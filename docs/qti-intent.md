@@ -34,6 +34,10 @@ part of the test, not a cost to avoid.
     names choices that exist, and `max-choices` does not exceed the choices;
   - a section cannot select more items than it holds, and every reference resolves;
   - a response is recorded only for a variable its item declares, and only inside an open attempt.
+- **Model everything.** Nothing that is valid QTI 3.0 is refused. QTI is deliberately open in places: item bodies may
+  hold HTML, MathML and SSML, `data-*` attributes, portable custom interactions and vendor extensions. Each of those is
+  modeled as tightly as the QTI elements themselves, as relations and rules, rather than refused or stored as opaque
+  text. Content that is not valid QTI 3.0 is still refused.
 - **Local only.** Node on the local grizzle cluster. No Cloudflare, no deploy.
 - **Toolchain.** pnpm, Effect `4.0.7`, Vite+, and the lint, format and TypeScript rules carried over from the
   Cloudflare monorepo template. See [AGENTS.md](../AGENTS.md).
@@ -41,10 +45,7 @@ part of the test, not a cost to avoid.
 
 ## Open
 
-- **Coverage of QTI's open corners.** QTI is deliberately open in places: item bodies may hold arbitrary HTML, MathML
-  and SSML, `data-*` attributes, custom interactions and vendor extensions. When a real package uses something the
-  tight model does not cover, does the import refuse the whole package, or does the model cover every such corner so
-  that nothing valid is refused? Not yet answered; ask before planning around either.
+- How much an import refuses when content is invalid: the one item, or the whole package.
 - Everything about structure: how item body markup becomes rows, how response processing is stored and evaluated, how
   the package splits into grizzle schemas, roles and logins, and the order the four steps are built in.
 
