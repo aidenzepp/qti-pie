@@ -1,0 +1,22 @@
+{
+  "name": "@gr8des/qti",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#qti/*": "./src/*",
+    "#migrations/*": "./migrations/*"
+  },
+  "scripts": {
+    "db": "scripts/db.sh",
+    "grizzle": "grizzle",
+    "test": "NODE_OPTIONS=\"$NODE_OPTIONS --disable-proto=delete --disable-sigusr1\" vp test run"
+  },
+  "dependencies": {
+    "@bjornpagen/grizzle": "file:../../vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz",
+    "@effect/platform-node": "4.0.7",
+    "effect": "4.0.7"
+  },
+  "devDependencies": {
+    "@effect/vitest": "4.0.7"
+  }
+}
