@@ -1,0 +1,13 @@
+packages:
+  - packages/*
+
+# grizzle is not on npm yet. Its tarballs are packed from a local clone; see vendor/README.md.
+# The grizzle tarball depends on the engine by version, so the override points that version at its tarball.
+overrides:
+  "@bjornpagen/grizzle-engine": file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz
+  vite: npm:@voidzero-dev/vite-plus-core@1.0.0
+
+# The vite override above is Vite+'s own core, which reports version 1.0.0 to its bundled Vitest.
+peerDependencyRules:
+  allowedVersions:
+    vite: 1.0.0
