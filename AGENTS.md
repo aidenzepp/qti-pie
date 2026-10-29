@@ -76,6 +76,42 @@ Read environment-backed settings with Effect `Config`, with constraints and defa
 Tests use `@effect/vitest` (`it.effect`, `layer`) and sit beside the code they test. A test that needs the database
 uses the local cluster through a login's `DbLayer`, never a mock.
 
+## Shared machine resources
+
+This runs on one laptop with limited disk. Storage, databases and ports are not free, and leftovers are a defect. Every
+plan and every orchestrator run budgets them, and every agent cleans up what it made. Clean up at phase boundaries, not
+after every step, but never leave it for someone else.
+
+**Worktrees.**
+
+- Parallel work uses git worktrees under `.worktrees/<slice>` in this repo (ignored by git), never elsewhere on disk.
+- At most 6 exist at once. That matches the number of database connections a parallel run can hold (see below).
+- A worktree is removed (`git worktree remove`, then its branch deleted) as soon as its slice is merged or abandoned. The
+  orchestrator runs `git worktree prune` and confirms `.worktrees/` holds only active slices at the end of every phase.
+- `pnpm install` in a worktree links from the shared pnpm store, so a worktree's `node_modules` costs little. Never copy
+  a `node_modules`, a build output or a cache between worktrees.
+
+**PostgreSQL.**
+
+- There is one cluster: grizzle's development cluster on `localhost:5433`. Never start another cluster, run `initdb`,
+  open another port, or use Docker.
+- At most one database per active worktree, named `gr8des_qti_<slice>`, created from `grizzle_template` and dropped when
+  its worktree is removed. The orchestrator lists `gr8des_%` databases at the end of every phase and drops any without
+  an active worktree.
+- Roles are cluster-wide: two worktrees cannot install the same grizzle schema at the same time, because the second
+  collides on its role names. The plan must say how parallel slices that need the database avoid that (for example,
+  one database lease at a time, or schema names unique per worktree) before any of them run.
+
+**Disk.**
+
+- Budget: the worktrees and `gr8des_*` databases together stay under 5 GB. The orchestrator reports their size at the end
+  of every phase (`du -sh .worktrees`, and `pg_database_size` for each `gr8des_%` database).
+- Downloaded inputs, such as 1EdTech's QTI example packages, are fetched once into a single shared location the plan
+  names, never once per worktree.
+- Scratch files go in the worktree's `work/` folder and leave with the worktree. Never use `/tmp` for repositories,
+  databases or large files.
+- No process outlives its slice except the shared cluster.
+
 ## Schema intent
 
 Data models shape the rest of the application. Before changing a schema, establish the expected domain meaning, data

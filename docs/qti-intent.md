@@ -49,6 +49,20 @@ part of the test, not a cost to avoid.
 - Everything about structure: how item body markup becomes rows, how response processing is stored and evaluated, how
   the package splits into grizzle schemas, roles and logins, and the order the four steps are built in.
 
+## How it gets planned and built
+
+- **No skimping on the model because it is hard.** Every QTI 3.0 structure and every rule, and every structure and rule
+  of the languages QTI embeds, maps into grizzle relations and rules. Difficulty is not a reason to store something
+  loosely, defer a rule or narrow coverage. Each of these standards is published in detail; read it and model it.
+- **Planned as a DAG of thin slices with [shipyard](https://github.com/ianzepp/shipyard).** The scope is large and very
+  parallel, so it runs through shipyard's pipeline: `goal-forge` and `goal-check` for the goal, `campaign` to order the
+  goals (the QTI core, each embedded language, packaging, delivery, scoring, results), `delivery` for each stage's spec,
+  and `slicer` to cut each spec into thin slices with exact write scopes and a dependency graph. `factory` builds the
+  slices, in parallel where their write scopes are disjoint. Plans live in files in this repository, not in chat.
+- **Parallel in git worktrees, within the resource budget.** See "Shared machine resources" in
+  [AGENTS.md](../AGENTS.md): worktree and database limits, cleanup at every phase boundary, a disk budget, and how
+  cluster-wide roles constrain parallel database work. The plan states how it meets each one.
+
 ## What grizzle means for the model
 
 From grizzle's README (Limits) and its agent guide, `.agents/skills/grizzle/SKILL.md`:

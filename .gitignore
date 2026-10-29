@@ -5,3 +5,4 @@ dist/
 !.env.example
 work/
 docs/superpowers/
+.worktrees/
