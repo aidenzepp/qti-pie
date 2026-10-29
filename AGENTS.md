@@ -76,6 +76,27 @@ Read environment-backed settings with Effect `Config`, with constraints and defa
 Tests use `@effect/vitest` (`it.effect`, `layer`) and sit beside the code they test. A test that needs the database
 uses the local cluster through a login's `DbLayer`, never a mock.
 
+## Planning and building with shipyard
+
+Work runs through [shipyard](https://github.com/ianzepp/shipyard)'s skills: `goal-forge`, `goal-check`, `campaign`,
+`delivery`, `slicer`, `factory`, then `auditor`, with `correctness`, `poker-face`, `cleanliness`, `housekeeping` and
+`polish` as the lenses `factory` calls. Their artifacts live in `docs/shipyard/` and are committed:
+
+| Artifact                         | Path                                       |
+| -------------------------------- | ------------------------------------------ |
+| Goal                             | `docs/shipyard/GOAL.md`                    |
+| Campaign                         | `docs/shipyard/campaign.md`                |
+| Delivery spec per campaign stage | `docs/shipyard/delivery/<stage>.md`        |
+| Slice list per spec              | `docs/shipyard/delivery/<stage>.slices.md` |
+| Factory ledger                   | `docs/shipyard/ledger.md`                  |
+
+The shared machine resource rules below bind every stage:
+
+- Every delivery spec has a `Resources` part: which units need the database, how they avoid the cluster-wide role
+  collision, and the cleanup its phase ends with.
+- Every slice states whether it needs a database.
+- `factory` ends every phase with the cleanup and the size report, and records both in the ledger.
+
 ## Shared machine resources
 
 This runs on one laptop with limited disk. Storage, databases and ports are not free, and leftovers are a defect. Every
@@ -84,10 +105,13 @@ after every step, but never leave it for someone else.
 
 **Worktrees.**
 
-- Parallel work uses git worktrees under `.worktrees/<slice>` in this repo (ignored by git), never elsewhere on disk.
+- Parallel work uses git worktrees under `.worktrees/<slice>` in this repo, or under `.claude/worktrees/` when Claude
+  Code's subagent isolation creates them. Both are ignored by git, and both count toward the limit. Never create a
+  worktree anywhere else, `/tmp` included.
 - At most 6 exist at once. That matches the number of database connections a parallel run can hold (see below).
 - A worktree is removed (`git worktree remove`, then its branch deleted) as soon as its slice is merged or abandoned. The
-  orchestrator runs `git worktree prune` and confirms `.worktrees/` holds only active slices at the end of every phase.
+  orchestrator runs `git worktree prune` and confirms `git worktree list` shows only active slices at the end of every
+  phase.
 - `pnpm install` in a worktree links from the shared pnpm store, so a worktree's `node_modules` costs little. Never copy
   a `node_modules`, a build output or a cache between worktrees.
 
