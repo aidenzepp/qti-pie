@@ -105,14 +105,16 @@ scope checks already exclude it.
 
 This is the workflow `factory` records in its ledger; it meets shipyard's five requirements.
 
-- **Structure A, a branch per slice.** Each feature has a branch `qti/<feature>/main` from `main`, checked out in the
-  main checkout while the feature runs. Each slice has a sibling branch `qti/<feature>/<slice-id>` from the feature
-  branch, checked out in its own worktree (see Shared machine resources). Slices with disjoint write scopes run in
-  parallel.
+- **Structure A, a branch per slice.** Each feature has a branch `qti/<feature>/main` from `main`, checked out only in
+  that feature's merge worktree `.worktrees/merge-<feature>/`; the main checkout stays on `main`, so several features
+  can run at once. Each slice has a sibling branch `qti/<feature>/<slice-id>` from the feature branch, checked out in
+  its own worktree (see Shared machine resources). Merge worktrees count toward the worktree limit. Slices with
+  disjoint write scopes run in parallel.
 - **Who records.** The hand commits its own slice on its slice branch (`<type>(<scope>): <slice title>` with a
   `Slice: <id>` trailer) and reports. Sign-off diffs the slice branch against its base. The Mind then files a merge task
-  for the `merge` seat, depending on the slice's task: it merges the slice branch into the feature branch, runs the
-  checks the task names, and, on success, removes the slice's worktree and deletes its branch. For a slice that touches
+  for the `merge` seat, depending on the slice's task: in the feature's merge worktree, it merges the slice branch into
+  the feature branch, runs the checks the task names, and, on success, removes the slice's worktree and deletes its
+  branch. For a slice that touches
   no database, the checks are `pnpm check` and that slice's own tests. A slice that touches the database, and the phase
   freeze, run `pnpm check` and the affected package's full test suite. These checks belong to the merge seat, never to a
   hand. The Mind accepts the merge task; that feature-branch tip is the slice's ref. The Mind does not run git itself.
@@ -138,11 +140,12 @@ non-negotiables of this file, shown to every seat.
 | Seat         | Band    | Does                                                                                                         |
 | ------------ | ------- | ------------------------------------------------------------------------------------------------------------ |
 | `mind`       | `P1-S2` | The orchestrating session. Files work in vivi, spawns seats, accepts or reopens their reports, runs shipyard |
-| `planner`    | `P1-S2` | Lowers goals through shipyard: `goal-forge`, `goal-check`, `delivery`                                        |
+| `planner`    | `P1-S2` | Lowers goals through shipyard: `goal-forge`, `goal-check`, `delivery`, and slices with `slicer`              |
 | `researcher` | `P1-S1` | Answers one question from primary sources into its findings file; changes no code                            |
 | `hand`       | `P2-S0` | One logical change or one experiment, in its own worktree, committed and reported                            |
 | `merge`      | `P2-S0` | Merges an accepted slice into its feature branch, runs the integration checks, removes the slice's worktree  |
 | `auditor`    | `P1-S1` | Reviews a frozen range: settled specs or landed phases                                                       |
+| `hater`      | `P3-S0` | A cold, hostile first read of one artifact for one skeptical audience; a head extracts the merit             |
 | `head-cto`   | `P0-S2` | Advises on architecture and gate honesty                                                                     |
 | `head-cxo`   | `P0-S2` | Advises on purity and complexity                                                                             |
 
@@ -182,7 +185,7 @@ after every step, but never leave it for someone else.
 
 **Disk.**
 
-- Budget: the worktrees and `gr8des_*` databases together stay under 5 GB. The orchestrator reports their size at the end
+- Budget: the worktrees and `gr8des_*` databases together stay under 2 GB. The orchestrator reports their size at the end
   of every phase (`du -sh .worktrees`, and `pg_database_size` for each `gr8des_%` database).
 - Downloaded inputs, such as specifications, schema files and 1EdTech's QTI example packages, are fetched once into
   `~/.cache/gr8des/`, never into the repository or once per worktree.
