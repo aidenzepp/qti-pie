@@ -112,9 +112,10 @@ This is the workflow `factory` records in its ledger; it meets shipyard's five r
 - **Who records.** The hand commits its own slice on its slice branch (`<type>(<scope>): <slice title>` with a
   `Slice: <id>` trailer) and reports. Sign-off diffs the slice branch against its base. The Mind then files a merge task
   for the `merge` seat, depending on the slice's task: it merges the slice branch into the feature branch, runs the
-  checks the task names (`pnpm check` and the affected package's tests belong here, never on a hand), and, on success,
-  removes the slice's worktree and deletes its branch. The Mind accepts the merge task; that feature-branch tip is the
-  slice's ref. The Mind does not run git itself.
+  checks the task names, and, on success, removes the slice's worktree and deletes its branch. For a slice that touches
+  no database, the checks are `pnpm check` and that slice's own tests. A slice that touches the database, and the phase
+  freeze, run `pnpm check` and the affected package's full test suite. These checks belong to the merge seat, never to a
+  hand. The Mind accepts the merge task; that feature-branch tip is the slice's ref. The Mind does not run git itself.
 - **Integration.** An accepted feature merges into `main` locally, on a merge task. There is no remote and no pull
   request.
 - **Audits** take a frozen range on the feature branch. Never rewrite accepted history, never force anything, fix
