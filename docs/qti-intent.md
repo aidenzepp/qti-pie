@@ -58,7 +58,7 @@ part of the test, not a cost to avoid.
   parallel, so it runs through shipyard's pipeline: `goal-forge` and `goal-check` for the goal, `campaign` to order the
   goals (the QTI core, each embedded language, packaging, delivery, scoring, results), `delivery` for each stage's spec,
   and `slicer` to cut each spec into thin slices with exact write scopes and a dependency graph. `factory` builds the
-  slices, in parallel where their write scopes are disjoint. Plans live in files in this repository, not in chat.
+  slices, in parallel where their write scopes are disjoint. Plans live in files under `docs/shipyard/`, which git ignores, not in chat.
 - **Parallel in git worktrees, within the resource budget.** See "Shared machine resources" in
   [AGENTS.md](../AGENTS.md): worktree and database limits, cleanup at every phase boundary, a disk budget, and how
   cluster-wide roles constrain parallel database work. The plan states how it meets each one.

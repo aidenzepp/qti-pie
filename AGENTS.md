@@ -80,7 +80,8 @@ uses the local cluster through a login's `DbLayer`, never a mock.
 
 Work runs through [shipyard](https://github.com/ianzepp/shipyard)'s skills: `goal-forge`, `goal-check`, `campaign`,
 `delivery`, `slicer`, `factory`, then `auditor`, with `correctness`, `poker-face`, `cleanliness`, `housekeeping` and
-`polish` as the lenses `factory` calls. Their artifacts live in `docs/shipyard/` and are committed:
+`polish` as the lenses `factory` calls. Their artifacts live in `docs/shipyard/`, which git ignores: planning work is
+never committed. Write them nowhere else, and never stage them.
 
 | Artifact                         | Path                                       |
 | -------------------------------- | ------------------------------------------ |
@@ -89,6 +90,9 @@ Work runs through [shipyard](https://github.com/ianzepp/shipyard)'s skills: `goa
 | Delivery spec per campaign stage | `docs/shipyard/delivery/<stage>.md`        |
 | Slice list per spec              | `docs/shipyard/delivery/<stage>.slices.md` |
 | Factory ledger                   | `docs/shipyard/ledger.md`                  |
+
+An ignored file is not in a new worktree. A worker in a worktree reads these artifacts from the main checkout,
+`~/Documents/dev/workspaces/personal/gr8des/docs/shipyard/`, and only the orchestrator in the main checkout writes them.
 
 The shared machine resource rules below bind every stage:
 
