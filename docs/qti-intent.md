@@ -18,10 +18,11 @@ part of the test, not a cost to avoid.
 1. **Import.** Real QTI 3.0 content packages, starting with 1EdTech's published examples, load into grizzle relations.
    That includes item bodies and response processing, not only metadata.
 2. **Export.** What was imported is written back as QTI 3.0 XML and compared with the original package.
-3. **Deliver.** A candidate takes a test: sessions, attempts and responses, with the database enforcing the rules and
-   the roles (a candidate sees only their own attempts; an author cannot touch results).
-4. **Score.** The stored response processing runs in Effect over a candidate's responses and produces a QTI results
-   report.
+
+**Out of scope: delivery and scoring** (operator ruling, 2026-10-30). No candidate sessions, attempts or responses, no
+attempt-time variable state, no execution of response or template processing, and no results reports. Response
+processing, template processing and outcome processing are still modeled tightly as content, because they are part of
+every item and test; they are stored and round-tripped, never run.
 
 ## Settled
 
@@ -32,8 +33,7 @@ part of the test, not a cost to avoid.
   - `base-type` and `cardinality` are closed sets, and a declaration's default and correct values must match them;
   - an interaction's `response-identifier` names a declared response variable of a fitting type, its correct response
     names choices that exist, and `max-choices` does not exceed the choices;
-  - a section cannot select more items than it holds, and every reference resolves;
-  - a response is recorded only for a variable its item declares, and only inside an open attempt.
+  - a section cannot select more items than it holds, and every reference resolves.
 - **Model everything.** Nothing that is valid QTI 3.0 is refused. QTI is deliberately open in places: item bodies may
   hold HTML, MathML and SSML, `data-*` attributes, portable custom interactions and vendor extensions. Each of those is
   modeled as tightly as the QTI elements themselves, as relations and rules, rather than refused or stored as opaque
@@ -56,7 +56,7 @@ part of the test, not a cost to avoid.
   loosely, defer a rule or narrow coverage. Each of these standards is published in detail; read it and model it.
 - **Planned as a DAG of thin slices with [shipyard](https://github.com/ianzepp/shipyard).** The scope is large and very
   parallel, so it runs through shipyard's pipeline: `goal-forge` and `goal-check` for the goal, `campaign` to order the
-  goals (the QTI core, each embedded language, packaging, delivery, scoring, results), `delivery` for each stage's spec,
+  goals (the QTI core, each embedded language, packaging, import and export), `delivery` for each stage's spec,
   and `slicer` to cut each spec into thin slices with exact write scopes and a dependency graph. `factory` builds the
   slices, in parallel where their write scopes are disjoint. Plans live in files under `docs/goals/` and `docs/campaigns/`, which git ignores, not in chat.
 - **Parallel in git worktrees, within the resource budget.** See "Shared machine resources" in
