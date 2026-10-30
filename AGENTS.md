@@ -80,21 +80,44 @@ uses the local cluster through a login's `DbLayer`, never a mock.
 
 Work runs through [shipyard](https://github.com/ianzepp/shipyard)'s skills: `goal-forge`, `goal-check`, `campaign`,
 `delivery`, `slicer`, `factory`, then `auditor`, with `correctness`, `poker-face`, `cleanliness`, `housekeeping` and
-`polish` as the lenses `factory` calls. Their artifacts live in `docs/shipyard/`, which git ignores: planning work is
-never committed. Write them nowhere else, and never stage them.
+`polish` as the lenses `factory` calls. Their artifacts are bookkeeping, and here bookkeeping is never committed: it
+lives in the git-ignored paths below, in shipyard's default layout, and is never staged. That overrides shipyard's
+default of integrating bookkeeping with the work.
 
-| Artifact                         | Path                                       |
-| -------------------------------- | ------------------------------------------ |
-| Goal                             | `docs/shipyard/GOAL.md`                    |
-| Campaign                         | `docs/shipyard/campaign.md`                |
-| Delivery spec per campaign stage | `docs/shipyard/delivery/<stage>.md`        |
-| Slice list per spec              | `docs/shipyard/delivery/<stage>.slices.md` |
-| Factory ledger                   | `docs/shipyard/ledger.md`                  |
-| Research findings, per handle    | `docs/shipyard/research/<handle>.md`       |
+| Artifact                                | Path                                         |
+| --------------------------------------- | -------------------------------------------- |
+| Goal                                    | `docs/goals/<goal>/GOAL.md`                  |
+| Factory ledger, one per run             | `docs/goals/<goal>/ledger.md`                |
+| Delivery spec for phase n               | `docs/goals/<goal>/phase-<n>.md`             |
+| Slice list for phase n                  | `docs/goals/<goal>/phase-<n>.slices.md`      |
+| Slice list for a repair phase           | `docs/goals/<goal>/repair-<n>.slices.md`     |
+| Audit reports                           | `docs/goals/<goal>/audit.md`, `audit-<n>.md` |
+| Campaign                                | `docs/campaigns/<campaign>/CAMPAIGN.md`      |
+| Research findings, per vivi task handle | `docs/research/<handle>.md`                  |
 
-An ignored file is not in a new worktree. A worker in a worktree reads these artifacts from the main checkout,
-`~/Documents/dev/workspaces/personal/gr8des/docs/shipyard/`. The Mind is the sole writer of every artifact but the
-research findings; a researcher writes only its own handle's findings file.
+These files live only in the main checkout, `~/Documents/dev/workspaces/personal/gr8des/`; an ignored file is not in a
+new worktree, so a seat in a worktree reads them from there. The Mind is their sole writer, except that a researcher
+writes its own handle's findings file. Bookkeeping is durable as files in the main checkout; shipyard's clean-tree and
+scope checks already exclude it.
+
+### Workflow
+
+This is the workflow `factory` records in its ledger; it meets shipyard's five requirements.
+
+- **Structure A, a branch per slice.** Each feature has a branch `qti/<feature>/main` from `main`, checked out in the
+  main checkout while the feature runs. Each slice has a sibling branch `qti/<feature>/<slice-id>` from the feature
+  branch, checked out in its own worktree (see Shared machine resources). Slices with disjoint write scopes run in
+  parallel.
+- **Who records.** The hand commits its own slice on its slice branch (`<type>(<scope>): <slice title>` with a
+  `Slice: <id>` trailer) and reports. Sign-off diffs the slice branch against its base. The Mind then files a merge task
+  for the `merge` seat, depending on the slice's task: it merges the slice branch into the feature branch, runs the
+  checks the task names (`pnpm check` and the affected package's tests belong here, never on a hand), and, on success,
+  removes the slice's worktree and deletes its branch. The Mind accepts the merge task; that feature-branch tip is the
+  slice's ref. The Mind does not run git itself.
+- **Integration.** An accepted feature merges into `main` locally, on a merge task. There is no remote and no pull
+  request.
+- **Audits** take a frozen range on the feature branch. Never rewrite accepted history, never force anything, fix
+  forward.
 
 The shared machine resource rules below bind every stage:
 
@@ -116,11 +139,12 @@ non-negotiables of this file, shown to every seat.
 | `planner`    | `P1-S2` | Lowers goals through shipyard: `goal-forge`, `goal-check`, `delivery`                                        |
 | `researcher` | `P1-S1` | Answers one question from primary sources into its findings file; changes no code                            |
 | `hand`       | `P2-S0` | One logical change or one experiment, in its own worktree, committed and reported                            |
+| `merge`      | `P2-S0` | Merges an accepted slice into its feature branch, runs the integration checks, removes the slice's worktree  |
 | `auditor`    | `P1-S1` | Reviews a frozen range: settled specs or landed phases                                                       |
 | `head-cto`   | `P0-S2` | Advises on architecture and gate honesty                                                                     |
 | `head-cxo`   | `P0-S2` | Advises on purity and complexity                                                                             |
 
-`operator` is the person, and `merge` and `pump-planner` came with the mailspace; the pump is not used. Seats run as
+`operator` is the person. `pump-planner` and the pump came with the mailspace and are not used. Seats run as
 subagents of the Mind's session (`harness: subagent`): the Mind files the task first, then spawns the seat with the
 four-line tugboat pointer and nothing else, and a hand gets its own worktree. `scripts/boot-probe` measures the
 resource budget for `vivi boot`.

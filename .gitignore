@@ -7,4 +7,8 @@ work/
 docs/superpowers/
 .worktrees/
 .claude/worktrees/
-docs/shipyard/
+docs/goals/
+docs/campaigns/
+docs/research/
+audits/
+.polish-inspected.json
