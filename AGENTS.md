@@ -90,9 +90,11 @@ never committed. Write them nowhere else, and never stage them.
 | Delivery spec per campaign stage | `docs/shipyard/delivery/<stage>.md`        |
 | Slice list per spec              | `docs/shipyard/delivery/<stage>.slices.md` |
 | Factory ledger                   | `docs/shipyard/ledger.md`                  |
+| Research findings, per handle    | `docs/shipyard/research/<handle>.md`       |
 
 An ignored file is not in a new worktree. A worker in a worktree reads these artifacts from the main checkout,
-`~/Documents/dev/workspaces/personal/gr8des/docs/shipyard/`, and only the orchestrator in the main checkout writes them.
+`~/Documents/dev/workspaces/personal/gr8des/docs/shipyard/`. The Mind is the sole writer of every artifact but the
+research findings; a researcher writes only its own handle's findings file.
 
 The shared machine resource rules below bind every stage:
 
@@ -100,6 +102,28 @@ The shared machine resource rules below bind every stage:
   collision, and the cleanup its phase ends with.
 - Every slice states whether it needs a database.
 - `factory` ends every phase with the cleanup and the size report, and records both in the ledger.
+
+## Coordination: vivi and tugboat
+
+This project coordinates through a [vivi](https://github.com/ianzepp/vivi) mailspace in `.vivi/` (machine-local and
+never committed) and runs the tugboat protocol in Mind mode: the Mind routes, and worker seats do the work. Load the
+`vivi` and `tugboat` skills, and start every session with `vivi boot --project .`. Its project rules are the
+non-negotiables of this file, shown to every seat.
+
+| Seat         | Band    | Does                                                                                                         |
+| ------------ | ------- | ------------------------------------------------------------------------------------------------------------ |
+| `mind`       | `P1-S2` | The orchestrating session. Files work in vivi, spawns seats, accepts or reopens their reports, runs shipyard |
+| `planner`    | `P1-S2` | Lowers goals through shipyard: `goal-forge`, `goal-check`, `delivery`                                        |
+| `researcher` | `P1-S1` | Answers one question from primary sources into its findings file; changes no code                            |
+| `hand`       | `P2-S0` | One logical change or one experiment, in its own worktree, committed and reported                            |
+| `auditor`    | `P1-S1` | Reviews a frozen range: settled specs or landed phases                                                       |
+| `head-cto`   | `P0-S2` | Advises on architecture and gate honesty                                                                     |
+| `head-cxo`   | `P0-S2` | Advises on purity and complexity                                                                             |
+
+`operator` is the person, and `merge` and `pump-planner` came with the mailspace; the pump is not used. Seats run as
+subagents of the Mind's session (`harness: subagent`): the Mind files the task first, then spawns the seat with the
+four-line tugboat pointer and nothing else, and a hand gets its own worktree. `scripts/boot-probe` measures the
+resource budget for `vivi boot`.
 
 ## Shared machine resources
 
@@ -134,8 +158,8 @@ after every step, but never leave it for someone else.
 
 - Budget: the worktrees and `gr8des_*` databases together stay under 5 GB. The orchestrator reports their size at the end
   of every phase (`du -sh .worktrees`, and `pg_database_size` for each `gr8des_%` database).
-- Downloaded inputs, such as 1EdTech's QTI example packages, are fetched once into a single shared location the plan
-  names, never once per worktree.
+- Downloaded inputs, such as specifications, schema files and 1EdTech's QTI example packages, are fetched once into
+  `~/.cache/gr8des/`, never into the repository or once per worktree.
 - Scratch files go in the worktree's `work/` folder and leave with the worktree. Never use `/tmp` for repositories,
   databases or large files.
 - No process outlives its slice except the shared cluster.
