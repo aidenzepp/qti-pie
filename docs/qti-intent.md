@@ -46,8 +46,9 @@ every item and test; they are stored and round-tripped, never run.
 ## Open
 
 - How much an import refuses when content is invalid: the one item, or the whole package.
-- Everything about structure: how item body markup becomes rows, how response processing is stored and evaluated, how
-  the package splits into grizzle schemas, roles and logins, and the order the four steps are built in.
+- Everything about structure: how item body markup becomes rows, how response, template and outcome processing are
+  stored as content, how the package splits into grizzle schemas, roles and logins, and the order import and export are
+  built in.
 
 ## How it gets planned and built
 

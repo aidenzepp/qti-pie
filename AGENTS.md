@@ -45,8 +45,9 @@ reads `grizzle.config.ts` from there.
   `pnpm fix` before `grizzle generate`, or the lint fix becomes an ungenerated schema change that `grizzle check`
   refuses.
 - Read every drafted SQL file and resolve its markers. Never edit `snapshot.json` or `meta.json`.
-- grizzle refuses what its README's Limits section lists: no nullable columns, no JSON column, no timestamp type, no
-  outer joins, no window functions, no raw SQL at run time, at most 100,000 rows per ChangeSet input. Model within them.
+- grizzle refuses what its README's Limits section lists: no nullable columns, no timestamp type, no outer joins, no
+  window functions, no raw SQL at run time, at most 100,000 rows per ChangeSet input. Its field types (README, "Tables
+  and types") include no JSON or XML type. Model within them.
 - When grizzle behaves wrongly or a limit blocks a correct model, record it in `docs/grizzle-findings.md` with the
   smallest reproduction. That record is a deliverable of this project, not a side note.
 
