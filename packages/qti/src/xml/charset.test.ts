@@ -187,6 +187,17 @@ describe("exportCharset", () => {
           "PI child",
           document("ISO-8859-1", element("a", [], [{ data: euro, kind: "pi", target: "p" }])),
         ],
+        [
+          "entity-reference name",
+          document("ISO-8859-1", element("a", [], [{ kind: "entityRef", name: "α" }])),
+        ],
+        [
+          "attribute reference name",
+          document(
+            "ISO-8859-1",
+            element("a", [{ ...attribute("alt", "&α;"), references: [{ name: "α", offset: 0 }] }]),
+          ),
+        ],
       ];
 
       for (const [where, doc] of offenders) {
@@ -221,6 +232,11 @@ describe("exportCharset", () => {
       assert.strictEqual(exportCharset("US-ASCII", accented), "UTF-8");
       assert.strictEqual(exportCharset("ISO-8859-1", accented), "ISO-8859-1");
       assert.strictEqual(exportCharset("ISO-8859-1", astral), "UTF-8");
+
+      const reference = document("US-ASCII", element("a", [], [{ kind: "entityRef", name: "é" }]));
+
+      assert.strictEqual(exportCharset("US-ASCII", reference), "UTF-8");
+      assert.strictEqual(exportCharset("ISO-8859-1", reference), "ISO-8859-1");
     }),
   );
 });

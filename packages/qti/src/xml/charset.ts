@@ -128,19 +128,25 @@ const holdsAbove = (limit: number, text: string): boolean => {
 
 /**
  * Test whether a node holds, in a place a character reference cannot reach, a code point above
- * `limit`: comment text, a processing instruction's target or data, or an element's name or an
- * attribute's name, anywhere in the element's subtree.
+ * `limit`: comment text, a processing instruction's target or data, an element's name or an
+ * attribute's name, or an entity reference's name (a child node, or one inside an attribute's
+ * value), anywhere in the element's subtree. An entity reference is written back verbatim as
+ * `&name;` and a name cannot be written as a character reference.
  *
  * @param limit - The highest code point the label's encoder writes as a single byte.
- * @param node - The node to inspect; text runs and entity references are skipped, and an
- *   attribute's value is not read.
+ * @param node - The node to inspect; text runs are skipped, and an attribute's value is not read
+ *   beyond the names of its entity references.
  * @returns `true` when anything inspected in the node's subtree exceeds `limit`.
  */
 const nodeHoldsAbove = (limit: number, node: Child): boolean => {
   if (node.kind === "element") {
     return (
       holdsAbove(limit, node.qname) ||
-      node.attributes.some((attribute) => holdsAbove(limit, attribute.qname)) ||
+      node.attributes.some(
+        (attribute) =>
+          holdsAbove(limit, attribute.qname) ||
+          attribute.references.some((reference) => holdsAbove(limit, reference.name)),
+      ) ||
       node.children.some((child) => nodeHoldsAbove(limit, child))
     );
   }
@@ -153,6 +159,10 @@ const nodeHoldsAbove = (limit: number, node: Child): boolean => {
     return holdsAbove(limit, node.target) || holdsAbove(limit, node.data);
   }
 
+  if (node.kind === "entityRef") {
+    return holdsAbove(limit, node.name);
+  }
+
   return false;
 };
 
@@ -162,8 +172,9 @@ const nodeHoldsAbove = (limit: number, node: Child): boolean => {
  * The decision is made once, at import, so the encoder never falls back silently: a character it
  * cannot reference in the label it is given is an `EncodeError`. A character above the threshold of
  * `latin1` or `ascii` can be written as a numeric character reference in a text run or an attribute
- * value, but nowhere else, so only comment text, processing-instruction targets and data, and
- * element and attribute names are inspected.
+ * value, but nowhere else, so only comment text, processing-instruction targets and data, element
+ * and attribute names, and entity-reference names are inspected. An entity reference is written
+ * back as `&name;`, so its name is as unwritable as a comment.
  *
  * @param label - The label the document was read under, as read.
  * @param doc - The document whose prolog, root subtree and epilog are inspected.
