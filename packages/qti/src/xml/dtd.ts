@@ -20,10 +20,10 @@ export interface AttlistEntry {
  * What the prolog of a document says, read before any of the body is parsed.
  *
  * `entities` holds the internal general entities by name, each as its replacement text: character
- * references and parameter-entity references expanded, general-entity references as written. An
- * external or unparsed entity is not in it. `attlists` holds the declared attributes of each
- * element by name. Both stop growing at the first parameter-entity reference the lexer cannot
- * read, unless the document is `standalone`.
+ * references expanded, general-entity references as written; a parameter-entity reference inside a
+ * value is refused. An external or unparsed entity is not in it. `attlists` holds the declared
+ * attributes of each element by name. Both stop growing at the first parameter-entity reference
+ * the lexer cannot read, unless the document is `standalone`.
  * `bodyStart` is the offset of the first character that the prolog does not account for.
  */
 export interface Prolog {
@@ -90,7 +90,8 @@ const DECLARATION_REST = /(?:[^"'>]|"[^"]*"|'[^']*')*>/uy;
 
 /**
  * Each construct that can appear inside an entity value: a hexadecimal or decimal character
- * reference, a general-entity reference, a parameter-entity reference, or a bare `&` or `%`.
+ * reference, a general-entity reference, a parameter-entity reference (which a value refuses), or a
+ * bare `&` or `%`.
  */
 const ENTITY_VALUE_TOKEN = new RegExp(
   String.raw`&#x([0-9A-Fa-f]+);|&#([0-9]+);|&(${NAME});|%(${NAME});|[&%]`,
@@ -519,12 +520,14 @@ const expandLiteral = Effect.fnUntraced(function* expandLiteralContent(
 });
 
 /**
- * Compute the replacement text of an entity value (XML 1.0 section 4.5): character references and
- * parameter-entity references expanded, general-entity references left as written.
+ * Compute the replacement text of an entity value (XML 1.0 section 4.5): character references
+ * expanded, general-entity references left as written.
  *
- * A reference to a parameter entity that was not read stops the subset (section 5.1) and leaves the
- * returned text incomplete; in a `standalone` document it is an error instead, because every
- * entity such a document uses is declared in it.
+ * A parameter-entity reference inside the value is an error when the entity was read, because a
+ * markup declaration of the internal subset forbids one (section 2.8, "PEs in Internal Subset").
+ * One that was not read stops the subset (section 5.1) and leaves the returned text incomplete; in
+ * a `standalone` document it is an error instead, because every entity such a document uses is
+ * declared in it.
  *
  * @param tables - The subset's declarations; `stopped` is set when a reference cannot be read.
  * @param cursor - The read position, for failures.
@@ -557,9 +560,12 @@ const expandEntityValue = (tables: Tables, cursor: Cursor, literal: Literal) =>
         );
       }
 
-      const replacement = tables.parameters.get(parameter);
-      if (replacement !== undefined) {
-        return replacement;
+      if (tables.parameters.has(parameter)) {
+        return yield* failure(
+          cursor,
+          `entity value: the parameter-entity reference "%${parameter};" is not allowed inside a markup declaration of the internal subset (XML 1.0 section 2.8, "PEs in Internal Subset"). Write the value without it, or "&#37;" for a literal percent sign.`,
+          offset,
+        );
       }
 
       if (tables.standalone) {
@@ -1115,7 +1121,8 @@ const skipMisc = Effect.fnUntraced(function* skipMiscMarkup(
  * internal subset, and where the body starts.
  *
  * Nothing after the document type declaration is read. The internal subset is read as XML 1.0
- * section 4.5 and 5.1 describe: entity values are expanded at declaration, the first declaration of
+ * section 4.5 and 5.1 describe: entity values are expanded at declaration (a parameter-entity
+ * reference inside one is refused, section 2.8), the first declaration of
  * a name binds, and reading stops at the first parameter-entity reference that was not read unless
  * the declaration says `standalone="yes"`. An external subset is recorded and never fetched.
  *
