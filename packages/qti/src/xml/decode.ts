@@ -22,11 +22,13 @@ type Utf16Order = "utf-16be" | "utf-16le";
 
 /**
  * What the first bytes of a document settle: the bytes left to decode, the label to decode them
- * under, and the byte order a UTF-16 byte order mark chose.
+ * under, whether a byte order mark opened the document, and the byte order a UTF-16 mark or an
+ * XML 1.0 Appendix F pattern chose.
  */
 interface Sniffed {
   readonly body: Uint8Array;
   readonly label: string;
+  readonly marked: boolean;
   readonly order: Option.Option<Utf16Order>;
 }
 
@@ -56,49 +58,93 @@ const startsWith = (bytes: Uint8Array, prefix: readonly number[]): boolean =>
   prefix.every((byte, index) => bytes[index] === byte);
 
 /**
- * Read the `encoding` an XML declaration gives, if the document starts with one.
+ * Read the `encoding` an XML declaration gives, if the text starts with one.
  *
- * @param bytes - The document, not starting with a byte order mark.
- * @returns The label exactly as written, from the first 1024 bytes read one byte per character
- *   (an ASCII-compatible reading, so a UTF-16 document, whose declaration interleaves NUL bytes,
- *   yields none); `None` when there is no declaration or it gives no encoding.
+ * @param head - The start of the document as characters: read one byte per character for an
+ *   ASCII-compatible document, or decoded in the byte order Appendix F found for a UTF-16 one.
+ * @returns The label exactly as written; `None` when there is no declaration or it gives no
+ *   encoding.
  */
-const declaredEncoding = (bytes: Uint8Array): Option.Option<string> => {
-  const head = latin1Text(bytes.subarray(0, declarationWindow));
+const declaredEncoding = (head: string): Option.Option<string> => {
   const quoted = declarationPattern.exec(head)?.groups?.["quoted"];
 
   return Option.map(Option.fromUndefinedOr(quoted), (value) => value.slice(1, -1));
 };
 
 /**
+ * The byte order XML 1.0 Appendix F gives a UTF-16 document with no byte order mark that begins
+ * `<?`: `3C 00 3F 00` is little-endian and `00 3C 00 3F` big-endian.
+ */
+const appendixFOrder = (bytes: Uint8Array): Option.Option<Utf16Order> => {
+  if (startsWith(bytes, [0x3c, 0x00, 0x3f, 0x00])) {
+    return Option.some("utf-16le");
+  }
+
+  return startsWith(bytes, [0x00, 0x3c, 0x00, 0x3f]) ? Option.some("utf-16be") : Option.none();
+};
+
+/**
  * Settle what the first bytes of a document say about its encoding.
  *
  * A byte order mark decides the encoding and is dropped: `EF BB BF` is UTF-8, `FE FF` UTF-16BE and
- * `FF FE` UTF-16LE, and the document's declaration is not consulted. Without one the XML
- * declaration's `encoding` decides, and a document with neither is UTF-8.
+ * `FF FE` UTF-16LE, and the document's declaration is not consulted. Without one, a document
+ * beginning `<?` as UTF-16 (`3C 00 3F 00` little-endian, `00 3C 00 3F` big-endian, XML 1.0
+ * Appendix F) is UTF-16 in that order, and its declaration, read in that order, gives the label.
+ * Any other document takes the ASCII-compatible reading: the XML declaration's `encoding` decides,
+ * and a document with neither is UTF-8.
  *
  * @param bytes - The document as read from storage.
  * @returns The bytes after any byte order mark, the label to decode them under (`UTF-16` for a
- *   UTF-16 byte order mark, whichever order it gives), and the byte order a UTF-16 mark chose.
+ *   UTF-16 byte order mark, whichever order it gives), whether a mark was present, and the byte
+ *   order a UTF-16 mark or Appendix F pattern chose.
  */
 const sniff = (bytes: Uint8Array): Sniffed => {
   if (startsWith(bytes, [0xef, 0xbb, 0xbf])) {
-    return { body: bytes.subarray(3), label: "UTF-8", order: Option.none() };
+    return { body: bytes.subarray(3), label: "UTF-8", marked: true, order: Option.none() };
   }
 
   if (startsWith(bytes, [0xfe, 0xff])) {
-    return { body: bytes.subarray(2), label: "UTF-16", order: Option.some("utf-16be") };
+    return {
+      body: bytes.subarray(2),
+      label: "UTF-16",
+      marked: true,
+      order: Option.some("utf-16be"),
+    };
   }
 
   if (startsWith(bytes, [0xff, 0xfe])) {
-    return { body: bytes.subarray(2), label: "UTF-16", order: Option.some("utf-16le") };
+    return {
+      body: bytes.subarray(2),
+      label: "UTF-16",
+      marked: true,
+      order: Option.some("utf-16le"),
+    };
   }
 
-  return {
-    body: bytes,
-    label: Option.getOrElse(declaredEncoding(bytes), () => "UTF-8"),
-    order: Option.none(),
-  };
+  const unmarked = appendixFOrder(bytes);
+
+  return Option.match(unmarked, {
+    onNone: () => ({
+      body: bytes,
+      label: Option.getOrElse(
+        declaredEncoding(latin1Text(bytes.subarray(0, declarationWindow))),
+        () => "UTF-8",
+      ),
+      marked: false,
+      order: Option.none(),
+    }),
+    // The peek at a prefix is not fatal because the prefix may cut a surrogate pair; the body
+    // decode stays fatal.
+    onSome: (order) => ({
+      body: bytes,
+      label: Option.getOrElse(
+        declaredEncoding(new TextDecoder(order).decode(bytes.subarray(0, 2 * declarationWindow))),
+        () => "UTF-16",
+      ),
+      marked: false,
+      order: unmarked,
+    }),
+  });
 };
 
 /**
@@ -161,6 +207,7 @@ const decodeStrictly = (
 type ClassDecoder = (
   body: Uint8Array,
   label: string,
+  marked: boolean,
   order: Option.Option<Utf16Order>,
 ) => Effect.Effect<string, ReaderRefusal>;
 
@@ -171,8 +218,11 @@ type ClassDecoder = (
  * `TextDecoder`: the WHATWG table maps `ISO-8859-1` to `windows-1252`, which turns bytes 0x80 to
  * 0x9F into printable characters where ISO-8859-1 and XML 1.0 section 4.3.3 give the C1 controls
  * U+0080 to U+009F. `ascii` admits only bytes below 0x80 and then reads them the same way. `utf16`
- * needs the byte order a byte order mark chose, so a UTF-16 label without one is `bare-utf16`. A
- * `decode-only` label goes to `TextDecoder` under its own name.
+ * decodes in the byte order a byte order mark or an Appendix F pattern chose, keeping the label as
+ * spelled even when it names the other order. The unmarked label `UTF-16` requires the mark (XML
+ * 1.0 section 4.3.3), so without one it is `bare-utf16`; `UTF-16LE` and `UTF-16BE` need none, but
+ * a document that begins with neither a mark nor a UTF-16 declaration has no order to decode in,
+ * and is refused as `decode`. A `decode-only` label goes to `TextDecoder` under its own name.
  */
 const classDecoders: Readonly<Record<EncoderClass, ClassDecoder>> = {
   ascii: (body, label) => {
@@ -189,17 +239,24 @@ const classDecoders: Readonly<Record<EncoderClass, ClassDecoder>> = {
   },
   "decode-only": (body, label) => decodeStrictly(label.toLowerCase(), label, body),
   latin1: (body) => Effect.succeed(latin1Text(body)),
-  utf16: (body, label, order) =>
-    Option.match(order, {
-      onNone: () =>
-        Effect.fail(
+  utf16: (body, label, marked, order) =>
+    classify(label).canonical === "UTF-16" && !marked
+      ? Effect.fail(
           refuse(
             "bare-utf16",
             `The document declares ${label} but does not start with a byte order mark (FF FE or FE FF), so its byte order is unknown. Add the byte order mark, or re-save the document as UTF-8.`,
           ),
-        ),
-      onSome: (byteOrder) => decodeStrictly(byteOrder, label, body),
-    }),
+        )
+      : Option.match(order, {
+          onNone: () =>
+            Effect.fail(
+              refuse(
+                "decode",
+                `The document declares ${label} but begins with neither a byte order mark nor a UTF-16 XML declaration, so its bytes are not UTF-16. Re-save the document as UTF-8, or as UTF-16 with a byte order mark.`,
+              ),
+            ),
+          onSome: (byteOrder) => decodeStrictly(byteOrder, label, body),
+        }),
   utf8: (body, label) => decodeStrictly("utf-8", label, body),
 };
 
@@ -235,21 +292,21 @@ const requireXmlCharacters = (text: string): Effect.Effect<string, ReaderRefusal
  * Turn a document's bytes into its text, refusing whatever cannot be decoded faithfully.
  *
  * The encoding is a byte order mark if the document starts with one, else the XML declaration's
- * `encoding`, else UTF-8; the declared label is classified by `xml/charset.ts` and decoded with
- * every error fatal, so no byte is ever replaced with U+FFFD. The decoded text must hold neither
- * U+0000 nor an unpaired surrogate.
+ * `encoding` (found in UTF-16 too, by XML 1.0 Appendix F's patterns), else UTF-8; the declared
+ * label is classified by `xml/charset.ts` and decoded with every error fatal, so no byte is ever
+ * replaced with U+FFFD. The decoded text must hold neither U+0000 nor an unpaired surrogate.
  *
  * @param bytes - The document as read from storage.
  * @returns The text, without its byte order mark, and the label as the document spelled it, which
  *   becomes the tree's `charset`; a `ReaderRefusal` whose rule is `decode` for a label the reader
- *   cannot decode or bytes that are not valid in it, `bare-utf16` for UTF-16 without a byte order
- *   mark, and `nul-or-surrogate` for text with a character XML 1.0 forbids.
+ *   cannot decode or bytes that are not valid in it, `bare-utf16` for the label `UTF-16` without a
+ *   byte order mark, and `nul-or-surrogate` for text with a character XML 1.0 forbids.
  */
 export const decode = Effect.fn("xml.decode")(function* decode(
   bytes: Uint8Array,
 ): Effect.fn.Return<Decoded, ReaderRefusal> {
-  const { body, label, order } = sniff(bytes);
-  const text = yield* classDecoders[classify(label).class](body, label, order).pipe(
+  const { body, label, marked, order } = sniff(bytes);
+  const text = yield* classDecoders[classify(label).class](body, label, marked, order).pipe(
     Effect.flatMap(requireXmlCharacters),
   );
 

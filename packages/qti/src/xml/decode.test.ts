@@ -31,6 +31,12 @@ const utf16 = (text: string, order: "be" | "le"): Uint8Array => {
 };
 
 /**
+ * Builds a UTF-16 document of the Basic Multilingual Plane `text` without a byte order mark, in the
+ * byte order named.
+ */
+const utf16Bare = (text: string, order: "be" | "le"): Uint8Array => utf16(text, order).subarray(2);
+
+/**
  * Decodes `input` and returns the refusal it raised, failing the test when `input` decodes.
  */
 const refusalOf = (input: Uint8Array): Effect.Effect<ReaderRefusal> =>
@@ -80,6 +86,25 @@ describe("decode refuses what it cannot decode faithfully", () => {
       const refusal = yield* refusalOf(declared("UTF-16", ascii("x")));
 
       assert.strictEqual(refusal.rule, "bare-utf16");
+    }),
+  );
+
+  it.effect("a declared UTF-16 that Appendix F found an order for, but without a mark", () =>
+    Effect.gen(function* refusesUnmarkedUtf16() {
+      const refusal = yield* refusalOf(
+        utf16Bare('<?xml version="1.0" encoding="UTF-16"?><a>x</a>', "le"),
+      );
+
+      assert.strictEqual(refusal.rule, "bare-utf16");
+    }),
+  );
+
+  it.effect("a declared UTF-16LE whose bytes are not UTF-16", () =>
+    Effect.gen(function* refusesNonUtf16() {
+      const refusal = yield* refusalOf(declared("UTF-16LE", ascii("x")));
+
+      assert.strictEqual(refusal.rule, "decode");
+      assert.include(refusal.detail, "UTF-16LE");
     }),
   );
 
@@ -198,6 +223,31 @@ describe("decode reads the label and the bytes", () => {
         assert.strictEqual(decoded.label, "UTF-16");
         assert.strictEqual(decoded.text, "<a>é€</a>");
       }
+    }),
+  );
+
+  it.effect("decodes UTF-16LE and UTF-16BE without a mark, keeping the label as spelled", () =>
+    Effect.gen(function* decodesBareUtf16() {
+      for (const [label, order] of [
+        ["UTF-16LE", "le"],
+        ["UTF-16BE", "be"],
+      ] as const) {
+        const text = `<?xml version="1.0" encoding="${label}"?><a>é€</a>`;
+        const decoded = yield* decode(utf16Bare(text, order));
+
+        assert.strictEqual(decoded.label, label);
+        assert.strictEqual(decoded.text, text);
+      }
+    }),
+  );
+
+  it.effect("decodes by the byte order Appendix F detects when the label names the other", () =>
+    Effect.gen(function* decodesByDetectedOrder() {
+      const text = '<?xml version="1.0" encoding="UTF-16LE"?><a>x</a>';
+      const decoded = yield* decode(utf16Bare(text, "be"));
+
+      assert.strictEqual(decoded.label, "UTF-16LE");
+      assert.strictEqual(decoded.text, text);
     }),
   );
 
