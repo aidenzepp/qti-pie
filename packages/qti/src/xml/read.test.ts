@@ -22,9 +22,15 @@ const observe = (entities: Readonly<Record<string, string>>, document: string): 
   const errors: string[] = [];
   const texts: string[] = [];
   Object.assign(parser.ENTITIES, entities);
-  parser.on("attribute", (attribute) => attributes.push(attribute.value));
-  parser.on("error", (error) => errors.push(error.message));
-  parser.on("text", (text) => texts.push(text));
+  parser.on("attribute", (attribute) => {
+    attributes.push(attribute.value);
+  });
+  parser.on("error", (error) => {
+    errors.push(error.message);
+  });
+  parser.on("text", (text) => {
+    texts.push(text);
+  });
   parser.write(document).close();
 
   return { attributes, errors, texts };
