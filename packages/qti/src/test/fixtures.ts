@@ -23,7 +23,8 @@ export const FIXTURES_VERSION = "1" as const;
  * - `InsertAfterLine` inserts `text` as a new line after the 1-based line `line` of `file`, ended
  *   with the terminator that line has (`\r\n` or `\n`).
  * - `EncodeUtf16` writes `file` as a byte order mark `FF FE` followed by its text as UTF-16 little
- *   endian.
+ *   endian. The text is the latin1 reading of the extracted bytes, so the file must be ASCII: a
+ *   multi-byte UTF-8 character would be encoded as its separate bytes, not as one character.
  */
 export type Edit =
   | {
@@ -95,9 +96,19 @@ export const hash12 = (spec: FixtureSpec): string =>
   transformHash(spec, FIXTURES_VERSION).slice(0, 12);
 
 /**
- * The names `materialize` accepts: `simple` and, as later slices add them, its variants.
+ * The names `materialize` accepts: `simple` and its seven variants, each the same package with the
+ * edits of its row in the spec table.
  */
-export const fixtureNames = ["simple"] as const;
+export const fixtureNames = [
+  "simple",
+  "doctype",
+  "latin1",
+  "external",
+  "utf16",
+  "windows-1252",
+  "padded-attributes",
+  "padded-text",
+] as const;
 
 /**
  * One of {@link fixtureNames}.
@@ -105,11 +116,165 @@ export const fixtureNames = ["simple"] as const;
 export type FixtureName = (typeof fixtureNames)[number];
 
 /**
+ * The tarball member `simple` and every variant of it are extracted from.
+ */
+const simpleMember = "qtiv3-examples/packaging/simple/simple.zip";
+
+/**
+ * Build a `ReplaceText` edit of one file.
+ *
+ * @param file - The file the edit names, relative to the package directory.
+ * @param search - The text to replace, which must occur exactly once when the edit applies.
+ * @param replacement - The text that takes its place.
+ * @returns The edit as plain data.
+ */
+const replaceIn = (file: string, search: string, replacement: string): Edit => ({
+  _tag: "ReplaceText",
+  file,
+  replacement,
+  search,
+});
+
+/**
+ * Build the `ReplaceText` edit of `choice.xml`'s encoding declaration.
+ *
+ * @param label - The encoding label the declaration names instead of `UTF-8`.
+ * @returns The edit as plain data.
+ */
+const declareEncoding = (label: string): Edit =>
+  replaceIn("choice.xml", 'encoding="UTF-8"', `encoding="${label}"`);
+
+/**
+ * Build the `ReplaceText` edit that appends a character to the sentence on `choice.xml`'s line 15,
+ * so the character lands inside the item body's first paragraph.
+ *
+ * @param character - The character to insert after `picture.`.
+ * @returns The edit as plain data.
+ */
+const afterPicture = (character: string): Edit =>
+  replaceIn("choice.xml", "in the picture.</p>", `in the picture.${character}</p>`);
+
+/**
+ * The prompt of `choice.xml`'s interaction, which `doctype` and `external` extend with an entity
+ * reference.
+ */
+const prompt = "<qti-prompt>What does it say?</qti-prompt>";
+
+/**
+ * The last word of `choice.xml`'s `alt` text with the quote that closes the attribute, which
+ * `latin1` and `external` replace.
+ */
+const altEnding = 'LUGGAGE UNATTENDED"';
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
+ *
+ * Every variant is `simple` with string edits to its `choice.xml` (and, for `padded-text`, its
+ * manifest), each written for the CRLF text of the original:
+ *
+ * - `doctype` declares a general entity and an `ATTLIST` default for `adaptive`, drops the attribute
+ *   from the root and uses the entity in the prompt.
+ * - `latin1` declares ISO-8859-1 and holds the byte 0x85 and a character reference to U+20AC.
+ * - `external` declares an external subset that is never written and refers to `&undeclared;` in the
+ *   prompt and the `alt` text.
+ * - `utf16` declares UTF-16 and is written as a byte order mark and UTF-16 little endian.
+ * - `windows-1252` declares that label and holds the byte 0x80, the euro there.
+ * - `padded-attributes` is valid QTI whose seven `collapse`-type attribute values each carry one
+ *   leading and one trailing space, with a tab character reference in a `replace`-type and a
+ *   `preserve`-type attribute.
+ * - `padded-text` is valid QTI whose manifest `collapse` leaf carries spaces and whose item gains a
+ *   `replace` leaf holding a tab and a line feed.
  */
 const specs: Record<FixtureName, FixtureSpec> = {
-  simple: { edits: [], member: "qtiv3-examples/packaging/simple/simple.zip", name: "simple" },
+  doctype: {
+    edits: [
+      {
+        _tag: "InsertAfterLine",
+        file: "choice.xml",
+        line: 1,
+        text: '<!DOCTYPE qti-assessment-item [<!ENTITY org "1EdTech &amp; friends"><!ATTLIST qti-assessment-item adaptive CDATA "false">]>',
+      },
+      replaceIn("choice.xml", ' adaptive="false"', ""),
+      replaceIn("choice.xml", prompt, "<qti-prompt>What does it say? &org;</qti-prompt>"),
+    ],
+    member: simpleMember,
+    name: "doctype",
+  },
+  external: {
+    edits: [
+      {
+        _tag: "InsertAfterLine",
+        file: "choice.xml",
+        line: 1,
+        text: '<!DOCTYPE qti-assessment-item SYSTEM "item.dtd">',
+      },
+      replaceIn("choice.xml", prompt, "<qti-prompt>What does it say? &undeclared;</qti-prompt>"),
+      replaceIn("choice.xml", altEnding, 'LUGGAGE &undeclared;"'),
+    ],
+    member: simpleMember,
+    name: "external",
+  },
+  latin1: {
+    edits: [
+      declareEncoding("ISO-8859-1"),
+      afterPicture("\u0085"),
+      replaceIn("choice.xml", altEnding, 'LUGGAGE &#x20AC;"'),
+    ],
+    member: simpleMember,
+    name: "latin1",
+  },
+  "padded-attributes": {
+    edits: [
+      replaceIn("choice.xml", 'identifier="choice"', 'identifier=" choice "'),
+      replaceIn("choice.xml", 'adaptive="false"', 'adaptive=" false "'),
+      replaceIn("choice.xml", 'src="images/sign.png"', 'src=" images/sign.png "'),
+      replaceIn("choice.xml", 'response-identifier="RESPONSE"', 'response-identifier=" RESPONSE "'),
+      replaceIn("choice.xml", 'max-choices="1"', 'max-choices=" 1 "'),
+      replaceIn("choice.xml", 'identifier="ChoiceA"', 'identifier=" ChoiceA "'),
+      replaceIn(
+        "choice.xml",
+        'template="https://www.imsglobal.org/question/qti_v3p0/rptemplates/match_correct.xml"',
+        'template=" https://www.imsglobal.org/question/qti_v3p0/rptemplates/match_correct.xml "',
+      ),
+      replaceIn("choice.xml", 'title="Unattended Luggage"', 'title="Unattended&#9;Luggage"'),
+      replaceIn(
+        "choice.xml",
+        'alt="NEVER LEAVE LUGGAGE UNATTENDED"',
+        'alt="NEVER&#9;LEAVE LUGGAGE UNATTENDED"',
+      ),
+    ],
+    member: simpleMember,
+    name: "padded-attributes",
+  },
+  "padded-text": {
+    edits: [
+      replaceIn(
+        "imsmanifest.xml",
+        "<imsqti:timeDependent>false</imsqti:timeDependent>",
+        "<imsqti:timeDependent> false </imsqti:timeDependent>",
+      ),
+      {
+        _tag: "InsertAfterLine",
+        file: "choice.xml",
+        line: 13,
+        text: '<qti-outcome-declaration identifier="NOTE" cardinality="single" base-type="string"><qti-default-value><qti-value>a&#9;b&#10;c</qti-value></qti-default-value></qti-outcome-declaration>',
+      },
+    ],
+    member: simpleMember,
+    name: "padded-text",
+  },
+  simple: { edits: [], member: simpleMember, name: "simple" },
+  utf16: {
+    edits: [declareEncoding("UTF-16"), { _tag: "EncodeUtf16", file: "choice.xml" }],
+    member: simpleMember,
+    name: "utf16",
+  },
+  "windows-1252": {
+    edits: [declareEncoding("windows-1252"), afterPicture("\u0080")],
+    member: simpleMember,
+    name: "windows-1252",
+  },
 };
 
 /**
