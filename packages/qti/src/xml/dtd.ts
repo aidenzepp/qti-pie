@@ -1164,3 +1164,195 @@ export const lexProlog = Effect.fnUntraced(function* lexPrologText(
     standalone,
   };
 });
+
+/**
+ * The document text with its general entities substituted, and the question `p1-09` asks of it.
+ *
+ * `body` is the whole text: the prolog and the DOCTYPE verbatim, then the body with each declared
+ * entity reference replaced. `afterSubstitution` says whether a substitution precedes an offset
+ * into `body`, so a reader knows when a line and column no longer match the source.
+ */
+export interface Substituted {
+  readonly afterSubstitution: (offset: number) => boolean;
+  readonly body: string;
+}
+
+/**
+ * How a quote of replacement text is written inside an attribute value literal.
+ */
+const ATTRIBUTE_QUOTES: ReadonlyMap<string, string> = new Map([
+  ['"', "&#34;"],
+  ["'", "&#39;"],
+]);
+
+/**
+ * A reference to a general entity, `&name;`, sticky.
+ */
+const REFERENCE_AT = new RegExp(`&(${NAME});`, "uy");
+
+/**
+ * Where a markup run that substitution does not touch ends: the end of a comment, a processing
+ * instruction or a CDATA section that starts at `offset`, or `offset` itself when none does.
+ */
+const hiddenEnd = (text: string, offset: number): number => {
+  for (const [open, close] of [
+    ["<!--", "-->"],
+    ["<?", "?>"],
+    ["<![CDATA[", "]]>"],
+  ] as const) {
+    if (text.startsWith(open, offset)) {
+      const end = text.indexOf(close, offset + open.length);
+
+      return end === -1 ? text.length : end + close.length;
+    }
+  }
+
+  return offset;
+};
+
+/**
+ * One reference to a declared, non-predefined entity at `offset`: its replacement text and the
+ * offset after its `;`, or none.
+ */
+const declaredReferenceAt = (
+  text: string,
+  offset: number,
+  entities: ReadonlyMap<string, string>,
+): Option.Option<{ readonly end: number; readonly replacement: string }> => {
+  REFERENCE_AT.lastIndex = offset;
+  const match = REFERENCE_AT.exec(text);
+  const name = match?.[1];
+  if (match === null || name === undefined || PREDEFINED.has(name)) {
+    return Option.none();
+  }
+
+  const replacement = entities.get(name);
+
+  return replacement === undefined
+    ? Option.none()
+    : Option.some({ end: offset + match[0].length, replacement });
+};
+
+/**
+ * Substitute the declared general entities of `prolog` into `text`.
+ *
+ * The prolog and the DOCTYPE stay verbatim at the front, so an offset into the result is an offset
+ * into the text a parser reads. From `bodyStart` on, each reference to a declared entity other
+ * than the five predefined ones is replaced, and the replacement text is rescanned: in element
+ * content it goes in as written, so markup in it is parsed as markup; inside an attribute value
+ * literal it goes in with both quotes written as character references, so it cannot end the
+ * literal. Comments, processing instructions and CDATA sections, undeclared names and character
+ * references are left as written.
+ *
+ * @see {@link https://www.w3.org/TR/2008/REC-xml-20081126/#entproc XML 1.0, section 4.4}
+ */
+export const substitute = (
+  text: string,
+  prolog: Prolog,
+): Effect.Effect<Substituted, ReaderRefusal> =>
+  Effect.sync(() => {
+    const { bodyStart, entities } = prolog;
+    let first = Option.none<number>();
+    let body = text.slice(0, bodyStart);
+    const noteSubstitution = (length: number) => {
+      if (Option.isNone(first)) {
+        first = Option.some(length === 0 ? body.length : body.length + 1);
+      }
+    };
+
+    const expandAttribute = (source: string): string => {
+      let result = "";
+      let offset = 0;
+      while (offset < source.length) {
+        const reference =
+          source[offset] === "&" ? declaredReferenceAt(source, offset, entities) : Option.none();
+        if (Option.isSome(reference)) {
+          result += expandAttribute(reference.value.replacement);
+          offset = reference.value.end;
+        } else {
+          const char = source[offset];
+          result += ATTRIBUTE_QUOTES.get(char ?? "") ?? char;
+          offset += 1;
+        }
+      }
+
+      return result;
+    };
+
+    const scanTag = (source: string, start: number): number => {
+      let offset = start + 1;
+      body += "<";
+      while (offset < source.length) {
+        const char = source[offset];
+        if (char === ">") {
+          body += ">";
+
+          return offset + 1;
+        }
+
+        if (char === '"' || char === "'") {
+          body += char;
+          offset += 1;
+          while (offset < source.length && source[offset] !== char) {
+            const reference =
+              source[offset] === "&"
+                ? declaredReferenceAt(source, offset, entities)
+                : Option.none();
+            if (Option.isSome(reference)) {
+              noteSubstitution(reference.value.replacement.length);
+              body += expandAttribute(reference.value.replacement);
+              offset = reference.value.end;
+            } else {
+              body += source[offset];
+              offset += 1;
+            }
+          }
+          if (offset < source.length) {
+            body += char;
+            offset += 1;
+          }
+        } else {
+          body += char;
+          offset += 1;
+        }
+      }
+
+      return offset;
+    };
+
+    const scanContent = (source: string): void => {
+      let offset = 0;
+      while (offset < source.length) {
+        const hidden = hiddenEnd(source, offset);
+        if (hidden > offset) {
+          body += source.slice(offset, hidden);
+          offset = hidden;
+        } else if (source[offset] === "<") {
+          offset = scanTag(source, offset);
+        } else if (source[offset] === "&") {
+          const reference = declaredReferenceAt(source, offset, entities);
+          if (Option.isSome(reference)) {
+            noteSubstitution(reference.value.replacement.length);
+            scanContent(reference.value.replacement);
+            offset = reference.value.end;
+          } else {
+            body += "&";
+            offset += 1;
+          }
+        } else {
+          const next = source.slice(offset).search(/[<&]/u);
+          const end = next === -1 ? source.length : offset + next;
+          body += source.slice(offset, end);
+          offset = end;
+        }
+      }
+    };
+
+    scanContent(text.slice(bodyStart));
+
+    return {
+      afterSubstitution: (offset: number) =>
+        Option.exists(first, (threshold) => offset >= threshold),
+      body,
+    };
+  });
