@@ -97,6 +97,19 @@ export const xsToken = "^(?:[^ \\t\\n\\r]+(?: [^ \\t\\n\\r]+)*)?$" as const;
 export const xsTokenFlags = "su" as const;
 
 /**
+ * The `xs:token` lexical space (no tab, line feed or carriage return, no leading, trailing or
+ * doubled space, the empty string included) with at most 256 non-space characters, so at most 511
+ * code points and 1,279 bytes. The collapsed form a key-shaped containment target holds (campaign
+ * decision 26); `xsToken` stays unbounded for every other field.
+ */
+export const boundedToken = "^(?:[^ \\t\\n\\r](?: ?[^ \\t\\n\\r]){0,255})?$" as const;
+
+/**
+ * The flags of `boundedToken`.
+ */
+export const boundedTokenFlags = "su" as const;
+
+/**
  * Text made only of XML whitespace characters, at least one.
  */
 export const whitespaceOnly = "^[ \\t\\r\\n]+$" as const;
@@ -151,12 +164,15 @@ export const yesNo = "^(yes|no)$" as const;
 export const base64 = "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$" as const;
 
 /**
- * A reference that stays inside the package (R8): a relative path with no `..` segment and no
- * leading `/`, or an absolute URI with a scheme. Written without lookarounds; a segment is one
- * character, two characters that are not `..`, or three to 255. Judged on the collapsed value.
+ * A reference that stays inside the package (R8): a relative path of at most eight segments with no
+ * `..` segment and no leading `/`, or an absolute URI with a scheme. Written without lookarounds; a
+ * segment is one character, two characters that are not `..`, or three to 80. For an absolute URI
+ * the scheme has at most 32 characters and at most 255 follow the colon, so the pattern proves at
+ * most 647 code points and 2,567 UTF-8 bytes, and a key of a `uuid` and a path (2,600 bytes) fits
+ * grizzle's 2,704-byte B-tree entry (campaign decision 26). Judged on the collapsed value.
  */
 export const hrefInPackage =
-  "^(?:[A-Za-z][A-Za-z0-9+.\\-]*:[^ \\t\\r\\n]*|(?:[^/]|[^/.][^/]|\\.[^/.]|[^/]{3,255})(?:/(?:[^/]|[^/.][^/]|\\.[^/.]|[^/]{3,255}))*)$" as const;
+  "^(?:[A-Za-z][A-Za-z0-9+.\\-]{0,31}:[^ \\t\\r\\n]{0,255}|(?:[^/]|[^/.][^/]|\\.[^/.]|[^/]{3,80})(?:/(?:[^/]|[^/.][^/]|\\.[^/.]|[^/]{3,80})){0,7})$" as const;
 
 /**
  * `xs:anyURI` lexical space as `xmllint` enforces it: libxml2's mapping of the characters outside
