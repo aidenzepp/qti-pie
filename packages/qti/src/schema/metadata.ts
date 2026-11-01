@@ -1,6 +1,7 @@
 /**
  * The metadata a package carries: a LOM record (`lom:lom`) under a manifest's or a resource's
- * `cp:metadata`, and the arms of the LOM `general` category beneath it.
+ * `cp:metadata`, and the arms of the LOM `general`, `lifeCycle` and `metaMetadata` categories
+ * beneath it.
  *
  * A `Lom` names the kind of element that owns it. The owner's arm holds the `cp:metadata` node the
  * record hangs under, and every row below the record copies the record's id (and its owner where
@@ -208,6 +209,89 @@ export const LomValue = relation("LomValue", { collapsed: token, id: uuid, value
 ]);
 
 /**
+ * The `lom:lifeCycle` of a record.
+ */
+export const LomLifeCycle = relation("LomLifeCycle", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The `lom:version` of a life cycle: a container of `lom:string` children.
+ */
+export const LomVersion = relation("LomVersion", { id: uuid, lifeCycle: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The `lom:status` of a life cycle: a vocabulary container of `lom:source` and `lom:value`.
+ */
+export const LomStatus = relation("LomStatus", { id: uuid, lifeCycle: uuid, lom: uuid }, ["id"]);
+
+/**
+ * A `lom:contribute` at its position under a `lom:lifeCycle` or a `lom:metaMetadata`.
+ */
+export const LomContribute = relation(
+  "LomContribute",
+  { id: uuid, lom: uuid, parent: uuid, position: pg.bigint },
+  ["id"],
+);
+
+/**
+ * The `lom:role` of a contribution: a vocabulary container.
+ */
+export const LomRole = relation("LomRole", { contribute: uuid, id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * A `lom:entity` of a contribution at its position: a `CharacterString` leaf holding vCard text,
+ * with the whitespace-collapsed form beside the value as written.
+ */
+export const LomEntity = relation(
+  "LomEntity",
+  {
+    collapsed: token,
+    contribute: uuid,
+    id: uuid,
+    lom: uuid,
+    position: pg.bigint,
+    value: wildcard,
+  },
+  ["id"],
+);
+
+/**
+ * The `lom:date` of a contribution: a date-time container of `lom:dateTime` and `lom:description`.
+ */
+export const LomDate = relation("LomDate", { contribute: uuid, id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The `lom:dateTime` of a date: a `CharacterString` leaf, with the whitespace-collapsed form beside
+ * the value as written.
+ */
+export const LomDateTime = relation(
+  "LomDateTime",
+  { collapsed: token, date: uuid, id: uuid, lom: uuid, value: wildcard },
+  ["id"],
+);
+
+/**
+ * The `lom:metaMetadata` of a record.
+ */
+export const LomMetaMetadata = relation("LomMetaMetadata", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * A `lom:metadataschema` of the meta-metadata category at its position: a `CharacterString` leaf,
+ * with the whitespace-collapsed form beside the value as written.
+ */
+export const LomMetadataschema = relation(
+  "LomMetadataschema",
+  {
+    collapsed: token,
+    id: uuid,
+    lom: uuid,
+    metaMetadata: uuid,
+    position: pg.bigint,
+    value: wildcard,
+  },
+  ["id"],
+);
+
+/**
  * A resource that owns a record with at least one `lom:identifier`, bound to the resource and its
  * type like the record's `ResourceLom`.
  */
@@ -262,24 +346,34 @@ export const LomObjectTitle = relation(
 );
 
 /**
- * The general category's arms, keyed by their `NodeKind` handles.
+ * The general, lifeCycle and metaMetadata categories' arms, keyed by their `NodeKind` handles.
  */
 export const arms = {
   "lom:aggregationLevel": LomAggregationLevel,
   "lom:catalog": LomIdentifierCatalog,
+  "lom:contribute": LomContribute,
   "lom:coverage": LomCoverage,
+  "lom:date": LomDate,
+  "lom:dateTime": LomDateTime,
   "lom:description": LomDescription,
+  "lom:entity": LomEntity,
   "lom:entry": LomIdentifierEntry,
   "lom:general": LomGeneral,
   "lom:identifier": LomIdentifier,
   "lom:keyword": LomKeyword,
   "lom:language": LomLanguage,
+  "lom:lifeCycle": LomLifeCycle,
   "lom:lom": Lom,
+  "lom:metaMetadata": LomMetaMetadata,
+  "lom:metadataschema": LomMetadataschema,
+  "lom:role": LomRole,
   "lom:source": LomSource,
+  "lom:status": LomStatus,
   "lom:string": LomString,
   "lom:structure": LomStructure,
   "lom:title": LomGeneralTitle,
   "lom:value": LomValue,
+  "lom:version": LomVersion,
 };
 
 /**
@@ -288,8 +382,12 @@ export const arms = {
 export const relations = {
   Lom,
   LomAggregationLevel,
+  LomContribute,
   LomCoverage,
+  LomDate,
+  LomDateTime,
   LomDescription,
+  LomEntity,
   LomGeneral,
   LomGeneralTitle,
   LomIdentifier,
@@ -297,15 +395,21 @@ export const relations = {
   LomIdentifierEntry,
   LomKeyword,
   LomLanguage,
+  LomLifeCycle,
+  LomMetaMetadata,
+  LomMetadataschema,
   LomObjectIdentifier,
   LomObjectTitle,
   LomOwner,
+  LomRole,
   LomSource,
+  LomStatus,
   LomString,
   LomStringLanguage,
   LomStructure,
   LomTitle,
   LomValue,
+  LomVersion,
   ManifestLom,
   ResourceLom,
   ResourceLomIdentified,
@@ -318,11 +422,13 @@ export const relations = {
  * kind and the edge between them, a resource owner also its resource and type; every row of the
  * general category belongs to a record, and a row that copies the record's owner agrees with it;
  * each identifier and language is the edge's child at the position it copies, each identifier part
- * the edge's child under the identifier it names and carries that identifier's position; each
- * title string is a string row of its own value; each string language belongs to a string. A
- * resource's record names at least one identifier and exactly one title; an item resource's record
- * has one object identifier and one object title, each a row of the record and of the item
- * document's own identifier or title.
+ * the edge's child under the identifier it names and carries that identifier's position; each title
+ * string is a string row of its own value; each string language belongs to a string. Each lifeCycle
+ * and metaMetadata row belongs to a record; a version, status, contribution, role, entity, date,
+ * date-time and metadata schema is the edge's child under the parent it names, at the position it
+ * copies where it has one. A resource's record names at least one identifier and exactly one title;
+ * an item resource's record has one object identifier and one object title, each a row of the
+ * record and of the item document's own identifier or title.
  */
 export const rules = [
   key(Lom, ["id", "owner"]),
@@ -367,6 +473,37 @@ export const rules = [
   contained(on(LomCoverage, "lom"), on(Lom, "id")),
   contained(on(LomStructure, "lom"), on(Lom, "id")),
   contained(on(LomAggregationLevel, "lom"), on(Lom, "id")),
+  key(LomLifeCycle, ["lom"]),
+  contained(on(LomLifeCycle, "lom"), on(Lom, "id")),
+  key(LomVersion, ["lifeCycle"]),
+  contained(on(LomVersion, "lom"), on(Lom, "id")),
+  contained(on(LomVersion, "id", "lifeCycle"), on(Edge, "child", "parent")),
+  key(LomStatus, ["lifeCycle"]),
+  contained(on(LomStatus, "lom"), on(Lom, "id")),
+  contained(on(LomStatus, "id", "lifeCycle"), on(Edge, "child", "parent")),
+  key(LomContribute, ["parent", "position"]),
+  contained(on(LomContribute, "lom"), on(Lom, "id")),
+  contained(on(LomContribute, "id", "parent"), on(Edge, "child", "parent")),
+  contained(on(LomContribute, "id", "position"), on(Edge, "child", "position")),
+  key(LomRole, ["contribute"]),
+  contained(on(LomRole, "lom"), on(Lom, "id")),
+  contained(on(LomRole, "id", "contribute"), on(Edge, "child", "parent")),
+  key(LomEntity, ["contribute", "position"]),
+  contained(on(LomEntity, "lom"), on(Lom, "id")),
+  contained(on(LomEntity, "id", "contribute"), on(Edge, "child", "parent")),
+  contained(on(LomEntity, "id", "position"), on(Edge, "child", "position")),
+  key(LomDate, ["contribute"]),
+  contained(on(LomDate, "lom"), on(Lom, "id")),
+  contained(on(LomDate, "id", "contribute"), on(Edge, "child", "parent")),
+  key(LomDateTime, ["date"]),
+  contained(on(LomDateTime, "lom"), on(Lom, "id")),
+  contained(on(LomDateTime, "id", "date"), on(Edge, "child", "parent")),
+  key(LomMetaMetadata, ["lom"]),
+  contained(on(LomMetaMetadata, "lom"), on(Lom, "id")),
+  key(LomMetadataschema, ["metaMetadata", "position"]),
+  contained(on(LomMetadataschema, "lom"), on(Lom, "id")),
+  contained(on(LomMetadataschema, "id", "metaMetadata"), on(Edge, "child", "parent")),
+  contained(on(LomMetadataschema, "id", "position"), on(Edge, "child", "position")),
   key(ResourceLomIdentified, ["lom"]),
   contained(
     on(ResourceLomIdentified, "lom", "package", "resource", "type"),
