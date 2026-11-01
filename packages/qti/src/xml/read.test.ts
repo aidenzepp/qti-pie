@@ -225,6 +225,85 @@ layer(NodeServices.layer, { excludeTestServices: true })("xml/read.ts", (suite) 
     }),
   );
 
+  suite.effect("applies the ATTLIST default and reads the entity of the doctype variant", () =>
+    Effect.gen(function* readDoctype() {
+      const directory = yield* materialize("doctype");
+      const { root } = yield* readFixture(directory, "choice.xml");
+
+      assert.strictEqual(attr(root, "adaptive"), "false");
+      assert.strictEqual(names(root).at(-1), "adaptive");
+      assert.include(textOf(first(root, "qti-prompt")), "1EdTech & friends");
+    }),
+  );
+
+  /**
+   * The expected outcome of each file under `fixtures/dtd/`: the attribute `x` of the root, a child
+   * element name, or the refusal.
+   */
+  const dtdFixtures: readonly (readonly [string, string])[] = [
+    ["attr-ws.xml", "a b"],
+    ["attlist-nmtokens.xml", "p q"],
+    ["quote.xml", 'a"b'],
+  ];
+
+  for (const [file, expected] of dtdFixtures) {
+    suite.effect(`reads dtd/${file} with x as ${JSON.stringify(expected)}`, () =>
+      Effect.gen(function* readDtd() {
+        const fs = yield* FileSystem.FileSystem;
+        const bytes = yield* fs.readFile(path.join(import.meta.dirname, "fixtures/dtd", file));
+        const document = yield* readXml(bytes);
+
+        assert.strictEqual(attr(document.root, "x"), expected);
+      }),
+    );
+  }
+
+  suite.effect("reads dtd/markup.xml with a b element under a", () =>
+    Effect.gen(function* readMarkup() {
+      const fs = yield* FileSystem.FileSystem;
+      const bytes = yield* fs.readFile(path.join(import.meta.dirname, "fixtures/dtd/markup.xml"));
+      const document = yield* readXml(bytes);
+
+      assert.deepStrictEqual(
+        document.root.children.map((child) =>
+          child.kind === "element" ? child.qname : child.kind,
+        ),
+        ["b"],
+      );
+    }),
+  );
+
+  suite.effect("refuses dtd/attr-lt.xml", () =>
+    Effect.gen(function* refuseAttrLt() {
+      const fs = yield* FileSystem.FileSystem;
+      const bytes = yield* fs.readFile(path.join(import.meta.dirname, "fixtures/dtd/attr-lt.xml"));
+      const error = yield* Effect.flip(readXml(bytes));
+
+      assert.strictEqual(error._tag, "WellFormednessError");
+    }),
+  );
+
+  suite.effect("normalizes a non-CDATA attribute and its default, and records an entity name", () =>
+    Effect.gen(function* readTypes() {
+      const text =
+        '<!DOCTYPE a [<!ATTLIST a i ID " p  q " e (u|v) " u " d NMTOKENS "  m  &amp;n  &z;  " c CDATA " k  ">]><a e=" v  " c=" k  "/>';
+      const { root } = yield* readXml(new TextEncoder().encode(text));
+
+      assert.deepStrictEqual(names(root), ["e", "c", "i", "d"]);
+      assert.strictEqual(attr(root, "e"), "v");
+      assert.strictEqual(attr(root, "c"), " k  ");
+      assert.strictEqual(attr(root, "i"), "p q");
+      assert.deepStrictEqual(root.attributes[3], {
+        local: "d",
+        namespace: "",
+        prefix: "",
+        qname: "d",
+        references: [{ name: "z", offset: 5 }],
+        value: "m &n &z;",
+      });
+    }),
+  );
+
   suite.effect("keeps CDATA, comments and processing instructions in order", () =>
     Effect.gen(function* readMixed() {
       const text =
