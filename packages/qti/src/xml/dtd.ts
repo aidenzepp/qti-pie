@@ -7,9 +7,9 @@ import type { XmlDeclaration } from "#qti/xml/tree.ts";
  *
  * `type` is the type keyword (`CDATA`, `ID`, `NMTOKENS`, `NOTATION`, ...) or, for an enumeration,
  * the parenthesized list as written. `default` is the value the declaration supplies, with its
- * character references and the five predefined entity references expanded, any other entity
- * reference left as written, and its white space normalized (XML 1.0 section 3.3.3); `#REQUIRED`
- * and `#IMPLIED` supply none.
+ * character references, the five predefined entity references and the general entities declared
+ * before the list expanded, any other entity reference left as written, and its white space
+ * normalized (XML 1.0 section 3.3.3); `#REQUIRED` and `#IMPLIED` supply none.
  */
 export interface AttlistEntry {
   readonly default: Option.Option<string>;
@@ -604,12 +604,12 @@ const characterOf = Effect.fnUntraced(function* characterOfReference(
  * @param replace - Gives the replacement for a token, given its match and its offset in the text.
  * @returns The rebuilt content.
  */
-const expandLiteral = Effect.fnUntraced(function* expandLiteralContent(
+const expandLiteral = Effect.fnUntraced(function* expandLiteralContent<E>(
   literal: Literal,
   pattern: RegExp,
   normalize: (text: string) => string,
-  replace: (token: RegExpExecArray, offset: number) => Effect.Effect<string, WellFormednessError>,
-): Effect.fn.Return<string, WellFormednessError> {
+  replace: (token: RegExpExecArray, offset: number) => Effect.Effect<string, E>,
+): Effect.fn.Return<string, E> {
   const pieces: string[] = [];
   let from = 0;
   for (const token of literal.content.matchAll(pattern)) {
@@ -688,15 +688,29 @@ const expandEntityValue = (tables: Tables, cursor: Cursor, literal: Literal) =>
   );
 
 /**
- * Compute the value an attribute declaration supplies: character references and the five
- * predefined entity references expanded, other entity references left as written, and each literal
- * tab and line break turned into a space (XML 1.0 section 3.3.3).
+ * Compute the value an attribute declaration supplies: character references, the five predefined
+ * entity references and the general entities declared so far expanded, other entity references
+ * left as written, and each literal tab and line break turned into a space (XML 1.0 sections 3.3.3
+ * and 4.4.5).
  *
+ * A declared entity's replacement text is processed by the same rules, recursively, and each one
+ * opened is charged against the subset's budget. A replacement text holding a `<` or a bare `&`
+ * is refused (the well-formedness constraint "No `<` in Attribute Values"), at the reference.
+ *
+ * @param tables - The subset's declarations and budget.
  * @param cursor - The read position, for failures.
- * @param literal - The default's literal.
+ * @param literal - The default's literal, or a replacement text being expanded.
+ * @param depth - How many replacement texts are open, `literal`'s own excluded.
+ * @param at - The offset to report failures at, when `literal` is a replacement text.
  * @returns The default value.
  */
-const expandDefault = (cursor: Cursor, literal: Literal) =>
+const expandDefault = (
+  tables: Tables,
+  cursor: Cursor,
+  literal: Literal,
+  depth = 0,
+  at: Option.Option<number> = Option.none(),
+): Effect.Effect<string, WellFormednessError | ReaderRefusal> =>
   expandLiteral(
     literal,
     DEFAULT_TOKEN,
@@ -704,21 +718,40 @@ const expandDefault = (cursor: Cursor, literal: Literal) =>
     Effect.fnUntraced(function* replaceDefaultToken(
       token: RegExpExecArray,
       offset: number,
-    ): Effect.fn.Return<string, WellFormednessError> {
+    ): Effect.fn.Return<string, WellFormednessError | ReaderRefusal> {
       const [whole, hex, decimal, entity] = token;
+      const where = Option.getOrElse(at, () => offset);
       if (hex !== undefined || decimal !== undefined) {
-        return yield* characterOf(cursor, token, offset);
+        return yield* characterOf(cursor, token, where);
       }
 
       if (entity === undefined) {
         return yield* failure(
           cursor,
           `attribute default: "${whole}" cannot appear in a default value; write "&#${whole === "&" ? "38" : "60"};".`,
-          offset,
+          where,
         );
       }
 
-      return PREDEFINED.get(entity) ?? whole;
+      const predefined = PREDEFINED.get(entity);
+      if (predefined !== undefined) {
+        return predefined;
+      }
+
+      const replacement = tables.entities.get(entity);
+      if (replacement === undefined) {
+        return whole;
+      }
+
+      yield* charge(tables.budget, replacement.length, depth + 1, entity);
+
+      return yield* expandDefault(
+        tables,
+        cursor,
+        { content: replacement, start: where },
+        depth + 1,
+        Option.some(where),
+      );
     }),
   );
 
@@ -839,8 +872,9 @@ const lexAttributeType = Effect.fnUntraced(function* lexAttributeTypeDeclaration
  *   the four forms.
  */
 const lexAttributeDefault = Effect.fnUntraced(function* lexAttributeDefaultDeclaration(
+  tables: Tables,
   cursor: Cursor,
-): Effect.fn.Return<Option.Option<string>, WellFormednessError> {
+): Effect.fn.Return<Option.Option<string>, WellFormednessError | ReaderRefusal> {
   const context = "attribute-list declaration";
   if (take(cursor, "#REQUIRED") || take(cursor, "#IMPLIED")) {
     return Option.none();
@@ -855,7 +889,7 @@ const lexAttributeDefault = Effect.fnUntraced(function* lexAttributeDefaultDecla
     );
   }
 
-  return Option.some(yield* expandDefault(cursor, yield* readQuoted(cursor, context)));
+  return Option.some(yield* expandDefault(tables, cursor, yield* readQuoted(cursor, context)));
 });
 
 /**
@@ -869,7 +903,7 @@ const lexAttributeDefault = Effect.fnUntraced(function* lexAttributeDefaultDecla
 const lexAttlist = Effect.fnUntraced(function* lexAttlistDeclaration(
   tables: Tables,
   cursor: Cursor,
-): Effect.fn.Return<void, WellFormednessError> {
+): Effect.fn.Return<void, WellFormednessError | ReaderRefusal> {
   const context = "attribute-list declaration";
   yield* expectSpace(cursor, context);
 
@@ -890,7 +924,7 @@ const lexAttlist = Effect.fnUntraced(function* lexAttlistDeclaration(
     const type = yield* lexAttributeType(cursor);
     yield* expectSpace(cursor, context);
 
-    const entry = { default: yield* lexAttributeDefault(cursor), type };
+    const entry = { default: yield* lexAttributeDefault(tables, cursor), type };
     const attributes = tables.attlists.get(element) ?? new Map<string, AttlistEntry>();
     tables.attlists.set(element, attributes);
     if (!attributes.has(name)) {
@@ -1037,7 +1071,7 @@ const readDeclarationKeyword = Effect.fnUntraced(function* readSubsetDeclaration
 const lexMarkup = Effect.fnUntraced(function* lexSubsetMarkup(
   tables: Tables,
   cursor: Cursor,
-): Effect.fn.Return<void, WellFormednessError> {
+): Effect.fn.Return<void, WellFormednessError | ReaderRefusal> {
   if (cursor.text.startsWith("<!--", cursor.offset)) {
     yield* skipComment(cursor);
   } else if (cursor.text.startsWith("<?", cursor.offset)) {

@@ -366,6 +366,12 @@ describe("the internal subset", () => {
   );
 });
 
+/**
+ * The table of `a` after `declarations` and a list whose default `d` names the entity `e`.
+ */
+const defaultOf = (declarations: string) =>
+  attlistOf(`<!DOCTYPE a [${declarations}<!ATTLIST a d CDATA "1&e;2">]><a/>`, "a");
+
 describe("attribute-list declarations", () => {
   it.effect("table each attribute's type and default", () =>
     Effect.gen(function* tablesAttributes() {
@@ -380,6 +386,41 @@ describe("attribute-list declarations", () => {
         ["z", { default: Option.none(), type: "CDATA" }],
         ["w", { default: Option.none(), type: "CDATA" }],
       ]);
+    }),
+  );
+
+  it.effect("expand the general entities declared before the list in a default", () =>
+    Effect.gen(function* expandsEntities() {
+      assert.deepStrictEqual(yield* defaultOf('<!ENTITY e "x&#9;y">'), [
+        ["d", { default: Option.some("1x y2"), type: "CDATA" }],
+      ]);
+      assert.deepStrictEqual(yield* defaultOf('<!ENTITY f "q"><!ENTITY e "x&f;y">'), [
+        ["d", { default: Option.some("1xqy2"), type: "CDATA" }],
+      ]);
+      assert.deepStrictEqual(yield* defaultOf('<!ENTITY e "x&lt;y">'), [
+        ["d", { default: Option.some("1x<y2"), type: "CDATA" }],
+      ]);
+    }),
+  );
+
+  it.effect("refuse a default whose entity's replacement text holds a less-than sign", () =>
+    Effect.gen(function* refusesLessThan() {
+      const error = yield* refusalOf(
+        '<!DOCTYPE a [<!ENTITY e "x&#60;y"><!ATTLIST a d CDATA "1&e;2">]><a/>',
+      );
+
+      assert.instanceOf(error, WellFormednessError);
+    }),
+  );
+
+  it.effect("keep an entity declared after the list as written in a default", () =>
+    Effect.gen(function* keepsLaterEntity() {
+      const table = yield* attlistOf(
+        '<!DOCTYPE a [<!ATTLIST a d CDATA "1&e;2"><!ENTITY e "x">]><a/>',
+        "a",
+      );
+
+      assert.deepStrictEqual(table, [["d", { default: Option.some("1&e;2"), type: "CDATA" }]]);
     }),
   );
 
