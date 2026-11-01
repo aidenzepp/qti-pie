@@ -79,14 +79,24 @@ const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
 type Pairs = readonly (readonly [name: string, value: string])[];
 
 /**
- * The XML name and namespace of each element kind, from the registries; the generic kinds are not
- * elements and are left out.
+ * The registry rows that name an element, by kind; the generic kinds are not elements and are left
+ * out.
  */
-const names: ReadonlyMap<string, RegistryRow> = new Map(
-  vocabularies
-    .flatMap((vocabulary) => Object.entries<RegistryRow>(vocabulary.registry))
-    .filter(([, row]) => row.local !== ""),
-);
+const elementRows = vocabularies
+  .flatMap((vocabulary) => Object.entries<RegistryRow>(vocabulary.registry))
+  .filter(([, row]) => row.local !== "");
+
+/**
+ * The XML name and namespace of each element kind, from the registries.
+ *
+ * A kind named by two registries would let the later row replace the earlier, so building the map
+ * refuses one.
+ */
+const names: ReadonlyMap<string, RegistryRow> = new Map(elementRows);
+
+if (names.size !== elementRows.length) {
+  throw new Error("Two vocabulary registries name the same element kind.");
+}
 
 /**
  * `facts` keyed by `key`, the last fact winning a shared key.

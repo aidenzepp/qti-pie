@@ -7,14 +7,16 @@ import { Qti } from "#qti/schema/qti.ts";
 /**
  * The relations the migration seeds, which no role writes.
  */
-const seeded = new Set([
+const seededNames = [
   "Admission",
   "BindingFit",
   "OperatorArity",
   "OperatorArityMax",
   "ResourceTypeOf",
   "RootOfType",
-]);
+] as const;
+
+const seeded: ReadonlySet<string> = new Set(seededNames);
 
 type Members = typeof Qti.relations;
 
@@ -39,16 +41,11 @@ const stored = Object.fromEntries(
 /**
  * The stored relations the migration does not seed.
  */
-// SAFETY: the keys of `stored` are `StoredName` and the filter removes the six seeded names.
+// SAFETY: the keys of `stored` are `StoredName` and the filter removes the seeded names.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
 const written = Object.keys(stored).filter((name) => !seeded.has(name)) as Exclude<
   StoredName,
-  | "Admission"
-  | "BindingFit"
-  | "OperatorArity"
-  | "OperatorArityMax"
-  | "ResourceTypeOf"
-  | "RootOfType"
+  (typeof seededNames)[number]
 >[];
 
 export const Author = role(Qti, "author", stored, { write: written });
