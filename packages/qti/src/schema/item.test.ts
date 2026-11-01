@@ -1,6 +1,8 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import * as html from "#qti/schema/html.ts";
+import * as asiKinds from "#qti/schema/kinds/asi.ts";
+import * as htmlKinds from "#qti/schema/kinds/html.ts";
 import * as item from "#qti/schema/item.ts";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
@@ -122,5 +124,71 @@ describe("item", () => {
     for (const handle of [...Object.keys(item.arms), ...Object.keys(html.arms)]) {
       assert.include(node.relations.NodeKind.handles, handle);
     }
+  });
+
+  describe("admission rows of the ASI and HTML kinds", () => {
+    const rows = [...asiKinds.admission, ...htmlKinds.admission];
+    const versions = ["3.0.0", "3.0.1"] as const;
+    const has = (parent: string, child: string, version: string): boolean =>
+      rows.some((r) => r.parent === parent && r.child === child && r.version === version);
+
+    const key = (version: string): readonly string[] =>
+      rows
+        .filter((r) => r.version === version)
+        .map((r) => `${r.parent}>${r.child}`)
+        .toSorted();
+
+    const present = [
+      ["qti-item-body", "p"],
+      ["qti-item-body", "qti-choice-interaction"],
+      ["qti-item-body", "ws"],
+      ["qti-choice-interaction", "qti-prompt"],
+      ["qti-choice-interaction", "qti-simple-choice"],
+      ["p", "img"],
+      ["p", "text"],
+      ["p", "ws"],
+      ["qti-prompt", "text"],
+      ["qti-simple-choice", "text"],
+      ["qti-value", "text"],
+      ["qti-value", "ws"],
+      ["qti-value", "entityRef"],
+      ["qti-value", "comment"],
+      ["img", "comment"],
+      ["img", "pi"],
+    ] as const;
+
+    const absent = [
+      ["qti-prompt", "qti-simple-choice"],
+      ["qti-value", "p"],
+      ["img", "text"],
+      ["img", "ws"],
+      ["qti-item-body", "text"],
+    ] as const;
+
+    it("admits each present pair under both versions", () => {
+      for (const [parent, child] of present) {
+        for (const version of versions) {
+          assert.isTrue(has(parent, child, version), `${parent} > ${child} @ ${version}`);
+        }
+      }
+    });
+
+    it("refuses each absent pair under both versions", () => {
+      for (const [parent, child] of absent) {
+        for (const version of versions) {
+          assert.isFalse(has(parent, child, version), `${parent} > ${child} @ ${version}`);
+        }
+      }
+    });
+
+    it("gives every element host a comment row and a pi row, and both versions the same rows", () => {
+      for (const host of [...asiKinds.kinds, ...htmlKinds.kinds]) {
+        for (const version of versions) {
+          assert.isTrue(has(host, "comment", version), `${host} comment @ ${version}`);
+          assert.isTrue(has(host, "pi", version), `${host} pi @ ${version}`);
+        }
+      }
+      assert.deepStrictEqual(key("3.0.0"), key("3.0.1"));
+    });
   });
 });

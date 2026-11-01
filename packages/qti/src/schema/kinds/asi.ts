@@ -3,7 +3,7 @@
  */
 import { Option } from "effect";
 
-import type { AdmissionRow, RegistryRow } from "#qti/schema/kinds/generic.ts";
+import type { AdmissionRow, RegistryRow, SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
 
 const namespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 
@@ -115,7 +115,41 @@ export const registry: Readonly<Record<(typeof kinds)[number], RegistryRow>> = {
   "qti-value": row("qti-value", ["field-identifier", "base-type"]),
 };
 
+const versions = ["3.0.0", "3.0.1"] as const satisfies readonly SchemaVersionHandle[];
+
+const elementOnly = ["ws", "comment", "pi"] as const;
+
+const mixed = ["text", "ws", "entityRef", "comment", "pi"] as const;
+
 /**
- * The ASI admission rows: none yet.
+ * The children each ASI kind admits, by content type: the spec's 3.6 and 4.3. The element-only
+ * hosts add whitespace, comments and instructions; the mixed hosts add character data and entity
+ * references; `qti-value` is simple content; `qti-response-processing` admits no element yet.
  */
-export const admission: readonly AdmissionRow[] = [];
+const children: Readonly<Record<(typeof kinds)[number], readonly string[]>> = {
+  "qti-assessment-item": [
+    "qti-response-declaration",
+    "qti-outcome-declaration",
+    "qti-item-body",
+    "qti-response-processing",
+    ...elementOnly,
+  ],
+  "qti-choice-interaction": ["qti-prompt", "qti-simple-choice", ...elementOnly],
+  "qti-correct-response": ["qti-value", ...elementOnly],
+  "qti-default-value": ["qti-value", ...elementOnly],
+  "qti-item-body": ["qti-choice-interaction", "p", ...elementOnly],
+  "qti-outcome-declaration": ["qti-default-value", ...elementOnly],
+  "qti-prompt": ["p", "img", ...mixed],
+  "qti-response-declaration": ["qti-default-value", "qti-correct-response", ...elementOnly],
+  "qti-response-processing": elementOnly,
+  "qti-simple-choice": ["p", "img", ...mixed],
+  "qti-value": mixed,
+};
+
+/**
+ * The ASI admission rows, the same for both versions.
+ */
+export const admission: readonly AdmissionRow[] = Object.entries(children).flatMap(
+  ([parent, kids]) =>
+    versions.flatMap((version) => kids.map((child) => ({ child, parent, version }))),
+);
