@@ -15,7 +15,8 @@ import type { FileSystem, PlatformError } from "effect";
 import { Rows, treeRows, typedAttribute } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { readEntry } from "#qti/package/read.ts";
-import type { Entry } from "#qti/package/read.ts";
+import type { Entry, PackageReadError } from "#qti/package/read.ts";
+import { Edge } from "#qti/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
 import {
   Dependency,
@@ -163,7 +164,8 @@ const versionOf = (doc: XmlDocument): Effect.Effect<SchemaVersionHandle, NotQti3
  * The root must be the QTI 3 content package `manifest` and its `schemaversion` `3.0.0` or `3.0.1`,
  * and that is judged before anything else. The package id is a fresh uuid and is the manifest
  * tree's id. Every manifest attribute goes through {@link typedAttribute} with the class the spec
- * names. The `file` positions count the resource's `file` children from 0.
+ * names. A `file`'s position is its element's `Edge` position under the resource, every child
+ * counted.
  *
  * @param dir - The package directory, where the bytes of unclaimed files are read.
  * @param entries - The package's entries, as `listPackage` returns them.
@@ -171,7 +173,8 @@ const versionOf = (doc: XmlDocument): Effect.Effect<SchemaVersionHandle, NotQti3
  * @param rows - The rows so far.
  * @returns The rows with the manifest's added, the node index, the package id, the version and one
  *   document per resource of a QTI type that has an `href`; `NotQti3` for a manifest that is not
- *   QTI 3, `UnmodeledVocabulary` for an element or attribute no registry names.
+ *   QTI 3, `UnmodeledVocabulary` for an element or attribute no registry names, and
+ *   `PackageReadError` for an entry that is not a regular file inside the package.
  */
 export const manifestRows = Effect.fn("import.manifestRows")(function* manifestRows(
   dir: string,
@@ -186,7 +189,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     rows: Rows;
     version: SchemaVersionHandle;
   },
-  NotQti3 | UnmodeledVocabulary | PlatformError.PlatformError,
+  NotQti3 | PackageReadError | UnmodeledVocabulary | PlatformError.PlatformError,
   FileSystem.FileSystem
 > {
   const version = yield* versionOf(doc);
@@ -198,6 +201,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
   );
   const { nodes } = tree;
   let built = tree.rows;
+  const positions = new Map(Rows.of(built, Edge).map((edge) => [edge.child, edge.position]));
 
   const add = <R extends AnyRelation>(relation: R, facts: readonly Fact<R>[]): void => {
     built = Rows.add(built, relation, facts);
@@ -275,15 +279,16 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       }
     }
 
-    for (const [position, file] of childrenNamed(resource, "file").entries()) {
+    for (const file of childrenNamed(resource, "file")) {
       const id = kindIs(file, "cp:file");
-      if (id !== undefined) {
+      const position = id === undefined ? undefined : positions.get(id);
+      if (id !== undefined && position !== undefined) {
         add(File, [
           {
             href: typed(file, "href", "collapse"),
             id,
             package: packageId,
-            position: BigInt(position),
+            position,
             resource: node.id,
           },
         ]);
@@ -343,7 +348,6 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     unclaimed,
     (entry) =>
       readEntry(dir, entry.path).pipe(
-        Effect.catchTag("PackageReadError", Effect.die),
         Effect.map((bytes) => ({
           byteLength: BigInt(bytes.length),
           content: Buffer.from(bytes).toString("base64"),
