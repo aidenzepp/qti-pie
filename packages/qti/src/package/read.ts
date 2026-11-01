@@ -14,20 +14,24 @@ const MANIFEST = "imsmanifest.xml";
 const INSPECT_CONCURRENCY = 16;
 
 /**
- * The directory cannot be read as a package, under the named rule.
+ * The directory or an entry path cannot be read as part of a package, under the named rule.
  *
- * `manifest-root` is a directory that has no `imsmanifest.xml` at its root; `dir` is that
- * directory.
+ * `manifest-root` is a directory that has no `imsmanifest.xml` at its root. `entry-path` is an
+ * entry path that is not a regular file inside the package directory. `dir` is the package
+ * directory and `path` the entry path concerned, `imsmanifest.xml` for `manifest-root`.
  */
 export class PackageReadError extends Schema.TaggedError<PackageReadError>()("PackageReadError", {
   dir: Schema.String,
-  rule: Schema.Literal("manifest-root"),
+  path: Schema.String,
+  rule: Schema.Literals(["manifest-root", "entry-path"]),
 }) {
   /**
-   * The directory, what it lacks, and where a package keeps it, in one line.
+   * What was refused, why, and what to change, in one or two sentences.
    */
   override get message(): string {
-    return `${this.dir} has no ${MANIFEST} at its root. A package keeps its manifest in its top directory, so pass the directory that holds ${MANIFEST}.`;
+    return this.rule === "manifest-root"
+      ? `${this.dir} has no ${MANIFEST} at its root. A package keeps its manifest in its top directory, so pass the directory that holds ${MANIFEST}.`
+      : `${this.path} is not an entry of the package at ${this.dir} (an entry path is relative, has no .. segment, resolves inside the package directory and names a regular file). Fix the href in the manifest.`;
   }
 }
 
@@ -70,7 +74,7 @@ export const listPackage = Effect.fn("package.listPackage")(function* listPackag
   );
 
   if (!files.includes(MANIFEST)) {
-    return yield* new PackageReadError({ dir, rule: "manifest-root" });
+    return yield* new PackageReadError({ dir, path: MANIFEST, rule: "manifest-root" });
   }
 
   return files
@@ -81,15 +85,43 @@ export const listPackage = Effect.fn("package.listPackage")(function* listPackag
 /**
  * Read one file of a package.
  *
+ * The path is untrusted: it comes from a manifest `href`. It must be relative, have no `..`
+ * segment, name a regular file (not a link or a directory) and resolve, links in its directories
+ * included, to a place inside the package directory.
+ *
  * @param dir - The package directory.
  * @param path - A file's path relative to `dir`, as {@link listPackage} returns it.
- * @returns The file's bytes, untouched.
+ * @returns The file's bytes, untouched, or a {@link PackageReadError} with rule `entry-path` when
+ *   `path` is not an entry of the package. A missing file is a `PlatformError`.
  */
 export const readEntry = Effect.fn("package.readEntry")(function* readEntry(
   dir: string,
   path: string,
-): Effect.fn.Return<Uint8Array, PlatformError.PlatformError, FileSystem.FileSystem> {
+): Effect.fn.Return<
+  Uint8Array,
+  PackageReadError | PlatformError.PlatformError,
+  FileSystem.FileSystem
+> {
   const fs = yield* FileSystem.FileSystem;
+  const refused = new PackageReadError({ dir, path, rule: "entry-path" });
+  const target = `${dir}/${path}`;
 
-  return yield* fs.readFile(`${dir}/${path}`);
+  if (path.startsWith("/") || path.split("/").includes("..")) {
+    return yield* refused;
+  }
+
+  const info = yield* fs.lstat(target);
+
+  if (info.type !== "File") {
+    return yield* refused;
+  }
+
+  const realDir = yield* fs.realPath(dir);
+  const realTarget = yield* fs.realPath(target);
+
+  if (!realTarget.startsWith(`${realDir}/`)) {
+    return yield* refused;
+  }
+
+  return yield* fs.readFile(target);
 });

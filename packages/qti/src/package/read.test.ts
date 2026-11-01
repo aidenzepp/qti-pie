@@ -33,6 +33,51 @@ let SIMPLE = "";
  */
 const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
 
+/**
+ * Assert that reading `entry` from `dir` is refused as an `entry-path` {@link PackageReadError}
+ * that carries `dir` and `entry` as passed.
+ *
+ * @param dir - The package directory.
+ * @param entry - The entry path handed to `readEntry`.
+ */
+const assertEntryRefused = Effect.fn("test.assertEntryRefused")(function* assertEntryRefused(
+  dir: string,
+  entry: string,
+) {
+  const failure = yield* Effect.flip(readEntry(dir, entry));
+
+  assert.instanceOf(failure, PackageReadError);
+  assert.strictEqual(failure.rule, "entry-path");
+  assert.strictEqual(failure.dir, dir);
+  assert.strictEqual(failure.path, entry);
+});
+
+/**
+ * Make a package under `workDirectory` with a manifest at its root and a file `outside.txt` beside
+ * it, in a scratch directory the surrounding scope removes.
+ *
+ * @returns The package directory.
+ */
+const makeLinkedPackage = Effect.fn("test.makeLinkedPackage")(function* makeLinkedPackage() {
+  const fs = yield* FileSystem.FileSystem;
+
+  yield* fs.makeDirectory(workDirectory, { recursive: true });
+
+  const parent = yield* fs.makeTempDirectoryScoped({
+    directory: workDirectory,
+    prefix: "package-read-test-",
+  });
+  const dir = `${parent}/package`;
+
+  yield* fs.makeDirectory(dir);
+  yield* fs.writeFileString(`${dir}/imsmanifest.xml`, "<manifest/>");
+  yield* fs.writeFileString(`${parent}/outside.txt`, "outside");
+  yield* fs.symlink(`${parent}/outside.txt`, `${dir}/link.txt`);
+  yield* fs.symlink(parent, `${dir}/up`);
+
+  return dir;
+});
+
 beforeAll(() =>
   Effect.gen(function* materializeSimple() {
     SIMPLE = yield* materialize("simple");
@@ -81,5 +126,27 @@ layer(TestLayer, { excludeTestServices: true })("package/read.ts", (it) => {
       assert.strictEqual(bytes.length, 4029);
       assert.isTrue(sha256(bytes).startsWith("3ca00b7cf97dea89"));
     }),
+  );
+
+  it.effect("readEntry refuses an absolute entry path", () =>
+    assertEntryRefused(SIMPLE, path.resolve(SIMPLE, "choice.xml")),
+  );
+
+  it.effect("readEntry refuses a .. segment even when the path resolves inside", () =>
+    assertEntryRefused(SIMPLE, "images/../choice.xml"),
+  );
+
+  it.effect("readEntry refuses a directory", () => assertEntryRefused(SIMPLE, "images"));
+
+  it.effect("readEntry refuses a symbolic link to a file", () =>
+    Effect.gen(function* refuseFileLink() {
+      yield* assertEntryRefused(yield* makeLinkedPackage(), "link.txt");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("readEntry refuses a file reached through a link that leaves the package", () =>
+    Effect.gen(function* refuseDirectoryLink() {
+      yield* assertEntryRefused(yield* makeLinkedPackage(), "up/outside.txt");
+    }).pipe(Effect.scoped),
   );
 });
