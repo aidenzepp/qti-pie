@@ -80,6 +80,17 @@ const first = (node: Element, qname: string): Element => {
 };
 
 /**
+ * One child as a string: an entity reference as `&name;`, text as its value, anything else `-`.
+ */
+const describe = (child: Child): string => {
+  if (child.kind === "entityRef") {
+    return `&${child.name};`;
+  }
+
+  return child.kind === "text" ? child.value : "-";
+};
+
+/**
  * The qnames of the attributes of `node`, in order.
  */
 const names = (node: Element): readonly string[] =>
@@ -343,6 +354,70 @@ layer(NodeServices.layer, { excludeTestServices: true })("xml/read.ts", (suite) 
     }),
   );
 
+  suite.effect("reads the external variant with its undeclared references as sentinels", () =>
+    Effect.gen(function* readExternal() {
+      const directory = yield* materialize("external");
+      const { root } = yield* readFixture(directory, "choice.xml");
+      const prompt = first(root, "qti-prompt");
+      const alt = first(root, "img").attributes.find((attribute) => attribute.qname === "alt");
+
+      assert.deepStrictEqual(prompt.children, [
+        { cdata: false, kind: "text", value: "What does it say? " },
+        { kind: "entityRef", name: "undeclared" },
+      ]);
+      assert.strictEqual(alt?.value, "NEVER LEAVE LUGGAGE &undeclared;");
+      assert.deepStrictEqual(alt?.references, [{ name: "undeclared", offset: 20 }]);
+    }),
+  );
+
+  suite.effect("refuses an undeclared entity in a standalone document", () =>
+    Effect.gen(function* refuseStandalone() {
+      const text =
+        '<?xml version="1.0" standalone="yes"?><!DOCTYPE a SYSTEM "a.dtd"><a>&undeclared;</a>';
+      const error = yield* Effect.flip(readXml(new TextEncoder().encode(text)));
+
+      assert.strictEqual(error._tag, "ReaderRefusal");
+      assert.strictEqual(error._tag === "ReaderRefusal" && error.rule, "undeclared-entity");
+      assert.include(error._tag === "ReaderRefusal" ? error.detail : "", "undeclared");
+    }),
+  );
+
+  suite.effect("refuses bad/07-undeclared-entity.xml under the named rule", () =>
+    Effect.gen(function* refuseNbsp() {
+      const fs = yield* FileSystem.FileSystem;
+      const bytes = yield* fs.readFile(
+        path.join(import.meta.dirname, "fixtures/bad/07-undeclared-entity.xml"),
+      );
+      const error = yield* Effect.flip(readXml(bytes));
+
+      assert.strictEqual(error._tag === "ReaderRefusal" && error.rule, "undeclared-entity");
+      assert.include(error._tag === "ReaderRefusal" ? error.detail : "", "nbsp");
+    }),
+  );
+
+  suite.effect("keeps references inside comments and CDATA, and skips a used sentinel", () =>
+    Effect.gen(function* readHidden() {
+      const text =
+        '<!DOCTYPE a SYSTEM "a.dtd"><a x="&p;&#xE000;&q;"><!--&n;--><![CDATA[&m;]]>\uE000&p;&#xE001;&q;&p;</a>';
+      const { root } = yield* readXml(new TextEncoder().encode(text));
+
+      assert.deepStrictEqual(root.attributes[0]?.references, [
+        { name: "p", offset: 0 },
+        { name: "q", offset: 4 },
+      ]);
+      assert.strictEqual(root.attributes[0]?.value, "&p;\uE000&q;");
+      assert.deepStrictEqual(root.children.map(describe), [
+        "-",
+        "&m;",
+        "\uE000",
+        "&p;",
+        "\uE001",
+        "&q;",
+        "&p;",
+      ]);
+    }),
+  );
+
   /**
    * The failure tag of each file under `fixtures/bad/`.
    */
@@ -353,7 +428,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("xml/read.ts", (suite) 
     ["04-undeclared-element-prefix.xml", "WellFormednessError"],
     ["05-undeclared-attribute-prefix.xml", "WellFormednessError"],
     ["06-lt-in-attribute.xml", "WellFormednessError"],
-    ["07-undeclared-entity.xml", "WellFormednessError"],
+    ["07-undeclared-entity.xml", "ReaderRefusal"],
     ["08-control-character.xml", "WellFormednessError"],
     ["09-two-roots.xml", "WellFormednessError"],
     ["10-trailing-content.xml", "WellFormednessError"],

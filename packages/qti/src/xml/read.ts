@@ -5,13 +5,13 @@ import { decode } from "#qti/xml/decode.ts";
 import type { Decoded } from "#qti/xml/decode.ts";
 import { lexProlog, substitute } from "#qti/xml/dtd.ts";
 import type { AttlistEntry, Prolog, Substituted } from "#qti/xml/dtd.ts";
-import { WellFormednessError } from "#qti/xml/errors.ts";
-import type { ReaderRefusal } from "#qti/xml/errors.ts";
+import { ReaderRefusal, WellFormednessError } from "#qti/xml/errors.ts";
 import type {
   Attribute,
   AttributeReference,
   Child,
   Element,
+  EntityRef,
   Misc,
   XmlDocument,
 } from "#qti/xml/tree.ts";
@@ -36,6 +36,133 @@ interface Built {
   readonly prolog: readonly Misc[];
   readonly root: Element;
 }
+
+/**
+ * The first and last code points of the private use area, where an undeclared entity reference
+ * borrows a stand-in character (6,400 of them).
+ */
+const SENTINEL_FIRST = 0xe0_00;
+
+const SENTINEL_LAST = 0xf8_ff;
+
+/**
+ * The characters that may start an XML name (XML 1.0 section 2.3, `NameStartChar`) and continue
+ * one (`NameChar`), as the inside of a `u`-mode character class. `dtd.ts` keeps the same two
+ * classes unexported.
+ */
+const NAME_START = String.raw`:A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\u{10000}-\u{EFFFF}`;
+
+const NAME_CHAR = String.raw`${NAME_START}\-.0-9\u00B7\u0300-\u036F\u203F\u2040`;
+
+/**
+ * What the undeclared-reference scan stops at, in document order: a comment, a processing
+ * instruction or a CDATA section (skipped whole), a character reference (its value group), or a
+ * general entity reference (its name group).
+ */
+const SCAN = new RegExp(
+  String.raw`<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!\[CDATA\[[\s\S]*?\]\]>|&#(?:x(?<hex>[0-9A-Fa-f]+)|(?<decimal>[0-9]+));|&(?<name>[${NAME_START}][${NAME_CHAR}]*);`,
+  "gu",
+);
+
+/**
+ * The five entities every XML processor knows (XML 1.0 section 4.6).
+ */
+const PREDEFINED: ReadonlySet<string> = new Set(["lt", "gt", "amp", "apos", "quot"]);
+
+/**
+ * The undeclared entity names the body references, in order of first use, and the code points the
+ * body already holds in the sentinel range, whether written out or named by a character reference.
+ */
+interface Scanned {
+  readonly names: readonly string[];
+  readonly used: ReadonlySet<number>;
+}
+
+/**
+ * Scan the body of `substituted` (everything from `bodyStart`) for references to entities that are
+ * neither predefined nor declared.
+ */
+const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Scanned => {
+  const names = new Set<string>();
+  const used = new Set<number>();
+  for (const character of body) {
+    const point = character.codePointAt(0) ?? 0;
+    if (point >= SENTINEL_FIRST && point <= SENTINEL_LAST) {
+      used.add(point);
+    }
+  }
+
+  for (const match of body.matchAll(SCAN)) {
+    const { decimal, hex, name } = match.groups ?? {};
+    if (name !== undefined && !PREDEFINED.has(name) && !declared.has(name)) {
+      names.add(name);
+    } else if (hex !== undefined || decimal !== undefined) {
+      used.add(hex === undefined ? Number(decimal) : Number.parseInt(hex, 16));
+    }
+  }
+
+  return { names: [...names], used };
+};
+
+/**
+ * The refusal for a reference to an entity the document never declares and has nowhere to declare.
+ */
+const undeclared = (name: string, why: string): ReaderRefusal =>
+  new ReaderRefusal({
+    detail: `the entity "${name}" is referenced but not declared, and ${why}, so no declaration can exist (XML 1.0 section 4.1, Entity Declared).`,
+    rule: "undeclared-entity",
+  });
+
+/**
+ * Give each undeclared entity name in the body a stand-in character, or refuse.
+ *
+ * A document that is `standalone="yes"` or has no external subset declares every entity it may use
+ * in its own prolog, so an undeclared reference is a well-formedness error and is refused naming
+ * the entity. Otherwise the declaration may sit in the external subset, which is never read: the
+ * name gets a private use character that occurs nowhere in the document, and the parser appends it
+ * as plain text.
+ *
+ * @returns The stand-in character of each name; the map is empty when the body has no such
+ *   reference.
+ */
+const assignSentinels = (
+  substituted: Substituted,
+  prolog: Prolog,
+): Effect.Effect<ReadonlyMap<string, string>, ReaderRefusal> =>
+  Effect.suspend(() => {
+    const scanned = scanReferences(substituted.body.slice(prolog.bodyStart), prolog.entities);
+    const [firstName] = scanned.names;
+    if (firstName === undefined) {
+      return Effect.succeed(new Map<string, string>());
+    }
+
+    if (prolog.standalone) {
+      return Effect.fail(undeclared(firstName, 'the document says standalone="yes"'));
+    }
+
+    if (!prolog.externalSubset) {
+      return Effect.fail(undeclared(firstName, "the document has no external subset"));
+    }
+
+    const sentinels = new Map<string, string>();
+    let point = SENTINEL_FIRST;
+    for (const name of scanned.names) {
+      while (point <= SENTINEL_LAST && scanned.used.has(point)) {
+        point += 1;
+      }
+
+      if (point > SENTINEL_LAST) {
+        return Effect.fail(
+          undeclared(name, "the document leaves no private use character free to stand for it"),
+        );
+      }
+
+      sentinels.set(name, String.fromCodePoint(point));
+      point += 1;
+    }
+
+    return Effect.succeed(sentinels);
+  });
 
 /**
  * The UTF-16 index in `text` of the code point at `position`, which `saxes` counts in code points.
@@ -81,8 +208,14 @@ const toElement = (open: OpenElement): Element => ({
  * `saxes` throws its first well-formedness error; that error becomes a `WellFormednessError` at
  * the position the parser had reached.
  */
-const parse = (substituted: Substituted): Effect.Effect<Built, WellFormednessError> => {
+const parse = (
+  substituted: Substituted,
+  sentinels: ReadonlyMap<string, string>,
+): Effect.Effect<Built, WellFormednessError> => {
   const parser = new SaxesParser({ position: true, xmlns: true });
+  for (const [name, sentinel] of sentinels) {
+    parser.ENTITIES[name] = sentinel;
+  }
 
   return Effect.try({
     catch: (error) =>
@@ -243,16 +376,105 @@ const applyAttlists = (element: Element, attlists: Prolog["attlists"]): Element 
 };
 
 /**
+ * An attribute value after its stand-in characters are written back as `&name;`, with where each
+ * `&` landed.
+ */
+interface Restored {
+  readonly references: readonly AttributeReference[];
+  readonly value: string;
+}
+
+/**
+ * `value` with each stand-in character written back as `&name;`.
+ */
+const restoreValue = (value: string, names: ReadonlyMap<string, string>): Restored => {
+  const references: AttributeReference[] = [];
+  let restored = "";
+  for (const character of value) {
+    const name = names.get(character);
+    if (name === undefined) {
+      restored += character;
+    } else {
+      references.push({ name, offset: restored.length });
+      restored += `&${name};`;
+    }
+  }
+
+  return { references, value: restored };
+};
+
+/**
+ * `value` split around its stand-in characters: the text between them as `Text` runs and each
+ * stand-in as an `EntityRef`.
+ */
+const restoreText = (value: string, names: ReadonlyMap<string, string>): readonly Child[] => {
+  const children: Child[] = [];
+  let run = "";
+  for (const character of value) {
+    const name = names.get(character);
+    if (name === undefined) {
+      run += character;
+    } else {
+      if (run !== "") {
+        children.push({ cdata: false, kind: "text", value: run });
+      }
+
+      children.push({ kind: "entityRef", name } satisfies EntityRef);
+      run = "";
+    }
+  }
+
+  if (run !== "") {
+    children.push({ cdata: false, kind: "text", value: run });
+  }
+
+  return children;
+};
+
+/**
+ * `element` and everything below it with each stand-in character replaced by the reference it
+ * stands for: an `EntityRef` among the children, and `&name;` in an attribute value with its
+ * offset recorded.
+ */
+const restoreReferences = (element: Element, names: ReadonlyMap<string, string>): Element => ({
+  ...element,
+  attributes: element.attributes.map((attribute) => {
+    const restored = restoreValue(attribute.value, names);
+
+    return restored.references.length === 0
+      ? attribute
+      : { ...attribute, references: restored.references, value: restored.value };
+  }),
+  children: element.children.flatMap((child): readonly Child[] => {
+    if (child.kind === "element") {
+      return [restoreReferences(child, names)];
+    }
+
+    return child.kind === "text" && !child.cdata ? restoreText(child.value, names) : [child];
+  }),
+});
+
+/**
  * Assemble the document from what the earlier stages read and the tree `saxes` built.
  */
-const assemble = (decoded: Decoded, prolog: Prolog, built: Built): XmlDocument => ({
-  charset: decoded.label,
-  declaration: prolog.declaration,
-  doctype: prolog.doctype,
-  epilog: built.epilog,
-  prolog: built.prolog,
-  root: prolog.attlists.size === 0 ? built.root : applyAttlists(built.root, prolog.attlists),
-});
+const assemble = (
+  decoded: Decoded,
+  prolog: Prolog,
+  built: Built,
+  names: ReadonlyMap<string, string>,
+): XmlDocument => {
+  const applied =
+    prolog.attlists.size === 0 ? built.root : applyAttlists(built.root, prolog.attlists);
+
+  return {
+    charset: decoded.label,
+    declaration: prolog.declaration,
+    doctype: prolog.doctype,
+    epilog: built.epilog,
+    prolog: built.prolog,
+    root: names.size === 0 ? applied : restoreReferences(applied, names),
+  };
+};
 
 /**
  * Read a document's bytes into its tree.
@@ -261,8 +483,13 @@ const assemble = (decoded: Decoded, prolog: Prolog, built: Built): XmlDocument =
  * body, then `saxes` parses the result with namespaces on and the tree is built from its events:
  * adjacent text events become one `Text`, a CDATA section stays its own `Text`, and the
  * empty-element form is dropped. The ATTLIST table is then applied: a declared default the element
- * lacks is appended, and a non-`CDATA` attribute value is normalized. Undeclared entity references
- * are not handled here.
+ * lacks is appended, and a non-`CDATA` attribute value is normalized.
+ *
+ * A reference to an entity the document does not declare is refused when the document is
+ * `standalone="yes"` or has no external subset. Otherwise each such name is registered with
+ * `saxes` as one private use character that the document does not contain, and after the parse each
+ * character becomes the reference it stood for: an `EntityRef` in content, `&name;` with a recorded
+ * offset in an attribute value.
  *
  * @param bytes - The document as read from storage.
  * @returns The tree; a `ReaderRefusal` from decoding or the prolog, or a `WellFormednessError`
@@ -275,7 +502,9 @@ export const readXml = Effect.fn("xml.read")(function* readXml(
   const decoded = yield* decode(bytes);
   const prolog = yield* lexProlog(decoded.text);
   const substituted = yield* substitute(decoded.text, prolog);
-  const built = yield* parse(substituted);
+  const sentinels = yield* assignSentinels(substituted, prolog);
+  const built = yield* parse(substituted, sentinels);
+  const names = new Map([...sentinels].map(([name, sentinel]) => [sentinel, name]));
 
-  return assemble(decoded, prolog, built);
+  return assemble(decoded, prolog, built, names);
 });
