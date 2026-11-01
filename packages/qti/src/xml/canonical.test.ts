@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
-import { ConfigProvider, Effect, Layer } from "effect";
+import { ConfigProvider, Effect, FileSystem, Layer } from "effect";
 import { materialize } from "#qti/test/fixtures.ts";
+import { canonicalize } from "#qti/xml/canonical.ts";
 import { OracleError, OracleLayer, xmllintC14n } from "#qti/xml/oracle.ts";
+import { readXml } from "#qti/xml/read.ts";
 
 /**
  * What every test here runs on: the process spawner `xmllintC14n` needs and the file system and
@@ -71,6 +73,91 @@ layer(TestLayer)("xml/oracle.ts", (it) => {
 
       assert.instanceOf(failure, OracleError);
       assert.strictEqual(failure.exitCode, 1);
+    }),
+  );
+});
+
+/**
+ * Read `path`, canonicalize it with {@link canonicalize}, and return the bytes beside the oracle's.
+ *
+ * @param path - An XML file the oracle accepts.
+ * @returns The canonicalizer's bytes and `xmllint --c14n`'s bytes for the same file.
+ */
+const bothCanonicals = Effect.fn("canonical.test.bothCanonicals")(function* bothCanonicals(
+  path: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const document = yield* readXml(yield* fs.readFile(path));
+
+  return { actual: canonicalize(document), expected: yield* xmllintC14n(path) };
+});
+
+/**
+ * Decode canonical bytes as UTF-8 so a mismatch reads as text.
+ */
+const decodeText = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
+
+/**
+ * Assert that two byte arrays are equal, showing the text first so a mismatch is readable.
+ */
+const assertSameBytes = (actual: Uint8Array, expected: Uint8Array): void => {
+  assert.strictEqual(decodeText(actual), decodeText(expected));
+  assert.deepStrictEqual([...actual], [...expected]);
+};
+
+layer(TestLayer)("xml/canonical.ts", (it) => {
+  it.effect("simple's choice.xml canonicalizes to the oracle's bytes", () =>
+    Effect.gen(function* choice() {
+      const { actual, expected } = yield* bothCanonicals(`${simple}/choice.xml`);
+
+      assert.isAbove(expected.length, 0);
+      assertSameBytes(actual, expected);
+    }),
+  );
+
+  it.effect("simple's imsmanifest.xml canonicalizes to the oracle's bytes", () =>
+    Effect.gen(function* manifest() {
+      const { actual, expected } = yield* bothCanonicals(`${simple}/imsmanifest.xml`);
+
+      assert.isAbove(expected.length, 0);
+      assertSameBytes(actual, expected);
+    }),
+  );
+
+  for (const name of ["doctype", "latin1"] as const) {
+    it.effect(`the ${name} fixture canonicalizes to the oracle's bytes`, () =>
+      Effect.gen(function* variant() {
+        const directory = yield* materialize(name);
+        const { actual, expected } = yield* bothCanonicals(`${directory}/choice.xml`);
+
+        assert.isAbove(expected.length, 0);
+        assertSameBytes(actual, expected);
+      }),
+    );
+  }
+
+  for (const file of ["markup", "attr-ws", "attlist-nmtokens", "quote"]) {
+    it.effect(`fixtures/dtd/${file}.xml canonicalizes to the oracle's bytes`, () =>
+      Effect.gen(function* dtdFixture() {
+        const { actual, expected } = yield* bothCanonicals(
+          `${import.meta.dirname}/fixtures/dtd/${file}.xml`,
+        );
+
+        assert.isAbove(expected.length, 0);
+        assertSameBytes(actual, expected);
+      }),
+    );
+  }
+
+  it.effect("the external fixture canonicalizes to the golden bytes, without the oracle", () =>
+    Effect.gen(function* external() {
+      const fs = yield* FileSystem.FileSystem;
+      const directory = yield* materialize("external");
+      const document = yield* readXml(yield* fs.readFile(`${directory}/choice.xml`));
+      const golden = yield* fs.readFile(`${import.meta.dirname}/fixtures/golden/external.c14n`);
+
+      assert.isAbove(golden.length, 0);
+      assertSameBytes(canonicalize(document), golden);
     }),
   );
 });
