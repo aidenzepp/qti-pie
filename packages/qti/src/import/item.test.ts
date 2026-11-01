@@ -2,14 +2,22 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, FileSystem, Option } from "effect";
+import { Effect, FileSystem, Option, Predicate } from "effect";
+import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { inject } from "vitest";
+import { itemGuards, ItemGuardRefusal } from "#qti/import/guards/item.ts";
 import { ItemRefusal, itemRows, standardTemplate } from "#qti/import/item.ts";
 import { Rows, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { NodeIndex } from "#qti/import/tree.ts";
 import {
   Declaration,
   DeclarationInterpretation,
+  DeclarationLongInterpretation,
+  DeclarationMasteryValue,
+  DeclarationNormalMaximum,
+  DeclarationNormalMinimum,
+  DeclarationVariableIdentifierRef,
+  DeclarationView,
   OutcomeDeclarationArm,
   ResponseDeclarationArm,
   ResponseDeclarationId,
@@ -20,6 +28,7 @@ import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#qti/schema/html.ts";
 import { AssessmentItem, DeclaredAdaptive, ItemBody, Prompt } from "#qti/schema/item.ts";
 import {
   ChoiceInteraction,
+  ChoiceInteractionMinSelectionsMessage,
   DeclaredMaxChoices,
   DeclaredMinChoices,
   DeclaredOrientation,
@@ -49,9 +58,12 @@ const packageId = "22222222-2222-4222-8222-222222222222";
 
 /**
  * Read `choice.xml` of a materialized fixture directory, after replacing every occurrence of
- * `search` with `replacement` when an edit is given.
+ * `search` with `replacement`, or after the function an edit gives, when an edit is given.
  */
-const readChoice = (directory: string, edit?: readonly [search: string, replacement: string]) =>
+const readChoice = (
+  directory: string,
+  edit?: readonly [search: string, replacement: string] | ((text: string) => string),
+) =>
   Effect.gen(function* readChoiceFile() {
     const fs = yield* FileSystem.FileSystem;
     const bytes = yield* fs.readFile(path.join(directory, "choice.xml"));
@@ -60,6 +72,10 @@ const readChoice = (directory: string, edit?: readonly [search: string, replacem
     }
 
     const text = new TextDecoder().decode(bytes);
+    if (Predicate.isFunction(edit)) {
+      return yield* readXml(new TextEncoder().encode(edit(text)));
+    }
+
     assert.isTrue(text.includes(edit[0]), `choice.xml holds ${edit[0]}`);
 
     return yield* readXml(new TextEncoder().encode(text.replaceAll(edit[0], edit[1])));
@@ -99,6 +115,88 @@ const itemOf = (doc: Effect.Success<ReturnType<typeof readChoice>>) =>
     },
     Rows.empty(),
   );
+
+/**
+ * The rows of `relation` with each one replaced by `change`'s answer for it.
+ */
+const mapRows = <R extends AnyRelation>(
+  rows: Rows,
+  relation: R,
+  change: (row: Fact<R>) => Fact<R>,
+): Rows => new Map(rows).set(relation, Rows.of(rows, relation).map(change));
+
+/**
+ * `row` with `patch` laid over it, for the tests that forge a value the row's type forbids.
+ */
+const patched = <T extends object>(
+  row: T,
+  patch: Partial<Record<keyof T, string | bigint>>,
+): T => ({
+  ...row,
+  ...patch,
+});
+
+/**
+ * Import `choice.xml` of `directory`, after an optional text edit, then run the item guards over
+ * the rows `alter` leaves. Fails with the guards' refusal.
+ */
+const guarded = (
+  directory: string,
+  options: {
+    readonly alter?: (rows: Rows, nodes: NodeIndex) => Rows;
+    readonly edit?: Parameters<typeof readChoice>[1];
+  } = {},
+) =>
+  Effect.gen(function* guardedItem() {
+    const doc = yield* readChoice(directory, options.edit);
+    const { nodes, rows } = yield* itemOf(doc);
+
+    return yield* itemGuards(options.alter === undefined ? rows : options.alter(rows, nodes));
+  });
+
+/**
+ * The refusal the guards answer, naming `rule`.
+ */
+const refusal = (rule: ItemGuardRefusal["rule"], ...args: Parameters<typeof guarded>) =>
+  Effect.gen(function* refusalOfItem() {
+    const failure = yield* Effect.flip(guarded(...args));
+
+    assert.instanceOf(failure, ItemGuardRefusal);
+    assert.strictEqual(failure.rule, rule);
+
+    return failure;
+  });
+
+/**
+ * Rows with an interpretation of `text` added to the value set of `role`.
+ */
+const interpreted = (role: "correct" | "default", text: string) => (rows: Rows) =>
+  Rows.add(rows, value.ValueSetInterpretation, [
+    {
+      value: text,
+      valueSet: Option.getOrThrow(
+        Option.fromNullishOr(Rows.of(rows, value.ValueSet).find((set) => set.role === role)),
+      ).id,
+    },
+  ]);
+
+/**
+ * A text edit that gives the NOTE outcome declaration `attribute` with the padded `padding`.
+ */
+const paddedOn = (attribute: string, padding: string) => (text: string) =>
+  text.replace('identifier="NOTE"', `identifier="NOTE" ${attribute}="${padding}"`);
+
+/**
+ * Text edits to `choice.xml` that move the body before the declarations or empty it.
+ */
+const bodyBeforeDeclarations = (text: string): string => {
+  const body = /<qti-item-body>[\s\S]*<\/qti-item-body>/u.exec(text)?.[0] ?? "";
+  assert.notStrictEqual(body, "", "choice.xml holds a body");
+
+  return text
+    .replace(body, "")
+    .replace(/<qti-response-declaration/u, (first) => `${body}\n${first}`);
+};
 
 layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suite) => {
   suite.effect(
@@ -514,4 +612,212 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
       );
     }),
   );
+  suite.effect("the item guards accept simple, padded-attributes and padded-text", () =>
+    Effect.gen(function* acceptedItems() {
+      yield* guarded(inject("fixtures").simple);
+      yield* guarded(yield* materialize("padded-attributes"));
+      yield* guarded(yield* materialize("padded-text"));
+    }),
+  );
+
+  suite.effect("text-copy refuses an identifier value that is not its qti-value's text", () =>
+    Effect.gen(function* identifierText() {
+      const failure = yield* refusal("text-copy", inject("fixtures").simple, {
+        alter: (rows) =>
+          mapRows(rows, value.relations.DeclaredValueIdentifier, (row) =>
+            patched(row, { value: "ChoiceB" }),
+          ),
+      });
+
+      assert.include(failure.detail, "ChoiceB");
+    }),
+  );
+
+  suite.effect("text-copy refuses a string value that keeps its children's tab", () =>
+    Effect.gen(function* stringText() {
+      yield* refusal("text-copy", yield* materialize("padded-text"), {
+        alter: (rows) =>
+          mapRows(rows, value.relations.DeclaredValueString, (row) =>
+            patched(row, { value: "a\tb\nc" }),
+          ),
+      });
+    }),
+  );
+
+  suite.effect("typed-copy refuses a binding count that is not its interaction's", () =>
+    Effect.gen(function* bindingCount() {
+      yield* refusal("typed-copy", inject("fixtures").simple, {
+        alter: (rows) => mapRows(rows, TypedBinding, (row) => patched(row, { maxCount: 2n })),
+      });
+    }),
+  );
+
+  suite.effect(
+    "typed-copy refuses a maxChoicesN or minChoicesN that is not its lexical's parse",
+    () =>
+      Effect.gen(function* choiceCounts() {
+        yield* refusal("typed-copy", inject("fixtures").simple, {
+          alter: (rows) =>
+            mapRows(rows, ChoiceInteraction, (row) => patched(row, { maxChoicesN: 2n })),
+        });
+
+        const failure = yield* refusal("typed-copy", inject("fixtures").simple, {
+          alter: (rows) =>
+            mapRows(rows, ChoiceInteraction, (row) => patched(row, { minChoicesN: 1n })),
+        });
+        assert.include(failure.detail, "minChoicesN");
+      }),
+  );
+
+  suite.effect("typed-copy refuses a lexical row whose processed value is not its column", () =>
+    Effect.gen(function* lexicalColumn() {
+      yield* refusal("typed-copy", inject("fixtures").simple, {
+        alter: (rows, nodes) =>
+          Rows.add(rows, AttributeLexical, [
+            {
+              attribute: "adaptive",
+              kind: "qti-assessment-item",
+              node: onlyId(nodes, "qti-assessment-item"),
+              value: " true ",
+            },
+          ]),
+      });
+    }),
+  );
+
+  suite.effect("typed-copy refuses a lexical row that equals its column as read", () =>
+    Effect.gen(function* lexicalUnchanged() {
+      yield* refusal("typed-copy", inject("fixtures").simple, {
+        alter: (rows, nodes) =>
+          Rows.add(
+            mapRows(rows, DocumentTitle, (row) =>
+              patched(row, { collapsed: "Unattended Luggage", value: "Unattended  Luggage" }),
+            ),
+            AttributeLexical,
+            [
+              {
+                attribute: "title",
+                kind: "qti-assessment-item",
+                node: onlyId(nodes, "qti-assessment-item"),
+                value: "Unattended  Luggage",
+              },
+            ],
+          ),
+      });
+    }),
+  );
+
+  suite.effect("typed-copy refuses a replace-class column holding a tab", () =>
+    Effect.gen(function* replaceClass() {
+      yield* refusal("typed-copy", inject("fixtures").simple, {
+        alter: (rows) =>
+          mapRows(rows, DocumentTitle, (row) => patched(row, { value: "Unattended\tLuggage" })),
+      });
+
+      const onDefault = yield* refusal("typed-copy", inject("fixtures").simple, {
+        alter: interpreted("default", "a\tb"),
+      });
+      assert.include(onDefault.detail, "ValueSetInterpretation");
+      yield* guarded(inject("fixtures").simple, { alter: interpreted("correct", "a\tb") });
+
+      const onMessage = yield* refusal("typed-copy", inject("fixtures").simple, {
+        alter: (rows, nodes) =>
+          Rows.add(rows, ChoiceInteractionMinSelectionsMessage, [
+            { node: onlyId(nodes, "qti-choice-interaction"), value: "at least\none" },
+          ]),
+      });
+      assert.include(onMessage.detail, "ChoiceInteractionMinSelectionsMessage");
+    }),
+  );
+
+  suite.effect("typed-copy refuses an item root missing its identifier or title", () =>
+    Effect.gen(function* missingRequired() {
+      yield* refusal("typed-copy", inject("fixtures").simple, {
+        alter: (rows) => new Map(rows).set(DocumentIdentifier, []),
+      });
+
+      const untitled = yield* refusal("typed-copy", inject("fixtures").simple, {
+        alter: (rows) => new Map(rows).set(DocumentTitle, []),
+      });
+      assert.include(untitled.detail, "no title");
+    }),
+  );
+
+  suite.effect("template-derivation refuses a reference that is not its URI's template", () =>
+    Effect.gen(function* templateNamed() {
+      yield* refusal("template-derivation", inject("fixtures").simple, {
+        alter: (rows) =>
+          mapRows(rows, StandardTemplateReference, (row) =>
+            patched(row, { template: "map_response" }),
+          ),
+      });
+    }),
+  );
+
+  suite.effect("template-derivation refuses a reference where the URI is not a published one", () =>
+    Effect.gen(function* templateUnknown() {
+      yield* refusal("template-derivation", inject("fixtures").simple, {
+        alter: (rows) =>
+          mapRows(rows, ResponseProcessingTemplate, (row) =>
+            patched(row, { uri: "https://example.com/rptemplates/match_correct" }),
+          ),
+      });
+    }),
+  );
+
+  suite.effect("ordering refuses an item body before the declarations", () =>
+    Effect.gen(function* bodyFirst() {
+      yield* refusal("ordering", inject("fixtures").simple, { edit: bodyBeforeDeclarations });
+    }),
+  );
+
+  suite.effect("body-empty refuses an item body holding only whitespace", () =>
+    Effect.gen(function* bodyBlank() {
+      yield* refusal("body-empty", inject("fixtures").simple, {
+        edit: (text) =>
+          text.replace(
+            /(?<open><qti-item-body>)[\s\S]*(?<close><\/qti-item-body>)/u,
+            "$<open>\n  $<close>",
+          ),
+      });
+    }),
+  );
+
+  for (const [attribute, relation, padded, collapsed] of [
+    ["view", DeclarationView, " author ", "author"],
+    [
+      "long-interpretation",
+      DeclarationLongInterpretation,
+      " http://example.com/a ",
+      "http://example.com/a",
+    ],
+    ["normal-maximum", DeclarationNormalMaximum, " 10 ", "10"],
+    ["normal-minimum", DeclarationNormalMinimum, " 0 ", "0"],
+    ["mastery-value", DeclarationMasteryValue, " 5 ", "5"],
+    ["variable-identifier-ref", DeclarationVariableIdentifierRef, " RESPONSE ", "RESPONSE"],
+  ] as const) {
+    suite.effect(`typed-copy accepts a padded ${attribute} on an outcome declaration`, () =>
+      Effect.gen(function* paddedDeclarationAttribute() {
+        const edit = paddedOn(attribute, padded);
+        yield* guarded(yield* materialize("padded-text"), { edit });
+
+        const { rows } = yield* itemOf(yield* readChoice(yield* materialize("padded-text"), edit));
+        assert.deepStrictEqual(
+          Rows.of(rows, relation).map((row) => row.value),
+          [collapsed],
+        );
+        assert.isTrue(
+          Rows.of(rows, AttributeLexical).some(
+            (row) => row.attribute === attribute && row.value === padded,
+          ),
+        );
+
+        const failure = yield* refusal("typed-copy", yield* materialize("padded-text"), {
+          alter: (altered) => new Map(altered).set(relation, []),
+          edit,
+        });
+        assert.include(failure.detail, "shadows no typed column");
+      }),
+    );
+  }
 });
