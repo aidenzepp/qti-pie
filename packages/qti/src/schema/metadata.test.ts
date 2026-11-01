@@ -15,6 +15,7 @@ import * as document from "#qti/schema/document.ts";
 import * as metadata from "#qti/schema/metadata.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
+import * as patterns from "#qti/schema/patterns.ts";
 import { admission as seedAdmission } from "#qti/schema/seed/admission.ts";
 
 /**
@@ -73,6 +74,21 @@ describe("metadata", () => {
       assert.isTrue(name in built.relations, name);
     }
     assert.isAbove(metadata.rules.length, 0);
+  });
+
+  it("bounds the collapsed form of the key-shaped fields by boundedToken and leaves LomString", () => {
+    const bounded = { flags: patterns.boundedTokenFlags, source: patterns.boundedToken };
+    for (const fields of [
+      metadata.relations.LomTitle.fields,
+      metadata.relations.LomObjectTitle.fields,
+      metadata.relations.LomIdentifierEntry.fields,
+    ]) {
+      assert.deepStrictEqual(fields.collapsed.pattern, bounded);
+    }
+    assert.strictEqual(
+      metadata.relations.LomString.fields.collapsed.pattern.source,
+      patterns.xsToken,
+    );
   });
 
   it("keys the arms by the LOM category handles and the QMD handles", () => {

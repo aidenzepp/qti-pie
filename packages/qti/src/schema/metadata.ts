@@ -36,6 +36,8 @@ const resourceType = str.regex(patterns.resourceType);
 
 const token = str.regex(patterns.xsToken, patterns.xsTokenFlags);
 
+const boundedToken = str.regex(patterns.boundedToken, patterns.boundedTokenFlags);
+
 const wildcard = str.regex(patterns.wildcard, patterns.wildcardFlags);
 
 const language = str.regex(patterns.xsLanguageOrEmpty);
@@ -113,11 +115,14 @@ export const LomIdentifierCatalog = relation(
 /**
  * The `lom:entry` of an identifier, with the whitespace-collapsed form it is judged on beside the
  * value as written. `position` is the identifier's.
+ *
+ * The collapsed form holds at most 256 non-space characters, a representation limit
+ * (campaign decision 26), because a key-shaped containment target or index holds it.
  */
 export const LomIdentifierEntry = relation(
   "LomIdentifierEntry",
   {
-    collapsed: token,
+    collapsed: boundedToken,
     id: uuid,
     identifier: uuid,
     lom: uuid,
@@ -148,11 +153,14 @@ export const LomString = relation("LomString", { collapsed: token, id: uuid, val
 /**
  * The string under a `lom:title`, at its position, with the value and collapsed form of the
  * `LomString` of the same node.
+ *
+ * The collapsed form holds at most 256 non-space characters, a representation limit
+ * (campaign decision 26), because a key-shaped containment target or index holds it.
  */
 export const LomTitle = relation(
   "LomTitle",
   {
-    collapsed: token,
+    collapsed: boundedToken,
     id: uuid,
     lom: uuid,
     owner: closedId(LomOwner),
@@ -480,11 +488,14 @@ export const ResourceLomTitled = relation(
 /**
  * The one title an item resource's record names the item by: the whitespace-collapsed string at its
  * position, bound to the item document's `title`.
+ *
+ * The collapsed form holds at most 256 non-space characters, a representation limit
+ * (campaign decision 26), because a key-shaped containment target or index holds it.
  */
 export const LomObjectTitle = relation(
   "LomObjectTitle",
   {
-    collapsed: token,
+    collapsed: boundedToken,
     lom: uuid,
     package: uuid,
     position: pg.bigint,
