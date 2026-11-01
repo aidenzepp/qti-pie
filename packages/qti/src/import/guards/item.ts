@@ -9,7 +9,15 @@ import { Effect, Option, Predicate, Schema } from "effect";
 import { standardTemplate } from "#qti/import/item.ts";
 import { collapse, replace, Rows } from "#qti/import/tree.ts";
 import type { WhiteSpace } from "#qti/import/tree.ts";
-import { Declaration } from "#qti/schema/declaration.ts";
+import {
+  Declaration,
+  DeclarationLongInterpretation,
+  DeclarationMasteryValue,
+  DeclarationNormalMaximum,
+  DeclarationNormalMinimum,
+  DeclarationVariableIdentifierRef,
+  DeclarationView,
+} from "#qti/schema/declaration.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import { Img, ImgLongdesc } from "#qti/schema/html.ts";
 import {
@@ -267,6 +275,55 @@ const shadows: ReadonlyMap<string, Shadow> = new Map<string, Shadow>([
     "qti-outcome-declaration/identifier",
     {
       column: (rows, node) => Rows.of(rows, Declaration).find((row) => row.id === node)?.identifier,
+      whiteSpace: "collapse",
+    },
+  ],
+  [
+    "qti-outcome-declaration/view",
+    {
+      column: (rows, node) =>
+        Rows.of(rows, DeclarationView).find((row) => row.declaration === node)?.value,
+      whiteSpace: "collapse",
+    },
+  ],
+  [
+    "qti-outcome-declaration/long-interpretation",
+    {
+      column: (rows, node) =>
+        Rows.of(rows, DeclarationLongInterpretation).find((row) => row.declaration === node)?.value,
+      whiteSpace: "collapse",
+    },
+  ],
+  [
+    "qti-outcome-declaration/normal-maximum",
+    {
+      column: (rows, node) =>
+        Rows.of(rows, DeclarationNormalMaximum).find((row) => row.declaration === node)?.value,
+      whiteSpace: "collapse",
+    },
+  ],
+  [
+    "qti-outcome-declaration/normal-minimum",
+    {
+      column: (rows, node) =>
+        Rows.of(rows, DeclarationNormalMinimum).find((row) => row.declaration === node)?.value,
+      whiteSpace: "collapse",
+    },
+  ],
+  [
+    "qti-outcome-declaration/mastery-value",
+    {
+      column: (rows, node) =>
+        Rows.of(rows, DeclarationMasteryValue).find((row) => row.declaration === node)?.value,
+      whiteSpace: "collapse",
+    },
+  ],
+  [
+    "qti-outcome-declaration/variable-identifier-ref",
+    {
+      column: (rows, node) =>
+        Rows.of(rows, DeclarationVariableIdentifierRef).find((row) => row.declaration === node)
+          ?.value,
       whiteSpace: "collapse",
     },
   ],

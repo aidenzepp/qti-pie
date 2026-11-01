@@ -12,6 +12,12 @@ import type { NodeIndex } from "#qti/import/tree.ts";
 import {
   Declaration,
   DeclarationInterpretation,
+  DeclarationLongInterpretation,
+  DeclarationMasteryValue,
+  DeclarationNormalMaximum,
+  DeclarationNormalMinimum,
+  DeclarationVariableIdentifierRef,
+  DeclarationView,
   OutcomeDeclarationArm,
   ResponseDeclarationArm,
   ResponseDeclarationId,
@@ -173,6 +179,12 @@ const interpreted = (role: "correct" | "default", text: string) => (rows: Rows) 
       ).id,
     },
   ]);
+
+/**
+ * A text edit that gives the NOTE outcome declaration `attribute` with the padded `padding`.
+ */
+const paddedOn = (attribute: string, padding: string) => (text: string) =>
+  text.replace('identifier="NOTE"', `identifier="NOTE" ${attribute}="${padding}"`);
 
 /**
  * Text edits to `choice.xml` that move the body before the declarations or empty it.
@@ -770,4 +782,42 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
       });
     }),
   );
+
+  for (const [attribute, relation, padded, collapsed] of [
+    ["view", DeclarationView, " author ", "author"],
+    [
+      "long-interpretation",
+      DeclarationLongInterpretation,
+      " http://example.com/a ",
+      "http://example.com/a",
+    ],
+    ["normal-maximum", DeclarationNormalMaximum, " 10 ", "10"],
+    ["normal-minimum", DeclarationNormalMinimum, " 0 ", "0"],
+    ["mastery-value", DeclarationMasteryValue, " 5 ", "5"],
+    ["variable-identifier-ref", DeclarationVariableIdentifierRef, " RESPONSE ", "RESPONSE"],
+  ] as const) {
+    suite.effect(`typed-copy accepts a padded ${attribute} on an outcome declaration`, () =>
+      Effect.gen(function* paddedDeclarationAttribute() {
+        const edit = paddedOn(attribute, padded);
+        yield* guarded(yield* materialize("padded-text"), { edit });
+
+        const { rows } = yield* itemOf(yield* readChoice(yield* materialize("padded-text"), edit));
+        assert.deepStrictEqual(
+          Rows.of(rows, relation).map((row) => row.value),
+          [collapsed],
+        );
+        assert.isTrue(
+          Rows.of(rows, AttributeLexical).some(
+            (row) => row.attribute === attribute && row.value === padded,
+          ),
+        );
+
+        const failure = yield* refusal("typed-copy", yield* materialize("padded-text"), {
+          alter: (altered) => new Map(altered).set(relation, []),
+          edit,
+        });
+        assert.include(failure.detail, "shadows no typed column");
+      }),
+    );
+  }
 });
