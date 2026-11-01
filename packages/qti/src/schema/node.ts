@@ -1,6 +1,8 @@
 /**
- * The document tree's rosters and the relations that keep a document's XML outside its element
- * tree: the prolog and epilog, the XML declaration, the doctype and the export charset.
+ * The document tree: its rosters, its nodes and the edges between them, the parent and child kinds
+ * each schema version admits, what a node keeps beside its kind-specific attributes, the five
+ * generic arms, and the relations that keep a document's XML outside its element tree: the prolog
+ * and epilog, the XML declaration, the doctype and the export charset.
  *
  * `NodeKind` and `AttributeName` are composed here, once, from the `as const` tuples of the kinds
  * files. `closed` keeps the roster type of a spread of literal tuples exactly, so a handle no kinds
@@ -203,15 +205,182 @@ export const TreeExportCharset = relation("TreeExportCharset", { label: encName,
 ]);
 
 /**
+ * One node of a tree, of one kind, carrying its tree's schema version and root kind so the edges
+ * and the kind-specific relations can be judged against them.
+ */
+export const Node = relation(
+  "Node",
+  {
+    id: uuid,
+    kind: closedId(NodeKind),
+    prefix: str.regex(patterns.ncNameOrEmpty),
+    rootKind: closedId(RootKind),
+    tree: uuid,
+    version: closedId(SchemaVersion),
+  },
+  ["id"],
+);
+
+/**
+ * A parent kind and a child kind one schema version admits under it. Seeded by a custom migration
+ * and read-only to every role.
+ */
+export const Admission = relation(
+  "Admission",
+  {
+    child: closedId(NodeKind),
+    parent: closedId(NodeKind),
+    version: closedId(SchemaVersion),
+  },
+  ["version", "parent", "child"],
+);
+
+/**
+ * A child node at its position under its parent, both of one tree, with both kinds copied so the
+ * pair can be judged against `Admission`. A node has at most one parent.
+ */
+export const Edge = relation(
+  "Edge",
+  {
+    child: uuid,
+    childKind: closedId(NodeKind),
+    parent: uuid,
+    parentKind: closedId(NodeKind),
+    position: pg.bigint,
+    tree: uuid,
+    version: closedId(SchemaVersion),
+  },
+  ["parent", "position"],
+);
+
+/**
+ * A namespace declaration on an element, at its position among the element's declarations; an
+ * empty prefix declares the default namespace.
+ */
+export const NamespaceDeclaration = relation(
+  "NamespaceDeclaration",
+  {
+    node: uuid,
+    position: pg.bigint,
+    prefix: str.regex(patterns.ncNameOrEmpty),
+    uri: str.regex(patterns.anyUri),
+  },
+  ["node", "position"],
+);
+
+/**
+ * An element's `xsi:schemaLocation`, verbatim, and the prefix it was written under.
+ */
+export const SchemaLocation = relation(
+  "SchemaLocation",
+  {
+    node: uuid,
+    prefix: str.regex(patterns.ncName),
+    value: str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags),
+  },
+  ["node"],
+);
+
+/**
+ * An entity reference inside an attribute value, by the attribute's qualified name and the offset
+ * at which the reference stood.
+ */
+export const AttributeEntityReference = relation(
+  "AttributeEntityReference",
+  {
+    attribute: str.regex(patterns.qName),
+    name: str.regex(patterns.ncName),
+    node: uuid,
+    offset: pg.bigint,
+  },
+  ["node", "attribute", "offset"],
+);
+
+/**
+ * The lexical form of a collapse- or replace-type attribute whose written value differs from its
+ * collapsed one, kept for the round trip.
+ */
+export const AttributeLexical = relation(
+  "AttributeLexical",
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.uncollapsed, patterns.uncollapsedFlags),
+  },
+  ["node", "attribute"],
+);
+
+/**
+ * A text node holding at least one character that is not whitespace.
+ */
+export const Text = relation(
+  "Text",
+  { id: uuid, value: str.regex(patterns.nonWhitespaceText, patterns.nonWhitespaceTextFlags) },
+  ["id"],
+);
+
+/**
+ * A text node made only of whitespace.
+ */
+export const Ws = relation("Ws", { id: uuid, value: str.regex(patterns.whitespaceOnly) }, ["id"]);
+
+/**
+ * A comment node inside the root element.
+ */
+export const Comment = relation("Comment", { id: uuid, text: wildcard }, ["id"]);
+
+/**
+ * A processing instruction inside the root element.
+ */
+export const Pi = relation("Pi", { data: wildcard, id: uuid, target: str.regex(patterns.ncName) }, [
+  "id",
+]);
+
+/**
+ * A general entity reference the reader kept unexpanded.
+ */
+export const EntityReference = relation(
+  "EntityReference",
+  { id: uuid, name: str.regex(patterns.ncName) },
+  ["id"],
+);
+
+/**
+ * The generic kinds' arms, keyed by their `NodeKind` handles.
+ *
+ * Their containments into `Node` are not written here: `alternatives(Node, "kind", NodeKind, ...)`
+ * in the composed schema expands to them, and writing both is a duplicate identity.
+ */
+export const arms = {
+  comment: Comment,
+  entityRef: EntityReference,
+  pi: Pi,
+  text: Text,
+  ws: Ws,
+};
+
+/**
  * The relations and rosters of this module, as schema members.
  */
 export const relations = {
+  Admission,
+  AttributeEntityReference,
+  AttributeLexical,
   AttributeName,
+  Comment,
+  Edge,
+  EntityReference,
   MiscKind,
+  NamespaceDeclaration,
+  Node,
   NodeKind,
+  Pi,
   Placement,
   RootKind,
+  SchemaLocation,
   SchemaVersion,
+  Text,
   Tree,
   TreeDoctype,
   TreeExportCharset,
@@ -221,11 +390,15 @@ export const relations = {
   TreeXmlEncoding,
   TreeXmlStandalone,
   TreeXmlVersion,
+  Ws,
 };
 
 /**
  * The statements over this module's relations: one tree per root node, one root per tree, every
- * fidelity row owned by a tree, and a manifest tree exactly when its root is a manifest.
+ * fidelity row owned by a tree, and a manifest tree exactly when its root is a manifest; every node
+ * of a tree carrying the tree's version and root kind, one parent per node, both ends of an edge in
+ * the edge's tree with the kinds it names, every edge's kind pair admitted by its version, and
+ * every attribute side row owned by a node.
  *
  * The row checks name the `manifest` handle as a literal: `TreeKind.handle("manifest")` is a term
  * typed exactly `"manifest"`, and a comparison's operand must carry the whole roster's type of the
@@ -241,6 +414,25 @@ export const rules = [
   contained(on(TreeXmlStandalone, "tree"), on(Tree, "id")),
   contained(on(TreeDoctype, "tree"), on(Tree, "id")),
   contained(on(TreeExportCharset, "tree"), on(Tree, "id")),
+  contained(on(TreeRoot, "node", "tree"), on(Node, "id", "tree")),
+  contained(on(Node, "tree", "version", "rootKind"), on(Tree, "id", "version", "root")),
+  key(Edge, ["child"]),
+  contained(
+    on(Edge, "parent", "tree", "version", "parentKind"),
+    on(Node, "id", "tree", "version", "kind"),
+  ),
+  contained(
+    on(Edge, "child", "tree", "version", "childKind"),
+    on(Node, "id", "tree", "version", "kind"),
+  ),
+  contained(
+    on(Edge, "version", "parentKind", "childKind"),
+    on(Admission, "version", "parent", "child"),
+  ),
+  contained(on(NamespaceDeclaration, "node"), on(Node, "id")),
+  contained(on(SchemaLocation, "node"), on(Node, "id")),
+  contained(on(AttributeEntityReference, "node"), on(Node, "id")),
+  contained(on(AttributeLexical, "node", "kind"), on(Node, "id", "kind")),
   check("ManifestTreeHasManifestRoot", Tree, (row) =>
     row.or(row.ne(row.kind, "manifest"), row.eq(row.root, "manifest")),
   ),
