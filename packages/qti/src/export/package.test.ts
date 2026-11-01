@@ -1,9 +1,19 @@
 import path from "node:path";
-import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
+import {
+  NodeChildProcessSpawner,
+  NodeFileSystem,
+  NodePath,
+  NodeServices,
+} from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
+import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { comparePackage, renderReport } from "#qti/export/compare.ts";
+import type { Report } from "#qti/export/compare.ts";
+import { exportPackage } from "#qti/export/package.ts";
+import { importPackage } from "#qti/import/package.ts";
 import { materialize } from "#qti/test/fixtures.ts";
+import type { FixtureName } from "#qti/test/fixtures.ts";
 
 /**
  * What every test here runs on: the file system the comparison and the fixture materializer need,
@@ -130,6 +140,96 @@ layer(TestLayer, { excludeTestServices: true })("export/compare.ts, database-fre
         at: "missing",
         kind: "differs",
       });
+    }),
+  );
+});
+
+/**
+ * The fixtures whose import is accepted and whose export is compared with them.
+ */
+const roundTripped = [
+  "simple",
+  "doctype",
+  "latin1",
+  "external",
+  "utf16",
+  "windows-1252",
+  "padded-attributes",
+  "padded-text",
+  "comment-in-element",
+] as const satisfies readonly FixtureName[];
+
+/**
+ * Import a fixture, export it to `work/export/<name>/`, compare the export with the fixture, and
+ * leave the rendered report beside it in `work/export/<name>.report.txt`.
+ *
+ * @param name - The fixture to round-trip.
+ * @returns The export directory and the report.
+ */
+const roundTrip = (name: FixtureName) =>
+  Effect.gen(function* roundTripFixture() {
+    const fs = yield* FileSystem.FileSystem;
+    const source = yield* materialize(name);
+    const exported = `${workDirectory}/export/${name}`;
+    const id = yield* importPackage(source);
+
+    yield* fs.remove(exported, { force: true, recursive: true });
+    yield* fs.makeDirectory(exported, { recursive: true });
+    yield* exportPackage(id, exported);
+
+    const report = yield* comparePackage(source, exported);
+
+    yield* fs.writeFileString(`${exported}.report.txt`, `${renderReport(report)}\n`);
+
+    return { exported, report };
+  });
+
+/**
+ * The outcome kind of one entry of a report.
+ */
+const kindOf = (report: Report, entry: string) =>
+  report.find((item) => item.path === entry)?.outcome.kind;
+
+layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
+  excludeTestServices: true,
+  timeout: "120 seconds",
+})("export/package.ts on the lease", (it) => {
+  for (const name of roundTripped) {
+    it.effect(`${name} round-trips through the database, every entry equal`, () =>
+      Effect.gen(function* roundTripEqual() {
+        const { report } = yield* roundTrip(name);
+
+        assert.strictEqual(
+          report.filter((item) => item.outcome.kind === "differs").length,
+          0,
+          renderReport(report),
+        );
+        assert.strictEqual(kindOf(report, "images/sign.png"), "byte-identical");
+        assert.strictEqual(kindOf(report, "imsmanifest.xml"), "canonical-equal");
+        assert.strictEqual(kindOf(report, "choice.xml"), "canonical-equal");
+      }),
+    );
+  }
+
+  it.effect("the latin1 export writes the euro sign as &#x20AC; and 0x85 as one byte", () =>
+    Effect.gen(function* latin1Bytes() {
+      const fs = yield* FileSystem.FileSystem;
+      const { exported } = yield* roundTrip("latin1");
+      const bytes = yield* fs.readFile(`${exported}/choice.xml`);
+
+      assert.strictEqual(bytes.filter((byte) => byte === 0x85).length, 1);
+      assert.include(Buffer.from(bytes).toString("latin1"), "&#x20AC;");
+    }),
+  );
+
+  it.effect("the windows-1252 export is UTF-8 and declares UTF-8", () =>
+    Effect.gen(function* windows1252Bytes() {
+      const fs = yield* FileSystem.FileSystem;
+      const { exported } = yield* roundTrip("windows-1252");
+      const bytes = yield* fs.readFile(`${exported}/choice.xml`);
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+
+      assert.include(text.slice(0, text.indexOf("?>")), 'encoding="UTF-8"');
     }),
   );
 });
