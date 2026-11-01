@@ -1,6 +1,7 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- the roster under test is `DeclarationShape`. */
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import { Predicate } from "effect";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as node from "#qti/schema/node.ts";
@@ -30,12 +31,54 @@ const probe = () =>
  */
 const added = [
   "CorrectResponseArm",
+  "DeclaredValue",
+  "DeclaredValueBoolean",
+  "DeclaredValueDirectedPair",
+  "DeclaredValueDuration",
+  "DeclaredValueFile",
+  "DeclaredValueFloat",
+  "DeclaredValueIdentifier",
+  "DeclaredValueInteger",
+  "DeclaredValuePair",
+  "DeclaredValuePoint",
+  "DeclaredValueString",
+  "DeclaredValueUri",
   "DefaultValueArm",
+  "RecordField",
   "RecordValueSet",
   "TypedValueSet",
   "ValueRole",
   "ValueSet",
   "ValueSetInterpretation",
+];
+
+/**
+ * The lower and upper bound a capacity statement declares, read from its description.
+ */
+const boundsOf = (rule: (typeof value.rules)[number]) => {
+  const desc: unknown = Predicate.hasProperty(rule, "desc") ? rule.desc : undefined;
+  const within = Predicate.hasProperty(desc, "within") ? desc.within : undefined;
+
+  return Predicate.hasProperty(within, "low") && Predicate.hasProperty(within, "high")
+    ? [within.low, within.high]
+    : [];
+};
+
+/**
+ * The base types a value arm exists for.
+ */
+const baseTypes = [
+  "boolean",
+  "integer",
+  "float",
+  "string",
+  "identifier",
+  "uri",
+  "duration",
+  "point",
+  "pair",
+  "directedPair",
+  "file",
 ];
 
 /**
@@ -173,12 +216,145 @@ describe("value", () => {
     }
   });
 
-  it("exports the correct-response and default-value arms", () => {
+  it("exports the correct-response, default-value and value arms", () => {
     assert.deepStrictEqual(Object.keys(value.arms).toSorted(), [
       "qti-correct-response",
       "qti-default-value",
+      "qti-value",
     ]);
+    assert.strictEqual(value.arms["qti-value"], value.relations.DeclaredValue);
     assert.strictEqual(value.arms["qti-correct-response"], value.relations.CorrectResponseArm);
     assert.strictEqual(value.arms["qti-default-value"], value.relations.DefaultValueArm);
+  });
+
+  it("builds the eleven value arms of a prefix, each keyed by id with a typed value", () => {
+    const built = value.valueArms("Probe");
+    assert.deepStrictEqual(Object.keys(built).toSorted(), [...baseTypes].toSorted());
+
+    const expected = [
+      [built.boolean, "ProbeBoolean", patterns.booleanLiteral],
+      [built.directedPair, "ProbeDirectedPair", patterns.pair],
+      [built.duration, "ProbeDuration", patterns.xsDouble],
+      [built.file, "ProbeFile", patterns.xsNormalizedString],
+      [built.float, "ProbeFloat", patterns.xsDouble],
+      [built.identifier, "ProbeIdentifier", patterns.ncName],
+      [built.integer, "ProbeInteger", patterns.xsInteger],
+      [built.pair, "ProbePair", patterns.pair],
+      [built.point, "ProbePoint", patterns.point],
+      [built.string, "ProbeString", patterns.xsNormalizedString],
+      [built.uri, "ProbeUri", patterns.anyUri],
+    ] as const;
+    for (const [arm, name, pattern] of expected) {
+      assert.strictEqual(arm.name, name);
+      assert.deepStrictEqual(Object.keys(arm.fields).toSorted(), ["id", "value"]);
+      assert.deepStrictEqual([...arm.primaryKey], ["id"]);
+      assert.strictEqual(arm.fields.value.pattern.source, pattern);
+    }
+  });
+
+  it("gives DeclaredValue its fields, key and containments", () => {
+    const {
+      DeclaredValue,
+      Edge: _unused,
+      ValueSet,
+    } = {
+      ...value.relations,
+      Edge: node.relations.Edge,
+    };
+    assert.deepStrictEqual(Object.keys(DeclaredValue.fields).toSorted(), [
+      "baseType",
+      "id",
+      "position",
+      "shape",
+      "valueSet",
+    ]);
+    assert.deepStrictEqual([...DeclaredValue.primaryKey], ["id"]);
+
+    const into = ofKind("contained").filter((rule) => rule.left.source === DeclaredValue);
+    assert.deepStrictEqual(
+      into.map((rule) => [rule.right.source, [...rule.left.fields], [...rule.right.fields]]),
+      [
+        [ValueSet, ["valueSet", "shape"], ["id", "shape"]],
+        [node.relations.Edge, ["id", "valueSet", "position"], ["child", "parent", "position"]],
+      ],
+    );
+  });
+
+  it("holds a typed value's base type to its value set's", () => {
+    const typed = ofKind("contained")
+      .filter((rule) => selectionOf(rule.left)?.relation === value.relations.DeclaredValue)
+      .map((rule) => [
+        selectionOf(rule.left)?.bindings,
+        [...rule.left.fields],
+        rule.right.source,
+        [...rule.right.fields],
+      ]);
+    assert.deepStrictEqual(typed, [
+      [
+        { shape: "typed" },
+        ["valueSet", "baseType"],
+        value.relations.TypedValueSet,
+        ["id", "baseType"],
+      ],
+    ]);
+  });
+
+  it("declares DeclaredValue alternatives on base type and on shape", () => {
+    const rules = ofKind("alternatives").filter(
+      (candidate) => candidate.parent === value.relations.DeclaredValue,
+    );
+    assert.deepStrictEqual(
+      rules.map((rule) => [rule.discriminator, rule.roster]),
+      [
+        ["baseType", declaration.relations.BaseType],
+        ["shape", declaration.relations.DeclarationShape],
+      ],
+    );
+    assert.deepStrictEqual(Object.keys(rules[0]?.arms ?? {}).toSorted(), [...baseTypes].toSorted());
+    assert.deepStrictEqual(rules[1]?.arms, { record: value.relations.RecordField });
+    assert.deepStrictEqual(Object.keys(value.relations.RecordField.fields).toSorted(), [
+      "fieldIdentifier",
+      "id",
+    ]);
+    assert.deepStrictEqual([...value.relations.RecordField.primaryKey], ["id"]);
+  });
+
+  it("bounds a single value set to one value and every value set to at least one", () => {
+    const capacities = ofKind("capacity").map((rule) => [
+      selectionOf(rule.target)?.relation ?? rule.target.source,
+      selectionOf(rule.target)?.bindings,
+      [...rule.target.fields],
+      rule.from.source,
+      [...rule.from.fields],
+      boundsOf(rule),
+    ]);
+    assert.deepStrictEqual(capacities, [
+      [
+        value.relations.TypedValueSet,
+        { cardinality: "single" },
+        ["id"],
+        value.relations.DeclaredValue,
+        ["valueSet"],
+        [1n, 1n],
+      ],
+      [
+        value.relations.ValueSet,
+        undefined,
+        ["id"],
+        value.relations.DeclaredValue,
+        ["valueSet"],
+        [1n, "*"],
+      ],
+    ]);
+  });
+
+  it("refuses an identifier with a space or padding by the identifier arm's pattern", () => {
+    const pattern = new RegExp(
+      value.valueArms("Probe").identifier.fields.value.pattern.source,
+      "u",
+    );
+    assert.isTrue(pattern.test("ChoiceA"));
+    assert.isFalse(pattern.test("Choice A"));
+    assert.isFalse(pattern.test(" ChoiceA "));
   });
 });
