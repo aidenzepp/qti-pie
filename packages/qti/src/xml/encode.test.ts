@@ -144,6 +144,21 @@ layer(NodeServices.layer, { excludeTestServices: true })("xml/encode.ts", (suite
     }),
   );
 
+  suite.effect("encodes the UTF-16BE label with a big-endian byte order mark", () =>
+    Effect.gen(function* encodeUtf16Be() {
+      const { document } = yield* readChoice("utf16");
+      const declaration = Option.getOrThrow(document.declaration);
+      const declared: XmlDocument = {
+        ...document,
+        declaration: Option.some({ ...declaration, encoding: Option.some("UTF-16BE") }),
+      };
+      const bytes = yield* encode(declared, "UTF-16BE");
+
+      assert.deepStrictEqual([...bytes.subarray(0, 4)], [0xfe, 0xff, 0x00, 0x3c]);
+      assert.deepStrictEqual(yield* readXml(bytes), { ...declared, charset: "UTF-16" });
+    }),
+  );
+
   suite.effect("encodes a document as plain UTF-8", () =>
     Effect.gen(function* encodeUtf8() {
       const { document } = yield* readChoice("windows-1252");
