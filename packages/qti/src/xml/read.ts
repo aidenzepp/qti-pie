@@ -180,7 +180,7 @@ const collapseSpaces = (value: string): string => value.replaceAll(/ +/gu, " ").
  */
 const referencesIn = (value: string): readonly AttributeReference[] =>
   [...value.matchAll(/&(?<name>[^\s&;]+);/gu)].map((match) => ({
-    name: match.groups?.name ?? "",
+    name: match.groups?.["name"] ?? "",
     offset: match.index,
   }));
 
