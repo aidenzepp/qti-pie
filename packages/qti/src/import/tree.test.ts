@@ -26,6 +26,7 @@ import {
   Ws,
 } from "#qti/schema/node.ts";
 import { materialize } from "#qti/test/fixtures.ts";
+import { GuardRefusal, treeGuards } from "#qti/import/guards/tree.ts";
 import {
   collapse,
   kindOf,
@@ -303,6 +304,95 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
       assert.strictEqual(refusal.kind, "attribute");
       assert.strictEqual(refusal.name, "class");
       assert.deepStrictEqual(refusal.parent, Option.some("qti-assessment-item"));
+    }),
+  );
+});
+
+/**
+ * Run `treeGuards` over `rows` and return the refusal it fails with.
+ */
+const refusalOf = (rows: Rows) =>
+  Effect.gen(function* refusal() {
+    const exit = yield* Effect.exit(treeGuards(rows));
+    const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
+
+    return Option.getOrThrow(failure);
+  });
+
+layer(NodeServices.layer, { excludeTestServices: true })("import/guards/tree.ts", (suite) => {
+  const choiceTree = Effect.gen(function* choiceTree() {
+    const doc = yield* readChoice(inject("fixtures").simple);
+
+    return (yield* treeRows(doc, itemInput(doc.charset), Rows.empty())).rows;
+  });
+
+  suite.effect("choice.xml passes both guards", () =>
+    Effect.gen(function* passes() {
+      yield* treeGuards(yield* choiceTree);
+    }),
+  );
+
+  suite.effect("a ring of edges detached from the root is refused as reachability", () =>
+    Effect.gen(function* ring() {
+      const rows = yield* choiceTree;
+      const template = Option.getOrThrow(Option.fromNullishOr(Rows.of(rows, Node)[0]));
+      const edge = Option.getOrThrow(Option.fromNullishOr(Rows.of(rows, Edge)[0]));
+      const a = "33333333-3333-4333-8333-333333333333";
+      const b = "44444444-4444-4444-8444-444444444444";
+      const withNodes = Rows.add(rows, Node, [
+        { ...template, id: a },
+        { ...template, id: b },
+      ]);
+      const ringed = Rows.add(withNodes, Edge, [
+        { ...edge, child: b, parent: a, position: 0n },
+        { ...edge, child: a, parent: b, position: 0n },
+      ]);
+      const refusal = yield* refusalOf(ringed);
+
+      assert.instanceOf(refusal, GuardRefusal);
+      assert.strictEqual(refusal.rule, "reachability");
+    }),
+  );
+
+  suite.effect("a node no edge leads to is refused as reachability", () =>
+    Effect.gen(function* orphan() {
+      const rows = yield* choiceTree;
+      const template = Option.getOrThrow(Option.fromNullishOr(Rows.of(rows, Node)[0]));
+      const refusal = yield* refusalOf(
+        Rows.add(rows, Node, [{ ...template, id: "55555555-5555-4555-8555-555555555555" }]),
+      );
+
+      assert.strictEqual(refusal.rule, "reachability");
+    }),
+  );
+
+  suite.effect("edge positions 0 and 2 under one parent are refused as ordering", () =>
+    Effect.gen(function* gap() {
+      const rows = yield* choiceTree;
+      const edges = Rows.of(rows, Edge);
+      const target = Option.getOrThrow(Option.fromNullishOr(edges.find((e) => e.position === 1n)));
+      const gapped = new Map(rows).set(
+        Edge,
+        edges.map((e) => (e === target ? { ...e, position: 2n } : e)),
+      );
+      const refusal = yield* refusalOf(gapped);
+
+      assert.strictEqual(refusal.rule, "ordering");
+    }),
+  );
+
+  suite.effect("a repeated edge position under one parent is refused as ordering", () =>
+    Effect.gen(function* repeat() {
+      const rows = yield* choiceTree;
+      const edges = Rows.of(rows, Edge);
+      const target = Option.getOrThrow(Option.fromNullishOr(edges.find((e) => e.position === 1n)));
+      const repeated = new Map(rows).set(
+        Edge,
+        edges.map((e) => (e === target ? { ...e, position: 0n } : e)),
+      );
+      const refusal = yield* refusalOf(repeated);
+
+      assert.strictEqual(refusal.rule, "ordering");
     }),
   );
 });
