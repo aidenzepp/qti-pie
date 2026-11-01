@@ -90,10 +90,11 @@ describe("patterns", () => {
   });
 
   it("xsDouble", () => {
-    for (const value of ["0", "0.0", "0e0", "-1.5E3", "INF"]) {
+    for (const value of ["0", "0.0", "0e0", "-1.5E3", "INF", "-INF", "NaN"]) {
       assert.isTrue(admits(patterns.xsDouble, "u", value), value);
     }
     assert.isFalse(admits(patterns.xsDouble, "u", "1,5"));
+    assert.isFalse(admits(patterns.xsDouble, "u", "+INF"));
   });
 
   it("xsToken", () => {

@@ -58,10 +58,10 @@ export const xsNonNegativeInteger = "^\\+?[0-9]+$" as const;
 export const xsInteger = "^[+\\-]?[0-9]+$" as const;
 
 /**
- * `xs:double` lexical space: a decimal with an optional exponent, signed `INF`, or `NaN`.
+ * `xs:double` lexical space: a decimal with an optional exponent, `INF`, `-INF`, or `NaN`.
  */
 export const xsDouble =
-  "^(?:[+\\-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+\\-]?[0-9]+)?|[+\\-]?INF|NaN)$" as const;
+  "^(?:[+\\-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+\\-]?[0-9]+)?|-?INF|NaN)$" as const;
 
 /**
  * `xs:string` lexical space: any text, whitespace preserved. The same source as `wildcard`; the
