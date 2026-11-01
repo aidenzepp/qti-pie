@@ -11,6 +11,7 @@
  */
 import {
   alternatives,
+  capacity,
   closed,
   closedId,
   contained,
@@ -21,7 +22,9 @@ import {
   select,
   str,
   uuid,
+  within,
 } from "@bjornpagen/grizzle";
+import { DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import { Edge, Node } from "#qti/schema/node.ts";
 import { Resource } from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
@@ -205,6 +208,60 @@ export const LomValue = relation("LomValue", { collapsed: token, id: uuid, value
 ]);
 
 /**
+ * A resource that owns a record with at least one `lom:identifier`, bound to the resource and its
+ * type like the record's `ResourceLom`.
+ */
+export const ResourceLomIdentified = relation(
+  "ResourceLomIdentified",
+  { lom: uuid, package: uuid, resource: ncName, type: resourceType },
+  ["lom"],
+);
+
+/**
+ * The one identifier an item resource's record names the item by: the whitespace-collapsed
+ * `lom:entry` at its position, bound to the item document's `identifier`.
+ */
+export const LomObjectIdentifier = relation(
+  "LomObjectIdentifier",
+  {
+    collapsed: ncName,
+    lom: uuid,
+    package: uuid,
+    position: pg.bigint,
+    resource: ncName,
+    type: resourceType,
+  },
+  ["lom"],
+);
+
+/**
+ * A resource that owns a record with a `lom:title` under its general category, bound to the
+ * resource and its type like the record's `ResourceLom`.
+ */
+export const ResourceLomTitled = relation(
+  "ResourceLomTitled",
+  { lom: uuid, package: uuid, resource: ncName, type: resourceType },
+  ["lom"],
+);
+
+/**
+ * The one title an item resource's record names the item by: the whitespace-collapsed string at its
+ * position, bound to the item document's `title`.
+ */
+export const LomObjectTitle = relation(
+  "LomObjectTitle",
+  {
+    collapsed: token,
+    lom: uuid,
+    package: uuid,
+    position: pg.bigint,
+    resource: ncName,
+    type: resourceType,
+  },
+  ["lom"],
+);
+
+/**
  * The general category's arms, keyed by their `NodeKind` handles.
  */
 export const arms = {
@@ -240,6 +297,8 @@ export const relations = {
   LomIdentifierEntry,
   LomKeyword,
   LomLanguage,
+  LomObjectIdentifier,
+  LomObjectTitle,
   LomOwner,
   LomSource,
   LomString,
@@ -249,6 +308,8 @@ export const relations = {
   LomValue,
   ManifestLom,
   ResourceLom,
+  ResourceLomIdentified,
+  ResourceLomTitled,
 };
 
 /**
@@ -258,7 +319,10 @@ export const relations = {
  * general category belongs to a record, and a row that copies the record's owner agrees with it;
  * each identifier and language is the edge's child at the position it copies, each identifier part
  * the edge's child under the identifier it names and carries that identifier's position; each
- * title string is a string row of its own value; each string language belongs to a string.
+ * title string is a string row of its own value; each string language belongs to a string. A
+ * resource's record names at least one identifier and exactly one title; an item resource's record
+ * has one object identifier and one object title, each a row of the record and of the item
+ * document's own identifier or title.
  */
 export const rules = [
   key(Lom, ["id", "owner"]),
@@ -303,4 +367,64 @@ export const rules = [
   contained(on(LomCoverage, "lom"), on(Lom, "id")),
   contained(on(LomStructure, "lom"), on(Lom, "id")),
   contained(on(LomAggregationLevel, "lom"), on(Lom, "id")),
+  key(ResourceLomIdentified, ["lom"]),
+  contained(
+    on(ResourceLomIdentified, "lom", "package", "resource", "type"),
+    on(ResourceLom, "lom", "package", "resource", "type"),
+  ),
+  contained(
+    on(select(LomIdentifier, { owner: "resource" }), "lom"),
+    on(ResourceLomIdentified, "lom"),
+  ),
+  capacity(on(ResourceLomIdentified, "lom"), {
+    from: on(LomIdentifier, "lom"),
+    within: within(1n, "*"),
+  }),
+  key(LomObjectIdentifier, ["lom"]),
+  contained(
+    on(LomObjectIdentifier, "lom", "position", "collapsed"),
+    on(LomIdentifierEntry, "lom", "position", "collapsed"),
+  ),
+  contained(
+    on(LomObjectIdentifier, "lom", "package", "resource", "type"),
+    on(ResourceLomIdentified, "lom", "package", "resource", "type"),
+  ),
+  contained(
+    on(LomObjectIdentifier, "package", "resource", "collapsed"),
+    on(DocumentIdentifier, "package", "resource", "value"),
+  ),
+  capacity(on(select(ResourceLomIdentified, { type: "imsqti_item_xmlv3p0" }), "lom"), {
+    from: on(LomObjectIdentifier, "lom"),
+    within: within(1n, 1n),
+  }),
+  key(ResourceLomTitled, ["lom"]),
+  contained(
+    on(ResourceLomTitled, "lom", "package", "resource", "type"),
+    on(ResourceLom, "lom", "package", "resource", "type"),
+  ),
+  contained(
+    on(select(LomGeneralTitle, { owner: "resource" }), "lom"),
+    on(ResourceLomTitled, "lom"),
+  ),
+  capacity(on(ResourceLomTitled, "lom"), {
+    from: on(LomGeneralTitle, "lom"),
+    within: within(1n, 1n),
+  }),
+  key(LomObjectTitle, ["lom"]),
+  contained(
+    on(LomObjectTitle, "lom", "position", "collapsed"),
+    on(LomTitle, "lom", "position", "collapsed"),
+  ),
+  contained(
+    on(LomObjectTitle, "lom", "package", "resource", "type"),
+    on(ResourceLomTitled, "lom", "package", "resource", "type"),
+  ),
+  contained(
+    on(LomObjectTitle, "package", "resource", "collapsed"),
+    on(DocumentTitle, "package", "resource", "collapsed"),
+  ),
+  capacity(on(select(ResourceLomTitled, { type: "imsqti_item_xmlv3p0" }), "lom"), {
+    from: on(LomObjectTitle, "lom"),
+    within: within(1n, 1n),
+  }),
 ] as const;
