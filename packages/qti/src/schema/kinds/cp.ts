@@ -5,6 +5,7 @@
 import { Option } from "effect";
 
 import type { AdmissionRow, RegistryRow } from "#qti/schema/kinds/generic.ts";
+import type { SchemaVersionHandle } from "#qti/schema/node.ts";
 
 const namespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
 
@@ -71,7 +72,39 @@ export const registry: Readonly<Record<(typeof kinds)[number], RegistryRow>> = {
   "cp:schemaversion": { attributes: [], local: "schemaversion", namespace, parent: Option.none() },
 };
 
+const versions = ["3.0.0", "3.0.1"] as const satisfies readonly SchemaVersionHandle[];
+
+const simpleContentChildren = ["text", "ws", "entityRef", "comment", "pi"] as const;
+
 /**
- * The CP admission rows: none yet.
+ * The children each CP kind admits, by content type: the spec's 3.6 and 4.3. `cp:organizations`
+ * and `cp:dependency` are empty types, so they admit no character data; `cp:metadata.file` is not
+ * admitted yet.
  */
-export const admission: readonly AdmissionRow[] = [];
+const children: Readonly<Record<(typeof kinds)[number], readonly string[]>> = {
+  "cp:dependency": ["comment", "pi"],
+  "cp:file": ["ws", "comment", "pi"],
+  "cp:manifest": [
+    "cp:metadata.manifest",
+    "cp:organizations",
+    "cp:resources",
+    "ws",
+    "comment",
+    "pi",
+  ],
+  "cp:metadata.manifest": ["cp:schema", "cp:schemaversion", "lom:lom", "ws", "comment", "pi"],
+  "cp:metadata.resource": ["qmd:qtiMetadata", "lom:lom", "ws", "comment", "pi"],
+  "cp:organizations": ["comment", "pi"],
+  "cp:resource": ["cp:metadata.resource", "cp:file", "cp:dependency", "ws", "comment", "pi"],
+  "cp:resources": ["cp:resource", "ws", "comment", "pi"],
+  "cp:schema": simpleContentChildren,
+  "cp:schemaversion": simpleContentChildren,
+};
+
+/**
+ * The CP admission rows, the same for both versions.
+ */
+export const admission: readonly AdmissionRow[] = Object.entries(children).flatMap(
+  ([parent, kids]) =>
+    versions.flatMap((version) => kids.map((child) => ({ child, parent, version }))),
+);
