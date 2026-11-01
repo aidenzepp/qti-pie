@@ -1,6 +1,8 @@
 import { closed, schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import * as generic from "#qti/schema/kinds/generic.ts";
 import * as node from "#qti/schema/node.ts";
+import * as patterns from "#qti/schema/patterns.ts";
 import type { AttributeNameHandle, NodeKindHandle } from "#qti/schema/node.ts";
 
 /**
@@ -41,12 +43,23 @@ describe("node", () => {
   it("builds a schema over its relations and rules without refusal", () => {
     const probe = schema("QtiNodeProbe", node.relations, node.rules);
     assert.deepStrictEqual(Object.keys(probe.relations).toSorted(), [
+      "Admission",
+      "AttributeEntityReference",
+      "AttributeLexical",
       "AttributeName",
+      "Comment",
+      "Edge",
+      "EntityReference",
       "MiscKind",
+      "NamespaceDeclaration",
+      "Node",
       "NodeKind",
+      "Pi",
       "Placement",
       "RootKind",
+      "SchemaLocation",
       "SchemaVersion",
+      "Text",
       "Tree",
       "TreeDoctype",
       "TreeExportCharset",
@@ -56,6 +69,7 @@ describe("node", () => {
       "TreeXmlEncoding",
       "TreeXmlStandalone",
       "TreeXmlVersion",
+      "Ws",
     ]);
     assert.strictEqual(probe.statements.length, node.rules.length);
   });
@@ -92,6 +106,46 @@ describe("node", () => {
       [["node"]],
     );
     assert.deepStrictEqual([...node.relations.TreeRoot.primaryKey], ["tree"]);
+  });
+
+  it("contains each edge's version and kinds in Admission, over its three keyed fields", () => {
+    const admitted = node.rules.filter(
+      (rule) =>
+        rule.kind === "contained" &&
+        rule.left.source === node.relations.Edge &&
+        rule.right.source === node.relations.Admission,
+    );
+    assert.deepStrictEqual(
+      admitted.map((rule) =>
+        rule.kind === "contained" ? [[...rule.left.fields], [...rule.right.fields]] : [],
+      ),
+      [
+        [
+          ["version", "parentKind", "childKind"],
+          ["version", "parent", "child"],
+        ],
+      ],
+    );
+    assert.deepStrictEqual(
+      [...node.relations.Admission.primaryKey],
+      ["version", "parent", "child"],
+    );
+  });
+
+  it("keys AttributeLexical by node and attribute, an AttributeName over an uncollapsed value", () => {
+    const lexical = node.relations.AttributeLexical;
+    assert.deepStrictEqual([...lexical.primaryKey], ["node", "attribute"]);
+    assert.strictEqual(lexical.fields.attribute.roster.name, node.relations.AttributeName.name);
+    assert.strictEqual(lexical.fields.value.pattern.source, patterns.uncollapsed);
+    assert.strictEqual(lexical.fields.value.pattern.flags, patterns.uncollapsedFlags);
+  });
+
+  it("gives each generic kind its arm, keyed by its NodeKind handle", () => {
+    assert.deepStrictEqual(Object.keys(node.arms).toSorted(), [...generic.kinds].toSorted());
+    assert.deepStrictEqual(
+      Object.values(node.arms).map((arm) => [...arm.primaryKey]),
+      generic.kinds.map(() => ["id"]),
+    );
   });
 
   it("types the composed handle unions as literals", () => {
