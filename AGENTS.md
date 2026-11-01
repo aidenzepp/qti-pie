@@ -50,6 +50,13 @@ reads `grizzle.config.ts` from there.
   and types") include no JSON or XML type. Model within them.
 - When grizzle behaves wrongly or a limit blocks a correct model, record it in `docs/grizzle-findings.md` with the
   smallest reproduction. That record is a deliverable of this project, not a side note.
+- grizzle is a very new beta, so expect real defects, and prove each one before blaming grizzle. Triage every
+  finding against grizzle's source, the clone at `~/Documents/dev/workspaces/personal/grizzle` checked out at the
+  vendored commit (`vendor/README.md`), and classify it as one of: our misuse (fix it here, record nothing), a
+  documented limit (record it as a limit), or a grizzle defect (record the cause with `file:line` anchors and a minimal
+  reproduction that does not need this repository). A workaround in our code does not close a finding: record the
+  workaround beside the cause. A confirmed grizzle defect becomes a GitHub issue on `bjornpagen/grizzle`, drafted with
+  the `issue-authoring` skill and filed only after the operator approves it.
 
 ## Code
 
