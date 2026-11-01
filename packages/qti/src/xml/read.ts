@@ -1,13 +1,20 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { SaxesParser } from "saxes";
 import type { SaxesAttributeNS } from "saxes";
 import { decode } from "#qti/xml/decode.ts";
 import type { Decoded } from "#qti/xml/decode.ts";
 import { lexProlog, substitute } from "#qti/xml/dtd.ts";
-import type { Prolog, Substituted } from "#qti/xml/dtd.ts";
+import type { AttlistEntry, Prolog, Substituted } from "#qti/xml/dtd.ts";
 import { WellFormednessError } from "#qti/xml/errors.ts";
 import type { ReaderRefusal } from "#qti/xml/errors.ts";
-import type { Attribute, Child, Element, Misc, XmlDocument } from "#qti/xml/tree.ts";
+import type {
+  Attribute,
+  AttributeReference,
+  Child,
+  Element,
+  Misc,
+  XmlDocument,
+} from "#qti/xml/tree.ts";
 
 /**
  * An element whose start tag has been read and whose end tag has not.
@@ -163,6 +170,79 @@ const parse = (substituted: Substituted): Effect.Effect<Built, WellFormednessErr
 };
 
 /**
+ * The value with leading and trailing spaces removed and each run of spaces made one (XML 1.0
+ * section 3.3.3, the second step, which applies to every attribute type but `CDATA`).
+ */
+const collapseSpaces = (value: string): string => value.replaceAll(/ +/gu, " ").trim();
+
+/**
+ * The `&name;` references in `value`, each as its name and the index of its `&`.
+ */
+const referencesIn = (value: string): readonly AttributeReference[] =>
+  [...value.matchAll(/&(?<name>[^\s&;]+);/gu)].map((match) => ({
+    name: match.groups?.name ?? "",
+    offset: match.index,
+  }));
+
+/**
+ * The attribute `declared` names with `value`, which is as the ATTLIST declaration supplies it
+ * except for the second normalization step a non-`CDATA` type adds; a name in it other than the
+ * predefined five is kept as written and recorded as a reference.
+ */
+const defaultAttribute = (declared: string, entry: AttlistEntry, value: string): Attribute => {
+  const normalized = entry.type === "CDATA" ? value : collapseSpaces(value);
+
+  return {
+    local: declared,
+    namespace: "",
+    prefix: "",
+    qname: declared,
+    references: referencesIn(normalized),
+    value: normalized,
+  };
+};
+
+/**
+ * `element`'s attributes after the ATTLIST table of its name is applied: a non-`CDATA` value is
+ * normalized and each declared default the element lacks is appended in declaration order.
+ */
+const applyAttlist = (
+  attributes: readonly Attribute[],
+  table: ReadonlyMap<string, AttlistEntry>,
+): readonly Attribute[] => {
+  const written = attributes.map((attribute) => {
+    const entry = table.get(attribute.qname);
+
+    return entry === undefined || entry.type === "CDATA"
+      ? attribute
+      : { ...attribute, value: collapseSpaces(attribute.value) };
+  });
+  const present = new Set(attributes.map((attribute) => attribute.qname));
+  const defaulted = [...table].flatMap(([declared, entry]) =>
+    !present.has(declared) && Option.isSome(entry.default)
+      ? [defaultAttribute(declared, entry, entry.default.value)]
+      : [],
+  );
+
+  return [...written, ...defaulted];
+};
+
+/**
+ * `element` and everything below it with the ATTLIST tables applied.
+ */
+const applyAttlists = (element: Element, attlists: Prolog["attlists"]): Element => {
+  const table = attlists.get(element.qname);
+
+  return {
+    ...element,
+    attributes: table === undefined ? element.attributes : applyAttlist(element.attributes, table),
+    children: element.children.map((child) =>
+      child.kind === "element" ? applyAttlists(child, attlists) : child,
+    ),
+  };
+};
+
+/**
  * Assemble the document from what the earlier stages read and the tree `saxes` built.
  */
 const assemble = (decoded: Decoded, prolog: Prolog, built: Built): XmlDocument => ({
@@ -171,7 +251,7 @@ const assemble = (decoded: Decoded, prolog: Prolog, built: Built): XmlDocument =
   doctype: prolog.doctype,
   epilog: built.epilog,
   prolog: built.prolog,
-  root: built.root,
+  root: prolog.attlists.size === 0 ? built.root : applyAttlists(built.root, prolog.attlists),
 });
 
 /**
@@ -180,8 +260,9 @@ const assemble = (decoded: Decoded, prolog: Prolog, built: Built): XmlDocument =
  * The bytes are decoded, the prolog is lexed and the declared entities are substituted into the
  * body, then `saxes` parses the result with namespaces on and the tree is built from its events:
  * adjacent text events become one `Text`, a CDATA section stays its own `Text`, and the
- * empty-element form is dropped. ATTLIST defaults, non-CDATA attribute normalization and undeclared
- * entity references are not handled here.
+ * empty-element form is dropped. The ATTLIST table is then applied: a declared default the element
+ * lacks is appended, and a non-`CDATA` attribute value is normalized. Undeclared entity references
+ * are not handled here.
  *
  * @param bytes - The document as read from storage.
  * @returns The tree; a `ReaderRefusal` from decoding or the prolog, or a `WellFormednessError`
