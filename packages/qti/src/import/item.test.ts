@@ -1,14 +1,33 @@
+/* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the declaration column the rows under test carry; the shape here is the typed-or-record choice, not a structure. */
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { inject } from "vitest";
-import { itemRows } from "#qti/import/item.ts";
+import { ItemRefusal, itemRows, standardTemplate } from "#qti/import/item.ts";
 import { Rows, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { NodeIndex } from "#qti/import/tree.ts";
-import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
+import {
+  Declaration,
+  DeclarationInterpretation,
+  OutcomeDeclarationArm,
+  ResponseDeclarationArm,
+  ResponseDeclarationId,
+  TypedDeclaration,
+} from "#qti/schema/declaration.ts";
+import { Document, DocumentId, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#qti/schema/html.ts";
 import { AssessmentItem, DeclaredAdaptive, ItemBody, Prompt } from "#qti/schema/item.ts";
+import {
+  ChoiceInteraction,
+  DeclaredMaxChoices,
+  DeclaredMinChoices,
+  DeclaredOrientation,
+  DeclaredShuffle,
+  InteractionBinding,
+  SimpleChoice,
+  TypedBinding,
+} from "#qti/schema/interaction.ts";
 import {
   AttributeEntityReference,
   AttributeLexical,
@@ -16,6 +35,13 @@ import {
   EntityReference,
   Text,
 } from "#qti/schema/node.ts";
+import {
+  ResponseProcessing,
+  ResponseProcessingItem,
+  ResponseProcessingTemplate,
+  StandardTemplateReference,
+} from "#qti/schema/processing.ts";
+import * as value from "#qti/schema/value.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import { readXml } from "#qti/xml/read.ts";
 
@@ -50,6 +76,13 @@ const idsOf = (nodes: NodeIndex, kind: string) =>
  */
 const onlyId = (nodes: NodeIndex, kind: string) =>
   Option.getOrThrow(Option.fromNullishOr(idsOf(nodes, kind)[0]));
+
+/**
+ * The id of the node of one kind at `index` in document order; the nodes the tests ask for are
+ * present.
+ */
+const idAt = (nodes: NodeIndex, kind: string, index: number) =>
+  Option.getOrThrow(Option.fromNullishOr(idsOf(nodes, kind)[index]));
 
 /**
  * The item rows of a decoded `choice.xml`, for the resource the tests describe.
@@ -200,6 +233,269 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
       assert.deepStrictEqual(lexical(root, "title"), ["Unattended\tLuggage"]);
       assert.deepStrictEqual(lexical(img, "alt"), []);
       assert.isString(documentId);
+    }),
+  );
+
+  suite.effect("choice.xml yields its declarations, values, binding, choices and processing", () =>
+    Effect.gen(function* choiceSemantics() {
+      const doc = yield* readChoice(inject("fixtures").simple);
+      const { documentId, nodes, rows } = yield* itemOf(doc);
+      const response = onlyId(nodes, "qti-response-declaration");
+      const outcome = onlyId(nodes, "qti-outcome-declaration");
+      const correct = onlyId(nodes, "qti-correct-response");
+      const initial = onlyId(nodes, "qti-default-value");
+      const interaction = onlyId(nodes, "qti-choice-interaction");
+      const correctValue = idAt(nodes, "qti-value", 0);
+      const defaultValue = idAt(nodes, "qti-value", 1);
+
+      assert.deepStrictEqual(Rows.of(rows, Declaration), [
+        {
+          document: documentId,
+          id: response,
+          identifier: "RESPONSE",
+          kind: "response",
+          shape: "typed",
+        },
+        {
+          document: documentId,
+          id: outcome,
+          identifier: "SCORE",
+          kind: "outcome",
+          shape: "typed",
+        },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, ResponseDeclarationArm), [{ id: response }]);
+      assert.deepStrictEqual(Rows.of(rows, OutcomeDeclarationArm), [{ id: outcome }]);
+      assert.deepStrictEqual(Rows.of(rows, TypedDeclaration), [
+        {
+          baseType: "identifier",
+          cardinality: "single",
+          document: documentId,
+          id: response,
+          identifier: "RESPONSE",
+        },
+        {
+          baseType: "float",
+          cardinality: "single",
+          document: documentId,
+          id: outcome,
+          identifier: "SCORE",
+        },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, DocumentId), [
+        { document: documentId, holder: "responseDeclaration", id: "RESPONSE" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, ResponseDeclarationId), [
+        { document: documentId, id: "RESPONSE", node: response },
+      ]);
+
+      assert.deepStrictEqual(Rows.of(rows, value.ValueSet), [
+        { declaration: response, id: correct, role: "correct", shape: "typed" },
+        { declaration: outcome, id: initial, role: "default", shape: "typed" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, value.TypedValueSet), [
+        { baseType: "identifier", cardinality: "single", declaration: response, id: correct },
+        { baseType: "float", cardinality: "single", declaration: outcome, id: initial },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, value.CorrectResponseArm), [{ id: correct }]);
+      assert.deepStrictEqual(Rows.of(rows, value.DefaultValueArm), [{ id: initial }]);
+      assert.deepStrictEqual(Rows.of(rows, value.DeclaredValue), [
+        {
+          baseType: "identifier",
+          id: correctValue,
+          position: 1n,
+          shape: "typed",
+          valueSet: correct,
+        },
+        { baseType: "float", id: defaultValue, position: 1n, shape: "typed", valueSet: initial },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, value.relations.DeclaredValueIdentifier), [
+        { id: correctValue, value: "ChoiceA" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, value.relations.DeclaredValueFloat), [
+        { id: defaultValue, value: "0" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, value.RecordField), []);
+
+      assert.deepStrictEqual(Rows.of(rows, ChoiceInteraction), [
+        {
+          id: interaction,
+          maxChoices: "1",
+          maxChoicesN: 1n,
+          minChoices: "0",
+          minChoicesN: 0n,
+          orientation: "vertical",
+          responseIdentifier: "RESPONSE",
+          rootKind: "item",
+          shuffle: "false",
+        },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, DeclaredShuffle), [{ node: interaction }]);
+      assert.deepStrictEqual(Rows.of(rows, DeclaredMaxChoices), [{ node: interaction }]);
+      assert.deepStrictEqual(Rows.of(rows, DeclaredMinChoices), []);
+      assert.deepStrictEqual(Rows.of(rows, DeclaredOrientation), []);
+      assert.deepStrictEqual(Rows.of(rows, InteractionBinding), [
+        {
+          document: documentId,
+          interactionKind: "qti-choice-interaction",
+          node: interaction,
+          responseIdentifier: "RESPONSE",
+          shape: "typed",
+        },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, TypedBinding), [
+        {
+          baseType: "identifier",
+          cardinality: "single",
+          document: documentId,
+          interactionKind: "qti-choice-interaction",
+          maxCount: 1n,
+          node: interaction,
+          responseIdentifier: "RESPONSE",
+        },
+      ]);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, SimpleChoice),
+        ["ChoiceA", "ChoiceB", "ChoiceC"].map((identifier, index) => ({
+          fixed: "false" as const,
+          id: idAt(nodes, "qti-simple-choice", index),
+          identifier,
+          interaction,
+          showHide: "show" as const,
+        })),
+      );
+
+      const processing = onlyId(nodes, "qti-response-processing");
+      const root = onlyId(nodes, "qti-assessment-item");
+      assert.deepStrictEqual(Rows.of(rows, ResponseProcessing), [
+        { id: processing, rootKind: "item" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, ResponseProcessingItem), [
+        { id: processing, item: root },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, ResponseProcessingTemplate), [
+        {
+          node: processing,
+          uri: "https://www.imsglobal.org/question/qti_v3p0/rptemplates/match_correct.xml",
+        },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, StandardTemplateReference), [
+        { node: processing, template: "match_correct" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, DeclarationInterpretation), []);
+    }),
+  );
+
+  suite.effect("a response-identifier naming no declaration is refused binding-declared", () =>
+    Effect.gen(function* undeclaredBinding() {
+      const doc = yield* readChoice(inject("fixtures").simple, [
+        'response-identifier="RESPONSE"',
+        'response-identifier="RESP"',
+      ]);
+      const error = yield* Effect.flip(itemOf(doc));
+
+      assert.instanceOf(error, ItemRefusal);
+      assert.strictEqual(error.rule, "binding-declared");
+    }),
+  );
+
+  suite.effect("the padded-attributes fixture processes the declaration, choice and template", () =>
+    Effect.gen(function* paddedSemantics() {
+      const doc = yield* readChoice(yield* materialize("padded-attributes"));
+      const { nodes, rows } = yield* itemOf(doc);
+      const interaction = onlyId(nodes, "qti-choice-interaction");
+
+      assert.deepStrictEqual(
+        Rows.of(rows, ChoiceInteraction).map((row) => [
+          row.responseIdentifier,
+          row.maxChoices,
+          row.maxChoicesN,
+        ]),
+        [["RESPONSE", "1", 1n]],
+      );
+      assert.strictEqual(Rows.of(rows, SimpleChoice)[0]?.identifier, "ChoiceA");
+      assert.deepStrictEqual(
+        Rows.of(rows, ResponseProcessingTemplate).map((row) => row.uri),
+        ["https://www.imsglobal.org/question/qti_v3p0/rptemplates/match_correct.xml"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, InteractionBinding).map((row) => [row.node, row.responseIdentifier]),
+        [[interaction, "RESPONSE"]],
+      );
+
+      const lexical = Rows.of(rows, AttributeLexical);
+      assert.deepStrictEqual(lexical.map((row) => row.attribute).toSorted(), [
+        "adaptive",
+        "identifier",
+        "identifier",
+        "max-choices",
+        "response-identifier",
+        "src",
+        "template",
+        "title",
+      ]);
+      assert.deepStrictEqual(
+        lexical.filter((row) => row.attribute === "alt"),
+        [],
+      );
+    }),
+  );
+
+  suite.effect("the padded-text fixture replaces the default value's whitespace characters", () =>
+    Effect.gen(function* paddedText() {
+      const doc = yield* readChoice(yield* materialize("padded-text"));
+      const { documentId, nodes, rows } = yield* itemOf(doc);
+      const note = idAt(nodes, "qti-outcome-declaration", 1);
+
+      assert.strictEqual(Rows.of(rows, Declaration).length, 3);
+      assert.deepStrictEqual(
+        Rows.of(rows, Declaration)
+          .filter((row) => row.identifier === "NOTE")
+          .map((row) => [row.id, row.kind, row.shape, row.document]),
+        [[note, "outcome", "typed", documentId]],
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, TypedDeclaration)
+          .filter((row) => row.identifier === "NOTE")
+          .map((row) => [row.baseType, row.cardinality]),
+        [["string", "single"]],
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, value.relations.DeclaredValueString).map((row) => row.value),
+        ["a b c"],
+      );
+    }),
+  );
+
+  suite.effect("standardTemplate maps the four published URI forms and refuses the rest", () =>
+    Effect.sync(() => {
+      const forms = [
+        "https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/",
+        "https://www.imsglobal.org/question/qti_v3p0/rptemplates/",
+      ].flatMap((prefix) => [`${prefix}map_response`, `${prefix}map_response.xml`]);
+      for (const form of forms) {
+        assert.deepStrictEqual(standardTemplate(form), Option.some("map_response"));
+      }
+
+      for (const refused of [
+        "https://example.com/rptemplates/map_response",
+        "https://www.imsglobal.org/question/qti_v3p0/rptemplates/unknown",
+        "https://www.imsglobal.org/question/qti_v3p0/rptemplates/map_response.xml.xml",
+        "https://www.imsglobal.org/question/qti_v3p0/rptemplates/",
+        "",
+      ]) {
+        assert.deepStrictEqual(standardTemplate(refused), Option.none());
+      }
+    }),
+  );
+
+  suite.effect("the simple fixture has no attribute lexical rows", () =>
+    Effect.gen(function* simpleLexical() {
+      const doc = yield* readChoice(inject("fixtures").simple);
+      const { rows } = yield* itemOf(doc);
+
+      assert.deepStrictEqual(Rows.of(rows, AttributeLexical), []);
     }),
   );
 
