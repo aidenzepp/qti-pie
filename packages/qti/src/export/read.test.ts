@@ -1,11 +1,16 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import type { AnyRelation } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Layer } from "effect";
+import { AuthorAppLayer } from "#qti/db/layer.ts";
+import { readTree, treesOf } from "#qti/export/read.ts";
 import { renderTree } from "#qti/export/render.ts";
+import { importPackage } from "#qti/import/package.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
 import { Rows } from "#qti/import/tree.ts";
+import { Author } from "#qti/schema/roles.ts";
 import { listPackage } from "#qti/package/read.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
@@ -73,6 +78,36 @@ const assertRenders = (rows: Rows, treeId: string, file: string) =>
     return rendered;
   });
 
+const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gu;
+
+/**
+ * The relations of a package that belong to no tree: the package's entries and the bytes of its
+ * files, which `readTree` does not read.
+ */
+const packageLevel: ReadonlySet<string> = new Set(["FileContent", "PackageEntry"]);
+
+/**
+ * Every fact of `rows` by relation name as sorted text with its ids masked, so two sets of rows
+ * that differ only in the ids a run generated compare equal.
+ */
+const maskedFacts = (rows: Rows): ReadonlyMap<string, readonly string[]> =>
+  new Map(
+    Author.write
+      .filter((name) => !packageLevel.has(name))
+      .map((name) => [
+        name,
+        Rows.of(rows, Author.relations[name])
+          .map((fact) =>
+            Object.entries(fact)
+              .toSorted(([left], [right]) => left.localeCompare(right))
+              .map(([field, value]) => `${field}=${String(value)}`)
+              .join("\n")
+              .replaceAll(uuidPattern, "id"),
+          )
+          .toSorted(),
+      ]),
+  );
+
 /**
  * How many comments a canonical text holds.
  */
@@ -98,6 +133,82 @@ layer(NodeServices.layer, { excludeTestServices: true })("export/render.ts, no d
         );
         assert.strictEqual(item.includes("<!-- c -->"), name === "comment-in-element");
         assert.strictEqual(item.includes("<?pi d?>"), name === "comment-in-element");
+      }),
+    );
+  }
+});
+
+layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
+  excludeTestServices: true,
+  timeout: "120 seconds",
+})("export/read.ts, on the lease", (it) => {
+  for (const name of [
+    "simple",
+    "comment-in-element",
+    "padded-attributes",
+    "padded-text",
+  ] as const) {
+    it.effect(`${name}: the read-back of both trees renders to the oracle's canonical bytes`, () =>
+      Effect.gen(function* readBackBothTrees() {
+        const dir = yield* materialize(name);
+        const packageId = yield* importPackage(dir);
+        const trees = yield* treesOf(packageId);
+
+        assert.lengthOf(trees, 2, `the ${name} package holds a manifest tree and an item tree`);
+
+        const [manifestId = "", documentId = ""] = trees;
+
+        assert.strictEqual(manifestId, packageId);
+
+        const manifest = yield* assertRenders(
+          yield* readTree(packageId, manifestId),
+          manifestId,
+          path.join(dir, "imsmanifest.xml"),
+        );
+        const item = yield* assertRenders(
+          yield* readTree(packageId, documentId),
+          documentId,
+          path.join(dir, "choice.xml"),
+        );
+
+        assert.strictEqual(
+          commentsIn(manifest) + commentsIn(item),
+          name === "comment-in-element" ? 4 : 3,
+        );
+        assert.strictEqual(item.includes("<!-- c -->"), name === "comment-in-element");
+        assert.strictEqual(item.includes("<?pi d?>"), name === "comment-in-element");
+      }),
+    );
+  }
+
+  for (const name of [
+    "simple",
+    "comment-in-element",
+    "padded-attributes",
+    "padded-text",
+  ] as const) {
+    it.effect(`${name}: the read-back holds the importer's facts, one for one`, () =>
+      Effect.gen(function* sameFacts() {
+        const { dir } = yield* importFixture(name);
+        const imported = (yield* importFixture(name)).rows;
+        const packageId = yield* importPackage(dir);
+        const read = new Map<AnyRelation, readonly object[]>();
+        for (const tree of yield* treesOf(packageId)) {
+          for (const [relation, facts] of yield* readTree(packageId, tree)) {
+            read.set(relation, [...(read.get(relation) ?? []), ...facts]);
+          }
+        }
+
+        const expected = maskedFacts(imported);
+        const actual = maskedFacts(read);
+        assert.isAtLeast(
+          [...expected.values()].filter((facts) => facts.length > 0).length,
+          40,
+          `${name}: the importer wrote facts of at least forty relations`,
+        );
+        for (const [relation, facts] of expected) {
+          assert.deepStrictEqual(actual.get(relation), facts, `${name}: ${relation}`);
+        }
       }),
     );
   }
