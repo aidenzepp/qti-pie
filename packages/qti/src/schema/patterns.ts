@@ -144,3 +144,127 @@ export const xmlVersion = "^1\\.[0-9]+$" as const;
  * An XML declaration standalone value, `yes` or `no`, for `TreeXmlStandalone`.
  */
 export const yesNo = "^(yes|no)$" as const;
+
+/**
+ * `xs:base64Binary` lexical space: whole four-character groups with an optional padded final group.
+ */
+export const base64 = "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$" as const;
+
+/**
+ * A reference that stays inside the package (R8): a relative path with no `..` segment and no
+ * leading `/`, or an absolute URI with a scheme. Written without lookarounds; a segment is one
+ * character, two characters that are not `..`, or three to 255. Judged on the collapsed value.
+ */
+export const hrefInPackage =
+  "^(?:[A-Za-z][A-Za-z0-9+.\\-]*:[^ \\t\\r\\n]*|(?:[^/]|[^/.][^/]|\\.[^/.]|[^/]{3,255})(?:/(?:[^/]|[^/.][^/]|\\.[^/.]|[^/]{3,255}))*)$" as const;
+
+/**
+ * `xs:anyURI` lexical space as `xmllint` enforces it: libxml2's mapping of the characters outside
+ * the URI set to `_`, then RFC 3986's URI-reference grammar with a closed IP literal, a non-empty
+ * port, a relative-path reference whose first segment has no colon, and a fragment that admits `[`
+ * and `]`. Judged on the collapsed value; the strict RFC 3986 grammar exceeds the engine's regex
+ * budget (2,516 constructs), this one takes 384 of 512.
+ */
+export const anyUri =
+  "^(?:[A-Za-z][A-Za-z0-9+\\-.]*:(?://(?:(?:[^#%/?@\\[\\]]|%[0-9A-Fa-f]{2})*@)?(?:\\[[^\\]]*\\]|(?:[^#%/?:@\\[\\]]|%[0-9A-Fa-f]{2})*)(?::[0-9]+)?(?:/(?:[^#%?\\[\\]]|%[0-9A-Fa-f]{2})*)?|/(?:(?:[^#%/?\\[\\]]|%[0-9A-Fa-f]{2})(?:[^#%?\\[\\]]|%[0-9A-Fa-f]{2})*)?|(?:[^#%/?\\[\\]]|%[0-9A-Fa-f]{2})(?:[^#%?\\[\\]]|%[0-9A-Fa-f]{2})*)?|(?://(?:(?:[^#%/?@\\[\\]]|%[0-9A-Fa-f]{2})*@)?(?:\\[[^\\]]*\\]|(?:[^#%/?:@\\[\\]]|%[0-9A-Fa-f]{2})*)(?::[0-9]+)?(?:/(?:[^#%?\\[\\]]|%[0-9A-Fa-f]{2})*)?|/(?:(?:[^#%/?\\[\\]]|%[0-9A-Fa-f]{2})(?:[^#%?\\[\\]]|%[0-9A-Fa-f]{2})*)?|(?:[^#%/?:\\[\\]]|%[0-9A-Fa-f]{2})+(?:/(?:[^#%?\\[\\]]|%[0-9A-Fa-f]{2})*)?)?)(?:\\?(?:[^#%\\[\\]]|%[0-9A-Fa-f]{2})*)?(?:#(?:[^#%]|%[0-9A-Fa-f]{2})*)?$" as const;
+
+/**
+ * `xs:language` lexical space: dash-separated subtags of at most eight characters, the first
+ * alphabetic.
+ */
+export const xsLanguage = "^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*$" as const;
+
+/**
+ * `xsLanguage` or the empty string: the LOM language bar (`LomStringLanguage.value`,
+ * `LomLanguage.value`).
+ */
+export const xsLanguageOrEmpty = "^(?:[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*)?$" as const;
+
+/**
+ * A media type: a type, a slash and a subtype, with no whitespace.
+ */
+export const mimeType = "^[^/ \\t\\r\\n]{1,127}/[^ \\t\\r\\n]{1,255}$" as const;
+
+/**
+ * The CP profile's `LengthDType`: digits with an optional percent sign.
+ */
+export const lengthDType = "^[0-9]+%?$" as const;
+
+/**
+ * The lexical envelope of a content-package resource type, the vocabulary `ResourceTypeOf` seeds.
+ */
+export const resourceType = "^[a-z0-9_/\\-]{1,80}$" as const;
+
+/**
+ * The seven `schema` values the QTI 3 content-package profile enumerates
+ * (`imsqtiv3p0_imscpv1p2_v1p0.xsd` lines 327 to 333, `imsqtiv3p0p1_imscpv1p2_v1p0.xsd` lines 295 to
+ * 301).
+ */
+export const cpSchema =
+  "^(QTI Package|QTI Test Bank|QTI Item Bank|QTI Object Bank|QTI Test|QTI Section|QTI Item)$" as const;
+
+/**
+ * The `schemaversion` values of the QTI 3 CP profile: `3.0.0` and `3.0.1`.
+ */
+export const schemaVersion = "^3\\.0\\.[01]$" as const;
+
+/**
+ * The 22 `interactionType` values of the QTI metadata XSD (`imsqti_metadatav3p0_v1p0.xsd` lines 169
+ * to 190), in XSD order. A literal alternation costs one construct per character, so this list has
+ * no headroom under the engine's 512-construct budget.
+ */
+export const qmdInteractionType =
+  "^(associateInteraction|choiceInteraction|customInteraction|drawingInteraction|endAttemptInteraction|extendedTextInteraction|gapMatchInteraction|graphicAssociateInteraction|graphicGapMatchInteraction|graphicOrderInteraction|hotspotInteraction|hottextInteraction|inlineChoiceInteraction|matchInteraction|mediaInteraction|orderInteraction|portableCustomInteraction|positionObjectInteraction|selectPointInteraction|sliderInteraction|textEntryInteraction|uploadInteraction)$" as const;
+
+/**
+ * The three `feedbackType` values of the QTI metadata XSD (`imsqti_metadatav3p0_v1p0.xsd` lines 202
+ * to 204).
+ */
+export const qmdFeedbackType = "^(adaptive|nonadaptive|none)$" as const;
+
+/**
+ * The three `scoringMode` values of the QTI metadata XSD (`imsqti_metadatav3p0_v1p0.xsd` lines 217
+ * to 219).
+ */
+export const qmdScoringMode = "^(human|externalmachine|responseprocessing)$" as const;
+
+/**
+ * A tool name or version: at most 256 characters, written as 255 then an optional one, within the
+ * engine's 255 repetition bound (R33).
+ */
+export const toolString = "^.{0,255}.?$" as const;
+
+/**
+ * The flags of `toolString`: `s` lets `.` match line terminators.
+ */
+export const toolStringFlags = "su" as const;
+
+/**
+ * The lexical space of the `boolean` value arm: `true` or `false`.
+ */
+export const booleanLiteral = "^(true|false)$" as const;
+
+/**
+ * The `externalScored` values: `human` or `externalMachine`.
+ */
+export const externalScored = "^(human|externalMachine)$" as const;
+
+/**
+ * The `orientation` values: `vertical` or `horizontal`.
+ */
+export const orientation = "^(vertical|horizontal)$" as const;
+
+/**
+ * The `showHide` values: `show` or `hide`.
+ */
+export const showHide = "^(show|hide)$" as const;
+
+/**
+ * The lexical space of a `point` value: two signed integers separated by one space.
+ */
+export const point = "^[+\\-]?[0-9]+ [+\\-]?[0-9]+$" as const;
+
+/**
+ * The lexical space of a `pair` or `directedPair` value: two NCNames separated by one space.
+ */
+export const pair = `^${ncNameBody} ${ncNameBody}$` as const;

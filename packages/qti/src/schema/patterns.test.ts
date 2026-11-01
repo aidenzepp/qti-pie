@@ -32,6 +32,26 @@ const fields = [
   ["wildcard", () => str.regex(patterns.wildcard, patterns.wildcardFlags)],
   ["xmlVersion", () => str.regex(patterns.xmlVersion)],
   ["yesNo", () => str.regex(patterns.yesNo)],
+  ["base64", () => str.regex(patterns.base64)],
+  ["hrefInPackage", () => str.regex(patterns.hrefInPackage)],
+  ["anyUri", () => str.regex(patterns.anyUri)],
+  ["xsLanguage", () => str.regex(patterns.xsLanguage)],
+  ["xsLanguageOrEmpty", () => str.regex(patterns.xsLanguageOrEmpty)],
+  ["mimeType", () => str.regex(patterns.mimeType)],
+  ["lengthDType", () => str.regex(patterns.lengthDType)],
+  ["resourceType", () => str.regex(patterns.resourceType)],
+  ["cpSchema", () => str.regex(patterns.cpSchema)],
+  ["schemaVersion", () => str.regex(patterns.schemaVersion)],
+  ["qmdInteractionType", () => str.regex(patterns.qmdInteractionType)],
+  ["qmdFeedbackType", () => str.regex(patterns.qmdFeedbackType)],
+  ["qmdScoringMode", () => str.regex(patterns.qmdScoringMode)],
+  ["booleanLiteral", () => str.regex(patterns.booleanLiteral)],
+  ["externalScored", () => str.regex(patterns.externalScored)],
+  ["orientation", () => str.regex(patterns.orientation)],
+  ["showHide", () => str.regex(patterns.showHide)],
+  ["point", () => str.regex(patterns.point)],
+  ["pair", () => str.regex(patterns.pair)],
+  ["toolString", () => str.regex(patterns.toolString, patterns.toolStringFlags)],
 ] as const;
 
 /**
@@ -119,5 +139,88 @@ describe("patterns", () => {
   it("yesNo", () => {
     assert.isFalse(admits(patterns.yesNo, "u", "true"));
     assert.isTrue(admits(patterns.yesNo, "u", "yes"));
+  });
+
+  it("hrefInPackage", () => {
+    const { hrefInPackage } = patterns;
+    for (const value of ["images/sign.png", "choice.xml", "https://x/y.png"]) {
+      assert.isTrue(admits(hrefInPackage, "u", value), value);
+    }
+    for (const value of ["../x", "a/../b", "/x"]) {
+      assert.isFalse(admits(hrefInPackage, "u", value), value);
+    }
+  });
+
+  it("base64", () => {
+    assert.isTrue(admits(patterns.base64, "u", "AQID"));
+    assert.isTrue(admits(patterns.base64, "u", "AQ=="));
+    assert.isFalse(admits(patterns.base64, "u", "A"));
+  });
+
+  it("anyUri", () => {
+    const { anyUri } = patterns;
+    for (const value of [
+      "not a uri",
+      "ok/path?q#f",
+      "https://x/y.png",
+      "images/sign.png",
+      "a#[x]",
+    ]) {
+      assert.isTrue(admits(anyUri, "u", value), value);
+    }
+    for (const value of ["a%zz", "http://[::1", "1a:b", "a?[", " a:b"]) {
+      assert.isFalse(admits(anyUri, "u", value), value);
+    }
+  });
+
+  it("xsLanguageOrEmpty", () => {
+    const { xsLanguageOrEmpty } = patterns;
+    for (const value of ["en", "de", "en-US", ""]) {
+      assert.isTrue(admits(xsLanguageOrEmpty, "u", value), value);
+    }
+    for (const value of [" en ", "1a", "en-"]) {
+      assert.isFalse(admits(xsLanguageOrEmpty, "u", value), value);
+    }
+    assert.isFalse(admits(patterns.xsLanguage, "u", ""));
+  });
+
+  it("cpSchema", () => {
+    assert.isTrue(admits(patterns.cpSchema, "u", "QTI Package"));
+    assert.isFalse(admits(patterns.cpSchema, "u", "QTI Packages"));
+  });
+
+  it("schemaVersion", () => {
+    assert.isTrue(admits(patterns.schemaVersion, "u", "3.0.0"));
+    assert.isTrue(admits(patterns.schemaVersion, "u", "3.0.1"));
+    assert.isFalse(admits(patterns.schemaVersion, "u", "3.0.2"));
+  });
+
+  it("the qmd vocabularies", () => {
+    assert.isTrue(admits(patterns.qmdInteractionType, "u", "choiceInteraction"));
+    assert.isTrue(admits(patterns.qmdFeedbackType, "u", "none"));
+    assert.isTrue(admits(patterns.qmdScoringMode, "u", "externalmachine"));
+    assert.isFalse(admits(patterns.qmdFeedbackType, "u", "nonadaptiv"));
+  });
+
+  it("toolString", () => {
+    const { toolString, toolStringFlags } = patterns;
+    assert.isTrue(admits(toolString, toolStringFlags, "x".repeat(256)));
+    assert.isFalse(admits(toolString, toolStringFlags, "x".repeat(257)));
+  });
+
+  it("booleanLiteral", () => {
+    assert.isTrue(admits(patterns.booleanLiteral, "u", "true"));
+    assert.isFalse(admits(patterns.booleanLiteral, "u", "1"));
+  });
+
+  it("pair", () => {
+    assert.isTrue(admits(patterns.pair, "u", "A B"));
+    assert.isFalse(admits(patterns.pair, "u", "A"));
+    assert.isFalse(admits(patterns.pair, "u", "A  B"));
+  });
+
+  it("point", () => {
+    assert.isTrue(admits(patterns.point, "u", "-1 2"));
+    assert.isFalse(admits(patterns.point, "u", "1,2"));
   });
 });
