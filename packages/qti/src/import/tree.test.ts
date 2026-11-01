@@ -5,14 +5,25 @@ import { assert, it, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option } from "effect";
 import { inject } from "vitest";
 import {
+  AttributeEntityReference,
   AttributeLexical,
+  Comment,
+  Edge,
+  EntityReference,
+  NamespaceDeclaration,
+  Node,
+  Pi,
+  SchemaLocation,
+  Text,
   Tree,
   TreeDoctype,
   TreeExportCharset,
   TreeMisc,
+  TreeRoot,
   TreeXmlEncoding,
   TreeXmlStandalone,
   TreeXmlVersion,
+  Ws,
 } from "#qti/schema/node.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import {
@@ -106,6 +117,156 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
 
       assert.isTrue(text.startsWith("<!DOCTYPE qti-assessment-item"));
       assert.deepStrictEqual(Rows.of(rows, TreeDoctype), [{ text, tree: treeId }]);
+    }),
+  );
+
+  suite.effect("choice.xml yields its node, edge, arm, namespace and root rows", () =>
+    Effect.gen(function* choiceNodes() {
+      const doc = yield* readChoice(inject("fixtures").simple);
+      const { nodes, rows } = yield* treeRows(doc, itemInput(doc.charset), Rows.empty());
+      const nodeRows = Rows.of(rows, Node);
+      const byId = new Map(nodeRows.map((row) => [row.id, row]));
+      const ofKind = (kind: string) => nodeRows.filter((row) => row.kind === kind);
+      const elements = nodeRows.filter(
+        (row) => !["text", "ws", "comment", "pi", "entityRef"].includes(row.kind),
+      );
+
+      // The spec's 3.4 count of elements in choice.xml.
+      assert.strictEqual(elements.length, 17);
+      assert.strictEqual(nodes.size, 17);
+
+      // One whitespace run lies between every pair of tags of an element that holds elements: the
+      // root 4 children (5 runs), the response and outcome declarations and their value holders
+      // (2 each, 4 elements), the item body 3 (4), the second p 1 (2) and the interaction 4 (5).
+      assert.strictEqual(ofKind("ws").length, 24);
+      assert.deepStrictEqual(
+        Rows.of(rows, Text)
+          .map((row) => row.value)
+          .toSorted(),
+        [
+          "0",
+          "ChoiceA",
+          "Do not let someone else look after your luggage.",
+          "Look at the text in the picture.",
+          "Remember your luggage when you leave.",
+          "What does it say?",
+          "You must stay with your luggage at all times.",
+        ],
+      );
+      assert.strictEqual(ofKind("text").length, 7);
+      assert.strictEqual(Rows.of(rows, Ws).length, 24);
+      assert.strictEqual(nodeRows.length, 17 + 24 + 7);
+      assert.isTrue(
+        nodeRows.every(
+          (row) =>
+            row.tree === treeId &&
+            row.version === "3.0.0" &&
+            row.rootKind === "item" &&
+            (elements.includes(row) || row.prefix === ""),
+        ),
+      );
+
+      const edges = Rows.of(rows, Edge);
+      assert.strictEqual(edges.length, nodeRows.length - 1);
+
+      const children = Map.groupBy(edges, (edge) => edge.parent);
+      for (const [parent, own] of children) {
+        assert.deepStrictEqual(
+          own.map((edge) => edge.position).toSorted((a, b) => Number(a - b)),
+          own.map((_, position) => BigInt(position)),
+          `positions under ${parent}`,
+        );
+        for (const edge of own) {
+          assert.strictEqual(edge.parentKind, byId.get(parent)?.kind);
+          assert.strictEqual(edge.childKind, byId.get(edge.child)?.kind);
+          assert.strictEqual(edge.tree, treeId);
+          assert.strictEqual(edge.version, "3.0.0");
+        }
+      }
+
+      const root = Option.getOrThrow(Option.fromNullishOr(nodes.get(doc.root)));
+      assert.deepStrictEqual(Rows.of(rows, TreeRoot), [{ node: root.id, tree: treeId }]);
+      assert.strictEqual(root.kind, "qti-assessment-item");
+      assert.isFalse(edges.some((edge) => edge.child === root.id));
+      assert.deepStrictEqual(Rows.of(rows, NamespaceDeclaration), [
+        { node: root.id, position: 0n, prefix: "", uri: doc.root.namespace },
+        {
+          node: root.id,
+          position: 1n,
+          prefix: "xsi",
+          uri: "http://www.w3.org/2001/XMLSchema-instance",
+        },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, SchemaLocation), [
+        {
+          node: root.id,
+          prefix: "xsi",
+          value:
+            "http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd",
+        },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, Comment), []);
+      assert.deepStrictEqual(Rows.of(rows, Pi), []);
+      assert.deepStrictEqual(Rows.of(rows, EntityReference), []);
+      assert.deepStrictEqual(Rows.of(rows, AttributeEntityReference), []);
+    }),
+  );
+
+  suite.effect("imsmanifest.xml yields 58 element nodes and four namespace declarations", () =>
+    Effect.gen(function* manifestNodes() {
+      const fs = yield* FileSystem.FileSystem;
+      const bytes = yield* fs.readFile(path.join(inject("fixtures").simple, "imsmanifest.xml"));
+      const doc = yield* readXml(bytes);
+      const { nodes, rows } = yield* treeRows(
+        doc,
+        { charset: doc.charset, id: treeId, kind: "manifest", root: "manifest", version: "3.0.0" },
+        Rows.empty(),
+      );
+      const root = Option.getOrThrow(Option.fromNullishOr(nodes.get(doc.root)));
+
+      assert.strictEqual(nodes.size, 58);
+      assert.strictEqual(
+        Rows.of(rows, Node).filter(
+          (row) => !["text", "ws", "comment", "pi", "entityRef"].includes(row.kind),
+        ).length,
+        58,
+      );
+      assert.strictEqual(Rows.of(rows, NamespaceDeclaration).length, 4);
+      assert.isTrue(Rows.of(rows, NamespaceDeclaration).every((row) => row.node === root.id));
+      assert.deepStrictEqual(
+        Rows.of(rows, NamespaceDeclaration).map((row) => row.position),
+        [0n, 1n, 2n, 3n],
+      );
+    }),
+  );
+
+  suite.effect("an entity reference in the prompt and in alt yields node and attribute rows", () =>
+    Effect.gen(function* externalReferences() {
+      const doc = yield* readChoice(yield* materialize("external"));
+      const { nodes, rows } = yield* treeRows(doc, itemInput(doc.charset), Rows.empty());
+      const refNodes = Rows.of(rows, Node).filter((row) => row.kind === "entityRef");
+      const refNode = Option.getOrThrow(Option.fromNullishOr(refNodes[0]));
+      const prompt = Option.getOrThrow(
+        Option.fromNullishOr(Rows.of(rows, Node).find((row) => row.kind === "qti-prompt")),
+      );
+      const img = Option.getOrThrow(
+        Option.fromNullishOr([...nodes].find(([element]) => element.local === "img")?.[1]),
+      );
+
+      assert.strictEqual(refNodes.length, 1);
+      assert.deepStrictEqual(Rows.of(rows, EntityReference), [
+        { id: refNode.id, name: "undeclared" },
+      ]);
+      assert.deepStrictEqual(
+        Rows.of(rows, Edge)
+          .filter((edge) => edge.child === refNode.id)
+          .map((edge) => [edge.parent, edge.parentKind, edge.childKind]),
+        [[prompt.id, "qti-prompt", "entityRef"]],
+      );
+      // `NEVER LEAVE LUGGAGE &undeclared;`: the `&` is at zero-based index 20.
+      assert.deepStrictEqual(Rows.of(rows, AttributeEntityReference), [
+        { attribute: "alt", name: "undeclared", node: img.id, offset: 20n },
+      ]);
     }),
   );
 
