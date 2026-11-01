@@ -8,6 +8,7 @@ import { inject } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
+import { retrySchedule } from "#qti/import/package.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
@@ -389,7 +390,9 @@ const apply = (draft: Draft) =>
   Effect.gen(function* applyDraft() {
     const db = yield* Db.open(AuthorApp.roles.author, {});
 
-    return yield* db.apply(changeSetOf(draft), {});
+    return yield* db
+      .apply(changeSetOf(draft), {})
+      .pipe(Effect.retry({ schedule: retrySchedule, while: (e) => e._tag === "TransientFailure" }));
   });
 
 /**
