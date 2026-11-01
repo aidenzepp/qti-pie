@@ -100,8 +100,9 @@ export type NodeIndex = ReadonlyMap<
 >;
 
 /**
- * What the caller of {@link treeRows} decides about a tree: its id, whether it is a document or a
- * manifest, its schema version, its root kind and the charset its bytes were decoded from.
+ * What the caller of {@link treeRows} decides about a tree: its id, which is also its root node's
+ * id, whether it is a document or a manifest, its schema version, its root kind and the charset its
+ * bytes were decoded from.
  */
 export interface TreeInput {
   readonly charset: string;
@@ -344,7 +345,7 @@ const walk = (
   index: Map<Element, { readonly id: string; readonly kind: NodeKindHandle }>,
 ): void => {
   const common = { tree: input.id, version: input.version };
-  const id = crypto.randomUUID();
+  const id = Option.isNone(parent) ? input.id : crypto.randomUUID();
   let kind: NodeKindHandle;
   let prefix = "";
 
@@ -446,6 +447,8 @@ const miscRow = (item: Misc): { kind: "comment" | "pi"; text: string } =>
 /**
  * Write the rows every tree has: its `Tree` row and the fidelity rows for its prolog, epilog,
  * declaration, doctype and export charset.
+ *
+ * The root node's id is the tree id; every other node gets a fresh uuid.
  *
  * The whole tree is checked against the registries before any row is written, so a vocabulary not
  * yet modeled is refused ahead of every other rule.

@@ -187,6 +187,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
 
       const root = Option.getOrThrow(Option.fromNullishOr(nodes.get(doc.root)));
       assert.deepStrictEqual(Rows.of(rows, TreeRoot), [{ node: root.id, tree: treeId }]);
+      assert.strictEqual(root.id, treeId);
       assert.strictEqual(root.kind, "qti-assessment-item");
       assert.isFalse(edges.some((edge) => edge.child === root.id));
       assert.deepStrictEqual(Rows.of(rows, NamespaceDeclaration), [
@@ -226,6 +227,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
       const root = Option.getOrThrow(Option.fromNullishOr(nodes.get(doc.root)));
 
       assert.strictEqual(nodes.size, 58);
+      assert.deepStrictEqual(Rows.of(rows, TreeRoot), [{ node: treeId, tree: treeId }]);
+      assert.strictEqual(root.id, treeId);
       assert.strictEqual(
         Rows.of(rows, Node).filter(
           (row) => !["text", "ws", "comment", "pi", "entityRef"].includes(row.kind),
