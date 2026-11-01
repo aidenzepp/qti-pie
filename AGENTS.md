@@ -79,6 +79,11 @@ waived. If any step fails or is in doubt, record the finding and do not file.
    `GH_TOKEN="$(gh auth token --user aidenzepp)" gh issue create --repo bjornpagen/grizzle --title … --body-file …`,
    with no labels or assignees. Record the issue URL in `docs/grizzle-findings.md` and mail the operator the link.
 
+**Issues only.** `bjornpagen/grizzle` is private, and `aidenzepp` holds write access to it so that it can file issues.
+Opening an issue is the only thing any agent does there. Never push, create or delete a branch or tag, open or review
+a pull request, comment, edit or close an issue, or change any setting. The local clone's push URL is disabled on
+purpose; never restore it. Pushing code may come later, but only on an explicit operator ruling.
+
 ## Code
 
 Before writing Effect code, read `packages/qti/node_modules/effect/AGENTS.md` and follow its links. For APIs it does not
