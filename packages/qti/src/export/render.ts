@@ -50,7 +50,7 @@ import {
   Node,
   Pi as PiRow,
   SchemaLocation,
-  Text as TextRow,
+  TextNode,
   Tree,
   TreeDoctype,
   TreeMisc,
@@ -366,7 +366,7 @@ export const renderTree = (rows: RowSet, treeId: string): XmlDocument => {
   const rootId = Rows.of(rows, TreeRoot).find((row) => row.tree === treeId)?.node;
   const nodes = by(Rows.of(rows, Node), (row) => row.id);
   const children = Map.groupBy(Rows.of(rows, Edge), (edge) => edge.parent);
-  const texts = by(Rows.of(rows, TextRow), (row) => row.id);
+  const texts = by(Rows.of(rows, TextNode), (row) => row.id);
   const whitespace = by(Rows.of(rows, Ws), (row) => row.id);
   const comments = by(Rows.of(rows, CommentRow), (row) => row.id);
   const instructions = by(Rows.of(rows, PiRow), (row) => row.id);
@@ -430,7 +430,7 @@ export const renderTree = (rows: RowSet, treeId: string): XmlDocument => {
       return {
         cdata: false,
         kind: "text",
-        value: (texts.get(id) ?? missing("Text row", id)).value,
+        value: (texts.get(id) ?? missing("TextNode row", id)).value,
       };
     }
 

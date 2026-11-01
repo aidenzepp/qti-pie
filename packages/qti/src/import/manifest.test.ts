@@ -24,7 +24,7 @@ import {
   QmdTimeDependent,
   QtiMetadata,
 } from "#qti/schema/metadata.ts";
-import { AttributeLexical, Edge, Node, Text, TreeRoot } from "#qti/schema/node.ts";
+import { AttributeLexical, Edge, Node, TextNode, TreeRoot } from "#qti/schema/node.ts";
 import {
   File,
   FileContent,
@@ -429,7 +429,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
           edge(container, "qmd:portableCustomInteractionContext", leaf, "qmd:customTypeIdentifier"),
           edge(leaf, "qmd:customTypeIdentifier", text, "text"),
         ]);
-        built = Rows.add(built, Text, [{ id: text, value: "a\tb" }]);
+        built = Rows.add(built, TextNode, [{ id: text, value: "a\tb" }]);
         built = Rows.add(built, QmdPortableCustomInteractionContext, [
           { id: container, qtiMetadata: qmd.id },
         ]);

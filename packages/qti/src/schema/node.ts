@@ -312,10 +312,12 @@ export const AttributeLexical = relation(
 );
 
 /**
- * A text node holding at least one character that is not whitespace.
+ * A text node holding at least one character that is not whitespace. The relation is named
+ * `TextNode` because a table named after the builtin type `text` would shadow that type in
+ * grizzle's drift replay (campaign decision 28).
  */
-export const Text = relation(
-  "Text",
+export const TextNode = relation(
+  "TextNode",
   { id: uuid, value: str.regex(patterns.nonWhitespaceText, patterns.nonWhitespaceTextFlags) },
   ["id"],
 );
@@ -356,7 +358,7 @@ export const arms = {
   comment: Comment,
   entityRef: EntityReference,
   pi: Pi,
-  text: Text,
+  text: TextNode,
   ws: Ws,
 };
 
@@ -380,7 +382,7 @@ export const relations = {
   RootKind,
   SchemaLocation,
   SchemaVersion,
-  Text,
+  TextNode,
   Tree,
   TreeDoctype,
   TreeExportCharset,

@@ -34,7 +34,7 @@ import {
   Edge,
   EntityReference,
   Node,
-  Text,
+  TextNode,
   vocabularies,
   Ws,
 } from "#qti/schema/node.ts";
@@ -146,7 +146,7 @@ const indexOf = (rows: Rows): Index => ({
   ),
   nodes: new Map(Rows.of(rows, Node).map((node) => [node.id, node])),
   pieces: new Map([
-    ...Rows.of(rows, Text).map((row): [string, string] => [row.id, row.value]),
+    ...Rows.of(rows, TextNode).map((row): [string, string] => [row.id, row.value]),
     ...Rows.of(rows, Ws).map((row): [string, string] => [row.id, row.value]),
     ...Rows.of(rows, EntityReference).map((row): [string, string] => [row.id, `&${row.name};`]),
   ]),

@@ -15,7 +15,7 @@ import {
   Edge,
   EntityReference,
   Node,
-  Text,
+  TextNode,
   vocabularies,
   Ws,
 } from "#qti/schema/node.ts";
@@ -175,11 +175,11 @@ const indexOf = (rows: Rows): Index => ({
   children: Map.groupBy(Rows.of(rows, Edge).toSorted(byPosition), (edge) => edge.parent),
   nodes: new Map(Rows.of(rows, Node).map((node) => [node.id, node])),
   pieces: new Map([
-    ...Rows.of(rows, Text).map((row): [string, string] => [row.id, row.value]),
+    ...Rows.of(rows, TextNode).map((row): [string, string] => [row.id, row.value]),
     ...Rows.of(rows, Ws).map((row): [string, string] => [row.id, row.value]),
     ...Rows.of(rows, EntityReference).map((row): [string, string] => [row.id, `&${row.name};`]),
   ]),
-  texts: new Map(Rows.of(rows, Text).map((row) => [row.id, row.value])),
+  texts: new Map(Rows.of(rows, TextNode).map((row) => [row.id, row.value])),
 });
 
 /**
