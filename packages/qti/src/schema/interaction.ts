@@ -12,7 +12,9 @@
  * of `SimpleChoice.(interaction)` into `ChoiceInteraction.(id)` would refuse that, so none is
  * written.
  */
+/* oxlint-disable anti-slop/no-shape-in-symbol-names -- `DeclarationShape` and the `shape` field are the contract the declaration module names; the shape here is the typed-or-record choice, not a structure. */
 import {
+  alternatives,
   capacity,
   check,
   closedId,
@@ -21,10 +23,12 @@ import {
   on,
   pg,
   relation,
+  select,
   str,
   uuid,
   within,
 } from "@bjornpagen/grizzle";
+import * as declaration from "#qti/schema/declaration.ts";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
@@ -153,6 +157,63 @@ export const SimpleChoiceTemplateIdentifier = relation(
 );
 
 /**
+ * A pairing of base type and cardinality an interaction kind accepts. Seeded by a custom migration
+ * and read-only to every role.
+ */
+export const BindingFit = relation(
+  "BindingFit",
+  {
+    baseType: closedId(declaration.BaseType),
+    cardinality: closedId(declaration.TypedCardinality),
+    interactionKind: closedId(node.NodeKind),
+  },
+  ["interactionKind", "baseType", "cardinality"],
+);
+
+/**
+ * The interaction that collects a response variable's value. A response variable has at most one,
+ * and its shape copies the variable's.
+ */
+export const InteractionBinding = relation(
+  "InteractionBinding",
+  {
+    document: uuid,
+    interactionKind: closedId(node.NodeKind),
+    node: uuid,
+    responseIdentifier: ncName,
+    shape: closedId(declaration.DeclarationShape),
+  },
+  ["node"],
+);
+
+/**
+ * A binding to a typed variable. `maxCount` is the interaction's `max-choices`, 1 where the source
+ * omits it; 0 means unlimited.
+ */
+export const TypedBinding = relation(
+  "TypedBinding",
+  {
+    baseType: closedId(declaration.BaseType),
+    cardinality: closedId(declaration.TypedCardinality),
+    document: uuid,
+    interactionKind: closedId(node.NodeKind),
+    maxCount: pg.bigint,
+    node: uuid,
+    responseIdentifier: ncName,
+  },
+  ["node"],
+);
+
+/**
+ * A binding to a record variable.
+ */
+export const RecordBinding = relation(
+  "RecordBinding",
+  { interactionKind: closedId(node.NodeKind), node: uuid },
+  ["node"],
+);
+
+/**
  * The choice kinds' arms, keyed by their `NodeKind` handles.
  *
  * Their containments into `Node` are not written here: `alternatives(Node, "kind", NodeKind, ...)`
@@ -167,6 +228,7 @@ export const arms = {
  * The relations of this module, as schema members.
  */
 export const relations = {
+  BindingFit,
   ChoiceInteraction,
   ChoiceInteractionMaxSelectionsMessage,
   ChoiceInteractionMinSelectionsMessage,
@@ -176,15 +238,21 @@ export const relations = {
   DeclaredOrientation,
   DeclaredShowHide,
   DeclaredShuffle,
+  InteractionBinding,
+  RecordBinding,
   SimpleChoice,
   SimpleChoiceTemplateIdentifier,
+  TypedBinding,
 };
 
 /**
  * The statements over this module's relations: a choice interaction is a node of its root kind; its
  * minimum is at most its maximum unless the maximum is 0 (unbounded); every marker and optional
  * value belongs to its owner; a simple choice is the edge child of its parent, is named
- * uniquely within it, and every interaction has at least one.
+ * uniquely within it, and every interaction has at least one. A binding names one interaction node
+ * of its document for one response variable of the same shape; a typed binding is a pairing the fit
+ * table lists, and a single-valued one takes at most one choice; every item choice interaction has
+ * a binding.
  */
 export const rules = [
   contained(on(ChoiceInteraction, "id", "rootKind"), on(node.Node, "id", "rootKind")),
@@ -206,4 +274,36 @@ export const rules = [
     from: on(SimpleChoice, "interaction"),
     within: within(1n, "*"),
   }),
+  key(InteractionBinding, ["document", "responseIdentifier"]),
+  contained(
+    on(InteractionBinding, "document", "responseIdentifier"),
+    on(select(declaration.Declaration, { kind: "response" }), "document", "identifier"),
+  ),
+  contained(
+    on(InteractionBinding, "document", "responseIdentifier", "shape"),
+    on(declaration.Declaration, "document", "identifier", "shape"),
+  ),
+  contained(
+    on(InteractionBinding, "node", "document", "interactionKind"),
+    on(node.Node, "id", "tree", "kind"),
+  ),
+  alternatives(InteractionBinding, "shape", declaration.DeclarationShape, {
+    record: RecordBinding,
+    typed: TypedBinding,
+  }),
+  contained(
+    on(TypedBinding, "document", "responseIdentifier", "baseType", "cardinality"),
+    on(declaration.TypedDeclaration, "document", "identifier", "baseType", "cardinality"),
+  ),
+  contained(
+    on(TypedBinding, "interactionKind", "baseType", "cardinality"),
+    on(BindingFit, "interactionKind", "baseType", "cardinality"),
+  ),
+  check("BindingMax", TypedBinding, (b) =>
+    b.or(b.eq(b.maxCount, 1n), b.eq(b.cardinality, "multiple")),
+  ),
+  contained(
+    on(select(ChoiceInteraction, { rootKind: "item" }), "id", "responseIdentifier"),
+    on(InteractionBinding, "node", "responseIdentifier"),
+  ),
 ] as const;
