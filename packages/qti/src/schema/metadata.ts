@@ -234,7 +234,9 @@ export const LomVersion = relation("LomVersion", { id: uuid, lifeCycle: uuid, lo
 export const LomStatus = relation("LomStatus", { id: uuid, lifeCycle: uuid, lom: uuid }, ["id"]);
 
 /**
- * A `lom:contribute` at its position under a `lom:lifeCycle` or a `lom:metaMetadata`.
+ * A `lom:contribute` at its position under a `lom:lifeCycle` or a `lom:metaMetadata`. The parent's
+ * kind is bound through its edge's admitted kind pair, and `lom:contribute` is admitted under
+ * those two parents only.
  */
 export const LomContribute = relation(
   "LomContribute",
@@ -769,7 +771,9 @@ export const relations = {
  * document's own identifier or title. A resource's QTI metadata record is the edge's child under
  * the resource's `cp:metadata.resource` node, at most one per resource; each of its leaves is the
  * edge's child under the record it names, the nine `0..1` ones at most once, and the two repeated
- * ones (`interactionType`, `scoringMode`) without a key.
+ * ones (`interactionType`, `scoringMode`) without a key. Each of the two context leaves
+ * (`customTypeIdentifier`, `interactionKind`) is the edge's child under the context it names, at
+ * most once per context. Each title string is also the edge's child at the position it copies.
  */
 export const rules = [
   key(Lom, ["id", "owner"]),
@@ -805,6 +809,7 @@ export const rules = [
   key(LomTitle, ["lom", "position"]),
   contained(on(LomTitle, "lom", "owner"), on(Lom, "id", "owner")),
   contained(on(LomTitle, "id", "value", "collapsed"), on(LomString, "id", "value", "collapsed")),
+  contained(on(LomTitle, "id", "position"), on(Edge, "child", "position")),
   key(LomStringLanguage, ["node"]),
   contained(on(LomStringLanguage, "node"), on(LomString, "id")),
   contained(on(LomLanguage, "lom"), on(Lom, "id")),
@@ -985,6 +990,8 @@ export const rules = [
     on(QmdPortableCustomInteractionContext, "id", "qtiMetadata"),
     on(Edge, "child", "parent"),
   ),
+  key(QmdCustomTypeIdentifier, ["context"]),
   contained(on(QmdCustomTypeIdentifier, "id", "context"), on(Edge, "child", "parent")),
+  key(QmdInteractionKind, ["context"]),
   contained(on(QmdInteractionKind, "id", "context"), on(Edge, "child", "parent")),
 ] as const;

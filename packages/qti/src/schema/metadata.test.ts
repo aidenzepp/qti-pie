@@ -15,6 +15,7 @@ import * as document from "#qti/schema/document.ts";
 import * as metadata from "#qti/schema/metadata.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
+import { admission as seedAdmission } from "#qti/schema/seed/admission.ts";
 
 /**
  * The schema over node's, package's, document's and this module's relations and rules.
@@ -221,6 +222,31 @@ describe("metadata", () => {
     }
     assert.deepStrictEqual(keysOf(metadata.relations.QmdInteractionType), []);
     assert.deepStrictEqual(keysOf(metadata.relations.QmdScoringMode), []);
+    assert.deepStrictEqual(keysOf(metadata.relations.QmdCustomTypeIdentifier), [["context"]]);
+    assert.deepStrictEqual(keysOf(metadata.relations.QmdInteractionKind), [["context"]]);
+  });
+
+  it("binds each LomTitle's position to the position of its Edge", () => {
+    const bound = metadata.rules.flatMap((rule) =>
+      rule.kind === "contained" &&
+      rule.left.source === metadata.relations.LomTitle &&
+      rule.right.source === node.relations.Edge &&
+      rule.left.fields.join(",") === "id,position" &&
+      rule.right.fields.join(",") === "child,position"
+        ? [rule]
+        : [],
+    );
+    assert.strictEqual(bound.length, 1);
+  });
+
+  it("admits lom:contribute under lom:lifeCycle and lom:metaMetadata only", () => {
+    const parents = new Set(
+      seedAdmission.filter((row) => row.child === "lom:contribute").map((row) => row.parent),
+    );
+    assert.deepStrictEqual([...parents].toSorted(), ["lom:lifeCycle", "lom:metaMetadata"]);
+    for (const parent of parents) {
+      assert.isTrue(admits(seedAdmission, parent, "lom:contribute"), parent);
+    }
   });
 
   it("admits character data, whitespace, entity references, comments and processing instructions under every qmd leaf", () => {
