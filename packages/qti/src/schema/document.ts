@@ -74,11 +74,14 @@ export const DocumentIdentifier = relation(
 /**
  * The `title` of a document's root element, with the whitespace-collapsed form it is judged on
  * beside the value as written.
+ *
+ * The collapsed form holds at most 256 non-space characters, a representation limit
+ * (campaign decision 26), because a key-shaped containment target or index holds it.
  */
 export const DocumentTitle = relation(
   "DocumentTitle",
   {
-    collapsed: str.regex(patterns.xsToken, patterns.xsTokenFlags),
+    collapsed: str.regex(patterns.boundedToken, patterns.boundedTokenFlags),
     document: uuid,
     package: uuid,
     resource: ncName,

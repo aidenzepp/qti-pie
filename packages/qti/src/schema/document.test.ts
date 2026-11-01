@@ -5,6 +5,7 @@ import * as document from "#qti/schema/document.ts";
 import * as node from "#qti/schema/node.ts";
 import { RootKind } from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
+import * as patterns from "#qti/schema/patterns.ts";
 
 /**
  * The schema over node's, package's and this module's relations and rules.
@@ -101,6 +102,13 @@ describe("document", () => {
       built.statements.length,
       node.rules.length + pkg.rules.length + document.rules.length,
     );
+  });
+
+  it("bounds the collapsed title of a document by boundedToken", () => {
+    assert.deepStrictEqual(document.relations.DocumentTitle.fields.collapsed.pattern, {
+      flags: patterns.boundedTokenFlags,
+      source: patterns.boundedToken,
+    });
   });
 
   it("declares the document relations and the IdHolder roster", () => {
