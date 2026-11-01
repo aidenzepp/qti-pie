@@ -202,16 +202,22 @@ const toElement = (open: OpenElement): Element => ({
 });
 
 /**
+ * The most elements open at once; `xmllint`'s default depth limit.
+ */
+const ELEMENT_DEPTH = 256;
+
+/**
  * Run `saxes` over `substituted.body` and build the root element with the comments and processing
  * instructions around it.
  *
  * `saxes` throws its first well-formedness error; that error becomes a `WellFormednessError` at
- * the position the parser had reached.
+ * the position the parser had reached. A document that nests more than `ELEMENT_DEPTH` elements is
+ * refused with a `ReaderRefusal` under rule `element-depth`.
  */
 const parse = (
   substituted: Substituted,
   sentinels: ReadonlyMap<string, string>,
-): Effect.Effect<Built, WellFormednessError> => {
+): Effect.Effect<Built, WellFormednessError | ReaderRefusal> => {
   const parser = new SaxesParser({ position: true, xmlns: true });
   for (const [name, sentinel] of sentinels) {
     parser.ENTITIES[name] = sentinel;
@@ -219,14 +225,16 @@ const parse = (
 
   return Effect.try({
     catch: (error) =>
-      new WellFormednessError({
-        afterSubstitution: substituted.afterSubstitution(
-          utf16Offset(substituted.body, parser.position),
-        ),
-        column: parser.column,
-        line: parser.line,
-        message: error instanceof Error ? error.message : String(error),
-      }),
+      error instanceof ReaderRefusal
+        ? error
+        : new WellFormednessError({
+            afterSubstitution: substituted.afterSubstitution(
+              utf16Offset(substituted.body, parser.position),
+            ),
+            column: parser.column,
+            line: parser.line,
+            message: error instanceof Error ? error.message : String(error),
+          }),
     try: () => {
       const open: OpenElement[] = [];
       const prolog: Misc[] = [];
@@ -242,6 +250,13 @@ const parse = (
       };
 
       parser.on("opentag", (tag) => {
+        if (open.length >= ELEMENT_DEPTH) {
+          throw new ReaderRefusal({
+            detail: `The document nests elements more than ${ELEMENT_DEPTH} deep: element <${tag.name}> at line ${parser.line}, column ${parser.column} opens past the reader's limit. Flatten the structure so at most ${ELEMENT_DEPTH} elements are open at once.`,
+            rule: "element-depth",
+          });
+        }
+
         // The attribute record's insertion order is the order the attributes were written in,
         // namespace declarations included.
         open.push({
@@ -491,10 +506,13 @@ const assemble = (
  * character becomes the reference it stood for: an `EntityRef` in content, `&name;` with a recorded
  * offset in an attribute value.
  *
+ * At most 256 elements may be open at once, as in `xmllint`; a deeper document is refused under
+ * rule `element-depth`.
+ *
  * @param bytes - The document as read from storage.
- * @returns The tree; a `ReaderRefusal` from decoding or the prolog, or a `WellFormednessError`
- *   whose position is the parser's and whose `afterSubstitution` says whether a substitution
- *   precedes it.
+ * @returns The tree; a `ReaderRefusal` from decoding, the prolog or the element depth, or a
+ *   `WellFormednessError` whose position is the parser's and whose `afterSubstitution` says whether
+ *   a substitution precedes it.
  */
 export const readXml = Effect.fn("xml.read")(function* readXml(
   bytes: Uint8Array,

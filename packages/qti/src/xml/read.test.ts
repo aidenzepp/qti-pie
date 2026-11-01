@@ -418,6 +418,36 @@ layer(NodeServices.layer, { excludeTestServices: true })("xml/read.ts", (suite) 
     }),
   );
 
+  suite.effect("reads a document nested 256 elements deep", () =>
+    Effect.gen(function* readDeepest() {
+      const { root } = yield* readXml(
+        new TextEncoder().encode("<a>".repeat(256) + "</a>".repeat(256)),
+      );
+
+      let depth = 1;
+      let node = root;
+      let [child] = node.children;
+      while (child?.kind === "element") {
+        node = child;
+        depth += 1;
+        [child] = node.children;
+      }
+
+      assert.strictEqual(depth, 256);
+    }),
+  );
+
+  suite.effect("refuses a document nested 257 elements deep under rule element-depth", () =>
+    Effect.gen(function* refuseTooDeep() {
+      const error = yield* Effect.flip(
+        readXml(new TextEncoder().encode("<a>".repeat(257) + "</a>".repeat(257))),
+      );
+
+      assert.strictEqual(error._tag, "ReaderRefusal");
+      assert.strictEqual(error._tag === "ReaderRefusal" ? error.rule : undefined, "element-depth");
+    }),
+  );
+
   /**
    * The failure tag of each file under `fixtures/bad/`.
    */
