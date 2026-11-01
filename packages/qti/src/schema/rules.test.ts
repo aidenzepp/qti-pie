@@ -1,3 +1,4 @@
+/* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the schema's field and the roster handle the declaration and value rows name; here it is the typed-or-record choice, not a structure. */
 import { isDeepStrictEqual } from "node:util";
 import { ChangeSet, Db } from "@bjornpagen/grizzle";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
@@ -11,8 +12,21 @@ import { manifestRows } from "#qti/import/manifest.ts";
 import { retrySchedule } from "#qti/import/package.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
+import {
+  OutcomeDeclarationArm,
+  RecordDeclaration,
+  Declaration,
+  TypedDeclaration,
+} from "#qti/schema/declaration.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
-import { AssessmentItem } from "#qti/schema/item.ts";
+import {
+  BindingFit,
+  ChoiceInteraction,
+  InteractionBinding,
+  SimpleChoice,
+  TypedBinding,
+} from "#qti/schema/interaction.ts";
+import { AssessmentItem, ItemBody, Prompt } from "#qti/schema/item.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import {
   LomGeneral,
@@ -39,7 +53,19 @@ import {
   RootOfType,
 } from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
+import {
+  ResponseProcessing,
+  ResponseProcessingItem,
+  ResponseProcessingTemplate,
+} from "#qti/schema/processing.ts";
 import { Author } from "#qti/schema/roles.ts";
+import {
+  DeclaredValue,
+  DefaultValueArm,
+  TypedValueSet,
+  ValueSet,
+  relations as valueRelations,
+} from "#qti/schema/value.ts";
 import { readXml } from "#qti/xml/read.ts";
 
 /**
@@ -71,6 +97,7 @@ type Law =
   | { readonly kind: "check"; readonly name: string; readonly relation: string }
   | { readonly flags: "su" | "u"; readonly kind: "pattern"; readonly source: string }
   | { readonly from: Side; readonly kind: "contained"; readonly to: Side }
+  | { readonly from: Side; readonly kind: "mirrors"; readonly to: Side }
   | {
       readonly from: Side;
       readonly kind: "capacity";
@@ -86,6 +113,11 @@ const side = (
 ): Side => ({ fields, relation: relation.name, selection });
 
 const contained = (from: Side, to: Side): Law => ({ from, kind: "contained", to });
+
+/**
+ * A `mirrors` law as grizzle reports it: one direction of the pair.
+ */
+const mirrorsLaw = (from: Side, to: Side): Law => ({ from, kind: "mirrors", to });
 
 const keyOf = (relation: AnyRelation, fields: readonly string[]): Law => ({
   fields,
@@ -415,6 +447,87 @@ const edgeInto = (draft: Draft, child: string): Row => {
 };
 
 /**
+ * Add a second default value set to the declaration `declarationId`, holding one float value, so
+ * that only the key on `(declaration, role)` is broken.
+ */
+const addDefaultSet = (draft: Draft, declarationId: string): void => {
+  const set_ = addNode(draft, "qti-default-value", declarationId);
+  const old = of(draft, TypedValueSet).find((row) => text(row, "declaration") === declarationId);
+  assert.isDefined(old, declarationId);
+
+  of(draft, ValueSet).push({
+    declaration: declarationId,
+    id: set_,
+    role: "default",
+    shape: "typed",
+  });
+  of(draft, TypedValueSet).push({
+    baseType: text(old ?? {}, "baseType"),
+    cardinality: text(old ?? {}, "cardinality"),
+    declaration: declarationId,
+    id: set_,
+  });
+  of(draft, DefaultValueArm).push({ id: set_ });
+
+  const value = addNode(draft, "qti-value", set_);
+  of(draft, DeclaredValue).push({
+    baseType: "float",
+    id: value,
+    position: position(edgeInto(draft, value)),
+    shape: "typed",
+    valueSet: set_,
+  });
+  of(draft, valueRelations.DeclaredValueFloat).push({ id: value, value: "1" });
+};
+
+/**
+ * The `Declaration` row of `identifier`.
+ */
+const declarationOf = (draft: Draft, identifier: string): Row => {
+  const found = of(draft, Declaration).find((row) => text(row, "identifier") === identifier);
+  assert.isDefined(found, identifier);
+
+  return found ?? {};
+};
+
+/**
+ * Give the `RESPONSE` declaration the base type `float` in every copy: its typed row, its correct
+ * value set, the value of that set (an identifier arm becomes a float arm), and the binding's.
+ */
+const retypeResponseAsFloat = (draft: Draft): void => {
+  const id = text(declarationOf(draft, "RESPONSE"), "id");
+  for (const relation of [TypedDeclaration, TypedValueSet, TypedBinding]) {
+    for (const row of of(draft, relation)) {
+      if (
+        peek(row, "id") === id ||
+        peek(row, "declaration") === id ||
+        peek(row, "node") !== undefined
+      ) {
+        set(row, "baseType", "float");
+      }
+    }
+  }
+
+  const sets = new Set(
+    of(draft, ValueSet)
+      .filter((row) => text(row, "declaration") === id)
+      .map((row) => text(row, "id")),
+  );
+  for (const row of of(draft, DeclaredValue)) {
+    if (sets.has(text(row, "valueSet"))) {
+      set(row, "baseType", "float");
+      draft.set(
+        valueRelations.DeclaredValueIdentifier,
+        of(draft, valueRelations.DeclaredValueIdentifier).filter(
+          (arm) => text(arm, "id") !== text(row, "id"),
+        ),
+      );
+      of(draft, valueRelations.DeclaredValueFloat).push({ id: text(row, "id"), value: "1" });
+    }
+  }
+};
+
+/**
  * Each alteration changes `SIMPLE`'s rows so that exactly one statement of the schema is broken,
  * and every copy of an altered field is altered with it, so a refusal by another statement is a
  * finding.
@@ -643,6 +756,264 @@ const negatives: readonly Negative[] = [
     laws: [{ fields: ["node", "attribute"], kind: "primaryKey", relation: AttributeLexical.name }],
     name: "two AttributeLexical rows for one (node, attribute) are refused by the primary key",
   },
+
+  {
+    alter: (draft) => {
+      const row = declarationOf(draft, "SCORE");
+      set(row, "identifier", "duration");
+      for (const typed of of(draft, TypedDeclaration)) {
+        if (peek(typed, "id") === peek(row, "id")) {
+          set(typed, "identifier", "duration");
+        }
+      }
+    },
+    laws: [{ kind: "check", name: "DeclarationNotReserved", relation: Declaration.name }],
+    name: "a declaration named duration is refused by DeclarationNotReserved",
+  },
+  {
+    alter: (draft) => {
+      const item = text(first(draft, Document), "id");
+      const id = addNode(draft, "qti-outcome-declaration", item);
+      of(draft, Declaration).push({
+        document: item,
+        id,
+        identifier: "RESPONSE",
+        kind: "outcome",
+        shape: "record",
+      });
+      of(draft, RecordDeclaration).push({ id });
+      of(draft, OutcomeDeclarationArm).push({ id });
+    },
+    laws: [keyOf(Declaration, ["document", "identifier"])],
+    name: "two declarations named RESPONSE are refused by the key on Declaration",
+  },
+  {
+    alter: (draft) => {
+      const row = of(draft, DeclaredValue).find((value) => text(value, "baseType") === "float");
+      assert.isDefined(row, "float value");
+      set(row ?? {}, "baseType", "identifier");
+
+      const id = text(row ?? {}, "id");
+      draft.set(
+        valueRelations.DeclaredValueFloat,
+        of(draft, valueRelations.DeclaredValueFloat).filter((arm) => text(arm, "id") !== id),
+      );
+      of(draft, valueRelations.DeclaredValueIdentifier).push({ id, value: "ChoiceA" });
+    },
+    laws: [
+      contained(
+        side(DeclaredValue, ["valueSet", "baseType"], [{ field: "shape", value: "typed" }]),
+        side(TypedValueSet, ["id", "baseType"]),
+      ),
+    ],
+    name: "an identifier value under the float default set is refused by the containment into TypedValueSet",
+  },
+  {
+    alter: (draft) => {
+      const set_ = text(
+        of(draft, ValueSet).find((row) => text(row, "role") === "default") ?? {},
+        "id",
+      );
+      const value = addNode(draft, "qti-value", set_);
+      of(draft, DeclaredValue).push({
+        baseType: "float",
+        id: value,
+        position: position(edgeInto(draft, value)),
+        shape: "typed",
+        valueSet: set_,
+      });
+      of(draft, valueRelations.DeclaredValueFloat).push({ id: value, value: "1" });
+    },
+    laws: [
+      capacity(
+        side(TypedValueSet, ["id"], [{ field: "cardinality", value: "single" }]),
+        side(DeclaredValue, ["valueSet"]),
+        { high: 1n, low: 1n },
+      ),
+    ],
+    name: "two values under a single value set are refused by the single capacity",
+  },
+  {
+    alter: (draft) => {
+      const set_ = text(
+        of(draft, ValueSet).find((row) => text(row, "role") === "default") ?? {},
+        "id",
+      );
+      for (const value of of(draft, DeclaredValue).filter((v) => text(v, "valueSet") === set_)) {
+        removeSubtree(draft, text(value, "id"));
+      }
+    },
+    laws: [
+      capacity(
+        side(TypedValueSet, ["id"], [{ field: "cardinality", value: "single" }]),
+        side(DeclaredValue, ["valueSet"]),
+        { high: 1n, low: 1n },
+      ),
+      capacity(side(ValueSet, ["id"]), side(DeclaredValue, ["valueSet"]), { high: "*", low: 1n }),
+    ],
+    name: "a value set whose qti-value subtrees are removed is refused by the presence or the single capacity",
+  },
+  {
+    alter: (draft) => {
+      addDefaultSet(draft, text(declarationOf(draft, "SCORE"), "id"));
+    },
+    laws: [keyOf(ValueSet, ["declaration", "role"])],
+    name: "two default value sets for one declaration are refused by the key on ValueSet",
+  },
+  {
+    alter: (draft) => {
+      for (const relation of [InteractionBinding, TypedBinding, ChoiceInteraction]) {
+        for (const row of of(draft, relation)) {
+          set(row, "responseIdentifier", "UNDECLARED");
+        }
+      }
+    },
+    laws: [
+      contained(
+        side(InteractionBinding, ["document", "responseIdentifier"]),
+        side(Declaration, ["document", "identifier"], [{ field: "kind", value: "response" }]),
+      ),
+      contained(
+        side(InteractionBinding, ["document", "responseIdentifier", "shape"]),
+        side(Declaration, ["document", "identifier", "shape"]),
+      ),
+    ],
+    name: "a binding that names an undeclared identifier is refused by the containment into Declaration",
+  },
+  {
+    alter: (draft) => {
+      draft.set(InteractionBinding, []);
+      draft.set(TypedBinding, []);
+    },
+    laws: [
+      contained(
+        side(
+          ChoiceInteraction,
+          ["id", "responseIdentifier"],
+          [{ field: "rootKind", value: "item" }],
+        ),
+        side(InteractionBinding, ["node", "responseIdentifier"]),
+      ),
+    ],
+    name: "a choice interaction with no binding is refused by the containment into InteractionBinding",
+  },
+  {
+    alter: (draft) => {
+      retypeResponseAsFloat(draft);
+    },
+    laws: [
+      contained(
+        side(TypedBinding, ["interactionKind", "baseType", "cardinality"]),
+        side(BindingFit, ["interactionKind", "baseType", "cardinality"]),
+      ),
+    ],
+    name: "a float binding to a choice interaction is refused by the containment into BindingFit",
+  },
+  {
+    alter: (draft) => {
+      set(first(draft, TypedBinding), "maxCount", 2n);
+      Object.assign(first(draft, ChoiceInteraction), { maxChoices: "2", maxChoicesN: 2n });
+    },
+    laws: [{ kind: "check", name: "BindingMax", relation: TypedBinding.name }],
+    name: "a binding with maxCount 2 on a single variable is refused by BindingMax",
+  },
+  {
+    alter: (draft) => {
+      for (const choice of of(draft, SimpleChoice)) {
+        removeSubtree(draft, text(choice, "id"));
+      }
+    },
+    laws: [
+      capacity(side(ChoiceInteraction, ["id"]), side(SimpleChoice, ["interaction"]), {
+        high: "*",
+        low: 1n,
+      }),
+    ],
+    name: "a choice interaction whose qti-simple-choice subtrees are removed is refused by the capacity",
+  },
+  {
+    alter: (draft) => {
+      Object.assign(first(draft, ChoiceInteraction), {
+        maxChoices: "1",
+        maxChoicesN: 1n,
+        minChoices: "2",
+        minChoicesN: 2n,
+      });
+    },
+    laws: [{ kind: "check", name: "ChoiceBounds", relation: ChoiceInteraction.name }],
+    name: "minChoices 2 above maxChoices 1 is refused by ChoiceBounds",
+  },
+  {
+    alter: (draft) => {
+      const [, second] = of(draft, SimpleChoice);
+      set(second ?? {}, "identifier", "ChoiceA");
+    },
+    laws: [keyOf(SimpleChoice, ["interaction", "identifier"])],
+    name: "two choices named ChoiceA are refused by the key on SimpleChoice",
+  },
+  {
+    alter: (draft) => {
+      const parent = text(first(draft, ChoiceInteraction), "id");
+      of(draft, Prompt).push({ id: addNode(draft, "qti-prompt", parent), parent });
+    },
+    laws: [keyOf(Prompt, ["parent"])],
+    name: "two prompts for one parent are refused by the key on Prompt",
+  },
+  {
+    alter: (draft) => {
+      const item = text(first(draft, ItemBody), "item");
+      of(draft, ItemBody).push({ id: addNode(draft, "qti-item-body", item), item });
+    },
+    laws: [keyOf(ItemBody, ["item"])],
+    name: "two item bodies for one item are refused by the key on ItemBody",
+  },
+  {
+    alter: (draft) => {
+      const item = text(first(draft, ResponseProcessingItem), "item");
+      const id = addNode(draft, "qti-response-processing", item);
+      of(draft, ResponseProcessing).push({ id, rootKind: "item" });
+      of(draft, ResponseProcessingItem).push({ id, item });
+    },
+    laws: [keyOf(ResponseProcessingItem, ["item"])],
+    name: "two response processing rows for one item are refused by the key on ResponseProcessingItem",
+  },
+  {
+    alter: (draft) => {
+      draft.set(ResponseProcessingItem, []);
+    },
+    laws: [
+      mirrorsLaw(
+        side(ResponseProcessing, ["id"], [{ field: "rootKind", value: "item" }]),
+        side(ResponseProcessingItem, ["id"]),
+      ),
+    ],
+    name: "an item-rooted response processing with no ResponseProcessingItem is refused by the mirror",
+  },
+  {
+    alter: (draft) => {
+      const item = text(first(draft, ResponseProcessingItem), "item");
+      removeSubtree(draft, text(nodeOf(draft, "qti-response-processing"), "id"));
+      of(draft, ResponseProcessingItem).push({
+        id: text(nodeOf(draft, "qti-item-body"), "id"),
+        item,
+      });
+    },
+    laws: [
+      mirrorsLaw(
+        side(ResponseProcessingItem, ["id"]),
+        side(ResponseProcessing, ["id"], [{ field: "rootKind", value: "item" }]),
+      ),
+    ],
+    name: "a ResponseProcessingItem with no item-rooted response processing is refused by the mirror",
+  },
+  // The structural row of the spec's 4.10 bin 1 table, "a base type exists exactly when the shape is typed", has no negative: a record declaration's rows and a typed one's are arms of one `alternatives`, so no row can carry a base type without its arm, and none can omit it.
+  ...["a%zz", "http://[::1", "1a:b"].map((uri): Negative => ({
+    alter: (draft) => {
+      set(first(draft, ResponseProcessingTemplate), "uri", uri);
+    },
+    laws: [{ flags: "u", kind: "pattern", source: patterns.anyUri }],
+    name: `a response processing template ${uri} is refused by the anyUri pattern`,
+  })),
 ];
 
 layer(Layer.mergeAll(AuthorAppLayer, SimpleRowsLayer), { excludeTestServices: true })(
