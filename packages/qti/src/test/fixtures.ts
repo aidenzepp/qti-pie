@@ -96,8 +96,8 @@ export const hash12 = (spec: FixtureSpec): string =>
   transformHash(spec, FIXTURES_VERSION).slice(0, 12);
 
 /**
- * The names `materialize` accepts: `simple` and its seven variants, each the same package with the
- * edits of its row in the spec table.
+ * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-broken
+ * packages, each the same package with the edits of its row in the spec table.
  */
 export const fixtureNames = [
   "simple",
@@ -108,6 +108,17 @@ export const fixtureNames = [
   "windows-1252",
   "padded-attributes",
   "padded-text",
+  "undeclared-response",
+  "choice-in-prompt",
+  "two-values-single",
+  "bad-identifier-value",
+  "padded-identifier-value",
+  "choice-bounds",
+  "identifier-mismatch",
+  "title-mismatch",
+  "body-empty",
+  "comment-in-element",
+  "bad-template-uri",
 ] as const;
 
 /**
@@ -167,6 +178,29 @@ const prompt = "<qti-prompt>What does it say?</qti-prompt>";
 const altEnding = 'LUGGAGE UNATTENDED"';
 
 /**
+ * The item body's children of `choice.xml` (its lines 15 to 24), from the first paragraph to the
+ * end of the interaction, as the CRLF text the file holds.
+ */
+const bodyChildren = [
+  "<p>Look at the text in the picture.</p>",
+  "        <p>",
+  '            <img src="images/sign.png" alt="NEVER LEAVE LUGGAGE UNATTENDED"/>',
+  "        </p>",
+  '        <qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1">',
+  "            <qti-prompt>What does it say?</qti-prompt>",
+  '            <qti-simple-choice identifier="ChoiceA">You must stay with your luggage at all times.</qti-simple-choice>',
+  '            <qti-simple-choice identifier="ChoiceB">Do not let someone else look after your luggage.</qti-simple-choice>',
+  '            <qti-simple-choice identifier="ChoiceC">Remember your luggage when you leave.</qti-simple-choice>',
+  "        </qti-choice-interaction>",
+].join("\r\n");
+
+/**
+ * The first choice of `choice.xml`, which `choice-in-prompt` moves into the prompt.
+ */
+const firstChoice =
+  '<qti-simple-choice identifier="ChoiceA">You must stay with your luggage at all times.</qti-simple-choice>';
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
  *
@@ -185,8 +219,79 @@ const altEnding = 'LUGGAGE UNATTENDED"';
  *   `preserve`-type attribute.
  * - `padded-text` is valid QTI whose manifest `collapse` leaf carries spaces and whose item gains a
  *   `replace` leaf holding a tab and a line feed.
+ *
+ * The eleven hand-broken packages each break one rule of the import guards and are otherwise
+ * `simple`:
+ *
+ * - `undeclared-response` points the interaction at `RESP`, which no declaration names.
+ * - `choice-in-prompt` moves the first choice inside the prompt.
+ * - `two-values-single` gives the single-cardinality default value a second `qti-value`.
+ * - `bad-identifier-value` reads `Choice A` where an identifier is due, and `padded-identifier-value`
+ *   reads `ChoiceA`, which only the identifier pattern refuses.
+ * - `choice-bounds` adds `min-choices="2"` beside `max-choices="1"`.
+ * - `identifier-mismatch` and `title-mismatch` make the manifest's resource metadata disagree with
+ *   the item (`choice2`, `Unattended Luggage 2`).
+ * - `body-empty` replaces the item body's children with whitespace.
+ * - `comment-in-element` puts a comment inside the first paragraph and a processing instruction
+ *   inside `img`, which becomes `<img ...><?pi d?></img>`.
+ * - `bad-template-uri` reads `a%zz` as the response-processing template, an invalid URI.
  */
 const specs: Record<FixtureName, FixtureSpec> = {
+  "bad-identifier-value": {
+    edits: [
+      replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value>Choice A</qti-value>"),
+    ],
+    member: simpleMember,
+    name: "bad-identifier-value",
+  },
+  "bad-template-uri": {
+    edits: [
+      replaceIn(
+        "choice.xml",
+        'template="https://www.imsglobal.org/question/qti_v3p0/rptemplates/match_correct.xml"',
+        'template="a%zz"',
+      ),
+    ],
+    member: simpleMember,
+    name: "bad-template-uri",
+  },
+  "body-empty": {
+    edits: [replaceIn("choice.xml", bodyChildren, " ")],
+    member: simpleMember,
+    name: "body-empty",
+  },
+  "choice-bounds": {
+    edits: [replaceIn("choice.xml", 'max-choices="1"', 'min-choices="2" max-choices="1"')],
+    member: simpleMember,
+    name: "choice-bounds",
+  },
+  "choice-in-prompt": {
+    edits: [
+      replaceIn(
+        "choice.xml",
+        `</qti-prompt>\r\n            ${firstChoice}`,
+        `${firstChoice}</qti-prompt>`,
+      ),
+    ],
+    member: simpleMember,
+    name: "choice-in-prompt",
+  },
+  "comment-in-element": {
+    edits: [
+      replaceIn(
+        "choice.xml",
+        "<p>Look at the text in the picture.</p>",
+        "<p>Look at <!-- c -->the text in the picture.</p>",
+      ),
+      replaceIn(
+        "choice.xml",
+        'alt="NEVER LEAVE LUGGAGE UNATTENDED"/>',
+        'alt="NEVER LEAVE LUGGAGE UNATTENDED"><?pi d?></img>',
+      ),
+    ],
+    member: simpleMember,
+    name: "comment-in-element",
+  },
   doctype: {
     edits: [
       {
@@ -214,6 +319,17 @@ const specs: Record<FixtureName, FixtureSpec> = {
     ],
     member: simpleMember,
     name: "external",
+  },
+  "identifier-mismatch": {
+    edits: [
+      replaceIn(
+        "imsmanifest.xml",
+        "<imsmd:entry>choice</imsmd:entry>",
+        "<imsmd:entry>choice2</imsmd:entry>",
+      ),
+    ],
+    member: simpleMember,
+    name: "identifier-mismatch",
   },
   latin1: {
     edits: [
@@ -247,6 +363,13 @@ const specs: Record<FixtureName, FixtureSpec> = {
     member: simpleMember,
     name: "padded-attributes",
   },
+  "padded-identifier-value": {
+    edits: [
+      replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value> ChoiceA </qti-value>"),
+    ],
+    member: simpleMember,
+    name: "padded-identifier-value",
+  },
   "padded-text": {
     edits: [
       replaceIn(
@@ -265,6 +388,40 @@ const specs: Record<FixtureName, FixtureSpec> = {
     name: "padded-text",
   },
   simple: { edits: [], member: simpleMember, name: "simple" },
+  "title-mismatch": {
+    edits: [
+      replaceIn(
+        "imsmanifest.xml",
+        "<imsmd:string>Unattended Luggage</imsmd:string>",
+        "<imsmd:string>Unattended Luggage 2</imsmd:string>",
+      ),
+    ],
+    member: simpleMember,
+    name: "title-mismatch",
+  },
+  "two-values-single": {
+    edits: [
+      {
+        _tag: "InsertAfterLine",
+        file: "choice.xml",
+        line: 11,
+        text: "<qti-value>1</qti-value>",
+      },
+    ],
+    member: simpleMember,
+    name: "two-values-single",
+  },
+  "undeclared-response": {
+    edits: [
+      replaceIn(
+        "choice.xml",
+        '<qti-choice-interaction response-identifier="RESPONSE"',
+        '<qti-choice-interaction response-identifier="RESP"',
+      ),
+    ],
+    member: simpleMember,
+    name: "undeclared-response",
+  },
   utf16: {
     edits: [declareEncoding("UTF-16"), { _tag: "EncodeUtf16", file: "choice.xml" }],
     member: simpleMember,
