@@ -24,11 +24,20 @@ const probe = () =>
 const added = [
   "BaseType",
   "Declaration",
+  "DeclarationExternalScored",
+  "DeclarationInterpretation",
   "DeclarationKind",
+  "DeclarationLongInterpretation",
+  "DeclarationMasteryValue",
+  "DeclarationNormalMaximum",
+  "DeclarationNormalMinimum",
   "DeclarationShape",
+  "DeclarationVariableIdentifierRef",
+  "DeclarationView",
   "OutcomeDeclarationArm",
   "RecordDeclaration",
   "ResponseDeclarationArm",
+  "ResponseDeclarationId",
   "TypedCardinality",
   "TypedDeclaration",
 ];
@@ -133,15 +142,20 @@ describe("declaration", () => {
   });
 
   it("declares the Declaration alternatives with a typed and a record arm", () => {
-    const [rule, ...rest] = ofKind("alternatives");
+    const [rule, ...rest] = ofKind("alternatives").filter(
+      (candidate) => candidate.parent === declaration.relations.Declaration,
+    );
     assert.strictEqual(rest.length, 0);
     assert.isDefined(rule);
     assert.strictEqual(rule?.parent, declaration.relations.Declaration);
     assert.strictEqual(rule?.discriminator, "shape");
     assert.strictEqual(rule?.roster, declaration.relations.DeclarationShape);
-    assert.deepStrictEqual(Object.keys(rule?.arms ?? {}).toSorted(), ["record", "typed"]);
-    assert.strictEqual(rule?.arms.typed, declaration.relations.TypedDeclaration);
-    assert.strictEqual(rule?.arms.record, declaration.relations.RecordDeclaration);
+
+    const arms = Object.entries(rule?.arms ?? {}).toSorted(([a], [b]) => a.localeCompare(b));
+    assert.deepStrictEqual(arms, [
+      ["record", declaration.relations.RecordDeclaration],
+      ["typed", declaration.relations.TypedDeclaration],
+    ]);
   });
 
   it("gives TypedDeclaration its base type, cardinality and keys, and RecordDeclaration its id", () => {
@@ -177,7 +191,9 @@ describe("declaration", () => {
   });
 
   it("mirrors each thin kind arm with the declarations of its kind on id", () => {
-    const rules = ofKind("mirrors");
+    const rules = ofKind("mirrors").filter(
+      (rule) => rule.left.source !== declaration.relations.ResponseDeclarationId,
+    );
     assert.strictEqual(rules.length, 2);
 
     const sides = rules.map((rule) => ({
@@ -217,6 +233,66 @@ describe("declaration", () => {
     assert.strictEqual(
       declaration.arms["qti-outcome-declaration"],
       declaration.relations.OutcomeDeclarationArm,
+    );
+  });
+
+  it("gives each optional outcome value a declaration key and a containment in the outcome arm", () => {
+    const optional = [
+      "DeclarationExternalScored",
+      "DeclarationInterpretation",
+      "DeclarationLongInterpretation",
+      "DeclarationMasteryValue",
+      "DeclarationNormalMaximum",
+      "DeclarationNormalMinimum",
+      "DeclarationVariableIdentifierRef",
+      "DeclarationView",
+    ] as const;
+    for (const name of optional) {
+      const rel = declaration.relations[name];
+      assert.deepStrictEqual(Object.keys(rel.fields), ["declaration", "value"]);
+      assert.deepStrictEqual([...rel.primaryKey], ["declaration"]);
+
+      const into = ofKind("contained").filter((rule) => rule.left.source === rel);
+      assert.deepStrictEqual(
+        into.map((rule) => [rule.right.source, [...rule.left.fields], [...rule.right.fields]]),
+        [[declaration.relations.OutcomeDeclarationArm, ["declaration"], ["id"]]],
+      );
+    }
+  });
+
+  it("declares the DocumentId holder alternatives with one arm", () => {
+    const [rule, ...rest] = ofKind("alternatives").filter(
+      (candidate) => candidate.parent === document.relations.DocumentId,
+    );
+    assert.strictEqual(rest.length, 0);
+    assert.isDefined(rule);
+    assert.strictEqual(rule?.discriminator, "holder");
+    assert.strictEqual(rule?.roster, document.relations.IdHolder);
+    assert.deepStrictEqual(Object.entries(rule?.arms ?? {}), [
+      ["responseDeclaration", declaration.relations.ResponseDeclarationId],
+    ]);
+  });
+
+  it("mirrors ResponseDeclarationId on (node, document, id) into the response Declarations", () => {
+    const [rule, ...rest] = ofKind("mirrors").filter(
+      (candidate) => candidate.left.source === declaration.relations.ResponseDeclarationId,
+    );
+    assert.strictEqual(rest.length, 0);
+    assert.isDefined(rule);
+    assert.deepStrictEqual([...(rule?.left.fields ?? [])], ["node", "document", "id"]);
+    assert.deepStrictEqual([...(rule?.right.fields ?? [])], ["id", "document", "identifier"]);
+
+    const selection = rule === undefined ? undefined : selectionOf(rule.right);
+    assert.strictEqual(selection?.relation, declaration.relations.Declaration);
+    assert.deepStrictEqual(selection?.bindings, { kind: "response" });
+    assert.deepStrictEqual(Object.keys(declaration.relations.ResponseDeclarationId.fields), [
+      "document",
+      "id",
+      "node",
+    ]);
+    assert.deepStrictEqual(
+      [...declaration.relations.ResponseDeclarationId.primaryKey],
+      ["document", "id"],
     );
   });
 });

@@ -23,6 +23,7 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
+import * as document from "#qti/schema/document.ts";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
@@ -112,16 +113,104 @@ export const ResponseDeclarationArm = relation("ResponseDeclarationArm", { id: u
 export const OutcomeDeclarationArm = relation("OutcomeDeclarationArm", { id: uuid }, ["id"]);
 
 /**
+ * An optional-value relation of an outcome declaration: one row where the attribute is written.
+ */
+const outcomeValue = <Name extends string>(name: Name, value: ReturnType<typeof str.regex>) =>
+  relation(name, { declaration: uuid, value }, ["declaration"]);
+
+/**
+ * The `view` attribute: a space-separated list of views.
+ */
+export const DeclarationView = outcomeValue(
+  "DeclarationView",
+  str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags),
+);
+
+/**
+ * The `interpretation` attribute, an `xs:string`.
+ */
+export const DeclarationInterpretation = outcomeValue(
+  "DeclarationInterpretation",
+  str.regex(patterns.xsString, patterns.xsStringFlags),
+);
+
+/**
+ * The `long-interpretation` attribute, a URI.
+ */
+export const DeclarationLongInterpretation = outcomeValue(
+  "DeclarationLongInterpretation",
+  str.regex(patterns.anyUri),
+);
+
+/**
+ * The `normal-maximum` attribute.
+ */
+export const DeclarationNormalMaximum = outcomeValue(
+  "DeclarationNormalMaximum",
+  str.regex(patterns.xsDouble),
+);
+
+/**
+ * The `normal-minimum` attribute.
+ */
+export const DeclarationNormalMinimum = outcomeValue(
+  "DeclarationNormalMinimum",
+  str.regex(patterns.xsDouble),
+);
+
+/**
+ * The `mastery-value` attribute.
+ */
+export const DeclarationMasteryValue = outcomeValue(
+  "DeclarationMasteryValue",
+  str.regex(patterns.xsDouble),
+);
+
+/**
+ * The `external-scored` attribute: `human` or `externalMachine`.
+ */
+export const DeclarationExternalScored = outcomeValue(
+  "DeclarationExternalScored",
+  str.regex(patterns.externalScored),
+);
+
+/**
+ * The `variable-identifier-ref` attribute: the identifier of another variable.
+ */
+export const DeclarationVariableIdentifierRef = outcomeValue(
+  "DeclarationVariableIdentifierRef",
+  ncName,
+);
+
+/**
+ * The `identifier` of a response declaration as the document's id holder: one holder per id.
+ */
+export const ResponseDeclarationId = relation(
+  "ResponseDeclarationId",
+  { document: uuid, id: ncName, node: uuid },
+  ["document", "id"],
+);
+
+/**
  * The relations and rosters of this module, as schema members.
  */
 export const relations = {
   BaseType,
   Declaration,
+  DeclarationExternalScored,
+  DeclarationInterpretation,
   DeclarationKind,
+  DeclarationLongInterpretation,
+  DeclarationMasteryValue,
+  DeclarationNormalMaximum,
+  DeclarationNormalMinimum,
   DeclarationShape,
+  DeclarationVariableIdentifierRef,
+  DeclarationView,
   OutcomeDeclarationArm,
   RecordDeclaration,
   ResponseDeclarationArm,
+  ResponseDeclarationId,
   TypedCardinality,
   TypedDeclaration,
 };
@@ -159,4 +248,21 @@ export const rules = [
   ),
   mirrors(on(ResponseDeclarationArm, "id"), on(select(Declaration, { kind: "response" }), "id")),
   mirrors(on(OutcomeDeclarationArm, "id"), on(select(Declaration, { kind: "outcome" }), "id")),
+  ...[
+    DeclarationExternalScored,
+    DeclarationInterpretation,
+    DeclarationLongInterpretation,
+    DeclarationMasteryValue,
+    DeclarationNormalMaximum,
+    DeclarationNormalMinimum,
+    DeclarationVariableIdentifierRef,
+    DeclarationView,
+  ].map((value) => contained(on(value, "declaration"), on(OutcomeDeclarationArm, "id"))),
+  mirrors(
+    on(ResponseDeclarationId, "node", "document", "id"),
+    on(select(Declaration, { kind: "response" }), "id", "document", "identifier"),
+  ),
+  alternatives(document.DocumentId, "holder", document.IdHolder, {
+    responseDeclaration: ResponseDeclarationId,
+  }),
 ] as const;
