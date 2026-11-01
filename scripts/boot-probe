@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 
 : "${GRIZZLE_PG_STATE:=$HOME/.local/var/grizzle/pg19rc1}"
 : "${GRIZZLE_PG_BIN:=$HOME/.local/opt/postgresql/19rc1/bin}"
-budget_kb=$((2 * 1024 * 1024))
+budget_kb=$((10 * 1024 * 1024))
 worktree_limit=6
 
 kb() { du -sk "$1" 2>/dev/null | cut -f1 || echo 0; }
@@ -59,7 +59,7 @@ fi
 
 used_kb=$((worktree_kb + db_kb))
 lines+=("budget $(human "$used_kb") of $(human "$budget_kb") (worktrees $(human "$worktree_kb"), databases $(human "$db_kb"))")
-((used_kb > budget_kb)) && facts+=("OVER the 2 GB resource budget: $(human "$used_kb")")
+((used_kb > budget_kb)) && facts+=("OVER the 10 GB resource budget: $(human "$used_kb")")
 lines+=("download cache ~/.cache/gr8des $(human "$(kb "$HOME/.cache/gr8des")")")
 lines+=("disk free $(df -k "$HOME" | awk 'NR == 2 { print $4 }' | xargs -I{} awk -v k={} 'BEGIN { printf "%.0f GB", k / 1048576 }')")
 

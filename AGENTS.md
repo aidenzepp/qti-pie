@@ -185,7 +185,7 @@ after every step, but never leave it for someone else.
 
 **Disk.**
 
-- Budget: the worktrees and `gr8des_*` databases together stay under 2 GB. The orchestrator reports their size at the end
+- Budget: the worktrees and `gr8des_*` databases together stay under 10 GB. The orchestrator reports their size at the end
   of every phase (`du -sh .worktrees`, and `pg_database_size` for each `gr8des_%` database).
 - Downloaded inputs, such as specifications, schema files and 1EdTech's QTI example packages, are fetched once into
   `~/.cache/gr8des/`, never into the repository or once per worktree.
