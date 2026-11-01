@@ -1,6 +1,10 @@
+import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import { Predicate } from "effect";
 import { admission } from "#qti/schema/kinds/cp.ts";
+import * as node from "#qti/schema/node.ts";
 import { RootKind } from "#qti/schema/node.ts";
+import * as pkg from "#qti/schema/package.ts";
 import { resourceTypes } from "#qti/schema/seed/resource-types.ts";
 import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
 
@@ -109,5 +113,97 @@ describe("cp admission", () => {
         assert.deepStrictEqual(childrenOf(parent, version), children, `${parent} ${version}`);
       }
     }
+  });
+});
+
+/**
+ * The schema over node's relations and rules and this module's.
+ */
+const probe = () =>
+  schema("QtiPackageProbe", { ...node.relations, ...pkg.relations }, [...node.rules, ...pkg.rules]);
+
+/**
+ * The inclusive bounds a capacity statement carries on its description, which the public statement
+ * type does not expose.
+ */
+const boundsOf = (rule: (typeof pkg.rules)[number]): readonly [unknown, unknown] => {
+  const within =
+    Predicate.hasProperty(rule, "desc") &&
+    Predicate.hasProperty(rule.desc, "within") &&
+    Predicate.hasProperty(rule.desc.within, "low") &&
+    Predicate.hasProperty(rule.desc.within, "high")
+      ? rule.desc.within
+      : undefined;
+
+  assert.isDefined(within, "capacity description");
+
+  return [within.low, within.high];
+};
+
+/**
+ * The capacity statements of this module.
+ */
+const capacities = () => pkg.rules.filter((rule) => rule.kind === "capacity");
+
+describe("package", () => {
+  it("builds a schema over node and package relations and rules without refusal", () => {
+    const built = probe();
+    for (const name of Object.keys(pkg.relations)) {
+      assert.isTrue(name in built.relations, name);
+    }
+    assert.strictEqual(built.statements.length, node.rules.length + pkg.rules.length);
+  });
+
+  it("declares the package relations and the roster", () => {
+    assert.deepStrictEqual(Object.keys(pkg.relations).toSorted(), [
+      "EntryKind",
+      "Manifest",
+      "ManifestMetadata",
+      "ManifestSchema",
+      "ManifestSchemaVersion",
+      "Organizations",
+      "Package",
+      "PackageEntry",
+      "Resources",
+    ]);
+  });
+
+  it("holds three capacity statements targeting Package, each exactly one", () => {
+    const onPackage = capacities().filter((rule) => rule.target.source === pkg.relations.Package);
+    assert.strictEqual(onPackage.length, 3);
+    for (const rule of onPackage) {
+      assert.deepStrictEqual([...rule.target.fields], ["id"]);
+      assert.deepStrictEqual(boundsOf(rule), [1n, 1n]);
+    }
+    assert.deepStrictEqual(onPackage.map((rule) => rule.from.source.name).toSorted(), [
+      "ManifestMetadata",
+      "Organizations",
+      "Resources",
+    ]);
+  });
+
+  it("holds two capacity statements targeting ManifestMetadata, each exactly one", () => {
+    const onMetadata = capacities().filter(
+      (rule) => rule.target.source === pkg.relations.ManifestMetadata,
+    );
+    assert.strictEqual(onMetadata.length, 2);
+    for (const rule of onMetadata) {
+      assert.deepStrictEqual(boundsOf(rule), [1n, 1n]);
+    }
+    assert.deepStrictEqual(onMetadata.map((rule) => rule.from.source.name).toSorted(), [
+      "ManifestSchema",
+      "ManifestSchemaVersion",
+    ]);
+  });
+
+  it("keys the arms by their NodeKind handles", () => {
+    assert.deepStrictEqual(Object.keys(pkg.arms).toSorted(), [
+      "cp:manifest",
+      "cp:metadata.manifest",
+      "cp:organizations",
+      "cp:resources",
+      "cp:schema",
+      "cp:schemaversion",
+    ]);
   });
 });
