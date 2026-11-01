@@ -24,10 +24,10 @@ const alternativesOf = () =>
   metadata.rules.flatMap((rule) => (rule.kind === "alternatives" ? [rule] : []));
 
 /**
- * The handles this module declares arms for, the first twenty-five of the LOM kinds: the general,
- * lifeCycle and metaMetadata categories.
+ * The handles this module declares arms for, the first forty-two of the LOM kinds: the general,
+ * lifeCycle, metaMetadata, technical and rights categories.
  */
-const armHandles = lomKinds.slice(0, 25);
+const armHandles = lomKinds.slice(0, 42);
 
 describe("metadata", () => {
   it("builds a schema over node, package, document and metadata relations and rules without refusal", () => {
@@ -38,7 +38,7 @@ describe("metadata", () => {
     assert.isAbove(metadata.rules.length, 0);
   });
 
-  it("keys the arms by the general, lifeCycle and metaMetadata LOM handles", () => {
+  it("keys the arms by the general, lifeCycle, metaMetadata, technical and rights LOM handles", () => {
     assert.deepStrictEqual(Object.keys(metadata.arms).toSorted(), [...armHandles].toSorted());
     for (const handle of Object.keys(metadata.arms)) {
       assert.isTrue(

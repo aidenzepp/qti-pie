@@ -292,6 +292,143 @@ export const LomMetadataschema = relation(
 );
 
 /**
+ * The `lom:technical` of a record.
+ */
+export const LomTechnical = relation("LomTechnical", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * A `lom:format` of the technical category at its position: a `CharacterString` leaf, with the
+ * whitespace-collapsed form beside the value as written.
+ */
+export const LomFormat = relation(
+  "LomFormat",
+  { collapsed: token, id: uuid, lom: uuid, position: pg.bigint, technical: uuid, value: wildcard },
+  ["id"],
+);
+
+/**
+ * The `lom:size` of the technical category: a `CharacterString` leaf, with the whitespace-collapsed
+ * form beside the value as written.
+ */
+export const LomSize = relation(
+  "LomSize",
+  { collapsed: token, id: uuid, lom: uuid, technical: uuid, value: wildcard },
+  ["id"],
+);
+
+/**
+ * A `lom:location` of the technical category at its position: a `CharacterString` leaf, with the
+ * whitespace-collapsed form beside the value as written.
+ */
+export const LomLocation = relation(
+  "LomLocation",
+  { collapsed: token, id: uuid, lom: uuid, position: pg.bigint, technical: uuid, value: wildcard },
+  ["id"],
+);
+
+/**
+ * A `lom:requirement` of the technical category at its position.
+ */
+export const LomRequirement = relation(
+  "LomRequirement",
+  { id: uuid, lom: uuid, position: pg.bigint, technical: uuid },
+  ["id"],
+);
+
+/**
+ * A `lom:orComposite` of a requirement at its position.
+ */
+export const LomOrComposite = relation(
+  "LomOrComposite",
+  { id: uuid, lom: uuid, position: pg.bigint, requirement: uuid },
+  ["id"],
+);
+
+/**
+ * The `lom:type` of an alternative requirement: a vocabulary container.
+ */
+export const LomType = relation("LomType", { id: uuid, lom: uuid, orComposite: uuid }, ["id"]);
+
+/**
+ * The `lom:name` of an alternative requirement: a vocabulary container.
+ */
+export const LomName = relation("LomName", { id: uuid, lom: uuid, orComposite: uuid }, ["id"]);
+
+/**
+ * The `lom:minimumVersion` of an alternative requirement: a `CharacterString` leaf, with the
+ * whitespace-collapsed form beside the value as written.
+ */
+export const LomMinimumVersion = relation(
+  "LomMinimumVersion",
+  { collapsed: token, id: uuid, lom: uuid, orComposite: uuid, value: wildcard },
+  ["id"],
+);
+
+/**
+ * The `lom:maximumVersion` of an alternative requirement: a `CharacterString` leaf, with the
+ * whitespace-collapsed form beside the value as written.
+ */
+export const LomMaximumVersion = relation(
+  "LomMaximumVersion",
+  { collapsed: token, id: uuid, lom: uuid, orComposite: uuid, value: wildcard },
+  ["id"],
+);
+
+/**
+ * The `lom:installationRemarks` of the technical category: a `LangString` container.
+ */
+export const LomInstallationRemarks = relation(
+  "LomInstallationRemarks",
+  { id: uuid, lom: uuid, technical: uuid },
+  ["id"],
+);
+
+/**
+ * The `lom:otherPlatformRequirements` of the technical category: a `LangString` container.
+ */
+export const LomOtherPlatformRequirements = relation(
+  "LomOtherPlatformRequirements",
+  { id: uuid, lom: uuid, technical: uuid },
+  ["id"],
+);
+
+/**
+ * The `lom:duration` of the technical category: a `Duration` container.
+ */
+export const LomDuration = relation("LomDuration", { id: uuid, lom: uuid, technical: uuid }, [
+  "id",
+]);
+
+/**
+ * The `CharacterString` child of a duration, the arm of `lom:duration.string`, with the
+ * whitespace-collapsed form beside the value as written.
+ */
+export const LomDurationString = relation(
+  "LomDurationString",
+  { collapsed: token, duration: uuid, id: uuid, lom: uuid, value: wildcard },
+  ["id"],
+);
+
+/**
+ * The `lom:rights` of a record.
+ */
+export const LomRights = relation("LomRights", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The `lom:cost` of the rights category: a vocabulary container.
+ */
+export const LomCost = relation("LomCost", { id: uuid, lom: uuid, rights: uuid }, ["id"]);
+
+/**
+ * The `lom:copyrightAndOtherRestrictions` of the rights category: a vocabulary container.
+ */
+export const LomCopyrightAndOtherRestrictions = relation(
+  "LomCopyrightAndOtherRestrictions",
+  { id: uuid, lom: uuid, rights: uuid },
+  ["id"],
+);
+
+/**
  * A resource that owns a record with at least one `lom:identifier`, bound to the resource and its
  * type like the record's `ResourceLom`.
  */
@@ -346,32 +483,50 @@ export const LomObjectTitle = relation(
 );
 
 /**
- * The general, lifeCycle and metaMetadata categories' arms, keyed by their `NodeKind` handles.
+ * The general, lifeCycle, metaMetadata, technical and rights categories' arms, keyed by their
+ * `NodeKind` handles.
  */
 export const arms = {
   "lom:aggregationLevel": LomAggregationLevel,
   "lom:catalog": LomIdentifierCatalog,
   "lom:contribute": LomContribute,
+  "lom:copyrightAndOtherRestrictions": LomCopyrightAndOtherRestrictions,
+  "lom:cost": LomCost,
   "lom:coverage": LomCoverage,
   "lom:date": LomDate,
   "lom:dateTime": LomDateTime,
   "lom:description": LomDescription,
+  "lom:duration": LomDuration,
+  "lom:duration.string": LomDurationString,
   "lom:entity": LomEntity,
   "lom:entry": LomIdentifierEntry,
+  "lom:format": LomFormat,
   "lom:general": LomGeneral,
   "lom:identifier": LomIdentifier,
+  "lom:installationRemarks": LomInstallationRemarks,
   "lom:keyword": LomKeyword,
   "lom:language": LomLanguage,
   "lom:lifeCycle": LomLifeCycle,
+  "lom:location": LomLocation,
   "lom:lom": Lom,
+  "lom:maximumVersion": LomMaximumVersion,
   "lom:metaMetadata": LomMetaMetadata,
   "lom:metadataschema": LomMetadataschema,
+  "lom:minimumVersion": LomMinimumVersion,
+  "lom:name": LomName,
+  "lom:orComposite": LomOrComposite,
+  "lom:otherPlatformRequirements": LomOtherPlatformRequirements,
+  "lom:requirement": LomRequirement,
+  "lom:rights": LomRights,
   "lom:role": LomRole,
+  "lom:size": LomSize,
   "lom:source": LomSource,
   "lom:status": LomStatus,
   "lom:string": LomString,
   "lom:structure": LomStructure,
+  "lom:technical": LomTechnical,
   "lom:title": LomGeneralTitle,
+  "lom:type": LomType,
   "lom:value": LomValue,
   "lom:version": LomVersion,
 };
@@ -383,31 +538,48 @@ export const relations = {
   Lom,
   LomAggregationLevel,
   LomContribute,
+  LomCopyrightAndOtherRestrictions,
+  LomCost,
   LomCoverage,
   LomDate,
   LomDateTime,
   LomDescription,
+  LomDuration,
+  LomDurationString,
   LomEntity,
+  LomFormat,
   LomGeneral,
   LomGeneralTitle,
   LomIdentifier,
   LomIdentifierCatalog,
   LomIdentifierEntry,
+  LomInstallationRemarks,
   LomKeyword,
   LomLanguage,
   LomLifeCycle,
+  LomLocation,
+  LomMaximumVersion,
   LomMetaMetadata,
   LomMetadataschema,
+  LomMinimumVersion,
+  LomName,
   LomObjectIdentifier,
   LomObjectTitle,
+  LomOrComposite,
+  LomOtherPlatformRequirements,
   LomOwner,
+  LomRequirement,
+  LomRights,
   LomRole,
+  LomSize,
   LomSource,
   LomStatus,
   LomString,
   LomStringLanguage,
   LomStructure,
+  LomTechnical,
   LomTitle,
+  LomType,
   LomValue,
   LomVersion,
   ManifestLom,
@@ -426,7 +598,9 @@ export const relations = {
  * string is a string row of its own value; each string language belongs to a string. Each lifeCycle
  * and metaMetadata row belongs to a record; a version, status, contribution, role, entity, date,
  * date-time and metadata schema is the edge's child under the parent it names, at the position it
- * copies where it has one. A resource's record names at least one identifier and exactly one title;
+ * copies where it has one. Each technical and rights row belongs to a record, and a row that has a
+ * parent is the edge's child under the parent it names, at the position it copies where it has one.
+ * A resource's record names at least one identifier and exactly one title;
  * an item resource's record has one object identifier and one object title, each a row of the
  * record and of the item document's own identifier or title.
  */
@@ -504,6 +678,59 @@ export const rules = [
   contained(on(LomMetadataschema, "lom"), on(Lom, "id")),
   contained(on(LomMetadataschema, "id", "metaMetadata"), on(Edge, "child", "parent")),
   contained(on(LomMetadataschema, "id", "position"), on(Edge, "child", "position")),
+  key(LomTechnical, ["lom"]),
+  contained(on(LomTechnical, "lom"), on(Lom, "id")),
+  key(LomFormat, ["technical", "position"]),
+  contained(on(LomFormat, "lom"), on(Lom, "id")),
+  contained(on(LomFormat, "id", "technical"), on(Edge, "child", "parent")),
+  contained(on(LomFormat, "id", "position"), on(Edge, "child", "position")),
+  key(LomSize, ["technical"]),
+  contained(on(LomSize, "lom"), on(Lom, "id")),
+  contained(on(LomSize, "id", "technical"), on(Edge, "child", "parent")),
+  key(LomLocation, ["technical", "position"]),
+  contained(on(LomLocation, "lom"), on(Lom, "id")),
+  contained(on(LomLocation, "id", "technical"), on(Edge, "child", "parent")),
+  contained(on(LomLocation, "id", "position"), on(Edge, "child", "position")),
+  key(LomRequirement, ["technical", "position"]),
+  contained(on(LomRequirement, "lom"), on(Lom, "id")),
+  contained(on(LomRequirement, "id", "technical"), on(Edge, "child", "parent")),
+  contained(on(LomRequirement, "id", "position"), on(Edge, "child", "position")),
+  key(LomOrComposite, ["requirement", "position"]),
+  contained(on(LomOrComposite, "lom"), on(Lom, "id")),
+  contained(on(LomOrComposite, "id", "requirement"), on(Edge, "child", "parent")),
+  contained(on(LomOrComposite, "id", "position"), on(Edge, "child", "position")),
+  key(LomType, ["orComposite"]),
+  contained(on(LomType, "lom"), on(Lom, "id")),
+  contained(on(LomType, "id", "orComposite"), on(Edge, "child", "parent")),
+  key(LomName, ["orComposite"]),
+  contained(on(LomName, "lom"), on(Lom, "id")),
+  contained(on(LomName, "id", "orComposite"), on(Edge, "child", "parent")),
+  key(LomMinimumVersion, ["orComposite"]),
+  contained(on(LomMinimumVersion, "lom"), on(Lom, "id")),
+  contained(on(LomMinimumVersion, "id", "orComposite"), on(Edge, "child", "parent")),
+  key(LomMaximumVersion, ["orComposite"]),
+  contained(on(LomMaximumVersion, "lom"), on(Lom, "id")),
+  contained(on(LomMaximumVersion, "id", "orComposite"), on(Edge, "child", "parent")),
+  key(LomInstallationRemarks, ["technical"]),
+  contained(on(LomInstallationRemarks, "lom"), on(Lom, "id")),
+  contained(on(LomInstallationRemarks, "id", "technical"), on(Edge, "child", "parent")),
+  key(LomOtherPlatformRequirements, ["technical"]),
+  contained(on(LomOtherPlatformRequirements, "lom"), on(Lom, "id")),
+  contained(on(LomOtherPlatformRequirements, "id", "technical"), on(Edge, "child", "parent")),
+  key(LomDuration, ["technical"]),
+  contained(on(LomDuration, "lom"), on(Lom, "id")),
+  contained(on(LomDuration, "id", "technical"), on(Edge, "child", "parent")),
+  key(LomDurationString, ["duration"]),
+  contained(on(LomDurationString, "lom"), on(Lom, "id")),
+  contained(on(LomDurationString, "id", "duration"), on(Edge, "child", "parent")),
+  key(LomRights, ["lom"]),
+  contained(on(LomRights, "lom"), on(Lom, "id")),
+  key(LomCost, ["rights"]),
+  contained(on(LomCost, "lom"), on(Lom, "id")),
+  contained(on(LomCost, "id", "rights"), on(Edge, "child", "parent")),
+  key(LomCopyrightAndOtherRestrictions, ["rights"]),
+  contained(on(LomCopyrightAndOtherRestrictions, "lom"), on(Lom, "id")),
+  contained(on(LomCopyrightAndOtherRestrictions, "id", "rights"), on(Edge, "child", "parent")),
   key(ResourceLomIdentified, ["lom"]),
   contained(
     on(ResourceLomIdentified, "lom", "package", "resource", "type"),
