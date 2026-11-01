@@ -107,15 +107,16 @@ const section = (value: string): string =>
 
 /**
  * Write a CDATA run. A section cannot hold a character reference, so each code point above
- * `threshold` closes the section, is written as a reference, and the section reopens after it; an
- * empty section is omitted, except that a run with no characters is still one empty section.
+ * `threshold`, and each CR (a re-read turns a raw CR into a line feed, XML 1.0 section 2.11),
+ * closes the section, is written as a reference, and the section reopens after it; an empty
+ * section is omitted, except that a run with no characters is still one empty section.
  */
 const renderCdata = (value: string, threshold: number): string => {
   let rendered = "";
   let current = "";
 
   for (const character of value) {
-    if (isAbove(character, threshold)) {
+    if (isAbove(character, threshold) || character === "\r") {
       rendered += current === "" ? "" : section(current);
       rendered += characterReference(character.codePointAt(0) ?? 0);
       current = "";
@@ -249,12 +250,19 @@ const findInNode = (node: Child, threshold: number): EncodeError | undefined => 
 };
 
 /**
- * The first unwritable construct in the prolog, the root and the epilog.
+ * The first unwritable construct in the doctype, the prolog, the root and the epilog, in writing
+ * order.
  */
-const findUnwritable = (doc: XmlDocument, threshold: number): EncodeError | undefined =>
-  [...doc.prolog, doc.root, ...doc.epilog]
-    .map((node) => findInNode(node, threshold))
-    .find((error) => error !== undefined);
+const findUnwritable = (doc: XmlDocument, threshold: number): EncodeError | undefined => {
+  const doctype = Option.getOrUndefined(doc.doctype);
+
+  return (
+    (doctype === undefined ? undefined : unwritable(doctype, "doctype", threshold)) ??
+    [...doc.prolog, doc.root, ...doc.epilog]
+      .map((node) => findInNode(node, threshold))
+      .find((error) => error !== undefined)
+  );
+};
 
 /**
  * Serialize a document: the declaration as stored, the doctype text as stored, the prolog, the root
@@ -262,7 +270,9 @@ const findUnwritable = (doc: XmlDocument, threshold: number): EncodeError | unde
  *
  * Without `options` every character is written as itself. With a `threshold`, a code point above it
  * in a text run or an attribute value becomes a numeric character reference (a CDATA run is closed
- * around it), and one anywhere else cannot be written, because no reference can carry it there.
+ * around it), and one anywhere else, the doctype text included, cannot be written, because no
+ * reference can carry it there. A CR in a CDATA run is closed around and written `&#xD;`, as in a
+ * text run, so a re-read keeps it.
  *
  * @param doc - The tree to serialize.
  * @param options - The threshold of the encoder that will carry the string, when it has one.
