@@ -3,9 +3,11 @@
 #
 #   scripts/db.sh create    create the database from grizzle_template, owned by the migration identity
 #   scripts/db.sh migrate   grizzle migrate, then give each of this package's logins its local password
-#   scripts/db.sh reset     drop the database and this package's PostgreSQL roles, then create and migrate again
+#   scripts/db.sh reset     drop, then create and migrate again
+#   scripts/db.sh drop      drop the database, this package's PostgreSQL roles and the password directory
+#   scripts/db.sh check-clear  list roles and gr8des_qti databases this one does not own; exit 1 if any, else 0
 #
-# Roles are cluster-wide, so reset drops the roles of every schema under migrations/ along with the database.
+# Roles are cluster-wide, so drop removes the roles of every schema under migrations/ along with the database.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -58,7 +60,7 @@ migrate() {
 	done
 }
 
-reset() {
+drop() {
 	as_owner postgres -c "DROP DATABASE IF EXISTS $GR8DES_PG_DATABASE WITH (FORCE)"
 	local schema role
 	for schema in $(schemas); do
@@ -66,16 +68,40 @@ reset() {
 			as_owner postgres -c "DROP ROLE $role"
 		done
 	done
+	rm -rf "$GR8DES_PG_SECRETS"
+}
+
+reset() {
+	drop
 	create
 	migrate
+}
+
+# Prints each leftover as "role: <name>" or "database: <name>"; exits 1 if any were found.
+check_clear() {
+	local schema where="rolname LIKE 'qti\_\_%' OR rolname LIKE 'qti_smoke\_\_%'"
+	for schema in $(schemas); do
+		where="$where OR rolname LIKE '${schema}\_\_%'"
+	done
+	local found
+	found="$(
+		as_owner postgres -c "SELECT 'role: ' || rolname FROM pg_roles WHERE $where ORDER BY rolname"
+		as_owner postgres -c "SELECT 'database: ' || datname FROM pg_database WHERE datname LIKE 'gr8des_qti%' AND datname <> '$GR8DES_PG_DATABASE' ORDER BY datname"
+	)"
+	if [[ -n "$found" ]]; then
+		echo "$found"
+		return 1
+	fi
 }
 
 case "${1:-}" in
 	create) create ;;
 	migrate) migrate ;;
 	reset) reset ;;
+	drop) drop ;;
+	check-clear) check_clear ;;
 	*)
-		echo "usage: scripts/db.sh create|migrate|reset" >&2
+		echo "usage: scripts/db.sh create|migrate|reset|drop|check-clear" >&2
 		exit 2
 		;;
 esac
