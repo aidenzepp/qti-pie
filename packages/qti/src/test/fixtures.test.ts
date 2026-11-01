@@ -325,18 +325,37 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
       }),
   );
 
-  it.effect("the spec table names simple and its seven variants, each by its own name", () =>
-    Effect.sync(() => {
-      assert.deepStrictEqual([...fixtureNames], ["simple", ...variantNames]);
+  it.effect(
+    "the spec table names simple, its seven variants and the eleven hand-broken packages",
+    () =>
+      Effect.sync(() => {
+        assert.deepStrictEqual(
+          [...fixtureNames],
+          [
+            "simple",
+            ...variantNames,
+            "undeclared-response",
+            "choice-in-prompt",
+            "two-values-single",
+            "bad-identifier-value",
+            "padded-identifier-value",
+            "choice-bounds",
+            "identifier-mismatch",
+            "title-mismatch",
+            "body-empty",
+            "comment-in-element",
+            "bad-template-uri",
+          ],
+        );
 
-      for (const name of fixtureNames) {
-        assert.strictEqual(specOf(name).name, name);
-        assert.strictEqual(specOf(name).member, specOf("simple").member);
-      }
+        for (const name of fixtureNames) {
+          assert.strictEqual(specOf(name).name, name);
+          assert.strictEqual(specOf(name).member, specOf("simple").member);
+        }
 
-      assert.deepStrictEqual(specOf("simple").edits, []);
-      assert.strictEqual(new Set(fixtureNames.map((name) => hash12(specOf(name)))).size, 8);
-    }),
+        assert.deepStrictEqual(specOf("simple").edits, []);
+        assert.strictEqual(new Set(fixtureNames.map((name) => hash12(specOf(name)))).size, 19);
+      }),
   );
 
   it.effect("every variant materializes beside the others under its own hashed name", () =>
