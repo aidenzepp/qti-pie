@@ -29,6 +29,7 @@ export class ReaderRefusal extends Schema.TaggedError<ReaderRefusal>()("ReaderRe
     "nul-or-surrogate",
     "undeclared-entity",
     "entity-cycle",
+    "entity-expansion",
   ]),
 }) {}
 
