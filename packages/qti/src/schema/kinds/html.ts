@@ -3,7 +3,7 @@
  */
 import { Option } from "effect";
 
-import type { AdmissionRow, RegistryRow } from "#qti/schema/kinds/generic.ts";
+import type { AdmissionRow, RegistryRow, SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
 
 const namespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 
@@ -30,7 +30,21 @@ export const registry: Readonly<Record<(typeof kinds)[number], RegistryRow>> = {
   p: { attributes: [], local: "p", namespace, parent: Option.none() },
 };
 
+const versions = ["3.0.0", "3.0.1"] as const satisfies readonly SchemaVersionHandle[];
+
 /**
- * The HTML admission rows: none yet.
+ * The children each HTML kind admits: the spec's 3.6 and 4.3. `p` is mixed content; `img` is the
+ * empty type and admits only comments and instructions.
  */
-export const admission: readonly AdmissionRow[] = [];
+const children: Readonly<Record<(typeof kinds)[number], readonly string[]>> = {
+  img: ["comment", "pi"],
+  p: ["img", "text", "ws", "entityRef", "comment", "pi"],
+};
+
+/**
+ * The HTML admission rows, the same for both versions.
+ */
+export const admission: readonly AdmissionRow[] = Object.entries(children).flatMap(
+  ([parent, kids]) =>
+    versions.flatMap((version) => kids.map((child) => ({ child, parent, version }))),
+);
