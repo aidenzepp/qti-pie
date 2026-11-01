@@ -73,7 +73,7 @@ waived. If any step fails or is in doubt, record the finding and do not file.
    it.
 4. **Draft with `issue-authoring`.** Follow the skill completely: the duplicate search, pinned permalinks, voice, the
    lint and the disclosure block, with the settings line the Mind puts in the task.
-5. **Hater pass.** A `hater` reads the draft cold, as grizzle's maintainer reading a report he suspects is user error.
+5. **Hater pass.** A `hater` reads the draft cold, as grizzle's maintainer reading a report they suspect is user error.
    A head turns its report into changes, and the draft is revised and linted again.
 6. **File.** As the operator's `aidenzepp` account, for that command only:
    `GH_TOKEN="$(gh auth token --user aidenzepp)" gh issue create --repo bjornpagen/grizzle --title … --body-file …`,
