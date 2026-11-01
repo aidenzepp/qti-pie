@@ -628,3 +628,117 @@ describe("substituting entities", () => {
     }),
   );
 });
+
+/**
+ * A subset that declares `p0` as `base` and `p<n>` as `copies` references to `p<n-1>` for `n` 1 to
+ * `top`, then uses `%p<top>;` between declarations.
+ */
+const parameterChain = (base: string, copies: number, top: number) => {
+  let subset = `<!ENTITY % p0 "${base}">`;
+  for (let n = 1; n <= top; n += 1) {
+    subset += `<!ENTITY % p${n} "${`&#37;p${n - 1};`.repeat(copies)}">`;
+  }
+
+  return `<!DOCTYPE a [${subset}%p${top};]><a/>`;
+};
+
+describe("the expansion budget", () => {
+  it.effect("admits parameter entities opened 20 deep", () =>
+    Effect.gen(function* admitsTwentyDeep() {
+      const prolog = yield* lexProlog(parameterChain("<!-- c -->", 1, 19));
+
+      assert.isAbove(prolog.expanded, 0);
+    }),
+  );
+
+  it.effect("refuses parameter entities opened 21 deep", () =>
+    Effect.gen(function* refusesTwentyOneDeep() {
+      const error = yield* refusalOf(parameterChain("<!-- c -->", 1, 20));
+
+      assert.instanceOf(error, ReaderRefusal);
+      assert.strictEqual(error.rule, "entity-expansion");
+      assert.include(error.detail, "p0");
+    }),
+  );
+
+  it.effect("refuses parameter entities that expand past the limit", () =>
+    Effect.gen(function* refusesAmplification() {
+      const error = yield* refusalOf(parameterChain(`<!--${"c".repeat(1996)}-->`, 10, 3));
+
+      assert.instanceOf(error, ReaderRefusal);
+      assert.strictEqual(error.rule, "entity-expansion");
+    }),
+  );
+
+  it.effect("admits the same chain with a small base", () =>
+    Effect.gen(function* admitsSmallChain() {
+      const prolog = yield* lexProlog(parameterChain("<!-- c -->", 10, 3));
+
+      assert.isAbove(prolog.expanded, 0);
+      assert.isBelow(prolog.expanded, 1_000_000);
+    }),
+  );
+
+  it.effect("counts nothing when no parameter entity is used between declarations", () =>
+    Effect.gen(function* countsNothing() {
+      const prolog = yield* lexProlog('<!DOCTYPE a [<!ENTITY e "x">]><a/>');
+
+      assert.strictEqual(prolog.expanded, 0);
+    }),
+  );
+
+  it.effect("tables a chain of 20,000 general entities without refusing it", () =>
+    Effect.gen(function* tablesLongChain() {
+      // Declared from the outermost entity inward, so the search descends the whole chain at once.
+      let subset = "";
+      for (let n = 20_000; n >= 1; n -= 1) {
+        subset += `<!ENTITY e${n} "&e${n - 1};">`;
+      }
+      subset += '<!ENTITY e0 "x">';
+      const prolog = yield* lexProlog(`<!DOCTYPE a [${subset}]><a/>`);
+
+      assert.strictEqual(prolog.entities.size, 20_001);
+    }),
+  );
+
+  it.effect("refuses a body reference to general entities nested 21 deep", () =>
+    Effect.gen(function* refusesDeepBody() {
+      let subset = '<!ENTITY e0 "x">';
+      for (let n = 1; n <= 20; n += 1) {
+        subset += `<!ENTITY e${n} "&e${n - 1};">`;
+      }
+      const text = `<!DOCTYPE a [${subset}]><a>&e20;</a>`;
+      const error = yield* Effect.flip(
+        lexProlog(text).pipe(Effect.flatMap((p) => substitute(text, p))),
+      );
+
+      assert.instanceOf(error, ReaderRefusal);
+      assert.strictEqual(error.rule, "entity-expansion");
+    }),
+  );
+
+  it.effect("admits a body reference to general entities nested 20 deep", () =>
+    Effect.gen(function* admitsTwentyBody() {
+      let subset = '<!ENTITY e0 "x">';
+      for (let n = 1; n <= 19; n += 1) {
+        subset += `<!ENTITY e${n} "&e${n - 1};">`;
+      }
+      const text = `<!DOCTYPE a [${subset}]><a>&e19;</a>`;
+      const { body } = yield* lexProlog(text).pipe(Effect.flatMap((p) => substitute(text, p)));
+
+      assert.isTrue(body.endsWith("<a>x</a>"));
+    }),
+  );
+
+  it.effect("refuses a body whose references expand past the limit", () =>
+    Effect.gen(function* refusesBodyAmplification() {
+      const text = `<!DOCTYPE a [<!ENTITY e0 "${"x".repeat(1000)}"><!ENTITY e1 "${"&e0;".repeat(10)}"><!ENTITY e2 "${"&e1;".repeat(10)}"><!ENTITY e3 "${"&e2;".repeat(10)}">]><a>&e3;</a>`;
+      const error = yield* Effect.flip(
+        lexProlog(text).pipe(Effect.flatMap((p) => substitute(text, p))),
+      );
+
+      assert.instanceOf(error, ReaderRefusal);
+      assert.strictEqual(error.rule, "entity-expansion");
+    }),
+  );
+});

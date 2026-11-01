@@ -33,6 +33,11 @@ export interface Prolog {
   readonly doctype: Option.Option<string>;
   readonly entities: ReadonlyMap<string, string>;
   /**
+   * The characters of replacement text opened so far, counted as `charge` counts them, so the
+   * substitution of the body continues the same count.
+   */
+  readonly expanded: number;
+  /**
    * True when the DOCTYPE names a `SYSTEM` or `PUBLIC` identifier. The external subset is never
    * fetched.
    */
@@ -160,6 +165,105 @@ interface Cursor {
 }
 
 /**
+ * The most replacement texts that may be open at once, one inside another. It is `xmllint`'s depth.
+ */
+export const EXPANSION_DEPTH = 20;
+
+/**
+ * The characters a document may open through entity references, and how many it has opened.
+ *
+ * `expanded` grows as `charge` is called; `limit` is fixed when the budget is made.
+ */
+export interface ExpansionBudget {
+  expanded: number;
+  readonly limit: number;
+}
+
+/**
+ * The characters of replacement text a document may open before it is refused as amplification.
+ */
+const EXPANSION_ALLOWED = 1_000_000;
+
+/**
+ * How many times the document's own length may be opened, once past `EXPANSION_ALLOWED`.
+ */
+const EXPANSION_FACTOR = 5;
+
+/**
+ * The cost of one reference beyond its text, so that a million references to an empty entity are
+ * bounded too.
+ */
+const EXPANSION_REFERENCE_COST = 20;
+
+/**
+ * A fresh budget for a document of `textLength` characters, at the same limit libxml2 sets: the
+ * larger of one million characters and five times the document.
+ *
+ * @param textLength - The length of the whole document text.
+ * @param expanded - The characters already counted, when a later stage continues the count.
+ */
+export const expansionBudget = (textLength: number, expanded = 0): ExpansionBudget => ({
+  expanded,
+  limit: Math.max(EXPANSION_ALLOWED, EXPANSION_FACTOR * textLength),
+});
+
+/**
+ * Count one opened replacement text against `budget`, and say why it is refused if it is.
+ *
+ * @returns The refusal when `depth` is past `EXPANSION_DEPTH` or the budget is spent, else `None`.
+ */
+const overBudget = (
+  budget: ExpansionBudget,
+  length: number,
+  depth: number,
+  name: string,
+): Option.Option<ReaderRefusal> => {
+  budget.expanded += length + EXPANSION_REFERENCE_COST;
+  if (depth > EXPANSION_DEPTH) {
+    return Option.some(
+      new ReaderRefusal({
+        detail: `The entity "${name}" is opened ${depth} levels deep, past the limit of ${EXPANSION_DEPTH}. Declare the entity's value in fewer, flatter steps, or write the text out.`,
+        rule: "entity-expansion",
+      }),
+    );
+  }
+
+  if (budget.expanded > budget.limit) {
+    return Option.some(
+      new ReaderRefusal({
+        detail: `The entity "${name}" brings the replacement text opened by the document's entity references to ${budget.expanded} characters, past the limit of ${budget.limit}. Declare the entity's value in fewer, flatter steps, or write the text out.`,
+        rule: "entity-expansion",
+      }),
+    );
+  }
+
+  return Option.none();
+};
+
+/**
+ * Count one opened replacement text against `budget`.
+ *
+ * Each call adds `length` and a fixed cost per reference to `budget.expanded`.
+ *
+ * @param budget - The document's budget.
+ * @param length - The length of the replacement text being opened.
+ * @param depth - How many replacement texts are open, this one included.
+ * @param name - The entity, for the refusal.
+ * @returns Nothing; fails with a refusal under rule `entity-expansion` when the depth or the
+ *   budget is exceeded.
+ */
+export const charge = (
+  budget: ExpansionBudget,
+  length: number,
+  depth: number,
+  name: string,
+): Effect.Effect<void, ReaderRefusal> => {
+  const refusal = overBudget(budget, length, depth, name);
+
+  return Option.isSome(refusal) ? Effect.fail(refusal.value) : Effect.void;
+};
+
+/**
  * What the internal subset has declared so far, and whether reading it has stopped.
  *
  * `bound` holds `&name` and `%name` for every entity declared, internal or external, because the
@@ -169,6 +273,7 @@ interface Cursor {
 interface Tables {
   readonly attlists: Map<string, Map<string, AttlistEntry>>;
   readonly bound: Set<string>;
+  readonly budget: ExpansionBudget;
   readonly entities: Map<string, string>;
   readonly parameters: Map<string, string>;
   readonly standalone: boolean;
@@ -806,32 +911,45 @@ const lexAttlist = Effect.fnUntraced(function* lexAttlistDeclaration(
  */
 const findCycle = (entities: ReadonlyMap<string, string>): Option.Option<readonly string[]> => {
   const cleared = new Set<string>();
-  const visit = (name: string, path: readonly string[]): Option.Option<readonly string[]> => {
-    const at = path.indexOf(name);
-    const replacement = entities.get(name);
-    if (at !== -1) {
-      return Option.some([...path.slice(at), name]);
+  for (const root of entities.keys()) {
+    if (cleared.has(root)) {
+      continue;
     }
 
-    if (replacement === undefined || cleared.has(name)) {
-      return Option.none();
-    }
+    const path: string[] = [root];
+    const onPath = new Set<string>(path);
+    const frames: Iterator<RegExpExecArray>[] = [
+      (entities.get(root) ?? "").matchAll(REFERENCE_OR_HIDDEN),
+    ];
+    while (frames.length > 0) {
+      const step = frames.at(-1)?.next();
+      if (step === undefined || step.done === true) {
+        frames.pop();
 
-    for (const reference of replacement.matchAll(REFERENCE_OR_HIDDEN)) {
-      const cycle =
-        reference[1] === undefined ? Option.none() : visit(reference[1], [...path, name]);
-      if (Option.isSome(cycle)) {
-        return cycle;
+        const finished = path.pop();
+        if (finished !== undefined) {
+          onPath.delete(finished);
+          cleared.add(finished);
+        }
+
+        continue;
       }
-    }
-    cleared.add(name);
 
-    return Option.none();
-  };
-  for (const name of entities.keys()) {
-    const cycle = visit(name, []);
-    if (Option.isSome(cycle)) {
-      return cycle;
+      const [, name] = step.value;
+      if (name === undefined) {
+        continue;
+      }
+
+      if (onPath.has(name)) {
+        return Option.some([...path.slice(path.indexOf(name)), name]);
+      }
+
+      const replacement = entities.get(name);
+      if (replacement !== undefined && !cleared.has(name)) {
+        path.push(name);
+        onPath.add(name);
+        frames.push(replacement.matchAll(REFERENCE_OR_HIDDEN));
+      }
     }
   }
 
@@ -973,6 +1091,12 @@ const lexSubset: (
             source: cursor.source,
             text: used.value.replacement,
           };
+          yield* charge(
+            tables.budget,
+            used.value.replacement.length,
+            active.size + 1,
+            used.value.name,
+          );
           yield* lexSubset(tables, inside, new Set([...active, used.value.name]));
           if (inside.offset < inside.text.length) {
             yield* failure(
@@ -1143,6 +1267,7 @@ export const lexProlog = Effect.fnUntraced(function* lexPrologText(
   const tables: Tables = {
     attlists: new Map(),
     bound: new Set(),
+    budget: expansionBudget(text.length),
     entities: new Map(),
     parameters: new Map(),
     standalone,
@@ -1167,6 +1292,7 @@ export const lexProlog = Effect.fnUntraced(function* lexPrologText(
     declaration,
     doctype: doctype.pipe(Option.map((read) => read.doctype)),
     entities: tables.entities,
+    expanded: tables.budget.expanded,
     externalSubset: Option.exists(doctype, (read) => read.externalSubset),
     standalone,
   };
@@ -1225,7 +1351,7 @@ const declaredReferenceAt = (
   text: string,
   offset: number,
   entities: ReadonlyMap<string, string>,
-): Option.Option<{ readonly end: number; readonly replacement: string }> => {
+): Option.Option<{ readonly end: number; readonly name: string; readonly replacement: string }> => {
   REFERENCE_AT.lastIndex = offset;
   const match = REFERENCE_AT.exec(text);
   const name = match?.[1];
@@ -1237,7 +1363,7 @@ const declaredReferenceAt = (
 
   return replacement === undefined
     ? Option.none()
-    : Option.some({ end: offset + match[0].length, replacement });
+    : Option.some({ end: offset + match[0].length, name, replacement });
 };
 
 /**
@@ -1249,16 +1375,21 @@ const declaredReferenceAt = (
  * content it goes in as written, so markup in it is parsed as markup; inside an attribute value
  * literal it goes in with both quotes written as character references, so it cannot end the
  * literal. Comments, processing instructions and CDATA sections, undeclared names and character
- * references are left as written.
+ * references are left as written. Each replacement text opened is charged against the budget the
+ * prolog began, so nesting past `EXPANSION_DEPTH` or amplification past its limit is refused.
  *
+ * @returns The substituted text; fails with a refusal under rule `entity-expansion` when the
+ *   references open too much.
  * @see {@link https://www.w3.org/TR/2008/REC-xml-20081126/#entproc XML 1.0, section 4.4}
  */
 export const substitute = (
   text: string,
   prolog: Prolog,
 ): Effect.Effect<Substituted, ReaderRefusal> =>
-  Effect.sync(() => {
+  Effect.suspend(() => {
     const { bodyStart, entities } = prolog;
+    const budget = expansionBudget(text.length, prolog.expanded);
+    const opened = { refusal: Option.none<ReaderRefusal>() };
     let first = Option.none<number>();
     let body = text.slice(0, bodyStart);
     const noteSubstitution = (length: number) => {
@@ -1267,14 +1398,24 @@ export const substitute = (
       }
     };
 
-    const expandAttribute = (source: string): string => {
+    const open = (length: number, depth: number, name: string): boolean => {
+      opened.refusal = overBudget(budget, length, depth, name);
+
+      return Option.isNone(opened.refusal);
+    };
+
+    const expandAttribute = (source: string, depth: number): string => {
       let result = "";
       let offset = 0;
-      while (offset < source.length) {
+      while (offset < source.length && Option.isNone(opened.refusal)) {
         const reference =
           source[offset] === "&" ? declaredReferenceAt(source, offset, entities) : Option.none();
         if (Option.isSome(reference)) {
-          result += expandAttribute(reference.value.replacement);
+          const { name, replacement } = reference.value;
+          if (open(replacement.length, depth + 1, name)) {
+            result += expandAttribute(replacement, depth + 1);
+          }
+
           offset = reference.value.end;
         } else {
           const char = source[offset];
@@ -1286,10 +1427,10 @@ export const substitute = (
       return result;
     };
 
-    const scanTag = (source: string, start: number): number => {
+    const scanTag = (source: string, start: number, depth: number): number => {
       let offset = start + 1;
       body += "<";
-      while (offset < source.length) {
+      while (offset < source.length && Option.isNone(opened.refusal)) {
         const char = source[offset];
         if (char === ">") {
           body += ">";
@@ -1300,14 +1441,22 @@ export const substitute = (
         if (char === '"' || char === "'") {
           body += char;
           offset += 1;
-          while (offset < source.length && source[offset] !== char) {
+          while (
+            offset < source.length &&
+            source[offset] !== char &&
+            Option.isNone(opened.refusal)
+          ) {
             const reference =
               source[offset] === "&"
                 ? declaredReferenceAt(source, offset, entities)
                 : Option.none();
             if (Option.isSome(reference)) {
-              noteSubstitution(reference.value.replacement.length);
-              body += expandAttribute(reference.value.replacement);
+              const { name, replacement } = reference.value;
+              noteSubstitution(replacement.length);
+              if (open(replacement.length, depth + 1, name)) {
+                body += expandAttribute(replacement, depth + 1);
+              }
+
               offset = reference.value.end;
             } else {
               body += source[offset];
@@ -1327,20 +1476,24 @@ export const substitute = (
       return offset;
     };
 
-    const scanContent = (source: string): void => {
+    const scanContent = (source: string, depth: number): void => {
       let offset = 0;
-      while (offset < source.length) {
+      while (offset < source.length && Option.isNone(opened.refusal)) {
         const hidden = hiddenEnd(source, offset);
         if (hidden > offset) {
           body += source.slice(offset, hidden);
           offset = hidden;
         } else if (source[offset] === "<") {
-          offset = scanTag(source, offset);
+          offset = scanTag(source, offset, depth);
         } else if (source[offset] === "&") {
           const reference = declaredReferenceAt(source, offset, entities);
           if (Option.isSome(reference)) {
-            noteSubstitution(reference.value.replacement.length);
-            scanContent(reference.value.replacement);
+            const { name, replacement } = reference.value;
+            noteSubstitution(replacement.length);
+            if (open(replacement.length, depth + 1, name)) {
+              scanContent(replacement, depth + 1);
+            }
+
             offset = reference.value.end;
           } else {
             body += "&";
@@ -1355,11 +1508,15 @@ export const substitute = (
       }
     };
 
-    scanContent(text.slice(bodyStart));
+    scanContent(text.slice(bodyStart), 0);
 
-    return {
+    if (Option.isSome(opened.refusal)) {
+      return Effect.fail(opened.refusal.value);
+    }
+
+    return Effect.succeed({
       afterSubstitution: (offset: number) =>
         Option.exists(first, (threshold) => offset >= threshold),
       body,
-    };
+    });
   });
