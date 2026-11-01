@@ -179,11 +179,14 @@ describe("general entities", () => {
     }),
   );
 
-  it.effect("expand parameter-entity references at declaration", () =>
-    Effect.gen(function* expandsParameterReferences() {
-      const prolog = yield* lexProlog('<!DOCTYPE a [<!ENTITY % p "x"><!ENTITY e "%p;y">]><a/>');
+  it.effect("are refused when a value references a parameter entity the subset declared", () =>
+    Effect.gen(function* refusesParameterReferences() {
+      const error = yield* refusalOf('<!DOCTYPE a [<!ENTITY % p "x"><!ENTITY e "%p;y">]><a/>');
 
-      assert.deepStrictEqual([...prolog.entities], [["e", "xy"]]);
+      assert.instanceOf(error, WellFormednessError);
+      assert.strictEqual(error.line, 1);
+      assert.strictEqual(error.column, 43);
+      assert.isFalse(error.afterSubstitution);
     }),
   );
 
