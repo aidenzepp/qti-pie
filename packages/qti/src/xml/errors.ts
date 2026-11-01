@@ -30,6 +30,7 @@ export class ReaderRefusal extends Schema.TaggedError<ReaderRefusal>()("ReaderRe
     "undeclared-entity",
     "entity-cycle",
     "entity-expansion",
+    "element-depth",
   ]),
 }) {}
 
