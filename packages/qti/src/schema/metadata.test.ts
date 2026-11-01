@@ -1,7 +1,16 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
-import { kinds as lomKinds } from "#qti/schema/kinds/lom.ts";
+import {
+  admission as lomAdmission,
+  kinds as lomKinds,
+  registry as lomRegistry,
+} from "#qti/schema/kinds/lom.ts";
+import {
+  admission as qmdAdmission,
+  kinds as qmdKinds,
+  registry as qmdRegistry,
+} from "#qti/schema/kinds/qmd.ts";
 import * as document from "#qti/schema/document.ts";
 import * as metadata from "#qti/schema/metadata.ts";
 import * as node from "#qti/schema/node.ts";
@@ -24,10 +33,37 @@ const alternativesOf = () =>
   metadata.rules.flatMap((rule) => (rule.kind === "alternatives" ? [rule] : []));
 
 /**
- * The handles this module declares arms for, the first forty-two of the LOM kinds: the general,
- * lifeCycle, metaMetadata, technical and rights categories.
+ * The handles this module declares arms for: the first forty-two of the LOM kinds (the general,
+ * lifeCycle, metaMetadata, technical and rights categories) and every QMD kind.
  */
-const armHandles = lomKinds.slice(0, 42);
+const armHandles = [...lomKinds.slice(0, 42), ...qmdKinds];
+
+/**
+ * The fields of each candidate key declared on a relation, `id` aside.
+ */
+const keysOf = (target: (typeof metadata.relations)[keyof typeof metadata.relations]) =>
+  metadata.rules.flatMap((rule) =>
+    rule.kind === "key" && rule.relation === target ? [[...rule.fields]] : [],
+  );
+
+/**
+ * The leaves of the QMD vocabulary: every kind but the two containers.
+ */
+const qmdLeaves = qmdKinds.filter(
+  (kind) => kind !== "qmd:qtiMetadata" && kind !== "qmd:portableCustomInteractionContext",
+);
+
+/**
+ * Whether the admission rows of both versions hold the pair.
+ */
+const admits = (
+  rows: readonly { readonly child: string; readonly parent: string; readonly version: string }[],
+  parent: string,
+  child: string,
+) =>
+  ["3.0.0", "3.0.1"].every((version) =>
+    rows.some((row) => row.parent === parent && row.child === child && row.version === version),
+  );
 
 describe("metadata", () => {
   it("builds a schema over node, package, document and metadata relations and rules without refusal", () => {
@@ -38,11 +74,11 @@ describe("metadata", () => {
     assert.isAbove(metadata.rules.length, 0);
   });
 
-  it("keys the arms by the general, lifeCycle, metaMetadata, technical and rights LOM handles", () => {
+  it("keys the arms by the LOM category handles and the QMD handles", () => {
     assert.deepStrictEqual(Object.keys(metadata.arms).toSorted(), [...armHandles].toSorted());
     for (const handle of Object.keys(metadata.arms)) {
       assert.isTrue(
-        lomKinds.some((kind) => kind === handle),
+        [...lomKinds, ...qmdKinds].some((kind) => kind === handle),
         handle,
       );
     }
@@ -112,5 +148,130 @@ describe("metadata", () => {
       selectedOn(metadata.relations.ResourceLomTitled, metadata.relations.LomObjectTitle).length,
       1,
     );
+  });
+
+  it("gives every element of the spec's 3.5 metadata inventory a handle, a registry row and an arm", () => {
+    const inventory = [
+      ...[
+        "catalog",
+        "description",
+        "entry",
+        "format",
+        "general",
+        "identifier",
+        "language",
+        "lifeCycle",
+        "location",
+        "lom",
+        "metaMetadata",
+        "metadataschema",
+        "rights",
+        "source",
+        "status",
+        "string",
+        "technical",
+        "title",
+        "value",
+        "version",
+      ].map((local) => ({ handle: `lom:${local}`, local })),
+      ...[
+        "composite",
+        "feedbackType",
+        "interactionType",
+        "qtiMetadata",
+        "solutionAvailable",
+        "timeDependent",
+        "toolName",
+        "toolVendor",
+        "toolVersion",
+      ].map((local) => ({ handle: `qmd:${local}`, local })),
+    ];
+    const registry = new Map<string, string>(
+      [...Object.entries(lomRegistry), ...Object.entries(qmdRegistry)].map(([handle, row]) => [
+        handle,
+        row.local,
+      ]),
+    );
+    for (const { handle, local } of inventory) {
+      assert.isTrue(
+        [...lomKinds, ...qmdKinds].some((kind) => kind === handle),
+        `${handle} handle`,
+      );
+      assert.strictEqual(registry.get(handle), local, `${handle} registry`);
+      assert.isTrue(handle in metadata.arms, `${handle} arm`);
+    }
+  });
+
+  it("keys QtiMetadata by resource and each 0..1 qmd leaf by its qtiMetadata, the repeated two by none", () => {
+    assert.deepStrictEqual(keysOf(metadata.relations.QtiMetadata), [["resource"]]);
+
+    const single = {
+      QmdComposite: metadata.relations.QmdComposite,
+      QmdFeedbackType: metadata.relations.QmdFeedbackType,
+      QmdItemTemplate: metadata.relations.QmdItemTemplate,
+      QmdPortableCustomInteractionContext: metadata.relations.QmdPortableCustomInteractionContext,
+      QmdSolutionAvailable: metadata.relations.QmdSolutionAvailable,
+      QmdTimeDependent: metadata.relations.QmdTimeDependent,
+      QmdToolName: metadata.relations.QmdToolName,
+      QmdToolVendor: metadata.relations.QmdToolVendor,
+      QmdToolVersion: metadata.relations.QmdToolVersion,
+    };
+    for (const [name, target] of Object.entries(single)) {
+      assert.deepStrictEqual(keysOf(target), [["qtiMetadata"]], name);
+    }
+    assert.deepStrictEqual(keysOf(metadata.relations.QmdInteractionType), []);
+    assert.deepStrictEqual(keysOf(metadata.relations.QmdScoringMode), []);
+  });
+
+  it("admits character data, whitespace, entity references, comments and processing instructions under every qmd leaf", () => {
+    assert.strictEqual(qmdLeaves.length, 12);
+    for (const leaf of qmdLeaves) {
+      for (const child of ["text", "ws", "entityRef", "comment", "pi"]) {
+        assert.isTrue(admits(qmdAdmission, leaf, child), `(${leaf}, ${child})`);
+      }
+    }
+  });
+
+  it("admits the qtiMetadata children in the order the schema lists them and no text under it", () => {
+    for (const child of [
+      "qmd:itemTemplate",
+      "qmd:timeDependent",
+      "qmd:composite",
+      "qmd:interactionType",
+      "qmd:portableCustomInteractionContext",
+      "qmd:feedbackType",
+      "qmd:solutionAvailable",
+      "qmd:scoringMode",
+      "qmd:toolName",
+      "qmd:toolVersion",
+      "qmd:toolVendor",
+      "ws",
+      "comment",
+      "pi",
+    ]) {
+      assert.isTrue(admits(qmdAdmission, "qmd:qtiMetadata", child), child);
+    }
+    assert.isFalse(
+      qmdAdmission.some((row) => row.parent === "qmd:qtiMetadata" && row.child === "text"),
+    );
+    for (const child of [
+      "qmd:customTypeIdentifier",
+      "qmd:interactionKind",
+      "ws",
+      "comment",
+      "pi",
+    ]) {
+      assert.isTrue(admits(qmdAdmission, "qmd:portableCustomInteractionContext", child), child);
+    }
+  });
+
+  it("admits comments and processing instructions under every LOM host and text under lom:string", () => {
+    const hosts = new Set(lomAdmission.map((row) => row.parent));
+    assert.isAbove(hosts.size, 0);
+    for (const host of hosts) {
+      assert.isTrue(admits(lomAdmission, host, "comment"), `(${host}, comment)`);
+      assert.isTrue(admits(lomAdmission, host, "pi"), `(${host}, pi)`);
+    }
+    assert.isTrue(admits(lomAdmission, "lom:string", "text"));
   });
 });

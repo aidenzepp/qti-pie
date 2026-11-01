@@ -40,6 +40,16 @@ const wildcard = str.regex(patterns.wildcard, patterns.wildcardFlags);
 
 const language = str.regex(patterns.xsLanguageOrEmpty);
 
+const xsBoolean = str.regex(patterns.xsBoolean);
+
+const interactionTypeValue = str.regex(patterns.qmdInteractionType);
+
+const feedbackTypeValue = str.regex(patterns.qmdFeedbackType);
+
+const scoringModeValue = str.regex(patterns.qmdScoringMode);
+
+const toolString = str.regex(patterns.toolString, patterns.toolStringFlags);
+
 /**
  * The elements that own a LOM record. `file` and `external` are declared for the owners a later
  * milestone gives arms to.
@@ -483,8 +493,134 @@ export const LomObjectTitle = relation(
 );
 
 /**
- * The general, lifeCycle, metaMetadata, technical and rights categories' arms, keyed by their
- * `NodeKind` handles.
+ * The QTI metadata record of a resource: the `cp:metadata.resource` node it hangs under and the
+ * resource it describes.
+ */
+export const QtiMetadata = relation("QtiMetadata", { id: uuid, metadata: uuid, resource: uuid }, [
+  "id",
+]);
+
+/**
+ * The `qmd:itemTemplate` of a QTI metadata record: a boolean.
+ */
+export const QmdItemTemplate = relation(
+  "QmdItemTemplate",
+  { id: uuid, qtiMetadata: uuid, value: xsBoolean },
+  ["id"],
+);
+
+/**
+ * The `qmd:timeDependent` of a QTI metadata record: a boolean.
+ */
+export const QmdTimeDependent = relation(
+  "QmdTimeDependent",
+  { id: uuid, qtiMetadata: uuid, value: xsBoolean },
+  ["id"],
+);
+
+/**
+ * The `qmd:composite` of a QTI metadata record: a boolean.
+ */
+export const QmdComposite = relation(
+  "QmdComposite",
+  { id: uuid, qtiMetadata: uuid, value: xsBoolean },
+  ["id"],
+);
+
+/**
+ * The `qmd:solutionAvailable` of a QTI metadata record: a boolean.
+ */
+export const QmdSolutionAvailable = relation(
+  "QmdSolutionAvailable",
+  { id: uuid, qtiMetadata: uuid, value: xsBoolean },
+  ["id"],
+);
+
+/**
+ * The `qmd:interactionType` of a QTI metadata record: one of the 22 interaction types, repeated.
+ */
+export const QmdInteractionType = relation(
+  "QmdInteractionType",
+  { id: uuid, qtiMetadata: uuid, value: interactionTypeValue },
+  ["id"],
+);
+
+/**
+ * The `qmd:feedbackType` of a QTI metadata record: one of the three feedback types.
+ */
+export const QmdFeedbackType = relation(
+  "QmdFeedbackType",
+  { id: uuid, qtiMetadata: uuid, value: feedbackTypeValue },
+  ["id"],
+);
+
+/**
+ * The `qmd:scoringMode` of a QTI metadata record: one of the three scoring modes, repeated.
+ */
+export const QmdScoringMode = relation(
+  "QmdScoringMode",
+  { id: uuid, qtiMetadata: uuid, value: scoringModeValue },
+  ["id"],
+);
+
+/**
+ * The `qmd:toolName` of a QTI metadata record: a tool string.
+ */
+export const QmdToolName = relation(
+  "QmdToolName",
+  { id: uuid, qtiMetadata: uuid, value: toolString },
+  ["id"],
+);
+
+/**
+ * The `qmd:toolVersion` of a QTI metadata record: a tool string.
+ */
+export const QmdToolVersion = relation(
+  "QmdToolVersion",
+  { id: uuid, qtiMetadata: uuid, value: toolString },
+  ["id"],
+);
+
+/**
+ * The `qmd:toolVendor` of a QTI metadata record: a tool string.
+ */
+export const QmdToolVendor = relation(
+  "QmdToolVendor",
+  { id: uuid, qtiMetadata: uuid, value: toolString },
+  ["id"],
+);
+
+/**
+ * The `qmd:portableCustomInteractionContext` of a QTI metadata record: a container of a custom type
+ * identifier and an interaction kind.
+ */
+export const QmdPortableCustomInteractionContext = relation(
+  "QmdPortableCustomInteractionContext",
+  { id: uuid, qtiMetadata: uuid },
+  ["id"],
+);
+
+/**
+ * The `qmd:customTypeIdentifier` of a portable custom interaction context.
+ */
+export const QmdCustomTypeIdentifier = relation(
+  "QmdCustomTypeIdentifier",
+  { context: uuid, id: uuid, value: wildcard },
+  ["id"],
+);
+
+/**
+ * The `qmd:interactionKind` of a portable custom interaction context.
+ */
+export const QmdInteractionKind = relation(
+  "QmdInteractionKind",
+  { context: uuid, id: uuid, value: wildcard },
+  ["id"],
+);
+
+/**
+ * The general, lifeCycle, metaMetadata, technical and rights categories' arms and the QTI metadata
+ * arms, keyed by their `NodeKind` handles.
  */
 export const arms = {
   "lom:aggregationLevel": LomAggregationLevel,
@@ -529,6 +665,20 @@ export const arms = {
   "lom:type": LomType,
   "lom:value": LomValue,
   "lom:version": LomVersion,
+  "qmd:composite": QmdComposite,
+  "qmd:customTypeIdentifier": QmdCustomTypeIdentifier,
+  "qmd:feedbackType": QmdFeedbackType,
+  "qmd:interactionKind": QmdInteractionKind,
+  "qmd:interactionType": QmdInteractionType,
+  "qmd:itemTemplate": QmdItemTemplate,
+  "qmd:portableCustomInteractionContext": QmdPortableCustomInteractionContext,
+  "qmd:qtiMetadata": QtiMetadata,
+  "qmd:scoringMode": QmdScoringMode,
+  "qmd:solutionAvailable": QmdSolutionAvailable,
+  "qmd:timeDependent": QmdTimeDependent,
+  "qmd:toolName": QmdToolName,
+  "qmd:toolVendor": QmdToolVendor,
+  "qmd:toolVersion": QmdToolVersion,
 };
 
 /**
@@ -583,6 +733,20 @@ export const relations = {
   LomValue,
   LomVersion,
   ManifestLom,
+  QmdComposite,
+  QmdCustomTypeIdentifier,
+  QmdFeedbackType,
+  QmdInteractionKind,
+  QmdInteractionType,
+  QmdItemTemplate,
+  QmdPortableCustomInteractionContext,
+  QmdScoringMode,
+  QmdSolutionAvailable,
+  QmdTimeDependent,
+  QmdToolName,
+  QmdToolVendor,
+  QmdToolVersion,
+  QtiMetadata,
   ResourceLom,
   ResourceLomIdentified,
   ResourceLomTitled,
@@ -600,9 +764,12 @@ export const relations = {
  * date-time and metadata schema is the edge's child under the parent it names, at the position it
  * copies where it has one. Each technical and rights row belongs to a record, and a row that has a
  * parent is the edge's child under the parent it names, at the position it copies where it has one.
- * A resource's record names at least one identifier and exactly one title;
- * an item resource's record has one object identifier and one object title, each a row of the
- * record and of the item document's own identifier or title.
+ * A resource's record names at least one identifier and exactly one title; an item resource's
+ * record has one object identifier and one object title, each a row of the record and of the item
+ * document's own identifier or title. A resource's QTI metadata record is the edge's child under
+ * the resource's `cp:metadata.resource` node, at most one per resource; each of its leaves is the
+ * edge's child under the record it names, the nine `0..1` ones at most once, and the two repeated
+ * ones (`interactionType`, `scoringMode`) without a key.
  */
 export const rules = [
   key(Lom, ["id", "owner"]),
@@ -791,4 +958,33 @@ export const rules = [
     from: on(LomObjectTitle, "lom"),
     within: within(1n, 1n),
   }),
+  key(QtiMetadata, ["resource"]),
+  contained(on(QtiMetadata, "resource"), on(Resource, "id")),
+  contained(on(QtiMetadata, "metadata"), on(select(Node, { kind: "cp:metadata.resource" }), "id")),
+  contained(on(QtiMetadata, "id", "metadata"), on(Edge, "child", "parent")),
+  key(QmdItemTemplate, ["qtiMetadata"]),
+  contained(on(QmdItemTemplate, "id", "qtiMetadata"), on(Edge, "child", "parent")),
+  key(QmdTimeDependent, ["qtiMetadata"]),
+  contained(on(QmdTimeDependent, "id", "qtiMetadata"), on(Edge, "child", "parent")),
+  key(QmdComposite, ["qtiMetadata"]),
+  contained(on(QmdComposite, "id", "qtiMetadata"), on(Edge, "child", "parent")),
+  key(QmdSolutionAvailable, ["qtiMetadata"]),
+  contained(on(QmdSolutionAvailable, "id", "qtiMetadata"), on(Edge, "child", "parent")),
+  contained(on(QmdInteractionType, "id", "qtiMetadata"), on(Edge, "child", "parent")),
+  key(QmdFeedbackType, ["qtiMetadata"]),
+  contained(on(QmdFeedbackType, "id", "qtiMetadata"), on(Edge, "child", "parent")),
+  contained(on(QmdScoringMode, "id", "qtiMetadata"), on(Edge, "child", "parent")),
+  key(QmdToolName, ["qtiMetadata"]),
+  contained(on(QmdToolName, "id", "qtiMetadata"), on(Edge, "child", "parent")),
+  key(QmdToolVersion, ["qtiMetadata"]),
+  contained(on(QmdToolVersion, "id", "qtiMetadata"), on(Edge, "child", "parent")),
+  key(QmdToolVendor, ["qtiMetadata"]),
+  contained(on(QmdToolVendor, "id", "qtiMetadata"), on(Edge, "child", "parent")),
+  key(QmdPortableCustomInteractionContext, ["qtiMetadata"]),
+  contained(
+    on(QmdPortableCustomInteractionContext, "id", "qtiMetadata"),
+    on(Edge, "child", "parent"),
+  ),
+  contained(on(QmdCustomTypeIdentifier, "id", "context"), on(Edge, "child", "parent")),
+  contained(on(QmdInteractionKind, "id", "context"), on(Edge, "child", "parent")),
 ] as const;

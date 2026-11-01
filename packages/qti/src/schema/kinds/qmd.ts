@@ -3,7 +3,7 @@
  */
 import { Option } from "effect";
 
-import type { AdmissionRow, RegistryRow } from "#qti/schema/kinds/generic.ts";
+import type { AdmissionRow, RegistryRow, SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
 
 const namespace = "http://www.imsglobal.org/xsd/imsqti_metadata_v3p0";
 
@@ -59,7 +59,55 @@ export const registry: Readonly<Record<(typeof kinds)[number], RegistryRow>> = {
   "qmd:toolVersion": element("toolVersion"),
 };
 
+const versions = ["3.0.0", "3.0.1"] as const satisfies readonly SchemaVersionHandle[];
+
+const hostRows = (parent: string, children: readonly string[]): readonly AdmissionRow[] =>
+  versions.flatMap((version) => children.map((child) => ({ child, parent, version })));
+
+const elementOnlyExtras = ["ws", "comment", "pi"] as const;
+
+const simpleContentChildren = ["text", "ws", "entityRef", "comment", "pi"] as const;
+
+const leaves = [
+  "qmd:itemTemplate",
+  "qmd:timeDependent",
+  "qmd:composite",
+  "qmd:interactionType",
+  "qmd:customTypeIdentifier",
+  "qmd:interactionKind",
+  "qmd:feedbackType",
+  "qmd:solutionAvailable",
+  "qmd:scoringMode",
+  "qmd:toolName",
+  "qmd:toolVersion",
+  "qmd:toolVendor",
+] as const satisfies readonly (typeof kinds)[number][];
+
 /**
- * The QMD admission rows: none yet.
+ * The QMD admission rows, the same for both versions: `qmd:qtiMetadata` admits its eleven element
+ * children, in the order the schema's sequence lists them (the order itself is judged elsewhere),
+ * plus `ws`, `comment` and `pi`; the portable custom interaction context admits its two; each leaf
+ * admits character data, `entityRef`, `comment` and `pi` and no element.
  */
-export const admission: readonly AdmissionRow[] = [];
+export const admission: readonly AdmissionRow[] = [
+  ...hostRows("qmd:qtiMetadata", [
+    "qmd:itemTemplate",
+    "qmd:timeDependent",
+    "qmd:composite",
+    "qmd:interactionType",
+    "qmd:portableCustomInteractionContext",
+    "qmd:feedbackType",
+    "qmd:solutionAvailable",
+    "qmd:scoringMode",
+    "qmd:toolName",
+    "qmd:toolVersion",
+    "qmd:toolVendor",
+    ...elementOnlyExtras,
+  ]),
+  ...hostRows("qmd:portableCustomInteractionContext", [
+    "qmd:customTypeIdentifier",
+    "qmd:interactionKind",
+    ...elementOnlyExtras,
+  ]),
+  ...leaves.flatMap((parent) => hostRows(parent, simpleContentChildren)),
+];
