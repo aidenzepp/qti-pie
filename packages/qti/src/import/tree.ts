@@ -5,23 +5,35 @@
  * names an element's kind, the refusal for vocabulary no registry models, and the whitespace
  * helpers every typed attribute passes through.
  *
- * The node, edge and arm rows are added to {@link treeRows} by the slice that follows this one;
- * until then it validates the whole tree and returns an empty {@link NodeIndex}.
+ * {@link treeRows} also walks the root and writes every tree's node, edge, generic-arm, namespace
+ * and attribute-reference rows; the kind-specific arms and typed attribute columns belong to the
+ * modules that read the {@link NodeIndex} it returns.
  */
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
 import {
+  AttributeEntityReference,
   AttributeLexical,
+  Comment,
+  Edge,
+  EntityReference,
+  NamespaceDeclaration,
+  Node,
   NodeKind,
+  Pi,
+  SchemaLocation,
+  Text,
   Tree,
   TreeDoctype,
   TreeExportCharset,
   TreeMisc,
+  TreeRoot,
   TreeXmlEncoding,
   TreeXmlStandalone,
   TreeXmlVersion,
   vocabularies,
+  Ws,
 } from "#qti/schema/node.ts";
 import type {
   AttributeNameHandle,
@@ -31,7 +43,7 @@ import type {
 } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { exportCharset } from "#qti/xml/charset.ts";
-import type { Element, Misc, XmlDocument } from "#qti/xml/tree.ts";
+import type { Child, Element, Misc, XmlDocument } from "#qti/xml/tree.ts";
 
 /**
  * The rows an import has built so far, by relation.
@@ -291,6 +303,130 @@ const firstUnmodeled = (
   return Option.none();
 };
 
+/**
+ * The rows the walk of a tree's root collects, one list per relation, filled as it descends.
+ */
+interface Walked {
+  readonly attributeReferences: Fact<typeof AttributeEntityReference>[];
+  readonly comments: Fact<typeof Comment>[];
+  readonly edges: Fact<typeof Edge>[];
+  readonly entityReferences: Fact<typeof EntityReference>[];
+  readonly namespaces: Fact<typeof NamespaceDeclaration>[];
+  readonly nodes: Fact<typeof Node>[];
+  readonly pis: Fact<typeof Pi>[];
+  readonly schemaLocations: Fact<typeof SchemaLocation>[];
+  readonly texts: Fact<typeof Text>[];
+  readonly whitespace: Fact<typeof Ws>[];
+}
+
+const nonWhitespace = /[^ \t\r\n]/u;
+
+/**
+ * Whether `value` is a non-empty run of whitespace, the shape `Ws` holds.
+ */
+const isWhitespaceRun = (value: string): value is Fact<typeof Ws>["value"] =>
+  /^[ \t\r\n]+$/u.test(value);
+
+/**
+ * Write the rows of one child of an element, or of the root, and for an element everything under it
+ * in document order.
+ *
+ * The caller has checked the whole tree against the registries, so every element has a kind; one
+ * that does not is a bug in that check, and is skipped here along with its subtree rather than
+ * given a row.
+ */
+const walk = (
+  child: Child,
+  parent: Option.Option<{ readonly id: string; readonly kind: NodeKindHandle }>,
+  position: number,
+  input: TreeInput,
+  walked: Walked,
+  index: Map<Element, { readonly id: string; readonly kind: NodeKindHandle }>,
+): void => {
+  const common = { tree: input.id, version: input.version };
+  const id = crypto.randomUUID();
+  let kind: NodeKindHandle;
+  let prefix = "";
+
+  if (child.kind === "element") {
+    const found = kindOf(child, parent.pipe(Option.map((above) => above.kind)));
+    if (Option.isNone(found)) {
+      return;
+    }
+
+    kind = found.value;
+    ({ prefix } = child);
+    index.set(child, { id, kind });
+  } else if (Option.isNone(parent)) {
+    return;
+  } else if (child.kind === "text") {
+    if (nonWhitespace.test(child.value)) {
+      kind = "text";
+      walked.texts.push({ id, value: child.value });
+    } else if (isWhitespaceRun(child.value)) {
+      kind = "ws";
+      walked.whitespace.push({ id, value: child.value });
+    } else {
+      // An empty run holds no character to keep; the reader does not produce one.
+      return;
+    }
+  } else if (child.kind === "comment") {
+    kind = "comment";
+    walked.comments.push({ id, text: child.text });
+  } else if (child.kind === "pi") {
+    kind = "pi";
+    walked.pis.push({ data: child.data, id, target: child.target });
+  } else {
+    kind = "entityRef";
+    walked.entityReferences.push({ id, name: child.name });
+  }
+
+  walked.nodes.push({ ...common, id, kind, prefix, rootKind: input.root });
+  if (Option.isSome(parent)) {
+    walked.edges.push({
+      ...common,
+      child: id,
+      childKind: kind,
+      parent: parent.value.id,
+      parentKind: parent.value.kind,
+      position: BigInt(position),
+    });
+  }
+
+  if (child.kind !== "element") {
+    return;
+  }
+
+  let declared = 0;
+  for (const attribute of child.attributes) {
+    if (attribute.namespace === xmlnsNamespace) {
+      walked.namespaces.push({
+        node: id,
+        position: BigInt(declared),
+        prefix: attribute.qname === "xmlns" ? "" : attribute.local,
+        uri: attribute.value,
+      });
+      declared += 1;
+    } else if (attribute.namespace === xsiNamespace && attribute.local === "schemaLocation") {
+      walked.schemaLocations.push({ node: id, prefix: attribute.prefix, value: attribute.value });
+    }
+
+    for (const reference of attribute.references) {
+      walked.attributeReferences.push({
+        attribute: attribute.qname,
+        name: reference.name,
+        node: id,
+        offset: BigInt(reference.offset),
+      });
+    }
+  }
+
+  const here = Option.some({ id, kind });
+  for (const [childPosition, grandchild] of child.children.entries()) {
+    walk(grandchild, here, childPosition, input, walked, index);
+  }
+};
+
 const xmlVersion = new RegExp(patterns.xmlVersion, "u");
 
 /**
@@ -317,8 +453,10 @@ const miscRow = (item: Misc): { kind: "comment" | "pi"; text: string } =>
  * @param doc - The tree as the reader gave it.
  * @param input - What the caller decides about the tree.
  * @param rows - The rows so far.
- * @returns The rows with this tree's added, and the node index (empty until node rows exist);
- *   `UnmodeledVocabulary` for the first element or attribute no registry names.
+ * @returns The rows with this tree's added, and the node index holding every element; the node,
+ *   edge and generic-arm rows, `TreeRoot`, the namespace declarations, the `xsi:schemaLocation` and
+ *   the attribute entity references are among them; `UnmodeledVocabulary` for the first element or
+ *   attribute no registry names.
  */
 export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
   doc: XmlDocument,
@@ -375,11 +513,44 @@ export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
     TreeDoctype,
     Option.match(doc.doctype, { onNone: () => [], onSome: (text) => [{ text, tree: id }] }),
   );
-  const built = Rows.add(
+  const withCharset = Rows.add(
     withDoctype,
     TreeExportCharset,
     exported === input.charset ? [] : [{ label: exported, tree: id }],
   );
 
-  return { nodes: new Map(), rows: built };
+  const walked: Walked = {
+    attributeReferences: [],
+    comments: [],
+    edges: [],
+    entityReferences: [],
+    namespaces: [],
+    nodes: [],
+    pis: [],
+    schemaLocations: [],
+    texts: [],
+    whitespace: [],
+  };
+  const nodes = new Map<Element, { readonly id: string; readonly kind: NodeKindHandle }>();
+  walk(doc.root, Option.none(), 0, input, walked, nodes);
+
+  const rootNode = nodes.get(doc.root);
+
+  const withNodes = Rows.add(withCharset, Node, walked.nodes);
+  const withEdges = Rows.add(withNodes, Edge, walked.edges);
+  const withTexts = Rows.add(withEdges, Text, walked.texts);
+  const withWs = Rows.add(withTexts, Ws, walked.whitespace);
+  const withComments = Rows.add(withWs, Comment, walked.comments);
+  const withPis = Rows.add(withComments, Pi, walked.pis);
+  const withEntities = Rows.add(withPis, EntityReference, walked.entityReferences);
+  const withRoot = Rows.add(
+    withEntities,
+    TreeRoot,
+    rootNode === undefined ? [] : [{ node: rootNode.id, tree: id }],
+  );
+  const withNamespaces = Rows.add(withRoot, NamespaceDeclaration, walked.namespaces);
+  const withSchemaLocations = Rows.add(withNamespaces, SchemaLocation, walked.schemaLocations);
+  const built = Rows.add(withSchemaLocations, AttributeEntityReference, walked.attributeReferences);
+
+  return { nodes, rows: built };
 });
