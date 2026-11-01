@@ -23,6 +23,7 @@ const fields = [
     () => str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags),
   ],
   ["xsToken", () => str.regex(patterns.xsToken, patterns.xsTokenFlags)],
+  ["boundedToken", () => str.regex(patterns.boundedToken, patterns.boundedTokenFlags)],
   ["whitespaceOnly", () => str.regex(patterns.whitespaceOnly)],
   [
     "nonWhitespaceText",
@@ -59,6 +60,12 @@ const fields = [
  */
 const admits = (source: string, flags: string, value: string): boolean =>
   new RegExp(source, flags).test(value);
+
+/**
+ * `count` segments of `length` `a`, joined by `/`.
+ */
+const segments = (count: number, length: number): string =>
+  Array.from({ length: count }, () => "a".repeat(length)).join("/");
 
 describe("patterns", () => {
   describe("grizzle builds a relation over each source", () => {
@@ -144,11 +151,48 @@ describe("patterns", () => {
 
   it("hrefInPackage", () => {
     const { hrefInPackage } = patterns;
-    for (const value of ["images/sign.png", "choice.xml", "https://x/y.png"]) {
+    for (const value of [
+      "images/sign.png",
+      "choice.xml",
+      "https://x/y.png",
+      "Example03-feedbackBlock-solution/Example03-feedbackBlock-solution.xml",
+      "items/i15211323542233760/style/custom/tao-user-styles.css",
+      "testitems/metadata_747eee11-848c-597a-8c9c-a71c5399798d.xml",
+      "\u00EFtem160.xml",
+      "http://www.flickr.com/photos/87012937@N00/3590186482/",
+      segments(8, 80),
+      `${"a".repeat(32)}://x`,
+      `http:${"x".repeat(255)}`,
+    ]) {
       assert.isTrue(admits(hrefInPackage, "u", value), value);
     }
-    for (const value of ["../x", "a/../b", "/x"]) {
+    for (const value of [
+      "../x",
+      "a/../b",
+      "/x",
+      segments(9, 1),
+      "a".repeat(81),
+      `${"a".repeat(33)}://x`,
+      `http:${"x".repeat(256)}`,
+    ]) {
       assert.isFalse(admits(hrefInPackage, "u", value), value);
+    }
+  });
+
+  it("boundedToken", () => {
+    const { boundedToken, boundedTokenFlags } = patterns;
+    const spaced = Array.from({ length: 256 }, () => "a").join(" ");
+    for (const value of [
+      "",
+      "a b",
+      "a".repeat(256),
+      spaced,
+      "Example Contentpackage with QTI v3.0 items (qti-assessment-item) and a test (qti-assessment-test)",
+    ]) {
+      assert.isTrue(admits(boundedToken, boundedTokenFlags, value), value);
+    }
+    for (const value of [" a", "a ", "a  b", "a\tb", "a".repeat(257)]) {
+      assert.isFalse(admits(boundedToken, boundedTokenFlags, value), value);
     }
   });
 
