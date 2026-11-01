@@ -1,30 +1,73 @@
+import { readFileSync } from "node:fs";
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import * as declaration from "#qti/schema/declaration.ts";
+import * as document from "#qti/schema/document.ts";
 import * as item from "#qti/schema/item.ts";
 import * as node from "#qti/schema/node.ts";
+import * as pkg from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import * as processing from "#qti/schema/processing.ts";
+import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
+import * as value from "#qti/schema/value.ts";
 
 /**
  * The probe schema: the node and item modules' relations and rules with this module's.
  */
 const probe = () =>
-  schema("QtiProcessingProbe", { ...node.relations, ...item.relations, ...processing.relations }, [
-    ...node.rules,
-    ...item.rules,
-    ...processing.rules,
-  ]);
+  schema(
+    "QtiProcessingProbe",
+    {
+      ...node.relations,
+      ...pkg.relations,
+      ...document.relations,
+      ...declaration.relations,
+      ...value.relations,
+      ...item.relations,
+      ...processing.relations,
+    },
+    [
+      ...node.rules,
+      ...pkg.rules,
+      ...document.rules,
+      ...declaration.rules,
+      ...value.rules,
+      ...item.rules,
+      ...processing.rules,
+    ],
+  );
 
 /**
  * The names of the relations this module adds.
  */
 const added = [
+  "BuiltIn",
+  "BuiltInRef",
+  "DeclaredRef",
+  "Expression",
+  "Literal",
+  "LiteralBoolean",
+  "LiteralDirectedPair",
+  "LiteralDuration",
+  "LiteralFile",
+  "LiteralFloat",
+  "LiteralIdentifier",
+  "LiteralInteger",
+  "LiteralPair",
+  "LiteralPoint",
+  "LiteralString",
+  "LiteralUri",
+  "Operand",
+  "OperatorArity",
+  "OperatorArityMax",
+  "RefKind",
   "ResponseProcessing",
   "ResponseProcessingItem",
   "ResponseProcessingTemplate",
   "ResponseProcessingTemplateLocation",
   "StandardTemplate",
   "StandardTemplateReference",
+  "VariableRef",
 ];
 
 /**
@@ -35,6 +78,15 @@ const ofKind = <K extends (typeof processing.rules)[number]["kind"]>(kind: K) =>
     (rule): rule is Extract<(typeof processing.rules)[number], { readonly kind: K }> =>
       rule.kind === kind,
   );
+
+/**
+ * The containments whose left side names a relation whole: the right relation, then both field
+ * lists.
+ */
+const containedFrom = (owner: (typeof processing.relations)[keyof typeof processing.relations]) =>
+  ofKind("contained")
+    .filter((rule) => rule.left.source === owner)
+    .map((rule) => [rule.right.source, [...rule.left.fields], [...rule.right.fields]]);
 
 /**
  * A containment side's selection of a relation, or none where the side names the relation whole.
@@ -50,7 +102,13 @@ describe("processing", () => {
     }
     assert.strictEqual(
       built.statements.length,
-      node.rules.length + item.rules.length + processing.rules.length,
+      node.rules.length +
+        pkg.rules.length +
+        document.rules.length +
+        declaration.rules.length +
+        value.rules.length +
+        item.rules.length +
+        processing.rules.length,
     );
   });
 
@@ -184,5 +242,110 @@ describe("processing", () => {
       processing.arms["qti-response-processing"],
       processing.relations.ResponseProcessing,
     );
+  });
+
+  it("keys Expression and OperatorArity by NodeKind and keeps no ExpressionKind roster", () => {
+    const { Expression, OperatorArity, OperatorArityMax } = processing.relations;
+    assert.deepStrictEqual(Object.keys(Expression.fields).toSorted(), ["document", "id", "kind"]);
+    assert.deepStrictEqual([...Expression.primaryKey], ["id"]);
+    assert.strictEqual(Expression.fields.kind.roster, node.NodeKind);
+    assert.deepStrictEqual(Object.keys(OperatorArity.fields).toSorted(), ["kind", "min"]);
+    assert.deepStrictEqual([...OperatorArity.primaryKey], ["kind"]);
+    assert.strictEqual(OperatorArity.fields.kind.roster, node.NodeKind);
+    assert.deepStrictEqual(Object.keys(OperatorArityMax.fields).toSorted(), ["kind", "max"]);
+    assert.deepStrictEqual([...OperatorArityMax.primaryKey], ["kind"]);
+    assert.strictEqual(OperatorArityMax.fields.kind.roster, node.NodeKind);
+    assert.notInclude(Object.keys(processing.relations), "ExpressionKind");
+  });
+
+  it("contains Expression in Node by (id, document, kind) and Literal in Expression by id", () => {
+    assert.deepStrictEqual(containedFrom(processing.relations.Expression), [
+      [node.relations.Node, ["id", "document", "kind"], ["id", "tree", "kind"]],
+    ]);
+    assert.deepStrictEqual(containedFrom(processing.relations.Literal), [
+      [processing.relations.Expression, ["id"], ["id"]],
+    ]);
+  });
+
+  it("keys Operand by (expression, position) and child, both into Expression", () => {
+    const { Operand } = processing.relations;
+    assert.deepStrictEqual(Object.keys(Operand.fields).toSorted(), [
+      "child",
+      "expression",
+      "position",
+    ]);
+    assert.deepStrictEqual([...Operand.primaryKey], ["expression", "position"]);
+    assert.deepStrictEqual(
+      ofKind("key")
+        .filter((rule) => rule.relation === Operand)
+        .map((rule) => [...rule.fields]),
+      [["child"]],
+    );
+    assert.deepStrictEqual(containedFrom(Operand), [
+      [processing.relations.Expression, ["expression"], ["id"]],
+      [processing.relations.Expression, ["child"], ["id"]],
+    ]);
+  });
+
+  it("holds the operator arity tables equal to the seed module's, empty until phase 3", () => {
+    assert.deepStrictEqual(operatorArity, []);
+    assert.deepStrictEqual(operatorArityMax, []);
+
+    const source = readFileSync(new URL("seed/operator-arity.ts", import.meta.url), "utf-8");
+    assert.match(source, /python3 -I/u);
+    assert.match(source, /qti-repeat\s+min=1 max=\*/u);
+    assert.match(source, /qti-base-value\s+min=0 max=0/u);
+    assert.match(source, /qti-sum\s+min=1 max=\*/u);
+  });
+
+  it("gives Literal one base-type arm per base type", () => {
+    const { Literal } = processing.relations;
+    assert.deepStrictEqual(Object.keys(Literal.fields).toSorted(), ["baseType", "id"]);
+    assert.deepStrictEqual([...Literal.primaryKey], ["id"]);
+
+    const [rule, ...rest] = ofKind("alternatives").filter(
+      (candidate) => candidate.parent === Literal,
+    );
+    assert.strictEqual(rest.length, 0);
+    assert.strictEqual(rule?.discriminator, "baseType");
+    assert.strictEqual(rule?.roster, declaration.relations.BaseType);
+    assert.strictEqual(Object.keys(rule?.arms ?? {}).length, 11);
+    assert.deepStrictEqual(
+      Object.keys(rule?.arms ?? {}).toSorted(),
+      [...declaration.BaseType.handles].toSorted(),
+    );
+  });
+
+  it("declares VariableRef alternatives over RefKind with the declared and built-in arms", () => {
+    const { VariableRef, DeclaredRef, BuiltInRef } = processing.relations;
+    assert.deepStrictEqual(
+      [...processing.relations.RefKind.handles],
+      ["declared", "builtIn", "itemVariable", "itemInstanceVariable", "sectionDuration"],
+    );
+    assert.deepStrictEqual(
+      [...processing.relations.BuiltIn.handles],
+      ["completionStatus", "numAttempts", "duration", "QTI_CONTEXT"],
+    );
+    assert.deepStrictEqual(Object.keys(VariableRef.fields).toSorted(), ["document", "id", "kind"]);
+    assert.deepStrictEqual(Object.keys(DeclaredRef.fields).toSorted(), [
+      "document",
+      "id",
+      "identifier",
+    ]);
+    assert.deepStrictEqual(Object.keys(BuiltInRef.fields).toSorted(), ["id", "name"]);
+
+    const [rule, ...rest] = ofKind("alternatives").filter(
+      (candidate) => candidate.parent === VariableRef,
+    );
+    assert.strictEqual(rest.length, 0);
+    assert.strictEqual(rule?.discriminator, "kind");
+    assert.strictEqual(rule?.roster, processing.relations.RefKind);
+    assert.deepStrictEqual(rule?.arms, { builtIn: BuiltInRef, declared: DeclaredRef });
+    assert.deepStrictEqual(containedFrom(VariableRef), [
+      [node.relations.Node, ["id", "document"], ["id", "tree"]],
+    ]);
+    assert.deepStrictEqual(containedFrom(DeclaredRef), [
+      [declaration.relations.Declaration, ["document", "identifier"], ["document", "identifier"]],
+    ]);
   });
 });
