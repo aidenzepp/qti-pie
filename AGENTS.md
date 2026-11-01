@@ -55,8 +55,29 @@ reads `grizzle.config.ts` from there.
   vendored commit (`vendor/README.md`), and classify it as one of: our misuse (fix it here, record nothing), a
   documented limit (record it as a limit), or a grizzle defect (record the cause with `file:line` anchors and a minimal
   reproduction that does not need this repository). A workaround in our code does not close a finding: record the
-  workaround beside the cause. A confirmed grizzle defect becomes a GitHub issue on `bjornpagen/grizzle`, drafted with
-  the `issue-authoring` skill and filed only after the operator approves it.
+  workaround beside the cause. A confirmed grizzle defect becomes a GitHub issue on `bjornpagen/grizzle`.
+
+### Filing grizzle issues
+
+Agents may file a grizzle issue without asking the operator, but only after every step below passes, in order. The
+operator's standing authorization replaces the `issue-authoring` skill's per-issue yes; nothing else in that skill is
+waived. If any step fails or is in doubt, record the finding and do not file.
+
+1. **Triage against source.** The finding is classified a grizzle defect, with the cause traced to `file:line` in
+   grizzle's source at the vendored commit and checked against grizzle's README and agent guide, so documented
+   behavior is not reported as a bug.
+2. **Standalone reproduction, run.** A minimal reproduction that needs nothing from this repository runs and fails as
+   claimed, with its output kept verbatim, beside a control: the nearest input that works.
+3. **Independent check.** A second seat that did not find it (an `auditor`, from another model family when one is
+   available) re-reads the source and re-runs the reproduction, and confirms the problem is grizzle's, not our use of
+   it.
+4. **Draft with `issue-authoring`.** Follow the skill completely: the duplicate search, pinned permalinks, voice, the
+   lint and the disclosure block, with the settings line the Mind puts in the task.
+5. **Hater pass.** A `hater` reads the draft cold, as grizzle's maintainer reading a report he suspects is user error.
+   A head turns its report into changes, and the draft is revised and linted again.
+6. **File.** As the operator's `aidenzepp` account, for that command only:
+   `GH_TOKEN="$(gh auth token --user aidenzepp)" gh issue create --repo bjornpagen/grizzle --title … --body-file …`,
+   with no labels or assignees. Record the issue URL in `docs/grizzle-findings.md` and mail the operator the link.
 
 ## Code
 
