@@ -6,8 +6,8 @@ import { Effect, FileSystem } from "effect";
 import { inject } from "vitest";
 import { manifestRows, NotQti3 } from "#qti/import/manifest.ts";
 import { Rows } from "#qti/import/tree.ts";
-import { listPackage, readEntry } from "#qti/package/read.ts";
-import { AttributeLexical, Edge } from "#qti/schema/node.ts";
+import { listPackage, PackageReadError, readEntry } from "#qti/package/read.ts";
+import { AttributeLexical, Edge, TreeRoot } from "#qti/schema/node.ts";
 import {
   File,
   FileContent,
@@ -69,6 +69,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
         },
       ]);
       assert.deepStrictEqual(Rows.of(rows, Manifest), [{ id: packageId }]);
+      assert.strictEqual(only(Rows.of(rows, TreeRoot)).node, packageId);
 
       const [organizations] = Rows.of(rows, Organizations);
       assert.strictEqual(Rows.of(rows, Organizations).length, 1);
@@ -115,10 +116,16 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
           position,
         })),
         [
-          { href: "choice.xml", owner: resource.id, position: 0n },
-          { href: "images/sign.png", owner: resource.id, position: 1n },
+          { href: "choice.xml", owner: resource.id, position: 3n },
+          { href: "images/sign.png", owner: resource.id, position: 5n },
         ],
       );
+      for (const file of Rows.of(rows, File)) {
+        assert.strictEqual(
+          file.position,
+          only(Rows.of(rows, Edge).filter((edge) => edge.child === file.id)).position,
+        );
+      }
       assert.deepStrictEqual(documents, [
         {
           path: "choice.xml",
@@ -127,6 +134,26 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
           type: "imsqti_item_xmlv3p0",
         },
       ]);
+    }),
+  );
+
+  suite.effect("an entry that is not a regular file is refused as entry-path", () =>
+    Effect.gen(function* directoryEntry() {
+      const dir = inject("fixtures").simple;
+      const fs = yield* FileSystem.FileSystem;
+      const entries = yield* listPackage(dir);
+      const bytes = yield* fs.readFile(path.join(dir, "imsmanifest.xml"));
+      const doc = yield* readXml(bytes);
+      const error = yield* manifestRows(
+        dir,
+        [...entries, { kind: "file", path: "images" }],
+        doc,
+        Rows.empty(),
+      ).pipe(Effect.flip);
+
+      assert.instanceOf(error, PackageReadError);
+      assert.strictEqual(error.rule, "entry-path");
+      assert.strictEqual(error.path, "images");
     }),
   );
 
