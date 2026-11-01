@@ -23,7 +23,7 @@ import {
   NodeKind,
   Pi,
   SchemaLocation,
-  Text,
+  TextNode,
   Tree,
   TreeDoctype,
   TreeExportCharset,
@@ -316,7 +316,7 @@ interface Walked {
   readonly nodes: Fact<typeof Node>[];
   readonly pis: Fact<typeof Pi>[];
   readonly schemaLocations: Fact<typeof SchemaLocation>[];
-  readonly texts: Fact<typeof Text>[];
+  readonly texts: Fact<typeof TextNode>[];
   readonly whitespace: Fact<typeof Ws>[];
 }
 
@@ -541,7 +541,7 @@ export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
 
   const withNodes = Rows.add(withCharset, Node, walked.nodes);
   const withEdges = Rows.add(withNodes, Edge, walked.edges);
-  const withTexts = Rows.add(withEdges, Text, walked.texts);
+  const withTexts = Rows.add(withEdges, TextNode, walked.texts);
   const withWs = Rows.add(withTexts, Ws, walked.whitespace);
   const withComments = Rows.add(withWs, Comment, walked.comments);
   const withPis = Rows.add(withComments, Pi, walked.pis);

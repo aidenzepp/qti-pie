@@ -59,7 +59,7 @@ describe("node", () => {
       "RootKind",
       "SchemaLocation",
       "SchemaVersion",
-      "Text",
+      "TextNode",
       "Tree",
       "TreeDoctype",
       "TreeExportCharset",

@@ -1275,10 +1275,10 @@ CREATE TABLE "qti"."standard_template_reference" (
   CONSTRAINT "__standard_template_reference_pk_cpeprqiikq" PRIMARY KEY ("node")
 );
 
-CREATE TABLE "qti"."text" (
+CREATE TABLE "qti"."text_node" (
   "id" uuid NOT NULL,
   "value" "qti"."__text_hmmood6ekl" NOT NULL,
-  CONSTRAINT "__text_pk_uuxplnj5cm" PRIMARY KEY ("id")
+  CONSTRAINT "__text_node_pk_22tpscvzub" PRIMARY KEY ("id")
 );
 
 CREATE TABLE "qti"."tree" (
@@ -1654,7 +1654,7 @@ ALTER TABLE "qti"."response_processing_item" ADD COLUMN "__tag_root_kind_item_od
 
 ALTER TABLE "qti"."simple_choice" ADD COLUMN "__tag_kind_qti_simple_choice_z52ayjzccu" "qti"."node_kind" GENERATED ALWAYS AS ('qti-simple-choice'::"qti"."node_kind") STORED NOT NULL;
 
-ALTER TABLE "qti"."text" ADD COLUMN "__tag_kind_text_vrxl6g2xzn" "qti"."node_kind" GENERATED ALWAYS AS ('text'::"qti"."node_kind") STORED NOT NULL;
+ALTER TABLE "qti"."text_node" ADD COLUMN "__tag_kind_text_vrxl6g2xzn" "qti"."node_kind" GENERATED ALWAYS AS ('text'::"qti"."node_kind") STORED NOT NULL;
 
 ALTER TABLE "qti"."typed_binding" ADD COLUMN "__tag_shape_typed_gdmqmo4yqk" "qti"."declaration_shape" GENERATED ALWAYS AS ('typed'::"qti"."declaration_shape") STORED NOT NULL;
 
@@ -2298,7 +2298,7 @@ ALTER TABLE "qti"."simple_choice_template_identifier" ADD CONSTRAINT "__simple_c
 
 ALTER TABLE "qti"."standard_template_reference" ADD CONSTRAINT "__standard_template_reference_fk_node_um7etzu6k3" FOREIGN KEY ("node") REFERENCES "qti"."response_processing_template" ("node") DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."text" ADD CONSTRAINT "__text_fk_id_tag_kind_text_vrxl_6_g_2_xzn_3b3tvgxovp" FOREIGN KEY ("id", "__tag_kind_text_vrxl6g2xzn") REFERENCES "qti"."node" ("id", "kind") DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."text_node" ADD CONSTRAINT "__text_node_fk_id_tag_kind_text_vrxl_6_g_2_xzn_i325irtyx3" FOREIGN KEY ("id", "__tag_kind_text_vrxl6g2xzn") REFERENCES "qti"."node" ("id", "kind") DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."tree" ADD CONSTRAINT "__tree_fk_id_ifxa72pndo" FOREIGN KEY ("id") REFERENCES "qti"."tree_root" ("tree") DEFERRABLE INITIALLY DEFERRED;
 
@@ -3021,7 +3021,7 @@ CREATE TRIGGER "__isolation"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
 CREATE TRIGGER "__isolation"
-  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."text"
+  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."text_node"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
 CREATE TRIGGER "__isolation"

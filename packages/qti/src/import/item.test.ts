@@ -42,7 +42,7 @@ import {
   AttributeLexical,
   Edge,
   EntityReference,
-  Text,
+  TextNode,
 } from "#qti/schema/node.ts";
 import {
   ResponseProcessing,
@@ -269,7 +269,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
       const { nodes, rows } = yield* itemOf(doc);
       const root = onlyId(nodes, "qti-assessment-item");
       const prompt = onlyId(nodes, "qti-prompt");
-      const texts = new Map(Rows.of(rows, Text).map((row) => [row.id, row.value]));
+      const texts = new Map(Rows.of(rows, TextNode).map((row) => [row.id, row.value]));
       const promptText = Rows.of(rows, Edge)
         .filter((edge) => edge.parent === prompt)
         .toSorted((left, right) => Number(left.position - right.position))

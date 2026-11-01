@@ -14,7 +14,7 @@ import {
   Node,
   Pi,
   SchemaLocation,
-  Text,
+  TextNode,
   Tree,
   TreeDoctype,
   TreeExportCharset,
@@ -141,7 +141,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
       // (2 each, 4 elements), the item body 3 (4), the second p 1 (2) and the interaction 4 (5).
       assert.strictEqual(ofKind("ws").length, 24);
       assert.deepStrictEqual(
-        Rows.of(rows, Text)
+        Rows.of(rows, TextNode)
           .map((row) => row.value)
           .toSorted(),
         [
