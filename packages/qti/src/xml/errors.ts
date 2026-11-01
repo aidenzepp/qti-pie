@@ -37,12 +37,13 @@ export class ReaderRefusal extends Schema.TaggedError<ReaderRefusal>()("ReaderRe
 /**
  * The encoder could not write the document in the label it was given.
  *
- * `where` names the construct that cannot carry `codePoint`, whose value lies above `threshold`,
+ * `where` names the construct that cannot carry `codePoint` (`"doctype"` is the doctype text, which
+ * is source text where no character reference applies), whose value lies above `threshold`,
  * the highest code point the label's encoder class represents; `where: "label"` means the label
  * itself has no encoder and both numbers are 0.
  */
 export class EncodeError extends Schema.TaggedError<EncodeError>()("EncodeError", {
   codePoint: Schema.Int,
   threshold: Schema.Int,
-  where: Schema.Literals(["label", "name", "comment", "pi", "text", "attribute"]),
+  where: Schema.Literals(["label", "doctype", "name", "comment", "pi", "text", "attribute"]),
 }) {}

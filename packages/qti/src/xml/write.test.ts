@@ -262,6 +262,19 @@ layer(TestLayer)("xml/write.ts", (it) => {
     }),
   );
 
+  it.effect("a CR in a CDATA run is written as a reference and reads back", () =>
+    Effect.gen(function* carriageReturn() {
+      const text = yield* written(element("a", [], [{ cdata: true, kind: "text", value: "a\rb" }]));
+      const read = yield* readXml(new TextEncoder().encode(text));
+
+      assert.strictEqual(text, "<a><![CDATA[a]]>&#xD;<![CDATA[b]]></a>");
+      assert.strictEqual(
+        read.root.children.map((child) => (child.kind === "text" ? child.value : "")).join(""),
+        "a\rb",
+      );
+    }),
+  );
+
   it.effect("a CDATA run at or below the threshold is untouched", () =>
     Effect.gen(function* untouched() {
       assert.strictEqual(
@@ -302,6 +315,23 @@ layer(TestLayer)("xml/write.ts", (it) => {
           );
         }
       }),
+  );
+
+  it.effect("a code point above the threshold in the doctype is refused", () =>
+    Effect.gen(function* doctype() {
+      const doc: XmlDocument = {
+        ...documentOf(element("a", [], [])),
+        doctype: Option.some('<!DOCTYPE a [<!ENTITY e "\u20AC">]>'),
+      };
+      const failure = yield* Effect.flip(writeXml(doc, { threshold: 0xff }));
+
+      assert.instanceOf(failure, EncodeError);
+      assert.deepStrictEqual(
+        { codePoint: failure.codePoint, threshold: failure.threshold, where: failure.where },
+        { codePoint: 0x20_ac, threshold: 0xff, where: "doctype" },
+      );
+      assert.strictEqual(yield* writeXml(doc), '<!DOCTYPE a [<!ENTITY e "\u20AC">]>\n<a/>');
+    }),
   );
 
   it.effect("the same constructs are written whole when no threshold is given", () =>
