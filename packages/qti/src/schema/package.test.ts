@@ -156,7 +156,10 @@ describe("package", () => {
 
   it("declares the package relations and the roster", () => {
     assert.deepStrictEqual(Object.keys(pkg.relations).toSorted(), [
+      "Dependency",
       "EntryKind",
+      "File",
+      "FileContent",
       "Manifest",
       "ManifestMetadata",
       "ManifestSchema",
@@ -164,7 +167,12 @@ describe("package", () => {
       "Organizations",
       "Package",
       "PackageEntry",
+      "Resource",
+      "ResourceHref",
+      "ResourceMetadata",
+      "ResourceTypeOf",
       "Resources",
+      "RootOfType",
     ]);
   });
 
@@ -198,12 +206,34 @@ describe("package", () => {
 
   it("keys the arms by their NodeKind handles", () => {
     assert.deepStrictEqual(Object.keys(pkg.arms).toSorted(), [
+      "cp:dependency",
+      "cp:file",
       "cp:manifest",
       "cp:metadata.manifest",
+      "cp:metadata.resource",
       "cp:organizations",
+      "cp:resource",
       "cp:resources",
       "cp:schema",
       "cp:schemaversion",
     ]);
+  });
+
+  it("holds the File into Resource capacity, one or more", () => {
+    const onResource = capacities().filter((rule) => rule.target.source === pkg.relations.Resource);
+    assert.strictEqual(onResource.length, 1);
+    for (const rule of onResource) {
+      assert.strictEqual(rule.from.source, pkg.relations.File);
+      assert.deepStrictEqual([...rule.target.fields], ["id"]);
+      assert.deepStrictEqual([...rule.from.fields], ["resource"]);
+      assert.deepStrictEqual(boundsOf(rule), [1n, "*"]);
+    }
+  });
+
+  it("holds the DependencyNotSelf check over Dependency", () => {
+    const names = pkg.rules.flatMap((rule) =>
+      rule.kind === "check" && rule.relation === pkg.relations.Dependency ? [rule.name] : [],
+    );
+    assert.deepStrictEqual(names, ["DependencyNotSelf"]);
   });
 });
