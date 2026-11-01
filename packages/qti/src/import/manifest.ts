@@ -6,16 +6,17 @@
  * ones no QTI document claims) and the refusal of a package that is not QTI 3.
  *
  * The manifest is a tree, so {@link treeRows} writes its nodes; this module writes the arm rows on
- * top of the node index it returns. The LOM and QTI-metadata rows and the manifest guards belong
- * to other modules.
+ * top of the node index it returns, the LOM and QTI-metadata rows among them. The manifest guards
+ * belong to another module.
  */
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
-import { Rows, treeRows, typedAttribute } from "#qti/import/tree.ts";
+import { collapse, replace, Rows, treeRows, typedAttribute } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { readEntry } from "#qti/package/read.ts";
 import type { Entry, PackageReadError } from "#qti/package/read.ts";
+import * as md from "#qti/schema/metadata.ts";
 import { Edge } from "#qti/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
 import {
@@ -65,6 +66,106 @@ const qtiDocumentType = /^imsqti_.+_xmlv3p0$/u;
  */
 const isSchemaVersion = (value: string): value is SchemaVersionHandle =>
   value === "3.0.0" || value === "3.0.1";
+
+/**
+ * The element children of `element`, whatever their namespace.
+ */
+const elementChildren = (element: Element): readonly Element[] =>
+  element.children.filter((child): child is Element => child.kind === "element");
+
+/**
+ * The character content of a leaf as read: its `text`, `ws` and `entityRef` children joined, an
+ * entity reference by its lexical form `&name;`; comments, processing instructions and elements
+ * contribute nothing.
+ */
+const contentOf = (element: Element): string =>
+  element.children
+    .map((child) => {
+      if (child.kind === "text") {
+        return child.value;
+      }
+
+      return child.kind === "entityRef" ? `&${child.name};` : "";
+    })
+    .join("");
+
+/**
+ * A leaf's content under its class: as read, with tab, line feed and carriage return turned to
+ * spaces, or collapsed.
+ */
+const classed = (value: string, whiteSpace: "collapse" | "preserve" | "replace"): string => {
+  if (whiteSpace === "collapse") {
+    return collapse(value);
+  }
+
+  return whiteSpace === "replace" ? replace(value) : value;
+};
+
+/**
+ * The `qmd:` leaves of a QTI metadata record, each with its arm and the whitespace class of its
+ * content: the four booleans collapse, the enumerations and tool strings are kept as read.
+ */
+const qmdLeaves = {
+  "qmd:composite": { arm: md.QmdComposite, class: "collapse" },
+  "qmd:feedbackType": { arm: md.QmdFeedbackType, class: "preserve" },
+  "qmd:interactionType": { arm: md.QmdInteractionType, class: "preserve" },
+  "qmd:itemTemplate": { arm: md.QmdItemTemplate, class: "collapse" },
+  "qmd:scoringMode": { arm: md.QmdScoringMode, class: "preserve" },
+  "qmd:solutionAvailable": { arm: md.QmdSolutionAvailable, class: "collapse" },
+  "qmd:timeDependent": { arm: md.QmdTimeDependent, class: "collapse" },
+  "qmd:toolName": { arm: md.QmdToolName, class: "preserve" },
+  "qmd:toolVendor": { arm: md.QmdToolVendor, class: "preserve" },
+  "qmd:toolVersion": { arm: md.QmdToolVersion, class: "preserve" },
+} as const;
+
+/**
+ * Whether `kind` is one of {@link qmdLeaves}.
+ */
+const isQmdLeaf = (kind: string): kind is keyof typeof qmdLeaves => kind in qmdLeaves;
+
+/**
+ * The resource-level facts the record of an item resource is bound to.
+ */
+interface LomResource {
+  readonly identifier: string;
+  readonly node: string;
+  readonly type: string;
+}
+
+/**
+ * What the walk of one `lom:lom` collects for the object identifier and title rows: the entries
+ * of the general category's identifiers and the strings under its titles, in document order, and
+ * whether the record holds any identifier or title at all.
+ */
+interface LomFindings {
+  readonly entries: { collapsed: string; position: bigint }[];
+  hasIdentifier: boolean;
+  hasTitle: boolean;
+  readonly titles: { collapsed: string; position: bigint }[];
+}
+
+/**
+ * The type of the resource whose record holds exactly one object identifier and one object title.
+ */
+const itemType = "imsqti_item_xmlv3p0";
+
+/**
+ * The facts of one element of a `lom:lom` subtree a kind's arm copies.
+ */
+interface LomContext {
+  readonly collapsed: string;
+  readonly element: Element;
+  readonly findings: LomFindings;
+  readonly grandparentKind: NodeKindHandle | undefined;
+  readonly id: string;
+  readonly lom: string;
+  readonly owner: "manifest" | "resource";
+  readonly parent: string;
+  readonly parentKind: NodeKindHandle | undefined;
+  readonly parentPosition: bigint;
+  readonly position: bigint;
+  readonly value: string;
+}
 
 /**
  * One document a resource of a QTI type names by `href`.
@@ -145,7 +246,7 @@ const versionOf = (doc: XmlDocument): Effect.Effect<SchemaVersionHandle, NotQti3
   }
 
   const [text] = childrenNamed(root, "metadata")
-    .flatMap((metadata) => childrenNamed(metadata, "schemaversion"))
+    .flatMap((container) => childrenNamed(container, "schemaversion"))
     .map((found) => textOf(found));
   if (text === undefined || !isSchemaVersion(text)) {
     return Effect.fail(
@@ -231,27 +332,424 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
   const documents: ManifestDocument[] = [];
   const { root } = doc;
 
-  const metadataRows = (metadata: Element): void => {
-    const metadataId = kindIs(metadata, "cp:metadata.manifest");
+  const lomArms: Partial<Record<NodeKindHandle, (c: LomContext) => void>> = {
+    "lom:aggregationLevel": (c) => {
+      add(md.LomAggregationLevel, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:catalog": (c) => {
+      add(md.LomIdentifierCatalog, [
+        {
+          collapsed: c.collapsed,
+          id: c.id,
+          identifier: c.parent,
+          lom: c.lom,
+          owner: c.owner,
+          position: c.parentPosition,
+          value: c.value,
+        },
+      ]);
+    },
+    "lom:contribute": (c) => {
+      add(md.LomContribute, [{ id: c.id, lom: c.lom, parent: c.parent, position: c.position }]);
+    },
+    "lom:copyrightAndOtherRestrictions": (c) => {
+      add(md.LomCopyrightAndOtherRestrictions, [{ id: c.id, lom: c.lom, rights: c.parent }]);
+    },
+    "lom:cost": (c) => {
+      add(md.LomCost, [{ id: c.id, lom: c.lom, rights: c.parent }]);
+    },
+    "lom:coverage": (c) => {
+      add(md.LomCoverage, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:date": (c) => {
+      add(md.LomDate, [{ contribute: c.parent, id: c.id, lom: c.lom }]);
+    },
+    "lom:dateTime": (c) => {
+      add(md.LomDateTime, [
+        { collapsed: c.collapsed, date: c.parent, id: c.id, lom: c.lom, value: c.value },
+      ]);
+    },
+    "lom:description": (c) => {
+      add(md.LomDescription, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:duration": (c) => {
+      add(md.LomDuration, [{ id: c.id, lom: c.lom, technical: c.parent }]);
+    },
+    "lom:duration.string": (c) => {
+      add(md.LomDurationString, [
+        { collapsed: c.collapsed, duration: c.parent, id: c.id, lom: c.lom, value: c.value },
+      ]);
+    },
+    "lom:entity": (c) => {
+      add(md.LomEntity, [
+        {
+          collapsed: c.collapsed,
+          contribute: c.parent,
+          id: c.id,
+          lom: c.lom,
+          position: c.position,
+          value: c.value,
+        },
+      ]);
+    },
+    "lom:entry": (c) => {
+      add(md.LomIdentifierEntry, [
+        {
+          collapsed: c.collapsed,
+          id: c.id,
+          identifier: c.parent,
+          lom: c.lom,
+          owner: c.owner,
+          position: c.parentPosition,
+          value: c.value,
+        },
+      ]);
+      if (c.grandparentKind === "lom:general") {
+        c.findings.entries.push({ collapsed: c.collapsed, position: c.parentPosition });
+      }
+    },
+    "lom:format": (c) => {
+      add(md.LomFormat, [
+        {
+          collapsed: c.collapsed,
+          id: c.id,
+          lom: c.lom,
+          position: c.position,
+          technical: c.parent,
+          value: c.value,
+        },
+      ]);
+    },
+    "lom:general": (c) => {
+      add(md.LomGeneral, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:identifier": (c) => {
+      add(md.LomIdentifier, [{ id: c.id, lom: c.lom, owner: c.owner, position: c.position }]);
+      c.findings.hasIdentifier = true;
+    },
+    "lom:installationRemarks": (c) => {
+      add(md.LomInstallationRemarks, [{ id: c.id, lom: c.lom, technical: c.parent }]);
+    },
+    "lom:keyword": (c) => {
+      add(md.LomKeyword, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:language": (c) => {
+      add(md.LomLanguage, [{ id: c.id, lom: c.lom, position: c.position, value: c.value }]);
+    },
+    "lom:lifeCycle": (c) => {
+      add(md.LomLifeCycle, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:location": (c) => {
+      add(md.LomLocation, [
+        {
+          collapsed: c.collapsed,
+          id: c.id,
+          lom: c.lom,
+          position: c.position,
+          technical: c.parent,
+          value: c.value,
+        },
+      ]);
+    },
+    "lom:maximumVersion": (c) => {
+      add(md.LomMaximumVersion, [
+        { collapsed: c.collapsed, id: c.id, lom: c.lom, orComposite: c.parent, value: c.value },
+      ]);
+    },
+    "lom:metaMetadata": (c) => {
+      add(md.LomMetaMetadata, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:metadataschema": (c) => {
+      add(md.LomMetadataschema, [
+        {
+          collapsed: c.collapsed,
+          id: c.id,
+          lom: c.lom,
+          metaMetadata: c.parent,
+          position: c.position,
+          value: c.value,
+        },
+      ]);
+    },
+    "lom:minimumVersion": (c) => {
+      add(md.LomMinimumVersion, [
+        { collapsed: c.collapsed, id: c.id, lom: c.lom, orComposite: c.parent, value: c.value },
+      ]);
+    },
+    "lom:name": (c) => {
+      add(md.LomName, [{ id: c.id, lom: c.lom, orComposite: c.parent }]);
+    },
+    "lom:orComposite": (c) => {
+      add(md.LomOrComposite, [
+        { id: c.id, lom: c.lom, position: c.position, requirement: c.parent },
+      ]);
+    },
+    "lom:otherPlatformRequirements": (c) => {
+      add(md.LomOtherPlatformRequirements, [{ id: c.id, lom: c.lom, technical: c.parent }]);
+    },
+    "lom:requirement": (c) => {
+      add(md.LomRequirement, [{ id: c.id, lom: c.lom, position: c.position, technical: c.parent }]);
+    },
+    "lom:rights": (c) => {
+      add(md.LomRights, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:role": (c) => {
+      add(md.LomRole, [{ contribute: c.parent, id: c.id, lom: c.lom }]);
+    },
+    "lom:size": (c) => {
+      add(md.LomSize, [
+        { collapsed: c.collapsed, id: c.id, lom: c.lom, technical: c.parent, value: c.value },
+      ]);
+    },
+    "lom:source": (c) => {
+      add(md.LomSource, [{ collapsed: c.collapsed, id: c.id, value: c.value }]);
+    },
+    "lom:status": (c) => {
+      add(md.LomStatus, [{ id: c.id, lifeCycle: c.parent, lom: c.lom }]);
+    },
+    "lom:string": (c) => {
+      add(md.LomString, [{ collapsed: c.collapsed, id: c.id, value: c.value }]);
+      if (c.parentKind === "lom:title") {
+        add(md.LomTitle, [
+          {
+            collapsed: c.collapsed,
+            id: c.id,
+            lom: c.lom,
+            owner: c.owner,
+            position: c.position,
+            value: c.value,
+          },
+        ]);
+        if (c.grandparentKind === "lom:general") {
+          c.findings.titles.push({ collapsed: c.collapsed, position: c.position });
+        }
+      }
+
+      if (Option.isSome(attributeOf(c.element, "language"))) {
+        add(md.LomStringLanguage, [
+          { node: c.id, value: typed(c.element, "language", "preserve") },
+        ]);
+      }
+    },
+    "lom:structure": (c) => {
+      add(md.LomStructure, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:technical": (c) => {
+      add(md.LomTechnical, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:title": (c) => {
+      add(md.LomGeneralTitle, [{ id: c.id, lom: c.lom, owner: c.owner }]);
+      c.findings.hasTitle = true;
+    },
+    "lom:type": (c) => {
+      add(md.LomType, [{ id: c.id, lom: c.lom, orComposite: c.parent }]);
+    },
+    "lom:value": (c) => {
+      add(md.LomValue, [{ collapsed: c.collapsed, id: c.id, value: c.value }]);
+    },
+    "lom:version": (c) => {
+      add(md.LomVersion, [{ id: c.id, lifeCycle: c.parent, lom: c.lom }]);
+    },
+  };
+
+  const lomSubtree = (
+    element: Element,
+    above: {
+      readonly grandparentKind: NodeKindHandle | undefined;
+      readonly id: string;
+      readonly kind: NodeKindHandle;
+      readonly position: bigint;
+    },
+    shared: Pick<LomContext, "findings" | "lom" | "owner">,
+  ): void => {
+    for (const child of elementChildren(element)) {
+      const node = nodes.get(child);
+      const position = node === undefined ? undefined : positions.get(node.id);
+      if (node === undefined || position === undefined) {
+        continue;
+      }
+
+      const value = contentOf(child);
+      lomArms[node.kind]?.({
+        ...shared,
+        collapsed: collapse(value),
+        element: child,
+        grandparentKind: above.grandparentKind,
+        id: node.id,
+        parent: above.id,
+        parentKind: above.kind,
+        parentPosition: above.position,
+        position,
+        value,
+      });
+      lomSubtree(
+        child,
+        { grandparentKind: above.kind, id: node.id, kind: node.kind, position },
+        shared,
+      );
+    }
+  };
+
+  /**
+   * Write the rows of one `lom:lom` under a `cp:metadata` node: its `Lom` row and owner arm, one
+   * arm row per element of its subtree and, for a resource's record, the object identifier and
+   * title rows.
+   */
+  const lomRows = (
+    lom: Element,
+    metadataNode: { readonly id: string; readonly kind: NodeKindHandle },
+    resource: LomResource | null,
+  ): void => {
+    const node = nodes.get(lom);
+    if (node === undefined) {
+      return;
+    }
+
+    const findings: LomFindings = {
+      entries: [],
+      hasIdentifier: false,
+      hasTitle: false,
+      titles: [],
+    };
+    if (resource === null) {
+      add(md.Lom, [{ id: node.id, owner: "manifest", package: packageId }]);
+      add(md.ManifestLom, [{ lom: node.id, metadata: metadataNode.id, package: packageId }]);
+    } else {
+      add(md.Lom, [{ id: node.id, owner: "resource", package: packageId }]);
+      add(md.ResourceLom, [
+        {
+          lom: node.id,
+          metadata: metadataNode.id,
+          package: packageId,
+          resource: resource.identifier,
+          type: resource.type,
+        },
+      ]);
+    }
+
+    lomSubtree(
+      lom,
+      {
+        grandparentKind: undefined,
+        id: node.id,
+        kind: node.kind,
+        position: positions.get(node.id) ?? 0n,
+      },
+      { findings, lom: node.id, owner: resource === null ? "manifest" : "resource" },
+    );
+
+    if (resource === null) {
+      return;
+    }
+
+    const bound = {
+      lom: node.id,
+      package: packageId,
+      resource: resource.identifier,
+      type: resource.type,
+    };
+    if (findings.hasIdentifier) {
+      add(md.ResourceLomIdentified, [bound]);
+    }
+
+    if (findings.hasTitle) {
+      add(md.ResourceLomTitled, [bound]);
+    }
+
+    if (resource.type !== itemType) {
+      return;
+    }
+
+    // The item's own title is not known until its document is read, so the first string stands for it.
+    const entry =
+      findings.entries.find((found) => found.collapsed === resource.identifier) ??
+      findings.entries[0];
+    if (entry !== undefined) {
+      add(md.LomObjectIdentifier, [{ ...bound, ...entry }]);
+    }
+
+    const [title] = findings.titles;
+    if (title !== undefined) {
+      add(md.LomObjectTitle, [{ ...bound, ...title }]);
+    }
+  };
+
+  /**
+   * Write the rows of one `qmd:qtiMetadata` of a resource: its record and one arm row per leaf.
+   */
+  const qmdRows = (qmd: Element, metadataId: string, resource: LomResource): void => {
+    const node = nodes.get(qmd);
+    if (node === undefined) {
+      return;
+    }
+
+    add(md.QtiMetadata, [{ id: node.id, metadata: metadataId, resource: resource.node }]);
+    for (const leaf of elementChildren(qmd)) {
+      const found = nodes.get(leaf);
+      if (found === undefined) {
+        continue;
+      }
+
+      const content = contentOf(leaf);
+      if (found.kind === "qmd:portableCustomInteractionContext") {
+        add(md.QmdPortableCustomInteractionContext, [{ id: found.id, qtiMetadata: node.id }]);
+        for (const part of elementChildren(leaf)) {
+          const partNode = nodes.get(part);
+          const value = replace(contentOf(part));
+          if (partNode?.kind === "qmd:customTypeIdentifier") {
+            add(md.QmdCustomTypeIdentifier, [{ context: found.id, id: partNode.id, value }]);
+          } else if (partNode?.kind === "qmd:interactionKind") {
+            add(md.QmdInteractionKind, [{ context: found.id, id: partNode.id, value }]);
+          }
+        }
+      } else if (isQmdLeaf(found.kind)) {
+        const spec = qmdLeaves[found.kind];
+        const value = classed(content, spec.class);
+        // SAFETY: the leaf's column pattern judges the value at commit, which is the importer's refusal for it.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+        add(spec.arm, [{ id: found.id, qtiMetadata: node.id, value }] as never);
+      }
+    }
+  };
+
+  const metadataChildren = (
+    parent: Element,
+    metadataNode: { readonly id: string; readonly kind: NodeKindHandle },
+    resource: LomResource | null,
+  ): void => {
+    for (const child of elementChildren(parent)) {
+      const kind = nodes.get(child)?.kind;
+      if (kind === "lom:lom") {
+        lomRows(child, metadataNode, resource);
+      } else if (kind === "qmd:qtiMetadata" && resource !== null) {
+        qmdRows(child, metadataNode.id, resource);
+      }
+    }
+  };
+
+  const metadataRows = (metadataElement: Element): void => {
+    const metadataId = kindIs(metadataElement, "cp:metadata.manifest");
     if (metadataId === undefined) {
       return;
     }
 
     add(ManifestMetadata, [{ id: metadataId, manifest: packageId }]);
-    for (const leaf of childrenNamed(metadata, "schema")) {
+    for (const leaf of childrenNamed(metadataElement, "schema")) {
       const id = kindIs(leaf, "cp:schema");
       if (id !== undefined) {
         add(ManifestSchema, [{ id, metadata: metadataId, value: textOf(leaf) }]);
       }
     }
 
-    for (const leaf of childrenNamed(metadata, "schemaversion")) {
+    for (const leaf of childrenNamed(metadataElement, "schemaversion")) {
       const id = kindIs(leaf, "cp:schemaversion");
       const value = textOf(leaf);
       if (id !== undefined && isSchemaVersion(value)) {
         add(ManifestSchemaVersion, [{ id, metadata: metadataId, value }]);
       }
     }
+
+    metadataChildren(metadataElement, { id: metadataId, kind: "cp:metadata.manifest" }, null);
   };
 
   const resourceRows = (resource: Element): void => {
@@ -272,10 +770,15 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       }
     }
 
-    for (const metadata of childrenNamed(resource, "metadata")) {
-      const id = kindIs(metadata, "cp:metadata.resource");
+    for (const metadataElement of childrenNamed(resource, "metadata")) {
+      const id = kindIs(metadataElement, "cp:metadata.resource");
       if (id !== undefined) {
         add(ResourceMetadata, [{ id, resource: node.id }]);
+        metadataChildren(
+          metadataElement,
+          { id, kind: "cp:metadata.resource" },
+          { identifier, node: node.id, type },
+        );
       }
     }
 
@@ -315,8 +818,8 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
   ]);
   add(Manifest, [{ id: packageId }]);
 
-  for (const metadata of childrenNamed(root, "metadata")) {
-    metadataRows(metadata);
+  for (const metadataElement of childrenNamed(root, "metadata")) {
+    metadataRows(metadataElement);
   }
 
   for (const organizations of childrenNamed(root, "organizations")) {

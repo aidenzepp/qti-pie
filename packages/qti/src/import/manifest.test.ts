@@ -7,6 +7,19 @@ import { inject } from "vitest";
 import { manifestRows, NotQti3 } from "#qti/import/manifest.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { listPackage, PackageReadError, readEntry } from "#qti/package/read.ts";
+import {
+  Lom,
+  LomFormat,
+  LomObjectIdentifier,
+  LomObjectTitle,
+  LomString,
+  LomTitle,
+  QmdFeedbackType,
+  QmdInteractionType,
+  QmdSolutionAvailable,
+  QmdTimeDependent,
+  QtiMetadata,
+} from "#qti/schema/metadata.ts";
 import { AttributeLexical, Edge, TreeRoot } from "#qti/schema/node.ts";
 import {
   File,
@@ -18,7 +31,7 @@ import {
   Resource,
   ResourceHref,
 } from "#qti/schema/package.ts";
-import { materializePackage } from "#qti/test/fixtures.ts";
+import { materialize, materializePackage } from "#qti/test/fixtures.ts";
 import { readXml } from "#qti/xml/read.ts";
 
 /**
@@ -200,6 +213,92 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
         lexical.map(({ attribute, kind, value }) => ({ attribute, kind, value })),
         [{ attribute: "href", kind: "cp:resource", value: " choice.xml" }],
       );
+    }),
+  );
+
+  suite.effect("simple yields a Lom per owner with the object identifier and title", () =>
+    Effect.gen(function* simpleLom() {
+      const { rows } = yield* importManifest(inject("fixtures").simple);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, Lom)
+          .map((lom) => lom.owner)
+          .toSorted(),
+        ["manifest", "resource"],
+      );
+
+      const identifier = only(Rows.of(rows, LomObjectIdentifier));
+      assert.strictEqual(identifier.collapsed, "choice");
+      assert.strictEqual(identifier.resource, "choice");
+      assert.strictEqual(identifier.type, "imsqti_item_xmlv3p0");
+
+      const title = only(Rows.of(rows, LomObjectTitle));
+      assert.strictEqual(title.collapsed, "Unattended Luggage");
+      assert.strictEqual(title.lom, identifier.lom);
+
+      const titled = only(Rows.of(rows, LomTitle).filter((row) => row.lom === title.lom));
+      assert.strictEqual(titled.position, title.position);
+      assert.strictEqual(
+        titled.position,
+        only(Rows.of(rows, Edge).filter((edge) => edge.child === titled.id)).position,
+      );
+    }),
+  );
+
+  suite.effect("simple yields two LomFormat rows under each technical", () =>
+    Effect.gen(function* simpleFormats() {
+      const { rows } = yield* importManifest(inject("fixtures").simple);
+      const formats = Rows.of(rows, LomFormat);
+
+      assert.strictEqual(formats.length, 4);
+      for (const technical of new Set(formats.map((format) => format.technical))) {
+        assert.deepStrictEqual(
+          formats.filter((format) => format.technical === technical).map((format) => format.value),
+          ["text/x-imsqti-item-xml", "image/png"],
+        );
+      }
+    }),
+  );
+
+  suite.effect("a LOM string keeps its line feed and indentation and collapses beside it", () =>
+    Effect.gen(function* simpleString() {
+      const { rows } = yield* importManifest(inject("fixtures").simple);
+      const description = only(
+        Rows.of(rows, LomString).filter(
+          (row) =>
+            row.collapsed === "This is an example Contentpackage containing a single QTI v3.0 item",
+        ),
+      );
+
+      assert.match(description.value, /containing a\n +single QTI v3\.0 item$/u);
+    }),
+  );
+
+  suite.effect("simple yields its QtiMetadata record and leaves", () =>
+    Effect.gen(function* simpleQmd() {
+      const { rows } = yield* importManifest(inject("fixtures").simple);
+      const record = only(Rows.of(rows, QtiMetadata));
+
+      assert.strictEqual(record.resource, only(Rows.of(rows, Resource)).id);
+      for (const [leaves, value] of [
+        [Rows.of(rows, QmdTimeDependent), "false"],
+        [Rows.of(rows, QmdInteractionType), "choiceInteraction"],
+        [Rows.of(rows, QmdFeedbackType), "none"],
+        [Rows.of(rows, QmdSolutionAvailable), "true"],
+      ] as const) {
+        const leaf = only(leaves);
+        assert.strictEqual(leaf.qtiMetadata, record.id);
+        assert.strictEqual(leaf.value, value);
+      }
+    }),
+  );
+
+  suite.effect("a padded boolean leaf collapses and has no attribute lexical row", () =>
+    Effect.gen(function* paddedText() {
+      const { rows } = yield* importManifest(yield* materialize("padded-text"));
+
+      assert.strictEqual(only(Rows.of(rows, QmdTimeDependent)).value, "false");
+      assert.deepStrictEqual(Rows.of(rows, AttributeLexical), []);
     }),
   );
 
