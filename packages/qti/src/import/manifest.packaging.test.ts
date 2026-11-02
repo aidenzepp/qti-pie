@@ -1,11 +1,16 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
+import { manifestGuards } from "#qti/import/guards/manifest.ts";
+import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
 import { kindOf, Rows } from "#qti/import/tree.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
+import type { Entry } from "#qti/package/read.ts";
+import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import * as cpx from "#qti/schema/kinds/cpx.ts";
 import * as drd from "#qti/schema/kinds/drd.ts";
+import { Document } from "#qti/schema/document.ts";
 import {
   CsmCaseItemUri,
   CsmGuid,
@@ -32,7 +37,8 @@ import {
   ResourceLomIdentified,
   ResourceLomTitled,
 } from "#qti/schema/metadata.ts";
-import { AttributeLexical, Edge, Node, NodeKind } from "#qti/schema/node.ts";
+import { AttributeLexical, Edge, Node, NodeKind, TextNode } from "#qti/schema/node.ts";
+import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
 import {
   AccessForAllResource,
   DrdAccessMode,
@@ -96,6 +102,111 @@ const rowsOf = (dir: string) =>
 
     return (yield* manifestRows(dir, entries, doc, Rows.empty())).rows;
   });
+
+/**
+ * The manifest rows of the package at `dir` with the document rows of the resources that name one,
+ * as the import holds them when the guards run: an item through `itemRows`, any other document
+ * type, whose reader a later slice owns, as the `Document` row its reader writes, or, for a type no
+ * `RootOfType` row names (a fragment), as the bytes it is stored as.
+ */
+const builtOf = (dir: string) =>
+  Effect.gen(function* builtPackage() {
+    const entries = yield* listPackage(dir);
+    const doc = yield* readXml(yield* readEntry(dir, "imsmanifest.xml"));
+    const built = yield* manifestRows(dir, entries, doc, Rows.empty());
+    let { rows } = built;
+
+    for (const document of built.documents) {
+      if (document.type === "imsqti_item_xmlv3p0") {
+        const item = yield* itemRows(
+          {
+            doc: yield* readXml(yield* readEntry(dir, document.path)),
+            packageId: built.packageId,
+            path: document.path,
+            resource: document.resource,
+            resourceType: document.type,
+            version: built.version,
+          },
+          rows,
+        );
+        ({ rows } = item);
+      } else {
+        const root = rootOfType.find((row) => row.type === document.type)?.root;
+        if (root === undefined) {
+          const bytes = yield* readEntry(dir, document.path);
+          rows = Rows.add(rows, FileContent, [
+            {
+              byteLength: BigInt(bytes.length),
+              content: Buffer.from(bytes).toString("base64"),
+              mimeType: "application/octet-stream",
+              package: built.packageId,
+              path: document.path,
+            },
+          ]);
+        } else {
+          rows = Rows.add(rows, Document, [
+            {
+              id: crypto.randomUUID(),
+              package: built.packageId,
+              path: document.path,
+              resource: document.resource,
+              resourceType: document.type,
+              root,
+              version: built.version,
+            },
+          ]);
+        }
+      }
+    }
+
+    return { entries, packageId: built.packageId, rows };
+  });
+
+/**
+ * What the manifest guards answer over `rows` and `entries`: the rule of the refusal and its
+ * detail, or the rule `pass` when every guard holds.
+ */
+const verdictOf = (rows: Rows, entries: readonly Entry[]) =>
+  manifestGuards(rows, entries).pipe(
+    Effect.match({
+      onFailure: (refusal): { readonly detail: string; readonly rule: string } => refusal,
+      onSuccess: () => ({ detail: "", rule: "pass" }),
+    }),
+  );
+
+/**
+ * The rows of `relation` with each one replaced by `change`'s answer for it.
+ */
+const mapRows = <R extends AnyRelation>(
+  rows: Rows,
+  relation: R,
+  change: (row: Fact<R>) => Fact<R>,
+): Rows => new Map(rows).set(relation, Rows.of(rows, relation).map(change));
+
+/**
+ * `rows` with the positions of the first and last edge of the children of `parentKind` that
+ * `isLeaf` accepts exchanged, which puts the last child before the first.
+ */
+const reversedChildren = (rows: Rows, parentKind: string, isLeaf: (kind: string) => boolean) => {
+  const leaves = Rows.of(rows, Edge)
+    .filter((edge) => edge.parentKind === parentKind && isLeaf(edge.childKind))
+    .toSorted((left, right) => Number(left.position - right.position));
+  const first = leaves.at(0);
+  const last = leaves.at(-1);
+  assert.isDefined(first);
+  assert.isDefined(last);
+  assert.notStrictEqual(first?.child, last?.child);
+
+  return mapRows(rows, Edge, (edge) => {
+    if (edge.child === first?.child) {
+      return { ...edge, position: last?.position ?? edge.position };
+    }
+
+    return edge.child === last?.child
+      ? { ...edge, position: first?.position ?? edge.position }
+      : edge;
+  });
+};
 
 layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts holders", (suite) => {
   suite.effect(
@@ -443,5 +554,167 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
         assert.isFalse(contents.has(document.path), document.path);
       }
     }),
+  );
+
+  suite.effect(
+    "refuses a cpx:variant before a cp:file and a DRD leaf out of sequence as ordering",
+    () =>
+      Effect.gen(function* orderingRefusals() {
+        const misplaced = yield* builtOf(yield* materialize("variant-before-file"));
+        assert.strictEqual((yield* verdictOf(misplaced.rows, misplaced.entries)).rule, "ordering");
+
+        const { entries, rows } = yield* builtOf(yield* materialize("variant"));
+        assert.strictEqual((yield* verdictOf(rows, entries)).rule, "pass");
+
+        const reversed = reversedChildren(rows, "drd:accessForAllResource", (kind) =>
+          kind.startsWith("drd:"),
+        );
+        const verdict = yield* verdictOf(reversed, entries);
+        assert.strictEqual(verdict.rule, "ordering");
+        assert.include(verdict.detail, "drd:accessForAllResource");
+      }),
+  );
+
+  suite.effect("refuses a csmd:labelledGUID whose children are out of sequence as ordering", () =>
+    Effect.gen(function* labelledOrder() {
+      const { entries, rows } = yield* builtOf(yield* materialize("csm"));
+      assert.strictEqual((yield* verdictOf(rows, entries)).rule, "pass");
+
+      const reversed = reversedChildren(rows, "csmd:labelledGUID", (kind) =>
+        kind.startsWith("csmd:"),
+      );
+      const verdict = yield* verdictOf(reversed, entries);
+      assert.strictEqual(verdict.rule, "ordering");
+      assert.include(verdict.detail, "csmd:labelledGUID");
+    }),
+  );
+
+  suite.effect("refuses a LomValue and a CsmGuid that disagree with their text as text-copy", () =>
+    Effect.gen(function* textCopies() {
+      const simple = yield* builtOf(yield* materialize("simple"));
+      const unfolded = mapRows(simple.rows, LomValue, (row) =>
+        row.collapsed === undefined ? row : { ...row, collapsed: `${row.collapsed}!` },
+      );
+      assert.strictEqual((yield* verdictOf(unfolded, simple.entries)).rule, "text-copy");
+
+      const { entries, rows } = yield* builtOf(yield* materialize("csm"));
+      const [guid] = Rows.of(rows, CsmGuid);
+      assert.isDefined(guid);
+
+      const texts = Rows.of(rows, Edge)
+        .filter((edge) => edge.parent === guid?.id)
+        .map((edge) => edge.child);
+      assert.isAbove(texts.length, 0);
+
+      const tabbed = mapRows(rows, TextNode, (row) =>
+        row.id === texts[0] ? { ...row, value: "a\tb" } : row,
+      );
+      const content = Rows.of(tabbed, TextNode)
+        .filter((row) => texts.includes(row.id))
+        .map((row) => row.value)
+        .join("");
+      assert.include(content, "\t");
+
+      const unreplaced = mapRows(tabbed, CsmGuid, (row) => ({ ...row, value: content }));
+      const verdict = yield* verdictOf(unreplaced, entries);
+      assert.strictEqual(verdict.rule, "text-copy");
+      assert.include(verdict.detail, "CsmGuid");
+    }),
+  );
+
+  suite.effect(
+    "refuses a variant lexical form that does not collapse to its column as typed-copy",
+    () =>
+      Effect.gen(function* variantLexical() {
+        const { entries, rows } = yield* builtOf(yield* materialize("variant-padded"));
+        assert.strictEqual((yield* verdictOf(rows, entries)).rule, "pass");
+
+        const [variant] = Rows.of(rows, Variant);
+        const changed = mapRows(rows, AttributeLexical, (row) =>
+          row.node === variant?.id && row.attribute === "identifier"
+            ? { ...row, value: " v9 " }
+            : row,
+        );
+        const verdict = yield* verdictOf(changed, entries);
+        assert.strictEqual(verdict.rule, "typed-copy");
+        assert.include(verdict.detail, "identifier");
+      }),
+  );
+
+  suite.effect("refuses a replace-class CSM column holding a tab as typed-copy", () =>
+    Effect.gen(function* csmTab() {
+      const { entries, rows } = yield* builtOf(yield* materialize("csm"));
+      assert.strictEqual((yield* verdictOf(rows, entries)).rule, "pass");
+
+      const tabbed = mapRows(rows, CsmSetResourceLabel, (row) => ({ ...row, value: "a\tb" }));
+      const verdict = yield* verdictOf(tabbed, entries);
+      assert.strictEqual(verdict.rule, "typed-copy");
+      assert.include(verdict.detail, "CsmSetResourceLabel");
+    }),
+  );
+
+  suite.effect("refuses a QTI document stored as bytes under a type that names another root", () =>
+    Effect.gen(function* rootTypeReverse() {
+      for (const [name, entry, root] of [
+        ["bytes-webcontent-item", "choice.xml", "qti-assessment-item"],
+        ["resproc-webcontent", "rp/match_correct.xml", "qti-response-processing"],
+      ] as const) {
+        const { entries, rows } = yield* builtOf(yield* materialize(name));
+        const verdict = yield* verdictOf(rows, entries);
+        assert.strictEqual(verdict.rule, "root-type-reverse", name);
+        assert.include(verdict.detail, entry, name);
+        assert.include(verdict.detail, root, name);
+      }
+    }),
+  );
+
+  suite.effect("refuses an entry that is both a document and bytes, and one that is neither", () =>
+    Effect.gen(function* entryKinds() {
+      const { entries, packageId, rows } = yield* builtOf(yield* materialize("simple"));
+      assert.strictEqual((yield* verdictOf(rows, entries)).rule, "pass");
+
+      const documents = Rows.of(rows, Document).map((row) => row.path);
+      assert.isAbove(documents.length, 0);
+
+      const [path] = documents;
+      assert.isDefined(path);
+
+      const both = Rows.add(rows, FileContent, [
+        {
+          byteLength: 0n,
+          content: "",
+          mimeType: "application/octet-stream",
+          package: packageId,
+          path: path ?? "",
+        },
+      ]);
+      const doubled = yield* verdictOf(both, entries);
+      assert.strictEqual(doubled.rule, "entry-kind");
+      assert.include(doubled.detail, path ?? "");
+
+      const neither = new Map(rows).set(Document, []);
+      const dropped = yield* verdictOf(neither, entries);
+      assert.strictEqual(dropped.rule, "entry-kind");
+      assert.include(dropped.detail, path ?? "");
+    }),
+  );
+
+  suite.effect(
+    "passes the variant, csm, filelom, bytes and resproc packages through every guard",
+    () =>
+      Effect.gen(function* positives() {
+        for (const name of [
+          "variant",
+          "variant-padded",
+          "csm",
+          "filelom",
+          "bytes",
+          "resproc",
+        ] as const) {
+          const { entries, rows } = yield* builtOf(yield* materialize(name));
+          const verdict = yield* verdictOf(rows, entries);
+          assert.strictEqual(verdict.rule, "pass", `${name}: ${verdict.detail}`);
+        }
+      }),
   );
 });
