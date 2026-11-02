@@ -8,6 +8,9 @@
  * columns that hold their text, the text of a literal is its text children, and an attribute whose
  * node has an `AttributeLexical` row is written with that row's value by `renderTree` itself.
  *
+ * An `xi:include` writes the attributes of its six optional rows, `href` and `parse` through the
+ * lexical row first like any other; its text and its `xi:fallback` are the tree's own children.
+ *
  * An attribute with no XSD default is written whenever its column or row exists. A defaulted one
  * (`tolerance-mode`, `include-lower-bound`, `include-upper-bound`, `rounding-mode` of
  * `qti-equal-rounded`, `substring`) is written only where its `Declared` marker row exists, so a
@@ -18,6 +21,7 @@ import { Rows } from "#qti/import/tree.ts";
 import * as expression from "#qti/schema/expression.ts";
 import * as attributed from "#qti/schema/expression-attributes.ts";
 import * as processing from "#qti/schema/processing.ts";
+import * as rule from "#qti/schema/rule.ts";
 
 /**
  * Attribute names with their values.
@@ -141,6 +145,13 @@ export const renderProcessing = (rows: RowSet): ProcessingAttributes => {
   const testVariables = by(Rows.of(rows, attributed.TestVariables));
   const testBaseType = valueOf(Rows.of(rows, attributed.TestVariablesBaseType));
 
+  const href = valueOf(Rows.of(rows, rule.XIncludeHref));
+  const parse = valueOf(Rows.of(rows, rule.XIncludeParse));
+  const xpointer = valueOf(Rows.of(rows, rule.XIncludeXpointer));
+  const encoding = valueOf(Rows.of(rows, rule.XIncludeEncoding));
+  const accept = valueOf(Rows.of(rows, rule.XIncludeAccept));
+  const acceptLanguage = valueOf(Rows.of(rows, rule.XIncludeAcceptLanguage));
+
   const entries: readonly (readonly [string, (id: string) => Pairs])[] = [
     [
       "qti-any-n",
@@ -246,6 +257,17 @@ export const renderProcessing = (rows: RowSet): ProcessingAttributes => {
       "qti-number-responded",
       "qti-number-selected",
     ].map((kind) => [kind, filters] as const),
+    [
+      "xi:include",
+      (id) => [
+        ...present("href", href(id)),
+        ...present("parse", parse(id)),
+        ...present("xpointer", xpointer(id)),
+        ...present("encoding", encoding(id)),
+        ...present("accept", accept(id)),
+        ...present("accept-language", acceptLanguage(id)),
+      ],
+    ],
     ...[
       "qti-correct",
       "qti-default",
