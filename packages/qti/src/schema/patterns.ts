@@ -186,9 +186,10 @@ export const anyUri =
 
 /**
  * `xs:language` lexical space: dash-separated subtags of at most eight characters, the first
- * alphabetic.
+ * alphabetic. At most 128 subtags: a key or an index entry over the value needs a byte bound
+ * grizzle can prove, and no valid tag comes near it.
  */
-export const xsLanguage = "^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*$" as const;
+export const xsLanguage = "^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8}){0,127}$" as const;
 
 /**
  * `xsLanguage` or the empty string: the LOM language bar (`LomStringLanguage.value`,
@@ -292,10 +293,13 @@ export const pair = `^${ncNameBody} ${ncNameBody}$` as const;
  * and three alphanumerics), extensions (a singleton other than `x` and subtags of two to eight
  * alphanumerics) and a private-use tail; or the whole `x-` private-use form; or the empty string.
  * Written as classes and groups, without `\p` or lookarounds. Well-formedness only: no subtag
- * registry is consulted and the grandfathered tags are not admitted.
+ * registry is consulted and the grandfathered tags are not admitted. Bounded for keys and index
+ * entries, which need a byte bound grizzle can prove: at most 8 variants, 8 extensions of at most
+ * 8 subtags each and 8 private-use subtags (95 subtags in all), so every non-empty value is an
+ * `xsLanguage` value.
  */
 export const bcp47 =
-  "^(?:(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})(?:-[A-Za-z]{4})?(?:-(?:[A-Za-z]{2}|[0-9]{3}))?(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*(?:-[xX](?:-[A-Za-z0-9]{1,8})+)?|[xX](?:-[A-Za-z0-9]{1,8})+)?$" as const;
+  "^(?:(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})(?:-[A-Za-z]{4})?(?:-(?:[A-Za-z]{2}|[0-9]{3}))?(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3})){0,8}(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8}){1,8}){0,8}(?:-[xX](?:-[A-Za-z0-9]{1,8}){1,8})?|[xX](?:-[A-Za-z0-9]{1,8}){1,8})?$" as const;
 
 /**
  * `xs:positiveInteger` lexical space: digits with an optional leading plus and at least one

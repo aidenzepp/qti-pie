@@ -115,6 +115,16 @@ const segments = (count: number, length: number): string =>
   Array.from({ length: count }, () => "a".repeat(length)).join("/");
 
 /**
+ * `n` copies of `part`, joined by `-`.
+ */
+const dashed = (n: number, part: string): string => Array.from({ length: n }, () => part).join("-");
+
+/**
+ * An `xs:language` tag of `subtags` subtags.
+ */
+const subtagTag = (subtags: number): string => `en-${dashed(subtags - 1, "a1")}`;
+
+/**
  * The 74 values of `@role` in `imsqti_asiv3p0p1_v1p0.xsd` lines 24413 to 24486, in the XSD's order.
  */
 const roles =
@@ -335,6 +345,39 @@ describe("patterns", () => {
     for (const bad of ["en--x", "1a"]) {
       assert.isFalse(admits(patterns.bcp47, "u", bad), bad);
     }
+  });
+
+  it("xsLanguage bounds its subtags at 128", () => {
+    assert.isTrue(admits(patterns.xsLanguage, "u", subtagTag(128)));
+    assert.isFalse(admits(patterns.xsLanguage, "u", subtagTag(129)));
+  });
+
+  it("bcp47 bounds variants, extensions and private-use subtags", () => {
+    const { bcp47, xsLanguage } = patterns;
+    const cases: readonly (readonly [string, (n: number) => string])[] = [
+      ["variants", (n) => `en-${dashed(n, "abcde")}`],
+      ["extensions", (n) => `en-${dashed(n, "a-bb")}`],
+      ["extension subtags", (n) => `en-a-${dashed(n, "bb")}`],
+      ["private-use subtags", (n) => `en-x-${dashed(n, "p")}`],
+      ["whole private-use subtags", (n) => `x-${dashed(n, "p")}`],
+    ];
+    for (const [name, build] of cases) {
+      assert.isTrue(admits(bcp47, "u", build(8)), `${name}: 8`);
+      assert.isFalse(admits(bcp47, "u", build(9)), `${name}: 9`);
+    }
+    const widest = [
+      "en",
+      "aaa",
+      "bbb",
+      "ccc",
+      "Latn",
+      "US",
+      dashed(8, "abcde"),
+      dashed(8, `a-${dashed(8, "bb")}`),
+      `x-${dashed(8, "p")}`,
+    ].join("-");
+    assert.isTrue(admits(bcp47, "u", widest));
+    assert.isTrue(admits(xsLanguage, "u", widest));
   });
 
   it("positiveInteger", () => {
