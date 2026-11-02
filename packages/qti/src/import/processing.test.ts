@@ -8,12 +8,13 @@ import { ProcessingGuardRefusal, processingGuards } from "#qti/import/guards/pro
 import { ProcessingRefused, processingRows } from "#qti/import/processing.ts";
 import type { ProcessingInput } from "#qti/import/processing.ts";
 import { itemRows } from "#qti/import/item.ts";
-import { documentRows } from "#qti/import/package.ts";
+import { documentRows, readRows } from "#qti/import/package.ts";
+import { ruleOfError } from "#qti/import/refusal.ts";
 import { rptemplateRows } from "#qti/import/rptemplate.ts";
 import { Rows, treeRows } from "#qti/import/tree.ts";
 import type { NodeIndex } from "#qti/import/tree.ts";
 import type { Language } from "#qti/processing/ast.ts";
-import { corpusPackage } from "#qti/processing/fixtures.ts";
+import { corpusPackage, materializeProcessing } from "#qti/processing/fixtures.ts";
 import { emptyEnvironment, environmentOf, withDeclarations } from "#qti/processing/env.ts";
 import type { DeclarationEntry, Environment, Mode } from "#qti/processing/env.ts";
 import { expressionKinds } from "#qti/processing/types.ts";
@@ -1510,6 +1511,30 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/rptemplate.ts",
       ]);
       assert.isAbove(of(built.rows, processing.Expression).length, 100);
       assert.isAbove(of(built.rows, ruleSchema.relations.RuleOperand).length, 0);
+    }),
+  );
+});
+
+layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts readRows", (suite) => {
+  suite.effect("refuses an else before its if with P30", () =>
+    Effect.gen(function* elseBeforeIf() {
+      const dir = yield* materializeProcessing("else-before-if");
+      const failure = yield* Effect.flip(readRows(dir));
+
+      assert.strictEqual(
+        failure._tag === "PlatformError" ? "PlatformError" : ruleOfError(failure).rule,
+        "P30",
+      );
+    }),
+  );
+
+  suite.effect("reads the processing-item and rptemplates packages", () =>
+    Effect.gen(function* realPackages() {
+      for (const name of ["processing-item", "rptemplates"] as const) {
+        const read = yield* readRows(yield* materializeProcessing(name));
+
+        assert.isAbove(read.rows.size, 0);
+      }
     }),
   );
 });

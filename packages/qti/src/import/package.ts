@@ -10,18 +10,10 @@ import { ChangeSet, Db } from "@bjornpagen/grizzle";
 import type { ApplyError, DbLayer, Fact, OpenError } from "@bjornpagen/grizzle";
 import { Effect, Option, Ref, Schedule } from "effect";
 import type { FileSystem, PlatformError } from "effect";
-import { itemGuards } from "#qti/import/guards/item.ts";
-import { manifestGuards } from "#qti/import/guards/manifest.ts";
-import { treeGuards } from "#qti/import/guards/tree.ts";
+import { guards } from "#qti/import/guards.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
-import type {
-  ImportLaw,
-  ImportRefused,
-  ImportWitness,
-  ProcessingRefusal,
-  ReadRefusal,
-} from "#qti/import/refusal.ts";
+import type { ImportLaw, ImportRefused, ImportWitness, ReadRefusal } from "#qti/import/refusal.ts";
 import { refusalOfLaw, ruleOfError } from "#qti/import/refusal.ts";
 import { rptemplateRows } from "#qti/import/rptemplate.ts";
 import { Rows } from "#qti/import/tree.ts";
@@ -98,7 +90,7 @@ const retried = <A, E extends ApplyError | OpenError, R>(
 /**
  * Whether `error` is one the guards or the reader raised, as opposed to the platform's.
  */
-const isReadRefusal = <E extends PlatformError.PlatformError | ProcessingRefusal | ReadRefusal>(
+const isReadRefusal = <E extends PlatformError.PlatformError | ReadRefusal>(
   error: E,
 ): error is Exclude<E, PlatformError.PlatformError> => error._tag !== "PlatformError";
 
@@ -140,9 +132,10 @@ export const documentRows = (input: DocumentInput, rows: Rows) =>
     : itemRows(input, rows);
 
 /**
- * Read the package at `dir` into rows: the manifest's, then every document it lists.
+ * Read the package at `dir` into rows and judge them, without the database: the manifest's, then
+ * every document it lists, then the tree, manifest, item and processing guards.
  */
-const readRows = Effect.fn("import.readRows")(function* readRows(dir: string) {
+export const readRows = Effect.fn("import.readRows")(function* readRows(dir: string) {
   const entries = yield* listPackage(dir);
   const manifest = yield* readXml(yield* readEntry(dir, "imsmanifest.xml"));
   const built = yield* manifestRows(dir, entries, manifest, Rows.empty());
@@ -164,9 +157,7 @@ const readRows = Effect.fn("import.readRows")(function* readRows(dir: string) {
     ({ rows } = item);
   }
 
-  yield* treeGuards(rows);
-  yield* manifestGuards(rows, entries);
-  yield* itemGuards(rows);
+  yield* guards(rows, entries);
 
   return { packageId: built.packageId, rows };
 });
@@ -195,11 +186,11 @@ export const changeSetOf = (rows: Rows) => {
 /**
  * Import the package at `dir`.
  *
- * Reads `imsmanifest.xml` and every QTI document it lists, judges the rows with the tree, manifest
- * and item guards, and applies them in one `ChangeSet` through the author role. `Db.open` and
- * `db.apply` are retried on a transient refusal and on nothing else. When the commit's outcome is
- * unknown the package row is read back by its id: present, the import was accepted; absent, the
- * error is the answer.
+ * Reads `imsmanifest.xml` and every QTI document it lists, judges the rows with the tree, manifest,
+ * item and processing guards, and applies them in one `ChangeSet` through the author role.
+ * `Db.open` and `db.apply` are retried on a transient refusal and on nothing else. When the
+ * commit's outcome is unknown the package row is read back by its id: present, the import was
+ * accepted; absent, the error is the answer.
  *
  * @param dir - The package directory.
  * @param options - Replacements for the retry schedule and the apply step, for tests.
