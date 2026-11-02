@@ -26,7 +26,7 @@
     </qti-item-body>
     <qti-response-processing>
         <qti-set-outcome-value identifier="FLAG">
-            <qti-substring>
+            <qti-substring case-sensitive="true">
                 <qti-variable identifier="COUNT"/>
                 <qti-base-value base-type="integer">1</qti-base-value>
             </qti-substring>
