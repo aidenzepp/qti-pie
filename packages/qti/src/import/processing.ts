@@ -28,6 +28,7 @@ import { literalOrRef, parseProcessing } from "#qti/processing/parse.ts";
 import { BaseType } from "#qti/schema/declaration.ts";
 import * as expression from "#qti/schema/expression.ts";
 import * as attributed from "#qti/schema/expression-attributes.ts";
+import { Edge } from "#qti/schema/node.ts";
 import type {
   AttributeNameHandle,
   NodeKindHandle,
@@ -35,6 +36,7 @@ import type {
   SchemaVersionHandle,
 } from "#qti/schema/node.ts";
 import * as processing from "#qti/schema/processing.ts";
+import * as ruleSchema from "#qti/schema/rule.ts";
 import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
 import type { Element } from "#qti/xml/tree.ts";
 
@@ -211,11 +213,12 @@ interface RuleLike {
  */
 interface Flat {
   readonly expressions: readonly ExpressionLike[];
+  readonly includes: readonly IncludeNode[];
   readonly ordered: readonly (ExpressionLike | RuleLike)[];
   readonly rules: readonly RuleLike[];
 }
 
-const nothing: Flat = { expressions: [], ordered: [], rules: [] };
+const nothing: Flat = { expressions: [], includes: [], ordered: [], rules: [] };
 
 /**
  * Flatten an expression and its operands, in document order.
@@ -228,6 +231,7 @@ const flattenExpression = (node: ExpressionLike): Flat => {
 
   return {
     expressions: [node, ...inner.flatMap((found) => found.expressions)],
+    includes: [],
     ordered: [node, ...inner.flatMap((found) => found.ordered)],
     rules: [],
   };
@@ -235,14 +239,14 @@ const flattenExpression = (node: ExpressionLike): Flat => {
 
 /**
  * Flatten a rule, its guarding or held expression, its condition branches and its sub-rules, in
- * document order. A nested `xi:include` holds nothing.
+ * document order. An `xi:include` is listed and holds nothing.
  *
  * @param node - The rule or include at the top of the subtree.
  * @returns The subtree's expressions and rules.
  */
 const flattenRule = (node: IncludeNode | RuleLike): Flat => {
   if (node.kind === "xi:include") {
-    return nothing;
+    return { ...nothing, includes: [node] };
   }
 
   const own = Option.match(node.expression, { onNone: () => nothing, onSome: flattenExpression });
@@ -250,6 +254,7 @@ const flattenRule = (node: IncludeNode | RuleLike): Flat => {
 
   return {
     expressions: [...own.expressions, ...nested.flatMap((found) => found.expressions)],
+    includes: nested.flatMap((found) => found.includes),
     ordered: [node, ...own.ordered, ...nested.flatMap((found) => found.ordered)],
     rules: [node, ...nested.flatMap((found) => found.rules)],
   };
@@ -266,6 +271,7 @@ const flatten = (rules: readonly (IncludeNode | RuleLike)[]): Flat => {
 
   return {
     expressions: found.flatMap((one) => one.expressions),
+    includes: found.flatMap((one) => one.includes),
     ordered: found.flatMap((one) => one.ordered),
     rules: found.flatMap((one) => one.rules),
   };
@@ -1041,13 +1047,174 @@ const referringRules: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Write the expression rows of a processing tree and the variable references of its expressions
- * and value-setting rules.
+ * The branches of a condition that hang under it by a `condition` column: the `if` and the `else`
+ * of each language. The `else-if` of a condition is unbounded and stays a thin arm.
+ */
+const branchArms = {
+  "qti-outcome-else": ruleSchema.OutcomeElseArm,
+  "qti-outcome-if": ruleSchema.OutcomeIfArm,
+  "qti-response-else": ruleSchema.ResponseElseArm,
+  "qti-response-if": ruleSchema.ResponseIfArm,
+  "qti-template-else": ruleSchema.TemplateElseArm,
+  "qti-template-if": ruleSchema.TemplateIfArm,
+};
+
+/**
+ * Whether a kind is the `if` or `else` of a condition.
+ *
+ * @param kind - A node kind.
+ * @returns Whether `branchArms` holds an arm for it.
+ */
+const isBranch = (kind: string): kind is keyof typeof branchArms => kind in branchArms;
+
+type ThinRuleKind = Exclude<
+  keyof typeof ruleSchema.arms,
+  keyof typeof branchArms | "qti-template-processing" | "xi:fallback" | "xi:include"
+>;
+
+/**
+ * Whether a kind is a rule whose arm holds the node's id and nothing else.
+ *
+ * @param kind - A node kind.
+ * @returns Whether `ruleSchema.arms` holds a thin arm for it.
+ */
+const isThinRule = (kind: string): kind is ThinRuleKind =>
+  kind in ruleSchema.arms &&
+  !isBranch(kind) &&
+  kind !== "qti-template-processing" &&
+  kind !== "xi:fallback" &&
+  kind !== "xi:include";
+
+/**
+ * Write one rule's rows: its arm and the `RuleOperand` row of the one expression it holds.
+ *
+ * A branch arm is written only under its condition, which the caller names; a rule whose element
+ * the node index does not hold is skipped by the caller.
+ *
+ * @param rows - The rows so far.
+ * @param input - The processing input.
+ * @param node - The rule.
+ * @param entry - The node it became.
+ * @param conditions - The condition node each branch hangs under, by branch element.
+ * @returns The rows with the rule's added.
+ */
+const ruleRows = (
+  rows: Rows,
+  input: ProcessingInput,
+  node: RuleLike,
+  entry: NodeEntry,
+  conditions: ReadonlyMap<Element, NodeEntry>,
+): Rows => {
+  let built = rows;
+  if (isBranch(node.kind)) {
+    const condition = conditions.get(node.element);
+    built =
+      condition === undefined
+        ? built
+        : Rows.add(built, branchArms[node.kind], [{ condition: condition.id, id: entry.id }]);
+  } else if (isThinRule(node.kind)) {
+    built = Rows.add(built, ruleSchema.arms[node.kind], [{ id: entry.id }]);
+  }
+
+  return Rows.add(
+    built,
+    ruleSchema.RuleOperand,
+    Option.toArray(node.expression).flatMap((held) => {
+      const child = input.nodes.get(held.element);
+
+      return child === undefined
+        ? []
+        : [
+            {
+              child: child.id,
+              position: BigInt(node.element.children.indexOf(held.element)),
+              rule: entry.id,
+              ruleKind: entry.kind,
+            },
+          ];
+    }),
+  );
+};
+
+/**
+ * Write the rows of an `xi:include`: the node, the optional attributes the source wrote and the
+ * `Fallback` of its `xi:fallback` child. The include is stored as written and never resolved.
+ *
+ * @param rows - The rows so far.
+ * @param input - The processing input.
+ * @param node - The include.
+ * @param entry - The node it became.
+ * @returns The rows with the include's added.
+ */
+const includeRows = (
+  rows: Rows,
+  input: ProcessingInput,
+  node: IncludeNode,
+  entry: NodeEntry,
+): Rows => {
+  const attributes = readerOf(rows, node, entry);
+  const href = attributes.read("href");
+  const parse = attributes.read("parse");
+  const xpointer = attributes.read("xpointer");
+  const encoding = attributes.read("encoding");
+  const accept = attributes.read("accept");
+  const acceptLanguage = attributes.read("accept-language");
+  const own = (value: string) => ({ node: entry.id, value: judgedLater(value) });
+  let built = Rows.add(attributes.rows(), ruleSchema.XInclude, [{ id: entry.id }]);
+  built = Rows.add(built, ruleSchema.XIncludeHref, written(href, own));
+  built = Rows.add(
+    built,
+    ruleSchema.XIncludeParse,
+    written(parse, (value) => ({ node: entry.id, value: judgedLater(value) })),
+  );
+  built = Rows.add(built, ruleSchema.XIncludeXpointer, written(xpointer, own));
+  built = Rows.add(built, ruleSchema.XIncludeEncoding, written(encoding, own));
+  built = Rows.add(built, ruleSchema.XIncludeAccept, written(accept, own));
+  built = Rows.add(built, ruleSchema.XIncludeAcceptLanguage, written(acceptLanguage, own));
+
+  return Rows.add(
+    built,
+    ruleSchema.Fallback,
+    Option.toArray(node.fallback).flatMap((element) => {
+      const fallback = input.nodes.get(element);
+
+      return fallback === undefined ? [] : [{ id: fallback.id }];
+    }),
+  );
+};
+
+/**
+ * Write the arm of the processing root the caller supplied: a template processing with the item it
+ * hangs under, or the thin arm of an outcome processing or a fragment. A `qti-response-processing`
+ * root is the item importer's row and writes nothing here.
+ *
+ * @param rows - The rows so far.
+ * @param entry - The node the root became.
+ * @returns The rows with the root's arm added.
+ */
+const rootRows = (rows: Rows, entry: NodeEntry): Rows => {
+  if (entry.kind === "qti-template-processing") {
+    const item = Rows.of(rows, Edge).find((edge) => edge.child === entry.id)?.parent;
+
+    return item === undefined
+      ? rows
+      : Rows.add(rows, ruleSchema.TemplateProcessing, [{ id: entry.id, item }]);
+  }
+
+  return isThinRule(entry.kind)
+    ? Rows.add(rows, ruleSchema.arms[entry.kind], [{ id: entry.id }])
+    : rows;
+};
+
+/**
+ * Write the rows of a processing tree: its expressions with their operands, arms and attributes,
+ * its rules with their arms and operands, its includes, and the variable references of its
+ * expressions and value-setting rules.
  *
  * The tree is judged first, and nothing is written for a tree that fails: it is parsed
  * (`parseProcessing`), every required attribute is looked for (`P5`), and it is type checked
- * (`checkProcessing`). The rules' own rows are not written here; a rule's `identifier` is read for
- * its variable reference only.
+ * (`checkProcessing`). A rule's `identifier` is read for its variable reference only; the
+ * `qti-response-processing` root's own rows are the item importer's.
  *
  * @param input - The processing root with the nodes `treeRows` wrote for it, the document and tree
  *   ids, the root kind and the mode, language and environment it is checked in.
@@ -1088,12 +1255,29 @@ export const processingRows = Effect.fn("import.processingRows")(function* proce
     }
   }
 
+  const conditions = new Map<Element, NodeEntry>(
+    tree.rules.flatMap((node) => {
+      const condition = input.nodes.get(node.element);
+
+      return condition === undefined
+        ? []
+        : node.branches.map((branch): [Element, NodeEntry] => [branch.element, condition]);
+    }),
+  );
   for (const node of tree.rules) {
     const entry = input.nodes.get(node.element);
-    if (entry !== undefined && referringRules.has(node.kind)) {
-      built = ruleReferenceRows(built, input, node, entry);
+    if (entry !== undefined) {
+      built = ruleRows(built, input, node, entry, conditions);
+      built = referringRules.has(node.kind) ? ruleReferenceRows(built, input, node, entry) : built;
     }
   }
 
-  return built;
+  for (const node of tree.includes) {
+    const entry = input.nodes.get(node.element);
+    built = entry === undefined ? built : includeRows(built, input, node, entry);
+  }
+
+  const root = input.nodes.get(input.root);
+
+  return root === undefined ? built : rootRows(built, root);
 });
