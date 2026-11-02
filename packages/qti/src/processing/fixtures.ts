@@ -113,7 +113,11 @@ export const PROCESSING_FIXTURES_VERSION = "1" as const;
  * - `addFile` copies `fromPath` of the materialized corpus package `fromPkg` to `path`.
  * - `addResource` appends a `resource` with one `file` of the same `href` to `imsmanifest.xml`.
  * - `addDeclarations` adds to the package's `file` each variable declaration of the hand-written
- *   `fromFile` that `file` does not declare yet, before its item body.
+ *   `fromFile` that `file` does not declare yet, after the last declaration of its kind or an
+ *   earlier one in the schema's order (context, response, outcome, template), else before the first
+ *   declaration or the item body.
+ * - `addTemplateProcessing` adds the `qti-template-processing` element of the hand-written `fromFile`
+ *   to the package's `file`, before its item body.
  * - `replaceFile` writes the hand-written `fromFile` as the package's `path`.
  * - `replaceText` replaces the one occurrence of `search` in the package's `file`.
  */
@@ -132,6 +136,7 @@ export type ProcessingEdit =
       readonly type: string;
     }
   | { readonly _tag: "addDeclarations"; readonly file: string; readonly fromFile: string }
+  | { readonly _tag: "addTemplateProcessing"; readonly file: string; readonly fromFile: string }
   | { readonly _tag: "replaceFile"; readonly fromFile: string; readonly path: string }
   | {
       readonly _tag: "replaceText";
@@ -211,12 +216,13 @@ const guardNames = [
 ] as const;
 
 /**
- * The packages M3 derives: the two round-trip packages, one package per broken and guard document
- * and the two padded-lexical packages the importer refuses.
+ * The packages M3 derives: the two round-trip packages, the template-item package, one package per
+ * broken and guard document and the two padded-lexical packages the importer refuses.
  */
 export const processingFixtureNames = [
   "processing-item",
   "rptemplates",
+  "template-item",
   ...brokenNames,
   ...guardNames,
   "padded-reference",
@@ -263,6 +269,10 @@ const responseItem: ProcessingEdit = {
  * - `processing-item`: `simple` with `choice.xml`'s processing replaced by `response.xml`'s rules,
  *   and the declarations and the `xi` namespace those rules need added; the body kinds are
  *   unchanged.
+ * - `template-item`: `simple` with the declarations, template processing and response processing of
+ *   `template.xml` and `response-mapped.xml` added. `RESPONSE` keeps `simple`'s identifier type and
+ *   gains the mapping of `response-mapped.xml`, so the template's integer correct response is
+ *   written to a new integer response `TOTAL` instead.
  * - `rptemplates`: `simple` plus the five template documents of the corpus under `rptemplates/`, each
  *   listed as an `imsqti_rptemplate_xmlv3p0` resource.
  * - `padded-reference`: `response.xml` with `figures=" COUNT "` on a `qti-equal-rounded`.
@@ -287,6 +297,39 @@ export const specOfProcessing = (name: ProcessingFixtureName): ProcessingFixture
         },
         { _tag: "addDeclarations", file: "choice.xml", fromFile: "valid/response.xml" },
         { _tag: "replaceProcessing", file: "choice.xml", withFile: "valid/response.xml" },
+      ],
+      name,
+    };
+  }
+
+  if (name === "template-item") {
+    return {
+      base: "simple",
+      edits: [
+        {
+          _tag: "replaceText",
+          file: "choice.xml",
+          replacement: [
+            "        </qti-correct-response>",
+            '        <qti-mapping default-value="0">',
+            '            <qti-map-entry map-key="ChoiceA" mapped-value="2"/>',
+            '            <qti-map-entry map-key="ChoiceB" mapped-value="1"/>',
+            "        </qti-mapping>",
+            "    </qti-response-declaration>",
+            '    <qti-response-declaration identifier="TOTAL" cardinality="single" base-type="integer"/>',
+          ].join("\r\n"),
+          search: "        </qti-correct-response>\r\n    </qti-response-declaration>",
+        },
+        { _tag: "addDeclarations", file: "choice.xml", fromFile: "valid/template.xml" },
+        { _tag: "addDeclarations", file: "choice.xml", fromFile: "valid/response-mapped.xml" },
+        { _tag: "addTemplateProcessing", file: "choice.xml", fromFile: "valid/template.xml" },
+        {
+          _tag: "replaceText",
+          file: "choice.xml",
+          replacement: '<qti-set-correct-response identifier="TOTAL">',
+          search: '<qti-set-correct-response identifier="RESPONSE">',
+        },
+        { _tag: "replaceProcessing", file: "choice.xml", withFile: "valid/response-mapped.xml" },
       ],
       name,
     };
@@ -383,7 +426,7 @@ const sourceOf = (edit: ProcessingEdit): Effect.Effect<Uint8Array | undefined, F
       Match.tag("replaceProcessing", (found) =>
         fs.readFile(path.join(handWrittenRoot, found.withFile)),
       ),
-      Match.tag("addDeclarations", (found) =>
+      Match.tag("addDeclarations", "addTemplateProcessing", (found) =>
         fs.readFile(path.join(handWrittenRoot, found.fromFile)),
       ),
       Match.tag("replaceFile", (found) => fs.readFile(path.join(handWrittenRoot, found.fromFile))),
@@ -449,27 +492,56 @@ const withTerminator = (text: string, terminator: string): string =>
 const processingElement =
   /<qti-response-processing(?:\s[^>]*?)?\/>|<qti-response-processing(?:\s[^>]*)?>[\s\S]*?<\/qti-response-processing>/u;
 
-const declarationOpening = /<qti-(?<kind>response|outcome|template)-declaration\b[^>]*>/gu;
+const templateProcessingElement =
+  /<qti-template-processing(?:\s[^>]*?)?\/>|<qti-template-processing(?:\s[^>]*)?>[\s\S]*?<\/qti-template-processing>/u;
+
+const declarationOpening = /<qti-(?<kind>response|outcome|template|context)-declaration\b[^>]*>/gu;
 
 /**
- * Take the variable declarations of a document, each as its source text and identifier.
+ * The schema's order of the declaration kinds in an item: context, response, outcome, template.
+ */
+const declarationRank = { context: 0, outcome: 2, response: 1, template: 3 } as const;
+
+const isDeclarationKind = (kind: string): kind is keyof typeof declarationRank =>
+  kind in declarationRank;
+
+interface Declaration {
+  readonly end: number;
+  readonly identifier: string;
+  readonly kind: keyof typeof declarationRank;
+  readonly start: number;
+  readonly text: string;
+}
+
+/**
+ * Take the variable declarations of a document, each as its source text, position and identifier.
  *
  * @param text - A QTI item document.
- * @returns Each top-level declaration element's text and its `identifier`, in document order.
+ * @returns Each top-level declaration element, in document order.
  */
-const declarationsOf = (
-  text: string,
-): readonly { readonly identifier: string; readonly text: string }[] => {
-  const found: { identifier: string; text: string }[] = [];
+const declarationsOf = (text: string): readonly Declaration[] => {
+  const found: Declaration[] = [];
 
   for (const opening of text.matchAll(declarationOpening)) {
+    const kind = opening.groups?.["kind"];
+
+    if (kind === undefined || !isDeclarationKind(kind)) {
+      continue;
+    }
+
     const end = opening[0].endsWith("/>")
       ? opening.index + opening[0].length
-      : text.indexOf(`</qti-${opening.groups?.["kind"]}-declaration>`, opening.index) +
-        `</qti-${opening.groups?.["kind"]}-declaration>`.length;
+      : text.indexOf(`</qti-${kind}-declaration>`, opening.index) +
+        `</qti-${kind}-declaration>`.length;
     const identifier = /\sidentifier="(?<id>[^"]*)"/u.exec(opening[0])?.groups?.["id"] ?? "";
 
-    found.push({ identifier, text: text.slice(opening.index, end) });
+    found.push({
+      end,
+      identifier,
+      kind,
+      start: opening.index,
+      text: text.slice(opening.index, end),
+    });
   }
 
   return found;
@@ -493,6 +565,33 @@ const insertBefore = (text: string, marker: string, insertion: string): string |
   const lineStart = text.lastIndexOf("\n", at) + 1;
 
   return `${text.slice(0, lineStart)}${insertion}${text.slice(lineStart)}`;
+};
+
+/**
+ * Add one declaration where the schema puts its kind: after the last declaration of its kind or an
+ * earlier one, else before the first declaration, else before the item body.
+ *
+ * @param text - The file's text.
+ * @param entry - The declaration to add.
+ * @param terminator - The file's line terminator.
+ * @returns The text with the declaration added, or `undefined` when there is no place for it.
+ */
+const addDeclaration = (
+  text: string,
+  entry: Declaration,
+  terminator: string,
+): string | undefined => {
+  const line = `    ${withTerminator(entry.text, terminator)}`;
+  const present = declarationsOf(text);
+  const before = present.findLast(
+    (other) => declarationRank[other.kind] <= declarationRank[entry.kind],
+  );
+
+  if (before !== undefined) {
+    return `${text.slice(0, before.end)}${terminator}${line}${text.slice(before.end)}`;
+  }
+
+  return insertBefore(text, present[0]?.text ?? "<qti-item-body", `${line}${terminator}`);
 };
 
 /**
@@ -570,20 +669,37 @@ const applyEdit = (
             found.file,
             (text) => {
               const declared = new Set(declarationsOf(text).map((entry) => entry.identifier));
-              const missing = declarationsOf(source).filter(
-                (entry) => !declared.has(entry.identifier),
-              );
               const terminator = terminatorOf(text);
+              let changed: string | undefined = text;
 
-              return insertBefore(
-                text,
-                "<qti-item-body",
-                missing
-                  .map((entry) => `    ${withTerminator(entry.text, terminator)}${terminator}`)
-                  .join(""),
-              );
+              for (const entry of declarationsOf(source)) {
+                if (!declared.has(entry.identifier) && changed !== undefined) {
+                  changed = addDeclaration(changed, entry, terminator);
+                }
+              }
+
+              return changed;
             },
             "no qti-item-body to put the declarations before",
+          );
+        }),
+      ),
+      Match.tag("addTemplateProcessing", (found) =>
+        Effect.gen(function* addTemplateProcessing() {
+          const source = yield* fs.readFileString(path.join(handWrittenRoot, found.fromFile));
+          const element = templateProcessingElement.exec(source)?.[0];
+
+          yield* rewrite(
+            found.file,
+            (text) =>
+              element === undefined || templateProcessingElement.test(text)
+                ? undefined
+                : insertBefore(
+                    text,
+                    "<qti-item-body",
+                    `    ${withTerminator(element, terminatorOf(text))}${terminatorOf(text)}`,
+                  ),
+            `${found.fromFile} has no qti-template-processing element, this file already has one, or it has no qti-item-body`,
           );
         }),
       ),
