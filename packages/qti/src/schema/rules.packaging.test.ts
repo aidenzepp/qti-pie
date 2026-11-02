@@ -11,11 +11,26 @@ import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
 import { outcomeRows } from "#qti/import/outcome.ts";
 import { changeSetOf, retrySchedule } from "#qti/import/package.ts";
+import { usageRows } from "#qti/import/usage.ts";
 import { kindOf, Rows } from "#qti/import/tree.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import { admission as lomAdmission } from "#qti/schema/kinds/lom.ts";
 import { Declaration, OutcomeDeclarationArm } from "#qti/schema/declaration.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
+import {
+  CsmCaseItemUri,
+  CsmGuid,
+  CsmLabel,
+  CsmLabelledGuid,
+  CsmMetadata,
+  CsmMetadataProviderId,
+  CsmSet,
+  CsmSetOfGuids,
+  CsmSetOfGuidsRegion,
+  CsmSetOfGuidsVersion,
+  CsmSetResourceLabel,
+  CsmSetResourcePartId,
+} from "#qti/schema/csm.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import {
   ExternalLom,
@@ -34,16 +49,67 @@ import {
   r30Asserts,
   rules as metadataRules,
 } from "#qti/schema/metadata.ts";
-import { Admission, Edge, Node, TreeRoot } from "#qti/schema/node.ts";
+import { Admission, AttributeLexical, Edge, Node, Tree, TreeRoot } from "#qti/schema/node.ts";
+import { OutcomeDocument } from "#qti/schema/outcome.ts";
 import {
+  AccessForAllResource,
+  DrdAccessMode,
+  DrdAccessModeAdapted,
+  DrdAdaptationDetail,
+  DrdAdaptationMediaType,
+  DrdAdaptationType,
+  DrdApiInteroperable,
+  DrdAtInteroperable,
+  DrdControlFlexibility,
+  DrdDisplayTransformability,
+  DrdEducationalComplexityOfAdaptation,
+  DrdEducationalLevelOfAdaptation,
+  DrdHasAdaptation,
+  DrdHazard,
+  DrdIsAdaptationOf,
+  DrdIsFullAdaptationOf,
+  DrdIsPartialAdaptationOf,
+  DrdLanguageOfAdaptation,
   File,
   FileMetadata,
+  ManifestId,
+  ManifestIdOfManifest,
+  ManifestIdOfResource,
+  ManifestIdOfVariant,
+  Package,
   PackageEntry,
   Resource,
   ResourceMetadata,
   RootOfType,
+  Variant,
+  VariantMetadata,
 } from "#qti/schema/package.ts";
-import { OutcomeDocument } from "#qti/schema/outcome.ts";
+import * as patterns from "#qti/schema/patterns.ts";
+import { ResponseProcessing, ResponseProcessingItem } from "#qti/schema/processing.ts";
+import {
+  CategorizedStatisticArm,
+  OrdinaryStatisticArm,
+  Statistic,
+  StatisticCaseCount,
+  StatisticGlossary,
+  StatisticLastUpdated,
+  StatisticStdDeviation,
+  StatisticStdError,
+  TargetObject,
+  UsageData,
+  UsageDataGlossary,
+  UsageMapEntry,
+  UsageMapEntryCaseSensitive,
+  UsageMapping,
+  UsageMappingLowerBound,
+  UsageMappingUpperBound,
+  UsageTypedValue,
+  UsageValue,
+  UsageValueBaseType,
+  UsageValueFieldIdentifier,
+  TargetObjectPartIdentifier,
+  relations as usageRelations,
+} from "#qti/schema/usage.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
@@ -78,6 +144,8 @@ type Law =
   | { readonly kind: "check"; readonly name: string; readonly relation: string }
   | { readonly from: Side; readonly kind: "contained"; readonly to: Side }
   | { readonly from: Side; readonly kind: "mirrors"; readonly to: Side }
+  | { readonly flags: "su" | "u"; readonly kind: "pattern"; readonly source: string }
+  | { readonly fields: readonly string[]; readonly kind: "primaryKey"; readonly relation: string }
   | {
       readonly from: Side;
       readonly kind: "capacity";
@@ -95,6 +163,22 @@ const side = (
 const contained = (from: Side, to: Side): Law => ({ from, kind: "contained", to });
 
 const mirrorsLaw = (from: Side, to: Side): Law => ({ from, kind: "mirrors", to });
+
+/**
+ * The pattern law of a column: grizzle reports the regex and its flags and no relation, one law for
+ * every column that spells the same language.
+ */
+const patternLaw = (source: string, flags: "su" | "u" = "u"): Law => ({
+  flags,
+  kind: "pattern",
+  source,
+});
+
+const primaryKeyOf = (relation: AnyRelation, fields: readonly string[]): Law => ({
+  fields,
+  kind: "primaryKey",
+  relation: relation.name,
+});
 
 const keyOf = (relation: AnyRelation, fields: readonly string[]): Law => ({
   fields,
@@ -310,6 +394,51 @@ const removeSubtree = (draft: Draft, root: string): void => {
 };
 
 /**
+ * Copy the node `root`, every node under it and every row that names one of them under fresh ids,
+ * as a second child of the same parent after its last child. A row's reference to anything outside
+ * the subtree stays, so the copy hangs under the same parent and names the same owner.
+ *
+ * @returns The copy's root id.
+ */
+const copySubtree = (draft: Draft, root: string): string => {
+  const old = subtreeIds(draft, root);
+  const fresh = new Map([...old].map((id) => [id, crypto.randomUUID()]));
+  const parent = text(edgeInto(draft, root), "parent");
+  let last = 0n;
+  for (const edge of of(draft, Edge)) {
+    if (text(edge, "parent") === parent && position(edge) > last) {
+      last = position(edge);
+    }
+  }
+
+  const copied = fresh.get(root) ?? assert.fail("the copied subtree has no new root");
+  for (const facts of draft.values()) {
+    const copies = facts
+      .filter((fact) => Object.values(fact).some((v) => Predicate.isString(v) && old.has(v)))
+      .map((fact) =>
+        rowOf(
+          Object.entries(fact).map(([field, v]) => [
+            field,
+            Predicate.isString(v) ? (fresh.get(v) ?? v) : v,
+          ]),
+        ),
+      );
+    for (const copy of copies) {
+      if (
+        (peek(copy, "child") === copied || peek(copy, "id") === copied) &&
+        Predicate.isBigInt(peek(copy, "position"))
+      ) {
+        set(copy, "position", last + 2n);
+      }
+    }
+
+    facts.push(...copies);
+  }
+
+  return copied;
+};
+
+/**
  * Copy the document `tree` and every row that names a node of it under fresh ids, as a second
  * document. `rename` replaces text values in the copies only, as the new resource's name and
  * path.
@@ -408,8 +537,23 @@ const rowsOfPackage = (
           },
           rows,
         ));
+      } else if (root === "ud:usageData") {
+        ({ rows } = yield* usageRows(
+          doc,
+          {
+            package: built.packageId,
+            path: listed.path,
+            resource: listed.resource,
+            resourceType: listed.type,
+            version: built.version,
+          },
+          rows,
+        ));
       } else if (root === "qti-outcome-declaration") {
         ({ rows } = yield* outcomeRows(input, rows));
+      } else if (root === "qti-response-processing") {
+        // No builder writes the template document's rows yet: the R16 tests build them by hand.
+        continue;
       } else {
         return yield* Effect.die(new Error(`${listed.path} has the root ${root ?? "?"}`));
       }
@@ -424,7 +568,20 @@ const rowsOfPackage = (
 class FixtureRows extends Context.Service<
   FixtureRows,
   Readonly<
-    Record<"extmeta" | "filelom" | "lomrest" | "nestedqmd" | "nestedqmdBoth" | "outcome", Rows>
+    Record<
+      | "csm"
+      | "extmeta"
+      | "filelom"
+      | "lomrest"
+      | "nestedqmd"
+      | "nestedqmdBoth"
+      | "outcome"
+      | "resproc"
+      | "usage3"
+      | "usage3Typed"
+      | "variant",
+      Rows
+    >
   >
 >()("rules.packaging.test/FixtureRows") {}
 
@@ -434,12 +591,17 @@ const rowsOfFixture = (name: FixtureName) =>
 const FixtureRowsLayer = Layer.effect(
   FixtureRows,
   Effect.all({
+    csm: rowsOfFixture("csm"),
     extmeta: rowsOfFixture("extmeta"),
     filelom: rowsOfFixture("filelom"),
     lomrest: rowsOfFixture("lomrest"),
     nestedqmd: rowsOfFixture("nestedqmd"),
     nestedqmdBoth: rowsOfFixture("nestedqmd-both"),
     outcome: rowsOfFixture("outcome"),
+    resproc: rowsOfFixture("resproc"),
+    usage3: rowsOfFixture("usage3"),
+    usage3Typed: rowsOfFixture("usage3-typed"),
+    variant: rowsOfFixture("variant"),
   }).pipe(Effect.provide(NodeServices.layer)),
 );
 
@@ -832,6 +994,961 @@ const negatives: readonly Negative[] = [
 ];
 
 /**
+ * The id of the variant's `drd:accessForAllResource`, which the DRD leaves hang under.
+ */
+const accessForAll = (draft: Draft): string => text(first(draft, AccessForAllResource), "id");
+
+/**
+ * The 17 DRD leaves of the variant vocabulary, each with the value it is judged against and the
+ * pattern law its column reports. A value outside an enumeration has no `ext:` prefix, which the
+ * enumerations admit; the two `normalizedString` leaves admit every string and have no pattern
+ * negative.
+ */
+const drdLeaves = [
+  {
+    bad: "tactile ",
+    handle: "drd:accessMode",
+    relation: DrdAccessMode,
+    source: patterns.drdAccessMode,
+  },
+  {
+    bad: "bogus",
+    handle: "drd:accessModeAdapted",
+    relation: DrdAccessModeAdapted,
+    source: patterns.drdAccessModeAdapted,
+  },
+  {
+    bad: "bogus",
+    handle: "drd:adaptationDetail",
+    relation: DrdAdaptationDetail,
+    source: patterns.drdAdaptationDetail,
+  },
+  {
+    bad: "bogus",
+    handle: "drd:adaptationMediaType",
+    relation: DrdAdaptationMediaType,
+    source: patterns.drdAdaptationMediaType,
+  },
+  {
+    bad: "bogus",
+    handle: "drd:adaptationType",
+    relation: DrdAdaptationType,
+    source: patterns.drdAdaptationType,
+  },
+  {
+    bad: "bogus",
+    handle: "drd:apiInteroperable",
+    relation: DrdApiInteroperable,
+    source: patterns.drdApiInteroperable,
+  },
+  {
+    bad: "maybe",
+    handle: "drd:atInteroperable",
+    relation: DrdAtInteroperable,
+    source: patterns.xsBoolean,
+  },
+  {
+    bad: "bogus",
+    handle: "drd:controlFlexibility",
+    relation: DrdControlFlexibility,
+    source: patterns.drdControlFlexibility,
+  },
+  {
+    bad: "bogus",
+    handle: "drd:displayTransformability",
+    relation: DrdDisplayTransformability,
+    source: patterns.drdDisplayTransformability,
+  },
+  {
+    bad: "bogus",
+    handle: "drd:educationalComplexityOfAdaptation",
+    relation: DrdEducationalComplexityOfAdaptation,
+    source: patterns.drdEducationalComplexityOfAdaptation,
+  },
+  {
+    bad: undefined,
+    handle: "drd:educationalLevelOfAdaptation",
+    relation: DrdEducationalLevelOfAdaptation,
+    source: undefined,
+  },
+  { bad: "a%zz", handle: "drd:hasAdaptation", relation: DrdHasAdaptation, source: patterns.anyUri },
+  { bad: "bogus", handle: "drd:hazard", relation: DrdHazard, source: patterns.drdHazard },
+  {
+    bad: "a%zz",
+    handle: "drd:isAdaptationOf",
+    relation: DrdIsAdaptationOf,
+    source: patterns.anyUri,
+  },
+  {
+    bad: "a%zz",
+    handle: "drd:isFullAdaptationOf",
+    relation: DrdIsFullAdaptationOf,
+    source: patterns.anyUri,
+  },
+  {
+    bad: "a%zz",
+    handle: "drd:isPartialAdaptationOf",
+    relation: DrdIsPartialAdaptationOf,
+    source: patterns.anyUri,
+  },
+  {
+    bad: undefined,
+    handle: "drd:languageOfAdaptation",
+    relation: DrdLanguageOfAdaptation,
+    source: undefined,
+  },
+] as const;
+
+/**
+ * One of the DRD leaves.
+ */
+type DrdLeaf = (typeof drdLeaves)[number];
+
+/**
+ * Add a DRD leaf of `leaf` with `value` under the variant's `accessForAllResource`.
+ */
+const addLeaf = (draft: Draft, leaf: DrdLeaf, value: string): void => {
+  const owner = accessForAll(draft);
+  const id = addNode(draft, leaf.handle, owner);
+  of(draft, leaf.relation).push({ id, owner, value });
+};
+
+const ordinaryStatistic = (draft: Draft): Row =>
+  of(draft, Statistic).find((row) => peek(row, "kind") === "ordinary") ??
+  assert.fail("the document has no ordinary statistic");
+
+const categorizedStatistic = (draft: Draft): Row =>
+  of(draft, Statistic).find((row) => peek(row, "kind") === "categorized") ??
+  assert.fail("the document has no categorized statistic");
+
+const ordinary = [{ field: "kind", value: "ordinary" }] as const;
+
+const categorized = [{ field: "kind", value: "categorized" }] as const;
+
+/**
+ * The rows of `relation` whose `field` is `value`.
+ */
+const rowsWhere = (draft: Draft, relation: AnyRelation, field: string, value: string): Row[] =>
+  of(draft, relation).filter((row) => peek(row, field) === value);
+
+/**
+ * Remove the subtree of every row of `relation` whose `field` is `value`.
+ */
+const removeChildren = (
+  draft: Draft,
+  relation: AnyRelation,
+  field: string,
+  value: string,
+): void => {
+  for (const row of rowsWhere(draft, relation, field, value)) {
+    removeSubtree(draft, text(row, "id"));
+  }
+};
+
+/**
+ * The arms of a typed usage value, one per base type.
+ */
+const typedArms = Object.entries(usageRelations)
+  .filter(([name]) => name.startsWith("UsageTypedValue") && name !== "UsageTypedValue")
+  .map(([, relation]) => relation);
+
+/**
+ * A pattern, as the schema spells it: its source and flags.
+ */
+interface Spelling {
+  readonly flags: "su" | "u";
+  readonly pattern: string;
+}
+
+const plain = (pattern: string): Spelling => ({ flags: "u", pattern });
+
+/**
+ * One column of the usage-data document with a value outside its pattern, and the alteration that
+ * writes that value.
+ */
+interface UsagePattern {
+  readonly alter: (draft: Draft) => void;
+  readonly bad: string;
+  readonly base: "usage3" | "usage3Typed";
+  readonly column: string;
+  readonly source: Spelling;
+}
+
+/**
+ * Write `value` into the column `field` of the first row of `relation`.
+ */
+const writeFirst =
+  (relation: AnyRelation, field: string, value: string) =>
+  (draft: Draft): void => {
+    set(first(draft, relation), field, value);
+  };
+
+/**
+ * Add an optional row of `relation` for the first row of `owner`, whose id the row names.
+ */
+const addFor =
+  (relation: AnyRelation, owner: AnyRelation, value: string, field = "node") =>
+  (draft: Draft): void => {
+    of(draft, relation).push({ [field]: text(first(draft, owner), "id"), value });
+  };
+
+/**
+ * Write `value` into every copy of the first typed float value: the typed value and the value it
+ * names, whose collapsed form is `collapsed`. The caller writes the arm's.
+ *
+ * @returns The float arm's row.
+ */
+const writeTypedCopies = (draft: Draft, value: string, collapsed: string): Row => {
+  const arm = first(draft, usageRelations.UsageTypedValueFloat);
+  for (const row of rowsWhere(draft, UsageTypedValue, "id", text(arm, "id"))) {
+    set(row, "value", value);
+  }
+
+  for (const row of rowsWhere(draft, UsageValue, "id", text(arm, "id"))) {
+    set(row, "value", value);
+    set(row, "collapsed", collapsed);
+  }
+
+  return arm;
+};
+
+/**
+ * The first typed float value written `value`, which the float arm's pattern judges.
+ */
+const floatWritten =
+  (value: string, collapsed: string) =>
+  (draft: Draft): void => {
+    set(writeTypedCopies(draft, value, collapsed), "value", value);
+  };
+
+/**
+ * The first typed float value made an `integer` value written `value`: its base type, its copy of
+ * it and its arm move together, so the integer arm's pattern is the law it can break.
+ */
+const floatMadeInteger =
+  (value: string) =>
+  (draft: Draft): void => {
+    const arm = writeTypedCopies(draft, value, value);
+    const id = text(arm, "id");
+    for (const row of [
+      ...rowsWhere(draft, UsageTypedValue, "id", id),
+      ...rowsWhere(draft, UsageValueBaseType, "id", id),
+    ]) {
+      set(row, "baseType", "integer");
+    }
+
+    draft.set(
+      usageRelations.UsageTypedValueFloat,
+      of(draft, usageRelations.UsageTypedValueFloat).filter((row) => row !== arm),
+    );
+    of(draft, usageRelations.UsageTypedValueInteger).push({ id, value });
+  };
+
+/**
+ * The columns of the usage-data document that carry a pattern the spec's 4.14 names, each with its
+ * value. The two closed rosters, `TargetObjectType` and `BaseType`, name no value outside them, and
+ * the `^.*$` patterns of the `replace` and `preserve` text columns admit every string, so none of
+ * them has a negative here.
+ */
+const usagePatterns: readonly UsagePattern[] = [
+  {
+    alter: writeFirst(Statistic, "name", "1a"),
+    bad: "1a",
+    base: "usage3",
+    column: "Statistic.name",
+    source: plain(patterns.ncName),
+  },
+  {
+    alter: writeFirst(TargetObjectPartIdentifier, "value", "1a"),
+    bad: "1a",
+    base: "usage3",
+    column: "TargetObjectPartIdentifier.value",
+    source: plain(patterns.ncName),
+  },
+  {
+    alter: addFor(UsageValueFieldIdentifier, UsageValue, "1a", "id"),
+    bad: "1a",
+    base: "usage3",
+    column: "UsageValueFieldIdentifier.value",
+    source: plain(patterns.ncName),
+  },
+  {
+    alter: writeFirst(Statistic, "context", "a%zz"),
+    bad: "a%zz",
+    base: "usage3",
+    column: "Statistic.context",
+    source: plain(patterns.anyUri),
+  },
+  {
+    alter: addFor(UsageDataGlossary, UsageData, "a%zz"),
+    bad: "a%zz",
+    base: "usage3",
+    column: "UsageDataGlossary.value",
+    source: plain(patterns.anyUri),
+  },
+  {
+    alter: writeFirst(StatisticGlossary, "value", "a%zz"),
+    bad: "a%zz",
+    base: "usage3",
+    column: "StatisticGlossary.value",
+    source: plain(patterns.anyUri),
+  },
+  {
+    alter: writeFirst(StatisticCaseCount, "value", "1.5"),
+    bad: "1.5",
+    base: "usage3",
+    column: "StatisticCaseCount.value",
+    source: plain(patterns.xsInteger),
+  },
+  {
+    alter: writeFirst(StatisticStdError, "value", "x"),
+    bad: "x",
+    base: "usage3",
+    column: "StatisticStdError.value",
+    source: plain(patterns.xsDouble),
+  },
+  {
+    alter: addFor(StatisticStdDeviation, Statistic, "x"),
+    bad: "x",
+    base: "usage3",
+    column: "StatisticStdDeviation.value",
+    source: plain(patterns.xsDouble),
+  },
+  {
+    alter: writeFirst(UsageMappingLowerBound, "value", "x"),
+    bad: "x",
+    base: "usage3",
+    column: "UsageMappingLowerBound.value",
+    source: plain(patterns.xsDouble),
+  },
+  {
+    alter: writeFirst(UsageMappingUpperBound, "value", "x"),
+    bad: "x",
+    base: "usage3",
+    column: "UsageMappingUpperBound.value",
+    source: plain(patterns.xsDouble),
+  },
+  {
+    alter: writeFirst(UsageMapping, "defaultValue", "x"),
+    bad: "x",
+    base: "usage3",
+    column: "UsageMapping.defaultValue",
+    source: plain(patterns.xsDouble),
+  },
+  {
+    alter: writeFirst(UsageMapEntry, "mappedValue", "x"),
+    bad: "x",
+    base: "usage3",
+    column: "UsageMapEntry.mappedValue",
+    source: plain(patterns.xsDouble),
+  },
+  {
+    alter: addFor(UsageMapEntryCaseSensitive, UsageMapEntry, "maybe"),
+    bad: "maybe",
+    base: "usage3",
+    column: "UsageMapEntryCaseSensitive.value",
+    source: plain(patterns.xsBoolean),
+  },
+  {
+    alter: writeFirst(StatisticLastUpdated, "value", "2004-13-04"),
+    bad: "2004-13-04",
+    base: "usage3",
+    column: "StatisticLastUpdated.value",
+    source: plain(patterns.usageDate),
+  },
+  {
+    alter: floatMadeInteger("0.87"),
+    bad: "0.87",
+    base: "usage3Typed",
+    column: "UsageTypedValueInteger.value",
+    source: plain(patterns.xsInteger),
+  },
+  {
+    alter: floatWritten(" 0.87 ", "0.87"),
+    bad: " 0.87 ",
+    base: "usage3Typed",
+    column: "UsageTypedValueFloat.value",
+    source: plain(patterns.xsDouble),
+  },
+];
+
+/**
+ * Add, by hand, the rows of an `rptemplate` document for the resource `rp1`: its tree, the root
+ * node and its processing row. No builder writes them, so the template-rooted row has none of an
+ * item's: no `ResponseProcessingItem`.
+ *
+ * @returns The document's id.
+ */
+const templateDocument = (draft: Draft): string => {
+  const resource = rowWhere(draft, Resource, "identifier", "rp1");
+  const manifest = first(draft, Package);
+  const id = crypto.randomUUID();
+  const version = text(manifest, "schemaversion");
+
+  of(draft, Tree).push({
+    charset: text(first(draft, Tree), "charset"),
+    id,
+    kind: "document",
+    root: "rptemplate",
+    version,
+  });
+  of(draft, Node).push({
+    id,
+    kind: "qti-response-processing",
+    prefix: "",
+    rootKind: "rptemplate",
+    tree: id,
+    version,
+  });
+  of(draft, TreeRoot).push({ node: id, tree: id });
+  of(draft, Document).push({
+    id,
+    package: text(manifest, "id"),
+    path: "rp/match_correct.xml",
+    resource: text(resource, "identifier"),
+    resourceType: text(resource, "type"),
+    root: "rptemplate",
+    version,
+  });
+  of(draft, ResponseProcessing).push({ id, rootKind: "rptemplate" });
+
+  return id;
+};
+
+/**
+ * The negatives of the second half: the variant, the DRD record, the manifest's `xs:ID` space, the
+ * curriculum standards set, the usage-data document, the template root and the lexical rows. Each
+ * is an alteration of one fixture's rows, and the law it breaks, as the first half's.
+ */
+const packagingNegatives: readonly Negative[] = [
+  {
+    alter: (draft) => {
+      replaceEverywhere(draft, "3.0.0", "3.0.1");
+    },
+    base: "variant",
+    laws: [admission],
+    name: "an edge from cp:resource to cpx:variant at the version 3.0.1 is refused by the Edge containment into Admission",
+  },
+  {
+    alter: (draft) => {
+      const variant = first(draft, Variant);
+      set(variant, "identifierref", text(variant, "resourceIdentifier"));
+    },
+    base: "variant",
+    laws: [{ kind: "check", name: "VariantNotSelf", relation: Variant.name }],
+    name: "a Variant whose identifierref is its own resource is refused by the VariantNotSelf check",
+  },
+  {
+    alter: (draft) => {
+      set(first(draft, Variant), "identifierref", "nonesuch");
+    },
+    base: "variant",
+    laws: [
+      contained(
+        side(Variant, ["package", "identifierref"]),
+        side(Resource, ["package", "identifier"]),
+      ),
+    ],
+    name: "a Variant whose identifierref names no resource is refused by the containment into Resource",
+  },
+  {
+    alter: (draft) => {
+      set(first(draft, Variant), "resourceIdentifier", "elsewhere");
+    },
+    base: "variant",
+    laws: [
+      contained(
+        side(Variant, ["resource", "package", "resourceIdentifier"]),
+        side(Resource, ["id", "package", "identifier"]),
+      ),
+    ],
+    name: "a Variant whose resourceIdentifier is not its parent resource's identifier is refused by the containment into Resource",
+  },
+  {
+    alter: (draft) => {
+      copySubtree(draft, text(first(draft, Variant), "id"));
+    },
+    base: "variant",
+    laws: [keyOf(Variant, ["package", "identifier"])],
+    name: "two Variant rows for one identifier are refused by the key on (package, identifier)",
+  },
+  {
+    alter: (draft) => {
+      removeSubtree(draft, text(first(draft, VariantMetadata), "id"));
+    },
+    base: "variant",
+    laws: [
+      capacity(side(Variant, ["id"]), side(VariantMetadata, ["variant"]), { high: 1n, low: 1n }),
+    ],
+    name: "a Variant with no cpx:metadata is refused by the capacity",
+  },
+  {
+    alter: (draft) => {
+      copySubtree(draft, text(first(draft, VariantMetadata), "id"));
+    },
+    base: "variant",
+    laws: [keyOf(VariantMetadata, ["variant"])],
+    name: "two VariantMetadata rows for one variant are refused by the key on variant",
+  },
+  {
+    alter: (draft) => {
+      removeSubtree(draft, text(first(draft, AccessForAllResource), "id"));
+    },
+    base: "variant",
+    laws: [
+      capacity(side(VariantMetadata, ["id"]), side(AccessForAllResource, ["metadata"]), {
+        high: 1n,
+        low: 1n,
+      }),
+    ],
+    name: "a cpx:metadata with no accessForAllResource is refused by the capacity",
+  },
+  {
+    alter: (draft) => {
+      copySubtree(draft, text(first(draft, AccessForAllResource), "id"));
+    },
+    base: "variant",
+    laws: [keyOf(AccessForAllResource, ["metadata"])],
+    name: "two AccessForAllResource rows for one cpx:metadata are refused by the key on metadata",
+  },
+  ...drdLeaves.flatMap((leaf): Negative[] =>
+    leaf.bad === undefined || leaf.source === undefined
+      ? []
+      : [
+          {
+            alter: (draft) => {
+              addLeaf(draft, leaf, leaf.bad);
+            },
+            base: "variant",
+            laws: [patternLaw(leaf.source)],
+            name: `a ${leaf.handle} value ${JSON.stringify(leaf.bad)} is refused by its pattern`,
+          },
+        ],
+  ),
+  ...drdLeaves
+    .filter(
+      (leaf) =>
+        leaf.handle === "drd:atInteroperable" ||
+        leaf.handle === "drd:educationalComplexityOfAdaptation",
+    )
+    .map((leaf): Negative => ({
+      alter: (draft) => {
+        const value = leaf.handle === "drd:atInteroperable" ? "true" : "simplified";
+        addLeaf(draft, leaf, value);
+        addLeaf(draft, leaf, value);
+      },
+      base: "variant",
+      laws: [keyOf(leaf.relation, ["owner"])],
+      name: `two ${leaf.handle} leaves under one accessForAllResource are refused by the key on owner`,
+    })),
+  {
+    alter: (draft) => {
+      const identifier = text(first(draft, Package), "identifier");
+      replaceEverywhere(draft, text(first(draft, ManifestIdOfVariant), "id"), identifier);
+    },
+    base: "variant",
+    laws: [primaryKeyOf(ManifestId, ["package", "id"])],
+    name: "a ManifestIdOfVariant whose id is the manifest's identifier is refused by the key on ManifestId",
+  },
+  {
+    alter: (draft) => {
+      const arm = first(draft, ManifestIdOfManifest);
+      draft.set(
+        ManifestId,
+        of(draft, ManifestId).filter((row) => text(row, "id") !== text(arm, "id")),
+      );
+      draft.set(ManifestIdOfManifest, []);
+    },
+    base: "variant",
+    laws: [
+      mirrorsLaw(
+        side(Package, ["id", "identifier"]),
+        side(ManifestIdOfManifest, ["package", "id"]),
+      ),
+    ],
+    name: "a Package with no ManifestIdOfManifest row is refused by the mirror",
+  },
+  {
+    alter: (draft) => {
+      const arm = of(draft, ManifestIdOfResource)[0] ?? assert.fail("no resource id");
+      draft.set(
+        ManifestId,
+        of(draft, ManifestId).filter((row) => text(row, "id") !== text(arm, "id")),
+      );
+      draft.set(
+        ManifestIdOfResource,
+        of(draft, ManifestIdOfResource).filter((row) => row !== arm),
+      );
+    },
+    base: "variant",
+    laws: [
+      mirrorsLaw(
+        side(Resource, ["package", "identifier"]),
+        side(ManifestIdOfResource, ["package", "id"]),
+      ),
+    ],
+    name: "a Resource with no ManifestIdOfResource row is refused by the mirror",
+  },
+  {
+    alter: (draft) => {
+      const arm = first(draft, ManifestIdOfVariant);
+      draft.set(
+        ManifestId,
+        of(draft, ManifestId).filter((row) => text(row, "id") !== text(arm, "id")),
+      );
+      draft.set(ManifestIdOfVariant, []);
+    },
+    base: "variant",
+    laws: [
+      mirrorsLaw(
+        side(Variant, ["package", "identifier"]),
+        side(ManifestIdOfVariant, ["package", "id"]),
+      ),
+    ],
+    name: "a Variant with no ManifestIdOfVariant row is refused by the mirror",
+  },
+  {
+    alter: (draft) => {
+      of(draft, ManifestId).push({
+        holder: "variant",
+        id: "orphan",
+        package: text(first(draft, Package), "id"),
+      });
+    },
+    base: "variant",
+    laws: [{ field: "holder", kind: "alternatives", relation: ManifestId.name }],
+    name: "a ManifestId with the holder variant and no ManifestIdOfVariant row is refused by the alternatives",
+  },
+  {
+    alter: (draft) => {
+      copySubtree(draft, text(first(draft, CsmSet), "id"));
+    },
+    base: "csm",
+    laws: [
+      capacity(
+        side(Node, ["id"], [{ field: "kind", value: "cp:metadata.manifest" }]),
+        side(CsmSet, ["host"]),
+        {
+          high: 1n,
+          low: 0n,
+        },
+      ),
+    ],
+    name: "two CsmSet rows under one manifest-level metadata are refused by the capacity",
+  },
+  {
+    alter: (draft) => {
+      const resourceSet = of(draft, CsmSet).find(
+        (row) =>
+          text(rowWhere(draft, Node, "id", text(row, "host")), "kind") === "cp:metadata.resource",
+      );
+      copySubtree(draft, text(resourceSet ?? assert.fail("no resource-level set"), "id"));
+    },
+    base: "csm",
+    laws: [
+      capacity(
+        side(Node, ["id"], [{ field: "kind", value: "cp:metadata.resource" }]),
+        side(CsmSet, ["host"]),
+        {
+          high: 1n,
+          low: 0n,
+        },
+      ),
+    ],
+    name: "two CsmSet rows under one resource-level metadata are refused by the capacity",
+  },
+  {
+    alter: (draft) => {
+      removeChildren(draft, CsmMetadata, "set", text(first(draft, CsmSet), "id"));
+    },
+    base: "csm",
+    laws: [capacity(side(CsmSet, ["id"]), side(CsmMetadata, ["set"]), { high: "*", low: 1n })],
+    name: "a CsmSet with no curriculumStandardsMetadata is refused by the capacity",
+  },
+  {
+    alter: (draft) => {
+      removeChildren(draft, CsmSetOfGuids, "metadata", text(first(draft, CsmMetadata), "id"));
+    },
+    base: "csm",
+    laws: [
+      capacity(side(CsmMetadata, ["id"]), side(CsmSetOfGuids, ["metadata"]), {
+        high: "*",
+        low: 1n,
+      }),
+    ],
+    name: "a curriculumStandardsMetadata with no setOfGUIDs is refused by the capacity",
+  },
+  {
+    alter: (draft) => {
+      removeChildren(draft, CsmLabelledGuid, "setOfGuids", text(first(draft, CsmSetOfGuids), "id"));
+    },
+    base: "csm",
+    laws: [
+      capacity(side(CsmSetOfGuids, ["id"]), side(CsmLabelledGuid, ["setOfGuids"]), {
+        high: "*",
+        low: 1n,
+      }),
+    ],
+    name: "a setOfGUIDs with no labelledGUID is refused by the capacity",
+  },
+  {
+    alter: (draft) => {
+      removeChildren(draft, CsmGuid, "labelledGuid", text(first(draft, CsmLabelledGuid), "id"));
+    },
+    base: "csm",
+    laws: [
+      capacity(side(CsmLabelledGuid, ["id"]), side(CsmGuid, ["labelledGuid"]), {
+        high: 1n,
+        low: 1n,
+      }),
+    ],
+    name: "a labelledGUID with no GUID is refused by the capacity",
+  },
+  ...(
+    [
+      ["csmd:GUID", CsmGuid, "guid"],
+      ["csmd:label", CsmLabel, "label"],
+      ["csmd:caseItemURI", CsmCaseItemUri, "urn:example:item"],
+    ] as const
+  ).map(([handle, relation, value]): Negative => ({
+    alter: (draft) => {
+      const owner = text(first(draft, CsmLabelledGuid), "id");
+      const id = addNode(draft, handle, owner);
+      of(draft, relation).push({ id, labelledGuid: owner, value });
+    },
+    base: "csm",
+    laws: [keyOf(relation, ["labelledGuid"])],
+    name: `two ${handle} leaves under one labelledGUID are refused by the key on labelledGuid`,
+  })),
+  {
+    alter: (draft) => {
+      set(first(draft, CsmCaseItemUri), "value", "a%zz");
+    },
+    base: "csm",
+    laws: [patternLaw(patterns.anyUri)],
+    name: "a caseItemURI of a%zz is refused by the uri-syntax pattern",
+  },
+  ...[
+    CsmSetResourceLabel,
+    CsmSetResourcePartId,
+    CsmMetadataProviderId,
+    CsmSetOfGuidsRegion,
+    CsmSetOfGuidsVersion,
+  ].map((relation): Negative => ({
+    alter: (draft) => {
+      of(draft, relation).push({ node: text(first(draft, relation), "node"), value: "another" });
+    },
+    base: "csm",
+    laws: [primaryKeyOf(relation, ["node"])],
+    name: `a second ${relation.name} row for one node is refused by the key on node`,
+  })),
+  {
+    alter: (draft) => {
+      draft.set(UsageData, []);
+    },
+    base: "usage3",
+    laws: [
+      mirrorsLaw(
+        side(Document, ["id"], [{ field: "root", value: "usagedata" }]),
+        side(UsageData, ["document"]),
+      ),
+    ],
+    name: "a usagedata Document with no UsageData row is refused by the mirror",
+  },
+  {
+    alter: (draft) => {
+      set(first(draft, UsageData), "id", text(first(draft, Statistic), "id"));
+    },
+    base: "usage3",
+    laws: [contained(side(UsageData, ["id", "document"]), side(TreeRoot, ["node", "tree"]))],
+    name: "a UsageData whose id is not the root node is refused by the containment into TreeRoot",
+  },
+  {
+    alter: (draft) => {
+      removeChildren(draft, TargetObject, "statistic", text(first(draft, Statistic), "id"));
+    },
+    base: "usage3",
+    laws: [
+      capacity(side(Statistic, ["id"]), side(TargetObject, ["statistic"]), { high: "*", low: 1n }),
+    ],
+    name: "a Statistic with no TargetObject is refused by the capacity",
+  },
+  {
+    alter: (draft) => {
+      const id = text(ordinaryStatistic(draft), "id");
+      draft.set(
+        OrdinaryStatisticArm,
+        of(draft, OrdinaryStatisticArm).filter((row) => text(row, "id") !== id),
+      );
+    },
+    base: "usage3",
+    laws: [{ field: "kind", kind: "alternatives", relation: Node.name }],
+    name: "an ordinary Statistic with no OrdinaryStatisticArm row is refused by the Node alternatives, ahead of the mirror",
+  },
+  {
+    alter: (draft) => {
+      const id = text(categorizedStatistic(draft), "id");
+      draft.set(
+        CategorizedStatisticArm,
+        of(draft, CategorizedStatisticArm).filter((row) => text(row, "id") !== id),
+      );
+    },
+    base: "usage3",
+    laws: [{ field: "kind", kind: "alternatives", relation: Node.name }],
+    name: "a categorized Statistic with no CategorizedStatisticArm row is refused by the Node alternatives, ahead of the mirror",
+  },
+  {
+    alter: (draft) => {
+      copySubtree(draft, text(first(draft, UsageValue), "id"));
+    },
+    base: "usage3",
+    laws: [keyOf(UsageValue, ["statistic"])],
+    name: "two UsageValue rows for one ordinary statistic are refused by the key on statistic",
+  },
+  {
+    alter: (draft) => {
+      removeSubtree(draft, text(first(draft, UsageValue), "id"));
+    },
+    base: "usage3",
+    laws: [
+      capacity(side(Statistic, ["id"], ordinary), side(UsageValue, ["statistic"]), {
+        high: 1n,
+        low: 1n,
+      }),
+    ],
+    name: "an ordinary Statistic with no UsageValue is refused by the capacity",
+  },
+  {
+    alter: (draft) => {
+      removeSubtree(draft, text(first(draft, UsageMapping), "id"));
+    },
+    base: "usage3",
+    laws: [
+      capacity(side(Statistic, ["id"], categorized), side(UsageMapping, ["statistic"]), {
+        high: 1n,
+        low: 1n,
+      }),
+    ],
+    name: "a categorized Statistic with no UsageMapping is refused by the capacity",
+  },
+  {
+    alter: (draft) => {
+      const owner = text(categorizedStatistic(draft), "id");
+      const id = addNode(draft, "ud:value", owner);
+      of(draft, UsageValue).push({ collapsed: "1", id, statistic: owner, value: "1" });
+    },
+    base: "usage3",
+    laws: [admission],
+    name: "an edge from ud:categorizedStatistic to ud:value is refused by the Edge containment into Admission",
+  },
+  {
+    alter: (draft) => {
+      copySubtree(draft, text(first(draft, UsageMapping), "id"));
+    },
+    base: "usage3",
+    laws: [keyOf(UsageMapping, ["statistic"])],
+    name: "two UsageMapping rows for one categorized statistic are refused by the key on statistic",
+  },
+  {
+    alter: (draft) => {
+      removeChildren(draft, UsageMapEntry, "mapping", text(first(draft, UsageMapping), "id"));
+    },
+    base: "usage3",
+    laws: [
+      capacity(side(UsageMapping, ["id"]), side(UsageMapEntry, ["mapping"]), {
+        high: "*",
+        low: 1n,
+      }),
+    ],
+    name: "a UsageMapping with no map entry is refused by the capacity",
+  },
+  {
+    alter: (draft) => {
+      const id = text(first(draft, UsageTypedValue), "id");
+      draft.set(
+        UsageValueBaseType,
+        of(draft, UsageValueBaseType).filter((row) => text(row, "id") !== id),
+      );
+    },
+    base: "usage3Typed",
+    laws: [mirrorsLaw(side(UsageTypedValue, ["id"]), side(UsageValueBaseType, ["id"]))],
+    name: "a UsageTypedValue with no UsageValueBaseType row is refused by the mirror",
+  },
+  {
+    alter: (draft) => {
+      const id = text(first(draft, UsageTypedValue), "id");
+      for (const relation of [UsageTypedValue, ...typedArms]) {
+        draft.set(
+          relation,
+          of(draft, relation).filter((row) => peek(row, "id") !== id),
+        );
+      }
+    },
+    base: "usage3Typed",
+    laws: [mirrorsLaw(side(UsageValueBaseType, ["id"]), side(UsageTypedValue, ["id"]))],
+    name: "a UsageValueBaseType with no UsageTypedValue row is refused by the mirror",
+  },
+  {
+    alter: (draft) => {
+      const typed = first(draft, UsageTypedValue);
+      for (const relation of [UsageTypedValue, ...typedArms]) {
+        for (const row of rowsWhere(draft, relation, "id", text(typed, "id"))) {
+          set(row, "value", "0.5");
+        }
+      }
+    },
+    base: "usage3Typed",
+    laws: [contained(side(UsageTypedValue, ["id", "value"]), side(UsageValue, ["id", "value"]))],
+    name: "a UsageTypedValue whose value differs from its UsageValue is refused by the containment into UsageValue",
+  },
+  ...usagePatterns.map(({ alter, base, bad, column, source }): Negative => ({
+    alter,
+    base,
+    laws: [patternLaw(source.pattern, source.flags)],
+    name: `a ${column} of ${JSON.stringify(bad)} is refused by its pattern`,
+  })),
+  {
+    alter: (draft) => {
+      replaceEverywhere(draft, "imsqti_resprocessing_xmlv3p0", "webcontent");
+      templateDocument(draft);
+    },
+    base: "resproc",
+    laws: [contained(side(Document, ["resourceType", "root"]), side(RootOfType, ["type", "root"]))],
+    name: "an rptemplate Document whose resource type is webcontent is refused by the containment into RootOfType",
+  },
+  {
+    alter: (draft) => {
+      const owner = text(first(draft, Variant), "id");
+      of(draft, AttributeLexical).push({
+        attribute: "identifier",
+        kind: "cpx:variant",
+        node: owner,
+        value: "v1",
+      });
+    },
+    base: "variant",
+    laws: [patternLaw(patterns.uncollapsed, patterns.uncollapsedFlags)],
+    name: "an AttributeLexical row holding an already collapsed value is refused by the attribute-lexical pattern",
+  },
+  {
+    alter: (draft) => {
+      const node = text(first(draft, Variant), "id");
+      for (const value of [" v1", "v1 "]) {
+        of(draft, AttributeLexical).push({
+          attribute: "identifier",
+          kind: "cpx:variant",
+          node,
+          value,
+        });
+      }
+    },
+    base: "variant",
+    laws: [primaryKeyOf(AttributeLexical, ["node", "attribute"])],
+    name: "two AttributeLexical rows for one attribute of a node are refused by the key on (node, attribute)",
+  },
+];
+
+/**
  * The `(parent, child)` pairs of the LOM at-most-one asserts: one per distinct pair, with the path
  * of the parent's context.
  */
@@ -984,7 +2101,7 @@ describe.skipIf(!hasLease)(
     layer(Layer.mergeAll(AuthorAppLayer, FixtureRowsLayer), { excludeTestServices: true })(
       "the schema's bin 1 rules over the packaging relations, by direct ChangeSet",
       (it) => {
-        for (const negative of negatives) {
+        for (const negative of [...negatives, ...packagingNegatives]) {
           it.effect(negative.name, () =>
             Effect.gen(function* refused() {
               const fixtures = yield* FixtureRows;
@@ -1059,6 +2176,33 @@ describe.skipIf(!hasLease)(
             }),
           );
         }
+
+        for (const base of ["csm", "usage3", "usage3Typed", "variant"] as const) {
+          it.effect(`the unaltered ${base} rows are accepted`, () =>
+            Effect.gen(function* accepted() {
+              const fixtures = yield* FixtureRows;
+              const outcome = yield* apply(draftOf(fixtures[base]));
+
+              assert.strictEqual(outcome.kind, "accepted");
+            }),
+          );
+        }
+
+        it.effect(
+          "an rptemplate Document under imsqti_resprocessing_xmlv3p0, with its ResponseProcessing row and no item row, is accepted",
+          () =>
+            Effect.gen(function* accepted() {
+              const fixtures = yield* FixtureRows;
+              const draft = draftOf(fixtures.resproc);
+              const document = templateDocument(draft);
+
+              assert.isEmpty(rowsWhere(draft, ResponseProcessingItem, "id", document));
+
+              const outcome = yield* apply(draft);
+
+              assert.strictEqual(outcome.kind, "accepted");
+            }),
+        );
       },
     );
   },
