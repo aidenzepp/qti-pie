@@ -3,16 +3,19 @@ import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platf
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
 import { renderTree } from "#qti/export/render.ts";
+import { itemRows } from "#qti/import/item.ts";
 import { processingRows } from "#qti/import/processing.ts";
+import { rptemplateRows } from "#qti/import/rptemplate.ts";
 import { Rows, treeRows } from "#qti/import/tree.ts";
 import type { Language } from "#qti/processing/ast.ts";
 import { emptyEnvironment, environmentOf, withDeclarations } from "#qti/processing/env.ts";
+import { templateDocuments } from "#qti/processing/fixtures.ts";
 import type { DeclarationEntry, Environment, Mode } from "#qti/processing/env.ts";
 import type { RootKindHandle } from "#qti/schema/node.ts";
 import { canonicalize } from "#qti/xml/canonical.ts";
 import { xmllintC14n } from "#qti/xml/oracle.ts";
 import { readXml } from "#qti/xml/read.ts";
-import type { Attribute, Child, Element, XmlDocument } from "#qti/xml/tree.ts";
+import type { Attribute, Element, XmlDocument } from "#qti/xml/tree.ts";
 import { writeXml } from "#qti/xml/write.ts";
 
 /**
@@ -62,21 +65,8 @@ const pathTo = (root: Element, target: Element): readonly Element[] => {
 };
 
 /**
- * `own` with the attributes of every `xi:include` under it dropped, namespace declarations aside.
- */
-const strip = (own: Element): Element => ({
-  ...own,
-  attributes:
-    own.qname === "xi:include"
-      ? own.attributes.filter((attribute) => attribute.namespace === xmlnsNamespace)
-      : own.attributes,
-  children: own.children.map((child): Child => (child.kind === "element" ? strip(child) : child)),
-});
-
-/**
  * `element` as the root of a document of its own: the namespace declarations in scope above it are
- * written on it, as Canonical XML writes a subtree's apex, and an `xi:include` keeps no attribute,
- * because rendering them is `p3-29`'s.
+ * written on it, as Canonical XML writes a subtree's apex.
  */
 const detached = (doc: XmlDocument, element: Element): XmlDocument => {
   const inherited = new Map<string, Attribute>();
@@ -88,7 +78,7 @@ const detached = (doc: XmlDocument, element: Element): XmlDocument => {
     }
   }
 
-  const apex = strip(element);
+  const apex = element;
   const own = new Set(apex.attributes.map((attribute) => attribute.qname));
 
   return {
@@ -270,6 +260,79 @@ layer(TestLayer, { excludeTestServices: true })("export/processing.ts", (suite) 
       assert.strictEqual(forms.rendered, forms.read);
       assert.strictEqual(forms.rendered.split("tolerance-mode=").length - 1, 1);
       assert.strictEqual(forms.rendered.split("substring=").length - 1, 1);
+    }),
+  );
+
+  suite.effect("renders the qti-response-processing of response-mapped.xml as it was read", () =>
+    Effect.gen(function* mappedSubtree() {
+      const doc = yield* readFixture("valid", "response-mapped");
+      const forms = yield* roundTrip(doc, "qti-response-processing", itemSetting);
+
+      assert.strictEqual(forms.rendered, forms.read);
+      assert.strictEqual(forms.rendered, forms.oracle);
+      assert.include(forms.rendered, "<qti-map-response");
+    }),
+  );
+
+  suite.effect("renders the qti-template-processing of template.xml as it was read", () =>
+    Effect.gen(function* templateSubtree() {
+      const doc = yield* readFixture("valid", "template");
+      const forms = yield* roundTrip(doc, "qti-template-processing", {
+        language: "template",
+        mode: "template",
+        rootKind: "item",
+      });
+
+      assert.strictEqual(forms.rendered, forms.read);
+      assert.strictEqual(forms.rendered, forms.oracle);
+    }),
+  );
+
+  suite.effect("renders each of the five template documents as it was read", () =>
+    Effect.gen(function* templateDocumentsRoundTrip() {
+      const fs = yield* FileSystem.FileSystem;
+      const documents = yield* templateDocuments();
+      assert.strictEqual(documents.length, 5);
+
+      for (const document of documents) {
+        const doc = yield* readXml(yield* fs.readFile(document.path));
+        const built = yield* rptemplateRows(
+          {
+            doc,
+            packageId: crypto.randomUUID(),
+            path: document.path,
+            resource: path.basename(document.path, ".xml"),
+            resourceType: "imsqti_rptemplate_xmlv3p0",
+            version: "3.0.0",
+          },
+          Rows.empty(),
+        );
+        const rendered = decode(canonicalize(renderTree(built.rows, built.documentId)));
+
+        assert.strictEqual(rendered, decode(canonicalize(doc)), document.path);
+      }
+    }),
+  );
+
+  suite.effect("renders response.xml as a whole item, its xi:include with href and parse", () =>
+    Effect.gen(function* wholeItem() {
+      const doc = yield* readFixture("valid", "response");
+      const built = yield* itemRows(
+        {
+          doc,
+          packageId: crypto.randomUUID(),
+          path: "response.xml",
+          resource: "response",
+          resourceType: "imsqti_item_xmlv3p0",
+          version: "3.0.0",
+        },
+        Rows.empty(),
+      );
+      const rendered = decode(canonicalize(renderTree(built.rows, built.documentId)));
+
+      assert.strictEqual(rendered, decode(canonicalize(doc)));
+      assert.include(rendered, '<xi:include href="shared-rules.xml" parse="xml">');
+      assert.include(rendered, "<xi:fallback>fallback</xi:fallback>");
     }),
   );
 });
