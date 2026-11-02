@@ -48,6 +48,7 @@ import {
 import { ChoiceInteraction, TypedBinding } from "#qti/schema/interaction.ts";
 import {
   AssociableHotspot,
+  AssociableHotspotMatchMin,
   AssociateInteraction,
   AssociateMaxAssociations,
   AssociateMinAssociations,
@@ -679,8 +680,7 @@ const matchBounds = (
 
 /**
  * Every typed count of the interactions and their choices (spec 3.9, 4.5) with its source. A count
- * whose attribute has no lexical relation of its own is not here: `AssociableHotspot`'s
- * `match-min` is written nowhere but its typed column.
+ * whose attribute has no lexical relation of its own is not here.
  */
 const countsOf = (rows: Rows): readonly Count[] => {
   const of = (relation: AnyRelation): Written => valuesOfRelation(rows, relation);
@@ -769,7 +769,11 @@ const countsOf = (rows: Rows): readonly Count[] => {
       Rows.of(rows, SimpleAssociableChoice),
       of(SimpleAssociableChoiceMatchMin),
     ),
-    ...matchBounds("AssociableHotspot", Rows.of(rows, AssociableHotspot)),
+    ...matchBounds(
+      "AssociableHotspot",
+      Rows.of(rows, AssociableHotspot),
+      of(AssociableHotspotMatchMin),
+    ),
     ...matchBounds("GapText", Rows.of(rows, GapText), of(GapTextMatchMin)),
     ...matchBounds("GapImg", Rows.of(rows, GapImg), of(GapImgMatchMin)),
   ];

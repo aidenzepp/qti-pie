@@ -3,10 +3,11 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import type { ItemInput } from "#qti/import/item.ts";
-import { ownAttributes, renderTree } from "#qti/export/render.ts";
+import { renderTree } from "#qti/export/render.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
 import { Rows } from "#qti/import/tree.ts";
+import { ownAttributes } from "#qti/schema/attribute-homes.ts";
 import * as family from "#qti/schema/attributes.ts";
 import { ResourceLomGeneral } from "#qti/schema/lang.ts";
 import { registries } from "#qti/schema/seed/admission.ts";
@@ -185,12 +186,23 @@ const synthetic = `<?xml version="1.0" encoding="UTF-8"?>
 </qti-assessment-item>`;
 
 /**
+ * An item with a graphic associate interaction whose first hotspot writes `match-min` and whose
+ * second omits it.
+ */
+const hotspotItem = `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="hotspot" title="Hotspot" adaptive="false" time-dependent="false">
+  <qti-response-declaration identifier="RESPONSE" cardinality="multiple" base-type="directedPair"/>
+  <qti-item-body>
+    <qti-graphic-associate-interaction response-identifier="RESPONSE"><img src="a.png" alt="a"/><qti-associable-hotspot identifier="H1" shape="rect" coords="0,0,5,5" match-max="1" match-min="1"/><qti-associable-hotspot identifier="H2" shape="rect" coords="6,6,9,9" match-max="1"/></qti-graphic-associate-interaction>
+  </qti-item-body>
+</qti-assessment-item>`;
+
+/**
  * The attributes the registries admit that no relation stores, so the importer drops them and no
- * render can bring them back: the schema has no `show-hide` for these kinds and no `match-min`
- * row for an associable hotspot.
+ * render can bring them back: the schema has no `show-hide` for these kinds.
  */
 const unstored: ReadonlyMap<string, readonly string[]> = new Map([
-  ["qti-associable-hotspot", ["match-min", "show-hide"]],
+  ["qti-associable-hotspot", ["show-hide"]],
   ["qti-gap", ["show-hide"]],
   ["qti-gap-img", ["show-hide"]],
   ["qti-gap-text", ["show-hide"]],
@@ -245,6 +257,27 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         assert.strictEqual(rendered.split('shuffle="').length - 1, 1);
         assert.notInclude(rendered, 'src=""');
         assert.notInclude(rendered, "owner");
+      }),
+    );
+
+    it.effect("an associable hotspot's written match-min is kept", () =>
+      Effect.gen(function* hotspotMatchMin() {
+        const doc = yield* readXml(new TextEncoder().encode(hotspotItem));
+        const input: ItemInput = {
+          doc,
+          packageId: crypto.randomUUID(),
+          path: "hotspot.xml",
+          resource: "hotspot",
+          resourceLomHasGeneral: false,
+          resourceType: "imsqti_item_xmlv3p0",
+          version: "3.0.1",
+        };
+        const { documentId, rows } = yield* itemRows(input, Rows.empty());
+        const rendered = textOf(canonicalize(renderTree(rows, documentId)));
+
+        assert.strictEqual(rendered, textOf(canonicalize(doc)));
+        assert.strictEqual(rendered.split('match-min="').length - 1, 1);
+        assert.include(rendered, 'match-min="1"');
       }),
     );
 

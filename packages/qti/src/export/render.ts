@@ -41,13 +41,6 @@ import {
 } from "#qti/schema/node.ts";
 import type { Attribute, Child, Misc, XmlDocument } from "#qti/xml/tree.ts";
 
-/**
- * The table of where each own attribute lives, which moved to `schema/attribute-homes.ts` so the
- * import's guards read the same one; re-exported for the test that checks it against the
- * registries.
- */
-export { ownAttributes } from "#qti/schema/attribute-homes.ts";
-
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
 const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
