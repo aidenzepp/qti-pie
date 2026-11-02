@@ -33,13 +33,12 @@ export type TypedExpression = Omit<ExpressionNode, "operands"> & {
 /**
  * A rule whose expression, sub-rules and condition branches carry typed nodes.
  *
- * A nested `xi:include` is a rule of kind `xi:include` (the parser's reading of it), so it appears
- * here with no expression.
+ * A nested `xi:include` stays an untyped `IncludeNode`: it holds no expression to type.
  */
 export interface TypedRuleNode extends Omit<RuleNode, "branches" | "expression" | "rules"> {
   readonly branches: readonly TypedRuleNode[];
   readonly expression: Option.Option<TypedExpression>;
-  readonly rules: readonly TypedRuleNode[];
+  readonly rules: readonly (IncludeNode | TypedRuleNode)[];
 }
 
 /**
@@ -603,7 +602,7 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
       ...node,
       branches: node.branches.map((branch) => typeRule(branch)),
       expression,
-      rules: node.rules.map((child) => typeRule(child)),
+      rules: node.rules.map((child) => (child.kind === "xi:include" ? child : typeRule(child))),
     };
   };
 
