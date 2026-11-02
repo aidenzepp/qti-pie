@@ -324,7 +324,7 @@ export const resultTypes: Readonly<Record<ExpressionKind, ResultRule>> = {
 /**
  * Whether a node kind is one of the 64 expression kinds.
  */
-export const isExpressionKind = (kind: NodeKindHandle): kind is ExpressionKind =>
+const isExpressionKind = (kind: NodeKindHandle): kind is ExpressionKind =>
   Object.hasOwn(resultTypes, kind);
 
 /**
