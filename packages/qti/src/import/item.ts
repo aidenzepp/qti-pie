@@ -61,7 +61,12 @@ import {
 } from "#qti/schema/interaction.ts";
 import { AssessmentItem, DeclaredAdaptive, ItemBody, Prompt } from "#qti/schema/item.ts";
 import { Edge } from "#qti/schema/node.ts";
-import type { AttributeNameHandle, NodeKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
+import type {
+  AncestryHandle,
+  AttributeNameHandle,
+  NodeKindHandle,
+  SchemaVersionHandle,
+} from "#qti/schema/node.ts";
 import {
   ResponseProcessing,
   ResponseProcessingItem,
@@ -74,9 +79,10 @@ import * as values from "#qti/schema/value.ts";
 import type { Element, XmlDocument } from "#qti/xml/tree.ts";
 
 /**
- * One node of a tree: its id and its kind.
+ * One node of a tree: its id, its kind and the ancestry it sits in.
  */
 interface NodeEntry {
+  readonly ancestry: AncestryHandle;
   readonly id: string;
   readonly kind: NodeKindHandle;
 }
@@ -436,9 +442,10 @@ const interactionRows = Effect.fn("import.interactionRows")(function* interactio
   rows: Rows,
   element: Element,
   node: NodeEntry,
-  documentId: string,
+  item: { readonly adaptive: string; readonly documentId: string },
   declarations: ReadonlyMap<string, Declared>,
 ): Effect.fn.Return<Rows, ItemRefusal> {
+  const { adaptive, documentId } = item;
   const attributes = reader(rows, element, node);
   const responseIdentifier = Option.getOrElse(
     attributes.read("response-identifier", "collapse"),
@@ -492,6 +499,8 @@ const interactionRows = Effect.fn("import.interactionRows")(function* interactio
   );
   built = Rows.add(built, InteractionBinding, [
     {
+      adaptive: judgedLater(adaptive),
+      ancestry: node.ancestry,
       document: documentId,
       interactionKind,
       node: node.id,
@@ -620,6 +629,7 @@ const processingRows = (rows: Rows, element: Element, node: NodeEntry, item: str
  * element and the position of each node under its parent.
  */
 interface SemanticInput {
+  readonly adaptive: string;
   readonly documentId: string;
   readonly nodes: NodeIndex;
   readonly positions: ReadonlyMap<string, bigint>;
@@ -641,7 +651,7 @@ const semanticRows = Effect.fn("import.semanticRows")(function* semanticRows(
   input: SemanticInput,
   walked: readonly (readonly [Element, Option.Option<Element>])[],
 ): Effect.fn.Return<Rows, ItemRefusal> {
-  const { documentId, nodes, positions, rootId } = input;
+  const { adaptive, documentId, nodes, positions, rootId } = input;
   let built = rows;
   const declaredBy = new Map<Element, Declared>();
   const declarations = new Map<string, Declared>();
@@ -679,7 +689,7 @@ const semanticRows = Effect.fn("import.semanticRows")(function* semanticRows(
     } else if (node.kind === "qti-value" && Option.isSome(set)) {
       built = valueRows(built, element, node, set.value, positions.get(node.id) ?? 0n);
     } else if (node.kind === "qti-choice-interaction") {
-      built = yield* interactionRows(built, element, node, documentId, declarations);
+      built = yield* interactionRows(built, element, node, { adaptive, documentId }, declarations);
     } else if (node.kind === "qti-simple-choice" && Option.isSome(parentNode)) {
       built = choiceRows(built, element, node, parentNode.value.id);
     } else if (node.kind === "qti-response-processing") {
@@ -787,9 +797,10 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
     });
   }
 
+  const adaptiveLexical = Option.getOrElse(adaptive.value, () => "false");
   built = Rows.add(built, AssessmentItem, [
     {
-      adaptive: judgedLater(Option.getOrElse(adaptive.value, () => "false")),
+      adaptive: judgedLater(adaptiveLexical),
       id: rootNode.id,
       timeDependent: judgedLater(timeDependent.value.value),
       tree: documentId,
@@ -803,7 +814,11 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
 
   const walked = withParents(root, Option.none());
   const positions = new Map(Rows.of(tree.rows, Edge).map((edge) => [edge.child, edge.position]));
-  built = yield* semanticRows(built, { documentId, nodes, positions, rootId: rootNode.id }, walked);
+  built = yield* semanticRows(
+    built,
+    { adaptive: adaptiveLexical, documentId, nodes, positions, rootId: rootNode.id },
+    walked,
+  );
 
   for (const [element, parent] of walked) {
     const node = nodes.get(element);

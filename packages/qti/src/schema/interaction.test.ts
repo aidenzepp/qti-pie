@@ -1,12 +1,23 @@
 import { schema } from "@bjornpagen/grizzle";
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, layer } from "@effect/vitest";
+import { NodeServices } from "@effect/platform-node";
+import { Effect, FileSystem, Predicate } from "effect";
+import path from "node:path";
+import { inspect } from "node:util";
+import { inject } from "vitest";
+import { itemRows } from "#qti/import/item.ts";
+import { Rows } from "#qti/import/tree.ts";
+import { readXml } from "#qti/xml/read.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as interaction from "#qti/schema/interaction.ts";
+import * as item from "#qti/schema/item.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
+import { fbFlagged } from "#qti/schema/seed/ancestry.ts";
 import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
+import { recordBindingFit } from "#qti/schema/seed/record-binding-fit.ts";
 
 /**
  * The probe schema: the node module's relations and rules with this module's.
@@ -19,9 +30,17 @@ const probe = () =>
       ...pkg.relations,
       ...document.relations,
       ...declaration.relations,
+      ...item.relations,
       ...interaction.relations,
     },
-    [...node.rules, ...pkg.rules, ...document.rules, ...declaration.rules, ...interaction.rules],
+    [
+      ...node.rules,
+      ...pkg.rules,
+      ...document.rules,
+      ...declaration.rules,
+      ...item.rules,
+      ...interaction.rules,
+    ],
   );
 
 /**
@@ -38,8 +57,10 @@ const added = [
   "DeclaredOrientation",
   "DeclaredShowHide",
   "DeclaredShuffle",
+  "GapMatchBinding",
   "InteractionBinding",
   "RecordBinding",
+  "RecordBindingFit",
   "SimpleChoice",
   "SimpleChoiceTemplateIdentifier",
   "TypedBinding",
@@ -78,6 +99,7 @@ describe("interaction", () => {
         pkg.rules.length +
         document.rules.length +
         declaration.rules.length +
+        item.rules.length +
         interaction.rules.length,
     );
   });
@@ -97,13 +119,14 @@ describe("interaction", () => {
     assert.deepStrictEqual([...(capacity?.from.fields ?? [])], ["interaction"]);
   });
 
-  it("holds the ChoiceBounds and BindingMax checks on their relations", () => {
+  it("holds the AdaptiveFeedback, ChoiceBounds and BindingMax checks on their relations", () => {
     const checks = interaction.rules.filter((rule) => rule.kind === "check");
     assert.deepStrictEqual(
       checks
         .toSorted((a, b) => a.name.localeCompare(b.name))
         .map((rule) => [rule.name, rule.relation]),
       [
+        ["AdaptiveFeedback", interaction.relations.InteractionBinding],
         ["BindingMax", interaction.relations.TypedBinding],
         ["ChoiceBounds", interaction.relations.ChoiceInteraction],
       ],
@@ -227,6 +250,8 @@ describe("interaction", () => {
     const { InteractionBinding } = interaction.relations;
     assert.deepStrictEqual([...InteractionBinding.primaryKey], ["node"]);
     assert.deepStrictEqual(Object.keys(InteractionBinding.fields).toSorted(), [
+      "adaptive",
+      "ancestry",
       "document",
       "interactionKind",
       "node",
@@ -280,7 +305,90 @@ describe("interaction", () => {
         ["interactionKind", "baseType", "cardinality"],
       ],
     ]);
-    assert.strictEqual(containedFrom(InteractionBinding).length, 3);
+    assert.strictEqual(containedFrom(InteractionBinding).length, 5);
+  });
+
+  it("contains each binding's ancestry in its node and its adaptive in its item", () => {
+    assert.deepStrictEqual(
+      containedFrom(interaction.relations.InteractionBinding).filter(
+        ([target]) => target === node.relations.Node || target === item.relations.AssessmentItem,
+      ),
+      [
+        [node.relations.Node, ["node", "document", "interactionKind"], ["id", "tree", "kind"]],
+        [node.relations.Node, ["node", "ancestry"], ["id", "ancestry"]],
+        [item.relations.AssessmentItem, ["document", "adaptive"], ["tree", "adaptive"]],
+      ],
+    );
+  });
+
+  it("holds AdaptiveFeedback over ancestry and adaptive, from the one fbFlagged roster", () => {
+    const rule = interaction.rules.find(
+      (candidate) => candidate.kind === "check" && candidate.name === "AdaptiveFeedback",
+    );
+    if (rule?.kind !== "check") {
+      assert.fail("no AdaptiveFeedback check");
+    }
+
+    assert.strictEqual(rule.relation, interaction.relations.InteractionBinding);
+
+    const described: unknown = rule;
+    const text = Predicate.hasProperty(described, "desc")
+      ? inspect(described.desc, { depth: null, maxStringLength: 100_000 })
+      : "";
+    assert.include(text, "ancestry");
+    assert.include(text, "adaptive");
+    assert.include(text, "true");
+    for (const handle of fbFlagged) {
+      assert.include(text, handle);
+    }
+  });
+
+  it("keys GapMatchBinding by node, contained in TypedBinding by (node, cardinality)", () => {
+    const { GapMatchBinding, TypedBinding } = interaction.relations;
+    assert.deepStrictEqual([...GapMatchBinding.primaryKey], ["node"]);
+    assert.deepStrictEqual(Object.keys(GapMatchBinding.fields).toSorted(), ["cardinality", "node"]);
+
+    const owned = interaction.rules.filter(
+      (rule) => rule.kind === "contained" && rule.left.source === GapMatchBinding,
+    );
+    assert.deepStrictEqual(
+      owned.map((rule) =>
+        rule.kind === "contained"
+          ? [rule.right.source, [...rule.left.fields], [...rule.right.fields]]
+          : [],
+      ),
+      [[TypedBinding, ["node", "cardinality"], ["node", "cardinality"]]],
+    );
+  });
+
+  it("keys RecordBindingFit by interactionKind and contains each RecordBinding in it", () => {
+    const { RecordBinding, RecordBindingFit } = interaction.relations;
+    assert.deepStrictEqual([...RecordBindingFit.primaryKey], ["interactionKind"]);
+    assert.deepStrictEqual(Object.keys(RecordBindingFit.fields), ["interactionKind"]);
+    assert.deepStrictEqual(
+      interaction.rules
+        .filter((rule) => rule.kind === "contained" && rule.left.source === RecordBinding)
+        .map((rule) =>
+          rule.kind === "contained"
+            ? [rule.right.source, [...rule.left.fields], [...rule.right.fields]]
+            : [],
+        ),
+      [[RecordBindingFit, ["interactionKind"], ["interactionKind"]]],
+    );
+    assert.deepStrictEqual(recordBindingFit.map((row) => row.interactionKind).toSorted(), [
+      "qti-extended-text-interaction",
+      "qti-text-entry-interaction",
+    ]);
+  });
+
+  it("holds no containment of SimpleChoice.(interaction) into ChoiceInteraction.(id) (decision 23)", () => {
+    const offending = interaction.rules.filter(
+      (rule) =>
+        rule.kind === "contained" &&
+        rule.left.source === interaction.relations.SimpleChoice &&
+        rule.right.source === interaction.relations.ChoiceInteraction,
+    );
+    assert.strictEqual(offending.length, 0);
   });
 
   it("requires every item choice interaction to have a binding", () => {
@@ -303,4 +411,29 @@ describe("interaction", () => {
       rootKind: "item",
     });
   });
+});
+
+layer(NodeServices.layer, { excludeTestServices: true })("the importer's copies", (suite) => {
+  suite.effect("the choice interaction's InteractionBinding carries ancestry and adaptive", () =>
+    Effect.gen(function* bindingCopies() {
+      const fs = yield* FileSystem.FileSystem;
+      const bytes = yield* fs.readFile(path.join(inject("fixtures").simple, "choice.xml"));
+      const doc = yield* readXml(bytes);
+      const { rows } = yield* itemRows(
+        {
+          doc,
+          packageId: "22222222-2222-4222-8222-222222222222",
+          path: "choice.xml",
+          resource: "choice",
+          resourceType: "imsqti_item_xmlv3p0",
+          version: "3.0.0",
+        },
+        Rows.empty(),
+      );
+      const [binding, ...rest] = Rows.of(rows, interaction.InteractionBinding);
+      assert.strictEqual(rest.length, 0);
+      assert.strictEqual(binding?.ancestry, "root");
+      assert.strictEqual(binding?.adaptive, "false");
+    }),
+  );
 });
