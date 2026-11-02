@@ -54,7 +54,7 @@ const handles = [
 const containments = (
   list: typeof rules,
   from: (typeof relations)[keyof typeof relations],
-  into: typeof relations.Lom | typeof node.Edge,
+  into: typeof relations.Lom | typeof node.Edge | typeof node.Node | typeof node.TreeRoot,
   fields: readonly string[],
 ) =>
   list.flatMap((rule) =>
@@ -565,5 +565,31 @@ describe("metadata QtiMetadata hosts", () => {
     for (const [, arm] of hostArms) {
       assert.isTrue(arm.name in built.relations);
     }
+  });
+});
+
+describe("metadata record trees", () => {
+  it("binds each manifest-side owner arm's (lom, package) into the package tree, once", () => {
+    for (const arm of [relations.ManifestLom, relations.ResourceLom, relations.FileLom]) {
+      assert.strictEqual(
+        containments(rules, arm, node.Node, ["id", "tree"]).filter(
+          (rule) => rule.left.fields.join(",") === "lom,package",
+        ).length,
+        1,
+      );
+    }
+  });
+
+  it("binds no Lom row's (id, package) into a node tree directly", () => {
+    assert.deepStrictEqual(containments(rules, relations.Lom, node.Node, ["id", "tree"]), []);
+  });
+
+  it("keeps the external record in its own document's tree through TreeRoot", () => {
+    const [rule, ...rest] = containments(rules, relations.ExternalLom, node.TreeRoot, [
+      "node",
+      "tree",
+    ]);
+    assert.strictEqual(rest.length, 0);
+    assert.deepStrictEqual(rule === undefined ? [] : [...rule.left.fields], ["lom", "document"]);
   });
 });

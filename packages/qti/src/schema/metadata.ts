@@ -1327,23 +1327,24 @@ export const relations = {
 };
 
 /**
- * The statements over this module's relations: a record lies in a node's tree and is owned by a
- * manifest or a resource; each owner's arm binds its record, its `cp:metadata` node of the owner's
- * kind and the edge between them, a resource owner also its resource and type; every row of the
- * general category belongs to a record, and a row that copies the record's owner agrees with it;
- * each identifier and language is the edge's child at the position it copies, each identifier part
- * the edge's child under the identifier it names and carries that identifier's position; each title
- * string is a string row of its own value; each string language belongs to a string. Each lifeCycle
- * and metaMetadata row belongs to a record; a version, status, contribution, role, entity, date,
- * date-time and metadata schema is the edge's child under the parent it names, at the position it
- * copies where it has one. Each technical and rights row belongs to a record, and a row that has a
- * parent is the edge's child under the parent it names, at the position it copies where it has one.
- * A resource's record names at least one identifier and exactly one title; an item resource's
- * record has one object identifier and one object title, each a row of the record and of the item
- * document's own identifier or title. A resource's QTI metadata record is the edge's child under
- * the resource's `cp:metadata.resource` node, at most one per resource; each of its leaves is the
- * edge's child under the record it names, the nine `0..1` ones at most once, and the two repeated
- * ones (`interactionType`, `scoringMode`) without a key. Each of the two context leaves
+ * The statements over this module's relations: a manifest, resource or file record lies in the
+ * package's manifest tree and an external record in its own document's tree; each owner's arm binds
+ * its record, its `cp:metadata` node of the owner's kind and the edge between them, a resource
+ * owner also its resource and type; every row of the general category belongs to a record, and a
+ * row that copies the record's owner agrees with it; each identifier and language is the edge's
+ * child at the position it copies, each identifier part the edge's child under the identifier it
+ * names and carries that identifier's position; each title string is a string row of its own value;
+ * each string language belongs to a string. Each lifeCycle and metaMetadata row belongs to a
+ * record; a version, status, contribution, role, entity, date, date-time and metadata schema is the
+ * edge's child under the parent it names, at the position it copies where it has one. Each
+ * technical and rights row belongs to a record, and a row that has a parent is the edge's child
+ * under the parent it names, at the position it copies where it has one. A resource's record names
+ * at least one identifier and exactly one title; an item resource's record has one object
+ * identifier and one object title, each a row of the record and of the item document's own
+ * identifier or title. A resource's QTI metadata record is the edge's child under the resource's
+ * `cp:metadata.resource` node, at most one per resource; each of its leaves is the edge's child
+ * under the record it names, the nine `0..1` ones at most once, and the two repeated ones
+ * (`interactionType`, `scoringMode`) without a key. Each of the two context leaves
  * (`customTypeIdentifier`, `interactionKind`) is the edge's child under the context it names, at
  * most once per context. Each title string is also the edge's child at the position it copies.
  */
@@ -1352,7 +1353,6 @@ export const rules = [
   ...r30Capacities,
   key(Lom, ["id", "owner"]),
   key(Lom, ["id", "package"]),
-  contained(on(Lom, "id", "package"), on(Node, "id", "tree")),
   alternatives(Lom, "owner", LomOwner, {
     external: ExternalLom,
     file: FileLom,
@@ -1361,10 +1361,12 @@ export const rules = [
   }),
   key(ManifestLom, ["package"]),
   contained(on(ManifestLom, "lom", "package"), on(Lom, "id", "package")),
+  contained(on(ManifestLom, "lom", "package"), on(Node, "id", "tree")),
   contained(on(ManifestLom, "metadata"), on(select(Node, { kind: "cp:metadata.manifest" }), "id")),
   contained(on(ManifestLom, "lom", "metadata"), on(Edge, "child", "parent")),
   key(ResourceLom, ["package", "resource"]),
   contained(on(ResourceLom, "lom", "package"), on(Lom, "id", "package")),
+  contained(on(ResourceLom, "lom", "package"), on(Node, "id", "tree")),
   contained(
     on(ResourceLom, "package", "resource", "type"),
     on(Resource, "package", "identifier", "type"),
@@ -1375,6 +1377,7 @@ export const rules = [
   contained(on(FileLom, "metadata", "file"), on(FileMetadata, "id", "file")),
   contained(on(FileLom, "file", "package"), on(File, "id", "package")),
   contained(on(FileLom, "lom", "package"), on(Lom, "id", "package")),
+  contained(on(FileLom, "lom", "package"), on(Node, "id", "tree")),
   key(ExternalLom, ["package", "resource"]),
   contained(on(ExternalLom, "lom", "document"), on(TreeRoot, "node", "tree")),
   contained(
