@@ -114,18 +114,60 @@ describe("attributes", () => {
     assert.include(checks, "AriaRoleNotSource");
   });
 
-  it("keeps each ARIA relation keyed by its node and admitted by its own attribute", () => {
-    const ariaRelations = Object.entries(attributes.relations)
-      .filter(([name]) => name.startsWith("Aria"))
-      .map(([, relation]) => relation);
-    const admissions = attributes.rules.filter(
-      (rule) =>
-        rule.kind === "contained" &&
-        "relation" in rule.right.source &&
-        rule.right.source.relation === attributes.relations.AttributeAdmission &&
-        ariaRelations.some((relation) => relation === rule.left.source),
+  it("admits each family and ARIA relation by its kind and attribute together", () => {
+    const family = Object.entries(attributes.relations).filter(
+      ([name]) => name.startsWith("Aria") || /^Node./u.test(name),
     );
-    assert.strictEqual(admissions.length, 48);
+    const admission: unknown = attributes.relations.AttributeAdmission;
+    const checks = attributes.rules.flatMap((rule) => (rule.kind === "check" ? [rule.name] : []));
+    const containments = attributes.rules.flatMap((rule) =>
+      rule.kind === "contained" ? [rule] : [],
+    );
+
+    assert.strictEqual(family.length, 56);
+    for (const [name, relation] of family) {
+      assert.include(Object.keys(relation.fields), "attribute", name);
+      assert.include(checks, `${name}Attribute`, name);
+
+      const admitted = containments.filter(
+        (rule) => rule.left.source === relation && rule.right.source === admission,
+      );
+
+      assert.strictEqual(admitted.length, 1, name);
+      for (const rule of admitted) {
+        assert.deepStrictEqual([...rule.left.fields], ["kind", "attribute"], name);
+        assert.deepStrictEqual([...rule.right.fields], ["kind", "attribute"], name);
+      }
+    }
+
+    const selected = containments.filter((rule) => {
+      const source: object = rule.right.source;
+
+      return "relation" in source && source.relation === admission;
+    });
+
+    assert.strictEqual(selected.length, 0);
+  });
+
+  it("holds HeadersTarget to the headers attribute inside AttributeIdref", () => {
+    const { AttributeIdref, HeadersTarget } = attributes.relations;
+    const fields = ["node", "attribute", "position", "target"];
+    const into = attributes.rules.flatMap((rule) =>
+      rule.kind === "contained" &&
+      rule.left.source === HeadersTarget &&
+      rule.right.source === AttributeIdref
+        ? [rule]
+        : [],
+    );
+    const checks = attributes.rules.flatMap((rule) => (rule.kind === "check" ? [rule.name] : []));
+
+    assert.include(Object.keys(HeadersTarget.fields), "attribute");
+    assert.strictEqual(into.length, 1);
+    for (const rule of into) {
+      assert.deepStrictEqual([...rule.left.fields], fields);
+      assert.deepStrictEqual([...rule.right.fields], fields);
+    }
+    assert.include(checks, "HeadersTargetAttribute");
   });
 
   it("builds a probe schema over the spine relations and its own", () => {
