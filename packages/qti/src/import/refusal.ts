@@ -8,16 +8,19 @@
  * the schema that the apply broke. {@link ruleOfError} maps the first two and {@link ruleOfLaw} the
  * third, so a caller and a test see one closed roster, {@link ImportRule}, whichever refused.
  */
-import { Match, Schema } from "effect";
+import { Match, Predicate, Schema } from "effect";
 import type { ItemGuardRefusal } from "#qti/import/guards/item.ts";
 import type { ManifestGuardRefusal } from "#qti/import/guards/manifest.ts";
 import type { ProcessingGuardRefusal } from "#qti/import/guards/processing.ts";
 import type { GuardRefusal } from "#qti/import/guards/tree.ts";
+import type { UsageGuardRefusal } from "#qti/import/guards/usage.ts";
+import type { ExternalRefusal } from "#qti/import/record.ts";
 import type { ItemRefusal } from "#qti/import/item.ts";
 import type { NotQti3 } from "#qti/import/manifest.ts";
 import type { ProcessingRefused } from "#qti/import/processing.ts";
 import type { UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { PackageReadError } from "#qti/package/read.ts";
+import type { ZipRefusal } from "#qti/package/zip.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import type { ReaderRefusal, WellFormednessError } from "#qti/xml/errors.ts";
 
@@ -92,6 +95,33 @@ export const ImportRule = Schema.Literals([
   "unmodeled-vocabulary",
   "well-formedness",
   "reader-refusal",
+  "lom-capacity",
+  "lom-learning-resource-type",
+  "qti-metadata-host",
+  "file-metadata-single",
+  "file-lom-owner",
+  "external-lom-owner",
+  "variant-target",
+  "variant-resource",
+  "variant-key",
+  "variant-metadata",
+  "drd-value",
+  "drd-single",
+  "manifest-id-holder",
+  "csm-capacity",
+  "csm-single",
+  "usage-root",
+  "usage-statistic-kind",
+  "usage-count",
+  "usage-key",
+  "usage-typed-value",
+  "usage-lexical",
+  "outcome-document",
+  "calendar",
+  "root-type-reverse",
+  "record-unnamed",
+  "entry-kind",
+  "zip-format",
   "P1",
   "P2",
   "P3",
@@ -151,11 +181,13 @@ export class ImportRefused extends Schema.TaggedError<ImportRefused>()("ImportRe
 }
 
 /**
- * One side of a containment, mirrors or capacity law: a relation and the fields it names.
+ * One side of a containment, mirrors or capacity law: a relation, the fields it names and the
+ * columns the side selects on, as `Edge(parent)` selected on `childKind`.
  */
 interface LawSide {
   readonly fields: readonly string[];
   readonly relation: string;
+  readonly selection?: readonly { readonly field: string; readonly value: unknown }[];
 }
 
 /**
@@ -228,7 +260,6 @@ const keyRules = new Map<string, Rule>([
   ["OutcomeIfArm.(condition)", "P4"],
   ["Package.(id)", "manifest-identifier"],
   ["Prompt.(parent)", "prompt-single"],
-  ["QtiMetadata.(resource)", "qti-metadata-single"],
   ["Resource.(package,identifier)", "resource-identifier"],
   ["ResourceMetadata.(resource)", "resource-metadata-single"],
   ["Resources.(manifest)", "manifest-children"],
@@ -275,6 +306,7 @@ const checkRules = new Map<string, Rule>([
   ["DependencyNotSelf", "dependency-target"],
   ["EqualRoundedFigures", "P10"],
   ["IndexPositive", "P11"],
+  ["LomLearningResourceType", "lom-learning-resource-type"],
   ["OutcomeMinMaxKind", "outcome-minmax-kind"],
   ["ProcessingRoot", "processing-root"],
   ["RepeatInt", "P6"],
@@ -283,6 +315,7 @@ const checkRules = new Map<string, Rule>([
   ["TemplateParameterReferrer", "P13"],
   ["TemplateParameterRoot", "P13"],
   ["VariableWeightInTest", "P12"],
+  ["VariantNotSelf", "variant-target"],
 ]);
 
 /**
@@ -464,16 +497,33 @@ const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
 /**
  * The rule of a pattern, by its regex source. grizzle reports one pattern law for every column
  * that spells the same language, so a source names every column that uses it: `anyUri` is also the
- * `Uri` value arm's, and `hrefInPackage` is the pattern of every path column. The `Literal` value
- * arms share their sources with `DeclaredValue`'s, so a pattern law cannot tell `P7` from
- * `value-lexical`: P7 is named by the other laws of the `Literal` arms (the pattern law carries no
- * relation).
+ * `Uri` value arm's, the three DRD URIs', `CsmCaseItemUri.value`'s, `Statistic.context`'s and the
+ * two glossaries' (every `anyUri` column of the usage and DRD relations is `uri-syntax` through
+ * it); and `hrefInPackage` is the pattern of every path column. The `Literal` value arms share
+ * their sources with `DeclaredValue`'s, so a pattern law cannot tell `P7` from `value-lexical`: P7
+ * is named by the other laws of the `Literal` arms (the pattern law carries no relation).
+ *
+ * A source shared with another phase's columns keeps that phase's rule, since the law carries no
+ * relation to tell the columns apart: `ncName`, `xsInteger`, `xsDouble`, `pair`, `point`,
+ * `booleanLiteral` and `xsBoolean` (the DRD `atInteroperable` and the usage `caseSensitive` flag
+ * spell the same language as the QTI metadata flags and the declared booleans) name
+ * `value-lexical`, never `drd-value`, `usage-lexical` or `usage-typed-value`. Only a source no
+ * earlier column spells names the new rule: the nine DRD vocabularies and the usage date.
  */
 const patternRules = new Map<string, Rule>([
   [patterns.anyUri, "uri-syntax"],
   [patterns.baseType, "P6"],
   [patterns.booleanLiteral, "value-lexical"],
   [patterns.coords, "P6"],
+  [patterns.drdAccessMode, "drd-value"],
+  [patterns.drdAdaptationDetail, "drd-value"],
+  [patterns.drdAdaptationMediaType, "drd-value"],
+  [patterns.drdAdaptationType, "drd-value"],
+  [patterns.drdApiInteroperable, "drd-value"],
+  [patterns.drdControlFlexibility, "drd-value"],
+  [patterns.drdDisplayTransformability, "drd-value"],
+  [patterns.drdEducationalComplexityOfAdaptation, "drd-value"],
+  [patterns.drdHazard, "drd-value"],
   [patterns.floatOrVariableRef, "P6"],
   [patterns.hrefInPackage, "href-path"],
   [patterns.identifierList, "P6"],
@@ -491,10 +541,235 @@ const patternRules = new Map<string, Rule>([
   [patterns.toleranceMode, "P6"],
   [patterns.toolString, "tool-string-length"],
   [patterns.uncollapsed, "attribute-lexical"],
+  [patterns.usageDate, "usage-lexical"],
   [patterns.xincludeParse, "P6"],
+  [patterns.xsBoolean, "value-lexical"],
   [patterns.xsDouble, "value-lexical"],
   [patterns.xsInteger, "value-lexical"],
 ]);
+
+/**
+ * Whether a relation is one of the usage-data module's: the data, its statistics, their target
+ * objects, values and mappings.
+ */
+const isUsage = (relation: string): boolean =>
+  relation.startsWith("Statistic") ||
+  relation.startsWith("TargetObject") ||
+  relation.startsWith("Usage") ||
+  relation === "CategorizedStatisticArm" ||
+  relation === "DeclaredDefaultValue" ||
+  relation === "OrdinaryStatisticArm";
+
+/**
+ * Whether a side selects a column on a value, any value when none is given.
+ */
+const selects = (side: LawSide, field: string, value?: string): boolean =>
+  side.selection?.some((s) => s.field === field && (value === undefined || s.value === value)) ===
+  true;
+
+const isStatisticArm = (relation: string): boolean =>
+  relation === "CategorizedStatisticArm" || relation === "OrdinaryStatisticArm";
+
+const isVariantMetadata = (relation: string): boolean =>
+  relation === "VariantMetadata" || relation === "AccessForAllResource";
+
+/**
+ * The rule of a key by the relation it constrains, for the relations this phase added. A key over
+ * the fields a row names is the rule's; the primary key of a relation that carries a rule is that
+ * rule's too, where the relation's rule is one of capacity or identity.
+ */
+const phaseKeyRule = (relation: string, fields: readonly string[]): Rule | undefined => {
+  const key = fields.join(",");
+
+  if (relation === "QtiMetadata") {
+    return key === "package,resource" ? "qti-metadata-single" : undefined;
+  }
+
+  if (relation === "Variant") {
+    return key === "package,identifier" ? "variant-key" : undefined;
+  }
+
+  if (relation === "FileMetadata") {
+    return fields.includes("file") ? "file-metadata-single" : undefined;
+  }
+
+  if (relation.startsWith("Drd")) {
+    return fields.includes("owner") ? "drd-single" : undefined;
+  }
+
+  if (relation === "ExternalLom") {
+    return "external-lom-owner";
+  }
+
+  if (isVariantMetadata(relation)) {
+    return "variant-metadata";
+  }
+
+  if (relation === "ManifestId") {
+    return "manifest-id-holder";
+  }
+
+  if (relation.startsWith("Csm")) {
+    return "csm-single";
+  }
+
+  if (relation === "UsageData") {
+    return "usage-root";
+  }
+
+  if (relation === "OutcomeDocument") {
+    return "outcome-document";
+  }
+
+  return isUsage(relation) ? "usage-key" : undefined;
+};
+
+/**
+ * The rule of a capacity by the relation that fills it, for the relations this phase added: the
+ * `Edge` rows of a LOM category selected on `childKind`, a CSM or usage relation, a variant's
+ * metadata.
+ */
+const phaseCapacityRule = (from: LawSide): Rule | undefined => {
+  if (from.relation === "Edge") {
+    return selects(from, "childKind") ? "lom-capacity" : undefined;
+  }
+
+  if (from.relation.startsWith("Csm")) {
+    return "csm-capacity";
+  }
+
+  if (isVariantMetadata(from.relation)) {
+    return "variant-metadata";
+  }
+
+  return isUsage(from.relation) ? "usage-count" : undefined;
+};
+
+/**
+ * The rule of a containment or mirror by the relations on its sides, for the relations this phase
+ * added. The side that leaves names the rule, except where a mirror enters a relation whose own
+ * rule it is (a document root mirrored by the record or the data it holds, a statistic by its
+ * kind's arm, a typed value by its base type).
+ */
+const packageSidesRule = (from: LawSide, to: LawSide): Rule | undefined => {
+  const leaves = from.relation;
+  const enters = to.relation;
+
+  if (
+    (leaves === "Node" && selects(from, "kind", "qmd:qtiMetadata")) ||
+    (enters === "Node" && selects(to, "kind", "qmd:qtiMetadata")) ||
+    leaves.startsWith("QtiMetadata")
+  ) {
+    return "qti-metadata-host";
+  }
+
+  if (leaves === "LomValue" && enters === "Edge") {
+    return "lom-learning-resource-type";
+  }
+
+  if (leaves === "FileMetadata" || leaves === "FileLom") {
+    return "file-lom-owner";
+  }
+
+  if (leaves === "ExternalLom" || enters === "ExternalLom") {
+    return "external-lom-owner";
+  }
+
+  if (leaves === "Variant") {
+    return enters === "Resource" && !to.fields.includes("id")
+      ? "variant-target"
+      : "variant-resource";
+  }
+
+  if (isVariantMetadata(leaves)) {
+    return "variant-metadata";
+  }
+
+  if (leaves.startsWith("Drd")) {
+    return "drd-single";
+  }
+
+  if (leaves.startsWith("ManifestId")) {
+    return "manifest-id-holder";
+  }
+
+  return undefined;
+};
+
+/**
+ * The rule of a containment or mirror on the sides of the CSM, usage-data and outcome modules.
+ */
+const moduleSidesRule = (from: LawSide, to: LawSide): Rule | undefined => {
+  const leaves = from.relation;
+  const enters = to.relation;
+
+  if (leaves.startsWith("Csm")) {
+    return "csm-single";
+  }
+
+  if (leaves.startsWith("UsageTypedValue") || enters.startsWith("UsageTypedValue")) {
+    return "usage-typed-value";
+  }
+
+  if (isStatisticArm(leaves) || isStatisticArm(enters)) {
+    return "usage-statistic-kind";
+  }
+
+  if (leaves === "UsageData" || enters === "UsageData") {
+    return "usage-root";
+  }
+
+  if (leaves === "OutcomeDocument" || enters === "OutcomeDocument") {
+    return "outcome-document";
+  }
+
+  return isUsage(leaves) ? "usage-key" : undefined;
+};
+
+/**
+ * The rule of a containment or mirror on the relations this phase added.
+ */
+const phaseSidesRule = (from: LawSide, to: LawSide): Rule | undefined =>
+  packageSidesRule(from, to) ?? moduleSidesRule(from, to);
+
+/**
+ * The rule of a law over the relations this phase added, or nothing when the law is an earlier
+ * phase's (those rows follow). The alternatives over `Node` and `Lom` name no kind, so the `Node`
+ * law of `qmd:qtiMetadata` is found among the containments and mirrors its expansion states, and
+ * also by the kind of the row that breaks it: every node kind with an arm shares the one law, so
+ * only `witnessKind` says a `qmd:qtiMetadata` lacks its host arm.
+ */
+const phaseRule = (law: ImportLaw, witnessKind?: string): Rule | undefined => {
+  if (law.kind === "key" || law.kind === "primaryKey") {
+    return phaseKeyRule(law.relation, law.fields);
+  }
+
+  if (law.kind === "capacity") {
+    return phaseCapacityRule(law.from);
+  }
+
+  if (law.kind === "contained" || law.kind === "mirrors") {
+    return phaseSidesRule(law.from, law.to);
+  }
+
+  if (law.kind === "alternatives") {
+    if (law.relation === "Node" && law.field === "kind" && witnessKind === "qmd:qtiMetadata") {
+      return "qti-metadata-host";
+    }
+
+    if (law.relation === "ManifestId") {
+      return "manifest-id-holder";
+    }
+
+    if (law.relation === "QtiMetadata") {
+      return "qti-metadata-host";
+    }
+
+    return law.relation === "UsageTypedValue" ? "usage-typed-value" : undefined;
+  }
+
+  return undefined;
+};
 
 /**
  * The three condition roots whose `mirrors` with their `if` arm state that a condition holds an
@@ -509,7 +784,12 @@ const conditionMirrors: ReadonlySet<string> = new Set([
 const some = (rule: Rule | undefined): Mapped | undefined =>
   rule === undefined ? undefined : named(rule);
 
-const recognized = (law: ImportLaw): Mapped | undefined => {
+const recognized = (law: ImportLaw, witnessKind?: string): Mapped | undefined => {
+  const added = phaseRule(law, witnessKind);
+  if (added !== undefined) {
+    return named(added);
+  }
+
   if (law.kind === "key" || law.kind === "primaryKey") {
     return some(keyRule(law.relation, law.fields));
   }
@@ -545,7 +825,8 @@ const recognized = (law: ImportLaw): Mapped | undefined => {
   return undefined;
 };
 
-const classify = (law: ImportLaw): Mapped => recognized(law) ?? nearest(law);
+const classify = (law: ImportLaw, witnessKind?: string): Mapped =>
+  recognized(law, witnessKind) ?? nearest(law);
 
 /**
  * The rule of the roster a schema law maps to.
@@ -555,17 +836,22 @@ const classify = (law: ImportLaw): Mapped => recognized(law) ?? nearest(law);
  * law verbatim in `detail`, and `isMappedLaw` tells the two apart.
  *
  * @param law - The `law` of an `invariant-rejected` outcome.
+ * @param witnessKind - The node kind of the row the witness names, when the law is the `Node`
+ *   alternatives, which names no arm.
  * @returns The rule the law breaks.
  */
-export const ruleOfLaw = (law: ImportLaw): Rule => classify(law).rule;
+export const ruleOfLaw = (law: ImportLaw, witnessKind?: string): Rule =>
+  classify(law, witnessKind).rule;
 
 /**
  * Whether {@link ruleOfLaw} recognized the law, not merely sorted it.
  *
  * @param law - The `law` of an `invariant-rejected` outcome.
+ * @param witnessKind - The node kind of the row the witness names, as for {@link ruleOfLaw}.
  * @returns False when the law fell to the nearest rule; a test reports it as a finding.
  */
-export const isMappedLaw = (law: ImportLaw): boolean => classify(law).mapped;
+export const isMappedLaw = (law: ImportLaw, witnessKind?: string): boolean =>
+  classify(law, witnessKind).mapped;
 
 const sideText = (side: LawSide): string => `${side.relation}(${side.fields.join(", ")})`;
 
@@ -620,10 +906,18 @@ const witnessText = (witness: ImportWitness): string =>
  * @param law - The `law` of the outcome.
  * @param witness - The `witness` of the outcome, when the caller has it; only a key witness is
  *   named.
+ * @param nodeKind - The kind of the `Node` row with a given id, from the rows the import submitted;
+ *   read only for a key witness on `Node`, to name the arm the `Node` alternatives law lacks.
  * @returns The refusal naming the rule.
  */
-export const refusalOfLaw = (law: ImportLaw, witness?: ImportWitness): ImportRefused => {
-  const { mapped, rule } = classify(law);
+export const refusalOfLaw = (
+  law: ImportLaw,
+  witness?: ImportWitness,
+  nodeKind?: (id: string) => string | undefined,
+): ImportRefused => {
+  const id = witness?.kind === "key" && witness.relation === "Node" ? witness.values : undefined;
+  const nodeId = id !== undefined && "id" in id && Predicate.isString(id.id) ? id.id : undefined;
+  const { mapped, rule } = classify(law, nodeId === undefined ? undefined : nodeKind?.(nodeId));
   const unmapped = mapped ? "" : "no rule names this law, so it is filed under the nearest: ";
 
   return new ImportRefused({
@@ -637,6 +931,7 @@ export const refusalOfLaw = (law: ImportLaw, witness?: ImportWitness): ImportRef
  * Every error that refuses an import before the database does.
  */
 export type ReadRefusal =
+  | ExternalRefusal
   | GuardRefusal
   | ItemGuardRefusal
   | ItemRefusal
@@ -647,7 +942,9 @@ export type ReadRefusal =
   | ProcessingRefused
   | ReaderRefusal
   | UnmodeledVocabulary
-  | WellFormednessError;
+  | UsageGuardRefusal
+  | WellFormednessError
+  | ZipRefusal;
 
 /**
  * The refusal of an error a guard or the reader raised.
@@ -662,6 +959,7 @@ export type ReadRefusal =
 export const ruleOfError = (e: ReadRefusal): ImportRefused =>
   Match.value(e).pipe(
     Match.tagsExhaustive({
+      ExternalRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       GuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ItemGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ItemRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
@@ -681,11 +979,13 @@ export const ruleOfError = (e: ReadRefusal): ImportRefused =>
           detail: `${g.kind} ${g.name}${g.parent._tag === "Some" ? ` in ${g.parent.value}` : ""} has no model yet`,
           rule: "unmodeled-vocabulary",
         }),
+      UsageGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       WellFormednessError: (g) =>
         new ImportRefused({
           detail: `${g.message} at line ${g.line}, column ${g.column}`,
           rule: "well-formedness",
         }),
+      ZipRefusal: (g) => new ImportRefused({ detail: `${g.entry}: ${g.feature}`, rule: g.rule }),
     }),
   );
 

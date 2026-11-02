@@ -7,6 +7,7 @@
  * containments into `Node` to it.
  */
 import { alternatives, schema } from "@bjornpagen/grizzle";
+import * as csm from "#qti/schema/csm.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as expression from "#qti/schema/expression.ts";
@@ -16,8 +17,10 @@ import * as interaction from "#qti/schema/interaction.ts";
 import * as item from "#qti/schema/item.ts";
 import * as metadata from "#qti/schema/metadata.ts";
 import * as node from "#qti/schema/node.ts";
+import * as outcome from "#qti/schema/outcome.ts";
 import * as pkg from "#qti/schema/package.ts";
 import * as processing from "#qti/schema/processing.ts";
+import * as usage from "#qti/schema/usage.ts";
 import * as rule from "#qti/schema/rule.ts";
 import * as value from "#qti/schema/value.ts";
 
@@ -37,6 +40,11 @@ export const Qti = schema(
     ...rule.relations,
     ...item.relations,
     ...html.relations,
+    ...outcome.relations,
+    ...csm.relations,
+    ...usage.relations,
+    StatisticKind: usage.StatisticKind,
+    TargetObjectType: usage.TargetObjectType,
   },
   [
     ...node.rules,
@@ -52,6 +60,9 @@ export const Qti = schema(
     ...rule.rules,
     ...item.rules,
     ...html.rules,
+    ...outcome.rules,
+    ...csm.rules,
+    ...usage.rules,
     alternatives(node.Node, "kind", node.NodeKind, {
       ...node.arms,
       ...declaration.arms,
@@ -65,6 +76,8 @@ export const Qti = schema(
       ...html.arms,
       ...pkg.arms,
       ...metadata.arms,
+      ...csm.arms,
+      ...usage.arms,
     }),
     alternatives(node.Tree, "kind", node.TreeKind, {
       document: document.Document,

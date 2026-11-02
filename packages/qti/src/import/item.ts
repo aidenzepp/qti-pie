@@ -162,7 +162,7 @@ const judgedLater = <T extends string>(value: string): T =>
 /**
  * Every element of `element`'s subtree beside its parent element, in document order.
  */
-const withParents = (
+export const withParents = (
   element: Element,
   parent: Option.Option<Element>,
 ): readonly (readonly [Element, Option.Option<Element>])[] => [
@@ -640,7 +640,7 @@ interface SemanticInput {
  * @returns The rows; `ItemRefusal` for an interaction whose `response-identifier` names no
  *   declaration.
  */
-const semanticRows = Effect.fn("import.semanticRows")(function* semanticRows(
+export const semanticRows = Effect.fn("import.semanticRows")(function* semanticRows(
   rows: Rows,
   input: SemanticInput,
   walked: readonly (readonly [Element, Option.Option<Element>])[],

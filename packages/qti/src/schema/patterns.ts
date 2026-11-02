@@ -380,3 +380,99 @@ export const mathConstantName = "^(pi|e)$" as const;
  * The two `parse` values of `xi:include` (`parseType` in `w3/XInclude.xsd`): `xml text`.
  */
 export const xincludeParse = "^(xml|text)$" as const;
+
+/**
+ * The `ExtensionString.Type` half of every DRD union, as the XSD writes it
+ * (`imsqtiv3p0_afa3p0drd_v1p0.xsd` lines 369 to 373, pattern `(ext:)[ a-z | A-Z | 0-9 | . | _ ]+`):
+ * `ext:` then one or more of space, `|`, letters, digits, `.` and `_`. The XSD's class lists space
+ * and `|` as members, so both are admitted (the spec's Q6: admit exactly what the XSD admits). The
+ * class is `preserve`, so the text is judged as read.
+ */
+export const drdExt = "^ext:[ a-zA-Z0-9|._]+$" as const;
+
+/**
+ * The `accessMode` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line 131,
+ * enumeration at lines 136 to 145), in XSD order, then the extension arm. The class is `preserve`:
+ * a value with a trailing space is outside the pattern.
+ */
+export const drdAccessMode =
+  "^(auditory|colour|itemSize|olfactory|orientation|position|tactile|textOnImage|textual|visual|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `accessModeAdapted` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line
+ * 155, enumeration at lines 160 to 169), in XSD order, then the extension arm. The class is
+ * `preserve`: a value with a trailing space is outside the pattern.
+ */
+export const drdAccessModeAdapted =
+  "^(auditory|colour|itemSize|olfactory|orientation|position|tactile|textOnImage|textual|visual|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `adaptationDetail` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line 179,
+ * enumeration at lines 187 to 192), in XSD order, then the extension arm. The class is `preserve`:
+ * a value with a trailing space is outside the pattern.
+ */
+export const drdAdaptationDetail =
+  "^(enhanced|verbatim|realTime|symbolic|recorded|synthesized|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `adaptationMediaType` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line
+ * 199, enumeration at lines 207 to 217), in XSD order, then the extension arm. The class is
+ * `preserve`: a value with a trailing space is outside the pattern.
+ */
+export const drdAdaptationMediaType =
+  "^(Daisy|braille|NIMAS|MathML|ChemML|LaTeX|OEBPS|PDF|LIT|Nemeth|EPUB3|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `adaptationType` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line 224,
+ * enumeration at lines 232 to 240), in XSD order, then the extension arm. The class is `preserve`:
+ * a value with a trailing space is outside the pattern.
+ */
+export const drdAdaptationType =
+  "^(alternativeText|audioDescription|captions|e-book|haptic|highContrast|longDescription|signLanguage|transcript|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `apiInteroperable` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line 247,
+ * enumeration at lines 255 to 264), in XSD order, then the extension arm. The class is `preserve`:
+ * a value with a trailing space is outside the pattern.
+ */
+export const drdApiInteroperable =
+  "^(AndroidAccessibility|ARIA|ATK|AT-SPI|BlackberryAccessibility|iAccessible2|JavaAccessibility|MacOSXAccessibility|MSAA|UIAutomation|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `controlFlexibility` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line
+ * 271, enumeration at lines 279 to 280), in XSD order, then the extension arm. The class is
+ * `preserve`: a value with a trailing space is outside the pattern.
+ */
+export const drdControlFlexibility =
+  "^(fullKeyboardControl|fullMouseControl|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `displayTransformability` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at
+ * line 287, enumeration at lines 295 to 306), in XSD order, then the extension arm. The class is
+ * `preserve`: a value with a trailing space is outside the pattern.
+ */
+export const drdDisplayTransformability =
+  "^(backgroundColour|cursorPresentation|fontFace|fontSize|fontWeight|foregroundColour|highlightPresentation|layout|letterSpacing|lineHeight|structurePresentation|wordSpacing|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `educationalComplexityOfAdaptation` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd`
+ * element at line 313, enumeration at lines 321 to 322), in XSD order, then the extension arm. The
+ * class is `preserve`: a value with a trailing space is outside the pattern.
+ */
+export const drdEducationalComplexityOfAdaptation =
+  "^(enriched|simplified|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `hazard` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line 329,
+ * enumeration at lines 337 to 340), in XSD order, then the extension arm. The class is `preserve`:
+ * a value with a trailing space is outside the pattern.
+ */
+export const drdHazard =
+  "^(flashing|sound|olfactoryHazard|motionSimulation|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `lastUpdated` date of the usage-data XSD (`imsqti_usagedatav3p0_v1p0.xsd`), tightened to the
+ * month and day ranges a regular expression can state, written for the value after `collapse`.
+ * February and leap-day validity, which `xs:date` requires, is a guard's, not the pattern's.
+ */
+export const usageDate = "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$" as const;

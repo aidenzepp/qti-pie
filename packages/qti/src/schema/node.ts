@@ -24,11 +24,15 @@ import {
 } from "@bjornpagen/grizzle";
 import * as asi from "#qti/schema/kinds/asi.ts";
 import * as cp from "#qti/schema/kinds/cp.ts";
+import * as cpx from "#qti/schema/kinds/cpx.ts";
+import * as csmd from "#qti/schema/kinds/csmd.ts";
+import * as drd from "#qti/schema/kinds/drd.ts";
 import * as generic from "#qti/schema/kinds/generic.ts";
 import type { SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
 import * as html from "#qti/schema/kinds/html.ts";
 import * as lom from "#qti/schema/kinds/lom.ts";
 import * as qmd from "#qti/schema/kinds/qmd.ts";
+import * as ud from "#qti/schema/kinds/ud.ts";
 import * as xi from "#qti/schema/kinds/xi.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
@@ -38,7 +42,42 @@ import * as patterns from "#qti/schema/patterns.ts";
  * Each roster spreads these modules' tuples in this order; a kinds file added to one is added to
  * the other and to this list, which the tests read as the composition's source of truth.
  */
-export const vocabularies = [generic, asi, html, cp, lom, qmd, xi] as const;
+export const vocabularies = [generic, asi, html, cp, lom, qmd, cpx, drd, csmd, ud, xi] as const;
+
+/**
+ * The kinds tuples `NodeKind` spreads, in the order of `vocabularies`; the tests read the
+ * composed roster against their concatenation.
+ */
+export const kindTuples = [
+  generic.kinds,
+  asi.kinds,
+  html.kinds,
+  cp.kinds,
+  lom.kinds,
+  qmd.kinds,
+  cpx.kinds,
+  drd.kinds,
+  csmd.kinds,
+  ud.kinds,
+  xi.kinds,
+] as const;
+
+/**
+ * The attributes tuples `AttributeName` spreads, in the order of `vocabularies`.
+ */
+export const attributeTuples = [
+  generic.attributes,
+  asi.attributes,
+  html.attributes,
+  cp.attributes,
+  lom.attributes,
+  qmd.attributes,
+  cpx.attributes,
+  drd.attributes,
+  csmd.attributes,
+  ud.attributes,
+  xi.attributes,
+] as const;
 
 const schemaVersions = ["3.0.0", "3.0.1"] as const satisfies readonly SchemaVersionHandle[];
 
@@ -59,6 +98,7 @@ export const RootKind = closed("RootKind", [
   "outcomes",
   "usagedata",
   "manifest",
+  "externalLom",
 ]);
 
 /**
@@ -86,6 +126,10 @@ export const NodeKind = closed("NodeKind", [
   ...cp.kinds,
   ...lom.kinds,
   ...qmd.kinds,
+  ...cpx.kinds,
+  ...drd.kinds,
+  ...csmd.kinds,
+  ...ud.kinds,
   ...xi.kinds,
 ]);
 
@@ -103,6 +147,10 @@ export const AttributeName = closed("AttributeName", [
   ...cp.attributes,
   ...lom.attributes,
   ...qmd.attributes,
+  ...cpx.attributes,
+  ...drd.attributes,
+  ...csmd.attributes,
+  ...ud.attributes,
   ...xi.attributes,
 ]);
 

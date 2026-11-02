@@ -5,10 +5,13 @@
  * over the rows an import built before any of them is written.
  */
 import type { AnyRelation } from "@bjornpagen/grizzle";
-import { Effect, Predicate, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
 import { collapse, replace, Rows } from "#qti/import/tree.ts";
 import type { WhiteSpace } from "#qti/import/tree.ts";
 import type { Entry } from "#qti/package/read.ts";
+import { Document } from "#qti/schema/document.ts";
+import * as drd from "#qti/schema/kinds/drd.ts";
+import * as csm from "#qti/schema/csm.ts";
 import * as md from "#qti/schema/metadata.ts";
 import {
   AttributeLexical,
@@ -19,16 +22,24 @@ import {
   vocabularies,
   Ws,
 } from "#qti/schema/node.ts";
+import type { RootKindHandle } from "#qti/schema/node.ts";
 import {
   Dependency,
+  DrdEducationalLevelOfAdaptation,
+  DrdLanguageOfAdaptation,
   File,
+  FileContent,
   ManifestMetadata,
   ManifestSchemaVersion,
   Package,
   PackageEntry,
   Resource,
   ResourceHref,
+  Variant,
+  variantDrdRelations,
 } from "#qti/schema/package.ts";
+import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
+import { readXml } from "#qti/xml/read.ts";
 
 /**
  * A manifest guard refused the rows.
@@ -46,6 +57,8 @@ export class ManifestGuardRefusal extends Schema.TaggedError<ManifestGuardRefusa
       "file-listed",
       "href-listed",
       "manifest-id-space",
+      "root-type-reverse",
+      "entry-kind",
     ]),
   },
 ) {
@@ -82,6 +95,42 @@ const metadataRelations: readonly AnyRelation[] = Object.values<unknown>(md.rela
 );
 
 /**
+ * The 17 relations of the DRD leaves, each of which copies its node's text.
+ */
+const drdLeafRelations: readonly AnyRelation[] = Object.entries(variantDrdRelations)
+  .filter(([name]) => name.startsWith("Drd"))
+  .map(([, relation]) => relation);
+
+/**
+ * Every relation whose rows copy a leaf's text: the LOM and qmd leaves, the DRD leaves and the
+ * three CSM leaves.
+ */
+const textRelations: readonly AnyRelation[] = [
+  ...metadataRelations,
+  ...drdLeafRelations,
+  csm.CsmCaseItemUri,
+  csm.CsmGuid,
+  csm.CsmLabel,
+];
+
+/**
+ * The columns that hold a value after `replace`, so none holds a tab, line feed or carriage
+ * return: the five CSM attributes, the two CSM leaves that replace, and the two DRD leaves that
+ * replace.
+ */
+const replaceColumns: readonly AnyRelation[] = [
+  csm.CsmMetadataProviderId,
+  csm.CsmSetOfGuidsRegion,
+  csm.CsmSetOfGuidsVersion,
+  csm.CsmSetResourceLabel,
+  csm.CsmSetResourcePartId,
+  csm.CsmLabel,
+  csm.CsmGuid,
+  DrdEducationalLevelOfAdaptation,
+  DrdLanguageOfAdaptation,
+];
+
+/**
  * What a metadata arm row holds when it copies a node's text: the node's id, the value and, on
  * some arms, the collapsed form beside it.
  */
@@ -95,15 +144,26 @@ const isTextCopy = Schema.is(TextCopy);
 
 /**
  * The whitespace class of a leaf's content, spec 3.11: tab, line feed and carriage return become
- * spaces in the two leaves of a portable custom interaction context, the four `xs:boolean` leaves
- * collapse, and every other leaf is kept as read.
+ * spaces in the two leaves of a portable custom interaction context, the two DRD normalized
+ * strings and the CSM label and GUID; the four `xs:boolean` leaves, the five DRD boolean and URI
+ * leaves and the CSM case item URI collapse; and every other leaf is kept as read.
  */
 const contentClass = (kind: string): WhiteSpace => {
   switch (kind) {
+    case "csmd:GUID":
+    case "csmd:label":
+    case "drd:educationalLevelOfAdaptation":
+    case "drd:languageOfAdaptation":
     case "qmd:customTypeIdentifier":
     case "qmd:interactionKind": {
       return "replace";
     }
+    case "csmd:caseItemURI":
+    case "drd:atInteroperable":
+    case "drd:hasAdaptation":
+    case "drd:isAdaptationOf":
+    case "drd:isFullAdaptationOf":
+    case "drd:isPartialAdaptationOf":
     case "qmd:composite":
     case "qmd:itemTemplate":
     case "qmd:solutionAvailable":
@@ -138,7 +198,25 @@ const registryAttributes: ReadonlyMap<string, readonly string[]> = new Map(
 /**
  * The kinds under a `cp:resource`, in the XSD sequence's order.
  */
-const resourceOrder: readonly string[] = ["cp:metadata.resource", "cp:file", "cp:dependency"];
+const resourceOrder: readonly string[] = [
+  "cp:metadata.resource",
+  "cp:file",
+  "cp:dependency",
+  "cpx:variant",
+];
+
+/**
+ * The kinds under a `drd:accessForAllResource`, in the order of its XSD sequence: the roster of
+ * the DRD kinds lists them so, after the container itself.
+ */
+const accessForAllOrder: readonly string[] = drd.kinds.filter(
+  (kind) => kind !== "drd:accessForAllResource",
+);
+
+/**
+ * The kinds under a `csmd:labelledGUID`, in the order of its XSD sequence.
+ */
+const labelledGuidOrder: readonly string[] = ["csmd:label", "csmd:caseItemURI", "csmd:GUID"];
 
 /**
  * The kinds under a `qmd:qtiMetadata`, in the order `QTIMetadataDType` lists them.
@@ -189,11 +267,12 @@ const contentOf = (index: Index, id: string): string =>
   (index.children.get(id) ?? []).map((edge) => index.pieces.get(edge.child) ?? "").join("");
 
 /**
- * `text-copy`: every `value` copy on a LOM or qmd leaf arm is its node's character content under
- * the leaf's class, and every `collapsed` copy is the collapse of the `value` beside it.
+ * `text-copy`: every `value` copy on a LOM, qmd, DRD or CSM leaf arm is its node's character
+ * content under the leaf's class, and every `collapsed` copy is the collapse of the `value` beside
+ * it.
  */
 const textCopy = (rows: Rows, index: Index): Finding => {
-  for (const relation of metadataRelations) {
+  for (const relation of textRelations) {
     for (const row of rowsAt(rows, relation)) {
       if (!isTextCopy(row)) {
         continue;
@@ -227,39 +306,99 @@ const textCopy = (rows: Rows, index: Index): Finding => {
 
 /**
  * The typed column an `AttributeLexical` row of a manifest node shadows, by element kind and
- * attribute: the five attributes of the manifest that collapse.
+ * attribute: the five attributes of the manifest and the two of a variant, which collapse, and the
+ * five of the curriculum standards metadata, which replace.
  */
-const shadowed = (
-  rows: Rows,
-  kind: string,
-  attribute: string,
-  node: string,
-): string | undefined => {
-  switch (`${kind}/${attribute}`) {
-    case "cp:manifest/identifier": {
-      return Rows.of(rows, Package).find((row) => row.id === node)?.identifier;
-    }
-    case "cp:resource/identifier": {
-      return Rows.of(rows, Resource).find((row) => row.id === node)?.identifier;
-    }
-    case "cp:resource/href": {
-      return Rows.of(rows, ResourceHref).find((row) => row.resource === node)?.href;
-    }
-    case "cp:file/href": {
-      return Rows.of(rows, File).find((row) => row.id === node)?.href;
-    }
-    case "cp:dependency/identifierref": {
-      return Rows.of(rows, Dependency).find((row) => row.id === node)?.target;
-    }
-    default: {
-      return undefined;
+type Shadow = (rows: Rows, node: string) => string | undefined;
+
+const shadows: ReadonlyMap<string, Shadow> = new Map<string, Shadow>([
+  [
+    "cp:manifest/identifier",
+    (rows, node) => Rows.of(rows, Package).find((row) => row.id === node)?.identifier,
+  ],
+  [
+    "cp:resource/identifier",
+    (rows, node) => Rows.of(rows, Resource).find((row) => row.id === node)?.identifier,
+  ],
+  [
+    "cp:resource/href",
+    (rows, node) => Rows.of(rows, ResourceHref).find((row) => row.resource === node)?.href,
+  ],
+  ["cp:file/href", (rows, node) => Rows.of(rows, File).find((row) => row.id === node)?.href],
+  [
+    "cp:dependency/identifierref",
+    (rows, node) => Rows.of(rows, Dependency).find((row) => row.id === node)?.target,
+  ],
+  [
+    "cpx:variant/identifier",
+    (rows, node) => Rows.of(rows, Variant).find((row) => row.id === node)?.identifier,
+  ],
+  [
+    "cpx:variant/identifierref",
+    (rows, node) => Rows.of(rows, Variant).find((row) => row.id === node)?.identifierref,
+  ],
+  [
+    "csmd:curriculumStandardsMetadata/providerId",
+    (rows, node) =>
+      Rows.of(rows, csm.CsmMetadataProviderId).find((row) => row.node === node)?.value,
+  ],
+  [
+    "csmd:curriculumStandardsMetadataSet/resourceLabel",
+    (rows, node) => Rows.of(rows, csm.CsmSetResourceLabel).find((row) => row.node === node)?.value,
+  ],
+  [
+    "csmd:curriculumStandardsMetadataSet/resourcePartId",
+    (rows, node) => Rows.of(rows, csm.CsmSetResourcePartId).find((row) => row.node === node)?.value,
+  ],
+  [
+    "csmd:setOfGUIDs/region",
+    (rows, node) => Rows.of(rows, csm.CsmSetOfGuidsRegion).find((row) => row.node === node)?.value,
+  ],
+  [
+    "csmd:setOfGUIDs/version",
+    (rows, node) => Rows.of(rows, csm.CsmSetOfGuidsVersion).find((row) => row.node === node)?.value,
+  ],
+]);
+
+const shadowed = (rows: Rows, kind: string, attribute: string, node: string): string | undefined =>
+  shadows.get(`${kind}/${attribute}`)?.(rows, node);
+
+/**
+ * The whitespace class of a manifest attribute: the curriculum standards attributes replace, and
+ * every other attribute of the manifest collapses.
+ */
+const attributeClass = (kind: string): WhiteSpace =>
+  kind.startsWith("csmd:") ? "replace" : "collapse";
+
+/**
+ * What a row holds when it has a `value` column.
+ */
+const isValued = Schema.is(Schema.Struct({ value: Schema.String }));
+
+/**
+ * The first replace-class column holding a tab, line feed or carriage return, as a refusal.
+ */
+const replaceTabs = (rows: Rows): Finding => {
+  for (const relation of replaceColumns) {
+    const tabbed = rowsAt(rows, relation).find(
+      (row) => isValued(row) && /[\t\n\r]/u.test(row.value),
+    );
+    if (isValued(tabbed)) {
+      return refuse(
+        "typed-copy",
+        `${relation.name} holds ${JSON.stringify(tabbed.value)}, a value kept after replace that still holds a tab, line feed or carriage return.`,
+      );
     }
   }
+
+  return undefined;
 };
 
 /**
  * `typed-copy`: a package's `schemaversion` is the text of every `cp:schemaversion` of its
- * manifest, and every lexical row of a manifest node collapses to the column it shadows.
+ * manifest, every lexical row of a manifest node processes under its attribute's class to the
+ * column it shadows and differs from it as read, and no column that holds a `replace` value holds
+ * a tab, line feed or carriage return.
  */
 const typedCopy = (rows: Rows, index: Index): Finding => {
   const metadata = Rows.of(rows, ManifestMetadata);
@@ -320,10 +459,12 @@ const typedCopy = (rows: Rows, index: Index): Finding => {
       );
     }
 
-    if (collapse(row.value) !== typed) {
+    const whiteSpace = attributeClass(row.kind);
+    const expected = processed(row.value, whiteSpace);
+    if (expected !== typed) {
       return refuse(
         "typed-copy",
-        `The lexical ${row.attribute} ${JSON.stringify(row.value)} of ${row.kind} ${row.node} collapses to ${JSON.stringify(collapse(row.value))}, and its column holds ${JSON.stringify(typed)}.`,
+        `The lexical ${row.attribute} ${JSON.stringify(row.value)} of ${row.kind} ${row.node} ${whiteSpace === "collapse" ? "collapses" : "replaces"} to ${JSON.stringify(expected)}, and its column holds ${JSON.stringify(typed)}.`,
       );
     }
 
@@ -335,18 +476,20 @@ const typedCopy = (rows: Rows, index: Index): Finding => {
     }
   }
 
-  return undefined;
+  return replaceTabs(rows);
 };
 
 /**
- * `ordering`: the children of each `cp:resource` and each `qmd:qtiMetadata` follow the order their
- * XSD sequence lists; kinds the sequence does not list (whitespace, comments, instructions) are
- * skipped.
+ * `ordering`: the children of each `cp:resource`, `qmd:qtiMetadata`, `drd:accessForAllResource`
+ * and `csmd:labelledGUID` follow the order their XSD sequence lists; kinds the sequence does not
+ * list (whitespace, comments, instructions) are skipped.
  */
 const ordering = (rows: Rows): Finding => {
   const orders = new Map([
     ["cp:resource", resourceOrder],
     ["qmd:qtiMetadata", qtiMetadataOrder],
+    ["drd:accessForAllResource", accessForAllOrder],
+    ["csmd:labelledGUID", labelledGuidOrder],
   ]);
 
   const grouped = Map.groupBy(
@@ -427,8 +570,153 @@ const manifestIdSpace = (rows: Rows): Finding => {
 };
 
 /**
- * Refuse manifest rows that break one of the six cross-relation facts: the text copies, the typed
- * copies, the order of children, the files listed, the hrefs listed and the manifest's id space.
+ * The local name of the root element each root kind of a document has, for the roots that
+ * `RootOfType` names. The registries hold only the kinds the model reads so far
+ * (`qti-assessment-test`, `-section` and `-stimulus` are not yet among them), so the names are
+ * written out here.
+ */
+const rootElements: readonly (readonly [local: string, root: RootKindHandle])[] = [
+  ["lom", "externalLom"],
+  ["qti-assessment-item", "item"],
+  ["qti-assessment-section", "section"],
+  ["qti-assessment-stimulus", "stimulus"],
+  ["qti-assessment-test", "test"],
+  ["qti-outcome-declaration", "outcomes"],
+  ["qti-response-processing", "rptemplate"],
+  ["usageData", "usagedata"],
+];
+
+const rootOfElement: ReadonlyMap<string, RootKindHandle> = new Map(rootElements);
+
+/**
+ * The resource types `RootOfType` maps to each root kind.
+ */
+const typesOfRoot: ReadonlyMap<RootKindHandle, ReadonlySet<string>> = new Map(
+  Map.groupBy(rootOfType, ({ root }) => root)
+    .entries()
+    .map(([root, found]): [RootKindHandle, ReadonlySet<string>] => [
+      root,
+      new Set(found.map(({ type }) => type)),
+    ]),
+);
+
+/**
+ * Every resource type `RootOfType` names, under any root.
+ */
+const documentTypes: ReadonlySet<string> = new Set(rootOfType.map(({ type }) => type));
+
+/**
+ * The name a root kind's element has in a refusal.
+ */
+const elementOfRoot = (root: RootKindHandle): string =>
+  rootElements.find(([, found]) => found === root)?.[0] ?? root;
+
+const keyOf = (row: { readonly package: string; readonly path: string }): string =>
+  `${row.package}\u0000${row.path}`;
+
+/**
+ * `entry-kind`: each file entry of the package is a `Document`'s path or a `FileContent`'s path,
+ * never both and never neither.
+ */
+const entryKind = (rows: Rows): Finding => {
+  const documents = new Set(Rows.of(rows, Document).map(keyOf));
+  const contents = new Set(Rows.of(rows, FileContent).map(keyOf));
+
+  for (const entry of Rows.of(rows, PackageEntry)) {
+    if (entry.kind !== "file") {
+      continue;
+    }
+
+    const isDocument = documents.has(keyOf(entry));
+    const isBytes = contents.has(keyOf(entry));
+    if (isDocument && isBytes) {
+      return refuse(
+        "entry-kind",
+        `The package entry ${entry.path} is both a Document and a FileContent row; an entry is one or the other.`,
+      );
+    }
+
+    if (!isDocument && !isBytes) {
+      return refuse(
+        "entry-kind",
+        `The package entry ${entry.path} is neither a Document nor a FileContent row; an entry is one or the other.`,
+      );
+    }
+  }
+
+  return undefined;
+};
+
+/**
+ * `root-type-reverse`: an entry whose content is XML with a root `RootOfType` names, a stored
+ * document or bytes alike, is not packaged as a file of a resource whose type names no root, and
+ * bytes of such a root are listed by at least one resource whose type maps to that root.
+ *
+ * The root of a `Document` is its row's; the root of bytes is read from the entry's own XML, and a
+ * file that is not well-formed XML, or whose root no `RootOfType` row names (a fragment), is not a
+ * candidate.
+ */
+const rootTypeReverse = Effect.fn("manifestGuards.rootTypeReverse")(function* rootTypeReverse(
+  rows: Rows,
+): Effect.fn.Return<Finding> {
+  const stored = yield* Effect.forEach(
+    Rows.of(rows, FileContent),
+    (entry) =>
+      Effect.option(readXml(Buffer.from(entry.content, "base64"))).pipe(
+        Effect.map((doc): readonly [string, RootKindHandle | undefined] => [
+          entry.path,
+          Option.isSome(doc) ? rootOfElement.get(doc.value.root.local) : undefined,
+        ]),
+      ),
+    { concurrency: 4 },
+  );
+  const bytes = new Set(Rows.of(rows, FileContent).map((entry) => entry.path));
+  const roots = new Map<string, RootKindHandle>([
+    ...Rows.of(rows, Document).map((row): [string, RootKindHandle] => [row.path, row.root]),
+    ...stored.flatMap(([path, root]): [string, RootKindHandle][] =>
+      root === undefined ? [] : [[path, root]],
+    ),
+  ]);
+  const holders = new Map(Rows.of(rows, Resource).map((resource) => [resource.id, resource]));
+  const listings = [
+    ...Rows.of(rows, File).map(({ href, resource }) => ({ href, resource })),
+    ...Rows.of(rows, ResourceHref).map(({ href, resource }) => ({ href, resource })),
+  ].flatMap(({ href, resource }) => {
+    const holder = holders.get(resource);
+
+    return holder === undefined ? [] : [{ holder, path: href }];
+  });
+
+  for (const { holder, path } of listings) {
+    const root = roots.get(path);
+    if (root !== undefined && !documentTypes.has(holder.type)) {
+      return refuse(
+        "root-type-reverse",
+        `The entry ${path} is XML with root ${elementOfRoot(root)}, and the ${holder.type} resource ${holder.identifier} lists it as a packaged file; the resource types ${[...(typesOfRoot.get(root) ?? [])].join(", ")} name that root.`,
+      );
+    }
+  }
+
+  for (const [path, root] of roots) {
+    const types = typesOfRoot.get(root);
+    const listed = listings.some(
+      (listing) => listing.path === path && (types?.has(listing.holder.type) ?? false),
+    );
+    if (bytes.has(path) && !listed) {
+      return refuse(
+        "root-type-reverse",
+        `The entry ${path} is stored as bytes and is XML with root ${elementOfRoot(root)}, and no resource of type ${[...(types ?? [])].join(", ")} lists it.`,
+      );
+    }
+  }
+
+  return undefined;
+});
+
+/**
+ * Refuse manifest rows that break one of the eight cross-relation facts: the text copies, the typed
+ * copies, the order of children, the files listed, the hrefs listed, the manifest's id space, the
+ * kind of each entry and the root of the bytes each resource type admits.
  *
  * The first refusal found, in that order, is the failure. Reads rows only; writes nothing.
  *
@@ -448,7 +736,9 @@ export const manifestGuards = Effect.fn("manifestGuards")(function* manifestGuar
     ordering(rows) ??
     fileListed(rows, entries) ??
     hrefListed(rows) ??
-    manifestIdSpace(rows);
+    manifestIdSpace(rows) ??
+    entryKind(rows) ??
+    (yield* rootTypeReverse(rows));
   if (found !== undefined) {
     yield* found;
   }

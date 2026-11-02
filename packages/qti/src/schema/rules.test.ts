@@ -670,11 +670,14 @@ const negatives: readonly Negative[] = [
   },
   {
     alter: (draft) => {
-      const metadata = text(nodeOf(draft, "cp:metadata.resource"), "id");
+      const existing = first(draft, QtiMetadata);
+      const above = of(draft, Edge).find((edge) => text(edge, "child") === text(existing, "id"));
+      assert.isDefined(above, "the first QtiMetadata's node has a parent");
       of(draft, QtiMetadata).push({
-        id: addNode(draft, "qmd:qtiMetadata", metadata),
-        metadata,
-        resource: text(first(draft, Resource), "id"),
+        host: text(existing, "host"),
+        id: addNode(draft, "qmd:qtiMetadata", text(above ?? {}, "parent")),
+        package: text(existing, "package"),
+        resource: text(existing, "resource"),
       });
     },
     laws: [keyOf(QtiMetadata, qtiMetadataKey)],

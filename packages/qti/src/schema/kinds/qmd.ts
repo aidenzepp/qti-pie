@@ -84,12 +84,14 @@ const leaves = [
 ] as const satisfies readonly (typeof kinds)[number][];
 
 /**
- * The QMD admission rows, the same for both versions: `qmd:qtiMetadata` admits its eleven element
+ * The QMD admission rows, the same for both versions: `lom:lom` admits `qmd:qtiMetadata` (a record
+ * in a resource's own or an external `lom:lom`); `qmd:qtiMetadata` admits its eleven element
  * children, in the order the schema's sequence lists them (the order itself is judged elsewhere),
  * plus `ws`, `comment` and `pi`; the portable custom interaction context admits its two; each leaf
  * admits character data, `entityRef`, `comment` and `pi` and no element.
  */
 export const admission: readonly AdmissionRow[] = [
+  ...hostRows("lom:lom", ["qmd:qtiMetadata"]),
   ...hostRows("qmd:qtiMetadata", [
     "qmd:itemTemplate",
     "qmd:timeDependent",

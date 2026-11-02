@@ -10,15 +10,19 @@ import { ChangeSet, Db } from "@bjornpagen/grizzle";
 import type { ApplyError, DbLayer, Fact, OpenError } from "@bjornpagen/grizzle";
 import { Clock, Duration, Effect, Option, Random, Ref, Schedule } from "effect";
 import type { FileSystem, PlatformError } from "effect";
+import { externalRows } from "#qti/import/external.ts";
 import { guards } from "#qti/import/guards.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
-import type { ImportLaw, ImportRefused, ImportWitness, ReadRefusal } from "#qti/import/refusal.ts";
+import { outcomeRows } from "#qti/import/outcome.ts";
+import type { ImportLaw, ImportRefused, ImportWitness } from "#qti/import/refusal.ts";
 import { refusalOfLaw, ruleOfError } from "#qti/import/refusal.ts";
 import { rptemplateRows } from "#qti/import/rptemplate.ts";
-import { Rows } from "#qti/import/tree.ts";
+import { Rows, UnmodeledVocabulary, kindOf } from "#qti/import/tree.ts";
+import { usageRows } from "#qti/import/usage.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
+import { Node } from "#qti/schema/node.ts";
 import type { RootKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
 import { Package } from "#qti/schema/package.ts";
 import { Author } from "#qti/schema/roles.ts";
@@ -126,8 +130,11 @@ const retried = <A, E extends ApplyError | OpenError, R>(
 
 /**
  * Whether `error` is one the guards or the reader raised, as opposed to the platform's.
+ *
+ * It narrows whatever union reaches it, so a refusal a later slice adds to {@link ruleOfError}'s
+ * parameter flows to {@link ruleOfError} with no edit here.
  */
-const isReadRefusal = <E extends PlatformError.PlatformError | ReadRefusal>(
+const isReadRefusal = <E extends { readonly _tag: string }>(
   error: E,
 ): error is Exclude<E, PlatformError.PlatformError> => error._tag !== "PlatformError";
 
@@ -152,25 +159,71 @@ export interface DocumentInput {
 
 /**
  * Write the rows of one document the manifest lists, by the root kind its resource type maps to in
- * `RootOfType`, never by the type string: `rptemplate` goes to {@link rptemplateRows}, `item` to
- * `itemRows`, and any other root kind, or a type `RootOfType` does not hold, to `itemRows` too,
- * which refuses a root that is not `qti-assessment-item` as `UnmodeledVocabulary`.
+ * `RootOfType` for the `rptemplate` family, and by the root element the file holds for every other
+ * document.
  *
- * `imsqti_resprocessing_xmlv3p0` is phase 4's row of `RootOfType`; under this dispatch by root that
- * type reaches `rptemplateRows` with no edit here.
+ * First, a resource type whose root kind is `rptemplate` goes to {@link rptemplateRows}, never by
+ * the type string, so a new `rptemplate` type reaches it with no edit here; a
+ * `qti-response-processing` root listed under any other type has no element route and is
+ * `UnmodeledVocabulary`. Then the root element decides: `qti-assessment-item` goes to `itemRows`,
+ * `qti-outcome-declaration` to `outcomeRows`, `lom:lom` to `externalRows`, and `ud:usageData` to
+ * `usageRows`. A root no builder names is `UnmodeledVocabulary`, except in a `qtiusagedata/xml`
+ * file, which goes to `usageRows` so that a root outside QTI 3 usage data is `NotQti3`. A root that
+ * does not belong to its type is refused at commit by the `Document` containment into
+ * `RootOfType`.
  *
  * @param input - The decoded document and where its package lists it.
  * @param rows - The rows so far.
- * @returns The rows with the document's added, with the node index and the document's id.
+ * @returns The rows with the document's added.
  */
-export const documentRows = (input: DocumentInput, rows: Rows) =>
-  rootKindOfType(input.resourceType) === "rptemplate"
-    ? rptemplateRows(input, rows)
-    : itemRows(input, rows);
+export const documentRows = Effect.fn("import.documentRows")(function* documentRows(
+  input: DocumentInput,
+  rows: Rows,
+) {
+  if (rootKindOfType(input.resourceType) === "rptemplate") {
+    return yield* rptemplateRows(input, rows);
+  }
+
+  const { doc } = input;
+  const listed = {
+    package: input.packageId,
+    path: input.path,
+    resource: input.resource,
+    resourceType: input.resourceType,
+    version: input.version,
+  };
+  const root = Option.getOrUndefined(kindOf(doc.root, Option.none()));
+
+  if (root === "qti-assessment-item") {
+    return yield* itemRows(input, rows);
+  }
+
+  if (root === "lom:lom") {
+    return yield* externalRows(doc, listed, rows);
+  }
+
+  if (
+    root === "ud:usageData" ||
+    (root === undefined && input.resourceType === "qtiusagedata/xml")
+  ) {
+    return yield* usageRows(doc, listed, rows);
+  }
+
+  if (root === "qti-outcome-declaration") {
+    return yield* outcomeRows(input, rows);
+  }
+
+  return yield* new UnmodeledVocabulary({
+    kind: "element",
+    name: doc.root.qname,
+    parent: Option.none(),
+  });
+});
 
 /**
  * Read the package at `dir` into rows and judge them, without the database: the manifest's, then
- * every document it lists, then the tree, manifest, item and processing guards.
+ * every document it lists, each built by {@link documentRows}, then the tree, manifest, item,
+ * processing and usage guards.
  */
 export const readRows = Effect.fn("import.readRows")(function* readRows(dir: string) {
   const entries = yield* listPackage(dir);
@@ -264,9 +317,12 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   );
 
   if (outcome.kind === "invariant-rejected") {
+    const nodeKinds = new Map(Rows.of(rows, Node).map((node) => [node.id, node.kind]));
+
     return yield* refusalOfLaw(
       outcome.law satisfies ImportLaw,
       outcome.witness satisfies ImportWitness,
+      (id) => nodeKinds.get(id),
     );
   }
 

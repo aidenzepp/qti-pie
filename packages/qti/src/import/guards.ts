@@ -7,6 +7,8 @@
 import { Effect } from "effect";
 import { itemGuards } from "#qti/import/guards/item.ts";
 import type { ItemGuardRefusal } from "#qti/import/guards/item.ts";
+import { usageGuards } from "#qti/import/guards/usage.ts";
+import type { UsageGuardRefusal } from "#qti/import/guards/usage.ts";
 import { manifestGuards } from "#qti/import/guards/manifest.ts";
 import type { ManifestGuardRefusal } from "#qti/import/guards/manifest.ts";
 import { processingGuards } from "#qti/import/guards/processing.ts";
@@ -29,10 +31,15 @@ export const guards = Effect.fn("guards")(function* guards(
   entries: readonly Entry[],
 ): Effect.fn.Return<
   void,
-  GuardRefusal | ManifestGuardRefusal | ItemGuardRefusal | ProcessingGuardRefusal
+  | GuardRefusal
+  | ManifestGuardRefusal
+  | ItemGuardRefusal
+  | ProcessingGuardRefusal
+  | UsageGuardRefusal
 > {
   yield* treeGuards(rows);
   yield* manifestGuards(rows, entries);
   yield* itemGuards(rows);
   yield* processingGuards(rows);
+  yield* usageGuards(rows);
 });

@@ -75,17 +75,11 @@ describe("node", () => {
   });
 
   it("composes NodeKind from the kinds tuples of the composed vocabularies, in order", () => {
-    assert.deepStrictEqual(
-      [...node.relations.NodeKind.handles],
-      node.vocabularies.flatMap((vocabulary) => [...vocabulary.kinds]),
-    );
+    assert.deepStrictEqual([...node.relations.NodeKind.handles], node.kindTuples.flat());
   });
 
   it("composes AttributeName from the attributes tuples of the composed vocabularies, in order", () => {
-    assert.deepStrictEqual(
-      [...node.relations.AttributeName.handles],
-      node.vocabularies.flatMap((vocabulary) => [...vocabulary.attributes]),
-    );
+    assert.deepStrictEqual([...node.relations.AttributeName.handles], node.attributeTuples.flat());
   });
 
   it("names every registry row's attribute in AttributeName", () => {

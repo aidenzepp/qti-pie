@@ -12,6 +12,13 @@ import { renderProcessing } from "#qti/export/processing.ts";
 import type { Rows as RowSet } from "#qti/import/tree.ts";
 import { Rows } from "#qti/import/tree.ts";
 import {
+  CsmMetadataProviderId,
+  CsmSetOfGuidsRegion,
+  CsmSetOfGuidsVersion,
+  CsmSetResourceLabel,
+  CsmSetResourcePartId,
+} from "#qti/schema/csm.ts";
+import {
   Declaration,
   DeclarationExternalScored,
   DeclarationInterpretation,
@@ -62,11 +69,12 @@ import {
   vocabularies,
   Ws,
 } from "#qti/schema/node.ts";
-import { Dependency, File, Package, Resource, ResourceHref } from "#qti/schema/package.ts";
+import { Dependency, File, Package, Resource, ResourceHref, Variant } from "#qti/schema/package.ts";
 import {
   ResponseProcessingTemplate,
   ResponseProcessingTemplateLocation,
 } from "#qti/schema/processing.ts";
+import * as usage from "#qti/schema/usage.ts";
 import { DeclaredValue, RecordField, ValueSetInterpretation } from "#qti/schema/value.ts";
 import type { Attribute, Child, Misc, XmlDocument } from "#qti/xml/tree.ts";
 
@@ -93,9 +101,9 @@ const elementRows = vocabularies
  * A kind named by two registries would let the later row replace the earlier, so building the map
  * refuses one.
  */
-const names: ReadonlyMap<string, RegistryRow> = new Map(elementRows);
+export const renderRegistry: ReadonlyMap<string, RegistryRow> = new Map(elementRows);
 
-if (names.size !== elementRows.length) {
+if (renderRegistry.size !== elementRows.length) {
   throw new Error("Two vocabulary registries name the same element kind.");
 }
 
@@ -224,6 +232,52 @@ const attributeSources = (rows: RowSet): ReadonlyMap<string, (id: string) => Pai
   const files = by(Rows.of(rows, File), (fact) => fact.id);
   const dependencies = by(Rows.of(rows, Dependency), (fact) => fact.id);
   const languages = optional(Rows.of(rows, LomStringLanguage), (fact) => fact.node);
+  const variants = by(Rows.of(rows, Variant), (fact) => fact.id);
+  const resourceLabel = optional(Rows.of(rows, CsmSetResourceLabel), (fact) => fact.node);
+  const resourcePartId = optional(Rows.of(rows, CsmSetResourcePartId), (fact) => fact.node);
+  const providerId = optional(Rows.of(rows, CsmMetadataProviderId), (fact) => fact.node);
+  const region = optional(Rows.of(rows, CsmSetOfGuidsRegion), (fact) => fact.node);
+  const guidsVersion = optional(Rows.of(rows, CsmSetOfGuidsVersion), (fact) => fact.node);
+
+  const usageGlossary = optional(Rows.of(rows, usage.UsageDataGlossary), (fact) => fact.node);
+  const statisticRows = by(Rows.of(rows, usage.Statistic), (fact) => fact.id);
+  const statistics = {
+    caseCount: optional(Rows.of(rows, usage.StatisticCaseCount), (fact) => fact.node),
+    glossary: optional(Rows.of(rows, usage.StatisticGlossary), (fact) => fact.node),
+    lastUpdated: optional(Rows.of(rows, usage.StatisticLastUpdated), (fact) => fact.node),
+    stdDeviation: optional(Rows.of(rows, usage.StatisticStdDeviation), (fact) => fact.node),
+    stdError: optional(Rows.of(rows, usage.StatisticStdError), (fact) => fact.node),
+  };
+  const targets = by(Rows.of(rows, usage.TargetObject), (fact) => fact.id);
+  const partIdentifier = optional(
+    Rows.of(rows, usage.TargetObjectPartIdentifier),
+    (fact) => fact.node,
+  );
+  const objectType = optional(Rows.of(rows, usage.TargetObjectObjectType), (fact) => fact.node);
+  const usageBaseType = by(Rows.of(rows, usage.UsageValueBaseType), (fact) => fact.id);
+  const usageFieldIdentifier = optional(
+    Rows.of(rows, usage.UsageValueFieldIdentifier),
+    (fact) => fact.id,
+  );
+  const mappings = by(Rows.of(rows, usage.UsageMapping), (fact) => fact.id);
+  const declaredDefault = idsOf(Rows.of(rows, usage.DeclaredDefaultValue), (fact) => fact.node);
+  const lowerBound = optional(Rows.of(rows, usage.UsageMappingLowerBound), (fact) => fact.node);
+  const upperBound = optional(Rows.of(rows, usage.UsageMappingUpperBound), (fact) => fact.node);
+  const entries = by(Rows.of(rows, usage.UsageMapEntry), (fact) => fact.id);
+  const caseSensitive = optional(
+    Rows.of(rows, usage.UsageMapEntryCaseSensitive),
+    (fact) => fact.node,
+  );
+
+  const statistic = (id: string): Pairs => [
+    ...present("caseCount", statistics.caseCount(id)),
+    ...present("context", statisticRows.get(id)?.context),
+    ...present("glossary", statistics.glossary(id)),
+    ...present("lastUpdated", statistics.lastUpdated(id)),
+    ...present("name", statisticRows.get(id)?.name),
+    ...present("stdDeviation", statistics.stdDeviation(id)),
+    ...present("stdError", statistics.stdError(id)),
+  ];
 
   const declared = (id: string): Pairs => {
     const declaration = declarations.get(id);
@@ -319,6 +373,40 @@ const attributeSources = (rows: RowSet): ReadonlyMap<string, (id: string) => Pai
         ...present("width", width(id)),
       ],
     ],
+    ["ud:usageData", (id) => present("glossary", usageGlossary(id))],
+    ["ud:ordinaryStatistic", statistic],
+    ["ud:categorizedStatistic", statistic],
+    [
+      "ud:targetObject",
+      (id) => [
+        ...present("identifier", targets.get(id)?.identifier),
+        ...present("objectType", objectType(id)),
+        ...present("partIdentifier", partIdentifier(id)),
+      ],
+    ],
+    [
+      "ud:value",
+      (id) => [
+        ...present("baseType", usageBaseType.get(id)?.baseType),
+        ...present("fieldIdentifier", usageFieldIdentifier(id)),
+      ],
+    ],
+    [
+      "ud:mapping",
+      (id) => [
+        ...written(declaredDefault, id, "defaultValue", mappings.get(id)?.defaultValue),
+        ...present("lowerBound", lowerBound(id)),
+        ...present("upperBound", upperBound(id)),
+      ],
+    ],
+    [
+      "ud:mapEntry",
+      (id) => [
+        ...present("caseSensitive", caseSensitive(id)),
+        ...present("mapKey", entries.get(id)?.mapKey),
+        ...present("mappedValue", entries.get(id)?.mappedValue),
+      ],
+    ],
     ["cp:manifest", (id) => present("identifier", packages.get(id)?.identifier)],
     [
       "cp:resource",
@@ -331,6 +419,25 @@ const attributeSources = (rows: RowSet): ReadonlyMap<string, (id: string) => Pai
     ["cp:file", (id) => present("href", files.get(id)?.href)],
     ["cp:dependency", (id) => present("identifierref", dependencies.get(id)?.target)],
     ["lom:string", (id) => present("language", languages(id))],
+    [
+      "cpx:variant",
+      (id) => [
+        ...present("identifier", variants.get(id)?.identifier),
+        ...present("identifierref", variants.get(id)?.identifierref),
+      ],
+    ],
+    [
+      "csmd:curriculumStandardsMetadataSet",
+      (id) => [
+        ...present("resourceLabel", resourceLabel(id)),
+        ...present("resourcePartId", resourcePartId(id)),
+      ],
+    ],
+    ["csmd:curriculumStandardsMetadata", (id) => present("providerId", providerId(id))],
+    [
+      "csmd:setOfGUIDs",
+      (id) => [...present("region", region(id)), ...present("version", guidsVersion(id))],
+    ],
   ]);
 };
 
@@ -471,7 +578,7 @@ export const renderTree = (rows: RowSet, treeId: string): XmlDocument => {
       };
     }
 
-    const name = names.get(node.kind) ?? missing("registry row for the kind", node.kind);
+    const name = renderRegistry.get(node.kind) ?? missing("registry row for the kind", node.kind);
 
     return {
       attributes: attributesOf(id, node.kind),

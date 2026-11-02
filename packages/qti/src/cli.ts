@@ -2,14 +2,14 @@
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Cause, Console, Effect, FileSystem, Path, Schema } from "effect";
-import { Argument, CliError, Command } from "effect/cli";
+import { Argument, CliError, Command, Flag } from "effect/cli";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { comparePackage, renderReport } from "#qti/export/compare.ts";
 import { exportPackage } from "#qti/export/package.ts";
 import { importPackage } from "#qti/import/package.ts";
 
 /**
- * The directory the person named is not there, or is not a directory.
+ * The path the person named is not there, or is neither a directory nor a `.zip` file.
  */
 class NotADirectory extends Schema.TaggedError<NotADirectory>()("NotADirectory", {
   path: Schema.String,
@@ -18,7 +18,7 @@ class NotADirectory extends Schema.TaggedError<NotADirectory>()("NotADirectory",
    * The path and what to do about it.
    */
   override get message(): string {
-    return `${this.path} is not a directory. Name the directory of an unzipped QTI package.`;
+    return `${this.path} is not a directory or a .zip file. Name the directory of an unzipped QTI package, or its .zip file.`;
   }
 }
 
@@ -38,58 +38,80 @@ class RoundtripDiffers extends Schema.TaggedError<RoundtripDiffers>()("Roundtrip
 }
 
 /**
- * Refuse a path that is not a directory, before anything opens the database.
+ * Refuse a path that is neither a directory nor a `.zip` file, before anything opens the database.
  *
- * @param dir - The path the person named.
+ * @param source - The path the person named.
  */
-const requireDirectory = Effect.fn("cli.requireDirectory")(function* requireDirectory(dir: string) {
+const requirePackage = Effect.fn("cli.requirePackage")(function* requirePackage(source: string) {
   const fs = yield* FileSystem.FileSystem;
 
-  yield* fs.stat(dir).pipe(
+  yield* fs.stat(source).pipe(
     Effect.filterOrFail(
-      (info) => info.type === "Directory",
-      () => new NotADirectory({ path: dir }),
+      (info) => info.type === "Directory" || (info.type === "File" && source.endsWith(".zip")),
+      () => new NotADirectory({ path: source }),
     ),
-    Effect.mapError(() => new NotADirectory({ path: dir })),
+    Effect.mapError(() => new NotADirectory({ path: source })),
     Effect.asVoid,
   );
 });
 
 /**
- * Import the package in `dir`, then print its id.
+ * The flag that makes an export a zip file instead of a directory.
+ */
+const zipFlag = Flag.Boolean("zip").pipe(
+  Flag.withDefault(false),
+  Flag.withDescription("Write the export as a .zip file, adding .zip to the path when it lacks it"),
+);
+
+/**
+ * Import the package in `dir`, a directory or a `.zip` file, then print its id.
+ *
+ * `importPackage` reads through `listPackage`, which reads a zip as it reads a directory.
  */
 const importCommand = Command.make(
   "import",
   { dir: Argument.String("dir") },
   Effect.fn("cli.import")(function* importHandler({ dir }) {
-    yield* requireDirectory(dir);
+    yield* requirePackage(dir);
     yield* Console.log(yield* importPackage(dir).pipe(Effect.provide(AuthorAppLayer)));
   }),
-).pipe(Command.withDescription("Import the package in <dir> and print its package id"));
+).pipe(
+  Command.withDescription(
+    "Import the package in <dir>, a directory or a .zip file, and print its package id",
+  ),
+);
 
 /**
- * Write the imported package `packageId` to `dir`.
+ * Write the imported package `packageId` to `dir`, or to a zip file under `--zip`.
  */
 const exportCommand = Command.make(
   "export",
-  { dir: Argument.String("dir"), packageId: Argument.String("package-id") },
-  Effect.fn("cli.export")(function* exportHandler({ dir, packageId }) {
-    yield* exportPackage(packageId, dir).pipe(Effect.provide(AuthorAppLayer));
+  { dir: Argument.String("dir"), packageId: Argument.String("package-id"), zip: zipFlag },
+  Effect.fn("cli.export")(function* exportHandler({ dir, packageId, zip }) {
+    const target = zip && !dir.endsWith(".zip") ? `${dir}.zip` : dir;
+
+    yield* exportPackage(packageId, target).pipe(Effect.provide(AuthorAppLayer));
   }),
-).pipe(Command.withDescription("Export the package <package-id> to <dir>"));
+).pipe(
+  Command.withDescription(
+    "Export the package <package-id> to <dir>, or to the zip file <dir>.zip under --zip",
+  ),
+);
 
 /**
- * Import the package in `dir`, export it to `work/export/<name of dir>/`, and print the comparison.
+ * Import the package in `dir`, export it to `work/export/<name of dir>/` (`<name>.zip` under
+ * `--zip`), and print the comparison.
  */
 const roundtripCommand = Command.make(
   "roundtrip",
-  { dir: Argument.String("dir") },
-  Effect.fn("cli.roundtrip")(function* roundtripHandler({ dir }) {
-    yield* requireDirectory(dir);
+  { dir: Argument.String("dir"), zip: zipFlag },
+  Effect.fn("cli.roundtrip")(function* roundtripHandler({ dir, zip }) {
+    yield* requirePackage(dir);
 
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const exportDir = path.join("work", "export", path.basename(path.resolve(dir)));
+    const name = path.basename(path.resolve(dir)).replace(/\.zip$/u, "");
+    const exportDir = path.join("work", "export", zip ? `${name}.zip` : name);
 
     yield* fs.remove(exportDir, { force: true, recursive: true });
 
@@ -107,7 +129,9 @@ const roundtripCommand = Command.make(
     }
   }),
 ).pipe(
-  Command.withDescription("Import <dir>, export it to work/export/<name>, and compare the two"),
+  Command.withDescription(
+    "Import <dir>, export it to work/export/<name> (<name>.zip under --zip), and compare the two",
+  ),
 );
 
 /**
