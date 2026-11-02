@@ -8,7 +8,7 @@ import type {
   ProcessingAst,
   RuleNode,
 } from "#qti/processing/ast.ts";
-import type { Environment } from "#qti/processing/env.ts";
+import type { DeclarationEntry, Environment } from "#qti/processing/env.ts";
 import { literalOrRef, patternOrRef } from "#qti/processing/parse.ts";
 import { resultType } from "#qti/processing/types.ts";
 import type { BaseTypeOrAny, EffectiveType, ResultAttributes } from "#qti/processing/types.ts";
@@ -103,9 +103,72 @@ const referenceAttributes: readonly string[] = [
 ];
 
 /**
+ * The expression kinds only outcome processing admits (P25).
+ */
+const outcomeOnlyKinds: ReadonlySet<string> = new Set([
+  "qti-number-correct",
+  "qti-number-incorrect",
+  "qti-number-presented",
+  "qti-number-responded",
+  "qti-number-selected",
+  "qti-outcome-maximum",
+  "qti-outcome-minimum",
+  "qti-test-variables",
+]);
+
+/**
+ * The rule kinds whose expression is a condition (P21).
+ */
+const conditionKinds: ReadonlySet<string> = new Set([
+  "qti-outcome-else-if",
+  "qti-outcome-if",
+  "qti-response-else-if",
+  "qti-response-if",
+  "qti-template-constraint",
+  "qti-template-else-if",
+  "qti-template-if",
+]);
+
+/**
+ * The rule kinds that name a variable they write: the target's type is the type the expression
+ * must have (P20).
+ */
+const setKinds: ReadonlySet<string> = new Set([
+  "qti-set-correct-response",
+  "qti-set-default-value",
+  "qti-set-outcome-value",
+  "qti-set-template-value",
+]);
+
+/**
+ * Whether two types can be the same: each side agrees or one side says nothing (`any`, `unknown`).
+ */
+const compatible = (a: EffectiveType, b: EffectiveType): boolean =>
+  (a.baseType === b.baseType ||
+    a.baseType === "any" ||
+    b.baseType === "any" ||
+    a.baseType === "unknown" ||
+    b.baseType === "unknown") &&
+  (a.cardinality === b.cardinality || a.cardinality === "unknown" || b.cardinality === "unknown");
+
+/**
+ * The base type a reference attribute of a kind must name (P24): `pattern` a string, the `min`,
+ * `max` and `step` of `qti-random-float` a float, every other one an integer.
+ */
+const referencedBaseType = (kind: string, attribute: string): BaseTypeOrAny => {
+  if (attribute === "pattern") {
+    return "string";
+  }
+
+  const floating = kind === "qti-random-float" && ["max", "min", "step"].includes(attribute);
+
+  return floating ? "float" : "integer";
+};
+
+/**
  * The value of an attribute after its `whiteSpace` class, or `undefined` when absent.
  */
-const processed = (node: ExpressionNode, name: string): string | undefined =>
+const processed = (node: Pick<ExpressionNode, "attributes">, name: string): string | undefined =>
   node.attributes.get(name)?.processed;
 
 /**
@@ -129,13 +192,15 @@ const baseTypeOf = (value: string | undefined): BaseTypeOrAny =>
 
 /**
  * Check a processing tree: assign every expression a type bottom-up, through `resultType`, from its
- * operands' types and the declarations the environment holds.
+ * operands' types and the declarations the environment holds, and refuse the first rule of 4.10's
+ * bin 2 it breaks.
  *
- * A reference whose identifier the environment does not hold types `unknown` and is recorded as
- * unresolved, never refused: in `template` mode it is a template parameter, in `item` and `test`
- * mode a variable only a later rule can name (`p3-17` turns the item case into a refusal). A
- * `qti-custom-operator` and the field of a `qti-field-value` are `unknown` and unresolved too. No
- * rule fires yet, so the result is always `ok`.
+ * A rule fires only when the types it compares are known: a comparison against `unknown` or `any`
+ * is not a refusal. A reference whose identifier the environment does not hold is refused naming P8
+ * in `item` mode; in `template` mode it is a template parameter, and in `test` mode a variable a
+ * test environment would type, and either types `unknown` and is recorded as unresolved. A
+ * `qti-custom-operator` and the field of a `qti-field-value` are `unknown` and unresolved too (P49
+ * is a record, never a refusal).
  *
  * @param ast - The parsed processing tree.
  * @param env - The declarations and built-ins its mode provides.
@@ -143,6 +208,11 @@ const baseTypeOf = (value: string | undefined): BaseTypeOrAny =>
  */
 export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResult => {
   const unresolved: Unresolved[] = [];
+  let refusal: Extract<CheckResult, { readonly _tag: "refused" }> | undefined;
+
+  const refuse = (rule: PId, kind: string, position: Position): void => {
+    refusal ??= { _tag: "refused", kind, position, rule };
+  };
 
   const note = (
     identifier: string,
@@ -154,25 +224,120 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
     return unknownType;
   };
 
-  const reference = (identifier: string, position: Position): EffectiveType =>
-    env.declarations.get(identifier)?.type ??
-    env.builtIns.get(identifier) ??
-    note(identifier, position, env.mode === "template" ? "template-parameter" : "untyped-variable");
-
-  const typeExpression = (node: ExpressionNode): TypedExpression => {
-    for (const name of referenceAttributes) {
-      const found = referenceIn(node, name);
-      if (found?._tag === "ref") {
-        reference(found.identifier, node.position);
+  /**
+   * The declaration an identifier names, with the P26 refusal for a template rule that reads a
+   * response or outcome variable.
+   */
+  const read = (
+    identifier: string,
+    kind: string,
+    position: Position,
+  ): DeclarationEntry | undefined => {
+    const declared = env.declarations.get(identifier);
+    if (ast.language === "template") {
+      const builtIn = declared === undefined && env.builtIns.has(identifier);
+      if (
+        (declared !== undefined && (declared.kind === "response" || declared.kind === "outcome")) ||
+        (builtIn && identifier !== "QTI_CONTEXT")
+      ) {
+        refuse("P26", kind, position);
       }
     }
 
+    return declared;
+  };
+
+  const reference = (identifier: string, kind: string, position: Position): EffectiveType => {
+    const declared = read(identifier, kind, position);
+    const found = declared?.type ?? env.builtIns.get(identifier);
+    if (found !== undefined) {
+      return found;
+    }
+
+    if (env.mode === "item") {
+      refuse("P8", kind, position);
+    }
+
+    return note(
+      identifier,
+      position,
+      env.mode === "template" ? "template-parameter" : "untyped-variable",
+    );
+  };
+
+  /**
+   * The type of the variable a rule writes, refusing P8 in `item` mode when nothing is named.
+   */
+  const target = (
+    identifier: string,
+    kind: string,
+    position: Position,
+  ): EffectiveType | undefined => {
+    const found = env.declarations.get(identifier)?.type ?? env.builtIns.get(identifier);
+    if (found === undefined && env.mode === "item") {
+      refuse("P8", kind, position);
+    }
+
+    return found;
+  };
+
+  const checkAttributeReference = (
+    node: ExpressionNode,
+    name: string,
+    identifier: string,
+  ): void => {
+    const type = reference(identifier, node.kind, node.position);
+    const declared = env.declarations.get(identifier);
+    const named = declared !== undefined || env.builtIns.has(identifier);
+    const expected: EffectiveType = {
+      baseType: referencedBaseType(node.kind, name),
+      cardinality: "single",
+    };
+    const variable = declared?.kind === "template" || declared?.kind === "outcome";
+    if (named && (!variable || !compatible(type, expected))) {
+      refuse("P24", node.kind, node.position);
+    }
+  };
+
+  const checkMapping = (node: ExpressionNode): void => {
+    const identifier = processed(node, "identifier") ?? "";
+    reference(identifier, node.kind, node.position);
+
+    const declared = env.declarations.get(identifier);
+    if (declared === undefined) {
+      return;
+    }
+
     const kind: string = node.kind;
+    const point = kind === "qti-map-response-point";
+    const mapped = point ? declared.areaMapping : declared.mapping;
+    const typed =
+      !point || compatible(declared.type, { baseType: "point", cardinality: "unknown" });
+    if (declared.kind !== "response" || !mapped || !typed) {
+      refuse("P27", node.kind, node.position);
+    }
+  };
+
+  const typeExpression = (node: ExpressionNode): TypedExpression => {
+    const kind: string = node.kind;
+    if (outcomeOnlyKinds.has(kind) && ast.language !== "outcome") {
+      refuse("P25", kind, node.position);
+    }
+
+    for (const name of referenceAttributes) {
+      const found = referenceIn(node, name);
+      if (found?._tag === "ref") {
+        checkAttributeReference(node, name, found.identifier);
+      }
+    }
+
     const operatorName = processed(node, "name");
     const attrs: ResultAttributes = operatorName === undefined ? {} : { name: operatorName };
     let own = attrs;
     if (variableKinds.has(kind)) {
-      own = { ...attrs, ...reference(processed(node, "identifier") ?? "", node.position) };
+      own = { ...attrs, ...reference(processed(node, "identifier") ?? "", kind, node.position) };
+    } else if (kind === "qti-map-response" || kind === "qti-map-response-point") {
+      checkMapping(node);
     } else if (kind === "qti-base-value" || kind === "qti-test-variables") {
       own = { ...attrs, baseType: baseTypeOf(processed(node, "base-type")) };
     } else if (kind === "qti-custom-operator") {
@@ -194,14 +359,55 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
     };
   };
 
-  const typeRule = (node: RuleNode): TypedRuleNode => ({
-    ...node,
-    branches: node.branches.map((branch) => typeRule(branch)),
-    expression: node.expression.pipe(Option.map((expression) => typeExpression(expression))),
-    rules: node.rules.map((child) => typeRule(child)),
-  });
+  const checkLookup = (node: RuleNode, expression: TypedExpression): void => {
+    const declared = env.declarations.get(processed(node, "identifier") ?? "");
+    const { baseType, cardinality } = expression.type;
+    if (
+      (cardinality !== "single" && cardinality !== "unknown") ||
+      !["any", "duration", "float", "integer", "unknown"].includes(baseType)
+    ) {
+      refuse("P22", node.kind, node.position);
+    } else if (declared !== undefined) {
+      const table = declared.matchTable || declared.interpolationTable;
+      if (!table || (declared.matchTable && !["any", "integer", "unknown"].includes(baseType))) {
+        refuse("P22", node.kind, node.position);
+      }
+    }
+  };
+
+  const typeRule = (node: RuleNode): TypedRuleNode => {
+    const kind: string = node.kind;
+    const written =
+      setKinds.has(kind) || kind === "qti-lookup-outcome-value"
+        ? target(processed(node, "identifier") ?? "", kind, node.position)
+        : undefined;
+    const expression = node.expression.pipe(Option.map((e) => typeExpression(e)));
+    if (Option.isSome(expression)) {
+      if (
+        conditionKinds.has(kind) &&
+        !compatible(expression.value.type, { baseType: "boolean", cardinality: "single" })
+      ) {
+        refuse("P21", kind, node.position);
+      } else if (
+        setKinds.has(kind) &&
+        written !== undefined &&
+        !compatible(expression.value.type, written)
+      ) {
+        refuse("P20", kind, node.position);
+      } else if (kind === "qti-lookup-outcome-value") {
+        checkLookup(node, expression.value);
+      }
+    }
+
+    return {
+      ...node,
+      branches: node.branches.map((branch) => typeRule(branch)),
+      expression,
+      rules: node.rules.map((child) => typeRule(child)),
+    };
+  };
 
   const rules = ast.rules.map((rule) => (rule.kind === "xi:include" ? rule : typeRule(rule)));
 
-  return { _tag: "ok", typed: { ...ast, rules }, unresolved };
+  return refusal ?? { _tag: "ok", typed: { ...ast, rules }, unresolved };
 };
