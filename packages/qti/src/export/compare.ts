@@ -3,6 +3,7 @@ import type { PlatformError } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import type { PackageReadError } from "#qti/package/read.ts";
+import type { ZipRefusal } from "#qti/package/zip.ts";
 import { canonicalize } from "#qti/xml/canonical.ts";
 import type { ReaderRefusal, WellFormednessError } from "#qti/xml/errors.ts";
 import { xmllintC14n } from "#qti/xml/oracle.ts";
@@ -34,6 +35,7 @@ export type Report = readonly { path: string; outcome: Outcome }[];
  */
 type CompareError =
   | PackageReadError
+  | ZipRefusal
   | PlatformError.PlatformError
   | OracleError
   | WellFormednessError
