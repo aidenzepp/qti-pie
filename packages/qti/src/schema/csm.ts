@@ -188,7 +188,7 @@ export const rules = [
 /**
  * The element arms of this module, keyed by `NodeKind` handle.
  */
-export const arms: Readonly<Record<(typeof csmd.kinds)[number], AnyRelation>> = {
+export const arms = {
   "csmd:GUID": CsmGuid,
   "csmd:caseItemURI": CsmCaseItemUri,
   "csmd:curriculumStandardsMetadata": CsmMetadata,
@@ -196,4 +196,4 @@ export const arms: Readonly<Record<(typeof csmd.kinds)[number], AnyRelation>> = 
   "csmd:label": CsmLabel,
   "csmd:labelledGUID": CsmLabelledGuid,
   "csmd:setOfGUIDs": CsmSetOfGuids,
-};
+} as const satisfies Record<(typeof csmd.kinds)[number], AnyRelation>;
