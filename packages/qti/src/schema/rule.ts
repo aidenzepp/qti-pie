@@ -15,6 +15,7 @@
  * XInclude stores its references as read and never resolves them.
  */
 import {
+  check,
   closedId,
   contained,
   key,
@@ -352,6 +353,22 @@ export const rules = [
   ),
   contained(on(RuleOperand, "rule", "ruleKind"), on(node.Node, "id", "kind")),
   contained(on(RuleOperand, "child"), on(processing.Expression, "id")),
+  check("RuleOperandKind", RuleOperand, (o) =>
+    o.in(o.ruleKind, [
+      "qti-set-outcome-value",
+      "qti-lookup-outcome-value",
+      "qti-set-template-value",
+      "qti-set-default-value",
+      "qti-set-correct-response",
+      "qti-template-constraint",
+      "qti-response-if",
+      "qti-response-else-if",
+      "qti-outcome-if",
+      "qti-outcome-else-if",
+      "qti-template-if",
+      "qti-template-else-if",
+    ]),
+  ),
   contained(on(SetOutcomeValue, "id"), on(RuleOperand, "rule")),
   contained(on(LookupOutcomeValue, "id"), on(RuleOperand, "rule")),
   contained(on(SetTemplateValue, "id"), on(RuleOperand, "rule")),

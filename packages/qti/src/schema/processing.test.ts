@@ -1,14 +1,23 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { inspect } from "node:util";
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import { Predicate } from "effect";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
+import * as expressionAttributes from "#qti/schema/expression-attributes.ts";
 import * as item from "#qti/schema/item.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import * as processing from "#qti/schema/processing.ts";
-import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
+import * as ruleSchema from "#qti/schema/rule.ts";
+import {
+  operatorArity,
+  operatorArityMax,
+  operatorArityUnbounded,
+} from "#qti/schema/seed/operator-arity.ts";
 import * as value from "#qti/schema/value.ts";
 
 /**
@@ -38,36 +47,88 @@ const probe = () =>
   );
 
 /**
- * The names of the relations this module adds.
+ * The names of the relations and rosters this module exports: the exports that carry fields or
+ * handles.
  */
-const added = [
-  "BuiltIn",
-  "BuiltInRef",
-  "DeclaredRef",
-  "Expression",
-  "Literal",
-  "LiteralBoolean",
-  "LiteralDirectedPair",
-  "LiteralDuration",
-  "LiteralFile",
-  "LiteralFloat",
-  "LiteralIdentifier",
-  "LiteralInteger",
-  "LiteralPair",
-  "LiteralPoint",
-  "LiteralString",
-  "LiteralUri",
-  "Operand",
-  "OperatorArity",
-  "OperatorArityMax",
-  "RefKind",
-  "ResponseProcessing",
-  "ResponseProcessingItem",
-  "ResponseProcessingTemplate",
-  "ResponseProcessingTemplateLocation",
-  "StandardTemplate",
-  "StandardTemplateReference",
-  "VariableRef",
+const exportedNames = (): readonly string[] =>
+  Object.values(processing).flatMap((exported) =>
+    Predicate.hasProperty(exported, "name") &&
+    Predicate.isString(exported.name) &&
+    (Predicate.hasProperty(exported, "fields") || Predicate.hasProperty(exported, "handles"))
+      ? [exported.name]
+      : [],
+  );
+
+/**
+ * Table A of the phase-3 spec (3.3): each expression kind with the least and the most child
+ * expressions its XSD content admits, `"*"` where it has no upper bound. It is the second copy of
+ * the derivation `seed/operator-arity.ts` keeps in its comment.
+ */
+const tableA: readonly (readonly [string, number, number | "*"])[] = [
+  ["qti-base-value", 0, 0],
+  ["qti-variable", 0, 0],
+  ["qti-default", 0, 0],
+  ["qti-correct", 0, 0],
+  ["qti-map-response", 0, 0],
+  ["qti-map-response-point", 0, 0],
+  ["qti-math-constant", 0, 0],
+  ["qti-null", 0, 0],
+  ["qti-random-integer", 0, 0],
+  ["qti-random-float", 0, 0],
+  ["qti-number-correct", 0, 0],
+  ["qti-number-incorrect", 0, 0],
+  ["qti-number-presented", 0, 0],
+  ["qti-number-responded", 0, 0],
+  ["qti-number-selected", 0, 0],
+  ["qti-outcome-minimum", 0, 0],
+  ["qti-outcome-maximum", 0, 0],
+  ["qti-test-variables", 0, 0],
+  ["qti-and", 1, "*"],
+  ["qti-or", 1, "*"],
+  ["qti-not", 1, 1],
+  ["qti-any-n", 1, "*"],
+  ["qti-match", 2, 2],
+  ["qti-equal", 2, 2],
+  ["qti-equal-rounded", 2, 2],
+  ["qti-gt", 2, 2],
+  ["qti-gte", 2, 2],
+  ["qti-lt", 2, 2],
+  ["qti-lte", 2, 2],
+  ["qti-duration-lt", 2, 2],
+  ["qti-duration-gte", 2, 2],
+  ["qti-member", 2, 2],
+  ["qti-contains", 2, 2],
+  ["qti-delete", 2, 2],
+  ["qti-substring", 2, 2],
+  ["qti-string-match", 2, 2],
+  ["qti-pattern-match", 1, 1],
+  ["qti-inside", 1, 1],
+  ["qti-multiple", 0, "*"],
+  ["qti-ordered", 0, "*"],
+  ["qti-repeat", 1, "*"],
+  ["qti-container-size", 1, 1],
+  ["qti-is-null", 1, 1],
+  ["qti-random", 1, 1],
+  ["qti-index", 1, 1],
+  ["qti-field-value", 1, 1],
+  ["qti-sum", 1, "*"],
+  ["qti-product", 1, "*"],
+  ["qti-subtract", 2, 2],
+  ["qti-divide", 2, 2],
+  ["qti-power", 2, 2],
+  ["qti-integer-divide", 2, 2],
+  ["qti-integer-modulus", 2, 2],
+  ["qti-integer-to-float", 1, 1],
+  ["qti-round", 1, 1],
+  ["qti-truncate", 1, 1],
+  ["qti-round-to", 1, 1],
+  ["qti-min", 1, "*"],
+  ["qti-max", 1, "*"],
+  ["qti-gcd", 1, "*"],
+  ["qti-lcm", 1, "*"],
+  ["qti-math-operator", 1, "*"],
+  ["qti-stats-operator", 1, 1],
+  ["qti-custom-operator", 0, "*"],
 ];
 
 /**
@@ -89,6 +150,30 @@ const containedFrom = (owner: (typeof processing.relations)[keyof typeof process
     .map((rule) => [rule.right.source, [...rule.left.fields], [...rule.right.fields]]);
 
 /**
+ * The predicates of the row checks a statement list holds over one relation, as text.
+ */
+const predicateText = (
+  statements: readonly { readonly kind: string }[],
+  owner: { readonly name: string },
+): readonly string[] =>
+  statements.flatMap((statement) =>
+    statement.kind === "check" && "relation" in statement && statement.relation === owner
+      ? [
+          inspect(
+            Predicate.hasProperty(statement, "desc") &&
+              Predicate.hasProperty(statement.desc, "predicate")
+              ? statement.desc.predicate
+              : undefined,
+            {
+              depth: null,
+              maxStringLength: 100_000,
+            },
+          ),
+        ]
+      : [],
+  );
+
+/**
  * A containment side's selection of a relation, or none where the side names the relation whole.
  */
 const selectionOf = (side: { readonly source: object }) =>
@@ -97,7 +182,7 @@ const selectionOf = (side: { readonly source: object }) =>
 describe("processing", () => {
   it("builds a schema over node, item and processing without refusal", () => {
     const built = probe();
-    for (const name of added) {
+    for (const name of Object.keys(processing.relations)) {
       assert.include(Object.keys(built.relations), name);
     }
     assert.strictEqual(
@@ -112,8 +197,19 @@ describe("processing", () => {
     );
   });
 
-  it("adds exactly the processing relations", () => {
-    assert.deepStrictEqual(Object.keys(processing.relations).toSorted(), added);
+  it("lists every relation and roster the module declares, each under its own name", () => {
+    assert.includeMembers(Object.keys(processing.relations), [...exportedNames()]);
+    for (const [name, member] of Object.entries(processing.relations)) {
+      assert.strictEqual(member.name, name);
+    }
+    for (const name of [
+      "ArityBound",
+      "ExpressionMax",
+      "OperatorArityUnbounded",
+      "TemplateParameterRef",
+    ]) {
+      assert.include(Object.keys(processing.relations), name);
+    }
   });
 
   it("gives ResponseProcessing exactly the fields id and rootKind", () => {
@@ -136,11 +232,18 @@ describe("processing", () => {
     );
   });
 
-  it("holds the ProcessingRoot check on ResponseProcessing, and no other check", () => {
+  it("holds the ProcessingRoot check on ResponseProcessing and every check on this module's relations", () => {
+    const checks = ofKind("check");
     assert.deepStrictEqual(
-      ofKind("check").map((rule) => [rule.name, rule.relation]),
-      [["ProcessingRoot", processing.relations.ResponseProcessing]],
+      checks.filter((check) => check.name === "ProcessingRoot").map((check) => check.relation),
+      [processing.relations.ResponseProcessing],
     );
+    for (const check of checks) {
+      assert.isTrue(
+        Object.values(processing.relations).some((member) => member === check.relation),
+        check.name,
+      );
+    }
   });
 
   it("mirrors the item-rooted processing nodes with ResponseProcessingItem on id", () => {
@@ -163,7 +266,9 @@ describe("processing", () => {
     const selected = ofKind("contained").flatMap((rule) => {
       const selection = selectionOf(rule.left);
 
-      return selection === undefined ? [] : [{ rule, selection }];
+      return selection?.relation === processing.relations.ResponseProcessing
+        ? [{ rule, selection }]
+        : [];
     });
     assert.strictEqual(selected.length, 1);
     assert.strictEqual(selected[0]?.selection.relation, processing.relations.ResponseProcessing);
@@ -246,7 +351,13 @@ describe("processing", () => {
 
   it("keys Expression and OperatorArity by NodeKind and keeps no ExpressionKind roster", () => {
     const { Expression, OperatorArity, OperatorArityMax } = processing.relations;
-    assert.deepStrictEqual(Object.keys(Expression.fields).toSorted(), ["document", "id", "kind"]);
+    assert.deepStrictEqual(Object.keys(Expression.fields).toSorted(), [
+      "bounded",
+      "document",
+      "id",
+      "kind",
+      "min",
+    ]);
     assert.deepStrictEqual([...Expression.primaryKey], ["id"]);
     assert.strictEqual(Expression.fields.kind.roster, node.NodeKind);
     assert.deepStrictEqual(Object.keys(OperatorArity.fields).toSorted(), ["kind", "min"]);
@@ -259,9 +370,12 @@ describe("processing", () => {
   });
 
   it("contains Expression in Node by (id, document, kind) and Literal in Expression by id", () => {
-    assert.deepStrictEqual(containedFrom(processing.relations.Expression), [
-      [node.relations.Node, ["id", "document", "kind"], ["id", "tree", "kind"]],
-    ]);
+    assert.deepStrictEqual(
+      containedFrom(processing.relations.Expression).filter(
+        ([target]) => target === node.relations.Node,
+      ),
+      [[node.relations.Node, ["id", "document", "kind"], ["id", "tree", "kind"]]],
+    );
     assert.deepStrictEqual(containedFrom(processing.relations.Literal), [
       [processing.relations.Expression, ["id"], ["id"]],
     ]);
@@ -281,21 +395,236 @@ describe("processing", () => {
         .map((rule) => [...rule.fields]),
       [["child"]],
     );
-    assert.deepStrictEqual(containedFrom(Operand), [
-      [processing.relations.Expression, ["expression"], ["id"]],
-      [processing.relations.Expression, ["child"], ["id"]],
-    ]);
+    assert.deepStrictEqual(
+      containedFrom(Operand).filter(([target]) => target === processing.relations.Expression),
+      [
+        [processing.relations.Expression, ["expression"], ["id"]],
+        [processing.relations.Expression, ["child"], ["id"]],
+      ],
+    );
   });
 
-  it("holds the operator arity tables equal to the seed module's, empty until phase 3", () => {
-    assert.deepStrictEqual(operatorArity, []);
-    assert.deepStrictEqual(operatorArityMax, []);
+  it("holds the three operator arity tables equal to table A, row for row", () => {
+    assert.deepStrictEqual(
+      operatorArity.map((row) => [row.kind, Number(row.min)]),
+      tableA.map(([kind, min]) => [kind, min]),
+    );
+    assert.deepStrictEqual(
+      operatorArityMax.map((row) => [row.kind, Number(row.max)]),
+      tableA.flatMap(([kind, , max]) => (max === "*" ? [] : [[kind, max]])),
+    );
+    assert.deepStrictEqual(
+      operatorArityUnbounded.map((row) => row.kind),
+      tableA.flatMap(([kind, , max]) => (max === "*" ? [kind] : [])),
+    );
+  });
+
+  it("partitions the arity kinds into the bounded and the unbounded", () => {
+    const bounded = operatorArityMax.map((row) => row.kind);
+    const unbounded = operatorArityUnbounded.map((row) => row.kind);
+    assert.deepStrictEqual(
+      bounded.filter((kind) => unbounded.includes(kind)),
+      [],
+    );
+    assert.deepStrictEqual(
+      [...bounded, ...unbounded].toSorted(),
+      operatorArity.map((row) => row.kind).toSorted(),
+    );
+    for (const kinds of [bounded, unbounded]) {
+      assert.strictEqual(new Set(kinds).size, kinds.length);
+      assert.includeMembers([...node.NodeKind.handles], kinds);
+    }
 
     const source = readFileSync(new URL("seed/operator-arity.ts", import.meta.url), "utf-8");
     assert.match(source, /python3 -I/u);
     assert.match(source, /qti-repeat\s+min=1 max=\*/u);
     assert.match(source, /qti-base-value\s+min=0 max=0/u);
     assert.match(source, /qti-sum\s+min=1 max=\*/u);
+  });
+
+  it("prints as many OperatorArityUnbounded tuples as the seed module has rows", () => {
+    const sql = execFileSync(process.execPath, ["scripts/seed-sql.ts"], { encoding: "utf-8" });
+    const prefix = 'INSERT INTO "qti"."operator_arity_unbounded" ("kind") VALUES ';
+    const tuples = sql
+      .split("\n")
+      .filter((line) => line.startsWith(prefix))
+      .reduce((total, line) => total + line.split("), (").length, 0);
+    assert.strictEqual(tuples, operatorArityUnbounded.length);
+  });
+
+  it("binds Expression to the arity tables: min, bounded, and the two selected containments", () => {
+    const { ArityBound, Expression, OperatorArity, OperatorArityMax, OperatorArityUnbounded } =
+      processing.relations;
+    assert.deepStrictEqual([...ArityBound.handles], ["bounded", "unbounded"]);
+    assert.deepStrictEqual(Object.keys(Expression.fields).toSorted(), [
+      "bounded",
+      "document",
+      "id",
+      "kind",
+      "min",
+    ]);
+    assert.strictEqual(Expression.fields.bounded.roster, ArityBound);
+    assert.deepStrictEqual(Object.keys(OperatorArityUnbounded.fields), ["kind"]);
+    assert.deepStrictEqual([...OperatorArityUnbounded.primaryKey], ["kind"]);
+    assert.strictEqual(OperatorArityUnbounded.fields.kind.roster, node.NodeKind);
+    assert.deepStrictEqual(
+      containedFrom(Expression).filter(([target]) => target === OperatorArity),
+      [[OperatorArity, ["kind", "min"], ["kind", "min"]]],
+    );
+
+    const selected = ofKind("contained").flatMap((rule) => {
+      const selection = selectionOf(rule.left);
+
+      return selection?.relation === Expression
+        ? [[selection.bindings, [...rule.left.fields], rule.right.source, [...rule.right.fields]]]
+        : [];
+    });
+    assert.deepStrictEqual(selected, [
+      [{ bounded: "bounded" }, ["kind"], OperatorArityMax, ["kind"]],
+      [{ bounded: "unbounded" }, ["kind"], OperatorArityUnbounded, ["kind"]],
+      [{ bounded: "bounded" }, ["id", "kind"], processing.relations.ExpressionMax, ["id", "kind"]],
+    ]);
+  });
+
+  it("keys ExpressionMax by id and binds it to Expression and OperatorArityMax", () => {
+    const { Expression, ExpressionMax, OperatorArityMax } = processing.relations;
+    assert.deepStrictEqual(Object.keys(ExpressionMax.fields).toSorted(), ["id", "kind", "max"]);
+    assert.deepStrictEqual([...ExpressionMax.primaryKey], ["id"]);
+    assert.deepStrictEqual(containedFrom(ExpressionMax), [
+      [Expression, ["id", "kind"], ["id", "kind"]],
+      [OperatorArityMax, ["kind", "max"], ["kind", "max"]],
+    ]);
+  });
+
+  it("states the two capacities of an expression's operands, as ref and star, zero and ref", () => {
+    const capacities = ofKind("capacity");
+    assert.strictEqual(capacities.length, 2);
+
+    const [lower, upper] = capacities;
+    assert.strictEqual(lower?.target.source, processing.relations.Expression);
+    assert.strictEqual(lower?.from.source, processing.relations.Operand);
+    assert.deepStrictEqual([...(lower?.from.fields ?? [])], ["expression"]);
+    assert.strictEqual(upper?.target.source, processing.relations.ExpressionMax);
+    assert.strictEqual(upper?.from.source, processing.relations.Operand);
+    assert.deepStrictEqual([...(upper?.from.fields ?? [])], ["expression"]);
+
+    const bounds = (statement: typeof lower) =>
+      inspect(
+        Predicate.hasProperty(statement, "desc") && Predicate.hasProperty(statement.desc, "within")
+          ? statement.desc.within
+          : undefined,
+        { depth: null },
+      );
+    assert.include(bounds(lower), "min");
+    assert.include(bounds(lower), "*");
+    assert.notInclude(bounds(lower), "max");
+    assert.include(bounds(upper), "0n");
+    assert.include(bounds(upper), "max");
+  });
+
+  it("binds each Operand to the Edge it hangs from, by (child, expression, position)", () => {
+    assert.deepStrictEqual(
+      containedFrom(processing.relations.Operand).filter(
+        ([target]) => target === node.relations.Edge,
+      ),
+      [[node.relations.Edge, ["child", "expression", "position"], ["child", "parent", "position"]]],
+    );
+  });
+
+  it("names the referring kinds on the three reference arms and the rules over them", () => {
+    const { BuiltInRef, DeclaredRef, TemplateParameterRef } = processing.relations;
+    assert.include(processing.RefKind.handles, "templateParameter");
+    assert.strictEqual(processing.RefKind.handles.at(-1), "templateParameter");
+    assert.deepStrictEqual(Object.keys(DeclaredRef.fields).toSorted(), [
+      "declarationKind",
+      "document",
+      "id",
+      "identifier",
+      "referrerKind",
+    ]);
+    assert.strictEqual(
+      DeclaredRef.fields.declarationKind.roster,
+      declaration.relations.DeclarationKind,
+    );
+    assert.deepStrictEqual(Object.keys(BuiltInRef.fields).toSorted(), [
+      "id",
+      "name",
+      "referrerKind",
+    ]);
+    assert.deepStrictEqual(Object.keys(TemplateParameterRef.fields).toSorted(), [
+      "document",
+      "id",
+      "identifier",
+      "referrerKind",
+      "rootKind",
+    ]);
+    assert.deepStrictEqual([...TemplateParameterRef.primaryKey], ["id"]);
+
+    assert.deepStrictEqual(containedFrom(DeclaredRef), [
+      [
+        declaration.relations.Declaration,
+        ["document", "identifier", "declarationKind"],
+        ["document", "identifier", "kind"],
+      ],
+      [node.relations.Node, ["id", "referrerKind"], ["id", "kind"]],
+    ]);
+    assert.deepStrictEqual(containedFrom(BuiltInRef), [
+      [node.relations.Node, ["id", "referrerKind"], ["id", "kind"]],
+    ]);
+    assert.deepStrictEqual(containedFrom(TemplateParameterRef), [
+      [node.relations.Node, ["id", "rootKind"], ["id", "rootKind"]],
+      [node.relations.Node, ["id", "document"], ["id", "tree"]],
+      [node.relations.Node, ["id", "referrerKind"], ["id", "kind"]],
+    ]);
+
+    const variableRef = ofKind("alternatives").find(
+      (candidate) => candidate.parent === processing.relations.VariableRef,
+    );
+    assert.deepStrictEqual(Object.keys(variableRef?.arms ?? {}).toSorted(), [
+      "builtIn",
+      "declared",
+      "templateParameter",
+    ]);
+
+    const declaredChecks = predicateText(processing.rules, DeclaredRef);
+    assert.strictEqual(declaredChecks.length, 1);
+    for (const needle of ["referrerKind", "declarationKind", "qti-set-default-value"]) {
+      assert.include(declaredChecks[0], needle);
+    }
+    const builtInChecks = predicateText(processing.rules, BuiltInRef);
+    assert.strictEqual(builtInChecks.length, 1);
+    for (const needle of ["referrerKind", "completionStatus", "qti-set-outcome-value"]) {
+      assert.include(builtInChecks[0], needle);
+    }
+    const templateChecks = predicateText(processing.rules, TemplateParameterRef);
+    assert.strictEqual(templateChecks.length, 2);
+    assert.isTrue(templateChecks.some((text) => text.includes("rptemplate")));
+  });
+
+  it("names the twelve holder kinds on RuleOperand and the two outcome bounds on OutcomeMinMax", () => {
+    const [holders = ""] = predicateText(ruleSchema.rules, ruleSchema.relations.RuleOperand);
+    for (const kind of [
+      "qti-set-outcome-value",
+      "qti-lookup-outcome-value",
+      "qti-set-template-value",
+      "qti-set-default-value",
+      "qti-set-correct-response",
+      "qti-template-constraint",
+      "qti-response-if",
+      "qti-response-else-if",
+      "qti-outcome-if",
+      "qti-outcome-else-if",
+      "qti-template-if",
+      "qti-template-else-if",
+    ]) {
+      assert.include(holders, kind);
+    }
+    const [bounds = ""] = predicateText(
+      expressionAttributes.rules,
+      expressionAttributes.relations.OutcomeMinMax,
+    );
+    assert.include(bounds, "qti-outcome-minimum");
+    assert.include(bounds, "qti-outcome-maximum");
   });
 
   it("gives Literal one base-type arm per base type", () => {
@@ -320,7 +649,14 @@ describe("processing", () => {
     const { VariableRef, DeclaredRef, BuiltInRef } = processing.relations;
     assert.deepStrictEqual(
       [...processing.relations.RefKind.handles],
-      ["declared", "builtIn", "itemVariable", "itemInstanceVariable", "sectionDuration"],
+      [
+        "declared",
+        "builtIn",
+        "itemVariable",
+        "itemInstanceVariable",
+        "sectionDuration",
+        "templateParameter",
+      ],
     );
     assert.deepStrictEqual(
       [...processing.relations.BuiltIn.handles],
@@ -328,11 +664,17 @@ describe("processing", () => {
     );
     assert.deepStrictEqual(Object.keys(VariableRef.fields).toSorted(), ["document", "id", "kind"]);
     assert.deepStrictEqual(Object.keys(DeclaredRef.fields).toSorted(), [
+      "declarationKind",
       "document",
       "id",
       "identifier",
+      "referrerKind",
     ]);
-    assert.deepStrictEqual(Object.keys(BuiltInRef.fields).toSorted(), ["id", "name"]);
+    assert.deepStrictEqual(Object.keys(BuiltInRef.fields).toSorted(), [
+      "id",
+      "name",
+      "referrerKind",
+    ]);
 
     const [rule, ...rest] = ofKind("alternatives").filter(
       (candidate) => candidate.parent === VariableRef,
@@ -340,12 +682,23 @@ describe("processing", () => {
     assert.strictEqual(rest.length, 0);
     assert.strictEqual(rule?.discriminator, "kind");
     assert.strictEqual(rule?.roster, processing.relations.RefKind);
-    assert.deepStrictEqual(rule?.arms, { builtIn: BuiltInRef, declared: DeclaredRef });
+    assert.deepStrictEqual(rule?.arms, {
+      builtIn: BuiltInRef,
+      declared: DeclaredRef,
+      templateParameter: processing.relations.TemplateParameterRef,
+    });
     assert.deepStrictEqual(containedFrom(VariableRef), [
       [node.relations.Node, ["id", "document"], ["id", "tree"]],
     ]);
-    assert.deepStrictEqual(containedFrom(DeclaredRef), [
-      [declaration.relations.Declaration, ["document", "identifier"], ["document", "identifier"]],
-    ]);
+    assert.deepStrictEqual(
+      containedFrom(DeclaredRef).filter(([target]) => target === declaration.relations.Declaration),
+      [
+        [
+          declaration.relations.Declaration,
+          ["document", "identifier", "declarationKind"],
+          ["document", "identifier", "kind"],
+        ],
+      ],
+    );
   });
 });
