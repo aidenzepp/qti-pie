@@ -234,7 +234,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
           { ...common, collapsed: "Unattended Luggage", value: "Unattended Luggage" },
         ]);
         assert.deepStrictEqual(Rows.of(rows, AssessmentItem), [
-          { adaptive: "false", id: root, timeDependent: "false" },
+          { adaptive: "false", id: root, timeDependent: "false", tree: documentId },
         ]);
         assert.deepStrictEqual(Rows.of(rows, DeclaredAdaptive), [{ node: root }]);
         assert.deepStrictEqual(Rows.of(rows, ItemBody), [{ id: body, item: root }]);
