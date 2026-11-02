@@ -332,7 +332,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
       const { rows } = yield* importManifest(inject("fixtures").simple);
       const record = only(Rows.of(rows, QtiMetadata));
 
-      assert.strictEqual(record.resource, only(Rows.of(rows, Resource)).id);
+      assert.strictEqual(record.resource, only(Rows.of(rows, Resource)).identifier);
       for (const [leaves, value] of [
         [Rows.of(rows, QmdTimeDependent), "false"],
         [Rows.of(rows, QmdInteractionType), "choiceInteraction"],
