@@ -593,3 +593,61 @@ describe("metadata record trees", () => {
     assert.deepStrictEqual(rule === undefined ? [] : [...rule.left.fields], ["lom", "document"]);
   });
 });
+
+/**
+ * The containments of `from` into `into`, whatever their fields.
+ */
+const containmentsInto = (
+  from: (typeof relations)[keyof typeof relations],
+  into: (typeof relations)[keyof typeof relations] | typeof node.Edge,
+) =>
+  rules.flatMap((rule) =>
+    rule.kind === "contained" && rule.left.source === from && rule.right.source === into
+      ? [rule]
+      : [],
+  );
+
+describe("metadata identifier parents", () => {
+  it("binds each identifier's (id, parent, position) into its Edge row", () => {
+    const bound = containmentsInto(relations.LomIdentifier, node.Edge).filter(
+      (rule) => rule.left.fields.join(",") === "id,parent,position",
+    );
+    assert.strictEqual(bound.length, 1);
+    assert.deepStrictEqual([...(bound[0]?.right.fields ?? [])], ["child", "parent", "position"]);
+  });
+
+  it("keys no identifier or entry by (lom, position)", () => {
+    for (const arm of [relations.LomIdentifier, relations.LomIdentifierEntry]) {
+      const keyed = rules.filter(
+        (rule) =>
+          rule.kind === "key" && rule.relation === arm && rule.fields.join(",") === "lom,position",
+      );
+      assert.deepStrictEqual(keyed, [], arm.name);
+    }
+  });
+
+  it("names the identifier by its id from a catalog and from an entry", () => {
+    for (const arm of [relations.LomIdentifierCatalog, relations.LomIdentifierEntry]) {
+      const named = containmentsInto(arm, relations.LomIdentifier).filter(
+        (rule) => rule.left.fields[0] === "identifier",
+      );
+      assert.strictEqual(named.length, 1, arm.name);
+      assert.strictEqual(named[0]?.right.fields[0], "id", arm.name);
+    }
+  });
+
+  it("keys the object identifier's target by the identifier it names", () => {
+    assert.isTrue("identifier" in relations.LomObjectIdentifier.fields);
+
+    const [rule, ...rest] = containmentsInto(
+      relations.LomObjectIdentifier,
+      relations.LomIdentifierEntry,
+    );
+    assert.strictEqual(rest.length, 0);
+
+    const leftFields: readonly string[] = rule?.left.fields ?? [];
+    const rightFields: readonly string[] = rule?.right.fields ?? [];
+    assert.isTrue(leftFields.includes("identifier"));
+    assert.isTrue(rightFields.includes("identifier"));
+  });
+});

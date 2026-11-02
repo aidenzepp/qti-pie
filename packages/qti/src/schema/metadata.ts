@@ -108,11 +108,13 @@ export const ExternalLom = relation(
 export const LomGeneral = relation("LomGeneral", { id: uuid, lom: uuid }, ["id"]);
 
 /**
- * A `lom:identifier` at its position among the general category's children.
+ * A `lom:identifier` at its position among its parent's children. The kind stands under the
+ * general category, the meta-metadata and a resource relation, so an identifier is keyed by its
+ * parent and its position, which its `Edge` row holds, never by its record and position alone.
  */
 export const LomIdentifier = relation(
   "LomIdentifier",
-  { id: uuid, lom: uuid, owner: closedId(LomOwner), position: pg.bigint },
+  { id: uuid, lom: uuid, owner: closedId(LomOwner), parent: uuid, position: pg.bigint },
   ["id"],
 );
 
@@ -490,6 +492,7 @@ export const LomObjectIdentifier = relation(
   "LomObjectIdentifier",
   {
     collapsed: ncName,
+    identifier: uuid,
     lom: uuid,
     package: uuid,
     position: pg.bigint,
@@ -1388,15 +1391,20 @@ export const rules = [
   mirrors(on(select(Document, { root: "externalLom" }), "id"), on(ExternalLom, "document")),
   key(LomGeneral, ["lom"]),
   contained(on(LomGeneral, "lom"), on(Lom, "id")),
-  key(LomIdentifier, ["lom", "position"]),
   contained(on(LomIdentifier, "lom", "owner"), on(Lom, "id", "owner")),
-  contained(on(LomIdentifier, "id", "position"), on(Edge, "child", "position")),
+  contained(on(LomIdentifier, "id", "parent", "position"), on(Edge, "child", "parent", "position")),
   contained(on(LomIdentifierCatalog, "lom", "owner"), on(Lom, "id", "owner")),
-  contained(on(LomIdentifierCatalog, "lom", "position"), on(LomIdentifier, "lom", "position")),
+  contained(
+    on(LomIdentifierCatalog, "identifier", "lom", "position"),
+    on(LomIdentifier, "id", "lom", "position"),
+  ),
   contained(on(LomIdentifierCatalog, "id", "identifier"), on(Edge, "child", "parent")),
-  key(LomIdentifierEntry, ["lom", "position"]),
+  key(LomIdentifierEntry, ["identifier"]),
   contained(on(LomIdentifierEntry, "lom", "owner"), on(Lom, "id", "owner")),
-  contained(on(LomIdentifierEntry, "lom", "position"), on(LomIdentifier, "lom", "position")),
+  contained(
+    on(LomIdentifierEntry, "identifier", "lom", "position"),
+    on(LomIdentifier, "id", "lom", "position"),
+  ),
   contained(on(LomIdentifierEntry, "id", "identifier"), on(Edge, "child", "parent")),
   key(LomGeneralTitle, ["lom"]),
   contained(on(LomGeneralTitle, "lom", "owner"), on(Lom, "id", "owner")),
@@ -1512,8 +1520,8 @@ export const rules = [
   }),
   key(LomObjectIdentifier, ["lom"]),
   contained(
-    on(LomObjectIdentifier, "lom", "position", "collapsed"),
-    on(LomIdentifierEntry, "lom", "position", "collapsed"),
+    on(LomObjectIdentifier, "identifier", "lom", "position", "collapsed"),
+    on(LomIdentifierEntry, "identifier", "lom", "position", "collapsed"),
   ),
   contained(
     on(LomObjectIdentifier, "lom", "package", "resource", "type"),

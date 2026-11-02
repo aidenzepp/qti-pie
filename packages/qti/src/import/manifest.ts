@@ -212,7 +212,7 @@ interface LomResource {
  * whether the record holds any identifier or title at all.
  */
 interface LomFindings {
-  readonly entries: { collapsed: string; position: bigint }[];
+  readonly entries: { collapsed: string; identifier: string; position: bigint }[];
   hasIdentifier: boolean;
   hasTitle: boolean;
   readonly titles: { collapsed: string; position: bigint }[];
@@ -504,7 +504,11 @@ export const lomSubtreeRows = (
         },
       ]);
       if (c.grandparentKind === "lom:general") {
-        c.findings.entries.push({ collapsed: c.collapsed, position: c.parentPosition });
+        c.findings.entries.push({
+          collapsed: c.collapsed,
+          identifier: c.parent,
+          position: c.parentPosition,
+        });
       }
     },
     "lom:entry.langString": (c) => {
@@ -529,7 +533,9 @@ export const lomSubtreeRows = (
       add(md.LomId, [{ collapsed: c.collapsed, id: c.id, value: c.value }]);
     },
     "lom:identifier": (c) => {
-      add(md.LomIdentifier, [{ id: c.id, lom: c.lom, owner: c.owner, position: c.position }]);
+      add(md.LomIdentifier, [
+        { id: c.id, lom: c.lom, owner: c.owner, parent: c.parent, position: c.position },
+      ]);
       c.findings.hasIdentifier = true;
     },
     "lom:installationRemarks": (c) => {

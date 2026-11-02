@@ -26,6 +26,9 @@ import {
   LomEducational,
   LomEntryLangString,
   LomId,
+  LomIdentifier,
+  LomIdentifierEntry,
+  LomObjectIdentifier,
   LomRelation,
   LomSourceLangString,
   LomTaxonPath,
@@ -299,6 +302,42 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
         types.map((value) => value.collapsed),
         ["exercise"],
       );
+    }),
+  );
+
+  suite.effect("keys lomrest's identifiers by their parent and their entries by identifier", () =>
+    Effect.gen(function* identifierParents() {
+      const rows = yield* rowsOf(yield* materialize("lomrest"));
+      const edges = new Map(Rows.of(rows, Edge).map((edge) => [edge.child, edge]));
+      const identifiers = Rows.of(rows, LomIdentifier);
+      assert.isAbove(identifiers.length, 1);
+
+      const pairs = identifiers.map((row) => `${row.parent}/${row.position}`);
+      assert.strictEqual(new Set(pairs).size, pairs.length);
+      for (const row of identifiers) {
+        assert.strictEqual(row.parent, edges.get(row.id)?.parent, row.id);
+        assert.strictEqual(row.position, edges.get(row.id)?.position, row.id);
+      }
+
+      const underResource = identifiers.filter(
+        (row) => edges.get(row.parent)?.childKind === "lom:resource",
+      );
+      assert.strictEqual(underResource.length, 1);
+
+      const entries = Rows.of(rows, LomIdentifierEntry);
+      assert.isAbove(entries.length, 0);
+      assert.strictEqual(new Set(entries.map((row) => row.identifier)).size, entries.length);
+
+      const ids = new Set(identifiers.map((row) => row.id));
+      for (const entry of entries) {
+        assert.isTrue(ids.has(entry.identifier), entry.id);
+      }
+
+      const [object, ...rest] = Rows.of(rows, LomObjectIdentifier);
+      assert.strictEqual(rest.length, 0);
+
+      const named = identifiers.find((row) => row.id === object?.identifier);
+      assert.strictEqual(edges.get(named?.parent ?? "")?.childKind, "lom:general");
     }),
   );
 
