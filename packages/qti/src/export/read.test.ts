@@ -3,6 +3,7 @@ import { NodeServices } from "@effect/platform-node";
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
+import { describe } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { readTree, treesOf } from "#qti/export/read.ts";
 import { renderTree } from "#qti/export/render.ts";
@@ -17,6 +18,7 @@ import type { FixtureName } from "#qti/test/fixtures.ts";
 import { canonicalize } from "#qti/xml/canonical.ts";
 import { xmllintC14n } from "#qti/xml/oracle.ts";
 import { readXml } from "#qti/xml/read.ts";
+import { hasLease } from "#qti/test/settings.ts";
 
 /**
  * The text of a canonical form, so a failed comparison prints the two documents and not two byte
@@ -138,78 +140,82 @@ layer(NodeServices.layer, { excludeTestServices: true })("export/render.ts, no d
   }
 });
 
-layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
-  excludeTestServices: true,
-  timeout: "120 seconds",
-})("export/read.ts, on the lease", (it) => {
-  for (const name of [
-    "simple",
-    "comment-in-element",
-    "padded-attributes",
-    "padded-text",
-  ] as const) {
-    it.effect(`${name}: the read-back of both trees renders to the oracle's canonical bytes`, () =>
-      Effect.gen(function* readBackBothTrees() {
-        const dir = yield* materialize(name);
-        const packageId = yield* importPackage(dir);
-        const trees = yield* treesOf(packageId);
+describe.skipIf(!hasLease)("export/read.test.ts, on the lease", () => {
+  layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
+    excludeTestServices: true,
+    timeout: "120 seconds",
+  })("export/read.ts, on the lease", (it) => {
+    for (const name of [
+      "simple",
+      "comment-in-element",
+      "padded-attributes",
+      "padded-text",
+    ] as const) {
+      it.effect(
+        `${name}: the read-back of both trees renders to the oracle's canonical bytes`,
+        () =>
+          Effect.gen(function* readBackBothTrees() {
+            const dir = yield* materialize(name);
+            const packageId = yield* importPackage(dir);
+            const trees = yield* treesOf(packageId);
 
-        assert.lengthOf(trees, 2, `the ${name} package holds a manifest tree and an item tree`);
+            assert.lengthOf(trees, 2, `the ${name} package holds a manifest tree and an item tree`);
 
-        const [manifestId = "", documentId = ""] = trees;
+            const [manifestId = "", documentId = ""] = trees;
 
-        assert.strictEqual(manifestId, packageId);
+            assert.strictEqual(manifestId, packageId);
 
-        const manifest = yield* assertRenders(
-          yield* readTree(packageId, manifestId),
-          manifestId,
-          path.join(dir, "imsmanifest.xml"),
-        );
-        const item = yield* assertRenders(
-          yield* readTree(packageId, documentId),
-          documentId,
-          path.join(dir, "choice.xml"),
-        );
+            const manifest = yield* assertRenders(
+              yield* readTree(packageId, manifestId),
+              manifestId,
+              path.join(dir, "imsmanifest.xml"),
+            );
+            const item = yield* assertRenders(
+              yield* readTree(packageId, documentId),
+              documentId,
+              path.join(dir, "choice.xml"),
+            );
 
-        assert.strictEqual(
-          commentsIn(manifest) + commentsIn(item),
-          name === "comment-in-element" ? 4 : 3,
-        );
-        assert.strictEqual(item.includes("<!-- c -->"), name === "comment-in-element");
-        assert.strictEqual(item.includes("<?pi d?>"), name === "comment-in-element");
-      }),
-    );
-  }
+            assert.strictEqual(
+              commentsIn(manifest) + commentsIn(item),
+              name === "comment-in-element" ? 4 : 3,
+            );
+            assert.strictEqual(item.includes("<!-- c -->"), name === "comment-in-element");
+            assert.strictEqual(item.includes("<?pi d?>"), name === "comment-in-element");
+          }),
+      );
+    }
 
-  for (const name of [
-    "simple",
-    "comment-in-element",
-    "padded-attributes",
-    "padded-text",
-  ] as const) {
-    it.effect(`${name}: the read-back holds the importer's facts, one for one`, () =>
-      Effect.gen(function* sameFacts() {
-        const { dir } = yield* importFixture(name);
-        const imported = (yield* importFixture(name)).rows;
-        const packageId = yield* importPackage(dir);
-        const read = new Map<AnyRelation, readonly object[]>();
-        for (const tree of yield* treesOf(packageId)) {
-          for (const [relation, facts] of yield* readTree(packageId, tree)) {
-            read.set(relation, [...(read.get(relation) ?? []), ...facts]);
+    for (const name of [
+      "simple",
+      "comment-in-element",
+      "padded-attributes",
+      "padded-text",
+    ] as const) {
+      it.effect(`${name}: the read-back holds the importer's facts, one for one`, () =>
+        Effect.gen(function* sameFacts() {
+          const { dir } = yield* importFixture(name);
+          const imported = (yield* importFixture(name)).rows;
+          const packageId = yield* importPackage(dir);
+          const read = new Map<AnyRelation, readonly object[]>();
+          for (const tree of yield* treesOf(packageId)) {
+            for (const [relation, facts] of yield* readTree(packageId, tree)) {
+              read.set(relation, [...(read.get(relation) ?? []), ...facts]);
+            }
           }
-        }
 
-        const expected = maskedFacts(imported);
-        const actual = maskedFacts(read);
-        assert.isAtLeast(
-          [...expected.values()].filter((facts) => facts.length > 0).length,
-          40,
-          `${name}: the importer wrote facts of at least forty relations`,
-        );
-        for (const [relation, facts] of expected) {
-          assert.deepStrictEqual(actual.get(relation), facts, `${name}: ${relation}`);
-        }
-      }),
-    );
-  }
+          const expected = maskedFacts(imported);
+          const actual = maskedFacts(read);
+          assert.isAtLeast(
+            [...expected.values()].filter((facts) => facts.length > 0).length,
+            40,
+            `${name}: the importer wrote facts of at least forty relations`,
+          );
+          for (const [relation, facts] of expected) {
+            assert.deepStrictEqual(actual.get(relation), facts, `${name}: ${relation}`);
+          }
+        }),
+      );
+    }
+  });
 });
