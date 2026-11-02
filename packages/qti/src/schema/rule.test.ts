@@ -1,5 +1,6 @@
 /* oxlint-disable typescript/no-unnecessary-type-parameters -- `Equal` is the standard type-equality helper; its two `T` parameters are compared across the two function types by design, so each appears once per signature. */
 import { schema } from "@bjornpagen/grizzle";
+import type { Statement } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as item from "#qti/schema/item.ts";
@@ -349,13 +350,17 @@ describe("rule", () => {
     );
   });
 
-  it("holds only keys, containments and mirrors", () => {
-    assert.deepStrictEqual(
-      [...new Set(rule.rules.map((statement) => statement.kind))].toSorted((a, b) =>
-        a.localeCompare(b),
-      ),
-      ["contained", "key", "mirrors"],
-    );
+  it("holds only keys, containments, mirrors and checks, each check on this module's relations", () => {
+    const statements: readonly Statement[] = rule.rules;
+    for (const kind of new Set(statements.map((statement) => statement.kind))) {
+      assert.include(["check", "contained", "key", "mirrors"], kind);
+    }
+    for (const statement of statements.filter((candidate) => candidate.kind === "check")) {
+      assert.isTrue(
+        [...relationsByName.values()].some((relation) => relation === statement.relation),
+        statement.name,
+      );
+    }
   });
 });
 
