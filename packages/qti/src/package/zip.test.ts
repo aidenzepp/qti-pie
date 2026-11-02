@@ -3,9 +3,10 @@ import path from "node:path";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
-import { listPackage, readEntry } from "#qti/package/read.ts";
+import { listPackage, PackageReadError, readEntry } from "#qti/package/read.ts";
 import { readZip, ZipRefusal } from "#qti/package/zip.ts";
-import { materialize, materializeZip } from "#qti/test/fixtures.ts";
+import { materialize, materializeCorpus, materializeZip } from "#qti/test/fixtures.ts";
+import type { ZipName } from "#qti/test/fixtures.ts";
 
 /**
  * What every test here runs on: the file system `readZip` needs, and the process spawner and path
@@ -528,5 +529,140 @@ layer(TestLayer, { excludeTestServices: true })("package/zip.ts readZip", (it) =
         "overlaps the data of a.xml",
       );
     }).pipe(Effect.scoped),
+  );
+});
+
+/**
+ * The 28 QTI 3 zips of the examples tarball, by the name `materializeZip` takes.
+ */
+const CORPUS_ZIPS: readonly ZipName[] = [
+  "BBQsTest",
+  "BPIG_22April",
+  "BegGuide_March2025",
+  "CASE",
+  "CASEWithOutcome",
+  "CAT_Test01_Adaptive_EchoAdapt",
+  "basicFeedbackTest",
+  "ccPackage",
+  "englishBasicLevelV2",
+  "englishHighLevelV2",
+  "externalMetadata",
+  "feedbackTest",
+  "interactionMixSaxonyV3",
+  "items",
+  "lti",
+  "maxfiles",
+  "metaData",
+  "pci_item_examples",
+  "pci_simple_example",
+  "sample_pci",
+  "shared-vocabulary-imsmanifest",
+  "sharedMedia",
+  "sharedStimulus",
+  "simple",
+  "svg",
+  "testWithLti",
+  "test_package_minfiles",
+  "usageData",
+];
+
+layer(TestLayer, { excludeTestServices: true })("package/read.ts over a .zip", (it) => {
+  it.effect("listPackage of a zip equals listPackage of the directory, entry for entry", () =>
+    Effect.gen(function* listBoth() {
+      assert.deepStrictEqual(yield* listPackage(SIMPLE_ZIP), yield* listPackage(SIMPLE_DIR));
+    }),
+  );
+
+  it.effect("readEntry of images/sign.png gives the same 4029 bytes from both forms", () =>
+    Effect.gen(function* readBoth() {
+      const fromZip = yield* readEntry(SIMPLE_ZIP, "images/sign.png");
+
+      assert.strictEqual(fromZip.length, 4029);
+      assert.deepStrictEqual(fromZip, yield* readEntry(SIMPLE_DIR, "images/sign.png"));
+    }),
+  );
+
+  it.effect("readEntry of a path the zip lacks is an entry-path refusal", () =>
+    Effect.gen(function* readMissing() {
+      const failure = yield* Effect.flip(readEntry(SIMPLE_ZIP, "nope.xml"));
+
+      if (!(failure instanceof PackageReadError)) {
+        return assert.fail(`expected a PackageReadError, got ${failure._tag}`);
+      }
+
+      assert.strictEqual(failure.rule, "entry-path");
+    }),
+  );
+
+  it.effect("a zip with no imsmanifest.xml at its root is a PackageReadError, manifest-root", () =>
+    Effect.gen(function* listNoManifest() {
+      const file = yield* writeScratch(
+        emitZip([{ bytes: Buffer.from("<manifest/>"), name: "pkg/imsmanifest.xml" }]),
+      );
+      const failure = yield* Effect.flip(listPackage(file));
+
+      if (!(failure instanceof PackageReadError)) {
+        return assert.fail(`expected a PackageReadError, got ${failure._tag}`);
+      }
+
+      assert.strictEqual(failure.rule, "manifest-root");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("every other ZipRefusal flows out of both functions as itself", () =>
+    Effect.gen(function* refuseBoth() {
+      const file = yield* writeScratch(
+        emitZip([MANIFEST, { bytes: Buffer.from("x"), name: "../escape.xml" }]),
+      );
+
+      for (const failure of [
+        yield* Effect.flip(listPackage(file)),
+        yield* Effect.flip(readEntry(file, "imsmanifest.xml")),
+      ]) {
+        if (!(failure instanceof ZipRefusal)) {
+          return assert.fail(`expected a ZipRefusal, got ${failure._tag}`);
+        }
+
+        assert.strictEqual(failure.rule, "href-path");
+      }
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("the corpus list names exactly the zips materializeCorpus returns", () =>
+    Effect.gen(function* compareNames() {
+      const corpus = yield* materializeCorpus();
+
+      assert.deepStrictEqual(
+        corpus.map((member) => member.name).toSorted(),
+        CORPUS_ZIPS.toSorted(),
+      );
+    }),
+  );
+
+  it.effect(
+    "the 28 corpus zips read whole: 546 file entries, no directory, no cap refusing one",
+    () =>
+      Effect.gen(function* readCorpus() {
+        let files = 0;
+
+        for (const name of CORPUS_ZIPS) {
+          const zip = yield* materializeZip(name);
+          const entries = yield* listPackage(zip);
+
+          assert.isTrue(
+            entries.some((entry) => entry.kind === "manifest" && entry.path === "imsmanifest.xml"),
+            name,
+          );
+          assert.isFalse(
+            entries.some((entry) => entry.path.endsWith("/")),
+            name,
+          );
+          files += entries.length;
+        }
+
+        assert.strictEqual(CORPUS_ZIPS.length, 28);
+        assert.strictEqual(files, 546);
+      }),
+    { timeout: 120_000 },
   );
 });
