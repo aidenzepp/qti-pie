@@ -198,6 +198,19 @@ export const fixtureNames = [
   "bytes-webcontent-item",
   "resproc",
   "resproc-webcontent",
+  "usage3",
+  "usage3-typed",
+  "usage3-padded",
+  "usage3-integer-float",
+  "usage3-float-padded",
+  "usage3-no-target",
+  "usage3-two-values",
+  "usage3-ordinary-mapping",
+  "usage3-no-map-entry",
+  "usage3-bad-month",
+  "usage3-feb-30",
+  "usage3-bad-context",
+  "usage3-bad-name",
 ] as const;
 
 /**
@@ -1062,6 +1075,11 @@ const outcomeEdits: readonly Edit[] = [
 const ltiMember = "qtiv3-examples/packaging/lti/lti.zip";
 
 /**
+ * The tarball member the `usage3` fixtures are extracted from, the `usageData` package.
+ */
+const usageMember = "qtiv3-examples/packaging/usageData/usageData.zip";
+
+/**
  * The unpackaged QTI fragment `bytes` carries, whose root is `div`.
  */
 const fragmentMember = "qtiv3-examples/tests/rtest01-fragment.xml";
@@ -1253,6 +1271,196 @@ const ltiVersion301: Edit = replaceIn(
   "<schemaversion>3.0.0</schemaversion>",
   "<schemaversion>3.0.1</schemaversion>",
 );
+
+/**
+ * The member of the usage-data example the `usage3` fixtures package, loose in the tarball and in
+ * the QTI 3 usage-data namespace: 24 `ordinaryStatistic` and 2 `categorizedStatistic`, none with a
+ * `baseType`.
+ */
+const usageExample: FileSource = { member: "qtiv3-examples/usageData/example.xml" };
+
+/**
+ * The `usageData` package's three usage files, each a resource of its manifest.
+ */
+const usageFiles = [
+  "USAGE-FEMALE-TEST-106391.xml",
+  "USAGE-MALE-TEST-106391.xml",
+  "USAGE-TOTAL-TEST-106391.xml",
+] as const;
+
+/**
+ * The manifest's second resource, `USAGE-MALE-TEST-106391`, whole (lines 59 to 75 of its manifest).
+ */
+const maleResource: string = [
+  '      <resource identifier="USAGE-MALE-TEST-106391" type="qtiusagedata/xml" href="USAGE-MALE-TEST-106391.xml">',
+  "         <metadata>",
+  "            <imsmd:lom>",
+  "               <imsmd:general>",
+  "                  <imsmd:identifier>",
+  "                     <imsmd:entry>USAGE-MALE-TEST-106391</imsmd:entry>",
+  "                  </imsmd:identifier>",
+  "                  <imsmd:title>",
+  "                     <imsmd:string>Spring 2012 Grade 4 Math Assessment - MALE</imsmd:string>",
+  "                  </imsmd:title>",
+  "                  <imsmd:description>",
+  "                     <imsmd:string>This example illustrates the MALE only usage data set for an assessment administration that can be used to determine gender discrimination.</imsmd:string>",
+  "                  </imsmd:description>",
+  "               </imsmd:general>",
+  "            </imsmd:lom>",
+  "         </metadata>",
+  '         <file href="USAGE-MALE-TEST-106391.xml" />',
+  "      </resource>",
+]
+  .map((line) => `${line}\n`)
+  .join("");
+
+/**
+ * The manifest's third resource, `USAGE-FEMALE-TEST-106391`, whole (lines 76 to 92 of its
+ * manifest).
+ */
+const femaleResource: string = [
+  '      <resource identifier="USAGE-FEMALE-TEST-106391" type="qtiusagedata/xml" href="USAGE-FEMALE-TEST-106391.xml">',
+  "         <metadata>",
+  "            <imsmd:lom>",
+  "               <imsmd:general>",
+  "                  <imsmd:identifier>",
+  "                     <imsmd:entry>USAGE-FEMALE-TEST-106391</imsmd:entry>",
+  "                  </imsmd:identifier>",
+  "                  <imsmd:title>",
+  "                     <imsmd:string>Spring 2012 Grade 4 Math Assessment - FEMALE</imsmd:string>",
+  "                  </imsmd:title>",
+  "                  <imsmd:description>",
+  "                     <imsmd:string>This example illustrates the FEMALE only usage data set for an assessment administration that can be used to determine gender discrimination.</imsmd:string>",
+  "                  </imsmd:description>",
+  "               </imsmd:general>",
+  "            </imsmd:lom>",
+  "         </metadata>",
+  '         <file href="USAGE-FEMALE-TEST-106391.xml" />',
+  "      </resource>",
+]
+  .map((line) => `${line}\n`)
+  .join("");
+
+/**
+ * The edits that make the `usageData` package hold one resource, the total one, over `example.xml`:
+ * the other two resources and the three `USAGE-*.xml` files go, and the kept resource's `href` and
+ * `file` name `example.xml`.
+ */
+const usage3Edits: readonly Edit[] = [
+  ...usageFiles.map((file): Edit => ({ _tag: "deleteFile", path: file })),
+  { _tag: "addFile", path: "example.xml", source: usageExample },
+  replaceIn("imsmanifest.xml", maleResource, ""),
+  replaceIn("imsmanifest.xml", femaleResource, ""),
+  replaceIn(
+    "imsmanifest.xml",
+    'type="qtiusagedata/xml" href="USAGE-TOTAL-TEST-106391.xml"',
+    'type="qtiusagedata/xml" href="example.xml"',
+  ),
+  replaceIn(
+    "imsmanifest.xml",
+    '<file href="USAGE-TOTAL-TEST-106391.xml" />',
+    '<file href="example.xml" />',
+  ),
+];
+
+/**
+ * The opening tag of `example.xml`'s first statistic, `AIS`, split at its edited attributes.
+ */
+const firstStatistic = {
+  context: 'context="http://ntweb.ets.org/itemStats/Context/XVZ2004_J1B"',
+  lastUpdated: 'lastUpdated="2004-07-04"',
+  name: 'name="AIS"',
+};
+
+/**
+ * Build the edit of the first statistic's opening tag.
+ *
+ * @param changes - The attributes that replace the original `name`, `context` and `lastUpdated`.
+ * @returns The edit as plain data.
+ */
+const editFirstStatistic = (changes: Partial<typeof firstStatistic>): Edit => {
+  const open = (attributes: typeof firstStatistic): string =>
+    `<ordinaryStatistic ${attributes.name} ${attributes.context} caseCount="689325" stdError="0.0022" ${attributes.lastUpdated}>`;
+
+  return replaceIn("example.xml", open(firstStatistic), open({ ...firstStatistic, ...changes }));
+};
+
+/**
+ * The first statistic's target object and value, which no other statistic shares because of the
+ * value: the text every edit of that statistic's content searches.
+ */
+const firstTargetAndValue = [
+  '<targetObject identifier="Item_VB123456"/>',
+  "<value>0.87</value>",
+].join("\n        ");
+
+/**
+ * The twenty-four values of `example.xml`, in document order, and what the typed copy makes of
+ * each: the five statistics of the distractors `A` to `E` carry no float, so their values become
+ * the identifiers `A` to `E`, and the other nineteen become floats.
+ */
+const usageValues: readonly { readonly text: string; readonly identifier?: string }[] = [
+  { text: "0.87" },
+  { text: "0.647" },
+  { text: "0.3687" },
+  { text: "0.2837" },
+  { text: "0.3122" },
+  { text: "0.15556" },
+  { text: "0.02083" },
+  { text: "384.3477" },
+  { text: "0.2275" },
+  { identifier: "A", text: "0.21" },
+  { identifier: "B", text: "0.17" },
+  { identifier: "C", text: "0.05" },
+  { identifier: "D", text: "0.92" },
+  { identifier: "E", text: "0.46" },
+  { text: "0" },
+  { text: "465" },
+  { text: "2077" },
+  { text: "101101" },
+  { text: "585678" },
+  { text: "100200" },
+  { text: "100300" },
+  { text: "100400" },
+  { text: "100500" },
+  { text: "200222" },
+];
+
+/**
+ * The edits that type every value of `example.xml`.
+ */
+const usageTypedEdits: readonly Edit[] = usageValues.map(({ identifier, text }) =>
+  replaceIn(
+    "example.xml",
+    `<value>${text}</value>`,
+    identifier === undefined
+      ? `<value baseType="float">${text}</value>`
+      : `<value baseType="identifier">${identifier}</value>`,
+  ),
+);
+
+/**
+ * The first mapping's four entries, whole, which `usage3-no-map-entry` removes.
+ */
+const firstMapEntries = [
+  '<mapEntry mapKey="d1" mappedValue="412.5267"/>',
+  '<mapEntry mapKey="d2" mappedValue="426.5699"/>',
+  '<mapEntry mapKey="d3" mappedValue="451.8811"/>',
+  '<mapEntry mapKey="d4" mappedValue="441.8085"/>',
+].join("\n            ");
+
+/**
+ * Build a spec over the `usageData` package's member.
+ *
+ * @param name - The fixture's name.
+ * @param edits - The edits after `usage3`'s.
+ * @returns The spec.
+ */
+const overUsage = (name: string, ...edits: readonly Edit[]): FixtureSpec => ({
+  edits: [...usage3Edits, ...edits],
+  member: usageMember,
+  name,
+});
 
 /**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
@@ -1604,6 +1812,63 @@ const specs: Record<FixtureName, FixtureSpec> = {
     member: simpleMember,
     name: "undeclared-response",
   },
+  usage3: overUsage("usage3"),
+  "usage3-bad-context": overUsage(
+    "usage3-bad-context",
+    editFirstStatistic({ context: 'context="a%zz"' }),
+  ),
+  "usage3-bad-month": overUsage(
+    "usage3-bad-month",
+    editFirstStatistic({ lastUpdated: 'lastUpdated="2004-13-04"' }),
+  ),
+  "usage3-bad-name": overUsage("usage3-bad-name", editFirstStatistic({ name: 'name="1a"' })),
+  "usage3-feb-30": overUsage(
+    "usage3-feb-30",
+    editFirstStatistic({ lastUpdated: 'lastUpdated="2004-02-30"' }),
+  ),
+  "usage3-float-padded": overUsage(
+    "usage3-float-padded",
+    replaceIn("example.xml", "<value>0.87</value>", '<value baseType="float"> 0.87 </value>'),
+  ),
+  "usage3-integer-float": overUsage(
+    "usage3-integer-float",
+    replaceIn("example.xml", "<value>0.87</value>", '<value baseType="integer">0.87</value>'),
+  ),
+  "usage3-no-map-entry": overUsage(
+    "usage3-no-map-entry",
+    replaceIn("example.xml", firstMapEntries, ""),
+  ),
+  "usage3-no-target": overUsage(
+    "usage3-no-target",
+    replaceIn("example.xml", firstTargetAndValue, "<value>0.87</value>"),
+  ),
+  "usage3-ordinary-mapping": overUsage(
+    "usage3-ordinary-mapping",
+    replaceIn(
+      "example.xml",
+      "<value>0.87</value>",
+      '<value>0.87</value>\n        <mapping lowerBound="1" upperBound="1" defaultValue="0"><mapEntry mapKey="d1" mappedValue="1"/></mapping>',
+    ),
+  ),
+  "usage3-padded": overUsage(
+    "usage3-padded",
+    editFirstStatistic({ name: 'name=" AIS "' }),
+    replaceIn("example.xml", 'mapKey="d1"', 'mapKey="a&#9;b"'),
+    replaceIn(
+      "example.xml",
+      firstTargetAndValue,
+      ['<targetObject identifier=" item1 "/>', "<value> 0.87 </value>"].join("\n        "),
+    ),
+  ),
+  "usage3-two-values": overUsage(
+    "usage3-two-values",
+    replaceIn(
+      "example.xml",
+      "<value>0.87</value>",
+      "<value>0.87</value>\n        <value>0.87</value>",
+    ),
+  ),
+  "usage3-typed": overUsage("usage3-typed", ...usageTypedEdits),
   utf16: {
     edits: [declareEncoding("UTF-16"), { _tag: "EncodeUtf16", file: "choice.xml" }],
     member: simpleMember,
