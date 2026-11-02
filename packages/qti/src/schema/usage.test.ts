@@ -2,12 +2,14 @@ import { schema } from "@bjornpagen/grizzle";
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as ud from "#qti/schema/kinds/ud.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import * as usage from "#qti/schema/usage.ts";
+import * as value from "#qti/schema/value.ts";
 
 /**
  * The schema over the modules the usage relations bind and the module itself.
@@ -15,8 +17,22 @@ import * as usage from "#qti/schema/usage.ts";
 const probe = () =>
   schema(
     "P4UsageProbe",
-    { ...node.relations, ...pkg.relations, ...document.relations, ...usage.relations },
-    [...node.rules, ...pkg.rules, ...document.rules, ...usage.rules],
+    {
+      ...node.relations,
+      ...pkg.relations,
+      ...document.relations,
+      ...declaration.relations,
+      ...value.relations,
+      ...usage.relations,
+    },
+    [
+      ...node.rules,
+      ...pkg.rules,
+      ...document.rules,
+      ...declaration.rules,
+      ...value.rules,
+      ...usage.rules,
+    ],
   );
 
 type Statement = (typeof usage.rules)[number];
@@ -136,17 +152,102 @@ describe("usage", () => {
     }
   });
 
-  it("names a node arm for each of its four kinds, all of them ud kinds", () => {
-    assert.deepStrictEqual(Object.keys(usage.arms).toSorted(), [
-      "ud:categorizedStatistic",
-      "ud:ordinaryStatistic",
-      "ud:targetObject",
-      "ud:usageData",
-    ]);
+  it("names a node arm for each of the seven ud kinds", () => {
+    assert.deepStrictEqual(Object.keys(usage.arms).toSorted(), [...ud.kinds].toSorted());
+    assert.strictEqual(usage.arms["ud:value"], usage.relations.UsageValue);
+    assert.strictEqual(usage.arms["ud:mapping"], usage.relations.UsageMapping);
+    assert.strictEqual(usage.arms["ud:mapEntry"], usage.relations.UsageMapEntry);
+  });
 
-    const kinds: readonly string[] = ud.kinds;
-    for (const handle of Object.keys(usage.arms)) {
-      assert.isTrue(kinds.includes(handle), handle);
+  it("bounds the one value of an ordinary statistic and the one mapping of a categorized one", () => {
+    const pairs = [
+      [usage.relations.UsageValue, "ordinary"],
+      [usage.relations.UsageMapping, "categorized"],
+    ] as const;
+    for (const [from, kind] of pairs) {
+      const rows = capacities().filter((rule) => rule.from.source === from);
+      assert.strictEqual(rows.length, 1, kind);
+
+      const [row] = rows;
+      const source: unknown = row?.target.source;
+      const selected = Predicate.hasProperty(source, "relation") ? source.relation : undefined;
+      const bindings = Predicate.hasProperty(source, "bindings") ? source.bindings : undefined;
+      assert.isTrue(selected === usage.relations.Statistic, kind);
+      assert.deepStrictEqual<unknown>(bindings, { kind }, kind);
+      assert.deepStrictEqual([...(row?.target.fields ?? [])], ["id"], kind);
+      assert.deepStrictEqual([...(row?.from.fields ?? [])], ["statistic"], kind);
+      assert.deepStrictEqual(boundsOf(row), [1n, 1n], kind);
+    }
+  });
+
+  it("holds one or more map entries per mapping", () => {
+    const rows = capacities().filter((rule) => rule.from.source === usage.relations.UsageMapEntry);
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0]?.target.source, usage.relations.UsageMapping);
+    assert.deepStrictEqual(boundsOf(rows[0]), [1n, "*"]);
+  });
+
+  it("declares the typed-value alternatives over the eleven base types", () => {
+    const [rule, ...rest] = usage.rules.flatMap((candidate) =>
+      candidate.kind === "alternatives" ? [candidate] : [],
+    );
+    assert.strictEqual(rest.length, 0);
+    assert.strictEqual(rule?.parent, usage.relations.UsageTypedValue);
+    assert.strictEqual(rule?.discriminator, "baseType");
+    assert.strictEqual(rule?.roster, declaration.relations.BaseType);
+
+    const named = Object.keys(rule?.arms ?? {}).toSorted();
+    assert.deepStrictEqual(named, [...declaration.BaseType.handles].toSorted());
+    assert.strictEqual(named.length, 11);
+    for (const arm of Object.values(rule?.arms ?? {})) {
+      assert.isTrue(Object.values(usage.relations).includes(arm));
+    }
+  });
+
+  it("keys each ud:value relation by the node's id", () => {
+    const names = [
+      "UsageValue",
+      "UsageValueFieldIdentifier",
+      "UsageValueBaseType",
+      "UsageTypedValue",
+    ] as const;
+    for (const name of names) {
+      assert.deepStrictEqual([...usage.relations[name].primaryKey], ["id"], name);
+    }
+  });
+
+  it("refuses a padded or trailing-junk float in the typed float arm and admits a bare one", () => {
+    const { pattern } = usage.relations.UsageTypedValueFloat.fields.value;
+    const float = new RegExp(pattern.source, pattern.flags);
+    assert.isTrue(float.test("0.87"));
+    assert.isFalse(float.test("0.87x"));
+    assert.isFalse(float.test(" 0.87 "));
+  });
+
+  it("does not admit a value under a categorized statistic, and admits entity references in one", () => {
+    const rows = new Set(ud.admission.map((row) => `${row.parent}|${row.child}`));
+    assert.isFalse(rows.has("ud:categorizedStatistic|ud:value"));
+    assert.isTrue(rows.has("ud:value|entityRef"));
+  });
+
+  it("keeps the declared-default marker and the bound and case-sensitivity leaves under their owners", () => {
+    const owners = [
+      ["DeclaredDefaultValue", "UsageMapping"],
+      ["UsageMappingLowerBound", "UsageMapping"],
+      ["UsageMappingUpperBound", "UsageMapping"],
+      ["UsageMapEntryCaseSensitive", "UsageMapEntry"],
+    ] as const;
+    for (const [name, owner] of owners) {
+      assert.deepStrictEqual([...usage.relations[name].primaryKey], ["node"], name);
+      assert.isTrue(
+        usage.rules.some(
+          (rule) =>
+            rule.kind === "contained" &&
+            rule.left.source === usage.relations[name] &&
+            rule.right.source === usage.relations[owner],
+        ),
+        name,
+      );
     }
   });
 });
