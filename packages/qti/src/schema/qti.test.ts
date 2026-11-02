@@ -3,11 +3,19 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import nodePath from "node:path";
 import { afterAll, assert, describe, it } from "@effect/vitest";
 import { inventory } from "#qti/schema/content/xsd-inventory.ts";
+import * as asi from "#qti/schema/kinds/asi.ts";
+import * as html from "#qti/schema/kinds/html.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
-import { Node, NodeKind } from "#qti/schema/node.ts";
+import { Ancestry, Node, NodeKind } from "#qti/schema/node.ts";
 import { Qti } from "#qti/schema/qti.ts";
 import { Author } from "#qti/schema/roles.ts";
-import { admission, ancestryStep, attributeAdmission } from "#qti/schema/seed/admission.ts";
+import {
+  admission,
+  ancestryStep,
+  attributeAdmission,
+  registries,
+} from "#qti/schema/seed/admission.ts";
+import { KindEnters, reachable } from "#qti/schema/seed/ancestry.ts";
 import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
 import { mappableBaseType } from "#qti/schema/seed/mappable-base-type.ts";
 import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
@@ -20,9 +28,13 @@ import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
  */
 const seeded = new Set([
   "Admission",
+  "AncestryStep",
+  "AttributeAdmission",
   "BindingFit",
+  "MappableBaseType",
   "OperatorArity",
   "OperatorArityMax",
+  "RecordBindingFit",
   "ResourceTypeOf",
   "RootOfType",
 ]);
@@ -95,6 +107,33 @@ afterAll(() => {
   rmSync(scratch, { force: true, recursive: true });
 });
 
+/**
+ * The children a host's content model names, as inventory handles, and the content kinds around
+ * them: text and entityRef for a mixed host, ws for a host with children, comment and pi for all.
+ */
+const modelOf = (host: string): ReadonlySet<string> => {
+  const entry = inventory[host];
+  if (entry === undefined) {
+    assert.fail(`no inventory entry for ${host}`);
+  }
+
+  const named = entry.children
+    .map((child) =>
+      host === "qti-modal-feedback" && child.name === "qti-content-body"
+        ? "qti-content-body.modal"
+        : child.name,
+    )
+    .filter((name) => Object.hasOwn(inventory, name));
+
+  return new Set([
+    ...named,
+    ...(entry.mixed ? ["text", "entityRef"] : []),
+    ...(entry.mixed || named.length > 0 ? ["ws"] : []),
+    "comment",
+    "pi",
+  ]);
+};
+
 describe("qti", () => {
   it("builds the composed schema, the author role and the author login", () => {
     assert.strictEqual(Qti.name, "Qti");
@@ -116,9 +155,7 @@ describe("qti", () => {
     assert.isAbove(relations.length, 0);
   });
 
-  // Until the content phase's final slice gives the inventory's handles their arms, the check
-  // exempts them; it then returns to "every handle but `template` has an arm".
-  it("gives every NodeKind handle outside the inventory an arm in the Node alternatives statement", () => {
+  it("gives every NodeKind handle but template an arm in the Node alternatives statement", () => {
     const [rule, ...rest] = Qti.statements.filter(
       (statement) => statement.kind === "alternatives" && statement.parent === Node,
     );
@@ -131,13 +168,61 @@ describe("qti", () => {
 
     const arms = Object.keys(rule.arms);
     assert.deepStrictEqual(
-      NodeKind.handles.filter(
-        (handle) => !Object.hasOwn(inventory, handle) && !arms.includes(handle),
-      ),
-      [],
+      NodeKind.handles.filter((handle) => !arms.includes(handle)),
+      ["template"],
     );
     assert.deepStrictEqual(
       arms.filter((arm) => !NodeKind.handles.some((handle) => handle === arm)),
+      [],
+    );
+  });
+
+  it("composes the Admission rows of p, div, qti-item-body and qti-modal-feedback per host", () => {
+    for (const host of ["p", "div", "qti-item-body", "qti-modal-feedback"]) {
+      const expected = [...modelOf(host)].toSorted();
+      for (const version of ["3.0.0", "3.0.1"]) {
+        const rows = admission
+          .filter((row) => row.parent === host && row.version === version)
+          .map((row) => row.child)
+          .toSorted();
+        assert.deepStrictEqual(rows, expected, `${version}: ${host}`);
+      }
+    }
+  });
+
+  it("closes the Ancestry roster over the composed admission rows and KindEnters", () => {
+    const closure = reachable(admission, KindEnters).map((flags) =>
+      flags.length === 0 ? "root" : flags.join("."),
+    );
+    assert.deepStrictEqual([...closure].toSorted(), [...Ancestry.handles].toSorted());
+  });
+
+  it("steps every NodeKind handle, and only those, in the ancestry steps", () => {
+    assert.deepStrictEqual(
+      [...new Set(ancestryStep.map((row) => row.kind))].toSorted(),
+      [...NodeKind.handles].toSorted(),
+    );
+  });
+
+  it("seeds each handle's attribute admission from its registry row", () => {
+    const registry = new Map(registries.flatMap((entries) => Object.entries(entries)));
+    for (const handle of NodeKind.handles) {
+      const admitted = attributeAdmission
+        .filter((row) => row.kind === handle)
+        .map((row) => row.attribute)
+        .toSorted();
+      const declared = [...new Set(registry.get(handle)?.attributes)].toSorted();
+      assert.deepStrictEqual(admitted, declared, handle);
+    }
+  });
+
+  it("gives the inventory an entry for every ASI and HTML kind and names only NodeKind handles", () => {
+    for (const handle of [...asi.kinds, ...html.kinds]) {
+      assert.isTrue(Object.hasOwn(inventory, handle), `inventory lacks ${handle}`);
+    }
+
+    assert.deepStrictEqual(
+      Object.keys(inventory).filter((handle) => !NodeKind.handles.some((kind) => kind === handle)),
       [],
     );
   });
