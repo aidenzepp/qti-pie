@@ -35,9 +35,11 @@ let SIMPLE_DIR = "";
  * archive wrong in one named way.
  *
  * `size` replaces both sizes in the central directory only. `name` is raw bytes when the test
- * needs a name that is not UTF-8.
+ * needs a name that is not UTF-8. `at` writes no local header or data for the entry and points its
+ * central record at that offset.
  */
 interface EmitEntry {
+  readonly at?: number;
   readonly bytes: Uint8Array;
   readonly crc?: number;
   readonly externalAttributes?: number;
@@ -102,11 +104,14 @@ const emitZip = (entries: readonly EmitEntry[], options: EmitOptions = {}): Uint
     central.writeUInt32LE(entry.size ?? entry.bytes.length, 24);
     central.writeUInt16LE(name.length, 28);
     central.writeUInt32LE(entry.externalAttributes ?? 0, 38);
-    central.writeUInt32LE(offset, 42);
+    central.writeUInt32LE(entry.at ?? offset, 42);
 
-    locals.push(local, name, Buffer.from(entry.bytes));
     centrals.push(central, name);
-    offset += local.length + name.length + entry.bytes.length;
+
+    if (entry.at === undefined) {
+      locals.push(local, name, Buffer.from(entry.bytes));
+      offset += local.length + name.length + entry.bytes.length;
+    }
   }
 
   const directory = Buffer.concat(centrals);
@@ -402,5 +407,126 @@ layer(TestLayer, { excludeTestServices: true })("package/zip.ts readZip", (it) =
       "imsmanifest.xml",
       "more than one",
     ).pipe(Effect.scoped),
+  );
+
+  it.effect("more than 10000 central records are refused naming the archive", () =>
+    assertRefused(
+      emitZip([
+        MANIFEST,
+        ...Array.from({ length: 10_000 }, (_, index) => ({
+          bytes: new Uint8Array(),
+          name: `f/${String(index + 1).padStart(5, "0")}`,
+        })),
+      ]),
+      "zip-format",
+      undefined,
+      "entries, past the limit of 10000",
+    ).pipe(Effect.scoped),
+  );
+
+  it.effect("an entry that declares more than 64 MiB is refused naming the entry", () =>
+    assertRefused(
+      patchUncompressedSize(
+        emitZip([
+          MANIFEST,
+          { bytes: deflateRawSync(Buffer.from("text ".repeat(200))), method: 8, name: "bomb.xml" },
+        ]),
+        4_294_967_294,
+      ),
+      "zip-format",
+      "bomb.xml",
+      "bytes for one entry",
+    ).pipe(Effect.scoped),
+  );
+
+  it.effect("an entry that declares over 100 times its stored size is refused", () =>
+    Effect.gen(function* refuseRatio() {
+      const zeros = Buffer.alloc(2 * 1024 * 1024);
+      const archive = emitZip([
+        MANIFEST,
+        { bytes: deflateRawSync(zeros), crc: crc32(zeros), method: 8, name: "zeros.bin" },
+      ]);
+
+      yield* assertRefused(
+        patchUncompressedSize(archive, zeros.length),
+        "zip-format",
+        "zeros.bin",
+        "times its stored size",
+      );
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("the same ratio within the 1 MiB allowance reads back to its bytes", () =>
+    Effect.gen(function* readAllowed() {
+      const zeros = Buffer.alloc(1024 * 1024);
+      const archive = emitZip([
+        MANIFEST,
+        { bytes: deflateRawSync(zeros), crc: crc32(zeros), method: 8, name: "zeros.bin" },
+      ]);
+      const entries = yield* readZip(
+        yield* writeScratch(patchUncompressedSize(archive, zeros.length)),
+      );
+
+      assert.deepStrictEqual(
+        entries.find((entry) => entry.path === "zeros.bin")?.bytes,
+        new Uint8Array(zeros),
+      );
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("sizes that sum past 256 MiB are refused naming the archive", () =>
+    assertRefused(
+      emitZip([
+        MANIFEST,
+        ...["a", "b", "c", "d", "e"].map((name) => ({
+          bytes: Buffer.from("x"),
+          name: `${name}.bin`,
+          size: 60 * 1024 * 1024,
+        })),
+      ]),
+      "zip-format",
+      undefined,
+      "bytes for one package",
+    ).pipe(Effect.scoped),
+  );
+
+  it.effect("two central records naming one local entry are refused as an overlap", () =>
+    Effect.gen(function* refuseRepeat() {
+      const payload = Buffer.from("<a>some bytes</a>");
+      const manifestLength = 30 + MANIFEST.name.length + MANIFEST.bytes.length;
+
+      yield* assertRefused(
+        emitZip([
+          MANIFEST,
+          { bytes: payload, name: "a.xml" },
+          { at: manifestLength, bytes: payload, name: "b.xml" },
+        ]),
+        "zip-format",
+        "b.xml",
+        "overlaps the data of a.xml",
+      );
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("a record whose range starts inside another entry's data is refused", () =>
+    Effect.gen(function* refuseInside() {
+      const payload = Buffer.from("<b>inner entry</b>");
+      const inner = emitZip([{ bytes: payload, name: "b.xml" }]).subarray(
+        0,
+        30 + "b.xml".length + payload.length,
+      );
+      const manifestLength = 30 + MANIFEST.name.length + MANIFEST.bytes.length;
+
+      yield* assertRefused(
+        emitZip([
+          MANIFEST,
+          { bytes: inner, name: "a.xml" },
+          { at: manifestLength + 30 + "a.xml".length, bytes: payload, name: "b.xml" },
+        ]),
+        "zip-format",
+        "b.xml",
+        "overlaps the data of a.xml",
+      );
+    }).pipe(Effect.scoped),
   );
 });
