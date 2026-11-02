@@ -92,6 +92,11 @@ const titleBounds = {
   outcomes: [0n, 0n],
 } as const;
 
+/**
+ * The relations of the holder arms `IdHolder` gains beyond `responseDeclaration`.
+ */
+const holderArms = ["HtmlId", "ItemBodyId", "PrintedVariableId", "ContextDeclarationId"] as const;
+
 describe("document", () => {
   it("builds a schema over node, package and document relations and rules without refusal", () => {
     const built = probe();
@@ -112,14 +117,37 @@ describe("document", () => {
   });
 
   it("declares the document relations and the IdHolder roster", () => {
-    assert.deepStrictEqual(Object.keys(document.relations).toSorted(), [
-      "Document",
-      "DocumentId",
-      "DocumentIdentifier",
-      "DocumentTitle",
-      "IdHolder",
+    assert.deepStrictEqual(
+      Object.keys(document.relations).toSorted(),
+      [
+        "Document",
+        "DocumentId",
+        "DocumentIdentifier",
+        "ContextDeclarationId",
+        "DocumentTitle",
+        "HtmlId",
+        "IdHolder",
+        "ItemBodyId",
+        "PrintedVariableId",
+      ].toSorted(),
+    );
+    assert.deepStrictEqual(document.relations.IdHolder.handles, [
+      "responseDeclaration",
+      "htmlId",
+      "itemBody",
+      "printedVariable",
+      "contextDeclaration",
     ]);
-    assert.deepStrictEqual(document.relations.IdHolder.handles, ["responseDeclaration"]);
+  });
+
+  it("keys each holder arm on its node, beside its primary key", () => {
+    for (const name of holderArms) {
+      const arm = document.relations[name];
+      const keys = document.rules.flatMap((rule) =>
+        rule.kind === "key" && rule.relation === arm ? [[...rule.fields]] : [],
+      );
+      assert.deepStrictEqual(keys, [["node"]], name);
+    }
   });
 
   it("keeps the item root's arm out of this module", () => {
