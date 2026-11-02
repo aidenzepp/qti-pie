@@ -1,6 +1,6 @@
 /**
- * Which child kinds each parent kind admits under each schema version, composed from the kinds
- * files.
+ * What the kinds files seed, composed once: the admission rows, the attribute admission rows and
+ * the ancestry steps.
  */
 import * as asi from "#qti/schema/kinds/asi.ts";
 import * as cp from "#qti/schema/kinds/cp.ts";
@@ -10,6 +10,21 @@ import * as html from "#qti/schema/kinds/html.ts";
 import * as lom from "#qti/schema/kinds/lom.ts";
 import * as qmd from "#qti/schema/kinds/qmd.ts";
 import { NodeKind, SchemaVersion } from "#qti/schema/node.ts";
+import { KindEnters, ancestryStepRows } from "#qti/schema/seed/ancestry.ts";
+import { attributeAdmissionRows } from "#qti/schema/seed/attribute-admission.ts";
+
+/**
+ * The registry of every kinds file, in composition order. A later phase's kinds file joins this
+ * list in its regenerate-and-seed slice, as it joins `node.ts`'s spreads.
+ */
+export const registries = [
+  generic.registry,
+  asi.registry,
+  html.registry,
+  cp.registry,
+  lom.registry,
+  qmd.registry,
+];
 
 const kindOrder: ReadonlyMap<string, number> = new Map(
   NodeKind.handles.map((handle, index) => [handle, index]),
@@ -58,3 +73,14 @@ export const admission: readonly AdmissionRow[] = [
  */
 export const admissionByVersion = (version: SchemaVersionHandle): readonly AdmissionRow[] =>
   admission.filter((row) => row.version === version);
+
+/**
+ * The attribute names each kind may carry, from the one composed registry list.
+ */
+export const attributeAdmission = attributeAdmissionRows(registries);
+
+/**
+ * The ancestry steps of every handle of `NodeKind`: a kind a later phase appends gains its rows
+ * with no edit here.
+ */
+export const ancestryStep = ancestryStepRows(NodeKind.handles, KindEnters);
