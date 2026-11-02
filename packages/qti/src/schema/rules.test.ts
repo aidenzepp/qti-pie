@@ -42,6 +42,7 @@ import {
   rules as metadataRules,
 } from "#qti/schema/metadata.ts";
 import { Admission, AttributeLexical, Edge, Node, Tree } from "#qti/schema/node.ts";
+import { ancestryStepRows, KindEnters } from "#qti/schema/seed/ancestry.ts";
 import {
   Dependency,
   File,
@@ -267,6 +268,12 @@ const addNode = (draft: Draft, kind: string, parent: string): string => {
   assert.isDefined(above, parent);
 
   const id = crypto.randomUUID();
+  const parentAncestry = text(above ?? {}, "ancestry");
+  const parentKind = text(above ?? {}, "kind");
+  // The ancestry the importer computes for the child: the step of the parent's kind at its ancestry.
+  const childAncestry =
+    ancestryStepRows([parentKind], KindEnters).find((step) => step.ancestry === parentAncestry)
+      ?.next ?? parentAncestry;
   const tree = text(above ?? {}, "tree");
   const version = text(above ?? {}, "version");
   let last = 0n;
@@ -277,6 +284,7 @@ const addNode = (draft: Draft, kind: string, parent: string): string => {
   }
 
   of(draft, Node).push({
+    ancestry: childAncestry,
     id,
     kind,
     prefix: "",
@@ -286,9 +294,11 @@ const addNode = (draft: Draft, kind: string, parent: string): string => {
   });
   of(draft, Edge).push({
     child: id,
+    childAncestry,
     childKind: kind,
     parent,
-    parentKind: text(above ?? {}, "kind"),
+    parentAncestry,
+    parentKind,
     position: last + 2n,
     tree,
     version,

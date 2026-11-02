@@ -19,6 +19,7 @@ import {
   on,
   pg,
   relation,
+  select,
   str,
   uuid,
 } from "@bjornpagen/grizzle";
@@ -30,6 +31,7 @@ import * as html from "#qti/schema/kinds/html.ts";
 import * as lom from "#qti/schema/kinds/lom.ts";
 import * as qmd from "#qti/schema/kinds/qmd.ts";
 import * as patterns from "#qti/schema/patterns.ts";
+import { ancestryHandles } from "#qti/schema/seed/ancestry.ts";
 
 /**
  * The kinds files `NodeKind` and `AttributeName` compose, in composition order.
@@ -103,6 +105,15 @@ export const AttributeName = closed("AttributeName", [
   ...qmd.attributes,
 ]);
 
+/**
+ * Every ancestry a node can sit in: the set of flags (`fb`, `int`, `choice` and the rest of
+ * `FLAGS`) its ancestors enter, named by those flags joined with `.`, `root` for none.
+ *
+ * The handles are the closure `seed/ancestry.ts` computes over the kinds files' `Admission` rows;
+ * a flag set outside them is a node the model cannot hold.
+ */
+export const Ancestry = closed("Ancestry", ancestryHandles);
+
 export type { SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
 
 /**
@@ -114,6 +125,11 @@ export type RootKindHandle = (typeof RootKind.handles)[number];
  * A handle of `NodeKind`.
  */
 export type NodeKindHandle = (typeof NodeKind.handles)[number];
+
+/**
+ * A handle of `Ancestry`.
+ */
+export type AncestryHandle = (typeof Ancestry.handles)[number];
 
 /**
  * A handle of `AttributeName`.
@@ -206,11 +222,13 @@ export const TreeExportCharset = relation("TreeExportCharset", { label: encName,
 
 /**
  * One node of a tree, of one kind, carrying its tree's schema version and root kind so the edges
- * and the kind-specific relations can be judged against them.
+ * and the kind-specific relations can be judged against them, and the ancestry it sits in: the
+ * flags its ancestors enter, `root` for a tree's root element.
  */
 export const Node = relation(
   "Node",
   {
+    ancestry: closedId(Ancestry),
     id: uuid,
     kind: closedId(NodeKind),
     prefix: str.regex(patterns.ncNameOrEmpty),
@@ -236,15 +254,18 @@ export const Admission = relation(
 );
 
 /**
- * A child node at its position under its parent, both of one tree, with both kinds copied so the
- * pair can be judged against `Admission`. A node has at most one parent.
+ * A child node at its position under its parent, both of one tree, with both kinds and both
+ * ancestries copied so the pair can be judged against `Admission` and `AncestryStep`. A node has
+ * at most one parent.
  */
 export const Edge = relation(
   "Edge",
   {
     child: uuid,
+    childAncestry: closedId(Ancestry),
     childKind: closedId(NodeKind),
     parent: uuid,
+    parentAncestry: closedId(Ancestry),
     parentKind: closedId(NodeKind),
     position: pg.bigint,
     tree: uuid,
@@ -367,6 +388,7 @@ export const arms = {
  */
 export const relations = {
   Admission,
+  Ancestry,
   AttributeEntityReference,
   AttributeLexical,
   AttributeName,
@@ -399,8 +421,9 @@ export const relations = {
  * The statements over this module's relations: one tree per root node, one root per tree, every
  * fidelity row owned by a tree, and a manifest tree exactly when its root is a manifest; every node
  * of a tree carrying the tree's version and root kind, one parent per node, both ends of an edge in
- * the edge's tree with the kinds it names, every edge's kind pair admitted by its version, and
- * every attribute side row owned by a node.
+ * the edge's tree with the kinds and ancestries it names, every edge's kind pair admitted by its
+ * version, a tree rooted at a node of ancestry `root`, and every attribute side row owned by a
+ * node. The statements that read `AncestryStep` live in `ancestry.ts`.
  *
  * The row checks name the `manifest` handle as a literal: `TreeKind.handle("manifest")` is a term
  * typed exactly `"manifest"`, and a comparison's operand must carry the whole roster's type of the
@@ -416,7 +439,7 @@ export const rules = [
   contained(on(TreeXmlStandalone, "tree"), on(Tree, "id")),
   contained(on(TreeDoctype, "tree"), on(Tree, "id")),
   contained(on(TreeExportCharset, "tree"), on(Tree, "id")),
-  contained(on(TreeRoot, "node", "tree"), on(Node, "id", "tree")),
+  contained(on(TreeRoot, "node", "tree"), on(select(Node, { ancestry: "root" }), "id", "tree")),
   contained(on(Node, "tree", "version", "rootKind"), on(Tree, "id", "version", "root")),
   key(Edge, ["child"]),
   contained(
@@ -427,6 +450,8 @@ export const rules = [
     on(Edge, "child", "tree", "version", "childKind"),
     on(Node, "id", "tree", "version", "kind"),
   ),
+  contained(on(Edge, "parent", "parentAncestry"), on(Node, "id", "ancestry")),
+  contained(on(Edge, "child", "childAncestry"), on(Node, "id", "ancestry")),
   contained(
     on(Edge, "version", "parentKind", "childKind"),
     on(Admission, "version", "parent", "child"),

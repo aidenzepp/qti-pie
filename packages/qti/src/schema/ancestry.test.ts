@@ -1,4 +1,7 @@
+import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import * as leaf from "#qti/schema/ancestry.ts";
+import * as node from "#qti/schema/node.ts";
 import * as asi from "#qti/schema/kinds/asi.ts";
 import * as cp from "#qti/schema/kinds/cp.ts";
 import * as generic from "#qti/schema/kinds/generic.ts";
@@ -112,5 +115,57 @@ describe("seed/ancestry", () => {
       assert.include(ancestryHandles, row.next);
       assert.include(ancestryHandles, row.ancestry);
     }
+  });
+
+  it("declares the Ancestry roster over the 56 handles, and the three columns that name it", () => {
+    assert.deepStrictEqual([...node.Ancestry.handles], [...ancestryHandles]);
+    assert.strictEqual(node.Ancestry.handles.length, 56);
+    assert.strictEqual(node.Node.fields.ancestry.roster.name, "Ancestry");
+    assert.strictEqual(node.Edge.fields.parentAncestry.roster.name, "Ancestry");
+    assert.strictEqual(node.Edge.fields.childAncestry.roster.name, "Ancestry");
+  });
+
+  it("keys AncestryStep by ancestry and kind, both closed over their rosters", () => {
+    const step = leaf.relations.AncestryStep;
+    assert.deepStrictEqual([...step.primaryKey], ["ancestry", "kind"]);
+    assert.strictEqual(step.fields.next.roster.name, "Ancestry");
+    assert.strictEqual(step.fields.kind.roster.name, "NodeKind");
+    assert.deepStrictEqual(leaf.arms, {});
+  });
+
+  it("holds the per-node ban with source Node and the step with source Edge, both into AncestryStep", () => {
+    const contained = leaf.rules.filter((rule) => rule.kind === "contained");
+    const fields = (relation: typeof node.Node | typeof node.Edge) =>
+      contained
+        .filter((rule) => rule.left.source === relation)
+        .map((rule) => [[...rule.left.fields], [...rule.right.fields]]);
+
+    for (const rule of contained) {
+      assert.strictEqual(rule.right.source, leaf.relations.AncestryStep);
+    }
+
+    assert.deepStrictEqual(fields(node.Node), [
+      [
+        ["ancestry", "kind"],
+        ["ancestry", "kind"],
+      ],
+    ]);
+    assert.deepStrictEqual(fields(node.Edge), [
+      [
+        ["parentAncestry", "parentKind", "childAncestry"],
+        ["ancestry", "kind", "next"],
+      ],
+    ]);
+    assert.strictEqual(leaf.rules.length, 2);
+  });
+
+  it("builds a probe schema over the node and ancestry relations and both rule lists", () => {
+    const probe = schema("QtiAncestryProbe", { ...node.relations, ...leaf.relations }, [
+      ...node.rules,
+      ...leaf.rules,
+    ]);
+    assert.strictEqual(probe.statements.length, node.rules.length + leaf.rules.length);
+    assert.include(Object.keys(probe.relations), "AncestryStep");
+    assert.include(Object.keys(probe.relations), "Ancestry");
   });
 });
