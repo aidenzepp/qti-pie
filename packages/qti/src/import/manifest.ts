@@ -25,6 +25,9 @@ import {
   File,
   FileContent,
   Manifest,
+  ManifestId,
+  ManifestIdOfManifest,
+  ManifestIdOfResource,
   ManifestMetadata,
   ManifestSchema,
   ManifestSchemaVersion,
@@ -762,6 +765,8 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     const identifier = typed(resource, "identifier", "collapse");
     const type = typed(resource, "type", "preserve");
     add(Resource, [{ id: node.id, identifier, package: packageId, type, version }]);
+    add(ManifestId, [{ holder: "resource", id: identifier, package: packageId }]);
+    add(ManifestIdOfResource, [{ id: identifier, package: packageId }]);
 
     if (Option.isSome(attributeOf(resource, "href"))) {
       const href = typed(resource, "href", "collapse");
@@ -814,9 +819,10 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     }
   };
 
-  add(Package, [
-    { id: packageId, identifier: typed(root, "identifier", "collapse"), schemaversion: version },
-  ]);
+  const manifestIdentifier = typed(root, "identifier", "collapse");
+  add(Package, [{ id: packageId, identifier: manifestIdentifier, schemaversion: version }]);
+  add(ManifestId, [{ holder: "manifest", id: manifestIdentifier, package: packageId }]);
+  add(ManifestIdOfManifest, [{ id: manifestIdentifier, package: packageId }]);
   add(Manifest, [{ id: packageId }]);
 
   for (const metadataElement of childrenNamed(root, "metadata")) {
