@@ -313,8 +313,7 @@ describe.skipIf(!hasLease)(
             return;
           }
 
-          // The attribute names are not carried by a seeded relation, and no stored `xi:include` exists
-          // until the processing fixtures (`p3-22`), so the thirty labels are written as
+          // The attribute names are not carried by a seeded relation, so the thirty labels are written as
           // `AttributeLexical` rows on the manifest's root and read back; the table only names the
           // node, its kind and the attribute.
           const written = yield* db.apply(

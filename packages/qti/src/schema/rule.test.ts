@@ -4,9 +4,9 @@ import type { Statement } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as item from "#qti/schema/item.ts";
+import * as xi from "#qti/schema/kinds/xi.ts";
 import * as node from "#qti/schema/node.ts";
 import * as processing from "#qti/schema/processing.ts";
-import * as xi from "#qti/schema/kinds/xi.ts";
 import * as rule from "#qti/schema/rule.ts";
 
 /**

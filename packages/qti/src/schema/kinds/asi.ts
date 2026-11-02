@@ -10,7 +10,7 @@ const namespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 /**
  * The expression kinds of the processing vocabulary: table A of the spec's 3.3, alphabetical.
  */
-const expressionKinds = [
+export const expressionKinds = [
   "qti-and",
   "qti-any-n",
   "qti-base-value",
@@ -81,7 +81,7 @@ const expressionKinds = [
  * The rule and processing kinds, `qti-response-processing` (the M0 kind) aside: table B of the
  * spec's 3.3, in table order.
  */
-const ruleKinds = [
+export const ruleKinds = [
   "qti-response-condition",
   "qti-response-if",
   "qti-response-else-if",

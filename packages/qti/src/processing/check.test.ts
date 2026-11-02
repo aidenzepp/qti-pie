@@ -10,18 +10,13 @@ import type {
   TypedRuleNode,
   Unresolved,
 } from "#qti/processing/check.ts";
-import { corpusPackage, templateDocuments } from "#qti/processing/fixtures.ts";
-import { parseProcessing } from "#qti/processing/parse.ts";
 import { emptyEnvironment, environmentOf, withDeclarations } from "#qti/processing/env.ts";
 import type { DeclarationEntry, Environment } from "#qti/processing/env.ts";
-import {
-  expressionKinds,
-  numerical,
-  resultType,
-  resultTypes,
-  unify,
-} from "#qti/processing/types.ts";
+import { corpusPackage, templateDocuments } from "#qti/processing/fixtures.ts";
+import { parseProcessing } from "#qti/processing/parse.ts";
+import { numerical, resultType, resultTypes, unify } from "#qti/processing/types.ts";
 import type { EffectiveType } from "#qti/processing/types.ts";
+import { expressionKinds } from "#qti/schema/kinds/asi.ts";
 import type { NodeKindHandle } from "#qti/schema/node.ts";
 import { readXml } from "#qti/xml/read.ts";
 import type { Element } from "#qti/xml/tree.ts";
@@ -706,8 +701,8 @@ const checkBroken = (name: string, language: "response" | "template", mode: "ite
   });
 
 /**
- * The refusals of the bin 2 rules this slice owns: one broken tree each, refused naming exactly its
- * rule and the kind of the node that breaks it.
+ * The refusals of the bin 2 rules this file checks: one broken tree each, refused naming exactly
+ * its rule and the kind of the node that breaks it.
  */
 const refusals = [
   ["p20-float-into-integer-outcome", "response", "P20", "qti-set-outcome-value"],

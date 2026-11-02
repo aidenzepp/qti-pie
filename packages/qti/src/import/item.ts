@@ -25,6 +25,7 @@ import {
   UnmodeledVocabulary,
 } from "#qti/import/tree.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
+import { environmentOf } from "#qti/processing/env.ts";
 import {
   BaseType,
   Declaration,
@@ -63,7 +64,6 @@ import {
   TypedBinding,
 } from "#qti/schema/interaction.ts";
 import { AssessmentItem, DeclaredAdaptive, ItemBody, Prompt } from "#qti/schema/item.ts";
-import { environmentOf } from "#qti/processing/env.ts";
 import { Edge } from "#qti/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
 import {
