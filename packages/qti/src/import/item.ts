@@ -99,7 +99,7 @@ export type StandardTemplateHandle = (typeof StandardTemplate.handles)[number];
  */
 export class ItemRefusal extends Schema.TaggedError<ItemRefusal>()("ItemRefusal", {
   detail: Schema.String,
-  rule: Schema.Literal("binding-declared"),
+  rule: Schema.Literals(["binding-declared", "typed-copy"]),
 }) {}
 
 /**
@@ -696,8 +696,9 @@ const semanticRows = Effect.fn("import.semanticRows")(function* semanticRows(
  *
  * Every attribute passes through `typedAttribute` with its whitespace class: `identifier`,
  * `adaptive`, `time-dependent`, `src` and `longdesc` collapse, `title` replaces, and `alt`,
- * `height` and `width` are kept as read. `adaptive` takes its XSD default `false` when absent, and
- * a root that omits the required `time-dependent` takes `false` as well; the guards judge it.
+ * `height` and `width` are kept as read. `adaptive` takes its XSD default `false` when absent. A
+ * root may not omit the required `time-dependent`: a stored `false` would be indistinguishable
+ * from a present one, so the importer refuses the item as `typed-copy`.
  *
  * @param input - The decoded item and where its package lists it.
  * @param rows - The rows so far.
@@ -779,11 +780,17 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
   built = adaptive.rows;
   const timeDependent = attributeOf(built, root, rootNode, "time-dependent", "collapse");
   built = timeDependent.rows;
+  if (Option.isNone(timeDependent.value)) {
+    return yield* new ItemRefusal({
+      detail: "The item root has no time-dependent attribute, which is required.",
+      rule: "typed-copy",
+    });
+  }
   built = Rows.add(built, AssessmentItem, [
     {
       adaptive: judgedLater(Option.getOrElse(adaptive.value, () => "false")),
       id: rootNode.id,
-      timeDependent: judgedLater(Option.getOrElse(timeDependent.value, () => "false")),
+      timeDependent: judgedLater(timeDependent.value.value),
     },
   ]);
   built = Rows.add(
