@@ -26,6 +26,7 @@ import {
   DeclaredInlineChoiceFixed,
   DeclaredInlineChoiceMinChoices,
   DeclaredInlineChoiceRequired,
+  DeclaredInlineChoiceShowHide,
   DeclaredInlineChoiceShuffle,
   DeclaredTextEntryBase,
   ExtendedTextExpectedLength,
@@ -467,6 +468,43 @@ describe("textRows: inline-choice", () => {
 
   const template: DeclaredVariable = { ...identifierSingle, id: "decl-template" };
 
+  it.effect("writes a choice's show-hide and marks the one the source wrote", () =>
+    Effect.gen(function* showHide() {
+      const hidden = element("qti-inline-choice", [
+        ["identifier", "A"],
+        ["show-hide", "hide"],
+      ]);
+      const shown = element("qti-inline-choice", [["identifier", "B"]]);
+      const found = element(
+        "qti-inline-choice-interaction",
+        [["response-identifier", "RESPONSE"]],
+        [hidden, shown],
+      );
+      const rows = yield* run(
+        contextOf(
+          [found],
+          [
+            [found, "qti-inline-choice-interaction"],
+            [hidden, "qti-inline-choice"],
+            [shown, "qti-inline-choice"],
+          ],
+          [["RESPONSE", identifierSingle]],
+        ),
+      );
+
+      assert.deepStrictEqual(
+        Rows.of(rows, InlineChoice).map((row) => [row.identifier, row.showHide]),
+        [
+          ["A", "hide"],
+          ["B", "show"],
+        ],
+      );
+      assert.deepStrictEqual(Rows.of(rows, DeclaredInlineChoiceShowHide), [
+        { node: Rows.of(rows, InlineChoice)[0]?.id ?? "" },
+      ]);
+    }),
+  );
+
   it.effect("writes the interaction with its defaults, no marker, and a maxCount 1 binding", () =>
     Effect.gen(function* check() {
       const found = interaction([["response-identifier", "RESPONSE"]]);
@@ -514,8 +552,20 @@ describe("textRows: inline-choice", () => {
       );
 
       assert.deepStrictEqual(Rows.of(rows, InlineChoice), [
-        { fixed: "false", id: "qti-inline-choice-4", identifier: "A", interaction: interactionId },
-        { fixed: "true", id: "qti-inline-choice-5", identifier: "B", interaction: interactionId },
+        {
+          fixed: "false",
+          id: "qti-inline-choice-4",
+          identifier: "A",
+          interaction: interactionId,
+          showHide: "show",
+        },
+        {
+          fixed: "true",
+          id: "qti-inline-choice-5",
+          identifier: "B",
+          interaction: interactionId,
+          showHide: "show",
+        },
       ]);
       assert.deepStrictEqual(Rows.of(rows, DeclaredInlineChoiceFixed), [
         { node: "qti-inline-choice-5" },

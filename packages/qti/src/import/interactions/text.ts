@@ -17,6 +17,7 @@ import {
   DeclaredInlineChoiceFixed,
   DeclaredInlineChoiceMinChoices,
   DeclaredInlineChoiceRequired,
+  DeclaredInlineChoiceShowHide,
   DeclaredInlineChoiceShuffle,
   DeclaredTextEntryBase,
   ExtendedTextExpectedLength,
@@ -289,6 +290,7 @@ const inlineChoiceRows = Effect.fn("import.inlineChoiceRows")(function* inlineCh
   const attributes = ctx.shared.attributes(rows, element, node);
   const identifier = Option.getOrElse(attributes.read("identifier"), () => "");
   const fixed = attributes.read("fixed");
+  const showHide = attributes.read("show-hide");
   const templateIdentifier = attributes.read("template-identifier");
 
   let built = attributes.rows();
@@ -298,11 +300,12 @@ const inlineChoiceRows = Effect.fn("import.inlineChoiceRows")(function* inlineCh
       id: node.id,
       identifier,
       interaction: owner.value.id,
+      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
     },
   ]);
   built = ctx.shared.markers(
     built,
-    { fixed: DeclaredInlineChoiceFixed },
+    { fixed: DeclaredInlineChoiceFixed, "show-hide": DeclaredInlineChoiceShowHide },
     node.id,
     attributes.written(),
   );

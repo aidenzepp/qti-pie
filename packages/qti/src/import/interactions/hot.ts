@@ -14,10 +14,12 @@ import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { Shape } from "#qti/schema/content/rosters.ts";
 import type { ShapeHandle } from "#qti/schema/content/rosters.ts";
 import {
-  DeclaredHottextMaxChoices,
-  DeclaredHottextMinChoices,
+  DeclaredHotspotChoiceShowHide,
   DeclaredHotspotMaxChoices,
   DeclaredHotspotMinChoices,
+  DeclaredHottextMaxChoices,
+  DeclaredHottextMinChoices,
+  DeclaredHottextShowHide,
   DeclaredPositionObjectMaxChoices,
   DeclaredSelectPointMaxChoices,
   DeclaredSelectPointMinChoices,
@@ -346,7 +348,16 @@ const hottext = Effect.fn("import.hottext")(function* hottext(
   const attributes = ctx.shared.attributes(rows, element, node);
   const identifier = Option.getOrElse(attributes.read("identifier"), () => "");
   const template = attributes.read("template-identifier");
-  let built = Rows.add(attributes.rows(), Hottext, [{ id: node.id, identifier }]);
+  const showHide = attributes.read("show-hide");
+  let built = Rows.add(attributes.rows(), Hottext, [
+    { id: node.id, identifier, showHide: judgedLater(Option.getOrElse(showHide, () => "show")) },
+  ]);
+  built = ctx.shared.markers(
+    built,
+    { "show-hide": DeclaredHottextShowHide },
+    node.id,
+    attributes.written(),
+  );
   const owner = ctx.shared.nearestInteraction(ctx.nodes, element);
   if (Option.isSome(owner) && owner.value.kind === "qti-hottext-interaction") {
     built = Rows.add(built, HottextOwner, [
@@ -402,9 +413,22 @@ const hotspotChoice = Effect.fn("import.hotspotChoice")(function* hotspotChoice(
   const identifier = Option.getOrElse(attributes.read("identifier"), () => "");
   const label = attributes.read("hotspot-label");
   const template = attributes.read("template-identifier");
+  const showHide = attributes.read("show-hide");
   let built = Rows.add(attributes.rows(), HotspotChoice, [
-    { id: node.id, identifier, interaction: owner.value.id, shape: shape.value },
+    {
+      id: node.id,
+      identifier,
+      interaction: owner.value.id,
+      shape: shape.value,
+      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
+    },
   ]);
+  built = ctx.shared.markers(
+    built,
+    { "show-hide": DeclaredHotspotChoiceShowHide },
+    node.id,
+    attributes.written(),
+  );
   built = Rows.add(
     built,
     HotspotChoiceLabel,

@@ -25,6 +25,7 @@ import {
   AssociateInteraction,
   AssociateMaxAssociations,
   AssociateMinAssociations,
+  DeclaredAssociableHotspotShowHide,
   DeclaredAssociateMaxAssociations,
   DeclaredAssociateMinAssociations,
   DeclaredAssociateShuffle,
@@ -460,6 +461,45 @@ const graphicItem = (more: Readonly<Record<string, string>> = {}): Element =>
 const graphicDeclarations = new Map([["RESPONSE", variable("decl-1", "pair", "multiple")]]);
 
 describe("associateRows on a graphic associate interaction", () => {
+  it.effect("writes a hotspot's show-hide and marks the one the source wrote", () =>
+    Effect.gen(function* showHide() {
+      const ctx = contextOf(
+        [
+          element("qti-graphic-associate-interaction", { "response-identifier": "RESPONSE" }, [
+            element("img", { alt: "map", src: "map.png" }),
+            element("qti-associable-hotspot", {
+              coords: "10,10,5",
+              identifier: "H1",
+              "match-max": "1",
+              shape: "circle",
+              "show-hide": "hide",
+            }),
+            element("qti-associable-hotspot", {
+              coords: "40,40,5",
+              identifier: "H2",
+              "match-max": "1",
+              shape: "circle",
+            }),
+          ]),
+        ],
+        graphicDeclarations,
+      );
+
+      const built = yield* associateRows(ctx, Rows.empty());
+
+      assert.deepStrictEqual(
+        Rows.of(built, AssociableHotspot).map((row) => [row.identifier, row.showHide]),
+        [
+          ["H1", "hide"],
+          ["H2", "show"],
+        ],
+      );
+      assert.deepStrictEqual(Rows.of(built, DeclaredAssociableHotspotShowHide), [
+        { node: "node-4" },
+      ]);
+    }),
+  );
+
   it.effect("writes two hotspots with their coordinates and the interaction", () =>
     Effect.gen(function* hotspots() {
       const ctx = contextOf([graphicItem()], graphicDeclarations);

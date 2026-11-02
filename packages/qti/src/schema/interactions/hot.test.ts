@@ -200,6 +200,7 @@ describe("interactions/hot", () => {
       "identifier",
       "interaction",
       "shape",
+      "showHide",
     ]);
     assert.deepStrictEqual(relations.HotspotChoice.fields.shape, closedId(rosters.Shape));
 
@@ -302,7 +303,7 @@ describe("interactions/hot", () => {
   });
 
   it("gives Hottext no interaction column and owns the interaction by HottextOwner", () => {
-    assert.deepStrictEqual(Object.keys(relations.Hottext.fields), ["id", "identifier"]);
+    assert.deepStrictEqual(Object.keys(relations.Hottext.fields), ["id", "identifier", "showHide"]);
     assert.deepStrictEqual(Object.keys(relations.HottextOwner.fields), [
       "identifier",
       "interaction",
@@ -352,6 +353,8 @@ describe("interactions/hot", () => {
       [relations.HotspotMinSelectionsMessage, relations.HotspotInteraction],
       [relations.HotspotMaxSelectionsMessage, relations.HotspotInteraction],
       [relations.HotspotChoiceLabel, relations.HotspotChoice],
+      [relations.DeclaredHottextShowHide, relations.Hottext],
+      [relations.DeclaredHotspotChoiceShowHide, relations.HotspotChoice],
       [relations.DeclaredSelectPointMaxChoices, relations.SelectPointInteraction],
       [relations.DeclaredSelectPointMinChoices, relations.SelectPointInteraction],
       [relations.SelectPointMaxChoices, relations.SelectPointInteraction],
