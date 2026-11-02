@@ -25,12 +25,14 @@ import {
 import * as asi from "#qti/schema/kinds/asi.ts";
 import * as cp from "#qti/schema/kinds/cp.ts";
 import * as cpx from "#qti/schema/kinds/cpx.ts";
+import * as csmd from "#qti/schema/kinds/csmd.ts";
 import * as drd from "#qti/schema/kinds/drd.ts";
 import * as generic from "#qti/schema/kinds/generic.ts";
 import type { SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
 import * as html from "#qti/schema/kinds/html.ts";
 import * as lom from "#qti/schema/kinds/lom.ts";
 import * as qmd from "#qti/schema/kinds/qmd.ts";
+import * as ud from "#qti/schema/kinds/ud.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -39,7 +41,7 @@ import * as patterns from "#qti/schema/patterns.ts";
  * Each roster spreads these modules' tuples in this order; a kinds file added to one is added to
  * the other and to this list, which the tests read as the composition's source of truth.
  */
-export const vocabularies = [generic, asi, html, cp, lom, qmd, cpx, drd] as const;
+export const vocabularies = [generic, asi, html, cp, lom, qmd, cpx, drd, csmd, ud] as const;
 
 /**
  * The kinds tuples `NodeKind` spreads, in the order of `vocabularies`; the tests read the
@@ -54,6 +56,8 @@ export const kindTuples = [
   qmd.kinds,
   cpx.kinds,
   drd.kinds,
+  csmd.kinds,
+  ud.kinds,
 ] as const;
 
 /**
@@ -68,6 +72,8 @@ export const attributeTuples = [
   qmd.attributes,
   cpx.attributes,
   drd.attributes,
+  csmd.attributes,
+  ud.attributes,
 ] as const;
 
 const schemaVersions = ["3.0.0", "3.0.1"] as const satisfies readonly SchemaVersionHandle[];
@@ -119,6 +125,8 @@ export const NodeKind = closed("NodeKind", [
   ...qmd.kinds,
   ...cpx.kinds,
   ...drd.kinds,
+  ...csmd.kinds,
+  ...ud.kinds,
 ]);
 
 /**
@@ -137,6 +145,8 @@ export const AttributeName = closed("AttributeName", [
   ...qmd.attributes,
   ...cpx.attributes,
   ...drd.attributes,
+  ...csmd.attributes,
+  ...ud.attributes,
 ]);
 
 export type { SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
