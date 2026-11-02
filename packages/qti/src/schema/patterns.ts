@@ -193,9 +193,10 @@ export const xsLanguage = "^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8}){0,127}$" as const
 
 /**
  * `xsLanguage` or the empty string: the LOM language bar (`LomStringLanguage.value`,
- * `LomLanguage.value`).
+ * `LomLanguage.value`). It takes `xsLanguage`'s bound of 128 subtags, because a key over the value
+ * needs a byte bound grizzle can prove.
  */
-export const xsLanguageOrEmpty = "^(?:[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*)?$" as const;
+export const xsLanguageOrEmpty = "^(?:[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8}){0,127})?$" as const;
 
 /**
  * A media type: a type, a slash and a subtype, with no whitespace.

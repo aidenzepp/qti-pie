@@ -149,6 +149,28 @@ describe("attributes", () => {
     assert.strictEqual(selected.length, 0);
   });
 
+  it("holds HtmlId to the id attribute inside AttributeAdmission", () => {
+    const { AttributeAdmission } = attributes.relations;
+    const { HtmlId } = document.relations;
+    const into = attributes.rules.flatMap((rule) =>
+      rule.kind === "contained" &&
+      rule.left.source === HtmlId &&
+      rule.right.source === AttributeAdmission
+        ? [rule]
+        : [],
+    );
+    const checks = attributes.rules.flatMap((rule) => (rule.kind === "check" ? [rule.name] : []));
+
+    assert.include(Object.keys(HtmlId.fields), "attribute");
+    assert.strictEqual(Object.keys(HtmlId.fields)[0], "attribute");
+    assert.strictEqual(into.length, 1);
+    for (const rule of into) {
+      assert.deepStrictEqual([...rule.left.fields], ["kind", "attribute"]);
+      assert.deepStrictEqual([...rule.right.fields], ["kind", "attribute"]);
+    }
+    assert.include(checks, "HtmlIdAttribute");
+  });
+
   it("holds HeadersTarget to the headers attribute inside AttributeIdref", () => {
     const { AttributeIdref, HeadersTarget } = attributes.relations;
     const fields = ["node", "attribute", "position", "target"];
