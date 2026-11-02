@@ -20,7 +20,7 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import { RootKind, SchemaVersion, Tree } from "#qti/schema/node.ts";
+import { Node, NodeKind, RootKind, SchemaVersion, Tree } from "#qti/schema/node.ts";
 import type { RootKindHandle } from "#qti/schema/node.ts";
 import { Package, PackageEntry, Resource, RootOfType } from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
@@ -34,7 +34,13 @@ const resourceType = str.regex(patterns.resourceType);
 /**
  * The elements of a document that hold an `id` other rows refer to.
  */
-export const IdHolder = closed("IdHolder", ["responseDeclaration"]);
+export const IdHolder = closed("IdHolder", [
+  "responseDeclaration",
+  "htmlId",
+  "itemBody",
+  "printedVariable",
+  "contextDeclaration",
+]);
 
 /**
  * A QTI document of a package: the entry it is read from, the resource that lists it, its tree's
@@ -101,6 +107,43 @@ export const DocumentId = relation(
 );
 
 /**
+ * The `id` of an element of the HTML profile, with the kind of the element that holds it. The
+ * `(node)` key holds because an element has one `id`, and a containment can only reach a
+ * projection that is keyed.
+ */
+export const HtmlId = relation(
+  "HtmlId",
+  { document: uuid, id: ncName, kind: closedId(NodeKind), node: uuid },
+  ["document", "id"],
+);
+
+/**
+ * The `id` of the item body.
+ */
+export const ItemBodyId = relation("ItemBodyId", { document: uuid, id: ncName, node: uuid }, [
+  "document",
+  "id",
+]);
+
+/**
+ * The `id` of a printed variable.
+ */
+export const PrintedVariableId = relation(
+  "PrintedVariableId",
+  { document: uuid, id: ncName, node: uuid },
+  ["document", "id"],
+);
+
+/**
+ * The `id` of a context declaration.
+ */
+export const ContextDeclarationId = relation(
+  "ContextDeclarationId",
+  { document: uuid, id: ncName, node: uuid },
+  ["document", "id"],
+);
+
+/**
  * The root kinds whose root element has an `identifier` and a `title`, and the ones that have
  * neither; `outcomes` has an identifier and no title.
  */
@@ -130,7 +173,17 @@ const count = (bound: Readonly<Record<RootKindHandle, boolean>>, handle: RootKin
 /**
  * The relations and rosters of this module, as schema members.
  */
-export const relations = { Document, DocumentId, DocumentIdentifier, DocumentTitle, IdHolder };
+export const relations = {
+  ContextDeclarationId,
+  Document,
+  DocumentId,
+  DocumentIdentifier,
+  DocumentTitle,
+  HtmlId,
+  IdHolder,
+  ItemBodyId,
+  PrintedVariableId,
+};
 
 /**
  * The root elements' arms, none: the item root's is `item.ts`'s.
@@ -143,7 +196,9 @@ export const arms = {};
  * package's schema version, is the tree it names, and has a resource type its root kind is listed
  * under; each identifier and title belongs to a document and copies its package, resource and
  * root; each root kind has one identifier or none, and one title or none; each declared id belongs
- * to a document.
+ * to a document; each holder arm of the HTML profile, the item body, the printed variables and
+ * the context declarations is keyed by its node and lies in the node's tree. The arms join
+ * `DocumentId` in `declaration.ts`, not here.
  */
 export const rules = [
   key(Document, ["package", "path"]),
@@ -180,4 +235,12 @@ export const rules = [
     }),
   ),
   contained(on(DocumentId, "document"), on(Document, "id")),
+  key(HtmlId, ["node"]),
+  contained(on(HtmlId, "node", "document", "kind"), on(Node, "id", "tree", "kind")),
+  key(ItemBodyId, ["node"]),
+  contained(on(ItemBodyId, "node", "document"), on(Node, "id", "tree")),
+  key(PrintedVariableId, ["node"]),
+  contained(on(PrintedVariableId, "node", "document"), on(Node, "id", "tree")),
+  key(ContextDeclarationId, ["node"]),
+  contained(on(ContextDeclarationId, "node", "document"), on(Node, "id", "tree")),
 ] as const;
