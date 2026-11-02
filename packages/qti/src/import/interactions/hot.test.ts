@@ -1,0 +1,610 @@
+/* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the column the hotspot and `Coords` rows name; it is a geometric shape here, not a structure. */
+import path from "node:path";
+import { NodeServices } from "@effect/platform-node";
+import { assert, describe, it, layer } from "@effect/vitest";
+import { Effect, Exit, FileSystem, Option } from "effect";
+import {
+  attributeReader,
+  bindingRows,
+  coordsRows,
+  gapMatchBindingRow,
+  markers,
+  maxBoundOf,
+  maxCountDefault,
+  nearestInteraction,
+  templateRef,
+  typedCopy,
+} from "#qti/import/interactions.ts";
+import type { DeclaredVariable, InteractionContext, Shared } from "#qti/import/interactions.ts";
+import { hotRows } from "#qti/import/interactions/hot.ts";
+import { Rows, treeRows } from "#qti/import/tree.ts";
+import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
+import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
+import {
+  DeclaredHottextMaxChoices,
+  DeclaredHottextMinChoices,
+  DeclaredHotspotMaxChoices,
+  DeclaredHotspotMinChoices,
+  DeclaredPositionObjectMaxChoices,
+  DeclaredSelectPointMaxChoices,
+  DeclaredSelectPointMinChoices,
+  HotspotChoice,
+  HotspotChoiceLabel,
+  HotspotInteraction,
+  HotspotMaxChoices,
+  HotspotMaxSelectionsMessage,
+  HotspotMinSelectionsMessage,
+  Hottext,
+  HottextInteraction,
+  HottextMaxChoices,
+  HottextMaxSelectionsMessage,
+  HottextMinChoices,
+  HottextMinSelectionsMessage,
+  HottextOwner,
+  PositionObjectCenterPoint,
+  PositionObjectInteraction,
+  PositionObjectMaxChoices,
+  PositionObjectMinChoices,
+  PositionObjectStage,
+  SelectPointInteraction,
+  SelectPointMaxChoices,
+  SelectPointMinChoices,
+} from "#qti/schema/interactions/hot.ts";
+import { InteractionBinding, TypedBinding } from "#qti/schema/interaction.ts";
+import { NodeKind } from "#qti/schema/node.ts";
+import { Coords, CoordsCircle, CoordsRect } from "#qti/schema/shapes.ts";
+import { materialize } from "#qti/test/fixtures.ts";
+import { readXml } from "#qti/xml/read.ts";
+import type { Attribute, Element } from "#qti/xml/tree.ts";
+
+const documentId = "11111111-1111-4111-8111-111111111111";
+
+const attribute = (local: string, value: string): Attribute => ({
+  local,
+  namespace: "",
+  prefix: "",
+  qname: local,
+  references: [],
+  value,
+});
+
+const element = (
+  local: string,
+  attributes: Readonly<Record<string, string>> = {},
+  children: readonly Element[] = [],
+): Element => ({
+  attributes: Object.entries(attributes).map(([name, value]) => attribute(name, value)),
+  children,
+  kind: "element",
+  local,
+  namespace: "http://www.imsglobal.org/xsd/imsqtiasi_v3p0",
+  prefix: "",
+  qname: local,
+});
+
+/**
+ * The node index of a hand-written tree: each element's local name is its kind and its id is its
+ * position in document order.
+ */
+const indexTree = (root: Element): NodeIndex => {
+  const index = new Map<Element, IndexedNode>();
+  const visit = (found: Element): void => {
+    const kind = NodeKind.handles.find((handle) => handle === found.local);
+    if (kind !== undefined) {
+      index.set(found, { ancestry: "root", id: `node-${index.size}`, kind });
+    }
+
+    for (const child of found.children) {
+      if (child.kind === "element") {
+        visit(child);
+      }
+    }
+  };
+  visit(root);
+
+  return index;
+};
+
+const shared: Shared = {
+  attributes: attributeReader,
+  bindingRows,
+  coordsRows,
+  gapMatchBindingRow,
+  markers,
+  maxBoundOf,
+  maxCountDefault,
+  nearestInteraction,
+  templateRef,
+  typedCopy,
+};
+
+const variable = (
+  id: string,
+  baseType: NonNullable<DeclaredVariable["baseType"] extends Option.Option<infer B> ? B : never>,
+  cardinality: "multiple" | "ordered" | "single",
+): DeclaredVariable => ({
+  baseType: Option.some(baseType),
+  cardinality: Option.some(cardinality),
+  id,
+  shape: "typed",
+});
+
+const single = new Map([["RESPONSE", variable("decl-1", "identifier", "single")]]);
+
+const multiple = new Map([["RESPONSE", variable("decl-1", "identifier", "multiple")]]);
+
+const point = new Map([["RESPONSE", variable("decl-1", "point", "single")]]);
+
+/**
+ * The context of an item whose body holds `children`, and the node index of its tree.
+ */
+const contextOf = (
+  children: readonly Element[],
+  declarations: ReadonlyMap<string, DeclaredVariable> = new Map(),
+): InteractionContext => {
+  const root = element("qti-assessment-item", {}, [element("qti-item-body", {}, children)]);
+
+  return {
+    declarations,
+    documentId,
+    item: { adaptive: "false" },
+    nodes: indexTree(root),
+    root,
+    shared,
+  };
+};
+
+const idsOf = (ctx: InteractionContext, kind: string): string[] =>
+  [...ctx.nodes.values()].filter((found) => found.kind === kind).map((found) => found.id);
+
+const idOf = (ctx: InteractionContext, kind: string): string =>
+  Option.getOrThrow(Option.fromNullishOr(idsOf(ctx, kind)[0]));
+
+const hotspotChoice = (identifier: string, more: Readonly<Record<string, string>> = {}): Element =>
+  element("qti-hotspot-choice", {
+    coords: "0,0,10,10",
+    identifier,
+    shape: "rect",
+    ...more,
+  });
+
+const hottext = (identifier: string): Element => element("qti-hottext", { identifier });
+
+describe("hotRows on a hotspot interaction", () => {
+  it.effect("writes the interaction, its binding, its choices and their coordinates", () =>
+    Effect.gen(function* hotspots() {
+      const interaction = element(
+        "qti-hotspot-interaction",
+        {
+          "data-max-selections-message": "too many",
+          "data-min-selections-message": "too few",
+          "max-choices": "2",
+          "response-identifier": "RESPONSE",
+        },
+        [
+          hotspotChoice("A", { "hotspot-label": "north" }),
+          hotspotChoice("B", { coords: "5,5,3", shape: "circle" }),
+        ],
+      );
+      const ctx = contextOf([interaction], multiple);
+
+      const built = yield* hotRows(ctx, Rows.empty());
+
+      assert.deepStrictEqual(Rows.of(built, HotspotInteraction), [
+        {
+          id: "node-2",
+          maxChoicesN: 2n,
+          minChoicesN: 0n,
+          responseIdentifier: "RESPONSE",
+          rootKind: "item",
+        },
+      ]);
+      assert.deepStrictEqual(Rows.of(built, HotspotMaxChoices), [{ node: "node-2", value: "2" }]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredHotspotMaxChoices), [{ node: "node-2" }]);
+      assert.strictEqual(Rows.of(built, DeclaredHotspotMinChoices).length, 0);
+      assert.deepStrictEqual(Rows.of(built, HotspotMinSelectionsMessage), [
+        { node: "node-2", value: "too few" },
+      ]);
+      assert.deepStrictEqual(Rows.of(built, HotspotMaxSelectionsMessage), [
+        { node: "node-2", value: "too many" },
+      ]);
+      assert.deepStrictEqual(
+        Rows.of(built, HotspotChoice).map((row) => [
+          row.id,
+          row.identifier,
+          row.interaction,
+          row.shape,
+        ]),
+        [
+          ["node-3", "A", "node-2", "rect"],
+          ["node-4", "B", "node-2", "circle"],
+        ],
+      );
+      assert.deepStrictEqual(Rows.of(built, HotspotChoiceLabel), [
+        { node: "node-3", value: "north" },
+      ]);
+      assert.deepStrictEqual(
+        Rows.of(built, Coords).map((row) => [row.node, row.ownerKind, row.shape, row.value]),
+        [
+          ["node-3", "qti-hotspot-choice", "rect", "0,0,10,10"],
+          ["node-4", "qti-hotspot-choice", "circle", "5,5,3"],
+        ],
+      );
+      assert.deepStrictEqual(Rows.of(built, CoordsRect), [{ node: "node-3", value: "0,0,10,10" }]);
+      assert.deepStrictEqual(Rows.of(built, CoordsCircle), [{ node: "node-4", value: "5,5,3" }]);
+      assert.deepStrictEqual(Rows.of(built, TypedBinding), [
+        {
+          baseType: "identifier",
+          cardinality: "multiple",
+          document: documentId,
+          interactionKind: "qti-hotspot-interaction",
+          maxCount: 2n,
+          node: "node-2",
+          responseIdentifier: "RESPONSE",
+        },
+      ]);
+    }),
+  );
+
+  it.effect("defaults the bounds and writes no optional the source omitted", () =>
+    Effect.gen(function* defaults() {
+      const ctx = contextOf(
+        [element("qti-hotspot-interaction", { "response-identifier": "RESPONSE" })],
+        single,
+      );
+
+      const built = yield* hotRows(ctx, Rows.empty());
+
+      const [row] = Rows.of(built, HotspotInteraction);
+      assert.strictEqual(row?.maxChoicesN, 1n);
+      assert.strictEqual(row?.minChoicesN, 0n);
+      assert.strictEqual(Rows.of(built, HotspotMaxChoices).length, 0);
+      assert.strictEqual(Rows.of(built, DeclaredHotspotMaxChoices).length, 0);
+      assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 1n);
+    }),
+  );
+
+  it.effect("writes the template variable a choice names", () =>
+    Effect.gen(function* template() {
+      const declarations = new Map([
+        ...single,
+        ["TPL", variable("decl-2", "identifier", "single")],
+      ]);
+      const ctx = contextOf(
+        [
+          element("qti-hotspot-interaction", { "response-identifier": "RESPONSE" }, [
+            hotspotChoice("A", { "template-identifier": "TPL" }),
+          ]),
+        ],
+        declarations,
+      );
+
+      const built = yield* hotRows(ctx, Rows.empty());
+
+      assert.deepStrictEqual(
+        Rows.of(built, ChoiceTemplateRef).map((row) => [row.node, row.identifier]),
+        [["node-3", "TPL"]],
+      );
+    }),
+  );
+
+  it.effect("refuses a choice whose shape is not a shape", () =>
+    Effect.gen(function* badShape() {
+      const ctx = contextOf(
+        [
+          element("qti-hotspot-interaction", { "response-identifier": "RESPONSE" }, [
+            hotspotChoice("A", { shape: "star" }),
+          ]),
+        ],
+        single,
+      );
+
+      const exit = yield* Effect.exit(hotRows(ctx, Rows.empty()));
+
+      assert.isTrue(Exit.isFailure(exit));
+    }),
+  );
+
+  it.effect("refuses an interaction whose response variable no declaration names", () =>
+    Effect.gen(function* undeclared() {
+      const ctx = contextOf([
+        element("qti-hotspot-interaction", { "response-identifier": "RESPONSE" }),
+      ]);
+
+      const exit = yield* Effect.exit(hotRows(ctx, Rows.empty()));
+
+      assert.isTrue(Exit.isFailure(exit));
+    }),
+  );
+});
+
+describe("hotRows on a select-point interaction", () => {
+  it.effect("counts an absent max-choices as 0 in the interaction and the binding", () =>
+    Effect.gen(function* unbounded() {
+      const ctx = contextOf(
+        [element("qti-select-point-interaction", { "response-identifier": "RESPONSE" })],
+        point,
+      );
+
+      const built = yield* hotRows(ctx, Rows.empty());
+
+      assert.deepStrictEqual(Rows.of(built, SelectPointInteraction), [
+        {
+          id: "node-2",
+          maxChoicesN: 0n,
+          minChoicesN: 0n,
+          responseIdentifier: "RESPONSE",
+          rootKind: "item",
+        },
+      ]);
+      assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 0n);
+      assert.strictEqual(Rows.of(built, DeclaredSelectPointMaxChoices).length, 0);
+      assert.strictEqual(Rows.of(built, SelectPointMaxChoices).length, 0);
+    }),
+  );
+
+  it.effect("copies a written max-choices and min-choices with their markers", () =>
+    Effect.gen(function* written() {
+      const ctx = contextOf(
+        [
+          element("qti-select-point-interaction", {
+            "max-choices": "3",
+            "min-choices": "1",
+            "response-identifier": "RESPONSE",
+          }),
+        ],
+        point,
+      );
+
+      const built = yield* hotRows(ctx, Rows.empty());
+
+      const [row] = Rows.of(built, SelectPointInteraction);
+      assert.strictEqual(row?.maxChoicesN, 3n);
+      assert.strictEqual(row?.minChoicesN, 1n);
+      assert.deepStrictEqual(Rows.of(built, SelectPointMaxChoices), [
+        { node: "node-2", value: "3" },
+      ]);
+      assert.deepStrictEqual(Rows.of(built, SelectPointMinChoices), [
+        { node: "node-2", value: "1" },
+      ]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredSelectPointMaxChoices), [{ node: "node-2" }]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredSelectPointMinChoices), [{ node: "node-2" }]);
+      assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 3n);
+      assert.strictEqual(Rows.of(built, InteractionBinding).length, 1);
+    }),
+  );
+});
+
+describe("hotRows on a position-object interaction", () => {
+  it.effect("writes the stage, the interaction and its center point", () =>
+    Effect.gen(function* positioned() {
+      const stage = element("qti-position-object-stage", {}, [
+        element("qti-position-object-interaction", {
+          "center-point": "10 20",
+          "response-identifier": "RESPONSE",
+        }),
+      ]);
+      const ctx = contextOf([stage], point);
+
+      const built = yield* hotRows(ctx, Rows.empty());
+
+      assert.deepStrictEqual(Rows.of(built, PositionObjectStage), [{ id: "node-2" }]);
+      assert.deepStrictEqual(Rows.of(built, PositionObjectInteraction), [
+        {
+          id: "node-3",
+          maxChoicesN: 1n,
+          minChoicesN: 0n,
+          responseIdentifier: "RESPONSE",
+          rootKind: "item",
+        },
+      ]);
+      assert.deepStrictEqual(Rows.of(built, PositionObjectCenterPoint), [
+        { node: "node-3", value: "10 20" },
+      ]);
+      assert.strictEqual(Rows.of(built, PositionObjectMaxChoices).length, 0);
+      assert.strictEqual(Rows.of(built, PositionObjectMinChoices).length, 0);
+      assert.strictEqual(Rows.of(built, DeclaredPositionObjectMaxChoices).length, 0);
+      assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 1n);
+    }),
+  );
+
+  it.effect("copies a written max-choices and min-choices", () =>
+    Effect.gen(function* bounded() {
+      const ctx = contextOf(
+        [
+          element("qti-position-object-interaction", {
+            "max-choices": "2",
+            "min-choices": "1",
+            "response-identifier": "RESPONSE",
+          }),
+        ],
+        point,
+      );
+
+      const built = yield* hotRows(ctx, Rows.empty());
+
+      const [row] = Rows.of(built, PositionObjectInteraction);
+      assert.strictEqual(row?.maxChoicesN, 2n);
+      assert.strictEqual(row?.minChoicesN, 1n);
+      assert.deepStrictEqual(Rows.of(built, PositionObjectMinChoices), [
+        { node: "node-2", value: "1" },
+      ]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredPositionObjectMaxChoices), [
+        { node: "node-2" },
+      ]);
+      assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 2n);
+    }),
+  );
+});
+
+describe("hotRows on hottexts", () => {
+  it.effect("owns the hottexts of the prompt and the body, three rows each", () =>
+    Effect.gen(function* owned() {
+      const interaction = element(
+        "qti-hottext-interaction",
+        {
+          "data-max-selections-message": "too many",
+          "data-min-selections-message": "too few",
+          "max-choices": "2",
+          "min-choices": "1",
+          "response-identifier": "RESPONSE",
+        },
+        [element("qti-prompt", {}, [hottext("P")]), element("p", {}, [hottext("A"), hottext("B")])],
+      );
+      const ctx = contextOf([interaction], multiple);
+
+      const built = yield* hotRows(ctx, Rows.empty());
+
+      assert.deepStrictEqual(Rows.of(built, HottextInteraction), [
+        {
+          id: "node-2",
+          maxChoicesN: 2n,
+          minChoicesN: 1n,
+          responseIdentifier: "RESPONSE",
+          rootKind: "item",
+        },
+      ]);
+      assert.deepStrictEqual(
+        Rows.of(built, Hottext).map((row) => [row.id, row.identifier]),
+        [
+          ["node-4", "P"],
+          ["node-6", "A"],
+          ["node-7", "B"],
+        ],
+      );
+      assert.deepStrictEqual(
+        Rows.of(built, HottextOwner).map((row) => [row.node, row.identifier, row.interaction]),
+        [
+          ["node-4", "P", "node-2"],
+          ["node-6", "A", "node-2"],
+          ["node-7", "B", "node-2"],
+        ],
+      );
+      assert.deepStrictEqual(Rows.of(built, HottextMaxChoices), [{ node: "node-2", value: "2" }]);
+      assert.deepStrictEqual(Rows.of(built, HottextMinChoices), [{ node: "node-2", value: "1" }]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredHottextMaxChoices), [{ node: "node-2" }]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredHottextMinChoices), [{ node: "node-2" }]);
+      assert.deepStrictEqual(Rows.of(built, HottextMinSelectionsMessage), [
+        { node: "node-2", value: "too few" },
+      ]);
+      assert.deepStrictEqual(Rows.of(built, HottextMaxSelectionsMessage), [
+        { node: "node-2", value: "too many" },
+      ]);
+      assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 2n);
+    }),
+  );
+
+  it.effect("gives a hottext in a choice interaction's prompt a row and no owner", () =>
+    Effect.gen(function* foreign() {
+      const interaction = element("qti-choice-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-prompt", {}, [element("span", {}, [hottext("X")])]),
+      ]);
+      const ctx = contextOf([interaction], single);
+
+      const built = yield* hotRows(ctx, Rows.empty());
+
+      assert.deepStrictEqual(Rows.of(built, Hottext), [
+        { id: idOf(ctx, "qti-hottext"), identifier: "X" },
+      ]);
+      assert.strictEqual(Rows.of(built, HottextOwner).length, 0);
+      assert.strictEqual(Rows.of(built, HottextInteraction).length, 0);
+    }),
+  );
+
+  it.effect("gives a hottext directly under the item body a row and no owner", () =>
+    Effect.gen(function* bare() {
+      const ctx = contextOf([hottext("Y")]);
+
+      const built = yield* hotRows(ctx, Rows.empty());
+
+      assert.deepStrictEqual(Rows.of(built, Hottext), [{ id: "node-2", identifier: "Y" }]);
+      assert.strictEqual(Rows.of(built, HottextOwner).length, 0);
+    }),
+  );
+});
+
+/**
+ * Read `example/<name>.xml` of the materialized `sharedMedia` package into the item's tree.
+ */
+const sharedItem = (name: string) =>
+  Effect.gen(function* readShared() {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* materialize("sharedMedia");
+    const bytes = yield* fs.readFile(path.join(directory, "example", `${name}.xml`));
+    const doc = yield* readXml(bytes);
+    const tree = yield* treeRows(
+      doc,
+      { charset: "utf-8", id: documentId, kind: "document", root: "item", version: "3.0.0" },
+      Rows.empty(),
+    );
+    const ctx: InteractionContext = {
+      declarations: new Map([
+        [
+          "RESPONSE",
+          variable("decl-1", "identifier", name === "graphic_order" ? "ordered" : "single"),
+        ],
+      ]),
+      documentId,
+      item: { adaptive: "false" },
+      nodes: tree.nodes,
+      root: doc.root,
+      shared,
+    };
+
+    return { ctx, rows: yield* hotRows(ctx, tree.rows) };
+  });
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "hotRows on the sharedMedia items",
+  (suite) => {
+    suite.effect("writes hotspot.xml's interaction, four circle choices and their binding", () =>
+      Effect.gen(function* hotspotXml() {
+        const { ctx, rows } = yield* sharedItem("hotspot");
+        const interaction = idOf(ctx, "qti-hotspot-interaction");
+
+        assert.deepStrictEqual(
+          Rows.of(rows, HotspotInteraction).map((row) => [row.id, row.maxChoicesN]),
+          [[interaction, 1n]],
+        );
+        assert.deepStrictEqual(
+          Rows.of(rows, HotspotChoice).map((row) => [row.identifier, row.interaction, row.shape]),
+          ["A", "B", "C", "D"].map((identifier) => [identifier, interaction, "circle"]),
+        );
+        assert.deepStrictEqual(
+          Rows.of(rows, Coords).map((row) => [row.ownerKind, row.shape, row.value]),
+          [
+            ["qti-hotspot-choice", "circle", "77,115,8"],
+            ["qti-hotspot-choice", "circle", "118,184,8"],
+            ["qti-hotspot-choice", "circle", "150,235,8"],
+            ["qti-hotspot-choice", "circle", "96,114,8"],
+          ],
+        );
+        assert.strictEqual(Rows.of(rows, CoordsCircle).length, 4);
+        assert.strictEqual(Rows.of(rows, CoordsRect).length, 0);
+        assert.deepStrictEqual(
+          Rows.of(rows, TypedBinding).map((row) => [
+            row.responseIdentifier,
+            row.cardinality,
+            row.maxCount,
+          ]),
+          [["RESPONSE", "single", 1n]],
+        );
+        assert.deepStrictEqual(Rows.of(rows, DeclaredHotspotMaxChoices), [{ node: interaction }]);
+      }),
+    );
+
+    suite.effect("owns graphic_order.xml's four choices to the graphic order interaction", () =>
+      Effect.gen(function* graphicOrderXml() {
+        const { ctx, rows } = yield* sharedItem("graphic_order");
+        const interaction = idOf(ctx, "qti-graphic-order-interaction");
+
+        assert.strictEqual(Rows.of(rows, HotspotInteraction).length, 0);
+        assert.deepStrictEqual(
+          Rows.of(rows, HotspotChoice).map((row) => [row.identifier, row.interaction]),
+          ["A", "B", "C", "D"].map((identifier) => [identifier, interaction]),
+        );
+        assert.strictEqual(Rows.of(rows, Coords).length, 4);
+      }),
+    );
+  },
+);
