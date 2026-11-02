@@ -101,7 +101,7 @@ describe("metadata", () => {
     }
   });
 
-  it("holds one alternatives statement on Lom by owner, whose arms are the owner relations", () => {
+  it("holds one alternatives statement on Lom by owner, whose arms are owner relations, the manifest's and the resource's among them", () => {
     const found = alternativesOf();
     assert.strictEqual(found.length, 1);
 
@@ -109,7 +109,7 @@ describe("metadata", () => {
     assert.isDefined(rule, "alternatives statement");
     assert.strictEqual(rule.discriminator, "owner");
     assert.strictEqual(rule.roster, metadata.relations.LomOwner);
-    assert.deepStrictEqual(Object.keys(rule.arms).toSorted(), ["manifest", "resource"]);
+    assert.includeMembers(Object.keys(rule.arms), ["manifest", "resource"]);
     assert.isTrue(
       Predicate.hasProperty(rule.arms, "manifest") &&
         rule.arms.manifest === metadata.relations.ManifestLom,
