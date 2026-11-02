@@ -35,29 +35,33 @@ The first three came from grizzle's own test suites, before this package existed
 
 ## Drafted issues, not filed
 
-Step 4 of the filing gate only: nothing below is filed, and the independent check, the hater pass and the filing (steps 3, 5 and 6) follow. `gh repo view bjornpagen/grizzle` answered, as `aidenzepp`, that the repository is private with issues enabled and discussions disabled, and `gh issue list --repo bjornpagen/grizzle --state all` lists issues 1 to 3 only (the three rows above), with no pull request: a search of issues for `drift`, `search_path`, `shadow`, `42804`, `DriftUnchecked`, `pg_catalog`, `composite` and `Drifted` found no duplicate. Permalinks are pinned to `65203c443fa969cc47c539666a998436595f42fe` and resolve for collaborators only. One draft stands for the two confirmed defect rows that share a cause (the `Text` refusal and the `Uuid` false `Drifted`). The other defect rows are `unconfirmed` and have no draft.
+Steps 3 and 5 of the filing gate are done and step 6 is the only step left; nothing below is filed. Step 3 was an independent check (auditor task 65d7f348, report mail 2bcf260b, verdict confirmed grizzle defect). Step 5 was a cold read of the first draft (hater a6f49dce) and a merit extraction (head-cxo 5f552904); this draft applies the head's change list and adds a psql-only reproduction that was run on the local cluster in one rolled-back session. `gh repo view bjornpagen/grizzle` answered, as `aidenzepp`, that the repository is private with issues enabled and discussions disabled, and `gh issue list --repo bjornpagen/grizzle --state all` lists issues 1 to 3 only (the three rows above), with no pull request: a search of issues for `drift`, `search_path`, `shadow`, `42804`, `DriftUnchecked`, `pg_catalog`, `composite` and `Drifted` found no duplicate. Permalinks are pinned to `65203c443fa969cc47c539666a998436595f42fe` and resolve for collaborators only. One draft stands for the two confirmed defect rows that share a cause (the `Text` refusal and the `Uuid` false `Drifted`). The other defect rows are `unconfirmed` and have no draft.
 
-### Drift check refuses with SQLSTATE 42804, or reports false drift, when a relation is named like a builtin type
+Settings for the filer: repository `bjornpagen/grizzle` (private; `aidenzepp` holds write access); vendored commit `65203c4` (grizzle 1.0.0-beta.0); filed by `aidenzepp`, the operator's account, through the six-step gate; labels none; assignee none; the only action on the repository is opening this issue (rule 485ad014). The disclosure block names the Provider and Model of every seat that wrote text: one group, because the drafter and the reviser are the same model.
+
+### Drift replay puts the scratch schema before pg_catalog, so relations named Text, Uuid or Money shadow builtin types
 
 ````text
 ### Summary
-When a schema has a relation named `Text` and a later relation has a text field, `grizzle migrate` and `grizzle drift` refuse at stage `drift` with SQLSTATE 42804 (`collations are not supported by type text`), after every migration folder has applied. A relation named `Uuid` followed by a relation with a `uuid` field gives a false `Drifted` of two facts instead of an error.
+The drift replay runs with the scratch schema ahead of `pg_catalog` while builtin types print without a schema, so a relation named like a builtin type shadows that type in every later statement of the replay. A relation named `Text` gives SQLSTATE 42804 (`collations are not supported by type text`) from `grizzle migrate` and `grizzle drift`, at stage `drift`, after every migration folder has applied. A relation named `Uuid` or `Money` gives a false `Drifted` of two facts instead of an error. The shadowed statements come after the shadowing relation in grizzle's table order in the migration, not in declaration order: `{ Tree, Text }` fails the same way, with the same snapshot `b506347d66f2a33f`.
 
-Ran with `@bjornpagen/grizzle` 1.0.0-beta.0 packed from `65203c4`, against an empty database on PostgreSQL 19rc1, Node v26.13.0.
+Ran with `@bjornpagen/grizzle` 1.0.0-beta.0 packed from `65203c4`, Node v26.13.0, against an empty database on PostgreSQL 19rc1, which is grizzle's own development cluster (built by `pnpm pg:build`).
 
 ### Reproduction
-1. Declare a schema with two relations and no logins.
+1. In `grizzle.config.ts` of a package that depends on `@bjornpagen/grizzle`, declare a schema with two relations and no logins.
 
 ```ts
 import { defineConfig, relation, schema, str, uuid } from "@bjornpagen/grizzle"
 
-const any = str.regex("^.*$", "su")
-const Text = relation("Text", { id: uuid, value: any }, ["id"])
-const Tree = relation("Tree", { id: uuid, label: any }, ["id"])
+const Prose = str.regex("^.*$", "su")
+const Text = relation("Text", { id: uuid, value: Prose }, ["id"])
+const Tree = relation("Tree", { id: uuid, label: Prose }, ["id"])
 const ReproDrift = schema("ReproDrift", { Text, Tree }, [])
 
 export default defineConfig({ logins: [], schemas: [ReproDrift] })
 ```
+
+Every text field prints as `text COLLATE "pg_catalog"."pg_c_utf8"` (the README says text always carries a pattern), and `^.*$` makes no domain, so `label` is a plain text column with a collation.
 
 2. Generate the first migration.
 
@@ -90,7 +94,89 @@ $ echo $?
 
 `grizzle drift` then exits 0.
 
-**Second form.** Relations `Uuid { id: uuid }` and `Vote { id: uuid }` give a drift refusal that names two facts. No error is raised for the type.
+### Same statements in psql
+Two `CREATE TABLE` statements under the search path the replay uses reproduce the 42804 without grizzle. The session ran as one transaction on the same PostgreSQL 19rc1 cluster, with `psql -a`, and was rolled back. Part a is the `Text` case, with the same statements under `pg_catalog, s, pg_temp` as the control. Part b is the `Uuid` case, followed by a catalog read that does not depend on the search path. The search path order is [the replay's](https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/grizzle/src/adapter/admission/drift.ts#L505-L507).
+
+```text
+ERROR:  collations are not supported by type text
+LINE 1: ...EATE TABLE s."tree" (id uuid NOT NULL, label text COLLATE "p...
+
+ format_type
+-------------
+ uuid
+
+ attname | typnamespace | typname | typtype
+---------+--------------+---------+---------
+ id      | s            | uuid    | c
+```
+
+`format_type` omits the schema because `s` is first on the path, and the catalog row shows that the type of `vote.id` is the composite `s.uuid`, not `pg_catalog.uuid`. Under `pg_catalog, s, pg_temp` both `CREATE TABLE` statements of part a succeed.
+
+<details>
+<summary>The whole psql session, verbatim</summary>
+
+```text
+BEGIN;
+BEGIN
+CREATE SCHEMA s;
+CREATE SCHEMA
+-- Part a: grizzle's order puts the scratch schema first.
+SAVEPOINT a;
+SAVEPOINT
+SET LOCAL search_path TO s, pg_catalog, pg_temp;
+SET
+CREATE TABLE s."text" (id uuid NOT NULL, value text COLLATE "pg_catalog"."pg_c_utf8" NOT NULL);
+CREATE TABLE
+CREATE TABLE s."tree" (id uuid NOT NULL, label text COLLATE "pg_catalog"."pg_c_utf8" NOT NULL);
+ERROR:  collations are not supported by type text
+LINE 1: ...EATE TABLE s."tree" (id uuid NOT NULL, label text COLLATE "p...
+                                                             ^
+ROLLBACK TO a;
+ROLLBACK
+-- Part a, control: pg_catalog first.
+SAVEPOINT b;
+SAVEPOINT
+SET LOCAL search_path TO pg_catalog, s, pg_temp;
+SET
+CREATE TABLE s."text" (id uuid NOT NULL, value text COLLATE "pg_catalog"."pg_c_utf8" NOT NULL);
+CREATE TABLE
+CREATE TABLE s."tree" (id uuid NOT NULL, label text COLLATE "pg_catalog"."pg_c_utf8" NOT NULL);
+CREATE TABLE
+ROLLBACK TO b;
+ROLLBACK
+-- Part b: a table named uuid, then a column declared uuid.
+SAVEPOINT c;
+SAVEPOINT
+SET LOCAL search_path TO s, pg_catalog, pg_temp;
+SET
+CREATE TABLE s."uuid" (id uuid NOT NULL);
+CREATE TABLE
+CREATE TABLE s."vote" (id uuid NOT NULL);
+CREATE TABLE
+SELECT format_type(atttypid, atttypmod) FROM pg_attribute WHERE attrelid = 's.vote'::regclass AND attname = 'id';
+ format_type
+-------------
+ uuid
+(1 row)
+
+SELECT a.attname, t.typnamespace::regnamespace, t.typname, t.typtype FROM pg_attribute a JOIN pg_type t ON t.oid = a.atttypid WHERE a.attrelid = 's.vote'::regclass AND a.attname = 'id';
+ attname | typnamespace | typname | typtype
+---------+--------------+---------+---------
+ id      | s            | uuid    | c
+(1 row)
+
+ROLLBACK TO c;
+ROLLBACK
+ROLLBACK;
+ROLLBACK
+```
+
+</details>
+
+After the refused `grizzle migrate`, `pg_attribute` joined to `pg_type` shows `tree.label` as `pg_catalog.text` with collation `pg_c_utf8` and `vote.id` as `pg_catalog.uuid`, and the installing session's `search_path` is `"$user", public`. The installed catalog matches the snapshot and only the replay differs. In the `Uuid` and `Vote` run below, the replay produced `vote.id` as `repro_drift.uuid`, which the report calls missing from the database, while the database has `pg_catalog.uuid`, which the report calls unexpected.
+
+### Other names
+**Uuid.** Relations `Uuid` and `Vote`, declared like step 1 as `relation("Uuid", { id: uuid }, ["id"])` and `relation("Vote", { id: uuid }, ["id"])` in schema `{ Uuid, Vote }`, give a drift refusal that names two facts. No error is raised for the type.
 
 ```console
 $ pnpm exec grizzle migrate
@@ -103,40 +189,55 @@ $ echo $?
 1
 ```
 
+**Money.** Relations `relation("Money", { id: uuid }, ["id"])` and `relation("Wallet", { amount: pg.money, id: uuid }, ["id"])` give the same two facts for `wallet.amount`, with `grizzle migrate` exiting 1. The run declared two more relations, `Int4range` and `Slot` with `span(pg.integer)`, and `Money` and `Wallet` alone were not run. `grizzle drift` was not run on this schema.
+
+```console
+$ pnpm exec grizzle migrate
+grizzle migrate: refused at stage drift (schema repro_drift): the catalog of repro_drift differs from snapshot fd253792c387d2daa5535237c40e54fadfe68be014df5046511cd421efb1bd1e by 2 facts (edits are allowed, drift is not)
+  unexpected column repro_drift.wallet.amount as money; not null
+  missing column repro_drift.wallet.amount as repro_drift.money; not null
+Every folder applied, but the catalog differs from the snapshot.
+fix: undo the change made outside a migration, or reach the snapshot with a new migration (grizzle generate --custom)
+```
+
 ### Expected
-The folders that applied install the snapshot's catalog, so [`grizzle drift`](https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/README.md#L1528-L1529) ("does the database match the snapshot?") reports a match and `grizzle migrate` exits 0, for both schemas.
+The folders that applied install the snapshot's catalog, so [`grizzle drift`](https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/README.md#L1528-L1529) ("does the database match the snapshot?") reports a match and `grizzle migrate` exits 0, for each schema above. The README, the packaged agent guide (`packages/grizzle/skills/grizzle/SKILL.md`) and the source were searched for a rule that reserves or refuses a relation name equal to a builtin type, and none was found. `grizzle generate` and `grizzle check` print ok for each schema above.
 
 ### What changes the result
-- Relations `Text` and `Tree`: `grizzle migrate` refused, SQLSTATE 42804.
-- Relation `Text` alone: applies, drift passes.
-- Relations `TextNode` and `Tree`: applies, drift passes.
-- Relations `Uuid` and `Vote`: refused, false `Drifted` of two facts.
+  | Relations | `grizzle migrate` | `grizzle drift` |
+  | --- | --- | --- |
+  | `Text`, `Tree` | refused, SQLSTATE 42804 | refused, SQLSTATE 42804 |
+  | `Text` | applied, exit 0 | matches |
+  | `TextNode`, `Tree` | applied, exit 0 | matches |
+  | `Tree`, `Text`, declared in that order | refused, SQLSTATE 42804, snapshot `b506347d66f2a33f` | refused, SQLSTATE 42804 |
+  | `Uuid`, `Vote` | refused, 2 facts | refused, the same 2 facts |
+  | `Int4range`, `Money`, `Slot`, `Wallet` | refused, 2 facts, both on `wallet.amount` | not run |
 
 ### Cause
 Working theory. The replay binds a bare builtin type name through `search_path`, and a relation of the same name shadows it.
 
 1. `driftFlight` replays the snapshot under `SET LOCAL search_path TO <scratch schema>, pg_catalog, pg_temp`, so the scratch schema is searched before `pg_catalog` ([drift.ts](https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/grizzle/src/adapter/admission/drift.ts#L505-L507)). PostgreSQL searches `pg_catalog` first only when the path does not list it ([The System Catalog Schema](https://www.postgresql.org/docs/current/ddl-schemas.html#DDL-SCHEMAS-CATALOG)).
 2. `printType` writes a builtin type without a schema ([print.ts](https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/sql/print.ts#L174-L175)).
-3. `builtinTypeNames` documents the premise: the names "resolve ahead of any user schema, so they print unquoted" ([ast.ts](https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/sql/ast.ts#L32-L35)). That holds for the grammar keywords in the list (`smallint`, `integer`, `bigint`, `numeric`, `real`, `double precision`, `boolean`). It does not hold for `text`, `uuid`, `jsonb`, `money`, `int4range`, `int8range`, `int4multirange`, `int8multirange`, `regclass`, `record` and `trigger`, which are ordinary type names.
+3. The comment on `builtinTypeNames` says these names "resolve ahead of any user schema, so they print unquoted" ([ast.ts](https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/sql/ast.ts#L32-L35)). Under the replay's path, `text`, `uuid` and `money` resolve to the scratch schema first, as the psql session shows.
 4. Once the replay creates the table `text`, its row type is what a bare `text` names in every later statement. A composite type takes no collation, which gives SQLSTATE 42804 for a column declared with one. A later column declared without a collation binds to the composite without an error, which gives the false `Drifted`.
-5. The refusal surfaces as `DriftUnchecked` ([errors.ts](https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/grizzle/src/adapter/migrate/errors.ts#L625-L629)).
+5. The refusal surfaces as `DriftUnchecked` ([errors.ts](https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/grizzle/src/adapter/migrate/errors.ts#L629-L666)).
 
 ### Impact
-For a schema with a relation named `Text` followed by a relation with a text field, `grizzle migrate` exits 1 after applying every folder and `grizzle drift` refuses. A relation named `Uuid` makes both report a drift that is not there.
+A schema with such a relation cannot be installed through grizzle at all, because `grizzle migrate` exits 1 on every run even though every folder applied. The printed fix line, "undo the change made outside a migration", points at a change that was never made.
 
 ### Not confirmed
-- Whether a relation named like a builtin type is meant to be refused when the schema compiles. No README line was found that allows or forbids it.
-- The names `jsonb`, `money`, `int4range`, `int8range`, `int4multirange`, `int8multirange`, `regclass`, `record` and `trigger` were not run. Only `text` and `uuid` were.
-- Whether every object the replay creates is referenced with its schema name, which the fix direction below relies on.
+- Whether these names are meant to be refused at compile time. No rule was found in the README, the packaged agent guide or the compiler, and `grizzle generate` and `grizzle check` accept each schema above.
+- Relations named `Regclass`, `Record` or `Trigger` were not run. The range names are not reachable through a relation name: the name converter writes `Int4range` as `int_4_range`. `jsonb` has no field type. A closed enum or a contract named `Text`, `Uuid` or `Money` was not run.
+- Not run on an unpatched PostgreSQL.
 
 ### Fix direction
-Possible change, untested: run the drift replay under `SET LOCAL search_path TO pg_catalog, <scratch schema>, pg_temp`. That changes only the scratch replay, not the installed DDL or the snapshot.
+Possible change, untested. Either run the replay under `SET LOCAL search_path TO pg_catalog, <scratch schema>, pg_temp`, or run it under `pg_catalog, pg_temp` with no scratch schema, as [drift.ts](https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/grizzle/src/adapter/admission/drift.ts#L511) already does for the reads that follow. Every object the replay creates carries its schema (`ObjectName.schema` is required in [ast.ts](https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/sql/ast.ts#L5-L8), and the [scratch hooks](https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/grizzle/src/adapter/admission/drift.ts#L275-L286) move named types, functions and extension objects into the scratch schema), so neither option changes what the replay creates.
 
 ### Acceptance check
-For the `Text`, `Tree` schema and for the `Uuid`, `Vote` schema, `grizzle migrate` into an empty database exits 0 and `grizzle drift` afterwards reports a match.
+For each of the `Text` and `Tree`, `Uuid` and `Vote`, and `Money` and `Wallet` schemas, `grizzle migrate` into an empty database exits 0 and `grizzle drift` afterwards reports a match.
 
 ---
-**AI disclosure:** Written with AI assistance and reviewed by the filer before filing.
+**AI disclosure:** Written by AI, checked by independent AI reviewers, and filed without the account holder's review.
 - **Provider:** Anthropic
 - **Model:** Sonnet 5.5
 ````
