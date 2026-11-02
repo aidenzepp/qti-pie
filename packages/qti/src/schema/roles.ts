@@ -7,7 +7,7 @@ import { Qti } from "#qti/schema/qti.ts";
 /**
  * The relations the migration seeds, which no role writes.
  */
-const seededNames = [
+export const seededNames = [
   "Admission",
   "BindingFit",
   "OperatorArity",
