@@ -41,6 +41,54 @@ const positives = [
   "bytes",
 ] as const satisfies readonly FixtureName[];
 
+/**
+ * The manifest-side XML-path negatives of the spec's 4.12: each a hand-broken copy of a positive
+ * that `importPackage` refuses, with the rules the refusal may name (one, or two where the spec
+ * lets a bin 1 rule refuse first).
+ */
+const negatives = [
+  ["lomrest-two-titles", ["lom-title-single"]],
+  ["lomrest-two-purposes", ["lom-capacity"]],
+  ["lomrest-two-kinds", ["lom-capacity"]],
+  ["lomrest-exam", ["lom-learning-resource-type"]],
+  ["lomrest-self-assessment", ["lom-learning-resource-type"]],
+  ["csm-no-labelled-guid", ["csm-capacity"]],
+  ["csm-no-guid", ["csm-capacity"]],
+  ["csm-two-sets", ["csm-capacity"]],
+  ["csm-two-guids", ["csm-single"]],
+  ["filelom-qmd", ["admission", "qti-metadata-host"]],
+  ["filelom-two-metadata", ["file-metadata-single"]],
+  ["nestedqmd-both", ["qti-metadata-single"]],
+  ["extmeta-item-root", ["resource-root"]],
+  ["extmeta-two-resources", ["document-key"]],
+  ["variant-301", ["admission"]],
+  ["variant-self-ref", ["variant-target"]],
+  ["variant-no-resource", ["variant-target"]],
+  ["variant-id-clash", ["manifest-id-holder"]],
+  ["variant-tactile", ["drd-value"]],
+  ["variant-bad-uri", ["uri-syntax"]],
+  ["variant-two-atinteroperable", ["drd-single"]],
+  ["variant-two-complexity", ["drd-single"]],
+  ["variant-no-metadata", ["variant-metadata"]],
+  ["variant-before-file", ["ordering"]],
+] as const satisfies readonly (readonly [FixtureName, readonly string[]])[];
+
+/**
+ * The negatives whose refusal differs from the rule the slice brief names today. Each test pins the
+ * brief's rule and is marked `fails`, so it turns red the day the importer names that rule and the
+ * mark must then move to {@link negatives}. What the importer does now:
+ *
+ * - `nestedqmd-manifest-lom`: refused as `admission`, the law `alternatives Node.kind` that no rule
+ *   of the map names (not `qti-metadata-host`).
+ * - `extmeta-item-href`: refused as `href-listed` (not `resource-root`).
+ * - `extmeta-hrefless`: not refused; the import commits (not `record-unnamed`).
+ */
+const divergent = [
+  ["nestedqmd-manifest-lom", ["qti-metadata-host"]],
+  ["extmeta-item-href", ["resource-root"]],
+  ["extmeta-hrefless", ["record-unnamed"]],
+] as const satisfies readonly (readonly [FixtureName, readonly string[]])[];
+
 const documentsOf = query(Author).rule((r) => {
   const { id } = v(Document);
 
@@ -213,6 +261,37 @@ describe.skipIf(!hasLease)(
           assert.strictEqual(yield* nodeTotalOf(fromZip.id), yield* nodeTotalOf(fromDirectory.id));
         }),
       );
+
+      for (const [name, rules] of negatives) {
+        it.effect(`refuses ${name} naming ${rules.join(" or ")}`, () =>
+          Effect.gen(function* refusesNegative() {
+            const refused = yield* Effect.flip(importPackage(yield* materialize(name)));
+
+            assert.strictEqual(refused._tag, "ImportRefused", `${name}: refused by another error`);
+
+            const rule = refused._tag === "ImportRefused" ? refused.rule : refused._tag;
+
+            yield* Effect.log(`negative ${name} refused by rule`, rule);
+
+            assert.include(rules, rule, `${name}: the refusal named another rule`);
+          }),
+        );
+      }
+
+      for (const [name, rules] of divergent) {
+        it.effect.fails(`refuses ${name} naming ${rules.join(" or ")}`, () =>
+          Effect.gen(function* refusesDivergent() {
+            const refused = yield* Effect.flip(importPackage(yield* materialize(name)));
+
+            assert.strictEqual(refused._tag, "ImportRefused", `${name}: refused by another error`);
+            assert.include(
+              rules,
+              refused._tag === "ImportRefused" ? refused.rule : refused._tag,
+              `${name}: the refusal named another rule`,
+            );
+          }),
+        );
+      }
     });
   },
 );
