@@ -142,11 +142,13 @@ export class ImportRefused extends Schema.TaggedError<ImportRefused>()("ImportRe
 }
 
 /**
- * One side of a containment, mirrors or capacity law: a relation and the fields it names.
+ * One side of a containment, mirrors or capacity law: a relation, the fields it names and the
+ * columns the side selects on, as `Edge(parent)` selected on `childKind`.
  */
 interface LawSide {
   readonly fields: readonly string[];
   readonly relation: string;
+  readonly selection?: readonly { readonly field: string; readonly value: unknown }[];
 }
 
 /**
@@ -217,7 +219,6 @@ const keyRules = new Map<string, Rule>([
   ["Organizations.(manifest)", "manifest-children"],
   ["Package.(id)", "manifest-identifier"],
   ["Prompt.(parent)", "prompt-single"],
-  ["QtiMetadata.(resource)", "qti-metadata-single"],
   ["Resource.(package,identifier)", "resource-identifier"],
   ["ResourceMetadata.(resource)", "resource-metadata-single"],
   ["Resources.(manifest)", "manifest-children"],
@@ -254,7 +255,9 @@ const checkRules = new Map<string, Rule>([
   ["ChoiceBounds", "choice-bounds"],
   ["DeclarationNotReserved", "declaration-reserved"],
   ["DependencyNotSelf", "dependency-target"],
+  ["LomLearningResourceType", "lom-learning-resource-type"],
   ["ProcessingRoot", "processing-root"],
+  ["VariantNotSelf", "variant-target"],
 ]);
 
 /**
@@ -327,25 +330,267 @@ const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
 /**
  * The rule of a pattern, by its regex source. grizzle reports one pattern law for every column
  * that spells the same language, so a source names every column that uses it: `anyUri` is also the
- * `Uri` value arm's, and `hrefInPackage` is the pattern of every path column.
+ * `Uri` value arm's, the three DRD URIs', `CsmCaseItemUri.value`'s, `Statistic.context`'s and the
+ * two glossaries' (every `anyUri` column of the usage and DRD relations is `uri-syntax` through
+ * it); and `hrefInPackage` is the pattern of every path column.
+ *
+ * A source shared with another phase's columns keeps that phase's rule, since the law carries no
+ * relation to tell the columns apart: `ncName`, `xsInteger`, `xsDouble`, `pair`, `point`,
+ * `booleanLiteral` and `xsBoolean` (the DRD `atInteroperable` and the usage `caseSensitive` flag
+ * spell the same language as the QTI metadata flags and the declared booleans) name
+ * `value-lexical`, never `drd-value`, `usage-lexical` or `usage-typed-value`. Only a source no
+ * earlier column spells names the new rule: the nine DRD vocabularies and the usage date.
  */
 const patternRules = new Map<string, Rule>([
   [patterns.anyUri, "uri-syntax"],
   [patterns.booleanLiteral, "value-lexical"],
+  [patterns.drdAccessMode, "drd-value"],
+  [patterns.drdAdaptationDetail, "drd-value"],
+  [patterns.drdAdaptationMediaType, "drd-value"],
+  [patterns.drdAdaptationType, "drd-value"],
+  [patterns.drdApiInteroperable, "drd-value"],
+  [patterns.drdControlFlexibility, "drd-value"],
+  [patterns.drdDisplayTransformability, "drd-value"],
+  [patterns.drdEducationalComplexityOfAdaptation, "drd-value"],
+  [patterns.drdHazard, "drd-value"],
   [patterns.hrefInPackage, "href-path"],
   [patterns.ncName, "value-lexical"],
   [patterns.pair, "value-lexical"],
   [patterns.point, "value-lexical"],
   [patterns.toolString, "tool-string-length"],
   [patterns.uncollapsed, "attribute-lexical"],
+  [patterns.usageDate, "usage-lexical"],
+  [patterns.xsBoolean, "value-lexical"],
   [patterns.xsDouble, "value-lexical"],
   [patterns.xsInteger, "value-lexical"],
 ]);
+
+/**
+ * Whether a relation is one of the usage-data module's: the data, its statistics, their target
+ * objects, values and mappings.
+ */
+const isUsage = (relation: string): boolean =>
+  relation.startsWith("Statistic") ||
+  relation.startsWith("TargetObject") ||
+  relation.startsWith("Usage") ||
+  relation === "CategorizedStatisticArm" ||
+  relation === "DeclaredDefaultValue" ||
+  relation === "OrdinaryStatisticArm";
+
+/**
+ * Whether a side selects a column on a value, any value when none is given.
+ */
+const selects = (side: LawSide, field: string, value?: string): boolean =>
+  side.selection?.some((s) => s.field === field && (value === undefined || s.value === value)) ===
+  true;
+
+const isStatisticArm = (relation: string): boolean =>
+  relation === "CategorizedStatisticArm" || relation === "OrdinaryStatisticArm";
+
+const isVariantMetadata = (relation: string): boolean =>
+  relation === "VariantMetadata" || relation === "AccessForAllResource";
+
+/**
+ * The rule of a key by the relation it constrains, for the relations this phase added. A key over
+ * the fields a row names is the rule's; the primary key of a relation that carries a rule is that
+ * rule's too, where the relation's rule is one of capacity or identity.
+ */
+const phaseKeyRule = (relation: string, fields: readonly string[]): Rule | undefined => {
+  const key = fields.join(",");
+
+  if (relation === "QtiMetadata") {
+    return key === "package,resource" ? "qti-metadata-single" : undefined;
+  }
+
+  if (relation === "Variant") {
+    return key === "package,identifier" ? "variant-key" : undefined;
+  }
+
+  if (relation === "FileMetadata") {
+    return fields.includes("file") ? "file-metadata-single" : undefined;
+  }
+
+  if (relation.startsWith("Drd")) {
+    return fields.includes("owner") ? "drd-single" : undefined;
+  }
+
+  if (relation === "ExternalLom") {
+    return "external-lom-owner";
+  }
+
+  if (isVariantMetadata(relation)) {
+    return "variant-metadata";
+  }
+
+  if (relation === "ManifestId") {
+    return "manifest-id-holder";
+  }
+
+  if (relation.startsWith("Csm")) {
+    return "csm-single";
+  }
+
+  if (relation === "UsageData") {
+    return "usage-root";
+  }
+
+  if (relation === "OutcomeDocument") {
+    return "outcome-document";
+  }
+
+  return isUsage(relation) ? "usage-key" : undefined;
+};
+
+/**
+ * The rule of a capacity by the relation that fills it, for the relations this phase added: the
+ * `Edge` rows of a LOM category selected on `childKind`, a CSM or usage relation, a variant's
+ * metadata.
+ */
+const phaseCapacityRule = (from: LawSide): Rule | undefined => {
+  if (from.relation === "Edge") {
+    return selects(from, "childKind") ? "lom-capacity" : undefined;
+  }
+
+  if (from.relation.startsWith("Csm")) {
+    return "csm-capacity";
+  }
+
+  if (isVariantMetadata(from.relation)) {
+    return "variant-metadata";
+  }
+
+  return isUsage(from.relation) ? "usage-count" : undefined;
+};
+
+/**
+ * The rule of a containment or mirror by the relations on its sides, for the relations this phase
+ * added. The side that leaves names the rule, except where a mirror enters a relation whose own
+ * rule it is (a document root mirrored by the record or the data it holds, a statistic by its
+ * kind's arm, a typed value by its base type).
+ */
+const packageSidesRule = (from: LawSide, to: LawSide): Rule | undefined => {
+  const leaves = from.relation;
+  const enters = to.relation;
+
+  if (
+    (leaves === "Node" && selects(from, "kind", "qmd:qtiMetadata")) ||
+    (enters === "Node" && selects(to, "kind", "qmd:qtiMetadata")) ||
+    leaves.startsWith("QtiMetadata")
+  ) {
+    return "qti-metadata-host";
+  }
+
+  if (leaves === "LomValue" && enters === "Edge") {
+    return "lom-learning-resource-type";
+  }
+
+  if (leaves === "FileMetadata" || leaves === "FileLom") {
+    return "file-lom-owner";
+  }
+
+  if (leaves === "ExternalLom" || enters === "ExternalLom") {
+    return "external-lom-owner";
+  }
+
+  if (leaves === "Variant") {
+    return enters === "Resource" && !to.fields.includes("id")
+      ? "variant-target"
+      : "variant-resource";
+  }
+
+  if (isVariantMetadata(leaves)) {
+    return "variant-metadata";
+  }
+
+  if (leaves.startsWith("Drd")) {
+    return "drd-single";
+  }
+
+  if (leaves.startsWith("ManifestId")) {
+    return "manifest-id-holder";
+  }
+
+  return undefined;
+};
+
+/**
+ * The rule of a containment or mirror on the sides of the CSM, usage-data and outcome modules.
+ */
+const moduleSidesRule = (from: LawSide, to: LawSide): Rule | undefined => {
+  const leaves = from.relation;
+  const enters = to.relation;
+
+  if (leaves.startsWith("Csm")) {
+    return "csm-single";
+  }
+
+  if (leaves.startsWith("UsageTypedValue") || enters.startsWith("UsageTypedValue")) {
+    return "usage-typed-value";
+  }
+
+  if (isStatisticArm(leaves) || isStatisticArm(enters)) {
+    return "usage-statistic-kind";
+  }
+
+  if (leaves === "UsageData" || enters === "UsageData") {
+    return "usage-root";
+  }
+
+  if (leaves === "OutcomeDocument" || enters === "OutcomeDocument") {
+    return "outcome-document";
+  }
+
+  return isUsage(leaves) ? "usage-key" : undefined;
+};
+
+/**
+ * The rule of a containment or mirror on the relations this phase added.
+ */
+const phaseSidesRule = (from: LawSide, to: LawSide): Rule | undefined =>
+  packageSidesRule(from, to) ?? moduleSidesRule(from, to);
+
+/**
+ * The rule of a law over the relations this phase added, or nothing when the law is an earlier
+ * phase's (those rows follow). The alternatives over `Node` and `Lom` name no kind, so the `Node`
+ * law of `qmd:qtiMetadata` is found among the containments and mirrors its expansion states.
+ */
+const phaseRule = (law: ImportLaw): Rule | undefined => {
+  if (law.kind === "key" || law.kind === "primaryKey") {
+    return phaseKeyRule(law.relation, law.fields);
+  }
+
+  if (law.kind === "capacity") {
+    return phaseCapacityRule(law.from);
+  }
+
+  if (law.kind === "contained" || law.kind === "mirrors") {
+    return phaseSidesRule(law.from, law.to);
+  }
+
+  if (law.kind === "alternatives") {
+    if (law.relation === "ManifestId") {
+      return "manifest-id-holder";
+    }
+
+    if (law.relation === "QtiMetadata") {
+      return "qti-metadata-host";
+    }
+
+    return law.relation === "UsageTypedValue" ? "usage-typed-value" : undefined;
+  }
+
+  return undefined;
+};
 
 const some = (rule: Rule | undefined): Mapped | undefined =>
   rule === undefined ? undefined : named(rule);
 
 const recognized = (law: ImportLaw): Mapped | undefined => {
+  const added = phaseRule(law);
+  if (added !== undefined) {
+    return named(added);
+  }
+
   if (law.kind === "key" || law.kind === "primaryKey") {
     return some(keyRule(law.relation, law.fields));
   }
