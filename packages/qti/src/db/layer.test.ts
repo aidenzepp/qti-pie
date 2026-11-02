@@ -1,7 +1,8 @@
 import { Db, query, v } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect } from "effect";
-import { describe } from "vitest";
+import { readFileSync } from "node:fs";
+import { describe, it as plainIt } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { Author } from "#qti/schema/roles.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
@@ -74,5 +75,14 @@ describe.skipIf(!hasLease)("db/layer.test.ts, on the lease", () => {
         );
       }),
     );
+  });
+});
+
+describe("db/layer.ts, without a database", () => {
+  plainIt("reads the migrations snapshot from disk, never as a module", () => {
+    const source = readFileSync(new URL("layer.ts", import.meta.url), "utf-8");
+
+    assert.notInclude(source, "import snapshot");
+    assert.notMatch(source, /^import .*snapshot\.json/mu);
   });
 });
