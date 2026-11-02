@@ -434,6 +434,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
       assert.deepStrictEqual(Rows.of(rows, DeclaredOrientation), []);
       assert.deepStrictEqual(Rows.of(rows, InteractionBinding), [
         {
+          adaptive: "false",
+          ancestry: "root",
           document: documentId,
           interactionKind: "qti-choice-interaction",
           node: interaction,

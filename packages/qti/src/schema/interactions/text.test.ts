@@ -5,6 +5,7 @@ import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as interaction from "#qti/schema/interaction.ts";
+import * as item from "#qti/schema/item.ts";
 import * as text from "#qti/schema/interactions/text.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
@@ -21,6 +22,7 @@ const probe = () =>
       ...pkg.relations,
       ...document.relations,
       ...declaration.relations,
+      ...item.relations,
       ...interaction.relations,
       ...rosters.relations,
       ...choices.relations,
@@ -31,6 +33,7 @@ const probe = () =>
       ...pkg.rules,
       ...document.rules,
       ...declaration.rules,
+      ...item.rules,
       ...interaction.rules,
       ...choices.rules,
       ...text.rules,
