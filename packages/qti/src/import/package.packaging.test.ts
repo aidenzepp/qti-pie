@@ -7,6 +7,7 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { importPackage } from "#qti/import/package.ts";
 import { Document } from "#qti/schema/document.ts";
+import * as patterns from "#qti/schema/patterns.ts";
 import { FileContent, Package } from "#qti/schema/package.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import { AttributeLexical, Node, NodeKind } from "#qti/schema/node.ts";
@@ -89,33 +90,27 @@ const negatives = [
 ] as const satisfies readonly (readonly [FixtureName, readonly string[]])[];
 
 /**
- * The negatives whose refusal differs from the rule the slice brief names. Each test pins the
- * brief's rule and is marked `fails`, so it turns red the day the importer names that rule and the
- * row must then move to {@link negatives}. What the importer does now:
- *
- * - `nestedqmd-manifest-lom`: `qti-metadata-host` on some imports and `admission` on others. The
- *   manifest-level `qmd:qtiMetadata` and each of its four leaves lack their arm row, so the `Node`
- *   alternatives law has five violators and the witness is any one of them; only the
- *   `qmd:qtiMetadata` row maps to `qti-metadata-host`.
- * - `usage3-integer-float`, `usage3-float-padded`, `usage3-bad-name`: `value-lexical`, the rule of
- *   the pattern law of the typed value, not `usage-typed-value` or `usage-lexical`.
- *
- * The published `usageData` package, refused as `unmodeled-vocabulary` (`element usageData has no
- * model yet`, not `not-qti3`), is pinned beside them in its own test.
+ * The negatives whose refusal is a pattern law of a typed value. grizzle reports a pattern law by
+ * its regex source and flags alone, one rule for every spelling of the same language, so the law
+ * cannot name `usage-typed-value` or `usage-lexical`: the typed value arms reuse the value patterns
+ * and `Statistic.name` is `ncName`. Each row pairs a fixture with the source its law must carry.
  */
-const divergent = [
-  ["nestedqmd-manifest-lom", ["qti-metadata-host"]],
-  ["usage3-integer-float", ["usage-typed-value"]],
-  ["usage3-float-padded", ["usage-typed-value"]],
-  ["usage3-bad-name", ["usage-lexical"]],
-] as const satisfies readonly (readonly [FixtureName, readonly string[]])[];
+const patternNegatives = [
+  ["usage3-integer-float", patterns.xsInteger],
+  ["usage3-float-padded", patterns.xsDouble],
+  ["usage3-bad-name", patterns.ncName],
+] as const satisfies readonly (readonly [FixtureName, string])[];
 
 /**
- * How many times a divergent negative is imported. A refusal whose rule depends on which of
- * several witnesses the engine reports names the brief's rule on every attempt only by chance, at
- * most once in a million times for twelve, so the expected failure does not flake.
+ * How many times `nestedqmd-manifest-lom` is imported. The manifest-level `qmd:qtiMetadata` is the
+ * only witness of its refusal, so every import names the same rule; twelve imports show it is no
+ * longer any one of several witnesses.
  */
-const divergentAttempts = 12;
+const repeatedImports = 12;
+
+const isPatternLaw = Schema.is(
+  Schema.Struct({ kind: Schema.Literal("pattern"), source: Schema.String }),
+);
 
 const documentsOf = query(Author).rule((r) => {
   const { id } = v(Document);
@@ -328,27 +323,51 @@ describe.skipIf(!hasLease)(
         );
       }
 
-      for (const [name, rules] of divergent) {
-        it.effect.fails(`refuses ${name} naming ${rules.join(" or ")}`, () =>
-          Effect.gen(function* refusesDivergent() {
-            for (let attempt = 0; attempt < divergentAttempts; attempt += 1) {
-              const refused = yield* Effect.flip(importPackage(yield* materialize(name)));
-              const rule = refused._tag === "ImportRefused" ? refused.rule : refused._tag;
+      it.effect("refuses nestedqmd-manifest-lom naming qti-metadata-host on every import", () =>
+        Effect.gen(function* refusesNestedQmd() {
+          for (let attempt = 0; attempt < repeatedImports; attempt += 1) {
+            const refused = yield* Effect.flip(
+              importPackage(yield* materialize("nestedqmd-manifest-lom")),
+            );
+            const rule = refused._tag === "ImportRefused" ? refused.rule : refused._tag;
 
-              yield* Effect.log(`divergent ${name} refused by rule`, rule);
+            yield* Effect.log("nestedqmd-manifest-lom refused by rule", rule);
 
-              assert.include(rules, rule, `${name}: the refusal named another rule`);
+            assert.strictEqual(rule, "qti-metadata-host");
+          }
+        }),
+      );
+
+      for (const [name, source] of patternNegatives) {
+        it.effect(`refuses ${name} naming value-lexical under the pattern ${source}`, () =>
+          Effect.gen(function* refusesPattern() {
+            const refused = yield* Effect.flip(importPackage(yield* materialize(name)));
+
+            assert.strictEqual(refused._tag, "ImportRefused", `${name}: refused by another error`);
+
+            if (refused._tag !== "ImportRefused") {
+              return;
             }
+
+            yield* Effect.log(`${name} refused by rule`, refused.rule);
+
+            assert.strictEqual(refused.rule, "value-lexical");
+            assert.isTrue(isPatternLaw(refused.law), `${name}: the law is no pattern law`);
+            assert.strictEqual(
+              isPatternLaw(refused.law) ? refused.law.source : undefined,
+              source,
+              `${name}: the pattern law carries another source`,
+            );
           }),
         );
       }
 
-      it.effect.fails("refuses the published usageData package naming not-qti3", () =>
+      it.effect("refuses the published usageData package naming not-qti3", () =>
         Effect.gen(function* refusesUsageData() {
           const refused = yield* Effect.flip(importPackage(yield* materializePackage("usageData")));
           const rule = refused._tag === "ImportRefused" ? refused.rule : refused._tag;
 
-          yield* Effect.log("divergent usageData refused by rule", rule);
+          yield* Effect.log("usageData refused by rule", rule);
 
           assert.strictEqual(rule, "not-qti3");
         }),
