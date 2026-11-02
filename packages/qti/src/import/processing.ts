@@ -1,0 +1,1099 @@
+/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
+
+/* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the XSD attribute `qti-inside` names, the region kind, not a structure. */
+
+/**
+ * The processing rows of one tree: the expressions of a response, outcome or template processing
+ * root, their operands, arms and attributes, and the variables they refer to.
+ *
+ * {@link processingRows} first judges the tree (parse, required attributes, type check) and writes
+ * no row for a tree it refuses. The rows it writes sit beside the node, edge and generic-arm rows
+ * `treeRows` already wrote under the same {@link NodeIndex}.
+ */
+import { Effect, Option, Schema } from "effect";
+import { Rows, typedAttribute } from "#qti/import/tree.ts";
+import type { NodeIndex, UnmodeledVocabulary, WhiteSpace } from "#qti/import/tree.ts";
+import type {
+  AttributeValue,
+  IncludeNode,
+  Language,
+  LiteralOrRef,
+  Position,
+  RuleOrExpressionKind,
+} from "#qti/processing/ast.ts";
+import { checkProcessing } from "#qti/processing/check.ts";
+import type { PId } from "#qti/processing/check.ts";
+import type { Environment, Mode } from "#qti/processing/env.ts";
+import { literalOrRef, parseProcessing } from "#qti/processing/parse.ts";
+import { BaseType } from "#qti/schema/declaration.ts";
+import * as expression from "#qti/schema/expression.ts";
+import * as attributed from "#qti/schema/expression-attributes.ts";
+import type {
+  AttributeNameHandle,
+  NodeKindHandle,
+  RootKindHandle,
+  SchemaVersionHandle,
+} from "#qti/schema/node.ts";
+import * as processing from "#qti/schema/processing.ts";
+import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
+import type { Element } from "#qti/xml/tree.ts";
+
+/**
+ * The rules {@link ProcessingRefused} names: the checker's, and `P5` for a required attribute the
+ * tree does not carry.
+ */
+export type ProcessingRule = PId | "P5";
+
+/**
+ * A processing tree the importer refuses to write rows for.
+ *
+ * `rule` is the id of 4.10's rule it breaks and `detail` says which element breaks it, where it
+ * stands in the tree and what to change.
+ */
+export class ProcessingRefused extends Schema.TaggedError<ProcessingRefused>()(
+  "ProcessingRefused",
+  {
+    detail: Schema.String,
+    rule: Schema.Literals([
+      "P5",
+      "P8",
+      "P20",
+      "P21",
+      "P22",
+      "P23",
+      "P24",
+      "P25",
+      "P26",
+      "P27",
+      "P29",
+    ]),
+  },
+) {
+  /**
+   * What was refused and by which rule, in one sentence.
+   */
+  override get message(): string {
+    return `The processing was refused under the ${this.rule} rule: ${this.detail}`;
+  }
+}
+
+/**
+ * What {@link processingRows} needs beside the rows: the processing root, the node each of its
+ * elements became, the document and tree it belongs to, and the environment it is checked in.
+ *
+ * `document` is the id of the document whose declarations a reference names and `tree` the id of
+ * the tree whose nodes the rows hang from; an item's document and tree share one id.
+ */
+export interface ProcessingInput {
+  readonly document: string;
+  readonly env: Environment;
+  readonly language: Language;
+  readonly mode: Mode;
+  readonly nodes: NodeIndex;
+  readonly root: Element;
+  readonly rootKind: RootKindHandle;
+  readonly tree: string;
+  readonly version: SchemaVersionHandle;
+}
+
+/**
+ * One node of a tree: its id and its kind.
+ */
+interface NodeEntry {
+  readonly id: string;
+  readonly kind: NodeKindHandle;
+}
+
+/**
+ * The attributes each expression and rule kind must carry, from 3.3 table A and B (`use` required).
+ *
+ * The value-setting rules are here because their `identifier` is the variable reference this module
+ * writes.
+ */
+const requiredAttributes: Readonly<Partial<Record<RuleOrExpressionKind, readonly string[]>>> = {
+  "qti-any-n": ["min", "max"],
+  "qti-base-value": ["base-type"],
+  "qti-correct": ["identifier"],
+  "qti-default": ["identifier"],
+  "qti-equal-rounded": ["figures"],
+  "qti-field-value": ["field-identifier"],
+  "qti-index": ["n"],
+  "qti-inside": ["shape", "coords"],
+  "qti-lookup-outcome-value": ["identifier"],
+  "qti-map-response": ["identifier"],
+  "qti-map-response-point": ["identifier"],
+  "qti-math-constant": ["name"],
+  "qti-math-operator": ["name"],
+  "qti-outcome-maximum": ["outcome-identifier"],
+  "qti-outcome-minimum": ["outcome-identifier"],
+  "qti-pattern-match": ["pattern"],
+  "qti-random-float": ["max"],
+  "qti-random-integer": ["max"],
+  "qti-repeat": ["number-repeats"],
+  "qti-round-to": ["rounding-mode", "figures"],
+  "qti-set-correct-response": ["identifier"],
+  "qti-set-default-value": ["identifier"],
+  "qti-set-outcome-value": ["identifier"],
+  "qti-set-template-value": ["identifier"],
+  "qti-stats-operator": ["name"],
+  "qti-string-match": ["case-sensitive"],
+  "qti-substring": ["case-sensitive"],
+  "qti-test-variables": ["variable-identifier"],
+  "qti-variable": ["identifier"],
+};
+
+/**
+ * Why each rule of the checker refuses and what to change, the second half of a refusal's detail.
+ */
+const guidance: Readonly<Record<PId, string>> = {
+  P20: "its expression does not have the type of the variable it sets. Change the expression or the variable's declaration so that the two agree.",
+  P21: "a condition must be a single boolean. Change the expression to one that is.",
+  P22: "the lookup's expression or its variable has a type or a table it cannot use. Change the expression, or declare the table the lookup reads.",
+  P23: "its operands have types the operator does not accept. Change the operands.",
+  P24: "an attribute names a variable that is the wrong kind or type for it. Name an outcome or template variable of a number type.",
+  P25: "it is only allowed in outcome processing. Move it there or replace it.",
+  P26: "a template's rules may not read a response or outcome variable. Read a template variable instead.",
+  P27: "it names a variable that has no mapping of the kind it needs. Declare the mapping or name another variable.",
+  P29: "a weighted test variable must be a float. Set base-type to float or remove the weight.",
+  P8: "it names a variable that no declaration of the document declares and no built-in provides. Declare the variable, or correct the identifier.",
+};
+
+/**
+ * A node's place in its tree: the child indexes from the processing root, joined by `/`.
+ *
+ * @param position - The node's position.
+ * @returns The path, or `the root` for the processing root itself.
+ */
+const placeOf = (position: Position): string =>
+  position.path.length === 0 ? "the root" : position.path.join("/");
+
+/**
+ * The detail of a checker refusal: the element, its place and the rule's reason.
+ *
+ * @param rule - The rule the checker named.
+ * @param kind - The refused element's kind.
+ * @param position - Where the element stands.
+ * @returns The sentence that names the element and what to change.
+ */
+const detailOf = (rule: PId, kind: string, position: Position): string =>
+  `${kind} at ${placeOf(position)} is refused: ${guidance[rule]}`;
+
+/**
+ * An expression as the row builder and the required-attribute scan read it: the untyped AST's
+ * `ExpressionNode` and the checker's `TypedExpression` both fit.
+ */
+interface ExpressionLike {
+  readonly attributes: ReadonlyMap<string, AttributeValue>;
+  readonly element: Element;
+  readonly kind: RuleOrExpressionKind;
+  readonly operands: readonly ExpressionLike[];
+  readonly position: Position;
+  readonly text: Option.Option<string>;
+}
+
+/**
+ * A rule as the row builder reads it: the untyped `RuleNode` and the checker's `TypedRuleNode` both
+ * fit.
+ */
+interface RuleLike {
+  readonly attributes: ReadonlyMap<string, AttributeValue>;
+  readonly branches: readonly RuleLike[];
+  readonly element: Element;
+  readonly expression: Option.Option<ExpressionLike>;
+  readonly kind: RuleOrExpressionKind;
+  readonly position: Position;
+  readonly rules: readonly (IncludeNode | RuleLike)[];
+}
+
+/**
+ * The expressions and rules of a tree, flat: each kind of node in document order, and both
+ * together.
+ */
+interface Flat {
+  readonly expressions: readonly ExpressionLike[];
+  readonly ordered: readonly (ExpressionLike | RuleLike)[];
+  readonly rules: readonly RuleLike[];
+}
+
+const nothing: Flat = { expressions: [], ordered: [], rules: [] };
+
+/**
+ * Flatten an expression and its operands, in document order.
+ *
+ * @param node - The expression at the top of the subtree.
+ * @returns The subtree's expressions.
+ */
+const flattenExpression = (node: ExpressionLike): Flat => {
+  const inner = node.operands.map(flattenExpression);
+
+  return {
+    expressions: [node, ...inner.flatMap((found) => found.expressions)],
+    ordered: [node, ...inner.flatMap((found) => found.ordered)],
+    rules: [],
+  };
+};
+
+/**
+ * Flatten a rule, its guarding or held expression, its condition branches and its sub-rules, in
+ * document order. A nested `xi:include` holds nothing.
+ *
+ * @param node - The rule or include at the top of the subtree.
+ * @returns The subtree's expressions and rules.
+ */
+const flattenRule = (node: IncludeNode | RuleLike): Flat => {
+  if (node.kind === "xi:include") {
+    return nothing;
+  }
+
+  const own = Option.match(node.expression, { onNone: () => nothing, onSome: flattenExpression });
+  const nested = [...node.branches, ...node.rules].map(flattenRule);
+
+  return {
+    expressions: [...own.expressions, ...nested.flatMap((found) => found.expressions)],
+    ordered: [node, ...own.ordered, ...nested.flatMap((found) => found.ordered)],
+    rules: [node, ...nested.flatMap((found) => found.rules)],
+  };
+};
+
+/**
+ * Flatten the top-level rules of a processing root.
+ *
+ * @param rules - The root's rules in document order.
+ * @returns Every expression and rule under them.
+ */
+const flatten = (rules: readonly (IncludeNode | RuleLike)[]): Flat => {
+  const found = rules.map(flattenRule);
+
+  return {
+    expressions: found.flatMap((one) => one.expressions),
+    ordered: found.flatMap((one) => one.ordered),
+    rules: found.flatMap((one) => one.rules),
+  };
+};
+
+/**
+ * The first node that lacks an attribute its kind requires, in document order.
+ *
+ * @param flat - The flattened tree.
+ * @returns The node's kind and place and the attribute, none when every node is complete.
+ */
+const firstMissing = (
+  flat: Flat,
+): Option.Option<{
+  readonly attribute: string;
+  readonly kind: string;
+  readonly position: Position;
+}> =>
+  Option.fromNullishOr(
+    flat.ordered.flatMap((node) =>
+      (requiredAttributes[node.kind] ?? [])
+        .filter((name) => !node.attributes.has(name))
+        .map((attribute) => ({ attribute, kind: node.kind, position: node.position })),
+    )[0],
+  );
+
+/**
+ * An attribute value whose column's pattern judges it at commit: the typed columns of enumerations,
+ * booleans and numbers are template-literal types, and the value read is a string until that
+ * pattern says it fits, so the cast narrows only the type; a value the pattern refuses is refused
+ * there.
+ *
+ * @param value - The attribute's processed value.
+ * @returns The same text, typed as the column that judges it.
+ */
+// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- `T` is the column type the caller's row demands; the call site names it by inference.
+const judgedLater = <T extends string>(value: string): T =>
+  // SAFETY: the column's regex law judges the value at commit, which is the importer's refusal for it (spec 3.9, 4.3).
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+  value as T;
+
+/**
+ * A mixed-union attribute (`figures`, `min`, `max`, `step`) as the column holds it, with how it
+ * was read.
+ */
+interface UnionValue {
+  readonly parsed: LiteralOrRef;
+  readonly value: string;
+}
+
+/**
+ * The attributes of one node, read one at a time under their `whiteSpace` class; the rows
+ * accumulate the `AttributeLexical` rows the reads produced.
+ */
+interface Reader {
+  /**
+   * The processed value of an attribute, none when the node does not carry it.
+   */
+  readonly read: (name: AttributeNameHandle) => Option.Option<string>;
+  /**
+   * The rows so far; call it after the last read.
+   */
+  readonly rows: () => Rows;
+  /**
+   * A mixed-union attribute: a number is stored collapsed, a bare name as read, and any other
+   * text as given, so a padded name stays a literal the column's pattern refuses.
+   */
+  readonly union: (name: AttributeNameHandle) => Option.Option<UnionValue>;
+}
+
+/**
+ * Open the reads of one node's attributes.
+ *
+ * @param rows - The rows so far.
+ * @param node - The node whose attributes are read.
+ * @param entry - The node's id and kind in the tree.
+ * @returns The reader over the node.
+ */
+const readerOf = (
+  rows: Rows,
+  node: { readonly attributes: ReadonlyMap<string, AttributeValue> },
+  entry: NodeEntry,
+): Reader => {
+  let built = rows;
+  /**
+   * Read one attribute under the class `whiteSpace` names for it, keeping its lexical row.
+   */
+  const take = (name: AttributeNameHandle, whiteSpace: (found: AttributeValue) => WhiteSpace) =>
+    Option.fromNullishOr(node.attributes.get(name)).pipe(
+      Option.map((found) => {
+        const typed = typedAttribute(
+          built,
+          entry.id,
+          entry.kind,
+          name,
+          found.lexical,
+          whiteSpace(found),
+        );
+        built = typed.rows;
+
+        return typed.value;
+      }),
+    );
+
+  return {
+    read: (name) => take(name, (found) => found.whiteSpace),
+    rows: () => built,
+    union: (name) =>
+      Option.fromNullishOr(node.attributes.get(name)).pipe(
+        Option.flatMap((found) => {
+          const parsed = literalOrRef(found.lexical);
+          const collapsed = parsed._tag === "literal" && parsed.value !== found.lexical;
+
+          return take(name, () => (collapsed ? "collapse" : "preserve")).pipe(
+            Option.map((value) => ({ parsed, value })),
+          );
+        }),
+      ),
+  };
+};
+
+const noUnion: UnionValue = { parsed: { _tag: "literal", value: "" }, value: "" };
+
+/**
+ * The integer a literal writes, `0` for a reference or for text that is not an integer: the column
+ * beside it carries the text and its pattern refuses it at commit.
+ *
+ * @param parsed - The union value as read.
+ * @returns The kind of the value and the typed copy.
+ */
+const copyOf = (
+  parsed: LiteralOrRef,
+): { readonly kind: "literal" | "ref"; readonly value: bigint } =>
+  parsed._tag === "ref"
+    ? { kind: "ref", value: 0n }
+    : { kind: "literal", value: /^[+-]?[0-9]+$/u.test(parsed.value) ? BigInt(parsed.value) : 0n };
+
+/**
+ * One fact of an optional-value relation where the attribute was written, none where it was not.
+ *
+ * @param value - The attribute's value, none when the node does not carry it.
+ * @param make - Builds the fact from the value.
+ * @returns A list of the one fact, or the empty list.
+ */
+const written = <Value, Made>(value: Option.Option<Value>, make: (own: Value) => Made): Made[] =>
+  Option.match(value, { onNone: () => [], onSome: (own) => [make(own)] });
+
+/**
+ * The text of an attribute the tree is known to carry: the required ones, which the scan checked.
+ *
+ * @param value - The attribute's value.
+ * @returns The value, the empty text for an attribute the scan would have refused.
+ */
+const need = (value: Option.Option<string>): string => Option.getOrElse(value, () => "");
+
+/**
+ * The arity the seed tables hold, by expression kind.
+ */
+const arity: ReadonlyMap<
+  NodeKindHandle,
+  { readonly max: Option.Option<bigint>; readonly min: bigint }
+> = new Map(
+  operatorArity.map((entry) => [
+    entry.kind,
+    {
+      max: Option.fromNullishOr(operatorArityMax.find((seed) => seed.kind === entry.kind)?.max),
+      min: entry.min,
+    },
+  ]),
+);
+
+/**
+ * Write the references of a node that names a variable: the `VariableRef` row and the arm for the
+ * way it names it.
+ *
+ * A name the document declares is a declared reference with its declaring kind; a name only the
+ * mode provides is a built-in; in a template document any other name is a template parameter; in
+ * any other mode a name nothing declares has no arm, and the checker has already refused it in an
+ * `item`.
+ *
+ * @param rows - The rows so far.
+ * @param input - The processing input.
+ * @param node - The referring node.
+ * @param identifier - The processed identifier it names.
+ * @returns The rows with the reference added.
+ */
+const referenceRows = (
+  rows: Rows,
+  input: ProcessingInput,
+  node: NodeEntry,
+  identifier: string,
+): Rows => {
+  const declaration = input.env.declarations.get(identifier);
+  if (declaration !== undefined) {
+    return Rows.add(
+      Rows.add(rows, processing.VariableRef, [
+        { document: input.tree, id: node.id, kind: "declared" },
+      ]),
+      processing.DeclaredRef,
+      [
+        {
+          declarationKind: declaration.kind,
+          document: input.document,
+          id: node.id,
+          identifier: judgedLater(identifier),
+          referrerKind: node.kind,
+        },
+      ],
+    );
+  }
+
+  const builtIn = processing.BuiltIn.handles.find(
+    (name) => name === identifier && input.env.builtIns.has(name),
+  );
+  if (builtIn !== undefined) {
+    return Rows.add(
+      Rows.add(rows, processing.VariableRef, [
+        { document: input.tree, id: node.id, kind: "builtIn" },
+      ]),
+      processing.BuiltInRef,
+      [{ id: node.id, name: builtIn, referrerKind: node.kind }],
+    );
+  }
+
+  if (input.mode !== "template") {
+    return rows;
+  }
+
+  return Rows.add(
+    Rows.add(rows, processing.VariableRef, [
+      { document: input.tree, id: node.id, kind: "templateParameter" },
+    ]),
+    processing.TemplateParameterRef,
+    [
+      {
+        document: input.tree,
+        id: node.id,
+        identifier: judgedLater(identifier),
+        referrerKind: node.kind,
+        rootKind: input.rootKind,
+      },
+    ],
+  );
+};
+
+type BaseTypeHandle = (typeof BaseType.handles)[number];
+
+/**
+ * The row of a literal's value in the arm of its base type.
+ */
+const literalArmRows: Record<BaseTypeHandle, (rows: Rows, id: string, text: string) => Rows> = {
+  boolean: (rows, id, text) =>
+    Rows.add(rows, processing.relations.LiteralBoolean, [{ id, value: judgedLater(text) }]),
+  directedPair: (rows, id, text) =>
+    Rows.add(rows, processing.relations.LiteralDirectedPair, [{ id, value: judgedLater(text) }]),
+  duration: (rows, id, text) =>
+    Rows.add(rows, processing.relations.LiteralDuration, [{ id, value: judgedLater(text) }]),
+  file: (rows, id, text) =>
+    Rows.add(rows, processing.relations.LiteralFile, [{ id, value: judgedLater(text) }]),
+  float: (rows, id, text) =>
+    Rows.add(rows, processing.relations.LiteralFloat, [{ id, value: judgedLater(text) }]),
+  identifier: (rows, id, text) =>
+    Rows.add(rows, processing.relations.LiteralIdentifier, [{ id, value: judgedLater(text) }]),
+  integer: (rows, id, text) =>
+    Rows.add(rows, processing.relations.LiteralInteger, [{ id, value: judgedLater(text) }]),
+  pair: (rows, id, text) =>
+    Rows.add(rows, processing.relations.LiteralPair, [{ id, value: judgedLater(text) }]),
+  point: (rows, id, text) =>
+    Rows.add(rows, processing.relations.LiteralPoint, [{ id, value: judgedLater(text) }]),
+  string: (rows, id, text) =>
+    Rows.add(rows, processing.relations.LiteralString, [{ id, value: judgedLater(text) }]),
+  uri: (rows, id, text) =>
+    Rows.add(rows, processing.relations.LiteralUri, [{ id, value: judgedLater(text) }]),
+};
+
+/**
+ * What an arm builder is given: the reads of its node, the node and its entry, and the input.
+ */
+interface Arm {
+  readonly attributes: Reader;
+  readonly entry: NodeEntry;
+  readonly input: ProcessingInput;
+  readonly node: ExpressionLike;
+}
+
+/**
+ * Read the three category and section filters of an outcome-only expression and return the writer
+ * of their rows, to be called after the node's last read.
+ *
+ * @param attributes - The node's reader.
+ * @returns A function that adds the filter rows for the written ones.
+ */
+const filtersOf = (attributes: Reader) => {
+  const section = attributes.read("section-identifier");
+  const include = attributes.read("include-category");
+  const exclude = attributes.read("exclude-category");
+
+  return (rows: Rows, id: string): Rows => {
+    const withSection = Rows.add(
+      rows,
+      expression.ExpressionSectionIdentifier,
+      written(section, (own) => ({ node: id, value: judgedLater(own) })),
+    );
+    const withInclude = Rows.add(
+      withSection,
+      expression.ExpressionIncludeCategory,
+      written(include, (own) => ({ node: id, value: judgedLater(own) })),
+    );
+
+    return Rows.add(
+      withInclude,
+      expression.ExpressionExcludeCategory,
+      written(exclude, (own) => ({ node: id, value: judgedLater(own) })),
+    );
+  };
+};
+
+/**
+ * The `weight-identifier` rows of an outcome-only expression, once read.
+ *
+ * @param rows - The rows so far.
+ * @param id - The expression's node id.
+ * @param weight - The attribute's processed value, none when not written.
+ * @returns The rows with the weight added where written.
+ */
+const weightOf = (rows: Rows, id: string, weight: Option.Option<string>): Rows =>
+  Rows.add(
+    rows,
+    attributed.ExpressionWeightIdentifier,
+    written(weight, (own) => ({ node: id, value: judgedLater(own) })),
+  );
+
+/**
+ * The `figures` columns of a rounding operator: the value as the column holds it, its kind and the
+ * typed copy.
+ *
+ * @param figures - The `figures` attribute.
+ * @returns The three columns.
+ */
+const roundingFigures = (figures: UnionValue) => {
+  const copy = copyOf(figures.parsed);
+
+  return { figures: judgedLater(figures.value), figuresKind: copy.kind, figuresValue: copy.value };
+};
+
+/**
+ * The rows of a `qti-outcome-minimum` or `qti-outcome-maximum`: the shared `OutcomeMinMax` row, the
+ * thin arm of the kind, the filters and the weight.
+ *
+ * @param arm - The reads of the node, its entry and the input.
+ * @param thin - The thin arm of the node's kind.
+ * @returns The rows with the bound's added.
+ */
+const outcomeBoundRows = (
+  { attributes, entry }: Arm,
+  thin: typeof attributed.OutcomeMaximumArm | typeof attributed.OutcomeMinimumArm,
+): Rows => {
+  const outcome = need(attributes.read("outcome-identifier"));
+  const weight = attributes.read("weight-identifier");
+  const filters = filtersOf(attributes);
+  const built = Rows.add(attributes.rows(), attributed.OutcomeMinMax, [
+    { id: entry.id, kind: entry.kind, outcomeIdentifier: judgedLater(outcome) },
+  ]);
+
+  return weightOf(Rows.add(filters(built, entry.id), thin, [{ id: entry.id }]), entry.id, weight);
+};
+
+/**
+ * The attributed arms, by kind; a kind not here is a thin arm.
+ */
+const armBuilders: Readonly<Partial<Record<RuleOrExpressionKind, (arm: Arm) => Rows>>> = {
+  "qti-any-n": ({ attributes, entry }) => {
+    const min = need(attributes.union("min").pipe(Option.map((found) => found.value)));
+    const max = need(attributes.union("max").pipe(Option.map((found) => found.value)));
+
+    return Rows.add(attributes.rows(), attributed.AnyN, [
+      { id: entry.id, max: judgedLater(max), min: judgedLater(min) },
+    ]);
+  },
+  "qti-base-value": ({ attributes, entry, node }) => {
+    const baseType = BaseType.handles.find(
+      (handle) => handle === need(attributes.read("base-type")),
+    );
+    const built = attributes.rows();
+
+    return baseType === undefined
+      ? built
+      : literalArmRows[baseType](
+          Rows.add(built, processing.Literal, [{ baseType, id: entry.id }]),
+          entry.id,
+          Option.getOrElse(node.text, () => ""),
+        );
+  },
+  "qti-custom-operator": ({ attributes, entry }) => {
+    const className = attributes.read("class");
+    const definition = attributes.read("definition");
+    const built = Rows.add(attributes.rows(), attributed.CustomOperator, [{ id: entry.id }]);
+
+    return Rows.add(
+      Rows.add(
+        built,
+        attributed.CustomOperatorClass,
+        written(className, (own) => ({ node: entry.id, value: judgedLater(own) })),
+      ),
+      attributed.CustomOperatorDefinition,
+      written(definition, (own) => ({ node: entry.id, value: judgedLater(own) })),
+    );
+  },
+  "qti-equal": ({ attributes, entry }) => {
+    const mode = attributes.read("tolerance-mode");
+    const lower = attributes.read("include-lower-bound");
+    const upper = attributes.read("include-upper-bound");
+    const tolerance = attributes.read("tolerance");
+    const toleranceMode = Option.getOrElse(mode, () => "exact");
+    let built = Rows.add(attributes.rows(), attributed.Equal, [
+      {
+        id: entry.id,
+        includeLowerBound: judgedLater(Option.getOrElse(lower, () => "true")),
+        includeUpperBound: judgedLater(Option.getOrElse(upper, () => "true")),
+        toleranceMode: judgedLater(toleranceMode),
+      },
+    ]);
+    /**
+     * The marker rows of a defaulted attribute the source wrote.
+     */
+    const marker = (value: Option.Option<string>) => written(value, () => ({ node: entry.id }));
+    built = Rows.add(built, attributed.DeclaredToleranceMode, marker(mode));
+    built = Rows.add(built, attributed.DeclaredIncludeLowerBound, marker(lower));
+    built = Rows.add(built, attributed.DeclaredIncludeUpperBound, marker(upper));
+
+    return Rows.add(
+      built,
+      attributed.EqualTolerance,
+      written(tolerance, (own) => ({
+        node: entry.id,
+        toleranceMode: judgedLater(toleranceMode),
+        value: judgedLater(own),
+      })),
+    );
+  },
+  "qti-equal-rounded": ({ attributes, entry }) => {
+    const mode = attributes.read("rounding-mode");
+    const figures = Option.getOrElse(attributes.union("figures"), () => noUnion);
+    const built = Rows.add(attributes.rows(), attributed.EqualRounded, [
+      {
+        ...roundingFigures(figures),
+        id: entry.id,
+        roundingMode: judgedLater(Option.getOrElse(mode, () => "significantFigures")),
+      },
+    ]);
+
+    return Rows.add(
+      built,
+      attributed.DeclaredRoundingMode,
+      written(mode, () => ({ node: entry.id })),
+    );
+  },
+  "qti-field-value": ({ attributes, entry }) => {
+    const field = need(attributes.read("field-identifier"));
+
+    return Rows.add(attributes.rows(), attributed.FieldValue, [
+      { fieldIdentifier: judgedLater(field), id: entry.id },
+    ]);
+  },
+  "qti-index": ({ attributes, entry }) => {
+    const found = need(attributes.read("n"));
+    const copy = copyOf(literalOrRef(found));
+
+    return Rows.add(attributes.rows(), attributed.Index, [
+      { id: entry.id, n: judgedLater(found), nKind: copy.kind, nValue: copy.value },
+    ]);
+  },
+  "qti-inside": ({ attributes, entry }) => {
+    const region = need(attributes.read("shape"));
+    const coords = need(attributes.read("coords"));
+
+    return Rows.add(attributes.rows(), attributed.Inside, [
+      { coords: judgedLater(coords), id: entry.id, shape: judgedLater(region) },
+    ]);
+  },
+  "qti-math-constant": ({ attributes, entry }) => {
+    const name = need(attributes.read("name"));
+
+    return Rows.add(attributes.rows(), attributed.MathConstant, [
+      { id: entry.id, name: judgedLater(name) },
+    ]);
+  },
+  "qti-math-operator": ({ attributes, entry }) => {
+    const name = need(attributes.read("name"));
+
+    return Rows.add(attributes.rows(), attributed.MathOperator, [
+      { id: entry.id, name: judgedLater(name) },
+    ]);
+  },
+  "qti-outcome-maximum": (arm) => outcomeBoundRows(arm, attributed.OutcomeMaximumArm),
+  "qti-outcome-minimum": (arm) => outcomeBoundRows(arm, attributed.OutcomeMinimumArm),
+  "qti-pattern-match": ({ attributes, entry }) => {
+    const pattern = need(attributes.read("pattern"));
+
+    return Rows.add(attributes.rows(), attributed.PatternMatch, [
+      { id: entry.id, pattern: judgedLater(pattern) },
+    ]);
+  },
+  "qti-random-float": ({ attributes, entry }) => {
+    const max = Option.getOrElse(attributes.union("max"), () => noUnion);
+    const min = attributes.union("min");
+    const built = Rows.add(attributes.rows(), attributed.RandomFloat, [
+      { id: entry.id, max: judgedLater(max.value) },
+    ]);
+
+    return Rows.add(
+      built,
+      attributed.RandomFloatMin,
+      written(min, (own) => ({ node: entry.id, value: judgedLater(own.value) })),
+    );
+  },
+  "qti-random-integer": ({ attributes, entry }) => {
+    const max = Option.getOrElse(attributes.union("max"), () => noUnion);
+    const min = attributes.union("min");
+    const step = attributes.union("step");
+    const built = Rows.add(attributes.rows(), attributed.RandomInteger, [
+      { id: entry.id, max: judgedLater(max.value) },
+    ]);
+
+    return Rows.add(
+      Rows.add(
+        built,
+        attributed.RandomIntegerMin,
+        written(min, (own) => ({ node: entry.id, value: judgedLater(own.value) })),
+      ),
+      attributed.RandomIntegerStep,
+      written(step, (own) => ({ node: entry.id, value: judgedLater(own.value) })),
+    );
+  },
+  "qti-repeat": ({ attributes, entry }) => {
+    const found = need(attributes.read("number-repeats"));
+    const copy = copyOf(literalOrRef(found));
+
+    return Rows.add(attributes.rows(), attributed.Repeat, [
+      {
+        id: entry.id,
+        numberRepeats: judgedLater(found),
+        numberRepeatsKind: copy.kind,
+        numberRepeatsValue: copy.value,
+      },
+    ]);
+  },
+  "qti-round-to": ({ attributes, entry }) => {
+    const mode = need(attributes.read("rounding-mode"));
+    const figures = Option.getOrElse(attributes.union("figures"), () => noUnion);
+
+    return Rows.add(attributes.rows(), attributed.RoundTo, [
+      { ...roundingFigures(figures), id: entry.id, roundingMode: judgedLater(mode) },
+    ]);
+  },
+  "qti-stats-operator": ({ attributes, entry }) => {
+    const name = need(attributes.read("name"));
+
+    return Rows.add(attributes.rows(), attributed.StatsOperator, [
+      { id: entry.id, name: judgedLater(name) },
+    ]);
+  },
+  "qti-string-match": ({ attributes, entry }) => {
+    const caseSensitive = need(attributes.read("case-sensitive"));
+    const substring = attributes.read("substring");
+    const built = Rows.add(attributes.rows(), attributed.StringMatch, [
+      {
+        caseSensitive: judgedLater(caseSensitive),
+        id: entry.id,
+        substring: judgedLater(Option.getOrElse(substring, () => "false")),
+      },
+    ]);
+
+    return Rows.add(
+      built,
+      attributed.DeclaredSubstring,
+      written(substring, () => ({ node: entry.id })),
+    );
+  },
+  "qti-substring": ({ attributes, entry }) => {
+    const caseSensitive = need(attributes.read("case-sensitive"));
+
+    return Rows.add(attributes.rows(), attributed.Substring, [
+      { caseSensitive: judgedLater(caseSensitive), id: entry.id },
+    ]);
+  },
+  "qti-test-variables": ({ attributes, entry }) => {
+    const variable = need(attributes.read("variable-identifier"));
+    const baseType = attributes.read("base-type");
+    const weight = attributes.read("weight-identifier");
+    const filters = filtersOf(attributes);
+    const built = Rows.add(attributes.rows(), attributed.TestVariables, [
+      { id: entry.id, variableIdentifier: judgedLater(variable) },
+    ]);
+
+    return weightOf(
+      Rows.add(
+        filters(built, entry.id),
+        attributed.TestVariablesBaseType,
+        written(baseType, (own) => ({ node: entry.id, value: judgedLater(own) })),
+      ),
+      entry.id,
+      weight,
+    );
+  },
+  "qti-variable": ({ attributes, entry, input }) => {
+    const identifier = need(attributes.read("identifier"));
+    const weight = attributes.read("weight-identifier");
+    const built = referenceRows(
+      Rows.add(attributes.rows(), attributed.Variable, [{ id: entry.id }]),
+      input,
+      entry,
+      identifier,
+    );
+
+    return Rows.add(
+      built,
+      attributed.VariableWeightIdentifier,
+      written(weight, (own) => ({
+        node: entry.id,
+        rootKind: input.rootKind,
+        value: judgedLater(own),
+      })),
+    );
+  },
+};
+
+/**
+ * The expression kinds whose thin arm also takes the section and category filters.
+ */
+const countingKinds: ReadonlySet<string> = new Set([
+  "qti-number-correct",
+  "qti-number-incorrect",
+  "qti-number-presented",
+  "qti-number-responded",
+  "qti-number-selected",
+]);
+
+/**
+ * The expression kinds that name a variable by their `identifier` and are thin arms.
+ */
+const referringKinds: ReadonlySet<string> = new Set([
+  "qti-correct",
+  "qti-default",
+  "qti-map-response",
+  "qti-map-response-point",
+]);
+
+type ThinKind = Exclude<keyof typeof expression.arms, "qti-base-value">;
+
+/**
+ * Whether a kind has a thin arm: an arm that holds the node's id and nothing else.
+ *
+ * @param kind - A node kind.
+ * @returns Whether `expression.arms` holds a thin arm for it.
+ */
+const isThin = (kind: string): kind is ThinKind =>
+  kind in expression.arms && kind !== "qti-base-value";
+
+/**
+ * Write one expression's rows: its `Expression` and `ExpressionMax` rows, the `Operand` row of each
+ * of its operands, and its arm with the attribute rows its kind carries.
+ *
+ * @param rows - The rows so far.
+ * @param input - The processing input.
+ * @param node - The expression.
+ * @param entry - The node it became.
+ * @returns The rows with the expression's added.
+ */
+const expressionRows = (
+  rows: Rows,
+  input: ProcessingInput,
+  node: ExpressionLike,
+  entry: NodeEntry,
+): Rows => {
+  const seeded = arity.get(entry.kind);
+  const bounded = seeded !== undefined && Option.isSome(seeded.max);
+  let built = rows;
+  if (seeded !== undefined) {
+    built = Rows.add(built, processing.Expression, [
+      {
+        bounded: bounded ? "bounded" : "unbounded",
+        document: input.tree,
+        id: entry.id,
+        kind: entry.kind,
+        min: seeded.min,
+      },
+    ]);
+    built = Rows.add(
+      built,
+      processing.ExpressionMax,
+      written(seeded.max, (max) => ({ id: entry.id, kind: entry.kind, max })),
+    );
+  }
+
+  built = Rows.add(
+    built,
+    processing.Operand,
+    node.operands.flatMap((operand) => {
+      const child = input.nodes.get(operand.element);
+
+      return child === undefined
+        ? []
+        : [
+            {
+              child: child.id,
+              expression: entry.id,
+              position: BigInt(node.element.children.indexOf(operand.element)),
+            },
+          ];
+    }),
+  );
+
+  const attributes = readerOf(built, node, entry);
+  const arm: Arm = { attributes, entry, input, node };
+  const builder = armBuilders[node.kind];
+  if (builder !== undefined) {
+    return builder(arm);
+  }
+
+  if (!isThin(node.kind)) {
+    return attributes.rows();
+  }
+
+  const filters = countingKinds.has(node.kind) ? filtersOf(attributes) : undefined;
+  const identifier = referringKinds.has(node.kind)
+    ? attributes.read("identifier")
+    : Option.none<string>();
+  let thin = Rows.add(attributes.rows(), expression.arms[node.kind], [{ id: entry.id }]);
+  thin = filters === undefined ? thin : filters(thin, entry.id);
+
+  return Option.match(identifier, {
+    onNone: () => thin,
+    onSome: (own) => referenceRows(thin, input, entry, own),
+  });
+};
+
+/**
+ * Write the reference rows of a value-setting rule: the variable it names, read from its
+ * `identifier`.
+ *
+ * @param rows - The rows so far.
+ * @param input - The processing input.
+ * @param node - The rule.
+ * @param entry - The node it became.
+ * @returns The rows with the reference added, and the `AttributeLexical` row of a padded
+ *   identifier.
+ */
+const ruleReferenceRows = (
+  rows: Rows,
+  input: ProcessingInput,
+  node: RuleLike,
+  entry: NodeEntry,
+): Rows => {
+  const attributes = readerOf(rows, node, entry);
+  const identifier = attributes.read("identifier");
+
+  return Option.match(identifier, {
+    onNone: () => attributes.rows(),
+    onSome: (own) => referenceRows(attributes.rows(), input, entry, own),
+  });
+};
+
+/**
+ * The rule kinds that name the variable they write or read by their `identifier`.
+ */
+const referringRules: ReadonlySet<string> = new Set([
+  "qti-lookup-outcome-value",
+  "qti-set-correct-response",
+  "qti-set-default-value",
+  "qti-set-outcome-value",
+  "qti-set-template-value",
+]);
+
+/**
+ * Write the expression rows of a processing tree and the variable references of its expressions
+ * and value-setting rules.
+ *
+ * The tree is judged first, and nothing is written for a tree that fails: it is parsed
+ * (`parseProcessing`), every required attribute is looked for (`P5`), and it is type checked
+ * (`checkProcessing`). The rules' own rows are not written here; a rule's `identifier` is read for
+ * its variable reference only.
+ *
+ * @param input - The processing root with the nodes `treeRows` wrote for it, the document and tree
+ *   ids, the root kind and the mode, language and environment it is checked in.
+ * @param rows - The rows so far, which already hold the tree's node and edge rows.
+ * @returns The rows with this tree's added; `ProcessingRefused` for a missing required attribute
+ *   (`P5`) or a rule of the checker, and `UnmodeledVocabulary` for an element or attribute the
+ *   processing vocabulary does not hold at that place.
+ */
+export const processingRows = Effect.fn("import.processingRows")(function* processingRows(
+  input: ProcessingInput,
+  rows: Rows,
+): Effect.fn.Return<Rows, ProcessingRefused | UnmodeledVocabulary> {
+  const ast = yield* parseProcessing(input.root, input.language);
+  const missing = firstMissing(flatten(ast.rules));
+  if (Option.isSome(missing)) {
+    const { attribute, kind, position } = missing.value;
+
+    return yield* new ProcessingRefused({
+      detail: `${kind} at ${placeOf(position)} has no ${attribute} attribute, which ${kind} requires. Add ${attribute} with the value the QTI schema asks for.`,
+      rule: "P5",
+    });
+  }
+
+  const checked = checkProcessing(ast, input.env);
+  if (checked._tag === "refused") {
+    return yield* new ProcessingRefused({
+      detail: detailOf(checked.rule, checked.kind, checked.position),
+      rule: checked.rule,
+    });
+  }
+
+  const tree = flatten(checked.typed.rules);
+  let built = rows;
+  for (const node of tree.expressions) {
+    const entry = input.nodes.get(node.element);
+    if (entry !== undefined) {
+      built = expressionRows(built, input, node, entry);
+    }
+  }
+
+  for (const node of tree.rules) {
+    const entry = input.nodes.get(node.element);
+    if (entry !== undefined && referringRules.has(node.kind)) {
+      built = ruleReferenceRows(built, input, node, entry);
+    }
+  }
+
+  return built;
+});
