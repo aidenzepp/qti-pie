@@ -6,7 +6,7 @@ import { ContentGuardRefusal } from "#qti/import/guards/content.ts";
 import { readRows } from "#qti/import/package.ts";
 import { ruleOfError } from "#qti/import/refusal.ts";
 import type { Rule } from "#qti/import/refusal.ts";
-import { materialize } from "#qti/test/fixtures.ts";
+import { fixtureNames, materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
 
 const fixtures = inject("fixtures");
@@ -82,6 +82,8 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       "padded-attributes",
       "padded-text",
       "sharedMedia",
+      "end-attempt",
+      ...fixtureNames.filter((name) => name.startsWith("cut-")),
     ];
     for (const name of clean) {
       suite.effect(`admits ${name}`, () =>
