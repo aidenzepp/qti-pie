@@ -16,25 +16,57 @@ import type { ImportLaw, Rule } from "#qti/import/refusal.ts";
 import { Rows } from "#qti/import/tree.ts";
 import {
   AriaLevel,
+  AriaRole,
   AriaValuetext,
   AttributeIdref,
   HeadersTarget,
   NodeClass,
+  NodeDir,
   NodeLabel,
   NodeLang,
 } from "#qti/schema/attributes.ts";
 import { DocumentId, HtmlId } from "#qti/schema/document.ts";
-import { ContentBodyModal, FeedbackBlock, FeedbackInline } from "#qti/schema/feedback.ts";
-import { VideoControls } from "#qti/schema/html/media.ts";
+import {
+  ContentBodyModal,
+  FeedbackBlock,
+  FeedbackInline,
+  FeedbackOutcomeRef,
+  ModalFeedback,
+} from "#qti/schema/feedback.ts";
+import { Img } from "#qti/schema/html.ts";
+import { Bdo, Div, H1, Summary } from "#qti/schema/html/text.ts";
+import {
+  Picture,
+  Source,
+  SourceSrcset,
+  Track,
+  Video,
+  VideoControls,
+} from "#qti/schema/html/media.ts";
+import {
+  Caption,
+  Col,
+  Colgroup,
+  ColgroupSpan,
+  Details,
+  Table,
+} from "#qti/schema/html/structure.ts";
 import { InteractionBinding } from "#qti/schema/interaction.ts";
 import { Gap } from "#qti/schema/interactions/gap.ts";
 import { Hottext, HottextOwner } from "#qti/schema/interactions/hot.ts";
 import { TextEntryInteraction } from "#qti/schema/interactions/text.ts";
+import { TypedDeclaration } from "#qti/schema/declaration.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import { AttributeLexical, Edge, Node } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { RubricBlock } from "#qti/schema/rubric.ts";
-import { PrintedVariableFormat } from "#qti/schema/template.ts";
+import {
+  PrintedVariable,
+  PrintedVariableFormat,
+  PrintedVariableRef,
+  PrintedVariableVarRef,
+  TemplateContentRef,
+} from "#qti/schema/template.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
@@ -189,6 +221,13 @@ type Law =
   | { readonly fields: readonly string[]; readonly kind: "key"; readonly relation: string }
   | { readonly fields: readonly string[]; readonly kind: "primaryKey"; readonly relation: string }
   | { readonly kind: "check"; readonly name: string; readonly relation: string }
+  | {
+      readonly from: Side;
+      readonly kind: "capacity";
+      readonly target: Side;
+      readonly weight: { readonly kind: "count" };
+      readonly within: { readonly high: bigint | "*"; readonly low: bigint };
+    }
   | { readonly flags: "su" | "u"; readonly kind: "pattern"; readonly source: string }
   | { readonly from: Side; readonly kind: "contained"; readonly to: Side };
 
@@ -207,6 +246,14 @@ const checkLaw = (relation: AnyRelation, name: string): Law => ({
 });
 
 const patternLaw = (source: string): Law => ({ flags: "u", kind: "pattern", source });
+
+const capacityLaw = (target: Side, from: Side, low: bigint, high: bigint | "*"): Law => ({
+  from,
+  kind: "capacity",
+  target,
+  weight: { kind: "count" },
+  within: { high, low },
+});
 
 /**
  * The rows of every base fixture, read once for the suite.
@@ -404,6 +451,137 @@ const ancestryStep = containedLaw(side(Edge, ["parentAncestry", "parentKind", "c
   selection: [],
 });
 
+/**
+ * A node of the draft as an edge names it.
+ */
+interface Placed {
+  readonly ancestry: string;
+  readonly id: string;
+  readonly kind: string;
+}
+
+/**
+ * The first node of `kind`, placed.
+ */
+const placedOf = (draft: Draft, kind: string): Placed => ({
+  ancestry: text(nodeOf(draft, kind), "ancestry"),
+  id: idOf(draft, kind),
+  kind,
+});
+
+/**
+ * Add a node of `kind` as the last child of `parent`, at the ancestry `parent` is at, with its arm
+ * row `row`. Positions start at 1000, clear of the fixture's own.
+ *
+ * @returns The new node, placed.
+ */
+const attach = (draft: Draft, parent: Placed, arm: AnyRelation, kind: string, row: Row = {}) => {
+  const id = addNode(draft, kind, parent.ancestry, { relation: arm, row });
+  const child = { ancestry: parent.ancestry, id, kind };
+  const edge = edgeRow(draft, parent, child);
+
+  edge.position = BigInt(1000 + of(draft, Edge).length);
+  of(draft, Edge).push(edge);
+
+  return child;
+};
+
+/**
+ * A `div` under the item body: the item body admits few HTML children itself, and the `div` admits
+ * the rest.
+ */
+const division = (draft: Draft) => attach(draft, placedOf(draft, "qti-item-body"), Div, "div");
+
+/**
+ * The declaration of `identifier` in the draft's item, as a reference row copies it.
+ */
+const declared = (draft: Draft, identifier: string) => {
+  const row = find(
+    draft,
+    TypedDeclaration,
+    (candidate) => text(candidate, "identifier") === identifier,
+  );
+
+  return {
+    baseType: text(row, "baseType"),
+    cardinality: text(row, "cardinality"),
+    document: text(row, "document"),
+    identifier,
+    kind: text(row, "kind"),
+  };
+};
+
+/**
+ * A picture holding `images` images and `sources` sources, each source with a `srcset`.
+ */
+const picture = (draft: Draft, images: number, sources: number) => {
+  const holder = attach(draft, division(draft), Picture, "picture");
+
+  for (let at = 0; at < images; at += 1) {
+    attach(draft, holder, Img, "img", { alt: "a", src: "a.png" });
+  }
+
+  for (let at = 0; at < sources; at += 1) {
+    const source = attach(draft, holder, Source, "source", { parentKind: "picture", src: "a.png" });
+
+    of(draft, SourceSrcset).push({ node: source.id, value: "a.png 1x" });
+  }
+
+  return holder;
+};
+
+/**
+ * A `Details` under the item body, holding `summaries` summaries.
+ */
+const details = (draft: Draft, summaries: number) => {
+  const holder = attach(draft, division(draft), Details, "details");
+
+  for (let at = 0; at < summaries; at += 1) {
+    attach(draft, holder, Summary, "summary");
+  }
+};
+
+/**
+ * A `Table` under the item body, holding `captions` captions.
+ */
+const table = (draft: Draft, captions: number) => {
+  const holder = attach(draft, division(draft), Table, "table");
+
+  for (let at = 0; at < captions; at += 1) {
+    attach(draft, holder, Caption, "caption");
+  }
+};
+
+/**
+ * The outcome reference of a feedback that reads `identifier`, on the item's first paragraph. No
+ * feedback block carries it: `FeedbackBlock` and `TemplateBlock` each serve two kind handles with
+ * one arm, and the engine refuses an arm row of either with its `mirrors` law (see the report), so
+ * the reference law is reached on a plain node, which is all the law reads.
+ */
+const feedbackRef = (draft: Draft, identifier: string) => {
+  const { baseType, cardinality, document } = declared(draft, identifier);
+
+  of(draft, FeedbackOutcomeRef).push({
+    baseType,
+    cardinality,
+    document,
+    identifier,
+    node: idOf(draft, "p"),
+  });
+};
+
+/**
+ * A printed variable in the item's first paragraph, returned with its arm already written.
+ */
+const printedVariable = (draft: Draft, identifier: string) =>
+  attach(draft, placedOf(draft, "p"), PrintedVariable, "qti-printed-variable", {
+    base: "10",
+    delimiter: ";",
+    identifier,
+    mappingIndicator: "=",
+    powerForm: "false",
+  });
+
 const negatives: readonly Negative[] = [
   {
     alter: (draft) => {
@@ -540,7 +718,7 @@ const negatives: readonly Negative[] = [
       selection: [],
     }),
     name: "an idref whose target is no DocumentId is refused by the containment into DocumentId",
-    rule: "admission",
+    rule: "idref-target",
   },
   {
     alter: (draft) => {
@@ -566,7 +744,7 @@ const negatives: readonly Negative[] = [
       selection: [{ field: "kind", value: "th" }],
     }),
     name: "a headers target that is a td is refused by the containment into the th selection",
-    rule: "admission",
+    rule: "idref-target",
   },
   {
     alter: (draft) => {
@@ -667,6 +845,262 @@ const negatives: readonly Negative[] = [
     rule: "admission",
   },
   {
+    alter: (draft) => {
+      details(draft, 0);
+    },
+    fixture: "cut-choice",
+    law: capacityLaw(
+      side(Details, ["id"]),
+      side(Edge, ["parent"], [{ field: "childKind", value: "summary" }]),
+      1n,
+      1n,
+    ),
+    name: "a details with no summary child is refused by the capacity of its summaries",
+    rule: "details-summary",
+  },
+  {
+    alter: (draft) => {
+      picture(draft, 2, 1);
+    },
+    fixture: "cut-choice",
+    law: capacityLaw(
+      side(Picture, ["id"]),
+      side(Edge, ["parent"], [{ field: "childKind", value: "img" }]),
+      1n,
+      1n,
+    ),
+    name: "a picture with two img children is refused by the capacity of its images",
+    rule: "picture-img",
+  },
+  {
+    alter: (draft) => {
+      picture(draft, 1, 0);
+    },
+    fixture: "cut-choice",
+    law: capacityLaw(
+      side(Picture, ["id"]),
+      side(Edge, ["parent"], [{ field: "childKind", value: "source" }]),
+      1n,
+      "*",
+    ),
+    name: "a picture with no source child is refused by the capacity of its sources",
+    rule: "picture-source",
+  },
+  {
+    alter: (draft) => {
+      table(draft, 2);
+    },
+    fixture: "cut-choice",
+    law: capacityLaw(
+      side(Table, ["id"]),
+      side(Edge, ["parent"], [{ field: "childKind", value: "caption" }]),
+      0n,
+      1n,
+    ),
+    name: "a table with two caption children is refused by the capacity of its captions",
+    rule: "table-parts",
+  },
+  {
+    alter: (draft) => {
+      const holder = attach(draft, division(draft), Table, "table");
+      const group = attach(draft, holder, Colgroup, "colgroup");
+
+      attach(draft, group, Col, "col");
+      of(draft, ColgroupSpan).push({ node: group.id, value: "2" });
+    },
+    fixture: "cut-choice",
+    law: capacityLaw(
+      side(ColgroupSpan, ["node"]),
+      side(Edge, ["parent"], [{ field: "childKind", value: "col" }]),
+      0n,
+      0n,
+    ),
+    name: "a colgroup span on a colgroup with a col child is refused by the capacity of its cols",
+    rule: "colgroup-span",
+  },
+  {
+    alter: (draft) => {
+      attach(draft, placedOf(draft, "p"), Bdo, "bdo");
+    },
+    fixture: "cut-choice",
+    law: capacityLaw(
+      side(Node, ["id"], [{ field: "kind", value: "bdo" }]),
+      side(NodeDir, ["node"]),
+      1n,
+      1n,
+    ),
+    name: "a bdo with no NodeDir row is refused by the capacity of its dir",
+    rule: "bdo-dir",
+  },
+  {
+    alter: (draft) => {
+      const bidi = attach(draft, placedOf(draft, "p"), Bdo, "bdo");
+
+      of(draft, NodeDir).push({ attribute: "dir", kind: "bdo", node: bidi.id, value: "auto" });
+    },
+    fixture: "cut-choice",
+    law: checkLaw(NodeDir, "BdoDirNotAuto"),
+    name: "a NodeDir of auto on a bdo is refused by the BdoDirNotAuto check",
+    rule: "bdo-dir",
+  },
+  {
+    alter: (draft) => {
+      const holder = attach(draft, division(draft), Picture, "picture");
+
+      attach(draft, holder, Img, "img", { alt: "a", src: "a.png" });
+      attach(draft, holder, Source, "source", { parentKind: "picture", src: "a.png" });
+    },
+    fixture: "cut-choice",
+    law: containedLaw(side(Source, ["id"], [{ field: "parentKind", value: "picture" }]), {
+      fields: ["node"],
+      relation: "SourceSrcset",
+      selection: [],
+    }),
+    name: "a source of a picture with no srcset is refused by the containment into SourceSrcset",
+    rule: "source-srcset",
+  },
+  {
+    alter: (draft) => {
+      const clip = attach(draft, division(draft), Video, "video", {
+        version: "3.0.1",
+      });
+
+      attach(draft, clip, Track, "track", { kind: "subtitles", src: "a.vtt" });
+    },
+    fixture: "cut-choice",
+    law: containedLaw(side(Track, ["id"], [{ field: "kind", value: "subtitles" }]), {
+      fields: ["node"],
+      relation: "TrackSrclang",
+      selection: [],
+    }),
+    name: "a subtitles track with no srclang is refused by the containment into TrackSrclang",
+    rule: "track-srclang",
+  },
+  {
+    alter: (draft) => {
+      const heading = attach(draft, division(draft), H1, "h1");
+
+      of(draft, AriaRole).push({
+        attribute: "role",
+        kind: "h1",
+        node: heading.id,
+        value: "button",
+      });
+    },
+    fixture: "cut-choice",
+    law: checkLaw(AriaRole, "AriaRoleH1"),
+    name: "a role of button on an h1 is refused by the AriaRoleH1 check",
+    rule: "aria-role",
+  },
+  {
+    alter: (draft) => {
+      const holder = picture(draft, 1, 0);
+      const source = attach(draft, holder, Source, "source", {
+        parentKind: "picture",
+        src: "a.png",
+      });
+
+      of(draft, SourceSrcset).push({ node: source.id, value: "a.png 1x" });
+      of(draft, AriaRole).push({
+        attribute: "role",
+        kind: "source",
+        node: source.id,
+        value: "presentation",
+      });
+    },
+    fixture: "cut-choice",
+    law: checkLaw(AriaRole, "AriaRoleNotSource"),
+    name: "a role on a source is refused by the AriaRoleNotSource check",
+    rule: "aria-role",
+  },
+  {
+    alter: (draft) => {
+      const item = placedOf(draft, "qti-assessment-item");
+
+      attach(draft, item, ModalFeedback, "qti-modal-feedback", {
+        identifier: "m",
+        outcomeIdentifier: "SCORE",
+        showHide: "show",
+        version: text(nodeOf(draft, "qti-item-body"), "version"),
+      });
+    },
+    fixture: "cut-choice",
+    law: capacityLaw(
+      side(ModalFeedback, ["id"], [{ field: "version", value: "3.0.1" }]),
+      side(Edge, ["parent"], [{ field: "childKind", value: "qti-content-body.modal" }]),
+      1n,
+      1n,
+    ),
+    name: "a 3.0.1 modal feedback with no content body is refused by the capacity of its bodies",
+    rule: "modal-body",
+  },
+  {
+    alter: (draft) => {
+      feedbackRef(draft, "SCORE");
+    },
+    fixture: "cut-choice",
+    law: checkLaw(FeedbackOutcomeRef, "FeedbackOutcomeRefType"),
+    name: "a feedback outcome reference to a float outcome is refused by the FeedbackOutcomeRefType check",
+    rule: "feedback-ref",
+  },
+  {
+    alter: (draft) => {
+      const { baseType, cardinality, document } = declared(draft, "RESPONSE");
+
+      of(draft, TemplateContentRef).push({
+        baseType,
+        cardinality,
+        document,
+        identifier: "RESPONSE",
+        node: idOf(draft, "p"),
+      });
+    },
+    fixture: "cut-choice",
+    law: containedLaw(side(TemplateContentRef, ["document", "identifier"]), {
+      fields: ["document", "identifier"],
+      relation: "Declaration",
+      selection: [{ field: "kind", value: "template" }],
+    }),
+    name: "a template reference naming a response is refused by the containment into the template declarations",
+    rule: "template-ref",
+  },
+  {
+    alter: (draft) => {
+      const variable = printedVariable(draft, "RESPONSE");
+
+      of(draft, PrintedVariableRef).push({
+        document: documentOf(draft),
+        identifier: "RESPONSE",
+        kind: "response",
+        node: variable.id,
+      });
+    },
+    fixture: "cut-choice",
+    law: checkLaw(PrintedVariableRef, "PrintedVariableRefKind"),
+    name: "a printed variable naming a response is refused by the PrintedVariableRefKind check",
+    rule: "printed-variable-ref",
+  },
+  {
+    alter: (draft) => {
+      const variable = printedVariable(draft, "SCORE");
+      const { baseType, cardinality, document, kind } = declared(draft, "SCORE");
+
+      of(draft, PrintedVariableVarRef).push({
+        attribute: "base",
+        baseType,
+        cardinality,
+        document,
+        identifier: "SCORE",
+        kind,
+        node: variable.id,
+      });
+    },
+    fixture: "cut-choice",
+    law: checkLaw(PrintedVariableVarRef, "PrintedVariableVarRefType"),
+    name: "a printed variable base naming a float outcome is refused by the PrintedVariableVarRefType check",
+    rule: "printed-variable-ref",
+  },
+  {
     // The rows of `controls-3-0-0` as the importer reads them: a video of a 3.0.0 document with `controls="controls"`, which 3.0.0's XSD spells with a boolean (goal 3.9).
     alter: () => {},
     fixture: "controls-3-0-0",
@@ -683,17 +1117,17 @@ const negatives: readonly Negative[] = [
 const acceptedBases = negativeBases.filter((name) => name !== "controls-3-0-0");
 
 /**
- * The XML copies the database refuses, by `importPackage`: the fixture, the rule `refusal.ts`
- * names for the law that refuses it, and the law's kind.
+ * The XML copies `importPackage` refuses: the fixture, the rule `refusal.ts` names for what refuses
+ * it, and the party that refuses it. The database's refusal carries the engine's law; the
+ * importer's, met before any row is built, carries none (a stray gap has no `Gap` row to write).
  */
 const copyNegatives = [
-  { diverges: false, fixture: "admission-choice-in-feedback", rule: "admission" },
-  // Decision 12c: the importer refuses a gap that sits in no gap-match interaction itself, under `binding-declared`, before the database is reached, so the brief's `ancestry-ban` is pinned as an expected failure and the observed rule is logged. The ban is proved by the direct ChangeSet above.
-  { diverges: true, fixture: "gap-outside-gap-match", rule: "ancestry-ban" },
-  { diverges: false, fixture: "controls-3-0-0", rule: "attribute-lexical" },
+  { fixture: "admission-choice-in-feedback", party: "database", rule: "admission" },
+  { fixture: "gap-outside-gap-match", party: "importer", rule: "ancestry-ban" },
+  { fixture: "controls-3-0-0", party: "database", rule: "attribute-lexical" },
 ] as const satisfies readonly {
-  readonly diverges: boolean;
   readonly fixture: FixtureName;
+  readonly party: "database" | "importer";
   readonly rule: Rule;
 }[];
 
@@ -801,10 +1235,10 @@ describe.skipIf(!hasLease)(
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
       timeout: "120 seconds",
-    })("the XML copies are refused by the database through importPackage", (it) => {
-      for (const { diverges, fixture, rule } of copyNegatives) {
-        const copyRefused = () =>
-          Effect.gen(function* copyRefusedByDatabase() {
+    })("the XML copies are refused through importPackage", (it) => {
+      for (const { fixture, party, rule } of copyNegatives) {
+        it.effect(`${fixture} is refused under the ${rule} rule, by the ${party}`, () =>
+          Effect.gen(function* copyRefused() {
             const refusal = yield* refusalOf(fixture);
 
             yield* Effect.log(
@@ -812,17 +1246,19 @@ describe.skipIf(!hasLease)(
             );
 
             assert.strictEqual(refusal.rule, rule, refusal.message);
-            assert.isDefined(
-              refusal.law,
-              `${fixture} was refused before the database: ${refusal.message}`,
-            );
-          });
-
-        if (diverges) {
-          it.effect.fails(`${fixture} is refused under the ${rule} rule`, copyRefused);
-        } else {
-          it.effect(`${fixture} is refused under the ${rule} rule`, copyRefused);
-        }
+            if (party === "database") {
+              assert.isDefined(
+                refusal.law,
+                `${fixture} was refused before the database: ${refusal.message}`,
+              );
+            } else {
+              assert.isUndefined(
+                refusal.law,
+                `${fixture} reached the database: ${refusal.message}`,
+              );
+            }
+          }),
+        );
       }
     });
   },
@@ -861,42 +1297,38 @@ describe.skipIf(!hasLease)(
       excludeTestServices: true,
       timeout: "120 seconds",
     })("the whiteSpace witnesses and the admitted copies round-trip", (it) => {
-      // Decision 12c, blocked: phase 1's `lexicalCopy` (`src/import/guards/item.ts:472-502`) refuses every `AttributeLexical` row whose kind and attribute its `shadows` table lacks, `typed-copy` "shadows no typed column", and the table holds no M1 attribute, so the `class`, `label` and `aria-valuetext` rows are refused before the database. The expectations below are the brief's; they flip the test red once the guard judges only the attributes it shadows.
-      it.effect.fails(
-        "padded-m1-attributes stores one value and at most one lexical row per class",
-        () =>
-          Effect.gen(function* padded() {
-            const { id, report } = yield* roundTrip("padded-m1-attributes");
+      it.effect("padded-m1-attributes stores one value and at most one lexical row per class", () =>
+        Effect.gen(function* padded() {
+          const { id, report } = yield* roundTrip("padded-m1-attributes");
 
-            assertAllEqual(report);
+          assertAllEqual(report);
 
-            const classes = (yield* rowsOf(id, NodeClass)).filter((row) => row.kind === "p");
-            const labels = yield* rowsOf(id, NodeLabel);
-            const valuetexts = yield* rowsOf(id, AriaValuetext);
-            const lexical = yield* rowsOf(id, AttributeLexical);
-            const lexicalOf = (attribute: string) =>
-              lexical.filter((row) => row.attribute === attribute).map((row) => row.value);
+          const classes = (yield* rowsOf(id, NodeClass)).filter((row) => row.kind === "p");
+          const labels = yield* rowsOf(id, NodeLabel);
+          const valuetexts = yield* rowsOf(id, AriaValuetext);
+          const lexical = yield* rowsOf(id, AttributeLexical);
+          const lexicalOf = (attribute: string) =>
+            lexical.filter((row) => row.attribute === attribute).map((row) => row.value);
 
-            assert.deepStrictEqual(
-              classes.map((row) => row.value),
-              ["a b"],
-            );
-            assert.deepStrictEqual(lexicalOf("class"), [" a  b "]);
-            assert.deepStrictEqual(
-              labels.map((row) => row.value),
-              ["x y"],
-            );
-            assert.deepStrictEqual(lexicalOf("label"), ["x\ty"]);
-            assert.deepStrictEqual(
-              valuetexts.map((row) => row.value),
-              ["a\tb"],
-            );
-            assert.deepStrictEqual(lexicalOf("aria-valuetext"), []);
-          }),
+          assert.deepStrictEqual(
+            classes.map((row) => row.value),
+            ["a b"],
+          );
+          assert.deepStrictEqual(lexicalOf("class"), [" a  b "]);
+          assert.deepStrictEqual(
+            labels.map((row) => row.value),
+            ["x y"],
+          );
+          assert.deepStrictEqual(lexicalOf("label"), ["x\ty"]);
+          assert.deepStrictEqual(
+            valuetexts.map((row) => row.value),
+            ["a\tb"],
+          );
+          assert.deepStrictEqual(lexicalOf("aria-valuetext"), []);
+        }),
       );
 
-      // Blocked like `padded-m1-attributes`: the `p`'s lexical `class` row is refused by `lexicalCopy`.
-      it.effect.fails(
+      it.effect(
         "empty-class stores an empty list for the div and for the p, with one lexical row",
         () =>
           Effect.gen(function* empty() {
