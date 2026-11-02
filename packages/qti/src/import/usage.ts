@@ -5,6 +5,7 @@
  */
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
+import { contentOf, elementChildren } from "#qti/import/leaf.ts";
 import { NotQti3 } from "#qti/import/manifest.ts";
 import {
   collapse,
@@ -79,27 +80,6 @@ const typedArmRows: Record<BaseTypeHandle, (rows: Rows, id: string, text: string
   uri: (rows, id, text) =>
     Rows.add(rows, ud.relations.UsageTypedValueUri, [{ id, value: judgedLater(text) }]),
 };
-
-/**
- * The element children of `element`, whatever their namespace.
- */
-const elementChildren = (element: Element): readonly Element[] =>
-  element.children.filter((child): child is Element => child.kind === "element");
-
-/**
- * The character content of a leaf as read: its text and entity-reference children joined, an
- * entity reference by its lexical form `&name;`.
- */
-const contentOf = (element: Element): string =>
-  element.children
-    .map((child) => {
-      if (child.kind === "text") {
-        return child.value;
-      }
-
-      return child.kind === "entityRef" ? `&${child.name};` : "";
-    })
-    .join("");
 
 /**
  * The lexical value of an element's unprefixed attribute, none when it is not written.

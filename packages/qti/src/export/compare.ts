@@ -4,6 +4,7 @@ import type { ChildProcessSpawner } from "effect/process";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import type { PackageReadError } from "#qti/package/read.ts";
 import type { ZipRefusal } from "#qti/package/zip.ts";
+import { recordTypes, soleFileTypes } from "#qti/import/record.ts";
 import { collapse } from "#qti/import/tree.ts";
 import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
 import { canonicalize } from "#qti/xml/canonical.ts";
@@ -60,18 +61,10 @@ const cpNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
 const documentTypes: ReadonlySet<string> = new Set(rootOfType.map((row) => row.type));
 
 /**
- * The resource types whose one `file` is a document when the resource has no `href`.
- *
- * This mirrors `import/manifest.ts`: `recordTypes` (`resourcemetadata/xml`, `qtiusagedata/xml`)
- * and `soleFileTypes` (`imsqti_outcomes_xmlv3p0`, `imsqti_resprocessing_xmlv3p0`), whose rule
- * `soleFileDocument` applies.
+ * The resource types whose one `file` is a document when the resource has no `href`: the import's
+ * record types and its sole-file types.
  */
-const soleFileTypes: ReadonlySet<string> = new Set([
-  "resourcemetadata/xml",
-  "qtiusagedata/xml",
-  "imsqti_outcomes_xmlv3p0",
-  "imsqti_resprocessing_xmlv3p0",
-]);
+const soleFileDocumentTypes: ReadonlySet<string> = new Set([...recordTypes, ...soleFileTypes]);
 
 /**
  * Find the first offset at which two byte strings differ.
@@ -158,8 +151,8 @@ const attributeOf = (element: Element, local: string): string | undefined => {
  *
  * A resource with an `href` adds it when its type is one the seed's `rootOfType` names. A resource
  * with no `href` adds the `href` of its only `file` when it has exactly one and its type is in
- * {@link soleFileTypes}. Every other entry is stored as bytes, so it is written back as it was
- * read.
+ * {@link soleFileDocumentTypes}. Every other entry is stored as bytes, so it is written back as it
+ * was read.
  *
  * @param manifest - The source manifest.
  * @returns The paths, each as the import reads it after whitespace collapse.
@@ -189,7 +182,7 @@ const rewrittenEntries = (manifest: XmlDocument): ReadonlySet<string> => {
       const files = childrenNamed(resource, "file").map((file) => attributeOf(file, "href"));
       const [only, ...rest] = files;
 
-      if (soleFileTypes.has(type) && rest.length === 0 && only !== undefined) {
+      if (soleFileDocumentTypes.has(type) && rest.length === 0 && only !== undefined) {
         paths.add(only);
       }
     }

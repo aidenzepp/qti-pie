@@ -13,7 +13,7 @@ import type { GuardRefusal } from "#qti/import/guards/tree.ts";
 import type { ItemGuardRefusal } from "#qti/import/guards/item.ts";
 import type { ManifestGuardRefusal } from "#qti/import/guards/manifest.ts";
 import type { UsageGuardRefusal } from "#qti/import/guards/usage.ts";
-import type { ExternalRefusal } from "#qti/import/external.ts";
+import type { ExternalRefusal } from "#qti/import/record.ts";
 import type { ItemRefusal } from "#qti/import/item.ts";
 import type { NotQti3 } from "#qti/import/manifest.ts";
 import type { UnmodeledVocabulary } from "#qti/import/tree.ts";
