@@ -695,6 +695,17 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
     }),
   );
 
+  suite.effect("typed-copy refuses a choice binding whose node is no choice interaction", () =>
+    Effect.gen(function* orphanBinding() {
+      yield* refusal("typed-copy", inject("fixtures").simple, {
+        alter: (rows) =>
+          mapRows(rows, TypedBinding, (row) =>
+            patched(row, { node: "33333333-3333-4333-8333-333333333333" }),
+          ),
+      });
+    }),
+  );
+
   suite.effect(
     "typed-copy refuses a maxChoicesN or minChoicesN that is not its lexical's parse",
     () =>
@@ -1117,6 +1128,14 @@ const sharedRows = (
   });
 
 layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts composition", (suite) => {
+  suite.effect(
+    "itemGuards admit SHARED: a hotspot or graphic-order binding is not the choice guard's",
+    () =>
+      Effect.gen(function* sharedAdmitted() {
+        yield* itemGuards(yield* sharedRows());
+      }),
+  );
+
   suite.effect("SHARED holds the rows of the M1 builders, each counted once", () =>
     Effect.gen(function* sharedComposition() {
       const rows = yield* sharedRows();

@@ -427,7 +427,8 @@ const hasReplaceable = (text: string): boolean => replace(text) !== text;
 
 /**
  * `typed-copy` of the interaction: each count equals the parse of its lexical column, and each
- * binding's `maxCount` equals its interaction's `maxChoicesN`.
+ * choice binding's `maxCount` equals its choice interaction's `maxChoicesN`. The other kinds'
+ * binding counts are the content guards' (`bindingCopy`).
  */
 const interactionCopy = (rows: Rows): Finding => {
   const interactions = Rows.of(rows, ChoiceInteraction);
@@ -448,6 +449,10 @@ const interactionCopy = (rows: Rows): Finding => {
   }
 
   for (const binding of Rows.of(rows, TypedBinding)) {
+    if (binding.interactionKind !== "qti-choice-interaction") {
+      continue;
+    }
+
     const owner = interactions.find((row) => row.id === binding.node);
     if (owner?.maxChoicesN !== binding.maxCount) {
       return refuse(
