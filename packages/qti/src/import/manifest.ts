@@ -165,7 +165,7 @@ interface LomContext {
   readonly lom: string;
   readonly owner: "manifest" | "resource";
   readonly parent: string;
-  readonly parentKind: NodeKindHandle | undefined;
+  readonly parentKind: NodeKindHandle;
   readonly parentPosition: bigint;
   readonly position: bigint;
   readonly value: string;
@@ -444,7 +444,14 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     },
     "lom:language": (c) => {
       add(md.LomLanguage, [
-        { id: c.id, lom: c.lom, owner: c.owner, position: c.position, value: c.value },
+        {
+          id: c.id,
+          lom: c.lom,
+          owner: c.owner,
+          parentKind: c.parentKind,
+          position: c.position,
+          value: c.value,
+        },
       ]);
       if (c.parentKind === "lom:general") {
         c.findings.languages.add(c.value);

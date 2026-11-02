@@ -255,6 +255,28 @@ describe("metadata", () => {
     assert.strictEqual(bound.length, 1);
   });
 
+  it("binds each LomLanguage's parentKind to the parentKind of its Edge", () => {
+    assert.deepStrictEqual(Object.keys(metadata.relations.LomLanguage.fields), [
+      "id",
+      "lom",
+      "owner",
+      "parentKind",
+      "position",
+      "value",
+    ]);
+
+    const bound = metadata.rules.flatMap((rule) =>
+      rule.kind === "contained" &&
+      rule.left.source === metadata.relations.LomLanguage &&
+      rule.right.source === node.relations.Edge &&
+      rule.left.fields.join(",") === "id,parentKind" &&
+      rule.right.fields.join(",") === "child,parentKind"
+        ? [rule]
+        : [],
+    );
+    assert.strictEqual(bound.length, 1);
+  });
+
   it("admits lom:contribute under lom:lifeCycle and lom:metaMetadata only", () => {
     const parents = new Set(
       seedAdmission.filter((row) => row.child === "lom:contribute").map((row) => row.parent),

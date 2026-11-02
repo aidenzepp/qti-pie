@@ -7,11 +7,13 @@ import { inject } from "vitest";
 import { manifestGuards, ManifestGuardRefusal } from "#qti/import/guards/manifest.ts";
 import { manifestRows, NotQti3 } from "#qti/import/manifest.ts";
 import { Rows } from "#qti/import/tree.ts";
+import { ResourceLomLanguageSet } from "#qti/schema/lang.ts";
 import type { Entry } from "#qti/package/read.ts";
 import { listPackage, PackageReadError, readEntry } from "#qti/package/read.ts";
 import {
   Lom,
   LomFormat,
+  LomLanguage,
   LomObjectIdentifier,
   LomObjectTitle,
   LomString,
@@ -265,6 +267,36 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
       assert.deepStrictEqual(
         lexical.map(({ attribute, kind, value }) => ({ attribute, kind, value })),
         [{ attribute: "href", kind: "cp:resource", value: " choice.xml" }],
+      );
+    }),
+  );
+
+  suite.effect("metaData yields its meta-metadata language and no resource language set row", () =>
+    Effect.gen(function* metaDataLanguage() {
+      const { rows } = yield* importManifest(inject("fixtures").metaData);
+
+      const language = only(Rows.of(rows, LomLanguage).filter((row) => row.owner === "resource"));
+      assert.strictEqual(language.parentKind, "lom:metaMetadata");
+      assert.strictEqual(language.value, "en");
+      assert.deepStrictEqual(Rows.of(rows, ResourceLomLanguageSet), []);
+    }),
+  );
+
+  suite.effect("simple writes each LomLanguage the parentKind of its Edge", () =>
+    Effect.gen(function* simpleLanguageParents() {
+      const { rows } = yield* importManifest(inject("fixtures").simple);
+      const languages = Rows.of(rows, LomLanguage);
+
+      for (const language of languages) {
+        assert.strictEqual(
+          language.parentKind,
+          only(Rows.of(rows, Edge).filter((edge) => edge.child === language.id)).parentKind,
+        );
+      }
+
+      assert.deepStrictEqual(
+        new Set(languages.map((language) => language.parentKind)),
+        new Set(["lom:general", "lom:metaMetadata"]),
       );
     }),
   );

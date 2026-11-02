@@ -214,11 +214,11 @@ describe("lang", () => {
       );
     });
 
-    it("holds the resource LOM set's complete half over the resource-owned languages", () => {
+    it("holds the resource LOM set's complete half over the general category's languages", () => {
       assert.deepStrictEqual(
         fieldsOf(
           metadata.LomLanguage,
-          { owner: "resource" },
+          { owner: "resource", parentKind: "lom:general" },
           lang.relations.ResourceLomLanguageSet,
         ),
         [
@@ -227,6 +227,14 @@ describe("lang", () => {
             ["lom", "value"],
           ],
         ],
+      );
+      assert.deepStrictEqual(
+        fieldsOf(
+          metadata.LomLanguage,
+          { owner: "resource" },
+          lang.relations.ResourceLomLanguageSet,
+        ),
+        [],
       );
     });
 
