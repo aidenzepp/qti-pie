@@ -131,8 +131,9 @@ export const hash12 = (spec: FixtureSpec): string =>
   transformHash(spec, FIXTURES_VERSION).slice(0, 12);
 
 /**
- * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-broken
- * packages, each the same package with the edits of its row in the spec table.
+ * The names `materialize` accepts: `simple`, its seven variants, the eleven hand-broken packages
+ * and the metadata and content cuts with their negatives, each the same package with the edits of
+ * its row in the spec table.
  */
 export const fixtureNames = [
   "simple",
@@ -176,6 +177,27 @@ export const fixtureNames = [
   "extmeta-item-href",
   "extmeta-two-resources",
   "extmeta-hrefless",
+  "variant",
+  "variant-padded",
+  "variant-301",
+  "variant-self-ref",
+  "variant-no-resource",
+  "variant-id-clash",
+  "variant-tactile",
+  "variant-bad-uri",
+  "variant-two-atinteroperable",
+  "variant-two-complexity",
+  "variant-no-metadata",
+  "variant-before-file",
+  "outcome",
+  "outcome-title",
+  "lti301",
+  "lti300",
+  "lti300-as-301",
+  "bytes",
+  "bytes-webcontent-item",
+  "resproc",
+  "resproc-webcontent",
 ] as const;
 
 /**
@@ -816,6 +838,423 @@ const overSimple = (name: string, edits: readonly Edit[]): FixtureSpec => ({
 });
 
 /**
+ * The namespace of the content packaging extension, from the `targetNamespace` of
+ * `imsqtiv3p0_cpextv1p2_v1p0.xsd`: the `cpx:variant` element lives here.
+ */
+const cpxNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2";
+
+/**
+ * The namespace of the access for all digital resource description, from the `targetNamespace` of
+ * `imsqtiv3p0_afa3p0drd_v1p0.xsd`.
+ */
+const drdNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0drd_v1p0";
+
+/**
+ * The `Access_For_All_Resource.Type` children `variant` writes, in the sequence order the DRD
+ * schema gives: `accessMode`, `adaptationType`, then `languageOfAdaptation`.
+ */
+const drdChildren: readonly Lines[] = [
+  leaf("drd:accessMode", "textual"),
+  leaf("drd:adaptationType", "ext:stacked_translation"),
+  leaf("drd:languageOfAdaptation", "es"),
+];
+
+/**
+ * The edit that declares `cpx` and `drd` on the manifest root, after `xmlns:imsqti` (line 6).
+ */
+const declareVariantNamespaces: Edit = replaceIn(
+  "imsmanifest.xml",
+  'xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" ',
+  `xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" ${CRLF}${" ".repeat(10)}xmlns:cpx="${cpxNamespace}" ${CRLF}${" ".repeat(10)}xmlns:drd="${drdNamespace}" `,
+);
+
+/**
+ * The first `file` of `choice`'s resource, before which `variant-before-file` moves its variant.
+ */
+const firstFile = '<file href="choice.xml"/>';
+
+/**
+ * The last `file` of `choice`'s resource, after which a variant belongs.
+ */
+const lastFile = '<file href="images/sign.png"/>';
+
+/**
+ * How a variant fixture differs from `variant`.
+ */
+interface VariantOptions {
+  /**
+   * The `cpx:variant`'s `identifier` as written.
+   */
+  readonly identifier?: string;
+  /**
+   * The `identifierref` of the variant: the resource it names.
+   */
+  readonly identifierref?: string;
+  /**
+   * The `drd:accessForAllResource` children, in the order written.
+   */
+  readonly children?: readonly Lines[];
+  /**
+   * Whether the variant has its `cpx:metadata` child.
+   */
+  readonly metadata?: boolean;
+  /**
+   * Whether the variant stands before the first `file` instead of after the last.
+   */
+  readonly beforeFile?: boolean;
+  /**
+   * The `schemaversion` text when it is not `3.0.0`.
+   */
+  readonly schemaversion?: string;
+}
+
+/**
+ * Build the edits of a variant fixture over `simple`: the Spanish copy of the item as
+ * `es/choice.xml`, its resource `choice_es`, the namespaces and a `cpx:variant` on `choice`.
+ *
+ * @param options - How the fixture differs from `variant`, whose defaults are the valid package.
+ * @returns The edits as plain data.
+ */
+const variantEdits = (options: VariantOptions = {}): readonly Edit[] => {
+  const {
+    beforeFile = false,
+    children = drdChildren,
+    identifier = "v1",
+    identifierref = "choice_es",
+    metadata = true,
+    schemaversion = "3.0.0",
+  } = options;
+  const variant: Lines = element(
+    "cpx:variant",
+    ` identifier="${identifier}" identifierref="${identifierref}"`,
+    metadata
+      ? element("cpx:metadata", "", element("drd:accessForAllResource", "", ...children))
+      : [],
+  );
+  const placement: Edit = beforeFile
+    ? replaceIn(
+        "imsmanifest.xml",
+        firstFile,
+        `${continuingAt(12, variant)}${CRLF}            ${firstFile}`,
+      )
+    : replaceIn("imsmanifest.xml", lastFile, `${lastFile}${CRLF}${atColumn(12, variant)}`);
+
+  return [
+    { _tag: "copyFile", from: "choice.xml", to: "es/choice.xml" },
+    replaceIn(
+      "es/choice.xml",
+      'identifier="choice" title="Unattended Luggage"',
+      'identifier="choice_es" title="Equipaje desatendido"',
+    ),
+    declareVariantNamespaces,
+    placement,
+    addResources(
+      recordResource("choice_es", ' type="imsqti_item_xmlv3p0" href="es/choice.xml"', [
+        "es/choice.xml",
+      ]),
+    ),
+    ...(schemaversion === "3.0.0"
+      ? []
+      : [
+          replaceIn(
+            "imsmanifest.xml",
+            "<schemaversion>3.0.0</schemaversion>",
+            `<schemaversion>${schemaversion}</schemaversion>`,
+          ),
+        ]),
+  ];
+};
+
+/**
+ * The DRD children of `variant-padded`: the three class witnesses of whitespace. `atInteroperable`
+ * (a boolean, collapsed) is padded and `languageOfAdaptation` (a `normalizedString`, replaced)
+ * holds a tab character reference; the variant's own `identifier` is padded in the options.
+ */
+const paddedDrdChildren: readonly Lines[] = [
+  leaf("drd:accessMode", "textual"),
+  leaf("drd:adaptationType", "ext:stacked_translation"),
+  leaf("drd:atInteroperable", " true "),
+  leaf("drd:languageOfAdaptation", "es&#9;ES"),
+];
+
+/**
+ * Build the DRD children of a variant negative from `variant`'s, with extra children placed in the
+ * sequence order of `Access_For_All_Resource.Type`.
+ *
+ * @param between - The children between `adaptationType` and `languageOfAdaptation`.
+ * @returns The children, `accessMode` and `adaptationType` first and `languageOfAdaptation` last.
+ */
+const drdWith = (...between: readonly Lines[]): readonly Lines[] => [
+  leaf("drd:accessMode", "textual"),
+  leaf("drd:adaptationType", "ext:stacked_translation"),
+  ...between,
+  leaf("drd:languageOfAdaptation", "es"),
+];
+
+/**
+ * The resource block of the test outcome that `CASEWithOutcome.zip`'s manifest holds
+ * (`Outcome_01`), its `imscp:` prefixes written as the default namespace and its curriculum
+ * standards block kept.
+ */
+const outcomeResource: Lines = element(
+  "resource",
+  ' identifier="Outcome_01" type="imsqti_outcomes_xmlv3p0" href="testoutcome01.xml"',
+  element(
+    "metadata",
+    "",
+    element(
+      "csmd:curriculumStandardsMetadataSet",
+      ' resourceLabel="Outcome (QTI 3.0)" resourcePartId="SCORE"',
+      element(
+        "csmd:curriculumStandardsMetadata",
+        ' providerId="IMS_CASE_REGISTER"',
+        element(
+          "csmd:setOfGUIDs",
+          ' region="Texas" version="1.0"',
+          note("UUID v1.0 used in the Texas examples"),
+          ...csmGuids.manifest[0].map((guid) => labelledGuid("Outcome variable", guid)),
+        ),
+        element(
+          "csmd:setOfGUIDs",
+          ' region="Florida" version="1.0"',
+          note("UUID v4.0 used in the Florida examples"),
+          ...csmGuids.manifest[1].map((guid) => labelledGuid("Outcome variable", guid)),
+        ),
+      ),
+    ),
+    mdGroup(
+      "lom",
+      mdGroup(
+        "general",
+        mdText("title", "Mapping between an Outcome variable for a test and the CSM"),
+      ),
+    ),
+  ),
+  ['<file href="testoutcome01.xml"/>'],
+);
+
+/**
+ * The edits of `outcome`: the `csmd` declaration, the `Outcome_01` resource, its file from
+ * `CASEWithOutcome.zip` and a `dependency` on it after `choice`'s last `file`.
+ */
+const outcomeEdits: readonly Edit[] = [
+  declareCsmd,
+  replaceIn(
+    "imsmanifest.xml",
+    lastFile,
+    `${lastFile}${CRLF}            <dependency identifierref="Outcome_01"/>`,
+  ),
+  addResources(outcomeResource),
+  {
+    _tag: "addFile",
+    path: "testoutcome01.xml",
+    source: {
+      path: "testoutcome01.xml",
+      zip: "qtiv3-examples/packaging/CASEWithOutcome/CASEWithOutcome.zip",
+    },
+  },
+];
+
+/**
+ * The tarball member the two `lti` fixtures derive from, the package `materializePackage("lti")`
+ * extracts.
+ */
+const ltiMember = "qtiv3-examples/packaging/lti/lti.zip";
+
+/**
+ * The unpackaged QTI fragment `bytes` carries, whose root is `div`.
+ */
+const fragmentMember = "qtiv3-examples/tests/rtest01-fragment.xml";
+
+/**
+ * A well-formed `xs:schema` of ten lines, the payload of `bytes`' `controlfile`.
+ */
+const schemaStub = [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"',
+  '           targetNamespace="urn:example:control"',
+  '           elementFormDefault="qualified">',
+  '  <xs:element name="control">',
+  "    <xs:complexType>",
+  '      <xs:attribute name="id" type="xs:string"/>',
+  "    </xs:complexType>",
+  "  </xs:element>",
+  "</xs:schema>",
+  "",
+].join("\n");
+
+/**
+ * A two-lexeme pronunciation lexicon, the payload of `bytes`' `pls`.
+ */
+const lexicon = [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<lexicon version="1.0" xmlns="http://www.w3.org/2005/01/pronunciation-lexicon"',
+  '         alphabet="ipa" xml:lang="en">',
+  "  <lexeme><grapheme>luggage</grapheme><phoneme>lʌɡɪdʒ</phoneme></lexeme>",
+  "  <lexeme><grapheme>sign</grapheme><phoneme>saɪn</phoneme></lexeme>",
+  "</lexicon>",
+  "",
+].join("\n");
+
+/**
+ * One packaged-file resource of `bytes`: its type, the file's path and where the bytes come from.
+ */
+interface BytesResource {
+  readonly href: string;
+  readonly identifier: string;
+  readonly source: FileSource;
+  readonly type: string;
+}
+
+/**
+ * The nine resources `bytes` adds to `simple`, one per type that nothing reads as QTI.
+ */
+const bytesResources: readonly BytesResource[] = [
+  {
+    href: "control/item.xsd",
+    identifier: "r-controlfile",
+    source: { text: schemaStub },
+    type: "controlfile",
+  },
+  { href: "speech/words.pls", identifier: "r-pls", source: { text: lexicon }, type: "pls" },
+  {
+    href: "css/two.css",
+    identifier: "r-css2",
+    source: { text: "p { margin: 0; }\n" },
+    type: "css2",
+  },
+  {
+    href: "css/three.css",
+    identifier: "r-css3",
+    source: { text: "p { color: rebeccapurple; }\n" },
+    type: "css3",
+  },
+  {
+    href: "web/page.html",
+    identifier: "r-webcontent",
+    source: {
+      text: "<!DOCTYPE html>\n<html><head><title>Page</title></head><body><p>Hello</p></body></html>\n",
+    },
+    type: "webcontent",
+  },
+  {
+    href: "app/launch.xml",
+    identifier: "r-app",
+    source: {
+      text: '<?xml version="1.0" encoding="UTF-8"?>\n<launch><tool>viewer</tool></launch>\n',
+    },
+    type: "associatedcontent/learning-application-resource",
+  },
+  {
+    href: "extra/notes.txt",
+    identifier: "r-extension",
+    source: { text: "An extension resource.\n" },
+    type: "extension",
+  },
+  {
+    href: "meta/other.xml",
+    identifier: "r-extmeta",
+    source: {
+      text: '<?xml version="1.0" encoding="UTF-8"?>\n<record><note>arbitrary</note></record>\n',
+    },
+    type: "resourceextmetadata/xml",
+  },
+  {
+    href: "fragments/rtest01-fragment.xml",
+    identifier: "r-fragment",
+    source: { member: fragmentMember },
+    type: "imsqti_fragment_xmlv3p0",
+  },
+];
+
+/**
+ * Build the manifest edit of `bytes`: the resources added after `choice`.
+ *
+ * @param resources - The resources to add.
+ * @returns The edit as plain data.
+ */
+const bytesManifestEdit = (resources: readonly BytesResource[]): Edit =>
+  addResources(
+    ...resources.map((resource) =>
+      recordResource(resource.identifier, ` type="${resource.type}" href="${resource.href}"`, [
+        resource.href,
+      ]),
+    ),
+  );
+
+/**
+ * Build the file edits of `bytes`: each resource's file added from its source.
+ *
+ * @param resources - The resources whose files are added.
+ * @returns The edits as plain data.
+ */
+const bytesFileEdits = (resources: readonly BytesResource[]): readonly Edit[] =>
+  resources.map((resource): Edit => ({
+    _tag: "addFile",
+    path: resource.href,
+    source: resource.source,
+  }));
+
+/**
+ * The resources of `bytes` that are not its `webcontent`, which `bytes-webcontent-item` replaces.
+ */
+const bytesWithoutWebcontent: readonly BytesResource[] = bytesResources.filter(
+  (resource) => resource.type !== "webcontent",
+);
+
+/**
+ * The response processing template `resproc` packages, as a file of `maxfiles.zip`.
+ */
+const matchCorrect: FileSource = {
+  path: "rptemplates/match_correct.xml",
+  zip: "qtiv3-examples/packaging/maxfiles/maxfiles.zip",
+};
+
+/**
+ * Build the edits of `resproc`: the resource `rp1` of the given type and its file.
+ *
+ * @param type - The resource's type.
+ * @returns The edits as plain data.
+ */
+const resprocEdits = (type: string): readonly Edit[] => [
+  addResources(
+    recordResource("rp1", ` type="${type}" href="rp/match_correct.xml"`, ["rp/match_correct.xml"]),
+  ),
+  { _tag: "addFile", path: "rp/match_correct.xml", source: matchCorrect },
+];
+
+/**
+ * Build a spec over the `lti` package's member.
+ *
+ * @param name - The fixture's name.
+ * @param edits - The fixture's edits.
+ * @returns The spec.
+ */
+const overLti = (name: string, edits: readonly Edit[]): FixtureSpec => ({
+  edits,
+  member: ltiMember,
+  name,
+});
+
+/**
+ * The edit that makes the `lti` manifest's resource the basic LTI type.
+ */
+const ltiBasicType: Edit = replaceIn(
+  "imsmanifest.xml",
+  'type="imslti_xmlv1p1"',
+  'type="imsbasiclti_xmlv1p3"',
+);
+
+/**
+ * The edit that makes the `lti` manifest's `schemaversion` `3.0.1`.
+ */
+const ltiVersion301: Edit = replaceIn(
+  "imsmanifest.xml",
+  "<schemaversion>3.0.0</schemaversion>",
+  "<schemaversion>3.0.1</schemaversion>",
+);
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
  *
@@ -875,6 +1314,17 @@ const specs: Record<FixtureName, FixtureSpec> = {
     member: simpleMember,
     name: "body-empty",
   },
+  bytes: overSimple("bytes", [
+    bytesManifestEdit(bytesResources),
+    ...bytesFileEdits(bytesResources),
+  ]),
+  "bytes-webcontent-item": overSimple("bytes-webcontent-item", [
+    bytesManifestEdit([
+      ...bytesWithoutWebcontent,
+      { href: "choice.xml", identifier: "r-webcontent", source: { text: "" }, type: "webcontent" },
+    ]),
+    ...bytesFileEdits(bytesWithoutWebcontent),
+  ]),
   "choice-bounds": {
     edits: [replaceIn("choice.xml", 'max-choices="1"', 'min-choices="2" max-choices="1"')],
     member: simpleMember,
@@ -1056,11 +1506,19 @@ const specs: Record<FixtureName, FixtureSpec> = {
       mdText("title", "Unattended Luggage, again"),
     ),
   ]),
+  lti300: overLti("lti300", [ltiBasicType]),
+  "lti300-as-301": overLti("lti300-as-301", [ltiBasicType, ltiVersion301]),
+  lti301: overLti("lti301", [ltiVersion301]),
   nestedqmd: overSimple("nestedqmd", [takeQtiMetadataOut, putQtiMetadataIn(resourceLomEnd, 20)]),
   "nestedqmd-both": overSimple("nestedqmd-both", [putQtiMetadataIn(resourceLomEnd, 20)]),
   "nestedqmd-manifest-lom": overSimple("nestedqmd-manifest-lom", [
     takeQtiMetadataOut,
     putQtiMetadataIn(manifestLomEnd, 12),
+  ]),
+  outcome: overSimple("outcome", outcomeEdits),
+  "outcome-title": overSimple("outcome-title", [
+    ...outcomeEdits,
+    replaceIn("testoutcome01.xml", 'identifier="SCORE"', 'identifier="SCORE" title="x"'),
   ]),
   "padded-attributes": {
     edits: [
@@ -1109,6 +1567,8 @@ const specs: Record<FixtureName, FixtureSpec> = {
     member: simpleMember,
     name: "padded-text",
   },
+  resproc: overSimple("resproc", resprocEdits("imsqti_resprocessing_xmlv3p0")),
+  "resproc-webcontent": overSimple("resproc-webcontent", resprocEdits("webcontent")),
   simple: { edits: [], member: simpleMember, name: "simple" },
   "title-mismatch": {
     edits: [
@@ -1149,6 +1609,49 @@ const specs: Record<FixtureName, FixtureSpec> = {
     member: simpleMember,
     name: "utf16",
   },
+  variant: overSimple("variant", variantEdits()),
+  "variant-301": overSimple("variant-301", variantEdits({ schemaversion: "3.0.1" })),
+  "variant-bad-uri": overSimple(
+    "variant-bad-uri",
+    variantEdits({ children: drdWith(leaf("drd:hasAdaptation", "a%zz")) }),
+  ),
+  "variant-before-file": overSimple("variant-before-file", variantEdits({ beforeFile: true })),
+  "variant-id-clash": overSimple("variant-id-clash", variantEdits({ identifier: "choice_es" })),
+  "variant-no-metadata": overSimple("variant-no-metadata", variantEdits({ metadata: false })),
+  "variant-no-resource": overSimple(
+    "variant-no-resource",
+    variantEdits({ identifierref: "nobody" }),
+  ),
+  "variant-padded": overSimple(
+    "variant-padded",
+    variantEdits({ children: paddedDrdChildren, identifier: " v1 " }),
+  ),
+  "variant-self-ref": overSimple("variant-self-ref", variantEdits({ identifierref: "choice" })),
+  "variant-tactile": overSimple(
+    "variant-tactile",
+    variantEdits({
+      children: [
+        leaf("drd:accessMode", "tactile "),
+        leaf("drd:adaptationType", "ext:stacked_translation"),
+        leaf("drd:languageOfAdaptation", "es"),
+      ],
+    }),
+  ),
+  "variant-two-atinteroperable": overSimple(
+    "variant-two-atinteroperable",
+    variantEdits({
+      children: drdWith(leaf("drd:atInteroperable", "true"), leaf("drd:atInteroperable", "false")),
+    }),
+  ),
+  "variant-two-complexity": overSimple(
+    "variant-two-complexity",
+    variantEdits({
+      children: drdWith(
+        leaf("drd:educationalComplexityOfAdaptation", "enriched"),
+        leaf("drd:educationalComplexityOfAdaptation", "simplified"),
+      ),
+    }),
+  ),
   "windows-1252": {
     edits: [declareEncoding("windows-1252"), afterPicture("\u0080")],
     member: simpleMember,
