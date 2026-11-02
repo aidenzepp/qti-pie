@@ -14,7 +14,11 @@ import type { AdmissionRow } from "#qti/schema/kinds/generic.ts";
 import { admission } from "#qti/schema/seed/admission.ts";
 import type { BindingFitRow } from "#qti/schema/seed/binding-fit.ts";
 import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
-import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
+import {
+  operatorArity,
+  operatorArityMax,
+  operatorArityUnbounded,
+} from "#qti/schema/seed/operator-arity.ts";
 import { resourceTypes } from "#qti/schema/seed/resource-types.ts";
 import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
 
@@ -225,6 +229,11 @@ const allTables: readonly Rendered[] = [
     columns: [handle("kind", "node_kind", (row) => row.kind), integer("max", (row) => row.max)],
     name: "operator_arity_max",
     rows: operatorArityMax,
+  }),
+  renderTable<(typeof operatorArityUnbounded)[number]>({
+    columns: [handle("kind", "node_kind", (row) => row.kind)],
+    name: "operator_arity_unbounded",
+    rows: operatorArityUnbounded,
   }),
 ];
 

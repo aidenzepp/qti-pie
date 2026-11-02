@@ -12,6 +12,7 @@ export const seededNames = [
   "BindingFit",
   "OperatorArity",
   "OperatorArityMax",
+  "OperatorArityUnbounded",
   "ResourceTypeOf",
   "RootOfType",
 ] as const;

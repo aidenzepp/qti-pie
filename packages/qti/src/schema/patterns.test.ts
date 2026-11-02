@@ -269,3 +269,208 @@ describe("patterns", () => {
     assert.isFalse(admits(patterns.point, "u", "1,2"));
   });
 });
+
+/**
+ * The phase-3 list and coordinate patterns are this phase's regex-budget experiment: each is built
+ * into a one-field relation, because grizzle refuses a source that is too complex when `relation`
+ * is called, never at `str.regex` or `tsc`. The engine exposes no field validator without a
+ * database, so admit and refuse are asserted through `new RegExp(source, "u")` on the same source.
+ */
+describe("processing patterns", () => {
+  const probes = [
+    [
+      "identifierList",
+      () =>
+        relation("PidentifierList", { id: uuid, v: str.regex(patterns.identifierList) }, ["id"]),
+    ],
+    [
+      "toleranceList",
+      () => relation("PtoleranceList", { id: uuid, v: str.regex(patterns.toleranceList) }, ["id"]),
+    ],
+    ["coords", () => relation("Pcoords", { id: uuid, v: str.regex(patterns.coords) }, ["id"])],
+  ] as const;
+
+  for (const [name, probe] of probes) {
+    it.effect(`grizzle builds a relation over ${name}`, () =>
+      Effect.try(() => probe()).pipe(Effect.asVoid),
+    );
+  }
+
+  it("coords", () => {
+    const { coords } = patterns;
+    for (const value of ["0,0,10,10", "50%,50%,10"]) {
+      assert.isTrue(admits(coords, "u", value), value);
+    }
+    for (const value of ["0,0", "0,0,10,10 ", "0, 0, 10, 10"]) {
+      assert.isFalse(admits(coords, "u", value), value);
+    }
+  });
+
+  it("identifierList", () => {
+    const { identifierList } = patterns;
+    for (const value of ["", "A", "A B"]) {
+      assert.isTrue(admits(identifierList, "u", value), value);
+    }
+    for (const value of ["A,B", " A B", "A  B"]) {
+      assert.isFalse(admits(identifierList, "u", value), value);
+    }
+  });
+
+  it("toleranceList", () => {
+    const { toleranceList } = patterns;
+    for (const value of ["", "0.5", "0.5 1", "T"]) {
+      assert.isTrue(admits(toleranceList, "u", value), value);
+    }
+    for (const value of ["0.5,1", "0.5 1 "]) {
+      assert.isFalse(admits(toleranceList, "u", value), value);
+    }
+  });
+
+  const referenceProbes = [
+    [
+      "integerOrVariableRef",
+      () =>
+        relation(
+          "PintegerOrVariableRef",
+          { id: uuid, v: str.regex(patterns.integerOrVariableRef) },
+          ["id"],
+        ),
+    ],
+    [
+      "floatOrVariableRef",
+      () =>
+        relation("PfloatOrVariableRef", { id: uuid, v: str.regex(patterns.floatOrVariableRef) }, [
+          "id",
+        ]),
+    ],
+    [
+      "intOrIdentifier",
+      () =>
+        relation("PintOrIdentifier", { id: uuid, v: str.regex(patterns.intOrIdentifier) }, ["id"]),
+    ],
+    [
+      "baseType",
+      () => relation("PbaseType", { id: uuid, v: str.regex(patterns.baseType) }, ["id"]),
+    ],
+    [
+      "toleranceMode",
+      () => relation("PtoleranceMode", { id: uuid, v: str.regex(patterns.toleranceMode) }, ["id"]),
+    ],
+    [
+      "roundingMode",
+      () => relation("ProundingMode", { id: uuid, v: str.regex(patterns.roundingMode) }, ["id"]),
+    ],
+    ["shape", () => relation("Pshape", { id: uuid, v: str.regex(patterns.shape) }, ["id"])],
+    [
+      "mathOperatorName",
+      () =>
+        relation("PmathOperatorName", { id: uuid, v: str.regex(patterns.mathOperatorName) }, [
+          "id",
+        ]),
+    ],
+    [
+      "statsOperatorName",
+      () =>
+        relation("PstatsOperatorName", { id: uuid, v: str.regex(patterns.statsOperatorName) }, [
+          "id",
+        ]),
+    ],
+    [
+      "mathConstantName",
+      () =>
+        relation("PmathConstantName", { id: uuid, v: str.regex(patterns.mathConstantName) }, [
+          "id",
+        ]),
+    ],
+    [
+      "xincludeParse",
+      () => relation("PxincludeParse", { id: uuid, v: str.regex(patterns.xincludeParse) }, ["id"]),
+    ],
+  ] as const;
+
+  for (const [name, probe] of referenceProbes) {
+    it.effect(`grizzle builds a relation over ${name}`, () =>
+      Effect.try(() => probe()).pipe(Effect.asVoid),
+    );
+  }
+
+  it("integerOrVariableRef", () => {
+    const { integerOrVariableRef } = patterns;
+    for (const value of ["3", "-3", "+3", "N"]) {
+      assert.isTrue(admits(integerOrVariableRef, "u", value), value);
+    }
+    for (const value of [" N ", "3 N", "3.0"]) {
+      assert.isFalse(admits(integerOrVariableRef, "u", value), value);
+    }
+  });
+
+  it("floatOrVariableRef", () => {
+    const { floatOrVariableRef } = patterns;
+    for (const value of ["0.5", "1e3", "N"]) {
+      assert.isTrue(admits(floatOrVariableRef, "u", value), value);
+    }
+    assert.isFalse(admits(floatOrVariableRef, "u", " 0.5"));
+  });
+
+  it("intOrIdentifier", () => {
+    const { intOrIdentifier } = patterns;
+    for (const value of ["1", "N"]) {
+      assert.isTrue(admits(intOrIdentifier, "u", value), value);
+    }
+    assert.isFalse(admits(intOrIdentifier, "u", "1.5"));
+  });
+
+  /**
+   * Each enumeration admits exactly the XSD values and refuses a padded, a re-cased and a
+   * prefix-only form of the first.
+   */
+  const enumerations = [
+    [
+      "baseType",
+      patterns.baseType,
+      "boolean directedPair duration file float identifier integer pair point string uri",
+    ],
+    ["toleranceMode", patterns.toleranceMode, "absolute exact relative"],
+    ["roundingMode", patterns.roundingMode, "decimalPlaces significantFigures"],
+    ["shape", patterns.shape, "circle default ellipse poly rect"],
+    [
+      "mathOperatorName",
+      patterns.mathOperatorName,
+      "sin cos tan sec csc cot asin acos atan atan2 asec acsc acot sinh cosh tanh sech csch coth log ln exp abs signum floor ceil toDegrees toRadians",
+    ],
+    [
+      "statsOperatorName",
+      patterns.statsOperatorName,
+      "mean sampleVariance sampleSD popVariance popSD",
+    ],
+    ["mathConstantName", patterns.mathConstantName, "pi e"],
+    ["xincludeParse", patterns.xincludeParse, "xml text"],
+  ] as const;
+
+  for (const [name, source, values] of enumerations) {
+    it(`${name} admits exactly its XSD values`, () => {
+      const members = values.split(" ");
+      for (const value of members) {
+        assert.isTrue(admits(source, "u", value), value);
+      }
+      const [first = ""] = members;
+      for (const value of [` ${first}`, `${first} `, `${first.toUpperCase()}x`, `${first}x`, ""]) {
+        assert.isFalse(admits(source, "u", value), JSON.stringify(value));
+      }
+    });
+  }
+
+  it("toleranceMode refuses a padded or re-cased value", () => {
+    assert.isFalse(admits(patterns.toleranceMode, "u", " exact"));
+    assert.isFalse(admits(patterns.toleranceMode, "u", "Exact"));
+  });
+
+  it("shape refuses rectangle", () => {
+    assert.isFalse(admits(patterns.shape, "u", "rectangle"));
+  });
+
+  it("mathOperatorName refuses sign", () => {
+    assert.isTrue(admits(patterns.mathOperatorName, "u", "signum"));
+    assert.isFalse(admits(patterns.mathOperatorName, "u", "sign"));
+  });
+});

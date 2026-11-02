@@ -9,13 +9,15 @@
  * third, so a caller and a test see one closed roster, {@link ImportRule}, whichever refused.
  */
 import { Match, Predicate, Schema } from "effect";
-import type { GuardRefusal } from "#qti/import/guards/tree.ts";
 import type { ItemGuardRefusal } from "#qti/import/guards/item.ts";
 import type { ManifestGuardRefusal } from "#qti/import/guards/manifest.ts";
+import type { ProcessingGuardRefusal } from "#qti/import/guards/processing.ts";
+import type { GuardRefusal } from "#qti/import/guards/tree.ts";
 import type { UsageGuardRefusal } from "#qti/import/guards/usage.ts";
 import type { ExternalRefusal } from "#qti/import/record.ts";
 import type { ItemRefusal } from "#qti/import/item.ts";
 import type { NotQti3 } from "#qti/import/manifest.ts";
+import type { ProcessingRefused } from "#qti/import/processing.ts";
 import type { UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { PackageReadError } from "#qti/package/read.ts";
 import type { ZipRefusal } from "#qti/package/zip.ts";
@@ -25,6 +27,11 @@ import type { ReaderRefusal, WellFormednessError } from "#qti/xml/errors.ts";
 /**
  * Every name a refused import may carry: the rules the schema holds at commit, the guards that run
  * before the apply and the reader's refusals.
+ *
+ * The `P` names are the rule ids of the processing model's refusals (spec 4.10): bin 1 is the
+ * schema's (`P1` to `P13`, `P17`, `P36`), `P5` the builder's, and `P20` to `P32` the checker's and
+ * the guards'. `arm-expression`, `ref-exists`, `condition-edge` and `outcome-minmax-kind` name the
+ * schema's structural laws of that model, which 4.10 lists as representatives without an id.
  */
 export const ImportRule = Schema.Literals([
   "admission",
@@ -115,6 +122,38 @@ export const ImportRule = Schema.Literals([
   "record-unnamed",
   "entry-kind",
   "zip-format",
+  "P1",
+  "P2",
+  "P3",
+  "P4",
+  "P5",
+  "P6",
+  "P7",
+  "P8",
+  "P9",
+  "P10",
+  "P11",
+  "P12",
+  "P13",
+  "P17",
+  "P20",
+  "P21",
+  "P22",
+  "P23",
+  "P24",
+  "P25",
+  "P26",
+  "P27",
+  "P28",
+  "P29",
+  "P30",
+  "P31",
+  "P32",
+  "P36",
+  "arm-expression",
+  "ref-exists",
+  "condition-edge",
+  "outcome-minmax-kind",
 ]);
 
 /**
@@ -217,13 +256,21 @@ const keyRules = new Map<string, Rule>([
   ["ManifestSchema.(metadata)", "schema-single"],
   ["ManifestSchemaVersion.(metadata)", "schema-single"],
   ["Organizations.(manifest)", "manifest-children"],
+  ["OutcomeElseArm.(condition)", "P4"],
+  ["OutcomeIfArm.(condition)", "P4"],
   ["Package.(id)", "manifest-identifier"],
   ["Prompt.(parent)", "prompt-single"],
   ["Resource.(package,identifier)", "resource-identifier"],
   ["ResourceMetadata.(resource)", "resource-metadata-single"],
   ["Resources.(manifest)", "manifest-children"],
+  ["ResponseElseArm.(condition)", "P4"],
+  ["ResponseIfArm.(condition)", "P4"],
   ["ResponseProcessingItem.(item)", "processing-single"],
+  ["RuleOperand.(child)", "P3"],
   ["SimpleChoice.(interaction,identifier)", "choice-key"],
+  ["TemplateElseArm.(condition)", "P4"],
+  ["TemplateIfArm.(condition)", "P4"],
+  ["TemplateProcessing.(item)", "P17"],
   ["TypedDeclaration.(document,identifier)", "declaration-key"],
   ["ValueSet.(declaration,role)", "value-set-role"],
 ]);
@@ -252,11 +299,22 @@ const keyRule = (relation: string, fields: readonly string[]): Rule | undefined 
  */
 const checkRules = new Map<string, Rule>([
   ["BindingMax", "binding-max"],
+  ["BuiltInRefKind", "P9"],
   ["ChoiceBounds", "choice-bounds"],
   ["DeclarationNotReserved", "declaration-reserved"],
+  ["DeclaredRefKind", "P8"],
   ["DependencyNotSelf", "dependency-target"],
+  ["EqualRoundedFigures", "P10"],
+  ["IndexPositive", "P11"],
   ["LomLearningResourceType", "lom-learning-resource-type"],
+  ["OutcomeMinMaxKind", "outcome-minmax-kind"],
   ["ProcessingRoot", "processing-root"],
+  ["RepeatInt", "P6"],
+  ["RoundToFigures", "P10"],
+  ["RuleOperandKind", "P3"],
+  ["TemplateParameterReferrer", "P13"],
+  ["TemplateParameterRoot", "P13"],
+  ["VariableWeightInTest", "P12"],
   ["VariantNotSelf", "variant-target"],
 ]);
 
@@ -268,6 +326,8 @@ const capacityRules = new Map<string, Rule>([
   ["ChoiceInteraction<SimpleChoice", "choice-present"],
   ["Document<DocumentIdentifier", "root-identifier"],
   ["Document<DocumentTitle", "root-title"],
+  ["Expression<Operand", "P2"],
+  ["ExpressionMax<Operand", "P2"],
   ["ManifestMetadata<ManifestSchema", "schema-single"],
   ["ManifestMetadata<ManifestSchemaVersion", "schema-single"],
   ["Package<ManifestMetadata", "manifest-children"],
@@ -300,6 +360,108 @@ const containedRules = new Map<string, Rule>([
   ["TypedBinding>BindingFit", "binding-fit"],
 ]);
 
+/**
+ * The relations the schema's `Literal` value arms are, `valueArms("Literal")`'s eleven.
+ */
+const literalArms: ReadonlySet<string> = new Set([
+  "LiteralBoolean",
+  "LiteralDirectedPair",
+  "LiteralDuration",
+  "LiteralFile",
+  "LiteralFloat",
+  "LiteralIdentifier",
+  "LiteralInteger",
+  "LiteralPair",
+  "LiteralPoint",
+  "LiteralString",
+  "LiteralUri",
+]);
+
+/**
+ * The relations that hold the arity seeds a processing expression is judged against.
+ */
+const arityRelations: ReadonlySet<string> = new Set([
+  "OperatorArity",
+  "OperatorArityMax",
+  "OperatorArityUnbounded",
+]);
+
+/**
+ * The relations of the six condition arms that bind their condition copy into `Edge`, and of the
+ * operand rows that bind their position into it.
+ */
+const edgeBoundArms: ReadonlySet<string> = new Set([
+  "Operand",
+  "OutcomeElseArm",
+  "OutcomeIfArm",
+  "ResponseElseArm",
+  "ResponseIfArm",
+  "RuleOperand",
+  "TemplateElseArm",
+  "TemplateIfArm",
+]);
+
+/**
+ * The rule of a containment of the processing model, by the relation it leaves and the one it
+ * enters, as `from>to`.
+ */
+const processingContained = new Map<string, Rule>([
+  ["BuiltInRef>Node", "P9"],
+  ["DeclaredRef>Declaration", "P8"],
+  ["DeclaredRef>Node", "P8"],
+  ["Equal>EqualTolerance", "P36"],
+  ["EqualTolerance>Equal", "P36"],
+  ["Expression>ExpressionMax", "P2"],
+  ["Expression>Node", "arm-expression"],
+  ["ExpressionMax>Expression", "P2"],
+  ["OutcomeMaximumArm>OutcomeMinMax", "outcome-minmax-kind"],
+  ["OutcomeMinMax>Node", "outcome-minmax-kind"],
+  ["OutcomeMinimumArm>OutcomeMinMax", "outcome-minmax-kind"],
+  ["ResponseProcessing>Node", "processing-root"],
+  ["ResponseProcessingItem>AssessmentItem", "processing-item"],
+  ["ResponseProcessingItem>Edge", "processing-item"],
+  ["RuleOperand>Node", "P3"],
+  ["TemplateParameterRef>Node", "P13"],
+  ["TemplateProcessing>AssessmentItem", "P17"],
+  ["TemplateProcessing>Edge", "P17"],
+  ["VariableRef>Node", "ref-exists"],
+  ["VariableWeightIdentifier>Node", "P12"],
+  ["VariableWeightIdentifier>Variable", "P12"],
+]);
+
+/**
+ * The rule of a containment of the processing model, or nothing when it is not one: by the
+ * relation it enters first (the arity seeds, `RuleOperand`, `VariableRef`, `Expression`, `Edge`),
+ * then by the exact pair.
+ */
+const processingContainedRule = (from: LawSide, to: LawSide): Rule | undefined => {
+  if (arityRelations.has(to.relation)) {
+    return "P2";
+  }
+
+  if (to.relation === "RuleOperand") {
+    return "P3";
+  }
+
+  if (to.relation === "VariableRef") {
+    return "ref-exists";
+  }
+
+  if (literalArms.has(from.relation)) {
+    return "P7";
+  }
+
+  if (to.relation === "Edge" && edgeBoundArms.has(from.relation)) {
+    return "condition-edge";
+  }
+
+  if (to.relation === "Expression") {
+    return "arm-expression";
+  }
+
+  return processingContained.get(`${from.relation}>${to.relation}`);
+};
+
 const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
   if (from.relation === "LomObjectIdentifier") {
     return "lom-identifier";
@@ -312,6 +474,11 @@ const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
   const rule = containedRules.get(`${from.relation}>${to.relation}`);
   if (rule !== undefined) {
     return rule;
+  }
+
+  const processing = processingContainedRule(from, to);
+  if (processing !== undefined) {
+    return processing;
   }
 
   if (to.relation === "ResourceTypeOf") {
@@ -332,7 +499,9 @@ const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
  * that spells the same language, so a source names every column that uses it: `anyUri` is also the
  * `Uri` value arm's, the three DRD URIs', `CsmCaseItemUri.value`'s, `Statistic.context`'s and the
  * two glossaries' (every `anyUri` column of the usage and DRD relations is `uri-syntax` through
- * it); and `hrefInPackage` is the pattern of every path column.
+ * it); and `hrefInPackage` is the pattern of every path column. The `Literal` value arms share
+ * their sources with `DeclaredValue`'s, so a pattern law cannot tell `P7` from `value-lexical`: P7
+ * is named by the other laws of the `Literal` arms (the pattern law carries no relation).
  *
  * A source shared with another phase's columns keeps that phase's rule, since the law carries no
  * relation to tell the columns apart: `ncName`, `xsInteger`, `xsDouble`, `pair`, `point`,
@@ -343,7 +512,9 @@ const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
  */
 const patternRules = new Map<string, Rule>([
   [patterns.anyUri, "uri-syntax"],
+  [patterns.baseType, "P6"],
   [patterns.booleanLiteral, "value-lexical"],
+  [patterns.coords, "P6"],
   [patterns.drdAccessMode, "drd-value"],
   [patterns.drdAdaptationDetail, "drd-value"],
   [patterns.drdAdaptationMediaType, "drd-value"],
@@ -353,13 +524,25 @@ const patternRules = new Map<string, Rule>([
   [patterns.drdDisplayTransformability, "drd-value"],
   [patterns.drdEducationalComplexityOfAdaptation, "drd-value"],
   [patterns.drdHazard, "drd-value"],
+  [patterns.floatOrVariableRef, "P6"],
   [patterns.hrefInPackage, "href-path"],
+  [patterns.identifierList, "P6"],
+  [patterns.integerOrVariableRef, "P6"],
+  [patterns.intOrIdentifier, "P6"],
+  [patterns.mathConstantName, "P6"],
+  [patterns.mathOperatorName, "P6"],
   [patterns.ncName, "value-lexical"],
   [patterns.pair, "value-lexical"],
   [patterns.point, "value-lexical"],
+  [patterns.roundingMode, "P6"],
+  [patterns.shape, "P6"],
+  [patterns.statsOperatorName, "P6"],
+  [patterns.toleranceList, "P6"],
+  [patterns.toleranceMode, "P6"],
   [patterns.toolString, "tool-string-length"],
   [patterns.uncollapsed, "attribute-lexical"],
   [patterns.usageDate, "usage-lexical"],
+  [patterns.xincludeParse, "P6"],
   [patterns.xsBoolean, "value-lexical"],
   [patterns.xsDouble, "value-lexical"],
   [patterns.xsInteger, "value-lexical"],
@@ -588,6 +771,16 @@ const phaseRule = (law: ImportLaw, witnessKind?: string): Rule | undefined => {
   return undefined;
 };
 
+/**
+ * The three condition roots whose `mirrors` with their `if` arm state that a condition holds an
+ * `if`.
+ */
+const conditionMirrors: ReadonlySet<string> = new Set([
+  "OutcomeConditionArm",
+  "ResponseConditionArm",
+  "TemplateConditionArm",
+]);
+
 const some = (rule: Rule | undefined): Mapped | undefined =>
   rule === undefined ? undefined : named(rule);
 
@@ -615,6 +808,10 @@ const recognized = (law: ImportLaw, witnessKind?: string): Mapped | undefined =>
 
   if (law.kind === "mirrors") {
     const between = new Set([law.from.relation, law.to.relation]);
+
+    if (conditionMirrors.has(law.from.relation) || conditionMirrors.has(law.to.relation)) {
+      return named("P4");
+    }
 
     return between.has("ResponseProcessing") && between.has("ResponseProcessingItem")
       ? named("processing-item")
@@ -741,6 +938,8 @@ export type ReadRefusal =
   | ManifestGuardRefusal
   | NotQti3
   | PackageReadError
+  | ProcessingGuardRefusal
+  | ProcessingRefused
   | ReaderRefusal
   | UnmodeledVocabulary
   | UsageGuardRefusal
@@ -771,6 +970,8 @@ export const ruleOfError = (e: ReadRefusal): ImportRefused =>
           detail: g.message,
           rule: g.rule === "manifest-root" ? "manifest-root" : "href-path",
         }),
+      ProcessingGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
+      ProcessingRefused: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ReaderRefusal: (g) =>
         new ImportRefused({ detail: `${g.rule}: ${g.detail}`, rule: "reader-refusal" }),
       UnmodeledVocabulary: (g) =>

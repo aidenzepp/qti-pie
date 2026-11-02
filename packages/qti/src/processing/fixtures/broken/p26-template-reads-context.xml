@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd" identifier="p26-template-reads-context" title="P26 positive control: a template rule reads QTI_CONTEXT" adaptive="false" time-dependent="false">
+    <qti-context-declaration identifier="CTX" cardinality="single" base-type="integer">
+        <qti-default-value>
+            <qti-value>1</qti-value>
+        </qti-default-value>
+    </qti-context-declaration>
+    <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer"/>
+    <qti-template-declaration identifier="N" cardinality="single" base-type="integer"/>
+    <qti-template-declaration identifier="M" cardinality="single" base-type="integer"/>
+    <qti-template-processing>
+        <qti-template-condition>
+            <qti-template-if>
+                <qti-is-null>
+                    <qti-field-value field-identifier="level">
+                        <qti-variable identifier="QTI_CONTEXT"/>
+                    </qti-field-value>
+                </qti-is-null>
+                <qti-set-template-value identifier="M">
+                    <qti-base-value base-type="integer">1</qti-base-value>
+                </qti-set-template-value>
+            </qti-template-if>
+        </qti-template-condition>
+    </qti-template-processing>
+    <qti-item-body>
+        <p>Enter a number.</p>
+        <p>
+            <qti-text-entry-interaction response-identifier="RESPONSE" base="10"/>
+        </p>
+    </qti-item-body>
+</qti-assessment-item>
