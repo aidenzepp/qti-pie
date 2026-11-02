@@ -53,6 +53,21 @@ const fields = [
   ["point", () => str.regex(patterns.point)],
   ["pair", () => str.regex(patterns.pair)],
   ["toolString", () => str.regex(patterns.toolString, patterns.toolStringFlags)],
+  ["bcp47", () => str.regex(patterns.bcp47)],
+  ["positiveInteger", () => str.regex(patterns.positiveInteger)],
+  ["positiveDouble", () => str.regex(patterns.positiveDouble)],
+  ["nonNegativeDouble", () => str.regex(patterns.nonNegativeDouble)],
+  ["xsDecimal", () => str.regex(patterns.xsDecimal)],
+  ["xsInt", () => str.regex(patterns.xsInt)],
+  ["integerList", () => str.regex(patterns.integerList)],
+  ["integerOrVariableString", () => str.regex(patterns.integerOrVariableString)],
+  ["ncNameList", () => str.regex(patterns.ncNameList)],
+  ["ncNameListOrEmpty", () => str.regex(patterns.ncNameListOrEmpty)],
+  ["viewList", () => str.regex(patterns.viewList)],
+  ["useEnumExt", () => str.regex(patterns.useEnumExt)],
+  ["mimeTypeList", () => str.regex(patterns.mimeTypeList)],
+  ["printfFormat", () => str.regex(patterns.printfFormat)],
+  ["classList", () => str.regex(patterns.classList)],
 ] as const;
 
 /**
@@ -267,5 +282,104 @@ describe("patterns", () => {
   it("point", () => {
     assert.isTrue(admits(patterns.point, "u", "-1 2"));
     assert.isFalse(admits(patterns.point, "u", "1,2"));
+  });
+
+  it("bcp47", () => {
+    for (const ok of ["en", "zh-Hant-TW", "x-none", ""]) {
+      assert.isTrue(admits(patterns.bcp47, "u", ok), ok);
+    }
+    for (const bad of ["en--x", "1a"]) {
+      assert.isFalse(admits(patterns.bcp47, "u", bad), bad);
+    }
+  });
+
+  it("positiveInteger", () => {
+    assert.isTrue(admits(patterns.positiveInteger, "u", "1"));
+    assert.isFalse(admits(patterns.positiveInteger, "u", "0"));
+  });
+
+  it("positiveDouble", () => {
+    const { positiveDouble } = patterns;
+    for (const ok of ["0.5", "1E2"]) {
+      assert.isTrue(admits(positiveDouble, "u", ok), ok);
+    }
+    for (const bad of ["0", "0.0", "0e3", "-1", "INF", "NaN"]) {
+      assert.isFalse(admits(positiveDouble, "u", bad), bad);
+    }
+  });
+
+  it("nonNegativeDouble", () => {
+    assert.isTrue(admits(patterns.nonNegativeDouble, "u", "0.0"));
+    assert.isFalse(admits(patterns.nonNegativeDouble, "u", "-1"));
+  });
+
+  it("xsDecimal and xsInt", () => {
+    assert.isTrue(admits(patterns.xsDecimal, "u", "-.5"));
+    assert.isFalse(admits(patterns.xsDecimal, "u", "1e3"));
+    assert.isTrue(admits(patterns.xsInt, "u", "-42"));
+    assert.isFalse(admits(patterns.xsInt, "u", "1.5"));
+  });
+
+  it("integerList", () => {
+    const { integerList } = patterns;
+    for (const ok of ["10 20", "-3", ""]) {
+      assert.isTrue(admits(integerList, "u", ok), ok);
+    }
+    for (const bad of ["1,2", "a"]) {
+      assert.isFalse(admits(integerList, "u", bad), bad);
+    }
+  });
+
+  it("integerOrVariableString", () => {
+    const { integerOrVariableString } = patterns;
+    assert.isTrue(admits(integerOrVariableString, "u", "16"));
+    assert.isTrue(admits(integerOrVariableString, "u", "VAR"));
+    assert.isFalse(admits(integerOrVariableString, "u", "1.5"));
+  });
+
+  it("ncNameList and ncNameListOrEmpty", () => {
+    assert.isTrue(admits(patterns.ncNameListOrEmpty, "u", "A B"));
+    assert.isTrue(admits(patterns.ncNameListOrEmpty, "u", ""));
+    assert.isFalse(admits(patterns.ncNameListOrEmpty, "u", " A"));
+    assert.isTrue(admits(patterns.ncNameList, "u", "A B"));
+    assert.isFalse(admits(patterns.ncNameList, "u", ""));
+  });
+
+  it("classList", () => {
+    const { classList } = patterns;
+    for (const ok of ["a", "a b", ""]) {
+      assert.isTrue(admits(classList, "u", ok), ok);
+    }
+    for (const bad of [" a", "a  b"]) {
+      assert.isFalse(admits(classList, "u", bad), bad);
+    }
+  });
+
+  it("viewList", () => {
+    assert.isTrue(admits(patterns.viewList, "u", "candidate scorer"));
+    assert.isFalse(admits(patterns.viewList, "u", ""));
+    assert.isFalse(admits(patterns.viewList, "u", "Candidate"));
+  });
+
+  it("useEnumExt", () => {
+    assert.isTrue(admits(patterns.useEnumExt, "u", "scoring"));
+    assert.isTrue(admits(patterns.useEnumExt, "u", "ext:foo.bar"));
+    assert.isFalse(admits(patterns.useEnumExt, "u", "Scoring"));
+    assert.isFalse(admits(patterns.useEnumExt, "u", "ext:"));
+  });
+
+  it("mimeTypeList", () => {
+    const { mimeTypeList } = patterns;
+    for (const ok of ["image/png", "image/png text/css", ""]) {
+      assert.isTrue(admits(mimeTypeList, "u", ok), ok);
+    }
+    assert.isFalse(admits(mimeTypeList, "u", "png"));
+  });
+
+  it("printfFormat", () => {
+    assert.isTrue(admits(patterns.printfFormat, "u", "%.2f"));
+    assert.isTrue(admits(patterns.printfFormat, "u", "%i"));
+    assert.isFalse(admits(patterns.printfFormat, "u", "%q"));
+    assert.isFalse(admits(patterns.printfFormat, "u", "2f"));
   });
 });
