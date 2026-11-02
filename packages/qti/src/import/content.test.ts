@@ -1,6 +1,7 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the declaration column the variables under test carry; the shape here is the typed-or-record choice, not a structure. */
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Exit, Option } from "effect";
+import { Effect, Exit, Option, Predicate } from "effect";
+import type { AnyRelation } from "@bjornpagen/grizzle";
 import { contentRows } from "#qti/import/content.ts";
 import type { DeclaredVariable } from "#qti/import/interactions.ts";
 import { ItemRefusal, Rows, treeRows } from "#qti/import/tree.ts";
@@ -22,13 +23,16 @@ import {
   ContentBodyTemplate,
   DeclaredFeedbackBlockShowHide,
   DeclaredFeedbackInlineShowHide,
+  DeclaredTemplateFeedbackBlockShowHide,
   FeedbackBlock,
   FeedbackInline,
   FeedbackOutcomeRef,
   ModalFeedback,
   ModalFeedbackTitle,
+  TemplateFeedbackBlock,
 } from "#qti/schema/feedback.ts";
-import { AttributeLexical } from "#qti/schema/node.ts";
+import { AttributeLexical, Node } from "#qti/schema/node.ts";
+import { Qti } from "#qti/schema/qti.ts";
 import type { SchemaVersionHandle } from "#qti/schema/node.ts";
 import {
   CatalogInfo,
@@ -43,13 +47,18 @@ import {
   DeclaredPrintedVariableDelimiter,
   DeclaredPrintedVariableMappingIndicator,
   DeclaredPrintedVariablePowerForm,
+  DeclaredRubricTemplateBlockShowHide,
+  DeclaredRubricTemplateInlineShowHide,
   DeclaredTemplateBlockShowHide,
+  DeclaredTemplateInlineShowHide,
   PrintedVariable,
   PrintedVariableField,
   PrintedVariableFormat,
   PrintedVariableIndex,
   PrintedVariableRef,
   PrintedVariableVarRef,
+  RubricTemplateBlock,
+  RubricTemplateInline,
   TemplateBlock,
   TemplateContentRef,
   TemplateInline,
@@ -120,6 +129,35 @@ const built = (item: Item, declarations: ReadonlyMap<string, DeclaredVariable> =
  * The id of a row found through an optional lookup, empty when the lookup found nothing.
  */
 const idOf = (row: { readonly id: string } | undefined): string => row?.id ?? "";
+
+/**
+ * One node of each feedback and template kind: `fa` a feedback block, `ft` a template feedback
+ * block, `tb` a template block, `rb` a rubric template block, `ti` a template inline and `ri` a
+ * rubric template inline.
+ */
+const sixKinds = `<qti-rubric-block use="instructions" view="candidate"><qti-content-body><qti-template-block template-identifier="T" identifier="rb" show-hide="hide"><qti-content-body><p>r</p></qti-content-body></qti-template-block><qti-template-inline template-identifier="T" identifier="ri" show-hide="hide">i</qti-template-inline></qti-content-body></qti-rubric-block><qti-feedback-block outcome-identifier="FEEDBACK" identifier="fa"><qti-content-body><p>a</p></qti-content-body></qti-feedback-block><qti-template-block template-identifier="T" identifier="tb"><qti-content-body><qti-feedback-block outcome-identifier="FEEDBACK" identifier="ft" show-hide="hide"><qti-content-body><p>t</p></qti-content-body></qti-feedback-block></qti-content-body></qti-template-block><p><qti-template-inline template-identifier="T" identifier="ti">x</qti-template-inline></p>`;
+
+const sixKindsHead = `<qti-template-declaration identifier="T" cardinality="single" base-type="identifier"/>`;
+
+/**
+ * The arm each of the six kind handles names in `Node`'s alternatives.
+ */
+const armOfKind: ReadonlyMap<string, AnyRelation> = new Map(
+  Qti.statements.flatMap((statement) =>
+    statement.kind === "alternatives" && statement.parent === Node
+      ? Object.entries<AnyRelation>(statement.arms)
+      : [],
+  ),
+);
+
+const sixHandles = [
+  "qti-feedback-block",
+  "qti-feedback-block.template",
+  "qti-template-block",
+  "qti-template-block.rubric",
+  "qti-template-inline",
+  "qti-template-inline.rubric",
+] as const;
 
 const modal = `<qti-modal-feedback outcome-identifier="FEEDBACK" show-hide="show" identifier="m1"><qti-content-body><p>Well done</p></qti-content-body></qti-modal-feedback>`;
 
@@ -533,8 +571,92 @@ describe("contentRows", () => {
         Rows.of(rows, TemplateBlock)
           .map((row) => row.identifier)
           .toSorted((a, b) => a.localeCompare(b)),
-        ["x", "y"],
+        ["y"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, RubricTemplateBlock).map((row) => row.identifier),
+        ["x"],
       );
     }),
+  );
+
+  it.effect("writes each feedback and template kind's own arm and marker", () =>
+    Effect.gen(function* run() {
+      const { rows } = yield* built({ body: sixKinds, head: sixKindsHead });
+      const identifiers = (relation: AnyRelation) =>
+        Rows.of(rows, relation).flatMap((row) =>
+          Predicate.hasProperty(row, "identifier") ? [String(row.identifier)] : [],
+        );
+      const idByIdentifier = new Map(
+        [
+          FeedbackBlock,
+          TemplateFeedbackBlock,
+          TemplateBlock,
+          RubricTemplateBlock,
+          TemplateInline,
+          RubricTemplateInline,
+        ]
+          .flatMap((relation) => Rows.of(rows, relation))
+          .map((row) => [row.identifier, row.id]),
+      );
+
+      assert.deepStrictEqual(identifiers(FeedbackBlock), ["fa"]);
+      assert.deepStrictEqual(identifiers(TemplateFeedbackBlock), ["ft"]);
+      assert.deepStrictEqual(identifiers(TemplateBlock), ["tb"]);
+      assert.deepStrictEqual(identifiers(RubricTemplateBlock), ["rb"]);
+      assert.deepStrictEqual(identifiers(TemplateInline), ["ti"]);
+      assert.deepStrictEqual(identifiers(RubricTemplateInline), ["ri"]);
+      assert.deepStrictEqual(Rows.of(rows, DeclaredTemplateFeedbackBlockShowHide), [
+        { node: idByIdentifier.get("ft") ?? "" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, DeclaredRubricTemplateBlockShowHide), [
+        { node: idByIdentifier.get("rb") ?? "" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, DeclaredRubricTemplateInlineShowHide), [
+        { node: idByIdentifier.get("ri") ?? "" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, DeclaredFeedbackBlockShowHide), []);
+      assert.deepStrictEqual(Rows.of(rows, DeclaredTemplateBlockShowHide), []);
+      assert.deepStrictEqual(Rows.of(rows, DeclaredTemplateInlineShowHide), []);
+      assert.strictEqual(Rows.of(rows, FeedbackOutcomeRef).length, 2);
+      assert.strictEqual(Rows.of(rows, TemplateContentRef).length, 4);
+    }),
+  );
+
+  it.effect(
+    "puts each feedback and template node's row in the arm Node's alternatives name for its kind",
+    () =>
+      Effect.gen(function* run() {
+        const { rows } = yield* built({ body: sixKinds, head: sixKindsHead });
+        const arms = sixHandles.map((handle) => armOfKind.get(handle));
+        const idsOf = (relation: AnyRelation | undefined): readonly string[] =>
+          relation === undefined
+            ? []
+            : Rows.of(rows, relation).flatMap((row) =>
+                Predicate.hasProperty(row, "id") ? [String(row.id)] : [],
+              );
+        const nodes = Rows.of(rows, Node).filter((row) =>
+          sixHandles.some((handle) => handle === row.kind),
+        );
+
+        assert.strictEqual(nodes.length, 6);
+        for (const node of nodes) {
+          const own = armOfKind.get(node.kind);
+
+          assert.isDefined(own, node.kind);
+          assert.deepStrictEqual(
+            idsOf(own).filter((id) => id === node.id),
+            [node.id],
+            node.kind,
+          );
+          for (const other of arms.filter((arm) => arm !== own)) {
+            assert.deepStrictEqual(
+              idsOf(other).filter((id) => id === node.id),
+              [],
+              node.kind,
+            );
+          }
+        }
+      }),
   );
 });

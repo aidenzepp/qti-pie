@@ -45,11 +45,13 @@ import {
   ContentBodyTemplate,
   DeclaredFeedbackBlockShowHide,
   DeclaredFeedbackInlineShowHide,
+  DeclaredTemplateFeedbackBlockShowHide,
   FeedbackBlock,
   FeedbackInline,
   FeedbackOutcomeRef,
   ModalFeedback,
   ModalFeedbackTitle,
+  TemplateFeedbackBlock,
 } from "#qti/schema/feedback.ts";
 import { Edge, Node } from "#qti/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle } from "#qti/schema/node.ts";
@@ -68,6 +70,8 @@ import {
   DeclaredPrintedVariableDelimiter,
   DeclaredPrintedVariableMappingIndicator,
   DeclaredPrintedVariablePowerForm,
+  DeclaredRubricTemplateBlockShowHide,
+  DeclaredRubricTemplateInlineShowHide,
   DeclaredTemplateBlockShowHide,
   DeclaredTemplateInlineShowHide,
   PrintedVariable,
@@ -76,6 +80,8 @@ import {
   PrintedVariableIndex,
   PrintedVariableRef,
   PrintedVariableVarRef,
+  RubricTemplateBlock,
+  RubricTemplateInline,
   TemplateBlock,
   TemplateContentRef,
   TemplateInline,
@@ -473,7 +479,8 @@ const templateContentRef = Effect.fn("import.templateContentRef")(function* temp
 });
 
 /**
- * The rows of a `qti-feedback-block`, `qti-feedback-block.template` or `qti-feedback-inline`.
+ * The rows of a `qti-feedback-block`, `qti-feedback-block.template` or `qti-feedback-inline`:
+ * each kind writes its own arm and its own `show-hide` marker.
  */
 const feedbackRows = Effect.fn("import.feedbackRows")(function* feedbackRows(
   rows: Rows,
@@ -494,6 +501,14 @@ const feedbackRows = Effect.fn("import.feedbackRows")(function* feedbackRows(
     built = markers(
       built,
       { "show-hide": DeclaredFeedbackInlineShowHide },
+      node.id,
+      attributes.written(),
+    );
+  } else if (node.kind === "qti-feedback-block.template") {
+    built = Rows.add(built, TemplateFeedbackBlock, fact);
+    built = markers(
+      built,
+      { "show-hide": DeclaredTemplateFeedbackBlockShowHide },
       node.id,
       attributes.written(),
     );
@@ -545,7 +560,8 @@ const modalRows = Effect.fn("import.modalRows")(function* modalRows(
 });
 
 /**
- * The rows of a template block or inline, of either kind, and the template variable it reads.
+ * The rows of a template block or inline, of the plain or the rubric kind, and the template
+ * variable it reads: each of the four kinds writes its own arm and its own `show-hide` marker.
  */
 const templateRows = Effect.fn("import.templateRows")(function* templateRows(
   rows: Rows,
@@ -560,21 +576,44 @@ const templateRows = Effect.fn("import.templateRows")(function* templateRows(
     onNone: () => Option.some<(typeof ShowHide.handles)[number]>("show"),
     onSome: (text) => handleOf(ShowHide.handles, Option.some(text)),
   });
-  const inline = node.kind === "qti-template-inline" || node.kind === "qti-template-inline.rubric";
+  const fact = Option.match(showHide, {
+    onNone: () => [],
+    onSome: (value) => [{ id: node.id, identifier, showHide: value, templateIdentifier }],
+  });
   let built = attributes.rows();
-  if (Option.isSome(showHide)) {
-    const fact = [{ id: node.id, identifier, showHide: showHide.value, templateIdentifier }];
-    built = inline ? Rows.add(built, TemplateInline, fact) : Rows.add(built, TemplateBlock, fact);
+  if (node.kind === "qti-template-inline") {
+    built = Rows.add(built, TemplateInline, fact);
+    built = markers(
+      built,
+      { "show-hide": DeclaredTemplateInlineShowHide },
+      node.id,
+      attributes.written(),
+    );
+  } else if (node.kind === "qti-template-inline.rubric") {
+    built = Rows.add(built, RubricTemplateInline, fact);
+    built = markers(
+      built,
+      { "show-hide": DeclaredRubricTemplateInlineShowHide },
+      node.id,
+      attributes.written(),
+    );
+  } else if (node.kind === "qti-template-block.rubric") {
+    built = Rows.add(built, RubricTemplateBlock, fact);
+    built = markers(
+      built,
+      { "show-hide": DeclaredRubricTemplateBlockShowHide },
+      node.id,
+      attributes.written(),
+    );
+  } else {
+    built = Rows.add(built, TemplateBlock, fact);
+    built = markers(
+      built,
+      { "show-hide": DeclaredTemplateBlockShowHide },
+      node.id,
+      attributes.written(),
+    );
   }
-
-  built = markers(
-    built,
-    inline
-      ? { "show-hide": DeclaredTemplateInlineShowHide }
-      : { "show-hide": DeclaredTemplateBlockShowHide },
-    node.id,
-    attributes.written(),
-  );
 
   return yield* templateContentRef(built, node, templateIdentifier, context);
 });
