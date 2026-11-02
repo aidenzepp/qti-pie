@@ -1940,8 +1940,8 @@ const ownPosition = new Set(["lom:entity"]);
 
 /**
  * The `(parent, child)` pairs the LOM content model admits and no R30 assert caps, whose child kind
- * R30 caps under another parent. The 80 capacities are lowered to one unique index per child kind,
- * so each of these pairs is capped today although the content model lets it repeat.
+ * R30 caps under another parent. Each of the 80 capacities selects `Edge` on its parent kind and
+ * its child kind, so none of these pairs is capped, as the content model lets it repeat.
  */
 const uncappedPairs = [
   { child: "lom:entity", context: "lom/lifeCycle/contribute", parent: "lom:contribute" },
@@ -1968,9 +1968,8 @@ unitIt("the LOM pairs an R30 child kind sits in uncapped are the five uncappedPa
  * The law a second `child` under one `parent` breaks, as the declarations order the statements.
  *
  * The child's arm keys its parent where the schema lists the assert's child kind as a candidate
- * key, and the key is the statement grizzle reports. Otherwise the 80 capacities are lowered to
- * one unique index per child kind, so the statement reported is the first declared for that child
- * kind, whichever parent the pair names.
+ * key, and the key is the statement grizzle reports. Otherwise each pair has its own capacity, on
+ * the `Edge` rows of that child kind under that parent kind, and that statement is reported.
  */
 const lawOfPair = (pair: (typeof r30Pairs)[number]): Law => {
   const keyed = metadataRules.find(
@@ -1980,11 +1979,16 @@ const lawOfPair = (pair: (typeof r30Pairs)[number]): Law => {
     return keyOf(metadataArms[pair.child], keyed.fields);
   }
 
-  const owner = r30Pairs.find((candidate) => candidate.child === pair.child) ?? pair;
-
   return capacity(
-    side(metadataArms[owner.parent], ["id"]),
-    side(Edge, ["parent"], [{ field: "childKind", value: pair.child }]),
+    side(metadataArms[pair.parent], ["id"]),
+    side(
+      Edge,
+      ["parent"],
+      [
+        { field: "childKind", value: pair.child },
+        { field: "parentKind", value: pair.parent },
+      ],
+    ),
     { high: 1n, low: 0n },
   );
 };
@@ -2163,8 +2167,6 @@ describe.skipIf(!hasLease)(
         }
 
         for (const pair of uncappedPairs) {
-          const declared = r30Pairs.find((candidate) => candidate.child === pair.child);
-
           it.effect(
             `R30 over-cap control: one ${pair.child} under ${pair.parent} is accepted`,
             () =>
@@ -2178,20 +2180,14 @@ describe.skipIf(!hasLease)(
           );
 
           it.effect(
-            `R30 over-cap probe: two ${pair.child} under one ${pair.parent} are refused today by the first R30 capacity declared for ${pair.child}`,
+            `two ${pair.child} under one ${pair.parent}, a pair no R30 assert caps, are accepted`,
             () =>
-              Effect.gen(function* probe() {
-                assert.isDefined(declared);
-
+              Effect.gen(function* positive() {
                 const outcome = yield* apply(
                   draftOf(yield* recordRows(pair.context, pair.child, 2)),
                 );
 
-                assert.strictEqual(outcome.kind, "invariant-rejected");
-                if (outcome.kind === "invariant-rejected" && declared !== undefined) {
-                  const reported: unknown = outcome.law;
-                  assert.deepStrictEqual(reported, lawOfPair(declared));
-                }
+                assert.strictEqual(outcome.kind, "accepted");
               }),
           );
         }
