@@ -1006,3 +1006,224 @@ export const rules = [
   key(QmdInteractionKind, ["context"]),
   contained(on(QmdInteractionKind, "id", "context"), on(Edge, "child", "parent")),
 ] as const;
+
+// The 21 remainder arms of the LOM categories the first milestone left out. They are declared and
+// exported here and staged: `relations`, `rules` and `arms` above do not hold them yet.
+
+/**
+ * The the `lom:educational` category of a record.
+ */
+export const LomEducational = relation("LomEducational", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The a `lom:classification` category of a record.
+ */
+export const LomClassification = relation("LomClassification", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The a `lom:relation` category of a record.
+ */
+export const LomRelation = relation("LomRelation", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The a `lom:annotation` category of a record.
+ */
+export const LomAnnotation = relation("LomAnnotation", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The a `lom:taxonPath` of a classification.
+ */
+export const LomTaxonPath = relation("LomTaxonPath", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The a `lom:taxon` of a taxon path.
+ */
+export const LomTaxon = relation("LomTaxon", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The the `lom:resource` of a relation.
+ */
+export const LomResource = relation("LomResource", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The the `lom:typicalLearningTime` of the educational category.
+ */
+export const LomTypicalLearningTime = relation("LomTypicalLearningTime", { id: uuid, lom: uuid }, [
+  "id",
+]);
+
+/**
+ * The a Vocabulary container, `lom:interactivityType`.
+ */
+export const LomInteractivityType = relation("LomInteractivityType", { id: uuid, lom: uuid }, [
+  "id",
+]);
+
+/**
+ * The a Vocabulary container, `lom:learningResourceType`.
+ */
+export const LomLearningResourceType = relation(
+  "LomLearningResourceType",
+  { id: uuid, lom: uuid },
+  ["id"],
+);
+
+/**
+ * The a Vocabulary container, `lom:interactivityLevel`.
+ */
+export const LomInteractivityLevel = relation("LomInteractivityLevel", { id: uuid, lom: uuid }, [
+  "id",
+]);
+
+/**
+ * The a Vocabulary container, `lom:semanticDensity`.
+ */
+export const LomSemanticDensity = relation("LomSemanticDensity", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The a Vocabulary container, `lom:intendedEndUserRole`.
+ */
+export const LomIntendedEndUserRole = relation("LomIntendedEndUserRole", { id: uuid, lom: uuid }, [
+  "id",
+]);
+
+/**
+ * The a Vocabulary container, `lom:context`.
+ */
+export const LomContext = relation("LomContext", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The a Vocabulary container, `lom:difficulty`.
+ */
+export const LomDifficulty = relation("LomDifficulty", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The a Vocabulary container, `lom:purpose`.
+ */
+export const LomPurpose = relation("LomPurpose", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The a Vocabulary container, `lom:kind`.
+ */
+export const LomKind = relation("LomKind", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The a LangString container, `lom:typicalAgeRange`.
+ */
+export const LomTypicalAgeRange = relation("LomTypicalAgeRange", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The a LangString container, the `lom:source` of a taxon path.
+ */
+export const LomSourceLangString = relation("LomSourceLangString", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The a LangString container, the `lom:entry` of a taxon.
+ */
+export const LomEntryLangString = relation("LomEntryLangString", { id: uuid, lom: uuid }, ["id"]);
+
+/**
+ * The `lom:id` leaf of a record: its text as read and its collapsed form.
+ */
+export const LomId = relation("LomId", { collapsed: token, id: uuid, value: wildcard }, ["id"]);
+
+/**
+ * The remainder's relations, staged.
+ */
+export const lomRemainderRelations = {
+  LomAnnotation,
+  LomClassification,
+  LomContext,
+  LomDifficulty,
+  LomEducational,
+  LomEntryLangString,
+  LomId,
+  LomIntendedEndUserRole,
+  LomInteractivityLevel,
+  LomInteractivityType,
+  LomKind,
+  LomLearningResourceType,
+  LomPurpose,
+  LomRelation,
+  LomResource,
+  LomSemanticDensity,
+  LomSourceLangString,
+  LomTaxon,
+  LomTaxonPath,
+  LomTypicalAgeRange,
+  LomTypicalLearningTime,
+};
+
+/**
+ * The remainder's statements, staged: each thin container lies in a record and is the child of its
+ * parent's edge.
+ */
+export const lomRemainderRules = [
+  contained(on(LomAnnotation, "lom"), on(Lom, "id")),
+  contained(on(LomAnnotation, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomClassification, "lom"), on(Lom, "id")),
+  contained(on(LomClassification, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomContext, "lom"), on(Lom, "id")),
+  contained(on(LomContext, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomDifficulty, "lom"), on(Lom, "id")),
+  contained(on(LomDifficulty, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomEducational, "lom"), on(Lom, "id")),
+  contained(on(LomEducational, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomEntryLangString, "lom"), on(Lom, "id")),
+  contained(on(LomEntryLangString, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomIntendedEndUserRole, "lom"), on(Lom, "id")),
+  contained(on(LomIntendedEndUserRole, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomInteractivityLevel, "lom"), on(Lom, "id")),
+  contained(on(LomInteractivityLevel, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomInteractivityType, "lom"), on(Lom, "id")),
+  contained(on(LomInteractivityType, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomKind, "lom"), on(Lom, "id")),
+  contained(on(LomKind, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomLearningResourceType, "lom"), on(Lom, "id")),
+  contained(on(LomLearningResourceType, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomPurpose, "lom"), on(Lom, "id")),
+  contained(on(LomPurpose, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomRelation, "lom"), on(Lom, "id")),
+  contained(on(LomRelation, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomResource, "lom"), on(Lom, "id")),
+  contained(on(LomResource, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomSemanticDensity, "lom"), on(Lom, "id")),
+  contained(on(LomSemanticDensity, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomSourceLangString, "lom"), on(Lom, "id")),
+  contained(on(LomSourceLangString, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomTaxon, "lom"), on(Lom, "id")),
+  contained(on(LomTaxon, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomTaxonPath, "lom"), on(Lom, "id")),
+  contained(on(LomTaxonPath, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomTypicalAgeRange, "lom"), on(Lom, "id")),
+  contained(on(LomTypicalAgeRange, "id", "lom"), on(Edge, "child", "parent")),
+  contained(on(LomTypicalLearningTime, "lom"), on(Lom, "id")),
+  contained(on(LomTypicalLearningTime, "id", "lom"), on(Edge, "child", "parent")),
+] as const;
+
+/**
+ * The remainder's arms, staged, keyed by their `NodeKind` handles.
+ */
+export const lomRemainderArms = {
+  "lom:annotation": LomAnnotation,
+  "lom:classification": LomClassification,
+  "lom:context": LomContext,
+  "lom:difficulty": LomDifficulty,
+  "lom:educational": LomEducational,
+  "lom:entry.langString": LomEntryLangString,
+  "lom:id": LomId,
+  "lom:intendedEndUserRole": LomIntendedEndUserRole,
+  "lom:interactivityLevel": LomInteractivityLevel,
+  "lom:interactivityType": LomInteractivityType,
+  "lom:kind": LomKind,
+  "lom:learningResourceType": LomLearningResourceType,
+  "lom:purpose": LomPurpose,
+  "lom:relation": LomRelation,
+  "lom:resource": LomResource,
+  "lom:semanticDensity": LomSemanticDensity,
+  "lom:source.langString": LomSourceLangString,
+  "lom:taxon": LomTaxon,
+  "lom:taxonPath": LomTaxonPath,
+  "lom:typicalAgeRange": LomTypicalAgeRange,
+  "lom:typicalLearningTime": LomTypicalLearningTime,
+};
