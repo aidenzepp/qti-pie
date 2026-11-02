@@ -14,8 +14,9 @@ import type { DeclarationEntry, Environment, Mode } from "#qti/processing/env.ts
 import { expressionKinds } from "#qti/processing/types.ts";
 import * as expression from "#qti/schema/expression.ts";
 import * as attributed from "#qti/schema/expression-attributes.ts";
-import { AttributeLexical, Edge } from "#qti/schema/node.ts";
+import { AttributeLexical, Edge, TextNode } from "#qti/schema/node.ts";
 import type { NodeKindHandle, RootKindHandle } from "#qti/schema/node.ts";
+import * as ruleSchema from "#qti/schema/rule.ts";
 import * as processing from "#qti/schema/processing.ts";
 import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
 import { readXml } from "#qti/xml/read.ts";
@@ -52,7 +53,14 @@ const isProcessingRoot = (element: Element): boolean =>
  * The `qti-*-processing` element of a document: its root, or the first child of the root that is
  * one.
  */
-const processingElement = (doc: XmlDocument): Element => {
+const processingElement = (doc: XmlDocument, local?: string): Element => {
+  if (local !== undefined) {
+    return (
+      elementsOf(doc.root).find((element) => element.local === local) ??
+      assert.fail(`the document has no ${local}`)
+    );
+  }
+
   if (isProcessingRoot(doc.root)) {
     return doc.root;
   }
@@ -82,6 +90,7 @@ const prepare = (
     readonly env?: Environment;
     readonly language: Language;
     readonly mode: Mode;
+    readonly root?: string;
     readonly rootKind: RootKindHandle;
   },
 ) =>
@@ -104,7 +113,7 @@ const prepare = (
       language: options.language,
       mode: options.mode,
       nodes: built.nodes,
-      root: processingElement(doc),
+      root: processingElement(doc, options.root),
       rootKind: options.rootKind,
       tree,
       version: "3.0.0",
@@ -245,6 +254,74 @@ const ruleOf = (kind: string, attributes: readonly (readonly [string, string])[]
   `<qti-set-outcome-value identifier="O"><${kind}${attributes
     .map(([name, value]) => ` ${name}="${value}"`)
     .join("")}/></qti-set-outcome-value>`;
+
+/**
+ * The rule kinds that hold exactly one expression, by processing language: each is a holder of a
+ * `RuleOperand` row, an `else` is not.
+ */
+const responseHolders = [
+  "qti-set-outcome-value",
+  "qti-lookup-outcome-value",
+  "qti-response-if",
+  "qti-response-else-if",
+] as const;
+
+const outcomeHolders = [
+  "qti-set-outcome-value",
+  "qti-lookup-outcome-value",
+  "qti-outcome-if",
+  "qti-outcome-else-if",
+] as const;
+
+const templateHolders = [
+  "qti-set-template-value",
+  "qti-set-default-value",
+  "qti-set-correct-response",
+  "qti-template-constraint",
+  "qti-template-if",
+  "qti-template-else-if",
+] as const;
+
+/**
+ * The node id of an element.
+ */
+const nodeIdOf = (prepared: Prepared, element: Element): string =>
+  prepared.nodes.get(element)?.id ?? assert.fail(`${element.local} has no node`);
+
+/**
+ * The first element of a kind under the processing root.
+ */
+const elementOf = (prepared: Prepared, kind: string): Element =>
+  elementsOf(prepared.input.root).find((element) => element.local === kind) ??
+  assert.fail(`no ${kind}`);
+
+/**
+ * The node id of the element an element hangs under.
+ */
+const conditionIdOf = (prepared: Prepared, element: Element): string => {
+  const parent = elementsOf(prepared.input.root).find((candidate) =>
+    candidate.children.includes(element),
+  );
+
+  return parent === undefined
+    ? assert.fail(`${element.local} has no parent`)
+    : nodeIdOf(prepared, parent);
+};
+
+/**
+ * The `RuleOperand` rows the document's own shape asks for, in the order the tests compare them:
+ * each holder's first element child is its expression, at its index among the holder's children.
+ */
+const holderRows = (prepared: Prepared, holders: readonly string[]): readonly string[] =>
+  elementsOf(prepared.input.root)
+    .filter((element) => holders.includes(element.local))
+    .map((holder) => {
+      const expressionElement =
+        holder.children.find((child) => child.kind === "element") ?? assert.fail(holder.local);
+
+      return `${nodeIdOf(prepared, expressionElement)}@${holder.children.indexOf(expressionElement)}:${nodeIdOf(prepared, holder)}:${prepared.nodes.get(holder)?.kind}`;
+    })
+    .toSorted();
 
 layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts", (suite) => {
   suite.effect("writes one Expression row per expression element with the seeded arity", () =>
@@ -916,6 +993,249 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       for (const row of of(built, processing.Expression)) {
         assert.strictEqual(kinds.get(row.id), row.kind);
       }
+    }),
+  );
+  suite.effect("writes one RuleOperand row per single-expression holder, none for an else", () =>
+    Effect.gen(function* ruleOperandsOfResponse() {
+      const prepared = yield* prepareFixture("valid", "response", itemOptions);
+      const built = yield* processed(prepared);
+      const expected = holderRows(prepared, responseHolders);
+      assert.isAbove(expected.length, 14);
+      assert.deepStrictEqual(
+        of(built, ruleSchema.RuleOperand)
+          .map((row) => `${key(row)}:${row.rule}:${row.ruleKind}`)
+          .toSorted(),
+        expected,
+      );
+
+      const elses = new Set(idsOfKinds(prepared, ["qti-response-else"]));
+      assert.strictEqual(elses.size, 1);
+      assert.isFalse(of(built, ruleSchema.RuleOperand).some((row) => elses.has(row.rule)));
+    }),
+  );
+
+  suite.effect("writes the thin arm of each rule kind and a condition's branch arms", () =>
+    Effect.gen(function* ruleArmsOfResponse() {
+      const prepared = yield* prepareFixture("valid", "response", itemOptions);
+      const built = yield* processed(prepared);
+      const thin = [
+        ["qti-exit-response", ruleSchema.ExitResponse],
+        ["qti-response-condition", ruleSchema.ResponseConditionArm],
+        ["qti-response-else-if", ruleSchema.ResponseElseIfArm],
+        ["qti-response-processing-fragment", ruleSchema.ResponseProcessingFragment],
+        ["qti-set-outcome-value", ruleSchema.SetOutcomeValue],
+      ] as const;
+      for (const [kind, relation] of thin) {
+        const ids = idsOfKinds(prepared, [kind]);
+        assert.isAbove(ids.length, 0, kind);
+        assert.deepStrictEqual(armIds(built, relation), ids, kind);
+      }
+
+      const branches = [
+        ["qti-response-if", ruleSchema.ResponseIfArm],
+        ["qti-response-else", ruleSchema.ResponseElseArm],
+      ] as const;
+      for (const [kind, relation] of branches) {
+        const expected = elementsOf(prepared.input.root)
+          .filter((element) => element.local === kind)
+          .map((element) => `${nodeIdOf(prepared, element)}<${conditionIdOf(prepared, element)}`)
+          .toSorted();
+        assert.isAbove(expected.length, 0, kind);
+        assert.deepStrictEqual(
+          of(built, relation)
+            .map((row) => `${row.id}<${row.condition}`)
+            .toSorted(),
+          expected,
+          kind,
+        );
+      }
+
+      assert.deepStrictEqual(of(built, ruleSchema.TemplateIfArm), []);
+      assert.deepStrictEqual(of(built, ruleSchema.OutcomeIfArm), []);
+    }),
+  );
+
+  suite.effect("writes the XInclude row, its attributes and its Fallback", () =>
+    Effect.gen(function* xIncludeOfResponse() {
+      const prepared = yield* prepareFixture("valid", "response", itemOptions);
+      const built = yield* processed(prepared);
+      const include = idAt(prepared, "include");
+      const fallback = idAt(prepared, "fallback");
+      assert.deepStrictEqual(of(built, ruleSchema.XInclude), [{ id: include }]);
+      assert.deepStrictEqual(of(built, ruleSchema.XIncludeHref), [
+        { node: include, value: "shared-rules.xml" },
+      ]);
+      assert.deepStrictEqual(of(built, ruleSchema.XIncludeParse), [
+        { node: include, value: "xml" },
+      ]);
+      assert.deepStrictEqual(of(built, ruleSchema.XIncludeXpointer), []);
+      assert.deepStrictEqual(of(built, ruleSchema.XIncludeEncoding), []);
+      assert.deepStrictEqual(of(built, ruleSchema.XIncludeAccept), []);
+      assert.deepStrictEqual(of(built, ruleSchema.XIncludeAcceptLanguage), []);
+      assert.deepStrictEqual(of(built, ruleSchema.Fallback), [{ id: fallback }]);
+
+      const texts = new Map(of(built, TextNode).map((row) => [row.id, row.value]));
+      const under = of(built, Edge)
+        .filter((edge) => edge.parent === fallback)
+        .map((edge) => texts.get(edge.child));
+      assert.deepStrictEqual(under, ["fallback"]);
+    }),
+  );
+
+  suite.effect("keeps the lexical form of a padded include href and the four strings as read", () =>
+    Effect.gen(function* paddedInclude() {
+      const prepared = yield* prepareBody(
+        `<xi:include href=" rules.xml " parse=" text " xpointer=" p " encoding=" e " accept=" a " accept-language=" l " xmlns:xi="http://www.w3.org/2001/XInclude"/>`,
+        itemOptions,
+      );
+      const built = yield* processed(prepared);
+      const include = idAt(prepared, "include");
+      assert.deepStrictEqual(of(built, ruleSchema.XIncludeHref), [
+        { node: include, value: "rules.xml" },
+      ]);
+      assert.deepStrictEqual(of(built, ruleSchema.XIncludeParse), [
+        { node: include, value: "text" },
+      ]);
+      assert.deepStrictEqual(of(built, ruleSchema.XIncludeXpointer), [
+        { node: include, value: " p " },
+      ]);
+      assert.deepStrictEqual(of(built, ruleSchema.XIncludeEncoding), [
+        { node: include, value: " e " },
+      ]);
+      assert.deepStrictEqual(of(built, ruleSchema.XIncludeAccept), [
+        { node: include, value: " a " },
+      ]);
+      assert.deepStrictEqual(of(built, ruleSchema.XIncludeAcceptLanguage), [
+        { node: include, value: " l " },
+      ]);
+      assert.deepStrictEqual(of(built, ruleSchema.Fallback), []);
+      assert.deepStrictEqual(
+        of(built, AttributeLexical)
+          .map((row) => [row.attribute, row.value])
+          .toSorted(byText),
+        [
+          ["href", " rules.xml "],
+          ["parse", " text "],
+        ],
+      );
+    }),
+  );
+
+  suite.effect("writes the outcome rules, conditions and the root's arm of outcome.xml", () =>
+    Effect.gen(function* outcomeRules() {
+      const env = withDeclarations(emptyEnvironment("test"), [
+        outcomeOf("TOTAL", "float"),
+        outcomeOf("MAXTOTAL", "float"),
+        outcomeOf("COUNT", "integer"),
+        outcomeOf("PASSED", "boolean"),
+      ]);
+      const prepared = yield* prepareFixture("valid", "outcome", {
+        env,
+        language: "outcome",
+        mode: "test",
+        rootKind: "test",
+      });
+      const built = yield* processed(prepared);
+      const root = nodeIdOf(prepared, prepared.input.root);
+      assert.deepStrictEqual(of(built, ruleSchema.OutcomeProcessing), [{ id: root }]);
+
+      const thin = [
+        ["qti-exit-test", ruleSchema.ExitTest],
+        ["qti-outcome-condition", ruleSchema.OutcomeConditionArm],
+        ["qti-outcome-else-if", ruleSchema.OutcomeElseIfArm],
+        ["qti-outcome-processing-fragment", ruleSchema.OutcomeProcessingFragment],
+        ["qti-set-outcome-value", ruleSchema.SetOutcomeValue],
+      ] as const;
+      for (const [kind, relation] of thin) {
+        const ids = idsOfKinds(prepared, [kind]);
+        assert.isAbove(ids.length, 0, kind);
+        assert.deepStrictEqual(armIds(built, relation), ids, kind);
+      }
+
+      const branch = (element: Element) =>
+        `${nodeIdOf(prepared, element)}<${conditionIdOf(prepared, element)}`;
+      const locals = (kind: string) =>
+        elementsOf(prepared.input.root).filter((element) => element.local === kind);
+      assert.deepStrictEqual(
+        of(built, ruleSchema.OutcomeIfArm)
+          .map((row) => `${row.id}<${row.condition}`)
+          .toSorted(),
+        locals("qti-outcome-if").map(branch).toSorted(),
+      );
+      assert.deepStrictEqual(
+        of(built, ruleSchema.OutcomeElseArm)
+          .map((row) => `${row.id}<${row.condition}`)
+          .toSorted(),
+        locals("qti-outcome-else").map(branch).toSorted(),
+      );
+      assert.deepStrictEqual(
+        of(built, ruleSchema.RuleOperand)
+          .map((row) => `${key(row)}:${row.rule}:${row.ruleKind}`)
+          .toSorted(),
+        holderRows(prepared, outcomeHolders),
+      );
+      assert.deepStrictEqual(of(built, ruleSchema.TemplateProcessing), []);
+    }),
+  );
+
+  suite.effect("writes the template rules and the item a template processing hangs under", () =>
+    Effect.gen(function* templateRules() {
+      const text = `<qti-assessment-item xmlns="${asiNamespace}" identifier="t" title="t" adaptive="false" time-dependent="false"><qti-template-processing><qti-set-template-value identifier="N"><qti-random-integer min="5" max="10"/></qti-set-template-value><qti-template-condition><qti-template-if><qti-gt><qti-variable identifier="N"/><qti-variable identifier="M"/></qti-gt><qti-exit-template/></qti-template-if><qti-template-else-if><qti-gt><qti-variable identifier="M"/><qti-variable identifier="N"/></qti-gt><qti-set-correct-response identifier="N"><qti-variable identifier="M"/></qti-set-correct-response></qti-template-else-if><qti-template-else><qti-set-default-value identifier="M"><qti-variable identifier="N"/></qti-set-default-value></qti-template-else></qti-template-condition><qti-template-constraint><qti-gt><qti-variable identifier="N"/><qti-variable identifier="M"/></qti-gt></qti-template-constraint></qti-template-processing></qti-assessment-item>`;
+      const prepared = yield* prepare(yield* readXml(new TextEncoder().encode(text)), {
+        env: withDeclarations(emptyEnvironment("template"), [
+          { ...outcomeOf("N", "integer"), kind: "template" },
+          { ...outcomeOf("M", "integer"), kind: "template" },
+        ]),
+        language: "template",
+        mode: "template",
+        root: "qti-template-processing",
+        rootKind: "item",
+      });
+      const built = yield* processed(prepared);
+      const root = nodeIdOf(prepared, prepared.input.root);
+      const item = nodeIdOf(prepared, prepared.doc.root);
+      assert.deepStrictEqual(of(built, ruleSchema.TemplateProcessing), [{ id: root, item }]);
+
+      const thin = [
+        ["qti-exit-template", ruleSchema.ExitTemplate],
+        ["qti-set-correct-response", ruleSchema.SetCorrectResponse],
+        ["qti-set-default-value", ruleSchema.SetDefaultValue],
+        ["qti-set-template-value", ruleSchema.SetTemplateValue],
+        ["qti-template-condition", ruleSchema.TemplateConditionArm],
+        ["qti-template-constraint", ruleSchema.TemplateConstraint],
+        ["qti-template-else-if", ruleSchema.TemplateElseIfArm],
+      ] as const;
+      for (const [kind, relation] of thin) {
+        const ids = idsOfKinds(prepared, [kind]);
+        assert.isAbove(ids.length, 0, kind);
+        assert.deepStrictEqual(armIds(built, relation), ids, kind);
+      }
+
+      const condition = conditionIdOf(prepared, elementOf(prepared, "qti-template-if"));
+      assert.deepStrictEqual(of(built, ruleSchema.TemplateIfArm), [
+        { condition, id: idAt(prepared, "qti-template-if") },
+      ]);
+      assert.deepStrictEqual(of(built, ruleSchema.TemplateElseArm), [
+        { condition, id: idAt(prepared, "qti-template-else") },
+      ]);
+      assert.deepStrictEqual(
+        of(built, ruleSchema.RuleOperand)
+          .map((row) => `${key(row)}:${row.rule}:${row.ruleKind}`)
+          .toSorted(),
+        holderRows(prepared, templateHolders),
+      );
+    }),
+  );
+
+  suite.effect("writes no rule row for a tree it refuses", () =>
+    Effect.gen(function* refusedWritesNothing() {
+      const prepared = yield* prepareBody(
+        `<qti-set-outcome-value identifier="NOPE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value>`,
+        itemOptions,
+      );
+      const failure = yield* refusal(prepared);
+      assert.strictEqual(failure.rule, "P8");
+      assert.deepStrictEqual(of(prepared.rows, ruleSchema.RuleOperand), []);
     }),
   );
 });
