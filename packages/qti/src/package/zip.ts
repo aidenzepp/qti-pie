@@ -140,6 +140,7 @@ const CP437_HIGH =
  */
 const CP437: readonly string[] = [
   ...Array.from({ length: 128 }, (_, code) => String.fromCodePoint(code)),
+  // oxlint-disable-next-line typescript/no-misused-spread -- every character of the table is one BMP code point, so the spread yields exactly the 128 bytes 0x80 to 0xFF.
   ...CP437_HIGH,
 ];
 
@@ -426,23 +427,15 @@ const checkListing = Effect.fn("package.checkListing")(function* checkListing(
   );
 
   if (duplicate?.name === MANIFEST) {
-    return yield* refuse(
-      "manifest-root",
-      MANIFEST,
-      "the archive has more than one imsmanifest.xml",
-    );
+    yield* refuse("manifest-root", MANIFEST, "the archive has more than one imsmanifest.xml");
   }
 
   if (duplicate !== undefined) {
-    return yield* refuse(
-      "zip-format",
-      duplicate.name,
-      "the archive holds two entries with this name",
-    );
+    yield* refuse("zip-format", duplicate.name, "the archive holds two entries with this name");
   }
 
   if (!files.some((record) => record.name === MANIFEST)) {
-    return yield* refuse(
+    yield* refuse(
       "manifest-root",
       MANIFEST,
       "the archive has no imsmanifest.xml at its root, and a package keeps its manifest in its top directory",
