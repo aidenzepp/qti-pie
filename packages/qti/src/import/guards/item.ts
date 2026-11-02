@@ -19,6 +19,8 @@ import {
   DeclarationView,
 } from "#qti/schema/declaration.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
+import * as expression from "#qti/schema/expression.ts";
+import * as attributed from "#qti/schema/expression-attributes.ts";
 import { Img, ImgLongdesc } from "#qti/schema/html.ts";
 import {
   ChoiceInteraction,
@@ -39,10 +41,14 @@ import {
   Ws,
 } from "#qti/schema/node.ts";
 import {
+  BuiltInRef,
+  DeclaredRef,
   ResponseProcessingTemplate,
   ResponseProcessingTemplateLocation,
   StandardTemplateReference,
+  TemplateParameterRef,
 } from "#qti/schema/processing.ts";
+import { XIncludeHref, XIncludeParse } from "#qti/schema/rule.ts";
 import * as values from "#qti/schema/value.ts";
 
 /**
@@ -220,6 +226,239 @@ const item = (rows: Rows, node: string) =>
 
 const interpretation = (rows: Rows, node: string): string | undefined =>
   Rows.of(rows, values.ValueSetInterpretation).find((row) => row.valueSet === node)?.value;
+
+/**
+ * A typed column read for the node a lexical row names: the value the importer wrote for it, none
+ * when the node has no such row.
+ */
+type Column = (rows: Rows, node: string) => string | undefined;
+
+/**
+ * The `identifier` a referring node names, read from the arm of the way it names it: a declared
+ * reference, a built-in or a template parameter.
+ */
+const referenceOf: Column = (rows, node) =>
+  Rows.of(rows, DeclaredRef).find((row) => row.id === node)?.identifier ??
+  Rows.of(rows, BuiltInRef).find((row) => row.id === node)?.name ??
+  Rows.of(rows, TemplateParameterRef).find((row) => row.id === node)?.identifier;
+
+/**
+ * One `shadows` entry of a collapse-class attribute for each kind that carries it, all reading the
+ * same column.
+ */
+const collapsedBy = (
+  kinds: readonly string[],
+  attribute: string,
+  column: Column,
+): readonly (readonly [string, Shadow])[] =>
+  kinds.map((kind): [string, Shadow] => [
+    `${kind}/${attribute}`,
+    { column, whiteSpace: "collapse" },
+  ]);
+
+/**
+ * The kinds that name a variable by their `identifier`: the referring expressions and the rules
+ * that read or set one.
+ */
+const referringKinds: readonly string[] = [
+  "qti-correct",
+  "qti-default",
+  "qti-lookup-outcome-value",
+  "qti-map-response",
+  "qti-map-response-point",
+  "qti-set-correct-response",
+  "qti-set-default-value",
+  "qti-set-outcome-value",
+  "qti-set-template-value",
+  "qti-variable",
+];
+
+/**
+ * The outcome-only expressions that take the section and category filters.
+ */
+const filteredKinds: readonly string[] = [
+  "qti-number-correct",
+  "qti-number-incorrect",
+  "qti-number-presented",
+  "qti-number-responded",
+  "qti-number-selected",
+  "qti-outcome-maximum",
+  "qti-outcome-minimum",
+  "qti-test-variables",
+];
+
+/**
+ * The shadows of the collapse-class attributes of processing expressions and rules (spec 4.3
+ * "Attribute storage"): the importer writes a lexical row for one whose value as read differs from
+ * its collapse, and each entry names the typed column it shadows. For a mixed union (`figures`,
+ * `min`, `max`, `step`) the importer writes a lexical row only for a collapsed literal.
+ */
+const processingShadows: readonly (readonly [string, Shadow])[] = [
+  ...collapsedBy(referringKinds, "identifier", referenceOf),
+  ...collapsedBy(
+    filteredKinds,
+    "section-identifier",
+    (rows, node) =>
+      Rows.of(rows, expression.ExpressionSectionIdentifier).find((row) => row.node === node)?.value,
+  ),
+  ...collapsedBy(
+    filteredKinds,
+    "include-category",
+    (rows, node) =>
+      Rows.of(rows, expression.ExpressionIncludeCategory).find((row) => row.node === node)?.value,
+  ),
+  ...collapsedBy(
+    filteredKinds,
+    "exclude-category",
+    (rows, node) =>
+      Rows.of(rows, expression.ExpressionExcludeCategory).find((row) => row.node === node)?.value,
+  ),
+  ...collapsedBy(
+    ["qti-outcome-maximum", "qti-outcome-minimum", "qti-test-variables"],
+    "weight-identifier",
+    (rows, node) =>
+      Rows.of(rows, attributed.ExpressionWeightIdentifier).find((row) => row.node === node)?.value,
+  ),
+  ...collapsedBy(
+    ["qti-variable"],
+    "weight-identifier",
+    (rows, node) =>
+      Rows.of(rows, attributed.VariableWeightIdentifier).find((row) => row.node === node)?.value,
+  ),
+  ...collapsedBy(
+    ["qti-outcome-maximum", "qti-outcome-minimum"],
+    "outcome-identifier",
+    (rows, node) =>
+      Rows.of(rows, attributed.OutcomeMinMax).find((row) => row.id === node)?.outcomeIdentifier,
+  ),
+  ...collapsedBy(
+    ["qti-test-variables"],
+    "variable-identifier",
+    (rows, node) =>
+      Rows.of(rows, attributed.TestVariables).find((row) => row.id === node)?.variableIdentifier,
+  ),
+  ...collapsedBy(
+    ["qti-custom-operator"],
+    "class",
+    (rows, node) =>
+      Rows.of(rows, attributed.CustomOperatorClass).find((row) => row.node === node)?.value,
+  ),
+  ...collapsedBy(
+    ["qti-custom-operator"],
+    "definition",
+    (rows, node) =>
+      Rows.of(rows, attributed.CustomOperatorDefinition).find((row) => row.node === node)?.value,
+  ),
+  ...collapsedBy(
+    ["qti-equal"],
+    "tolerance",
+    (rows, node) =>
+      Rows.of(rows, attributed.EqualTolerance).find((row) => row.node === node)?.value,
+  ),
+  ...collapsedBy(
+    ["qti-equal"],
+    "include-lower-bound",
+    (rows, node) =>
+      Rows.of(rows, attributed.Equal).find((row) => row.id === node)?.includeLowerBound,
+  ),
+  ...collapsedBy(
+    ["qti-equal"],
+    "include-upper-bound",
+    (rows, node) =>
+      Rows.of(rows, attributed.Equal).find((row) => row.id === node)?.includeUpperBound,
+  ),
+  ...collapsedBy(
+    ["qti-string-match"],
+    "case-sensitive",
+    (rows, node) =>
+      Rows.of(rows, attributed.StringMatch).find((row) => row.id === node)?.caseSensitive,
+  ),
+  ...collapsedBy(
+    ["qti-string-match"],
+    "substring",
+    (rows, node) => Rows.of(rows, attributed.StringMatch).find((row) => row.id === node)?.substring,
+  ),
+  ...collapsedBy(
+    ["qti-substring"],
+    "case-sensitive",
+    (rows, node) =>
+      Rows.of(rows, attributed.Substring).find((row) => row.id === node)?.caseSensitive,
+  ),
+  ...collapsedBy(
+    ["qti-equal-rounded"],
+    "figures",
+    (rows, node) => Rows.of(rows, attributed.EqualRounded).find((row) => row.id === node)?.figures,
+  ),
+  ...collapsedBy(
+    ["qti-round-to"],
+    "figures",
+    (rows, node) => Rows.of(rows, attributed.RoundTo).find((row) => row.id === node)?.figures,
+  ),
+  ...collapsedBy(
+    ["qti-field-value"],
+    "field-identifier",
+    (rows, node) =>
+      Rows.of(rows, attributed.FieldValue).find((row) => row.id === node)?.fieldIdentifier,
+  ),
+  ...collapsedBy(
+    ["qti-index"],
+    "n",
+    (rows, node) => Rows.of(rows, attributed.Index).find((row) => row.id === node)?.n,
+  ),
+  ...collapsedBy(
+    ["qti-repeat"],
+    "number-repeats",
+    (rows, node) => Rows.of(rows, attributed.Repeat).find((row) => row.id === node)?.numberRepeats,
+  ),
+  ...collapsedBy(
+    ["qti-any-n"],
+    "min",
+    (rows, node) => Rows.of(rows, attributed.AnyN).find((row) => row.id === node)?.min,
+  ),
+  ...collapsedBy(
+    ["qti-any-n"],
+    "max",
+    (rows, node) => Rows.of(rows, attributed.AnyN).find((row) => row.id === node)?.max,
+  ),
+  ...collapsedBy(
+    ["qti-random-integer"],
+    "max",
+    (rows, node) => Rows.of(rows, attributed.RandomInteger).find((row) => row.id === node)?.max,
+  ),
+  ...collapsedBy(
+    ["qti-random-integer"],
+    "min",
+    (rows, node) =>
+      Rows.of(rows, attributed.RandomIntegerMin).find((row) => row.node === node)?.value,
+  ),
+  ...collapsedBy(
+    ["qti-random-integer"],
+    "step",
+    (rows, node) =>
+      Rows.of(rows, attributed.RandomIntegerStep).find((row) => row.node === node)?.value,
+  ),
+  ...collapsedBy(
+    ["qti-random-float"],
+    "max",
+    (rows, node) => Rows.of(rows, attributed.RandomFloat).find((row) => row.id === node)?.max,
+  ),
+  ...collapsedBy(
+    ["qti-random-float"],
+    "min",
+    (rows, node) =>
+      Rows.of(rows, attributed.RandomFloatMin).find((row) => row.node === node)?.value,
+  ),
+  ...collapsedBy(
+    ["xi:include"],
+    "href",
+    (rows, node) => Rows.of(rows, XIncludeHref).find((row) => row.node === node)?.value,
+  ),
+  ...collapsedBy(
+    ["xi:include"],
+    "parse",
+    (rows, node) => Rows.of(rows, XIncludeParse).find((row) => row.node === node)?.value,
+  ),
+];
 
 /**
  * Every item attribute with a typed column, by element kind and attribute. An attribute the table
@@ -411,7 +650,14 @@ const shadows: ReadonlyMap<string, Shadow> = new Map<string, Shadow>([
       whiteSpace: "collapse",
     },
   ],
+  ...processingShadows,
 ]);
+
+/**
+ * The `kind/attribute` pairs an item tree's lexical row may name: the attributes that have a typed
+ * column to shadow.
+ */
+export const shadowedAttributes: ReadonlySet<string> = new Set(shadows.keys());
 
 /**
  * The lexical form of a non-negative integer as the importer reads it: an unparseable form reads
