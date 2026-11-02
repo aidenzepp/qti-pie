@@ -178,8 +178,8 @@ export const cutItem = (
 /**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-broken
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
- * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package, and the 19
- * cut items of {@link cutNames}.
+ * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
+ * `end-attempt`, phase 2's hand-written positive, and the 19 cut items of {@link cutNames}.
  */
 export const fixtureNames = [
   "simple",
@@ -203,6 +203,7 @@ export const fixtureNames = [
   "bad-template-uri",
   "sharedMedia",
   "quoted-q",
+  "end-attempt",
   ...cutNames,
 ] as const;
 
@@ -359,6 +360,12 @@ const cutSpecs: Record<(typeof cutNames)[number], FixtureSpec> = {
 };
 
 /**
+ * The item of `BPIG_22April` that `cut-text-entry` is cut from, which `end-attempt` edits before
+ * it cuts it.
+ */
+const bgTextEntryItem = "items/BG010.xml";
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
  *
@@ -396,6 +403,11 @@ const cutSpecs: Record<(typeof cutNames)[number], FixtureSpec> = {
  *
  * `quoted-q` is phase 2's hand-broken package, `simple` with straight quotation marks around a `q`,
  * which the browser draws itself (the content guards' `q-punctuation`).
+ *
+ * `end-attempt` is phase 2's hand-written positive, the item `cut-text-entry` is cut from with its
+ * text-entry interaction replaced by a `qti-end-attempt-interaction` and its response declaration
+ * by a `boolean single` one, `HINT`, and its `map_response` template dropped, which would name a
+ * response no longer declared. No corpus item holds an end-attempt interaction (spec 3.6).
  */
 const specs: Record<FixtureName, FixtureSpec> = {
   ...cutSpecs,
@@ -467,6 +479,28 @@ const specs: Record<FixtureName, FixtureSpec> = {
     ],
     member: simpleMember,
     name: "doctype",
+  },
+  "end-attempt": {
+    edits: [
+      replaceIn(
+        bgTextEntryItem,
+        '<qti-response-declaration identifier="RESPONSE" base-type="string" cardinality="single">\n  <qti-correct-response>\n   <qti-value>York</qti-value>\n  </qti-correct-response>\n  <qti-mapping default-value="0">\n   <qti-map-entry map-key="York" mapped-value="1" case-sensitive="true" />\n   <qti-map-entry map-key="york" mapped-value="0.5" />\n  </qti-mapping>\n </qti-response-declaration>',
+        '<qti-response-declaration identifier="HINT" base-type="boolean" cardinality="single"/>',
+      ),
+      replaceIn(
+        bgTextEntryItem,
+        '<qti-text-entry-interaction response-identifier="RESPONSE" />',
+        '<qti-end-attempt-interaction response-identifier="HINT" title="Hint"/>',
+      ),
+      replaceIn(
+        bgTextEntryItem,
+        ' <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/map_response" />\n',
+        "",
+      ),
+      { _tag: "cut", item: bgTextEntryItem, schemaversion: "3.0.1" },
+    ],
+    member: corpusMembers.BPIG_22April,
+    name: "end-attempt",
   },
   external: {
     edits: [
