@@ -293,6 +293,7 @@ const declarationRows = (
         document: documentId,
         id: declaration,
         identifier: text,
+        kind: response ? "response" : "outcome",
       },
     ]);
   }

@@ -1,12 +1,18 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- the roster under test is `DeclarationShape`. */
 import { inspect } from "node:util";
-import { schema } from "@bjornpagen/grizzle";
-import { assert, describe, it } from "@effect/vitest";
-import { Predicate } from "effect";
+import { schema, str } from "@bjornpagen/grizzle";
+import { assert, describe, it, layer } from "@effect/vitest";
+import { NodeServices } from "@effect/platform-node";
+import { Effect, FileSystem, Predicate } from "effect";
+import { inject } from "vitest";
+import { itemRows } from "#qti/import/item.ts";
+import { Rows } from "#qti/import/tree.ts";
+import { readXml } from "#qti/xml/read.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
+import * as patterns from "#qti/schema/patterns.ts";
 
 /**
  * The schema over node's, package's, document's and this module's relations and rules.
@@ -23,6 +29,7 @@ const probe = () =>
  */
 const added = [
   "BaseType",
+  "ContextDeclarationArm",
   "Declaration",
   "DeclarationExternalScored",
   "DeclarationInterpretation",
@@ -34,10 +41,13 @@ const added = [
   "DeclarationShape",
   "DeclarationVariableIdentifierRef",
   "DeclarationView",
+  "DeclaredMathVariable",
+  "DeclaredParamVariable",
   "OutcomeDeclarationArm",
   "RecordDeclaration",
   "ResponseDeclarationArm",
   "ResponseDeclarationId",
+  "TemplateDeclarationArm",
   "TypedCardinality",
   "TypedDeclaration",
 ];
@@ -56,6 +66,12 @@ const ofKind = <K extends (typeof declaration.rules)[number]["kind"]>(kind: K) =
  */
 const selectionOf = (side: { readonly source: object }) =>
   "relation" in side.source && "bindings" in side.source ? side.source : undefined;
+
+/**
+ * A field's whole description, for comparing two fields by their pattern.
+ */
+const describeField = (field: ReturnType<typeof str.regex>) =>
+  inspect(field, { depth: null, maxStringLength: 100_000 });
 
 /**
  * The names of the variables a QTI processing engine sets itself, which no declaration may use.
@@ -122,12 +138,14 @@ describe("declaration", () => {
     );
   });
 
-  it("holds one check, on Declaration, naming the three reserved names", () => {
+  it("holds the reserved-names check on Declaration, naming the three reserved names", () => {
     const checks = ofKind("check");
-    assert.strictEqual(checks.length, 1);
     assert.deepStrictEqual(
       checks.map((rule) => [rule.name, rule.relation]),
-      [["DeclarationNotReserved", declaration.relations.Declaration]],
+      [
+        ["DeclarationNotReserved", declaration.relations.Declaration],
+        ["ReservedOutcomeTypes", declaration.relations.TypedDeclaration],
+      ],
     );
 
     const check: unknown = checks[0];
@@ -166,6 +184,7 @@ describe("declaration", () => {
       "document",
       "id",
       "identifier",
+      "kind",
     ]);
     assert.deepStrictEqual([...TypedDeclaration.primaryKey], ["id"]);
     assert.deepStrictEqual(Object.keys(RecordDeclaration.fields), ["id"]);
@@ -186,6 +205,7 @@ describe("declaration", () => {
           ["id", "document", "identifier"],
           ["id", "document", "identifier"],
         ],
+        [declaration.relations.Declaration, ["id", "kind"], ["id", "kind"]],
       ],
     );
   });
@@ -194,7 +214,7 @@ describe("declaration", () => {
     const rules = ofKind("mirrors").filter(
       (rule) => rule.left.source !== declaration.relations.ResponseDeclarationId,
     );
-    assert.strictEqual(rules.length, 2);
+    assert.strictEqual(rules.length, 4);
 
     const sides = rules.map((rule) => ({
       arm: rule.left.source,
@@ -213,6 +233,16 @@ describe("declaration", () => {
           declaration.relations.Declaration,
           { kind: "outcome" },
         ],
+        [
+          declaration.relations.TemplateDeclarationArm,
+          declaration.relations.Declaration,
+          { kind: "template" },
+        ],
+        [
+          declaration.relations.ContextDeclarationArm,
+          declaration.relations.Declaration,
+          { kind: "context" },
+        ],
       ],
     );
     for (const rule of rules) {
@@ -221,11 +251,21 @@ describe("declaration", () => {
     }
   });
 
-  it("exports the response and outcome declaration arms, and none for context or template", () => {
+  it("exports the response, outcome, template and context declaration arms", () => {
     assert.deepStrictEqual(Object.keys(declaration.arms).toSorted(), [
+      "qti-context-declaration",
       "qti-outcome-declaration",
       "qti-response-declaration",
+      "qti-template-declaration",
     ]);
+    assert.strictEqual(
+      declaration.arms["qti-template-declaration"],
+      declaration.relations.TemplateDeclarationArm,
+    );
+    assert.strictEqual(
+      declaration.arms["qti-context-declaration"],
+      declaration.relations.ContextDeclarationArm,
+    );
     assert.strictEqual(
       declaration.arms["qti-response-declaration"],
       declaration.relations.ResponseDeclarationArm,
@@ -260,7 +300,7 @@ describe("declaration", () => {
     }
   });
 
-  it("declares the DocumentId holder alternatives with one arm", () => {
+  it("declares the DocumentId holder alternatives with five arms", () => {
     const [rule, ...rest] = ofKind("alternatives").filter(
       (candidate) => candidate.parent === document.relations.DocumentId,
     );
@@ -268,9 +308,16 @@ describe("declaration", () => {
     assert.isDefined(rule);
     assert.strictEqual(rule?.discriminator, "holder");
     assert.strictEqual(rule?.roster, document.relations.IdHolder);
-    assert.deepStrictEqual(Object.entries(rule?.arms ?? {}), [
-      ["responseDeclaration", declaration.relations.ResponseDeclarationId],
-    ]);
+    assert.deepStrictEqual(
+      Object.entries(rule?.arms ?? {}).toSorted(([a], [b]) => a.localeCompare(b)),
+      [
+        ["contextDeclaration", document.relations.ContextDeclarationId],
+        ["htmlId", document.relations.HtmlId],
+        ["itemBody", document.relations.ItemBodyId],
+        ["printedVariable", document.relations.PrintedVariableId],
+        ["responseDeclaration", declaration.relations.ResponseDeclarationId],
+      ],
+    );
   });
 
   it("mirrors ResponseDeclarationId on (node, document, id) into the response Declarations", () => {
@@ -295,4 +342,102 @@ describe("declaration", () => {
       ["document", "id"],
     );
   });
+
+  it("gives the template arm its two typed booleans and the context arm its version", () => {
+    const { ContextDeclarationArm, TemplateDeclarationArm } = declaration.relations;
+    assert.deepStrictEqual(Object.keys(TemplateDeclarationArm.fields), [
+      "id",
+      "mathVariable",
+      "paramVariable",
+    ]);
+    assert.deepStrictEqual([...TemplateDeclarationArm.primaryKey], ["id"]);
+    assert.deepStrictEqual(Object.keys(ContextDeclarationArm.fields), ["id", "version"]);
+    assert.deepStrictEqual([...ContextDeclarationArm.primaryKey], ["id"]);
+
+    const into = ofKind("contained").filter((rule) => rule.left.source === ContextDeclarationArm);
+    assert.deepStrictEqual(
+      into.map((rule) => [rule.right.source, [...rule.left.fields], [...rule.right.fields]]),
+      [[node.relations.Node, ["id", "version"], ["id", "version"]]],
+    );
+  });
+
+  it("marks mathVariable and paramVariable per node, each contained in the template arm", () => {
+    const { DeclaredMathVariable, DeclaredParamVariable, TemplateDeclarationArm } =
+      declaration.relations;
+    for (const marker of [DeclaredMathVariable, DeclaredParamVariable]) {
+      assert.deepStrictEqual(Object.keys(marker.fields), ["node"]);
+      assert.deepStrictEqual([...marker.primaryKey], ["node"]);
+
+      const into = ofKind("contained").filter((rule) => rule.left.source === marker);
+      assert.deepStrictEqual(
+        into.map((rule) => [rule.right.source, [...rule.left.fields], [...rule.right.fields]]),
+        [[TemplateDeclarationArm, ["node"], ["id"]]],
+      );
+    }
+  });
+
+  it("contains the 3.0.0 context declarations in ContextDeclarationId by node (goal 3.1)", () => {
+    const [rule, ...rest] = ofKind("contained").filter(
+      (candidate) =>
+        selectionOf(candidate.left)?.relation === declaration.relations.ContextDeclarationArm,
+    );
+    assert.strictEqual(rest.length, 0);
+    assert.isDefined(rule);
+    assert.deepStrictEqual(selectionOf(rule?.left ?? { source: {} })?.bindings, {
+      version: "3.0.0",
+    });
+    assert.deepStrictEqual([...(rule?.left.fields ?? [])], ["id"]);
+    assert.strictEqual(rule?.right.source, document.relations.ContextDeclarationId);
+    assert.deepStrictEqual([...(rule?.right.fields ?? [])], ["node"]);
+  });
+
+  it("reads kind in the ReservedOutcomeTypes check", () => {
+    const [check, ...rest] = ofKind("check").filter((rule) => rule.name === "ReservedOutcomeTypes");
+    assert.strictEqual(rest.length, 0);
+    assert.strictEqual(check?.relation, declaration.relations.TypedDeclaration);
+
+    const described: unknown = check;
+    const text = Predicate.hasProperty(described, "desc")
+      ? inspect(described.desc, { depth: null, maxStringLength: 100_000 })
+      : "";
+    for (const word of ["kind", "outcome", "SCORE", "MAXSCORE", "PASSED", "float", "boolean"]) {
+      assert.include(text, word);
+    }
+  });
+
+  it("types DeclarationNormalMaximum.value as a positive double", () => {
+    const { value } = declaration.relations.DeclarationNormalMaximum.fields;
+    assert.strictEqual(describeField(value), describeField(str.regex(patterns.positiveDouble)));
+    assert.notStrictEqual(describeField(value), describeField(str.regex(patterns.xsDouble)));
+  });
+});
+
+layer(NodeServices.layer, { excludeTestServices: true })("declaration importer", (suite) => {
+  suite.effect("writes kind on the TypedDeclaration rows of SIMPLE/choice.xml", () =>
+    Effect.gen(function* importedKinds() {
+      const fs = yield* FileSystem.FileSystem;
+      const bytes = yield* fs.readFile(`${inject("fixtures").simple}/choice.xml`);
+      const doc = yield* readXml(bytes);
+      const { rows } = yield* itemRows(
+        {
+          doc,
+          packageId: "22222222-2222-4222-8222-222222222222",
+          path: "choice.xml",
+          resource: "choice",
+          resourceType: "imsqti_item_xmlv3p0",
+          version: "3.0.0",
+        },
+        Rows.empty(),
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, declaration.relations.TypedDeclaration)
+          .map((row) => [row.identifier, row.kind])
+          .toSorted(([a], [b]) => String(a).localeCompare(String(b))),
+        [
+          ["RESPONSE", "response"],
+          ["SCORE", "outcome"],
+        ],
+      );
+    }),
+  );
 });
