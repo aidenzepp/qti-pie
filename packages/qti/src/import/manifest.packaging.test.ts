@@ -595,6 +595,23 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
     }),
   );
 
+  suite.effect("stores bytes' fragment as a packaged file, never as a document", () =>
+    Effect.gen(function* fragmentBytes() {
+      const { documents, rows } = yield* resultOf(yield* materialize("bytes"));
+      assert.deepStrictEqual(
+        documents.map((document) => document.path),
+        ["choice.xml"],
+      );
+
+      const contents = new Set(Rows.of(rows, FileContent).map((row) => row.path));
+      assert.isTrue(contents.has("fragments/rtest01-fragment.xml"));
+      assert.isTrue(contents.has("meta/other.xml"));
+      for (const document of documents) {
+        assert.isFalse(contents.has(document.path), document.path);
+      }
+    }),
+  );
+
   suite.effect(
     "refuses a cpx:variant before a cp:file and a DRD leaf out of sequence as ordering",
     () =>
