@@ -2,6 +2,7 @@ import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
 import * as document from "#qti/schema/document.ts";
+import * as metadata from "#qti/schema/metadata.ts";
 import {
   arms,
   LomId,
@@ -15,6 +16,7 @@ import {
   rules,
 } from "#qti/schema/metadata.ts";
 import * as lom from "#qti/schema/kinds/lom.ts";
+import * as qmd from "#qti/schema/kinds/qmd.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
@@ -440,5 +442,128 @@ describe("metadata R30 capacities", () => {
     );
     assert.strictEqual(composed.length, 80);
     assert.isDefined(probe());
+  });
+});
+
+const hostArms = [
+  ["metadata", metadata.QtiMetadataInMetadata],
+  ["resourceLom", metadata.QtiMetadataInResourceLom],
+  ["externalLom", metadata.QtiMetadataInExternalLom],
+] as const;
+
+/**
+ * The `[source, from fields, to fields]` of every containment of `from` in the module's rules.
+ */
+const targetsOf = (from: (typeof hostArms)[number][1]) =>
+  rules.flatMap((rule) =>
+    rule.kind === "contained" && rule.left.source === from
+      ? [[rule.right.source, [...rule.left.fields], [...rule.right.fields]] as const]
+      : [],
+  );
+
+describe("metadata QtiMetadata hosts", () => {
+  it("names exactly the three host arms in one alternatives statement on host", () => {
+    const [rule, ...rest] = rules.filter(
+      (candidate) => candidate.kind === "alternatives" && candidate.parent === metadata.QtiMetadata,
+    );
+    assert.strictEqual(rest.length, 0);
+    assert.strictEqual(rule?.kind === "alternatives" && rule.discriminator, "host");
+    assert.deepStrictEqual(
+      rule?.kind === "alternatives" ? [...rule.roster.handles] : [],
+      hostArms.map(([handle]) => handle),
+    );
+
+    const named = new Map(rule?.kind === "alternatives" ? Object.entries(rule.arms) : []);
+    assert.deepStrictEqual(
+      [...named.keys()].toSorted(),
+      hostArms.map(([handle]) => handle).toSorted(),
+    );
+    for (const [handle, arm] of hostArms) {
+      assert.strictEqual(named.get(handle), arm, handle);
+    }
+  });
+
+  it("keys QtiMetadata by id and by (package, resource), with no metadata field", () => {
+    assert.deepStrictEqual([...metadata.QtiMetadata.primaryKey], ["id"]);
+    assert.isFalse("metadata" in metadata.QtiMetadata.fields);
+    assert.isTrue(
+      rules.some(
+        (rule) =>
+          rule.kind === "key" &&
+          rule.relation === metadata.QtiMetadata &&
+          rule.fields.join(",") === "package,resource",
+      ),
+    );
+  });
+
+  it("contains each arm in QtiMetadata and in the edge of its host", () => {
+    for (const [, arm] of hostArms) {
+      assert.isTrue(
+        targetsOf(arm).some(
+          ([into, from, to]) =>
+            into === metadata.QtiMetadata &&
+            from.join(",") === "id,package,resource" &&
+            to.join(",") === "id,package,resource",
+        ),
+      );
+    }
+    assert.isTrue(
+      targetsOf(metadata.QtiMetadataInMetadata).some(
+        ([into, from, to]) =>
+          into === node.Edge && from.join(",") === "id,metadata" && to.join(",") === "child,parent",
+      ),
+    );
+  });
+
+  it("targets the host relations: ResourceMetadata, Resource, ResourceLom and ExternalLom", () => {
+    const inMetadata = targetsOf(metadata.QtiMetadataInMetadata);
+    assert.isTrue(
+      inMetadata.some(
+        ([into, from, to]) =>
+          into === pkg.ResourceMetadata &&
+          from.join(",") === "metadata,resourceNode" &&
+          to.join(",") === "id,resource",
+      ),
+    );
+    assert.isTrue(
+      inMetadata.some(
+        ([into, from, to]) =>
+          into === pkg.Resource &&
+          from.join(",") === "resourceNode,package,resource" &&
+          to.join(",") === "id,package,identifier",
+      ),
+    );
+    for (const [arm, into] of [
+      [metadata.QtiMetadataInResourceLom, metadata.ResourceLom],
+      [metadata.QtiMetadataInExternalLom, metadata.ExternalLom],
+    ] as const) {
+      assert.isTrue(
+        targetsOf(arm).some(
+          ([target, from, to]) =>
+            target === into &&
+            from.join(",") === "lom,package,resource" &&
+            to.join(",") === "lom,package,resource",
+        ),
+      );
+    }
+  });
+
+  it("admits qmd:qtiMetadata under lom:lom in both versions", () => {
+    for (const version of ["3.0.0", "3.0.1"]) {
+      assert.isTrue(
+        qmd.admission.some(
+          (row) =>
+            row.version === version && row.parent === "lom:lom" && row.child === "qmd:qtiMetadata",
+        ),
+        version,
+      );
+    }
+  });
+
+  it("builds the composed schema with the host arms in the relations", () => {
+    const built = probe();
+    for (const [, arm] of hostArms) {
+      assert.isTrue(arm.name in built.relations);
+    }
   });
 });

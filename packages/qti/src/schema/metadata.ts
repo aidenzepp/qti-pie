@@ -29,7 +29,7 @@ import {
 } from "@bjornpagen/grizzle";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import { Edge, Node, NodeKind, TreeRoot } from "#qti/schema/node.ts";
-import { File, FileMetadata, Resource } from "#qti/schema/package.ts";
+import { File, FileMetadata, Resource, ResourceMetadata } from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
@@ -530,12 +530,52 @@ export const LomObjectTitle = relation(
 );
 
 /**
- * The QTI metadata record of a resource: the `cp:metadata.resource` node it hangs under and the
- * resource it describes.
+ * The places a QTI metadata record can sit: under the resource's `cp:metadata.resource`, in the
+ * resource's own `lom:lom`, or in the `lom:lom` of an external metadata document.
  */
-export const QtiMetadata = relation("QtiMetadata", { id: uuid, metadata: uuid, resource: uuid }, [
-  "id",
+export const QtiMetadataHost = closed("QtiMetadataHost", [
+  "metadata",
+  "resourceLom",
+  "externalLom",
 ]);
+
+/**
+ * The QTI metadata record of a resource, at most one per resource across every host: the host
+ * arm that holds it, the package and the resource's identifier.
+ */
+export const QtiMetadata = relation(
+  "QtiMetadata",
+  { host: closedId(QtiMetadataHost), id: uuid, package: uuid, resource: ncName },
+  ["id"],
+);
+
+/**
+ * A record under the resource's `cp:metadata.resource` node, with the `cp:resource` node it
+ * describes.
+ */
+export const QtiMetadataInMetadata = relation(
+  "QtiMetadataInMetadata",
+  { id: uuid, metadata: uuid, package: uuid, resource: ncName, resourceNode: uuid },
+  ["id"],
+);
+
+/**
+ * A record in the resource's own `lom:lom`.
+ */
+export const QtiMetadataInResourceLom = relation(
+  "QtiMetadataInResourceLom",
+  { id: uuid, lom: uuid, package: uuid, resource: ncName },
+  ["id"],
+);
+
+/**
+ * A record in the `lom:lom` of the resource's external metadata document.
+ */
+export const QtiMetadataInExternalLom = relation(
+  "QtiMetadataInExternalLom",
+  { id: uuid, lom: uuid, package: uuid, resource: ncName },
+  ["id"],
+);
 
 /**
  * The `qmd:itemTemplate` of a QTI metadata record: a boolean.
@@ -1277,6 +1317,10 @@ export const relations = {
   QmdToolVendor,
   QmdToolVersion,
   QtiMetadata,
+  QtiMetadataHost,
+  QtiMetadataInExternalLom,
+  QtiMetadataInMetadata,
+  QtiMetadataInResourceLom,
   ResourceLom,
   ResourceLomIdentified,
   ResourceLomTitled,
@@ -1510,10 +1554,43 @@ export const rules = [
     from: on(LomObjectTitle, "lom"),
     within: within(1n, 1n),
   }),
-  key(QtiMetadata, ["resource"]),
-  contained(on(QtiMetadata, "resource"), on(Resource, "id")),
-  contained(on(QtiMetadata, "metadata"), on(select(Node, { kind: "cp:metadata.resource" }), "id")),
-  contained(on(QtiMetadata, "id", "metadata"), on(Edge, "child", "parent")),
+  key(QtiMetadata, ["package", "resource"]),
+  alternatives(QtiMetadata, "host", QtiMetadataHost, {
+    externalLom: QtiMetadataInExternalLom,
+    metadata: QtiMetadataInMetadata,
+    resourceLom: QtiMetadataInResourceLom,
+  }),
+  contained(
+    on(QtiMetadataInMetadata, "id", "package", "resource"),
+    on(QtiMetadata, "id", "package", "resource"),
+  ),
+  contained(on(QtiMetadataInMetadata, "id", "metadata"), on(Edge, "child", "parent")),
+  contained(
+    on(QtiMetadataInMetadata, "metadata", "resourceNode"),
+    on(ResourceMetadata, "id", "resource"),
+  ),
+  contained(
+    on(QtiMetadataInMetadata, "resourceNode", "package", "resource"),
+    on(Resource, "id", "package", "identifier"),
+  ),
+  contained(
+    on(QtiMetadataInResourceLom, "id", "package", "resource"),
+    on(QtiMetadata, "id", "package", "resource"),
+  ),
+  contained(on(QtiMetadataInResourceLom, "id", "lom"), on(Edge, "child", "parent")),
+  contained(
+    on(QtiMetadataInResourceLom, "lom", "package", "resource"),
+    on(ResourceLom, "lom", "package", "resource"),
+  ),
+  contained(
+    on(QtiMetadataInExternalLom, "id", "package", "resource"),
+    on(QtiMetadata, "id", "package", "resource"),
+  ),
+  contained(on(QtiMetadataInExternalLom, "id", "lom"), on(Edge, "child", "parent")),
+  contained(
+    on(QtiMetadataInExternalLom, "lom", "package", "resource"),
+    on(ExternalLom, "lom", "package", "resource"),
+  ),
   key(QmdItemTemplate, ["qtiMetadata"]),
   contained(on(QmdItemTemplate, "id", "qtiMetadata"), on(Edge, "child", "parent")),
   key(QmdTimeDependent, ["qtiMetadata"]),

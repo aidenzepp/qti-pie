@@ -1,0 +1,117 @@
+{
+	"decisions": {
+		"candidates": [
+			{
+				"label": "the candidate rename of \"qti\".\"qti_metadata\".\"metadata\" to \"host\"",
+				"renames": {
+					"added": "\"qti\".\"qti_metadata\".\"host\"",
+					"kind": "field",
+					"removed": "\"qti\".\"qti_metadata\".\"metadata\""
+				},
+				"requires": [],
+				"witness": {
+					"choice": 0,
+					"statement": 0
+				}
+			},
+			{
+				"label": "the candidate rename of \"qti\".\"qti_metadata\".\"metadata\" to \"package\"",
+				"renames": {
+					"added": "\"qti\".\"qti_metadata\".\"package\"",
+					"kind": "field",
+					"removed": "\"qti\".\"qti_metadata\".\"metadata\""
+				},
+				"requires": [],
+				"witness": {
+					"choice": 1,
+					"statement": 0
+				}
+			}
+		],
+		"choices": [
+			{
+				"file": "02-structure.sql",
+				"keep": "ALTER TABLE \"qti\".\"qti_metadata\" ADD COLUMN \"host\" \"qti\".\"qti_metadata_host\" DEFAULT __GRIZZLE_PLACEHOLDER__ NOT NULL",
+				"offers": [
+					{
+						"candidate": 0,
+						"statements": [
+							"ALTER TABLE \"qti\".\"qti_metadata\" RENAME COLUMN \"metadata\" TO \"host\"",
+							"ALTER TABLE \"qti\".\"qti_metadata\" DROP CONSTRAINT \"__qti_metadata_fk_id_metadata_sjj6dojrsg\"",
+							"ALTER TABLE \"qti\".\"qti_metadata\" DROP CONSTRAINT \"__qti_metadata_fk_metadata_tag_kind_cp_metadata_qzc3ba74y7\"",
+							"ALTER TABLE \"qti\".\"qti_metadata\" ALTER COLUMN \"host\" TYPE \"qti\".\"qti_metadata_host\" USING __GRIZZLE_PLACEHOLDER__"
+						]
+					}
+				],
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"file": "02-structure.sql",
+				"keep": "ALTER TABLE \"qti\".\"qti_metadata\" ADD COLUMN \"package\" uuid DEFAULT __GRIZZLE_PLACEHOLDER__ NOT NULL",
+				"offers": [
+					{
+						"candidate": 1,
+						"statements": [
+							"ALTER TABLE \"qti\".\"qti_metadata\" RENAME COLUMN \"metadata\" TO \"package\""
+						]
+					}
+				],
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"file": "07-publish.sql",
+				"keep": "ALTER TABLE \"qti\".\"qti_metadata\" DROP CONSTRAINT \"__qti_metadata_fk_metadata_tag_kind_cp_metadata_qzc3ba74y7\"",
+				"offers": [
+					{
+						"candidate": 0,
+						"statements": []
+					}
+				],
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"file": "07-publish.sql",
+				"keep": "ALTER TABLE \"qti\".\"qti_metadata\" DROP CONSTRAINT \"__qti_metadata_fk_id_metadata_sjj6dojrsg\"",
+				"offers": [
+					{
+						"candidate": 0,
+						"statements": []
+					}
+				],
+				"within": {
+					"kind": "top"
+				}
+			}
+		],
+		"confirms": [],
+		"losses": [
+			{
+				"carriers": [
+					0,
+					1
+				],
+				"file": "07-publish.sql",
+				"loses": {
+					"field": "\"metadata\"",
+					"kind": "field",
+					"relation": "\"qti\".\"qti_metadata\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"qti_metadata\" DROP COLUMN \"metadata\"",
+				"within": {
+					"kind": "top"
+				}
+			}
+		]
+	},
+	"kind": "drafted",
+	"schema": "qti",
+	"schemaName": "Qti",
+	"source": "6e498ef734097d44f40ad509c72e0221248e4e35cf01588b8c0424c06d6f07ea",
+	"target": "00744156d395a953efe389e59f3f665de7128695e8a958880d2c8821e7ed763d"
+}
