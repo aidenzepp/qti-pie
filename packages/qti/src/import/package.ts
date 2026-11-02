@@ -10,14 +10,15 @@ import { ChangeSet, Db } from "@bjornpagen/grizzle";
 import type { ApplyError, DbLayer, Fact, OpenError } from "@bjornpagen/grizzle";
 import { Effect, Option, Ref, Schedule } from "effect";
 import type { FileSystem, PlatformError } from "effect";
-import { itemGuards } from "#qti/import/guards/item.ts";
-import { manifestGuards } from "#qti/import/guards/manifest.ts";
-import { treeGuards } from "#qti/import/guards/tree.ts";
+import { externalRows } from "#qti/import/external.ts";
+import { guards } from "#qti/import/guards.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
+import { outcomeRows } from "#qti/import/outcome.ts";
 import type { ImportLaw, ImportRefused, ImportWitness } from "#qti/import/refusal.ts";
 import { refusalOfLaw, ruleOfError } from "#qti/import/refusal.ts";
-import { Rows } from "#qti/import/tree.ts";
+import { Rows, UnmodeledVocabulary, kindOf, treeRows } from "#qti/import/tree.ts";
+import { usageRows } from "#qti/import/usage.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import { Package } from "#qti/schema/package.ts";
@@ -96,7 +97,13 @@ const isReadRefusal = <E extends { readonly _tag: string }>(
 ): error is Exclude<E, PlatformError.PlatformError> => error._tag !== "PlatformError";
 
 /**
- * Read the package at `dir` into rows: the manifest's, then every document it lists.
+ * Read the package at `dir` into rows: the manifest's, then every document it lists, each built by
+ * the builder of the root element the file holds.
+ *
+ * The root decides the builder, and the resource's `type` is passed on whatever the root is, so a
+ * root that does not belong to the type is refused at commit by the `Document` containment into
+ * `RootOfType`. A root no builder names is `UnmodeledVocabulary`. The `rptemplate` root has no
+ * builder yet, so its tree is read as it stands and the reader refuses its first unmodeled kind.
  */
 const readRows = Effect.fn("import.readRows")(function* readRows(dir: string) {
   const entries = yield* listPackage(dir);
@@ -106,23 +113,53 @@ const readRows = Effect.fn("import.readRows")(function* readRows(dir: string) {
 
   for (const document of built.documents) {
     const doc = yield* readXml(yield* readEntry(dir, document.path));
-    const item = yield* itemRows(
-      {
+    const input = {
+      doc,
+      packageId: built.packageId,
+      path: document.path,
+      resource: document.resource,
+      resourceType: document.type,
+      version: built.version,
+    };
+    const listed = {
+      package: built.packageId,
+      path: document.path,
+      resource: document.resource,
+      resourceType: document.type,
+      version: built.version,
+    };
+    const root = Option.getOrUndefined(kindOf(doc.root, Option.none()));
+
+    if (root === "qti-assessment-item") {
+      ({ rows } = yield* itemRows(input, rows));
+    } else if (root === "lom:lom") {
+      ({ rows } = yield* externalRows(doc, listed, rows));
+    } else if (root === "ud:usageData") {
+      ({ rows } = yield* usageRows(doc, listed, rows));
+    } else if (root === "qti-outcome-declaration") {
+      ({ rows } = yield* outcomeRows(input, rows));
+    } else if (root === "qti-response-processing") {
+      ({ rows } = yield* treeRows(
         doc,
-        packageId: built.packageId,
-        path: document.path,
-        resource: document.resource,
-        resourceType: document.type,
-        version: built.version,
-      },
-      rows,
-    );
-    ({ rows } = item);
+        {
+          charset: doc.charset,
+          id: crypto.randomUUID(),
+          kind: "document",
+          root: "rptemplate",
+          version: built.version,
+        },
+        rows,
+      ));
+    } else {
+      return yield* new UnmodeledVocabulary({
+        kind: "element",
+        name: doc.root.qname,
+        parent: Option.none(),
+      });
+    }
   }
 
-  yield* treeGuards(rows);
-  yield* manifestGuards(rows, entries);
-  yield* itemGuards(rows);
+  yield* guards(rows, entries);
 
   return { packageId: built.packageId, rows };
 });
