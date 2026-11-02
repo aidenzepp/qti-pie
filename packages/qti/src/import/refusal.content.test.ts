@@ -64,6 +64,36 @@ describe("the content rules of a containment", () => {
     assert.isTrue(isMappedLaw(law));
   });
 
+  it("names each id holder's document copy document-key", () => {
+    const laws: readonly (readonly [string, ImportLaw])[] = [
+      ["HtmlId", contained("HtmlId", ["node", "document", "kind"], "Node", ["id", "tree", "kind"])],
+      ...["ItemBodyId", "PrintedVariableId", "ContextDeclarationId"].map(
+        (holder): readonly [string, ImportLaw] => [
+          holder,
+          contained(holder, ["node", "document"], "Node", ["id", "tree"]),
+        ],
+      ),
+    ];
+
+    for (const [holder, law] of laws) {
+      assert.strictEqual(ruleOfLaw(law), "document-key", holder);
+      assert.isTrue(isMappedLaw(law), holder);
+    }
+  });
+
+  it("keeps a 3.0.0 context declaration's holder containment context-id", () => {
+    const law = contained(
+      "ContextDeclarationArm",
+      ["id"],
+      "ContextDeclarationId",
+      ["node"],
+      [{ field: "version", value: "3.0.0" }],
+    );
+
+    assert.strictEqual(ruleOfLaw(law), "context-id");
+    assert.isTrue(isMappedLaw(law));
+  });
+
   it("leaves a containment between unnamed relations to the admission fallback", () => {
     const law = contained("Unnamed", ["id"], "Elsewhere", ["id"]);
 
