@@ -495,6 +495,10 @@ export const ownAttributes = {
     ["hotspot-label", optional(R.AssociableHotspotLabel)],
     ["match-max", arm(R.AssociableHotspot, "matchMax")],
     ["match-min", optional(R.AssociableHotspotMatchMin)],
+    [
+      "show-hide",
+      marked(R.DeclaredAssociableHotspotShowHide, arm(R.AssociableHotspot, "showHide")),
+    ],
   ],
   "qti-associate-interaction": [
     responseIdentifierOf(R.AssociateInteraction),
@@ -546,6 +550,7 @@ export const ownAttributes = {
     ["template-identifier", choiceTemplate],
     ["match-group", optional(R.MatchGroup)],
     ["required", marked(R.DeclaredGapRequired, arm(R.Gap, "required"))],
+    ["show-hide", marked(R.DeclaredGapShowHide, arm(R.Gap, "showHide"))],
   ],
   "qti-gap-img": [
     identifierOf(R.GapImg),
@@ -556,6 +561,7 @@ export const ownAttributes = {
     ["object-label", optional(R.GapImgObjectLabel)],
     ["top", optional(R.GapImgTop)],
     ["left", optional(R.GapImgLeft)],
+    ["show-hide", marked(R.DeclaredGapImgShowHide, arm(R.GapImg, "showHide"))],
   ],
   "qti-gap-match-interaction": [
     responseIdentifierOf(R.GapMatchInteraction),
@@ -572,6 +578,7 @@ export const ownAttributes = {
     ["match-group", optional(R.MatchGroup)],
     ["match-max", arm(R.GapText, "matchMax")],
     ["match-min", optional(R.GapTextMatchMin)],
+    ["show-hide", marked(R.DeclaredGapTextShowHide, arm(R.GapText, "showHide"))],
   ],
   "qti-graphic-associate-interaction": [
     responseIdentifierOf(R.GraphicAssociateInteraction),
@@ -597,6 +604,7 @@ export const ownAttributes = {
     ["shape", arm(R.HotspotChoice, "shape")],
     ["coords", optional(R.Coords)],
     ["hotspot-label", optional(R.HotspotChoiceLabel)],
+    ["show-hide", marked(R.DeclaredHotspotChoiceShowHide, arm(R.HotspotChoice, "showHide"))],
   ],
   "qti-hotspot-interaction": [
     responseIdentifierOf(R.HotspotInteraction),
@@ -605,7 +613,11 @@ export const ownAttributes = {
     ["data-min-selections-message", optional(R.HotspotMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.HotspotMaxSelectionsMessage)],
   ],
-  "qti-hottext": [identifierOf(R.Hottext), ["template-identifier", choiceTemplate]],
+  "qti-hottext": [
+    identifierOf(R.Hottext),
+    ["template-identifier", choiceTemplate],
+    ["show-hide", marked(R.DeclaredHottextShowHide, arm(R.Hottext, "showHide"))],
+  ],
   "qti-hottext-interaction": [
     responseIdentifierOf(R.HottextInteraction),
     ["max-choices", optional(R.HottextMaxChoices)],
@@ -617,6 +629,7 @@ export const ownAttributes = {
     identifierOf(R.InlineChoice),
     ["fixed", marked(R.DeclaredInlineChoiceFixed, arm(R.InlineChoice, "fixed"))],
     ["template-identifier", choiceTemplate],
+    ["show-hide", marked(R.DeclaredInlineChoiceShowHide, arm(R.InlineChoice, "showHide"))],
   ],
   "qti-inline-choice-interaction": [
     responseIdentifierOf(R.InlineChoiceInteraction),

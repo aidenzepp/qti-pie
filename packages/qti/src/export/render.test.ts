@@ -198,18 +198,18 @@ const hotspotItem = `<?xml version="1.0" encoding="UTF-8"?>
 </qti-assessment-item>`;
 
 /**
- * The attributes the registries admit that no relation stores, so the importer drops them and no
- * render can bring them back: the schema has no `show-hide` for these kinds.
+ * An item whose inline choice and hottext each write `show-hide="hide"` on the first choice and
+ * omit it on the second.
  */
-const unstored: ReadonlyMap<string, readonly string[]> = new Map([
-  ["qti-associable-hotspot", ["show-hide"]],
-  ["qti-gap", ["show-hide"]],
-  ["qti-gap-img", ["show-hide"]],
-  ["qti-gap-text", ["show-hide"]],
-  ["qti-hotspot-choice", ["show-hide"]],
-  ["qti-hottext", ["show-hide"]],
-  ["qti-inline-choice", ["show-hide"]],
-]);
+const choiceItem = `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="choices" title="Choices" adaptive="false" time-dependent="false">
+  <qti-response-declaration identifier="R1" cardinality="single" base-type="identifier"/>
+  <qti-response-declaration identifier="R2" cardinality="single" base-type="identifier"/>
+  <qti-item-body>
+    <p><qti-inline-choice-interaction response-identifier="R1"><qti-inline-choice identifier="A" show-hide="hide">a</qti-inline-choice><qti-inline-choice identifier="B">b</qti-inline-choice></qti-inline-choice-interaction></p>
+    <qti-hottext-interaction response-identifier="R2"><p><qti-hottext identifier="H1" show-hide="hide">h1</qti-hottext><qti-hottext identifier="H2">h2</qti-hottext></p></qti-hottext-interaction>
+  </qti-item-body>
+</qti-assessment-item>`;
 
 /**
  * The attributes every kind may carry whatever its registry row: the families, `id`, `headers`,
@@ -260,6 +260,29 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       }),
     );
 
+    it.effect(
+      "a choice-like child's written show-hide is kept and an omitted one stays omitted",
+      () =>
+        Effect.gen(function* choiceShowHide() {
+          const doc = yield* readXml(new TextEncoder().encode(choiceItem));
+          const input: ItemInput = {
+            doc,
+            packageId: crypto.randomUUID(),
+            path: "choices.xml",
+            resource: "choices",
+            resourceLomHasGeneral: false,
+            resourceType: "imsqti_item_xmlv3p0",
+            version: "3.0.1",
+          };
+          const { documentId, rows } = yield* itemRows(input, Rows.empty());
+          const rendered = textOf(canonicalize(renderTree(rows, documentId)));
+
+          assert.strictEqual(rendered, textOf(canonicalize(doc)));
+          assert.strictEqual(rendered.split('show-hide="hide"').length - 1, 2);
+          assert.notInclude(rendered, 'show-hide="show"');
+        }),
+    );
+
     it.effect("an associable hotspot's written match-min is kept", () =>
       Effect.gen(function* hotspotMatchMin() {
         const doc = yield* readXml(new TextEncoder().encode(hotspotItem));
@@ -281,7 +304,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       }),
     );
 
-    it.effect("every attribute a registry admits has a source, or is one nothing stores", () =>
+    it.effect("every attribute a registry admits has a source", () =>
       Effect.sync(() => {
         const sources = new Map(
           Object.entries(ownAttributes).map(([kind, own]) => [kind, own.map(([name]) => name)]),
@@ -294,10 +317,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
         for (const [kind, attributes] of admitted) {
           const lacking = attributes.filter(
-            (name) =>
-              !shared.has(name) &&
-              !(sources.get(kind) ?? []).includes(name) &&
-              !(unstored.get(kind) ?? []).includes(name),
+            (name) => !shared.has(name) && !(sources.get(kind) ?? []).includes(name),
           );
 
           assert.deepStrictEqual(lacking, [], `${kind}: admitted attributes with no source`);
