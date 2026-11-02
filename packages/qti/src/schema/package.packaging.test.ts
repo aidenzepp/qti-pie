@@ -109,15 +109,25 @@ describe("package staged variant and DRD trio", () => {
     }
   });
 
-  it("stages the trio: the package module's own relations do not hold it", () => {
-    assert.isFalse("Variant" in pkg.relations);
-    for (const name of Object.keys(variantDrdRelations)) {
-      assert.isFalse(name in pkg.relations, name);
+  it("composes the trio: the package module's own relations, rules and arms hold it", () => {
+    for (const [name, relation] of Object.entries(variantDrdRelations)) {
+      assert.isTrue(Object.entries(pkg.relations).some(([n, r]) => n === name && r === relation));
     }
     for (const rule of variantDrdRules) {
-      assert.isFalse(pkg.rules.some((held) => Object.is(held, rule)));
+      assert.isTrue(pkg.rules.some((held) => Object.is(held, rule)));
     }
-    assert.isFalse("cpx:variant" in pkg.arms);
+    for (const [handle, relation] of Object.entries(variantDrdArms)) {
+      assert.isTrue(Object.entries(pkg.arms).some(([h, r]) => h === handle && r === relation));
+    }
+  });
+
+  it("builds a schema over the package module's relations alone, Variant included", () => {
+    const built = schema("P4PackageProbe", { ...node.relations, ...pkg.relations }, [
+      ...node.rules,
+      ...pkg.rules,
+    ]);
+    assert.isTrue("Variant" in built.relations);
+    assert.isTrue("ManifestId" in built.relations);
   });
 
   it("counts each variant's metadata and each metadata's access-for-all resource exactly once", () => {
@@ -156,5 +166,84 @@ describe("package staged variant and DRD trio", () => {
     assert.isTrue(hasKey(DrdAtInteroperable, ["owner"]));
     assert.isTrue(hasKey(DrdEducationalComplexityOfAdaptation, ["owner"]));
     assert.isFalse(hasKey(DrdAccessMode, ["owner"]));
+  });
+});
+
+/**
+ * The statements of the package module's own rules, by kind.
+ */
+const mirrorsOf = () => pkg.rules.filter((rule) => rule.kind === "mirrors");
+
+const containedOf = () => pkg.rules.filter((rule) => rule.kind === "contained");
+
+const alternativesOf = () => pkg.rules.filter((rule) => rule.kind === "alternatives");
+
+const manifestIdArms = [
+  ["manifest", pkg.ManifestIdOfManifest, pkg.Package, ["package", "id"], ["id", "identifier"]],
+  [
+    "resource",
+    pkg.ManifestIdOfResource,
+    pkg.Resource,
+    ["package", "id"],
+    ["package", "identifier"],
+  ],
+  ["variant", pkg.ManifestIdOfVariant, pkg.Variant, ["package", "id"], ["package", "identifier"]],
+] as const;
+
+describe("package ManifestId", () => {
+  it("holds the roster, the relation and the three arms in the module's relations", () => {
+    assert.strictEqual(pkg.relations.ManifestIdHolder, pkg.ManifestIdHolder);
+    assert.strictEqual(pkg.relations.ManifestId, pkg.ManifestId);
+    assert.deepStrictEqual([...pkg.ManifestIdHolder.handles], ["manifest", "resource", "variant"]);
+    for (const [, arm] of manifestIdArms) {
+      assert.isTrue(Object.values(pkg.relations).includes(arm));
+      assert.deepStrictEqual([...arm.primaryKey], ["package", "id"]);
+    }
+  });
+
+  it("keys ManifestId by (package, id) and binds it to its package", () => {
+    assert.deepStrictEqual([...pkg.ManifestId.primaryKey], ["package", "id"]);
+    assert.isTrue(
+      containedOf().some(
+        (rule) =>
+          rule.left.source === pkg.ManifestId &&
+          rule.right.source === pkg.Package &&
+          rule.left.fields.join(",") === "package" &&
+          rule.right.fields.join(",") === "id",
+      ),
+    );
+  });
+
+  it("names its three arms by holder in one alternatives statement", () => {
+    const [rule, ...rest] = alternativesOf().filter(
+      (candidate) => candidate.parent === pkg.ManifestId,
+    );
+    assert.strictEqual(rest.length, 0);
+    assert.strictEqual(rule?.discriminator, "holder");
+    assert.strictEqual(rule?.roster, pkg.ManifestIdHolder);
+    assert.deepStrictEqual(
+      Object.entries(rule?.arms ?? {}).toSorted(([a], [b]) => a.localeCompare(b)),
+      [
+        ["manifest", pkg.ManifestIdOfManifest],
+        ["resource", pkg.ManifestIdOfResource],
+        ["variant", pkg.ManifestIdOfVariant],
+      ],
+    );
+  });
+
+  it("mirrors each arm onto its holder's (identifier) as p4-01's verdict admitted", () => {
+    for (const [, arm, owner, left, right] of manifestIdArms) {
+      const rules = mirrorsOf().filter((rule) => rule.left.source === arm);
+      assert.strictEqual(rules.length, 1, arm.name);
+      assert.strictEqual(rules[0]?.right.source, owner, arm.name);
+      assert.strictEqual(rules[0]?.left.fields.join(","), left.join(","), arm.name);
+      assert.strictEqual(rules[0]?.right.fields.join(","), right.join(","), arm.name);
+    }
+  });
+
+  it("keeps the ManifestId statements out of arms", () => {
+    for (const [, arm] of manifestIdArms) {
+      assert.isFalse(Object.values(pkg.arms).some((held) => Object.is(held, arm)));
+    }
   });
 });

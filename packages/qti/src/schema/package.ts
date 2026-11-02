@@ -8,6 +8,7 @@
  * exactly once per manifest by a capacity statement.
  */
 import {
+  alternatives,
   capacity,
   check,
   closed,
@@ -186,109 +187,6 @@ export const FileContent = relation(
   },
   ["package", "path"],
 );
-
-/**
- * The manifest kinds' arms, keyed by their `NodeKind` handles.
- */
-export const arms = {
-  "cp:dependency": Dependency,
-  "cp:file": File,
-  "cp:manifest": Package,
-  "cp:metadata.manifest": ManifestMetadata,
-  "cp:metadata.resource": ResourceMetadata,
-  "cp:organizations": Organizations,
-  "cp:resource": Resource,
-  "cp:resources": Resources,
-  "cp:schema": ManifestSchema,
-  "cp:schemaversion": ManifestSchemaVersion,
-};
-
-/**
- * The relations and rosters of this module, as schema members.
- */
-export const relations = {
-  Dependency,
-  EntryKind,
-  File,
-  FileContent,
-  Manifest,
-  ManifestMetadata,
-  ManifestSchema,
-  ManifestSchemaVersion,
-  Organizations,
-  Package,
-  PackageEntry,
-  Resource,
-  ResourceHref,
-  ResourceMetadata,
-  ResourceTypeOf,
-  Resources,
-  RootOfType,
-};
-
-/**
- * The statements over this module's relations: the manifest tree's id is the package id and binds
- * its version; each manifest child belongs to a package, hangs under the manifest by an edge, and
- * occurs exactly once; each metadata child belongs to the metadata, hangs under it by an edge, and
- * occurs exactly once; each entry belongs to a package; each resource belongs to a package under
- * the package's version, has a type its version admits and is a node of the manifest tree; each
- * file hangs under its resource by an edge, names an entry of the package, and every resource has
- * at least one; each dependency names two resources of its package, never the same one; each file
- * content is the bytes of an entry.
- */
-export const rules = [
-  mirrors(on(Manifest, "id"), on(Package, "id")),
-  contained(
-    on(select(Tree, { kind: "manifest" }), "id", "version"),
-    on(Package, "id", "schemaversion"),
-  ),
-  key(ManifestMetadata, ["manifest"]),
-  contained(on(ManifestMetadata, "manifest"), on(Package, "id")),
-  contained(on(ManifestMetadata, "id", "manifest"), on(Edge, "child", "parent")),
-  capacity(on(Package, "id"), { from: on(ManifestMetadata, "manifest"), within: within(1n, 1n) }),
-  key(Organizations, ["manifest"]),
-  contained(on(Organizations, "manifest"), on(Package, "id")),
-  contained(on(Organizations, "id", "manifest"), on(Edge, "child", "parent")),
-  capacity(on(Package, "id"), { from: on(Organizations, "manifest"), within: within(1n, 1n) }),
-  key(Resources, ["manifest"]),
-  contained(on(Resources, "manifest"), on(Package, "id")),
-  contained(on(Resources, "id", "manifest"), on(Edge, "child", "parent")),
-  capacity(on(Package, "id"), { from: on(Resources, "manifest"), within: within(1n, 1n) }),
-  key(ManifestSchema, ["metadata"]),
-  contained(on(ManifestSchema, "metadata"), on(ManifestMetadata, "id")),
-  contained(on(ManifestSchema, "id", "metadata"), on(Edge, "child", "parent")),
-  capacity(on(ManifestMetadata, "id"), {
-    from: on(ManifestSchema, "metadata"),
-    within: within(1n, 1n),
-  }),
-  key(ManifestSchemaVersion, ["metadata"]),
-  contained(on(ManifestSchemaVersion, "metadata"), on(ManifestMetadata, "id")),
-  contained(on(ManifestSchemaVersion, "id", "metadata"), on(Edge, "child", "parent")),
-  capacity(on(ManifestMetadata, "id"), {
-    from: on(ManifestSchemaVersion, "metadata"),
-    within: within(1n, 1n),
-  }),
-  contained(on(PackageEntry, "package"), on(Package, "id")),
-  key(Resource, ["package", "identifier"]),
-  contained(on(Resource, "package"), on(Package, "id")),
-  contained(on(Resource, "package", "version"), on(Package, "id", "schemaversion")),
-  contained(on(Resource, "version", "type"), on(ResourceTypeOf, "version", "type")),
-  contained(on(Resource, "id", "package"), on(Node, "id", "tree")),
-  contained(on(ResourceHref, "resource", "package"), on(Resource, "id", "package")),
-  key(ResourceMetadata, ["resource"]),
-  contained(on(ResourceMetadata, "resource"), on(Resource, "id")),
-  contained(on(ResourceMetadata, "id", "resource"), on(Edge, "child", "parent")),
-  key(File, ["package", "resource", "position"]),
-  contained(on(File, "resource", "package"), on(Resource, "id", "package")),
-  contained(on(File, "package", "href"), on(PackageEntry, "package", "path")),
-  contained(on(File, "id", "resource", "position"), on(Edge, "child", "parent", "position")),
-  capacity(on(Resource, "id"), { from: on(File, "resource"), within: within(1n, "*") }),
-  contained(on(Dependency, "package", "resource"), on(Resource, "package", "identifier")),
-  contained(on(Dependency, "package", "target"), on(Resource, "package", "identifier")),
-  check("DependencyNotSelf", Dependency, (d) => d.ne(d.resource, d.target)),
-  contained(on(Dependency, "id", "package"), on(Node, "id", "tree")),
-  contained(on(FileContent, "package", "path"), on(PackageEntry, "package", "path")),
-] as const;
 
 const drdLeaf = <Name extends string>(name: Name, value: ReturnType<typeof str.regex>) =>
   relation(name, { id: uuid, owner: uuid, value }, ["id"]);
@@ -474,7 +372,7 @@ const drdLeaves = [
 ] as const;
 
 /**
- * The staged relations of the variant and DRD vocabulary, which `p4-13` spreads into `relations`.
+ * The relations of the variant and DRD vocabulary, spread into `relations`.
  */
 export const variantDrdRelations = {
   AccessForAllResource,
@@ -500,7 +398,7 @@ export const variantDrdRelations = {
 };
 
 /**
- * The staged statements over the variant and DRD relations. A variant belongs to a resource, which
+ * The statements over the variant and DRD relations. A variant belongs to a resource, which
  * it names by id and by a bound copy of the resource's identifier, hangs under it by an edge, and
  * points at a sibling resource, never its own parent. Its metadata and the metadata's
  * access-for-all resource each occur exactly once and hang under their parent by an edge. Each
@@ -535,7 +433,8 @@ export const variantDrdRules = [
 ] as const;
 
 /**
- * The staged arms of the variant and DRD vocabulary, keyed by their `NodeKind` handles.
+ * The arms of the variant and DRD vocabulary, spread into `arms` and keyed by their `NodeKind`
+ * handles.
  */
 export const variantDrdArms = {
   "cpx:metadata": VariantMetadata,
@@ -543,3 +442,177 @@ export const variantDrdArms = {
   "drd:accessForAllResource": AccessForAllResource,
   ...Object.fromEntries(drdLeaves.map(({ handle, relation: leaf }) => [handle, leaf])),
 };
+
+/**
+ * What holds an `xs:ID` of a manifest: the manifest itself, a resource, or a variant.
+ */
+export const ManifestIdHolder = closed("ManifestIdHolder", ["manifest", "resource", "variant"]);
+
+/**
+ * An `xs:ID` of a manifest, one row per value: the manifest document has one ID space, so a
+ * package's manifest, resources and variants share it. `holder` names which of the three owns the
+ * value, and the holder's arm below binds it to that owner.
+ */
+export const ManifestId = relation(
+  "ManifestId",
+  { holder: closedId(ManifestIdHolder), id: ncName, package: uuid },
+  ["package", "id"],
+);
+
+/**
+ * The `ManifestId` of a package's manifest: the manifest's `identifier`.
+ */
+export const ManifestIdOfManifest = relation(
+  "ManifestIdOfManifest",
+  { id: ncName, package: uuid },
+  ["package", "id"],
+);
+
+/**
+ * The `ManifestId` of a resource: the resource's `identifier`.
+ */
+export const ManifestIdOfResource = relation(
+  "ManifestIdOfResource",
+  { id: ncName, package: uuid },
+  ["package", "id"],
+);
+
+/**
+ * The `ManifestId` of a variant: the variant's `identifier`.
+ */
+export const ManifestIdOfVariant = relation("ManifestIdOfVariant", { id: ncName, package: uuid }, [
+  "package",
+  "id",
+]);
+
+/**
+ * The statements of the manifest-wide `xs:ID` space. Each id belongs to a package, and the
+ * alternatives statement sends each holder to its arm. Each arm is mirrored onto its owner's
+ * `identifier`, so every package, resource and variant has exactly its id row and no id row lacks
+ * an owner. `p4-01`'s probe (`probe.test.ts`) admitted mirroring onto the owner's superkey `(id,
+ * identifier)`, so each is one `mirrors` and not two containments each way.
+ */
+const manifestIdRules = [
+  contained(on(ManifestId, "package"), on(Package, "id")),
+  alternatives(ManifestId, "holder", ManifestIdHolder, {
+    manifest: ManifestIdOfManifest,
+    resource: ManifestIdOfResource,
+    variant: ManifestIdOfVariant,
+  }),
+  mirrors(on(ManifestIdOfManifest, "package", "id"), on(Package, "id", "identifier")),
+  mirrors(on(ManifestIdOfResource, "package", "id"), on(Resource, "package", "identifier")),
+  mirrors(on(ManifestIdOfVariant, "package", "id"), on(Variant, "package", "identifier")),
+] as const;
+
+/**
+ * The manifest kinds' arms, keyed by their `NodeKind` handles.
+ */
+export const arms = {
+  ...variantDrdArms,
+  "cp:dependency": Dependency,
+  "cp:file": File,
+  "cp:manifest": Package,
+  "cp:metadata.manifest": ManifestMetadata,
+  "cp:metadata.resource": ResourceMetadata,
+  "cp:organizations": Organizations,
+  "cp:resource": Resource,
+  "cp:resources": Resources,
+  "cp:schema": ManifestSchema,
+  "cp:schemaversion": ManifestSchemaVersion,
+};
+
+/**
+ * The relations and rosters of this module, as schema members.
+ */
+export const relations = {
+  ...variantDrdRelations,
+  Dependency,
+  EntryKind,
+  File,
+  FileContent,
+  Manifest,
+  ManifestId,
+  ManifestIdHolder,
+  ManifestIdOfManifest,
+  ManifestIdOfResource,
+  ManifestIdOfVariant,
+  ManifestMetadata,
+  ManifestSchema,
+  ManifestSchemaVersion,
+  Organizations,
+  Package,
+  PackageEntry,
+  Resource,
+  ResourceHref,
+  ResourceMetadata,
+  ResourceTypeOf,
+  Resources,
+  RootOfType,
+};
+
+/**
+ * The statements over this module's relations: the manifest tree's id is the package id and binds
+ * its version; each manifest child belongs to a package, hangs under the manifest by an edge, and
+ * occurs exactly once; each metadata child belongs to the metadata, hangs under it by an edge, and
+ * occurs exactly once; each entry belongs to a package; each resource belongs to a package under
+ * the package's version, has a type its version admits and is a node of the manifest tree; each
+ * file hangs under its resource by an edge, names an entry of the package, and every resource has
+ * at least one; each dependency names two resources of its package, never the same one; each file
+ * content is the bytes of an entry. The variant and DRD statements and the `ManifestId` statements
+ * follow.
+ */
+export const rules = [
+  mirrors(on(Manifest, "id"), on(Package, "id")),
+  contained(
+    on(select(Tree, { kind: "manifest" }), "id", "version"),
+    on(Package, "id", "schemaversion"),
+  ),
+  key(ManifestMetadata, ["manifest"]),
+  contained(on(ManifestMetadata, "manifest"), on(Package, "id")),
+  contained(on(ManifestMetadata, "id", "manifest"), on(Edge, "child", "parent")),
+  capacity(on(Package, "id"), { from: on(ManifestMetadata, "manifest"), within: within(1n, 1n) }),
+  key(Organizations, ["manifest"]),
+  contained(on(Organizations, "manifest"), on(Package, "id")),
+  contained(on(Organizations, "id", "manifest"), on(Edge, "child", "parent")),
+  capacity(on(Package, "id"), { from: on(Organizations, "manifest"), within: within(1n, 1n) }),
+  key(Resources, ["manifest"]),
+  contained(on(Resources, "manifest"), on(Package, "id")),
+  contained(on(Resources, "id", "manifest"), on(Edge, "child", "parent")),
+  capacity(on(Package, "id"), { from: on(Resources, "manifest"), within: within(1n, 1n) }),
+  key(ManifestSchema, ["metadata"]),
+  contained(on(ManifestSchema, "metadata"), on(ManifestMetadata, "id")),
+  contained(on(ManifestSchema, "id", "metadata"), on(Edge, "child", "parent")),
+  capacity(on(ManifestMetadata, "id"), {
+    from: on(ManifestSchema, "metadata"),
+    within: within(1n, 1n),
+  }),
+  key(ManifestSchemaVersion, ["metadata"]),
+  contained(on(ManifestSchemaVersion, "metadata"), on(ManifestMetadata, "id")),
+  contained(on(ManifestSchemaVersion, "id", "metadata"), on(Edge, "child", "parent")),
+  capacity(on(ManifestMetadata, "id"), {
+    from: on(ManifestSchemaVersion, "metadata"),
+    within: within(1n, 1n),
+  }),
+  contained(on(PackageEntry, "package"), on(Package, "id")),
+  key(Resource, ["package", "identifier"]),
+  contained(on(Resource, "package"), on(Package, "id")),
+  contained(on(Resource, "package", "version"), on(Package, "id", "schemaversion")),
+  contained(on(Resource, "version", "type"), on(ResourceTypeOf, "version", "type")),
+  contained(on(Resource, "id", "package"), on(Node, "id", "tree")),
+  contained(on(ResourceHref, "resource", "package"), on(Resource, "id", "package")),
+  key(ResourceMetadata, ["resource"]),
+  contained(on(ResourceMetadata, "resource"), on(Resource, "id")),
+  contained(on(ResourceMetadata, "id", "resource"), on(Edge, "child", "parent")),
+  key(File, ["package", "resource", "position"]),
+  contained(on(File, "resource", "package"), on(Resource, "id", "package")),
+  contained(on(File, "package", "href"), on(PackageEntry, "package", "path")),
+  contained(on(File, "id", "resource", "position"), on(Edge, "child", "parent", "position")),
+  capacity(on(Resource, "id"), { from: on(File, "resource"), within: within(1n, "*") }),
+  contained(on(Dependency, "package", "resource"), on(Resource, "package", "identifier")),
+  contained(on(Dependency, "package", "target"), on(Resource, "package", "identifier")),
+  check("DependencyNotSelf", Dependency, (d) => d.ne(d.resource, d.target)),
+  contained(on(Dependency, "id", "package"), on(Node, "id", "tree")),
+  contained(on(FileContent, "package", "path"), on(PackageEntry, "package", "path")),
+  ...variantDrdRules,
+  ...manifestIdRules,
+] as const;
