@@ -1,5 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
-
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `DeclarationShape` and the `shape` field are the contract the declaration, value and interaction modules name; the shape here is the typed-or-record choice, not a structure. */
 
 /**
@@ -11,15 +9,17 @@
  * Expressions inside the response processing are written by the module that reads the
  * {@link NodeIndex} this one returns.
  */
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option } from "effect";
 import {
   collapse,
+  ItemRefusal,
   kindOf,
   replace,
   Rows,
   treeRows,
   typedAttribute,
   UnmodeledVocabulary,
+  withParents,
 } from "#qti/import/tree.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
 import {
@@ -110,16 +110,6 @@ type ShapeHandle = (typeof DeclarationShape.handles)[number];
 export type StandardTemplateHandle = (typeof StandardTemplate.handles)[number];
 
 /**
- * An item the importer reads but whose bindings do not hold together.
- *
- * `rule` names the importer rule the item breaks and `detail` says which part of the item does.
- */
-export class ItemRefusal extends Schema.TaggedError<ItemRefusal>()("ItemRefusal", {
-  detail: Schema.String,
-  rule: Schema.Literals(["binding-declared", "typed-copy"]),
-}) {}
-
-/**
  * What {@link itemRows} needs to know about the document beside its tree.
  */
 export interface ItemInput {
@@ -176,19 +166,6 @@ const judgedLater = <T extends string>(value: string): T =>
   // SAFETY: the column's regex law judges the value at commit, which is the importer's refusal for it (spec 3.9, 4.5).
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
   value as T;
-
-/**
- * Every element of `element`'s subtree beside its parent element, in document order.
- */
-export const withParents = (
-  element: Element,
-  parent: Option.Option<Element>,
-): readonly (readonly [Element, Option.Option<Element>])[] => [
-  [element, parent],
-  ...element.children.flatMap((child) =>
-    child.kind === "element" ? withParents(child, Option.some(element)) : [],
-  ),
-];
 
 const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
 

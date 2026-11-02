@@ -15,8 +15,7 @@ import {
   typedCopy,
 } from "#qti/import/interactions.ts";
 import type { DeclaredVariable } from "#qti/import/interactions.ts";
-import { ItemRefusal } from "#qti/import/item.ts";
-import { Rows } from "#qti/import/tree.ts";
+import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
 import { CoordsRect, Coords } from "#qti/schema/shapes.ts";
 import { ChoiceTemplateRef } from "#qti/schema/choices.ts";

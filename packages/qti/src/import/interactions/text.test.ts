@@ -15,8 +15,7 @@ import {
 } from "#qti/import/interactions.ts";
 import type { DeclaredVariable, InteractionContext } from "#qti/import/interactions.ts";
 import { textRows } from "#qti/import/interactions/text.ts";
-import { ItemRefusal } from "#qti/import/item.ts";
-import { Rows } from "#qti/import/tree.ts";
+import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
 import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
 import { InteractionBinding, RecordBinding, TypedBinding } from "#qti/schema/interaction.ts";

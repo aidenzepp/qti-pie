@@ -3,8 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option } from "effect";
 import { contentRows } from "#qti/import/content.ts";
 import type { DeclaredVariable } from "#qti/import/interactions.ts";
-import { ItemRefusal } from "#qti/import/item.ts";
-import { Rows, treeRows } from "#qti/import/tree.ts";
+import { ItemRefusal, Rows, treeRows } from "#qti/import/tree.ts";
 import {
   ContextDeclarationArm,
   Declaration,

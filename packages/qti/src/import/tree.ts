@@ -2,8 +2,9 @@
 
 /**
  * The tree-level half of the importer: the rows every tree has beside its nodes, the lookup that
- * names an element's kind, the refusal for vocabulary no registry models, and the whitespace
- * helpers every typed attribute passes through.
+ * names an element's kind, the refusal for vocabulary no registry models, the refusal for an item
+ * whose bindings do not hold together, the walk that pairs every element with its parent, and the
+ * whitespace helpers every typed attribute passes through.
  *
  * {@link treeRows} also walks the root and writes every tree's node, edge, generic-arm, namespace
  * and attribute-reference rows; the kind-specific arms and typed attribute columns belong to the
@@ -136,6 +137,29 @@ export class UnmodeledVocabulary extends Schema.TaggedError<UnmodeledVocabulary>
     parent: Schema.Option(Schema.String),
   },
 ) {}
+
+/**
+ * An item the importer reads but whose bindings do not hold together.
+ *
+ * `rule` names the importer rule the item breaks and `detail` says which part of the item does.
+ */
+export class ItemRefusal extends Schema.TaggedError<ItemRefusal>()("ItemRefusal", {
+  detail: Schema.String,
+  rule: Schema.Literals(["binding-declared", "typed-copy"]),
+}) {}
+
+/**
+ * Every element of `element`'s subtree beside its parent element, in document order.
+ */
+export const withParents = (
+  element: Element,
+  parent: Option.Option<Element>,
+): readonly (readonly [Element, Option.Option<Element>])[] => [
+  [element, parent],
+  ...element.children.flatMap((child) =>
+    child.kind === "element" ? withParents(child, Option.some(element)) : [],
+  ),
+];
 
 /**
  * How an attribute's lexical value becomes its typed value: kept, with its tab, line feed and

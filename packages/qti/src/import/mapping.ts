@@ -13,8 +13,7 @@
 import { Effect, Option } from "effect";
 import { attributeReader, coordsRows, markers } from "#qti/import/interactions.ts";
 import type { DeclaredVariable, NodeRef } from "#qti/import/interactions.ts";
-import { ItemRefusal, withParents } from "#qti/import/item.ts";
-import { Rows, typedAttribute } from "#qti/import/tree.ts";
+import { ItemRefusal, Rows, typedAttribute, withParents } from "#qti/import/tree.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
 import { Shape } from "#qti/schema/content/rosters.ts";
 import type { BaseType } from "#qti/schema/declaration.ts";

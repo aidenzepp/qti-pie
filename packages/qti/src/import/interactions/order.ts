@@ -6,10 +6,8 @@
  */
 import { Effect, Option } from "effect";
 import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
-import type { ItemRefusal } from "#qti/import/item.ts";
-import { withParents } from "#qti/import/item.ts";
-import { Rows } from "#qti/import/tree.ts";
-import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
+import { Rows, withParents } from "#qti/import/tree.ts";
+import type { IndexedNode, ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import {
   DeclaredFixed,
   DeclaredShowHide,
