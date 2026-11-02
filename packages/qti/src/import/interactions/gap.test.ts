@@ -347,7 +347,7 @@ describe("gapRows on a gap-match interaction", () => {
         gapRows(contextOf([element("p", {}, [gap("G1")])], pairs), Rows.empty()),
       );
 
-      assert.strictEqual(refusalRuleOf(exit), "binding-declared");
+      assert.strictEqual(refusalRuleOf(exit), "ancestry-ban");
     }),
   );
 });

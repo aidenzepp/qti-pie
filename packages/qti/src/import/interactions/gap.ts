@@ -270,8 +270,8 @@ const groupAndTemplate = Effect.fn("import.gapGroupAndTemplate")(function* group
  * The rows of one `qti-gap`: the gap with the gap-match interaction that nearest encloses it, its
  * `required` flag and marker, its match group and its template variable.
  *
- * @returns The rows; `ItemRefusal` for a gap that sits in no gap-match interaction and for a
- *   `template-identifier` that names no typed variable.
+ * @returns The rows; `ItemRefusal` with rule `ancestry-ban` for a gap that sits in no gap-match
+ *   interaction, and `ItemRefusal` for a `template-identifier` that names no typed variable.
  */
 const gap = Effect.fn("import.gap")(function* gap(
   ctx: InteractionContext,
@@ -284,7 +284,7 @@ const gap = Effect.fn("import.gap")(function* gap(
     return yield* new ItemRefusal({
       detail:
         "A qti-gap sits inside no qti-gap-match-interaction. Move it into the block content of a qti-gap-match-interaction.",
-      rule: "binding-declared",
+      rule: "ancestry-ban",
     });
   }
 
