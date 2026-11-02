@@ -3,12 +3,17 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect } from "effect";
 import { renderRegistry, renderTree } from "#qti/export/render.ts";
+import { externalRows } from "#qti/import/external.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
+import { outcomeRows } from "#qti/import/outcome.ts";
 import { Rows } from "#qti/import/tree.ts";
+import { usageRows } from "#qti/import/usage.ts";
 import * as cpx from "#qti/schema/kinds/cpx.ts";
 import * as csmd from "#qti/schema/kinds/csmd.ts";
 import * as drd from "#qti/schema/kinds/drd.ts";
 import * as lom from "#qti/schema/kinds/lom.ts";
+import * as ud from "#qti/schema/kinds/ud.ts";
+import { Document } from "#qti/schema/document.ts";
 import { Node } from "#qti/schema/node.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import { materialize } from "#qti/test/fixtures.ts";
@@ -56,6 +61,43 @@ const manifestOf = (name: FixtureName) =>
     );
 
     return { expected, packageId: built.packageId, rows: built.rows };
+  });
+
+/**
+ * The oracle's canonical text of `file` of the fixture `name`, and the file's decoded document.
+ */
+const oracleOf = (name: FixtureName, file: string) =>
+  Effect.gen(function* oracleOfFile() {
+    const dir = yield* materialize(name);
+    const doc = yield* readXml(yield* readEntry(dir, file));
+    const expected = new TextDecoder().decode(yield* xmllintC14n(path.join(dir, file)));
+
+    return { doc, expected };
+  });
+
+const usagePackage = "66666666-6666-4666-8666-666666666666";
+
+/**
+ * The rows of `example.xml` of a usage-data fixture, with its oracle's canonical text and its
+ * tree's id.
+ */
+const usageOf = (name: FixtureName) =>
+  Effect.gen(function* usageOfFixture() {
+    const { doc, expected } = yield* oracleOf(name, "example.xml");
+    const built = yield* usageRows(
+      doc,
+      {
+        package: usagePackage,
+        path: "example.xml",
+        resource: "USAGE-TOTAL-TEST-106391",
+        resourceType: "qtiusagedata/xml",
+        version: "3.0.0",
+      },
+      Rows.empty(),
+    );
+    const [document] = Rows.of(built.rows, Document);
+
+    return { expected, id: document?.id ?? "", rows: built.rows };
   });
 
 /**
@@ -170,6 +212,90 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
         assert.include(text, 'identifier=" v1 "');
         assert.include(text, "\t");
+      }),
+    );
+
+    it.effect("the render registry names every handle of the 56", () =>
+      Effect.sync(() => {
+        const handles = [...manifestSideKinds, ...ud.kinds];
+
+        assert.lengthOf(handles, 56);
+        assert.deepStrictEqual(
+          handles.filter((handle) => !renderRegistry.has(handle)),
+          [],
+        );
+      }),
+    );
+
+    for (const name of ["usage3", "usage3-padded"] as const) {
+      it.effect(`${name}: example.xml renders to the oracle's canonical bytes`, () =>
+        Effect.gen(function* usageRenders() {
+          const { expected, id, rows } = yield* usageOf(name);
+
+          assert.strictEqual(
+            new TextDecoder().decode(canonicalize(renderTree(rows, id))),
+            expected,
+          );
+        }),
+      );
+    }
+
+    it.effect(
+      "usage3-padded renders the padded name, identifier, the tab and the padded value verbatim",
+      () =>
+        Effect.gen(function* usagePadded() {
+          const { id, rows } = yield* usageOf("usage3-padded");
+          const text = new TextDecoder().decode(canonicalize(renderTree(rows, id)));
+
+          assert.include(text, 'name=" AIS "');
+          assert.include(text, 'identifier=" item1 "');
+          assert.include(text, 'mapKey="a&#x9;b"');
+          assert.include(text, "> 0.87 <");
+        }),
+    );
+
+    it.effect("extmeta: the record renders to the oracle's canonical bytes", () =>
+      Effect.gen(function* recordRenders() {
+        const { doc, expected } = yield* oracleOf("extmeta", "meta/choice.xml");
+        const built = yield* externalRows(
+          doc,
+          {
+            package: usagePackage,
+            path: "meta/choice.xml",
+            resource: "choice-meta",
+            resourceType: "resourcemetadata/xml",
+            version: "3.0.0",
+          },
+          Rows.empty(),
+        );
+        const [document] = Rows.of(built.rows, Document);
+
+        assert.strictEqual(
+          new TextDecoder().decode(canonicalize(renderTree(built.rows, document?.id ?? ""))),
+          expected,
+        );
+      }),
+    );
+
+    it.effect("outcome: testoutcome01.xml renders to the oracle's canonical bytes", () =>
+      Effect.gen(function* outcomeRenders() {
+        const { doc, expected } = yield* oracleOf("outcome", "testoutcome01.xml");
+        const built = yield* outcomeRows(
+          {
+            doc,
+            packageId: usagePackage,
+            path: "testoutcome01.xml",
+            resource: "Outcome_01",
+            resourceType: "imsqti_outcomes_xmlv3p0",
+            version: "3.0.0",
+          },
+          Rows.empty(),
+        );
+
+        assert.strictEqual(
+          new TextDecoder().decode(canonicalize(renderTree(built.rows, built.documentId))),
+          expected,
+        );
       }),
     );
   },
