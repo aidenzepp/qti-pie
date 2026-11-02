@@ -3,10 +3,10 @@
  *
  * `AttributeAdmission` is seeded from the registries (`seed/attribute-admission.ts`) and read-only
  * to every role. Each family relation stores one attribute of the base families (spec 4.2) as an
- * optional value keyed by its node, and its kind is contained into the admission rows of that one
- * attribute, so a node of a kind that does not carry the attribute cannot hold the row. The
+ * optional value keyed by its node, and its kind and attribute are contained together into the
+ * admission rows, so a node of a kind that does not carry the attribute cannot hold the row. The
  * statements that read `AttributeAdmission` live here, in the leaf: the O3 containment of the
- * lexical forms and the kind copy of the HTML ids.
+ * lexical forms.
  *
  * The 48 ARIA relations (`role` and 47 `aria-*` attributes, `aria-keyshorts` the 48th) are one
  * relation per attribute, `Aria<Name>`, each kind-copied and admitted like the base families. Their
@@ -63,9 +63,11 @@
  * names no ARIA types, each enumeration being anonymous per attribute. The `IDREF` and `IDREFS`
  * attributes also write their token rows to `AttributeIdref`.
  *
- * O1: one-selector form built. A containment from `(kind)` into
- * `select(AttributeAdmission, { attribute: "<name>" })`'s `(kind)` builds, because the selector
- * binds `attribute` and so the projection holds the key.
+ * O1: composite-key form taken, refusal: `UnsupportedLawFamily at contained
+ * AriaActivedescendant(kind) in AttributeAdmission(kind) selected (attributes.ts:794:3): a
+ * containment into a selected target into a projection that contains a key of AttributeAdmission;
+ * (kind) contains none, and a containment into an unkeyed projection is not admitted`. Each
+ * relation so carries a constant `attribute` column, held to its one handle by a check.
  */
 import {
   Compute,
@@ -100,7 +102,12 @@ export const AttributeAdmission = relation(
  */
 export const NodeClass = relation(
   "NodeClass",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.classList) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.classList),
+  },
   ["node"],
 );
 
@@ -109,7 +116,12 @@ export const NodeClass = relation(
  */
 export const NodeLang = relation(
   "NodeLang",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.bcp47) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.bcp47),
+  },
   ["node"],
 );
 
@@ -120,6 +132,7 @@ export const NodeLang = relation(
 export const NodeXmlLang = relation(
   "NodeXmlLang",
   {
+    attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
     rootKind: closedId(RootKind),
@@ -135,6 +148,7 @@ export const NodeXmlLang = relation(
 export const NodeLabel = relation(
   "NodeLabel",
   {
+    attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
     rootKind: closedId(RootKind),
@@ -149,7 +163,12 @@ export const NodeLabel = relation(
  */
 export const NodeDir = relation(
   "NodeDir",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.dirEnum) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.dirEnum),
+  },
   ["node"],
 );
 
@@ -158,7 +177,12 @@ export const NodeDir = relation(
  */
 export const NodeXmlBase = relation(
   "NodeXmlBase",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.anyUri) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.anyUri),
+  },
   ["node"],
 );
 
@@ -167,7 +191,12 @@ export const NodeXmlBase = relation(
  */
 export const NodeSuppressTts = relation(
   "NodeSuppressTts",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.suppressTts) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.suppressTts),
+  },
   ["node"],
 );
 
@@ -178,6 +207,7 @@ export const NodeSuppressTts = relation(
 export const NodeCatalogIdref = relation(
   "NodeCatalogIdref",
   {
+    attribute: closedId(AttributeName),
     document: uuid,
     kind: closedId(NodeKind),
     node: uuid,
@@ -210,7 +240,13 @@ export const AttributeIdref = relation(
  */
 export const HeadersTarget = relation(
   "HeadersTarget",
-  { document: uuid, node: uuid, position: pg.bigint, target: str.regex(patterns.ncName) },
+  {
+    attribute: closedId(IdrefAttribute),
+    document: uuid,
+    node: uuid,
+    position: pg.bigint,
+    target: str.regex(patterns.ncName),
+  },
   ["node", "position"],
 );
 
@@ -219,7 +255,12 @@ export const HeadersTarget = relation(
  */
 export const AriaActivedescendant = relation(
   "AriaActivedescendant",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ncName) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ncName),
+  },
   ["node"],
 );
 
@@ -228,7 +269,12 @@ export const AriaActivedescendant = relation(
  */
 export const AriaAtomic = relation(
   "AriaAtomic",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsBoolean) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsBoolean),
+  },
   ["node"],
 );
 
@@ -237,7 +283,12 @@ export const AriaAtomic = relation(
  */
 export const AriaAutocomplete = relation(
   "AriaAutocomplete",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ariaAutocomplete) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ariaAutocomplete),
+  },
   ["node"],
 );
 
@@ -246,7 +297,12 @@ export const AriaAutocomplete = relation(
  */
 export const AriaBusy = relation(
   "AriaBusy",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsBoolean) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsBoolean),
+  },
   ["node"],
 );
 
@@ -255,7 +311,12 @@ export const AriaBusy = relation(
  */
 export const AriaChecked = relation(
   "AriaChecked",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ariaChecked) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ariaChecked),
+  },
   ["node"],
 );
 
@@ -264,7 +325,12 @@ export const AriaChecked = relation(
  */
 export const AriaColcount = relation(
   "AriaColcount",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsInteger) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsInteger),
+  },
   ["node"],
 );
 
@@ -273,7 +339,12 @@ export const AriaColcount = relation(
  */
 export const AriaColindex = relation(
   "AriaColindex",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsInteger) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsInteger),
+  },
   ["node"],
 );
 
@@ -282,7 +353,12 @@ export const AriaColindex = relation(
  */
 export const AriaColspan = relation(
   "AriaColspan",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsInteger) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsInteger),
+  },
   ["node"],
 );
 
@@ -291,7 +367,12 @@ export const AriaColspan = relation(
  */
 export const AriaControls = relation(
   "AriaControls",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ncNameList) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ncNameList),
+  },
   ["node"],
 );
 
@@ -300,7 +381,12 @@ export const AriaControls = relation(
  */
 export const AriaCurrent = relation(
   "AriaCurrent",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ariaCurrent) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ariaCurrent),
+  },
   ["node"],
 );
 
@@ -309,7 +395,12 @@ export const AriaCurrent = relation(
  */
 export const AriaDescribedby = relation(
   "AriaDescribedby",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ncNameList) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ncNameList),
+  },
   ["node"],
 );
 
@@ -318,7 +409,12 @@ export const AriaDescribedby = relation(
  */
 export const AriaDetails = relation(
   "AriaDetails",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ncName) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ncName),
+  },
   ["node"],
 );
 
@@ -327,7 +423,12 @@ export const AriaDetails = relation(
  */
 export const AriaDisabled = relation(
   "AriaDisabled",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsBoolean) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsBoolean),
+  },
   ["node"],
 );
 
@@ -336,7 +437,12 @@ export const AriaDisabled = relation(
  */
 export const AriaErrormessage = relation(
   "AriaErrormessage",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ncName) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ncName),
+  },
   ["node"],
 );
 
@@ -345,7 +451,12 @@ export const AriaErrormessage = relation(
  */
 export const AriaExpanded = relation(
   "AriaExpanded",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ariaExpanded) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ariaExpanded),
+  },
   ["node"],
 );
 
@@ -354,7 +465,12 @@ export const AriaExpanded = relation(
  */
 export const AriaFlowto = relation(
   "AriaFlowto",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ncNameList) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ncNameList),
+  },
   ["node"],
 );
 
@@ -363,7 +479,12 @@ export const AriaFlowto = relation(
  */
 export const AriaHaspopup = relation(
   "AriaHaspopup",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsBoolean) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsBoolean),
+  },
   ["node"],
 );
 
@@ -372,7 +493,12 @@ export const AriaHaspopup = relation(
  */
 export const AriaHidden = relation(
   "AriaHidden",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsBoolean) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsBoolean),
+  },
   ["node"],
 );
 
@@ -381,7 +507,12 @@ export const AriaHidden = relation(
  */
 export const AriaInvalid = relation(
   "AriaInvalid",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ariaInvalid) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ariaInvalid),
+  },
   ["node"],
 );
 
@@ -391,6 +522,7 @@ export const AriaInvalid = relation(
 export const AriaKeyshortcuts = relation(
   "AriaKeyshortcuts",
   {
+    attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
     value: str.regex(patterns.xsString, patterns.xsStringFlags),
@@ -404,6 +536,7 @@ export const AriaKeyshortcuts = relation(
 export const AriaKeyshorts = relation(
   "AriaKeyshorts",
   {
+    attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
     value: str.regex(patterns.xsString, patterns.xsStringFlags),
@@ -417,6 +550,7 @@ export const AriaKeyshorts = relation(
 export const AriaLabel = relation(
   "AriaLabel",
   {
+    attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
     value: str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags),
@@ -429,7 +563,12 @@ export const AriaLabel = relation(
  */
 export const AriaLabelledby = relation(
   "AriaLabelledby",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ncNameList) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ncNameList),
+  },
   ["node"],
 );
 
@@ -438,7 +577,12 @@ export const AriaLabelledby = relation(
  */
 export const AriaLevel = relation(
   "AriaLevel",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.positiveInteger) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.positiveInteger),
+  },
   ["node"],
 );
 
@@ -447,7 +591,12 @@ export const AriaLevel = relation(
  */
 export const AriaLive = relation(
   "AriaLive",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ariaLive) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ariaLive),
+  },
   ["node"],
 );
 
@@ -456,7 +605,12 @@ export const AriaLive = relation(
  */
 export const AriaModal = relation(
   "AriaModal",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsBoolean) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsBoolean),
+  },
   ["node"],
 );
 
@@ -465,7 +619,12 @@ export const AriaModal = relation(
  */
 export const AriaMultiline = relation(
   "AriaMultiline",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsBoolean) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsBoolean),
+  },
   ["node"],
 );
 
@@ -474,7 +633,12 @@ export const AriaMultiline = relation(
  */
 export const AriaMultiselectable = relation(
   "AriaMultiselectable",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsBoolean) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsBoolean),
+  },
   ["node"],
 );
 
@@ -483,7 +647,12 @@ export const AriaMultiselectable = relation(
  */
 export const AriaOrientation = relation(
   "AriaOrientation",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ariaOrientation) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ariaOrientation),
+  },
   ["node"],
 );
 
@@ -492,7 +661,12 @@ export const AriaOrientation = relation(
  */
 export const AriaOwns = relation(
   "AriaOwns",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ncNameList) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ncNameList),
+  },
   ["node"],
 );
 
@@ -502,6 +676,7 @@ export const AriaOwns = relation(
 export const AriaPlaceholder = relation(
   "AriaPlaceholder",
   {
+    attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
     value: str.regex(patterns.xsString, patterns.xsStringFlags),
@@ -514,7 +689,12 @@ export const AriaPlaceholder = relation(
  */
 export const AriaPosinset = relation(
   "AriaPosinset",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.positiveInteger) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.positiveInteger),
+  },
   ["node"],
 );
 
@@ -523,7 +703,12 @@ export const AriaPosinset = relation(
  */
 export const AriaPressed = relation(
   "AriaPressed",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ariaPressed) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ariaPressed),
+  },
   ["node"],
 );
 
@@ -532,7 +717,12 @@ export const AriaPressed = relation(
  */
 export const AriaReadonly = relation(
   "AriaReadonly",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsBoolean) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsBoolean),
+  },
   ["node"],
 );
 
@@ -541,7 +731,12 @@ export const AriaReadonly = relation(
  */
 export const AriaRelevant = relation(
   "AriaRelevant",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ariaRelevantList) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ariaRelevantList),
+  },
   ["node"],
 );
 
@@ -550,7 +745,12 @@ export const AriaRelevant = relation(
  */
 export const AriaRequired = relation(
   "AriaRequired",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsBoolean) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsBoolean),
+  },
   ["node"],
 );
 
@@ -559,7 +759,12 @@ export const AriaRequired = relation(
  */
 export const AriaRole = relation(
   "AriaRole",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ariaRole) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ariaRole),
+  },
   ["node"],
 );
 
@@ -569,6 +774,7 @@ export const AriaRole = relation(
 export const AriaRoledescription = relation(
   "AriaRoledescription",
   {
+    attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
     value: str.regex(patterns.xsString, patterns.xsStringFlags),
@@ -581,7 +787,12 @@ export const AriaRoledescription = relation(
  */
 export const AriaRowcount = relation(
   "AriaRowcount",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsInteger) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsInteger),
+  },
   ["node"],
 );
 
@@ -590,7 +801,12 @@ export const AriaRowcount = relation(
  */
 export const AriaRowindex = relation(
   "AriaRowindex",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsInteger) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsInteger),
+  },
   ["node"],
 );
 
@@ -599,7 +815,12 @@ export const AriaRowindex = relation(
  */
 export const AriaRowspan = relation(
   "AriaRowspan",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsInteger) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsInteger),
+  },
   ["node"],
 );
 
@@ -608,7 +829,12 @@ export const AriaRowspan = relation(
  */
 export const AriaSelected = relation(
   "AriaSelected",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ariaSelected) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ariaSelected),
+  },
   ["node"],
 );
 
@@ -617,7 +843,12 @@ export const AriaSelected = relation(
  */
 export const AriaSetsize = relation(
   "AriaSetsize",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsInteger) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsInteger),
+  },
   ["node"],
 );
 
@@ -626,7 +857,12 @@ export const AriaSetsize = relation(
  */
 export const AriaSort = relation(
   "AriaSort",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.ariaSort) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.ariaSort),
+  },
   ["node"],
 );
 
@@ -635,7 +871,12 @@ export const AriaSort = relation(
  */
 export const AriaValuemax = relation(
   "AriaValuemax",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsDecimal) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsDecimal),
+  },
   ["node"],
 );
 
@@ -644,7 +885,12 @@ export const AriaValuemax = relation(
  */
 export const AriaValuemin = relation(
   "AriaValuemin",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsDecimal) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsDecimal),
+  },
   ["node"],
 );
 
@@ -653,7 +899,12 @@ export const AriaValuemin = relation(
  */
 export const AriaValuenow = relation(
   "AriaValuenow",
-  { kind: closedId(NodeKind), node: uuid, value: str.regex(patterns.xsDecimal) },
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.xsDecimal),
+  },
   ["node"],
 );
 
@@ -663,6 +914,7 @@ export const AriaValuenow = relation(
 export const AriaValuetext = relation(
   "AriaValuetext",
   {
+    attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
     value: str.regex(patterns.xsString, patterns.xsStringFlags),
@@ -741,32 +993,30 @@ export const relations = {
 export const arms = {};
 
 /**
- * Admission of the attribute `name` for a family relation's kind.
- */
-const admitted = (name: (typeof AttributeName.handles)[number]) =>
-  select(AttributeAdmission, { attribute: name });
-
-/**
  * The statements over this module's relations and the leaf relations it reads. The row checks
  * name handles as literals: a handle term is refused against a `closedId` field of the whole
  * roster (TS2345), while a literal adopts the field's type.
  */
 export const rules = [
   contained(on(AttributeLexical, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
-  contained(on(HtmlId, "kind"), on(admitted("id"), "kind")),
   contained(on(NodeClass, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(NodeClass, "kind"), on(admitted("class"), "kind")),
+  contained(on(NodeClass, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("NodeClassAttribute", NodeClass, (row) => row.eq(row.attribute, "class")),
   contained(on(NodeLang, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(NodeLang, "kind"), on(admitted("lang"), "kind")),
+  contained(on(NodeLang, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("NodeLangAttribute", NodeLang, (row) => row.eq(row.attribute, "lang")),
   contained(on(NodeXmlLang, "node", "kind"), on(Node, "id", "kind")),
   contained(on(NodeXmlLang, "node", "tree", "rootKind"), on(Node, "id", "tree", "rootKind")),
-  contained(on(NodeXmlLang, "kind"), on(admitted("xml:lang"), "kind")),
+  contained(on(NodeXmlLang, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("NodeXmlLangAttribute", NodeXmlLang, (row) => row.eq(row.attribute, "xml:lang")),
   contained(on(NodeLabel, "node", "kind"), on(Node, "id", "kind")),
   contained(on(NodeLabel, "node", "tree", "rootKind"), on(Node, "id", "tree", "rootKind")),
-  contained(on(NodeLabel, "kind"), on(admitted("label"), "kind")),
+  contained(on(NodeLabel, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("NodeLabelAttribute", NodeLabel, (row) => row.eq(row.attribute, "label")),
   check("NodeLabelNotRoot", NodeLabel, (row) => row.ne(row.kind, "qti-assessment-item")),
   contained(on(NodeDir, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(NodeDir, "kind"), on(admitted("dir"), "kind")),
+  contained(on(NodeDir, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("NodeDirAttribute", NodeDir, (row) => row.eq(row.attribute, "dir")),
   check("BdoDirNotAuto", NodeDir, (row) =>
     row.or(row.ne(row.kind, "bdo"), row.ne(row.value, "auto")),
   ),
@@ -775,11 +1025,18 @@ export const rules = [
     within: within(1n, 1n),
   }),
   contained(on(NodeXmlBase, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(NodeXmlBase, "kind"), on(admitted("xml:base"), "kind")),
+  contained(on(NodeXmlBase, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("NodeXmlBaseAttribute", NodeXmlBase, (row) => row.eq(row.attribute, "xml:base")),
   contained(on(NodeSuppressTts, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(NodeSuppressTts, "kind"), on(admitted("data-qti-suppress-tts"), "kind")),
+  contained(on(NodeSuppressTts, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("NodeSuppressTtsAttribute", NodeSuppressTts, (row) =>
+    row.eq(row.attribute, "data-qti-suppress-tts"),
+  ),
   contained(on(NodeCatalogIdref, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(NodeCatalogIdref, "kind"), on(admitted("data-catalog-idref"), "kind")),
+  contained(on(NodeCatalogIdref, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("NodeCatalogIdrefAttribute", NodeCatalogIdref, (row) =>
+    row.eq(row.attribute, "data-catalog-idref"),
+  ),
   contained(on(AttributeIdref, "document", "target"), on(DocumentId, "document", "id")),
   contained(on(AttributeIdref, "node", "document"), on(Node, "id", "tree")),
   contained(
@@ -787,105 +1044,183 @@ export const rules = [
     on(select(HtmlId, { kind: "th" }), "document", "id"),
   ),
   contained(
-    on(HeadersTarget, "node", "position", "target"),
-    on(select(AttributeIdref, { attribute: "headers" }), "node", "position", "target"),
+    on(HeadersTarget, "node", "attribute", "position", "target"),
+    on(AttributeIdref, "node", "attribute", "position", "target"),
   ),
+  check("HeadersTargetAttribute", HeadersTarget, (row) => row.eq(row.attribute, "headers")),
   contained(on(AriaActivedescendant, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaActivedescendant, "kind"), on(admitted("aria-activedescendant"), "kind")),
+  contained(
+    on(AriaActivedescendant, "kind", "attribute"),
+    on(AttributeAdmission, "kind", "attribute"),
+  ),
+  check("AriaActivedescendantAttribute", AriaActivedescendant, (row) =>
+    row.eq(row.attribute, "aria-activedescendant"),
+  ),
   contained(on(AriaAtomic, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaAtomic, "kind"), on(admitted("aria-atomic"), "kind")),
+  contained(on(AriaAtomic, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaAtomicAttribute", AriaAtomic, (row) => row.eq(row.attribute, "aria-atomic")),
   contained(on(AriaAutocomplete, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaAutocomplete, "kind"), on(admitted("aria-autocomplete"), "kind")),
+  contained(on(AriaAutocomplete, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaAutocompleteAttribute", AriaAutocomplete, (row) =>
+    row.eq(row.attribute, "aria-autocomplete"),
+  ),
   contained(on(AriaBusy, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaBusy, "kind"), on(admitted("aria-busy"), "kind")),
+  contained(on(AriaBusy, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaBusyAttribute", AriaBusy, (row) => row.eq(row.attribute, "aria-busy")),
   contained(on(AriaChecked, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaChecked, "kind"), on(admitted("aria-checked"), "kind")),
+  contained(on(AriaChecked, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaCheckedAttribute", AriaChecked, (row) => row.eq(row.attribute, "aria-checked")),
   contained(on(AriaColcount, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaColcount, "kind"), on(admitted("aria-colcount"), "kind")),
+  contained(on(AriaColcount, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaColcountAttribute", AriaColcount, (row) => row.eq(row.attribute, "aria-colcount")),
   contained(on(AriaColindex, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaColindex, "kind"), on(admitted("aria-colindex"), "kind")),
+  contained(on(AriaColindex, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaColindexAttribute", AriaColindex, (row) => row.eq(row.attribute, "aria-colindex")),
   contained(on(AriaColspan, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaColspan, "kind"), on(admitted("aria-colspan"), "kind")),
+  contained(on(AriaColspan, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaColspanAttribute", AriaColspan, (row) => row.eq(row.attribute, "aria-colspan")),
   contained(on(AriaControls, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaControls, "kind"), on(admitted("aria-controls"), "kind")),
+  contained(on(AriaControls, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaControlsAttribute", AriaControls, (row) => row.eq(row.attribute, "aria-controls")),
   contained(on(AriaCurrent, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaCurrent, "kind"), on(admitted("aria-current"), "kind")),
+  contained(on(AriaCurrent, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaCurrentAttribute", AriaCurrent, (row) => row.eq(row.attribute, "aria-current")),
   contained(on(AriaDescribedby, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaDescribedby, "kind"), on(admitted("aria-describedby"), "kind")),
+  contained(on(AriaDescribedby, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaDescribedbyAttribute", AriaDescribedby, (row) =>
+    row.eq(row.attribute, "aria-describedby"),
+  ),
   contained(on(AriaDetails, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaDetails, "kind"), on(admitted("aria-details"), "kind")),
+  contained(on(AriaDetails, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaDetailsAttribute", AriaDetails, (row) => row.eq(row.attribute, "aria-details")),
   contained(on(AriaDisabled, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaDisabled, "kind"), on(admitted("aria-disabled"), "kind")),
+  contained(on(AriaDisabled, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaDisabledAttribute", AriaDisabled, (row) => row.eq(row.attribute, "aria-disabled")),
   contained(on(AriaErrormessage, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaErrormessage, "kind"), on(admitted("aria-errormessage"), "kind")),
+  contained(on(AriaErrormessage, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaErrormessageAttribute", AriaErrormessage, (row) =>
+    row.eq(row.attribute, "aria-errormessage"),
+  ),
   contained(on(AriaExpanded, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaExpanded, "kind"), on(admitted("aria-expanded"), "kind")),
+  contained(on(AriaExpanded, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaExpandedAttribute", AriaExpanded, (row) => row.eq(row.attribute, "aria-expanded")),
   contained(on(AriaFlowto, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaFlowto, "kind"), on(admitted("aria-flowto"), "kind")),
+  contained(on(AriaFlowto, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaFlowtoAttribute", AriaFlowto, (row) => row.eq(row.attribute, "aria-flowto")),
   contained(on(AriaHaspopup, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaHaspopup, "kind"), on(admitted("aria-haspopup"), "kind")),
+  contained(on(AriaHaspopup, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaHaspopupAttribute", AriaHaspopup, (row) => row.eq(row.attribute, "aria-haspopup")),
   contained(on(AriaHidden, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaHidden, "kind"), on(admitted("aria-hidden"), "kind")),
+  contained(on(AriaHidden, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaHiddenAttribute", AriaHidden, (row) => row.eq(row.attribute, "aria-hidden")),
   contained(on(AriaInvalid, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaInvalid, "kind"), on(admitted("aria-invalid"), "kind")),
+  contained(on(AriaInvalid, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaInvalidAttribute", AriaInvalid, (row) => row.eq(row.attribute, "aria-invalid")),
   contained(on(AriaKeyshortcuts, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaKeyshortcuts, "kind"), on(admitted("aria-keyshortcuts"), "kind")),
+  contained(on(AriaKeyshortcuts, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaKeyshortcutsAttribute", AriaKeyshortcuts, (row) =>
+    row.eq(row.attribute, "aria-keyshortcuts"),
+  ),
   contained(on(AriaKeyshorts, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaKeyshorts, "kind"), on(admitted("aria-keyshorts"), "kind")),
+  contained(on(AriaKeyshorts, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaKeyshortsAttribute", AriaKeyshorts, (row) => row.eq(row.attribute, "aria-keyshorts")),
   contained(on(AriaLabel, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaLabel, "kind"), on(admitted("aria-label"), "kind")),
+  contained(on(AriaLabel, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaLabelAttribute", AriaLabel, (row) => row.eq(row.attribute, "aria-label")),
   contained(on(AriaLabelledby, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaLabelledby, "kind"), on(admitted("aria-labelledby"), "kind")),
+  contained(on(AriaLabelledby, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaLabelledbyAttribute", AriaLabelledby, (row) =>
+    row.eq(row.attribute, "aria-labelledby"),
+  ),
   contained(on(AriaLevel, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaLevel, "kind"), on(admitted("aria-level"), "kind")),
+  contained(on(AriaLevel, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaLevelAttribute", AriaLevel, (row) => row.eq(row.attribute, "aria-level")),
   contained(on(AriaLive, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaLive, "kind"), on(admitted("aria-live"), "kind")),
+  contained(on(AriaLive, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaLiveAttribute", AriaLive, (row) => row.eq(row.attribute, "aria-live")),
   contained(on(AriaModal, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaModal, "kind"), on(admitted("aria-modal"), "kind")),
+  contained(on(AriaModal, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaModalAttribute", AriaModal, (row) => row.eq(row.attribute, "aria-modal")),
   contained(on(AriaMultiline, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaMultiline, "kind"), on(admitted("aria-multiline"), "kind")),
+  contained(on(AriaMultiline, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaMultilineAttribute", AriaMultiline, (row) => row.eq(row.attribute, "aria-multiline")),
   contained(on(AriaMultiselectable, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaMultiselectable, "kind"), on(admitted("aria-multiselectable"), "kind")),
+  contained(
+    on(AriaMultiselectable, "kind", "attribute"),
+    on(AttributeAdmission, "kind", "attribute"),
+  ),
+  check("AriaMultiselectableAttribute", AriaMultiselectable, (row) =>
+    row.eq(row.attribute, "aria-multiselectable"),
+  ),
   contained(on(AriaOrientation, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaOrientation, "kind"), on(admitted("aria-orientation"), "kind")),
+  contained(on(AriaOrientation, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaOrientationAttribute", AriaOrientation, (row) =>
+    row.eq(row.attribute, "aria-orientation"),
+  ),
   contained(on(AriaOwns, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaOwns, "kind"), on(admitted("aria-owns"), "kind")),
+  contained(on(AriaOwns, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaOwnsAttribute", AriaOwns, (row) => row.eq(row.attribute, "aria-owns")),
   contained(on(AriaPlaceholder, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaPlaceholder, "kind"), on(admitted("aria-placeholder"), "kind")),
+  contained(on(AriaPlaceholder, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaPlaceholderAttribute", AriaPlaceholder, (row) =>
+    row.eq(row.attribute, "aria-placeholder"),
+  ),
   contained(on(AriaPosinset, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaPosinset, "kind"), on(admitted("aria-posinset"), "kind")),
+  contained(on(AriaPosinset, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaPosinsetAttribute", AriaPosinset, (row) => row.eq(row.attribute, "aria-posinset")),
   contained(on(AriaPressed, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaPressed, "kind"), on(admitted("aria-pressed"), "kind")),
+  contained(on(AriaPressed, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaPressedAttribute", AriaPressed, (row) => row.eq(row.attribute, "aria-pressed")),
   contained(on(AriaReadonly, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaReadonly, "kind"), on(admitted("aria-readonly"), "kind")),
+  contained(on(AriaReadonly, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaReadonlyAttribute", AriaReadonly, (row) => row.eq(row.attribute, "aria-readonly")),
   contained(on(AriaRelevant, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaRelevant, "kind"), on(admitted("aria-relevant"), "kind")),
+  contained(on(AriaRelevant, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaRelevantAttribute", AriaRelevant, (row) => row.eq(row.attribute, "aria-relevant")),
   contained(on(AriaRequired, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaRequired, "kind"), on(admitted("aria-required"), "kind")),
+  contained(on(AriaRequired, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaRequiredAttribute", AriaRequired, (row) => row.eq(row.attribute, "aria-required")),
   contained(on(AriaRole, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaRole, "kind"), on(admitted("role"), "kind")),
+  contained(on(AriaRole, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaRoleAttribute", AriaRole, (row) => row.eq(row.attribute, "role")),
   contained(on(AriaRoledescription, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaRoledescription, "kind"), on(admitted("aria-roledescription"), "kind")),
+  contained(
+    on(AriaRoledescription, "kind", "attribute"),
+    on(AttributeAdmission, "kind", "attribute"),
+  ),
+  check("AriaRoledescriptionAttribute", AriaRoledescription, (row) =>
+    row.eq(row.attribute, "aria-roledescription"),
+  ),
   contained(on(AriaRowcount, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaRowcount, "kind"), on(admitted("aria-rowcount"), "kind")),
+  contained(on(AriaRowcount, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaRowcountAttribute", AriaRowcount, (row) => row.eq(row.attribute, "aria-rowcount")),
   contained(on(AriaRowindex, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaRowindex, "kind"), on(admitted("aria-rowindex"), "kind")),
+  contained(on(AriaRowindex, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaRowindexAttribute", AriaRowindex, (row) => row.eq(row.attribute, "aria-rowindex")),
   contained(on(AriaRowspan, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaRowspan, "kind"), on(admitted("aria-rowspan"), "kind")),
+  contained(on(AriaRowspan, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaRowspanAttribute", AriaRowspan, (row) => row.eq(row.attribute, "aria-rowspan")),
   contained(on(AriaSelected, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaSelected, "kind"), on(admitted("aria-selected"), "kind")),
+  contained(on(AriaSelected, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaSelectedAttribute", AriaSelected, (row) => row.eq(row.attribute, "aria-selected")),
   contained(on(AriaSetsize, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaSetsize, "kind"), on(admitted("aria-setsize"), "kind")),
+  contained(on(AriaSetsize, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaSetsizeAttribute", AriaSetsize, (row) => row.eq(row.attribute, "aria-setsize")),
   contained(on(AriaSort, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaSort, "kind"), on(admitted("aria-sort"), "kind")),
+  contained(on(AriaSort, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaSortAttribute", AriaSort, (row) => row.eq(row.attribute, "aria-sort")),
   contained(on(AriaValuemax, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaValuemax, "kind"), on(admitted("aria-valuemax"), "kind")),
+  contained(on(AriaValuemax, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaValuemaxAttribute", AriaValuemax, (row) => row.eq(row.attribute, "aria-valuemax")),
   contained(on(AriaValuemin, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaValuemin, "kind"), on(admitted("aria-valuemin"), "kind")),
+  contained(on(AriaValuemin, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaValueminAttribute", AriaValuemin, (row) => row.eq(row.attribute, "aria-valuemin")),
   contained(on(AriaValuenow, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaValuenow, "kind"), on(admitted("aria-valuenow"), "kind")),
+  contained(on(AriaValuenow, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaValuenowAttribute", AriaValuenow, (row) => row.eq(row.attribute, "aria-valuenow")),
   contained(on(AriaValuetext, "node", "kind"), on(Node, "id", "kind")),
-  contained(on(AriaValuetext, "kind"), on(admitted("aria-valuetext"), "kind")),
+  contained(on(AriaValuetext, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("AriaValuetextAttribute", AriaValuetext, (row) => row.eq(row.attribute, "aria-valuetext")),
   check("AriaRoleH1", AriaRole, (row) =>
     row.or(row.ne(row.kind, "h1"), Compute.in(row.value, ["heading", "tab", "presentation"])),
   ),
