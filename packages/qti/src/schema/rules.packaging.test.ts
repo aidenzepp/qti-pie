@@ -904,7 +904,15 @@ const negatives: readonly Negative[] = [
       set(first(draft, OutcomeDocument), "declaration", text(response ?? {}, "id"));
     },
     base: "outcome",
-    laws: [contained(side(OutcomeDocument, ["declaration"]), side(OutcomeDeclarationArm, ["id"]))],
+    // A response declaration is not the root node of its document's tree either, so this write breaks
+    // both containments, and which one the outcome names is the firing-order class, not the caller's choice.
+    laws: [
+      contained(side(OutcomeDocument, ["declaration"]), side(OutcomeDeclarationArm, ["id"])),
+      contained(
+        side(OutcomeDocument, ["document", "declaration"]),
+        side(TreeRoot, ["tree", "node"]),
+      ),
+    ],
     name: "an OutcomeDocument whose declaration is a response declaration is refused by the containment into the outcome arm",
   },
   {
