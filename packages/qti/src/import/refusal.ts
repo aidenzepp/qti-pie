@@ -404,6 +404,7 @@ const capacityRule = (target: LawSide, from: LawSide): Rule | undefined => {
 const containedRules = new Map<string, Rule>([
   ["AssessmentItemLabel>ItemToolBoth", "label-tool"],
   ["AttributeIdref>DocumentId", "idref-target"],
+  ["AttributeIdref>Node", "idref-target"],
   ["ContextDeclarationArm>ContextDeclarationId", "context-id"],
   ["DeclaredValue>TypedValueSet", "value-base-type"],
   ["Dependency>Resource", "dependency-target"],

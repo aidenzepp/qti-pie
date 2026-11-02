@@ -50,6 +50,20 @@ describe("the content rules of a containment", () => {
     assert.isTrue(isMappedLaw(law));
   });
 
+  it("names the idref row's document copy idref-target", () => {
+    const law = contained("AttributeIdref", ["node", "document"], "Node", ["id", "tree"]);
+
+    assert.strictEqual(ruleOfLaw(law), "idref-target");
+    assert.isTrue(isMappedLaw(law));
+  });
+
+  it("keeps a reference's document copy under its reference rule", () => {
+    const law = contained("ChoiceTemplateRef", ["node", "document"], "Node", ["id", "tree"]);
+
+    assert.strictEqual(ruleOfLaw(law), "template-ref");
+    assert.isTrue(isMappedLaw(law));
+  });
+
   it("leaves a containment between unnamed relations to the admission fallback", () => {
     const law = contained("Unnamed", ["id"], "Elsewhere", ["id"]);
 
