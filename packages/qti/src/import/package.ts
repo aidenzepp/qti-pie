@@ -15,14 +15,24 @@ import { manifestGuards } from "#qti/import/guards/manifest.ts";
 import { treeGuards } from "#qti/import/guards/tree.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
-import type { ImportLaw, ImportRefused, ImportWitness, ReadRefusal } from "#qti/import/refusal.ts";
+import type {
+  ImportLaw,
+  ImportRefused,
+  ImportWitness,
+  ProcessingRefusal,
+  ReadRefusal,
+} from "#qti/import/refusal.ts";
 import { refusalOfLaw, ruleOfError } from "#qti/import/refusal.ts";
+import { rptemplateRows } from "#qti/import/rptemplate.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
+import type { RootKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
 import { Package } from "#qti/schema/package.ts";
 import { Author } from "#qti/schema/roles.ts";
+import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
 import { readXml } from "#qti/xml/read.ts";
+import type { XmlDocument } from "#qti/xml/tree.ts";
 
 /**
  * The retry between attempts at the database: 50 ms doubling each time with jitter, at most five
@@ -88,8 +98,46 @@ const retried = <A, E extends ApplyError | OpenError, R>(
 /**
  * Whether `error` is one the guards or the reader raised, as opposed to the platform's.
  */
-const isReadRefusal = (error: PlatformError.PlatformError | ReadRefusal): error is ReadRefusal =>
-  error._tag !== "PlatformError";
+const isReadRefusal = <E extends PlatformError.PlatformError | ProcessingRefusal | ReadRefusal>(
+  error: E,
+): error is Exclude<E, PlatformError.PlatformError> => error._tag !== "PlatformError";
+
+/**
+ * The root kind a resource type lists its documents under, none for a type `RootOfType` does not
+ * hold.
+ */
+const rootKindOfType = (type: string): RootKindHandle | undefined =>
+  rootOfType.find((entry) => entry.type === type)?.root;
+
+/**
+ * What {@link documentRows} needs to know about one listed document.
+ */
+export interface DocumentInput {
+  readonly doc: XmlDocument;
+  readonly packageId: string;
+  readonly path: string;
+  readonly resource: string;
+  readonly resourceType: string;
+  readonly version: SchemaVersionHandle;
+}
+
+/**
+ * Write the rows of one document the manifest lists, by the root kind its resource type maps to in
+ * `RootOfType`, never by the type string: `rptemplate` goes to {@link rptemplateRows}, `item` to
+ * `itemRows`, and any other root kind, or a type `RootOfType` does not hold, to `itemRows` too,
+ * which refuses a root that is not `qti-assessment-item` as `UnmodeledVocabulary`.
+ *
+ * `imsqti_resprocessing_xmlv3p0` is phase 4's row of `RootOfType`; under this dispatch by root that
+ * type reaches `rptemplateRows` with no edit here.
+ *
+ * @param input - The decoded document and where its package lists it.
+ * @param rows - The rows so far.
+ * @returns The rows with the document's added, with the node index and the document's id.
+ */
+export const documentRows = (input: DocumentInput, rows: Rows) =>
+  rootKindOfType(input.resourceType) === "rptemplate"
+    ? rptemplateRows(input, rows)
+    : itemRows(input, rows);
 
 /**
  * Read the package at `dir` into rows: the manifest's, then every document it lists.
@@ -102,7 +150,7 @@ const readRows = Effect.fn("import.readRows")(function* readRows(dir: string) {
 
   for (const document of built.documents) {
     const doc = yield* readXml(yield* readEntry(dir, document.path));
-    const item = yield* itemRows(
+    const item = yield* documentRows(
       {
         doc,
         packageId: built.packageId,

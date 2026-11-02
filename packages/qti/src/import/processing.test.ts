@@ -7,12 +7,17 @@ import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { ProcessingGuardRefusal, processingGuards } from "#qti/import/guards/processing.ts";
 import { ProcessingRefused, processingRows } from "#qti/import/processing.ts";
 import type { ProcessingInput } from "#qti/import/processing.ts";
+import { itemRows } from "#qti/import/item.ts";
+import { documentRows } from "#qti/import/package.ts";
+import { rptemplateRows } from "#qti/import/rptemplate.ts";
 import { Rows, treeRows } from "#qti/import/tree.ts";
 import type { NodeIndex } from "#qti/import/tree.ts";
 import type { Language } from "#qti/processing/ast.ts";
+import { corpusPackage } from "#qti/processing/fixtures.ts";
 import { emptyEnvironment, environmentOf, withDeclarations } from "#qti/processing/env.ts";
 import type { DeclarationEntry, Environment, Mode } from "#qti/processing/env.ts";
 import { expressionKinds } from "#qti/processing/types.ts";
+import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import * as expression from "#qti/schema/expression.ts";
 import * as attributed from "#qti/schema/expression-attributes.ts";
 import { AttributeLexical, Edge, TextNode } from "#qti/schema/node.ts";
@@ -1379,6 +1384,132 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/guards/processi
         );
         yield* processingGuards(yield* processed(prepared));
       }
+    }),
+  );
+});
+
+layer(NodeServices.layer, { excludeTestServices: true })("import/rptemplate.ts", (suite) => {
+  const packageId = crypto.randomUUID();
+
+  suite.effect("writes the document, the processing root and the parameter references", () =>
+    Effect.gen(function* templateDocument() {
+      const fs = yield* FileSystem.FileSystem;
+      const dir = yield* corpusPackage("ccPackage");
+      const doc = yield* readXml(yield* fs.readFile(path.join(dir, "rptemplates/CC2_match.xml")));
+      const built = yield* rptemplateRows(
+        {
+          doc,
+          packageId,
+          path: "rptemplates/CC2_match.xml",
+          resource: "CC2_match",
+          resourceType: "imsqti_rptemplate_xmlv3p0",
+          version: "3.0.0",
+        },
+        Rows.empty(),
+      );
+      const rootId = built.nodes.get(doc.root)?.id ?? assert.fail("the root has no node");
+
+      const documents = of(built.rows, Document);
+      assert.strictEqual(documents.length, 1);
+      assert.deepStrictEqual(documents[0], {
+        id: built.documentId,
+        package: packageId,
+        path: "rptemplates/CC2_match.xml",
+        resource: "CC2_match",
+        resourceType: "imsqti_rptemplate_xmlv3p0",
+        root: "rptemplate",
+        version: "3.0.0",
+      });
+      assert.strictEqual(built.documentId, rootId);
+      assert.deepStrictEqual(of(built.rows, DocumentIdentifier), []);
+      assert.deepStrictEqual(of(built.rows, DocumentTitle), []);
+      assert.deepStrictEqual(of(built.rows, processing.ResponseProcessing), [
+        { id: rootId, rootKind: "rptemplate" },
+      ]);
+      assert.deepStrictEqual(of(built.rows, processing.ResponseProcessingItem), []);
+
+      const parameters = of(built.rows, processing.TemplateParameterRef);
+      assert.deepStrictEqual([...new Set(parameters.map((row) => row.identifier))].toSorted(), [
+        "RESPONSE",
+        "SCORE",
+      ]);
+      for (const row of parameters) {
+        assert.strictEqual(row.rootKind, "rptemplate");
+        assert.strictEqual(row.document, built.documentId);
+      }
+    }),
+  );
+
+  suite.effect("refuses a root that is not a response processing", () =>
+    Effect.gen(function* wrongRoot() {
+      const doc = yield* readXml(
+        new TextEncoder().encode(`<qti-outcome-processing xmlns="${asiNamespace}"/>`),
+      );
+      const failure = yield* Effect.flip(
+        rptemplateRows(
+          {
+            doc,
+            packageId,
+            path: "t.xml",
+            resource: "t",
+            resourceType: "imsqti_rptemplate_xmlv3p0",
+            version: "3.0.0",
+          },
+          Rows.empty(),
+        ),
+      );
+      assert.strictEqual(failure._tag, "UnmodeledVocabulary");
+    }),
+  );
+
+  suite.effect("dispatches a document by the root kind its resource type maps to", () =>
+    Effect.gen(function* dispatch() {
+      const fs = yield* FileSystem.FileSystem;
+      const dir = yield* corpusPackage("ccPackage");
+      const doc = yield* readXml(yield* fs.readFile(path.join(dir, "rptemplates/CC2_match.xml")));
+      const input = (resourceType: string) => ({
+        doc,
+        packageId,
+        path: "rptemplates/CC2_match.xml",
+        resource: "CC2_match",
+        resourceType,
+        version: "3.0.0" as const,
+      });
+
+      const routed = yield* documentRows(input("imsqti_rptemplate_xmlv3p0"), Rows.empty());
+      assert.deepStrictEqual(
+        of(routed.rows, Document).map((row) => row.root),
+        ["rptemplate"],
+      );
+      assert.isAbove(of(routed.rows, processing.TemplateParameterRef).length, 0);
+
+      const refused = yield* Effect.flip(documentRows(input("imsqti_item_xmlv3p0"), Rows.empty()));
+      assert.strictEqual(refused._tag, "UnmodeledVocabulary");
+    }),
+  );
+
+  suite.effect("writes the processing rows of an item's response processing", () =>
+    Effect.gen(function* itemProcessing() {
+      const fs = yield* FileSystem.FileSystem;
+      const doc = yield* readXml(yield* fs.readFile(path.join(fixtures, "valid", "response.xml")));
+      const built = yield* itemRows(
+        {
+          doc,
+          packageId,
+          path: "response.xml",
+          resource: "response",
+          resourceType: "imsqti_item_xmlv3p0",
+          version: "3.0.0",
+        },
+        Rows.empty(),
+      );
+      const element = processingElement(doc);
+      const nodeId = built.nodes.get(element)?.id ?? assert.fail("no node");
+      assert.deepStrictEqual(of(built.rows, processing.ResponseProcessingItem), [
+        { id: nodeId, item: built.documentId },
+      ]);
+      assert.isAbove(of(built.rows, processing.Expression).length, 100);
+      assert.isAbove(of(built.rows, ruleSchema.relations.RuleOperand).length, 0);
     }),
   );
 });
