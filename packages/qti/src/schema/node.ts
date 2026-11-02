@@ -28,6 +28,7 @@ import * as generic from "#qti/schema/kinds/generic.ts";
 import * as html from "#qti/schema/kinds/html.ts";
 import * as lom from "#qti/schema/kinds/lom.ts";
 import * as qmd from "#qti/schema/kinds/qmd.ts";
+import * as xi from "#qti/schema/kinds/xi.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -36,7 +37,7 @@ import * as patterns from "#qti/schema/patterns.ts";
  * Each roster spreads these modules' tuples in this order; a kinds file added to one is added to
  * the other and to this list, which the tests read as the composition's source of truth.
  */
-export const vocabularies = [generic, asi, html, cp, lom, qmd] as const;
+export const vocabularies = [generic, asi, html, cp, lom, qmd, xi] as const;
 
 /**
  * The QTI schema versions the model admits.
@@ -82,6 +83,7 @@ export const NodeKind = closed("NodeKind", [
   ...cp.kinds,
   ...lom.kinds,
   ...qmd.kinds,
+  ...xi.kinds,
 ]);
 
 /**
@@ -98,6 +100,7 @@ export const AttributeName = closed("AttributeName", [
   ...cp.attributes,
   ...lom.attributes,
   ...qmd.attributes,
+  ...xi.attributes,
 ]);
 
 /**
