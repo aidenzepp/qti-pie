@@ -11,6 +11,10 @@ import {
   DrdAtInteroperable,
   DrdEducationalComplexityOfAdaptation,
   DrdHasAdaptation,
+  FileMetadata,
+  fileMetadataArms,
+  fileMetadataRelations,
+  fileMetadataRules,
   Variant,
   variantDrdArms,
   variantDrdRelations,
@@ -245,5 +249,52 @@ describe("package ManifestId", () => {
     for (const [, arm] of manifestIdArms) {
       assert.isFalse(Object.values(pkg.arms).some((held) => Object.is(held, arm)));
     }
+  });
+});
+
+const fileMetadataProbe = () =>
+  schema("P4FileMetadataProbe", { ...node.relations, ...pkg.relations, ...fileMetadataRelations }, [
+    ...node.rules,
+    ...pkg.rules,
+    ...fileMetadataRules,
+  ]);
+
+describe("package staged FileMetadata", () => {
+  it("builds a schema over the package module and the staged relation without refusal", () => {
+    const built = fileMetadataProbe();
+    assert.isTrue("FileMetadata" in built.relations);
+  });
+
+  it("holds exactly FileMetadata, keyed by id, and the cp:metadata.file arm", () => {
+    assert.deepStrictEqual(Object.keys(fileMetadataRelations), ["FileMetadata"]);
+    assert.deepStrictEqual(Object.keys(fileMetadataArms), ["cp:metadata.file"]);
+    assert.strictEqual(fileMetadataArms["cp:metadata.file"], FileMetadata);
+    assert.deepStrictEqual([...FileMetadata.primaryKey], ["id"]);
+    assert.deepStrictEqual(Object.keys(FileMetadata.fields), ["file", "id"]);
+  });
+
+  it("carries a candidate key over file and containments into Edge and File", () => {
+    const keys = fileMetadataRules.flatMap((rule) =>
+      rule.kind === "key" && rule.relation === FileMetadata ? [[...rule.fields]] : [],
+    );
+    assert.deepStrictEqual(keys, [["file"]]);
+
+    const into = fileMetadataRules.flatMap((rule) =>
+      rule.kind === "contained" && rule.left.source === FileMetadata
+        ? [[rule.right.source, [...rule.left.fields], [...rule.right.fields]]]
+        : [],
+    );
+    assert.deepStrictEqual(into, [
+      [node.Edge, ["id", "file"], ["child", "parent"]],
+      [pkg.File, ["file"], ["id"]],
+    ]);
+  });
+
+  it("is not yet in the package module's relations, rules or arms", () => {
+    assert.isFalse(Object.values(pkg.relations).some((held) => Object.is(held, FileMetadata)));
+    for (const rule of fileMetadataRules) {
+      assert.isFalse(pkg.rules.some((held) => Object.is(held, rule)));
+    }
+    assert.isFalse(Object.values(pkg.arms).some((held) => Object.is(held, FileMetadata)));
   });
 });
