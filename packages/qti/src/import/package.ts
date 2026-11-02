@@ -140,10 +140,12 @@ const isReadRefusal = <E extends { readonly _tag: string }>(
  *
  * The root decides the builder, and the resource's `type` is passed on whatever the root is, so a
  * root that does not belong to the type is refused at commit by the `Document` containment into
- * `RootOfType`. A root no builder names is `UnmodeledVocabulary`. The `rptemplate` root has no
- * builder yet, so its tree is read as it stands and the reader refuses its first unmodeled kind.
+ * `RootOfType`. A root no builder names is `UnmodeledVocabulary`, except in a `qtiusagedata/xml`
+ * file, which goes to `usageRows` so that a root outside QTI 3 usage data is `NotQti3`. The
+ * `rptemplate` root has no builder yet, so its tree is read as it stands and the reader refuses its
+ * first unmodeled kind.
  */
-const readRows = Effect.fn("import.readRows")(function* readRows(dir: string) {
+export const readRows = Effect.fn("import.readRows")(function* readRows(dir: string) {
   const entries = yield* listPackage(dir);
   const manifest = yield* readXml(yield* readEntry(dir, "imsmanifest.xml"));
   const built = yield* manifestRows(dir, entries, manifest, Rows.empty());
@@ -172,7 +174,10 @@ const readRows = Effect.fn("import.readRows")(function* readRows(dir: string) {
       ({ rows } = yield* itemRows(input, rows));
     } else if (root === "lom:lom") {
       ({ rows } = yield* externalRows(doc, listed, rows));
-    } else if (root === "ud:usageData") {
+    } else if (
+      root === "ud:usageData" ||
+      (root === undefined && document.type === "qtiusagedata/xml")
+    ) {
       ({ rows } = yield* usageRows(doc, listed, rows));
     } else if (root === "qti-outcome-declaration") {
       ({ rows } = yield* outcomeRows(input, rows));
