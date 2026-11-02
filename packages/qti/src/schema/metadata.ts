@@ -26,7 +26,7 @@ import {
   within,
 } from "@bjornpagen/grizzle";
 import { DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
-import { Edge, Node } from "#qti/schema/node.ts";
+import { Edge, Node, NodeKind } from "#qti/schema/node.ts";
 import { Resource } from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
@@ -178,12 +178,20 @@ export const LomStringLanguage = relation("LomStringLanguage", { node: uuid, val
 ]);
 
 /**
- * A `lom:language` at its position among the general category's children; the empty string is
- * admitted.
+ * A `lom:language` of the general or the meta-metadata category, at its position among its parent's
+ * children, with its parent's kind copied and bound to its `Edge` so that a rule can select the
+ * general category's languages; the empty string is admitted.
  */
 export const LomLanguage = relation(
   "LomLanguage",
-  { id: uuid, lom: uuid, owner: closedId(LomOwner), position: pg.bigint, value: language },
+  {
+    id: uuid,
+    lom: uuid,
+    owner: closedId(LomOwner),
+    parentKind: closedId(NodeKind),
+    position: pg.bigint,
+    value: language,
+  },
   ["id"],
 );
 
@@ -826,6 +834,7 @@ export const rules = [
   contained(on(LomLanguage, "lom"), on(Lom, "id")),
   contained(on(LomLanguage, "lom", "owner"), on(Lom, "id", "owner")),
   contained(on(LomLanguage, "id", "position"), on(Edge, "child", "position")),
+  contained(on(LomLanguage, "id", "parentKind"), on(Edge, "child", "parentKind")),
   contained(on(LomDescription, "lom"), on(Lom, "id")),
   contained(on(LomKeyword, "lom"), on(Lom, "id")),
   contained(on(LomCoverage, "lom"), on(Lom, "id")),

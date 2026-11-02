@@ -4,9 +4,10 @@
  *
  * A document's language set is the `xml:lang` values written in its tree. `DocumentLang` holds one
  * row per distinct value, flagged by whether the resource's LOM `general` category also declares
- * it. A resource's LOM set is its `lom:language` values; `ResourceLomLanguageSet` holds one row
- * per distinct value, with the resource it belongs to copied for the rule that judges a document
- * against it. `ResourceLomGeneral` marks the resources whose record has a `general` category.
+ * it. A resource's LOM set is its general category's `lom:language` values;
+ * `ResourceLomLanguageSet` holds one row per distinct value, with the resource it belongs to copied
+ * for the rule that judges a document against it. `ResourceLomGeneral` marks the resources whose
+ * record has a `general` category.
  */
 import { closedId, contained, key, on, relation, select, str, uuid } from "@bjornpagen/grizzle";
 import { NodeLabel, NodeXmlLang } from "#qti/schema/attributes.ts";
@@ -69,13 +70,14 @@ export const arms = {};
 /**
  * The statements over this module's relations and the leaf relations they read.
  *
- * A language row belongs to its document and, through the document's resource, to the record
- * of the same resource. The resource's set is keyed by its record and, because `ResourceLom` holds
+ * A language row belongs to its document and, through the document's resource, to the record of the
+ * same resource. The resource's set is keyed by its record and, because `ResourceLom` holds
  * `(package, resource)` as a key, by the resource as well. Every `xml:lang` of an item tree is a
- * `DocumentLang` row; manifest `lom:string` languages are not item documents and are not
- * refused. A flagged document language is in the resource's LOM set and the resource's record
- * has a `general` category; every resource-owned `lom:language` is in that set. A label in an
- * item tree needs both tool values (goal 3.12).
+ * `DocumentLang` row; manifest `lom:string` languages are not item documents and are not refused. A
+ * flagged document language is in the resource's LOM set and the resource's record has a `general`
+ * category; every `lom:language` of a resource record's general category is in that set, while a
+ * meta-metadata language is the record's own language and is not. A label in an item tree needs
+ * both tool values (goal 3.12).
  */
 export const rules = [
   contained(
@@ -106,7 +108,7 @@ export const rules = [
     on(ResourceLomGeneral, "package", "resource"),
   ),
   contained(
-    on(select(LomLanguage, { owner: "resource" }), "lom", "value"),
+    on(select(LomLanguage, { owner: "resource", parentKind: "lom:general" }), "lom", "value"),
     on(ResourceLomLanguageSet, "lom", "value"),
   ),
   contained(on(select(NodeLabel, { rootKind: "item" }), "tree"), on(ItemToolBoth, "tree")),
