@@ -224,11 +224,25 @@ const htmlElements = [
 ] as const;
 
 /**
+ * The names of the six XML copies of phase 2's fixtures b (negatives, part one): each is a cut of
+ * one corpus item with one edit, three that the database refuses and three that it admits.
+ */
+const copyNames = [
+  "admission-choice-in-feedback",
+  "gap-outside-gap-match",
+  "controls-3-0-0",
+  "padded-m1-attributes",
+  "empty-class",
+  "hottext-in-prompt",
+] as const;
+
+/**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-broken
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
- * `end-attempt`, phase 2's hand-written positive, the 19 cut items of {@link cutNames} and the 40
- * hand-written HTML positives of {@link htmlElements}.
+ * `end-attempt`, phase 2's hand-written positive, the 19 cut items of {@link cutNames}, the 40
+ * hand-written HTML positives of {@link htmlElements} and the six XML copies of
+ * {@link copyNames}.
  */
 export const fixtureNames = [
   "simple",
@@ -255,6 +269,7 @@ export const fixtureNames = [
   "end-attempt",
   ...cutNames,
   ...htmlElements.map((element) => `html-${element}` as const),
+  ...copyNames,
 ] as const;
 
 /**
@@ -536,6 +551,110 @@ const htmlSpecs: Record<`html-${(typeof htmlElements)[number]}`, FixtureSpec> = 
 };
 
 /**
+ * The item of `BBQsTest` that `controls-3-0-0` is cut from: an extended-text item of a package
+ * whose schema is 3.0.0 (spec 3.6's pick for the 3.0.0 version).
+ */
+const bbqExtendedTextItem = "id-1ccd6e04685f/ShortAnswer-extText-postcard.xml";
+
+/**
+ * The root element's last attribute of {@link bgChoiceItem}, which the copies that give the root
+ * `tool-name` and `tool-version` extend.
+ */
+const bgRootAttribute = 'time-dependent="false"';
+
+/**
+ * The opening tag of {@link bgChoiceItem}'s choice interaction.
+ */
+const bgInteractionOpen = '<qti-choice-interaction max-choices="1" response-identifier="RESPONSE">';
+
+/**
+ * The spec of one XML copy of phase 2's fixtures b (negatives, part one): a cut of
+ * {@link bgChoiceItem} with `edits` applied first.
+ *
+ * @param name - The fixture's name, one of {@link copyNames}.
+ * @param edits - The `ReplaceText` edits of the item, each of which must match exactly once.
+ * @returns The spec, cut at schema version 3.0.1 like any `BPIG_22April` item.
+ */
+const bgCopy = (name: string, edits: readonly FileEdit[]): FixtureSpec => ({
+  edits: [...edits, { _tag: "cut", item: bgChoiceItem, schemaversion: "3.0.1" }],
+  member: corpusMembers.BPIG_22April,
+  name,
+});
+
+/**
+ * The six XML copies of {@link copyNames}.
+ *
+ * - `admission-choice-in-feedback` moves the second choice into the content body of a feedback block,
+ *   where `Admission` admits no simple choice (a `FEEDBACK` outcome is declared for the block to
+ *   read).
+ * - `gap-outside-gap-match` has a `qti-gap` in an item with no gap-match interaction, which the
+ *   ancestry bans.
+ * - `controls-3-0-0` is the 3.0.0 pick for `controls`: an extended-text item whose manifest and root
+ *   declare 3.0.0 with a `video controls="controls"`, a 3.0.1 spelling.
+ * - `padded-m1-attributes` carries decision 19's witnesses, one per class (spec 4.11): a `class` that
+ *   collapses, a `label` that is replaced and an `aria-valuetext` that is preserved. `label` is not
+ *   on the item root, so the root carries `tool-name` and `tool-version`.
+ * - `empty-class` is campaign decision 22's pair, `class=""` and `class=" "`.
+ * - `hottext-in-prompt` has a `qti-hottext` in a `span` in the choice interaction's `qti-prompt`.
+ */
+const copySpecs: Record<(typeof copyNames)[number], FixtureSpec> = {
+  "admission-choice-in-feedback": bgCopy("admission-choice-in-feedback", [
+    replaceIn(bgChoiceItem, '<qti-simple-choice identifier="false">False</qti-simple-choice>', ""),
+    replaceIn(
+      bgChoiceItem,
+      "</qti-choice-interaction>",
+      '</qti-choice-interaction><qti-feedback-block outcome-identifier="FEEDBACK" identifier="wrong" show-hide="show"><qti-content-body><qti-simple-choice identifier="false">False</qti-simple-choice></qti-content-body></qti-feedback-block>',
+    ),
+    replaceIn(
+      bgChoiceItem,
+      "</qti-outcome-declaration>",
+      '</qti-outcome-declaration><qti-outcome-declaration base-type="identifier" cardinality="single" identifier="FEEDBACK"/>',
+    ),
+  ]),
+  "controls-3-0-0": {
+    edits: [
+      replaceIn(
+        bbqExtendedTextItem,
+        "<p><br/>Here is a sample response:</p>",
+        '<video controls="controls"><source src="video/clip.mp4" type="video/mp4"/></video><p><br/>Here is a sample response:</p>',
+      ),
+      { _tag: "cut", item: bbqExtendedTextItem, schemaversion: "3.0.0" },
+    ],
+    member: corpusMembers.BBQsTest,
+    name: "controls-3-0-0",
+  },
+  "empty-class": bgCopy("empty-class", [
+    replaceIn(
+      bgChoiceItem,
+      bgChoiceQuestion,
+      '<div class=""><p>This is a True/False question?</p></div><p class="  ">Choose one.</p>',
+    ),
+  ]),
+  "gap-outside-gap-match": bgCopy("gap-outside-gap-match", [
+    replaceIn(bgChoiceItem, bgChoiceQuestion, '<p><qti-gap identifier="G"/></p>'),
+  ]),
+  "hottext-in-prompt": bgCopy("hottext-in-prompt", [
+    replaceIn(
+      bgChoiceItem,
+      bgInteractionOpen,
+      `${bgInteractionOpen}<qti-prompt><span><qti-hottext identifier="H">Pick</qti-hottext></span></qti-prompt>`,
+    ),
+  ]),
+  "padded-m1-attributes": bgCopy("padded-m1-attributes", [
+    replaceIn(
+      bgChoiceItem,
+      bgRootAttribute,
+      `${bgRootAttribute} tool-name="gr8des" tool-version="1"`,
+    ),
+    replaceIn(
+      bgChoiceItem,
+      bgChoiceQuestion,
+      '<p class=" a  b ">This is a True/False question?</p><div label="x&#9;y"><p>Choose one.</p></div><p><span aria-valuetext="a&#9;b">Answer.</span></p>',
+    ),
+  ]),
+};
+
+/**
  * The item of `BPIG_22April` that `cut-text-entry` is cut from, which `end-attempt` edits before
  * it cuts it.
  */
@@ -588,6 +707,7 @@ const bgTextEntryItem = "items/BG010.xml";
 const specs: Record<FixtureName, FixtureSpec> = {
   ...cutSpecs,
   ...htmlSpecs,
+  ...copySpecs,
   "bad-identifier-value": {
     edits: [
       replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value>Choice A</qti-value>"),
