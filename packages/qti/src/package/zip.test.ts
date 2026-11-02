@@ -4,7 +4,7 @@ import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platf
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
 import { listPackage, PackageReadError, readEntry } from "#qti/package/read.ts";
-import { readZip, ZipRefusal } from "#qti/package/zip.ts";
+import { readZip, writeZip, ZipRefusal } from "#qti/package/zip.ts";
 import { materialize, materializeCorpus, materializeZip } from "#qti/test/fixtures.ts";
 import type { ZipName } from "#qti/test/fixtures.ts";
 
@@ -664,5 +664,134 @@ layer(TestLayer, { excludeTestServices: true })("package/read.ts over a .zip", (
         assert.strictEqual(files, 546);
       }),
     { timeout: 120_000 },
+  );
+});
+
+/**
+ * What a test's own header parser reads from one central directory record.
+ */
+interface WrittenRecord {
+  readonly date: number;
+  readonly flags: number;
+  readonly method: number;
+  readonly name: string;
+  readonly time: number;
+}
+
+/**
+ * What {@link parseHeaders} reads: the central records and the count of local headers found.
+ */
+interface WrittenHeaders {
+  readonly locals: number;
+  readonly records: readonly WrittenRecord[];
+}
+
+/**
+ * Read every central directory record of an archive and count its local headers, without
+ * `readZip`, so a test checks the container's fields independently of the reader.
+ *
+ * @param bytes - The archive.
+ * @returns The central records and the number of local file headers found at the offsets they name.
+ */
+const parseHeaders = (bytes: Uint8Array): WrittenHeaders => {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const end = bytes.byteLength - 22;
+  const count = view.getUint16(end + 10, true);
+  const records: WrittenRecord[] = [];
+  let locals = 0;
+  let at = view.getUint32(end + 16, true);
+
+  for (let index = 0; index < count; index += 1) {
+    const nameLength = view.getUint16(at + 28, true);
+
+    records.push({
+      date: view.getUint16(at + 14, true),
+      flags: view.getUint16(at + 8, true),
+      method: view.getUint16(at + 10, true),
+      name: new TextDecoder().decode(bytes.subarray(at + 46, at + 46 + nameLength)),
+      time: view.getUint16(at + 12, true),
+    });
+
+    if (view.getUint32(view.getUint32(at + 42, true), true) === 0x04_03_4b_50) {
+      locals += 1;
+    }
+
+    at += 46 + nameLength + view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
+  }
+
+  return { locals, records };
+};
+
+layer(TestLayer, { excludeTestServices: true })("package/zip.ts writeZip", (it) => {
+  it.effect("readZip of writeZip of the simple zip lists the same entries with equal bytes", () =>
+    Effect.gen(function* roundTrip() {
+      const original = yield* readZip(SIMPLE_ZIP);
+      const rewritten = yield* readZip(yield* writeScratch(writeZip(original)));
+
+      assert.isAbove(original.length, 1);
+      assert.deepStrictEqual(
+        rewritten.map((entry) => ({ bytes: [...entry.bytes], path: entry.path })),
+        original.map((entry) => ({ bytes: [...entry.bytes], path: entry.path })),
+      );
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("the container has no directory entry, bit 11 on every entry and the fixed stamp", () =>
+    Effect.gen(function* inspect() {
+      const original = yield* readZip(SIMPLE_ZIP);
+      const { locals, records } = parseHeaders(writeZip(original));
+
+      assert.strictEqual(records.length, original.length);
+      assert.strictEqual(locals, original.length);
+      assert.deepStrictEqual(
+        records.map((record) => record.name),
+        original.map((entry) => entry.path),
+      );
+
+      for (const record of records) {
+        assert.isFalse(record.name.endsWith("/"), record.name);
+        assert.strictEqual(record.flags, 0x8_00, record.name);
+        // 1980-01-01 is DOS date 0x0021 (year 0, month 1, day 1); 00:00:00 is time 0.
+        assert.strictEqual(record.date, 0x00_21, record.name);
+        assert.strictEqual(record.time, 0, record.name);
+      }
+    }),
+  );
+
+  it.effect("a 10-byte entry is stored and a 1000-byte one is deflated", () =>
+    Effect.gen(function* methods() {
+      const small = new Uint8Array(10).fill(97);
+      const large = new Uint8Array(1000).fill(98);
+      const archive = writeZip([
+        { bytes: Buffer.from("<m/>"), path: "imsmanifest.xml" },
+        { bytes: small, path: "small.txt" },
+        { bytes: large, path: "large.txt" },
+      ]);
+      const byName = new Map(parseHeaders(archive).records.map((record) => [record.name, record]));
+
+      assert.strictEqual(byName.get("imsmanifest.xml")?.method, 0);
+      assert.strictEqual(byName.get("small.txt")?.method, 0);
+      assert.strictEqual(byName.get("large.txt")?.method, 8);
+
+      const read = yield* readZip(yield* writeScratch(archive));
+
+      assert.deepStrictEqual(read.find((entry) => entry.path === "large.txt")?.bytes, large);
+      assert.deepStrictEqual(read.find((entry) => entry.path === "small.txt")?.bytes, small);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("non-ASCII names round trip under bit 11", () =>
+    Effect.gen(function* names() {
+      const archive = writeZip([
+        { bytes: Buffer.from("<m/>"), path: "imsmanifest.xml" },
+        { bytes: Buffer.from("é"), path: "images/café-日本.txt" },
+      ]);
+      const read = yield* readZip(yield* writeScratch(archive));
+
+      assert.deepStrictEqual(
+        read.map((entry) => entry.path),
+        ["images/café-日本.txt", "imsmanifest.xml"],
+      );
+    }).pipe(Effect.scoped),
   );
 });
