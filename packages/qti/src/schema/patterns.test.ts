@@ -68,6 +68,38 @@ const fields = [
   ["mimeTypeList", () => str.regex(patterns.mimeTypeList)],
   ["printfFormat", () => str.regex(patterns.printfFormat)],
   ["classList", () => str.regex(patterns.classList)],
+  ["coordsRect", () => str.regex(patterns.coordsRect)],
+  ["coordsEllipse", () => str.regex(patterns.coordsEllipse)],
+  ["coordsCircle", () => str.regex(patterns.coordsCircle)],
+  ["coordsPoly", () => str.regex(patterns.coordsPoly)],
+  ["coordsAny", () => str.regex(patterns.coordsAny)],
+  ["ariaRole", () => str.regex(patterns.ariaRole)],
+  ["ariaAutocomplete", () => str.regex(patterns.ariaAutocomplete)],
+  ["ariaChecked", () => str.regex(patterns.ariaChecked)],
+  ["ariaCurrent", () => str.regex(patterns.ariaCurrent)],
+  ["ariaExpanded", () => str.regex(patterns.ariaExpanded)],
+  ["ariaInvalid", () => str.regex(patterns.ariaInvalid)],
+  ["ariaLive", () => str.regex(patterns.ariaLive)],
+  ["ariaOrientation", () => str.regex(patterns.ariaOrientation)],
+  ["ariaPressed", () => str.regex(patterns.ariaPressed)],
+  ["ariaSelected", () => str.regex(patterns.ariaSelected)],
+  ["ariaSort", () => str.regex(patterns.ariaSort)],
+  ["ariaRelevantList", () => str.regex(patterns.ariaRelevantList)],
+  ["autoplayEnum", () => str.regex(patterns.autoplayEnum)],
+  ["loopEnum", () => str.regex(patterns.loopEnum)],
+  ["mutedEnum", () => str.regex(patterns.mutedEnum)],
+  ["controlsEnum", () => str.regex(patterns.controlsEnum)],
+  ["defaultEnum", () => str.regex(patterns.defaultEnum)],
+  ["dirEnum", () => str.regex(patterns.dirEnum)],
+  ["suppressTts", () => str.regex(patterns.suppressTts)],
+  ["valuetype", () => str.regex(patterns.valuetype)],
+  ["scope", () => str.regex(patterns.scope)],
+  ["align", () => str.regex(patterns.align)],
+  ["valign", () => str.regex(patterns.valign)],
+  ["preload", () => str.regex(patterns.preload)],
+  ["crossorigin", () => str.regex(patterns.crossorigin)],
+  ["trackKind", () => str.regex(patterns.trackKind)],
+  ["textFormat", () => str.regex(patterns.textFormat)],
 ] as const;
 
 /**
@@ -82,7 +114,19 @@ const admits = (source: string, flags: string, value: string): boolean =>
 const segments = (count: number, length: number): string =>
   Array.from({ length: count }, () => "a".repeat(length)).join("/");
 
+/**
+ * The 74 values of `@role` in `imsqti_asiv3p0p1_v1p0.xsd` lines 24413 to 24486, in the XSD's order.
+ */
+const roles =
+  "article columnheader definition document group heading img list listitem math note presentation region row rowgroup rowheader separator toolbar button checkbox gridcell link log option radio slider spinbutton status tab tabpanel textbox timer listbox radiogroup tablist complementary contentinfo alert alertdialog application banner combobox dialog form grid main marquee menu menubar menuitem menuitemcheckbox menuitemradio navigation progressbar scrollbar search tooltip tree treegrid treeitem searchbox switch term figure code time subscript superscript meter generic insertion deletion strong emphasis".split(
+    " ",
+  );
+
 describe("patterns", () => {
+  it("roles lists the 74 values", () => {
+    assert.strictEqual(new Set(roles).size, 74);
+  });
+
   describe("grizzle builds a relation over each source", () => {
     for (const [name, field] of fields) {
       it.effect(name, () =>
@@ -381,5 +425,105 @@ describe("patterns", () => {
     assert.isTrue(admits(patterns.printfFormat, "u", "%i"));
     assert.isFalse(admits(patterns.printfFormat, "u", "%q"));
     assert.isFalse(admits(patterns.printfFormat, "u", "2f"));
+  });
+
+  it("coords patterns judge the tokens of CoordsDType, a percent sign included", () => {
+    const { coordsAny, coordsCircle, coordsEllipse, coordsPoly, coordsRect } = patterns;
+    assert.isTrue(admits(coordsRect, "u", "1,2,3,4"));
+    assert.isTrue(admits(coordsRect, "u", "1%,2,3%,4"));
+    assert.isFalse(admits(coordsRect, "u", "1,2,3"));
+    assert.isFalse(admits(coordsRect, "u", "1, 2,3,4"));
+    assert.isTrue(admits(coordsEllipse, "u", "1,2,3,4"));
+    assert.isFalse(admits(coordsEllipse, "u", "1,2,3,4,5"));
+    assert.isTrue(admits(coordsCircle, "u", "1,2,3"));
+    assert.isFalse(admits(coordsCircle, "u", "1,2,3,4"));
+    assert.isFalse(admits(coordsPoly, "u", "1,2,3,4"));
+    assert.isFalse(admits(coordsPoly, "u", "1,2,3,4,5,6,7"));
+    assert.isTrue(admits(coordsPoly, "u", "1,2,3,4,5,6"));
+    assert.isTrue(admits(coordsPoly, "u", "1%,2,3,4,5,6"));
+    assert.isTrue(admits(coordsPoly, "u", "1,2,3,4,5,6,7,8"));
+    for (const value of ["1,2,3", "1,2,3,4", "1,2,3,4,5,6", "1,2,3,4,5,6,7,8"]) {
+      assert.isTrue(admits(coordsAny, "u", value), value);
+    }
+    for (const value of ["1,2", "1,2,3,4,5", "1,2,3,4,5,6,7", "", "a,b,c", "1,2,"]) {
+      assert.isFalse(admits(coordsAny, "u", value), value);
+    }
+  });
+
+  it("ariaRole", () => {
+    assert.isTrue(admits(patterns.ariaRole, "u", "heading"));
+    assert.isTrue(admits(patterns.ariaRole, "u", "tab"));
+    assert.isFalse(admits(patterns.ariaRole, "u", "Heading"));
+    assert.isFalse(admits(patterns.ariaRole, "u", "head"));
+    assert.isFalse(admits(patterns.ariaRole, "u", "heading tab"));
+    for (const role of roles) {
+      assert.isTrue(admits(patterns.ariaRole, "u", role), role);
+      assert.isFalse(admits(patterns.ariaRole, "u", `${role}x`), role);
+    }
+  });
+
+  it("ariaRelevantList admits the empty list and refuses an unknown token", () => {
+    const { ariaRelevantList } = patterns;
+    for (const value of ["additions text", "", "all", "removals"]) {
+      assert.isTrue(admits(ariaRelevantList, "u", value), JSON.stringify(value));
+    }
+    for (const value of ["extra", "additions extra", "additions  text", " text"]) {
+      assert.isFalse(admits(ariaRelevantList, "u", value), JSON.stringify(value));
+    }
+  });
+
+  it("the ARIA token enumerations", () => {
+    assert.isTrue(admits(patterns.ariaLive, "u", "polite"));
+    assert.isFalse(admits(patterns.ariaLive, "u", "loud"));
+    assert.isTrue(admits(patterns.ariaOrientation, "u", "vertical"));
+    assert.isTrue(admits(patterns.ariaAutocomplete, "u", "both"));
+    assert.isTrue(admits(patterns.ariaChecked, "u", "mixed"));
+    assert.isTrue(admits(patterns.ariaPressed, "u", "mixed"));
+    assert.isFalse(admits(patterns.ariaExpanded, "u", "mixed"));
+    assert.isFalse(admits(patterns.ariaSelected, "u", "mixed"));
+    assert.isTrue(admits(patterns.ariaInvalid, "u", "spelling"));
+    assert.isTrue(admits(patterns.ariaSort, "u", "other"));
+    assert.isTrue(admits(patterns.ariaCurrent, "u", "location"));
+    assert.isFalse(admits(patterns.ariaCurrent, "u", "mixed"));
+  });
+
+  it("the version booleans of 3.0.1 take the true, the false and the attribute name", () => {
+    const cases = [
+      [patterns.autoplayEnum, "autoplay"],
+      [patterns.loopEnum, "loop"],
+      [patterns.mutedEnum, "muted"],
+      [patterns.controlsEnum, "controls"],
+      [patterns.defaultEnum, "default"],
+    ] as const;
+    for (const [source, name] of cases) {
+      for (const value of ["true", "false", name]) {
+        assert.isTrue(admits(source, "u", value), value);
+      }
+      assert.isFalse(admits(source, "u", "yes"));
+      assert.isFalse(admits(source, "u", "1"));
+    }
+  });
+
+  it("the enumerations typed as text", () => {
+    assert.isTrue(admits(patterns.dirEnum, "u", "rtl"));
+    assert.isFalse(admits(patterns.dirEnum, "u", "LTR"));
+    assert.isTrue(admits(patterns.suppressTts, "u", "screen-reader"));
+    assert.isFalse(admits(patterns.suppressTts, "u", "none"));
+    assert.isTrue(admits(patterns.valuetype, "u", "DATA"));
+    assert.isFalse(admits(patterns.valuetype, "u", "data"));
+    assert.isTrue(admits(patterns.scope, "u", "colgroup"));
+    assert.isFalse(admits(patterns.scope, "u", "cell"));
+    assert.isTrue(admits(patterns.align, "u", "justify"));
+    assert.isFalse(admits(patterns.align, "u", "top"));
+    assert.isTrue(admits(patterns.valign, "u", "baseline"));
+    assert.isFalse(admits(patterns.valign, "u", "left"));
+    assert.isTrue(admits(patterns.preload, "u", "metadata"));
+    assert.isFalse(admits(patterns.preload, "u", "true"));
+    assert.isTrue(admits(patterns.crossorigin, "u", "use-credentials"));
+    assert.isFalse(admits(patterns.crossorigin, "u", ""));
+    assert.isTrue(admits(patterns.trackKind, "u", "subtitles"));
+    assert.isFalse(admits(patterns.trackKind, "u", "subtitle"));
+    assert.isTrue(admits(patterns.textFormat, "u", "xhtml"));
+    assert.isFalse(admits(patterns.textFormat, "u", "html"));
   });
 });
