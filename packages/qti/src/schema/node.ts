@@ -25,6 +25,7 @@ import {
 import * as asi from "#qti/schema/kinds/asi.ts";
 import * as cp from "#qti/schema/kinds/cp.ts";
 import * as generic from "#qti/schema/kinds/generic.ts";
+import type { SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
 import * as html from "#qti/schema/kinds/html.ts";
 import * as lom from "#qti/schema/kinds/lom.ts";
 import * as qmd from "#qti/schema/kinds/qmd.ts";
@@ -38,10 +39,12 @@ import * as patterns from "#qti/schema/patterns.ts";
  */
 export const vocabularies = [generic, asi, html, cp, lom, qmd] as const;
 
+const schemaVersions = ["3.0.0", "3.0.1"] as const satisfies readonly SchemaVersionHandle[];
+
 /**
  * The QTI schema versions the model admits.
  */
-export const SchemaVersion = closed("SchemaVersion", ["3.0.0", "3.0.1"]);
+export const SchemaVersion = closed("SchemaVersion", schemaVersions);
 
 /**
  * The root element kinds a document tree may have.
@@ -100,10 +103,7 @@ export const AttributeName = closed("AttributeName", [
   ...qmd.attributes,
 ]);
 
-/**
- * A handle of `SchemaVersion`.
- */
-export type SchemaVersionHandle = (typeof SchemaVersion.handles)[number];
+export type { SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
 
 /**
  * A handle of `RootKind`.
