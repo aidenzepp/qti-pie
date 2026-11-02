@@ -23,9 +23,10 @@ import { usageRows } from "#qti/import/usage.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import { Node } from "#qti/schema/node.ts";
-import type { SchemaVersionHandle } from "#qti/schema/node.ts";
+import type { RootKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
 import { Package } from "#qti/schema/package.ts";
 import { Author } from "#qti/schema/roles.ts";
+import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
 import { readXml } from "#qti/xml/read.ts";
 import type { XmlDocument } from "#qti/xml/tree.ts";
 
@@ -138,6 +139,13 @@ const isReadRefusal = <E extends { readonly _tag: string }>(
 ): error is Exclude<E, PlatformError.PlatformError> => error._tag !== "PlatformError";
 
 /**
+ * The root kind a resource type lists its documents under, none for a type `RootOfType` does not
+ * hold.
+ */
+const rootKindOfType = (type: string): RootKindHandle | undefined =>
+  rootOfType.find((entry) => entry.type === type)?.root;
+
+/**
  * What {@link documentRows} needs to know about one listed document.
  */
 export interface DocumentInput {
@@ -150,15 +158,19 @@ export interface DocumentInput {
 }
 
 /**
- * Write the rows of one document the manifest lists, by the root element the file holds.
+ * Write the rows of one document the manifest lists, by the root kind its resource type maps to in
+ * `RootOfType` for the `rptemplate` family, and by the root element the file holds for every other
+ * document.
  *
- * The root element decides the builder, not the resource's type, so a root that does not belong to
- * the type is refused at commit by the `Document` containment into `RootOfType`, and a new
- * `rptemplate` type reaches `rptemplateRows` with no edit here: `qti-assessment-item` goes to
- * `itemRows`, `qti-response-processing` to {@link rptemplateRows}, `qti-outcome-declaration` to
- * `outcomeRows`, `lom:lom` to `externalRows`, and `ud:usageData` to `usageRows`. A root no builder
- * names is `UnmodeledVocabulary`, except in a `qtiusagedata/xml` file, which goes to `usageRows` so
- * that a root outside QTI 3 usage data is `NotQti3`.
+ * First, a resource type whose root kind is `rptemplate` goes to {@link rptemplateRows}, never by
+ * the type string, so a new `rptemplate` type reaches it with no edit here; a
+ * `qti-response-processing` root listed under any other type has no element route and is
+ * `UnmodeledVocabulary`. Then the root element decides: `qti-assessment-item` goes to `itemRows`,
+ * `qti-outcome-declaration` to `outcomeRows`, `lom:lom` to `externalRows`, and `ud:usageData` to
+ * `usageRows`. A root no builder names is `UnmodeledVocabulary`, except in a `qtiusagedata/xml`
+ * file, which goes to `usageRows` so that a root outside QTI 3 usage data is `NotQti3`. A root that
+ * does not belong to its type is refused at commit by the `Document` containment into
+ * `RootOfType`.
  *
  * @param input - The decoded document and where its package lists it.
  * @param rows - The rows so far.
@@ -168,6 +180,10 @@ export const documentRows = Effect.fn("import.documentRows")(function* documentR
   input: DocumentInput,
   rows: Rows,
 ) {
+  if (rootKindOfType(input.resourceType) === "rptemplate") {
+    return yield* rptemplateRows(input, rows);
+  }
+
   const { doc } = input;
   const listed = {
     package: input.packageId,
@@ -195,10 +211,6 @@ export const documentRows = Effect.fn("import.documentRows")(function* documentR
 
   if (root === "qti-outcome-declaration") {
     return yield* outcomeRows(input, rows);
-  }
-
-  if (root === "qti-response-processing") {
-    return yield* rptemplateRows(input, rows);
   }
 
   return yield* new UnmodeledVocabulary({
