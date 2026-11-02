@@ -12,10 +12,13 @@ import { Match, Schema } from "effect";
 import type { GuardRefusal } from "#qti/import/guards/tree.ts";
 import type { ItemGuardRefusal } from "#qti/import/guards/item.ts";
 import type { ManifestGuardRefusal } from "#qti/import/guards/manifest.ts";
+import type { UsageGuardRefusal } from "#qti/import/guards/usage.ts";
+import type { ExternalRefusal } from "#qti/import/external.ts";
 import type { ItemRefusal } from "#qti/import/item.ts";
 import type { NotQti3 } from "#qti/import/manifest.ts";
 import type { UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { PackageReadError } from "#qti/package/read.ts";
+import type { ZipRefusal } from "#qti/package/zip.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import type { ReaderRefusal, WellFormednessError } from "#qti/xml/errors.ts";
 
@@ -85,6 +88,33 @@ export const ImportRule = Schema.Literals([
   "unmodeled-vocabulary",
   "well-formedness",
   "reader-refusal",
+  "lom-capacity",
+  "lom-learning-resource-type",
+  "qti-metadata-host",
+  "file-metadata-single",
+  "file-lom-owner",
+  "external-lom-owner",
+  "variant-target",
+  "variant-resource",
+  "variant-key",
+  "variant-metadata",
+  "drd-value",
+  "drd-single",
+  "manifest-id-holder",
+  "csm-capacity",
+  "csm-single",
+  "usage-root",
+  "usage-statistic-kind",
+  "usage-count",
+  "usage-key",
+  "usage-typed-value",
+  "usage-lexical",
+  "outcome-document",
+  "calendar",
+  "root-type-reverse",
+  "record-unnamed",
+  "entry-kind",
+  "zip-format",
 ]);
 
 /**
@@ -439,6 +469,7 @@ export const refusalOfLaw = (law: ImportLaw, witness?: ImportWitness): ImportRef
  * Every error that refuses an import before the database does.
  */
 export type ReadRefusal =
+  | ExternalRefusal
   | GuardRefusal
   | ItemGuardRefusal
   | ItemRefusal
@@ -447,7 +478,9 @@ export type ReadRefusal =
   | PackageReadError
   | ReaderRefusal
   | UnmodeledVocabulary
-  | WellFormednessError;
+  | UsageGuardRefusal
+  | WellFormednessError
+  | ZipRefusal;
 
 /**
  * The refusal of an error a guard or the reader raised.
@@ -462,6 +495,7 @@ export type ReadRefusal =
 export const ruleOfError = (e: ReadRefusal): ImportRefused =>
   Match.value(e).pipe(
     Match.tagsExhaustive({
+      ExternalRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       GuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ItemGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ItemRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
@@ -479,11 +513,13 @@ export const ruleOfError = (e: ReadRefusal): ImportRefused =>
           detail: `${g.kind} ${g.name}${g.parent._tag === "Some" ? ` in ${g.parent.value}` : ""} has no model yet`,
           rule: "unmodeled-vocabulary",
         }),
+      UsageGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       WellFormednessError: (g) =>
         new ImportRefused({
           detail: `${g.message} at line ${g.line}, column ${g.column}`,
           rule: "well-formedness",
         }),
+      ZipRefusal: (g) => new ImportRefused({ detail: `${g.entry}: ${g.feature}`, rule: g.rule }),
     }),
   );
 
