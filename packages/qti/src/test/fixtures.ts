@@ -154,6 +154,28 @@ export const fixtureNames = [
   "body-empty",
   "comment-in-element",
   "bad-template-uri",
+  "lomrest",
+  "lomrest-two-titles",
+  "lomrest-two-purposes",
+  "lomrest-two-kinds",
+  "lomrest-exam",
+  "lomrest-self-assessment",
+  "csm",
+  "csm-no-labelled-guid",
+  "csm-two-guids",
+  "csm-no-guid",
+  "csm-two-sets",
+  "filelom",
+  "filelom-qmd",
+  "filelom-two-metadata",
+  "nestedqmd",
+  "nestedqmd-manifest-lom",
+  "nestedqmd-both",
+  "extmeta",
+  "extmeta-item-root",
+  "extmeta-item-href",
+  "extmeta-two-resources",
+  "extmeta-hrefless",
 ] as const;
 
 /**
@@ -234,6 +256,564 @@ const bodyChildren = [
  */
 const firstChoice =
   '<qti-simple-choice identifier="ChoiceA">You must stay with your luggage at all times.</qti-simple-choice>';
+
+/**
+ * Lines of XML text, each without its indentation, as the metadata fixtures build their inserted
+ * elements.
+ */
+type Lines = readonly string[];
+
+/**
+ * The line terminator of `simple`'s `imsmanifest.xml`, which every inserted line ends with.
+ */
+const CRLF = "\r\n";
+
+/**
+ * Build an element as lines: its start tag, its children one level in and its end tag.
+ *
+ * @param name - The qualified name.
+ * @param attributes - The attributes with their leading space, or `""`.
+ * @param children - The child elements, comments and leaves, in order.
+ * @returns The lines, the children indented four spaces as the manifest is.
+ */
+const element = (name: string, attributes: string, ...children: readonly Lines[]): Lines => [
+  `<${name}${attributes}>`,
+  ...children.flat().map((line) => `    ${line}`),
+  `</${name}>`,
+];
+
+/**
+ * Build an element holding only text.
+ *
+ * @param name - The qualified name.
+ * @param value - The text, already escaped.
+ * @returns The element as one line.
+ */
+const leaf = (name: string, value: string): Lines => [`<${name}>${value}</${name}>`];
+
+/**
+ * Build a comment.
+ *
+ * @param value - The comment's text.
+ * @returns The comment as one line.
+ */
+const note = (value: string): Lines => [`<!-- ${value} -->`];
+
+/**
+ * Lay lines out at a column.
+ *
+ * @param column - The number of spaces before every line.
+ * @param lines - The lines, relative to each other.
+ * @returns The lines each padded and joined with the manifest's terminator.
+ */
+const atColumn = (column: number, lines: Lines): string =>
+  lines.map((line) => `${" ".repeat(column)}${line}`).join(CRLF);
+
+/**
+ * Lay lines out at a column for a replacement that continues a line already indented to it.
+ *
+ * @param column - The column the first line already sits at.
+ * @param lines - The lines, relative to each other.
+ * @returns {@link atColumn} 's text without the first line's padding.
+ */
+const continuingAt = (column: number, lines: Lines): string => atColumn(column, lines).trimStart();
+
+/**
+ * Build an `imsmd:` element holding only text, as a `CharacterString`.
+ *
+ * @param name - The local name.
+ * @param value - The text.
+ * @returns The element as one line.
+ */
+const mdLeaf = (name: string, value: string): Lines => leaf(`imsmd:${name}`, value);
+
+/**
+ * Build an `imsmd:` container.
+ *
+ * @param name - The local name.
+ * @param children - The children, in order.
+ * @returns The container's lines.
+ */
+const mdGroup = (name: string, ...children: readonly Lines[]): Lines =>
+  element(`imsmd:${name}`, "", ...children);
+
+/**
+ * Build an `imsmd:` `LangString`: the element holding one `imsmd:string`.
+ *
+ * @param name - The local name.
+ * @param value - The string.
+ * @returns The element's lines.
+ */
+const mdText = (name: string, value: string): Lines => mdGroup(name, leaf("imsmd:string", value));
+
+/**
+ * Build an `imsmd:` vocabulary leaf in its `source` and `value` form.
+ *
+ * @param name - The local name.
+ * @param value - The vocabulary value.
+ * @returns The element's lines, under source `LOMv1.0`.
+ */
+const mdVocabulary = (name: string, value: string): Lines =>
+  mdGroup(name, mdLeaf("source", "LOMv1.0"), mdLeaf("value", value));
+
+/**
+ * Build a minimal `imsmd:lom` whose `general` holds a title.
+ *
+ * @param title - The title's string.
+ * @returns The `lom`'s lines.
+ */
+const titledLom = (title: string): Lines =>
+  mdGroup("lom", mdGroup("general", mdText("title", title)));
+
+/**
+ * `simple`'s `qtiMetadata` block, as it stands at lines 53 to 58 of `imsmanifest.xml`.
+ */
+const qtiMetadata: Lines = element(
+  "imsqti:qtiMetadata",
+  "",
+  leaf("imsqti:timeDependent", "false"),
+  leaf("imsqti:interactionType", "choiceInteraction"),
+  leaf("imsqti:feedbackType", "none"),
+  leaf("imsqti:solutionAvailable", "true"),
+);
+
+/**
+ * The column of the resource `lom`'s children in `simple`'s manifest (line 59 is the `lom`, at 16).
+ */
+const resourceLomChildren = 20;
+
+/**
+ * The end of the resource `lom` in `simple`'s manifest (lines 85 to 91): its `rights` closes at
+ * column 20 and the `lom` at 16. The metadata fixtures that add children to the `lom` search here.
+ */
+const resourceLomEnd = `</imsmd:rights>${CRLF}                </imsmd:lom>`;
+
+/**
+ * The end of the manifest-level `lom` of `simple`'s manifest (lines 41 to 47): its `rights` closes
+ * at column 12 and the `lom` at 8.
+ */
+const manifestLomEnd = `</imsmd:rights>${CRLF}        </imsmd:lom>`;
+
+/**
+ * The `ReplaceText` edit that adds children to the end of the resource `lom`.
+ *
+ * @param children - The children, after `rights`.
+ * @returns The edit as plain data.
+ */
+const endResourceLom = (...children: readonly Lines[]): Edit =>
+  replaceIn(
+    "imsmanifest.xml",
+    resourceLomEnd,
+    `</imsmd:rights>${CRLF}${atColumn(resourceLomChildren, children.flat())}${CRLF}                </imsmd:lom>`,
+  );
+
+/**
+ * The first `educational` of `lomrest`: every child of the category with its comment.
+ */
+const fullEducational: Lines = mdGroup(
+  "educational",
+  note("every child of educational, as the loose schema lists them"),
+  mdVocabulary("interactivityType", "active"),
+  mdVocabulary("learningResourceType", "exercise"),
+  mdVocabulary("interactivityLevel", "medium"),
+  mdVocabulary("semanticDensity", "low"),
+  mdVocabulary("intendedEndUserRole", "learner"),
+  mdVocabulary("context", "school"),
+  mdText("typicalAgeRange", "10-12"),
+  mdVocabulary("difficulty", "easy"),
+  mdGroup(
+    "typicalLearningTime",
+    mdLeaf("duration", "PT30M"),
+    mdText("description", "Half an hour of work."),
+  ),
+  mdText("description", "A short worked example."),
+  mdLeaf("language", "en"),
+);
+
+/**
+ * The `classification` of `lomrest`: a purpose, two taxon paths, a description and a keyword.
+ */
+const fullClassification: Lines = mdGroup(
+  "classification",
+  mdVocabulary("purpose", "discipline"),
+  mdGroup(
+    "taxonPath",
+    mdText("source", "Example scheme"),
+    mdGroup("taxon", mdLeaf("id", "M1"), mdText("entry", "Mathematics")),
+  ),
+  mdGroup(
+    "taxonPath",
+    mdText("source", "Example scheme"),
+    mdGroup("taxon", mdLeaf("id", "M1.2"), mdText("entry", "Arithmetic")),
+  ),
+  mdText("description", "Filed under arithmetic."),
+  mdText("keyword", "reading"),
+);
+
+/**
+ * The `relation` of `lomrest`: a kind and a related resource with its identifier.
+ */
+const fullRelation: Lines = mdGroup(
+  "relation",
+  mdVocabulary("kind", "precludes"),
+  mdGroup(
+    "resource",
+    mdGroup("identifier", mdLeaf("catalog", "URI"), mdLeaf("entry", "urn:example:other-item")),
+    mdText("description", "An item this one cannot be set beside."),
+  ),
+);
+
+/**
+ * The `annotation` of `lomrest`: an entity, a date and a description.
+ */
+const fullAnnotation: Lines = mdGroup(
+  "annotation",
+  mdLeaf("entity", "reviewer"),
+  mdGroup("date", mdLeaf("dateTime", "2026-01-15"), mdText("description", "Reviewed in January.")),
+  mdText("description", "Read through and accepted."),
+);
+
+/**
+ * The second `educational` of `lomrest`, which repeats the category.
+ */
+const secondEducational: Lines = mdGroup(
+  "educational",
+  mdText("description", "A second educational category."),
+);
+
+/**
+ * The edits of `lomrest`: the resource `lom` gains the five categories after `rights`.
+ */
+const lomrestEdits: readonly Edit[] = [
+  endResourceLom(
+    fullEducational,
+    fullClassification,
+    fullRelation,
+    fullAnnotation,
+    secondEducational,
+  ),
+];
+
+/**
+ * Build the `ReplaceText` edit that adds a sibling after one element of `lomrest`.
+ *
+ * @param closing - The end tag of the element the sibling follows, which occurs once in `lomrest`.
+ * @param column - The column of that element.
+ * @param sibling - The sibling to add.
+ * @returns The edit as plain data.
+ */
+const addAfter = (closing: string, column: number, sibling: Lines): Edit =>
+  replaceIn("imsmanifest.xml", closing, `${closing}${CRLF}${atColumn(column, sibling)}`);
+
+/**
+ * The namespace of the curriculum standards metadata, from the `targetNamespace` of
+ * `imsqtiv3p0_csmv1p1_v1p0.xsd` and the `csmd` declaration of `CASEWithOutcome.zip`'s manifest.
+ */
+const csmNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscsmd_v1p1";
+
+/**
+ * The edit that declares `csmd` on the manifest root, after `xmlns:imsqti` (line 6).
+ */
+const declareCsmd: Edit = replaceIn(
+  "imsmanifest.xml",
+  'xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" ',
+  `xmlns:imsqti="http://www.imsglobal.org/xsd/imsqti_metadata_v3p0" ${CRLF}${" ".repeat(10)}xmlns:csmd="${csmNamespace}" `,
+);
+
+/**
+ * The URI the CASE register gives an item.
+ *
+ * @param guid - The item's GUID.
+ * @returns The `caseItemURI`.
+ */
+const caseItemUri = (guid: string): string => `http://www.imsglobal.org/caseregistry/${guid}`;
+
+/**
+ * Build a `labelledGUID`, as `CASEWithOutcome.zip`'s manifest does.
+ *
+ * @param scope - What the item is addressed by, in its label.
+ * @param guid - The item's GUID.
+ * @returns The `labelledGUID`'s lines.
+ */
+const labelledGuid = (scope: string, guid: string): Lines =>
+  element(
+    "csmd:labelledGUID",
+    "",
+    leaf(
+      "csmd:label",
+      `GUID for a top-level Learning Standard Item definition addressed by this ${scope}.`,
+    ),
+    leaf("csmd:caseItemURI", caseItemUri(guid)),
+    leaf("csmd:GUID", guid),
+  );
+
+/**
+ * Build a `setOfGUIDs` with a comment and one `labelledGUID` per GUID.
+ *
+ * @param region - The `region` attribute.
+ * @param scope - What the items are addressed by.
+ * @param guids - The GUIDs, in order.
+ * @returns The set's lines.
+ */
+const setOfGuids = (region: string, scope: string, guids: readonly string[]): Lines =>
+  element(
+    "csmd:setOfGUIDs",
+    ` region="${region}" version="1.0"`,
+    note(`identifiers of the ${region} standards`),
+    ...guids.map((guid) => labelledGuid(scope, guid)),
+  );
+
+/**
+ * The GUIDs of the manifest-level set and of the resource-level set, each as a Texas pair and a
+ * Florida pair taken from `CASEWithOutcome.zip`'s manifest. No GUID is in two sets, so each is a
+ * unique search for the negatives.
+ */
+const csmGuids = {
+  manifest: [
+    ["e57e4172-44ae-11e9-b210-d663bd873d93", "2759e09c-44af-11e9-b210-d663bd873d93"],
+    ["0c06bc21-c83a-4635-a90a-b55e3b1added", "fd4412d1-0687-4f2b-b610-8a9161dad42d"],
+  ],
+  resource: [
+    ["a3d6bbda-44b0-11e9-b210-d663bd873d93", "b1ffaba4-44b0-11e9-b210-d663bd873d93"],
+    ["7a1a83f8-a371-46e8-96ab-2af89223af79", "ce496478-235a-4d85-abee-805475838cf0"],
+  ],
+  second: [
+    ["3c1d0a52-44b1-11e9-b210-d663bd873d93", "4e2f1b63-44b1-11e9-b210-d663bd873d93"],
+    ["9d8e7f60-1b2a-4c3d-8e4f-5a6b7c8d9e0f", "1f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b"],
+  ],
+  spare: "5b4bfc1c-5e7b-4f43-8f0e-ee2a8d7dbb8e",
+} as const;
+
+/**
+ * Build a curriculum standards metadata set: one `curriculumStandardsMetadata` with a Texas and a
+ * Florida `setOfGUIDs`.
+ *
+ * @param attributes - The set's attributes with their leading space.
+ * @param scope - What the items are addressed by.
+ * @param guids - The Texas pair and the Florida pair.
+ * @returns The set's lines.
+ */
+const csmSet = (
+  attributes: string,
+  scope: string,
+  guids: readonly [readonly string[], readonly string[]],
+): Lines =>
+  element(
+    "csmd:curriculumStandardsMetadataSet",
+    attributes,
+    element(
+      "csmd:curriculumStandardsMetadata",
+      ' providerId="IMS_CASE_REGISTER"',
+      setOfGuids("Texas", scope, guids[0]),
+      setOfGuids("Florida", scope, guids[1]),
+    ),
+  );
+
+/**
+ * The set under the manifest `metadata`, which `csm` adds after the manifest `lom` (line 47).
+ */
+const manifestCsmSet: Lines = csmSet(
+  ' resourceLabel="Package (QTI 3.0)"',
+  "package",
+  csmGuids.manifest,
+);
+
+/**
+ * The set under the resource `metadata`, which `csm` adds after the resource `lom` (line 91).
+ */
+const resourceCsmSet: Lines = csmSet(' resourcePartId="choice"', "resource", csmGuids.resource);
+
+/**
+ * The edits of `csm`: the declaration and one set under each `metadata`, each after its `lom`. The
+ * manifest `metadata` closes at column 4 and the resource's at column 12.
+ */
+const csmEdits: readonly Edit[] = [
+  declareCsmd,
+  replaceIn(
+    "imsmanifest.xml",
+    `</imsmd:lom>${CRLF}    </metadata>`,
+    `</imsmd:lom>${CRLF}${atColumn(8, manifestCsmSet)}${CRLF}    </metadata>`,
+  ),
+  replaceIn(
+    "imsmanifest.xml",
+    `</imsmd:lom>${CRLF}            </metadata>`,
+    `</imsmd:lom>${CRLF}${atColumn(16, resourceCsmSet)}${CRLF}            </metadata>`,
+  ),
+];
+
+/**
+ * The text of the resource-level Florida `labelledGUID`s, where the set's children sit at column 28.
+ */
+const resourceFloridaGuids: string = continuingAt(
+  28,
+  csmGuids.resource[1].flatMap((guid) => labelledGuid("resource", guid)),
+);
+
+/**
+ * The text of a `GUID` leaf and the `caseItemURI` before it, in the resource-level Texas set,
+ * whose `labelledGUID` children sit at column 32.
+ */
+const resourceUriAndGuid: string = continuingAt(32, [
+  ...leaf("csmd:caseItemURI", caseItemUri(csmGuids.resource[0][1])),
+  ...leaf("csmd:GUID", csmGuids.resource[0][1]),
+]);
+
+/**
+ * The qtiMetadata block as one text, for the edits that search for it where it stands in the
+ * manifest (lines 53 to 58), its first line unpadded.
+ */
+const qtiMetadataInPlace: string = continuingAt(16, qtiMetadata);
+
+/**
+ * The edit that removes the block from the resource `metadata`, where `nestedqmd` takes it from.
+ */
+const takeQtiMetadataOut: Edit = replaceIn(
+  "imsmanifest.xml",
+  `${qtiMetadataInPlace}${CRLF}                <imsmd:lom>`,
+  "<imsmd:lom>",
+);
+
+/**
+ * Build the `ReplaceText` edit that adds the qtiMetadata block as the last child of a `lom`.
+ *
+ * @param end - The text that ends the `lom`, as {@link resourceLomEnd} and {@link manifestLomEnd}.
+ * @param column - The column of the `lom`'s children; the `lom` closes four columns before it.
+ * @returns The edit as plain data.
+ */
+const putQtiMetadataIn = (end: string, column: number): Edit =>
+  replaceIn(
+    "imsmanifest.xml",
+    end,
+    `</imsmd:rights>${CRLF}${atColumn(column, qtiMetadata)}${CRLF}${" ".repeat(column - 4)}</imsmd:lom>`,
+  );
+
+/**
+ * The `lom`s and curriculum sets of the file `images/sign.png` in `filelom`, inside its one
+ * `metadata`: two `lom`s each with a titled `general`, and two sets.
+ */
+const fileMetadataChildren: readonly Lines[] = [
+  titledLom("Sign image"),
+  titledLom("Sign image, long description"),
+  csmSet(' resourceLabel="Image (QTI 3.0)"', "image", csmGuids.manifest),
+  csmSet(' resourceLabel="Image text (QTI 3.0)"', "image text", csmGuids.second),
+];
+
+/**
+ * The file `images/sign.png` of `filelom`: its `metadata` closes at column 16 and the file at 12.
+ */
+const fileWithMetadata: Lines = element(
+  "file",
+  ' href="images/sign.png"',
+  element("metadata", "", ...fileMetadataChildren),
+);
+
+/**
+ * The end of `filelom`'s file, where the negatives add to its `metadata`.
+ */
+const fileMetadataEnd = `</metadata>${CRLF}            </file>`;
+
+/**
+ * The edits of `filelom`: the declaration, and the file `images/sign.png` gaining its `metadata`.
+ */
+const filelomEdits: readonly Edit[] = [
+  declareCsmd,
+  replaceIn(
+    "imsmanifest.xml",
+    '<file href="images/sign.png"/>',
+    continuingAt(12, fileWithMetadata),
+  ),
+];
+
+/**
+ * The record resource of `extmeta`, after `choice` in `simple`'s manifest (line 95 closes
+ * `choice`).
+ *
+ * @param identifier - The resource's identifier.
+ * @param attributes - The attributes after the identifier, with their leading space.
+ * @param files - The `href` of each file the resource lists.
+ * @returns The resource's lines.
+ */
+const recordResource = (identifier: string, attributes: string, files: readonly string[]): Lines =>
+  element(
+    "resource",
+    ` identifier="${identifier}"${attributes}`,
+    ...files.map((href): Lines => [`<file href="${href}"/>`]),
+  );
+
+/**
+ * The attributes of a record resource that names `meta/choice.xml` as its `href`.
+ */
+const recordAttributes = ' type="resourcemetadata/xml" href="meta/choice.xml"';
+
+/**
+ * The end of the last resource of `simple`'s manifest (lines 95 and 96), where `extmeta` adds its
+ * record resources.
+ */
+const resourcesEnd = `</resource>${CRLF}    </resources>`;
+
+/**
+ * Build the edit that adds resources after the last one.
+ *
+ * @param resources - The resources to add.
+ * @returns The edit as plain data.
+ */
+const addResources = (...resources: readonly Lines[]): Edit =>
+  replaceIn(
+    "imsmanifest.xml",
+    resourcesEnd,
+    `</resource>${CRLF}${atColumn(8, resources.flat())}${CRLF}    </resources>`,
+  );
+
+/**
+ * The published record that `extmeta` takes its `meta/choice.xml` from: the LOM of an item in
+ * `externalMetadata.zip`.
+ */
+const externalRecord: FileSource = {
+  path: "testitems/metadata_747eee11-848c-597a-8c9c-a71c5399798d.xml",
+  zip: "qtiv3-examples/packaging/externalMetadata/externalMetadata.zip",
+};
+
+/**
+ * The edits of `extmeta` that put the record resource in the manifest and make `choice` depend on
+ * it: a `dependency` after the last `file` of `choice` (line 94) and the resource after `choice`.
+ */
+const extmetaManifestEdits: readonly Edit[] = [
+  replaceIn(
+    "imsmanifest.xml",
+    '<file href="images/sign.png"/>',
+    `<file href="images/sign.png"/>${CRLF}            <dependency identifierref="choice-meta"/>`,
+  ),
+  addResources(recordResource("choice-meta", recordAttributes, ["meta/choice.xml"])),
+];
+
+/**
+ * The edits of `extmeta` that put the record in `meta/choice.xml`: the published file, with the
+ * two `xml:lang="en"` attributes it carries (on `jacs` and `Mathematics`) taken out, because `xml:`
+ * attributes are the one family the importer does not model.
+ */
+const extmetaRecordEdits: readonly Edit[] = [
+  { _tag: "addFile", path: "meta/choice.xml", source: externalRecord },
+  replaceIn("meta/choice.xml", '<string xml:lang="en">jacs<', "<string>jacs<"),
+  replaceIn("meta/choice.xml", '<string xml:lang="en">Mathematics<', "<string>Mathematics<"),
+];
+
+/**
+ * The edits of `extmeta`: the record resource, the dependency and the record file.
+ */
+const extmetaEdits: readonly Edit[] = [...extmetaManifestEdits, ...extmetaRecordEdits];
+
+/**
+ * Build a spec over `simple`'s member.
+ *
+ * @param name - The fixture's name.
+ * @param edits - The fixture's edits.
+ * @returns The spec.
+ */
+const overSimple = (name: string, edits: readonly Edit[]): FixtureSpec => ({
+  edits,
+  member: simpleMember,
+  name,
+});
 
 /**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
@@ -327,6 +907,31 @@ const specs: Record<FixtureName, FixtureSpec> = {
     member: simpleMember,
     name: "comment-in-element",
   },
+  csm: overSimple("csm", csmEdits),
+  "csm-no-guid": overSimple("csm-no-guid", [
+    ...csmEdits,
+    replaceIn("imsmanifest.xml", resourceUriAndGuid, ""),
+  ]),
+  "csm-no-labelled-guid": overSimple("csm-no-labelled-guid", [
+    ...csmEdits,
+    replaceIn("imsmanifest.xml", resourceFloridaGuids, ""),
+  ]),
+  "csm-two-guids": overSimple("csm-two-guids", [
+    ...csmEdits,
+    replaceIn(
+      "imsmanifest.xml",
+      `<csmd:GUID>${csmGuids.resource[1][0]}</csmd:GUID>`,
+      `<csmd:GUID>${csmGuids.resource[1][0]}</csmd:GUID>${CRLF}${" ".repeat(32)}<csmd:GUID>${csmGuids.spare}</csmd:GUID>`,
+    ),
+  ]),
+  "csm-two-sets": overSimple("csm-two-sets", [
+    ...csmEdits,
+    replaceIn(
+      "imsmanifest.xml",
+      `</csmd:curriculumStandardsMetadataSet>${CRLF}            </metadata>`,
+      `</csmd:curriculumStandardsMetadataSet>${CRLF}${atColumn(16, csmSet(' resourcePartId="choice-b"', "resource", csmGuids.second))}${CRLF}            </metadata>`,
+    ),
+  ]),
   doctype: {
     edits: [
       {
@@ -355,6 +960,49 @@ const specs: Record<FixtureName, FixtureSpec> = {
     member: simpleMember,
     name: "external",
   },
+  extmeta: overSimple("extmeta", extmetaEdits),
+  "extmeta-hrefless": overSimple("extmeta-hrefless", [
+    ...extmetaEdits,
+    { _tag: "copyFile", from: "meta/choice.xml", to: "meta/choice2.xml" },
+    replaceIn(
+      "imsmanifest.xml",
+      `<resource identifier="choice-meta"${recordAttributes}>${CRLF}            <file href="meta/choice.xml"/>`,
+      `<resource identifier="choice-meta" type="resourcemetadata/xml">${CRLF}            <file href="meta/choice.xml"/>${CRLF}            <file href="meta/choice2.xml"/>`,
+    ),
+  ]),
+  "extmeta-item-href": overSimple("extmeta-item-href", [
+    ...extmetaEdits,
+    replaceIn(
+      "imsmanifest.xml",
+      'type="imsqti_item_xmlv3p0" href="choice.xml"',
+      'type="imsqti_item_xmlv3p0" href="meta/choice.xml"',
+    ),
+  ]),
+  "extmeta-item-root": overSimple("extmeta-item-root", [
+    ...extmetaManifestEdits,
+    { _tag: "copyFile", from: "choice.xml", to: "meta/choice.xml" },
+  ]),
+  "extmeta-two-resources": overSimple("extmeta-two-resources", [
+    ...extmetaEdits,
+    addResources(recordResource("choice-meta2", recordAttributes, ["meta/choice.xml"])),
+  ]),
+  filelom: overSimple("filelom", filelomEdits),
+  "filelom-qmd": overSimple("filelom-qmd", [
+    ...filelomEdits,
+    replaceIn(
+      "imsmanifest.xml",
+      fileMetadataEnd,
+      `${continuingAt(16, qtiMetadata)}${CRLF}                </metadata>${CRLF}            </file>`,
+    ),
+  ]),
+  "filelom-two-metadata": overSimple("filelom-two-metadata", [
+    ...filelomEdits,
+    replaceIn(
+      "imsmanifest.xml",
+      fileMetadataEnd,
+      `</metadata>${CRLF}${atColumn(16, element("metadata", "", titledLom("Second metadata")))}${CRLF}            </file>`,
+    ),
+  ]),
   "identifier-mismatch": {
     edits: [
       replaceIn(
@@ -375,6 +1023,45 @@ const specs: Record<FixtureName, FixtureSpec> = {
     member: simpleMember,
     name: "latin1",
   },
+  lomrest: overSimple("lomrest", lomrestEdits),
+  "lomrest-exam": overSimple("lomrest-exam", [
+    ...lomrestEdits,
+    replaceIn(
+      "imsmanifest.xml",
+      "<imsmd:value>exercise</imsmd:value>",
+      "<imsmd:value>exam</imsmd:value>",
+    ),
+  ]),
+  "lomrest-self-assessment": overSimple("lomrest-self-assessment", [
+    ...lomrestEdits,
+    replaceIn(
+      "imsmanifest.xml",
+      "<imsmd:value>exercise</imsmd:value>",
+      "<imsmd:value> self  assessment </imsmd:value>",
+    ),
+  ]),
+  "lomrest-two-kinds": overSimple("lomrest-two-kinds", [
+    ...lomrestEdits,
+    addAfter("</imsmd:kind>", 24, mdVocabulary("kind", "requires")),
+  ]),
+  "lomrest-two-purposes": overSimple("lomrest-two-purposes", [
+    ...lomrestEdits,
+    addAfter("</imsmd:purpose>", 24, mdVocabulary("purpose", "idea")),
+  ]),
+  "lomrest-two-titles": overSimple("lomrest-two-titles", [
+    ...lomrestEdits,
+    addAfter(
+      `Unattended Luggage</imsmd:string>${CRLF}${" ".repeat(24)}</imsmd:title>`,
+      24,
+      mdText("title", "Unattended Luggage, again"),
+    ),
+  ]),
+  nestedqmd: overSimple("nestedqmd", [takeQtiMetadataOut, putQtiMetadataIn(resourceLomEnd, 20)]),
+  "nestedqmd-both": overSimple("nestedqmd-both", [putQtiMetadataIn(resourceLomEnd, 20)]),
+  "nestedqmd-manifest-lom": overSimple("nestedqmd-manifest-lom", [
+    takeQtiMetadataOut,
+    putQtiMetadataIn(manifestLomEnd, 12),
+  ]),
   "padded-attributes": {
     edits: [
       replaceIn("choice.xml", 'identifier="choice"', 'identifier=" choice "'),
