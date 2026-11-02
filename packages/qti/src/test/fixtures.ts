@@ -176,10 +176,59 @@ export const cutItem = (
 });
 
 /**
+ * The names of the 40 hand-written HTML positives: `html-<element>`, one per HTML kind that has an
+ * arm and that the corpus never uses (spec 3.6's second census: 41 names, `template` among them,
+ * which has no arm and no positive).
+ */
+const htmlElements = [
+  "abbr",
+  "acronym",
+  "address",
+  "article",
+  "aside",
+  "audio",
+  "bdi",
+  "big",
+  "caption",
+  "cite",
+  "code",
+  "col",
+  "colgroup",
+  "dd",
+  "details",
+  "dfn",
+  "dl",
+  "dt",
+  "footer",
+  "h4",
+  "h6",
+  "header",
+  "kbd",
+  "label",
+  "nav",
+  "ol",
+  "param",
+  "pre",
+  "q",
+  "rp",
+  "rtc",
+  "samp",
+  "small",
+  "sub",
+  "summary",
+  "tfoot",
+  "th",
+  "thead",
+  "tt",
+  "var",
+] as const;
+
+/**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-broken
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
- * `end-attempt`, phase 2's hand-written positive, and the 19 cut items of {@link cutNames}.
+ * `end-attempt`, phase 2's hand-written positive, the 19 cut items of {@link cutNames} and the 40
+ * hand-written HTML positives of {@link htmlElements}.
  */
 export const fixtureNames = [
   "simple",
@@ -205,6 +254,7 @@ export const fixtureNames = [
   "quoted-q",
   "end-attempt",
   ...cutNames,
+  ...htmlElements.map((element) => `html-${element}` as const),
 ] as const;
 
 /**
@@ -360,6 +410,132 @@ const cutSpecs: Record<(typeof cutNames)[number], FixtureSpec> = {
 };
 
 /**
+ * The item of `BPIG_22April` that every `html-<element>` fixture is cut from, `cut-choice`'s
+ * source (spec 3.6's pick for `qti-choice-interaction`).
+ */
+const bgChoiceItem = "items/BG007.xml";
+
+/**
+ * The paragraph of {@link bgChoiceItem}'s item body that every `html-<element>` edit replaces.
+ */
+const bgChoiceQuestion = "<p>This is a True/False question?</p>";
+
+/**
+ * The body of one table row cell, which the table fixtures share.
+ */
+const bodyRow = "<tbody><tr><td>cell</td></tr></tbody>";
+
+/**
+ * Build the spec of one hand-written HTML positive: `cut-choice`'s item with
+ * {@link bgChoiceQuestion} replaced by `use`, then cut like any cut item.
+ *
+ * `use` is the paragraph as it was with a minimal valid use of the element where
+ * `864e756f.md` section 3.4's host matrix admits it. An inline element sits inside the paragraph;
+ * a block element follows it in the item body, which admits `HBLOCK` only; a part of a structure
+ * sits in a minimal host (`caption`, `col`, `colgroup`, `thead`, `tfoot` and `th` in a `table`;
+ * `dd` and `dt` in a `dl`; `summary` in a `details`, which sits in a `div` because the XSD's item
+ * body does not admit `details` (`kinds/asi.ts`); `param` in an `object`; `rp` and `rtc` in a
+ * `ruby`). The text is ASCII, because an edit is written as latin1.
+ *
+ * @param element - The element the fixture exercises.
+ * @param use - The text that replaces the item body's first paragraph.
+ * @returns The spec, named `html-<element>`.
+ */
+const htmlItem = (element: string, use: string): FixtureSpec => ({
+  edits: [
+    replaceIn(bgChoiceItem, bgChoiceQuestion, use),
+    { _tag: "cut", item: bgChoiceItem, schemaversion: "3.0.1" },
+  ],
+  member: corpusMembers.BPIG_22April,
+  name: `html-${element}`,
+});
+
+/**
+ * The 40 hand-written HTML positives, one row per element of {@link htmlElements}.
+ */
+const htmlSpecs: Record<`html-${(typeof htmlElements)[number]}`, FixtureSpec> = {
+  "html-abbr": htmlItem("abbr", "<p>This is a True/False question? <abbr>T/F</abbr></p>"),
+  "html-acronym": htmlItem(
+    "acronym",
+    "<p>This is a True/False question? <acronym>TF</acronym></p>",
+  ),
+  "html-address": htmlItem("address", `${bgChoiceQuestion}<address>1 Main Street</address>`),
+  "html-article": htmlItem("article", `${bgChoiceQuestion}<article><p>An article.</p></article>`),
+  "html-aside": htmlItem("aside", `${bgChoiceQuestion}<aside><p>An aside.</p></aside>`),
+  "html-audio": htmlItem(
+    "audio",
+    `${bgChoiceQuestion}<audio controls="controls"><source src="audio/clip.mp3" type="audio/mpeg"/></audio>`,
+  ),
+  "html-bdi": htmlItem("bdi", "<p>This is a True/False question? <bdi>isolated</bdi></p>"),
+  "html-big": htmlItem("big", "<p>This is a True/False question? <big>big</big></p>"),
+  "html-caption": htmlItem(
+    "caption",
+    `${bgChoiceQuestion}<table><caption>A caption.</caption>${bodyRow}</table>`,
+  ),
+  "html-cite": htmlItem("cite", "<p>This is a True/False question? <cite>A title</cite></p>"),
+  "html-code": htmlItem("code", "<p>This is a True/False question? <code>x = 1</code></p>"),
+  "html-col": htmlItem("col", `${bgChoiceQuestion}<table><col/>${bodyRow}</table>`),
+  "html-colgroup": htmlItem(
+    "colgroup",
+    `${bgChoiceQuestion}<table><colgroup><col/></colgroup>${bodyRow}</table>`,
+  ),
+  "html-dd": htmlItem("dd", `${bgChoiceQuestion}<dl><dd>A definition.</dd></dl>`),
+  "html-details": htmlItem(
+    "details",
+    `${bgChoiceQuestion}<div><details><summary>Hint</summary><p>A hint.</p></details></div>`,
+  ),
+  "html-dfn": htmlItem("dfn", "<p>This is a True/False question? <dfn>term</dfn></p>"),
+  "html-dl": htmlItem("dl", `${bgChoiceQuestion}<dl><dt>Term</dt><dd>A definition.</dd></dl>`),
+  "html-dt": htmlItem("dt", `${bgChoiceQuestion}<dl><dt>Term</dt></dl>`),
+  "html-footer": htmlItem("footer", `${bgChoiceQuestion}<footer><p>A footer.</p></footer>`),
+  "html-h4": htmlItem("h4", `${bgChoiceQuestion}<h4>A heading</h4>`),
+  "html-h6": htmlItem("h6", `${bgChoiceQuestion}<h6>A heading</h6>`),
+  "html-header": htmlItem("header", `${bgChoiceQuestion}<header><p>A header.</p></header>`),
+  "html-kbd": htmlItem("kbd", "<p>This is a True/False question? <kbd>Enter</kbd></p>"),
+  "html-label": htmlItem("label", "<p>This is a True/False question? <label>A label</label></p>"),
+  "html-nav": htmlItem("nav", `${bgChoiceQuestion}<nav><p>A nav.</p></nav>`),
+  "html-ol": htmlItem("ol", `${bgChoiceQuestion}<ol><li>One</li></ol>`),
+  "html-param": htmlItem(
+    "param",
+    `<p>This is a True/False question? <object data="images/x.png" type="image/png"><param name="n" value="v" valuetype="DATA"/></object></p>`,
+  ),
+  "html-pre": htmlItem("pre", `${bgChoiceQuestion}<pre>a  b</pre>`),
+  "html-q": htmlItem("q", "<p>This is a True/False question? <q>quoted</q></p>"),
+  "html-rp": htmlItem(
+    "rp",
+    "<p>This is a True/False question? <ruby>base<rp>(</rp><rt>top</rt><rp>)</rp></ruby></p>",
+  ),
+  "html-rtc": htmlItem(
+    "rtc",
+    "<p>This is a True/False question? <ruby>base<rtc><rt>top</rt></rtc></ruby></p>",
+  ),
+  "html-samp": htmlItem("samp", "<p>This is a True/False question? <samp>output</samp></p>"),
+  "html-small": htmlItem(
+    "small",
+    "<p>This is a True/False question? <small>fine print</small></p>",
+  ),
+  "html-sub": htmlItem("sub", "<p>This is a True/False question? H<sub>2</sub>O</p>"),
+  "html-summary": htmlItem(
+    "summary",
+    `${bgChoiceQuestion}<div><details><summary>Hint</summary><p>A hint.</p></details></div>`,
+  ),
+  "html-tfoot": htmlItem(
+    "tfoot",
+    `${bgChoiceQuestion}<table>${bodyRow}<tfoot><tr><td>total</td></tr></tfoot></table>`,
+  ),
+  "html-th": htmlItem(
+    "th",
+    `${bgChoiceQuestion}<table><tbody><tr><th>head</th><td>cell</td></tr></tbody></table>`,
+  ),
+  "html-thead": htmlItem(
+    "thead",
+    `${bgChoiceQuestion}<table><thead><tr><td>head</td></tr></thead>${bodyRow}</table>`,
+  ),
+  "html-tt": htmlItem("tt", "<p>This is a True/False question? <tt>mono</tt></p>"),
+  "html-var": htmlItem("var", "<p>This is a True/False question? <var>x</var></p>"),
+};
+
+/**
  * The item of `BPIG_22April` that `cut-text-entry` is cut from, which `end-attempt` edits before
  * it cuts it.
  */
@@ -411,6 +587,7 @@ const bgTextEntryItem = "items/BG010.xml";
  */
 const specs: Record<FixtureName, FixtureSpec> = {
   ...cutSpecs,
+  ...htmlSpecs,
   "bad-identifier-value": {
     edits: [
       replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value>Choice A</qti-value>"),
