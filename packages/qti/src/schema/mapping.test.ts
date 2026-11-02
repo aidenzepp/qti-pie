@@ -211,6 +211,8 @@ describe("mapping", () => {
       [relations.AreaMappingLowerBound, relations.AreaMapping],
       [relations.AreaMappingUpperBound, relations.AreaMapping],
       [relations.DeclaredMapEntryCaseSensitive, relations.MapEntry],
+      [relations.DeclaredMappingDefaultValue, relations.Mapping],
+      [relations.DeclaredAreaMappingDefaultValue, relations.AreaMapping],
       [relations.DeclaredIncludeBoundary, relations.InterpolationTableEntry],
     ] as const) {
       const owned = containmentsFrom(bound);

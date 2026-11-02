@@ -10,8 +10,10 @@ import {
   AreaMapping,
   AreaMappingLowerBound,
   AreaMappingUpperBound,
+  DeclaredAreaMappingDefaultValue,
   DeclaredIncludeBoundary,
   DeclaredMapEntryCaseSensitive,
+  DeclaredMappingDefaultValue,
   InterpolationTable,
   InterpolationTableDefaultValue,
   InterpolationTableEntry,
@@ -50,6 +52,18 @@ const itemXml = (declarations: string): Uint8Array =>
   new TextEncoder().encode(
     `<qti-assessment-item xmlns="${namespace}" identifier="item" title="Item" adaptive="false" time-dependent="false">${declarations}</qti-assessment-item>`,
   );
+
+/**
+ * A multiple-cardinality identifier response declaration holding the given mapping.
+ */
+const identifierDeclaration = (mapping: string) =>
+  `<qti-response-declaration identifier="RESPONSE" cardinality="multiple" base-type="identifier">${mapping}</qti-response-declaration>`;
+
+/**
+ * A single-cardinality point response declaration holding the given area mapping.
+ */
+const pointDeclaration = (areaMapping: string) =>
+  `<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="point">${areaMapping}</qti-response-declaration>`;
 
 const baseTypes = [
   "boolean",
@@ -201,6 +215,29 @@ describe("mappingRows on a mapping", () => {
     }),
   );
 
+  it.effect("marks a written default-value, even the default's own value, and only that", () =>
+    Effect.gen(function* marked() {
+      const entry = `<qti-map-entry map-key="A" mapped-value="1"/>`;
+      const written = yield* mapped(
+        identifierDeclaration(`<qti-mapping default-value="0">${entry}</qti-mapping>`),
+      );
+      const omitted = yield* mapped(identifierDeclaration(`<qti-mapping>${entry}</qti-mapping>`));
+
+      assert.deepStrictEqual(Rows.of(written.built, DeclaredMappingDefaultValue), [
+        { node: idOf(written.nodes, "qti-mapping") },
+      ]);
+      assert.deepStrictEqual(
+        Rows.of(written.built, Mapping).map((row) => row.defaultValue),
+        ["0"],
+      );
+      assert.strictEqual(Rows.of(omitted.built, DeclaredMappingDefaultValue).length, 0);
+      assert.deepStrictEqual(
+        Rows.of(omitted.built, Mapping).map((row) => row.defaultValue),
+        ["0"],
+      );
+    }),
+  );
+
   it.effect("stores a key after the class of its base type's lexical space", () =>
     Effect.gen(function* keyClass() {
       const { built, nodes } = yield* mapped(
@@ -229,6 +266,28 @@ describe("mappingRows on a mapping", () => {
 });
 
 describe("mappingRows on an area mapping", () => {
+  const areaEntry = `<qti-area-map-entry shape="rect" coords="0,0,10,10" mapped-value="1"/>`;
+
+  it.effect("marks a written default-value on an area mapping and only that", () =>
+    Effect.gen(function* marked() {
+      const written = yield* mapped(
+        pointDeclaration(`<qti-area-mapping default-value="1">${areaEntry}</qti-area-mapping>`),
+      );
+      const omitted = yield* mapped(
+        pointDeclaration(`<qti-area-mapping>${areaEntry}</qti-area-mapping>`),
+      );
+
+      assert.deepStrictEqual(Rows.of(written.built, DeclaredAreaMappingDefaultValue), [
+        { node: idOf(written.nodes, "qti-area-mapping") },
+      ]);
+      assert.strictEqual(Rows.of(omitted.built, DeclaredAreaMappingDefaultValue).length, 0);
+      assert.deepStrictEqual(
+        Rows.of(omitted.built, AreaMapping).map((row) => row.defaultValue),
+        ["0"],
+      );
+    }),
+  );
+
   const point = `<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="point"><qti-area-mapping lower-bound="0" upper-bound="2" default-value="0.5"><qti-area-map-entry shape="rect" coords="0,0,10,10" mapped-value="1"/><qti-area-map-entry shape="circle" coords="5,5,3" mapped-value="2"/></qti-area-mapping></qti-response-declaration>`;
 
   it.effect("writes the area mapping, its bounds, its entries and their coordinates", () =>

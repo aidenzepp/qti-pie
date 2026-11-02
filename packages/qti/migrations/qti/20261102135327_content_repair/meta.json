@@ -1,0 +1,183 @@
+{
+	"decisions": {
+		"candidates": [
+			{
+				"label": "the candidate rename of \"qti\".\"track_label\" to \"qti\".\"declared_area_mapping_default_value\"",
+				"renames": {
+					"added": "\"qti\".\"declared_area_mapping_default_value\"",
+					"kind": "relation",
+					"removed": "\"qti\".\"track_label\""
+				},
+				"requires": [],
+				"witness": {
+					"choice": 0,
+					"statement": 0
+				}
+			},
+			{
+				"label": "the candidate rename of \"qti\".\"track_label\" to \"qti\".\"declared_mapping_default_value\"",
+				"renames": {
+					"added": "\"qti\".\"declared_mapping_default_value\"",
+					"kind": "relation",
+					"removed": "\"qti\".\"track_label\""
+				},
+				"requires": [],
+				"witness": {
+					"choice": 1,
+					"statement": 0
+				}
+			}
+		],
+		"choices": [
+			{
+				"file": "01-structure.sql",
+				"keep": "CREATE TABLE \"qti\".\"declared_area_mapping_default_value\" (\n  \"node\" uuid NOT NULL,\n  CONSTRAINT \"__declared_area_mapping_default_value_pk_w2oayrb4x4\" PRIMARY KEY (\"node\")\n)",
+				"offers": [
+					{
+						"candidate": 0,
+						"statements": [
+							"ALTER TABLE \"qti\".\"track_label\" RENAME TO \"declared_area_mapping_default_value\"",
+							"ALTER TABLE \"qti\".\"declared_area_mapping_default_value\" DROP CONSTRAINT \"__track_label_fk_node_x26nngotxl\"",
+							"ALTER TABLE \"qti\".\"declared_area_mapping_default_value\" RENAME CONSTRAINT \"__track_label_pk_tfd5e6e4gy\" TO \"__declared_area_mapping_default_value_pk_w2oayrb4x4\""
+						]
+					}
+				],
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"file": "01-structure.sql",
+				"keep": "CREATE TABLE \"qti\".\"declared_mapping_default_value\" (\n  \"node\" uuid NOT NULL,\n  CONSTRAINT \"__declared_mapping_default_value_pk_46yyn7x6np\" PRIMARY KEY (\"node\")\n)",
+				"offers": [
+					{
+						"candidate": 1,
+						"statements": [
+							"ALTER TABLE \"qti\".\"track_label\" RENAME TO \"declared_mapping_default_value\"",
+							"ALTER TABLE \"qti\".\"declared_mapping_default_value\" DROP CONSTRAINT \"__track_label_fk_node_x26nngotxl\"",
+							"ALTER TABLE \"qti\".\"declared_mapping_default_value\" RENAME CONSTRAINT \"__track_label_pk_tfd5e6e4gy\" TO \"__declared_mapping_default_value_pk_46yyn7x6np\""
+						]
+					}
+				],
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"file": "01-structure.sql",
+				"keep": "CREATE TRIGGER \"__isolation\"\n  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON \"qti\".\"declared_area_mapping_default_value\"\n  FOR EACH STATEMENT EXECUTE FUNCTION \"qti\".\"__require_serializable\"()",
+				"offers": [
+					{
+						"candidate": 0,
+						"statements": []
+					}
+				],
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"file": "01-structure.sql",
+				"keep": "CREATE TRIGGER \"__isolation\"\n  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON \"qti\".\"declared_mapping_default_value\"\n  FOR EACH STATEMENT EXECUTE FUNCTION \"qti\".\"__require_serializable\"()",
+				"offers": [
+					{
+						"candidate": 1,
+						"statements": []
+					}
+				],
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"file": "02-publish.sql",
+				"keep": "ALTER TABLE \"qti\".\"track_label\" DROP CONSTRAINT \"__track_label_fk_node_x26nngotxl\"",
+				"offers": [
+					{
+						"candidate": 0,
+						"statements": []
+					},
+					{
+						"candidate": 1,
+						"statements": []
+					}
+				],
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"file": "02-publish.sql",
+				"keep": "REVOKE SELECT, INSERT, DELETE ON TABLE \"qti\".\"track_label\" FROM \"qti__author\"",
+				"offers": [
+					{
+						"candidate": 0,
+						"statements": [
+							"REVOKE SELECT, INSERT, DELETE ON TABLE \"qti\".\"declared_area_mapping_default_value\" FROM \"qti__author\""
+						]
+					},
+					{
+						"candidate": 1,
+						"statements": [
+							"REVOKE SELECT, INSERT, DELETE ON TABLE \"qti\".\"declared_mapping_default_value\" FROM \"qti__author\""
+						]
+					}
+				],
+				"within": {
+					"kind": "top"
+				}
+			}
+		],
+		"confirms": [],
+		"losses": [
+			{
+				"carriers": [],
+				"file": "01-structure.sql",
+				"loses": {
+					"field": "\"value\"",
+					"kind": "field",
+					"relation": "\"qti\".\"declared_area_mapping_default_value\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"declared_area_mapping_default_value\" DROP COLUMN \"value\"",
+				"within": {
+					"candidate": 0,
+					"kind": "within"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "01-structure.sql",
+				"loses": {
+					"field": "\"value\"",
+					"kind": "field",
+					"relation": "\"qti\".\"declared_mapping_default_value\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"declared_mapping_default_value\" DROP COLUMN \"value\"",
+				"within": {
+					"candidate": 1,
+					"kind": "within"
+				}
+			},
+			{
+				"carriers": [
+					0,
+					1
+				],
+				"file": "02-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"track_label\""
+				},
+				"statement": "DROP TABLE \"qti\".\"track_label\"",
+				"within": {
+					"kind": "top"
+				}
+			}
+		]
+	},
+	"kind": "drafted",
+	"schema": "qti",
+	"schemaName": "Qti",
+	"source": "0000a9e98a3a53d38476703af6293b7357548178df25197e5f8107ae3cef31e9",
+	"target": "34e4f6825c7f8aaf82ad622d63e8481053e68142d8becf1b9290c87d64f374ac"
+}

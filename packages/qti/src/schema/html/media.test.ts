@@ -139,7 +139,6 @@ describe("html/media", () => {
       [media.relations.ObjectHeight, media.relations.Object],
       [media.relations.ParamType, media.relations.Param],
       [media.relations.SourceSizes, media.relations.Source],
-      [media.relations.TrackLabel, media.relations.Track],
       [media.relations.VideoPoster, media.relations.Video],
     ] as const;
     for (const [relation, arm] of optional) {
@@ -147,6 +146,10 @@ describe("html/media", () => {
       assert.deepStrictEqual(Object.keys(relation.fields), ["node", "value"], relation.name);
       assert.deepStrictEqual(containments(relation), [[["node"], arm, ["id"]]], relation.name);
     }
+  });
+
+  it("holds no TrackLabel: a track's label is the base family's NodeLabel", () => {
+    assert.strictEqual("TrackLabel" in media.relations, false);
   });
 
   it("builds a probe schema over node.relations, html.relations and media.relations", () => {
