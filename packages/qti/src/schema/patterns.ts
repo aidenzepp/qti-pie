@@ -58,10 +58,15 @@ export const xsNonNegativeInteger = "^\\+?[0-9]+$" as const;
 export const xsInteger = "^[+\\-]?[0-9]+$" as const;
 
 /**
+ * The `xs:double` lexical space without anchors, so a list pattern can repeat it.
+ */
+const xsDoubleBody =
+  "(?:[+\\-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+\\-]?[0-9]+)?|-?INF|NaN)" as const;
+
+/**
  * `xs:double` lexical space: a decimal with an optional exponent, `INF`, `-INF`, or `NaN`.
  */
-export const xsDouble =
-  "^(?:[+\\-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+\\-]?[0-9]+)?|-?INF|NaN)$" as const;
+export const xsDouble = `^${xsDoubleBody}$` as const;
 
 /**
  * `xs:string` lexical space: any text, whitespace preserved. The same source as `wildcard`; the
@@ -284,3 +289,27 @@ export const point = "^[+\\-]?[0-9]+ [+\\-]?[0-9]+$" as const;
  * The lexical space of a `pair` or `directedPair` value: two NCNames separated by one space.
  */
 export const pair = `^${ncNameBody} ${ncNameBody}$` as const;
+
+/**
+ * A collapsed `IdentifierListDType` value: NCNames one space apart, with no leading, trailing or
+ * doubled space. The empty list is admitted because the XSD list has no `minLength` (XSD line
+ * 34443 of `imsqti_asiv3p0p1_v1p0.xsd`; campaign decision 22).
+ */
+export const identifierList = `^(?:${ncNameBody}(?: ${ncNameBody})*)?$` as const;
+
+/**
+ * A collapsed `ToleranceListDType` value: `xs:double` or NCName tokens one space apart (XSD line
+ * 23973, a union of `xs:string` and `xs:double`). The empty list is admitted because the XSD list
+ * has no `minLength` (line 27029; campaign decision 22); presence under `absolute` and `relative`
+ * is a containment, not this pattern's.
+ */
+export const toleranceList =
+  `^(?:(?:${xsDoubleBody}|${ncNameBody})(?: (?:${xsDoubleBody}|${ncNameBody}))*)?$` as const;
+
+/**
+ * The `CoordsDType` pattern of `imsqti_asiv3p0p1_v1p0.xsd` (line 24090), anchored: three
+ * alternatives over `[0-9]+%?` and `,`, with no space admitted. The attribute's `whiteSpace` class
+ * is `replace`, so a tab, line feed or carriage return becomes a space, which this refuses.
+ */
+export const coords =
+  "^(?:(?:[0-9]+%?,){2}[0-9]+%?|(?:[0-9]+%?,){3}[0-9]+%?|(?:[0-9]+%?,){2}(?:(?:[0-9]+%?,){2})+[0-9]+%?,[0-9]+%?)$" as const;
