@@ -643,17 +643,11 @@ export type ReadRefusal =
   | ManifestGuardRefusal
   | NotQti3
   | PackageReadError
+  | ProcessingGuardRefusal
+  | ProcessingRefused
   | ReaderRefusal
   | UnmodeledVocabulary
   | WellFormednessError;
-
-/**
- * The errors of the processing model that refuse an import: the checker's and builder's, and the
- * processing guards'. They are kept apart from {@link ReadRefusal} while `readRows` does not yet
- * raise them: the error `importPackage` filters with `ReadRefusal` must stay a subset of what
- * `readRows` fails with.
- */
-export type ProcessingRefusal = ProcessingGuardRefusal | ProcessingRefused;
 
 /**
  * The refusal of an error a guard or the reader raised.
@@ -665,7 +659,7 @@ export type ProcessingRefusal = ProcessingGuardRefusal | ProcessingRefused;
  * @param e - The error raised.
  * @returns The refusal naming its rule.
  */
-export const ruleOfError = (e: ProcessingRefusal | ReadRefusal): ImportRefused =>
+export const ruleOfError = (e: ReadRefusal): ImportRefused =>
   Match.value(e).pipe(
     Match.tagsExhaustive({
       GuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
