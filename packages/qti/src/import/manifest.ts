@@ -14,6 +14,9 @@ import { Effect, Option, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { collapse, replace, Rows, treeRows, typedAttribute } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
+// oxlint-disable-next-line import/no-cycle -- `external.ts` imports this module's row builders and this module imports `recordFile`; each side uses the other only inside function bodies, so evaluation never reads an uninitialized binding.
+import { recordFile } from "#qti/import/external.ts";
+import type { ExternalRefusal } from "#qti/import/external.ts";
 import { readEntry } from "#qti/package/read.ts";
 import type { Entry, PackageReadError } from "#qti/package/read.ts";
 import type { ZipRefusal } from "#qti/package/zip.ts";
@@ -180,8 +183,9 @@ const drdLeaves = {
 const isDrdLeaf = (kind: string): kind is keyof typeof drdLeaves => kind in drdLeaves;
 
 /**
- * The resource types whose one entry is read as a document beside the QTI ones: a record of
- * metadata and a record of usage data.
+ * The resource types whose `href` is read as a document beside the QTI ones: a record of metadata
+ * and a record of usage data. A record of metadata with no `href` is named by {@link recordFile}
+ * instead.
  */
 const recordTypes: ReadonlySet<string> = new Set(["resourcemetadata/xml", "qtiusagedata/xml"]);
 
@@ -307,7 +311,8 @@ const attributeOf = (element: Element, local: string): Option.Option<string> =>
 
 /**
  * The one file a resource with no `href` is read from as a document: its only file, when its type
- * is a record, usage or outcome type and it has no `href`.
+ * is a usage-data, outcome or response-processing type and it has no `href`. A record of metadata
+ * is not named here, because {@link recordFile} owns that rule, several files included.
  */
 const soleFileDocument = (
   resource: Element,
@@ -315,7 +320,7 @@ const soleFileDocument = (
   fileHrefs: readonly string[],
 ): string | undefined => {
   const [only, ...rest] = fileHrefs;
-  const named = recordTypes.has(type) || soleFileTypes.has(type);
+  const named = type === "qtiusagedata/xml" || soleFileTypes.has(type);
 
   return named && rest.length === 0 && Option.isNone(attributeOf(resource, "href"))
     ? only
@@ -858,9 +863,10 @@ export const csmSetRows = (rows: Rows, nodes: NodeIndex, set: Element, host: str
  * @param rows - The rows so far.
  * @returns The rows with the manifest's added, the node index, the package id, the version and one
  *   document per resource of a QTI, record or usage type that names one (its `href`, else its one
- *   file); `NotQti3` for a manifest that is not
- *   QTI 3, `UnmodeledVocabulary` for an element or attribute no registry names, and
- *   `PackageReadError` for an entry that is not a regular file inside the package.
+ *   file); `NotQti3` for a manifest that is not QTI 3, `ExternalRefusal` for a record resource with
+ *   no `href` that does not list exactly one file, `UnmodeledVocabulary` for an element or
+ *   attribute no registry names, and `PackageReadError` for an entry that is not a regular file
+ *   inside the package.
  */
 export const manifestRows = Effect.fn("import.manifestRows")(function* manifestRows(
   dir: string,
@@ -875,7 +881,12 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     rows: Rows;
     version: SchemaVersionHandle;
   },
-  NotQti3 | PackageReadError | UnmodeledVocabulary | PlatformError.PlatformError | ZipRefusal,
+  | ExternalRefusal
+  | NotQti3
+  | PackageReadError
+  | PlatformError.PlatformError
+  | UnmodeledVocabulary
+  | ZipRefusal,
   FileSystem.FileSystem
 > {
   const version = yield* versionOf(doc);
@@ -1207,6 +1218,13 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     }
   };
 
+  const hrefless: {
+    readonly files: readonly string[];
+    readonly identifier: string;
+    readonly resourceId: string;
+    readonly type: string;
+  }[] = [];
+
   const resourceRows = (resource: Element): void => {
     const node = nodes.get(resource);
     if (node === undefined) {
@@ -1258,6 +1276,10 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
           },
         ]);
       }
+    }
+
+    if (type === "resourcemetadata/xml" && Option.isNone(attributeOf(resource, "href"))) {
+      hrefless.push({ files: fileHrefs, identifier, resourceId: node.id, type });
     }
 
     const sole = soleFileDocument(resource, type, fileHrefs);
@@ -1319,6 +1341,16 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     PackageEntry,
     entries.map(({ kind, path }) => ({ kind, package: packageId, path })),
   );
+
+  for (const record of hrefless) {
+    const path = yield* recordFile({ files: record.files, href: Option.none() });
+    documents.push({
+      path,
+      resource: record.identifier,
+      resourceId: record.resourceId,
+      type: record.type,
+    });
+  }
 
   const claimed = new Set(documents.map((document) => document.path));
   const unclaimed = entries.filter((entry) => entry.kind === "file" && !claimed.has(entry.path));

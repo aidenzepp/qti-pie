@@ -595,6 +595,34 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
     }),
   );
 
+  suite.effect(
+    "refuses an hrefless record resource that lists several files as record-unnamed",
+    () =>
+      Effect.gen(function* recordUnnamed() {
+        const refusal = yield* Effect.flip(resultOf(yield* materialize("extmeta-hrefless")));
+        assert.strictEqual(refusal._tag, "ExternalRefusal");
+        assert.isTrue(refusal._tag === "ExternalRefusal" && refusal.rule === "record-unnamed");
+      }),
+  );
+
+  suite.effect("still lists the record the href names in extmeta", () =>
+    Effect.gen(function* recordByHref() {
+      const { documents } = yield* resultOf(yield* materialize("extmeta"));
+      assert.deepStrictEqual(
+        documents.filter((document) => document.resource === "choice-meta"),
+        [
+          {
+            path: "meta/choice.xml",
+            resource: "choice-meta",
+            resourceId: documents.find((document) => document.resource === "choice-meta")
+              ?.resourceId,
+            type: "resourcemetadata/xml",
+          },
+        ],
+      );
+    }),
+  );
+
   suite.effect("stores bytes' fragment as a packaged file, never as a document", () =>
     Effect.gen(function* fragmentBytes() {
       const { documents, rows } = yield* resultOf(yield* materialize("bytes"));
