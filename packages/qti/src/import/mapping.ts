@@ -343,10 +343,17 @@ const mappingElement = (
     written(lower, (own) => ({ node: node.id, value: own })),
   );
 
-  return Rows.add(
+  built = Rows.add(
     built,
     mapping.MappingUpperBound,
     written(upper, (own) => ({ node: node.id, value: own })),
+  );
+
+  return markers(
+    built,
+    { "default-value": mapping.DeclaredMappingDefaultValue },
+    node.id,
+    attributes.written(),
   );
 };
 
@@ -423,10 +430,17 @@ const areaMappingElement = (
     written(lower, (own) => ({ node: node.id, value: own })),
   );
 
-  return Rows.add(
+  built = Rows.add(
     built,
     mapping.AreaMappingUpperBound,
     written(upper, (own) => ({ node: node.id, value: own })),
+  );
+
+  return markers(
+    built,
+    { "default-value": mapping.DeclaredAreaMappingDefaultValue },
+    node.id,
+    attributes.written(),
   );
 };
 

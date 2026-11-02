@@ -219,11 +219,6 @@ export const TrackSrclang = relation(
 );
 
 /**
- * A track's `label`, when written.
- */
-export const TrackLabel = relation("TrackLabel", { node: uuid, value: xsString }, ["node"]);
-
-/**
  * An object's `width`, when written.
  */
 export const ObjectWidth = relation(
@@ -382,7 +377,6 @@ export const relations = {
   SourceType,
   Track,
   TrackDefault,
-  TrackLabel,
   TrackSrclang,
   Video,
   VideoAutoplay,
@@ -423,7 +417,6 @@ export const rules = [
   contained(on(SourceMedia, "node"), on(Source, "id")),
   contained(on(SourceSizes, "node"), on(Source, "id")),
   contained(on(TrackSrclang, "node"), on(Track, "id")),
-  contained(on(TrackLabel, "node"), on(Track, "id")),
   contained(on(ObjectWidth, "node"), on(ObjectElement, "id")),
   contained(on(ObjectHeight, "node"), on(ObjectElement, "id")),
   contained(on(ParamType, "node"), on(Param, "id")),

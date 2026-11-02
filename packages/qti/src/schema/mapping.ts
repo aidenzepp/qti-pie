@@ -124,6 +124,22 @@ export const DeclaredMapEntryCaseSensitive = relation(
 );
 
 /**
+ * The source wrote `default-value` on this mapping.
+ */
+export const DeclaredMappingDefaultValue = relation("DeclaredMappingDefaultValue", { node: uuid }, [
+  "node",
+]);
+
+/**
+ * The source wrote `default-value` on this area mapping.
+ */
+export const DeclaredAreaMappingDefaultValue = relation(
+  "DeclaredAreaMappingDefaultValue",
+  { node: uuid },
+  ["node"],
+);
+
+/**
  * A `qti-area-mapping`, the mapping of a point-typed response declaration.
  */
 export const AreaMapping = relation(
@@ -409,8 +425,10 @@ export const relations = {
   AreaMapping,
   AreaMappingLowerBound,
   AreaMappingUpperBound,
+  DeclaredAreaMappingDefaultValue,
   DeclaredIncludeBoundary,
   DeclaredMapEntryCaseSensitive,
+  DeclaredMappingDefaultValue,
   InterpolationTable,
   InterpolationTableDefaultValue,
   InterpolationTableDefaultValueBoolean: interpolationTableDefaultValueArms.boolean,
@@ -514,6 +532,7 @@ export const rules = [
   contained(on(MapEntry, "id", "mapping", "position"), on(Edge, "child", "parent", "position")),
   alternatives(MapEntry, "baseType", BaseType, mapEntryArms),
   contained(on(DeclaredMapEntryCaseSensitive, "node"), on(MapEntry, "id")),
+  contained(on(DeclaredMappingDefaultValue, "node"), on(Mapping, "id")),
   key(AreaMapping, ["declaration"]),
   contained(
     on(AreaMapping, "declaration"),
@@ -522,6 +541,7 @@ export const rules = [
   contained(on(AreaMapping, "id", "declaration"), on(Edge, "child", "parent")),
   contained(on(AreaMappingLowerBound, "node"), on(AreaMapping, "id")),
   contained(on(AreaMappingUpperBound, "node"), on(AreaMapping, "id")),
+  contained(on(DeclaredAreaMappingDefaultValue, "node"), on(AreaMapping, "id")),
   contained(
     on(AreaMapEntry, "id", "areaMapping", "position"),
     on(Edge, "child", "parent", "position"),
