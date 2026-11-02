@@ -1,0 +1,209 @@
+/**
+ * The usage-data document: its root, the statistics it holds and their target objects. The
+ * statistic's two kinds share one relation; thin arms bind each kind to its own node kind.
+ *
+ * This module is a leaf: nothing composes it yet.
+ */
+import {
+  capacity,
+  closed,
+  closedId,
+  contained,
+  key,
+  mirrors,
+  on,
+  pg,
+  relation,
+  select,
+  str,
+  uuid,
+  within,
+} from "@bjornpagen/grizzle";
+import type { AnyRelation } from "@bjornpagen/grizzle";
+import { Document } from "#qti/schema/document.ts";
+import type * as ud from "#qti/schema/kinds/ud.ts";
+import { Edge, TreeRoot } from "#qti/schema/node.ts";
+import * as patterns from "#qti/schema/patterns.ts";
+
+const anyUri = str.regex(patterns.anyUri);
+
+const ncName = str.regex(patterns.ncName);
+
+const xsInteger = str.regex(patterns.xsInteger);
+
+const xsDouble = str.regex(patterns.xsDouble);
+
+const xsString = str.regex(patterns.xsString, patterns.xsStringFlags);
+
+const usageDate = str.regex(patterns.usageDate);
+
+/**
+ * The two kinds of statistic: `ordinaryStatistic` and `categorizedStatistic`.
+ */
+export const StatisticKind = closed("StatisticKind", ["ordinary", "categorized"]);
+
+/**
+ * The kinds of object a target object names, in the order of the XSD's `objectType` enumeration
+ * (`imsqti_usagedatav3p0_v1p0.xsd`, lines 266 to 272).
+ */
+export const TargetObjectType = closed("TargetObjectType", [
+  "test",
+  "testpart",
+  "section",
+  "item",
+  "outcome",
+  "interaction",
+  "choice",
+]);
+
+/**
+ * A usage-data document's root: its id is its tree's root node and `document` the document.
+ */
+export const UsageData = relation("UsageData", { document: uuid, id: uuid }, ["id"]);
+
+/**
+ * The `glossary` of a usage-data root, when it has one.
+ */
+export const UsageDataGlossary = relation("UsageDataGlossary", { node: uuid, value: anyUri }, [
+  "node",
+]);
+
+/**
+ * A statistic at its position among the usage data's children. `name` and `context` hold the
+ * collapsed values.
+ */
+export const Statistic = relation(
+  "Statistic",
+  {
+    context: anyUri,
+    id: uuid,
+    kind: closedId(StatisticKind),
+    name: ncName,
+    position: pg.bigint,
+    usageData: uuid,
+  },
+  ["id"],
+);
+
+/**
+ * The statistic of kind `ordinary`: one row per such statistic.
+ */
+export const OrdinaryStatisticArm = relation("OrdinaryStatisticArm", { id: uuid }, ["id"]);
+
+/**
+ * The statistic of kind `categorized`: one row per such statistic.
+ */
+export const CategorizedStatisticArm = relation("CategorizedStatisticArm", { id: uuid }, ["id"]);
+
+const optional = <Name extends string, Value extends ReturnType<typeof str.regex>>(
+  name: Name,
+  value: Value,
+) => relation(name, { node: uuid, value }, ["node"]);
+
+/**
+ * The optional `glossary` of a statistic.
+ */
+export const StatisticGlossary = optional("StatisticGlossary", anyUri);
+
+/**
+ * The optional `caseCount` of a statistic.
+ */
+export const StatisticCaseCount = optional("StatisticCaseCount", xsInteger);
+
+/**
+ * The optional `stdError` of a statistic.
+ */
+export const StatisticStdError = optional("StatisticStdError", xsDouble);
+
+/**
+ * The optional `stdDeviation` of a statistic.
+ */
+export const StatisticStdDeviation = optional("StatisticStdDeviation", xsDouble);
+
+/**
+ * The optional `lastUpdated` date of a statistic.
+ */
+export const StatisticLastUpdated = optional("StatisticLastUpdated", usageDate);
+
+/**
+ * A target object at its position among its statistic's children. Its `identifier` is `xs:string`
+ * kept as read.
+ */
+export const TargetObject = relation(
+  "TargetObject",
+  { id: uuid, identifier: xsString, position: pg.bigint, statistic: uuid },
+  ["id"],
+);
+
+/**
+ * The optional `partIdentifier` of a target object.
+ */
+export const TargetObjectPartIdentifier = optional("TargetObjectPartIdentifier", ncName);
+
+/**
+ * The optional `objectType` of a target object.
+ */
+export const TargetObjectObjectType = relation(
+  "TargetObjectObjectType",
+  { node: uuid, value: closedId(TargetObjectType) },
+  ["node"],
+);
+
+/**
+ * The relations of this module, as schema members.
+ */
+export const relations = {
+  CategorizedStatisticArm,
+  OrdinaryStatisticArm,
+  Statistic,
+  StatisticCaseCount,
+  StatisticGlossary,
+  StatisticLastUpdated,
+  StatisticStdDeviation,
+  StatisticStdError,
+  TargetObject,
+  TargetObjectObjectType,
+  TargetObjectPartIdentifier,
+  UsageData,
+  UsageDataGlossary,
+};
+
+/**
+ * The statements over these relations: the root is its tree's and one per usage-data document;
+ * statistics and target objects hang under their parents by an edge; each statistic kind has its
+ * arm; a statistic has at least one target object; and each optional value names its owner.
+ */
+export const rules = [
+  key(UsageData, ["document"]),
+  contained(on(UsageData, "id", "document"), on(TreeRoot, "node", "tree")),
+  mirrors(on(select(Document, { root: "usagedata" }), "id"), on(UsageData, "document")),
+  contained(on(UsageDataGlossary, "node"), on(UsageData, "id")),
+  contained(on(Statistic, "id", "usageData", "position"), on(Edge, "child", "parent", "position")),
+  contained(on(Statistic, "usageData"), on(UsageData, "id")),
+  mirrors(on(select(Statistic, { kind: "ordinary" }), "id"), on(OrdinaryStatisticArm, "id")),
+  mirrors(on(select(Statistic, { kind: "categorized" }), "id"), on(CategorizedStatisticArm, "id")),
+  contained(on(StatisticGlossary, "node"), on(Statistic, "id")),
+  contained(on(StatisticCaseCount, "node"), on(Statistic, "id")),
+  contained(on(StatisticStdError, "node"), on(Statistic, "id")),
+  contained(on(StatisticStdDeviation, "node"), on(Statistic, "id")),
+  contained(on(StatisticLastUpdated, "node"), on(Statistic, "id")),
+  contained(
+    on(TargetObject, "id", "statistic", "position"),
+    on(Edge, "child", "parent", "position"),
+  ),
+  contained(on(TargetObject, "statistic"), on(Statistic, "id")),
+  capacity(on(Statistic, "id"), { from: on(TargetObject, "statistic"), within: within(1n, "*") }),
+  contained(on(TargetObjectPartIdentifier, "node"), on(TargetObject, "id")),
+  contained(on(TargetObjectObjectType, "node"), on(TargetObject, "id")),
+] as const;
+
+/**
+ * The element arms of this module, keyed by `NodeKind` handle. The remaining usage-data kinds
+ * join them when their relations exist.
+ */
+export const arms = {
+  "ud:categorizedStatistic": CategorizedStatisticArm,
+  "ud:ordinaryStatistic": OrdinaryStatisticArm,
+  "ud:targetObject": TargetObject,
+  "ud:usageData": UsageData,
+} as const satisfies Partial<Record<(typeof ud.kinds)[number], AnyRelation>>;
