@@ -309,6 +309,72 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
       assert.deepStrictEqual(refusal.parent, Option.some("qti-assessment-item"));
     }),
   );
+
+  suite.effect("choice.xml's nodes carry the ancestry their ancestors enter", () =>
+    Effect.gen(function* choiceAncestry() {
+      const doc = yield* readChoice(inject("fixtures").simple);
+      const { nodes, rows } = yield* treeRows(doc, itemInput(doc.charset), Rows.empty());
+      const nodeRows = Rows.of(rows, Node);
+      const byId = new Map(nodeRows.map((row) => [row.id, row]));
+      const ancestryOf = (kind: string) => [
+        ...new Set(
+          nodes
+            .values()
+            .filter((entry) => entry.kind === kind)
+            .map((entry) => entry.ancestry),
+        ),
+      ];
+
+      assert.deepStrictEqual(ancestryOf("qti-item-body"), ["root"]);
+      assert.deepStrictEqual(ancestryOf("qti-choice-interaction"), ["root"]);
+      assert.deepStrictEqual(ancestryOf("qti-prompt"), ["int"]);
+      assert.deepStrictEqual(ancestryOf("qti-simple-choice"), ["int"]);
+
+      // The prompt's children sit inside the interaction and the prompt: `int.choice`.
+      const prompt = [...nodes.values()].find((entry) => entry.kind === "qti-prompt");
+      const promptChildren = Rows.of(rows, Edge).filter((edge) => edge.parent === prompt?.id);
+      assert.isAbove(promptChildren.length, 0);
+      for (const edge of promptChildren) {
+        assert.strictEqual(byId.get(edge.child)?.ancestry, "int.choice");
+      }
+
+      for (const edge of Rows.of(rows, Edge)) {
+        assert.strictEqual(edge.childAncestry, byId.get(edge.child)?.ancestry);
+        assert.strictEqual(edge.parentAncestry, byId.get(edge.parent)?.ancestry);
+      }
+
+      assert.strictEqual(byId.get(treeId)?.ancestry, "root");
+    }),
+  );
+
+  suite.effect("a choice interaction inside a feedback block gives its children fb.int", () =>
+    Effect.gen(function* feedbackAncestry() {
+      const text = new TextDecoder().decode(
+        yield* (yield* FileSystem.FileSystem).readFile(
+          path.join(inject("fixtures").simple, "choice.xml"),
+        ),
+      );
+      const open = text.indexOf("<qti-choice-interaction");
+      const close = text.indexOf("</qti-choice-interaction>") + "</qti-choice-interaction>".length;
+      const wrapped = `${text.slice(0, open)}<qti-feedback-block outcome-identifier="FEEDBACK" show-hide="show" identifier="x">${text.slice(open, close)}</qti-feedback-block>${text.slice(close)}`;
+      const doc = yield* readXml(new TextEncoder().encode(wrapped));
+      const { nodes, rows } = yield* treeRows(doc, itemInput(doc.charset), Rows.empty());
+      const byId = new Map(Rows.of(rows, Node).map((row) => [row.id, row]));
+      const interaction = [...nodes.values()].find(
+        (entry) => entry.kind === "qti-choice-interaction",
+      );
+
+      assert.strictEqual(interaction?.ancestry, "fb");
+
+      const children = Rows.of(rows, Edge).filter((edge) => edge.parent === interaction?.id);
+      assert.isAbove(children.length, 0);
+      for (const edge of children) {
+        assert.strictEqual(byId.get(edge.child)?.ancestry, "fb.int");
+        assert.strictEqual(edge.parentAncestry, "fb");
+        assert.strictEqual(edge.childAncestry, "fb.int");
+      }
+    }),
+  );
 });
 
 /**

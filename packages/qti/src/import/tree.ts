@@ -13,6 +13,7 @@ import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
 import {
+  Ancestry,
   AttributeEntityReference,
   AttributeLexical,
   Comment,
@@ -36,12 +37,15 @@ import {
   Ws,
 } from "#qti/schema/node.ts";
 import type {
+  AncestryHandle,
   AttributeNameHandle,
   NodeKindHandle,
   RootKindHandle,
   SchemaVersionHandle,
 } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
+import { FLAGS, handleOf, KindEnters } from "#qti/schema/seed/ancestry.ts";
+import type { Flag } from "#qti/schema/seed/ancestry.ts";
 import { exportCharset } from "#qti/xml/charset.ts";
 import type { Child, Element, Misc, XmlDocument } from "#qti/xml/tree.ts";
 
@@ -91,13 +95,19 @@ export const Rows = {
 };
 
 /**
+ * What the walk keeps of an element's node: its id, its kind, and the ancestry it sits in.
+ */
+export interface IndexedNode {
+  readonly ancestry: AncestryHandle;
+  readonly id: string;
+  readonly kind: NodeKindHandle;
+}
+
+/**
  * The node each element of a tree became, keyed by the tree's own `Element` objects by identity, so
  * later modules attach arm rows to the elements they walk.
  */
-export type NodeIndex = ReadonlyMap<
-  Element,
-  { readonly id: string; readonly kind: NodeKindHandle }
->;
+export type NodeIndex = ReadonlyMap<Element, IndexedNode>;
 
 /**
  * What the caller of {@link treeRows} decides about a tree: its id, which is also its root node's
@@ -214,6 +224,19 @@ const rowsByHandle: ReadonlyMap<string, RegistryRow> = new Map(
     .filter(([, row]) => row.local !== ""),
 );
 
+/**
+ * The `Ancestry` handle a flag set is named by, `None` when the set is one no tree can reach.
+ */
+const ancestryOf = (flags: readonly Flag[]): Option.Option<AncestryHandle> =>
+  Option.fromNullishOr(Ancestry.handles.find((handle) => handle === handleOf(flags)));
+
+/**
+ * The flags in force under an element of `kind` that sits inside `flags`: those it sits inside and
+ * the ones its kind enters.
+ */
+const enteredBy = (flags: readonly Flag[], kind: NodeKindHandle): readonly Flag[] =>
+  FLAGS.filter((flag) => flags.includes(flag) || (KindEnters[kind] ?? []).includes(flag));
+
 const clark = (namespace: string, local: string): string => `{${namespace}}${local}`;
 
 /**
@@ -258,13 +281,16 @@ export const kindOf = (
 
 /**
  * The first element or attribute of `element`'s subtree that no registry models, in document order.
+ * An element whose ancestry no `Ancestry` handle names is refused as an element: it sits inside a
+ * combination of flags the model cannot hold.
  */
 const firstUnmodeled = (
   element: Element,
   parent: Option.Option<{ readonly kind: NodeKindHandle; readonly name: string }>,
+  flags: readonly Flag[],
 ): Option.Option<UnmodeledVocabulary> => {
   const kind = kindOf(element, parent.pipe(Option.map((above) => above.kind)));
-  if (Option.isNone(kind)) {
+  if (Option.isNone(kind) || Option.isNone(ancestryOf(flags))) {
     return Option.some(
       new UnmodeledVocabulary({
         kind: "element",
@@ -292,9 +318,10 @@ const firstUnmodeled = (
   }
 
   const here = Option.some({ kind: kind.value, name: element.qname });
+  const inside = enteredBy(flags, kind.value);
   for (const child of element.children) {
     if (child.kind === "element") {
-      const found = firstUnmodeled(child, here);
+      const found = firstUnmodeled(child, here, inside);
       if (Option.isSome(found)) {
         return found;
       }
@@ -338,14 +365,29 @@ const isWhitespaceRun = (value: string): value is Fact<typeof Ws>["value"] =>
  */
 const walk = (
   child: Child,
-  parent: Option.Option<{ readonly id: string; readonly kind: NodeKindHandle }>,
+  parent: Option.Option<{
+    readonly ancestry: AncestryHandle;
+    readonly flags: readonly Flag[];
+    readonly id: string;
+    readonly kind: NodeKindHandle;
+  }>,
   position: number,
   input: TreeInput,
   walked: Walked,
-  index: Map<Element, { readonly id: string; readonly kind: NodeKindHandle }>,
+  index: Map<Element, IndexedNode>,
 ): void => {
   const common = { tree: input.id, version: input.version };
   const id = Option.isNone(parent) ? input.id : crypto.randomUUID();
+  const flags = parent.pipe(
+    Option.map((above) => above.flags),
+    Option.getOrElse((): readonly Flag[] => []),
+  );
+  const sitsAt = ancestryOf(flags);
+  if (Option.isNone(sitsAt)) {
+    return;
+  }
+
+  const { value: ancestry } = sitsAt;
   let kind: NodeKindHandle;
   let prefix = "";
 
@@ -357,7 +399,7 @@ const walk = (
 
     kind = found.value;
     ({ prefix } = child);
-    index.set(child, { id, kind });
+    index.set(child, { ancestry, id, kind });
   } else if (Option.isNone(parent)) {
     return;
   } else if (child.kind === "text") {
@@ -382,13 +424,15 @@ const walk = (
     walked.entityReferences.push({ id, name: child.name });
   }
 
-  walked.nodes.push({ ...common, id, kind, prefix, rootKind: input.root });
+  walked.nodes.push({ ...common, ancestry, id, kind, prefix, rootKind: input.root });
   if (Option.isSome(parent)) {
     walked.edges.push({
       ...common,
       child: id,
+      childAncestry: ancestry,
       childKind: kind,
       parent: parent.value.id,
+      parentAncestry: parent.value.ancestry,
       parentKind: parent.value.kind,
       position: BigInt(position),
     });
@@ -422,7 +466,7 @@ const walk = (
     }
   }
 
-  const here = Option.some({ id, kind });
+  const here = Option.some({ ancestry, flags: enteredBy(flags, kind), id, kind });
   for (const [childPosition, grandchild] of child.children.entries()) {
     walk(grandchild, here, childPosition, input, walked, index);
   }
@@ -466,7 +510,7 @@ export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
   input: TreeInput,
   rows: Rows,
 ): Effect.fn.Return<{ rows: Rows; nodes: NodeIndex }, UnmodeledVocabulary> {
-  const refusal = firstUnmodeled(doc.root, Option.none());
+  const refusal = firstUnmodeled(doc.root, Option.none(), []);
   if (Option.isSome(refusal)) {
     return yield* refusal.value;
   }
@@ -534,7 +578,7 @@ export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
     texts: [],
     whitespace: [],
   };
-  const nodes = new Map<Element, { readonly id: string; readonly kind: NodeKindHandle }>();
+  const nodes = new Map<Element, IndexedNode>();
   walk(doc.root, Option.none(), 0, input, walked, nodes);
 
   const rootNode = nodes.get(doc.root);
