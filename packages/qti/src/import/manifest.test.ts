@@ -24,6 +24,7 @@ import {
   QmdTimeDependent,
   QtiMetadata,
 } from "#qti/schema/metadata.ts";
+import { Document } from "#qti/schema/document.ts";
 import { AttributeLexical, Edge, Node, TextNode, TreeRoot } from "#qti/schema/node.ts";
 import {
   File,
@@ -103,9 +104,22 @@ const guarded = (
   ) => [rows, entries],
 ) =>
   Effect.gen(function* guardedImport() {
-    const { rows } = yield* importManifest(dir, edit);
+    const built = yield* importManifest(dir, edit);
     const entries = yield* listPackage(dir);
-    const [changed, listing] = alter(rows, entries);
+    const claimed = Rows.add(
+      built.rows,
+      Document,
+      built.documents.map((document) => ({
+        id: crypto.randomUUID(),
+        package: built.packageId,
+        path: document.path,
+        resource: document.resource,
+        resourceType: document.type,
+        root: "item" as const,
+        version: built.version,
+      })),
+    );
+    const [changed, listing] = alter(claimed, entries);
 
     return yield* manifestGuards(changed, listing);
   });
