@@ -371,9 +371,9 @@ const hottext = Effect.fn("import.hottext")(function* hottext(
  * The rows of one `qti-hotspot-choice`: the choice with the interaction that encloses it, its
  * label when it has one, its template variable, and its coordinates.
  *
- * @returns The rows; `ItemRefusal` for a choice with no valid `shape`, no enclosing interaction, or
- *   a `template-identifier` that names no typed variable. A choice with no `coords` has no
- *   `Coords` row, and the shape's capacity refuses it at commit.
+ * @returns The rows; `ItemRefusal` for a choice with no valid `shape`, no enclosing interaction
+ *   (rule `admission`), or a `template-identifier` that names no typed variable. A choice with no
+ *   `coords` has no `Coords` row, and the shape's capacity refuses it at commit.
  */
 const hotspotChoice = Effect.fn("import.hotspotChoice")(function* hotspotChoice(
   ctx: InteractionContext,
@@ -386,7 +386,7 @@ const hotspotChoice = Effect.fn("import.hotspotChoice")(function* hotspotChoice(
     return yield* new ItemRefusal({
       detail:
         "A qti-hotspot-choice sits inside no interaction. Move it into a qti-hotspot-interaction or a qti-graphic-order-interaction.",
-      rule: "binding-declared",
+      rule: "admission",
     });
   }
 

@@ -149,6 +149,12 @@ const matchItem = (): Element =>
 
 const pairs = new Map([["RESPONSE", variable("decl-1", "directedPair", "multiple")]]);
 
+const refusalRuleOf = (exit: Exit.Exit<Rows, unknown>): string => {
+  const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
+
+  return Option.isSome(failure) && failure.value instanceof ItemRefusal ? failure.value.rule : "";
+};
+
 describe("associateRows on a match interaction", () => {
   it.effect("writes the interaction, its two sets, five choices and the binding", () =>
     Effect.gen(function* matchRows() {
@@ -419,6 +425,16 @@ describe("associateRows on an associate interaction", () => {
       assert.isTrue(Exit.isFailure(exit));
     }),
   );
+
+  it.effect("refuses a choice that sits in no interaction under admission", () =>
+    Effect.gen(function* stray() {
+      const exit = yield* Effect.exit(
+        associateRows(contextOf([element("p", {}, [choice("A")])]), Rows.empty()),
+      );
+
+      assert.strictEqual(refusalRuleOf(exit), "admission");
+    }),
+  );
 });
 
 const graphicItem = (more: Readonly<Record<string, string>> = {}): Element =>
@@ -555,6 +571,28 @@ describe("associateRows on a graphic associate interaction", () => {
         [["node-2", "qti-graphic-gap-match-interaction"]],
       );
       assert.strictEqual(Rows.of(built, GraphicAssociateInteraction).length, 0);
+    }),
+  );
+
+  it.effect("refuses an associable hotspot that sits in no interaction under admission", () =>
+    Effect.gen(function* stray() {
+      const exit = yield* Effect.exit(
+        associateRows(
+          contextOf([
+            element("p", {}, [
+              element("qti-associable-hotspot", {
+                coords: "0,0,10,10",
+                identifier: "H1",
+                "match-max": "1",
+                shape: "rect",
+              }),
+            ]),
+          ]),
+          Rows.empty(),
+        ),
+      );
+
+      assert.strictEqual(refusalRuleOf(exit), "admission");
     }),
   );
 });
