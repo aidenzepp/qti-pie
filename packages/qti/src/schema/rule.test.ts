@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-unnecessary-type-parameters -- `Equal` is the standard type-equality helper; its two `T` parameters are compared across the two function types by design, so each appears once per signature. */
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import * as declaration from "#qti/schema/declaration.ts";
