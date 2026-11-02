@@ -353,7 +353,8 @@ const showing = (relation: AnyRelation, marker: AnyRelation): readonly Own[] => 
 ];
 
 /**
- * The attributes of `qti-feedback-block` and `qti-feedback-inline`.
+ * The attributes of `qti-feedback-block`, `qti-feedback-block.template` and `qti-feedback-inline`,
+ * each read from its own arm.
  */
 const feedback = (relation: AnyRelation, marker: AnyRelation): readonly Own[] => [
   ["outcome-identifier", arm(relation, "outcomeIdentifier")],
@@ -361,7 +362,8 @@ const feedback = (relation: AnyRelation, marker: AnyRelation): readonly Own[] =>
 ];
 
 /**
- * The attributes of `qti-template-block` and `qti-template-inline`.
+ * The attributes of `qti-template-block`, `qti-template-inline` and their two `.rubric` kinds, each
+ * read from its own arm.
  */
 const templating = (relation: AnyRelation, marker: AnyRelation): readonly Own[] => [
   ["template-identifier", arm(relation, "templateIdentifier")],
@@ -543,7 +545,10 @@ export const ownAttributes = {
     ["data-patternmask-message", optional(R.ExtendedTextPatternmaskMessage)],
   ],
   "qti-feedback-block": feedback(R.FeedbackBlock, R.DeclaredFeedbackBlockShowHide),
-  "qti-feedback-block.template": feedback(R.FeedbackBlock, R.DeclaredFeedbackBlockShowHide),
+  "qti-feedback-block.template": feedback(
+    R.TemplateFeedbackBlock,
+    R.DeclaredTemplateFeedbackBlockShowHide,
+  ),
   "qti-feedback-inline": feedback(R.FeedbackInline, R.DeclaredFeedbackInlineShowHide),
   "qti-gap": [
     identifierOf(R.Gap),
@@ -779,7 +784,10 @@ export const ownAttributes = {
     ["title", optional(R.StylesheetTitle)],
   ],
   "qti-template-block": templating(R.TemplateBlock, R.DeclaredTemplateBlockShowHide),
-  "qti-template-block.rubric": templating(R.TemplateBlock, R.DeclaredTemplateBlockShowHide),
+  "qti-template-block.rubric": templating(
+    R.RubricTemplateBlock,
+    R.DeclaredRubricTemplateBlockShowHide,
+  ),
   "qti-template-declaration": [
     ...declared,
     [
@@ -792,7 +800,10 @@ export const ownAttributes = {
     ],
   ],
   "qti-template-inline": templating(R.TemplateInline, R.DeclaredTemplateInlineShowHide),
-  "qti-template-inline.rubric": templating(R.TemplateInline, R.DeclaredTemplateInlineShowHide),
+  "qti-template-inline.rubric": templating(
+    R.RubricTemplateInline,
+    R.DeclaredRubricTemplateInlineShowHide,
+  ),
   "qti-text-entry-interaction": [
     responseIdentifierOf(R.TextEntryInteraction),
     ["base", marked(R.DeclaredTextEntryBase, arm(R.TextEntryInteraction, "base"))],

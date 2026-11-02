@@ -186,6 +186,17 @@ const synthetic = `<?xml version="1.0" encoding="UTF-8"?>
 </qti-assessment-item>`;
 
 /**
+ * An item that holds one node of each feedback and template kind, three of them written with
+ * `show-hide="hide"`.
+ */
+const sixKindsItem = `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="six" title="Six" adaptive="false" time-dependent="false">
+  <qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>
+  <qti-template-declaration identifier="T" cardinality="single" base-type="identifier"/>
+  <qti-item-body><qti-rubric-block use="instructions" view="candidate"><qti-content-body><qti-template-block template-identifier="T" identifier="rb" show-hide="hide"><qti-content-body><p>r</p></qti-content-body></qti-template-block><qti-template-inline template-identifier="T" identifier="ri" show-hide="hide">i</qti-template-inline></qti-content-body></qti-rubric-block><qti-feedback-block outcome-identifier="FEEDBACK" identifier="fa"><qti-content-body><p>a</p></qti-content-body></qti-feedback-block><qti-template-block template-identifier="T" identifier="tb"><qti-content-body><qti-feedback-block outcome-identifier="FEEDBACK" identifier="ft" show-hide="hide"><qti-content-body><p>t</p></qti-content-body></qti-feedback-block></qti-content-body></qti-template-block><p><qti-template-inline template-identifier="T" identifier="ti">x</qti-template-inline></p></qti-item-body>
+</qti-assessment-item>`;
+
+/**
  * An item with a graphic associate interaction whose first hotspot writes `match-min` and whose
  * second omits it.
  */
@@ -257,6 +268,26 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         assert.strictEqual(rendered.split('shuffle="').length - 1, 1);
         assert.notInclude(rendered, 'src=""');
         assert.notInclude(rendered, "owner");
+      }),
+    );
+
+    it.effect("the six feedback and template kinds round-trip on their own arms", () =>
+      Effect.gen(function* sixKindsRoundTrip() {
+        const doc = yield* readXml(new TextEncoder().encode(sixKindsItem));
+        const input: ItemInput = {
+          doc,
+          packageId: crypto.randomUUID(),
+          path: "six.xml",
+          resource: "six",
+          resourceLomHasGeneral: false,
+          resourceType: "imsqti_item_xmlv3p0",
+          version: "3.0.1",
+        };
+        const { documentId, rows } = yield* itemRows(input, Rows.empty());
+        const rendered = textOf(canonicalize(renderTree(rows, documentId)));
+
+        assert.strictEqual(rendered, textOf(canonicalize(doc)));
+        assert.strictEqual(rendered.split('show-hide="hide"').length - 1, 3);
       }),
     );
 
