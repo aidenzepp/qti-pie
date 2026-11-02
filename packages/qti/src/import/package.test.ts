@@ -1,10 +1,11 @@
 import { CommitUnknown, Db, query, TransientFailure, uuid, v } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
-import { assert, layer } from "@effect/vitest";
-import { Effect, Layer, Ref, Result, Schedule, Schema } from "effect";
+import { assert, it as plain, layer } from "@effect/vitest";
+import { Effect, Fiber, Layer, Ref, Result, Schedule, Schema } from "effect";
+import { TestClock } from "effect/testing";
 import { describe, inject } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { importPackage } from "#qti/import/package.ts";
+import { importPackage, retrySchedule } from "#qti/import/package.ts";
 import { ImportRefused, isMappedLaw } from "#qti/import/refusal.ts";
 import type { ImportLaw, Rule } from "#qti/import/refusal.ts";
 import { Document } from "#qti/schema/document.ts";
@@ -170,6 +171,39 @@ const serializationFailure = Schema.decodeUnknownSync(TransientFailure)({
  */
 const quickly = Schedule.recurs(2);
 
+/**
+ * Fail `failures` times in a row, then succeed, retried on `schedule` while the failure is
+ * transient, with the delays driven by the test clock so nothing sleeps. Gives the attempts made.
+ */
+const attemptsUnder = (schedule: Schedule.Schedule<unknown>, failures: number) =>
+  Effect.gen(function* simulated() {
+    const attempts = yield* Ref.make(0);
+    const attempt = Effect.flatMap(
+      Ref.updateAndGet(attempts, (n) => n + 1),
+      (n) => (n <= failures ? Effect.fail(serializationFailure) : Effect.succeed(n)),
+    );
+    const fiber = yield* Effect.forkChild(Effect.result(Effect.retry(attempt, { schedule })));
+
+    yield* TestClock.adjust("10 seconds");
+    yield* Fiber.join(fiber);
+
+    return yield* Ref.get(attempts);
+  });
+
+describe("import/package.test.ts, the retry budget", () => {
+  plain.effect("the production schedule retries an injected failure and two real ones", () =>
+    Effect.gen(function* survives() {
+      assert.strictEqual(yield* attemptsUnder(retrySchedule, 3), 4);
+    }),
+  );
+
+  plain.effect("the test schedule gives up after one injected failure and two real ones", () =>
+    Effect.gen(function* gaveUp() {
+      assert.strictEqual(yield* attemptsUnder(quickly, 3), 3);
+    }),
+  );
+});
+
 describe.skipIf(!hasLease)(
   "import/package.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
@@ -283,8 +317,8 @@ describe.skipIf(!hasLease)(
       it.effect("retries one injected TransientFailure and then accepts", () =>
         Effect.gen(function* retriesTransient() {
           const attempts = yield* Ref.make(0);
+          // The production schedule, so a real 40001 beside the injected one is retried too.
           const id = yield* importPackage(fixtures.simple, {
-            schedule: quickly,
             wrapApply: <A, E, R>(apply: Effect.Effect<A, E, R>) =>
               Effect.flatMap(
                 Ref.getAndUpdate(attempts, (n) => n + 1),
