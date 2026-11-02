@@ -9,7 +9,7 @@
   "scripts": {
     "db": "scripts/db.sh",
     "grizzle": "grizzle",
-    "test": "NODE_OPTIONS=\"$NODE_OPTIONS --disable-proto=delete --disable-sigusr1\" vp test run"
+    "test": "mkdir -p work/.vp-tmp && TMPDIR=\"$PWD/work/.vp-tmp\" NODE_OPTIONS=\"$NODE_OPTIONS --disable-proto=delete --disable-sigusr1\" vp test run"
   },
   "dependencies": {
     "@bjornpagen/grizzle": "file:../../vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz",
