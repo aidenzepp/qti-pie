@@ -2,9 +2,19 @@ import { assert, describe, it } from "@effect/vitest";
 
 import { hostAdditions } from "#qti/schema/content/sets.ts";
 import { entryOf, inventory } from "#qti/schema/content/xsd-inventory.ts";
-import { admission as asiAdmission } from "#qti/schema/kinds/asi.ts";
-import type { AdmissionRow, SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
-import { admission as htmlAdmission } from "#qti/schema/kinds/html.ts";
+import * as asi from "#qti/schema/kinds/asi.ts";
+import * as cp from "#qti/schema/kinds/cp.ts";
+import * as generic from "#qti/schema/kinds/generic.ts";
+import type { AdmissionRow, RegistryRow, SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
+import * as html from "#qti/schema/kinds/html.ts";
+import * as lom from "#qti/schema/kinds/lom.ts";
+import * as qmd from "#qti/schema/kinds/qmd.ts";
+import { AttributeName, NodeKind } from "#qti/schema/node.ts";
+import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
+
+const asiAdmission = asi.admission;
+
+const htmlAdmission = html.admission;
 
 const versions = ["3.0.0", "3.0.1"] as const satisfies readonly SchemaVersionHandle[];
 
@@ -179,5 +189,177 @@ describe("the M1 Admission rows", () => {
       assert.isTrue(admits(version, "p", "img"));
       assert.isTrue(admits(version, "img", "comment"));
     }
+  });
+});
+
+/**
+ * Phase-1's ASI and HTML kinds: the tuples' lengths before the roster append.
+ */
+const m0Asi = [
+  "qti-assessment-item",
+  "qti-response-declaration",
+  "qti-outcome-declaration",
+  "qti-correct-response",
+  "qti-default-value",
+  "qti-value",
+  "qti-item-body",
+  "qti-choice-interaction",
+  "qti-prompt",
+  "qti-simple-choice",
+  "qti-response-processing",
+] as const;
+
+const m0Html = ["p", "img"] as const;
+
+/**
+ * The 51 M1 element names of the XSD roster (spec 3.4). Five of them have several types and so
+ * several handles, `qti-content-body` only dotted ones.
+ */
+const m1Names =
+  `qti-area-map-entry qti-area-mapping qti-associable-hotspot qti-associate-interaction
+qti-catalog-info qti-companion-materials-info qti-content-body qti-context-declaration
+qti-drawing-interaction qti-end-attempt-interaction qti-extended-text-interaction qti-feedback-block
+qti-feedback-inline qti-gap qti-gap-img qti-gap-match-interaction qti-gap-text
+qti-graphic-associate-interaction qti-graphic-gap-match-interaction qti-graphic-order-interaction
+qti-hotspot-choice qti-hotspot-interaction qti-hottext qti-hottext-interaction qti-inline-choice
+qti-inline-choice-interaction qti-interpolation-table qti-interpolation-table-entry qti-label
+qti-map-entry qti-mapping qti-match-interaction qti-match-table qti-match-table-entry
+qti-media-interaction qti-modal-feedback qti-order-interaction qti-position-object-interaction
+qti-position-object-stage qti-printed-variable qti-rubric-block qti-select-point-interaction
+qti-simple-associable-choice qti-simple-match-set qti-slider-interaction qti-stylesheet
+qti-template-block qti-template-declaration qti-template-inline qti-text-entry-interaction
+qti-upload-interaction`
+    .split("\n")
+    .flatMap((line) => line.split(" "));
+
+const htmlNames =
+  `a abbr acronym address article aside audio b bdi bdo big blockquote br caption cite
+code col colgroup dd details dfn div dl dt em figcaption figure footer h1 h2 h3 h4 h5 h6 header hr i
+img kbd label li nav object ol p param picture pre q rb rp rt rtc ruby samp section small source span
+strong sub summary sup table tbody td template tfoot th thead tr track tt ul var video`
+    .split("\n")
+    .flatMap((line) => line.split(" "));
+
+const registries: readonly Readonly<Record<string, RegistryRow>>[] = [
+  generic.registry,
+  asi.registry,
+  html.registry,
+  cp.registry,
+  lom.registry,
+  qmd.registry,
+];
+
+const attributeTuples: readonly (readonly string[])[] = [
+  generic.attributes,
+  asi.attributes,
+  html.attributes,
+  cp.attributes,
+  lom.attributes,
+  qmd.attributes,
+];
+
+describe("the roster append", () => {
+  it("appends 58 ASI and 74 HTML handles to phase-1's", () => {
+    assert.strictEqual(asi.kinds.length, m0Asi.length + 58);
+    assert.strictEqual(html.kinds.length, m0Html.length + 74);
+    assert.deepStrictEqual(asi.kinds.slice(0, m0Asi.length), [...m0Asi]);
+    assert.deepStrictEqual(html.kinds.slice(0, m0Html.length), [...m0Html]);
+  });
+
+  it("gives every M1 name of the XSD roster a handle", () => {
+    assert.strictEqual(m1Names.length, 51);
+    for (const name of m1Names) {
+      assert.isTrue(
+        asi.kinds.some((kind) => kind === name || kind.startsWith(`${name}.`)),
+        name,
+      );
+    }
+    assert.strictEqual(htmlNames.length, 76);
+    for (const name of htmlNames) {
+      assert.include(html.kinds, name);
+    }
+  });
+
+  it("composes NodeKind from the six tuples", () => {
+    const sum = [generic, asi, html, cp, lom, qmd].reduce((n, kinds) => n + kinds.kinds.length, 0);
+    assert.strictEqual(NodeKind.handles.length, sum);
+    assert.strictEqual(new Set(NodeKind.handles).size, sum);
+  });
+
+  it("holds a registry row for every handle and none beyond", () => {
+    for (const [kinds, registry] of [
+      [asi.kinds, asi.registry],
+      [html.kinds, html.registry],
+    ] as const) {
+      assert.deepStrictEqual(Object.keys(registry).toSorted(), [...kinds].toSorted());
+    }
+  });
+
+  it("gives every inventory handle a registry attribute set equal to its entry's names", () => {
+    for (const entry of Object.values(inventory)) {
+      const row = { ...asi.registry, ...html.registry }[entry.handle];
+      assert.isDefined(row, entry.handle);
+      assert.deepStrictEqual(
+        new Set(row?.attributes),
+        new Set(entry.attributes.map((attribute) => attribute.name)),
+        entry.handle,
+      );
+      assert.strictEqual(row?.attributes.length, new Set(row?.attributes).size, entry.handle);
+    }
+  });
+
+  it("widens lom:string to language and xml:lang", () => {
+    assert.include(lom.registry["lom:string"].attributes, "language");
+    assert.include(lom.registry["lom:string"].attributes, "xml:lang");
+  });
+
+  it("composes AttributeName from the tuples, each registry attribute name once", () => {
+    const names = registries.flatMap((registry) =>
+      Object.values(registry).flatMap((row) => row.attributes),
+    );
+    assert.deepStrictEqual([...AttributeName.handles].toSorted(), [...new Set(names)].toSorted());
+
+    const handles: readonly string[] = AttributeName.handles;
+    assert.strictEqual(
+      handles.length,
+      attributeTuples.reduce((n, tuple) => n + tuple.length, 0),
+    );
+    assert.strictEqual(new Set(handles).size, handles.length);
+  });
+
+  it("declares a new name once, in the first vocabulary whose kind carries it", () => {
+    assert.include(asi.attributes, "xml:lang");
+    assert.include(asi.attributes, "aria-label");
+    assert.include(html.attributes, "srcset");
+    for (const name of ["type", "href", "identifierref"]) {
+      assert.include(cp.attributes, name);
+      assert.notInclude(asi.attributes, name);
+      assert.notInclude(html.attributes, name);
+    }
+  });
+});
+
+const has = (baseType: string, cardinality: string, interactionKind: string): boolean =>
+  bindingFit.some(
+    (row) =>
+      row.baseType === baseType &&
+      row.cardinality === cardinality &&
+      row.interactionKind === interactionKind,
+  );
+
+describe("the BindingFit rows", () => {
+  it("holds 40 rows, every interaction kind a handle", () => {
+    assert.strictEqual(bindingFit.length, 40);
+    for (const row of bindingFit) {
+      assert.include(NodeKind.handles, row.interactionKind);
+    }
+  });
+
+  it("holds the select-point rows and keeps phase-1's choice rows", () => {
+    assert.isTrue(has("point", "multiple", "qti-select-point-interaction"));
+    assert.isFalse(has("identifier", "single", "qti-order-interaction"));
+    assert.isTrue(has("identifier", "ordered", "qti-order-interaction"));
+    assert.isTrue(has("identifier", "single", "qti-choice-interaction"));
+    assert.isTrue(has("identifier", "multiple", "qti-choice-interaction"));
   });
 });

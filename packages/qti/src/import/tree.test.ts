@@ -278,7 +278,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
     Effect.gen(function* unmodeledElement() {
       const doc = yield* readChoice(inject("fixtures").simple, [
         "<qti-prompt>",
-        "<div>x</div><qti-prompt>",
+        "<qti-made-up>x</qti-made-up><qti-prompt>",
       ]);
       const exit = yield* Effect.exit(treeRows(doc, itemInput(doc.charset), Rows.empty()));
 
@@ -288,7 +288,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
       const refusal = Option.getOrThrow(failure);
       assert.instanceOf(refusal, UnmodeledVocabulary);
       assert.strictEqual(refusal.kind, "element");
-      assert.strictEqual(refusal.name, "div");
+      assert.strictEqual(refusal.name, "qti-made-up");
       assert.deepStrictEqual(refusal.parent, Option.some("qti-choice-interaction"));
     }),
   );
