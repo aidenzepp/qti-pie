@@ -48,12 +48,18 @@ export type LiteralOrRef =
   | { readonly _tag: "ref"; readonly identifier: string };
 
 /**
+ * The kind of a rule or an expression: every node kind but `xi:include`, so that
+ * `kind === "xi:include"` holds exactly for an `IncludeNode`, whatever `NodeKind` composes.
+ */
+export type RuleOrExpressionKind = Exclude<NodeKindHandle, "xi:include">;
+
+/**
  * One expression element with its attributes and operand expressions.
  */
 export interface ExpressionNode {
   readonly attributes: ReadonlyMap<string, AttributeValue>;
   readonly element: Element;
-  readonly kind: NodeKindHandle;
+  readonly kind: RuleOrExpressionKind;
   readonly operands: readonly ExpressionNode[];
   readonly position: Position;
   /**
@@ -77,12 +83,12 @@ export interface RuleNode {
    * The single expression of a rule that holds one.
    */
   readonly expression: Option.Option<ExpressionNode>;
-  readonly kind: NodeKindHandle;
+  readonly kind: RuleOrExpressionKind;
   readonly position: Position;
   /**
-   * A container's sub-rules, in document order.
+   * A container's sub-rules and includes, in document order.
    */
-  readonly rules: readonly RuleNode[];
+  readonly rules: readonly (IncludeNode | RuleNode)[];
 }
 
 /**

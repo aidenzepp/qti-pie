@@ -455,7 +455,7 @@ const isKind = (node: TypedExpression, kind: string): boolean => node.kind === k
 const expressionsOfRule = (node: TypedRuleNode): readonly TypedExpression[] => [
   ...Option.match(node.expression, { onNone: () => [], onSome: withOperands }),
   ...node.branches.flatMap((branch) => expressionsOfRule(branch)),
-  ...node.rules.flatMap((child) => expressionsOfRule(child)),
+  ...node.rules.flatMap((child) => (child.kind === "xi:include" ? [] : expressionsOfRule(child))),
 ];
 
 const expressionsOf = (typed: TypedAst): readonly TypedExpression[] =>

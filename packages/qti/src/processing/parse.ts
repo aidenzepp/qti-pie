@@ -11,11 +11,11 @@ import type {
   Position,
   ProcessingAst,
   RuleNode,
+  RuleOrExpressionKind,
 } from "#qti/processing/ast.ts";
 import { expressionKinds } from "#qti/processing/types.ts";
 import * as asi from "#qti/schema/kinds/asi.ts";
 import * as xi from "#qti/schema/kinds/xi.ts";
-import type { NodeKindHandle } from "#qti/schema/node.ts";
 import { ncName, xsDouble, xsInteger } from "#qti/schema/patterns.ts";
 import type { Element } from "#qti/xml/tree.ts";
 
@@ -285,12 +285,12 @@ const xIncludeNamespace = xi.registry["xi:include"].namespace;
 /**
  * Name an element as a node kind.
  *
- * `NodeKindHandle` lists the processing kinds only once `node.ts` composes them, so the roster the
- * parser has checked is asserted here, in one place, until it does.
+ * `RuleOrExpressionKind` lists the processing kinds only once `node.ts` composes them, so the
+ * roster the parser has checked is asserted here, in one place, until it does.
  */
-const asKind = (name: string): NodeKindHandle =>
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: callers pass only names `asiEntries` classified or `xi:include`, the roster the composed `NodeKind` will hold.
-  name as NodeKindHandle;
+const asKind = (name: string): RuleOrExpressionKind =>
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: callers pass only names `asiEntries` classified, the roster the composed `NodeKind` will hold.
+  name as RuleOrExpressionKind;
 
 /**
  * The element children of `element`, in document order, each with its index among them.
@@ -507,29 +507,6 @@ const slotOf = (host: RuleClass, child: Classified): "branch" | "expression" | "
 };
 
 /**
- * Stand an include in a place the AST types only as a `RuleNode`, which cannot carry the
- * `IncludeNode` shape: the same attributes and element, the fallback reachable through `element`.
- */
-const includeAsRule = (include: IncludeNode): RuleNode => ({
-  attributes: include.attributes,
-  branches: [],
-  element: include.element,
-  expression: Option.none(),
-  kind: asKind("xi:include"),
-  position: include.position,
-  rules: [],
-});
-
-/**
- * A parsed rule host: the node, and its statements with each `xi:include` kept as an
- * `IncludeNode`, which only the top of the AST can hold.
- */
-interface ParsedHost {
-  readonly node: RuleNode;
-  readonly statements: readonly (IncludeNode | RuleNode)[];
-}
-
-/**
  * Parse a rule element and, recursively, the rules and expressions under it.
  *
  * The host's class decides which children it takes and where they go: an `if` takes a guarding
@@ -541,7 +518,7 @@ const parseHost = (
   element: Element,
   entry: RuleEntry,
   position: Position,
-): Effect.Effect<ParsedHost, UnmodeledVocabulary> =>
+): Effect.Effect<RuleNode, UnmodeledVocabulary> =>
   Effect.gen(function* parseRuleElement() {
     const attributes = yield* readAttributes(element, entry.attributes);
     const branches: RuleNode[] = [];
@@ -567,26 +544,21 @@ const parseHost = (
       } else if (found._tag === "rule") {
         const parsed = yield* parseHost(child, found.entry, at);
         if (slot === "branch") {
-          branches.push(parsed.node);
+          branches.push(parsed);
         } else {
-          statements.push(parsed.node);
+          statements.push(parsed);
         }
       }
     }
 
     return {
-      node: {
-        attributes,
-        branches,
-        element,
-        expression,
-        kind: asKind(element.local),
-        position,
-        rules: statements.map((statement) =>
-          statement.kind === "xi:include" ? includeAsRule(statement) : statement,
-        ),
-      },
-      statements,
+      attributes,
+      branches,
+      element,
+      expression,
+      kind: asKind(element.local),
+      position,
+      rules: statements,
     };
   });
 
@@ -624,5 +596,5 @@ export const parseProcessing = (
 
     const parsed = yield* parseHost(root, classified.value.entry, { path: [] });
 
-    return { language, root, rules: parsed.statements };
+    return { language, root, rules: parsed.rules };
   });

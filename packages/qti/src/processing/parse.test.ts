@@ -139,7 +139,7 @@ type ProcessingNode = ExpressionNode | IncludeNode | RuleNode;
  * The nodes directly under a node: an expression's operands, a rule's branches, rules and
  * expression, nothing under an include.
  */
-const childrenOf = (node: ProcessingNode): readonly (ExpressionNode | RuleNode)[] => {
+const childrenOf = (node: ProcessingNode): readonly ProcessingNode[] => {
   if ("operands" in node) {
     return node.operands;
   }
@@ -410,6 +410,12 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing/parse.ts", 
 
       const included = fragment.rules.find((rule) => rule.element.local === "include");
       assert.isDefined(included);
+      assert.strictEqual(included.kind, "xi:include");
+      assert.isFalse("branches" in included);
+      if (included.kind !== "xi:include") {
+        assert.fail("the nested include is not an IncludeNode");
+      }
+
       assert.deepStrictEqual(included.position.path, [9, 1]);
       assert.strictEqual(included.attributes.get("href")?.processed, "shared-rules.xml");
       assert.strictEqual(included.attributes.get("parse")?.processed, "xml");
@@ -417,6 +423,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing/parse.ts", 
       const fallback = elementChild(included.element, "fallback");
       assert.strictEqual(fallback.qname, "xi:fallback");
       assert.deepStrictEqual(childSummary(fallback), ["fallback"]);
+      assert.deepStrictEqual(childSummary(Option.getOrThrow(included.fallback)), ["fallback"]);
     }),
   );
 
