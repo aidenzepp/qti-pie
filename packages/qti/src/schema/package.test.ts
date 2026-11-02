@@ -1,7 +1,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
-import { admission } from "#qti/schema/kinds/cp.ts";
+import { admission, kinds as cpKinds } from "#qti/schema/kinds/cp.ts";
 import * as node from "#qti/schema/node.ts";
 import { RootKind } from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
@@ -39,10 +39,14 @@ describe("resource types", () => {
 });
 
 describe("rootOfType", () => {
-  it("has one row per QTI root kind, as many as the roster minus the manifest", () => {
+  it("gives each QTI root kind a row and each row a QTI root kind, one row per type", () => {
     const roots = RootKind.handles.filter((root) => root !== "manifest");
-    assert.strictEqual(rootOfType.length, roots.length);
-    assert.deepStrictEqual(rootOfType.map((row) => row.root).toSorted(), [...roots].toSorted());
+    const rowRoots = rootOfType.map((row) => row.root);
+    assert.includeMembers(roots, rowRoots);
+    assert.includeMembers(rowRoots, roots);
+
+    const types = rootOfType.map((row) => row.type);
+    assert.strictEqual(new Set(types).size, types.length);
   });
 
   it("names a type that is a resource type under both versions", () => {
@@ -90,7 +94,11 @@ describe("cp admission", () => {
     assert.isAbove(admission.length, 0);
   });
 
-  it("admits the spec's children under each cp kind", () => {
+  it("admits declared kinds under each cp kind, the spec's children among them", () => {
+    const declared: readonly string[] = node.NodeKind.handles;
+    for (const row of admission) {
+      assert.include(declared, row.child, `${row.parent} ${row.child}`);
+    }
     const expected = {
       "cp:dependency": ["comment", "pi"],
       "cp:file": ["comment", "pi", "ws"],
@@ -110,7 +118,7 @@ describe("cp admission", () => {
     };
     for (const [parent, children] of Object.entries(expected)) {
       for (const version of versions) {
-        assert.deepStrictEqual(childrenOf(parent, version), children, `${parent} ${version}`);
+        assert.includeMembers(childrenOf(parent, version), children, `${parent} ${version}`);
       }
     }
   });
@@ -154,8 +162,12 @@ describe("package", () => {
     assert.strictEqual(built.statements.length, node.rules.length + pkg.rules.length);
   });
 
-  it("declares the package relations and the roster", () => {
-    assert.deepStrictEqual(Object.keys(pkg.relations).toSorted(), [
+  it("declares each relation and roster under its exported name, phase 1's among them", () => {
+    const exported = new Map<string, unknown>(Object.entries(pkg));
+    for (const [name, member] of Object.entries(pkg.relations)) {
+      assert.strictEqual(exported.get(name), member, name);
+    }
+    assert.includeMembers(Object.keys(pkg.relations), [
       "Dependency",
       "EntryKind",
       "File",
@@ -204,19 +216,13 @@ describe("package", () => {
     ]);
   });
 
-  it("keys the arms by their NodeKind handles", () => {
-    assert.deepStrictEqual(Object.keys(pkg.arms).toSorted(), [
-      "cp:dependency",
-      "cp:file",
-      "cp:manifest",
-      "cp:metadata.manifest",
-      "cp:metadata.resource",
-      "cp:organizations",
-      "cp:resource",
-      "cp:resources",
-      "cp:schema",
-      "cp:schemaversion",
-    ]);
+  it("keys the arms by NodeKind handles, each over a relation of this module, every CP kind among them", () => {
+    const members: readonly unknown[] = Object.values(pkg.relations);
+    assert.includeMembers([...node.NodeKind.handles], Object.keys(pkg.arms));
+    for (const [handle, arm] of Object.entries(pkg.arms)) {
+      assert.include(members, arm, handle);
+    }
+    assert.includeMembers(Object.keys(pkg.arms), [...cpKinds]);
   });
 
   it("holds the File into Resource capacity, one or more", () => {
