@@ -14,6 +14,7 @@ import * as interaction from "#qti/schema/interaction.ts";
 import * as item from "#qti/schema/item.ts";
 import * as metadata from "#qti/schema/metadata.ts";
 import * as node from "#qti/schema/node.ts";
+import * as outcome from "#qti/schema/outcome.ts";
 import * as pkg from "#qti/schema/package.ts";
 import * as processing from "#qti/schema/processing.ts";
 import * as value from "#qti/schema/value.ts";
@@ -31,6 +32,7 @@ export const Qti = schema(
     ...processing.relations,
     ...item.relations,
     ...html.relations,
+    ...outcome.relations,
   },
   [
     ...node.rules,
@@ -43,6 +45,7 @@ export const Qti = schema(
     ...processing.rules,
     ...item.rules,
     ...html.rules,
+    ...outcome.rules,
     alternatives(node.Node, "kind", node.NodeKind, {
       ...node.arms,
       ...declaration.arms,

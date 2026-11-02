@@ -89,6 +89,7 @@ export const RootKind = closed("RootKind", [
   "outcomes",
   "usagedata",
   "manifest",
+  "externalLom",
 ]);
 
 /**

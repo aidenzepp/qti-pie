@@ -1,7 +1,7 @@
 /**
- * The metadata a package carries: a LOM record (`lom:lom`) under a manifest's or a resource's
- * `cp:metadata`, and the arms of the LOM `general`, `lifeCycle` and `metaMetadata` categories
- * beneath it.
+ * The metadata a package carries: a LOM record (`lom:lom`) under a manifest's, a resource's or a
+ * file's `cp:metadata`, or the root of an external metadata document, and the arms of the LOM
+ * `general`, `lifeCycle` and `metaMetadata` categories beneath it.
  *
  * A `Lom` names the kind of element that owns it. The owner's arm holds the `cp:metadata` node the
  * record hangs under, and every row below the record copies the record's id (and its owner where
@@ -18,6 +18,7 @@ import {
   closedId,
   contained,
   key,
+  mirrors,
   on,
   pg,
   relation,
@@ -26,9 +27,9 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import { DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
-import { Edge, Node, NodeKind } from "#qti/schema/node.ts";
-import { Resource } from "#qti/schema/package.ts";
+import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
+import { Edge, Node, NodeKind, TreeRoot } from "#qti/schema/node.ts";
+import { File, FileMetadata, Resource } from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
@@ -54,8 +55,8 @@ const scoringModeValue = str.regex(patterns.qmdScoringMode);
 const toolString = str.regex(patterns.toolString, patterns.toolStringFlags);
 
 /**
- * The elements that own a LOM record. `file` and `external` are declared for the owners a later
- * milestone gives arms to.
+ * The elements that own a LOM record: the manifest, a resource, a file, and an external metadata
+ * document.
  */
 export const LomOwner = closed("LomOwner", ["manifest", "resource", "file", "external"]);
 
@@ -78,6 +79,26 @@ export const ManifestLom = relation("ManifestLom", { lom: uuid, metadata: uuid, 
 export const ResourceLom = relation(
   "ResourceLom",
   { lom: uuid, metadata: uuid, package: uuid, resource: ncName, type: resourceType },
+  ["lom"],
+);
+
+/**
+ * A record owned by a file: the `cp:metadata` node it hangs under and the file. A file may hold any
+ * number of records, so the file is no key.
+ */
+export const FileLom = relation(
+  "FileLom",
+  { file: uuid, lom: uuid, metadata: uuid, package: uuid },
+  ["lom"],
+);
+
+/**
+ * A record that is the whole of an external metadata document: the document, which is the record's
+ * tree, and the resource that lists it.
+ */
+export const ExternalLom = relation(
+  "ExternalLom",
+  { document: uuid, lom: uuid, package: uuid, resource: ncName },
   ["lom"],
 );
 
@@ -1192,6 +1213,8 @@ export const r30Capacities = [
  */
 export const relations = {
   ...lomRemainderRelations,
+  ExternalLom,
+  FileLom,
   Lom,
   LomAggregationLevel,
   LomContribute,
@@ -1286,7 +1309,12 @@ export const rules = [
   key(Lom, ["id", "owner"]),
   key(Lom, ["id", "package"]),
   contained(on(Lom, "id", "package"), on(Node, "id", "tree")),
-  alternatives(Lom, "owner", LomOwner, { manifest: ManifestLom, resource: ResourceLom }),
+  alternatives(Lom, "owner", LomOwner, {
+    external: ExternalLom,
+    file: FileLom,
+    manifest: ManifestLom,
+    resource: ResourceLom,
+  }),
   key(ManifestLom, ["package"]),
   contained(on(ManifestLom, "lom", "package"), on(Lom, "id", "package")),
   contained(on(ManifestLom, "metadata"), on(select(Node, { kind: "cp:metadata.manifest" }), "id")),
@@ -1299,6 +1327,18 @@ export const rules = [
   ),
   contained(on(ResourceLom, "metadata"), on(select(Node, { kind: "cp:metadata.resource" }), "id")),
   contained(on(ResourceLom, "lom", "metadata"), on(Edge, "child", "parent")),
+  contained(on(FileLom, "lom", "metadata"), on(Edge, "child", "parent")),
+  contained(on(FileLom, "metadata", "file"), on(FileMetadata, "id", "file")),
+  contained(on(FileLom, "file", "package"), on(File, "id", "package")),
+  contained(on(FileLom, "lom", "package"), on(Lom, "id", "package")),
+  key(ExternalLom, ["package", "resource"]),
+  contained(on(ExternalLom, "lom", "document"), on(TreeRoot, "node", "tree")),
+  contained(
+    on(ExternalLom, "document", "package", "resource"),
+    on(Document, "id", "package", "resource"),
+  ),
+  contained(on(ExternalLom, "lom", "package"), on(Lom, "id", "package")),
+  mirrors(on(select(Document, { root: "externalLom" }), "id"), on(ExternalLom, "document")),
   key(LomGeneral, ["lom"]),
   contained(on(LomGeneral, "lom"), on(Lom, "id")),
   key(LomIdentifier, ["lom", "position"]),

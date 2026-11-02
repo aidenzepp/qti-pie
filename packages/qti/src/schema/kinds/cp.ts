@@ -23,6 +23,7 @@ export const kinds = [
   "cp:resource",
   "cp:file",
   "cp:dependency",
+  "cp:metadata.file",
 ] as const;
 
 /**
@@ -47,6 +48,12 @@ export const registry: Readonly<Record<(typeof kinds)[number], RegistryRow>> = {
     local: "manifest",
     namespace,
     parent: Option.none(),
+  },
+  "cp:metadata.file": {
+    attributes: [],
+    local: "metadata",
+    namespace,
+    parent: Option.some("cp:file"),
   },
   "cp:metadata.manifest": {
     attributes: [],
@@ -77,13 +84,13 @@ const versions = ["3.0.0", "3.0.1"] as const satisfies readonly SchemaVersionHan
 const simpleContentChildren = ["text", "ws", "entityRef", "comment", "pi"] as const;
 
 /**
- * The children each CP kind admits, by content type: the spec's 3.6 and 4.3. `cp:organizations`
- * and `cp:dependency` are empty types, so they admit no character data; `cp:metadata.file` is not
- * admitted yet.
+ * The children each CP kind admits, by content type: the spec's 3.6 and 4.3. `cp:organizations` and
+ * `cp:dependency` are empty types, so they admit no character data; `cp:metadata.file` admits the
+ * record `lom:lom` and no `qmd:qtiMetadata`.
  */
 const children: Readonly<Record<(typeof kinds)[number], readonly string[]>> = {
   "cp:dependency": ["comment", "pi"],
-  "cp:file": ["ws", "comment", "pi"],
+  "cp:file": ["cp:metadata.file", "ws", "comment", "pi"],
   "cp:manifest": [
     "cp:metadata.manifest",
     "cp:organizations",
@@ -92,6 +99,7 @@ const children: Readonly<Record<(typeof kinds)[number], readonly string[]>> = {
     "comment",
     "pi",
   ],
+  "cp:metadata.file": ["lom:lom", "ws", "comment", "pi"],
   "cp:metadata.manifest": ["cp:schema", "cp:schemaversion", "lom:lom", "ws", "comment", "pi"],
   "cp:metadata.resource": ["qmd:qtiMetadata", "lom:lom", "ws", "comment", "pi"],
   "cp:organizations": ["comment", "pi"],

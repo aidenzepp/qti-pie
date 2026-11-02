@@ -194,13 +194,13 @@ export const FileContent = relation(
 export const FileMetadata = relation("FileMetadata", { file: uuid, id: uuid }, ["id"]);
 
 /**
- * The relations of the file metadata, staged: not yet spread into `relations`.
+ * The relations of the file metadata, spread into `relations`.
  */
 export const fileMetadataRelations = { FileMetadata };
 
 /**
  * The statements over `FileMetadata`: at most one per file, hung under its file by an edge, and
- * naming a file of a package. Staged beside the relation.
+ * naming a file of a package. Spread into `rules`.
  */
 export const fileMetadataRules = [
   key(FileMetadata, ["file"]),
@@ -209,7 +209,7 @@ export const fileMetadataRules = [
 ] as const;
 
 /**
- * The arm of the file metadata, keyed by its `NodeKind` handle. Staged beside the relation.
+ * The arm of the file metadata, keyed by its `NodeKind` handle. Spread into `arms`.
  */
 export const fileMetadataArms = { "cp:metadata.file": FileMetadata };
 
@@ -533,6 +533,7 @@ const manifestIdRules = [
  * The manifest kinds' arms, keyed by their `NodeKind` handles.
  */
 export const arms = {
+  ...fileMetadataArms,
   ...variantDrdArms,
   "cp:dependency": Dependency,
   "cp:file": File,
@@ -550,6 +551,7 @@ export const arms = {
  * The relations and rosters of this module, as schema members.
  */
 export const relations = {
+  ...fileMetadataRelations,
   ...variantDrdRelations,
   Dependency,
   EntryKind,
@@ -587,6 +589,7 @@ export const relations = {
  * follow.
  */
 export const rules = [
+  ...fileMetadataRules,
   mirrors(on(Manifest, "id"), on(Package, "id")),
   contained(
     on(select(Tree, { kind: "manifest" }), "id", "version"),

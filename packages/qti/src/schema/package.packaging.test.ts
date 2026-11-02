@@ -290,11 +290,11 @@ describe("package staged FileMetadata", () => {
     ]);
   });
 
-  it("is not yet in the package module's relations, rules or arms", () => {
-    assert.isFalse(Object.values(pkg.relations).some((held) => Object.is(held, FileMetadata)));
+  it("is in the package module's relations, rules and arms", () => {
+    assert.isTrue(Object.values(pkg.relations).some((held) => Object.is(held, FileMetadata)));
     for (const rule of fileMetadataRules) {
-      assert.isFalse(pkg.rules.some((held) => Object.is(held, rule)));
+      assert.isTrue(pkg.rules.some((held) => Object.is(held, rule)));
     }
-    assert.isFalse(Object.values(pkg.arms).some((held) => Object.is(held, FileMetadata)));
+    assert.isTrue(Object.values(pkg.arms).some((held) => Object.is(held, FileMetadata)));
   });
 });
