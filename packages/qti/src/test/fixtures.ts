@@ -224,8 +224,10 @@ const htmlElements = [
 ] as const;
 
 /**
- * The names of the six XML copies of phase 2's fixtures b (negatives, part one): each is a cut of
- * one corpus item with one edit, three that the database refuses and three that it admits.
+ * The names of the XML copies of phase 2's fixtures b (negatives, part one) and c: each is a cut of
+ * one corpus item, or a copy of `simple` or `sharedMedia`, with a few edits. Of fixtures b's six,
+ * three are refused by the database and three admitted; of fixtures c's six, one is refused
+ * (`adaptive-zero-feedback`) and five admitted.
  */
 const copyNames = [
   "admission-choice-in-feedback",
@@ -234,6 +236,12 @@ const copyNames = [
   "padded-m1-attributes",
   "empty-class",
   "hottext-in-prompt",
+  "label-3-0-0",
+  "manifest-xml-lang",
+  "item-lang-en",
+  "item-lang-no-general",
+  "adaptive-one-feedback",
+  "adaptive-zero-feedback",
 ] as const;
 
 /**
@@ -241,7 +249,7 @@ const copyNames = [
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
  * `end-attempt`, phase 2's hand-written positive, the 19 cut items of {@link cutNames}, the 40
- * hand-written HTML positives of {@link htmlElements} and the six XML copies of
+ * hand-written HTML positives of {@link htmlElements} and the 12 XML copies of
  * {@link copyNames}.
  */
 export const fixtureNames = [
@@ -582,7 +590,68 @@ const bgCopy = (name: string, edits: readonly FileEdit[]): FixtureSpec => ({
 });
 
 /**
- * The six XML copies of {@link copyNames}.
+ * The line of `simple`'s manifest that ends the resource's `general` title, after which
+ * `item-lang-en` writes the resource's `general.language`.
+ */
+const simpleResourceTitleEnd = 66;
+
+/**
+ * The `general` element of `simple`'s resource LOM, as the manifest writes it (CRLF lines), which
+ * `item-lang-no-general` removes.
+ */
+const simpleResourceGeneral = [
+  "<imsmd:general>",
+  "                        <imsmd:identifier>",
+  "                            <imsmd:entry>choice</imsmd:entry>",
+  "                        </imsmd:identifier>",
+  "                        <imsmd:title>",
+  "                            <imsmd:string>Unattended Luggage</imsmd:string>",
+  "                        </imsmd:title>",
+  "                        <imsmd:description>",
+  "                            <imsmd:string>This example illustrates the",
+  "                                choiceInteraction being used to obtain a single response from the candidate.</imsmd:string>",
+  "                        </imsmd:description>",
+  "                    </imsmd:general>",
+].join("\r\n");
+
+/**
+ * The edit that gives `simple`'s item root an `xml:lang` of `en`.
+ */
+const simpleItemLang = replaceIn(
+  "choice.xml",
+  'adaptive="false" time-dependent="false">',
+  'adaptive="false" time-dependent="false" xml:lang="en">',
+);
+
+/**
+ * The edits of `adaptive-one-feedback` and `adaptive-zero-feedback`: the choice interaction of
+ * {@link bgChoiceItem} goes in the content body of a feedback block, the `FEEDBACK` outcome the
+ * block reads is declared, and the root writes `adaptive`, which the item does not.
+ *
+ * @param adaptive - The root's `adaptive`, an `xs:boolean` spelling.
+ * @returns The edits, each of which must match exactly once.
+ */
+const feedbackWrapped = (adaptive: string): readonly FileEdit[] => [
+  replaceIn(
+    bgChoiceItem,
+    bgInteractionOpen,
+    `<qti-feedback-block outcome-identifier="FEEDBACK" identifier="shown" show-hide="show"><qti-content-body>${bgInteractionOpen}`,
+  ),
+  replaceIn(
+    bgChoiceItem,
+    "</qti-choice-interaction>",
+    "</qti-choice-interaction></qti-content-body></qti-feedback-block>",
+  ),
+  replaceIn(
+    bgChoiceItem,
+    "</qti-outcome-declaration>",
+    '</qti-outcome-declaration><qti-outcome-declaration base-type="identifier" cardinality="single" identifier="FEEDBACK"/>',
+  ),
+  replaceIn(bgChoiceItem, bgRootAttribute, `adaptive="${adaptive}" ${bgRootAttribute}`),
+];
+
+/**
+ * The XML copies of {@link copyNames}.
  *
  * - `admission-choice-in-feedback` moves the second choice into the content body of a feedback block,
  *   where `Admission` admits no simple choice (a `FEEDBACK` outcome is declared for the block to
@@ -596,8 +665,24 @@ const bgCopy = (name: string, edits: readonly FileEdit[]): FixtureSpec => ({
  *   on the item root, so the root carries `tool-name` and `tool-version`.
  * - `empty-class` is campaign decision 22's pair, `class=""` and `class=" "`.
  * - `hottext-in-prompt` has a `qti-hottext` in a `span` in the choice interaction's `qti-prompt`.
+ *
+ * Fixtures c (phase 2, V34) adds six:
+ *
+ * - `label-3-0-0` is the 3.0.0 extended-text pick given `label="L"` on its root and no tool fields,
+ *   which 3.0.0 admits (goal 3.12).
+ * - `manifest-xml-lang` is `sharedMedia` with an `xml:lang="en"` on the first `lom:string` of its
+ *   manifest (decision 16, spec 3.10).
+ * - `item-lang-en` is `simple` whose item root carries `xml:lang="en"` and whose resource LOM
+ *   `general` lists the language `en` (R26).
+ * - `item-lang-no-general` is the same item with the resource LOM's `general` removed, so R26's
+ *   exemption holds.
+ * - `adaptive-one-feedback` wraps the choice interaction of {@link bgChoiceItem} in a feedback block
+ *   and writes `adaptive="1"` on the root, an `xs:boolean` true.
+ * - `adaptive-zero-feedback` is the same copy with `adaptive="0"`, which is false.
  */
 const copySpecs: Record<(typeof copyNames)[number], FixtureSpec> = {
+  "adaptive-one-feedback": bgCopy("adaptive-one-feedback", feedbackWrapped("1")),
+  "adaptive-zero-feedback": bgCopy("adaptive-zero-feedback", feedbackWrapped("0")),
   "admission-choice-in-feedback": bgCopy("admission-choice-in-feedback", [
     replaceIn(bgChoiceItem, '<qti-simple-choice identifier="false">False</qti-simple-choice>', ""),
     replaceIn(
@@ -640,6 +725,47 @@ const copySpecs: Record<(typeof copyNames)[number], FixtureSpec> = {
       `${bgInteractionOpen}<qti-prompt><span><qti-hottext identifier="H">Pick</qti-hottext></span></qti-prompt>`,
     ),
   ]),
+  "item-lang-en": {
+    edits: [
+      simpleItemLang,
+      {
+        _tag: "InsertAfterLine",
+        file: "imsmanifest.xml",
+        line: simpleResourceTitleEnd,
+        text: "                        <imsmd:language>en</imsmd:language>",
+      },
+    ],
+    member: simpleMember,
+    name: "item-lang-en",
+  },
+  "item-lang-no-general": {
+    edits: [simpleItemLang, replaceIn("imsmanifest.xml", simpleResourceGeneral, "")],
+    member: simpleMember,
+    name: "item-lang-no-general",
+  },
+  "label-3-0-0": {
+    edits: [
+      replaceIn(
+        bbqExtendedTextItem,
+        'adaptive="false" time-dependent="false">',
+        'adaptive="false" time-dependent="false" label="L">',
+      ),
+      { _tag: "cut", item: bbqExtendedTextItem, schemaversion: "3.0.0" },
+    ],
+    member: corpusMembers.BBQsTest,
+    name: "label-3-0-0",
+  },
+  "manifest-xml-lang": {
+    edits: [
+      replaceIn(
+        "imsmanifest.xml",
+        '<imsmd:string language="en">Shared Image Example</imsmd:string>',
+        '<imsmd:string language="en" xml:lang="en">Shared Image Example</imsmd:string>',
+      ),
+    ],
+    member: sharedMediaMember,
+    name: "manifest-xml-lang",
+  },
   "padded-m1-attributes": bgCopy("padded-m1-attributes", [
     replaceIn(
       bgChoiceItem,
