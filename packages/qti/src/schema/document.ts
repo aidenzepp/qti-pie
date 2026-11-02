@@ -102,9 +102,11 @@ export const DocumentId = relation(
 
 /**
  * The root kinds whose root element has an `identifier` and a `title`, and the ones that have
- * neither; `outcomes` has an identifier and no title.
+ * neither (the external metadata record's root is a `lom:lom`); `outcomes` has an identifier and no
+ * title.
  */
 const identified: Readonly<Record<RootKindHandle, boolean>> = {
+  externalLom: false,
   item: true,
   manifest: false,
   outcomes: true,

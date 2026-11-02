@@ -14,4 +14,6 @@ export const rootOfType: readonly { readonly root: RootKindHandle; readonly type
   { root: "rptemplate", type: "imsqti_rptemplate_xmlv3p0" },
   { root: "outcomes", type: "imsqti_outcomes_xmlv3p0" },
   { root: "usagedata", type: "qtiusagedata/xml" },
+  { root: "externalLom", type: "resourcemetadata/xml" },
+  { root: "rptemplate", type: "imsqti_resprocessing_xmlv3p0" },
 ];
