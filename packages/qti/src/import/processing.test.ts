@@ -4,6 +4,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
+import { ProcessingGuardRefusal, processingGuards } from "#qti/import/guards/processing.ts";
 import { ProcessingRefused, processingRows } from "#qti/import/processing.ts";
 import type { ProcessingInput } from "#qti/import/processing.ts";
 import { Rows, treeRows } from "#qti/import/tree.ts";
@@ -1236,6 +1237,148 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       const failure = yield* refusal(prepared);
       assert.strictEqual(failure.rule, "P8");
       assert.deepStrictEqual(of(prepared.rows, ruleSchema.RuleOperand), []);
+    }),
+  );
+});
+
+/**
+ * The first rule a guard run refuses with, none when every guard passes.
+ */
+const guardRefusal = (rows: Rows) =>
+  Effect.gen(function* guardRun() {
+    const failure = yield* Effect.flip(processingGuards(rows));
+    assert.instanceOf(failure, ProcessingGuardRefusal);
+
+    return failure.rule;
+  });
+
+/**
+ * The rows with one relation's rows replaced.
+ */
+const withRows = <R extends AnyRelation>(
+  rows: Rows,
+  relation: R,
+  facts: readonly Fact<R>[],
+): Rows => new Map(rows).set(relation, facts);
+
+layer(NodeServices.layer, { excludeTestServices: true })("import/guards/processing.ts", (suite) => {
+  const templateOptions = {
+    language: "template",
+    mode: "template",
+    root: "qti-template-processing",
+    rootKind: "item",
+  } as const;
+
+  suite.effect("P28 refuses a template processing with no rule", () =>
+    Effect.gen(function* emptyTemplateProcessing() {
+      const fs = yield* FileSystem.FileSystem;
+      const source = new TextDecoder().decode(
+        yield* fs.readFile(path.join(fixtures, "guards", "empty-template-processing.xml")),
+      );
+      // The declarations and the body are vocabulary M3 does not model yet; the rule under test is
+      // the empty `qti-template-processing` that stays.
+      const stripped = source
+        .replaceAll(
+          /<qti-(?:context|outcome|response|template)-declaration\b[\s\S]*?(?:\/>|<\/qti-\w+-declaration>)/gu,
+          "",
+        )
+        .replace(/<qti-item-body>[\s\S]*<\/qti-item-body>/u, "");
+      assert.include(stripped, "<qti-template-processing/>");
+      assert.notInclude(stripped, "declaration");
+
+      const prepared = yield* prepare(
+        yield* readXml(new TextEncoder().encode(stripped)),
+        templateOptions,
+      );
+      const built = yield* processed(prepared);
+      assert.strictEqual(yield* guardRefusal(built), "P28");
+    }),
+  );
+
+  suite.effect("P30 refuses an else that precedes its if", () =>
+    Effect.gen(function* elseBeforeIf() {
+      const prepared = yield* prepareFixture("guards", "else-before-if", itemOptions);
+      const built = yield* processed(prepared);
+      assert.strictEqual(yield* guardRefusal(built), "P30");
+    }),
+  );
+
+  suite.effect("P31 refuses an expression edge with no operand row", () =>
+    Effect.gen(function* edgeWithoutOperand() {
+      const prepared = yield* prepareFixture("valid", "response", itemOptions);
+      const built = yield* processed(prepared);
+      const operands = of(built, processing.Operand);
+      assert.isAbove(operands.length, 0);
+      assert.strictEqual(
+        yield* guardRefusal(withRows(built, processing.Operand, operands.slice(1))),
+        "P31",
+      );
+
+      const holders = of(built, ruleSchema.RuleOperand);
+      assert.isAbove(holders.length, 0);
+      assert.strictEqual(
+        yield* guardRefusal(withRows(built, ruleSchema.RuleOperand, holders.slice(1))),
+        "P31",
+      );
+    }),
+  );
+
+  suite.effect("P32 refuses a copy that disagrees with its source", () =>
+    Effect.gen(function* copyDisagrees() {
+      const prepared = yield* prepareFixture("valid", "response", itemOptions);
+      const built = yield* processed(prepared);
+      const literals = of(built, processing.relations.LiteralBoolean);
+      assert.isAbove(literals.length, 0);
+      assert.strictEqual(
+        yield* guardRefusal(
+          withRows(
+            built,
+            processing.relations.LiteralBoolean,
+            literals.map((row) => ({ ...row, value: row.value === "true" ? "false" : "true" })),
+          ),
+        ),
+        "P32",
+      );
+
+      const expressions = of(built, processing.Expression);
+      assert.strictEqual(
+        yield* guardRefusal(
+          withRows(
+            built,
+            processing.Expression,
+            expressions.map((row) => ({ ...row, min: row.min + 1n })),
+          ),
+        ),
+        "P32",
+      );
+
+      const padded = yield* prepareFixture("guards", "padded-processing", itemOptions);
+      const paddedRows = yield* processed(padded);
+      const rounded = of(paddedRows, attributed.EqualRounded);
+      assert.isAbove(rounded.length, 0);
+      assert.strictEqual(
+        yield* guardRefusal(
+          withRows(
+            paddedRows,
+            attributed.EqualRounded,
+            rounded.map((row) => ({ ...row, figuresValue: row.figuresValue + 1n })),
+          ),
+        ),
+        "P32",
+      );
+    }),
+  );
+
+  suite.effect("passes the rows of response.xml and padded-processing.xml", () =>
+    Effect.gen(function* soundRows() {
+      for (const name of ["response", "padded-processing"] as const) {
+        const prepared = yield* prepareFixture(
+          name === "response" ? "valid" : "guards",
+          name,
+          itemOptions,
+        );
+        yield* processingGuards(yield* processed(prepared));
+      }
     }),
   );
 });
