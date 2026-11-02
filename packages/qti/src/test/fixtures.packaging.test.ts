@@ -438,10 +438,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts (pack
     ),
   );
 
-  it.effect("every metadata name is in the table and materializes under the hash it names", () =>
-    inFreshRoot((root) =>
-      Effect.gen(function* metadataPaths() {
-        for (const name of metadataNames) {
+  for (const name of metadataNames) {
+    it.effect(`metadata ${name} is in the table and materializes under the hash it names`, () =>
+      inFreshRoot((root) =>
+        Effect.gen(function* metadataPath() {
           assert.include(fixtureNames, name);
 
           const spec = specOf(name);
@@ -452,37 +452,48 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts (pack
             yield* materialize(name),
             `${root}/${name}-${transformHash(spec, FIXTURES_VERSION).slice(0, 12)}`,
           );
-        }
+        }),
+      ),
+    );
+  }
 
-        assert.strictEqual(new Set(fixtureNames).size, fixtureNames.length);
-        assert.strictEqual(
-          new Set(metadataNames.map((name) => transformHash(specOf(name), FIXTURES_VERSION))).size,
-          metadataNames.length,
-        );
-      }),
-    ),
+  it.effect("the table's names and the cuts' transform hashes are distinct", () =>
+    Effect.sync(() => {
+      assert.strictEqual(new Set(fixtureNames).size, fixtureNames.length);
+      assert.strictEqual(
+        new Set(metadataNames.map((name) => transformHash(specOf(name), FIXTURES_VERSION))).size,
+        metadataNames.length,
+      );
+      assert.strictEqual(contentNames.length, 21);
+      assert.strictEqual(
+        new Set(contentNames.map((name) => transformHash(specOf(name), FIXTURES_VERSION))).size,
+        contentNames.length,
+      );
+    }),
   );
 
-  it.effect("each metadata positive is a manifest with the resources and elements it adds", () =>
-    inFreshRoot(() =>
-      Effect.gen(function* metadataPositiveContents() {
-        for (const cut of metadataCuts) {
-          const elements = yield* manifestElements(yield* materialize(cut.name));
-          const named = (local: string) => elements.filter((element) => element.local === local);
+  for (const cut of metadataCuts) {
+    it.effect(
+      `metadata positive ${cut.name} is a manifest with the resources and elements it adds`,
+      () =>
+        inFreshRoot(() =>
+          Effect.gen(function* metadataPositiveContents() {
+            const elements = yield* manifestElements(yield* materialize(cut.name));
+            const named = (local: string) => elements.filter((element) => element.local === local);
 
-          assert.strictEqual(
-            named("resource").filter((element) => element.namespace === cpNamespace).length,
-            cut.resources,
-            cut.name,
-          );
+            assert.strictEqual(
+              named("resource").filter((element) => element.namespace === cpNamespace).length,
+              cut.resources,
+              cut.name,
+            );
 
-          for (const [local, count] of Object.entries(cut.counts)) {
-            assert.strictEqual(named(local).length, count, `${cut.name}: ${local}`);
-          }
-        }
-      }),
-    ),
-  );
+            for (const [local, count] of Object.entries(cut.counts)) {
+              assert.strictEqual(named(local).length, count, `${cut.name}: ${local}`);
+            }
+          }),
+        ),
+    );
+  }
 
   it.effect("nestedqmd holds its qtiMetadata as the last child of the resource lom", () =>
     inFreshRoot(() =>
@@ -520,29 +531,28 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts (pack
     ),
   );
 
-  it.effect("each metadata negative differs from its positive in the manifest or the record", () =>
-    inFreshRoot(() =>
-      Effect.gen(function* metadataNegativeDiffers() {
-        for (const cut of metadataCuts) {
-          const base = yield* manifestAndRecord(yield* materialize(cut.name));
+  for (const cut of metadataCuts) {
+    for (const name of cut.negatives) {
+      it.effect(
+        `metadata negative ${name} differs from its positive ${cut.name} in the manifest or the record`,
+        () =>
+          inFreshRoot(() =>
+            Effect.gen(function* metadataNegativeDiffers() {
+              const base = yield* manifestAndRecord(yield* materialize(cut.name));
+              const broken = yield* manifestAndRecord(yield* materialize(name));
 
-          for (const name of cut.negatives) {
-            const broken = yield* manifestAndRecord(yield* materialize(name));
+              assert.notDeepEqual(broken, base, name);
+            }),
+          ),
+      );
+    }
+  }
 
-            assert.notDeepEqual(broken, base, name);
-          }
-        }
-      }),
-    ),
-  );
-
-  it.effect("every name of the content cut is in the table and materializes under its hash", () =>
-    inFreshRoot((root) =>
-      Effect.gen(function* contentPaths() {
-        assert.strictEqual(contentNames.length, 21);
-
-        for (const cut of contentCuts) {
-          for (const name of [cut.name, ...cut.negatives]) {
+  for (const cut of contentCuts) {
+    for (const name of [cut.name, ...cut.negatives]) {
+      it.effect(`content ${name} is in the table and materializes under the hash it names`, () =>
+        inFreshRoot((root) =>
+          Effect.gen(function* contentPath() {
             assert.include(fixtureNames, name);
 
             const spec = specOf(name);
@@ -553,22 +563,16 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts (pack
               yield* materialize(name),
               `${root}/${name}-${transformHash(spec, FIXTURES_VERSION).slice(0, 12)}`,
             );
-          }
-        }
+          }),
+        ),
+      );
+    }
+  }
 
-        assert.strictEqual(new Set(fixtureNames).size, fixtureNames.length);
-        assert.strictEqual(
-          new Set(contentNames.map((name) => transformHash(specOf(name), FIXTURES_VERSION))).size,
-          contentNames.length,
-        );
-      }),
-    ),
-  );
-
-  it.effect("each content positive holds the resources its row names", () =>
-    inFreshRoot(() =>
-      Effect.gen(function* contentResources() {
-        for (const cut of contentCuts) {
+  for (const cut of contentCuts) {
+    it.effect(`content positive ${cut.name} holds the resources its row names`, () =>
+      inFreshRoot(() =>
+        Effect.gen(function* contentResources() {
           const elements = yield* manifestElements(yield* materialize(cut.name));
 
           assert.strictEqual(
@@ -578,10 +582,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts (pack
             cut.resources,
             cut.name,
           );
-        }
-      }),
-    ),
-  );
+        }),
+      ),
+    );
+  }
 
   it.effect("variant-padded keeps its identifier, boolean and tab as written", () =>
     inFreshRoot(() =>
@@ -706,19 +710,19 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts (pack
     ),
   );
 
-  it.effect("each content negative differs from its positive", () =>
-    inFreshRoot(() =>
-      Effect.gen(function* contentNegativeDiffers() {
-        for (const cut of contentCuts) {
-          const base = yield* treeDigest(yield* materialize(cut.name));
+  for (const cut of contentCuts) {
+    for (const name of cut.negatives) {
+      it.effect(`content negative ${name} differs from its positive ${cut.name}`, () =>
+        inFreshRoot(() =>
+          Effect.gen(function* contentNegativeDiffers() {
+            const base = yield* treeDigest(yield* materialize(cut.name));
 
-          for (const name of cut.negatives) {
             assert.notDeepEqual(yield* treeDigest(yield* materialize(name)), base, name);
-          }
-        }
-      }),
-    ),
-  );
+          }),
+        ),
+      );
+    }
+  }
 
   it.effect("no packaging test names a cache or fixtures path literal", () =>
     Effect.gen(function* pathLiteralSweep() {
