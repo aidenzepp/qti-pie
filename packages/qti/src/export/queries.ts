@@ -270,12 +270,12 @@ export const nodeRuns: readonly (readonly Attachment[])[] = inRuns(
 const nodesRule = query(Author).rule((r) => {
   const walk = subtree.bind({ tree: r.param("tree", uuid) });
   const { node } = v(walk);
-  const { kind, prefix, rootKind, tree, version } = v(Node);
+  const { ancestry, kind, prefix, rootKind, tree, version } = v(Node);
 
   return r
     .match(walk, { node })
-    .match(Node, { id: node, kind, prefix, rootKind, tree, version })
-    .find({ id: node, kind, prefix, rootKind, tree, version });
+    .match(Node, { ancestry, id: node, kind, prefix, rootKind, tree, version })
+    .find({ ancestry, id: node, kind, prefix, rootKind, tree, version });
 });
 
 /**
