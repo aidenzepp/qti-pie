@@ -22,6 +22,7 @@ const fields = [
     () => str.regex(patterns.drdEducationalComplexityOfAdaptation),
   ],
   ["drdHazard", () => str.regex(patterns.drdHazard)],
+  ["usageDate", () => str.regex(patterns.usageDate)],
 ] as const;
 
 /**
@@ -58,5 +59,19 @@ describe("DRD patterns", () => {
     assert.isTrue(admits(patterns.drdExt, "ext:a.b_c"));
     assert.isFalse(admits(patterns.drdExt, "ext"));
     assert.isFalse(admits(patterns.drdExt, "ext:é"));
+  });
+});
+
+describe("usageDate", () => {
+  it("admits a date in the month and day ranges, the calendar aside", () => {
+    for (const value of ["2004-07-04", "2004-02-30"]) {
+      assert.isTrue(admits(patterns.usageDate, value), value);
+    }
+  });
+
+  it("refuses an out-of-range month, a short field, padding and a missing separator", () => {
+    for (const value of ["2004-13-04", "2004-7-4", " 2004-07-04", "20040704"]) {
+      assert.isFalse(admits(patterns.usageDate, value), JSON.stringify(value));
+    }
   });
 });

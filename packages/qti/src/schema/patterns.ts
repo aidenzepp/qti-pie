@@ -373,3 +373,10 @@ export const drdEducationalComplexityOfAdaptation =
  */
 export const drdHazard =
   "^(flashing|sound|olfactoryHazard|motionSimulation|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `lastUpdated` date of the usage-data XSD (`imsqti_usagedatav3p0_v1p0.xsd`), tightened to the
+ * month and day ranges a regular expression can state, written for the value after `collapse`.
+ * February and leap-day validity, which `xs:date` requires, is a guard's, not the pattern's.
+ */
+export const usageDate = "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$" as const;
