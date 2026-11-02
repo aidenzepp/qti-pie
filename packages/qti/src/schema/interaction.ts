@@ -11,6 +11,17 @@
  * `qti-simple-choice` is also valid under `qti-order-interaction` in a later phase; a containment
  * of `SimpleChoice.(interaction)` into `ChoiceInteraction.(id)` would refuse that, so none is
  * written.
+ *
+ * `TypedBinding.maxCount` follows one rule per interaction kind (spec 4.4): `max-choices` defaults
+ * to 1 for choice, hottext, hotspot and position-object and to 0 (unlimited) for select-point;
+ * `max-associations` defaults to 1 for associate, match, graphic-associate and gap-match. An
+ * interaction that is always multiple (graphic-gap-match) or always ordered (order, graphic-order)
+ * has `BindingFit` rows alone and no count; every other kind has no count rule and writes
+ * `maxCount = 1`.
+ *
+ * A binding records the ancestry its node sits in and the `adaptive` of its item. Feedback
+ * (`fb`-flagged ancestry) is valid only in an adaptive item, which the `AdaptiveFeedback` check
+ * states over the one `fbFlagged` roster.
  */
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `DeclarationShape` and the `shape` field are the contract the declaration module names; the shape here is the typed-or-record choice, not a structure. */
 import {
@@ -18,6 +29,7 @@ import {
   capacity,
   check,
   closedId,
+  Compute,
   contained,
   key,
   on,
@@ -29,8 +41,15 @@ import {
   within,
 } from "@bjornpagen/grizzle";
 import * as declaration from "#qti/schema/declaration.ts";
+import * as item from "#qti/schema/item.ts";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
+import { fbFlagged } from "#qti/schema/seed/ancestry.ts";
+
+/**
+ * The `Ancestry` handles that sit inside feedback: `fbFlagged`, typed as handles of the roster.
+ */
+const feedbackAncestries = node.Ancestry.handles.filter((handle) => fbFlagged.includes(handle));
 
 /**
  * An `xs:boolean` attribute's lexical form.
@@ -177,6 +196,8 @@ export const BindingFit = relation(
 export const InteractionBinding = relation(
   "InteractionBinding",
   {
+    adaptive: xsBoolean,
+    ancestry: closedId(node.Ancestry),
     document: uuid,
     interactionKind: closedId(node.NodeKind),
     node: uuid,
@@ -205,12 +226,32 @@ export const TypedBinding = relation(
 );
 
 /**
+ * A binding to a gap-match interaction's typed variable, whose cardinality the interaction's gaps
+ * bound.
+ */
+export const GapMatchBinding = relation(
+  "GapMatchBinding",
+  { cardinality: closedId(declaration.TypedCardinality), node: uuid },
+  ["node"],
+);
+
+/**
  * A binding to a record variable.
  */
 export const RecordBinding = relation(
   "RecordBinding",
   { interactionKind: closedId(node.NodeKind), node: uuid },
   ["node"],
+);
+
+/**
+ * An interaction kind that may bind a record variable. Seeded by a custom migration and read-only
+ * to every role.
+ */
+export const RecordBindingFit = relation(
+  "RecordBindingFit",
+  { interactionKind: closedId(node.NodeKind) },
+  ["interactionKind"],
 );
 
 /**
@@ -238,8 +279,10 @@ export const relations = {
   DeclaredOrientation,
   DeclaredShowHide,
   DeclaredShuffle,
+  GapMatchBinding,
   InteractionBinding,
   RecordBinding,
+  RecordBindingFit,
   SimpleChoice,
   SimpleChoiceTemplateIdentifier,
   TypedBinding,
@@ -287,6 +330,14 @@ export const rules = [
     on(InteractionBinding, "node", "document", "interactionKind"),
     on(node.Node, "id", "tree", "kind"),
   ),
+  contained(on(InteractionBinding, "node", "ancestry"), on(node.Node, "id", "ancestry")),
+  contained(
+    on(InteractionBinding, "document", "adaptive"),
+    on(item.AssessmentItem, "tree", "adaptive"),
+  ),
+  check("AdaptiveFeedback", InteractionBinding, (b) =>
+    b.or(b.not(Compute.in(b.ancestry, feedbackAncestries)), b.eq(b.adaptive, "true")),
+  ),
   alternatives(InteractionBinding, "shape", declaration.DeclarationShape, {
     record: RecordBinding,
     typed: TypedBinding,
@@ -299,6 +350,8 @@ export const rules = [
     on(TypedBinding, "interactionKind", "baseType", "cardinality"),
     on(BindingFit, "interactionKind", "baseType", "cardinality"),
   ),
+  contained(on(GapMatchBinding, "node", "cardinality"), on(TypedBinding, "node", "cardinality")),
+  contained(on(RecordBinding, "interactionKind"), on(RecordBindingFit, "interactionKind")),
   check("BindingMax", TypedBinding, (b) =>
     b.or(b.eq(b.maxCount, 1n), b.eq(b.cardinality, "multiple")),
   ),
