@@ -1155,8 +1155,9 @@ export const lomRemainderRelations = {
 };
 
 /**
- * The remainder's statements, staged: each thin container lies in a record and is the child of its
- * parent's edge.
+ * The remainder's statements, staged: every container lies in a record. A category's parent edge is
+ * the record's `lom:lom` node; a nested container's parent is bound by its edge's admitted kind
+ * pair, so it carries no `Edge` statement here.
  */
 export const lomRemainderRules = [
   contained(on(LomAnnotation, "lom"), on(Lom, "id")),
@@ -1164,41 +1165,25 @@ export const lomRemainderRules = [
   contained(on(LomClassification, "lom"), on(Lom, "id")),
   contained(on(LomClassification, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomContext, "lom"), on(Lom, "id")),
-  contained(on(LomContext, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomDifficulty, "lom"), on(Lom, "id")),
-  contained(on(LomDifficulty, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomEducational, "lom"), on(Lom, "id")),
   contained(on(LomEducational, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomEntryLangString, "lom"), on(Lom, "id")),
-  contained(on(LomEntryLangString, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomIntendedEndUserRole, "lom"), on(Lom, "id")),
-  contained(on(LomIntendedEndUserRole, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomInteractivityLevel, "lom"), on(Lom, "id")),
-  contained(on(LomInteractivityLevel, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomInteractivityType, "lom"), on(Lom, "id")),
-  contained(on(LomInteractivityType, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomKind, "lom"), on(Lom, "id")),
-  contained(on(LomKind, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomLearningResourceType, "lom"), on(Lom, "id")),
-  contained(on(LomLearningResourceType, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomPurpose, "lom"), on(Lom, "id")),
-  contained(on(LomPurpose, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomRelation, "lom"), on(Lom, "id")),
   contained(on(LomRelation, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomResource, "lom"), on(Lom, "id")),
-  contained(on(LomResource, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomSemanticDensity, "lom"), on(Lom, "id")),
-  contained(on(LomSemanticDensity, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomSourceLangString, "lom"), on(Lom, "id")),
-  contained(on(LomSourceLangString, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomTaxon, "lom"), on(Lom, "id")),
-  contained(on(LomTaxon, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomTaxonPath, "lom"), on(Lom, "id")),
-  contained(on(LomTaxonPath, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomTypicalAgeRange, "lom"), on(Lom, "id")),
-  contained(on(LomTypicalAgeRange, "id", "lom"), on(Edge, "child", "parent")),
   contained(on(LomTypicalLearningTime, "lom"), on(Lom, "id")),
-  contained(on(LomTypicalLearningTime, "id", "lom"), on(Edge, "child", "parent")),
 ] as const;
 
 /**
