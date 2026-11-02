@@ -20,8 +20,9 @@
  * `maxCount = 1`.
  *
  * A binding records the ancestry its node sits in and the `adaptive` of its item. Feedback
- * (`fb`-flagged ancestry) is valid only in an adaptive item, which the `AdaptiveFeedback` check
- * states over the one `fbFlagged` roster.
+ * (`fb`-flagged ancestry) is valid only in an adaptive item, one whose `adaptive` is `true` or
+ * `1`, the xs:boolean forms for true; the `AdaptiveFeedback` check states it over the one
+ * `fbFlagged` roster.
  */
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `DeclarationShape` and the `shape` field are the contract the declaration module names; the shape here is the typed-or-record choice, not a structure. */
 import {
@@ -336,7 +337,7 @@ export const rules = [
     on(item.AssessmentItem, "tree", "adaptive"),
   ),
   check("AdaptiveFeedback", InteractionBinding, (b) =>
-    b.or(b.not(Compute.in(b.ancestry, feedbackAncestries)), b.eq(b.adaptive, "true")),
+    b.or(b.not(Compute.in(b.ancestry, feedbackAncestries)), Compute.in(b.adaptive, ["true", "1"])),
   ),
   alternatives(InteractionBinding, "shape", declaration.DeclarationShape, {
     record: RecordBinding,
