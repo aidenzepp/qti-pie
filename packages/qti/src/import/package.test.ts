@@ -2,7 +2,7 @@ import { CommitUnknown, Db, query, TransientFailure, uuid, v } from "@bjornpagen
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Layer, Ref, Result, Schedule, Schema } from "effect";
-import { inject } from "vitest";
+import { describe, inject } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { importPackage } from "#qti/import/package.ts";
 import { ImportRefused, isMappedLaw } from "#qti/import/refusal.ts";
@@ -14,6 +14,7 @@ import { AuthorApp } from "#qti/schema/logins.ts";
 import { Author } from "#qti/schema/roles.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
+import { hasLease } from "#qti/test/settings.ts";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
@@ -169,172 +170,176 @@ const serializationFailure = Schema.decodeUnknownSync(TransientFailure)({
  */
 const quickly = Schedule.recurs(2);
 
-layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
-  excludeTestServices: true,
-  timeout: "60 seconds",
-})("importPackage on the lease", (it) => {
-  it.effect("accepts simple and returns the package's id", () =>
-    Effect.gen(function* acceptsSimple() {
-      const id = yield* accepted(fixtures.simple);
-      const db = yield* Db.open(AuthorApp.roles.author, {});
-      const rows = yield* (yield* db.execute(packageRows, { id })).collect;
+describe.skipIf(!hasLease)("import/package.test.ts, on the lease", () => {
+  layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
+    excludeTestServices: true,
+    timeout: "60 seconds",
+  })("importPackage on the lease", (it) => {
+    it.effect("accepts simple and returns the package's id", () =>
+      Effect.gen(function* acceptsSimple() {
+        const id = yield* accepted(fixtures.simple);
+        const db = yield* Db.open(AuthorApp.roles.author, {});
+        const rows = yield* (yield* db.execute(packageRows, { id })).collect;
 
-      assert.strictEqual(rows.length, 1);
-    }),
-  );
-
-  it.effect("refuses metaData under a LOM rule", () =>
-    refused(fixtures.metaData, "metaData", ["lom-identifier", "lom-title"]),
-  );
-
-  it.effect("refuses identifier-mismatch under lom-identifier", () =>
-    Effect.gen(function* identifierMismatch() {
-      yield* refused(yield* fixture("identifier-mismatch"), "identifier-mismatch", [
-        "lom-identifier",
-      ]);
-    }),
-  );
-
-  it.effect("refuses title-mismatch under lom-title", () =>
-    Effect.gen(function* titleMismatch() {
-      yield* refused(yield* fixture("title-mismatch"), "title-mismatch", ["lom-title"]);
-    }),
-  );
-
-  it.effect("refuses lti under resource-type", () =>
-    refused(fixtures.lti, "lti", ["resource-type"]),
-  );
-
-  it.effect("refuses CAT_Test01_Adaptive_EchoAdapt under not-qti3", () =>
-    refused(fixtures.CAT_Test01_Adaptive_EchoAdapt, "CAT_Test01_Adaptive_EchoAdapt", ["not-qti3"]),
-  );
-
-  it.effect("refuses sample_pci under not-qti3", () =>
-    refused(fixtures.sample_pci, "sample_pci", ["not-qti3"]),
-  );
-
-  const broken: readonly (readonly [FixtureName, readonly Rule[]])[] = [
-    ["undeclared-response", ["binding-declared"]],
-    ["choice-in-prompt", ["admission", "choice-parent"]],
-    ["two-values-single", ["value-single"]],
-    ["bad-identifier-value", ["value-lexical"]],
-    ["padded-identifier-value", ["value-lexical"]],
-    ["choice-bounds", ["choice-bounds"]],
-    ["body-empty", ["body-empty"]],
-    ["bad-template-uri", ["uri-syntax"]],
-  ];
-  for (const [name, rules] of broken) {
-    it.effect(`refuses ${name} under ${rules.join(" or ")}`, () =>
-      Effect.gen(function* refusesBroken() {
-        yield* refused(yield* fixture(name), name, rules);
+        assert.strictEqual(rows.length, 1);
       }),
     );
-  }
 
-  const clean: readonly FixtureName[] = [
-    "doctype",
-    "latin1",
-    "external",
-    "utf16",
-    "comment-in-element",
-  ];
-  for (const name of clean) {
-    it.effect(`accepts ${name}`, () =>
-      Effect.gen(function* acceptsClean() {
-        yield* accepted(yield* fixture(name));
+    it.effect("refuses metaData under a LOM rule", () =>
+      refused(fixtures.metaData, "metaData", ["lom-identifier", "lom-title"]),
+    );
+
+    it.effect("refuses identifier-mismatch under lom-identifier", () =>
+      Effect.gen(function* identifierMismatch() {
+        yield* refused(yield* fixture("identifier-mismatch"), "identifier-mismatch", [
+          "lom-identifier",
+        ]);
       }),
     );
-  }
 
-  it.effect("accepts windows-1252 with a TreeExportCharset row", () =>
-    Effect.gen(function* windows1252() {
-      const id = yield* accepted(yield* fixture("windows-1252"));
-      const labels = yield* charsetsOfPackage(id);
+    it.effect("refuses title-mismatch under lom-title", () =>
+      Effect.gen(function* titleMismatch() {
+        yield* refused(yield* fixture("title-mismatch"), "title-mismatch", ["lom-title"]);
+      }),
+    );
 
-      assert.strictEqual(labels.length, 1);
-    }),
-  );
+    it.effect("refuses lti under resource-type", () =>
+      refused(fixtures.lti, "lti", ["resource-type"]),
+    );
 
-  it.effect("accepts padded-attributes with eight AttributeLexical rows", () =>
-    Effect.gen(function* paddedAttributes() {
-      const id = yield* accepted(yield* fixture("padded-attributes"));
-      const rows = yield* lexicalsOfPackage(id);
+    it.effect("refuses CAT_Test01_Adaptive_EchoAdapt under not-qti3", () =>
+      refused(fixtures.CAT_Test01_Adaptive_EchoAdapt, "CAT_Test01_Adaptive_EchoAdapt", [
+        "not-qti3",
+      ]),
+    );
 
-      assert.strictEqual(rows.length, 8);
-    }),
-  );
+    it.effect("refuses sample_pci under not-qti3", () =>
+      refused(fixtures.sample_pci, "sample_pci", ["not-qti3"]),
+    );
 
-  it.effect("accepts padded-text with no AttributeLexical rows", () =>
-    Effect.gen(function* paddedText() {
-      const id = yield* accepted(yield* fixture("padded-text"));
-      const rows = yield* lexicalsOfPackage(id);
+    const broken: readonly (readonly [FixtureName, readonly Rule[]])[] = [
+      ["undeclared-response", ["binding-declared"]],
+      ["choice-in-prompt", ["admission", "choice-parent"]],
+      ["two-values-single", ["value-single"]],
+      ["bad-identifier-value", ["value-lexical"]],
+      ["padded-identifier-value", ["value-lexical"]],
+      ["choice-bounds", ["choice-bounds"]],
+      ["body-empty", ["body-empty"]],
+      ["bad-template-uri", ["uri-syntax"]],
+    ];
+    for (const [name, rules] of broken) {
+      it.effect(`refuses ${name} under ${rules.join(" or ")}`, () =>
+        Effect.gen(function* refusesBroken() {
+          yield* refused(yield* fixture(name), name, rules);
+        }),
+      );
+    }
 
-      assert.strictEqual(rows.length, 0);
-    }),
-  );
+    const clean: readonly FixtureName[] = [
+      "doctype",
+      "latin1",
+      "external",
+      "utf16",
+      "comment-in-element",
+    ];
+    for (const name of clean) {
+      it.effect(`accepts ${name}`, () =>
+        Effect.gen(function* acceptsClean() {
+          yield* accepted(yield* fixture(name));
+        }),
+      );
+    }
 
-  it.effect("retries one injected TransientFailure and then accepts", () =>
-    Effect.gen(function* retriesTransient() {
-      const attempts = yield* Ref.make(0);
-      const id = yield* importPackage(fixtures.simple, {
-        schedule: quickly,
-        wrapApply: <A, E, R>(apply: Effect.Effect<A, E, R>) =>
-          Effect.flatMap(
-            Ref.getAndUpdate(attempts, (n) => n + 1),
-            (n): Effect.Effect<A, E | TransientFailure, R> =>
-              n === 0 ? Effect.fail(serializationFailure) : apply,
-          ),
-      });
+    it.effect("accepts windows-1252 with a TreeExportCharset row", () =>
+      Effect.gen(function* windows1252() {
+        const id = yield* accepted(yield* fixture("windows-1252"));
+        const labels = yield* charsetsOfPackage(id);
 
-      assert.match(id, uuidPattern);
-      assert.isAtLeast(yield* Ref.get(attempts), 2);
-    }),
-  );
+        assert.strictEqual(labels.length, 1);
+      }),
+    );
 
-  it.effect("fails with the TransientFailure itself after the last retry", () =>
-    Effect.gen(function* givesUp() {
-      const attempts = yield* Ref.make(0);
-      const result = yield* Effect.result(
-        importPackage(fixtures.simple, {
+    it.effect("accepts padded-attributes with eight AttributeLexical rows", () =>
+      Effect.gen(function* paddedAttributes() {
+        const id = yield* accepted(yield* fixture("padded-attributes"));
+        const rows = yield* lexicalsOfPackage(id);
+
+        assert.strictEqual(rows.length, 8);
+      }),
+    );
+
+    it.effect("accepts padded-text with no AttributeLexical rows", () =>
+      Effect.gen(function* paddedText() {
+        const id = yield* accepted(yield* fixture("padded-text"));
+        const rows = yield* lexicalsOfPackage(id);
+
+        assert.strictEqual(rows.length, 0);
+      }),
+    );
+
+    it.effect("retries one injected TransientFailure and then accepts", () =>
+      Effect.gen(function* retriesTransient() {
+        const attempts = yield* Ref.make(0);
+        const id = yield* importPackage(fixtures.simple, {
           schedule: quickly,
-          wrapApply: () =>
-            Effect.andThen(
-              Ref.update(attempts, (n) => n + 1),
-              Effect.fail(serializationFailure),
+          wrapApply: <A, E, R>(apply: Effect.Effect<A, E, R>) =>
+            Effect.flatMap(
+              Ref.getAndUpdate(attempts, (n) => n + 1),
+              (n): Effect.Effect<A, E | TransientFailure, R> =>
+                n === 0 ? Effect.fail(serializationFailure) : apply,
             ),
-        }),
-      );
+        });
 
-      assert.isTrue(Result.isFailure(result));
-      assert.strictEqual(
-        Result.isFailure(result) ? result.failure : undefined,
-        serializationFailure,
-      );
-      assert.strictEqual(yield* Ref.get(attempts), 3);
-    }),
-  );
+        assert.match(id, uuidPattern);
+        assert.isAtLeast(yield* Ref.get(attempts), 2);
+      }),
+    );
 
-  it.effect("reads the package back when the commit's outcome is unknown", () =>
-    Effect.gen(function* readsBack() {
-      const id = yield* importPackage(fixtures.simple, {
-        wrapApply: (apply) => Effect.andThen(apply, Effect.fail(new CommitUnknown())),
-      });
-      const db = yield* Db.open(AuthorApp.roles.author, {});
-      const rows = yield* (yield* db.execute(packageRows, { id })).collect;
+    it.effect("fails with the TransientFailure itself after the last retry", () =>
+      Effect.gen(function* givesUp() {
+        const attempts = yield* Ref.make(0);
+        const result = yield* Effect.result(
+          importPackage(fixtures.simple, {
+            schedule: quickly,
+            wrapApply: () =>
+              Effect.andThen(
+                Ref.update(attempts, (n) => n + 1),
+                Effect.fail(serializationFailure),
+              ),
+          }),
+        );
 
-      assert.strictEqual(rows.length, 1);
-    }),
-  );
+        assert.isTrue(Result.isFailure(result));
+        assert.strictEqual(
+          Result.isFailure(result) ? result.failure : undefined,
+          serializationFailure,
+        );
+        assert.strictEqual(yield* Ref.get(attempts), 3);
+      }),
+    );
 
-  it.effect("fails with CommitUnknown when the package is not there", () =>
-    Effect.gen(function* notThere() {
-      const result = yield* Effect.result(
-        importPackage(fixtures.simple, {
-          wrapApply: () => Effect.fail(new CommitUnknown()),
-        }),
-      );
+    it.effect("reads the package back when the commit's outcome is unknown", () =>
+      Effect.gen(function* readsBack() {
+        const id = yield* importPackage(fixtures.simple, {
+          wrapApply: (apply) => Effect.andThen(apply, Effect.fail(new CommitUnknown())),
+        });
+        const db = yield* Db.open(AuthorApp.roles.author, {});
+        const rows = yield* (yield* db.execute(packageRows, { id })).collect;
 
-      assert.isTrue(Result.isFailure(result) && result.failure._tag === "CommitUnknown");
-    }),
-  );
+        assert.strictEqual(rows.length, 1);
+      }),
+    );
+
+    it.effect("fails with CommitUnknown when the package is not there", () =>
+      Effect.gen(function* notThere() {
+        const result = yield* Effect.result(
+          importPackage(fixtures.simple, {
+            wrapApply: () => Effect.fail(new CommitUnknown()),
+          }),
+        );
+
+        assert.isTrue(Result.isFailure(result) && result.failure._tag === "CommitUnknown");
+      }),
+    );
+  });
 });

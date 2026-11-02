@@ -86,6 +86,26 @@ const variantNames = [
 ] as const;
 
 /**
+ * The fixtures phase 1 itself defines: `simple`, its seven variants and the eleven hand-broken
+ * packages. Later phases append names to `fixtureNames`, so these are checked as a subset.
+ */
+const phaseOneNames = [
+  "simple",
+  ...variantNames,
+  "undeclared-response",
+  "choice-in-prompt",
+  "two-values-single",
+  "bad-identifier-value",
+  "padded-identifier-value",
+  "choice-bounds",
+  "identifier-mismatch",
+  "title-mismatch",
+  "body-empty",
+  "comment-in-element",
+  "bad-template-uri",
+] as const satisfies readonly FixtureName[];
+
+/**
  * Materialize a fixture under the current root and read one of its files.
  *
  * @param name - The fixture to materialize.
@@ -326,35 +346,26 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
   );
 
   it.effect(
-    "the spec table names simple, its seven variants and the eleven hand-broken packages",
+    "every fixture name has its own spec and hash, and phase 1's fixtures are present as variants of simple",
     () =>
       Effect.sync(() => {
-        assert.deepStrictEqual(
-          [...fixtureNames],
-          [
-            "simple",
-            ...variantNames,
-            "undeclared-response",
-            "choice-in-prompt",
-            "two-values-single",
-            "bad-identifier-value",
-            "padded-identifier-value",
-            "choice-bounds",
-            "identifier-mismatch",
-            "title-mismatch",
-            "body-empty",
-            "comment-in-element",
-            "bad-template-uri",
-          ],
-        );
+        assert.strictEqual(new Set(fixtureNames).size, fixtureNames.length);
 
         for (const name of fixtureNames) {
           assert.strictEqual(specOf(name).name, name);
+        }
+
+        assert.strictEqual(
+          new Set(fixtureNames.map((name) => hash12(specOf(name)))).size,
+          fixtureNames.length,
+        );
+        assert.includeMembers([...fixtureNames], [...phaseOneNames]);
+
+        for (const name of phaseOneNames) {
           assert.strictEqual(specOf(name).member, specOf("simple").member);
         }
 
         assert.deepStrictEqual(specOf("simple").edits, []);
-        assert.strictEqual(new Set(fixtureNames.map((name) => hash12(specOf(name)))).size, 19);
       }),
   );
 

@@ -2,8 +2,9 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Cause, Console, Effect, Exit, Stdio } from "effect";
 import { Command } from "effect/cli";
-import { inject } from "vitest";
+import { describe, inject } from "vitest";
 import { cli } from "#qti/cli.ts";
+import { hasLease } from "#qti/test/settings.ts";
 
 const fixtures = inject("fixtures");
 
@@ -32,34 +33,39 @@ const run = Effect.fn("cli.roundtrip.test.run")(function* run(args: readonly str
   return { exit, output: lines.join("\n") };
 });
 
-layer(NodeServices.layer, { excludeTestServices: true, timeout: "120 seconds" })(
-  "cli.ts roundtrip on the lease",
-  (it) => {
-    it.effect(
-      "roundtrip of simple lists every entry equal and ends all equal",
-      () =>
-        Effect.gen(function* roundtripSimple() {
-          const { exit, output } = yield* run(["roundtrip", fixtures.simple]);
+describe.skipIf(!hasLease)("cli.roundtrip.test.ts, on the lease", () => {
+  layer(NodeServices.layer, { excludeTestServices: true, timeout: "120 seconds" })(
+    "cli.ts roundtrip on the lease",
+    (it) => {
+      it.effect(
+        "roundtrip of simple lists every entry equal and ends all equal",
+        () =>
+          Effect.gen(function* roundtripSimple() {
+            const { exit, output } = yield* run(["roundtrip", fixtures.simple]);
 
-          assert.isTrue(Exit.isSuccess(exit), Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "");
-          assert.include(output, "imsmanifest.xml: canonical-equal");
-          assert.include(output, "choice.xml: canonical-equal");
-          assert.include(output, "images/sign.png: byte-identical");
-          assert.strictEqual(output.split("\n").at(-1), "all equal");
-        }),
-      TEST_TIMEOUT,
-    );
+            assert.isTrue(
+              Exit.isSuccess(exit),
+              Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "",
+            );
+            assert.include(output, "imsmanifest.xml: canonical-equal");
+            assert.include(output, "choice.xml: canonical-equal");
+            assert.include(output, "images/sign.png: byte-identical");
+            assert.strictEqual(output.split("\n").at(-1), "all equal");
+          }),
+        TEST_TIMEOUT,
+      );
 
-    it.effect(
-      "import of metaData fails and names the rule",
-      () =>
-        Effect.gen(function* importRefused() {
-          const { exit } = yield* run(["import", fixtures.metaData]);
+      it.effect(
+        "import of metaData fails and names the rule",
+        () =>
+          Effect.gen(function* importRefused() {
+            const { exit } = yield* run(["import", fixtures.metaData]);
 
-          assert.isTrue(Exit.isFailure(exit));
-          assert.match(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "", /lom-/u);
-        }),
-      TEST_TIMEOUT,
-    );
-  },
-);
+            assert.isTrue(Exit.isFailure(exit));
+            assert.match(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "", /lom-/u);
+          }),
+        TEST_TIMEOUT,
+      );
+    },
+  );
+});

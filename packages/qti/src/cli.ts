@@ -1,8 +1,8 @@
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, FileSystem, Path, Schema } from "effect";
-import { Argument, Command } from "effect/cli";
+import { Cause, Console, Effect, FileSystem, Path, Schema } from "effect";
+import { Argument, CliError, Command } from "effect/cli";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { comparePackage, renderReport } from "#qti/export/compare.ts";
 import { exportPackage } from "#qti/export/package.ts";
@@ -119,7 +119,16 @@ export const cli = Command.make("qti").pipe(
 );
 
 if (import.meta.main) {
-  const main = cli.pipe(Command.run({ version: "0.0.0" }), Effect.provide(NodeServices.layer));
+  const main = cli.pipe(
+    Command.run({ version: "0.0.0" }),
+    // A refusal prints its message once; `Command.run` has already presented a usage error. A
+    // defect keeps its pretty cause, the one case a stack is wanted.
+    Effect.tapError((failure) =>
+      CliError.isCliError(failure) ? Effect.void : Console.error(failure.message),
+    ),
+    Effect.tapDefect((defect) => Console.error(Cause.pretty(Cause.die(defect)))),
+    Effect.provide(NodeServices.layer),
+  );
 
-  NodeRuntime.runMain(main);
+  NodeRuntime.runMain(main, { disableErrorReporting: true });
 }
