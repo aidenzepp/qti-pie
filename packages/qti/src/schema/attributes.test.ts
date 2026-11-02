@@ -100,6 +100,34 @@ describe("attributes", () => {
     assert.include(checks, "BdoDirNotAuto");
   });
 
+  it("declares the 48 ARIA relations and both R42 checks", () => {
+    const aria = Object.keys(attributes.relations).filter((name) => name.startsWith("Aria"));
+    assert.strictEqual(aria.length, 48);
+    assert.include(aria, "AriaKeyshorts");
+    assert.include(aria, "AriaKeyshortcuts");
+    assert.include(aria, "AriaRole");
+
+    const checks = attributes.rules
+      .filter((rule) => rule.kind === "check")
+      .map((rule) => rule.name);
+    assert.include(checks, "AriaRoleH1");
+    assert.include(checks, "AriaRoleNotSource");
+  });
+
+  it("keeps each ARIA relation keyed by its node and admitted by its own attribute", () => {
+    const ariaRelations = Object.entries(attributes.relations)
+      .filter(([name]) => name.startsWith("Aria"))
+      .map(([, relation]) => relation);
+    const admissions = attributes.rules.filter(
+      (rule) =>
+        rule.kind === "contained" &&
+        "relation" in rule.right.source &&
+        rule.right.source.relation === attributes.relations.AttributeAdmission &&
+        ariaRelations.some((relation) => relation === rule.left.source),
+    );
+    assert.strictEqual(admissions.length, 48);
+  });
+
   it("builds a probe schema over the spine relations and its own", () => {
     const probe = schema(
       "QtiAttributesProbe",
