@@ -1,0 +1,314 @@
+/**
+ * What a template or printed variable writes into item content: the template blocks and inlines
+ * that show or hide by a template variable, and the printed variable that prints an outcome or
+ * template variable.
+ *
+ * A template block or inline names a template variable in `template-identifier`, and that variable
+ * must be a template declaration of the same document holding a single or multiple identifier. A
+ * printed variable names an outcome or a template variable; its `base` and `index` are an integer
+ * or the name of a variable, and a name must be an integer single outcome or template variable.
+ */
+import {
+  check,
+  closed,
+  closedId,
+  contained,
+  on,
+  relation,
+  select,
+  str,
+  uuid,
+} from "@bjornpagen/grizzle";
+import { ShowHide } from "#qti/schema/content/rosters.ts";
+import {
+  BaseType,
+  Declaration,
+  DeclarationKind,
+  TypedCardinality,
+  TypedDeclaration,
+} from "#qti/schema/declaration.ts";
+import { Node } from "#qti/schema/node.ts";
+import * as patterns from "#qti/schema/patterns.ts";
+
+const ncName = str.regex(patterns.ncName);
+
+const xsString = str.regex(patterns.xsString, patterns.xsStringFlags);
+
+const xsBoolean = str.regex(patterns.xsBoolean);
+
+const integerOrVariableString = str.regex(patterns.integerOrVariableString);
+
+/**
+ * The attributes of a printed variable that may name a variable instead of an integer.
+ */
+export const PrintedVariableAttr = closed("PrintedVariableAttr", ["base", "index"]);
+
+/**
+ * The `qti-template-block` and `qti-template-block.rubric` elements. `show-hide` defaults to
+ * `show`; `DeclaredTemplateBlockShowHide` marks a block that wrote it.
+ */
+export const TemplateBlock = relation(
+  "TemplateBlock",
+  {
+    id: uuid,
+    identifier: ncName,
+    showHide: closedId(ShowHide),
+    templateIdentifier: ncName,
+  },
+  ["id"],
+);
+
+/**
+ * A template block that wrote `show-hide`.
+ */
+export const DeclaredTemplateBlockShowHide = relation(
+  "DeclaredTemplateBlockShowHide",
+  { node: uuid },
+  ["node"],
+);
+
+/**
+ * The `qti-template-inline` and `qti-template-inline.rubric` elements.
+ */
+export const TemplateInline = relation(
+  "TemplateInline",
+  {
+    id: uuid,
+    identifier: ncName,
+    showHide: closedId(ShowHide),
+    templateIdentifier: ncName,
+  },
+  ["id"],
+);
+
+/**
+ * A template inline that wrote `show-hide`.
+ */
+export const DeclaredTemplateInlineShowHide = relation(
+  "DeclaredTemplateInlineShowHide",
+  { node: uuid },
+  ["node"],
+);
+
+/**
+ * The template variable a template block or inline reads: one row per node of either kind, where
+ * `identifier` is its `template-identifier`. `document` and `identifier` name the declaration, and
+ * the pair of them with the base type and cardinality copies the typed declaration's.
+ */
+export const TemplateContentRef = relation(
+  "TemplateContentRef",
+  {
+    baseType: closedId(BaseType),
+    cardinality: closedId(TypedCardinality),
+    document: uuid,
+    identifier: ncName,
+    node: uuid,
+  },
+  ["node"],
+);
+
+/**
+ * The `qti-printed-variable` element. The defaults are `base` 10, `delimiter` `;`,
+ * `mapping-indicator` `=` and `power-form` false, each with a marker for a value that was written.
+ * `base` is an integer or a variable name.
+ */
+export const PrintedVariable = relation(
+  "PrintedVariable",
+  {
+    base: integerOrVariableString,
+    delimiter: xsString,
+    id: uuid,
+    identifier: ncName,
+    mappingIndicator: xsString,
+    powerForm: xsBoolean,
+  },
+  ["id"],
+);
+
+/**
+ * A printed variable that wrote `base`.
+ */
+export const DeclaredPrintedVariableBase = relation("DeclaredPrintedVariableBase", { node: uuid }, [
+  "node",
+]);
+
+/**
+ * A printed variable that wrote `delimiter`.
+ */
+export const DeclaredPrintedVariableDelimiter = relation(
+  "DeclaredPrintedVariableDelimiter",
+  { node: uuid },
+  ["node"],
+);
+
+/**
+ * A printed variable that wrote `mapping-indicator`.
+ */
+export const DeclaredPrintedVariableMappingIndicator = relation(
+  "DeclaredPrintedVariableMappingIndicator",
+  { node: uuid },
+  ["node"],
+);
+
+/**
+ * A printed variable that wrote `power-form`.
+ */
+export const DeclaredPrintedVariablePowerForm = relation(
+  "DeclaredPrintedVariablePowerForm",
+  { node: uuid },
+  ["node"],
+);
+
+/**
+ * A printed variable's `format`, a printf-style conversion, when it has one.
+ */
+export const PrintedVariableFormat = relation(
+  "PrintedVariableFormat",
+  { node: uuid, value: str.regex(patterns.printfFormat) },
+  ["node"],
+);
+
+/**
+ * A printed variable's `index`, an integer or a variable name, when it has one.
+ */
+export const PrintedVariableIndex = relation(
+  "PrintedVariableIndex",
+  { node: uuid, value: integerOrVariableString },
+  ["node"],
+);
+
+/**
+ * A printed variable's `field`, when it has one.
+ */
+export const PrintedVariableField = relation(
+  "PrintedVariableField",
+  { node: uuid, value: ncName },
+  ["node"],
+);
+
+/**
+ * The variable a printed variable prints: one row per printed variable, naming an outcome or a
+ * template declaration of the document.
+ */
+export const PrintedVariableRef = relation(
+  "PrintedVariableRef",
+  {
+    document: uuid,
+    identifier: ncName,
+    kind: closedId(DeclarationKind),
+    node: uuid,
+  },
+  ["node"],
+);
+
+/**
+ * The variable a printed variable's `base` or `index` names, where the attribute is not an
+ * integer. The row exists exactly for the non-integer spellings, so it is a typed variable of base
+ * type integer and single cardinality, an outcome or a template variable.
+ */
+export const PrintedVariableVarRef = relation(
+  "PrintedVariableVarRef",
+  {
+    attribute: closedId(PrintedVariableAttr),
+    baseType: closedId(BaseType),
+    cardinality: closedId(TypedCardinality),
+    document: uuid,
+    identifier: ncName,
+    kind: closedId(DeclarationKind),
+    node: uuid,
+  },
+  ["node", "attribute"],
+);
+
+/**
+ * The relations of this module, as schema members.
+ */
+export const relations = {
+  DeclaredPrintedVariableBase,
+  DeclaredPrintedVariableDelimiter,
+  DeclaredPrintedVariableMappingIndicator,
+  DeclaredPrintedVariablePowerForm,
+  DeclaredTemplateBlockShowHide,
+  DeclaredTemplateInlineShowHide,
+  PrintedVariable,
+  PrintedVariableAttr,
+  PrintedVariableField,
+  PrintedVariableFormat,
+  PrintedVariableIndex,
+  PrintedVariableRef,
+  PrintedVariableVarRef,
+  TemplateBlock,
+  TemplateContentRef,
+  TemplateInline,
+};
+
+/**
+ * The template kinds' arms, keyed by their `NodeKind` handles. A block and a rubric block share an
+ * arm, as do an inline and a rubric inline.
+ *
+ * Their containments into `Node` are not written here: `alternatives(Node, "kind", NodeKind, ...)`
+ * in the composed schema expands to them, and writing both is a duplicate identity.
+ */
+export const arms = {
+  "qti-printed-variable": PrintedVariable,
+  "qti-template-block": TemplateBlock,
+  "qti-template-block.rubric": TemplateBlock,
+  "qti-template-inline": TemplateInline,
+  "qti-template-inline.rubric": TemplateInline,
+};
+
+/**
+ * The statements over this module's relations. A template reference is a template declaration of
+ * its document, with the base type and cardinality its declaration holds, on a node of that
+ * document's tree, and its type is an identifier of single or multiple cardinality (R36). A printed
+ * variable names an outcome or a template declaration (R37). A variable named by `base` or `index`
+ * is an integer single outcome or template variable (R39). Every marker and optional value belongs
+ * to its owner.
+ */
+export const rules = [
+  contained(on(DeclaredTemplateBlockShowHide, "node"), on(TemplateBlock, "id")),
+  contained(on(DeclaredTemplateInlineShowHide, "node"), on(TemplateInline, "id")),
+  contained(
+    on(TemplateContentRef, "document", "identifier"),
+    on(select(Declaration, { kind: "template" }), "document", "identifier"),
+  ),
+  contained(
+    on(TemplateContentRef, "document", "identifier", "baseType", "cardinality"),
+    on(TypedDeclaration, "document", "identifier", "baseType", "cardinality"),
+  ),
+  contained(on(TemplateContentRef, "node", "document"), on(Node, "id", "tree")),
+  check("TemplateContentRefType", TemplateContentRef, (r) =>
+    r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
+  ),
+  contained(on(DeclaredPrintedVariableBase, "node"), on(PrintedVariable, "id")),
+  contained(on(DeclaredPrintedVariableDelimiter, "node"), on(PrintedVariable, "id")),
+  contained(on(DeclaredPrintedVariableMappingIndicator, "node"), on(PrintedVariable, "id")),
+  contained(on(DeclaredPrintedVariablePowerForm, "node"), on(PrintedVariable, "id")),
+  contained(on(PrintedVariableFormat, "node"), on(PrintedVariable, "id")),
+  contained(on(PrintedVariableIndex, "node"), on(PrintedVariable, "id")),
+  contained(on(PrintedVariableField, "node"), on(PrintedVariable, "id")),
+  contained(on(PrintedVariableRef, "node"), on(PrintedVariable, "id")),
+  contained(
+    on(PrintedVariableRef, "document", "identifier", "kind"),
+    on(Declaration, "document", "identifier", "kind"),
+  ),
+  contained(on(PrintedVariableRef, "node", "document"), on(Node, "id", "tree")),
+  check("PrintedVariableRefKind", PrintedVariableRef, (r) => r.in(r.kind, ["outcome", "template"])),
+  contained(on(PrintedVariableVarRef, "node"), on(PrintedVariable, "id")),
+  contained(
+    on(PrintedVariableVarRef, "document", "identifier", "baseType", "cardinality"),
+    on(TypedDeclaration, "document", "identifier", "baseType", "cardinality"),
+  ),
+  contained(
+    on(PrintedVariableVarRef, "document", "identifier", "kind"),
+    on(Declaration, "document", "identifier", "kind"),
+  ),
+  contained(on(PrintedVariableVarRef, "node", "document"), on(Node, "id", "tree")),
+  check("PrintedVariableVarRefType", PrintedVariableVarRef, (r) =>
+    r.and(
+      r.eq(r.baseType, "integer"),
+      r.eq(r.cardinality, "single"),
+      r.in(r.kind, ["outcome", "template"]),
+    ),
+  ),
+] as const;
