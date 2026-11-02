@@ -1,4 +1,5 @@
 import type { BaseType } from "#qti/schema/declaration.ts";
+import type { NodeKindHandle } from "#qti/schema/node.ts";
 
 /**
  * A base type an expression can have: one of phase-1's eleven declared base types, `any` (the
@@ -38,9 +39,8 @@ export interface ResultAttributes {
 /**
  * The 64 expression kinds of section 3.3 table A, in the XSD's alphabetical order.
  *
- * The names are literals rather than `NodeKindHandle` members because `node.ts` does not compose
- * the processing vocabulary until its generate slice; `resultType` takes a plain string for the
- * same reason, and a `NodeKindHandle` is one.
+ * Each name is checked as a `NodeKindHandle`, so a name outside the composed vocabulary is a
+ * compile error.
  */
 export const expressionKinds = [
   "qti-and",
@@ -107,7 +107,7 @@ export const expressionKinds = [
   "qti-test-variables",
   "qti-truncate",
   "qti-variable",
-] as const;
+] as const satisfies readonly NodeKindHandle[];
 
 /**
  * An expression kind: one of the 64 in `expressionKinds`.
@@ -324,7 +324,7 @@ export const resultTypes: Readonly<Record<ExpressionKind, ResultRule>> = {
 /**
  * Whether a node kind is one of the 64 expression kinds.
  */
-export const isExpressionKind = (kind: string): kind is ExpressionKind =>
+export const isExpressionKind = (kind: NodeKindHandle): kind is ExpressionKind =>
   Object.hasOwn(resultTypes, kind);
 
 /**
@@ -335,7 +335,7 @@ export const isExpressionKind = (kind: string): kind is ExpressionKind =>
  * answers `unknown` on both axes, and the checker never asks.
  */
 export const resultType = (
-  kind: string,
+  kind: NodeKindHandle,
   operands: readonly EffectiveType[],
   attrs: ResultAttributes,
 ): EffectiveType => (isExpressionKind(kind) ? resultTypes[kind](operands, attrs) : UNKNOWN);

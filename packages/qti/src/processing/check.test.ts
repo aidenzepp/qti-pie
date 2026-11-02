@@ -22,6 +22,7 @@ import {
   unify,
 } from "#qti/processing/types.ts";
 import type { EffectiveType } from "#qti/processing/types.ts";
+import type { NodeKindHandle } from "#qti/schema/node.ts";
 import { readXml } from "#qti/xml/read.ts";
 import type { Element } from "#qti/xml/tree.ts";
 
@@ -444,10 +445,9 @@ const withOperands = (node: TypedExpression): readonly TypedExpression[] => [
 ];
 
 /**
- * Whether an expression is of a kind named by a string; the processing kinds are not yet in the
- * node kind type.
+ * Whether an expression is of a given node kind.
  */
-const isKind = (node: TypedExpression, kind: string): boolean => node.kind === kind;
+const isKind = (node: TypedExpression, kind: NodeKindHandle): boolean => node.kind === kind;
 
 /**
  * Every typed expression of a typed tree, in document order, each before its operands.
@@ -461,7 +461,7 @@ const expressionsOfRule = (node: TypedRuleNode): readonly TypedExpression[] => [
 const expressionsOf = (typed: TypedAst): readonly TypedExpression[] =>
   typed.rules.flatMap((rule) => (rule.kind === "xi:include" ? [] : expressionsOfRule(rule)));
 
-const typeOfKind = (typed: TypedAst, kind: string): readonly string[] =>
+const typeOfKind = (typed: TypedAst, kind: NodeKindHandle): readonly string[] =>
   expressionsOf(typed)
     .filter((e) => isKind(e, kind))
     .map((e) => `${e.type.baseType}/${e.type.cardinality}`);

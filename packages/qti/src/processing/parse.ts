@@ -92,6 +92,7 @@ type RuleClass = "condition" | "else" | "fragment" | "holder" | "if" | "leaf" | 
 interface ExpressionEntry {
   readonly attributes: readonly string[];
   readonly class: "expression";
+  readonly kind: RuleOrExpressionKind;
 }
 
 /**
@@ -100,6 +101,7 @@ interface ExpressionEntry {
 interface RuleEntry {
   readonly attributes: readonly string[];
   readonly class: RuleClass;
+  readonly kind: RuleOrExpressionKind;
 }
 
 /**
@@ -161,34 +163,34 @@ const expressionAttributes = {
 /**
  * The 26 rule and processing kinds of section 3.3 table B, each with its class and attribute names.
  */
-const ruleEntries = {
-  "qti-exit-response": { attributes: [], class: "leaf" },
-  "qti-exit-template": { attributes: [], class: "leaf" },
-  "qti-exit-test": { attributes: [], class: "leaf" },
-  "qti-lookup-outcome-value": { attributes: ["identifier"], class: "holder" },
-  "qti-outcome-condition": { attributes: [], class: "condition" },
-  "qti-outcome-else": { attributes: [], class: "else" },
-  "qti-outcome-else-if": { attributes: [], class: "if" },
-  "qti-outcome-if": { attributes: [], class: "if" },
-  "qti-outcome-processing": { attributes: [], class: "root" },
-  "qti-outcome-processing-fragment": { attributes: [], class: "fragment" },
-  "qti-response-condition": { attributes: [], class: "condition" },
-  "qti-response-else": { attributes: [], class: "else" },
-  "qti-response-else-if": { attributes: [], class: "if" },
-  "qti-response-if": { attributes: [], class: "if" },
-  "qti-response-processing": { attributes: ["template", "template-location"], class: "root" },
-  "qti-response-processing-fragment": { attributes: [], class: "fragment" },
-  "qti-set-correct-response": { attributes: ["identifier"], class: "holder" },
-  "qti-set-default-value": { attributes: ["identifier"], class: "holder" },
-  "qti-set-outcome-value": { attributes: ["identifier"], class: "holder" },
-  "qti-set-template-value": { attributes: ["identifier"], class: "holder" },
-  "qti-template-condition": { attributes: [], class: "condition" },
-  "qti-template-constraint": { attributes: [], class: "holder" },
-  "qti-template-else": { attributes: [], class: "else" },
-  "qti-template-else-if": { attributes: [], class: "if" },
-  "qti-template-if": { attributes: [], class: "if" },
-  "qti-template-processing": { attributes: [], class: "root" },
-} satisfies Readonly<Record<string, RuleEntry>>;
+const ruleEntries: readonly RuleEntry[] = [
+  { attributes: [], class: "leaf", kind: "qti-exit-response" },
+  { attributes: [], class: "leaf", kind: "qti-exit-template" },
+  { attributes: [], class: "leaf", kind: "qti-exit-test" },
+  { attributes: ["identifier"], class: "holder", kind: "qti-lookup-outcome-value" },
+  { attributes: [], class: "condition", kind: "qti-outcome-condition" },
+  { attributes: [], class: "else", kind: "qti-outcome-else" },
+  { attributes: [], class: "if", kind: "qti-outcome-else-if" },
+  { attributes: [], class: "if", kind: "qti-outcome-if" },
+  { attributes: [], class: "root", kind: "qti-outcome-processing" },
+  { attributes: [], class: "fragment", kind: "qti-outcome-processing-fragment" },
+  { attributes: [], class: "condition", kind: "qti-response-condition" },
+  { attributes: [], class: "else", kind: "qti-response-else" },
+  { attributes: [], class: "if", kind: "qti-response-else-if" },
+  { attributes: [], class: "if", kind: "qti-response-if" },
+  { attributes: ["template", "template-location"], class: "root", kind: "qti-response-processing" },
+  { attributes: [], class: "fragment", kind: "qti-response-processing-fragment" },
+  { attributes: ["identifier"], class: "holder", kind: "qti-set-correct-response" },
+  { attributes: ["identifier"], class: "holder", kind: "qti-set-default-value" },
+  { attributes: ["identifier"], class: "holder", kind: "qti-set-outcome-value" },
+  { attributes: ["identifier"], class: "holder", kind: "qti-set-template-value" },
+  { attributes: [], class: "condition", kind: "qti-template-condition" },
+  { attributes: [], class: "holder", kind: "qti-template-constraint" },
+  { attributes: [], class: "else", kind: "qti-template-else" },
+  { attributes: [], class: "if", kind: "qti-template-else-if" },
+  { attributes: [], class: "if", kind: "qti-template-if" },
+  { attributes: [], class: "root", kind: "qti-template-processing" },
+];
 
 /**
  * What an element name is in the vocabulary: an expression or a rule with its entry, or one of the
@@ -212,13 +214,11 @@ const asiEntries: ReadonlyMap<string, Classified> = new Map<string, Classified>(
       entry: {
         attributes: new Map(Object.entries(expressionAttributes)).get(kind) ?? [],
         class: "expression",
+        kind,
       },
     },
   ]),
-  ...Object.entries(ruleEntries).map(([kind, entry]): [string, Classified] => [
-    kind,
-    { _tag: "rule", entry },
-  ]),
+  ...ruleEntries.map((entry): [string, Classified] => [entry.kind, { _tag: "rule", entry }]),
 ]);
 
 /**
@@ -281,16 +281,6 @@ const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
 const asiNamespace = asi.registry["qti-response-processing"].namespace;
 
 const xIncludeNamespace = xi.registry["xi:include"].namespace;
-
-/**
- * Name an element as a node kind.
- *
- * `RuleOrExpressionKind` lists the processing kinds only once `node.ts` composes them, so the
- * roster the parser has checked is asserted here, in one place, until it does.
- */
-const asKind = (name: string): RuleOrExpressionKind =>
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- SAFETY: callers pass only names `asiEntries` classified, the roster the composed `NodeKind` will hold.
-  name as RuleOrExpressionKind;
 
 /**
  * The element children of `element`, in document order, each with its index among them.
@@ -432,7 +422,7 @@ const parseExpression = (
     return {
       attributes,
       element,
-      kind: asKind(element.local),
+      kind: entry.kind,
       operands,
       position,
       text: element.local === "qti-base-value" ? Option.some(textOf(element)) : Option.none(),
@@ -556,7 +546,7 @@ const parseHost = (
       branches,
       element,
       expression,
-      kind: asKind(element.local),
+      kind: entry.kind,
       position,
       rules: statements,
     };
