@@ -10,6 +10,13 @@
 import { Option } from "effect";
 import type { Rows as RowSet } from "#qti/import/tree.ts";
 import { Rows } from "#qti/import/tree.ts";
+import {
+  CsmMetadataProviderId,
+  CsmSetOfGuidsRegion,
+  CsmSetOfGuidsVersion,
+  CsmSetResourceLabel,
+  CsmSetResourcePartId,
+} from "#qti/schema/csm.ts";
 import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
 import {
   Declaration,
@@ -61,7 +68,7 @@ import {
   vocabularies,
   Ws,
 } from "#qti/schema/node.ts";
-import { Dependency, File, Package, Resource, ResourceHref } from "#qti/schema/package.ts";
+import { Dependency, File, Package, Resource, ResourceHref, Variant } from "#qti/schema/package.ts";
 import {
   ResponseProcessingTemplate,
   ResponseProcessingTemplateLocation,
@@ -92,9 +99,9 @@ const elementRows = vocabularies
  * A kind named by two registries would let the later row replace the earlier, so building the map
  * refuses one.
  */
-const names: ReadonlyMap<string, RegistryRow> = new Map(elementRows);
+export const renderRegistry: ReadonlyMap<string, RegistryRow> = new Map(elementRows);
 
-if (names.size !== elementRows.length) {
+if (renderRegistry.size !== elementRows.length) {
   throw new Error("Two vocabulary registries name the same element kind.");
 }
 
@@ -223,6 +230,12 @@ const attributeSources = (rows: RowSet): ReadonlyMap<string, (id: string) => Pai
   const files = by(Rows.of(rows, File), (fact) => fact.id);
   const dependencies = by(Rows.of(rows, Dependency), (fact) => fact.id);
   const languages = optional(Rows.of(rows, LomStringLanguage), (fact) => fact.node);
+  const variants = by(Rows.of(rows, Variant), (fact) => fact.id);
+  const resourceLabel = optional(Rows.of(rows, CsmSetResourceLabel), (fact) => fact.node);
+  const resourcePartId = optional(Rows.of(rows, CsmSetResourcePartId), (fact) => fact.node);
+  const providerId = optional(Rows.of(rows, CsmMetadataProviderId), (fact) => fact.node);
+  const region = optional(Rows.of(rows, CsmSetOfGuidsRegion), (fact) => fact.node);
+  const guidsVersion = optional(Rows.of(rows, CsmSetOfGuidsVersion), (fact) => fact.node);
 
   const declared = (id: string): Pairs => {
     const declaration = declarations.get(id);
@@ -329,6 +342,25 @@ const attributeSources = (rows: RowSet): ReadonlyMap<string, (id: string) => Pai
     ["cp:file", (id) => present("href", files.get(id)?.href)],
     ["cp:dependency", (id) => present("identifierref", dependencies.get(id)?.target)],
     ["lom:string", (id) => present("language", languages(id))],
+    [
+      "cpx:variant",
+      (id) => [
+        ...present("identifier", variants.get(id)?.identifier),
+        ...present("identifierref", variants.get(id)?.identifierref),
+      ],
+    ],
+    [
+      "csmd:curriculumStandardsMetadataSet",
+      (id) => [
+        ...present("resourceLabel", resourceLabel(id)),
+        ...present("resourcePartId", resourcePartId(id)),
+      ],
+    ],
+    ["csmd:curriculumStandardsMetadata", (id) => present("providerId", providerId(id))],
+    [
+      "csmd:setOfGUIDs",
+      (id) => [...present("region", region(id)), ...present("version", guidsVersion(id))],
+    ],
   ]);
 };
 
@@ -469,7 +501,7 @@ export const renderTree = (rows: RowSet, treeId: string): XmlDocument => {
       };
     }
 
-    const name = names.get(node.kind) ?? missing("registry row for the kind", node.kind);
+    const name = renderRegistry.get(node.kind) ?? missing("registry row for the kind", node.kind);
 
     return {
       attributes: attributesOf(id, node.kind),
