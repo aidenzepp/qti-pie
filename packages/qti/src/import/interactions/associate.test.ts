@@ -21,6 +21,7 @@ import { ChoiceTemplateRef, MatchGroup } from "#qti/schema/choices.ts";
 import {
   AssociableHotspot,
   AssociableHotspotLabel,
+  AssociableHotspotMatchMin,
   AssociateInteraction,
   AssociateMaxAssociations,
   AssociateMinAssociations,
@@ -506,6 +507,45 @@ describe("associateRows on a graphic associate interaction", () => {
       assert.deepStrictEqual(Rows.of(built, AssociableHotspotLabel), [
         { node: "node-5", value: "north" },
       ]);
+    }),
+  );
+
+  it.effect("keeps a hotspot's written match-min and writes none it omitted", () =>
+    Effect.gen(function* hotspotMatchMin() {
+      const ctx = contextOf(
+        [
+          element("qti-graphic-associate-interaction", { "response-identifier": "RESPONSE" }, [
+            element("img", { alt: "map", src: "map.png" }),
+            element("qti-associable-hotspot", {
+              coords: "10,10,5",
+              identifier: "H1",
+              "match-max": "1",
+              "match-min": "2",
+              shape: "circle",
+            }),
+            element("qti-associable-hotspot", {
+              coords: "40,40,5",
+              identifier: "H2",
+              "match-max": "1",
+              shape: "circle",
+            }),
+          ]),
+        ],
+        graphicDeclarations,
+      );
+
+      const built = yield* associateRows(ctx, Rows.empty());
+
+      assert.deepStrictEqual(Rows.of(built, AssociableHotspotMatchMin), [
+        { node: "node-4", value: "2" },
+      ]);
+      assert.deepStrictEqual(
+        Rows.of(built, AssociableHotspot).map((row) => [row.identifier, row.matchMinN]),
+        [
+          ["H1", 2n],
+          ["H2", 0n],
+        ],
+      );
     }),
   );
 

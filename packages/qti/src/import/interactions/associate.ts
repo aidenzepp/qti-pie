@@ -17,6 +17,7 @@ import type { ShapeHandle } from "#qti/schema/content/rosters.ts";
 import {
   AssociableHotspot,
   AssociableHotspotLabel,
+  AssociableHotspotMatchMin,
   AssociateInteraction,
   AssociateMaxAssociations,
   AssociateMinAssociations,
@@ -422,6 +423,11 @@ const hotspot = Effect.fn("import.associableHotspot")(function* hotspot(
     built,
     AssociableHotspotLabel,
     written(label, (own) => ({ node: node.id, value: judgedLater(own) })),
+  );
+  built = Rows.add(
+    built,
+    AssociableHotspotMatchMin,
+    written(matchMin, (own) => ({ node: node.id, value: judgedLater(own) })),
   );
 
   return Option.match(lexicalOf(element, "coords"), {

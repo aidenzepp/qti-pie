@@ -494,6 +494,7 @@ export const ownAttributes = {
     ["coords", optional(R.Coords)],
     ["hotspot-label", optional(R.AssociableHotspotLabel)],
     ["match-max", arm(R.AssociableHotspot, "matchMax")],
+    ["match-min", optional(R.AssociableHotspotMatchMin)],
   ],
   "qti-associate-interaction": [
     responseIdentifierOf(R.AssociateInteraction),
