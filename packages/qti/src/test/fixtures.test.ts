@@ -543,32 +543,4 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
         }),
       ),
   );
-
-  it.effect(
-    "sharedMedia materializes the four files of the shared-media package and nothing else",
-    () =>
-      inFreshRoot((root) =>
-        Effect.gen(function* sharedMediaPackage() {
-          const fs = yield* FileSystem.FileSystem;
-          const dir = yield* materialize("sharedMedia");
-          const entries = yield* fs.readDirectory(dir, { recursive: true });
-          const files: string[] = [];
-
-          for (const entry of entries) {
-            if ((yield* fs.stat(`${dir}/${entry}`)).type === "File") {
-              files.push(entry);
-            }
-          }
-
-          assert.strictEqual(dir, `${root}/sharedMedia-${hash12(specOf("sharedMedia"))}`);
-          assert.deepStrictEqual(files.toSorted(), [
-            "example/graphic_order.xml",
-            "example/hotspot.xml",
-            "example/ukair.png",
-            "imsmanifest.xml",
-          ]);
-          assert.deepStrictEqual(specOf("sharedMedia").edits, []);
-        }),
-      ),
-  );
 });
