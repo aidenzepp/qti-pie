@@ -6,9 +6,14 @@ import { Rows } from "#qti/import/tree.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import * as cpx from "#qti/schema/kinds/cpx.ts";
 import * as drd from "#qti/schema/kinds/drd.ts";
-import { LomValue } from "#qti/schema/metadata.ts";
+import { LomValue, QtiMetadata, QtiMetadataInMetadata } from "#qti/schema/metadata.ts";
 import { Edge, NodeKind } from "#qti/schema/node.ts";
-import { ManifestId, ManifestIdOfManifest, ManifestIdOfResource } from "#qti/schema/package.ts";
+import {
+  ManifestId,
+  ManifestIdOfManifest,
+  ManifestIdOfResource,
+  Resource,
+} from "#qti/schema/package.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import { readXml } from "#qti/xml/read.ts";
 
@@ -53,6 +58,25 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
       const rows = yield* rowsOf(yield* materialize("simple"));
       const packages = new Set(Rows.of(rows, ManifestId).map((row) => row.package));
       assert.strictEqual(packages.size, 1);
+    }),
+  );
+
+  suite.effect("writes SIMPLE's one QtiMetadata row with its host arm on the resource node", () =>
+    Effect.gen(function* hostRow() {
+      const rows = yield* rowsOf(yield* materialize("simple"));
+      const [record, ...more] = Rows.of(rows, QtiMetadata);
+      assert.strictEqual(more.length, 0);
+      assert.strictEqual(record?.host, "metadata");
+      assert.strictEqual(record?.resource, "choice");
+
+      const [arm, ...rest] = Rows.of(rows, QtiMetadataInMetadata);
+      assert.strictEqual(rest.length, 0);
+      assert.strictEqual(arm?.id, record?.id);
+      assert.strictEqual(arm?.package, record?.package);
+      assert.strictEqual(arm?.resource, "choice");
+
+      const [holder] = Rows.of(rows, Resource);
+      assert.strictEqual(arm?.resourceNode, holder?.id);
     }),
   );
 

@@ -689,7 +689,18 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       return;
     }
 
-    add(md.QtiMetadata, [{ id: node.id, metadata: metadataId, resource: resource.node }]);
+    add(md.QtiMetadata, [
+      { host: "metadata", id: node.id, package: packageId, resource: resource.identifier },
+    ]);
+    add(md.QtiMetadataInMetadata, [
+      {
+        id: node.id,
+        metadata: metadataId,
+        package: packageId,
+        resource: resource.identifier,
+        resourceNode: resource.node,
+      },
+    ]);
     for (const leaf of elementChildren(qmd)) {
       const found = nodes.get(leaf);
       if (found === undefined) {
