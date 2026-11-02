@@ -1,12 +1,24 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { manifestRows } from "#qti/import/manifest.ts";
-import { Rows } from "#qti/import/tree.ts";
+import { kindOf, Rows } from "#qti/import/tree.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import * as cpx from "#qti/schema/kinds/cpx.ts";
 import * as drd from "#qti/schema/kinds/drd.ts";
-import { LomValue, QtiMetadata, QtiMetadataInMetadata } from "#qti/schema/metadata.ts";
+import {
+  LomAnnotation,
+  LomClassification,
+  LomEducational,
+  LomEntryLangString,
+  LomId,
+  LomRelation,
+  LomSourceLangString,
+  LomTaxonPath,
+  LomValue,
+  QtiMetadata,
+  QtiMetadataInMetadata,
+} from "#qti/schema/metadata.ts";
 import { Edge, NodeKind } from "#qti/schema/node.ts";
 import {
   ManifestId,
@@ -16,6 +28,28 @@ import {
 } from "#qti/schema/package.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import { readXml } from "#qti/xml/read.ts";
+import type { Element, XmlDocument } from "#qti/xml/tree.ts";
+
+/**
+ * Every element of the subtree rooted at `element`, in document order, with its parent.
+ */
+const elementsOf = (
+  element: Element,
+  parent: Element | null,
+): readonly { readonly element: Element; readonly parent: Element | null }[] => [
+  { element, parent },
+  ...element.children.flatMap((child) =>
+    child.kind === "element" ? elementsOf(child, element) : [],
+  ),
+];
+
+/**
+ * The manifest of the package at `dir`, read.
+ */
+const manifestOf = (dir: string): Effect.Effect<XmlDocument, unknown> =>
+  Effect.gen(function* manifestDocument() {
+    return yield* readXml(yield* readEntry(dir, "imsmanifest.xml"));
+  }).pipe(Effect.provide(NodeServices.layer));
 
 /**
  * The manifest rows of the package at `dir`.
@@ -97,6 +131,69 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
       assert.isAbove(values.length, 0);
       for (const value of values) {
         assert.strictEqual(value.parentKind, edges.get(value.id), value.id);
+      }
+    }),
+  );
+
+  suite.effect("writes the LOM remainder's rows for the lomrest package", () =>
+    Effect.gen(function* remainderRows() {
+      const rows = yield* rowsOf(yield* materialize("lomrest"));
+      assert.strictEqual(Rows.of(rows, LomEducational).length, 2);
+      assert.strictEqual(Rows.of(rows, LomClassification).length, 1);
+      assert.strictEqual(Rows.of(rows, LomRelation).length, 1);
+      assert.strictEqual(Rows.of(rows, LomAnnotation).length, 1);
+      assert.strictEqual(Rows.of(rows, LomTaxonPath).length, 2);
+      assert.strictEqual(Rows.of(rows, LomSourceLangString).length, 2);
+      assert.strictEqual(Rows.of(rows, LomEntryLangString).length, 2);
+
+      const types = Rows.of(rows, LomValue).filter(
+        (value) => value.parentKind === "lom:learningResourceType",
+      );
+      assert.deepStrictEqual(
+        types.map((value) => value.collapsed),
+        ["exercise"],
+      );
+    }),
+  );
+
+  suite.effect("writes one LomId row per lom:id with the leaf's text", () =>
+    Effect.gen(function* idRows() {
+      const dir = yield* materialize("lomrest");
+      const rows = yield* rowsOf(dir);
+      const doc = yield* manifestOf(dir);
+      const expected = elementsOf(doc.root, null)
+        .filter(({ element }) => element.local === "id" && element.namespace.includes("LOM"))
+        .map(({ element }) =>
+          element.children.map((child) => (child.kind === "text" ? child.value : "")).join(""),
+        );
+      assert.isAbove(expected.length, 0);
+      assert.deepStrictEqual(
+        Rows.of(rows, LomId).map((row) => row.value),
+        expected,
+      );
+    }),
+  );
+
+  suite.effect("reads lomrest's manifest without an UnmodeledVocabulary refusal", () =>
+    Effect.gen(function* resolved() {
+      const rows = yield* rowsOf(yield* materialize("lomrest"));
+      assert.isAbove(Rows.of(rows, Edge).length, 0);
+    }),
+  );
+
+  suite.effect("resolves a duration under typicalLearningTime to lom:duration.string", () =>
+    Effect.gen(function* durationKinds() {
+      const doc = yield* manifestOf(yield* materialize("lomrest"));
+      const found = elementsOf(doc.root, null).filter(
+        ({ element, parent }) =>
+          element.local === "duration" && parent?.local === "typicalLearningTime",
+      );
+      assert.isAbove(found.length, 0);
+      for (const { element } of found) {
+        assert.deepStrictEqual(
+          kindOf(element, Option.some("lom:typicalLearningTime")),
+          Option.some("lom:duration.string"),
+        );
       }
     }),
   );

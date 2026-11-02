@@ -205,7 +205,7 @@ interface Candidate {
 }
 
 /**
- * The element-kind registry rows by handle, from the six kinds files; the generic kinds are not
+ * The element-kind registry rows by handle, from the ten kinds files; the generic kinds are not
  * elements and are left out.
  */
 const rowsByHandle: ReadonlyMap<string, RegistryRow> = new Map(
@@ -213,6 +213,18 @@ const rowsByHandle: ReadonlyMap<string, RegistryRow> = new Map(
     .flatMap((vocabulary) => Object.entries<RegistryRow>(vocabulary.registry))
     .filter(([, row]) => row.local !== ""),
 );
+
+/**
+ * The parent kinds, beside a dotted handle's registry `parent`, under which its element name also
+ * resolves to that handle.
+ *
+ * A registry row names one parent, and the `Duration` container's `duration` child is the
+ * `CharacterString` `lom:duration.string` under `lom:typicalLearningTime` as it is under
+ * `lom:duration`.
+ */
+const alsoUnder: ReadonlyMap<string, readonly string[]> = new Map([
+  ["lom:duration.string", ["lom:typicalLearningTime"]],
+]);
 
 const clark = (namespace: string, local: string): string => `{${namespace}}${local}`;
 
@@ -249,7 +261,8 @@ export const kindOf = (
     (candidate) =>
       Option.isSome(candidate.parent) &&
       Option.isSome(parentKind) &&
-      candidate.parent.value === parentKind.value,
+      (candidate.parent.value === parentKind.value ||
+        (alsoUnder.get(candidate.handle) ?? []).includes(parentKind.value)),
   );
   const plain = named.find((candidate) => Option.isNone(candidate.parent));
 
