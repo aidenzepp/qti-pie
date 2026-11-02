@@ -15,7 +15,7 @@ import { exportPackage } from "#qti/export/package.ts";
 import { importPackage } from "#qti/import/package.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
-import { hasLease } from "#qti/test/settings.ts";
+import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**
  * What every test here runs on: the file system the comparison and the fixture materializer need,
@@ -192,48 +192,52 @@ const roundTrip = (name: FixtureName) =>
 const kindOf = (report: Report, entry: string) =>
   report.find((item) => item.path === entry)?.outcome.kind;
 
-describe.skipIf(!hasLease)("export/package.test.ts, on the lease", () => {
-  layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
-    excludeTestServices: true,
-    timeout: "120 seconds",
-  })("export/package.ts on the lease", (it) => {
-    for (const name of roundTripped) {
-      it.effect(`${name} round-trips through the database, every entry equal`, () =>
-        Effect.gen(function* roundTripEqual() {
-          const { report } = yield* roundTrip(name);
+describe.skipIf(!hasLease)(
+  "export/package.test.ts, on the lease",
+  { timeout: leaseTestTimeoutMs },
+  () => {
+    layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
+      excludeTestServices: true,
+      timeout: "120 seconds",
+    })("export/package.ts on the lease", (it) => {
+      for (const name of roundTripped) {
+        it.effect(`${name} round-trips through the database, every entry equal`, () =>
+          Effect.gen(function* roundTripEqual() {
+            const { report } = yield* roundTrip(name);
 
-          assert.strictEqual(
-            report.filter((item) => item.outcome.kind === "differs").length,
-            0,
-            renderReport(report),
-          );
-          assert.strictEqual(kindOf(report, "images/sign.png"), "byte-identical");
-          assert.strictEqual(kindOf(report, "imsmanifest.xml"), "canonical-equal");
-          assert.strictEqual(kindOf(report, "choice.xml"), "canonical-equal");
+            assert.strictEqual(
+              report.filter((item) => item.outcome.kind === "differs").length,
+              0,
+              renderReport(report),
+            );
+            assert.strictEqual(kindOf(report, "images/sign.png"), "byte-identical");
+            assert.strictEqual(kindOf(report, "imsmanifest.xml"), "canonical-equal");
+            assert.strictEqual(kindOf(report, "choice.xml"), "canonical-equal");
+          }),
+        );
+      }
+
+      it.effect("the latin1 export writes the euro sign as &#x20AC; and 0x85 as one byte", () =>
+        Effect.gen(function* latin1Bytes() {
+          const fs = yield* FileSystem.FileSystem;
+          const { exported } = yield* roundTrip("latin1");
+          const bytes = yield* fs.readFile(`${exported}/choice.xml`);
+
+          assert.strictEqual(bytes.filter((byte) => byte === 0x85).length, 1);
+          assert.include(Buffer.from(bytes).toString("latin1"), "&#x20AC;");
         }),
       );
-    }
 
-    it.effect("the latin1 export writes the euro sign as &#x20AC; and 0x85 as one byte", () =>
-      Effect.gen(function* latin1Bytes() {
-        const fs = yield* FileSystem.FileSystem;
-        const { exported } = yield* roundTrip("latin1");
-        const bytes = yield* fs.readFile(`${exported}/choice.xml`);
+      it.effect("the windows-1252 export is UTF-8 and declares UTF-8", () =>
+        Effect.gen(function* windows1252Bytes() {
+          const fs = yield* FileSystem.FileSystem;
+          const { exported } = yield* roundTrip("windows-1252");
+          const bytes = yield* fs.readFile(`${exported}/choice.xml`);
+          const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 
-        assert.strictEqual(bytes.filter((byte) => byte === 0x85).length, 1);
-        assert.include(Buffer.from(bytes).toString("latin1"), "&#x20AC;");
-      }),
-    );
-
-    it.effect("the windows-1252 export is UTF-8 and declares UTF-8", () =>
-      Effect.gen(function* windows1252Bytes() {
-        const fs = yield* FileSystem.FileSystem;
-        const { exported } = yield* roundTrip("windows-1252");
-        const bytes = yield* fs.readFile(`${exported}/choice.xml`);
-        const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-
-        assert.include(text.slice(0, text.indexOf("?>")), 'encoding="UTF-8"');
-      }),
-    );
-  });
-});
+          assert.include(text.slice(0, text.indexOf("?>")), 'encoding="UTF-8"');
+        }),
+      );
+    });
+  },
+);

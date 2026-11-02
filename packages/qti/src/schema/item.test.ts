@@ -128,6 +128,12 @@ describe("item", () => {
 
   describe("admission rows of the ASI and HTML kinds", () => {
     const rows = [...asiKinds.admission, ...htmlKinds.admission];
+
+    /**
+     * The kinds that admit any child: the derived host set. A declared kind with no content model,
+     * such as HTML's `template`, is not a host.
+     */
+    const hosts = [...new Set(rows.map((row) => row.parent))].toSorted();
     const versions = ["3.0.0", "3.0.1"] as const;
     const has = (parent: string, child: string, version: string): boolean =>
       rows.some((r) => r.parent === parent && r.child === child && r.version === version);
@@ -181,8 +187,10 @@ describe("item", () => {
       }
     });
 
-    it("gives every element host a comment row and a pi row, and both versions the same rows", () => {
-      for (const host of [...asiKinds.kinds, ...htmlKinds.kinds]) {
+    it("gives every host (a kind that admits any child) a comment row and a pi row, and both versions the same rows", () => {
+      assert.includeMembers([...asiKinds.kinds, ...htmlKinds.kinds], hosts);
+      assert.includeMembers(hosts, [...Object.keys(item.arms), ...Object.keys(html.arms)]);
+      for (const host of hosts) {
         for (const version of versions) {
           assert.isTrue(has(host, "comment", version), `${host} comment @ ${version}`);
           assert.isTrue(has(host, "pi", version), `${host} pi @ ${version}`);
