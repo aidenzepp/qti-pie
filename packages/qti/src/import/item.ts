@@ -59,7 +59,18 @@ import {
   SimpleChoiceTemplateIdentifier,
   TypedBinding,
 } from "#qti/schema/interaction.ts";
-import { AssessmentItem, DeclaredAdaptive, ItemBody, Prompt } from "#qti/schema/item.ts";
+import {
+  AssessmentItem,
+  AssessmentItemLabel,
+  DeclaredAdaptive,
+  ItemBody,
+  ItemTool,
+  ItemToolBoth,
+  ItemToolName,
+  ItemToolVersion,
+  Prompt,
+} from "#qti/schema/item.ts";
+import { DocumentLang } from "#qti/schema/lang.ts";
 import { Edge } from "#qti/schema/node.ts";
 import type {
   AncestryHandle,
@@ -116,6 +127,11 @@ export interface ItemInput {
   readonly packageId: string;
   readonly path: string;
   readonly resource: string;
+  /**
+   * Whether the manifest's LOM record for this resource has a `general` category, as the manifest
+   * pass found it.
+   */
+  readonly resourceLomHasGeneral: boolean;
   readonly resourceType: string;
   readonly version: SchemaVersionHandle;
 }
@@ -164,7 +180,7 @@ const judgedLater = <T extends string>(value: string): T =>
 /**
  * Every element of `element`'s subtree beside its parent element, in document order.
  */
-const withParents = (
+export const withParents = (
   element: Element,
   parent: Option.Option<Element>,
 ): readonly (readonly [Element, Option.Option<Element>])[] => [
@@ -173,6 +189,78 @@ const withParents = (
     child.kind === "element" ? withParents(child, Option.some(element)) : [],
   ),
 ];
+
+const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
+
+/**
+ * The collapsed `xml:lang` values of the elements of a tree, each once, in document order.
+ */
+const distinctLanguages = (
+  walked: readonly (readonly [Element, Option.Option<Element>])[],
+): readonly string[] => [
+  ...new Set(
+    walked.flatMap(([element]) =>
+      element.attributes
+        .filter((attribute) => attribute.namespace === xmlNamespace && attribute.local === "lang")
+        .map((attribute) => collapse(attribute.value)),
+    ),
+  ),
+];
+
+/**
+ * The `DocumentLang` rows of an item document: one per distinct collapsed `xml:lang` value in its
+ * tree, the root included, each flagged by whether the manifest's LOM record for the document's
+ * resource has a `general` category.
+ *
+ * @param rows - The rows so far.
+ * @param input - The item's input, which names its package, resource and the flag.
+ * @param documentId - The document's id, which is its tree's.
+ * @param walked - The elements of the tree beside their parents, as {@link withParents} gives them.
+ * @returns The rows with the document's language rows added.
+ */
+export const documentLangRows = (
+  rows: Rows,
+  input: Pick<ItemInput, "packageId" | "resource" | "resourceLomHasGeneral">,
+  documentId: string,
+  walked: readonly (readonly [Element, Option.Option<Element>])[],
+): Rows =>
+  Rows.add(
+    rows,
+    DocumentLang,
+    distinctLanguages(walked).map((value) => ({
+      document: documentId,
+      lomGeneral: input.resourceLomHasGeneral ? "yes" : "no",
+      package: input.packageId,
+      resource: input.resource,
+      value,
+    })),
+  );
+
+/**
+ * The tool row of an item root and the arm that holds the strings it wrote, as read; none when it
+ * wrote neither `tool-name` nor `tool-version`.
+ */
+const toolRows = (rows: Rows, root: Element, tree: string): Rows => {
+  const name = lexicalOf(root, "tool-name");
+  const version = lexicalOf(root, "tool-version");
+  if (Option.isSome(name) && Option.isSome(version)) {
+    return Rows.add(Rows.add(rows, ItemTool, [{ shape: "both", tree }]), ItemToolBoth, [
+      { toolName: name.value, toolVersion: version.value, tree },
+    ]);
+  }
+
+  if (Option.isSome(name)) {
+    return Rows.add(Rows.add(rows, ItemTool, [{ shape: "nameOnly", tree }]), ItemToolName, [
+      { toolName: name.value, tree },
+    ]);
+  }
+
+  return Option.isSome(version)
+    ? Rows.add(Rows.add(rows, ItemTool, [{ shape: "versionOnly", tree }]), ItemToolVersion, [
+        { toolVersion: version.value, tree },
+      ])
+    : rows;
+};
 
 /**
  * The attributes of one element, read one at a time with their whitespace class; the rows
@@ -813,7 +901,17 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
     Option.isSome(adaptive.value) ? [{ node: rootNode.id }] : [],
   );
 
+  const label = attributeOf(built, root, rootNode, "label", "replace");
+  built = label.rows;
+  built = Rows.add(
+    built,
+    AssessmentItemLabel,
+    written(label.value, (value) => ({ node: rootNode.id, tree: documentId, value, version })),
+  );
+  built = toolRows(built, root, documentId);
+
   const walked = withParents(root, Option.none());
+  built = documentLangRows(built, input, documentId, walked);
   const positions = new Map(Rows.of(tree.rows, Edge).map((edge) => [edge.child, edge.position]));
   built = yield* semanticRows(
     built,
