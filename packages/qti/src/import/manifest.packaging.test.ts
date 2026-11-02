@@ -32,13 +32,22 @@ import {
   ResourceLomIdentified,
   ResourceLomTitled,
 } from "#qti/schema/metadata.ts";
-import { Edge, Node, NodeKind } from "#qti/schema/node.ts";
+import { AttributeLexical, Edge, Node, NodeKind } from "#qti/schema/node.ts";
 import {
+  AccessForAllResource,
+  DrdAccessMode,
+  DrdAdaptationType,
+  DrdAtInteroperable,
+  DrdLanguageOfAdaptation,
+  FileContent,
   FileMetadata,
   ManifestId,
   ManifestIdOfManifest,
   ManifestIdOfResource,
+  ManifestIdOfVariant,
   Resource,
+  Variant,
+  VariantMetadata,
 } from "#qti/schema/package.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import { readXml } from "#qti/xml/read.ts";
@@ -64,6 +73,18 @@ const manifestOf = (dir: string): Effect.Effect<XmlDocument, unknown> =>
   Effect.gen(function* manifestDocument() {
     return yield* readXml(yield* readEntry(dir, "imsmanifest.xml"));
   }).pipe(Effect.provide(NodeServices.layer));
+
+/**
+ * The manifest rows of the package at `dir` with the documents its resources name.
+ */
+const resultOf = (dir: string) =>
+  Effect.gen(function* resultOfPackage() {
+    const entries = yield* listPackage(dir);
+    const doc = yield* readXml(yield* readEntry(dir, "imsmanifest.xml"));
+    const result = yield* manifestRows(dir, entries, doc, Rows.empty());
+
+    return { doc, documents: result.documents, rows: result.rows };
+  });
 
 /**
  * The manifest rows of the package at `dir`.
@@ -315,6 +336,111 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
         for (const node of stranded) {
           assert.isFalse(records.has(node.id), name);
         }
+      }
+    }),
+  );
+
+  suite.effect("writes variant's Variant, metadata, access-for-all resource and leaf rows", () =>
+    Effect.gen(function* variantRows() {
+      const rows = yield* rowsOf(yield* materialize("variant"));
+      const [variant, ...more] = Rows.of(rows, Variant);
+      assert.strictEqual(more.length, 0);
+      assert.strictEqual(variant?.identifier, "v1");
+      assert.strictEqual(variant?.identifierref, "choice_es");
+      assert.strictEqual(variant?.resourceIdentifier, "choice");
+
+      const holder = Rows.of(rows, Resource).find((row) => row.identifier === "choice");
+      assert.strictEqual(variant?.resource, holder?.id);
+
+      const [metadata, ...moreMetadata] = Rows.of(rows, VariantMetadata);
+      assert.strictEqual(moreMetadata.length, 0);
+      assert.strictEqual(metadata?.variant, variant?.id);
+
+      const [description, ...moreDescriptions] = Rows.of(rows, AccessForAllResource);
+      assert.strictEqual(moreDescriptions.length, 0);
+      assert.strictEqual(description?.metadata, metadata?.id);
+
+      const leaves = [
+        ...Rows.of(rows, DrdAccessMode),
+        ...Rows.of(rows, DrdAdaptationType),
+        ...Rows.of(rows, DrdLanguageOfAdaptation),
+      ];
+      assert.deepStrictEqual(
+        leaves.map((leaf) => leaf.value),
+        ["textual", "ext:stacked_translation", "es"],
+      );
+      for (const leaf of leaves) {
+        assert.strictEqual(leaf.owner, description?.id);
+      }
+
+      const ids = Rows.of(rows, ManifestId)
+        .map((row) => `${row.id}:${row.holder}`)
+        .toSorted();
+      assert.deepStrictEqual(
+        ids,
+        [
+          "MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390:manifest",
+          "choice:resource",
+          "choice_es:resource",
+          "v1:variant",
+        ].toSorted(),
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, ManifestIdOfVariant).map((row) => row.id),
+        ["v1"],
+      );
+    }),
+  );
+
+  suite.effect("keeps variant-padded's lexical forms beside the classed values", () =>
+    Effect.gen(function* paddedRows() {
+      const { doc, rows } = yield* resultOf(yield* materialize("variant-padded"));
+      const [variant] = Rows.of(rows, Variant);
+      assert.strictEqual(variant?.identifier, "v1");
+
+      const lexical = Rows.of(rows, AttributeLexical).filter(
+        (row) => row.node === variant?.id && row.attribute === "identifier",
+      );
+      assert.deepStrictEqual(
+        lexical.map((row) => row.value),
+        [" v1 "],
+      );
+
+      const texts = (local: string) =>
+        elementsOf(doc.root, null)
+          .filter(({ element }) => element.local === local)
+          .map(({ element }) =>
+            element.children.map((child) => (child.kind === "text" ? child.value : "")).join(""),
+          );
+      assert.deepStrictEqual(texts("atInteroperable"), [" true "]);
+      assert.deepStrictEqual(
+        Rows.of(rows, DrdAtInteroperable).map((row) => row.value),
+        ["true"],
+      );
+
+      const [language] = texts("languageOfAdaptation");
+      assert.isTrue(language?.includes("\t") ?? false);
+      assert.deepStrictEqual(
+        Rows.of(rows, DrdLanguageOfAdaptation).map((row) => row.value),
+        ["es ES"],
+      );
+    }),
+  );
+
+  suite.effect("reads exactly the record resource's href as a document in extmeta", () =>
+    Effect.gen(function* recordDocument() {
+      const { documents, rows } = yield* resultOf(yield* materialize("extmeta"));
+      const records = documents.filter((document) => document.type === "resourcemetadata/xml");
+      assert.deepStrictEqual(
+        records.map((document) => document.path),
+        ["meta/choice.xml"],
+      );
+
+      const contents = new Set(Rows.of(rows, FileContent).map((row) => row.path));
+      assert.isFalse(contents.has("meta/choice.xml"));
+      assert.isTrue(contents.has("images/sign.png"));
+      for (const document of documents) {
+        assert.isFalse(contents.has(document.path), document.path);
       }
     }),
   );
