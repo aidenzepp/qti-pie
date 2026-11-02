@@ -58,10 +58,15 @@ export const xsNonNegativeInteger = "^\\+?[0-9]+$" as const;
 export const xsInteger = "^[+\\-]?[0-9]+$" as const;
 
 /**
+ * The `xs:double` lexical space without anchors, so a list pattern can repeat it.
+ */
+const xsDoubleBody =
+  "(?:[+\\-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+\\-]?[0-9]+)?|-?INF|NaN)" as const;
+
+/**
  * `xs:double` lexical space: a decimal with an optional exponent, `INF`, `-INF`, or `NaN`.
  */
-export const xsDouble =
-  "^(?:[+\\-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+\\-]?[0-9]+)?|-?INF|NaN)$" as const;
+export const xsDouble = `^${xsDoubleBody}$` as const;
 
 /**
  * `xs:string` lexical space: any text, whitespace preserved. The same source as `wildcard`; the
@@ -284,3 +289,94 @@ export const point = "^[+\\-]?[0-9]+ [+\\-]?[0-9]+$" as const;
  * The lexical space of a `pair` or `directedPair` value: two NCNames separated by one space.
  */
 export const pair = `^${ncNameBody} ${ncNameBody}$` as const;
+
+/**
+ * A collapsed `IdentifierListDType` value: NCNames one space apart, with no leading, trailing or
+ * doubled space. The empty list is admitted because the XSD list has no `minLength` (XSD line
+ * 34443 of `imsqti_asiv3p0p1_v1p0.xsd`; campaign decision 22).
+ */
+export const identifierList = `^(?:${ncNameBody}(?: ${ncNameBody})*)?$` as const;
+
+/**
+ * A collapsed `ToleranceListDType` value: `xs:double` or NCName tokens one space apart (XSD line
+ * 23973, a union of `xs:string` and `xs:double`). The empty list is admitted because the XSD list
+ * has no `minLength` (line 27029; campaign decision 22); presence under `absolute` and `relative`
+ * is a containment, not this pattern's.
+ */
+export const toleranceList =
+  `^(?:(?:${xsDoubleBody}|${ncNameBody})(?: (?:${xsDoubleBody}|${ncNameBody}))*)?$` as const;
+
+/**
+ * The `CoordsDType` pattern of `imsqti_asiv3p0p1_v1p0.xsd` (line 24090), anchored: three
+ * alternatives over `[0-9]+%?` and `,`, with no space admitted. The attribute's `whiteSpace` class
+ * is `replace`, so a tab, line feed or carriage return becomes a space, which this refuses.
+ */
+export const coords =
+  "^(?:(?:[0-9]+%?,){2}[0-9]+%?|(?:[0-9]+%?,){3}[0-9]+%?|(?:[0-9]+%?,){2}(?:(?:[0-9]+%?,){2})+[0-9]+%?,[0-9]+%?)$" as const;
+
+/**
+ * A collapsed integer or a variable reference: the mixed unions `min`, `max` and `step` of
+ * `qti-any-n` and `qti-random-integer` and `figures`. A value whose collapse is a number is the
+ * literal and a bare NCName as read is the reference; a padded reference admits neither member.
+ */
+export const integerOrVariableRef = `^(?:[+\\-]?[0-9]+|${ncNameBody})$` as const;
+
+/**
+ * A collapsed `xs:double` or a variable reference: `min` and `max` of `qti-random-float`.
+ */
+export const floatOrVariableRef = `^(?:${xsDoubleBody}|${ncNameBody})$` as const;
+
+/**
+ * An NCName or a collapsed integer: `n` of `qti-index` and `number-repeats` of `qti-repeat`. The
+ * `xs:int` range is the typed copy's check, not this pattern's.
+ */
+export const intOrIdentifier = `^(?:${ncNameBody}|[+\\-]?[0-9]+)$` as const;
+
+/**
+ * The eleven `base-type` values of `TestVariablesBaseType` in `imsqti_asiv3p0p1_v1p0.xsd`, in XSD
+ * order: `boolean directedPair duration file float identifier integer pair point string uri`. The
+ * `whiteSpace` class is `preserve`, so a padded value is refused as the XSD refuses it. Phase 1's
+ * `BaseType` roster stays the column type elsewhere.
+ */
+export const baseType =
+  "^(boolean|directedPair|duration|file|float|identifier|integer|pair|point|string|uri)$" as const;
+
+/**
+ * The three `tolerance-mode` values of the ASI XSD, in XSD order: `absolute exact relative`.
+ */
+export const toleranceMode = "^(absolute|exact|relative)$" as const;
+
+/**
+ * The two `rounding-mode` values of the ASI XSD, in XSD order: `decimalPlaces significantFigures`.
+ */
+export const roundingMode = "^(decimalPlaces|significantFigures)$" as const;
+
+/**
+ * The five `shape` values of the ASI XSD, in XSD order: `circle default ellipse poly rect`.
+ */
+// oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the XSD attribute name of the hotspot enumeration (`circle default ellipse poly rect`), the contract the interaction and processing modules name, not a structure.
+export const shape = "^(circle|default|ellipse|poly|rect)$" as const;
+
+/**
+ * The 28 `name` values of `qti-math-operator` (`MathOperatorDType`), in XSD order: `sin cos tan
+ * sec csc cot asin acos atan atan2 asec acsc acot sinh cosh tanh sech csch coth log ln exp abs
+ * signum floor ceil toDegrees toRadians`.
+ */
+export const mathOperatorName =
+  "^(sin|cos|tan|sec|csc|cot|asin|acos|atan|atan2|asec|acsc|acot|sinh|cosh|tanh|sech|csch|coth|log|ln|exp|abs|signum|floor|ceil|toDegrees|toRadians)$" as const;
+
+/**
+ * The five `name` values of `qti-stats-operator` (`StatsOperatorDType`), in XSD order: `mean
+ * sampleVariance sampleSD popVariance popSD`.
+ */
+export const statsOperatorName = "^(mean|sampleVariance|sampleSD|popVariance|popSD)$" as const;
+
+/**
+ * The two `name` values of `qti-math-constant` (`MathConstantDType`), in XSD order: `pi e`.
+ */
+export const mathConstantName = "^(pi|e)$" as const;
+
+/**
+ * The two `parse` values of `xi:include` (`parseType` in `w3/XInclude.xsd`): `xml text`.
+ */
+export const xincludeParse = "^(xml|text)$" as const;

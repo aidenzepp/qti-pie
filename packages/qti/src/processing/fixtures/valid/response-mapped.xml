@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd" identifier="response-mapped" title="Mapped responses and lookup tables" adaptive="false" time-dependent="false">
+    <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
+        <qti-correct-response>
+            <qti-value>ChoiceA</qti-value>
+        </qti-correct-response>
+        <qti-mapping default-value="0">
+            <qti-map-entry map-key="ChoiceA" mapped-value="2"/>
+            <qti-map-entry map-key="ChoiceB" mapped-value="1"/>
+        </qti-mapping>
+    </qti-response-declaration>
+    <qti-response-declaration identifier="SPOT" cardinality="single" base-type="point">
+        <qti-area-mapping default-value="0">
+            <qti-area-map-entry shape="rect" coords="0,0,10,10" mapped-value="1"/>
+            <qti-area-map-entry shape="circle" coords="50,50,5" mapped-value="2"/>
+        </qti-area-mapping>
+    </qti-response-declaration>
+    <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+        <qti-default-value>
+            <qti-value>0</qti-value>
+        </qti-default-value>
+    </qti-outcome-declaration>
+    <qti-outcome-declaration identifier="COUNT" cardinality="single" base-type="integer">
+        <qti-default-value>
+            <qti-value>0</qti-value>
+        </qti-default-value>
+    </qti-outcome-declaration>
+    <qti-outcome-declaration identifier="LEVEL" cardinality="single" base-type="string">
+        <qti-match-table default-value="none">
+            <qti-match-table-entry source-value="1" target-value="low"/>
+            <qti-match-table-entry source-value="2" target-value="high"/>
+        </qti-match-table>
+    </qti-outcome-declaration>
+    <qti-outcome-declaration identifier="GRADE" cardinality="single" base-type="float">
+        <qti-interpolation-table default-value="0">
+            <qti-interpolation-table-entry source-value="0" target-value="0"/>
+            <qti-interpolation-table-entry source-value="2.5" target-value="1" include-boundary="false"/>
+        </qti-interpolation-table>
+    </qti-outcome-declaration>
+    <qti-item-body>
+        <p>Choose, then mark a point.</p>
+        <qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1">
+            <qti-simple-choice identifier="ChoiceA">First</qti-simple-choice>
+            <qti-simple-choice identifier="ChoiceB">Second</qti-simple-choice>
+        </qti-choice-interaction>
+        <qti-select-point-interaction response-identifier="SPOT" max-choices="1">
+            <img src="images/sign.png" alt="NEVER LEAVE LUGGAGE UNATTENDED" width="100" height="100"/>
+        </qti-select-point-interaction>
+    </qti-item-body>
+    <qti-response-processing>
+        <qti-set-outcome-value identifier="SCORE">
+            <qti-sum>
+                <qti-map-response identifier="RESPONSE"/>
+                <qti-map-response-point identifier="SPOT"/>
+            </qti-sum>
+        </qti-set-outcome-value>
+        <qti-set-outcome-value identifier="COUNT">
+            <qti-round>
+                <qti-variable identifier="SCORE"/>
+            </qti-round>
+        </qti-set-outcome-value>
+        <qti-lookup-outcome-value identifier="LEVEL">
+            <qti-variable identifier="COUNT"/>
+        </qti-lookup-outcome-value>
+        <qti-lookup-outcome-value identifier="GRADE">
+            <qti-variable identifier="SCORE"/>
+        </qti-lookup-outcome-value>
+    </qti-response-processing>
+</qti-assessment-item>
