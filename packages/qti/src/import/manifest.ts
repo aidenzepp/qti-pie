@@ -17,6 +17,7 @@ import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { readEntry } from "#qti/package/read.ts";
 import type { Entry, PackageReadError } from "#qti/package/read.ts";
 import type { ZipRefusal } from "#qti/package/zip.ts";
+import * as csm from "#qti/schema/csm.ts";
 import * as md from "#qti/schema/metadata.ts";
 import { Edge } from "#qti/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
@@ -24,6 +25,7 @@ import {
   Dependency,
   File,
   FileContent,
+  FileMetadata,
   Manifest,
   ManifestId,
   ManifestIdOfManifest,
@@ -163,7 +165,7 @@ interface LomContext {
   readonly grandparentKind: NodeKindHandle | undefined;
   readonly id: string;
   readonly lom: string;
-  readonly owner: "manifest" | "resource";
+  readonly owner: "file" | "manifest" | "resource";
   readonly parent: string;
   readonly parentKind: NodeKindHandle;
   readonly parentPosition: bigint;
@@ -264,50 +266,57 @@ const versionOf = (doc: XmlDocument): Effect.Effect<SchemaVersionHandle, NotQti3
 };
 
 /**
- * Write the rows of a package's manifest.
- *
- * The root must be the QTI 3 content package `manifest` and its `schemaversion` `3.0.0` or `3.0.1`,
- * and that is judged before anything else. The package id is a fresh uuid and is the manifest
- * tree's id. Every manifest attribute goes through {@link typedAttribute} with the class the spec
- * names. A `file`'s position is its element's `Edge` position under the resource, every child
- * counted.
- *
- * @param dir - The package directory, where the bytes of unclaimed files are read.
- * @param entries - The package's entries, as `listPackage` returns them.
- * @param doc - The manifest as the reader gave it.
- * @param rows - The rows so far.
- * @returns The rows with the manifest's added, the node index, the package id, the version and one
- *   document per resource of a QTI type that has an `href`; `NotQti3` for a manifest that is not
- *   QTI 3, `UnmodeledVocabulary` for an element or attribute no registry names, and
- *   `PackageReadError` for an entry that is not a regular file inside the package.
+ * An element's attribute processed under its class by {@link typedAttribute}: the typed value, with
+ * the lexical form kept in the rows where processing changed it, or the empty string and no change
+ * when the element has no node or no such attribute.
  */
-export const manifestRows = Effect.fn("import.manifestRows")(function* manifestRows(
-  dir: string,
-  entries: readonly Entry[],
-  doc: XmlDocument,
+const typedValue = (
   rows: Rows,
-): Effect.fn.Return<
-  {
-    documents: readonly ManifestDocument[];
-    nodes: NodeIndex;
-    packageId: string;
-    rows: Rows;
-    version: SchemaVersionHandle;
-  },
-  NotQti3 | PackageReadError | UnmodeledVocabulary | PlatformError.PlatformError | ZipRefusal,
-  FileSystem.FileSystem
-> {
-  const version = yield* versionOf(doc);
-  const packageId = crypto.randomUUID();
-  const tree = yield* treeRows(
-    doc,
-    { charset: doc.charset, id: packageId, kind: "manifest", root: "manifest", version },
-    rows,
-  );
-  const { nodes } = tree;
-  let built = tree.rows;
-  const positions = new Map(Rows.of(built, Edge).map((edge) => [edge.child, edge.position]));
+  nodes: NodeIndex,
+  element: Element,
+  name: AttributeNameHandle,
+  whiteSpace: "collapse" | "preserve",
+) => {
+  const node = nodes.get(element);
+  const lexical = attributeOf(element, name);
+  if (node === undefined || Option.isNone(lexical)) {
+    return { rows, value: "" };
+  }
 
+  return typedAttribute(rows, node.id, node.kind, name, lexical.value, whiteSpace);
+};
+
+/**
+ * The element a walk of a `lom:lom` subtree stands under: its node id and kind, its position
+ * under its own parent and its parent's kind.
+ */
+export interface LomAbove {
+  readonly grandparentKind: NodeKindHandle | undefined;
+  readonly id: string;
+  readonly kind: NodeKindHandle;
+  readonly position: bigint;
+}
+
+/**
+ * Write the arm rows of one `lom:lom` element's subtree: one row per element the kind has an arm
+ * for, each copying its record's id and owner. The `Lom` row and its owner arm are the caller's.
+ *
+ * @param rows - The rows so far.
+ * @param index - The node of every element, and each node's `Edge` position under its parent.
+ * @param root - The `lom:lom` element, or the element whose children are walked.
+ * @param start - The element's own node, kind and position.
+ * @param record - The record's id and owner, and the findings the walk adds to.
+ * @returns The rows with the subtree's arm rows added.
+ */
+export const lomSubtreeRows = (
+  rows: Rows,
+  index: { readonly nodes: NodeIndex; readonly positions: ReadonlyMap<string, bigint> },
+  root: Element,
+  start: LomAbove,
+  record: Pick<LomContext, "findings" | "lom" | "owner">,
+): Rows => {
+  const { nodes, positions } = index;
+  let built = rows;
   const add = <R extends AnyRelation>(relation: R, facts: readonly Fact<R>[]): void => {
     built = Rows.add(built, relation, facts);
   };
@@ -316,25 +325,11 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     name: AttributeNameHandle,
     whiteSpace: "preserve" | "collapse",
   ): string => {
-    const node = nodes.get(element);
-    const lexical = attributeOf(element, name);
-    if (node === undefined || Option.isNone(lexical)) {
-      return "";
-    }
-
-    const processed = typedAttribute(built, node.id, node.kind, name, lexical.value, whiteSpace);
+    const processed = typedValue(built, nodes, element, name, whiteSpace);
     built = processed.rows;
 
     return processed.value;
   };
-  const kindIs = (element: Element, kind: NodeKindHandle): string | undefined => {
-    const node = nodes.get(element);
-
-    return node?.kind === kind ? node.id : undefined;
-  };
-
-  const documents: ManifestDocument[] = [];
-  const { root } = doc;
 
   const lomArms: Partial<Record<NodeKindHandle, (c: LomContext) => void>> = {
     "lom:aggregationLevel": (c) => {
@@ -623,12 +618,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
 
   const lomSubtree = (
     element: Element,
-    above: {
-      readonly grandparentKind: NodeKindHandle | undefined;
-      readonly id: string;
-      readonly kind: NodeKindHandle;
-      readonly position: bigint;
-    },
+    above: LomAbove,
     shared: Pick<LomContext, "findings" | "lom" | "owner">,
   ): void => {
     for (const child of elementChildren(element)) {
@@ -656,6 +646,242 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
         { grandparentKind: above.kind, id: node.id, kind: node.kind, position },
         shared,
       );
+    }
+  };
+
+  lomSubtree(root, start, record);
+
+  return built;
+};
+
+/**
+ * Write the rows of one `csmd:curriculumStandardsMetadataSet` and everything beneath it: the set
+ * under its host, its metadata, sets of GUIDs and labelled GUIDs, their label, GUID and case item
+ * URI leaves, and each of the five attributes under the `replace` class of the spec's 3.9.
+ *
+ * @param rows - The rows so far.
+ * @param nodes - The node of every element.
+ * @param set - The set's element.
+ * @param host - The id of the node the set sits under: a `cp:metadata` node of the manifest, a
+ *   resource or a file, or a `lom:lom`.
+ * @returns The rows with the set's added.
+ */
+export const csmSetRows = (rows: Rows, nodes: NodeIndex, set: Element, host: string): Rows => {
+  let built = rows;
+  const add = <R extends AnyRelation>(relation: R, facts: readonly Fact<R>[]): void => {
+    built = Rows.add(built, relation, facts);
+  };
+  const attribute = (
+    element: Element,
+    name: AttributeNameHandle,
+    relation:
+      | typeof csm.CsmMetadataProviderId
+      | typeof csm.CsmSetOfGuidsRegion
+      | typeof csm.CsmSetOfGuidsVersion
+      | typeof csm.CsmSetResourceLabel
+      | typeof csm.CsmSetResourcePartId,
+  ): void => {
+    const node = nodes.get(element);
+    const lexical = attributeOf(element, name);
+    if (node === undefined || Option.isNone(lexical)) {
+      return;
+    }
+
+    const processed = typedAttribute(built, node.id, node.kind, name, lexical.value, "replace");
+    built = Rows.add(processed.rows, relation, [{ node: node.id, value: processed.value }]);
+  };
+  const leaves = (labelled: Element, labelledGuid: string): void => {
+    for (const leaf of elementChildren(labelled)) {
+      const node = nodes.get(leaf);
+      if (node === undefined) {
+        continue;
+      }
+
+      const content = contentOf(leaf);
+      if (node.kind === "csmd:label") {
+        add(csm.CsmLabel, [{ id: node.id, labelledGuid, value: replace(content) }]);
+      } else if (node.kind === "csmd:GUID") {
+        add(csm.CsmGuid, [{ id: node.id, labelledGuid, value: replace(content) }]);
+      } else if (node.kind === "csmd:caseItemURI") {
+        add(csm.CsmCaseItemUri, [{ id: node.id, labelledGuid, value: collapse(content) }]);
+      }
+    }
+  };
+  const nodeOf = (element: Element, kind: NodeKindHandle): string | undefined => {
+    const node = nodes.get(element);
+
+    return node?.kind === kind ? node.id : undefined;
+  };
+
+  const setId = nodeOf(set, "csmd:curriculumStandardsMetadataSet");
+  if (setId === undefined) {
+    return built;
+  }
+
+  add(csm.CsmSet, [{ host, id: setId }]);
+  attribute(set, "resourceLabel", csm.CsmSetResourceLabel);
+  attribute(set, "resourcePartId", csm.CsmSetResourcePartId);
+  for (const metadata of elementChildren(set)) {
+    const metadataId = nodeOf(metadata, "csmd:curriculumStandardsMetadata");
+    if (metadataId === undefined) {
+      continue;
+    }
+
+    add(csm.CsmMetadata, [{ id: metadataId, set: setId }]);
+    attribute(metadata, "providerId", csm.CsmMetadataProviderId);
+    for (const guids of elementChildren(metadata)) {
+      const guidsId = nodeOf(guids, "csmd:setOfGUIDs");
+      if (guidsId === undefined) {
+        continue;
+      }
+
+      add(csm.CsmSetOfGuids, [{ id: guidsId, metadata: metadataId }]);
+      attribute(guids, "region", csm.CsmSetOfGuidsRegion);
+      attribute(guids, "version", csm.CsmSetOfGuidsVersion);
+      for (const labelled of elementChildren(guids)) {
+        const labelledId = nodeOf(labelled, "csmd:labelledGUID");
+        if (labelledId !== undefined) {
+          add(csm.CsmLabelledGuid, [{ id: labelledId, setOfGuids: guidsId }]);
+          leaves(labelled, labelledId);
+        }
+      }
+    }
+  }
+
+  return built;
+};
+
+/**
+ * Write the rows of a package's manifest.
+ *
+ * The root must be the QTI 3 content package `manifest` and its `schemaversion` `3.0.0` or `3.0.1`,
+ * and that is judged before anything else. The package id is a fresh uuid and is the manifest
+ * tree's id. Every manifest attribute goes through {@link typedAttribute} with the class the spec
+ * names. A `file`'s position is its element's `Edge` position under the resource, every child
+ * counted.
+ *
+ * @param dir - The package directory, where the bytes of unclaimed files are read.
+ * @param entries - The package's entries, as `listPackage` returns them.
+ * @param doc - The manifest as the reader gave it.
+ * @param rows - The rows so far.
+ * @returns The rows with the manifest's added, the node index, the package id, the version and one
+ *   document per resource of a QTI type that has an `href`; `NotQti3` for a manifest that is not
+ *   QTI 3, `UnmodeledVocabulary` for an element or attribute no registry names, and
+ *   `PackageReadError` for an entry that is not a regular file inside the package.
+ */
+export const manifestRows = Effect.fn("import.manifestRows")(function* manifestRows(
+  dir: string,
+  entries: readonly Entry[],
+  doc: XmlDocument,
+  rows: Rows,
+): Effect.fn.Return<
+  {
+    documents: readonly ManifestDocument[];
+    nodes: NodeIndex;
+    packageId: string;
+    rows: Rows;
+    version: SchemaVersionHandle;
+  },
+  NotQti3 | PackageReadError | UnmodeledVocabulary | PlatformError.PlatformError | ZipRefusal,
+  FileSystem.FileSystem
+> {
+  const version = yield* versionOf(doc);
+  const packageId = crypto.randomUUID();
+  const tree = yield* treeRows(
+    doc,
+    { charset: doc.charset, id: packageId, kind: "manifest", root: "manifest", version },
+    rows,
+  );
+  const { nodes } = tree;
+  let built = tree.rows;
+  const positions = new Map(Rows.of(built, Edge).map((edge) => [edge.child, edge.position]));
+
+  const add = <R extends AnyRelation>(relation: R, facts: readonly Fact<R>[]): void => {
+    built = Rows.add(built, relation, facts);
+  };
+  const typed = (
+    element: Element,
+    name: AttributeNameHandle,
+    whiteSpace: "preserve" | "collapse",
+  ): string => {
+    const processed = typedValue(built, nodes, element, name, whiteSpace);
+    built = processed.rows;
+
+    return processed.value;
+  };
+  const kindIs = (element: Element, kind: NodeKindHandle): string | undefined => {
+    const node = nodes.get(element);
+
+    return node?.kind === kind ? node.id : undefined;
+  };
+
+  const documents: ManifestDocument[] = [];
+  const { root } = doc;
+
+  /**
+   * Write the rows of one `qmd:qtiMetadata` of a resource: its record and one arm row per leaf.
+   */
+  const qmdRows = (
+    qmd: Element,
+    host:
+      | { readonly metadata: string; readonly tag: "metadata" }
+      | { readonly lom: string; readonly tag: "resourceLom" },
+    resource: LomResource,
+  ): void => {
+    const node = nodes.get(qmd);
+    if (node === undefined) {
+      return;
+    }
+
+    add(md.QtiMetadata, [
+      { host: host.tag, id: node.id, package: packageId, resource: resource.identifier },
+    ]);
+    if (host.tag === "metadata") {
+      add(md.QtiMetadataInMetadata, [
+        {
+          id: node.id,
+          metadata: host.metadata,
+          package: packageId,
+          resource: resource.identifier,
+          resourceNode: resource.node,
+        },
+      ]);
+    } else {
+      add(md.QtiMetadataInResourceLom, [
+        {
+          id: node.id,
+          lom: host.lom,
+          package: packageId,
+          resource: resource.identifier,
+        },
+      ]);
+    }
+
+    for (const leaf of elementChildren(qmd)) {
+      const found = nodes.get(leaf);
+      if (found === undefined) {
+        continue;
+      }
+
+      const content = contentOf(leaf);
+      if (found.kind === "qmd:portableCustomInteractionContext") {
+        add(md.QmdPortableCustomInteractionContext, [{ id: found.id, qtiMetadata: node.id }]);
+        for (const part of elementChildren(leaf)) {
+          const partNode = nodes.get(part);
+          const value = replace(contentOf(part));
+          if (partNode?.kind === "qmd:customTypeIdentifier") {
+            add(md.QmdCustomTypeIdentifier, [{ context: found.id, id: partNode.id, value }]);
+          } else if (partNode?.kind === "qmd:interactionKind") {
+            add(md.QmdInteractionKind, [{ context: found.id, id: partNode.id, value }]);
+          }
+        }
+      } else if (isQmdLeaf(found.kind)) {
+        const spec = qmdLeaves[found.kind];
+        const value = classed(content, spec.class);
+        // SAFETY: the leaf's column pattern judges the value at commit, which is the importer's refusal for it.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+        add(spec.arm, [{ id: found.id, qtiMetadata: node.id, value }] as never);
+      }
     }
   };
 
@@ -696,7 +922,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       ]);
     }
 
-    lomSubtree(
+    built = lomSubtreeRows(
+      built,
+      { nodes, positions },
       lom,
       {
         grandparentKind: undefined,
@@ -709,6 +937,12 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
 
     if (resource === null) {
       return;
+    }
+
+    for (const child of elementChildren(lom)) {
+      if (nodes.get(child)?.kind === "qmd:qtiMetadata") {
+        qmdRows(child, { lom: node.id, tag: "resourceLom" }, resource);
+      }
     }
 
     const bound = {
@@ -743,55 +977,6 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     }
   };
 
-  /**
-   * Write the rows of one `qmd:qtiMetadata` of a resource: its record and one arm row per leaf.
-   */
-  const qmdRows = (qmd: Element, metadataId: string, resource: LomResource): void => {
-    const node = nodes.get(qmd);
-    if (node === undefined) {
-      return;
-    }
-
-    add(md.QtiMetadata, [
-      { host: "metadata", id: node.id, package: packageId, resource: resource.identifier },
-    ]);
-    add(md.QtiMetadataInMetadata, [
-      {
-        id: node.id,
-        metadata: metadataId,
-        package: packageId,
-        resource: resource.identifier,
-        resourceNode: resource.node,
-      },
-    ]);
-    for (const leaf of elementChildren(qmd)) {
-      const found = nodes.get(leaf);
-      if (found === undefined) {
-        continue;
-      }
-
-      const content = contentOf(leaf);
-      if (found.kind === "qmd:portableCustomInteractionContext") {
-        add(md.QmdPortableCustomInteractionContext, [{ id: found.id, qtiMetadata: node.id }]);
-        for (const part of elementChildren(leaf)) {
-          const partNode = nodes.get(part);
-          const value = replace(contentOf(part));
-          if (partNode?.kind === "qmd:customTypeIdentifier") {
-            add(md.QmdCustomTypeIdentifier, [{ context: found.id, id: partNode.id, value }]);
-          } else if (partNode?.kind === "qmd:interactionKind") {
-            add(md.QmdInteractionKind, [{ context: found.id, id: partNode.id, value }]);
-          }
-        }
-      } else if (isQmdLeaf(found.kind)) {
-        const spec = qmdLeaves[found.kind];
-        const value = classed(content, spec.class);
-        // SAFETY: the leaf's column pattern judges the value at commit, which is the importer's refusal for it.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-        add(spec.arm, [{ id: found.id, qtiMetadata: node.id, value }] as never);
-      }
-    }
-  };
-
   const metadataChildren = (
     parent: Element,
     metadataNode: { readonly id: string; readonly kind: NodeKindHandle },
@@ -801,8 +986,54 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       const kind = nodes.get(child)?.kind;
       if (kind === "lom:lom") {
         lomRows(child, metadataNode, resource);
+      } else if (kind === "csmd:curriculumStandardsMetadataSet") {
+        built = csmSetRows(built, nodes, child, metadataNode.id);
       } else if (kind === "qmd:qtiMetadata" && resource !== null) {
-        qmdRows(child, metadataNode.id, resource);
+        qmdRows(child, { metadata: metadataNode.id, tag: "metadata" }, resource);
+      }
+    }
+  };
+
+  /**
+   * Write the rows of the `cp:metadata.file` of one `cp:file`: its record, each record of LOM the
+   * metadata holds with its subtree, and each curriculum standards set. A file's records are
+   * outside the object identifier and title rows of a resource's, and a `qtiMetadata` beside them
+   * gets no row, so the database refuses it at commit.
+   */
+  const fileMetadataRows = (file: Element, fileId: string): void => {
+    for (const metadataElement of childrenNamed(file, "metadata")) {
+      const metadataId = kindIs(metadataElement, "cp:metadata.file");
+      if (metadataId === undefined) {
+        continue;
+      }
+
+      add(FileMetadata, [{ file: fileId, id: metadataId }]);
+      for (const child of elementChildren(metadataElement)) {
+        const node = nodes.get(child);
+        if (node?.kind === "lom:lom") {
+          add(md.Lom, [{ id: node.id, owner: "file", package: packageId }]);
+          add(md.FileLom, [
+            { file: fileId, lom: node.id, metadata: metadataId, package: packageId },
+          ]);
+          built = lomSubtreeRows(
+            built,
+            { nodes, positions },
+            child,
+            {
+              grandparentKind: undefined,
+              id: node.id,
+              kind: node.kind,
+              position: positions.get(node.id) ?? 0n,
+            },
+            {
+              findings: { entries: [], hasIdentifier: false, hasTitle: false, titles: [] },
+              lom: node.id,
+              owner: "file",
+            },
+          );
+        } else if (node?.kind === "csmd:curriculumStandardsMetadataSet") {
+          built = csmSetRows(built, nodes, child, metadataId);
+        }
       }
     }
   };
@@ -868,6 +1099,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       const id = kindIs(file, "cp:file");
       const position = id === undefined ? undefined : positions.get(id);
       if (id !== undefined && position !== undefined) {
+        fileMetadataRows(file, id);
         add(File, [
           {
             href: typed(file, "href", "collapse"),
