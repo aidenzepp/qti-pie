@@ -1,5 +1,6 @@
 /* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import { createHash } from "node:crypto";
+import path from "node:path";
 import { Config, Effect, FileSystem, Match, Option, Schema, Stream } from "effect";
 import type { PlatformError } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -25,8 +26,10 @@ export const FIXTURES_VERSION = "1" as const;
  * - `EncodeUtf16` writes `file` as a byte order mark `FF FE` followed by its text as UTF-16 little
  *   endian. The text is the latin1 reading of the extracted bytes, so the file must be ASCII: a
  *   multi-byte UTF-8 character would be encoded as its separate bytes, not as one character.
+ *
+ * The file edits are {@link FileEdit}; {@link CutEdit} is the one edit that names no file.
  */
-export type Edit =
+export type FileEdit =
   | {
       readonly _tag: "ReplaceText";
       readonly file: string;
@@ -40,6 +43,24 @@ export type Edit =
       readonly text: string;
     }
   | { readonly _tag: "EncodeUtf16"; readonly file: string };
+
+/**
+ * The edit that turns an extracted package into a minimal package of one item.
+ *
+ * It keeps the item file `item` and the files that item references, deletes every other entry and
+ * writes a manifest of one `imsqti_item_xmlv3p0` resource declaring `schemaversion`. It applies
+ * after the {@link FileEdit}s of its spec, once the package is extracted.
+ */
+export interface CutEdit {
+  readonly _tag: "cut";
+  readonly item: string;
+  readonly schemaversion: "3.0.0" | "3.0.1";
+}
+
+/**
+ * Any edit a {@link FixtureSpec} may list: a {@link FileEdit} or the {@link CutEdit}.
+ */
+export type Edit = FileEdit | CutEdit;
 
 /**
  * A fixture's whole definition: what it is called, the tarball member it comes from and the edits
@@ -96,9 +117,68 @@ export const hash12 = (spec: FixtureSpec): string =>
   transformHash(spec, FIXTURES_VERSION).slice(0, 12);
 
 /**
+ * The names of the cut items: one `cut-<interaction>` fixture per interaction that has an
+ * M0+M1-pure corpus item (spec 3.6's `one source each` line), 19 of the 20 interactions.
+ * `qti-end-attempt-interaction` has no pure corpus item, so its fixture is hand-written, and
+ * `qti-position-object-stage` is in the item `cut-position-object` is cut from.
+ */
+const cutNames = [
+  "cut-associate",
+  "cut-choice",
+  "cut-drawing",
+  "cut-extended-text",
+  "cut-gap-match",
+  "cut-graphic-associate",
+  "cut-graphic-gap-match",
+  "cut-graphic-order",
+  "cut-hotspot",
+  "cut-hottext",
+  "cut-inline-choice",
+  "cut-match",
+  "cut-media",
+  "cut-order",
+  "cut-position-object",
+  "cut-select-point",
+  "cut-slider",
+  "cut-text-entry",
+  "cut-upload",
+] as const;
+
+/**
+ * The corpus packages the cut items come from, each as the tarball member of its zip, which
+ * `materializeCorpus` names by the zip's file name.
+ */
+const corpusMembers = {
+  BBQsTest: "qtiv3-examples/packaging/BBQsTest/BBQsTest.zip",
+  BPIG_22April: "QTI3_BPIG_Examples/BPIG_22April.zip",
+} as const;
+
+/**
+ * The spec of a cut item: the package's zip, with the one {@link CutEdit} that keeps `itemPath`
+ * and the files it references and writes a minimal manifest.
+ *
+ * @param name - The fixture's name, `cut-<interaction>`.
+ * @param pkg - The corpus package the item is in.
+ * @param itemPath - The item's path inside the package's zip.
+ * @param schemaversion - The `schemaversion` the minimal manifest declares: `3.0.1` for a
+ *   `BPIG_22April` item and `3.0.0` for one of `BBQsTest`.
+ * @returns The spec, whose directory is named by the hash of exactly these values like any other.
+ */
+export const cutItem = (
+  name: string,
+  pkg: keyof typeof corpusMembers,
+  itemPath: string,
+  schemaversion: CutEdit["schemaversion"],
+): FixtureSpec => ({
+  edits: [{ _tag: "cut", item: itemPath, schemaversion }],
+  member: corpusMembers[pkg],
+  name,
+});
+
+/**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-broken
- * packages, each the same package with the edits of its row in the spec table, and `sharedMedia`,
- * the examples' shared-media package unedited.
+ * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
+ * examples' shared-media package unedited, and the 19 cut items of {@link cutNames}.
  */
 export const fixtureNames = [
   "simple",
@@ -121,6 +201,7 @@ export const fixtureNames = [
   "comment-in-element",
   "bad-template-uri",
   "sharedMedia",
+  ...cutNames,
 ] as const;
 
 /**
@@ -148,7 +229,7 @@ const sharedMediaMember = "qtiv3-examples/packaging/sharedMedia/sharedMedia.zip"
  * @param replacement - The text that takes its place.
  * @returns The edit as plain data.
  */
-const replaceIn = (file: string, search: string, replacement: string): Edit => ({
+const replaceIn = (file: string, search: string, replacement: string): FileEdit => ({
   _tag: "ReplaceText",
   file,
   replacement,
@@ -161,7 +242,7 @@ const replaceIn = (file: string, search: string, replacement: string): Edit => (
  * @param label - The encoding label the declaration names instead of `UTF-8`.
  * @returns The edit as plain data.
  */
-const declareEncoding = (label: string): Edit =>
+const declareEncoding = (label: string): FileEdit =>
   replaceIn("choice.xml", 'encoding="UTF-8"', `encoding="${label}"`);
 
 /**
@@ -171,7 +252,7 @@ const declareEncoding = (label: string): Edit =>
  * @param character - The character to insert after `picture.`.
  * @returns The edit as plain data.
  */
-const afterPicture = (character: string): Edit =>
+const afterPicture = (character: string): FileEdit =>
   replaceIn("choice.xml", "in the picture.</p>", `in the picture.${character}</p>`);
 
 /**
@@ -210,6 +291,72 @@ const firstChoice =
   '<qti-simple-choice identifier="ChoiceA">You must stay with your luggage at all times.</qti-simple-choice>';
 
 /**
+ * The 19 cut items: `cut-<interaction>` and the source item of spec 3.6's `one source each` line.
+ * The picks are revision 2's of the spec, and a later tarball change is a list update here.
+ */
+const cutSpecs: Record<(typeof cutNames)[number], FixtureSpec> = {
+  "cut-associate": cutItem("cut-associate", "BPIG_22April", "items/QTI3-associate.xml", "3.0.1"),
+  "cut-choice": cutItem("cut-choice", "BPIG_22April", "items/BG007.xml", "3.0.1"),
+  "cut-drawing": cutItem("cut-drawing", "BPIG_22April", "items/drawing-interaction-1.xml", "3.0.1"),
+  "cut-extended-text": cutItem(
+    "cut-extended-text",
+    "BBQsTest",
+    "id-1ccd6e04685f/ShortAnswer-extText-postcard.xml",
+    "3.0.0",
+  ),
+  "cut-gap-match": cutItem(
+    "cut-gap-match",
+    "BPIG_22April",
+    "items/gap-match-example-1.xml",
+    "3.0.1",
+  ),
+  "cut-graphic-associate": cutItem(
+    "cut-graphic-associate",
+    "BPIG_22April",
+    "items/example-graphic-assoc-1.xml",
+    "3.0.1",
+  ),
+  "cut-graphic-gap-match": cutItem(
+    "cut-graphic-gap-match",
+    "BPIG_22April",
+    "items/graphic-gap-match-item1.xml",
+    "3.0.1",
+  ),
+  "cut-graphic-order": cutItem(
+    "cut-graphic-order",
+    "BPIG_22April",
+    "items/QTI3-graphic-order.xml",
+    "3.0.1",
+  ),
+  "cut-hotspot": cutItem("cut-hotspot", "BPIG_22April", "items/QTI3-hotspot.xml", "3.0.1"),
+  "cut-hottext": cutItem("cut-hottext", "BPIG_22April", "items/hot-text-example-1.xml", "3.0.1"),
+  "cut-inline-choice": cutItem(
+    "cut-inline-choice",
+    "BPIG_22April",
+    "items/QTI3-custom-stylesheet.xml",
+    "3.0.1",
+  ),
+  "cut-match": cutItem("cut-match", "BPIG_22April", "items/QTI3-match.xml", "3.0.1"),
+  "cut-media": cutItem("cut-media", "BPIG_22April", "items/media-example-1.xml", "3.0.1"),
+  "cut-order": cutItem("cut-order", "BPIG_22April", "items/Order_RTL_Hebrew.xml", "3.0.1"),
+  "cut-position-object": cutItem(
+    "cut-position-object",
+    "BPIG_22April",
+    "items/position-object-1.xml",
+    "3.0.1",
+  ),
+  "cut-select-point": cutItem(
+    "cut-select-point",
+    "BPIG_22April",
+    "items/select-point-item_1.xml",
+    "3.0.1",
+  ),
+  "cut-slider": cutItem("cut-slider", "BPIG_22April", "items/slider-1.xml", "3.0.1"),
+  "cut-text-entry": cutItem("cut-text-entry", "BPIG_22April", "items/BG010.xml", "3.0.1"),
+  "cut-upload": cutItem("cut-upload", "BBQsTest", "id-90b59b73c8e4/upload-file.xml", "3.0.0"),
+};
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
  *
@@ -246,6 +393,7 @@ const firstChoice =
  * - `bad-template-uri` reads `a%zz` as the response-processing template, an invalid URI.
  */
 const specs: Record<FixtureName, FixtureSpec> = {
+  ...cutSpecs,
   "bad-identifier-value": {
     edits: [
       replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value>Choice A</qti-value>"),
@@ -597,7 +745,7 @@ const removeFinderMetadata = Effect.fn("fixtures.removeFinderMetadata")(
  * @param edit - The edit naming `search` and `replacement`.
  * @returns `text` with `search` replaced; throws when `search` does not occur exactly once.
  */
-const replaceOnce = (text: string, edit: Extract<Edit, { _tag: "ReplaceText" }>): string => {
+const replaceOnce = (text: string, edit: Extract<FileEdit, { _tag: "ReplaceText" }>): string => {
   const first = text.indexOf(edit.search);
   const occurrences = text.split(edit.search).length - 1;
 
@@ -619,7 +767,7 @@ const replaceOnce = (text: string, edit: Extract<Edit, { _tag: "ReplaceText" }>)
  */
 const insertAfterLine = (
   text: string,
-  edit: Extract<Edit, { _tag: "InsertAfterLine" }>,
+  edit: Extract<FileEdit, { _tag: "InsertAfterLine" }>,
 ): string => {
   let end = -1;
 
@@ -646,7 +794,7 @@ const insertAfterLine = (
  * @returns The edited text; an `EncodeUtf16` edit leaves the text as it is, because it only changes
  *   how the bytes are written.
  */
-const applyEdit = (text: string, edit: Edit): string =>
+const applyEdit = (text: string, edit: FileEdit): string =>
   Match.value(edit).pipe(
     Match.tag("ReplaceText", (replace) => replaceOnce(text, replace)),
     Match.tag("InsertAfterLine", (insert) => insertAfterLine(text, insert)),
@@ -666,7 +814,7 @@ const applyEdit = (text: string, edit: Edit): string =>
  *   occur exactly once, a line that does not exist) or the text holds a character latin1 cannot
  *   write.
  */
-export const editBytes = (original: Uint8Array, edits: readonly Edit[]): Uint8Array => {
+export const editBytes = (original: Uint8Array, edits: readonly FileEdit[]): Uint8Array => {
   let text = Buffer.from(original).toString("latin1");
 
   for (const edit of edits) {
@@ -687,10 +835,10 @@ export const editBytes = (original: Uint8Array, edits: readonly Edit[]): Uint8Ar
 };
 
 /**
- * Apply a spec's edits to the files they name, inside an extracted package directory.
+ * Apply a spec's file edits to the files they name, inside an extracted package directory.
  *
  * @param pkg - The extracted package directory.
- * @param edits - The spec's edit list.
+ * @param edits - The spec's edit list; a {@link CutEdit} in it is left for {@link cutPackage}.
  * @returns Completes once every named file has been rewritten once.
  */
 const applyEdits = Effect.fn("fixtures.applyEdits")(function* applyEdits(
@@ -698,9 +846,10 @@ const applyEdits = Effect.fn("fixtures.applyEdits")(function* applyEdits(
   edits: readonly Edit[],
 ) {
   const fs = yield* FileSystem.FileSystem;
+  const fileEdits = edits.filter((edit) => edit._tag !== "cut");
 
   yield* Effect.forEach(
-    new Set(edits.map((edit) => edit.file)),
+    new Set(fileEdits.map((edit) => edit.file)),
     (file) =>
       Effect.gen(function* rewrite() {
         const original = yield* fs.readFile(`${pkg}/${file}`);
@@ -709,7 +858,7 @@ const applyEdits = Effect.fn("fixtures.applyEdits")(function* applyEdits(
           `${pkg}/${file}`,
           editBytes(
             original,
-            edits.filter((edit) => edit.file === file),
+            fileEdits.filter((edit) => edit.file === file),
           ),
         );
       }),
@@ -718,10 +867,142 @@ const applyEdits = Effect.fn("fixtures.applyEdits")(function* applyEdits(
 });
 
 /**
+ * The attributes of an item whose values may name a file of the package: `src`, `href`, `data` and
+ * `poster`. The item is read with a plain regular expression over its text, not with `readXml`: a
+ * match that is not a file (text or a comment that reads `src="x"`) names no entry of the package
+ * and is dropped, so the cut keeps exactly the files the item can reach.
+ */
+const referencePattern =
+  /\s(?:src|href|data|poster)\s*=\s*(?:"(?<double>[^"]*)"|'(?<single>[^']*)')/gu;
+
+/**
+ * A reference that is not a path inside the package: it has a scheme, starts at the root or names
+ * only a fragment.
+ */
+const externalReference = /^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/|#)/u;
+
+/**
+ * Make an item's file name an XML `NCName`: every character outside letters, digits, `_`, `.` and
+ * `-` becomes `_`, and a name that does not start with a letter or `_` gains a leading `_`.
+ *
+ * @param item - The item's path.
+ * @returns The basename of `item` without its extension, as an `NCName`.
+ */
+const ncNameOf = (item: string): string => {
+  const name = path.posix
+    .basename(item, path.posix.extname(item))
+    .replaceAll(/[^A-Za-z0-9_.-]/gu, "_");
+
+  return /^[A-Za-z_]/u.test(name) ? name : `_${name}`;
+};
+
+/**
+ * Escape text for an XML attribute value written in double quotes.
+ */
+const escapeAttribute = (text: string): string =>
+  text.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+
+/**
+ * Write the minimal manifest of a cut: the QTI 3 content-package namespaces, `QTI Package` and the
+ * edit's `schemaversion`, no LOM, and one `imsqti_item_xmlv3p0` resource of the item with a `file`
+ * for each kept entry.
+ *
+ * @param edit - The cut.
+ * @param kept - Every kept path, the item first.
+ * @returns The manifest's text.
+ */
+const cutManifest = (edit: CutEdit, kept: readonly string[]): string => {
+  const identifier = ncNameOf(edit.item);
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"',
+    '  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+    '  xsi:schemaLocation="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0_imscpv1p2_v1p0.xsd"',
+    `  identifier="MANIFEST-${identifier}">`,
+    "  <metadata>",
+    "    <schema>QTI Package</schema>",
+    `    <schemaversion>${edit.schemaversion}</schemaversion>`,
+    "  </metadata>",
+    "  <organizations/>",
+    "  <resources>",
+    `    <resource identifier="${identifier}" type="imsqti_item_xmlv3p0" href="${escapeAttribute(edit.item)}">`,
+    ...kept.map((file) => `      <file href="${escapeAttribute(file)}"/>`),
+    "    </resource>",
+    "  </resources>",
+    "</manifest>",
+    "",
+  ].join("\n");
+};
+
+/**
+ * Cut an extracted package down to one item, in place.
+ *
+ * The files kept are the item and each file its `src`, `href`, `data` and `poster` values name
+ * (relative paths only, resolved from the item's directory, and only when the package holds the
+ * file). Every other entry is deleted, the kept files keep their paths, and a fresh
+ * `imsmanifest.xml` replaces the package's own. The cut is a function of the package and the edit
+ * alone, so the directory it makes is named by the same hash as every other fixture.
+ *
+ * @param pkg - The extracted package directory.
+ * @param tmp - The temporary directory that holds it, where the cut is assembled.
+ * @param edit - The cut.
+ * @returns Completes once `pkg` holds only the item, its files and the manifest.
+ */
+const cutPackage = Effect.fn("fixtures.cutPackage")(function* cutPackage(
+  pkg: string,
+  tmp: string,
+  edit: CutEdit,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const item = yield* fs.readFile(`${pkg}/${edit.item}`);
+  const itemDirectory = path.posix.dirname(edit.item);
+  const kept = [edit.item];
+
+  for (const match of Buffer.from(item).toString("latin1").matchAll(referencePattern)) {
+    const reference = (match.groups?.["double"] ?? match.groups?.["single"] ?? "").replace(
+      /[?#].*$/u,
+      "",
+    );
+
+    if (reference === "" || externalReference.test(reference)) {
+      continue;
+    }
+
+    const resolved = path.posix.join(itemDirectory, reference);
+
+    if (
+      !resolved.startsWith("..") &&
+      !kept.includes(resolved) &&
+      (yield* fs.exists(`${pkg}/${resolved}`)) &&
+      (yield* fs.stat(`${pkg}/${resolved}`)).type === "File"
+    ) {
+      kept.push(resolved);
+    }
+  }
+
+  const cut = `${tmp}/cut`;
+
+  yield* Effect.forEach(
+    kept,
+    (file) =>
+      Effect.gen(function* copyKept() {
+        yield* fs.makeDirectory(path.posix.dirname(`${cut}/${file}`), { recursive: true });
+        yield* fs.writeFile(`${cut}/${file}`, yield* fs.readFile(`${pkg}/${file}`));
+      }),
+    { discard: true },
+  );
+  yield* fs.writeFileString(`${cut}/imsmanifest.xml`, cutManifest(edit, kept));
+  yield* fs.remove(pkg, { recursive: true });
+  yield* fs.rename(cut, pkg);
+});
+
+/**
  * Extract and derive a spec's package into `<tmp>/pkg`.
  *
  * The recipe is `tar` of the one zip member, `unzip` of it, deletion of `.DS_Store`, then the
- * spec's edits, all inside the temporary directory so nothing is visible under the root yet.
+ * spec's file edits and its cut, all inside the temporary directory so nothing is visible under the
+ * root yet.
  *
  * @param spec - The fixture's spec.
  * @param tarball - The examples tarball.
@@ -749,6 +1030,12 @@ const build = Effect.fn("fixtures.build")(function* build(
   yield* run("unzip", ["-q", "-o", `${tmp}/src/${spec.member}`, "-d", `${tmp}/pkg`]);
   yield* removeFinderMetadata(`${tmp}/pkg`);
   yield* applyEdits(`${tmp}/pkg`, spec.edits);
+
+  for (const edit of spec.edits) {
+    if (edit._tag === "cut") {
+      yield* cutPackage(`${tmp}/pkg`, tmp, edit);
+    }
+  }
 });
 
 /**

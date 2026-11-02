@@ -1,7 +1,7 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Result } from "effect";
 import type { ItemInput } from "#qti/import/item.ts";
 import { ownAttributes, renderTree } from "#qti/export/render.ts";
 import { itemRows } from "#qti/import/item.ts";
@@ -11,9 +11,11 @@ import * as family from "#qti/schema/attributes.ts";
 import { ResourceLomGeneral } from "#qti/schema/lang.ts";
 import { registries } from "#qti/schema/seed/admission.ts";
 import { listPackage } from "#qti/package/read.ts";
-import { materialize } from "#qti/test/fixtures.ts";
+import type { FixtureName } from "#qti/test/fixtures.ts";
+import { fixtureNames, materialize, materializeCorpus } from "#qti/test/fixtures.ts";
 import { canonicalize } from "#qti/xml/canonical.ts";
 import { xmllintC14n } from "#qti/xml/oracle.ts";
+import type { Element } from "#qti/xml/tree.ts";
 import { readXml } from "#qti/xml/read.ts";
 
 /**
@@ -23,51 +25,82 @@ import { readXml } from "#qti/xml/read.ts";
 const textOf = (bytes: Uint8Array): string => new TextDecoder().decode(bytes);
 
 /**
- * Import the `sharedMedia` package into in-memory rows, no database: the manifest, then every
+ * Import a materialized fixture package into in-memory rows, no database: the manifest, then every
  * item document it lists.
  *
+ * @param name - The fixture to materialize and import.
  * @returns The package directory, the rows of every tree, the manifest tree's id and each item's
  *   path with its tree id.
  */
-const importSharedMedia = Effect.gen(function* importedSharedMedia() {
-  const fs = yield* FileSystem.FileSystem;
-  const dir = yield* materialize("sharedMedia");
-  const entries = yield* listPackage(dir);
-  const manifest = yield* readXml(yield* fs.readFile(path.join(dir, "imsmanifest.xml")));
-  const imported = yield* manifestRows(dir, entries, manifest, Rows.empty());
-  let { rows } = imported;
-  const items: (readonly [path: string, treeId: string])[] = [];
+const importFixture = (name: FixtureName) =>
+  Effect.gen(function* importedFixture() {
+    const fs = yield* FileSystem.FileSystem;
+    const dir = yield* materialize(name);
+    const entries = yield* listPackage(dir);
+    const manifest = yield* readXml(yield* fs.readFile(path.join(dir, "imsmanifest.xml")));
+    const imported = yield* manifestRows(dir, entries, manifest, Rows.empty());
+    let { rows } = imported;
+    const items: (readonly [path: string, treeId: string])[] = [];
 
-  for (const document of imported.documents) {
-    const doc = yield* readXml(yield* fs.readFile(path.join(dir, document.path)));
-    const withItem = yield* itemRows(
-      {
-        doc,
-        packageId: imported.packageId,
-        path: document.path,
-        resource: document.resource,
-        resourceLomHasGeneral: Rows.of(rows, ResourceLomGeneral).some(
-          (general) => general.resource === document.resource,
-        ),
-        resourceType: document.type,
-        version: imported.version,
-      },
-      rows,
-    );
+    for (const document of imported.documents) {
+      const doc = yield* readXml(yield* fs.readFile(path.join(dir, document.path)));
+      const withItem = yield* itemRows(
+        {
+          doc,
+          packageId: imported.packageId,
+          path: document.path,
+          resource: document.resource,
+          resourceLomHasGeneral: Rows.of(rows, ResourceLomGeneral).some(
+            (general) => general.resource === document.resource,
+          ),
+          resourceType: document.type,
+          version: imported.version,
+        },
+        rows,
+      );
 
-    ({ rows } = withItem);
-    items.push([document.path, withItem.documentId]);
-  }
+      ({ rows } = withItem);
+      items.push([document.path, withItem.documentId]);
+    }
 
-  return { dir, items, packageId: imported.packageId, rows };
-});
+    return { dir, items, packageId: imported.packageId, rows };
+  });
+
+/**
+ * Render each named tree of an imported package and compare it with the oracle's canonical form of
+ * the file it came from.
+ *
+ * @param imported - What {@link importFixture} returned.
+ * @param trees - Each file's path under the package directory with its tree id.
+ * @returns One line per file whose rendering is not the oracle's bytes, naming the file; empty when
+ *   every file agrees.
+ */
+const disagreements = (
+  imported: { readonly dir: string; readonly rows: Parameters<typeof renderTree>[0] },
+  trees: readonly (readonly [file: string, treeId: string])[],
+) =>
+  Effect.gen(function* compared() {
+    const found: string[] = [];
+
+    for (const [file, treeId] of trees) {
+      const expected = textOf(yield* xmllintC14n(path.join(imported.dir, file)));
+      const rendered = textOf(canonicalize(renderTree(imported.rows, treeId)));
+
+      if (rendered !== expected) {
+        found.push(`${file}: rendered ${rendered.length} bytes, the oracle ${expected.length}`);
+      }
+    }
+
+    return found;
+  });
 
 layer(NodeServices.layer, { excludeTestServices: true })(
   "export/render.ts on sharedMedia, no database",
   (it) => {
     it.effect("the manifest and both items render to the oracle's canonical bytes", () =>
       Effect.gen(function* everyKindRenders() {
-        const { dir, items, packageId, rows } = yield* importSharedMedia;
+        const imported = yield* importFixture("sharedMedia");
+        const { items, packageId } = imported;
 
         assert.deepStrictEqual(items.map(([file]) => file).toSorted(), [
           "example/graphic_order.xml",
@@ -79,13 +112,57 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           ...items,
         ];
 
-        for (const [file, treeId] of trees) {
-          const expected = textOf(yield* xmllintC14n(path.join(dir, file)));
-          const rendered = textOf(canonicalize(renderTree(rows, treeId)));
-
-          assert.strictEqual(rendered, expected, file);
-        }
+        assert.deepStrictEqual(yield* disagreements(imported, trees), []);
       }),
+    );
+  },
+);
+
+/**
+ * The cut items' fixture names, as `fixtureNames` lists them.
+ */
+const cutNames = fixtureNames.filter((name) => name.startsWith("cut-"));
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "export/render.ts on the 19 cut items, no database",
+  (it) => {
+    it.effect(
+      "every cut item and its minimal manifest render to the oracle's canonical bytes",
+      () =>
+        Effect.gen(function* everyCutItemRenders() {
+          const failures: string[] = [];
+          let files = 0;
+
+          assert.strictEqual(cutNames.length, 19);
+
+          for (const name of cutNames) {
+            const outcome = yield* Effect.result(
+              Effect.gen(function* oneCutItem() {
+                const imported = yield* importFixture(name);
+
+                assert.strictEqual(imported.items.length, 1, name);
+
+                return {
+                  found: yield* disagreements(imported, [
+                    ["imsmanifest.xml", imported.packageId],
+                    ...imported.items,
+                  ]),
+                  items: imported.items.length,
+                };
+              }),
+            );
+
+            if (Result.isFailure(outcome)) {
+              failures.push(`${name}: ${JSON.stringify(outcome.failure)}`);
+            } else {
+              files += outcome.success.items;
+              failures.push(...outcome.success.found.map((line) => `${name}: ${line}`));
+            }
+          }
+
+          assert.deepStrictEqual(failures, []);
+          assert.strictEqual(files, cutNames.length);
+        }),
     );
   },
 );
@@ -200,6 +277,176 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           }
         }
       }),
+    );
+  },
+);
+
+/**
+ * Whether the operator asked for the corpus run: it reads every package of the examples tarball
+ * and spawns `xmllint` once per item document, so it runs only on request.
+ */
+const requested = process.env["GR8DES_CORPUS"] === "1";
+
+/**
+ * The part of the QTI 3 item namespace the census tests for, as in spec 3.6.
+ */
+const asiNamespace = "imsqtiasi_v3p0";
+
+/**
+ * The element names of the M0 and M1 rosters and of the HTML profile, as the second census script
+ * of spec 3.6 lists them: an item is pure when every element it holds is one of these.
+ */
+const censusElements: ReadonlySet<string> = new Set(
+  (
+    "qti-assessment-item qti-response-declaration qti-outcome-declaration qti-correct-response " +
+    "qti-default-value qti-value qti-item-body p img qti-choice-interaction qti-prompt " +
+    "qti-simple-choice qti-response-processing " +
+    "qti-area-map-entry qti-area-mapping qti-associable-hotspot qti-associate-interaction " +
+    "qti-catalog-info qti-companion-materials-info qti-content-body qti-context-declaration " +
+    "qti-drawing-interaction qti-end-attempt-interaction qti-extended-text-interaction " +
+    "qti-feedback-block qti-feedback-inline qti-gap qti-gap-img qti-gap-match-interaction " +
+    "qti-gap-text qti-graphic-associate-interaction qti-graphic-gap-match-interaction " +
+    "qti-graphic-order-interaction qti-hotspot-choice qti-hotspot-interaction qti-hottext " +
+    "qti-hottext-interaction qti-inline-choice qti-inline-choice-interaction " +
+    "qti-interpolation-table qti-interpolation-table-entry qti-label qti-map-entry qti-mapping " +
+    "qti-match-interaction qti-match-table qti-match-table-entry qti-media-interaction " +
+    "qti-modal-feedback qti-order-interaction qti-position-object-interaction " +
+    "qti-position-object-stage qti-printed-variable qti-rubric-block " +
+    "qti-select-point-interaction qti-simple-associable-choice qti-simple-match-set " +
+    "qti-slider-interaction qti-stylesheet qti-template-block qti-template-declaration " +
+    "qti-template-inline qti-text-entry-interaction qti-upload-interaction " +
+    "a abbr acronym address article aside audio b bdi bdo big blockquote br caption cite code " +
+    "col colgroup dd details dfn div dl dt em figcaption figure footer h1 h2 h3 h4 h5 h6 " +
+    "header hr i img kbd label li nav object ol p param picture pre q rb rp rt rtc ruby samp " +
+    "section small source span strong sub summary sup table tbody td template tfoot th thead " +
+    "tr track tt ul var video"
+  ).split(" "),
+);
+
+/**
+ * The `data-*` attributes the M1 roster types, which a pure item may carry.
+ */
+const typedDataAttributes: ReadonlySet<string> = new Set([
+  "data-choices-container-width",
+  "data-first-column-header",
+  "data-max-selections-message",
+  "data-min-selections-message",
+  "data-patternmask-message",
+  "data-prompt",
+  "data-qti-suppress-tts",
+]);
+
+/**
+ * Whether an element and everything below it is M0+M1-pure: in the item namespace, a name of
+ * {@link censusElements} and no `data-*` attribute outside {@link typedDataAttributes}, which
+ * leaves `data-catalog-idref` out.
+ */
+const pureBelow = (element: Element): boolean =>
+  element.namespace.includes(asiNamespace) &&
+  censusElements.has(element.local) &&
+  element.attributes.every(
+    (attribute) =>
+      attribute.namespace !== "" ||
+      !attribute.local.startsWith("data-") ||
+      typedDataAttributes.has(attribute.local),
+  ) &&
+  element.children.every((child) => child.kind !== "element" || pureBelow(child));
+
+/**
+ * The `schemaversion` a package's manifest declares, `3.0.0` when it names none.
+ */
+const versionOf = (manifest: string): "3.0.0" | "3.0.1" =>
+  /<schemaversion>\s*3\.0\.1\s*<\/schemaversion>/u.test(manifest) ? "3.0.1" : "3.0.0";
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "export/render.ts over the corpus, no database",
+  (it) => {
+    it.effect.skipIf(!requested)(
+      "every M0+M1-pure item document renders to the oracle's canonical bytes",
+      () =>
+        Effect.gen(function* everyPureItemRenders() {
+          const fs = yield* FileSystem.FileSystem;
+          const started = Date.now();
+          const pure: {
+            readonly dir: string;
+            readonly file: string;
+            readonly version: "3.0.0" | "3.0.1";
+          }[] = [];
+
+          for (const { dir } of yield* materializeCorpus()) {
+            const entries = yield* fs.readDirectory(dir, { recursive: true });
+            const manifest = entries.includes("imsmanifest.xml")
+              ? yield* fs.readFileString(path.join(dir, "imsmanifest.xml"))
+              : "";
+
+            for (const file of entries.toSorted()) {
+              if (
+                !file.endsWith(".xml") ||
+                file.endsWith("imsmanifest.xml") ||
+                file.includes("__MACOSX")
+              ) {
+                continue;
+              }
+
+              const doc = yield* Effect.result(readXml(yield* fs.readFile(path.join(dir, file))));
+
+              if (
+                Result.isSuccess(doc) &&
+                doc.success.root.local === "qti-assessment-item" &&
+                doc.success.root.namespace.includes(asiNamespace) &&
+                pureBelow(doc.success.root)
+              ) {
+                pure.push({ dir, file, version: versionOf(manifest) });
+              }
+            }
+          }
+
+          const failures: string[] = [];
+          const refused: string[] = [];
+
+          for (const { dir, file, version } of pure) {
+            const label = `${path.basename(dir)}/${file}`;
+            const outcome = yield* Effect.result(
+              Effect.gen(function* oneItem() {
+                const doc = yield* readXml(yield* fs.readFile(path.join(dir, file)));
+                const { documentId, rows } = yield* itemRows(
+                  {
+                    doc,
+                    packageId: crypto.randomUUID(),
+                    path: file,
+                    resource: path.basename(file, ".xml"),
+                    resourceLomHasGeneral: false,
+                    resourceType: "imsqti_item_xmlv3p0",
+                    version,
+                  },
+                  Rows.empty(),
+                );
+
+                return yield* disagreements({ dir, rows }, [[file, documentId]]);
+              }),
+            );
+
+            if (Result.isSuccess(outcome)) {
+              failures.push(...outcome.success.map((line) => `${path.basename(dir)}/${line}`));
+            } else if (outcome.failure._tag === "UnmodeledVocabulary") {
+              // The census's purity is element names and `data-*` attributes only, so an item that
+              // writes an attribute the XSD does not give its element (`alt` on `object`) is pure
+              // and is refused by the importer, which is the rule working: it has no tree to render.
+              refused.push(`${label}: ${JSON.stringify(outcome.failure)}`);
+            } else {
+              failures.push(`${label}: ${JSON.stringify(outcome.failure)}`);
+            }
+          }
+
+          yield* Effect.logInfo(
+            `corpus loop: ${pure.length} pure item documents, ${pure.length - refused.length - failures.length} render to the oracle's bytes, ${refused.length} refused as unmodeled vocabulary, ${failures.length} failing, ${Date.now() - started} ms`,
+            refused,
+          );
+
+          assert.isAbove(pure.length, 0);
+          assert.deepStrictEqual(failures, []);
+        }),
+      { timeout: 600_000 },
     );
   },
 );
