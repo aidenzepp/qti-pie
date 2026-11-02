@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Result } from "effect";
+import { Effect, FileSystem, Layer, Result, Schema } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { comparePackage, renderReport } from "#qti/export/compare.ts";
@@ -8,6 +8,7 @@ import { exportPackage } from "#qti/export/package.ts";
 import { importPackage } from "#qti/import/package.ts";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import type { Rule } from "#qti/import/refusal.ts";
+import { ncName } from "#qti/schema/patterns.ts";
 import { materializeProcessing } from "#qti/processing/fixtures.ts";
 import type { ProcessingFixtureName } from "#qti/processing/fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
@@ -30,17 +31,24 @@ const roundTripped = [
 /**
  * Each package the XML path refuses, with the rule its refusal names.
  *
- * The checker's P8, P20 to P27 and P29 come from `broken/`, the builder's P5 and the guards' P28
- * and P30 from `guards/`, and the two padded packages are refused by the database (P6: the pattern
- * law on `figures`; P7: the identifier value arm's pattern on the content as read). P31 and P32
- * have no XML-path package: their negatives are the in-memory sets of `guards/processing.test.ts`.
+ * The checker's P8, P20, P21, P22 (the lookup without a table), P23, P24, P25 (the response case),
+ * P27 come from `broken/`, the builder's P5 and the guard's P30 from `guards/`, and the two padded
+ * packages are refused by the database (P6: the pattern law on `figures`; `value-lexical`: the
+ * identifier value arm's pattern on the content as read, which a pattern law cannot tell from P7).
+ * `p29-test-variables-weight-integer` has a test root, which the reader refuses as
+ * `unmodeled-vocabulary`; its XML path is M4's. Five packages hold content's vocabulary
+ * (`qti-template-declaration`, `qti-context-declaration`, `qti-match-table`) that the reader
+ * refuses on this branch, so their XML path is the join's (`join-m1-m3.db.test.ts`):
+ * `p22-string-into-lookup`, `p25-number-correct-in-template`, `p26-template-reads-response` and
+ * `empty-template-processing` are refused there, and `p26-template-reads-context` accepted, as it
+ * is the positive control. P31 and P32 have no XML-path package: their negatives are the in-memory
+ * sets of `guards/processing.test.ts`.
  */
 const refused: readonly (readonly [ProcessingFixtureName, Rule])[] = [
   ["undeclared-reference", "P8"],
   ["p20-float-into-integer-outcome", "P20"],
   ["p21-sum-as-condition", "P21"],
   ["p22-lookup-without-table", "P22"],
-  ["p22-string-into-lookup", "P22"],
   ["p23-and-string-operand", "P23"],
   ["p23-contains-singles", "P23"],
   ["p23-divide-multiple", "P23"],
@@ -59,17 +67,23 @@ const refused: readonly (readonly [ProcessingFixtureName, Rule])[] = [
   ["p23-sum-record", "P23"],
   ["p24-figures-float-variable", "P24"],
   ["p25-number-correct-in-response", "P25"],
-  ["p25-number-correct-in-template", "P25"],
-  ["p26-template-reads-context", "P26"],
-  ["p26-template-reads-response", "P26"],
   ["p27-map-response-unmapped", "P27"],
-  ["p29-test-variables-weight-integer", "P29"],
+  ["p29-test-variables-weight-integer", "unmodeled-vocabulary"],
   ["missing-identifier", "P5"],
-  ["empty-template-processing", "P28"],
   ["else-before-if", "P30"],
   ["padded-reference", "P6"],
-  ["padded-literal", "P7"],
+  ["padded-literal", "value-lexical"],
 ];
+
+/**
+ * A pattern law as grizzle reports it: the regex and its flags, and no relation.
+ */
+const PatternLaw = Schema.Struct({ kind: Schema.Literal("pattern"), source: Schema.String });
+
+/**
+ * Whether a refusal's law is a pattern law.
+ */
+const isPatternLaw = Schema.is(PatternLaw);
 
 /**
  * The rows an apply added to one relation.
@@ -213,6 +227,25 @@ describe.skipIf(!hasLease)(
                 rule,
                 String(result.failure),
               );
+
+              if (name === "padded-literal" && result.failure instanceof ImportRefused) {
+                // A pattern law carries no relation (`refusal.ts`), so the map cannot tell P7 from
+                // `value-lexical`: the law is the `LiteralIdentifier` arm's `ncName` pattern.
+                const { law } = result.failure;
+
+                assert.isTrue(
+                  isPatternLaw(law),
+                  `law is not a pattern law: ${JSON.stringify(law)}`,
+                );
+
+                if (isPatternLaw(law)) {
+                  assert.strictEqual(law.source, ncName);
+                }
+
+                yield* Effect.log(`padded-literal detail: ${result.failure.detail}`);
+
+                yield* Effect.log(`padded-literal law: ${JSON.stringify(law)}`);
+              }
             }
           }),
         );
