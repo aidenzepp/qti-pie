@@ -10,6 +10,7 @@
  */
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
+// oxlint-disable-next-line import/no-cycle -- `manifest.ts` imports this module's `recordFile` and this module imports its row builders; each side uses the other only inside function bodies, so evaluation never reads an uninitialized binding; p4-tidy breaks the cycle.
 import { csmSetRows, lomSubtreeRows } from "#qti/import/manifest.ts";
 import { collapse, replace, Rows, treeRows } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
