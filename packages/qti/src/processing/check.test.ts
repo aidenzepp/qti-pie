@@ -1,7 +1,16 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Option } from "effect";
+import type { Language, ProcessingAst } from "#qti/processing/ast.ts";
+import { checkProcessing } from "#qti/processing/check.ts";
+import type {
+  TypedAst,
+  TypedExpression,
+  TypedRuleNode,
+  Unresolved,
+} from "#qti/processing/check.ts";
+import { parseProcessing } from "#qti/processing/parse.ts";
 import { emptyEnvironment, environmentOf, withDeclarations } from "#qti/processing/env.ts";
 import type { DeclarationEntry, Environment } from "#qti/processing/env.ts";
 import {
@@ -13,6 +22,7 @@ import {
 } from "#qti/processing/types.ts";
 import type { EffectiveType } from "#qti/processing/types.ts";
 import { readXml } from "#qti/xml/read.ts";
+import type { Element } from "#qti/xml/tree.ts";
 
 /**
  * The 64 expression kinds of section 3.3 table A, by name: the oracle `resultType` must be total
@@ -365,4 +375,261 @@ describe("emptyEnvironment and withDeclarations", () => {
     assert.strictEqual(extended.declarations.get("A")?.kind, "template");
     assert.strictEqual(extended.mode, "test");
   });
+});
+
+/**
+ * The `qti-<language>-processing` child of an item root, or the root itself for `outcome`.
+ */
+const processingRoot = (root: Element, name: string): Element => {
+  if (name === "outcome") {
+    return root;
+  }
+
+  const local = `qti-${name === "response-mapped" ? "response" : name}-processing`;
+  const found = root.children.find((c) => c.kind === "element" && c.local === local);
+
+  return found?.kind === "element" ? found : assert.fail(`no ${local} in ${name}.xml`);
+};
+
+const languageOf = (name: string): Language => {
+  if (name === "outcome") {
+    return "outcome";
+  }
+
+  return name === "template" ? "template" : "response";
+};
+
+/**
+ * Read a committed fixture and parse its processing tree, with the item mode environment of its own
+ * document.
+ */
+const parseValid = (name: string) =>
+  Effect.gen(function* parseValidFile() {
+    const fs = yield* FileSystem.FileSystem;
+    const document = yield* readXml(yield* fs.readFile(path.join(validDirectory, `${name}.xml`)));
+    const ast = yield* parseProcessing(processingRoot(document.root, name), languageOf(name));
+
+    return { ast, document };
+  });
+
+/**
+ * Parse a response processing tree written as a string.
+ */
+const parseBody = (body: string) =>
+  Effect.gen(function* parseBodyText() {
+    const text = `<qti-response-processing xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">${body}</qti-response-processing>`;
+    const document = yield* readXml(new TextEncoder().encode(text));
+
+    return yield* parseProcessing(document.root, "response");
+  });
+
+/**
+ * The result of a check that must be `ok`.
+ */
+const okOf = (ast: ProcessingAst, env: Environment) => {
+  const result = checkProcessing(ast, env);
+
+  return result._tag === "ok"
+    ? result
+    : assert.fail(`refused ${result.rule} at ${result.kind} ${result.position.path.join("/")}`);
+};
+
+/**
+ * A typed expression and its operands, in document order.
+ */
+const withOperands = (node: TypedExpression): readonly TypedExpression[] => [
+  node,
+  ...node.operands.flatMap((operand) => withOperands(operand)),
+];
+
+/**
+ * Whether an expression is of a kind named by a string; the processing kinds are not yet in the
+ * node kind type.
+ */
+const isKind = (node: TypedExpression, kind: string): boolean => node.kind === kind;
+
+/**
+ * Every typed expression of a typed tree, in document order, each before its operands.
+ */
+const expressionsOfRule = (node: TypedRuleNode): readonly TypedExpression[] => [
+  ...Option.match(node.expression, { onNone: () => [], onSome: withOperands }),
+  ...node.branches.flatMap((branch) => expressionsOfRule(branch)),
+  ...node.rules.flatMap((child) => expressionsOfRule(child)),
+];
+
+const expressionsOf = (typed: TypedAst): readonly TypedExpression[] =>
+  typed.rules.flatMap((rule) => (rule.kind === "xi:include" ? [] : expressionsOfRule(rule)));
+
+const typeOfKind = (typed: TypedAst, kind: string): readonly string[] =>
+  expressionsOf(typed)
+    .filter((e) => isKind(e, kind))
+    .map((e) => `${e.type.baseType}/${e.type.cardinality}`);
+
+/**
+ * An outcome declaration of a base type and single cardinality.
+ */
+const outcomeOf = (identifier: string, baseType: EffectiveType["baseType"]): DeclarationEntry => ({
+  areaMapping: false,
+  identifier,
+  interpolationTable: false,
+  kind: "outcome",
+  mapping: false,
+  matchTable: false,
+  mathVariable: false,
+  paramVariable: false,
+  type: { baseType, cardinality: "single" },
+});
+
+/**
+ * The test environment `outcome.xml` is typed under.
+ */
+const testEnvironment = withDeclarations(emptyEnvironment("test"), [
+  outcomeOf("TOTAL", "float"),
+  outcomeOf("MAXTOTAL", "float"),
+  outcomeOf("COUNT", "integer"),
+  outcomeOf("PASSED", "boolean"),
+]);
+
+/**
+ * The reason and identifier of each unresolved entry, in order.
+ */
+const summary = (unresolved: readonly Unresolved[]) =>
+  unresolved.map((u) => [u.reason, u.identifier]);
+
+layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts", (suite) => {
+  suite.effect(
+    "checks response.xml ok, unresolved only at the custom operator and the record field",
+    () =>
+      Effect.gen(function* checkResponse() {
+        const { ast, document } = yield* parseValid("response");
+        const result = okOf(ast, environmentOf(document, "item"));
+        assert.deepStrictEqual(summary(result.unresolved), [
+          ["custom-operator", "com.example.Operator"],
+          ["untyped-variable", "level"],
+        ]);
+      }),
+  );
+
+  suite.effect("checks template.xml and response-mapped.xml ok with nothing unresolved", () =>
+    Effect.gen(function* checkTemplateAndMapped() {
+      for (const name of ["template", "response-mapped"]) {
+        const { ast, document } = yield* parseValid(name);
+        assert.deepStrictEqual(okOf(ast, environmentOf(document, "item")).unresolved, []);
+      }
+    }),
+  );
+
+  suite.effect("checks outcome.xml ok under the test environment, and unresolved without it", () =>
+    Effect.gen(function* checkOutcome() {
+      const { ast } = yield* parseValid("outcome");
+      assert.deepStrictEqual(okOf(ast, testEnvironment).unresolved, []);
+      assert.deepStrictEqual(summary(okOf(ast, emptyEnvironment("test")).unresolved), [
+        ["untyped-variable", "TOTAL"],
+        ["untyped-variable", "TOTAL"],
+      ]);
+    }),
+  );
+
+  suite.effect("types response.xml's operators from their operands", () =>
+    Effect.gen(function* typeResponse() {
+      const { ast, document } = yield* parseValid("response");
+      const { typed } = okOf(ast, environmentOf(document, "item"));
+      assert.deepStrictEqual(typeOfKind(typed, "qti-sum"), ["float/single", "integer/single"]);
+      assert.deepStrictEqual(typeOfKind(typed, "qti-divide"), ["float/single"]);
+      assert.deepStrictEqual(typeOfKind(typed, "qti-round"), ["integer/single"]);
+      assert.deepStrictEqual(typeOfKind(typed, "qti-math-operator"), [
+        "float/single",
+        "integer/single",
+      ]);
+      assert.deepStrictEqual(typeOfKind(typed, "qti-multiple"), [
+        "identifier/multiple",
+        "float/multiple",
+        "identifier/multiple",
+        "string/multiple",
+      ]);
+      assert.deepStrictEqual(typeOfKind(typed, "qti-null"), ["any/unknown", "any/unknown"]);
+      assert.deepStrictEqual(typeOfKind(typed, "qti-custom-operator"), ["unknown/unknown"]);
+    }),
+  );
+
+  suite.effect("types a reference by its declaration and a built-in by its mode", () =>
+    Effect.gen(function* typeReferences() {
+      const { ast, document } = yield* parseValid("response");
+      const { typed } = okOf(ast, environmentOf(document, "item"));
+      const variables = expressionsOf(typed)
+        .filter((e) => isKind(e, "qti-variable"))
+        .map(
+          (e) =>
+            `${e.attributes.get("identifier")?.processed}:${e.type.baseType}/${e.type.cardinality}`,
+        );
+      assert.include(variables, "RESPONSE:identifier/single");
+      assert.include(variables, "BAG:identifier/multiple");
+      assert.include(variables, "SCORE:float/single");
+      assert.include(variables, "QTI_CONTEXT:unknown/record");
+      assert.deepStrictEqual(typeOfKind(typed, "qti-correct"), ["identifier/single"]);
+      assert.deepStrictEqual(typeOfKind(typed, "qti-default"), ["float/single"]);
+    }),
+  );
+
+  suite.effect("accepts qti-null beside an integer as an operand of qti-match", () =>
+    Effect.gen(function* nullBesideInteger() {
+      const ast = yield* parseBody(
+        `<qti-set-outcome-value identifier="X"><qti-match><qti-null/><qti-base-value base-type="integer">1</qti-base-value></qti-match></qti-set-outcome-value>`,
+      );
+      const result = okOf(ast, emptyEnvironment("item"));
+      assert.deepStrictEqual(result.unresolved, []);
+      assert.deepStrictEqual(typeOfKind(result.typed, "qti-match"), ["boolean/single"]);
+
+      const match = expressionsOf(result.typed).find((e) => isKind(e, "qti-match"));
+      assert.deepStrictEqual(
+        match?.operands.map((o) => `${o.type.baseType}/${o.type.cardinality}`),
+        ["any/unknown", "integer/single"],
+      );
+    }),
+  );
+
+  suite.effect("checks response.xml in template mode ok, every variable reference unresolved", () =>
+    Effect.gen(function* checkTemplateMode() {
+      const { ast } = yield* parseValid("response");
+      const { unresolved } = okOf(ast, emptyEnvironment("template"));
+      const references = new Set(
+        unresolved.filter((u) => u.reason === "template-parameter").map((u) => u.identifier),
+      );
+      assert.deepStrictEqual([...references].toSorted(), [
+        "BAG",
+        "COUNT",
+        "FLAG",
+        "NOTE",
+        "RESPONSE",
+        "SCORE",
+        "SPOT",
+        "TAKEN",
+      ]);
+      assert.deepStrictEqual(
+        [
+          ...new Set(
+            unresolved.filter((u) => u.reason !== "template-parameter").map((u) => u.reason),
+          ),
+        ].toSorted(),
+        ["custom-operator", "untyped-variable"],
+      );
+    }),
+  );
+
+  suite.effect("records a reference in a mixed-union attribute the same way", () =>
+    Effect.gen(function* checkAttributeReference() {
+      const ast = yield* parseBody(
+        `<qti-set-outcome-value identifier="X"><qti-equal-rounded rounding-mode="decimalPlaces" figures="N"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">1</qti-base-value></qti-equal-rounded></qti-set-outcome-value>`,
+      );
+      assert.deepStrictEqual(summary(okOf(ast, emptyEnvironment("item")).unresolved), [
+        ["untyped-variable", "N"],
+      ]);
+      assert.deepStrictEqual(summary(okOf(ast, emptyEnvironment("template")).unresolved), [
+        ["template-parameter", "N"],
+      ]);
+
+      const declared = withDeclarations(emptyEnvironment("item"), [outcomeOf("N", "integer")]);
+      assert.deepStrictEqual(okOf(ast, declared).unresolved, []);
+    }),
+  );
 });
