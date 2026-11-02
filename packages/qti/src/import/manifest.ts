@@ -14,9 +14,9 @@ import { Effect, Option, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { collapse, replace, Rows, treeRows, typedAttribute } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
-// oxlint-disable-next-line import/no-cycle -- `external.ts` imports this module's row builders and this module imports `recordFile`; each side uses the other only inside function bodies, so evaluation never reads an uninitialized binding.
-import { recordFile } from "#qti/import/external.ts";
-import type { ExternalRefusal } from "#qti/import/external.ts";
+import { classed, contentOf, elementChildren, qmdLeafRows } from "#qti/import/leaf.ts";
+import { recordFile, recordTypes, soleFileTypes } from "#qti/import/record.ts";
+import type { ExternalRefusal } from "#qti/import/record.ts";
 import { readEntry } from "#qti/package/read.ts";
 import type { Entry, PackageReadError } from "#qti/package/read.ts";
 import type { ZipRefusal } from "#qti/package/zip.ts";
@@ -99,57 +99,6 @@ const isSchemaVersion = (value: string): value is SchemaVersionHandle =>
   value === "3.0.0" || value === "3.0.1";
 
 /**
- * The element children of `element`, whatever their namespace.
- */
-const elementChildren = (element: Element): readonly Element[] =>
-  element.children.filter((child): child is Element => child.kind === "element");
-
-/**
- * The character content of a leaf as read: its `text`, `ws` and `entityRef` children joined, an
- * entity reference by its lexical form `&name;`; comments, processing instructions and elements
- * contribute nothing.
- */
-const contentOf = (element: Element): string =>
-  element.children
-    .map((child) => {
-      if (child.kind === "text") {
-        return child.value;
-      }
-
-      return child.kind === "entityRef" ? `&${child.name};` : "";
-    })
-    .join("");
-
-/**
- * A leaf's content under its class: as read, with tab, line feed and carriage return turned to
- * spaces, or collapsed.
- */
-const classed = (value: string, whiteSpace: "collapse" | "preserve" | "replace"): string => {
-  if (whiteSpace === "collapse") {
-    return collapse(value);
-  }
-
-  return whiteSpace === "replace" ? replace(value) : value;
-};
-
-/**
- * The `qmd:` leaves of a QTI metadata record, each with its arm and the whitespace class of its
- * content: the four booleans collapse, the enumerations and tool strings are kept as read.
- */
-const qmdLeaves = {
-  "qmd:composite": { arm: md.QmdComposite, class: "collapse" },
-  "qmd:feedbackType": { arm: md.QmdFeedbackType, class: "preserve" },
-  "qmd:interactionType": { arm: md.QmdInteractionType, class: "preserve" },
-  "qmd:itemTemplate": { arm: md.QmdItemTemplate, class: "collapse" },
-  "qmd:scoringMode": { arm: md.QmdScoringMode, class: "preserve" },
-  "qmd:solutionAvailable": { arm: md.QmdSolutionAvailable, class: "collapse" },
-  "qmd:timeDependent": { arm: md.QmdTimeDependent, class: "collapse" },
-  "qmd:toolName": { arm: md.QmdToolName, class: "preserve" },
-  "qmd:toolVendor": { arm: md.QmdToolVendor, class: "preserve" },
-  "qmd:toolVersion": { arm: md.QmdToolVersion, class: "preserve" },
-} as const;
-
-/**
  * The 17 `drd:` leaves of a digital resource description, each with its arm and the whitespace
  * class of its content: the enumerations, tool strings and unions are kept as read, the boolean and
  * the four URIs collapse, and the two normalized strings replace.
@@ -181,26 +130,6 @@ const drdLeaves = {
  * Whether `kind` is one of {@link drdLeaves}.
  */
 const isDrdLeaf = (kind: string): kind is keyof typeof drdLeaves => kind in drdLeaves;
-
-/**
- * The resource types whose `href` is read as a document beside the QTI ones: a record of metadata
- * and a record of usage data. A record of metadata with no `href` is named by {@link recordFile}
- * instead.
- */
-const recordTypes: ReadonlySet<string> = new Set(["resourcemetadata/xml", "qtiusagedata/xml"]);
-
-/**
- * The QTI document types that also name their one file when they have no `href`.
- */
-const soleFileTypes: ReadonlySet<string> = new Set([
-  "imsqti_outcomes_xmlv3p0",
-  "imsqti_resprocessing_xmlv3p0",
-]);
-
-/**
- * Whether `kind` is one of {@link qmdLeaves}.
- */
-const isQmdLeaf = (kind: string): kind is keyof typeof qmdLeaves => kind in qmdLeaves;
 
 /**
  * The resource-level facts the record of an item resource is bound to.
@@ -923,40 +852,6 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
   const { root } = doc;
 
   /**
-   * Write one arm row per leaf of the `qmd:qtiMetadata` `qmd`, whose node id is `qtiMetadata`, and
-   * of its portable custom interaction context. A leaf's arm binds only to its record's node, so
-   * the rows do not depend on where the record sits.
-   */
-  const qmdLeafRows = (qmd: Element, qtiMetadata: string): void => {
-    for (const leaf of elementChildren(qmd)) {
-      const found = nodes.get(leaf);
-      if (found === undefined) {
-        continue;
-      }
-
-      const content = contentOf(leaf);
-      if (found.kind === "qmd:portableCustomInteractionContext") {
-        add(md.QmdPortableCustomInteractionContext, [{ id: found.id, qtiMetadata }]);
-        for (const part of elementChildren(leaf)) {
-          const partNode = nodes.get(part);
-          const value = replace(contentOf(part));
-          if (partNode?.kind === "qmd:customTypeIdentifier") {
-            add(md.QmdCustomTypeIdentifier, [{ context: found.id, id: partNode.id, value }]);
-          } else if (partNode?.kind === "qmd:interactionKind") {
-            add(md.QmdInteractionKind, [{ context: found.id, id: partNode.id, value }]);
-          }
-        }
-      } else if (isQmdLeaf(found.kind)) {
-        const spec = qmdLeaves[found.kind];
-        const value = classed(content, spec.class);
-        // SAFETY: the leaf's column pattern judges the value at commit, which is the importer's refusal for it.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-        add(spec.arm, [{ id: found.id, qtiMetadata, value }] as never);
-      }
-    }
-  };
-
-  /**
    * Write the record of one `qmd:qtiMetadata` of a resource and its host arm. Its leaves' arm rows
    * are `qmdLeafRows`', written for every record of the manifest, hosted or not.
    */
@@ -1347,7 +1242,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
 
   for (const [element, found] of nodes) {
     if (found.kind === "qmd:qtiMetadata") {
-      qmdLeafRows(element, found.id);
+      built = qmdLeafRows(built, nodes, element, found.id);
     }
   }
 
