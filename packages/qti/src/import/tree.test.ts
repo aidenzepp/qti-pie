@@ -25,6 +25,8 @@ import {
   TreeXmlVersion,
   Ws,
 } from "#qti/schema/node.ts";
+import { NodeXmlBase, NodeXmlLang } from "#qti/schema/attributes.ts";
+import { attributeRows } from "#qti/import/attributes.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import { GuardRefusal, treeGuards } from "#qti/import/guards/tree.ts";
 import {
@@ -36,11 +38,20 @@ import {
   typedAttribute,
   UnmodeledVocabulary,
 } from "#qti/import/tree.ts";
-import type { TreeInput } from "#qti/import/tree.ts";
+import type { NodeIndex, TreeInput } from "#qti/import/tree.ts";
 import { readXml } from "#qti/xml/read.ts";
 import type { Element } from "#qti/xml/tree.ts";
 
 const treeId = "11111111-1111-4111-8111-111111111111";
+
+/**
+ * The id of the node of `kind` an index holds; the tests' documents hold one of each kind they ask
+ * for.
+ */
+const idOf = (nodes: NodeIndex, kind: string): string =>
+  Option.getOrThrow(
+    Option.fromNullishOr([...nodes.values()].find((found) => found.kind === kind)?.id),
+  );
 
 /**
  * The input of an item document whose charset is the one the reader decoded it under.
@@ -307,6 +318,108 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
       assert.strictEqual(refusal.kind, "attribute");
       assert.strictEqual(refusal.name, "class");
       assert.deepStrictEqual(refusal.parent, Option.some("qti-assessment-item"));
+    }),
+  );
+
+  suite.effect(
+    "an xml:lang the prompt's registry lists is modeled and written by attributeRows",
+    () =>
+      Effect.gen(function* promptLang() {
+        const doc = yield* readChoice(inject("fixtures").simple, [
+          "<qti-prompt>",
+          '<qti-prompt xml:lang="en">',
+        ]);
+        const { nodes, rows } = yield* treeRows(doc, itemInput(doc.charset), Rows.empty());
+        const built = yield* attributeRows(doc.root, nodes, treeId, rows);
+        const prompt = idOf(nodes, "qti-prompt");
+
+        assert.deepStrictEqual(Rows.of(built, NodeXmlLang), [
+          {
+            attribute: "xml:lang",
+            kind: "qti-prompt",
+            node: prompt,
+            rootKind: "item",
+            tree: treeId,
+            value: "en",
+          },
+        ]);
+      }),
+  );
+
+  suite.effect("an xml:base a paragraph's registry lists is modeled and written", () =>
+    Effect.gen(function* paragraphBase() {
+      const doc = yield* readChoice(inject("fixtures").simple, ["<p>", '<p xml:base="a/">']);
+      const { nodes, rows } = yield* treeRows(doc, itemInput(doc.charset), Rows.empty());
+      const built = yield* attributeRows(doc.root, nodes, treeId, rows);
+      const paragraph = idOf(nodes, "p");
+
+      assert.deepStrictEqual(Rows.of(built, NodeXmlBase), [
+        { attribute: "xml:base", kind: "p", node: paragraph, value: "a/" },
+      ]);
+    }),
+  );
+
+  suite.effect("an xml:space no registry lists is refused by its qualified name", () =>
+    Effect.gen(function* xmlSpace() {
+      const doc = yield* readChoice(inject("fixtures").simple, ["<p>", '<p xml:space="preserve">']);
+      const exit = yield* Effect.exit(treeRows(doc, itemInput(doc.charset), Rows.empty()));
+
+      const refusal = Option.getOrThrow(
+        Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none(),
+      );
+      assert.instanceOf(refusal, UnmodeledVocabulary);
+      assert.strictEqual(refusal.kind, "attribute");
+      assert.strictEqual(refusal.name, "xml:space");
+      assert.deepStrictEqual(refusal.parent, Option.some("p"));
+    }),
+  );
+
+  suite.effect("an xml:lang on a kind whose registry lacks it is still refused", () =>
+    Effect.gen(function* declarationLang() {
+      const doc = yield* readChoice(inject("fixtures").simple, [
+        "<qti-response-declaration ",
+        '<qti-response-declaration xml:lang="en" ',
+      ]);
+      const exit = yield* Effect.exit(treeRows(doc, itemInput(doc.charset), Rows.empty()));
+
+      const refusal = Option.getOrThrow(
+        Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none(),
+      );
+      assert.instanceOf(refusal, UnmodeledVocabulary);
+      assert.strictEqual(refusal.kind, "attribute");
+      assert.strictEqual(refusal.name, "xml:lang");
+      assert.deepStrictEqual(refusal.parent, Option.some("qti-response-declaration"));
+    }),
+  );
+
+  suite.effect("a manifest's lom:string xml:lang is modeled under the manifest root", () =>
+    Effect.gen(function* manifestLang() {
+      const doc = yield* readXml(
+        new TextEncoder().encode(
+          '<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" identifier="M"><metadata><imsmd:lom><imsmd:general><imsmd:title><imsmd:string xml:lang="en">T</imsmd:string></imsmd:title></imsmd:general></imsmd:lom></metadata></manifest>',
+        ),
+      );
+      const input: TreeInput = {
+        charset: doc.charset,
+        id: treeId,
+        kind: "manifest",
+        root: "manifest",
+        version: "3.0.0",
+      };
+      const { nodes, rows } = yield* treeRows(doc, input, Rows.empty());
+      const built = yield* attributeRows(doc.root, nodes, treeId, rows);
+      const string = idOf(nodes, "lom:string");
+
+      assert.deepStrictEqual(Rows.of(built, NodeXmlLang), [
+        {
+          attribute: "xml:lang",
+          kind: "lom:string",
+          node: string,
+          rootKind: "manifest",
+          tree: treeId,
+          value: "en",
+        },
+      ]);
     }),
   );
 
