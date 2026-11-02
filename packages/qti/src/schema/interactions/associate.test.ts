@@ -317,6 +317,7 @@ describe("interactions/associate", () => {
       [relations.SimpleAssociableChoiceShowHide, relations.SimpleAssociableChoice],
       [relations.SimpleAssociableChoiceMatchMin, relations.SimpleAssociableChoice],
       [relations.AssociableHotspotLabel, relations.AssociableHotspot],
+      [relations.AssociableHotspotMatchMin, relations.AssociableHotspot],
     ] as const;
 
     for (const [optional, arm] of owners) {

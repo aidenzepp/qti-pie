@@ -119,6 +119,7 @@ export const Author = role(
     AssessmentItemLabel: Qti.relations.AssessmentItemLabel,
     AssociableHotspot: Qti.relations.AssociableHotspot,
     AssociableHotspotLabel: Qti.relations.AssociableHotspotLabel,
+    AssociableHotspotMatchMin: Qti.relations.AssociableHotspotMatchMin,
     AssociateInteraction: Qti.relations.AssociateInteraction,
     AssociateMaxAssociations: Qti.relations.AssociateMaxAssociations,
     AssociateMinAssociations: Qti.relations.AssociateMinAssociations,

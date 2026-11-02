@@ -343,6 +343,15 @@ export const AssociableHotspotLabel = relation(
 );
 
 /**
+ * An associable hotspot's `match-min` as written, when it has one.
+ */
+export const AssociableHotspotMatchMin = relation(
+  "AssociableHotspotMatchMin",
+  { node: uuid, value: xsNonNegativeInteger },
+  ["node"],
+);
+
+/**
  * The arms of the six associate kinds, keyed by their `NodeKind` handles. Their containments into
  * `Node` are expanded by `alternatives` in the composed schema.
  */
@@ -361,6 +370,7 @@ export const arms = {
 export const relations = {
   AssociableHotspot,
   AssociableHotspotLabel,
+  AssociableHotspotMatchMin,
   AssociateInteraction,
   AssociateMaxAssociations,
   AssociateMinAssociations,
@@ -471,4 +481,5 @@ export const rules = [
   contained(on(SimpleAssociableChoiceShowHide, "node"), on(SimpleAssociableChoice, "id")),
   contained(on(SimpleAssociableChoiceMatchMin, "node"), on(SimpleAssociableChoice, "id")),
   contained(on(AssociableHotspotLabel, "node"), on(AssociableHotspot, "id")),
+  contained(on(AssociableHotspotMatchMin, "node"), on(AssociableHotspot, "id")),
 ] as const;
