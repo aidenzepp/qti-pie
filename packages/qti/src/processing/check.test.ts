@@ -1,4 +1,9 @@
-import { assert, describe, it } from "@effect/vitest";
+import path from "node:path";
+import { NodeServices } from "@effect/platform-node";
+import { assert, describe, it, layer } from "@effect/vitest";
+import { Effect, FileSystem } from "effect";
+import { emptyEnvironment, environmentOf, withDeclarations } from "#qti/processing/env.ts";
+import type { DeclarationEntry, Environment } from "#qti/processing/env.ts";
 import {
   expressionKinds,
   numerical,
@@ -7,6 +12,7 @@ import {
   unify,
 } from "#qti/processing/types.ts";
 import type { EffectiveType } from "#qti/processing/types.ts";
+import { readXml } from "#qti/xml/read.ts";
 
 /**
  * The 64 expression kinds of section 3.3 table A, by name: the oracle `resultType` must be total
@@ -202,5 +208,161 @@ describe("the lattice", () => {
     assert.strictEqual(numerical(single("integer")), true);
     assert.strictEqual(numerical(single("float")), true);
     assert.strictEqual(numerical(single("duration")), false);
+  });
+});
+
+/**
+ * The committed trees, relative to `packages/qti`, where the tests run.
+ */
+const validDirectory = "src/processing/fixtures/valid";
+
+/**
+ * Read a committed fixture and build its `item` mode environment.
+ */
+const environmentOfFixture = (name: string) =>
+  Effect.gen(function* environmentOfFile() {
+    const fs = yield* FileSystem.FileSystem;
+    const document = yield* readXml(yield* fs.readFile(path.join(validDirectory, `${name}.xml`)));
+
+    return environmentOf(document, "item");
+  });
+
+/**
+ * The part of a declaration entry that a fixture's attributes fix, as `[kind, type]`.
+ */
+const typeOfDeclaration = (env: Environment, identifier: string) => {
+  const entry = env.declarations.get(identifier);
+
+  return entry === undefined
+    ? undefined
+    : [entry.kind, entry.type.baseType, entry.type.cardinality];
+};
+
+layer(NodeServices.layer, { excludeTestServices: true })("processing/env.ts", (suite) => {
+  suite.effect("holds every declaration of template.xml by identifier", () =>
+    Effect.gen(function* templateDeclarations() {
+      const env = yield* environmentOfFixture("template");
+      assert.deepStrictEqual([...env.declarations.keys()].toSorted(), [
+        "A",
+        "CTX",
+        "M",
+        "N",
+        "RESPONSE",
+        "SCORE",
+      ]);
+      assert.deepStrictEqual(typeOfDeclaration(env, "CTX"), ["context", "integer", "single"]);
+      assert.deepStrictEqual(typeOfDeclaration(env, "RESPONSE"), ["response", "integer", "single"]);
+      assert.deepStrictEqual(typeOfDeclaration(env, "SCORE"), ["outcome", "float", "single"]);
+      assert.deepStrictEqual(typeOfDeclaration(env, "A"), ["template", "integer", "single"]);
+      assert.deepStrictEqual(typeOfDeclaration(env, "N"), ["template", "integer", "single"]);
+      assert.strictEqual(env.declarations.get("A")?.paramVariable, true);
+      assert.strictEqual(env.declarations.get("N")?.paramVariable, false);
+      assert.strictEqual(env.declarations.get("N")?.mathVariable, false);
+      assert.strictEqual(env.mode, "item");
+    }),
+  );
+
+  suite.effect("holds the four built-ins of item mode, QTI_CONTEXT a record", () =>
+    Effect.gen(function* builtIns() {
+      const env = yield* environmentOfFixture("template");
+      assert.deepStrictEqual([...env.builtIns.keys()].toSorted(), [
+        "QTI_CONTEXT",
+        "completionStatus",
+        "duration",
+        "numAttempts",
+      ]);
+      assert.deepStrictEqual(env.builtIns.get("completionStatus"), {
+        baseType: "identifier",
+        cardinality: "single",
+      });
+      assert.deepStrictEqual(env.builtIns.get("numAttempts"), {
+        baseType: "integer",
+        cardinality: "single",
+      });
+      assert.deepStrictEqual(env.builtIns.get("duration"), {
+        baseType: "float",
+        cardinality: "single",
+      });
+      assert.deepStrictEqual(env.builtIns.get("QTI_CONTEXT"), {
+        baseType: "unknown",
+        cardinality: "record",
+      });
+    }),
+  );
+
+  suite.effect("reads the mapping and table children of response-mapped.xml", () =>
+    Effect.gen(function* mappedFlags() {
+      const env = yield* environmentOfFixture("response-mapped");
+      const flags = (identifier: string) => {
+        const entry = env.declarations.get(identifier);
+
+        return entry === undefined
+          ? undefined
+          : {
+              areaMapping: entry.areaMapping,
+              interpolationTable: entry.interpolationTable,
+              mapping: entry.mapping,
+              matchTable: entry.matchTable,
+            };
+      };
+      const none = {
+        areaMapping: false,
+        interpolationTable: false,
+        mapping: false,
+        matchTable: false,
+      };
+      assert.deepStrictEqual(flags("RESPONSE"), { ...none, mapping: true });
+      assert.deepStrictEqual(flags("SPOT"), { ...none, areaMapping: true });
+      assert.deepStrictEqual(flags("LEVEL"), { ...none, matchTable: true });
+      assert.deepStrictEqual(flags("GRADE"), { ...none, interpolationTable: true });
+      assert.deepStrictEqual(flags("SCORE"), none);
+      assert.deepStrictEqual(typeOfDeclaration(env, "SPOT"), ["response", "point", "single"]);
+      assert.deepStrictEqual(typeOfDeclaration(env, "LEVEL"), ["outcome", "string", "single"]);
+    }),
+  );
+});
+
+/**
+ * A float outcome entry named `identifier`.
+ */
+const entry = (identifier: string): DeclarationEntry => ({
+  areaMapping: false,
+  identifier,
+  interpolationTable: false,
+  kind: "outcome",
+  mapping: false,
+  matchTable: false,
+  mathVariable: false,
+  paramVariable: false,
+  type: { baseType: "float", cardinality: "single" },
+});
+
+describe("emptyEnvironment and withDeclarations", () => {
+  it("holds no declaration in template mode", () => {
+    const env = emptyEnvironment("template");
+    assert.strictEqual(env.mode, "template");
+    assert.strictEqual(env.declarations.size, 0);
+  });
+
+  it("holds the built-ins of the mode and none of the declarations in test mode", () => {
+    const env = emptyEnvironment("test");
+    assert.strictEqual(env.declarations.size, 0);
+    assert.deepStrictEqual([...env.builtIns.keys()].toSorted(), [
+      "QTI_CONTEXT",
+      "completionStatus",
+      "duration",
+      "numAttempts",
+    ]);
+  });
+
+  it("adds entries by identifier and leaves the argument unchanged", () => {
+    const base = emptyEnvironment("test");
+    const extended = withDeclarations(withDeclarations(base, [entry("A"), entry("B")]), [
+      { ...entry("A"), kind: "template" },
+    ]);
+    assert.strictEqual(base.declarations.size, 0);
+    assert.deepStrictEqual([...extended.declarations.keys()].toSorted(), ["A", "B"]);
+    assert.strictEqual(extended.declarations.get("A")?.kind, "template");
+    assert.strictEqual(extended.mode, "test");
   });
 });
