@@ -5,6 +5,7 @@ import { ContentGuardRefusal, contentGuards } from "#qti/import/guards/content.t
 import { itemRows } from "#qti/import/item.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { AttributeIdref, HeadersTarget, NodeClass, NodeLabel } from "#qti/schema/attributes.ts";
+import { A, BlockquoteCite } from "#qti/schema/html/text.ts";
 import { ChoiceInteraction } from "#qti/schema/interaction.ts";
 import { Gap } from "#qti/schema/interactions/gap.ts";
 import { HottextInteraction, HottextOwner } from "#qti/schema/interactions/hot.ts";
@@ -365,6 +366,38 @@ describe("contentGuards typed-copy", () => {
         "processes to",
       );
     }),
+  );
+
+  it.effect("refuses an arm attribute's lexical row that does not process to its column", () =>
+    Effect.gen(function* lexicalArmColumn() {
+      const built = yield* rowsOf("3.0.1", `<p><a href=" u ">x</a></p>`);
+      const anchor = nodeId(built, "a");
+      // The importer's anchor step reads `href` after its lexical rows are collected, so it writes no
+      // lexical row here; the row it should write is added by hand.
+      const rows = Rows.add(built, AttributeLexical, [
+        { attribute: "href", kind: "a", node: anchor, value: " u " },
+      ]);
+      yield* contentGuards(rows);
+      yield* refusalOfRows(
+        "typed-copy",
+        edited(rows, A, (facts) => facts.map((fact) => ({ ...fact, href: "v" }))),
+        "processes to",
+      );
+    }),
+  );
+
+  it.effect(
+    "refuses an optional attribute's lexical row that does not process to its relation",
+    () =>
+      Effect.gen(function* lexicalOptionalColumn() {
+        const rows = yield* rowsOf("3.0.1", `<blockquote cite=" c "><p>x</p></blockquote>`);
+        yield* contentGuards(rows);
+        yield* refusalOfRows(
+          "typed-copy",
+          edited(rows, BlockquoteCite, (facts) => facts.map((fact) => ({ ...fact, value: "d" }))),
+          "processes to",
+        );
+      }),
   );
 
   it.effect("admits an empty xml:lang and refuses a whitespace-only one (N7)", () =>

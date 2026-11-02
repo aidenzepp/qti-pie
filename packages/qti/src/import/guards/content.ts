@@ -15,6 +15,7 @@ import { collapse, replace, Rows } from "#qti/import/tree.ts";
 import type { WhiteSpace } from "#qti/import/tree.ts";
 import { IdrefAttribute } from "#qti/schema/content/rosters.ts";
 import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
+import { typedValues } from "#qti/schema/attribute-homes.ts";
 import * as shared from "#qti/schema/attributes.ts";
 import {
   AriaLabel,
@@ -1068,13 +1069,16 @@ const familyValues = (rows: Rows): ReadonlyMap<string, Written> =>
 
 /**
  * `typed-copy` of the lexical rows: each `AttributeLexical` row differs from the value its class
- * makes of it and, where a typed column holds the attribute, processes to that column.
+ * makes of it and, where a typed column holds the attribute, processes to that column. The column
+ * is the family relation's or, for any other attribute, the one the renderer reads
+ * (`typedValues`), so one table says where each attribute's typed value lives.
  *
  * An empty `headers` is carried by a lexical row of `""` because no token row can, so the form
  * does not differ there.
  */
 const lexicalCopy = (rows: Rows): Finding => {
   const typed = familyValues(rows);
+  const value = typedValues(rows);
   for (const row of Rows.of(rows, AttributeLexical)) {
     const whiteSpace = classOf(row.kind, row.attribute);
     if (whiteSpace === undefined || (row.attribute === "headers" && row.value === "")) {
@@ -1089,7 +1093,8 @@ const lexicalCopy = (rows: Rows): Finding => {
       );
     }
 
-    const column = typed.get(row.attribute)?.get(row.node);
+    const column =
+      typed.get(row.attribute)?.get(row.node) ?? value(row.node, row.kind, row.attribute);
     if (column !== undefined && column !== expected) {
       return refuse(
         "typed-copy",
