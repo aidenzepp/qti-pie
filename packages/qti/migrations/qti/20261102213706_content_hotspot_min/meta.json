@@ -1,0 +1,13 @@
+{
+	"decisions": {
+		"candidates": [],
+		"choices": [],
+		"confirms": [],
+		"losses": []
+	},
+	"kind": "drafted",
+	"schema": "qti",
+	"schemaName": "Qti",
+	"source": "b06e1ab17ed35e5ada1c23d276442abc79d5b1bc1b2efe4fb13d558216a9a160",
+	"target": "8440273bf59c56dacfdecd687fe9a7c296558f8c6cca3622a66c6ade899e540d"
+}
