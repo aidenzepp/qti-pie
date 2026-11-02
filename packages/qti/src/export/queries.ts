@@ -155,13 +155,14 @@ const armRelations: ReadonlySet<AnyRelation> = new Set(nodeArms.values());
 
 /**
  * The attachments of a node: its `Edge` to its parent, the row of the arm its kind names, then
- * every other relation it owns.
+ * every other relation it owns. An arm's attachment is named by its handle, not its relation: a
+ * relation can be the arm of several handles, and a heading's names are each used once.
  */
 const nodeAttachments: readonly Attachment[] = [
   { delivery: "option", name: Edge.name, owner: "child", relation: Edge },
   ...[...nodeArms].map(([handle, relation]): Attachment => ({
     delivery: arm("kind", handle),
-    name: relation.name,
+    name: handle,
     owner: ownerOf(relation),
     relation,
   })),
