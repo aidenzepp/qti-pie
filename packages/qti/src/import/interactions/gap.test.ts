@@ -350,6 +350,16 @@ describe("gapRows on a gap-match interaction", () => {
       assert.strictEqual(refusalRuleOf(exit), "ancestry-ban");
     }),
   );
+
+  it.effect("refuses a gap text that sits in no gap-match interaction under admission", () =>
+    Effect.gen(function* stray() {
+      const exit = yield* Effect.exit(
+        gapRows(contextOf([element("p", {}, [gapText("T1")])]), Rows.empty()),
+      );
+
+      assert.strictEqual(refusalRuleOf(exit), "admission");
+    }),
+  );
 });
 
 const graphic = (more: Readonly<Record<string, string>> = {}): Element =>
@@ -442,6 +452,25 @@ describe("gapRows on a graphic gap-match interaction", () => {
       ]);
       assert.deepStrictEqual(Rows.of(built, GapImgTop), [{ node: "node-3", value: "3" }]);
       assert.deepStrictEqual(Rows.of(built, GapImgLeft), [{ node: "node-3", value: "1 2" }]);
+    }),
+  );
+
+  it.effect("refuses a gap image that sits in no gap-match interaction under admission", () =>
+    Effect.gen(function* stray() {
+      const exit = yield* Effect.exit(
+        gapRows(
+          contextOf([
+            element("p", {}, [
+              element("qti-gap-img", { identifier: "I1", "match-max": "1" }, [
+                element("img", { src: "b.png" }),
+              ]),
+            ]),
+          ]),
+          Rows.empty(),
+        ),
+      );
+
+      assert.strictEqual(refusalRuleOf(exit), "admission");
     }),
   );
 });

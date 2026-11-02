@@ -280,8 +280,8 @@ const graphicAssociate = Effect.fn("import.graphicAssociate")(function* graphicA
  * source wrote, the set it sits in when its parent is a `qti-simple-match-set`, and the template
  * variable it names.
  *
- * @returns The rows; `ItemRefusal` for a choice that sits in no interaction, and for a
- *   `template-identifier` that names no typed variable.
+ * @returns The rows; `ItemRefusal` for a choice that sits in no interaction (rule `admission`), and
+ *   for a `template-identifier` that names no typed variable.
  */
 const choice = Effect.fn("import.associableChoice")(function* choice(
   ctx: InteractionContext,
@@ -295,7 +295,7 @@ const choice = Effect.fn("import.associableChoice")(function* choice(
     return yield* new ItemRefusal({
       detail:
         "A qti-simple-associable-choice sits inside no interaction. Move it into a qti-associate-interaction or a qti-simple-match-set of a qti-match-interaction.",
-      rule: "binding-declared",
+      rule: "admission",
     });
   }
 
@@ -372,7 +372,8 @@ const shapeOf = (text: Option.Option<string>): Option.Option<ShapeHandle> =>
  * The rows of one `qti-associable-hotspot`: the hotspot with its parent's kind and the interaction
  * that encloses it, its match bounds, its label when it has one, and its coordinates.
  *
- * @returns The rows; `ItemRefusal` for a hotspot with no valid `shape` or no enclosing interaction.
+ * @returns The rows; `ItemRefusal` for a hotspot with no valid `shape`, and for one with no enclosing
+ *   interaction (rule `admission`).
  *   A hotspot with no `coords` has no `Coords` row, and the shape's capacity refuses it at commit.
  */
 const hotspot = Effect.fn("import.associableHotspot")(function* hotspot(
@@ -388,7 +389,7 @@ const hotspot = Effect.fn("import.associableHotspot")(function* hotspot(
     return yield* new ItemRefusal({
       detail:
         "A qti-associable-hotspot sits inside no interaction. Move it into a qti-graphic-associate-interaction or a qti-graphic-gap-match-interaction.",
-      rule: "binding-declared",
+      rule: "admission",
     });
   }
 

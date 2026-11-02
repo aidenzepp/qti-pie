@@ -327,8 +327,8 @@ const gapOwner = (ctx: InteractionContext, element: Element): Option.Option<stri
  * The rows of one `qti-gap-text`: the text, its match bounds, its `match-min` when written, its
  * match group and its template variable.
  *
- * @returns The rows; `ItemRefusal` for a gap text that sits in no gap interaction and for a
- *   `template-identifier` that names no typed variable.
+ * @returns The rows; `ItemRefusal` for a gap text that sits in no gap interaction (rule
+ *   `admission`) and for a `template-identifier` that names no typed variable.
  */
 const gapText = Effect.fn("import.gapText")(function* gapText(
   ctx: InteractionContext,
@@ -341,7 +341,7 @@ const gapText = Effect.fn("import.gapText")(function* gapText(
     return yield* new ItemRefusal({
       detail:
         "A qti-gap-text sits inside no gap interaction. Move it into a qti-gap-match-interaction or a qti-graphic-gap-match-interaction.",
-      rule: "binding-declared",
+      rule: "admission",
     });
   }
 
@@ -372,8 +372,8 @@ const gapText = Effect.fn("import.gapText")(function* gapText(
  * The rows of one `qti-gap-img`: the image, its match bounds, the optionals the source wrote, its
  * match group and its template variable. The `object` or `img` it holds is the HTML rows' own.
  *
- * @returns The rows; `ItemRefusal` for a gap image that sits in no gap interaction and for a
- *   `template-identifier` that names no typed variable.
+ * @returns The rows; `ItemRefusal` for a gap image that sits in no gap interaction (rule
+ *   `admission`) and for a `template-identifier` that names no typed variable.
  */
 const gapImg = Effect.fn("import.gapImg")(function* gapImg(
   ctx: InteractionContext,
@@ -386,7 +386,7 @@ const gapImg = Effect.fn("import.gapImg")(function* gapImg(
     return yield* new ItemRefusal({
       detail:
         "A qti-gap-img sits inside no gap interaction. Move it into a qti-gap-match-interaction or a qti-graphic-gap-match-interaction.",
-      rule: "binding-declared",
+      rule: "admission",
     });
   }
 

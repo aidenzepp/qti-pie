@@ -17,7 +17,7 @@ import {
 } from "#qti/import/interactions.ts";
 import type { DeclaredVariable, InteractionContext, Shared } from "#qti/import/interactions.ts";
 import { hotRows } from "#qti/import/interactions/hot.ts";
-import { Rows, treeRows } from "#qti/import/tree.ts";
+import { ItemRefusal, Rows, treeRows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
 import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
 import {
@@ -170,6 +170,12 @@ const hotspotChoice = (identifier: string, more: Readonly<Record<string, string>
 
 const hottext = (identifier: string): Element => element("qti-hottext", { identifier });
 
+const refusalRuleOf = (exit: Exit.Exit<Rows, unknown>): string => {
+  const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
+
+  return Option.isSome(failure) && failure.value instanceof ItemRefusal ? failure.value.rule : "";
+};
+
 describe("hotRows on a hotspot interaction", () => {
   it.effect("writes the interaction, its binding, its choices and their coordinates", () =>
     Effect.gen(function* hotspots() {
@@ -314,6 +320,16 @@ describe("hotRows on a hotspot interaction", () => {
       const exit = yield* Effect.exit(hotRows(ctx, Rows.empty()));
 
       assert.isTrue(Exit.isFailure(exit));
+    }),
+  );
+
+  it.effect("refuses a hotspot choice that sits in no interaction under admission", () =>
+    Effect.gen(function* stray() {
+      const exit = yield* Effect.exit(
+        hotRows(contextOf([element("p", {}, [hotspotChoice("A")])]), Rows.empty()),
+      );
+
+      assert.strictEqual(refusalRuleOf(exit), "admission");
     }),
   );
 });
