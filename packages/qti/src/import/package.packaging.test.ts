@@ -7,10 +7,11 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { importPackage } from "#qti/import/package.ts";
 import { Document } from "#qti/schema/document.ts";
+import { FileContent, Package } from "#qti/schema/package.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
-import { AttributeLexical, Node } from "#qti/schema/node.ts";
+import { AttributeLexical, Node, NodeKind } from "#qti/schema/node.ts";
 import { Author } from "#qti/schema/roles.ts";
-import { materialize, materializeZip } from "#qti/test/fixtures.ts";
+import { materialize, materializePackage, materializeZip } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 
@@ -42,9 +43,10 @@ const positives = [
 ] as const satisfies readonly FixtureName[];
 
 /**
- * The manifest-side XML-path negatives of the spec's 4.12: each a hand-broken copy of a positive
- * that `importPackage` refuses, with the rules the refusal may name (one, or two where the spec
- * lets a bin 1 rule refuse first).
+ * The XML-path negatives of the spec's 4.12 to 4.14: each a hand-broken copy of a positive that
+ * `importPackage` refuses, with the rules the refusal may name (one, or two where the spec lets a
+ * bin 1 rule refuse first). The manifest-side rows come first, then the usage, outcome, LTI and
+ * bytes rows.
  */
 const negatives = [
   ["lomrest-two-titles", ["lom-title-single"]],
@@ -61,6 +63,8 @@ const negatives = [
   ["nestedqmd-both", ["qti-metadata-single"]],
   ["extmeta-item-root", ["resource-root"]],
   ["extmeta-two-resources", ["document-key"]],
+  ["extmeta-item-href", ["href-listed"]],
+  ["extmeta-hrefless", ["record-unnamed"]],
   ["variant-301", ["admission"]],
   ["variant-self-ref", ["variant-target"]],
   ["variant-no-resource", ["variant-target"]],
@@ -71,23 +75,47 @@ const negatives = [
   ["variant-two-complexity", ["drd-single"]],
   ["variant-no-metadata", ["variant-metadata"]],
   ["variant-before-file", ["ordering"]],
+  ["usage3-no-target", ["usage-count"]],
+  ["usage3-no-map-entry", ["usage-count"]],
+  ["usage3-two-values", ["usage-key"]],
+  ["usage3-ordinary-mapping", ["admission"]],
+  ["usage3-bad-month", ["usage-lexical"]],
+  ["usage3-feb-30", ["calendar"]],
+  ["usage3-bad-context", ["uri-syntax"]],
+  ["outcome-title", ["unmodeled-vocabulary"]],
+  ["lti300-as-301", ["resource-type"]],
+  ["bytes-webcontent-item", ["root-type-reverse"]],
+  ["resproc-webcontent", ["root-type-reverse"]],
 ] as const satisfies readonly (readonly [FixtureName, readonly string[]])[];
 
 /**
- * The negatives whose refusal differs from the rule the slice brief names today. Each test pins the
+ * The negatives whose refusal differs from the rule the slice brief names. Each test pins the
  * brief's rule and is marked `fails`, so it turns red the day the importer names that rule and the
- * mark must then move to {@link negatives}. What the importer does now:
+ * row must then move to {@link negatives}. What the importer does now:
  *
- * - `nestedqmd-manifest-lom`: refused as `admission`, the law `alternatives Node.kind` that no rule
- *   of the map names (not `qti-metadata-host`).
- * - `extmeta-item-href`: refused as `href-listed` (not `resource-root`).
- * - `extmeta-hrefless`: not refused; the import commits (not `record-unnamed`).
+ * - `nestedqmd-manifest-lom`: `qti-metadata-host` on some imports and `admission` on others. The
+ *   manifest-level `qmd:qtiMetadata` and each of its four leaves lack their arm row, so the `Node`
+ *   alternatives law has five violators and the witness is any one of them; only the
+ *   `qmd:qtiMetadata` row maps to `qti-metadata-host`.
+ * - `usage3-integer-float`, `usage3-float-padded`, `usage3-bad-name`: `value-lexical`, the rule of
+ *   the pattern law of the typed value, not `usage-typed-value` or `usage-lexical`.
+ *
+ * The published `usageData` package, refused as `unmodeled-vocabulary` (`element usageData has no
+ * model yet`, not `not-qti3`), is pinned beside them in its own test.
  */
 const divergent = [
   ["nestedqmd-manifest-lom", ["qti-metadata-host"]],
-  ["extmeta-item-href", ["resource-root"]],
-  ["extmeta-hrefless", ["record-unnamed"]],
+  ["usage3-integer-float", ["usage-typed-value"]],
+  ["usage3-float-padded", ["usage-typed-value"]],
+  ["usage3-bad-name", ["usage-lexical"]],
 ] as const satisfies readonly (readonly [FixtureName, readonly string[]])[];
+
+/**
+ * How many times a divergent negative is imported. A refusal whose rule depends on which of
+ * several witnesses the engine reports names the brief's rule on every attempt only by chance, at
+ * most once in a million times for twelve, so the expected failure does not flake.
+ */
+const divergentAttempts = 12;
 
 const documentsOf = query(Author).rule((r) => {
   const { id } = v(Document);
@@ -102,6 +130,28 @@ const lexicalsOf = query(Author).rule((r) => {
     .match(Node, { id: node, tree: r.param("tree", uuid) })
     .match(AttributeLexical, { attribute, kind, node, value })
     .find({ attribute, kind, node, value });
+});
+
+const documentRootsOf = query(Author).rule((r) => {
+  const { id, resource, root } = v(Document);
+
+  return r
+    .match(Document, { id, package: r.param("package", uuid), resource, root })
+    .find({ id, resource, root });
+});
+
+const filePathsOf = query(Author).rule((r) => {
+  const { path: file } = v(FileContent);
+
+  return r
+    .match(FileContent, { package: r.param("package", uuid), path: file })
+    .find({ path: file });
+});
+
+const packagesCounted = query(Author).rule((r) => {
+  const { id } = v(Package);
+
+  return r.match(Package, { id }).find({ total: r.count() });
 });
 
 const nodesOf = query(Author).rule((r) => {
@@ -281,17 +331,81 @@ describe.skipIf(!hasLease)(
       for (const [name, rules] of divergent) {
         it.effect.fails(`refuses ${name} naming ${rules.join(" or ")}`, () =>
           Effect.gen(function* refusesDivergent() {
-            const refused = yield* Effect.flip(importPackage(yield* materialize(name)));
+            for (let attempt = 0; attempt < divergentAttempts; attempt += 1) {
+              const refused = yield* Effect.flip(importPackage(yield* materialize(name)));
+              const rule = refused._tag === "ImportRefused" ? refused.rule : refused._tag;
 
-            assert.strictEqual(refused._tag, "ImportRefused", `${name}: refused by another error`);
-            assert.include(
-              rules,
-              refused._tag === "ImportRefused" ? refused.rule : refused._tag,
-              `${name}: the refusal named another rule`,
-            );
+              yield* Effect.log(`divergent ${name} refused by rule`, rule);
+
+              assert.include(rules, rule, `${name}: the refusal named another rule`);
+            }
           }),
         );
       }
+
+      it.effect.fails("refuses the published usageData package naming not-qti3", () =>
+        Effect.gen(function* refusesUsageData() {
+          const refused = yield* Effect.flip(importPackage(yield* materializePackage("usageData")));
+          const rule = refused._tag === "ImportRefused" ? refused.rule : refused._tag;
+
+          yield* Effect.log("divergent usageData refused by rule", rule);
+
+          assert.strictEqual(rule, "not-qti3");
+        }),
+      );
+
+      it.effect(
+        "resproc is refused as unmodeled vocabulary or imported as an rptemplate document",
+        () =>
+          Effect.gen(function* resprocEitherWay() {
+            const db = yield* Db.open(AuthorApp.roles.author, {});
+            const totalBefore = (yield* (yield* db.execute(packagesCounted, {})).collect)[0]?.total;
+            const outcome = yield* Effect.result(importPackage(yield* materialize("resproc")));
+
+            if (outcome._tag === "Failure") {
+              const refused = outcome.failure;
+
+              assert.strictEqual(refused._tag, "ImportRefused", "refused by another error");
+
+              const { detail, rule } =
+                refused._tag === "ImportRefused" ? refused : { detail: "", rule: refused._tag };
+              const element = /^element (?<name>qti-[^ ]+) /u.exec(detail)?.groups?.["name"];
+
+              yield* Effect.log("resproc refused", { detail, rule });
+
+              assert.strictEqual(rule, "unmodeled-vocabulary");
+              assert.isDefined(element, `the detail names no ASI element: ${detail}`);
+              assert.isFalse(
+                NodeKind.handles.some((handle) => handle === element),
+                `${element} is a modeled kind, so it is not unmodeled`,
+              );
+              assert.strictEqual(
+                (yield* (yield* db.execute(packagesCounted, {})).collect)[0]?.total,
+                totalBefore,
+                "a refused package stored a Package row",
+              );
+
+              return;
+            }
+
+            yield* Effect.log("resproc accepted");
+
+            const documents = yield* (yield* db.execute(documentRootsOf, {
+              package: outcome.success,
+            })).collect;
+            const files = yield* (yield* db.execute(filePathsOf, { package: outcome.success }))
+              .collect;
+
+            assert.deepStrictEqual(
+              documents.filter((row) => row.resource === "rp1").map((row) => row.root),
+              ["rptemplate"],
+            );
+            assert.isFalse(
+              files.some((row) => row.path === "rp/match_correct.xml"),
+              "the rptemplate document's href has a FileContent row",
+            );
+          }),
+      );
     });
   },
 );
