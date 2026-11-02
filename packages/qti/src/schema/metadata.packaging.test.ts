@@ -75,6 +75,39 @@ const containments = (
       JSON.stringify(rule.right.fields) === JSON.stringify(fields),
   );
 
+/**
+ * The four categories, whose parent is the record's `lom:lom` node.
+ */
+const categories = ["LomAnnotation", "LomClassification", "LomEducational", "LomRelation"] as const;
+
+/**
+ * The 16 nested containers, whose parent kind the `Edge` admission law binds.
+ */
+const nested = [
+  "LomContext",
+  "LomDifficulty",
+  "LomEntryLangString",
+  "LomIntendedEndUserRole",
+  "LomInteractivityLevel",
+  "LomInteractivityType",
+  "LomKind",
+  "LomLearningResourceType",
+  "LomPurpose",
+  "LomResource",
+  "LomSemanticDensity",
+  "LomSourceLangString",
+  "LomTaxon",
+  "LomTaxonPath",
+  "LomTypicalAgeRange",
+  "LomTypicalLearningTime",
+] as const;
+
+/**
+ * The remainder relation named `name`.
+ */
+const relationOf = (name: (typeof categories)[number] | (typeof nested)[number]) =>
+  lomRemainderRelations[name];
+
 describe("metadata staged remainder", () => {
   it("builds a schema over the four modules, the remainder relations and their rules without refusal", () => {
     const built = probe();
@@ -95,17 +128,50 @@ describe("metadata staged remainder", () => {
     }
   });
 
-  it("contains every relation of the remainder but LomId into Lom and Edge", () => {
+  it("contains every relation of the remainder but LomId into Lom", () => {
     for (const [name, relation] of Object.entries(lomRemainderRelations)) {
       if (name === "LomId") {
         continue;
       }
 
       const intoLom = containments(lomRemainderRules, relation, relations.Lom, ["id"]);
-      const intoEdge = containments(lomRemainderRules, relation, node.Edge, ["child", "parent"]);
       assert.strictEqual(intoLom.length, 1, `${name} into Lom`);
-      assert.strictEqual(intoEdge.length, 1, `${name} into Edge`);
     }
+  });
+
+  it("binds each category to its record's lom:lom node by an Edge containment on (id, lom)", () => {
+    for (const name of categories) {
+      const intoEdge = containments(lomRemainderRules, relationOf(name), node.Edge, [
+        "child",
+        "parent",
+      ]);
+      assert.strictEqual(intoEdge.length, 1, `${name} into Edge`);
+      assert.deepStrictEqual(intoEdge[0]?.left.fields, ["id", "lom"], `${name} left fields`);
+    }
+  });
+
+  it("leaves each nested container's parent to the Edge admission law", () => {
+    for (const name of nested) {
+      const intoEdge = lomRemainderRules.filter(
+        (rule) =>
+          rule.kind === "contained" &&
+          rule.left.source === relationOf(name) &&
+          rule.right.source === node.Edge,
+      );
+      assert.strictEqual(intoEdge.length, 0, `${name} into Edge`);
+    }
+  });
+
+  it("partitions the remainder's relations but LomId into categories and nested", () => {
+    const named = [...categories, ...nested];
+    assert.strictEqual(new Set(named).size, named.length);
+    assert.strictEqual(named.length, 20);
+    assert.deepStrictEqual(
+      named.toSorted(),
+      Object.keys(lomRemainderRelations)
+        .filter((name) => name !== "LomId")
+        .toSorted(),
+    );
   });
 
   it("types LomId's value by the wildcard pattern", () => {
