@@ -9,10 +9,10 @@
  * third, so a caller and a test see one closed roster, {@link ImportRule}, whichever refused.
  */
 import { Match, Schema } from "effect";
-import type { ProcessingGuardRefusal } from "#qti/import/guards/processing.ts";
-import type { GuardRefusal } from "#qti/import/guards/tree.ts";
 import type { ItemGuardRefusal } from "#qti/import/guards/item.ts";
 import type { ManifestGuardRefusal } from "#qti/import/guards/manifest.ts";
+import type { ProcessingGuardRefusal } from "#qti/import/guards/processing.ts";
+import type { GuardRefusal } from "#qti/import/guards/tree.ts";
 import type { ItemRefusal } from "#qti/import/item.ts";
 import type { NotQti3 } from "#qti/import/manifest.ts";
 import type { ProcessingRefused } from "#qti/import/processing.ts";

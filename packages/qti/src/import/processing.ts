@@ -41,12 +41,6 @@ import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity
 import type { Element } from "#qti/xml/tree.ts";
 
 /**
- * The rules {@link ProcessingRefused} names: the checker's, and `P5` for a required attribute the
- * tree does not carry.
- */
-export type ProcessingRule = PId | "P5";
-
-/**
  * A processing tree the importer refuses to write rows for.
  *
  * `rule` is the id of 4.10's rule it breaks and `detail` says which element breaks it, where it

@@ -11,7 +11,6 @@ import { Option } from "effect";
 import { renderProcessing } from "#qti/export/processing.ts";
 import type { Rows as RowSet } from "#qti/import/tree.ts";
 import { Rows } from "#qti/import/tree.ts";
-import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
 import {
   Declaration,
   DeclarationExternalScored,
@@ -40,6 +39,7 @@ import {
   SimpleChoiceTemplateIdentifier,
 } from "#qti/schema/interaction.ts";
 import { AssessmentItem, DeclaredAdaptive } from "#qti/schema/item.ts";
+import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
 import { LomStringLanguage } from "#qti/schema/metadata.ts";
 import {
   AttributeEntityReference,

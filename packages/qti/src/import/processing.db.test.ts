@@ -12,9 +12,8 @@ import { changeSetOf, importPackage, readRows, retrySchedule } from "#qti/import
 import { ImportRefused, isMappedLaw, refusalOfLaw, ruleOfLaw } from "#qti/import/refusal.ts";
 import type { ImportLaw, ImportWitness, Rule } from "#qti/import/refusal.ts";
 import type { Rows } from "#qti/import/tree.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
-import { Edge, Node } from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import { materializeProcessing } from "#qti/processing/fixtures.ts";
+import type { ProcessingFixtureName } from "#qti/processing/fixtures.ts";
 import { Correct, Null } from "#qti/schema/expression.ts";
 import {
   Equal,
@@ -28,6 +27,9 @@ import {
   VariableWeightIdentifier,
 } from "#qti/schema/expression-attributes.ts";
 import { AssessmentItem } from "#qti/schema/item.ts";
+import { AuthorApp } from "#qti/schema/logins.ts";
+import { Edge, Node } from "#qti/schema/node.ts";
+import * as patterns from "#qti/schema/patterns.ts";
 import {
   BuiltInRef,
   DeclaredRef,
@@ -51,8 +53,6 @@ import {
   TemplateProcessing,
 } from "#qti/schema/rule.ts";
 import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
-import { materializeProcessing } from "#qti/processing/fixtures.ts";
-import type { ProcessingFixtureName } from "#qti/processing/fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**

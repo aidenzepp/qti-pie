@@ -1,8 +1,8 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import * as declaration from "#qti/schema/declaration.ts";
-import * as expression from "#qti/schema/expression.ts";
 import * as document from "#qti/schema/document.ts";
+import * as expression from "#qti/schema/expression.ts";
 import * as item from "#qti/schema/item.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";

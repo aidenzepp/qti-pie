@@ -1,4 +1,5 @@
 import type { BaseType } from "#qti/schema/declaration.ts";
+import type { expressionKinds } from "#qti/schema/kinds/asi.ts";
 import type { NodeKindHandle } from "#qti/schema/node.ts";
 
 /**
@@ -37,80 +38,7 @@ export interface ResultAttributes {
 }
 
 /**
- * The 64 expression kinds of section 3.3 table A, in the XSD's alphabetical order.
- *
- * Each name is checked as a `NodeKindHandle`, so a name outside the composed vocabulary is a
- * compile error.
- */
-export const expressionKinds = [
-  "qti-and",
-  "qti-any-n",
-  "qti-base-value",
-  "qti-container-size",
-  "qti-contains",
-  "qti-correct",
-  "qti-custom-operator",
-  "qti-default",
-  "qti-delete",
-  "qti-divide",
-  "qti-duration-gte",
-  "qti-duration-lt",
-  "qti-equal",
-  "qti-equal-rounded",
-  "qti-field-value",
-  "qti-gcd",
-  "qti-gt",
-  "qti-gte",
-  "qti-index",
-  "qti-inside",
-  "qti-integer-divide",
-  "qti-integer-modulus",
-  "qti-integer-to-float",
-  "qti-is-null",
-  "qti-lcm",
-  "qti-lt",
-  "qti-lte",
-  "qti-map-response",
-  "qti-map-response-point",
-  "qti-match",
-  "qti-math-constant",
-  "qti-math-operator",
-  "qti-max",
-  "qti-member",
-  "qti-min",
-  "qti-multiple",
-  "qti-not",
-  "qti-null",
-  "qti-number-correct",
-  "qti-number-incorrect",
-  "qti-number-presented",
-  "qti-number-responded",
-  "qti-number-selected",
-  "qti-or",
-  "qti-ordered",
-  "qti-outcome-maximum",
-  "qti-outcome-minimum",
-  "qti-pattern-match",
-  "qti-power",
-  "qti-product",
-  "qti-random",
-  "qti-random-float",
-  "qti-random-integer",
-  "qti-repeat",
-  "qti-round",
-  "qti-round-to",
-  "qti-stats-operator",
-  "qti-string-match",
-  "qti-substring",
-  "qti-subtract",
-  "qti-sum",
-  "qti-test-variables",
-  "qti-truncate",
-  "qti-variable",
-] as const satisfies readonly NodeKindHandle[];
-
-/**
- * An expression kind: one of the 64 in `expressionKinds`.
+ * An expression kind: one of the 64 in `expressionKinds` of `kinds/asi.ts`.
  */
 export type ExpressionKind = (typeof expressionKinds)[number];
 
@@ -324,7 +252,7 @@ export const resultTypes: Readonly<Record<ExpressionKind, ResultRule>> = {
 /**
  * Whether a node kind is one of the 64 expression kinds.
  */
-export const isExpressionKind = (kind: NodeKindHandle): kind is ExpressionKind =>
+const isExpressionKind = (kind: NodeKindHandle): kind is ExpressionKind =>
   Object.hasOwn(resultTypes, kind);
 
 /**

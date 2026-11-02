@@ -13,7 +13,6 @@ import type {
   RuleNode,
   RuleOrExpressionKind,
 } from "#qti/processing/ast.ts";
-import { expressionKinds } from "#qti/processing/types.ts";
 import * as asi from "#qti/schema/kinds/asi.ts";
 import * as xi from "#qti/schema/kinds/xi.ts";
 import { ncName, xsDouble, xsInteger } from "#qti/schema/patterns.ts";
@@ -207,7 +206,7 @@ type Classified =
  * and processing kinds.
  */
 const asiEntries: ReadonlyMap<string, Classified> = new Map<string, Classified>([
-  ...expressionKinds.map((kind): [string, Classified] => [
+  ...asi.expressionKinds.map((kind): [string, Classified] => [
     kind,
     {
       _tag: "expression",
