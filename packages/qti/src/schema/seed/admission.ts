@@ -9,6 +9,7 @@ import type { AdmissionRow, SchemaVersionHandle } from "#qti/schema/kinds/generi
 import * as html from "#qti/schema/kinds/html.ts";
 import * as lom from "#qti/schema/kinds/lom.ts";
 import * as qmd from "#qti/schema/kinds/qmd.ts";
+import * as xi from "#qti/schema/kinds/xi.ts";
 import { NodeKind, SchemaVersion } from "#qti/schema/node.ts";
 
 const kindOrder: ReadonlyMap<string, number> = new Map(
@@ -44,6 +45,7 @@ export const admission: readonly AdmissionRow[] = [
       ...cp.admission,
       ...lom.admission,
       ...qmd.admission,
+      ...xi.admission,
     ].map((row) => [`${row.version}\u0000${row.parent}\u0000${row.child}`, row] as const),
   ).values(),
 ].toSorted(

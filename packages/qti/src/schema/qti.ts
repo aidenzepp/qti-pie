@@ -9,6 +9,8 @@
 import { alternatives, schema } from "@bjornpagen/grizzle";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
+import * as expression from "#qti/schema/expression.ts";
+import * as expressionAttributes from "#qti/schema/expression-attributes.ts";
 import * as html from "#qti/schema/html.ts";
 import * as interaction from "#qti/schema/interaction.ts";
 import * as item from "#qti/schema/item.ts";
@@ -16,6 +18,7 @@ import * as metadata from "#qti/schema/metadata.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
 import * as processing from "#qti/schema/processing.ts";
+import * as rule from "#qti/schema/rule.ts";
 import * as value from "#qti/schema/value.ts";
 
 export const Qti = schema(
@@ -29,6 +32,9 @@ export const Qti = schema(
     ...value.relations,
     ...interaction.relations,
     ...processing.relations,
+    ...expression.relations,
+    ...expressionAttributes.relations,
+    ...rule.relations,
     ...item.relations,
     ...html.relations,
   },
@@ -41,6 +47,9 @@ export const Qti = schema(
     ...value.rules,
     ...interaction.rules,
     ...processing.rules,
+    ...expression.rules,
+    ...expressionAttributes.rules,
+    ...rule.rules,
     ...item.rules,
     ...html.rules,
     alternatives(node.Node, "kind", node.NodeKind, {
@@ -49,6 +58,9 @@ export const Qti = schema(
       ...value.arms,
       ...interaction.arms,
       ...processing.arms,
+      ...expression.arms,
+      ...expressionAttributes.arms,
+      ...rule.arms,
       ...item.arms,
       ...html.arms,
       ...pkg.arms,
