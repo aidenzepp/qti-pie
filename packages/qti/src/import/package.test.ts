@@ -1,10 +1,11 @@
 import { CommitUnknown, Db, query, TransientFailure, uuid, v } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
-import { assert, layer } from "@effect/vitest";
-import { Effect, Layer, Ref, Result, Schedule, Schema } from "effect";
+import { assert, it as plainIt, layer } from "@effect/vitest";
+import { Clock, Effect, Fiber, Layer, Ref, Result, Schedule, Schema } from "effect";
+import { TestClock } from "effect/testing";
 import { describe, inject } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { importPackage } from "#qti/import/package.ts";
+import { importPackage, retrySchedule } from "#qti/import/package.ts";
 import { ImportRefused, isMappedLaw } from "#qti/import/refusal.ts";
 import type { ImportLaw, Rule } from "#qti/import/refusal.ts";
 import { Document } from "#qti/schema/document.ts";
@@ -163,6 +164,70 @@ const serializationFailure = Schema.decodeUnknownSync(TransientFailure)({
     table: undefined,
   },
   reason: { _tag: "SerializationFailure" },
+});
+
+/**
+ * What a run of `retrySchedule` against a failure that never clears did: the clock reading at each
+ * attempt, in milliseconds after the first, and whether the retry gave up.
+ */
+interface RetryRun {
+  readonly attemptAt: readonly number[];
+  readonly gaveUp: boolean;
+}
+
+/**
+ * Run `retrySchedule` against an effect that always fails, on the test clock, and advance the clock
+ * well past the schedule's bound.
+ */
+const runRetrySchedule = Effect.gen(function* runRetrySchedule() {
+  const attemptAt = yield* Ref.make<readonly number[]>([]);
+  const started = yield* Clock.currentTimeMillis;
+  const attempt = Effect.gen(function* failsAlways() {
+    const now = yield* Clock.currentTimeMillis;
+
+    yield* Ref.update(attemptAt, (all) => [...all, now - started]);
+
+    return yield* Effect.fail("transient");
+  });
+  const fiber = yield* Effect.forkChild(Effect.result(Effect.retry(attempt, retrySchedule)));
+
+  yield* TestClock.adjust("120 seconds");
+
+  const result = yield* Fiber.join(fiber);
+  const run: RetryRun = { attemptAt: yield* Ref.get(attemptAt), gaveUp: Result.isFailure(result) };
+
+  return run;
+});
+
+describe("retrySchedule", () => {
+  plainIt.effect("keeps retrying past the fifth retry while under its time bound", () =>
+    Effect.gen(function* keepsRetrying() {
+      const { attemptAt } = yield* runRetrySchedule;
+
+      assert.isAbove(attemptAt.length, 6);
+      assert.isBelow(attemptAt[6] ?? Number.POSITIVE_INFINITY, 30_000);
+    }),
+  );
+
+  plainIt.effect("waits at most one second between attempts", () =>
+    Effect.gen(function* capsDelays() {
+      const { attemptAt } = yield* runRetrySchedule;
+      const gaps = attemptAt.slice(1).map((at, i) => at - (attemptAt[i] ?? 0));
+
+      assert.isAtMost(Math.max(...gaps), 1000);
+    }),
+  );
+
+  plainIt.effect("stops once thirty seconds have passed, and then fails", () =>
+    Effect.gen(function* stopsAtBound() {
+      const { attemptAt, gaveUp } = yield* runRetrySchedule;
+      const last = attemptAt.at(-1) ?? 0;
+
+      assert.isTrue(gaveUp);
+      assert.isAbove(last, 30_000);
+      assert.isAtMost(last, 31_000);
+    }),
+  );
 });
 
 /**
