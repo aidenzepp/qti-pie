@@ -8,7 +8,6 @@ import {
   bindingRows,
   coordsRows,
   gapMatchBindingRow,
-  interactionRows,
   markers,
   maxBoundOf,
   maxCountDefault,
@@ -21,7 +20,6 @@ import { orderRows } from "#qti/import/interactions/order.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
-import { Declaration, TypedDeclaration } from "#qti/schema/declaration.ts";
 import {
   DeclaredFixed,
   DeclaredShowHide,
@@ -445,32 +443,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           },
           Rows.empty(),
         );
-        const declarations = new Map<string, DeclaredVariable>(
-          Rows.of(item.rows, Declaration).map((declaration) => {
-            const typed = Rows.of(item.rows, TypedDeclaration).find(
-              (row) => row.id === declaration.id,
-            );
-
-            return [
-              declaration.identifier,
-              {
-                baseType: Option.fromNullishOr(typed?.baseType),
-                cardinality: Option.fromNullishOr(typed?.cardinality),
-                id: declaration.id,
-                shape: declaration.shape,
-              },
-            ];
-          }),
-        );
-
-        const built = yield* interactionRows(
-          doc.root,
-          item.nodes,
-          item.documentId,
-          declarations,
-          { adaptive: "false" },
-          item.rows,
-        );
+        const built = item.rows;
 
         const interactions = Rows.of(built, GraphicOrderInteraction);
         assert.strictEqual(interactions.length, 1);
