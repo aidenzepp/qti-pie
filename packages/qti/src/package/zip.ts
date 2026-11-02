@@ -10,7 +10,7 @@
  * budgets before any entry is inflated, so an archive that expands past them is refused at the cost
  * of reading its directory.
  */
-import { crc32, inflateRawSync } from "node:zlib";
+import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { Effect, FileSystem, Schema } from "effect";
 import type { PlatformError } from "effect";
 
@@ -743,3 +743,143 @@ export const readZip = Effect.fn("package.readZip")(function* readZip(
 
   return yield* parseZip(path, yield* fs.readFile(path));
 });
+
+/**
+ * Entries shorter than this many bytes are stored, because deflate would not make them smaller.
+ */
+const STORE_BELOW = 64;
+
+/**
+ * The version needed to extract and the version made by: 2.0, the level deflate requires, with
+ * the MS-DOS host byte 0 so no Unix mode is implied.
+ */
+const VERSION = 20;
+
+/**
+ * The fixed DOS timestamp of every written entry: 1980-01-01 00:00:00. The date packs
+ * `(year - 1980) << 9 | month << 5 | day`, which is month 1, day 1 here.
+ */
+const DOS_DATE = 0x00_21;
+
+const DOS_TIME = 0;
+
+/**
+ * One entry as written: its name, its data and the facts both headers repeat.
+ */
+interface WrittenEntry {
+  readonly crc: number;
+  readonly data: Uint8Array;
+  readonly method: number;
+  readonly name: Uint8Array;
+  readonly offset: number;
+  readonly size: number;
+}
+
+/**
+ * The fields both headers share, from the version to the name length: `version`, flags, method,
+ * time, date, CRC-32, stored size, size and name length, 24 bytes in all.
+ *
+ * @param entry - The entry written.
+ * @returns The shared fields, little-endian.
+ */
+const sharedFields = (entry: WrittenEntry): Uint8Array => {
+  const fields = new Uint8Array(24);
+  const view = new DataView(fields.buffer);
+
+  view.setUint16(0, VERSION, true);
+  view.setUint16(2, FLAG_UTF8, true);
+  view.setUint16(4, entry.method, true);
+  view.setUint16(6, DOS_TIME, true);
+  view.setUint16(8, DOS_DATE, true);
+  view.setUint32(10, entry.crc, true);
+  view.setUint32(14, entry.data.length, true);
+  view.setUint32(18, entry.size, true);
+  view.setUint16(22, entry.name.length, true);
+
+  return fields;
+};
+
+/**
+ * A 4-byte little-endian signature.
+ *
+ * @param signature - The signature as a number.
+ * @returns Its bytes.
+ */
+const signatureBytes = (signature: number): Uint8Array => {
+  const bytes = new Uint8Array(4);
+
+  new DataView(bytes.buffer).setUint32(0, signature, true);
+
+  return bytes;
+};
+
+/**
+ * Write entries as a zip archive that {@link readZip} admits.
+ *
+ * Each entry is deflated (RFC 1951), or stored when it is under 64 bytes, in the order given. The
+ * archive has local headers, a central directory and an end record, no directory entries and no
+ * comments, UTF-8 names with general-purpose bit 11, and a fixed DOS timestamp of 1980-01-01
+ * 00:00:00, so the same entries give the same bytes. The container is not part of what a round trip
+ * compares: the entries are.
+ *
+ * It does not check the archive against the reader's caps or write ZIP64, so more than 65,535
+ * entries or 4 GiB are outside it.
+ *
+ * @param entries - The files, in the order written.
+ * @returns The archive.
+ */
+export const writeZip = (entries: readonly ZipEntry[]): Uint8Array => {
+  const encoder = new TextEncoder();
+  const parts: Uint8Array[] = [];
+  const written: WrittenEntry[] = [];
+  let offset = 0;
+
+  for (const entry of entries) {
+    const deflate = entry.bytes.length >= STORE_BELOW;
+    const data = deflate ? new Uint8Array(deflateRawSync(entry.bytes)) : entry.bytes;
+    const record: WrittenEntry = {
+      crc: crc32(entry.bytes),
+      data,
+      method: deflate ? METHOD_DEFLATE : METHOD_STORED,
+      name: encoder.encode(entry.path),
+      offset,
+      size: entry.bytes.length,
+    };
+    const extra = new Uint8Array(2);
+
+    parts.push(signatureBytes(LOCAL_SIGNATURE), sharedFields(record), extra, record.name, data);
+    offset += 4 + 24 + extra.length + record.name.length + data.length;
+    written.push(record);
+  }
+
+  const directoryOffset = offset;
+
+  for (const record of written) {
+    const tail = new Uint8Array(14);
+    const view = new DataView(tail.buffer);
+
+    // Comment length, disk number, internal attributes and external attributes are
+    // zero; only the local header's offset is set.
+    view.setUint32(10, record.offset, true);
+    parts.push(
+      signatureBytes(CENTRAL_SIGNATURE),
+      new Uint8Array([VERSION, 0]),
+      sharedFields(record),
+      new Uint8Array(2),
+      tail,
+      record.name,
+    );
+    offset += CENTRAL_LENGTH + record.name.length;
+  }
+
+  const end = new Uint8Array(END_LENGTH - 4);
+  const endView = new DataView(end.buffer);
+
+  endView.setUint16(4, written.length, true);
+  endView.setUint16(6, written.length, true);
+  endView.setUint32(8, offset - directoryOffset, true);
+  endView.setUint32(12, directoryOffset, true);
+  parts.push(signatureBytes(END_SIGNATURE), end);
+
+  return Buffer.concat(parts);
+};
