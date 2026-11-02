@@ -63,12 +63,18 @@ const boundsOf = (rule: Capacity | undefined): readonly [unknown, unknown] => {
 describe("feedback", () => {
   it("builds the probe over node, declaration and feedback without refusal", () => {
     const built = probe();
-    for (const name of ["FeedbackBlock", "FeedbackInline", "ModalFeedback", "FeedbackOutcomeRef"]) {
+    for (const name of [
+      "FeedbackBlock",
+      "TemplateFeedbackBlock",
+      "FeedbackInline",
+      "ModalFeedback",
+      "FeedbackOutcomeRef",
+    ]) {
       assert.include(Object.keys(built.relations), name);
     }
   });
 
-  it("exports the nine handles, both feedback block kinds on one arm", () => {
+  it("exports the nine handles, each feedback block kind on its own arm", () => {
     assert.deepStrictEqual(Object.keys(feedback.arms).toSorted(), [
       "qti-content-body.feedback",
       "qti-content-body.modal",
@@ -80,10 +86,36 @@ describe("feedback", () => {
       "qti-feedback-inline",
       "qti-modal-feedback",
     ]);
+    assert.strictEqual(feedback.arms["qti-feedback-block"], feedback.relations.FeedbackBlock);
     assert.strictEqual(
-      feedback.arms["qti-feedback-block"],
       feedback.arms["qti-feedback-block.template"],
+      feedback.relations.TemplateFeedbackBlock,
     );
+  });
+
+  it("gives the template feedback block a feedback block's fields, keyed by id, with its own show-hide marker", () => {
+    const { FeedbackBlock, TemplateFeedbackBlock } = feedback.relations;
+    assert.deepStrictEqual(
+      Object.keys(TemplateFeedbackBlock.fields),
+      Object.keys(FeedbackBlock.fields),
+    );
+    assert.deepStrictEqual(Object.keys(TemplateFeedbackBlock.fields), [
+      "id",
+      "identifier",
+      "outcomeIdentifier",
+      "showHide",
+    ]);
+    assert.deepStrictEqual([...TemplateFeedbackBlock.primaryKey], ["id"]);
+
+    const markers = feedback.rules
+      .filter((rule) => rule.kind === "contained")
+      .filter(
+        (rule) => rule.left.source === feedback.relations.DeclaredTemplateFeedbackBlockShowHide,
+      );
+    assert.strictEqual(markers.length, 1);
+    assert.deepStrictEqual([...(markers[0]?.left.fields ?? [])], ["node"]);
+    assert.strictEqual(markers[0]?.right.source, TemplateFeedbackBlock);
+    assert.deepStrictEqual([...(markers[0]?.right.fields ?? [])], ["id"]);
   });
 
   it("declares the selected-source probe: one body per 3.0.1 modal, at most one per 3.0.0", () => {

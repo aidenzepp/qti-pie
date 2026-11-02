@@ -5,7 +5,8 @@
  * A feedback block or inline shows or hides on an outcome variable's value: its
  * `outcome-identifier` names an outcome declaration of the same document, and the reference states
  * the type the declaration holds. `qti-feedback-block` and `qti-feedback-block.template` are one
- * shape, so the two handles share one arm. A modal feedback has one content body under it in
+ * shape, but each handle has its own arm: a node has one kind, so an arm listed under two handles
+ * admits no row. A modal feedback has one content body under it in
  * `3.0.1` and at most one in `3.0.0`; the two capacities below count those bodies from the edges
  * whose child is a modal content body, so a body is counted without a row of its own.
  */
@@ -38,9 +39,9 @@ const ncName = str.regex(patterns.ncName);
 const showHide = str.regex(patterns.showHide);
 
 /**
- * A `qti-feedback-block`, or a `qti-feedback-block.template` (the same element inside a template
- * content body): the identifier its outcome value is matched against, the outcome it reads and
- * whether a match shows or hides it.
+ * A `qti-feedback-block`: the identifier its outcome value is matched against, the outcome it reads
+ * and whether a match shows or hides it. The same element inside a template content body is a
+ * `TemplateFeedbackBlock`.
  */
 export const FeedbackBlock = relation(
   "FeedbackBlock",
@@ -53,6 +54,25 @@ export const FeedbackBlock = relation(
  */
 export const DeclaredFeedbackBlockShowHide = relation(
   "DeclaredFeedbackBlockShowHide",
+  { node: uuid },
+  ["node"],
+);
+
+/**
+ * A `qti-feedback-block.template`: a feedback block inside a template block's content body, with a
+ * feedback block's fields.
+ */
+export const TemplateFeedbackBlock = relation(
+  "TemplateFeedbackBlock",
+  { id: uuid, identifier: ncName, outcomeIdentifier: ncName, showHide },
+  ["id"],
+);
+
+/**
+ * The source wrote `show-hide` on this template feedback block.
+ */
+export const DeclaredTemplateFeedbackBlockShowHide = relation(
+  "DeclaredTemplateFeedbackBlockShowHide",
   { node: uuid },
   ["node"],
 );
@@ -156,16 +176,19 @@ export const relations = {
   ContentBodyTemplate,
   DeclaredFeedbackBlockShowHide,
   DeclaredFeedbackInlineShowHide,
+  DeclaredTemplateFeedbackBlockShowHide,
   FeedbackBlock,
   FeedbackInline,
   FeedbackOutcomeRef,
   ModalFeedback,
   ModalFeedbackTitle,
+  TemplateFeedbackBlock,
 };
 
 /**
- * The feedback kinds' arms, keyed by their `NodeKind` handles. Both feedback block handles take
- * the one arm.
+ * The feedback kinds' arms, keyed by their `NodeKind` handles. Each handle has its own arm:
+ * `alternatives` binds each arm row to a node of every handle that lists the arm, and a node has
+ * one kind, so an arm listed under two handles admits no row.
  */
 export const arms = {
   "qti-content-body.feedback": ContentBodyFeedback,
@@ -174,7 +197,7 @@ export const arms = {
   "qti-content-body.rubricTemplate": ContentBodyRubricTemplate,
   "qti-content-body.template": ContentBodyTemplate,
   "qti-feedback-block": FeedbackBlock,
-  "qti-feedback-block.template": FeedbackBlock,
+  "qti-feedback-block.template": TemplateFeedbackBlock,
   "qti-feedback-inline": FeedbackInline,
   "qti-modal-feedback": ModalFeedback,
 };
@@ -198,6 +221,7 @@ export const rules = [
   }),
   contained(on(DeclaredFeedbackBlockShowHide, "node"), on(FeedbackBlock, "id")),
   contained(on(DeclaredFeedbackInlineShowHide, "node"), on(FeedbackInline, "id")),
+  contained(on(DeclaredTemplateFeedbackBlockShowHide, "node"), on(TemplateFeedbackBlock, "id")),
   contained(on(ModalFeedbackTitle, "node"), on(ModalFeedback, "id")),
   contained(
     on(FeedbackOutcomeRef, "document", "identifier"),
