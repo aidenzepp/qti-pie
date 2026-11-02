@@ -923,7 +923,42 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
   const { root } = doc;
 
   /**
-   * Write the rows of one `qmd:qtiMetadata` of a resource: its record and one arm row per leaf.
+   * Write one arm row per leaf of the `qmd:qtiMetadata` `qmd`, whose node id is `qtiMetadata`, and
+   * of its portable custom interaction context. A leaf's arm binds only to its record's node, so
+   * the rows do not depend on where the record sits.
+   */
+  const qmdLeafRows = (qmd: Element, qtiMetadata: string): void => {
+    for (const leaf of elementChildren(qmd)) {
+      const found = nodes.get(leaf);
+      if (found === undefined) {
+        continue;
+      }
+
+      const content = contentOf(leaf);
+      if (found.kind === "qmd:portableCustomInteractionContext") {
+        add(md.QmdPortableCustomInteractionContext, [{ id: found.id, qtiMetadata }]);
+        for (const part of elementChildren(leaf)) {
+          const partNode = nodes.get(part);
+          const value = replace(contentOf(part));
+          if (partNode?.kind === "qmd:customTypeIdentifier") {
+            add(md.QmdCustomTypeIdentifier, [{ context: found.id, id: partNode.id, value }]);
+          } else if (partNode?.kind === "qmd:interactionKind") {
+            add(md.QmdInteractionKind, [{ context: found.id, id: partNode.id, value }]);
+          }
+        }
+      } else if (isQmdLeaf(found.kind)) {
+        const spec = qmdLeaves[found.kind];
+        const value = classed(content, spec.class);
+        // SAFETY: the leaf's column pattern judges the value at commit, which is the importer's refusal for it.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+        add(spec.arm, [{ id: found.id, qtiMetadata, value }] as never);
+      }
+    }
+  };
+
+  /**
+   * Write the record of one `qmd:qtiMetadata` of a resource and its host arm. Its leaves' arm rows
+   * are `qmdLeafRows`', written for every record of the manifest, hosted or not.
    */
   const qmdRows = (
     qmd: Element,
@@ -959,33 +994,6 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
           resource: resource.identifier,
         },
       ]);
-    }
-
-    for (const leaf of elementChildren(qmd)) {
-      const found = nodes.get(leaf);
-      if (found === undefined) {
-        continue;
-      }
-
-      const content = contentOf(leaf);
-      if (found.kind === "qmd:portableCustomInteractionContext") {
-        add(md.QmdPortableCustomInteractionContext, [{ id: found.id, qtiMetadata: node.id }]);
-        for (const part of elementChildren(leaf)) {
-          const partNode = nodes.get(part);
-          const value = replace(contentOf(part));
-          if (partNode?.kind === "qmd:customTypeIdentifier") {
-            add(md.QmdCustomTypeIdentifier, [{ context: found.id, id: partNode.id, value }]);
-          } else if (partNode?.kind === "qmd:interactionKind") {
-            add(md.QmdInteractionKind, [{ context: found.id, id: partNode.id, value }]);
-          }
-        }
-      } else if (isQmdLeaf(found.kind)) {
-        const spec = qmdLeaves[found.kind];
-        const value = classed(content, spec.class);
-        // SAFETY: the leaf's column pattern judges the value at commit, which is the importer's refusal for it.
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-        add(spec.arm, [{ id: found.id, qtiMetadata: node.id, value }] as never);
-      }
     }
   };
 
@@ -1102,7 +1110,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
    * Write the rows of the `cp:metadata.file` of one `cp:file`: its record, each record of LOM the
    * metadata holds with its subtree, and each curriculum standards set. A file's records are
    * outside the object identifier and title rows of a resource's, and a `qtiMetadata` beside them
-   * gets no row, so the database refuses it at commit.
+   * gets no record row, only its leaves' arms, so the database refuses it at commit.
    */
   const fileMetadataRows = (file: Element, fileId: string): void => {
     for (const metadataElement of childrenNamed(file, "metadata")) {
@@ -1334,6 +1342,12 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
 
     for (const resource of childrenNamed(resources, "resource")) {
       resourceRows(resource);
+    }
+  }
+
+  for (const [element, found] of nodes) {
+    if (found.kind === "qmd:qtiMetadata") {
+      qmdLeafRows(element, found.id);
     }
   }
 

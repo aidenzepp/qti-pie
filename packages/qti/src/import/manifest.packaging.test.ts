@@ -20,6 +20,7 @@ import {
   CsmSetResourcePartId,
 } from "#qti/schema/csm.ts";
 import {
+  arms,
   FileLom,
   LomAnnotation,
   LomClassification,
@@ -176,6 +177,17 @@ const verdictOf = (rows: Rows, entries: readonly Entry[]) =>
       onSuccess: () => ({ detail: "", rule: "pass" }),
     }),
   );
+
+/**
+ * How many rows of the arm of `kind` have `id`, which is zero for a kind with no arm.
+ */
+const armRowsOf = (rows: Rows, kind: string, id: string): number =>
+  Object.entries(arms)
+    .filter(([armKind]) => armKind === kind)
+    .reduce(
+      (count, [, arm]) => count + Rows.of(rows, arm).filter((row) => row.id === id).length,
+      0,
+    );
 
 /**
  * The rows of `relation` with each one replaced by `change`'s answer for it.
@@ -486,6 +498,54 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
         for (const node of stranded) {
           assert.isFalse(records.has(node.id), name);
         }
+      }
+    }),
+  );
+
+  suite.effect("writes every qmd leaf's arm row wherever its qtiMetadata sits", () =>
+    Effect.gen(function* qmdLeafArms() {
+      for (const name of ["nestedqmd-manifest-lom", "filelom-qmd"] as const) {
+        const rows = yield* rowsOf(yield* materialize(name));
+        const leaves = Rows.of(rows, Node).filter(
+          (node) => node.kind.startsWith("qmd:") && node.kind !== "qmd:qtiMetadata",
+        );
+        assert.isAbove(leaves.length, 0, name);
+        for (const leaf of leaves) {
+          assert.strictEqual(armRowsOf(rows, leaf.kind, leaf.id), 1, `${name} ${leaf.kind}`);
+        }
+
+        const parents = new Map(Rows.of(rows, Edge).map((edge) => [edge.child, edge.parentKind]));
+        const stranded = Rows.of(rows, Node).filter(
+          (node) =>
+            node.kind === "qmd:qtiMetadata" &&
+            (parents.get(node.id) === "cp:metadata.file" || parents.get(node.id) === "lom:lom"),
+        );
+        assert.isAbove(stranded.length, 0, name);
+        for (const record of stranded) {
+          assert.isFalse(
+            Rows.of(rows, QtiMetadata).some((row) => row.id === record.id),
+            name,
+          );
+        }
+      }
+    }),
+  );
+
+  suite.effect("passes the guards over a package whose only hostless node is its qmd record", () =>
+    Effect.gen(function* hostlessRecordPasses() {
+      const built = yield* builtOf(yield* materialize("nestedqmd-manifest-lom"));
+
+      assert.strictEqual((yield* verdictOf(built.rows, built.entries)).rule, "pass");
+    }),
+  );
+
+  suite.effect("writes each qmd node of a hosted record one arm row, none twice", () =>
+    Effect.gen(function* hostedQmdArms() {
+      const rows = yield* rowsOf(yield* materialize("simple"));
+      const qmds = Rows.of(rows, Node).filter((node) => node.kind.startsWith("qmd:"));
+      assert.isAbove(qmds.length, 1);
+      for (const node of qmds) {
+        assert.strictEqual(armRowsOf(rows, node.kind, node.id), 1, node.kind);
       }
     }),
   );
