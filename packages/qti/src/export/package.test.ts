@@ -6,8 +6,10 @@ import {
   NodeServices,
 } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
-import { Effect, FileSystem, Layer } from "effect";
+import { Console, Effect, Exit, FileSystem, Layer, Stdio } from "effect";
+import { Command } from "effect/cli";
 import { describe } from "vitest";
+import { cli } from "#qti/cli.ts";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { comparePackage, renderReport } from "#qti/export/compare.ts";
 import type { Report } from "#qti/export/compare.ts";
@@ -192,6 +194,29 @@ const roundTrip = (name: FixtureName) =>
 const kindOf = (report: Report, entry: string) =>
   report.find((item) => item.path === entry)?.outcome.kind;
 
+/**
+ * Run the command line on `args` with the console captured, in place of writing to the terminal.
+ *
+ * @param args - The command line after the program name.
+ * @returns What the run wrote with `log` and `error` joined by line feeds, and how it ended.
+ */
+const runCli = Effect.fn("export/package.test.runCli")(function* runCli(args: readonly string[]) {
+  const lines: string[] = [];
+  const capture = (...parts: readonly unknown[]): void => {
+    lines.push(parts.join(" "));
+  };
+  const exit = yield* Command.run(cli, { version: "0.0.0" }).pipe(
+    Effect.provide(Stdio.layerTest({ args: Effect.succeed(args) })),
+    Effect.provideService(
+      Console.Console,
+      Object.assign(Object.create(console), { error: capture, log: capture }),
+    ),
+    Effect.exit,
+  );
+
+  return { exit, output: lines.join("\n") };
+});
+
 describe.skipIf(!hasLease)(
   "export/package.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
@@ -216,6 +241,35 @@ describe.skipIf(!hasLease)(
           }),
         );
       }
+
+      it.effect("sharedMedia round-trips: its two items and manifest are canonical-equal", () =>
+        Effect.gen(function* sharedMediaRoundTrip() {
+          const { report } = yield* roundTrip("sharedMedia");
+
+          assert.strictEqual(
+            report.filter((item) => item.outcome.kind === "differs").length,
+            0,
+            renderReport(report),
+          );
+          assert.strictEqual(kindOf(report, "imsmanifest.xml"), "canonical-equal");
+          assert.strictEqual(kindOf(report, "example/graphic_order.xml"), "canonical-equal");
+          assert.strictEqual(kindOf(report, "example/hotspot.xml"), "canonical-equal");
+          assert.strictEqual(kindOf(report, "example/ukair.png"), "byte-identical");
+          assert.strictEqual(report.length, 4);
+        }),
+      );
+
+      it.effect("the roundtrip command on sharedMedia prints the same report", () =>
+        Effect.gen(function* sharedMediaCli() {
+          const source = yield* materialize("sharedMedia");
+          const { report } = yield* roundTrip("sharedMedia");
+          const { exit, output } = yield* runCli(["roundtrip", source]);
+
+          assert.isTrue(Exit.isSuccess(exit), output);
+          assert.strictEqual(output, renderReport(report));
+          assert.strictEqual(output.split("\n").at(-1), "all equal");
+        }),
+      );
 
       it.effect("the latin1 export writes the euro sign as &#x20AC; and 0x85 as one byte", () =>
         Effect.gen(function* latin1Bytes() {
