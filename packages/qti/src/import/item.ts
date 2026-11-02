@@ -786,6 +786,7 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
       rule: "typed-copy",
     });
   }
+
   built = Rows.add(built, AssessmentItem, [
     {
       adaptive: judgedLater(Option.getOrElse(adaptive.value, () => "false")),
