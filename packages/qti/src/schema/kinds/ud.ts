@@ -24,14 +24,13 @@ export const kinds = [
 
 /**
  * The attribute names these kinds introduce, in order of first appearance among the kinds.
- * `identifier` is `asi`'s name.
+ * `identifier` and `name` are `asi`'s names.
  */
 export const attributes = [
   "glossary",
   "caseCount",
   "context",
   "lastUpdated",
-  "name",
   "stdDeviation",
   "stdError",
   "objectType",
