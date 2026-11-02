@@ -284,3 +284,106 @@ export const point = "^[+\\-]?[0-9]+ [+\\-]?[0-9]+$" as const;
  * The lexical space of a `pair` or `directedPair` value: two NCNames separated by one space.
  */
 export const pair = `^${ncNameBody} ${ncNameBody}$` as const;
+
+/**
+ * RFC 5646 (BCP 47) well-formedness: a language of two or three letters with up to three
+ * three-letter extlangs, or four letters, or five to eight; an optional script (four letters), an
+ * optional region (two letters or three digits), variants (five to eight alphanumerics, or a digit
+ * and three alphanumerics), extensions (a singleton other than `x` and subtags of two to eight
+ * alphanumerics) and a private-use tail; or the whole `x-` private-use form; or the empty string.
+ * Written as classes and groups, without `\p` or lookarounds. Well-formedness only: no subtag
+ * registry is consulted and the grandfathered tags are not admitted.
+ */
+export const bcp47 =
+  "^(?:(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})(?:-[A-Za-z]{4})?(?:-(?:[A-Za-z]{2}|[0-9]{3}))?(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*(?:-[xX](?:-[A-Za-z0-9]{1,8})+)?|[xX](?:-[A-Za-z0-9]{1,8})+)?$" as const;
+
+/**
+ * `xs:positiveInteger` lexical space: digits with an optional leading plus and at least one
+ * non-zero digit, so the value is at least one.
+ */
+export const positiveInteger = "^\\+?0*[1-9][0-9]*$" as const;
+
+/**
+ * An `xs:double` whose value is strictly greater than zero: no sign, a mantissa with at least one
+ * non-zero digit, an optional exponent. `INF` and `NaN` are refused (`normal-maximum` does not
+ * admit them).
+ */
+export const positiveDouble =
+  "^\\+?(?:[0-9]*[1-9][0-9]*(?:\\.[0-9]*)?|[0-9]*\\.[0-9]*[1-9][0-9]*)(?:[eE][+\\-]?[0-9]+)?$" as const;
+
+/**
+ * An `xs:double` whose value is zero or greater: an optional plus, no minus, no `INF` and no `NaN`.
+ * A negative zero is refused too.
+ */
+export const nonNegativeDouble =
+  "^\\+?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+\\-]?[0-9]+)?$" as const;
+
+/**
+ * `xs:decimal` lexical space: an optional sign and digits with an optional fraction, no exponent.
+ */
+export const xsDecimal = "^[+\\-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)$" as const;
+
+/**
+ * `xs:int` lexical space: a signed integer of at most ten digits. The range check of `xs:int` is
+ * not encoded.
+ */
+export const xsInt = "^[+\\-]?[0-9]{1,10}$" as const;
+
+/**
+ * `xs:int` tokens separated by single spaces, or the empty string
+ * (`qti-position-object-interaction/@center-point`, an anonymous `xs:list` with no `minLength`,
+ * `imsqti_asiv3p0p1_v1p0.xsd` line 30461; campaign decision 22 admits the empty list). Judged on
+ * the collapsed value.
+ */
+export const integerList = "^([+\\-]?[0-9]+( [+\\-]?[0-9]+)*)?$" as const;
+
+/**
+ * An `xs:integer` or a `VariableStringDType` name (`[\i-[:]][\c-[:]]*`, an NCName,
+ * `imsqti_asiv3p0p1_v1p0.xsd` line 24152), at most 256 characters.
+ */
+export const integerOrVariableString = `^(?:[+\\-]?[0-9]+|${ncNameBody})$` as const;
+
+/**
+ * One or more NCNames separated by single spaces: any `xs:IDREFS`-typed value, whose built-in
+ * `minLength` is one. Judged on the collapsed value.
+ */
+export const ncNameList = `^${ncNameBody}(?: ${ncNameBody})*$` as const;
+
+/**
+ * NCNames separated by single spaces, or the empty string
+ * (`qti-simple-associable-choice/@match-group`, an anonymous `xs:list` with no `minLength`,
+ * `imsqti_asiv3p0p1_v1p0.xsd` line 24881; campaign decision 22).
+ */
+export const ncNameListOrEmpty = `^(?:${ncNameBody}(?: ${ncNameBody})*)?$` as const;
+
+/**
+ * A `class` list: space-separated tokens or the empty string (campaign decision 22: a list-typed
+ * attribute whose XSD type sets no minimum length admits the empty list).
+ */
+export const classList = "^([^ \\t\\r\\n]+( [^ \\t\\r\\n]+)*)?$" as const;
+
+/**
+ * `qti-rubric-block/@view`: one or more of `author candidate proctor scorer testConstructor tutor`
+ * separated by single spaces. The minimum of one is kept, an exception to campaign decision 22: the
+ * attribute is required and the QTI prose rule reads "one or more" (`1ed2f744.md` section 5).
+ */
+export const viewList =
+  "^(?:author|candidate|proctor|scorer|testConstructor|tutor)(?: (?:author|candidate|proctor|scorer|testConstructor|tutor))*$" as const;
+
+/**
+ * The `use` values of a rubric block: `instructions`, `scoring`, `navigation`, or an `ext:` name.
+ */
+export const useEnumExt = "^(instructions|scoring|navigation|ext:[a-zA-Z0-9_.-]+)$" as const;
+
+/**
+ * Media types separated by single spaces, or the empty list (`qti-upload-interaction/@type`, an
+ * unbounded `xs:list`; campaign decision 22). Each token has the body of `mimeType`.
+ */
+export const mimeTypeList =
+  "^(?:[^/ \\t\\r\\n]{1,127}/[^ \\t\\r\\n]{1,255}(?: [^/ \\t\\r\\n]{1,127}/[^ \\t\\r\\n]{1,255})*)?$" as const;
+
+/**
+ * A `printf`-style number format (R38): a percent sign, flags, a width, a precision and one of the
+ * conversions `E e f G g r R i o X x`.
+ */
+export const printfFormat = "^%[#0 +-]*[0-9]*(\\.[0-9]+)?[EefGgrRioXx]$" as const;
