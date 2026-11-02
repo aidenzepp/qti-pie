@@ -399,6 +399,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
         }
 
         const node = (id: string, kind: Fact<typeof Node>["kind"]): Fact<typeof Node> => ({
+          // No qmd kind enters an Ancestry flag, so every node here stays at `root`.
+          ancestry: "root",
           id,
           kind,
           prefix: "",
@@ -413,8 +415,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
           childKind: Fact<typeof Edge>["childKind"],
         ): Fact<typeof Edge> => ({
           child,
+          childAncestry: "root",
           childKind,
           parent,
+          parentAncestry: "root",
           parentKind,
           position: 0n,
           tree: root.tree,
