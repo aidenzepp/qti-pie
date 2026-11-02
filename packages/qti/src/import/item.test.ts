@@ -485,6 +485,16 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
     }),
   );
 
+  suite.effect("an item root without time-dependent is refused typed-copy", () =>
+    Effect.gen(function* missingTimeDependent() {
+      const doc = yield* readChoice(inject("fixtures").simple, [' time-dependent="false"', ""]);
+      const error = yield* Effect.flip(itemOf(doc));
+
+      assert.instanceOf(error, ItemRefusal);
+      assert.strictEqual(error.rule, "typed-copy");
+    }),
+  );
+
   suite.effect("a response-identifier naming no declaration is refused binding-declared", () =>
     Effect.gen(function* undeclaredBinding() {
       const doc = yield* readChoice(inject("fixtures").simple, [
