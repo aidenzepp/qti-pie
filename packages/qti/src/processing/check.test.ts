@@ -577,7 +577,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts", 
       const ast = yield* parseBody(
         `<qti-set-outcome-value identifier="X"><qti-match><qti-null/><qti-base-value base-type="integer">1</qti-base-value></qti-match></qti-set-outcome-value>`,
       );
-      const result = okOf(ast, emptyEnvironment("item"));
+      const result = okOf(
+        ast,
+        withDeclarations(emptyEnvironment("item"), [outcomeOf("X", "boolean")]),
+      );
       assert.deepStrictEqual(result.unresolved, []);
       assert.deepStrictEqual(typeOfKind(result.typed, "qti-match"), ["boolean/single"]);
 
@@ -617,19 +620,29 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts", 
     }),
   );
 
-  suite.effect("records a reference in a mixed-union attribute the same way", () =>
+  suite.effect("records a reference in a mixed-union attribute, refusing it in item mode", () =>
     Effect.gen(function* checkAttributeReference() {
       const ast = yield* parseBody(
         `<qti-set-outcome-value identifier="X"><qti-equal-rounded rounding-mode="decimalPlaces" figures="N"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">1</qti-base-value></qti-equal-rounded></qti-set-outcome-value>`,
       );
-      assert.deepStrictEqual(summary(okOf(ast, emptyEnvironment("item")).unresolved), [
-        ["untyped-variable", "N"],
+      const target = [outcomeOf("X", "boolean")];
+      const undeclared = checkProcessing(ast, withDeclarations(emptyEnvironment("item"), target));
+      assert.deepStrictEqual(undeclared._tag === "refused" && [undeclared.rule, undeclared.kind], [
+        "P8",
+        "qti-equal-rounded",
       ]);
+      assert.deepStrictEqual(
+        summary(okOf(ast, withDeclarations(emptyEnvironment("test"), target)).unresolved),
+        [["untyped-variable", "N"]],
+      );
       assert.deepStrictEqual(summary(okOf(ast, emptyEnvironment("template")).unresolved), [
         ["template-parameter", "N"],
       ]);
 
-      const declared = withDeclarations(emptyEnvironment("item"), [outcomeOf("N", "integer")]);
+      const declared = withDeclarations(emptyEnvironment("item"), [
+        ...target,
+        outcomeOf("N", "integer"),
+      ]);
       assert.deepStrictEqual(okOf(ast, declared).unresolved, []);
     }),
   );
@@ -670,6 +683,87 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts", 
       const fs = yield* FileSystem.FileSystem;
       const dir = yield* corpusPackage("svg");
       assert.isTrue(yield* fs.exists(path.join(dir, "svg.xml")));
+    }),
+  );
+});
+
+const brokenDirectory = "src/processing/fixtures/broken";
+
+/**
+ * Check a hand-broken fixture: read it, parse the processing root of its language, and check it
+ * under the environment of its own document in the mode given (`item` by default).
+ */
+const checkBroken = (name: string, language: "response" | "template", mode: "item" | "template") =>
+  Effect.gen(function* checkBrokenFile() {
+    const fs = yield* FileSystem.FileSystem;
+    const document = yield* readXml(yield* fs.readFile(path.join(brokenDirectory, `${name}.xml`)));
+    const ast = yield* parseProcessing(processingRoot(document.root, language), language);
+
+    return checkProcessing(
+      ast,
+      mode === "item" ? environmentOf(document, "item") : emptyEnvironment("template"),
+    );
+  });
+
+/**
+ * The refusals of the bin 2 rules this slice owns: one broken tree each, refused naming exactly its
+ * rule and the kind of the node that breaks it.
+ */
+const refusals = [
+  ["p20-float-into-integer-outcome", "response", "P20", "qti-set-outcome-value"],
+  ["p21-sum-as-condition", "response", "P21", "qti-response-if"],
+  ["p22-string-into-lookup", "response", "P22", "qti-lookup-outcome-value"],
+  ["p22-lookup-without-table", "response", "P22", "qti-lookup-outcome-value"],
+  ["p24-figures-float-variable", "response", "P24", "qti-equal-rounded"],
+  ["p25-number-correct-in-response", "response", "P25", "qti-number-correct"],
+  ["p25-number-correct-in-template", "template", "P25", "qti-number-correct"],
+  ["p26-template-reads-response", "template", "P26", "qti-variable"],
+  ["p27-map-response-unmapped", "response", "P27", "qti-map-response"],
+  ["undeclared-reference", "response", "P8", "qti-variable"],
+] as const;
+
+layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts rules", (suite) => {
+  for (const [name, language, rule, kind] of refusals) {
+    suite.effect(`refuses ${name} naming ${rule}`, () =>
+      Effect.gen(function* refuseBroken() {
+        const result = yield* checkBroken(name, language, "item");
+        assert.strictEqual(result._tag, "refused");
+        if (result._tag === "refused") {
+          assert.strictEqual(result.rule, rule);
+          assert.strictEqual(result.kind, kind);
+        }
+      }),
+    );
+  }
+
+  suite.effect("accepts a template rule that reads QTI_CONTEXT", () =>
+    Effect.gen(function* acceptContext() {
+      const result = yield* checkBroken("p26-template-reads-context", "template", "item");
+      assert.strictEqual(result._tag, "ok");
+    }),
+  );
+
+  suite.effect(
+    "checks undeclared-reference.xml in template mode ok, the reference unresolved",
+    () =>
+      Effect.gen(function* undeclaredInTemplate() {
+        const result = yield* checkBroken("undeclared-reference", "response", "template");
+        assert.strictEqual(result._tag, "ok");
+        if (result._tag === "ok") {
+          assert.deepStrictEqual(summary(result.unresolved), [["template-parameter", "MISSING"]]);
+        }
+      }),
+  );
+
+  suite.effect("checks a custom operator ok with exactly one unresolved entry", () =>
+    Effect.gen(function* customOperator() {
+      const result = yield* checkBroken("p49-custom-operator-unresolved", "response", "item");
+      assert.strictEqual(result._tag, "ok");
+      if (result._tag === "ok") {
+        assert.deepStrictEqual(summary(result.unresolved), [
+          ["custom-operator", "com.example.Operator"],
+        ]);
+      }
     }),
   );
 });
