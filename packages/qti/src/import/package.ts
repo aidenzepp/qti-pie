@@ -15,7 +15,7 @@ import { manifestGuards } from "#qti/import/guards/manifest.ts";
 import { treeGuards } from "#qti/import/guards/tree.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
-import type { ImportLaw, ImportRefused, ImportWitness, ReadRefusal } from "#qti/import/refusal.ts";
+import type { ImportLaw, ImportRefused, ImportWitness } from "#qti/import/refusal.ts";
 import { refusalOfLaw, ruleOfError } from "#qti/import/refusal.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
@@ -87,9 +87,13 @@ const retried = <A, E extends ApplyError | OpenError, R>(
 
 /**
  * Whether `error` is one the guards or the reader raised, as opposed to the platform's.
+ *
+ * It narrows whatever union reaches it, so a refusal a later slice adds to {@link ruleOfError}'s
+ * parameter flows to {@link ruleOfError} with no edit here.
  */
-const isReadRefusal = (error: PlatformError.PlatformError | ReadRefusal): error is ReadRefusal =>
-  error._tag !== "PlatformError";
+const isReadRefusal = <E extends { readonly _tag: string }>(
+  error: E,
+): error is Exclude<E, PlatformError.PlatformError> => error._tag !== "PlatformError";
 
 /**
  * Read the package at `dir` into rows: the manifest's, then every document it lists.
