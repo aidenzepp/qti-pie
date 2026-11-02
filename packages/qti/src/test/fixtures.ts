@@ -1,5 +1,6 @@
 /* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import { createHash } from "node:crypto";
+import path from "node:path";
 import { Config, Effect, FileSystem, Match, Option, Schema, Stream } from "effect";
 import type { PlatformError } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -26,7 +27,7 @@ export const FIXTURES_VERSION = "1" as const;
  *   endian. The text is the latin1 reading of the extracted bytes, so the file must be ASCII: a
  *   multi-byte UTF-8 character would be encoded as its separate bytes, not as one character.
  */
-export type Edit =
+export type TextEdit =
   | {
       readonly _tag: "ReplaceText";
       readonly file: string;
@@ -40,6 +41,40 @@ export type Edit =
       readonly text: string;
     }
   | { readonly _tag: "EncodeUtf16"; readonly file: string };
+
+/**
+ * Where an `addFile` edit takes the new file's bytes from.
+ *
+ * - `{ zip, path }` is the entry `path` of the examples tarball's zip member `zip` (a tarball path
+ *   ending `.zip`, so a file of another package).
+ * - `{ member }` is a loose, non-zip tarball member.
+ * - `{ text }` is a hand-written file, written as UTF-8.
+ */
+export type FileSource =
+  | { readonly zip: string; readonly path: string }
+  | { readonly member: string }
+  | { readonly text: string };
+
+/**
+ * An edit of the package's file set, as plain data.
+ *
+ * - `addFile` writes `source` to `path`, making its directories.
+ * - `copyFile` copies the package's file `from` to `to`, making its directories.
+ * - `deleteFile` removes `path`.
+ */
+export type FileEdit =
+  | { readonly _tag: "addFile"; readonly path: string; readonly source: FileSource }
+  | { readonly _tag: "copyFile"; readonly from: string; readonly to: string }
+  | { readonly _tag: "deleteFile"; readonly path: string };
+
+/**
+ * One edit of a fixture: a {@link TextEdit} of one file's text or a {@link FileEdit} of the file
+ * set.
+ *
+ * A spec's file edits apply first, in list order, so a text edit can name a file an `addFile` or
+ * `copyFile` made; its text edits then apply file by file, as {@link TextEdit} says.
+ */
+export type Edit = TextEdit | FileEdit;
 
 /**
  * A fixture's whole definition: what it is called, the tarball member it comes from and the edits
@@ -444,19 +479,71 @@ export const specOf = (name: FixtureName): FixtureSpec => specs[name];
 
 /**
  * The four packages the importer refuses (a manifest outside the supported QTI 3 subset), which
- * the importer's tests still read.
+ * the importer's tests still read, and which the package's `globalSetup` materializes once.
  */
 export type RefusedPackage = "metaData" | "lti" | "CAT_Test01_Adaptive_EchoAdapt" | "sample_pci";
 
 /**
- * The tarball member of each {@link RefusedPackage}.
+ * Every package `materializePackage` accepts: the {@link RefusedPackage} base set, and `usageData`,
+ * the published package whose usage-data documents the importer refuses.
+ *
+ * `usageData` stays out of {@link RefusedPackage} because that type is the `globalSetup` base set,
+ * which a test pins to five keys.
  */
-const refusedMembers: Record<RefusedPackage, string> = {
+export type NamedPackage = RefusedPackage | "usageData";
+
+/**
+ * The tarball member of each {@link NamedPackage}.
+ */
+const refusedMembers: Record<NamedPackage, string> = {
   CAT_Test01_Adaptive_EchoAdapt: "qtiv3-examples/CAT/CAT_Test01_Adaptive_EchoAdapt.zip",
   lti: "qtiv3-examples/packaging/lti/lti.zip",
   metaData: "qtiv3-examples/packaging/metaData/metaData.zip",
   sample_pci: "qtiv3-examples/PCI/sample_pci.zip",
+  usageData: "qtiv3-examples/packaging/usageData/usageData.zip",
 };
+
+/**
+ * The tarball member of each zip {@link materializeCorpus} lists (28 of the tarball's 29 zips, the
+ * QTI 2.2 archive left out), keyed by the zip's file name without `.zip`.
+ */
+const zipMembers = {
+  BBQsTest: "qtiv3-examples/packaging/BBQsTest/BBQsTest.zip",
+  BPIG_22April: "QTI3_BPIG_Examples/BPIG_22April.zip",
+  BegGuide_March2025: "QTI3_BeginnersGuide_Examples/BegGuide_March2025.zip",
+  CASE: "qtiv3-examples/packaging/CASE/CASE.zip",
+  CASEWithOutcome: "qtiv3-examples/packaging/CASEWithOutcome/CASEWithOutcome.zip",
+  CAT_Test01_Adaptive_EchoAdapt: "qtiv3-examples/CAT/CAT_Test01_Adaptive_EchoAdapt.zip",
+  basicFeedbackTest: "qtiv3-examples/packaging/basicFeedbackTest/basicFeedbackTest.zip",
+  ccPackage: "qtiv3-examples/packaging/ccPackage/ccPackage.zip",
+  englishBasicLevelV2: "qtiv3-examples/packaging/englishBasicLevelV2/englishBasicLevelV2.zip",
+  englishHighLevelV2: "qtiv3-examples/packaging/englishHighLevelV2/englishHighLevelV2.zip",
+  externalMetadata: "qtiv3-examples/packaging/externalMetadata/externalMetadata.zip",
+  feedbackTest: "qtiv3-examples/packaging/feedbackTest/feedbackTest.zip",
+  interactionMixSaxonyV3:
+    "qtiv3-examples/packaging/interactionMixSaxonyV3/interactionMixSaxonyV3.zip",
+  items: "qtiv3-examples/packaging/items/items.zip",
+  lti: "qtiv3-examples/packaging/lti/lti.zip",
+  maxfiles: "qtiv3-examples/packaging/maxfiles/maxfiles.zip",
+  metaData: "qtiv3-examples/packaging/metaData/metaData.zip",
+  pci_item_examples: "qtiv3-examples/packaging/pci/pci_item_examples.zip",
+  pci_simple_example: "qtiv3-examples/packaging/pci-simple/pci_simple_example.zip",
+  sample_pci: "qtiv3-examples/PCI/sample_pci.zip",
+  "shared-vocabulary-imsmanifest":
+    "qtiv3-examples/items/shared-vocabulary/shared-vocabulary-imsmanifest.zip",
+  sharedMedia: "qtiv3-examples/packaging/sharedMedia/sharedMedia.zip",
+  sharedStimulus: "qtiv3-examples/packaging/sharedStimulus/sharedStimulus.zip",
+  simple: "qtiv3-examples/packaging/simple/simple.zip",
+  svg: "qtiv3-examples/packaging/svg/svg.zip",
+  testWithLti: "qtiv3-examples/packaging/testWithLti/testWithLti.zip",
+  test_package_minfiles: "qtiv3-examples/packaging/test_package_minfiles/test_package_minfiles.zip",
+  usageData: "qtiv3-examples/packaging/usageData/usageData.zip",
+} as const;
+
+/**
+ * The name of one zip of the corpus, the key of its row in the table of members.
+ */
+export type ZipName = keyof typeof zipMembers;
 
 /**
  * The one zip of the tarball the corpus leaves out: a QTI 2.2 items archive, not a QTI 3 package.
@@ -475,7 +562,7 @@ const fixturesRoot = Config.NonEmptyString("GR8DES_QTI_FIXTURES").pipe(
  * The examples tarball, read from `GR8DES_QTI_EXAMPLES`, or else from the shared cache under
  * `HOME`.
  */
-const examplesTarball = Effect.gen(function* examplesTarball() {
+export const examplesTarball = Effect.gen(function* examplesTarball() {
   const configured = yield* Config.option(Config.NonEmptyString("GR8DES_QTI_EXAMPLES"));
 
   if (Option.isSome(configured)) {
@@ -587,7 +674,7 @@ const removeFinderMetadata = Effect.fn("fixtures.removeFinderMetadata")(
  * @param edit - The edit naming `search` and `replacement`.
  * @returns `text` with `search` replaced; throws when `search` does not occur exactly once.
  */
-const replaceOnce = (text: string, edit: Extract<Edit, { _tag: "ReplaceText" }>): string => {
+const replaceOnce = (text: string, edit: Extract<TextEdit, { _tag: "ReplaceText" }>): string => {
   const first = text.indexOf(edit.search);
   const occurrences = text.split(edit.search).length - 1;
 
@@ -609,7 +696,7 @@ const replaceOnce = (text: string, edit: Extract<Edit, { _tag: "ReplaceText" }>)
  */
 const insertAfterLine = (
   text: string,
-  edit: Extract<Edit, { _tag: "InsertAfterLine" }>,
+  edit: Extract<TextEdit, { _tag: "InsertAfterLine" }>,
 ): string => {
   let end = -1;
 
@@ -636,7 +723,7 @@ const insertAfterLine = (
  * @returns The edited text; an `EncodeUtf16` edit leaves the text as it is, because it only changes
  *   how the bytes are written.
  */
-const applyEdit = (text: string, edit: Edit): string =>
+const applyEdit = (text: string, edit: TextEdit): string =>
   Match.value(edit).pipe(
     Match.tag("ReplaceText", (replace) => replaceOnce(text, replace)),
     Match.tag("InsertAfterLine", (insert) => insertAfterLine(text, insert)),
@@ -656,7 +743,7 @@ const applyEdit = (text: string, edit: Edit): string =>
  *   occur exactly once, a line that does not exist) or the text holds a character latin1 cannot
  *   write.
  */
-export const editBytes = (original: Uint8Array, edits: readonly Edit[]): Uint8Array => {
+export const editBytes = (original: Uint8Array, edits: readonly TextEdit[]): Uint8Array => {
   let text = Buffer.from(original).toString("latin1");
 
   for (const edit of edits) {
@@ -677,15 +764,24 @@ export const editBytes = (original: Uint8Array, edits: readonly Edit[]): Uint8Ar
 };
 
 /**
- * Apply a spec's edits to the files they name, inside an extracted package directory.
+ * Whether an edit changes one file's text, as opposed to the package's file set.
+ *
+ * @param edit - Any edit.
+ * @returns `true` for a {@link TextEdit}.
+ */
+const isTextEdit = (edit: Edit): edit is TextEdit =>
+  edit._tag === "ReplaceText" || edit._tag === "InsertAfterLine" || edit._tag === "EncodeUtf16";
+
+/**
+ * Apply a spec's text edits to the files they name, inside an extracted package directory.
  *
  * @param pkg - The extracted package directory.
- * @param edits - The spec's edit list.
+ * @param edits - The spec's text edits.
  * @returns Completes once every named file has been rewritten once.
  */
-const applyEdits = Effect.fn("fixtures.applyEdits")(function* applyEdits(
+const applyTextEdits = Effect.fn("fixtures.applyTextEdits")(function* applyTextEdits(
   pkg: string,
-  edits: readonly Edit[],
+  edits: readonly TextEdit[],
 ) {
   const fs = yield* FileSystem.FileSystem;
 
@@ -708,10 +804,113 @@ const applyEdits = Effect.fn("fixtures.applyEdits")(function* applyEdits(
 });
 
 /**
+ * Extract one tarball member, as a file, into a directory.
+ *
+ * @param tarball - The examples tarball.
+ * @param top - The tarball's top-level directory.
+ * @param member - The member's path below `top`.
+ * @param into - The directory the member lands in, as `<into>/<member>`.
+ * @returns Completes once the file exists.
+ */
+const extractMember = Effect.fn("fixtures.extractMember")(function* extractMember(
+  tarball: string,
+  top: string,
+  member: string,
+  into: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+
+  yield* fs.makeDirectory(into, { recursive: true });
+  yield* run("tar", ["-xzf", tarball, "-C", into, "--strip-components", "1", `${top}/${member}`]);
+});
+
+/**
+ * Write one file of a package, making its directories.
+ *
+ * @param file - The file's path.
+ * @param bytes - The bytes to write.
+ * @returns Completes once the file exists.
+ */
+const writeInto = Effect.fn("fixtures.writeInto")(function* writeInto(
+  file: string,
+  bytes: Uint8Array,
+) {
+  const fs = yield* FileSystem.FileSystem;
+
+  yield* fs.makeDirectory(path.dirname(file), { recursive: true });
+  yield* fs.writeFile(file, bytes);
+});
+
+/**
+ * Apply one file-set edit inside an extracted package directory.
+ *
+ * @param pkg - The extracted package directory.
+ * @param tmp - The build's temporary directory, where a source's tarball member is extracted.
+ * @param tarball - The examples tarball.
+ * @param top - The tarball's top-level directory.
+ * @param index - The edit's place in the list, which names its scratch directory.
+ * @param edit - The edit.
+ * @returns Completes once the package holds the edit's result.
+ */
+const applyFileEdit = Effect.fn("fixtures.applyFileEdit")(function* applyFileEdit(
+  pkg: string,
+  tmp: string,
+  tarball: string,
+  top: string,
+  index: number,
+  edit: FileEdit,
+) {
+  const fs = yield* FileSystem.FileSystem;
+
+  if (edit._tag === "deleteFile") {
+    return yield* fs.remove(`${pkg}/${edit.path}`);
+  }
+
+  if (edit._tag === "copyFile") {
+    yield* fs.makeDirectory(path.dirname(`${pkg}/${edit.to}`), { recursive: true });
+
+    return yield* fs.copyFile(`${pkg}/${edit.from}`, `${pkg}/${edit.to}`);
+  }
+
+  const { source } = edit;
+  const scratch = `${tmp}/edit-${index}`;
+
+  if ("text" in source) {
+    return yield* writeInto(`${pkg}/${edit.path}`, new TextEncoder().encode(source.text));
+  }
+
+  if ("member" in source) {
+    yield* extractMember(tarball, top, source.member, scratch);
+
+    return yield* writeInto(
+      `${pkg}/${edit.path}`,
+      yield* fs.readFile(`${scratch}/${source.member}`),
+    );
+  }
+
+  yield* extractMember(tarball, top, source.zip, scratch);
+  yield* run("unzip", [
+    "-q",
+    "-o",
+    `${scratch}/${source.zip}`,
+    source.path,
+    "-d",
+    `${scratch}/zip`,
+  ]);
+
+  return yield* writeInto(
+    `${pkg}/${edit.path}`,
+    yield* fs.readFile(`${scratch}/zip/${source.path}`),
+  );
+});
+
+/**
  * Extract and derive a spec's package into `<tmp>/pkg`.
  *
- * The recipe is `tar` of the one zip member, `unzip` of it, deletion of `.DS_Store`, then the
- * spec's edits, all inside the temporary directory so nothing is visible under the root yet.
+ * The recipe is `tar` of the one member, then `unzip` of it when it is a zip (a loose member is
+ * placed as `<tmp>/pkg/<basename>` instead), deletion of `.DS_Store`, the spec's file edits in list
+ * order, then its text edits, all inside the temporary directory so nothing is visible under the
+ * root yet.
  *
  * @param spec - The fixture's spec.
  * @param tarball - The examples tarball.
@@ -726,47 +925,55 @@ const build = Effect.fn("fixtures.build")(function* build(
   const fs = yield* FileSystem.FileSystem;
   const { top } = yield* listTarball(tarball);
 
-  yield* fs.makeDirectory(`${tmp}/src`);
-  yield* run("tar", [
-    "-xzf",
-    tarball,
-    "-C",
-    `${tmp}/src`,
-    "--strip-components",
-    "1",
-    `${top}/${spec.member}`,
-  ]);
-  yield* run("unzip", ["-q", "-o", `${tmp}/src/${spec.member}`, "-d", `${tmp}/pkg`]);
+  yield* extractMember(tarball, top, spec.member, `${tmp}/src`);
+
+  if (spec.member.endsWith(".zip")) {
+    yield* run("unzip", ["-q", "-o", `${tmp}/src/${spec.member}`, "-d", `${tmp}/pkg`]);
+  } else {
+    yield* fs.makeDirectory(`${tmp}/pkg`);
+    yield* fs.copyFile(
+      `${tmp}/src/${spec.member}`,
+      `${tmp}/pkg/${spec.member.slice(spec.member.lastIndexOf("/") + 1)}`,
+    );
+  }
+
   yield* removeFinderMetadata(`${tmp}/pkg`);
-  yield* applyEdits(`${tmp}/pkg`, spec.edits);
+  yield* Effect.forEach(
+    spec.edits.filter((edit): edit is FileEdit => !isTextEdit(edit)),
+    (edit, index) => applyFileEdit(`${tmp}/pkg`, tmp, tarball, top, index, edit),
+    { discard: true },
+  );
+  yield* applyTextEdits(`${tmp}/pkg`, spec.edits.filter(isTextEdit));
 });
 
 /**
- * Return a spec's materialized directory, making it first when it is absent.
+ * Return a materialized path, making it first when it is absent.
  *
- * A materialized directory is immutable and appears only by one `rename`:
+ * A materialized path is immutable and appears only by one `rename`:
  *
  * - A present target is returned and nothing is written.
- * - An absent target is built in a fresh `<root>/.tmp-<random>/`, then `rename`d into place. The
- *   loser of two concurrent builds sees its `rename` fail, because the target appeared in the
- *   meantime. `ENOTEMPTY`, what macOS answers for a rename onto a non-empty directory, reaches
- *   Effect as reason `Unknown` rather than `AlreadyExists`, so the failure is not told apart by its
- *   reason: whenever the target exists after a failed `rename` the build lost the race, and returns
- *   the target.
+ * - An absent target is built in a fresh `<root>/.tmp-<random>/`, then `<tmp>/pkg` is `rename`d into
+ *   place as the target. The loser of two concurrent builds sees its `rename` fail, because the
+ *   target appeared in the meantime. `ENOTEMPTY`, what macOS answers for a rename onto a non-empty
+ *   directory, reaches Effect as reason `Unknown` rather than `AlreadyExists`, so the failure is
+ *   not told apart by its reason: whenever the target exists after a failed `rename` the build lost
+ *   the race, and returns the target.
  * - The temporary directory is removed when the build ends, whichever way it ends.
  *
  * Nothing under the root is written outside a `.tmp-*` directory, and there is no marker, lock or
  * sweeper: the name holds the hash of the transform, so a changed transform is a new directory.
  *
- * @param spec - The fixture's spec.
- * @returns The directory `<root>/<name>-<hash12>`.
+ * @param entry - The name of the directory under the root.
+ * @param make - Builds the result into `<tmp>/pkg`, given the examples tarball and `tmp`.
+ * @returns `<root>/<entry>`.
  */
-const materializeSpec = Effect.fn("fixtures.materializeSpec")(function* materializeSpec(
-  spec: FixtureSpec,
+const materializeInto = Effect.fn("fixtures.materializeInto")(function* materializeInto<E, R>(
+  entry: string,
+  make: (tarball: string, tmp: string) => Effect.Effect<void, E, R>,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* Effect.orDie(fixturesRoot);
-  const target = `${root}/${spec.name}-${hash12(spec)}`;
+  const target = `${root}/${entry}`;
 
   if (yield* fs.exists(target)) {
     return target;
@@ -778,7 +985,7 @@ const materializeSpec = Effect.fn("fixtures.materializeSpec")(function* material
   yield* Effect.gen(function* buildAndRename() {
     const tmp = yield* fs.makeTempDirectoryScoped({ directory: root, prefix: ".tmp-" });
 
-    yield* build(spec, tarball, tmp);
+    yield* make(tarball, tmp);
     yield* fs
       .rename(`${tmp}/pkg`, target)
       .pipe(
@@ -792,6 +999,15 @@ const materializeSpec = Effect.fn("fixtures.materializeSpec")(function* material
 
   return target;
 });
+
+/**
+ * Return a spec's materialized directory, making it first when it is absent.
+ *
+ * @param spec - The fixture's spec.
+ * @returns The directory `<root>/<name>-<hash12>`, built as {@link materializeInto} says.
+ */
+export const materializeSpec = (spec: FixtureSpec) =>
+  materializeInto(`${spec.name}-${hash12(spec)}`, (tarball, tmp) => build(spec, tarball, tmp));
 
 /**
  * Materialize a named fixture and return its directory.
@@ -808,13 +1024,13 @@ export const materialize = (
 > => materializeSpec(specOf(name));
 
 /**
- * Materialize one of the packages the importer refuses.
+ * Materialize one of the {@link NamedPackage}s the importer refuses.
  *
  * @param pkg - The package's name.
  * @returns `<root>/<pkg>-<hash12>`, a no-edit spec over the package's tarball member.
  */
 export const materializePackage = (
-  pkg: RefusedPackage,
+  pkg: NamedPackage,
 ): Effect.Effect<
   string,
   PlatformError.PlatformError | ExamplesError,
@@ -847,3 +1063,35 @@ export const materializeCorpus = Effect.fn("fixtures.materializeCorpus")(
     );
   },
 );
+
+/**
+ * Materialize one corpus zip as a file, without extracting it.
+ *
+ * The member is extracted by `tar` into a temporary directory and `rename`d into place as built,
+ * so the file is byte for byte the tarball's member.
+ *
+ * @param name - The zip's name, the file name of its tarball member without `.zip`.
+ * @returns The file `<root>/<name>.zip-<hash12>/<name>.zip`, extracted on first use and never
+ *   rewritten. The hash is {@link transformHash} of `{ name: "zip", member, edits: [] }`.
+ */
+export const materializeZip = (
+  name: ZipName,
+): Effect.Effect<
+  string,
+  PlatformError.PlatformError | ExamplesError,
+  FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
+> => {
+  const member = zipMembers[name];
+
+  return materializeInto(
+    `${name}.zip-${hash12({ edits: [], member, name: "zip" })}`,
+    Effect.fn("fixtures.buildZip")(function* buildZip(tarball, tmp) {
+      const fs = yield* FileSystem.FileSystem;
+      const { top } = yield* listTarball(tarball);
+
+      yield* extractMember(tarball, top, member, `${tmp}/src`);
+      yield* fs.makeDirectory(`${tmp}/pkg`);
+      yield* fs.rename(`${tmp}/src/${member}`, `${tmp}/pkg/${name}.zip`);
+    }),
+  ).pipe(Effect.map((dir) => `${dir}/${name}.zip`));
+};
