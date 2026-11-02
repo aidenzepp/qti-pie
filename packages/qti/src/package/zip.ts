@@ -6,7 +6,9 @@
  *
  * The central directory is the truth for names, sizes, CRC-32 values and methods; the local
  * headers are read only to find where each entry's data starts, so an entry that carries a data
- * descriptor needs no special path.
+ * descriptor needs no special path. The sizes the central directory declares are checked against
+ * budgets before any entry is inflated, so an archive that expands past them is refused at the cost
+ * of reading its directory.
  */
 import { crc32, inflateRawSync } from "node:zlib";
 import { Effect, FileSystem, Schema } from "effect";
@@ -119,6 +121,36 @@ const METHOD_DEFLATE = 8;
 const DOS_DIRECTORY = 0x10;
 
 const UNIX_DIRECTORY_TYPE = 4;
+
+/**
+ * The most central records an archive may hold, directory entries included. The corpus's largest
+ * archive has 99.
+ */
+const MAX_ENTRIES = 10_000;
+
+/**
+ * The most bytes one file may declare uncompressed. The corpus's largest file is 5,251,725 bytes.
+ */
+const MAX_ENTRY_SIZE = 64 * 1024 * 1024;
+
+/**
+ * The most bytes the files of one archive may declare uncompressed, summed. The corpus's largest
+ * package is 11,018,253 bytes.
+ */
+const MAX_PACKAGE_SIZE = 256 * 1024 * 1024;
+
+/**
+ * How many times its stored size an entry may declare, once past {@link RATIO_ALLOWANCE}. The
+ * corpus's highest ratio is 27.95 (a 6,148-byte `.DS_Store`) and 3.61 for any entry of 64 KiB or
+ * more; deflate itself reaches about 1,032.
+ */
+const MAX_RATIO = 100;
+
+/**
+ * The bytes any entry may declare whatever its stored size, so a small, well-compressed file is not
+ * refused for its ratio.
+ */
+const RATIO_ALLOWANCE = 1024 * 1024;
 
 /**
  * The upper half (0x80 to 0xFF) of code page 437, transcribed from the ZIP APPNOTE (version 6.3.10,
@@ -444,20 +476,18 @@ const checkListing = Effect.fn("package.checkListing")(function* checkListing(
 });
 
 /**
- * Read one entry's bytes and verify its CRC-32.
+ * Where one file's data lies in the archive, from its local header.
  *
- * @param bytes - The whole file.
- * @param view - The same bytes.
+ * @param view - The whole file.
  * @param record - The entry's central directory record.
  * @param limit - Where the central directory starts; no entry's data may reach it.
- * @returns The uncompressed bytes, or a {@link ZipRefusal}.
+ * @returns The data's `start` and the `end` of the entry's stored bytes, or a {@link ZipRefusal}.
  */
-const readData = Effect.fn("package.readData")(function* readData(
-  bytes: Uint8Array,
+const dataSpan = Effect.fn("package.dataSpan")(function* dataSpan(
   view: DataView,
   record: CentralRecord,
   limit: number,
-): Effect.fn.Return<Uint8Array, ZipRefusal> {
+): Effect.fn.Return<{ readonly end: number; readonly start: number }, ZipRefusal> {
   const broken = (feature: string) => refuse("zip-format", record.name, feature);
 
   if (
@@ -477,7 +507,122 @@ const readData = Effect.fn("package.readData")(function* readData(
     return yield* broken("its data runs past the central directory");
   }
 
-  const stored = bytes.subarray(start, start + record.storedSize);
+  return { end: start + record.storedSize, start };
+});
+
+/**
+ * Refuse a listing whose declared sizes pass a budget, before any entry is read.
+ *
+ * The first file past {@link MAX_ENTRY_SIZE} or past its ratio bound is refused, then a sum past
+ * {@link MAX_PACKAGE_SIZE}.
+ *
+ * @param archive - The zip file's path, which names the refusal about the whole archive.
+ * @param files - The non-directory records.
+ * @returns Nothing, or a {@link ZipRefusal}.
+ */
+const checkBudget = Effect.fn("package.checkBudget")(function* checkBudget(
+  archive: string,
+  files: readonly CentralRecord[],
+): Effect.fn.Return<void, ZipRefusal> {
+  const large = files.find((record) => record.size > MAX_ENTRY_SIZE);
+
+  if (large !== undefined) {
+    yield* refuse(
+      "zip-format",
+      large.name,
+      `it declares ${large.size} bytes for one entry, past the limit of ${MAX_ENTRY_SIZE}`,
+    );
+  }
+
+  const ratio = files.find(
+    (record) => record.size > Math.max(RATIO_ALLOWANCE, MAX_RATIO * record.storedSize),
+  );
+
+  if (ratio !== undefined) {
+    yield* refuse(
+      "zip-format",
+      ratio.name,
+      `it declares ${ratio.size} bytes from ${ratio.storedSize} stored, more than ${MAX_RATIO} times its stored size and past ${RATIO_ALLOWANCE} bytes`,
+    );
+  }
+
+  const total = files.reduce((sum, record) => sum + record.size, 0);
+
+  if (total > MAX_PACKAGE_SIZE) {
+    yield* refuse(
+      "zip-format",
+      archive,
+      `the files declare ${total} bytes for one package, past the limit of ${MAX_PACKAGE_SIZE}`,
+    );
+  }
+});
+
+/**
+ * Refuse files whose stored ranges overlap, before any entry is read.
+ *
+ * A range runs from the local header to the end of the stored data, so two records naming one
+ * local entry overlap, and so does a record that points into another's data. A data descriptor
+ * lies after the range.
+ *
+ * @param view - The whole file.
+ * @param files - The non-directory records.
+ * @param limit - Where the central directory starts.
+ * @returns Each file's span, keyed by name, or a {@link ZipRefusal}.
+ */
+const checkSpans = Effect.fn("package.checkSpans")(function* checkSpans(
+  view: DataView,
+  files: readonly CentralRecord[],
+  limit: number,
+): Effect.fn.Return<
+  ReadonlyMap<string, { readonly end: number; readonly start: number }>,
+  ZipRefusal
+> {
+  const spans = new Map<string, { readonly end: number; readonly start: number }>();
+
+  for (const record of files) {
+    spans.set(record.name, yield* dataSpan(view, record, limit));
+  }
+
+  const ordered = files.toSorted(
+    (left, right) => left.offset - right.offset || (left.name < right.name ? -1 : 1),
+  );
+  let previous: CentralRecord | undefined;
+
+  for (const record of ordered) {
+    const before = previous === undefined ? undefined : spans.get(previous.name);
+
+    if (previous !== undefined && before !== undefined && record.offset < before.end) {
+      yield* refuse(
+        "zip-format",
+        record.name,
+        `its range overlaps the data of ${previous.name}, so two entries would share bytes`,
+      );
+    }
+
+    previous = record;
+  }
+
+  return spans;
+});
+
+/**
+ * Read one entry's bytes and verify its CRC-32.
+ *
+ * @param bytes - The whole file.
+ * @param record - The entry's central directory record.
+ * @param span - Where the entry's stored bytes lie.
+ * @param remaining - How many bytes of the package's budget are left; the inflate stops there.
+ * @returns The uncompressed bytes, or a {@link ZipRefusal}.
+ */
+const readData = Effect.fn("package.readData")(function* readData(
+  bytes: Uint8Array,
+  record: CentralRecord,
+  span: { readonly end: number; readonly start: number },
+  remaining: number,
+): Effect.fn.Return<Uint8Array, ZipRefusal> {
+  const broken = (feature: string) => refuse("zip-format", record.name, feature);
+
+  const stored = bytes.subarray(span.start, span.end);
 
   if (record.method === METHOD_STORED && record.storedSize !== record.size) {
     return yield* broken("its stored size and its size differ");
@@ -494,7 +639,9 @@ const readData = Effect.fn("package.readData")(function* readData(
               rule: "zip-format",
             }),
           try: () => {
-            const inflated = inflateRawSync(stored, { maxOutputLength: Math.max(record.size, 1) });
+            const inflated = inflateRawSync(stored, {
+              maxOutputLength: Math.max(Math.min(record.size, remaining), 1),
+            });
 
             return new Uint8Array(inflated.buffer, inflated.byteOffset, inflated.byteLength);
           },
@@ -524,6 +671,15 @@ const parseZip = Effect.fn("package.parseZip")(function* parseZip(
 ): Effect.fn.Return<readonly ZipEntry[], ZipRefusal> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const { count, end, offset } = yield* locateDirectory(archive, view);
+
+  if (count > MAX_ENTRIES) {
+    yield* refuse(
+      "zip-format",
+      archive,
+      `the archive has ${count} entries, past the limit of ${MAX_ENTRIES}`,
+    );
+  }
+
   const records: CentralRecord[] = [];
   let at = offset;
 
@@ -538,13 +694,26 @@ const parseZip = Effect.fn("package.parseZip")(function* parseZip(
 
   yield* checkListing(files);
 
-  return yield* Effect.all(
-    files.map((record) =>
-      readData(bytes, view, record, offset).pipe(
-        Effect.map((data): ZipEntry => ({ bytes: data, path: record.name })),
-      ),
-    ),
-  );
+  yield* checkBudget(archive, files);
+
+  const spans = yield* checkSpans(view, files, offset);
+  const entries: ZipEntry[] = [];
+  let remaining = MAX_PACKAGE_SIZE;
+
+  for (const record of files) {
+    const span = spans.get(record.name);
+
+    if (span === undefined) {
+      return yield* refuse("zip-format", record.name, "its local header was not found");
+    }
+
+    const data = yield* readData(bytes, record, span, remaining);
+
+    remaining -= data.length;
+    entries.push({ bytes: data, path: record.name });
+  }
+
+  return entries;
 });
 
 /**
@@ -556,8 +725,10 @@ const parseZip = Effect.fn("package.parseZip")(function* parseZip(
  *
  * @param path - The zip file.
  * @returns The files as {@link ZipEntry} values. A {@link ZipRefusal} names the entry and the
- *   feature: `zip-format` for another method, encryption, ZIP64, an archive that does not parse or
- *   a CRC-32 mismatch; `href-path` for an absolute name or one with a `..` segment or a backslash;
+ *   feature: `zip-format` for another method, encryption, ZIP64, an archive that does not parse, a
+ *   CRC-32 mismatch, more than 10,000 entries, a file declaring over 64 MiB or over 100 times its
+ *   stored size (past 1 MiB), files declaring over 256 MiB between them, or two files whose stored
+ *   ranges overlap; `href-path` for an absolute name or one with a `..` segment or a backslash;
  *   `manifest-root` for no `imsmanifest.xml` at the root or two of them. A missing file is a
  *   `PlatformError`.
  */
