@@ -340,6 +340,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     "lom:aggregationLevel": (c) => {
       add(md.LomAggregationLevel, [{ id: c.id, lom: c.lom }]);
     },
+    "lom:annotation": (c) => {
+      add(md.LomAnnotation, [{ id: c.id, lom: c.lom }]);
+    },
     "lom:catalog": (c) => {
       add(md.LomIdentifierCatalog, [
         {
@@ -352,6 +355,12 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
           value: c.value,
         },
       ]);
+    },
+    "lom:classification": (c) => {
+      add(md.LomClassification, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:context": (c) => {
+      add(md.LomContext, [{ id: c.id, lom: c.lom }]);
     },
     "lom:contribute": (c) => {
       add(md.LomContribute, [{ id: c.id, lom: c.lom, parent: c.parent, position: c.position }]);
@@ -376,6 +385,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     "lom:description": (c) => {
       add(md.LomDescription, [{ id: c.id, lom: c.lom }]);
     },
+    "lom:difficulty": (c) => {
+      add(md.LomDifficulty, [{ id: c.id, lom: c.lom }]);
+    },
     "lom:duration": (c) => {
       add(md.LomDuration, [{ id: c.id, lom: c.lom, technical: c.parent }]);
     },
@@ -383,6 +395,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       add(md.LomDurationString, [
         { collapsed: c.collapsed, duration: c.parent, id: c.id, lom: c.lom, value: c.value },
       ]);
+    },
+    "lom:educational": (c) => {
+      add(md.LomEducational, [{ id: c.id, lom: c.lom }]);
     },
     "lom:entity": (c) => {
       add(md.LomEntity, [
@@ -412,6 +427,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
         c.findings.entries.push({ collapsed: c.collapsed, position: c.parentPosition });
       }
     },
+    "lom:entry.langString": (c) => {
+      add(md.LomEntryLangString, [{ id: c.id, lom: c.lom }]);
+    },
     "lom:format": (c) => {
       add(md.LomFormat, [
         {
@@ -427,6 +445,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     "lom:general": (c) => {
       add(md.LomGeneral, [{ id: c.id, lom: c.lom }]);
     },
+    "lom:id": (c) => {
+      add(md.LomId, [{ collapsed: c.collapsed, id: c.id, value: c.value }]);
+    },
     "lom:identifier": (c) => {
       add(md.LomIdentifier, [{ id: c.id, lom: c.lom, owner: c.owner, position: c.position }]);
       c.findings.hasIdentifier = true;
@@ -434,11 +455,26 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     "lom:installationRemarks": (c) => {
       add(md.LomInstallationRemarks, [{ id: c.id, lom: c.lom, technical: c.parent }]);
     },
+    "lom:intendedEndUserRole": (c) => {
+      add(md.LomIntendedEndUserRole, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:interactivityLevel": (c) => {
+      add(md.LomInteractivityLevel, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:interactivityType": (c) => {
+      add(md.LomInteractivityType, [{ id: c.id, lom: c.lom }]);
+    },
     "lom:keyword": (c) => {
       add(md.LomKeyword, [{ id: c.id, lom: c.lom }]);
     },
+    "lom:kind": (c) => {
+      add(md.LomKind, [{ id: c.id, lom: c.lom }]);
+    },
     "lom:language": (c) => {
       add(md.LomLanguage, [{ id: c.id, lom: c.lom, position: c.position, value: c.value }]);
+    },
+    "lom:learningResourceType": (c) => {
+      add(md.LomLearningResourceType, [{ id: c.id, lom: c.lom }]);
     },
     "lom:lifeCycle": (c) => {
       add(md.LomLifeCycle, [{ id: c.id, lom: c.lom }]);
@@ -491,14 +527,26 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     "lom:otherPlatformRequirements": (c) => {
       add(md.LomOtherPlatformRequirements, [{ id: c.id, lom: c.lom, technical: c.parent }]);
     },
+    "lom:purpose": (c) => {
+      add(md.LomPurpose, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:relation": (c) => {
+      add(md.LomRelation, [{ id: c.id, lom: c.lom }]);
+    },
     "lom:requirement": (c) => {
       add(md.LomRequirement, [{ id: c.id, lom: c.lom, position: c.position, technical: c.parent }]);
+    },
+    "lom:resource": (c) => {
+      add(md.LomResource, [{ id: c.id, lom: c.lom }]);
     },
     "lom:rights": (c) => {
       add(md.LomRights, [{ id: c.id, lom: c.lom }]);
     },
     "lom:role": (c) => {
       add(md.LomRole, [{ contribute: c.parent, id: c.id, lom: c.lom }]);
+    },
+    "lom:semanticDensity": (c) => {
+      add(md.LomSemanticDensity, [{ id: c.id, lom: c.lom }]);
     },
     "lom:size": (c) => {
       add(md.LomSize, [
@@ -507,6 +555,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     },
     "lom:source": (c) => {
       add(md.LomSource, [{ collapsed: c.collapsed, id: c.id, value: c.value }]);
+    },
+    "lom:source.langString": (c) => {
+      add(md.LomSourceLangString, [{ id: c.id, lom: c.lom }]);
     },
     "lom:status": (c) => {
       add(md.LomStatus, [{ id: c.id, lifeCycle: c.parent, lom: c.lom }]);
@@ -538,6 +589,12 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     "lom:structure": (c) => {
       add(md.LomStructure, [{ id: c.id, lom: c.lom }]);
     },
+    "lom:taxon": (c) => {
+      add(md.LomTaxon, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:taxonPath": (c) => {
+      add(md.LomTaxonPath, [{ id: c.id, lom: c.lom }]);
+    },
     "lom:technical": (c) => {
       add(md.LomTechnical, [{ id: c.id, lom: c.lom }]);
     },
@@ -547,6 +604,12 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     },
     "lom:type": (c) => {
       add(md.LomType, [{ id: c.id, lom: c.lom, orComposite: c.parent }]);
+    },
+    "lom:typicalAgeRange": (c) => {
+      add(md.LomTypicalAgeRange, [{ id: c.id, lom: c.lom }]);
+    },
+    "lom:typicalLearningTime": (c) => {
+      add(md.LomTypicalLearningTime, [{ id: c.id, lom: c.lom }]);
     },
     "lom:value": (c) => {
       add(md.LomValue, [
