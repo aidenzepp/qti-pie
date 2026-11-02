@@ -1237,16 +1237,19 @@ export const r30Asserts = [
 ] as const;
 
 /**
- * The capacity statements of the 92 asserts: one per distinct `(parent, child)` pair, 80 in all,
- * because the kinds `lom:contribute`, `lom:date`, `lom:identifier` and `lom:role` are one kind
- * each, so a cap holds wherever the kind sits. Each caps the parent's rows at one `Edge` row of
- * the child kind.
+ * The capacity statements of the 92 asserts: one per distinct `(parent, child)` pair, 80 in all
+ * (the kinds `lom:contribute`, `lom:date`, `lom:identifier` and `lom:role` are one kind each, so a
+ * cap holds wherever the kind sits). Each caps the parent's rows at one `Edge` row of the child
+ * kind, and selects `Edge` on both the child kind and the parent kind, so grizzle draws one exact
+ * partial unique index `edge(parent) WHERE child_kind = C AND parent_kind = P` per pair. A
+ * selection on the child kind alone would cap the child under every parent kind, because grizzle's
+ * at-most-one index over an unselected target also bounds source groups no target fact names.
  */
 export const r30Capacities = [
   ...new Map(r30Asserts.map((row) => [`${row.parent} ${row.child}`, row] as const)).values(),
 ].map((row) =>
   capacity(on(arms[row.parent], "id"), {
-    from: on(select(Edge, { childKind: row.child }), "parent"),
+    from: on(select(Edge, { childKind: row.child, parentKind: row.parent }), "parent"),
     within: within(0n, 1n),
   }),
 );

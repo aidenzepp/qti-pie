@@ -350,7 +350,7 @@ interface Sourced {
 /**
  * The (parent, child) pair of an assert row.
  */
-const pairOf = (row: { readonly parent: string; readonly child: string }) =>
+const rowPair = (row: { readonly parent: string; readonly child: string }) =>
   `${row.parent} ${row.child}`;
 
 /**
@@ -369,19 +369,21 @@ const boundsOf = (statement: Capacity): readonly [unknown, unknown] | undefined 
 };
 
 /**
- * The child kind a capacity statement selects `Edge` on, when its source is a selection of `Edge`
- * on `childKind` alone.
+ * The `"<parentKind> <childKind>"` pair a capacity statement selects `Edge` on, when its source is
+ * a selection of `Edge` whose bindings are exactly `childKind` and `parentKind`.
  */
-const childKindOf = (statement: Sourced): string | undefined => {
+const pairOf = (statement: Sourced): string | undefined => {
   const source: unknown = statement.from.source;
 
   return Predicate.hasProperty(source, "relation") &&
     source.relation === node.Edge &&
     Predicate.hasProperty(source, "bindings") &&
     Predicate.hasProperty(source.bindings, "childKind") &&
-    Object.keys(source.bindings).length === 1 &&
-    Predicate.isString(source.bindings.childKind)
-    ? source.bindings.childKind
+    Predicate.hasProperty(source.bindings, "parentKind") &&
+    Object.keys(source.bindings).length === 2 &&
+    Predicate.isString(source.bindings.childKind) &&
+    Predicate.isString(source.bindings.parentKind)
+    ? `${source.bindings.parentKind} ${source.bindings.childKind}`
     : undefined;
 };
 
@@ -398,35 +400,34 @@ describe("metadata R30 capacities", () => {
   });
 
   it("maps the 92 asserts onto the 80 distinct pairs the spec's command prints", () => {
-    const distinct = new Set(r30Asserts.map(pairOf));
+    const distinct = new Set(r30Asserts.map(rowPair));
     assert.strictEqual(distinct.size, 80);
     assert.deepStrictEqual([...distinct].toSorted(), expectedPairs);
     for (const row of r30Asserts) {
-      assert.isTrue(expectedPairs.includes(pairOf(row)), String(row.n));
+      assert.isTrue(expectedPairs.includes(rowPair(row)), String(row.n));
       assert.include(node.NodeKind.handles, row.parent);
       assert.include(node.NodeKind.handles, row.child);
     }
   });
 
-  it("states one capacity per distinct pair: a selected Edge source, the parent arm, 0..1", () => {
+  it("states one capacity per distinct pair: an Edge source selected on the pair's child and parent kind, the parent arm, 0..1", () => {
     assert.strictEqual(r30Capacities.length, 80);
 
     const seen: string[] = [];
     for (const rule of r30Capacities) {
-      const child = childKindOf(rule);
-      assert.isDefined(child);
+      const pair = pairOf(rule);
+      assert.isDefined(pair);
       assert.deepStrictEqual([...rule.from.fields], ["parent"]);
       assert.deepStrictEqual([...rule.target.fields], ["id"]);
       assert.deepStrictEqual(boundsOf(rule), [0n, 1n]);
 
-      const row = r30Asserts.find((candidate) => candidate.child === child);
-      assert.isDefined(row);
-
-      const parent = r30Asserts.find(
-        (candidate) => candidate.child === child && arms[candidate.parent] === rule.target.source,
-      )?.parent;
-      assert.isDefined(parent, child);
-      seen.push(`${parent} ${child}`);
+      const [parent] = pair.split(" ");
+      assert.isTrue(
+        parent !== undefined &&
+          new Map<string, unknown>(Object.entries(arms)).get(parent) === rule.target.source,
+        pair,
+      );
+      seen.push(pair);
     }
 
     assert.deepStrictEqual(seen.toSorted(), expectedPairs);
@@ -437,9 +438,7 @@ describe("metadata R30 capacities", () => {
       assert.isTrue(rules.includes(rule));
     }
 
-    const composed = rules.filter(
-      (rule) => rule.kind === "capacity" && childKindOf(rule) !== undefined,
-    );
+    const composed = rules.filter((rule) => rule.kind === "capacity" && pairOf(rule) !== undefined);
     assert.strictEqual(composed.length, 80);
     assert.isDefined(probe());
   });
