@@ -4,14 +4,20 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { readXml } from "#qti/xml/read.ts";
+import type { Element } from "#qti/xml/tree.ts";
 import {
+  FIXTURES_VERSION,
   examplesTarball,
+  fixtureNames,
   materialize,
   materializePackage,
   materializeSpec,
   materializeZip,
+  specOf,
+  transformHash,
 } from "#qti/test/fixtures.ts";
-import type { FixtureSpec } from "#qti/test/fixtures.ts";
+import type { FixtureName, FixtureSpec } from "#qti/test/fixtures.ts";
 
 /**
  * The directory every test root is made under: the package's gitignored `work/`.
@@ -124,6 +130,123 @@ const simpleMember = "qtiv3-examples/packaging/simple/simple.zip";
  */
 const looseMember = "qtiv3-examples/tests/rtest01-fragment.xml";
 
+/**
+ * One positive of the metadata cut: what its manifest holds, and the hand-broken copies made from
+ * it.
+ */
+interface MetadataCut {
+  /**
+   * The number of elements of each local name that the positive's edits add.
+   */
+  readonly counts: Readonly<Record<string, number>>;
+  readonly name: FixtureName;
+  readonly negatives: readonly FixtureName[];
+  /**
+   * The number of content packaging `resource` elements in the positive's manifest.
+   */
+  readonly resources: number;
+}
+
+/**
+ * The five positives of the metadata cut with their negatives.
+ */
+const metadataCuts: readonly MetadataCut[] = [
+  {
+    counts: { curriculumStandardsMetadataSet: 2 },
+    name: "csm",
+    negatives: ["csm-no-labelled-guid", "csm-two-guids", "csm-no-guid", "csm-two-sets"],
+    resources: 1,
+  },
+  {
+    counts: { dependency: 1 },
+    name: "extmeta",
+    negatives: [
+      "extmeta-item-root",
+      "extmeta-item-href",
+      "extmeta-two-resources",
+      "extmeta-hrefless",
+    ],
+    resources: 2,
+  },
+  {
+    counts: { curriculumStandardsMetadataSet: 2, lom: 4 },
+    name: "filelom",
+    negatives: ["filelom-qmd", "filelom-two-metadata"],
+    resources: 1,
+  },
+  {
+    counts: { annotation: 1, classification: 1, educational: 2, relation: 1 },
+    name: "lomrest",
+    negatives: [
+      "lomrest-two-titles",
+      "lomrest-two-purposes",
+      "lomrest-two-kinds",
+      "lomrest-exam",
+      "lomrest-self-assessment",
+    ],
+    resources: 1,
+  },
+  {
+    counts: { qtiMetadata: 1 },
+    name: "nestedqmd",
+    negatives: ["nestedqmd-manifest-lom", "nestedqmd-both"],
+    resources: 1,
+  },
+];
+
+/**
+ * Every name of the metadata cut: the five positives and their negatives.
+ */
+const metadataNames: readonly FixtureName[] = metadataCuts.flatMap((cut) => [
+  cut.name,
+  ...cut.negatives,
+]);
+
+/**
+ * The namespace of the content packaging elements, whose `resource` is not the LOM's.
+ */
+const cpNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
+
+/**
+ * Every element of a tree, the root first, in document order.
+ *
+ * @param element - The subtree's root.
+ * @returns The element and all its descendants.
+ */
+const elementsOf = (element: Element): readonly Element[] => [
+  element,
+  ...element.children.flatMap((child) => (child.kind === "element" ? elementsOf(child) : [])),
+];
+
+/**
+ * Read a materialized package's manifest as a tree.
+ *
+ * @param dir - The package directory.
+ * @returns The manifest's elements in document order.
+ */
+const manifestElements = Effect.fn("manifestElements")(function* manifestElements(dir: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const doc = yield* Effect.orDie(readXml(yield* fs.readFile(`${dir}/imsmanifest.xml`)));
+
+  return elementsOf(doc.root);
+});
+
+/**
+ * The bytes a metadata fixture differs in: its manifest and, when it has one, its metadata record.
+ *
+ * @param dir - The package directory.
+ * @returns The two files' text, the record as `""` when the package holds none.
+ */
+const manifestAndRecord = Effect.fn("manifestAndRecord")(function* manifestAndRecord(dir: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const record = `${dir}/meta/choice.xml`;
+
+  return [
+    yield* fs.readFileString(`${dir}/imsmanifest.xml`),
+    (yield* fs.exists(record)) ? yield* fs.readFileString(record) : "",
+  ] as const;
+});
+
 layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts (packaging)", (it) => {
   it.effect("materializeZip keeps the member's bytes as one file named by the zip", () =>
     inFreshRoot((root) =>
@@ -219,6 +342,104 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts (pack
         assert.strictEqual(files.length, 4);
         assert.include(files, "imsmanifest.xml");
         assert.strictEqual(files.filter((file) => /^USAGE-.*\.xml$/u.test(file)).length, 3);
+      }),
+    ),
+  );
+
+  it.effect("every metadata name is in the table and materializes under the hash it names", () =>
+    inFreshRoot((root) =>
+      Effect.gen(function* metadataPaths() {
+        for (const name of metadataNames) {
+          assert.include(fixtureNames, name);
+
+          const spec = specOf(name);
+
+          assert.strictEqual(spec.name, name);
+          assert.strictEqual(spec.member, specOf("simple").member);
+          assert.strictEqual(
+            yield* materialize(name),
+            `${root}/${name}-${transformHash(spec, FIXTURES_VERSION).slice(0, 12)}`,
+          );
+        }
+
+        assert.strictEqual(new Set(fixtureNames).size, fixtureNames.length);
+        assert.strictEqual(
+          new Set(metadataNames.map((name) => transformHash(specOf(name), FIXTURES_VERSION))).size,
+          metadataNames.length,
+        );
+      }),
+    ),
+  );
+
+  it.effect("each metadata positive is a manifest with the resources and elements it adds", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* metadataPositiveContents() {
+        for (const cut of metadataCuts) {
+          const elements = yield* manifestElements(yield* materialize(cut.name));
+          const named = (local: string) => elements.filter((element) => element.local === local);
+
+          assert.strictEqual(
+            named("resource").filter((element) => element.namespace === cpNamespace).length,
+            cut.resources,
+            cut.name,
+          );
+
+          for (const [local, count] of Object.entries(cut.counts)) {
+            assert.strictEqual(named(local).length, count, `${cut.name}: ${local}`);
+          }
+        }
+      }),
+    ),
+  );
+
+  it.effect("nestedqmd holds its qtiMetadata as the last child of the resource lom", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* nestedQtiMetadata() {
+        const elements = yield* manifestElements(yield* materialize("nestedqmd"));
+        const block = elements.find((element) => element.local === "qtiMetadata");
+        const owner = elements.find((element) => element.children.some((child) => child === block));
+        const lastChild = owner?.children.findLast((child) => child.kind === "element");
+
+        assert.strictEqual(owner?.local, "lom");
+        assert.strictEqual(lastChild, block);
+        assert.isTrue(elements.some((element) => element.local === "lom" && element !== owner));
+      }),
+    ),
+  );
+
+  it.effect("extmeta's record is the published metadata with no xml:lang attribute", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* externalRecord() {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* materialize("extmeta");
+        const record = yield* fs.readFileString(`${dir}/meta/choice.xml`);
+
+        assert.notInclude(record, "xml:lang");
+        assert.include(record, "<string>jacs</string>");
+        assert.include(record, "<string>Mathematics</string>");
+        assert.isBelow(record.length, 2726);
+        assert.deepStrictEqual(yield* filesUnder(dir), [
+          "choice.xml",
+          "images/sign.png",
+          "imsmanifest.xml",
+          "meta/choice.xml",
+        ]);
+      }),
+    ),
+  );
+
+  it.effect("each metadata negative differs from its positive in the manifest or the record", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* metadataNegativeDiffers() {
+        for (const cut of metadataCuts) {
+          const base = yield* manifestAndRecord(yield* materialize(cut.name));
+
+          for (const name of cut.negatives) {
+            const broken = yield* manifestAndRecord(yield* materialize(name));
+
+            assert.notDeepEqual(broken, base, name);
+          }
+        }
       }),
     ),
   );
