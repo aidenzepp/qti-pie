@@ -8,7 +8,7 @@
  */
 import { ChangeSet, Db } from "@bjornpagen/grizzle";
 import type { ApplyError, DbLayer, Fact, OpenError } from "@bjornpagen/grizzle";
-import { Effect, Option, Ref, Schedule } from "effect";
+import { Clock, Duration, Effect, Option, Random, Ref, Schedule } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { guards } from "#qti/import/guards.ts";
 import type { ContentGuardRefusal } from "#qti/import/guards/content.ts";
@@ -25,12 +25,34 @@ import { Author } from "#qti/schema/roles.ts";
 import { readXml } from "#qti/xml/read.ts";
 
 /**
- * The retry between attempts at the database: 50 ms doubling each time with jitter, at most five
- * retries after the first attempt.
+ * The longest the retries of one database call run, in total.
+ */
+const retryBound = Duration.seconds(30);
+
+/**
+ * The longest one wait between attempts lasts, before jitter.
+ */
+const retryDelayCap = Duration.seconds(1);
+
+/**
+ * The retry between attempts at the database, bounded by elapsed time and not by count.
+ *
+ * A serialization failure never depends on the call's inputs, and under contention PostgreSQL
+ * expects many attempts, so a count says nothing about how long the contention lasts. The wait
+ * starts at 50 ms and doubles, is capped at one second so the retries keep sampling while the
+ * burst thins out, and is then drawn uniformly from zero to that wait, so attempts that collided do
+ * not retry together. The retries stop at the first attempt that ends after thirty seconds, and
+ * that attempt's failure is the call's.
  */
 export const retrySchedule = Schedule.exponential("50 millis", 2).pipe(
-  Schedule.jittered,
-  Schedule.upTo({ times: 5 }),
+  Schedule.modifyDelay(
+    Effect.fnUntraced(function* jitters({ duration }) {
+      const random = yield* Random.next;
+
+      return Duration.times(Duration.min(duration, retryDelayCap), random);
+    }),
+  ),
+  Schedule.upTo({ duration: retryBound }),
 );
 
 /**
@@ -60,8 +82,10 @@ const isTransient = (error: ApplyError | OpenError): boolean =>
   (error._tag === "OpenError" && error.reason._tag === "AdmissionTransient");
 
 /**
- * Run `attempt` again while the database calls the failure transient, on `schedule`. A failure
- * after the last retry is the error it was; the attempts made are logged beside it.
+ * Run `attempt` again while the database calls the failure transient, on `schedule`. Each retry
+ * logs the attempt it follows, the time since the first attempt and the failure's tag, so a run
+ * shows how often it retried; a failure after the last retry is the error it was, logged with the
+ * attempts made.
  */
 const retried = <A, E extends ApplyError | OpenError, R>(
   name: string,
@@ -70,10 +94,23 @@ const retried = <A, E extends ApplyError | OpenError, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.gen(function* retriedAttempt() {
     const attempts = yield* Ref.make(0);
+    const started = yield* Clock.currentTimeMillis;
+    const logTransient = Effect.fnUntraced(function* logsRetry(failure: E) {
+      if (!isTransient(failure)) {
+        return;
+      }
+
+      const n = yield* Ref.get(attempts);
+      const now = yield* Clock.currentTimeMillis;
+
+      yield* Effect.logWarning(`${name} attempt ${n} failed transiently`).pipe(
+        Effect.annotateLogs({ attempt: n, elapsedMillis: now - started, errorTag: failure._tag }),
+      );
+    });
     const counted = Effect.andThen(
       Ref.update(attempts, (n) => n + 1),
       attempt,
-    );
+    ).pipe(Effect.tapError(logTransient));
 
     return yield* counted.pipe(
       Effect.retry({ schedule, while: isTransient }),
