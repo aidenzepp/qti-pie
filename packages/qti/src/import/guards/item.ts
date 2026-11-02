@@ -222,8 +222,8 @@ const interpretation = (rows: Rows, node: string): string | undefined =>
   Rows.of(rows, values.ValueSetInterpretation).find((row) => row.valueSet === node)?.value;
 
 /**
- * Every item attribute with a typed column, by element kind and attribute. An attribute the table
- * lacks has no typed column to shadow.
+ * The phase-1 item attributes with a typed column, by element kind and attribute. A lexical row of
+ * any other attribute is the content guards' (`lexicalCopy` in `guards/content.ts`).
  */
 const shadows: ReadonlyMap<string, Shadow> = new Map<string, Shadow>([
   [
@@ -467,7 +467,8 @@ const interactionCopy = (rows: Rows): Finding => {
 
 /**
  * `typed-copy` of the lexical rows: each row of an item node names an attribute its kind's
- * registry carries, shadows a typed column, differs from it as read, and processes to it.
+ * registry carries. Where `shadows` holds the attribute, the row shadows that typed column, differs
+ * from it as read, and processes to it; any other attribute's row is left to the content guards.
  */
 const lexicalCopy = (rows: Rows, index: Index): Finding => {
   for (const row of Rows.of(rows, AttributeLexical)) {
@@ -484,8 +485,12 @@ const lexicalCopy = (rows: Rows, index: Index): Finding => {
     }
 
     const shadow = shadows.get(`${row.kind}/${row.attribute}`);
-    const typed = shadow?.column(rows, row.node);
-    if (shadow === undefined || typed === undefined) {
+    if (shadow === undefined) {
+      continue;
+    }
+
+    const typed = shadow.column(rows, row.node);
+    if (typed === undefined) {
       return refuse(
         "typed-copy",
         `The lexical ${row.attribute} of ${row.kind} ${row.node} shadows no typed column.`,

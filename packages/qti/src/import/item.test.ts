@@ -76,6 +76,7 @@ import {
 } from "#qti/schema/processing.ts";
 import * as value from "#qti/schema/value.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
+import type { FixtureName } from "#qti/test/fixtures.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import { readXml } from "#qti/xml/read.ts";
 
@@ -1089,16 +1090,17 @@ const encode = (text: string) => new TextEncoder().encode(text);
 const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 
 /**
- * The rows `importPackage`'s pre-apply half builds for `SHARED`: the manifest's, then each listed
- * document's. `editManifest` and `editItem` rewrite the text of `imsmanifest.xml` and of the
+ * The rows `importPackage`'s pre-apply half builds for the named fixture: the manifest's, then each
+ * listed document's. `editManifest` and `editItem` rewrite the text of `imsmanifest.xml` and of the
  * document at the path the edit names.
  */
-const sharedRows = (
+const packageRows = (
+  name: FixtureName,
   editManifest: (text: string) => string = (text) => text,
   editItem: (path: string, text: string) => string = (_path, text) => text,
 ) =>
   Effect.gen(function* sharedPackageRows() {
-    const directory = yield* materialize("sharedMedia");
+    const directory = yield* materialize(name);
     const entries = yield* listPackage(directory);
     const manifest = yield* readXml(
       encode(editManifest(decode(yield* readEntry(directory, "imsmanifest.xml")))),
@@ -1132,13 +1134,22 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts composi
     "itemGuards admit SHARED: a hotspot or graphic-order binding is not the choice guard's",
     () =>
       Effect.gen(function* sharedAdmitted() {
-        yield* itemGuards(yield* sharedRows());
+        yield* itemGuards(yield* packageRows("sharedMedia"));
+      }),
+  );
+
+  suite.effect(
+    "itemGuards admit padded-m1-attributes and empty-class: an M1 attribute's lexical row is the content guards'",
+    () =>
+      Effect.gen(function* m1RowsAdmitted() {
+        yield* itemGuards(yield* packageRows("padded-m1-attributes"));
+        yield* itemGuards(yield* packageRows("empty-class"));
       }),
   );
 
   suite.effect("SHARED holds the rows of the M1 builders, each counted once", () =>
     Effect.gen(function* sharedComposition() {
-      const rows = yield* sharedRows();
+      const rows = yield* packageRows("sharedMedia");
 
       assert.isAbove(Rows.of(rows, ObjectElement).length, 0);
       assert.strictEqual(Rows.of(rows, GraphicOrderInteraction).length, 1);
@@ -1159,7 +1170,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts composi
   suite.effect("the attribute pass writes id, class and xml:lang of an edited hotspot item", () =>
     Effect.gen(function* editedAttributes() {
       const search = '<qti-hotspot-interaction response-identifier="RESPONSE"';
-      const rows = yield* sharedRows(
+      const rows = yield* packageRows(
+        "sharedMedia",
         (text) => text,
         (itemPath, text) => {
           if (itemPath !== "example/hotspot.xml") {
@@ -1193,7 +1205,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts composi
   suite.effect("a manifest lom:string xml:lang writes one NodeXmlLang row of the manifest", () =>
     Effect.gen(function* manifestLanguage() {
       const search = '<imsmd:string language="en">';
-      const rows = yield* sharedRows((text) => {
+      const rows = yield* packageRows("sharedMedia", (text) => {
         assert.isTrue(text.includes(search), "imsmanifest.xml holds an imsmd:string");
 
         return text.replace(search, '<imsmd:string language="en" xml:lang="en">');
