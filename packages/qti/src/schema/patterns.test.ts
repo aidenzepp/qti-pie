@@ -269,3 +269,60 @@ describe("patterns", () => {
     assert.isFalse(admits(patterns.point, "u", "1,2"));
   });
 });
+
+/**
+ * The phase-3 list and coordinate patterns are this phase's regex-budget experiment: each is built
+ * into a one-field relation, because grizzle refuses a source that is too complex when `relation`
+ * is called, never at `str.regex` or `tsc`. The engine exposes no field validator without a
+ * database, so admit and refuse are asserted through `new RegExp(source, "u")` on the same source.
+ */
+describe("processing patterns", () => {
+  const probes = [
+    [
+      "identifierList",
+      () =>
+        relation("PidentifierList", { id: uuid, v: str.regex(patterns.identifierList) }, ["id"]),
+    ],
+    [
+      "toleranceList",
+      () => relation("PtoleranceList", { id: uuid, v: str.regex(patterns.toleranceList) }, ["id"]),
+    ],
+    ["coords", () => relation("Pcoords", { id: uuid, v: str.regex(patterns.coords) }, ["id"])],
+  ] as const;
+
+  for (const [name, probe] of probes) {
+    it.effect(`grizzle builds a relation over ${name}`, () =>
+      Effect.try(() => probe()).pipe(Effect.asVoid),
+    );
+  }
+
+  it("coords", () => {
+    const { coords } = patterns;
+    for (const value of ["0,0,10,10", "50%,50%,10"]) {
+      assert.isTrue(admits(coords, "u", value), value);
+    }
+    for (const value of ["0,0", "0,0,10,10 ", "0, 0, 10, 10"]) {
+      assert.isFalse(admits(coords, "u", value), value);
+    }
+  });
+
+  it("identifierList", () => {
+    const { identifierList } = patterns;
+    for (const value of ["", "A", "A B"]) {
+      assert.isTrue(admits(identifierList, "u", value), value);
+    }
+    for (const value of ["A,B", " A B", "A  B"]) {
+      assert.isFalse(admits(identifierList, "u", value), value);
+    }
+  });
+
+  it("toleranceList", () => {
+    const { toleranceList } = patterns;
+    for (const value of ["", "0.5", "0.5 1", "T"]) {
+      assert.isTrue(admits(toleranceList, "u", value), value);
+    }
+    for (const value of ["0.5,1", "0.5 1 "]) {
+      assert.isFalse(admits(toleranceList, "u", value), value);
+    }
+  });
+});
