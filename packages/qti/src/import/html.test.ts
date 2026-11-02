@@ -2,7 +2,9 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option } from "effect";
+import { renderTree } from "#qti/export/render.ts";
 import { htmlRows } from "#qti/import/html.ts";
+import { itemRows } from "#qti/import/item.ts";
 import { Rows, treeRows, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { NodeIndex, TreeInput } from "#qti/import/tree.ts";
 import { Img, P } from "#qti/schema/html.ts";
@@ -12,6 +14,7 @@ import * as text from "#qti/schema/html/text.ts";
 import { AttributeLexical } from "#qti/schema/node.ts";
 import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
 import { materialize } from "#qti/test/fixtures.ts";
+import { canonicalize } from "#qti/xml/canonical.ts";
 import { readXml } from "#qti/xml/read.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";
@@ -63,6 +66,26 @@ describe("htmlRows on a 3.0.1 video", () => {
       assert.deepStrictEqual(Rows.of(rows, media.relations.SourceType), [
         { node: sourceId, value: "video/mp4" },
       ]);
+    }),
+  );
+});
+
+describe("htmlRows on a padded source", () => {
+  it.effect("keeps a padded source src's spelling", () =>
+    Effect.gen(function* paddedSource() {
+      const { nodes, rows } = yield* built(
+        "3.0.1",
+        '<video controls="controls"><source src="&#9;a.mp4&#9;" type="video/mp4"/></video>',
+      );
+      const sourceId = idOf(nodes, "source");
+
+      assert.deepStrictEqual(Rows.of(rows, media.relations.Source), [
+        { id: sourceId, parentKind: "video", src: " a.mp4 " },
+      ]);
+      assert.deepStrictEqual(
+        Rows.of(rows, AttributeLexical).map((row) => [row.node, row.attribute, row.value]),
+        [[sourceId, "src", "\ta.mp4\t"]],
+      );
     }),
   );
 });
@@ -194,6 +217,10 @@ describe("htmlRows on the text and structure elements", () => {
       assert.strictEqual(Rows.of(rows, text.Div).length, 1);
       assert.strictEqual(Rows.of(rows, text.Span).length, 1);
       assert.deepStrictEqual(Rows.of(rows, text.A), [{ href: "x.html", id: idOf(nodes, "a") }]);
+      assert.deepStrictEqual(
+        Rows.of(rows, AttributeLexical).map((row) => [row.node, row.attribute, row.value]),
+        [[idOf(nodes, "a"), "href", " x.html "]],
+      );
       assert.deepStrictEqual(Rows.of(rows, text.AType), [
         { node: idOf(nodes, "a"), value: "text/html" },
       ]);
@@ -316,6 +343,31 @@ layer(NodeServices.layer, { excludeTestServices: true })("htmlRows on sharedMedi
       assert.deepStrictEqual(Rows.of(rows, media.relations.ObjectHeight), [
         { node: objectId, value: "280" },
       ]);
+    }),
+  );
+});
+
+layer(NodeServices.layer, { excludeTestServices: true })("a padded href", (suite) => {
+  suite.effect("round-trips with its spelling", () =>
+    Effect.gen(function* paddedHref() {
+      const xml = `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-item-body><p><a href=" x.html ">go</a></p></qti-item-body></qti-assessment-item>`;
+      const doc = yield* readXml(new TextEncoder().encode(xml));
+      const { documentId: tree, rows } = yield* itemRows(
+        {
+          doc,
+          packageId: crypto.randomUUID(),
+          path: "padded.xml",
+          resource: "padded",
+          resourceLomHasGeneral: false,
+          resourceType: "imsqti_item_xmlv3p0",
+          version: "3.0.1",
+        },
+        Rows.empty(),
+      );
+      const rendered = new TextDecoder().decode(canonicalize(renderTree(rows, tree)));
+
+      assert.strictEqual(rendered, new TextDecoder().decode(canonicalize(doc)));
+      assert.include(rendered, 'href=" x.html "');
     }),
   );
 });

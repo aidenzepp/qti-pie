@@ -42,7 +42,8 @@ type Write = (rows: Rows) => Rows;
 
 /**
  * One part of an element's rows: the own attributes it reads and the step that reads and records
- * them.
+ * them. A step reads every attribute it records before it returns its `Write`, because the
+ * `AttributeLexical` rows are taken once every step has run.
  */
 interface Piece {
   readonly reads: readonly AttributeNameHandle[];
@@ -194,10 +195,11 @@ type ThinMarker = Relation<string, { readonly node: typeof uuid }, readonly ["no
  */
 const anchor: Piece = {
   reads: ["href"],
-  step:
-    ({ attributes, node }) =>
-    (rows) =>
-      Rows.add(rows, text.A, [{ href: judgedLater(required(attributes, "href")), id: node.id }]),
+  step: ({ attributes, node }) => {
+    const href = required(attributes, "href");
+
+    return (rows) => Rows.add(rows, text.A, [{ href: judgedLater(href), id: node.id }]);
+  },
 };
 
 /**
@@ -216,16 +218,14 @@ const mediaArm = (relation: typeof media.Audio | typeof media.Video): Piece => (
  */
 const sourceArm: Piece = {
   reads: ["src"],
-  step:
-    ({ attributes, node, parent }) =>
-    (rows) =>
+  step: ({ attributes, node, parent }) => {
+    const src = required(attributes, "src");
+
+    return (rows) =>
       Rows.add(rows, media.Source, [
-        {
-          id: node.id,
-          parentKind: parent.kind,
-          src: judgedLater(required(attributes, "src")),
-        },
-      ]),
+        { id: node.id, parentKind: parent.kind, src: judgedLater(src) },
+      ]);
+  },
 };
 
 /**
