@@ -126,7 +126,7 @@ const readRows = Effect.fn("import.readRows")(function* readRows(dir: string) {
 /**
  * One `ChangeSet` inserting every row of `rows`, relation by relation, the package's own first.
  */
-const changeSetOf = (rows: Rows) => {
+export const changeSetOf = (rows: Rows) => {
   let changes = ChangeSet.empty(Author).insert(Package, Rows.of(rows, Package));
 
   for (const [relation, facts] of rows) {

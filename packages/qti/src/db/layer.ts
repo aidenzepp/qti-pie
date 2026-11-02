@@ -5,7 +5,8 @@ import snapshot from "#migrations/qti/snapshot.json" with { type: "json" };
 import { AuthorApp } from "#qti/schema/logins.ts";
 
 /**
- * The local cluster scripts/db.sh migrates, read from the same variables with the same defaults.
+ * The local cluster scripts/db.sh migrates, read from the same variables with the same defaults as
+ * the `GR8DES_PG_*` block at the top of scripts/db.sh; change one, change both.
  */
 const localCluster = Config.all({
   database: Config.String("GR8DES_PG_DATABASE").pipe(Config.withDefault("gr8des_qti")),

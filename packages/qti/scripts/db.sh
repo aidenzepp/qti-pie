@@ -11,6 +11,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# The GR8DES_PG_* defaults below are read again, with the same values, by `localCluster` in src/db/layer.ts; change one, change both.
 : "${GRIZZLE_PG_STATE:=$HOME/.local/var/grizzle/pg19rc1}"
 : "${GRIZZLE_PG_BIN:=$HOME/.local/opt/postgresql/19rc1/bin}"
 : "${GR8DES_PG_HOST:=localhost}"

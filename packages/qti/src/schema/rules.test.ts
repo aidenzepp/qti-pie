@@ -1,7 +1,7 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the schema's field and the roster handle the declaration and value rows name; here it is the typed-or-record choice, not a structure. */
 import { isDeepStrictEqual } from "node:util";
-import { ChangeSet, Db } from "@bjornpagen/grizzle";
-import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
+import { Db } from "@bjornpagen/grizzle";
+import type { AnyRelation } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Context, Effect, Layer, Predicate } from "effect";
@@ -9,7 +9,7 @@ import { inject } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
-import { retrySchedule } from "#qti/import/package.ts";
+import { changeSetOf, retrySchedule } from "#qti/import/package.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import {
@@ -58,7 +58,6 @@ import {
   ResponseProcessingItem,
   ResponseProcessingTemplate,
 } from "#qti/schema/processing.ts";
-import { Author } from "#qti/schema/roles.ts";
 import {
   DeclaredValue,
   DefaultValueArm,
@@ -384,35 +383,6 @@ const addDocumentCopy = (draft: Draft): void => {
       }
     }
   }
-};
-
-/**
- * A row as the `Package` relation's fact, which the change set's per-relation typing asks for.
- */
-const factOf = (row: Row): Fact<typeof Package> =>
-  // SAFETY: the row is a draft of the importer's own fact of some relation, and the engine judges its fields against that relation's declaration when the change set is applied.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-  row as Fact<typeof Package>;
-
-/**
- * One `ChangeSet` inserting every row of the draft, relation by relation, the package's own first,
- * as the importer builds it.
- */
-const changeSetOf = (draft: Draft) => {
-  let changes = ChangeSet.empty(Author).insert(Package, of(draft, Package).map(factOf));
-
-  for (const [relation, facts] of draft) {
-    if (relation !== Package && facts.length > 0) {
-      // SAFETY: a draft holds each relation's own rows under that relation and the author role writes every relation it holds, but a map keyed by `AnyRelation` cannot say so to `insert`'s per-relation write check; `Package` stands for any of them, and `insert` reads only the relation's name and the rows at run time.
-      changes = changes.insert(
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-        relation as typeof Package,
-        facts.map(factOf),
-      );
-    }
-  }
-
-  return changes;
 };
 
 /**
