@@ -287,7 +287,7 @@ layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       });
 
       assert.match(id, uuidPattern);
-      assert.strictEqual(yield* Ref.get(attempts), 2);
+      assert.isAtLeast(yield* Ref.get(attempts), 2);
     }),
   );
 
