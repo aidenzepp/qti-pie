@@ -233,7 +233,7 @@ interface LomContext {
   readonly grandparentKind: NodeKindHandle | undefined;
   readonly id: string;
   readonly lom: string;
-  readonly owner: "file" | "manifest" | "resource";
+  readonly owner: "external" | "file" | "manifest" | "resource";
   readonly parent: string;
   readonly parentKind: NodeKindHandle;
   readonly parentPosition: bigint;
