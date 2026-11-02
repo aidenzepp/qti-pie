@@ -7,6 +7,15 @@ import { listPackage, readEntry } from "#qti/package/read.ts";
 import * as cpx from "#qti/schema/kinds/cpx.ts";
 import * as drd from "#qti/schema/kinds/drd.ts";
 import {
+  CsmCaseItemUri,
+  CsmGuid,
+  CsmLabel,
+  CsmSet,
+  CsmSetResourceLabel,
+  CsmSetResourcePartId,
+} from "#qti/schema/csm.ts";
+import {
+  FileLom,
   LomAnnotation,
   LomClassification,
   LomEducational,
@@ -18,9 +27,14 @@ import {
   LomValue,
   QtiMetadata,
   QtiMetadataInMetadata,
+  QtiMetadataInResourceLom,
+  ResourceLom,
+  ResourceLomIdentified,
+  ResourceLomTitled,
 } from "#qti/schema/metadata.ts";
-import { Edge, NodeKind } from "#qti/schema/node.ts";
+import { Edge, Node, NodeKind } from "#qti/schema/node.ts";
 import {
+  FileMetadata,
   ManifestId,
   ManifestIdOfManifest,
   ManifestIdOfResource,
@@ -194,6 +208,113 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
           kindOf(element, Option.some("lom:typicalLearningTime")),
           Option.some("lom:duration.string"),
         );
+      }
+    }),
+  );
+
+  suite.effect("writes csm's two sets under the manifest and resource metadata nodes", () =>
+    Effect.gen(function* csmRows() {
+      const dir = yield* materialize("csm");
+      const rows = yield* rowsOf(dir);
+      const kinds = new Map(Rows.of(rows, Node).map((node) => [node.id, node.kind]));
+      assert.deepStrictEqual(
+        Rows.of(rows, CsmSet)
+          .map((set) => kinds.get(set.host) ?? "")
+          .toSorted((left, right) => left.localeCompare(right)),
+        ["cp:metadata.manifest", "cp:metadata.resource"],
+      );
+
+      const doc = yield* manifestOf(dir);
+      const guids = elementsOf(doc.root, null)
+        .filter(({ element }) => element.local === "GUID")
+        .map(({ element }) =>
+          element.children.map((child) => (child.kind === "text" ? child.value : "")).join(""),
+        );
+      assert.isAbove(guids.length, 0);
+      assert.deepStrictEqual(
+        Rows.of(rows, CsmGuid).map((row) => row.value),
+        guids,
+      );
+      assert.strictEqual(Rows.of(rows, CsmLabel).length, guids.length);
+      assert.strictEqual(Rows.of(rows, CsmCaseItemUri).length, guids.length);
+      assert.strictEqual(Rows.of(rows, CsmSetResourceLabel).length, 1);
+      assert.strictEqual(Rows.of(rows, CsmSetResourcePartId).length, 1);
+      assert.strictEqual(Rows.of(rows, CsmSetResourcePartId)[0]?.value, "choice");
+    }),
+  );
+
+  suite.effect("writes filelom's file metadata, two file records and two sets", () =>
+    Effect.gen(function* fileRows() {
+      const rows = yield* rowsOf(yield* materialize("filelom"));
+      const kinds = new Map(Rows.of(rows, Node).map((node) => [node.id, node.kind]));
+      const [metadata, ...more] = Rows.of(rows, FileMetadata);
+      assert.strictEqual(more.length, 0);
+      assert.strictEqual(kinds.get(metadata?.file ?? ""), "cp:file");
+
+      const records = Rows.of(rows, FileLom);
+      assert.strictEqual(records.length, 2);
+      for (const record of records) {
+        assert.strictEqual(record.metadata, metadata?.id);
+        assert.strictEqual(record.file, metadata?.file);
+      }
+
+      const sets = Rows.of(rows, CsmSet).filter((set) => set.host === metadata?.id);
+      assert.strictEqual(sets.length, 2);
+      assert.strictEqual(kinds.get(metadata?.id ?? ""), "cp:metadata.file");
+
+      const fileLoms = new Set(records.map((record) => record.lom));
+      for (const record of Rows.of(rows, ResourceLom)) {
+        assert.isFalse(fileLoms.has(record.lom));
+      }
+
+      for (const row of [
+        ...Rows.of(rows, ResourceLomIdentified),
+        ...Rows.of(rows, ResourceLomTitled),
+      ]) {
+        assert.isFalse(fileLoms.has(row.lom));
+      }
+    }),
+  );
+
+  suite.effect("writes nestedqmd's one resource-lom QtiMetadata with its host arm", () =>
+    Effect.gen(function* nestedRows() {
+      const rows = yield* rowsOf(yield* materialize("nestedqmd"));
+      const [record, ...more] = Rows.of(rows, QtiMetadata);
+      assert.strictEqual(more.length, 0);
+      assert.strictEqual(record?.host, "resourceLom");
+
+      const [arm, ...rest] = Rows.of(rows, QtiMetadataInResourceLom);
+      assert.strictEqual(rest.length, 0);
+      assert.strictEqual(arm?.id, record?.id);
+      assert.strictEqual(arm?.resource, record?.resource);
+      assert.deepStrictEqual(
+        Rows.of(rows, ResourceLom).map((lom) => lom.lom),
+        [arm?.lom],
+      );
+      assert.strictEqual(Rows.of(rows, QtiMetadataInMetadata).length, 0);
+    }),
+  );
+
+  suite.effect("writes no QtiMetadata row for a qtiMetadata with no arm to land in", () =>
+    Effect.gen(function* noArmRows() {
+      for (const name of ["nestedqmd-manifest-lom", "filelom-qmd"] as const) {
+        const rows = yield* rowsOf(yield* materialize(name));
+        const parents = new Map(Rows.of(rows, Edge).map((edge) => [edge.child, edge.parentKind]));
+        const stranded = Rows.of(rows, Node).filter(
+          (node) =>
+            node.kind === "qmd:qtiMetadata" &&
+            (parents.get(node.id) === "cp:metadata.file" || parents.get(node.id) === "lom:lom"),
+        );
+        assert.isAbove(stranded.length, 0, name);
+
+        const records = new Set([
+          ...Rows.of(rows, QtiMetadata).map((row) => row.id),
+          ...Rows.of(rows, QtiMetadataInMetadata).map((row) => row.id),
+          ...Rows.of(rows, QtiMetadataInResourceLom).map((row) => row.id),
+        ]);
+        for (const node of stranded) {
+          assert.isFalse(records.has(node.id), name);
+        }
       }
     }),
   );
