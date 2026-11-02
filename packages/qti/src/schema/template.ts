@@ -44,8 +44,9 @@ const integerOrVariableString = str.regex(patterns.integerOrVariableString);
 export const PrintedVariableAttr = closed("PrintedVariableAttr", ["base", "index"]);
 
 /**
- * The `qti-template-block` and `qti-template-block.rubric` elements. `show-hide` defaults to
- * `show`; `DeclaredTemplateBlockShowHide` marks a block that wrote it.
+ * The `qti-template-block` element. `show-hide` defaults to `show`;
+ * `DeclaredTemplateBlockShowHide` marks a block that wrote it. The same element inside a rubric
+ * block is a `RubricTemplateBlock`.
  */
 export const TemplateBlock = relation(
   "TemplateBlock",
@@ -68,7 +69,32 @@ export const DeclaredTemplateBlockShowHide = relation(
 );
 
 /**
- * The `qti-template-inline` and `qti-template-inline.rubric` elements.
+ * A `qti-template-block.rubric`: a template block inside a rubric block's content body, with a
+ * template block's fields.
+ */
+export const RubricTemplateBlock = relation(
+  "RubricTemplateBlock",
+  {
+    id: uuid,
+    identifier: ncName,
+    showHide: closedId(ShowHide),
+    templateIdentifier: ncName,
+  },
+  ["id"],
+);
+
+/**
+ * A rubric template block that wrote `show-hide`.
+ */
+export const DeclaredRubricTemplateBlockShowHide = relation(
+  "DeclaredRubricTemplateBlockShowHide",
+  { node: uuid },
+  ["node"],
+);
+
+/**
+ * The `qti-template-inline` element. The same element inside a rubric block is a
+ * `RubricTemplateInline`.
  */
 export const TemplateInline = relation(
   "TemplateInline",
@@ -91,7 +117,33 @@ export const DeclaredTemplateInlineShowHide = relation(
 );
 
 /**
- * The template variable a template block or inline reads: one row per node of either kind, where
+ * A `qti-template-inline.rubric`: a template inline inside a rubric block's content body, with a
+ * template inline's fields.
+ */
+export const RubricTemplateInline = relation(
+  "RubricTemplateInline",
+  {
+    id: uuid,
+    identifier: ncName,
+    showHide: closedId(ShowHide),
+    templateIdentifier: ncName,
+  },
+  ["id"],
+);
+
+/**
+ * A rubric template inline that wrote `show-hide`.
+ */
+export const DeclaredRubricTemplateInlineShowHide = relation(
+  "DeclaredRubricTemplateInlineShowHide",
+  { node: uuid },
+  ["node"],
+);
+
+/**
+ * The template variable a template block or inline reads: one row per node of the four kinds
+ * (`qti-template-block`, `qti-template-block.rubric`, `qti-template-inline` and
+ * `qti-template-inline.rubric`), where
  * `identifier` is its `template-identifier`. `document` and `identifier` name the declaration, and
  * the pair of them with the base type and cardinality copies the typed declaration's.
  */
@@ -228,6 +280,8 @@ export const relations = {
   DeclaredPrintedVariableDelimiter,
   DeclaredPrintedVariableMappingIndicator,
   DeclaredPrintedVariablePowerForm,
+  DeclaredRubricTemplateBlockShowHide,
+  DeclaredRubricTemplateInlineShowHide,
   DeclaredTemplateBlockShowHide,
   DeclaredTemplateInlineShowHide,
   PrintedVariable,
@@ -237,14 +291,17 @@ export const relations = {
   PrintedVariableIndex,
   PrintedVariableRef,
   PrintedVariableVarRef,
+  RubricTemplateBlock,
+  RubricTemplateInline,
   TemplateBlock,
   TemplateContentRef,
   TemplateInline,
 };
 
 /**
- * The template kinds' arms, keyed by their `NodeKind` handles. A block and a rubric block share an
- * arm, as do an inline and a rubric inline.
+ * The template kinds' arms, keyed by their `NodeKind` handles. Each handle has its own arm:
+ * `alternatives` binds each arm row to a node of every handle that lists the arm, and a node has
+ * one kind, so an arm listed under two handles admits no row.
  *
  * Their containments into `Node` are not written here: `alternatives(Node, "kind", NodeKind, ...)`
  * in the composed schema expands to them, and writing both is a duplicate identity.
@@ -252,9 +309,9 @@ export const relations = {
 export const arms = {
   "qti-printed-variable": PrintedVariable,
   "qti-template-block": TemplateBlock,
-  "qti-template-block.rubric": TemplateBlock,
+  "qti-template-block.rubric": RubricTemplateBlock,
   "qti-template-inline": TemplateInline,
-  "qti-template-inline.rubric": TemplateInline,
+  "qti-template-inline.rubric": RubricTemplateInline,
 };
 
 /**
@@ -268,6 +325,8 @@ export const arms = {
 export const rules = [
   contained(on(DeclaredTemplateBlockShowHide, "node"), on(TemplateBlock, "id")),
   contained(on(DeclaredTemplateInlineShowHide, "node"), on(TemplateInline, "id")),
+  contained(on(DeclaredRubricTemplateBlockShowHide, "node"), on(RubricTemplateBlock, "id")),
+  contained(on(DeclaredRubricTemplateInlineShowHide, "node"), on(RubricTemplateInline, "id")),
   contained(
     on(TemplateContentRef, "document", "identifier"),
     on(select(Declaration, { kind: "template" }), "document", "identifier"),

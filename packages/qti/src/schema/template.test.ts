@@ -94,12 +94,12 @@ describe("template content and printed variables", () => {
     assert.strictEqual(template.arms["qti-template-block"], template.relations.TemplateBlock);
     assert.strictEqual(
       template.arms["qti-template-block.rubric"],
-      template.relations.TemplateBlock,
+      template.relations.RubricTemplateBlock,
     );
     assert.strictEqual(template.arms["qti-template-inline"], template.relations.TemplateInline);
     assert.strictEqual(
       template.arms["qti-template-inline.rubric"],
-      template.relations.TemplateInline,
+      template.relations.RubricTemplateInline,
     );
     assert.strictEqual(template.arms["qti-printed-variable"], template.relations.PrintedVariable);
     for (const handle of Object.keys(template.arms)) {
@@ -107,8 +107,13 @@ describe("template content and printed variables", () => {
     }
   });
 
-  it("gives both template arms the same fields, keyed by id, with a show-hide marker each", () => {
-    for (const arm of [template.relations.TemplateBlock, template.relations.TemplateInline]) {
+  it("gives the four template arms the same fields, keyed by id, with a show-hide marker each", () => {
+    for (const arm of [
+      template.relations.TemplateBlock,
+      template.relations.TemplateInline,
+      template.relations.RubricTemplateBlock,
+      template.relations.RubricTemplateInline,
+    ]) {
       assert.deepStrictEqual(Object.keys(arm.fields), [
         "id",
         "identifier",
@@ -133,6 +138,28 @@ describe("template content and printed variables", () => {
         target: template.relations.TemplateInline,
       },
     ]);
+    assert.deepStrictEqual(
+      containmentsFrom(template.relations.DeclaredRubricTemplateBlockShowHide),
+      [
+        {
+          left: ["node"],
+          right: ["id"],
+          selection: undefined,
+          target: template.relations.RubricTemplateBlock,
+        },
+      ],
+    );
+    assert.deepStrictEqual(
+      containmentsFrom(template.relations.DeclaredRubricTemplateInlineShowHide),
+      [
+        {
+          left: ["node"],
+          right: ["id"],
+          selection: undefined,
+          target: template.relations.RubricTemplateInline,
+        },
+      ],
+    );
   });
 
   it("admits %.2f and %i and refuses %q and 2f under PrintedVariableFormat", () => {

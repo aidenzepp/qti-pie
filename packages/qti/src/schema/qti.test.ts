@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import nodePath from "node:path";
 import { afterAll, assert, describe, it } from "@effect/vitest";
+import { Predicate } from "effect";
 import { inventory } from "#qti/schema/content/xsd-inventory.ts";
 import * as asi from "#qti/schema/kinds/asi.ts";
 import * as html from "#qti/schema/kinds/html.ts";
@@ -175,6 +176,30 @@ describe("qti", () => {
       arms.filter((arm) => !NodeKind.handles.some((handle) => handle === arm)),
       [],
     );
+  });
+
+  it("gives each Node arm one NodeKind handle", () => {
+    const rule = Qti.statements.find(
+      (statement) => statement.kind === "alternatives" && statement.parent === Node,
+    );
+    if (rule?.kind !== "alternatives") {
+      assert.fail("no Node alternatives statement");
+    }
+
+    const handlesByArm = new Map<object, string[]>();
+    for (const [handle, member] of Object.entries(rule.arms)) {
+      if (!Predicate.isObject(member)) {
+        assert.fail(`the arm of ${handle} is not a relation`);
+      }
+
+      handlesByArm.set(member, [...(handlesByArm.get(member) ?? []), handle]);
+    }
+
+    assert.deepStrictEqual(
+      [...handlesByArm.values()].filter((handles) => handles.length > 1),
+      [],
+    );
+    assert.strictEqual(handlesByArm.size, NodeKind.handles.length);
   });
 
   it("composes the Admission rows of p, div, qti-item-body and qti-modal-feedback per host", () => {
