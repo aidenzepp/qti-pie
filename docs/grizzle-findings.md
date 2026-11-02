@@ -544,7 +544,7 @@ On `grizzle generate` output of the schema of step 2, two clauses. Multiplier: t
 
 ### Draft: the printer's line-count ceiling (row 28)
 
-Drafted by `gate-printer` (hand `b5df5a5c`, Sonnet 5.5), steps 1 and 2 of the gate; revised by `gate-printer-rev1` after step 3 by `gate-printer-rev2` after step 5 pass 1 and by `gate-printer-rev3` after step 5 pass 2 (all Sonnet 5.5); not filed. Step 1: triaged against the clone at `65203c4` (a defect, not a documented limit: the README's Limits list, `README.md:1881-1899`, and the packaged agent guide name no ceiling on handles or function size and say nothing of the stack; the cause is the spread at `packages/engine/src/sql/print.ts:1029`). Step 2: the standalone grizzle project of the draft ran outside this repository with no database, the control `ARMS=241` and the larger-stack and loop runs; its outputs are in the draft, verbatim with paths shortened. Read, not run: `grizzle migrate`'s drift replay reaching the same print (`drift.ts:337` calls the same `emit`). What is new against grizzle#5 (read-only `gh issue view 5` as `aidenzepp`: state OPEN, no comments, last updated `2026-11-02T07:06:57Z`; issues 1 to 5 only, and a search for `printPlBlock`, `stack` and `RangeError` found no duplicate): #5 names the stack overflow in `printPlBlock` once, as a side observation at 123 to 128 handles with one unarmed handle, and lists its cause under Not confirmed; this draft gives the cause (the spread at `print.ts:1029`), shows the crash with every handle armed at 242 handles, shows the stack size is the limit, tests the loop as a fix on a patched copy, and is independent of the PostgreSQL compile time that #5 is about; #5's `fixed` shape keeps the all-armed line count, so it would not remove the crash. A separate issue, not a comment: agents may not comment on #5. Step 3: auditor `ba359052` (Opus 5.5; the drafter was Sonnet 5.5, the same provider) rebuilt the reproduction from the draft alone on Node 26.13.0, macOS arm64, re-read every anchor, ran the loop patch and the no-grizzle control, and confirmed a grizzle defect (report mail `6acf21e3`); its five required and seven recommended changes were applied by `gate-printer-rev1`. Step 4 (`issue-authoring` draft): the lint printed `ok` for the title and body below with `--forbid` of this repository's names, after the revision; the duplicate search is above, and the repository has no pull request. Step 5: hater `868819d6` (report `91364fb9`) and merit extraction `head-cxo` `924a0b4c` (verdict: fit to file after the changes and a clean second hater pass); `gate-printer-rev2` applied the changes and re-ran the reproduction in a fresh package built from the draft's recipe (unpatched at the default stack: `ARMS=241` generate and check exit 0, `ARMS=242` generate exits 1 and writes nothing; patched copy of the installed `dist`: `ARMS=242` generate exits 0, `check` prints `Repro: ok`, and the folder equals the unpatched CLI's under `--stack-size=3000` apart from the timestamp in its directory name), and re-ran the lint. Step 5 pass 2: hater `e042b588` and merit extraction `head-cxo` `5e5c01cf`; `gate-printer-rev3` applied its seven edits (files named, byte counts dropped, step 4 deleted, results table collapsed to four rows, Impact sized, Related rewritten with the computed reconciliation), measured the 120,292-line span once with the command now in step 3, and re-ran the lint. Hater pass 3 (the last) and step 6 (filing) remain. Settings for the filer: repository `bjornpagen/grizzle` (private); filed as `aidenzepp` through `gh issue create`; labels none; assignee none; the only action on the repository is opening this issue (rule 485ad014). The disclosure block names authoring seats only: one group, Anthropic / Sonnet 5.5, because the drafter and the three revisers are the same model; the step-3 auditor (Anthropic / Opus 5.5) wrote no text of the issue. Permalinks are pinned to `65203c443fa969cc47c539666a998436595f42fe`. Our workarounds are in the table row and not in the body. Title: `printPlBlock spreads a function body into one push, so a large alternatives law overflows the stack`
+Drafted by `gate-printer` (hand `b5df5a5c`, Sonnet 5.5), steps 1 and 2 of the gate; revised by `gate-printer-rev1` after step 3 by `gate-printer-rev2` after step 5 pass 1 and by `gate-printer-rev3` after step 5 pass 2 and by `gate-printer-rev4` after step 5 pass 3 (all Sonnet 5.5); not filed. Step 1: triaged against the clone at `65203c4` (a defect, not a documented limit: the README's Limits list, `README.md:1881-1899`, and the packaged agent guide name no ceiling on handles or function size and say nothing of the stack; the cause is the spread at `packages/engine/src/sql/print.ts:1029`). Step 2: the standalone grizzle project of the draft ran outside this repository with no database, the control `ARMS=241` and the larger-stack and loop runs; its outputs are in the draft, verbatim with paths shortened. Read, not run: `grizzle migrate`'s drift replay reaching the same print (`drift.ts:337` calls the same `emit`). What is new against grizzle#5 (read-only `gh issue view 5` as `aidenzepp`: state OPEN, no comments, last updated `2026-11-02T07:06:57Z`; issues 1 to 5 only, and a search for `printPlBlock`, `stack` and `RangeError` found no duplicate): #5 names the stack overflow in `printPlBlock` once, as a side observation at 123 to 128 handles with one unarmed handle, and lists its cause under Not confirmed; this draft gives the cause (the spread at `print.ts:1029`), shows the crash with every handle armed at 242 handles, shows the stack size is the limit, tests the loop as a fix on a patched copy, and is independent of the PostgreSQL compile time that #5 is about; #5's `fixed` shape keeps the all-armed line count, so it would not remove the crash. A separate issue, not a comment: agents may not comment on #5. Step 3: auditor `ba359052` (Opus 5.5; the drafter was Sonnet 5.5, the same provider) rebuilt the reproduction from the draft alone on Node 26.13.0, macOS arm64, re-read every anchor, ran the loop patch and the no-grizzle control, and confirmed a grizzle defect (report mail `6acf21e3`); its five required and seven recommended changes were applied by `gate-printer-rev1`. Step 4 (`issue-authoring` draft): the lint printed `ok` for the title and body below with `--forbid` of this repository's names, after the revision; the duplicate search is above, and the repository has no pull request. Step 5: hater `868819d6` (report `91364fb9`) and merit extraction `head-cxo` `924a0b4c` (verdict: fit to file after the changes and a clean second hater pass); `gate-printer-rev2` applied the changes and re-ran the reproduction in a fresh package built from the draft's recipe (unpatched at the default stack: `ARMS=241` generate and check exit 0, `ARMS=242` generate exits 1 and writes nothing; patched copy of the installed `dist`: `ARMS=242` generate exits 0, `check` prints `Repro: ok`, and the folder equals the unpatched CLI's under `--stack-size=3000` apart from the timestamp in its directory name), and re-ran the lint. Step 5 pass 2: hater `e042b588` and merit extraction `head-cxo` `5e5c01cf`; `gate-printer-rev3` applied its seven edits (files named, byte counts dropped, step 4 deleted, results table collapsed to four rows, Impact sized, Related rewritten with the computed reconciliation), measured the 120,292-line span once with the command now in step 3, and re-ran the lint. Step 5 pass 3 (the last): hater `00765557` and merit extraction `head-cxo` (report `4dc5d15c`), whose six edits `gate-printer-rev4` applied: the title now leads with the failing commands and gives the trigger as about 240 armed handles; the results table holds one value per cell; Impact names its platform and calls 363 an estimate; the 500-handle sentence left Not confirmed; the Fix direction transcript was re-run once from the draft's own recipe (no database; unpatched `ARMS=242` under `--stack-size=3000` as the reference, then the patched copy at the default stack: `generate` and `check` exit 0, and `diff -r` of the two migration folders and `diff` of the two snapshots both print 0, so the folders are byte-identical apart from the timestamp in their names); Related uses only numbers the body shows. No hater pass follows; the lint was re-run. Step 6 (filing) remains. Settings for the filer: repository `bjornpagen/grizzle` (private); filed as `aidenzepp` through `gh issue create`; labels none; assignee none; the only action on the repository is opening this issue (rule 485ad014). The disclosure block names authoring seats only: one group, Anthropic / Sonnet 5.5, because the drafter and the four revisers are the same model; the step-3 auditor (Anthropic / Opus 5.5) wrote no text of the issue. Permalinks are pinned to `65203c443fa969cc47c539666a998436595f42fe`. Our workarounds are in the table row and not in the body. Title: `grizzle check and generate fail with a RangeError in printPlBlock on an alternatives law with about 240 armed handles`
 
 ````text
 ### Summary
@@ -704,25 +704,25 @@ A schema that the README's Limits admit is printed, or refused with a named refu
 https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/README.md#L1881-L1899
 
 ### What changes the result
-Each row is `grizzle check` on the schema above with every handle armed, in a package with no `migrations` folder, run as `ARMS=<handles> node --stack-size=<KB> node_modules/@bjornpagen/grizzle/dist/cli/main.js check` (the default stack, 984 KB, needs no flag). "Crashes at" is the largest `--stack-size` measured that prints `RangeError: Maximum call stack size exceeded` at `printPlBlock`. "Prints at" is the smallest measured that finishes, and finishing prints `Repro: the schemas or their logins differ from snapshot.json (an ungenerated change); run grizzle generate`, because the folder has no migrations. Measured on this machine (macOS arm64, Node 26.13.0).
+Each row is `grizzle check` on the schema above with every handle armed, in a package with no `migrations` folder, run as `ARMS=<handles> node --stack-size=<KB> node_modules/@bjornpagen/grizzle/dist/cli/main.js check` (the default stack, 984 KB, needs no flag). A crash is `RangeError: Maximum call stack size exceeded` at `printPlBlock`. A finished run prints `Repro: the schemas or their logins differ from snapshot.json (an ungenerated change); run grizzle generate`, because the folder has no migrations. The last column is the smallest size measured that finishes; the next size down that was run crashed, at 986, 1120 and 2100 KB for 242, 260 and 363 handles. Measured on one machine (macOS arm64, Node 26.13.0).
 
-| Handles | Crashes at (KB) | Prints at (KB) |
+| Handles | Result at the default stack (984 KB) | Smallest `--stack-size` that prints (KB) |
 | --- | --- | --- |
-| 241 | none | 984 (default) |
-| 242 | 984 (default), 986 | 988 |
-| 260 | 1120 | 1140 |
-| 363 | 2100 | 2150 |
+| 241 | prints | 984 |
+| 242 | RangeError | 988 |
+| 260 | RangeError | 1140 |
+| 363 | RangeError | 2150 |
 
 With the loop of Fix direction in place of `print.js:1029` in a copy of the installed `dist`, the same schema at 242, 300 and 363 handles runs `check` at the default stack with no crash, and `generate` at 242 exits 0. The unpatched rows above fail at the stack size that a plain spread of that many arguments also fails at (step 4), which is the mechanism: the argument count of the one call, not the nesting.
 
 ### Impact
-A schema whose `alternatives` law has more than 241 armed handles cannot pass `grizzle check` or `grizzle generate` through `pnpm exec grizzle` at Node's default stack.
+On Node 26.13.0 (macOS, arm64) at the default stack, `grizzle check` and `grizzle generate` fail on an `alternatives` law from 242 armed handles. The handle count at which they fail moves with the stack size (table above).
 
-The schema this was found on has a closed roster of 216 handles in one part, every handle armed, and about 363 once its parts are composed, so 242 handles is inside the sizes it meets.
+The schema this was found on has a closed roster of 216 handles in one part, every handle armed, and an estimated 363 once its parts are composed, so 242 handles is inside the sizes it meets.
 
 ### Not confirmed
 - Whether `grizzle migrate` fails at the same size. Read in source, not run: its drift check prints through the same `emit` ([`drift.ts#L337`](https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/grizzle/src/adapter/admission/drift.ts#L337)), and no database was used.
-- Whether another spread in the printer fails at sizes past 363 handles. At 500 handles with `--stack-size=7000`, `check` stops first at `RangeError: Invalid string length` at `Array.join` under `prettyText`, because `snapshot.json` exceeds the string limit; that is a different failure, and not part of this report.
+- Whether another spread in the printer fails at sizes past 363 handles.
 - The stack size at which other Node versions fail. Node 26.13.0 only.
 
 ### Fix direction
@@ -735,15 +735,24 @@ Possible change to `packages/engine/src/sql/print.ts` at line 1029, tested on a 
 +	lines.push("END")
 ```
 
-Run with that change, default stack, in a package with no `migrations` folder, then compared with the folder the unpatched CLI wrote at `ARMS=242` under `--stack-size=3000`:
+Reference first: the unpatched CLI under a larger stack writes the folder to compare against, in a package with no `migrations` folder. The change above goes into the installed `dist/sql/print.js` after `mv migrations unpatched`, and the patched copy then runs at the default stack; its folder is compared with the reference:
 
 ```console
+$ ARMS=242 node --stack-size=3000 node_modules/@bjornpagen/grizzle/dist/cli/main.js generate --name init
+migrations/repro/20261102144218_init/01-setup.sql
+migrations/repro/20261102144218_init/02-structure.sql
+migrations/repro/20261102144218_init/03-validate.sql
+migrations/repro/20261102144218_init/04-publish.sql
+migrations/repro/20261102144218_init/meta.json
+migrations/repro/snapshot.json
+next: review the SQL, then run grizzle check
+$ mv migrations unpatched
 $ ARMS=242 pnpm exec grizzle generate --name init
-migrations/repro/20261102133720_init/01-setup.sql
-migrations/repro/20261102133720_init/02-structure.sql
-migrations/repro/20261102133720_init/03-validate.sql
-migrations/repro/20261102133720_init/04-publish.sql
-migrations/repro/20261102133720_init/meta.json
+migrations/repro/20261102144240_init/01-setup.sql
+migrations/repro/20261102144240_init/02-structure.sql
+migrations/repro/20261102144240_init/03-validate.sql
+migrations/repro/20261102144240_init/04-publish.sql
+migrations/repro/20261102144240_init/meta.json
 migrations/repro/snapshot.json
 next: review the SQL, then run grizzle check
 $ echo $?
@@ -752,19 +761,19 @@ $ ARMS=242 pnpm exec grizzle check
 Repro: ok (1 migration, snapshot a83a474bc865ee65)
 $ echo $?
 0
-$ diff -r <unpatched>/repro/20261102133710_init migrations/repro/20261102133720_init; echo $?
+$ diff -r unpatched/repro/*_init migrations/repro/*_init; echo $?
 0
-$ diff <unpatched>/repro/snapshot.json migrations/repro/snapshot.json; echo $?
+$ diff unpatched/repro/snapshot.json migrations/repro/snapshot.json; echo $?
 0
 ```
 
-`<unpatched>/repro` is the `migrations/repro` folder that `ARMS=242 node --stack-size=3000 node_modules/@bjornpagen/grizzle/dist/cli/main.js generate --name init` wrote with the unpatched CLI. The two migration folders differ only in the timestamp in their names, so the SQL, `meta.json` and the snapshot are byte-identical.
+The two migration folders differ only in the timestamp in their names, so the SQL, `meta.json` and the snapshot are byte-identical.
 
 ### Acceptance check
 After the change, at the default stack, `ARMS=242 pnpm exec grizzle generate --name init` exits 0, `ARMS=242 pnpm exec grizzle check` then prints `Repro: ok (1 migration, ...)` and exits 0, and `ARMS=363 pnpm exec grizzle generate --name init` exits 0 in a package with no `migrations` folder. The folder written for `ARMS=242` is byte-identical to the one the CLI before the change writes under `--stack-size=3000`, apart from the timestamp in its name.
 
 ### Related
-[#5](https://github.com/bjornpagen/grizzle/issues/5) reports this stack overflow at 123 to 128 handles with one unarmed handle and lists its cause under Not confirmed. The line counts in #5 fit the same ceiling. Computed from #5's line counts, not measured: with one unarmed handle the function has about 8.07 lines per table-by-handle cell (59,008 lines over 7,310 cells at 85 handles), against about 2.1 with every handle armed (15,578 over 7,310 there, and 120,292 over 58,806 at 242 handles here). The function therefore reaches the ceiling, between about 119,300 lines that print and 120,292 that crash, with one unarmed handle between `ARMS=120` (about 117,000 lines, which #5 says runs) and `ARMS=123` (about 123,000 lines, which #5 says crashes).
+[#5](https://github.com/bjornpagen/grizzle/issues/5) reports this stack overflow at 123 to 128 handles with one unarmed handle and lists its cause under Not confirmed. The line counts in #5 fit the same ceiling. Computed from #5's line counts, not measured: with one unarmed handle the function has about 8.07 lines per table-by-handle cell (59,008 lines over 7,310 cells at 85 handles), against about 2.1 with every handle armed (15,578 over 7,310 there, and 120,292 over 58,806 at 242 handles here). The function therefore reaches the ceiling, the one shown above (the 120,292-line all-armed function crashes at 242 handles, and in step 4 a spread of 120,000 passes while 125,000 does not), with one unarmed handle between `ARMS=120` (about 117,000 lines, which #5 says runs) and `ARMS=123` (about 123,000 lines, which #5 says crashes).
 
 #5 itself is about the PostgreSQL compile time of the first call. Its `fixed` shape changes the law's text but keeps the all-armed line count, so it leaves this crash.
 
