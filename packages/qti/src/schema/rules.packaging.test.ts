@@ -624,24 +624,6 @@ const outcomesDocument = { field: "root", value: "outcomes" } as const;
  */
 const documentRooted = (draft: Draft, root: string): Row => rowWhere(draft, Document, "root", root);
 
-/**
- * Remove the `lom:identifier` the relation's `lom:resource` holds.
- *
- * The importer writes it as a `LomIdentifier` at the same position as the general category's, and
- * the key on `(lom, position)` refuses the pair, so `lomrest` as built is refused before any
- * alteration. The removal makes the base committable, so each negative below is its alteration's.
- */
-const withoutRelationIdentifier = (draft: Draft): void => {
-  for (const edge of of(draft, Edge)) {
-    if (
-      text(edge, "childKind") === "lom:identifier" &&
-      text(edge, "parentKind") === "lom:resource"
-    ) {
-      removeSubtree(draft, text(edge, "child"));
-    }
-  }
-};
-
 const admission = contained(
   side(Edge, ["version", "parentKind", "childKind"]),
   side(Admission, ["version", "parent", "child"]),
@@ -652,16 +634,11 @@ const admission = contained(
  * it breaks.
  *
  * Every row but the one named was built by the importer from the fixture, so the alteration is the
- * only change; the unaltered controls at the end of the suite are accepted. `extmeta` has no
- * control: the importer's external record is refused by the containment of `Lom (id, package)` into
- * `Node (id, tree)` before any alteration, so each negative over it names a law grizzle reports
- * ahead of that one.
+ * only change; the unaltered controls at the end of the suite are accepted.
  */
 const negatives: readonly Negative[] = [
   {
     alter: (draft) => {
-      withoutRelationIdentifier(draft);
-
       const educational = nodeOf(draft, "lom:educational");
       const owner = text(
         rowWhere(draft, metadataArms["lom:educational"], "id", text(educational, "id")),
@@ -685,8 +662,6 @@ const negatives: readonly Negative[] = [
   },
   ...[" self  assessment ", "exam"].map((written): Negative => ({
     alter: (draft) => {
-      withoutRelationIdentifier(draft);
-
       const value = of(draft, LomValue).find(
         (row) => text(row, "parentKind") === "lom:learningResourceType",
       );
@@ -2161,15 +2136,11 @@ describe.skipIf(!hasLease)(
           );
         }
 
-        for (const base of ["lomrest", "filelom", "nestedqmd", "outcome"] as const) {
+        for (const base of ["extmeta", "lomrest", "filelom", "nestedqmd", "outcome"] as const) {
           it.effect(`the unaltered ${base} rows are accepted`, () =>
             Effect.gen(function* accepted() {
               const fixtures = yield* FixtureRows;
               const draft = draftOf(fixtures[base]);
-              if (base === "lomrest") {
-                withoutRelationIdentifier(draft);
-              }
-
               const outcome = yield* apply(draft);
 
               assert.strictEqual(outcome.kind, "accepted");
