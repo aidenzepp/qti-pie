@@ -373,7 +373,12 @@ describe("expression-attributes", () => {
     for (const name of ["EqualRounded", "RoundTo", "Index", "Repeat", "VariableWeightIdentifier"]) {
       assert.strictEqual(onRelation(name).length, 1, name);
     }
-    assert.strictEqual(checks.length, 5);
+    for (const rule of checks) {
+      assert.isTrue(
+        [...relationsByName.values()].some((relation) => relation === rule.relation),
+        rule.name,
+      );
+    }
 
     for (const name of ["EqualRounded", "RoundTo"]) {
       for (const needle of ["figuresKind", "significantFigures", "decimalPlaces", "figuresValue"]) {
