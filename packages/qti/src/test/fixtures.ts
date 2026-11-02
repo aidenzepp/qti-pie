@@ -178,7 +178,8 @@ export const cutItem = (
 /**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-broken
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
- * examples' shared-media package unedited, and the 19 cut items of {@link cutNames}.
+ * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package, and the 19
+ * cut items of {@link cutNames}.
  */
 export const fixtureNames = [
   "simple",
@@ -201,6 +202,7 @@ export const fixtureNames = [
   "comment-in-element",
   "bad-template-uri",
   "sharedMedia",
+  "quoted-q",
   ...cutNames,
 ] as const;
 
@@ -391,6 +393,9 @@ const cutSpecs: Record<(typeof cutNames)[number], FixtureSpec> = {
  * - `comment-in-element` puts a comment inside the first paragraph and a processing instruction
  *   inside `img`, which becomes `<img ...><?pi d?></img>`.
  * - `bad-template-uri` reads `a%zz` as the response-processing template, an invalid URI.
+ *
+ * `quoted-q` is phase 2's hand-broken package, `simple` with straight quotation marks around a `q`,
+ * which the browser draws itself (the content guards' `q-punctuation`).
  */
 const specs: Record<FixtureName, FixtureSpec> = {
   ...cutSpecs,
@@ -543,6 +548,17 @@ const specs: Record<FixtureName, FixtureSpec> = {
     ],
     member: simpleMember,
     name: "padded-text",
+  },
+  "quoted-q": {
+    edits: [
+      replaceIn(
+        "choice.xml",
+        "<p>Look at the text in the picture.</p>",
+        '<p>Look at the "<q>text</q>" in the picture.</p>',
+      ),
+    ],
+    member: simpleMember,
+    name: "quoted-q",
   },
   sharedMedia: { edits: [], member: sharedMediaMember, name: "sharedMedia" },
   simple: { edits: [], member: simpleMember, name: "simple" },
