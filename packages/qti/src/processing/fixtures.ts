@@ -120,6 +120,9 @@ export const PROCESSING_FIXTURES_VERSION = "1" as const;
  *   to the package's `file`, before its item body.
  * - `replaceFile` writes the hand-written `fromFile` as the package's `path`.
  * - `replaceText` replaces the one occurrence of `search` in the package's `file`.
+ * - `nameItem` sets the `identifier` and `title` attributes of the package's `file`'s one
+ *   `qti-assessment-item` start tag, so a hand-written item is named as the manifest's LOM names
+ *   it.
  */
 export type ProcessingEdit =
   | { readonly _tag: "replaceProcessing"; readonly file: string; readonly withFile: string }
@@ -143,6 +146,12 @@ export type ProcessingEdit =
       readonly file: string;
       readonly replacement: string;
       readonly search: string;
+    }
+  | {
+      readonly _tag: "nameItem";
+      readonly file: string;
+      readonly identifier: string;
+      readonly title: string;
     };
 
 /**
@@ -264,6 +273,17 @@ const responseItem: ProcessingEdit = {
 };
 
 /**
+ * The edit that names a hand-written item as `simple`'s manifest names it: the identifier and title
+ * of the LOM of the resource whose `href` is `choice.xml`.
+ */
+const simpleItemName: ProcessingEdit = {
+  _tag: "nameItem",
+  file: "choice.xml",
+  identifier: "choice",
+  title: "Unattended Luggage",
+};
+
+/**
  * Define a derived package by name.
  *
  * - `processing-item`: `simple` with `choice.xml`'s processing replaced by `response.xml`'s rules,
@@ -356,6 +376,7 @@ export const specOfProcessing = (name: ProcessingFixtureName): ProcessingFixture
       base: "simple",
       edits: [
         responseItem,
+        simpleItemName,
         {
           _tag: "replaceText",
           file: "choice.xml",
@@ -372,6 +393,7 @@ export const specOfProcessing = (name: ProcessingFixtureName): ProcessingFixture
       base: "simple",
       edits: [
         responseItem,
+        simpleItemName,
         {
           _tag: "replaceText",
           file: "choice.xml",
@@ -385,7 +407,14 @@ export const specOfProcessing = (name: ProcessingFixtureName): ProcessingFixture
     };
   }
 
-  return { base: "simple", edits: [handWritten(name)], name };
+  return {
+    base: "simple",
+    edits:
+      name === "p29-test-variables-weight-integer"
+        ? [handWritten(name)]
+        : [handWritten(name), simpleItemName],
+    name,
+  };
 };
 
 /**
@@ -435,7 +464,9 @@ const sourceOf = (edit: ProcessingEdit): Effect.Effect<Uint8Array | undefined, F
           Effect.flatMap((dir) => fs.readFile(path.join(dir, found.fromPath))),
         ),
       ),
-      Match.tag("addResource", "replaceText", () => Effect.sync((): undefined => undefined)),
+      Match.tag("addResource", "replaceText", "nameItem", () =>
+        Effect.sync((): undefined => undefined),
+      ),
       Match.exhaustive,
     );
   });
@@ -595,6 +626,43 @@ const addDeclaration = (
 };
 
 /**
+ * Set one attribute of a start tag, keeping the quotes' place.
+ *
+ * @param source - The start tag, or `undefined` when an earlier step found none.
+ * @param name - The attribute's name.
+ * @param value - Its new value.
+ * @returns The tag with the attribute set, or `undefined` when there is no tag or it lacks the
+ *   attribute.
+ */
+const setAttribute = (
+  source: string | undefined,
+  name: string,
+  value: string,
+): string | undefined => {
+  const attribute = new RegExp(`(\\s${name}=)(?:"[^"]*"|'[^']*')`, "u");
+
+  return source !== undefined && attribute.test(source)
+    ? source.replace(attribute, (_, head: string) => `${head}"${value}"`)
+    : undefined;
+};
+
+/**
+ * Set the `identifier` and `title` of the one `qti-assessment-item` start tag of a document.
+ *
+ * @param text - The document.
+ * @param identifier - The item's new identifier.
+ * @param title - The item's new title.
+ * @returns The document, or `undefined` when it has no such start tag or the tag lacks either
+ *   attribute.
+ */
+const nameItemTag = (text: string, identifier: string, title: string): string | undefined => {
+  const tag = /<qti-assessment-item\b[^>]*>/u.exec(text)?.[0];
+  const named = setAttribute(setAttribute(tag, "identifier", identifier), "title", title);
+
+  return tag === undefined || named === undefined ? undefined : text.replace(tag, () => named);
+};
+
+/**
  * Apply one edit to a package directory.
  *
  * @param fixture - The package's name, for the failure message.
@@ -726,6 +794,13 @@ const applyEdit = (
               ? text.replace(found.search, () => found.replacement)
               : undefined,
           `${JSON.stringify(found.search)} does not occur exactly once`,
+        ),
+      ),
+      Match.tag("nameItem", (found) =>
+        rewrite(
+          found.file,
+          (text) => nameItemTag(text, found.identifier, found.title),
+          "no qti-assessment-item start tag with an identifier and a title attribute",
         ),
       ),
       Match.exhaustive,
