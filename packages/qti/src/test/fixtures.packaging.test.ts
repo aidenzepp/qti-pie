@@ -247,6 +247,98 @@ const manifestAndRecord = Effect.fn("manifestAndRecord")(function* manifestAndRe
   ] as const;
 });
 
+/**
+ * The tarball member `lti` is extracted from, which the two `lti` fixtures derive from.
+ */
+const ltiMember = "qtiv3-examples/packaging/lti/lti.zip";
+
+/**
+ * One positive of the variant, outcome, LTI, bytes and response processing cut: where it comes
+ * from, how many `resource` elements its manifest holds and the hand-broken copies made from it.
+ */
+interface ContentCut {
+  readonly member: string;
+  readonly name: FixtureName;
+  readonly negatives: readonly FixtureName[];
+  readonly resources: number;
+}
+
+/**
+ * The seven positives of the cut with their 14 negatives.
+ */
+const contentCuts: readonly ContentCut[] = [
+  {
+    member: simpleMember,
+    name: "variant",
+    negatives: [
+      "variant-301",
+      "variant-self-ref",
+      "variant-no-resource",
+      "variant-id-clash",
+      "variant-tactile",
+      "variant-bad-uri",
+      "variant-two-atinteroperable",
+      "variant-two-complexity",
+      "variant-no-metadata",
+      "variant-before-file",
+    ],
+    resources: 2,
+  },
+  { member: simpleMember, name: "variant-padded", negatives: [], resources: 2 },
+  { member: simpleMember, name: "outcome", negatives: ["outcome-title"], resources: 2 },
+  { member: ltiMember, name: "lti301", negatives: [], resources: 1 },
+  { member: ltiMember, name: "lti300", negatives: ["lti300-as-301"], resources: 1 },
+  { member: simpleMember, name: "bytes", negatives: ["bytes-webcontent-item"], resources: 10 },
+  { member: simpleMember, name: "resproc", negatives: ["resproc-webcontent"], resources: 2 },
+];
+
+/**
+ * Every name of the cut, positives and negatives.
+ */
+const contentNames: readonly FixtureName[] = contentCuts.flatMap((cut) => [
+  cut.name,
+  ...cut.negatives,
+]);
+
+/**
+ * Digest every file of a package, so two packages are equal exactly when they hold the same paths
+ * with the same bytes.
+ *
+ * @param dir - The package directory.
+ * @returns One `path:sha256` string per file, sorted.
+ */
+const treeDigest = Effect.fn("treeDigest")(function* treeDigest(dir: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const digest: string[] = [];
+
+  for (const file of yield* filesUnder(dir)) {
+    digest.push(`${file}:${sha256(yield* fs.readFile(`${dir}/${file}`))}`);
+  }
+
+  return digest;
+});
+
+/**
+ * The text of a package's manifest.
+ *
+ * @param dir - The package directory.
+ * @returns The manifest as a string.
+ */
+const manifestText = Effect.fn("manifestText")(function* manifestText(dir: string) {
+  const fs = yield* FileSystem.FileSystem;
+
+  return yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+});
+
+/**
+ * The `type` attribute of a manifest `resource`.
+ *
+ * @param resource - The element.
+ * @returns The attribute's value, or `undefined` when there is none.
+ */
+const typeOf = (resource: Element): string | undefined =>
+  resource.attributes.find((attribute) => attribute.local === "type")?.value;
+
 layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts (packaging)", (it) => {
   it.effect("materializeZip keeps the member's bytes as one file named by the zip", () =>
     inFreshRoot((root) =>
@@ -438,6 +530,190 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts (pack
             const broken = yield* manifestAndRecord(yield* materialize(name));
 
             assert.notDeepEqual(broken, base, name);
+          }
+        }
+      }),
+    ),
+  );
+
+  it.effect("every name of the content cut is in the table and materializes under its hash", () =>
+    inFreshRoot((root) =>
+      Effect.gen(function* contentPaths() {
+        assert.strictEqual(contentNames.length, 21);
+
+        for (const cut of contentCuts) {
+          for (const name of [cut.name, ...cut.negatives]) {
+            assert.include(fixtureNames, name);
+
+            const spec = specOf(name);
+
+            assert.strictEqual(spec.name, name);
+            assert.strictEqual(spec.member, cut.member, name);
+            assert.strictEqual(
+              yield* materialize(name),
+              `${root}/${name}-${transformHash(spec, FIXTURES_VERSION).slice(0, 12)}`,
+            );
+          }
+        }
+
+        assert.strictEqual(new Set(fixtureNames).size, fixtureNames.length);
+        assert.strictEqual(
+          new Set(contentNames.map((name) => transformHash(specOf(name), FIXTURES_VERSION))).size,
+          contentNames.length,
+        );
+      }),
+    ),
+  );
+
+  it.effect("each content positive holds the resources its row names", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* contentResources() {
+        for (const cut of contentCuts) {
+          const elements = yield* manifestElements(yield* materialize(cut.name));
+
+          assert.strictEqual(
+            elements.filter(
+              (element) => element.local === "resource" && element.namespace === cpNamespace,
+            ).length,
+            cut.resources,
+            cut.name,
+          );
+        }
+      }),
+    ),
+  );
+
+  it.effect("variant-padded keeps its identifier, boolean and tab as written", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* paddedVariant() {
+        const text = yield* manifestText(yield* materialize("variant-padded"));
+        const plain = yield* manifestText(yield* materialize("variant"));
+
+        assert.include(text, 'identifier=" v1 "');
+        assert.include(text, "> true <");
+        assert.include(text, "es&#9;ES");
+        assert.notInclude(plain, 'identifier=" v1 "');
+        assert.notInclude(plain, "atInteroperable");
+      }),
+    ),
+  );
+
+  it.effect("variant is a second item resource, its translated copy and a variant on choice", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* variantContents() {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* materialize("variant");
+        const elements = yield* manifestElements(dir);
+        const variants = elements.filter((element) => element.local === "variant");
+        const copy = yield* fs.readFileString(`${dir}/es/choice.xml`);
+
+        assert.strictEqual(variants.length, 1);
+        assert.strictEqual(
+          variants[0]?.attributes.find((attribute) => attribute.local === "identifierref")?.value,
+          "choice_es",
+        );
+        assert.include(copy, 'identifier="choice_es"');
+        assert.notInclude(copy, 'title="Unattended Luggage"');
+      }),
+    ),
+  );
+
+  it.effect("outcome adds the outcome declaration file, 567 bytes, and choice depends on it", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* outcomeContents() {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* materialize("outcome");
+        const text = yield* manifestText(dir);
+
+        assert.strictEqual((yield* fs.readFile(`${dir}/testoutcome01.xml`)).length, 567);
+        assert.include(text, 'identifier="Outcome_01"');
+        assert.include(text, 'resourcePartId="SCORE"');
+        assert.include(text, '<dependency identifierref="Outcome_01"/>');
+        assert.notInclude(text, "imscp:");
+      }),
+    ),
+  );
+
+  it.effect("lti301 reads 3.0.1 and lti300 keeps 3.0.0 under the basic LTI type", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* ltiVersions() {
+        const lti301 = yield* manifestText(yield* materialize("lti301"));
+        const lti300 = yield* manifestText(yield* materialize("lti300"));
+
+        assert.include(lti301, "<schemaversion>3.0.1</schemaversion>");
+        assert.include(lti301, 'type="imslti_xmlv1p1"');
+        assert.include(lti300, "<schemaversion>3.0.0</schemaversion>");
+        assert.include(lti300, 'type="imsbasiclti_xmlv1p3"');
+        assert.notInclude(lti300, "imslti_xmlv1p1");
+      }),
+    ),
+  );
+
+  it.effect("bytes holds one file per type and its fragment's root is div", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* bytesContents() {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* materialize("bytes");
+        const elements = yield* manifestElements(dir);
+        const resources = elements.filter(
+          (element) => element.local === "resource" && element.namespace === cpNamespace,
+        );
+        const fragment = resources.find(
+          (resource) => typeOf(resource) === "imsqti_fragment_xmlv3p0",
+        );
+        const href = fragment?.attributes.find((attribute) => attribute.local === "href")?.value;
+
+        assert.strictEqual(new Set(resources.map(typeOf)).size, 10);
+        assert.isDefined(href);
+
+        const doc = yield* Effect.orDie(readXml(yield* fs.readFile(`${dir}/${href ?? ""}`)));
+
+        assert.strictEqual(doc.root.local, "div");
+      }),
+    ),
+  );
+
+  it.effect("resproc's file is the published match_correct template", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* responseProcessing() {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* materialize("resproc");
+        const expected = yield* Effect.orDie(
+          Effect.gen(function* member() {
+            const zip = yield* materializeZip("maxfiles");
+            const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
+            return yield* Effect.scoped(
+              Effect.gen(function* unzipOut() {
+                const handle = yield* spawner.spawn(
+                  ChildProcess.make("unzip", ["-p", zip, "rptemplates/match_correct.xml"], {
+                    stdin: "ignore",
+                  }),
+                );
+
+                return Buffer.concat(yield* Stream.runCollect(handle.stdout));
+              }),
+            );
+          }),
+        );
+
+        assert.strictEqual(
+          sha256(yield* fs.readFile(`${dir}/rp/match_correct.xml`)),
+          sha256(expected),
+        );
+        assert.include(yield* manifestText(dir), 'type="imsqti_resprocessing_xmlv3p0"');
+      }),
+    ),
+  );
+
+  it.effect("each content negative differs from its positive", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* contentNegativeDiffers() {
+        for (const cut of contentCuts) {
+          const base = yield* treeDigest(yield* materialize(cut.name));
+
+          for (const name of cut.negatives) {
+            assert.notDeepEqual(yield* treeDigest(yield* materialize(name)), base, name);
           }
         }
       }),
