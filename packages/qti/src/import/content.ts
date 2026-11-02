@@ -15,8 +15,14 @@ import type { Relation, uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import { attributeReader, markers } from "#qti/import/interactions.ts";
 import type { DeclaredVariable, NodeRef } from "#qti/import/interactions.ts";
-import { ItemRefusal, withParents } from "#qti/import/item.ts";
-import { collapse, replace, Rows, typedAttribute } from "#qti/import/tree.ts";
+import {
+  collapse,
+  ItemRefusal,
+  replace,
+  Rows,
+  typedAttribute,
+  withParents,
+} from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import {
   BaseType,

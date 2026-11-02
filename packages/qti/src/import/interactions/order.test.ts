@@ -18,8 +18,8 @@ import {
 } from "#qti/import/interactions.ts";
 import type { DeclaredVariable, InteractionContext, Shared } from "#qti/import/interactions.ts";
 import { orderRows } from "#qti/import/interactions/order.ts";
-import { ItemRefusal, itemRows } from "#qti/import/item.ts";
-import { Rows } from "#qti/import/tree.ts";
+import { itemRows } from "#qti/import/item.ts";
+import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
 import { Declaration, TypedDeclaration } from "#qti/schema/declaration.ts";
 import {

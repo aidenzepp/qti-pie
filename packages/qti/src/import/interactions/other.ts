@@ -8,9 +8,8 @@
  */
 import { Effect, Option } from "effect";
 import type { InteractionContext, MarkerRelation, NodeRef } from "#qti/import/interactions.ts";
-import type { ItemRefusal } from "#qti/import/item.ts";
 import { Rows, typedAttribute } from "#qti/import/tree.ts";
-import type { UnmodeledVocabulary } from "#qti/import/tree.ts";
+import type { ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import {
   DeclaredMediaLoop,
   DeclaredSliderStepLabel,

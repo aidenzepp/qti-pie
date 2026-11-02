@@ -7,8 +7,7 @@
  */
 import { Effect, Option } from "effect";
 import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
-import { ItemRefusal, withParents } from "#qti/import/item.ts";
-import { Rows } from "#qti/import/tree.ts";
+import { ItemRefusal, Rows, withParents } from "#qti/import/tree.ts";
 import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { MatchGroup } from "#qti/schema/choices.ts";
 import {
