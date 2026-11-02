@@ -2,8 +2,10 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
+import { usageGuards } from "#qti/import/guards/usage.ts";
 import { NotQti3 } from "#qti/import/manifest.ts";
 import { Rows, UnmodeledVocabulary } from "#qti/import/tree.ts";
+import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { usageRows } from "#qti/import/usage.ts";
 import { AttributeLexical, Edge, Tree, TreeRoot } from "#qti/schema/node.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
@@ -57,6 +59,27 @@ const rowsOf = (name: Parameters<typeof materialize>[0], edit?: (text: string) =
       )),
     };
   });
+
+/**
+ * `rows` with `relation`'s rows replaced by `change` of them.
+ */
+const changed = <R extends AnyRelation>(
+  rows: Rows,
+  relation: R,
+  change: (facts: readonly Fact<R>[]) => readonly Fact<R>[],
+): Rows => new Map(rows).set(relation, change(Rows.of(rows, relation)));
+
+/**
+ * The refusal the usage guards give `rows`, failing the test when they pass.
+ */
+const refusal = (rows: Rows) =>
+  Effect.gen(function* refused() {
+    const failure = yield* Effect.flip(usageGuards(rows));
+
+    return failure;
+  });
+
+const firstOf = <T>(list: readonly T[]): T => Option.getOrThrow(Option.fromNullishOr(list[0]));
 
 layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (suite) => {
   suite.effect("usage3 yields the counts of the example", () =>
@@ -224,6 +247,226 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
           parent: Option.some("targetObject"),
         }),
       );
+    }),
+  );
+
+  suite.effect("usage3's and usage3-padded's rows pass", () =>
+    Effect.gen(function* controls() {
+      for (const name of ["usage3", "usage3-padded", "usage3-typed"] as const) {
+        const { rows } = yield* rowsOf(name);
+        yield* usageGuards(rows);
+      }
+    }),
+  );
+
+  suite.effect("a value before a target object is refused as ordering", () =>
+    Effect.gen(function* valueFirst() {
+      const { rows } = yield* rowsOf("usage3");
+      const value = firstOf(Rows.of(rows, ud.UsageValue));
+      const target = firstOf(
+        Rows.of(rows, ud.TargetObject).filter((row) => row.statistic === value.statistic),
+      );
+      const positions = new Map(Rows.of(rows, Edge).map((edge) => [edge.child, edge.position]));
+      const swapped = changed(rows, Edge, (edges) =>
+        edges.map((edge) => {
+          if (edge.child === value.id) {
+            return { ...edge, position: positions.get(target.id) ?? 0n };
+          }
+
+          return edge.child === target.id
+            ? { ...edge, position: positions.get(value.id) ?? 0n }
+            : edge;
+        }),
+      );
+      const failure = yield* refusal(swapped);
+
+      assert.strictEqual(failure.rule, "ordering");
+      assert.include(failure.detail, value.statistic);
+    }),
+  );
+
+  suite.effect("a mapping before a target object is refused as ordering", () =>
+    Effect.gen(function* mappingFirst() {
+      const { rows } = yield* rowsOf("usage3");
+      const mapping = firstOf(Rows.of(rows, ud.UsageMapping));
+      const target = firstOf(
+        Rows.of(rows, ud.TargetObject).filter((row) => row.statistic === mapping.statistic),
+      );
+      const positions = new Map(Rows.of(rows, Edge).map((edge) => [edge.child, edge.position]));
+      const swapped = changed(rows, Edge, (edges) =>
+        edges.map((edge) => {
+          if (edge.child === mapping.id) {
+            return { ...edge, position: positions.get(target.id) ?? 0n };
+          }
+
+          return edge.child === target.id
+            ? { ...edge, position: positions.get(mapping.id) ?? 0n }
+            : edge;
+        }),
+      );
+
+      assert.strictEqual((yield* refusal(swapped)).rule, "ordering");
+    }),
+  );
+
+  suite.effect("usage3-feb-30 is refused as calendar though its pattern admits it", () =>
+    Effect.gen(function* feb30() {
+      const { rows } = yield* rowsOf("usage3-feb-30");
+      const failure = yield* refusal(rows);
+
+      assert.strictEqual(failure.rule, "calendar");
+      assert.include(failure.detail, "2004-02-30");
+    }),
+  );
+
+  suite.effect("a date is real by month length and leap year", () =>
+    Effect.gen(function* calendar() {
+      const { rows } = yield* rowsOf("usage3");
+      const statistic = firstOf(Rows.of(rows, ud.Statistic));
+      const dated = (value: string) =>
+        changed(rows, ud.StatisticLastUpdated, () => [{ node: statistic.id, value }]);
+
+      for (const real of ["2004-02-29", "2000-02-29", "2003-02-28", "2003-04-30", "2003-12-31"]) {
+        yield* usageGuards(dated(real));
+      }
+
+      for (const unreal of ["2003-02-29", "2100-02-29", "2004-04-31", "2004-06-31", "2004-09-31"]) {
+        const failure = yield* refusal(dated(unreal));
+
+        assert.strictEqual(failure.rule, "calendar");
+        assert.include(failure.detail, unreal);
+      }
+    }),
+  );
+
+  suite.effect("a value disagreeing with its text children is refused as text-copy", () =>
+    Effect.gen(function* valueText() {
+      const { rows } = yield* rowsOf("usage3");
+      const first = firstOf(Rows.of(rows, ud.UsageValue));
+      const edited = changed(rows, ud.UsageValue, (values) =>
+        values.map((row) => (row.id === first.id ? { ...row, value: `${row.value}9` } : row)),
+      );
+      const failure = yield* refusal(edited);
+
+      assert.strictEqual(failure.rule, "text-copy");
+      assert.include(failure.detail, first.id);
+    }),
+  );
+
+  suite.effect("a collapsed form that is not the collapse of the value is text-copy", () =>
+    Effect.gen(function* collapsedText() {
+      const { rows } = yield* rowsOf("usage3-padded");
+      const padded = firstOf(Rows.of(rows, ud.UsageValue).filter((row) => row.value === " 0.87 "));
+      const edited = changed(rows, ud.UsageValue, (values) =>
+        values.map((row) => (row.id === padded.id ? { ...row, collapsed: padded.value } : row)),
+      );
+
+      assert.strictEqual((yield* refusal(edited)).rule, "text-copy");
+    }),
+  );
+
+  suite.effect("a mapping default that is not its written defaultValue is typed-copy", () =>
+    Effect.gen(function* defaultValue() {
+      const { rows } = yield* rowsOf("usage3");
+      const declared = new Set(Rows.of(rows, ud.DeclaredDefaultValue).map((row) => row.node));
+      const written = Option.getOrThrow(
+        Option.fromNullishOr(Rows.of(rows, ud.UsageMapping).find((row) => declared.has(row.id))),
+      );
+      const padded = Rows.add(rows, AttributeLexical, [
+        {
+          attribute: "defaultValue",
+          kind: "ud:mapping",
+          node: written.id,
+          value: ` ${written.defaultValue} `,
+        },
+      ]);
+
+      yield* usageGuards(padded);
+
+      const edited = changed(padded, ud.UsageMapping, (list) =>
+        list.map((row) => (row.id === written.id ? { ...row, defaultValue: "1" } : row)),
+      );
+      const failure = yield* refusal(edited);
+
+      assert.strictEqual(failure.rule, "typed-copy");
+      assert.include(failure.detail, written.id);
+    }),
+  );
+
+  suite.effect("an undeclared default other than 0 is typed-copy", () =>
+    Effect.gen(function* undeclared() {
+      const { rows } = yield* rowsOf("usage3");
+      const mapping = firstOf(Rows.of(rows, ud.UsageMapping));
+      const stripped = changed(rows, ud.DeclaredDefaultValue, (list) =>
+        list.filter((row) => row.node !== mapping.id),
+      );
+      const edited = changed(stripped, ud.UsageMapping, (list) =>
+        list.map((row) => (row.id === mapping.id ? { ...row, defaultValue: "1" } : row)),
+      );
+
+      assert.strictEqual((yield* refusal(edited)).rule, "typed-copy");
+    }),
+  );
+
+  suite.effect("a typed value disagreeing with its value is typed-copy", () =>
+    Effect.gen(function* typedValue() {
+      const { rows } = yield* rowsOf("usage3-typed");
+      const typed = firstOf(Rows.of(rows, ud.UsageTypedValue));
+      const edited = changed(rows, ud.UsageTypedValue, (list) =>
+        list.map((row) => (row.id === typed.id ? { ...row, value: `${row.value}1` } : row)),
+      );
+      const arm = firstOf(Rows.of(rows, ud.relations.UsageTypedValueFloat));
+      const armEdited = changed(rows, ud.relations.UsageTypedValueFloat, (list) =>
+        list.map((row) => (row.id === arm.id ? { ...row, value: `${row.value}1` } : row)),
+      );
+
+      assert.strictEqual((yield* refusal(edited)).rule, "typed-copy");
+      assert.strictEqual((yield* refusal(armEdited)).rule, "typed-copy");
+    }),
+  );
+
+  suite.effect("a lexical row equal to its column is typed-copy", () =>
+    Effect.gen(function* lexicalEqual() {
+      const { rows } = yield* rowsOf("usage3");
+      const statistic = firstOf(Rows.of(rows, ud.Statistic));
+      const edited = Rows.add(rows, AttributeLexical, [
+        {
+          attribute: "name",
+          kind: "ud:ordinaryStatistic",
+          node: statistic.id,
+          value: statistic.name,
+        },
+      ]);
+      const failure = yield* refusal(edited);
+
+      assert.strictEqual(failure.rule, "typed-copy");
+      assert.include(failure.detail, statistic.id);
+    }),
+  );
+
+  suite.effect("a lexical row that does not process to its column is typed-copy", () =>
+    Effect.gen(function* lexicalWrong() {
+      const { rows } = yield* rowsOf("usage3-padded");
+      const edited = changed(rows, AttributeLexical, (list) =>
+        list.map((row) => (row.attribute === "name" ? { ...row, value: " OTHER " } : row)),
+      );
+
+      assert.strictEqual((yield* refusal(edited)).rule, "typed-copy");
+    }),
+  );
+
+  suite.effect("a map key holding a tab, line feed or carriage return is typed-copy", () =>
+    Effect.gen(function* mapKey() {
+      const { rows } = yield* rowsOf("usage3");
+      const entry = firstOf(Rows.of(rows, ud.UsageMapEntry));
+
+      for (const bad of ["a\tb", "a\nb", "a\rb"]) {
+        const edited = changed(rows, ud.UsageMapEntry, (list) =>
+          list.map((row) => (row.id === entry.id ? { ...row, mapKey: bad } : row)),
+        );
+
+        assert.strictEqual((yield* refusal(edited)).rule, "typed-copy");
+      }
     }),
   );
 });
