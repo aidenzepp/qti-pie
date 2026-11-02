@@ -165,7 +165,7 @@ interface LomContext {
   readonly lom: string;
   readonly owner: "manifest" | "resource";
   readonly parent: string;
-  readonly parentKind: NodeKindHandle | undefined;
+  readonly parentKind: NodeKindHandle;
   readonly parentPosition: bigint;
   readonly position: bigint;
   readonly value: string;
@@ -549,7 +549,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       add(md.LomType, [{ id: c.id, lom: c.lom, orComposite: c.parent }]);
     },
     "lom:value": (c) => {
-      add(md.LomValue, [{ collapsed: c.collapsed, id: c.id, value: c.value }]);
+      add(md.LomValue, [
+        { collapsed: c.collapsed, id: c.id, parentKind: c.parentKind, value: c.value },
+      ]);
     },
     "lom:version": (c) => {
       add(md.LomVersion, [{ id: c.id, lifeCycle: c.parent, lom: c.lom }]);
