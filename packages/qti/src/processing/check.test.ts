@@ -10,6 +10,7 @@ import type {
   TypedRuleNode,
   Unresolved,
 } from "#qti/processing/check.ts";
+import { corpusPackage, templateDocuments } from "#qti/processing/fixtures.ts";
 import { parseProcessing } from "#qti/processing/parse.ts";
 import { emptyEnvironment, environmentOf, withDeclarations } from "#qti/processing/env.ts";
 import type { DeclarationEntry, Environment } from "#qti/processing/env.ts";
@@ -630,6 +631,45 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts", 
 
       const declared = withDeclarations(emptyEnvironment("item"), [outcomeOf("N", "integer")]);
       assert.deepStrictEqual(okOf(ast, declared).unresolved, []);
+    }),
+  );
+
+  suite.effect(
+    "checks the five corpus template documents ok in template mode, all unresolved",
+    () =>
+      Effect.gen(function* checkCorpusTemplates() {
+        const fs = yield* FileSystem.FileSystem;
+        const documents = yield* templateDocuments();
+        assert.deepStrictEqual(
+          documents.map((d) => `${d.pkg}/${path.basename(d.path)}`).toSorted(),
+          [
+            "ccPackage/CC2_map_response.xml",
+            "ccPackage/CC2_match.xml",
+            "ccPackage/CC2_match_basic.xml",
+            "maxfiles/map_response.xml",
+            "maxfiles/match_correct.xml",
+          ],
+        );
+
+        for (const { path: file } of documents) {
+          const document = yield* readXml(yield* fs.readFile(file));
+          const ast = yield* parseProcessing(document.root, "response");
+          const result = okOf(ast, emptyEnvironment("template"));
+          assert.isAbove(result.unresolved.length, 0, file);
+          assert.deepStrictEqual(
+            [...new Set(result.unresolved.map((u) => u.reason))],
+            ["template-parameter"],
+            file,
+          );
+        }
+      }),
+  );
+
+  suite.effect("finds the svg corpus package by name, holding svg.xml", () =>
+    Effect.gen(function* findSvg() {
+      const fs = yield* FileSystem.FileSystem;
+      const dir = yield* corpusPackage("svg");
+      assert.isTrue(yield* fs.exists(path.join(dir, "svg.xml")));
     }),
   );
 });
