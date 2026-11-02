@@ -12,6 +12,7 @@ import { manifestRows } from "#qti/import/manifest.ts";
 import { changeSetOf, retrySchedule } from "#qti/import/package.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
+import { ResourceLomGeneral } from "#qti/schema/lang.ts";
 import {
   OutcomeDeclarationArm,
   RecordDeclaration,
@@ -159,6 +160,9 @@ const simpleRows = Effect.gen(function* simpleRows() {
         packageId: built.packageId,
         path: listed.path,
         resource: listed.resource,
+        resourceLomHasGeneral: Rows.of(built.rows, ResourceLomGeneral).some(
+          (general) => general.resource === listed.resource,
+        ),
         resourceType: listed.type,
         version: built.version,
       },

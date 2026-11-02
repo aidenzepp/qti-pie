@@ -425,6 +425,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("the importer's copies"
           packageId: "22222222-2222-4222-8222-222222222222",
           path: "choice.xml",
           resource: "choice",
+          resourceLomHasGeneral: true,
           resourceType: "imsqti_item_xmlv3p0",
           version: "3.0.0",
         },

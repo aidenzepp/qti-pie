@@ -19,6 +19,7 @@ import type { ImportLaw, ImportRefused, ImportWitness, ReadRefusal } from "#qti/
 import { refusalOfLaw, ruleOfError } from "#qti/import/refusal.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
+import { ResourceLomGeneral } from "#qti/schema/lang.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import { Package } from "#qti/schema/package.ts";
 import { Author } from "#qti/schema/roles.ts";
@@ -108,6 +109,9 @@ const readRows = Effect.fn("import.readRows")(function* readRows(dir: string) {
         packageId: built.packageId,
         path: document.path,
         resource: document.resource,
+        resourceLomHasGeneral: Rows.of(built.rows, ResourceLomGeneral).some(
+          (general) => general.resource === document.resource,
+        ),
         resourceType: document.type,
         version: built.version,
       },
