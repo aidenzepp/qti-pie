@@ -97,7 +97,8 @@ export const hash12 = (spec: FixtureSpec): string =>
 
 /**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-broken
- * packages, each the same package with the edits of its row in the spec table.
+ * packages, each the same package with the edits of its row in the spec table, and `sharedMedia`,
+ * the examples' shared-media package unedited.
  */
 export const fixtureNames = [
   "simple",
@@ -119,6 +120,7 @@ export const fixtureNames = [
   "body-empty",
   "comment-in-element",
   "bad-template-uri",
+  "sharedMedia",
 ] as const;
 
 /**
@@ -130,6 +132,13 @@ export type FixtureName = (typeof fixtureNames)[number];
  * The tarball member `simple` and every variant of it are extracted from.
  */
 const simpleMember = "qtiv3-examples/packaging/simple/simple.zip";
+
+/**
+ * The tarball member `sharedMedia` is extracted from (`tar -tzf` of the examples tarball lists it
+ * beside `imsmanifest.xml`, `example/graphic_order.xml`, `example/hotspot.xml` and
+ * `example/ukair.png`).
+ */
+const sharedMediaMember = "qtiv3-examples/packaging/sharedMedia/sharedMedia.zip";
 
 /**
  * Build a `ReplaceText` edit of one file.
@@ -387,6 +396,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
     member: simpleMember,
     name: "padded-text",
   },
+  sharedMedia: { edits: [], member: sharedMediaMember, name: "sharedMedia" },
   simple: { edits: [], member: simpleMember, name: "simple" },
   "title-mismatch": {
     edits: [
