@@ -141,11 +141,13 @@ export class UnmodeledVocabulary extends Schema.TaggedError<UnmodeledVocabulary>
 /**
  * An item the importer reads but whose bindings do not hold together.
  *
- * `rule` names the importer rule the item breaks and `detail` says which part of the item does.
+ * `rule` names the importer rule the item breaks and `detail` says which part of the item does. The
+ * rule may be a schema law's name when the importer meets that law first, as `ancestry-ban` for a
+ * gap that has no gap-match interaction to own it.
  */
 export class ItemRefusal extends Schema.TaggedError<ItemRefusal>()("ItemRefusal", {
   detail: Schema.String,
-  rule: Schema.Literals(["binding-declared", "typed-copy"]),
+  rule: Schema.Literals(["binding-declared", "typed-copy", "ancestry-ban"]),
 }) {}
 
 /**
