@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-outcome-processing xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd">
+    <!-- Test environment this tree is typed under: TOTAL and MAXTOTAL float single, COUNT integer single, PASSED boolean single. SCORE and WEIGHT are item-level outcomes of the test's items, named by the test-wide expressions below. -->
+    <qti-set-outcome-value identifier="TOTAL">
+        <qti-sum>
+            <qti-test-variables variable-identifier="SCORE" weight-identifier="WEIGHT" base-type="float" section-identifier="section1" include-category="scored" exclude-category="practice"/>
+        </qti-sum>
+    </qti-set-outcome-value>
+    <qti-set-outcome-value identifier="MAXTOTAL">
+        <qti-sum>
+            <qti-outcome-maximum outcome-identifier="SCORE" weight-identifier="WEIGHT" section-identifier="section1" include-category="scored"/>
+        </qti-sum>
+    </qti-set-outcome-value>
+    <qti-set-outcome-value identifier="COUNT">
+        <qti-sum>
+            <qti-number-correct/>
+            <qti-number-incorrect section-identifier="section1"/>
+            <qti-number-presented include-category="scored practice"/>
+            <qti-number-responded exclude-category="practice"/>
+            <qti-number-selected section-identifier="section1" include-category="scored" exclude-category="practice"/>
+        </qti-sum>
+    </qti-set-outcome-value>
+    <qti-outcome-condition>
+        <qti-outcome-if>
+            <qti-gte>
+                <qti-variable identifier="TOTAL"/>
+                <qti-base-value base-type="float">5</qti-base-value>
+            </qti-gte>
+            <qti-set-outcome-value identifier="PASSED">
+                <qti-base-value base-type="boolean">true</qti-base-value>
+            </qti-set-outcome-value>
+        </qti-outcome-if>
+        <qti-outcome-else-if>
+            <qti-lt>
+                <qti-min>
+                    <qti-outcome-minimum outcome-identifier="SCORE"/>
+                </qti-min>
+                <qti-base-value base-type="float">0</qti-base-value>
+            </qti-lt>
+            <qti-exit-test/>
+        </qti-outcome-else-if>
+        <qti-outcome-else>
+            <qti-set-outcome-value identifier="PASSED">
+                <qti-base-value base-type="boolean">false</qti-base-value>
+            </qti-set-outcome-value>
+        </qti-outcome-else>
+    </qti-outcome-condition>
+    <qti-outcome-processing-fragment>
+        <qti-set-outcome-value identifier="MAXTOTAL">
+            <qti-variable identifier="TOTAL"/>
+        </qti-set-outcome-value>
+    </qti-outcome-processing-fragment>
+</qti-outcome-processing>
