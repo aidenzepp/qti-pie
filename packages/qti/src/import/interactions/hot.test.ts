@@ -21,10 +21,12 @@ import { ItemRefusal, Rows, treeRows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
 import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
 import {
-  DeclaredHottextMaxChoices,
-  DeclaredHottextMinChoices,
+  DeclaredHotspotChoiceShowHide,
   DeclaredHotspotMaxChoices,
   DeclaredHotspotMinChoices,
+  DeclaredHottextMaxChoices,
+  DeclaredHottextMinChoices,
+  DeclaredHottextShowHide,
   DeclaredPositionObjectMaxChoices,
   DeclaredSelectPointMaxChoices,
   DeclaredSelectPointMinChoices,
@@ -168,7 +170,8 @@ const hotspotChoice = (identifier: string, more: Readonly<Record<string, string>
     ...more,
   });
 
-const hottext = (identifier: string): Element => element("qti-hottext", { identifier });
+const hottext = (identifier: string, more: Readonly<Record<string, string>> = {}): Element =>
+  element("qti-hottext", { identifier, ...more });
 
 const refusalRuleOf = (exit: Exit.Exit<Rows, unknown>): string => {
   const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
@@ -177,6 +180,34 @@ const refusalRuleOf = (exit: Exit.Exit<Rows, unknown>): string => {
 };
 
 describe("hotRows on a hotspot interaction", () => {
+  it.effect("writes a choice's show-hide and marks the one the source wrote", () =>
+    Effect.gen(function* showHide() {
+      const ctx = contextOf(
+        [
+          element("qti-hotspot-interaction", { "response-identifier": "RESPONSE" }, [
+            hotspotChoice("A", { "show-hide": "hide" }),
+            hotspotChoice("B"),
+          ]),
+        ],
+        single,
+      );
+
+      const built = yield* hotRows(ctx, Rows.empty());
+
+      const choices = Rows.of(built, HotspotChoice);
+      assert.deepStrictEqual(
+        choices.map((row) => [row.identifier, row.showHide]),
+        [
+          ["A", "hide"],
+          ["B", "show"],
+        ],
+      );
+      assert.deepStrictEqual(Rows.of(built, DeclaredHotspotChoiceShowHide), [
+        { node: choices[0]?.id ?? "" },
+      ]);
+    }),
+  );
+
   it.effect("writes the interaction, its binding, its choices and their coordinates", () =>
     Effect.gen(function* hotspots() {
       const interaction = element(
@@ -454,6 +485,33 @@ describe("hotRows on a position-object interaction", () => {
 });
 
 describe("hotRows on hottexts", () => {
+  it.effect("writes a hottext's show-hide and marks the one the source wrote", () =>
+    Effect.gen(function* showHide() {
+      const ctx = contextOf(
+        [
+          element("qti-hottext-interaction", { "response-identifier": "RESPONSE" }, [
+            element("p", {}, [hottext("A", { "show-hide": "hide" }), hottext("B")]),
+          ]),
+        ],
+        multiple,
+      );
+
+      const built = yield* hotRows(ctx, Rows.empty());
+
+      const texts = Rows.of(built, Hottext);
+      assert.deepStrictEqual(
+        texts.map((row) => [row.identifier, row.showHide]),
+        [
+          ["A", "hide"],
+          ["B", "show"],
+        ],
+      );
+      assert.deepStrictEqual(Rows.of(built, DeclaredHottextShowHide), [
+        { node: texts[0]?.id ?? "" },
+      ]);
+    }),
+  );
+
   it.effect("owns the hottexts of the prompt and the body, three rows each", () =>
     Effect.gen(function* owned() {
       const interaction = element(
@@ -520,7 +578,7 @@ describe("hotRows on hottexts", () => {
       const built = yield* hotRows(ctx, Rows.empty());
 
       assert.deepStrictEqual(Rows.of(built, Hottext), [
-        { id: idOf(ctx, "qti-hottext"), identifier: "X" },
+        { id: idOf(ctx, "qti-hottext"), identifier: "X", showHide: "show" },
       ]);
       assert.strictEqual(Rows.of(built, HottextOwner).length, 0);
       assert.strictEqual(Rows.of(built, HottextInteraction).length, 0);
@@ -533,7 +591,9 @@ describe("hotRows on hottexts", () => {
 
       const built = yield* hotRows(ctx, Rows.empty());
 
-      assert.deepStrictEqual(Rows.of(built, Hottext), [{ id: "node-2", identifier: "Y" }]);
+      assert.deepStrictEqual(Rows.of(built, Hottext), [
+        { id: "node-2", identifier: "Y", showHide: "show" },
+      ]);
       assert.strictEqual(Rows.of(built, HottextOwner).length, 0);
     }),
   );

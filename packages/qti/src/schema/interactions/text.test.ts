@@ -254,6 +254,7 @@ describe("interactions/text", () => {
       [relations.InlineChoicePrompt, relations.InlineChoiceInteraction],
       [relations.InlineChoiceMinSelectionsMessage, relations.InlineChoiceInteraction],
       [relations.DeclaredInlineChoiceFixed, relations.InlineChoice],
+      [relations.DeclaredInlineChoiceShowHide, relations.InlineChoice],
     ] as const;
 
     for (const [optional, arm] of owners) {

@@ -19,9 +19,12 @@ import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
 import { ChoiceTemplateRef, MatchGroup } from "#qti/schema/choices.ts";
 import {
+  DeclaredGapImgShowHide,
   DeclaredGapMatchMaxAssociations,
   DeclaredGapMatchShuffle,
   DeclaredGapRequired,
+  DeclaredGapShowHide,
+  DeclaredGapTextShowHide,
   DeclaredGraphicGapMatchMaxAssociations,
   Gap,
   GapImg,
@@ -157,6 +160,44 @@ const refusalRuleOf = (exit: Exit.Exit<Rows, unknown>): string => {
 };
 
 describe("gapRows on a gap-match interaction", () => {
+  it.effect("writes a gap's and a gap text's show-hide and marks each the source wrote", () =>
+    Effect.gen(function* showHide() {
+      const ctx = contextOf(
+        [
+          element("qti-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+            gapText("A", { "show-hide": "hide" }),
+            gapText("B"),
+            element("p", {}, [gap("G1", { "show-hide": "hide" }), gap("G2")]),
+          ]),
+        ],
+        pairs,
+      );
+
+      const built = yield* gapRows(ctx, Rows.empty());
+
+      const texts = Rows.of(built, GapText);
+      const gaps = Rows.of(built, Gap);
+      assert.deepStrictEqual(
+        texts.map((row) => [row.identifier, row.showHide]),
+        [
+          ["A", "hide"],
+          ["B", "show"],
+        ],
+      );
+      assert.deepStrictEqual(
+        gaps.map((row) => [row.identifier, row.showHide]),
+        [
+          ["G1", "hide"],
+          ["G2", "show"],
+        ],
+      );
+      assert.deepStrictEqual(Rows.of(built, DeclaredGapTextShowHide), [
+        { node: texts[0]?.id ?? "" },
+      ]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredGapShowHide), [{ node: gaps[0]?.id ?? "" }]);
+    }),
+  );
+
   it.effect("writes the interaction, its binding, two texts and both gaps at any depth", () =>
     Effect.gen(function* gapMatchRows() {
       const ctx = contextOf([gapMatchItem()], pairs);
@@ -372,6 +413,38 @@ const graphic = (more: Readonly<Record<string, string>> = {}): Element =>
   ]);
 
 describe("gapRows on a graphic gap-match interaction", () => {
+  it.effect("writes a gap image's show-hide and marks the one the source wrote", () =>
+    Effect.gen(function* showHide() {
+      const image = (identifier: string, more: Readonly<Record<string, string>> = {}): Element =>
+        element("qti-gap-img", { identifier, "match-max": "1", ...more }, [
+          element("img", { src: `${identifier}.png` }),
+        ]);
+      const ctx = contextOf(
+        [
+          element("qti-graphic-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+            image("I1", { "show-hide": "hide" }),
+            image("I2"),
+          ]),
+        ],
+        pairs,
+      );
+
+      const built = yield* gapRows(ctx, Rows.empty());
+
+      const images = Rows.of(built, GapImg);
+      assert.deepStrictEqual(
+        images.map((row) => [row.identifier, row.showHide]),
+        [
+          ["I1", "hide"],
+          ["I2", "show"],
+        ],
+      );
+      assert.deepStrictEqual(Rows.of(built, DeclaredGapImgShowHide), [
+        { node: images[0]?.id ?? "" },
+      ]);
+    }),
+  );
+
   it.effect(
     "writes the interaction, a binding of count 1 with no gap-match row, and gap images",
     () =>

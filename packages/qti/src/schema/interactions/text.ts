@@ -72,6 +72,11 @@ const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNor
 const ncName = str.regex(patterns.ncName);
 
 /**
+ * A choice's `show-hide`: `show` or `hide`.
+ */
+const showHide = str.regex(patterns.showHide);
+
+/**
  * An extended-text interaction's `format`: `plain`, `preformatted` or `xhtml`.
  */
 const textFormat = str.regex(patterns.textFormat);
@@ -122,11 +127,11 @@ export const InlineChoiceInteraction = relation(
 
 /**
  * A `qti-inline-choice`, by its identifier within the interaction that owns it. `fixed` is `false`
- * where the source omits it.
+ * and `showHide` is `show` where the source omits it.
  */
 export const InlineChoice = relation(
   "InlineChoice",
-  { fixed: xsBoolean, id: uuid, identifier: ncName, interaction: uuid },
+  { fixed: xsBoolean, id: uuid, identifier: ncName, interaction: uuid, showHide },
   ["id"],
 );
 
@@ -324,6 +329,15 @@ export const DeclaredInlineChoiceFixed = relation("DeclaredInlineChoiceFixed", {
 ]);
 
 /**
+ * A `qti-inline-choice` that wrote `show-hide`.
+ */
+export const DeclaredInlineChoiceShowHide = relation(
+  "DeclaredInlineChoiceShowHide",
+  { node: uuid },
+  ["node"],
+);
+
+/**
  * The arms of the five text kinds, keyed by their `NodeKind` handles. Their containments into
  * `Node` are expanded by `alternatives` in the composed schema.
  */
@@ -345,6 +359,7 @@ export const relations = {
   DeclaredInlineChoiceFixed,
   DeclaredInlineChoiceMinChoices,
   DeclaredInlineChoiceRequired,
+  DeclaredInlineChoiceShowHide,
   DeclaredInlineChoiceShuffle,
   DeclaredTextEntryBase,
   ExtendedTextExpectedLength,
@@ -424,4 +439,5 @@ export const rules = [
   contained(on(DeclaredInlineChoiceRequired, "node"), on(InlineChoiceInteraction, "id")),
   contained(on(DeclaredInlineChoiceMinChoices, "node"), on(InlineChoiceInteraction, "id")),
   contained(on(DeclaredInlineChoiceFixed, "node"), on(InlineChoice, "id")),
+  contained(on(DeclaredInlineChoiceShowHide, "node"), on(InlineChoice, "id")),
 ] as const;

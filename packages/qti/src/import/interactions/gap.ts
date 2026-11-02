@@ -11,9 +11,12 @@ import { ItemRefusal, Rows, withParents } from "#qti/import/tree.ts";
 import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { MatchGroup } from "#qti/schema/choices.ts";
 import {
+  DeclaredGapImgShowHide,
   DeclaredGapMatchMaxAssociations,
   DeclaredGapMatchShuffle,
   DeclaredGapRequired,
+  DeclaredGapShowHide,
+  DeclaredGapTextShowHide,
   DeclaredGraphicGapMatchMaxAssociations,
   Gap,
   GapImg,
@@ -291,19 +294,21 @@ const gap = Effect.fn("import.gap")(function* gap(
   const attributes = ctx.shared.attributes(rows, element, node);
   const identifier = Option.getOrElse(attributes.read("identifier"), () => "");
   const required = attributes.read("required");
+  const showHide = attributes.read("show-hide");
   const built = Rows.add(attributes.rows(), Gap, [
     {
       id: node.id,
       identifier,
       interaction: owner.value.id,
       required: judgedLater(Option.getOrElse(required, () => "false")),
+      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
     },
   ]);
   const grouped = yield* groupAndTemplate(ctx, built, attributes, node);
 
   return ctx.shared.markers(
     grouped,
-    { required: DeclaredGapRequired },
+    { required: DeclaredGapRequired, "show-hide": DeclaredGapShowHide },
     node.id,
     attributes.written(),
   );
@@ -349,6 +354,7 @@ const gapText = Effect.fn("import.gapText")(function* gapText(
   const identifier = Option.getOrElse(attributes.read("identifier"), () => "");
   const matchMax = attributes.read("match-max");
   const matchMin = attributes.read("match-min");
+  const showHide = attributes.read("show-hide");
   let built = Rows.add(attributes.rows(), GapText, [
     {
       id: node.id,
@@ -357,8 +363,15 @@ const gapText = Effect.fn("import.gapText")(function* gapText(
       matchMax: judgedLater(Option.getOrElse(matchMax, () => "")),
       matchMaxN: ctx.shared.typedCopy(matchMax, 0n),
       matchMinN: ctx.shared.typedCopy(matchMin, 0n),
+      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
     },
   ]);
+  built = ctx.shared.markers(
+    built,
+    { "show-hide": DeclaredGapTextShowHide },
+    node.id,
+    attributes.written(),
+  );
   built = Rows.add(
     built,
     GapTextMatchMin,
@@ -397,6 +410,7 @@ const gapImg = Effect.fn("import.gapImg")(function* gapImg(
   const label = attributes.read("object-label");
   const top = attributes.read("top");
   const left = attributes.read("left");
+  const showHide = attributes.read("show-hide");
   let built = Rows.add(attributes.rows(), GapImg, [
     {
       id: node.id,
@@ -405,8 +419,15 @@ const gapImg = Effect.fn("import.gapImg")(function* gapImg(
       matchMax: judgedLater(Option.getOrElse(matchMax, () => "")),
       matchMaxN: ctx.shared.typedCopy(matchMax, 0n),
       matchMinN: ctx.shared.typedCopy(matchMin, 0n),
+      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
     },
   ]);
+  built = ctx.shared.markers(
+    built,
+    { "show-hide": DeclaredGapImgShowHide },
+    node.id,
+    attributes.written(),
+  );
   built = Rows.add(
     built,
     GapImgMatchMin,

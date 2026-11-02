@@ -63,6 +63,11 @@ const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNor
 const ncName = str.regex(patterns.ncName);
 
 /**
+ * A choice's `show-hide`: `show` or `hide`.
+ */
+const showHide = str.regex(patterns.showHide);
+
+/**
  * A `qti-gap-match-interaction`.
  */
 export const GapMatchInteraction = relation(
@@ -95,18 +100,19 @@ export const GraphicGapMatchInteraction = relation(
 
 /**
  * A `qti-gap`, by its identifier within the gap-match interaction that owns it. `interaction` is
- * the importer-written owner copy at any depth. `required` is `false` where the source omits it.
+ * the importer-written owner copy at any depth. `required` is `false` where the source omits it,
+ * and `showHide` is `show`.
  */
 export const Gap = relation(
   "Gap",
-  { id: uuid, identifier: ncName, interaction: uuid, required: xsBoolean },
+  { id: uuid, identifier: ncName, interaction: uuid, required: xsBoolean, showHide },
   ["id"],
 );
 
 /**
  * A `qti-gap-text`, by its identifier within the interaction that owns it. `matchMax` is the
  * attribute as written and `matchMaxN` and `matchMinN` the integer values the match bounds are
- * checked on.
+ * checked on. `showHide` is `show` where the source omits it.
  */
 export const GapText = relation(
   "GapText",
@@ -117,12 +123,13 @@ export const GapText = relation(
     matchMax: xsNonNegativeInteger,
     matchMaxN: pg.bigint,
     matchMinN: pg.bigint,
+    showHide,
   },
   ["id"],
 );
 
 /**
- * A `qti-gap-img`: a gap text's fields, the same way.
+ * A `qti-gap-img`: a gap text's fields, the same way, `showHide` included.
  */
 export const GapImg = relation(
   "GapImg",
@@ -133,6 +140,7 @@ export const GapImg = relation(
     matchMax: xsNonNegativeInteger,
     matchMaxN: pg.bigint,
     matchMinN: pg.bigint,
+    showHide,
   },
   ["id"],
 );
@@ -168,6 +176,23 @@ export const DeclaredGraphicGapMatchMaxAssociations = relation(
  * The source wrote `required` on this gap.
  */
 export const DeclaredGapRequired = relation("DeclaredGapRequired", { node: uuid }, ["node"]);
+
+/**
+ * A `qti-gap` that wrote `show-hide`.
+ */
+export const DeclaredGapShowHide = relation("DeclaredGapShowHide", { node: uuid }, ["node"]);
+
+/**
+ * A `qti-gap-text` that wrote `show-hide`.
+ */
+export const DeclaredGapTextShowHide = relation("DeclaredGapTextShowHide", { node: uuid }, [
+  "node",
+]);
+
+/**
+ * A `qti-gap-img` that wrote `show-hide`.
+ */
+export const DeclaredGapImgShowHide = relation("DeclaredGapImgShowHide", { node: uuid }, ["node"]);
 
 /**
  * A gap-match interaction's `max-associations` as written, when it has one.
@@ -314,9 +339,12 @@ export const arms = {
  * The relations of this module, as schema members.
  */
 export const relations = {
+  DeclaredGapImgShowHide,
   DeclaredGapMatchMaxAssociations,
   DeclaredGapMatchShuffle,
   DeclaredGapRequired,
+  DeclaredGapShowHide,
+  DeclaredGapTextShowHide,
   DeclaredGraphicGapMatchMaxAssociations,
   Gap,
   GapImg,
@@ -394,6 +422,9 @@ export const rules = [
   contained(on(GraphicGapMatchMaxSelectionsMessage, "node"), on(GraphicGapMatchInteraction, "id")),
   contained(on(GraphicGapMatchChoicesContainerWidth, "node"), on(GraphicGapMatchInteraction, "id")),
   contained(on(DeclaredGapRequired, "node"), on(Gap, "id")),
+  contained(on(DeclaredGapShowHide, "node"), on(Gap, "id")),
+  contained(on(DeclaredGapTextShowHide, "node"), on(GapText, "id")),
+  contained(on(DeclaredGapImgShowHide, "node"), on(GapImg, "id")),
   contained(on(GapTextMatchMin, "node"), on(GapText, "id")),
   contained(on(GapImgMatchMin, "node"), on(GapImg, "id")),
   contained(on(GapImgObjectLabel, "node"), on(GapImg, "id")),

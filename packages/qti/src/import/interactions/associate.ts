@@ -21,6 +21,7 @@ import {
   AssociateInteraction,
   AssociateMaxAssociations,
   AssociateMinAssociations,
+  DeclaredAssociableHotspotShowHide,
   DeclaredAssociateMaxAssociations,
   DeclaredAssociateMinAssociations,
   DeclaredAssociateShuffle,
@@ -406,6 +407,7 @@ const hotspot = Effect.fn("import.associableHotspot")(function* hotspot(
   const matchMax = attributes.read("match-max");
   const matchMin = attributes.read("match-min");
   const label = attributes.read("hotspot-label");
+  const showHide = attributes.read("show-hide");
   let built = attributes.rows();
   built = Rows.add(built, AssociableHotspot, [
     {
@@ -417,8 +419,15 @@ const hotspot = Effect.fn("import.associableHotspot")(function* hotspot(
       matchMinN: ctx.shared.typedCopy(matchMin, 0n),
       parentKind: parent.value.kind,
       shape: shape.value,
+      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
     },
   ]);
+  built = ctx.shared.markers(
+    built,
+    { "show-hide": DeclaredAssociableHotspotShowHide },
+    node.id,
+    attributes.written(),
+  );
   built = Rows.add(
     built,
     AssociableHotspotLabel,

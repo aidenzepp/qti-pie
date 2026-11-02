@@ -69,6 +69,11 @@ const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNor
 const ncName = str.regex(patterns.ncName);
 
 /**
+ * A choice's `show-hide`: `show` or `hide`.
+ */
+const showHide = str.regex(patterns.showHide);
+
+/**
  * A `center-point`: a list of `xs:int` tokens, possibly empty.
  */
 const integerList = str.regex(patterns.integerList);
@@ -90,9 +95,10 @@ export const HottextInteraction = relation(
 );
 
 /**
- * A `qti-hottext`, by the identifier its owner, where it has one, keys.
+ * A `qti-hottext`, by the identifier its owner, where it has one, keys. `showHide` is `show` where
+ * the source omits it.
  */
-export const Hottext = relation("Hottext", { id: uuid, identifier: ncName }, ["id"]);
+export const Hottext = relation("Hottext", { id: uuid, identifier: ncName, showHide }, ["id"]);
 
 /**
  * The hottext interaction that owns a hottext: one row where the nearest enclosing interaction of
@@ -122,11 +128,11 @@ export const HotspotInteraction = relation(
 
 /**
  * A `qti-hotspot-choice`, by its identifier within the interaction that owns it. `shape` is the
- * shape its coordinates are for.
+ * shape its coordinates are for. `showHide` is `show` where the source omits it.
  */
 export const HotspotChoice = relation(
   "HotspotChoice",
-  { id: uuid, identifier: ncName, interaction: uuid, shape: closedId(Shape) },
+  { id: uuid, identifier: ncName, interaction: uuid, shape: closedId(Shape), showHide },
   ["id"],
 );
 
@@ -351,6 +357,22 @@ export const PositionObjectCenterPoint = relation(
 );
 
 /**
+ * A `qti-hottext` that wrote `show-hide`.
+ */
+export const DeclaredHottextShowHide = relation("DeclaredHottextShowHide", { node: uuid }, [
+  "node",
+]);
+
+/**
+ * A `qti-hotspot-choice` that wrote `show-hide`.
+ */
+export const DeclaredHotspotChoiceShowHide = relation(
+  "DeclaredHotspotChoiceShowHide",
+  { node: uuid },
+  ["node"],
+);
+
+/**
  * The arms of the seven hot kinds, keyed by their `NodeKind` handles. Their containments into
  * `Node` are expanded by `alternatives` in the composed schema.
  */
@@ -368,10 +390,12 @@ export const arms = {
  * The relations of this module, as schema members.
  */
 export const relations = {
+  DeclaredHotspotChoiceShowHide,
   DeclaredHotspotMaxChoices,
   DeclaredHotspotMinChoices,
   DeclaredHottextMaxChoices,
   DeclaredHottextMinChoices,
+  DeclaredHottextShowHide,
   DeclaredPositionObjectMaxChoices,
   DeclaredSelectPointMaxChoices,
   DeclaredSelectPointMinChoices,
@@ -469,6 +493,8 @@ export const rules = [
   contained(on(HotspotMinSelectionsMessage, "node"), on(HotspotInteraction, "id")),
   contained(on(HotspotMaxSelectionsMessage, "node"), on(HotspotInteraction, "id")),
   contained(on(HotspotChoiceLabel, "node"), on(HotspotChoice, "id")),
+  contained(on(DeclaredHotspotChoiceShowHide, "node"), on(HotspotChoice, "id")),
+  contained(on(DeclaredHottextShowHide, "node"), on(Hottext, "id")),
   contained(on(DeclaredSelectPointMaxChoices, "node"), on(SelectPointInteraction, "id")),
   contained(on(DeclaredSelectPointMinChoices, "node"), on(SelectPointInteraction, "id")),
   contained(on(SelectPointMaxChoices, "node"), on(SelectPointInteraction, "id")),

@@ -139,7 +139,7 @@ export const SimpleMatchSet = relation("SimpleMatchSet", { id: uuid }, ["id"]);
 /**
  * A `qti-associable-hotspot`. `parentKind` copies its parent's node kind, so a hotspot is refused
  * where its parent is not the kind the copy claims, and `shape` is the shape its coordinates are
- * for.
+ * for. `showHide` is `show` where the source omits it.
  */
 export const AssociableHotspot = relation(
   "AssociableHotspot",
@@ -152,6 +152,7 @@ export const AssociableHotspot = relation(
     matchMinN: pg.bigint,
     parentKind: closedId(NodeKind),
     shape: closedId(Shape),
+    showHide,
   },
   ["id"],
 );
@@ -316,6 +317,15 @@ export const SimpleAssociableChoiceFixed = relation(
 );
 
 /**
+ * A `qti-associable-hotspot` that wrote `show-hide`.
+ */
+export const DeclaredAssociableHotspotShowHide = relation(
+  "DeclaredAssociableHotspotShowHide",
+  { node: uuid },
+  ["node"],
+);
+
+/**
  * A simple associable choice's `show-hide`, when the source wrote it: the attribute has no default.
  */
 export const SimpleAssociableChoiceShowHide = relation(
@@ -374,6 +384,7 @@ export const relations = {
   AssociateInteraction,
   AssociateMaxAssociations,
   AssociateMinAssociations,
+  DeclaredAssociableHotspotShowHide,
   DeclaredAssociateMaxAssociations,
   DeclaredAssociateMinAssociations,
   DeclaredAssociateShuffle,
@@ -482,4 +493,5 @@ export const rules = [
   contained(on(SimpleAssociableChoiceMatchMin, "node"), on(SimpleAssociableChoice, "id")),
   contained(on(AssociableHotspotLabel, "node"), on(AssociableHotspot, "id")),
   contained(on(AssociableHotspotMatchMin, "node"), on(AssociableHotspot, "id")),
+  contained(on(DeclaredAssociableHotspotShowHide, "node"), on(AssociableHotspot, "id")),
 ] as const;

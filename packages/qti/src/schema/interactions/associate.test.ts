@@ -318,6 +318,7 @@ describe("interactions/associate", () => {
       [relations.SimpleAssociableChoiceMatchMin, relations.SimpleAssociableChoice],
       [relations.AssociableHotspotLabel, relations.AssociableHotspot],
       [relations.AssociableHotspotMatchMin, relations.AssociableHotspot],
+      [relations.DeclaredAssociableHotspotShowHide, relations.AssociableHotspot],
     ] as const;
 
     for (const [optional, arm] of owners) {
