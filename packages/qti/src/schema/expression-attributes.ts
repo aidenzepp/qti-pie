@@ -498,6 +498,9 @@ export const rules = [
     ),
   ),
   contained(on(OutcomeMinMax, "id", "kind"), on(node.Node, "id", "kind")),
+  check("OutcomeMinMaxKind", OutcomeMinMax, (o) =>
+    o.in(o.kind, ["qti-outcome-minimum", "qti-outcome-maximum"]),
+  ),
   contained(on(OutcomeMinimumArm, "id"), on(OutcomeMinMax, "id")),
   contained(on(OutcomeMaximumArm, "id"), on(OutcomeMinMax, "id")),
 ] as const;
