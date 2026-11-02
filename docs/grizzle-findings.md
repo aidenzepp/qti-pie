@@ -30,13 +30,13 @@ Defects and limits found while building `packages/qti` on grizzle `1.0.0-beta.0`
 | A query over relations known only as run-time values cannot be built through the typed public builder (`v(R)` over `AnyRelation` and `attach` over a run-time list do not typecheck), and the engine's run-time forms `queryOver` and `varsOver` are not exported from `@bjornpagen/grizzle`                                                                                                                                                                                                                                                                                                                                                                                                                          | limit  | confirmed                                                                    | `queryOver` and `varsOver` exist, "for a JavaScript caller, whose schema is known only at run time" (`packages/engine/src/query/build/query.ts:636` and `:801`), and the engine's build index exports them (`packages/engine/src/query/build/index.ts:23` and `:25`), but the public barrel exports `query` and `v` only (`packages/engine/src/public/query.ts:11`); the README documents the typed builder and a program built at run time from typed pieces (`README.md:1437`), and promises no query over relations held as values.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `import { queryOver } from "@bjornpagen/grizzle"` finds no export, and `v(relations[0])` over `relations: Array<AnyRelation>` does not typecheck. Read from the barrel, not run.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Four SAFETY assertions to a local run-time view (`LooseBuilder`, `LooseQuery`, `LooseDb`, `looseVars`) in `src/export/queries.ts` and `src/export/read.ts` (`p1-65`, `9dc3fd7`; the queries moved by `p1-72`, `9cbdd28`).                                                                                                                                      | `p1-65` (`9dc3fd7`)                                                                                   |
 | `grizzle generate` compiles a workload program and derives its indexes without charging the per-program SQL budget that `Db.open` enforces at layer build (`budgets.sqlBytes <= 1048576`), so a program can generate cleanly and then refuse every `Db.open`                                                                                                                                                                                                                                                                                                                                                                                                                                                          | defect | unconfirmed                                                                  | `generate` checks a workload ChangeSet through `compileChangeSet` with a meter that is never asked to emit SQL (`packages/engine/src/program/workload/compile.ts:192` to `198`); the SQL bytes of a write program are charged where each statement is emitted, `meter.chargeSql(sql, SourceLoc("write program", path))` (`packages/engine/src/write/program/compile.ts:363`), which `Db.open` runs when it compiles a workload's ChangeSet (`packages/grizzle/src/adapter/apply/compile.ts:88`), against `sqlBytes: 1024 * 1024` (`packages/engine/src/core/policy.ts:46`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | A schema of 185 relations with 547 fields in all and a workload program whose ChangeSet inserts into every relation: `grizzle generate` compiles the program with no refusal; `Db.open` then fails at stage schema with `OpenError: ... ResourceBound at write program at statements[526]: budgets.sqlBytes <= 1048576 (needed 1049460)`. Seen once, in this repository; a smaller standalone schema that crosses 1 MiB has not been built: needs a standalone reproduction.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | none: the import runs as one ChangeSet applied with `apply` and declares no workload (`p1-72`, exit (b): the workload folder reverted to `[]`, the query move kept).                                                                                                                                                                                           | `p1-72` (`9cbdd28`), closed with no change by `p1-73` (hand `a3e380d3`) and `p1-74` (hand `f5fc9d60`) |
 | A standalone package that depends on the two packed tarballs (`@bjornpagen/grizzle`, `@bjornpagen/grizzle-engine`) with `effect` at 4.0.7 resolves `@effect/platform-node-shared` 4.1.1 beside it, and the `grizzle` CLI fails with `ERR_MODULE_NOT_FOUND` (`effect/dist/process/CommandLine.js`) until that package is pinned to 4.0.7                                                                                                                                                                                                                                                                                                                                                                               | limit  | unconfirmed                                                                  | `@bjornpagen/grizzle` pins `@effect/platform-node` and takes `effect` as a peer of `^4.0.5` (`packages/grizzle/package.json:67`, `:75`); `@effect/platform-node` 4.0.7 depends on `@effect/platform-node-shared` at `^4.0.7`, a range that floats to a newer release when no lockfile holds it. The README installs the latest `effect` beside grizzle (`README.md:853`), which this does not. Observed once; the peer range of the 4.1.1 release was not read.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | In an empty package: add the two packed tarballs and `effect` at 4.0.7, then run any `grizzle` command: the CLI fails with `ERR_MODULE_NOT_FOUND` for `effect/dist/process/CommandLine.js`. Control: `overrides: { "@effect/platform-node-shared": "4.0.7" }` makes it run. Not rerun since the first observation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | An override of `@effect/platform-node-shared` to 4.0.7 in the scratch workspace (`p1-r18`, `625bf30`, scratch only); the repository's own `pnpm-lock.yaml:270` keeps 4.0.7.                                                                                                                                                                                    | `p1-r18` (`625bf30`)                                                                                  |
-| The alternatives reverse law function repeats its refusal block in every armed `WHEN` once the arm map omits a handle, and repeats the whole `CASE` in every participating table's branch, so for `Node.kind` over 85 armed handles and 84 branches it is 57,643 lines and 5.5 MB (15,228 lines and 1.1 MB with every handle armed), its first call in a backend costs 5.9 s (the first law-checked write of every pool, above vitest's 5,000 ms default: four phase-1 files at 5,443 to 5,687 ms in the `p2-06` merge), `migrate` of its folder 25.6 s, `snapshot.json` 22.6 MB to 102.5 MB, and it grows as (participating tables) x (armed handles): 373,038 lines, 33.1 MB and a first call of 211 s at 216 x 215 | defect | confirmed                                                                    | `armed` is true only when every handle has an arm (`packages/engine/src/laws/families/alternatives/index.ts:44`); when it is false each `WHEN` body is the probe plus the whole refusal, `body: armed ? [probe] : [probe, unlessFound(parent.raise)]` (`index.ts:57`), the dispatch gets `else: []` and no trailing refusal (`index.ts:61-64`), and the doc comment says so: "with an ELSE each armed branch raises after its own probe; with every handle armed the one refusal follows END CASE" (`index.ts:34-36`); the skeleton dispatches on `TG_TABLE_NAME` over every participating table and splices the family's steps into each branch (`packages/engine/src/laws/residual/skeleton.ts:205-210`, `:315-316`), so each branch repeats the per-arm blocks. The README's Limits list (`README.md:1881`) names none of it, so it is not a documented limit. Working theory for the time: PL/pgSQL compiles the body on the first call in each backend; not profiled.                                                                                                                                                                                                                                                               | `gen.sh <shape> <arms> <branches>` (the script in the draft below, section "Filed issues") prints one SQL file: a schema, an enum of `<arms>` handles (plus `unarmed` for `per-arm`), a table `node`, one table per arm, and a trigger function of `<branches>` `TG_TABLE_NAME` branches in the shape `armed` selects, fired by a deferred constraint trigger on `node` insert. Scratch database from a template on PostgreSQL 19rc1 (`jit` off); one `psql -c '\timing on' -f <file>` process is one backend; probes insert a `node` row of kind `k1` and its `a1` row in two transactions. A `per-arm 85 84`: 57,721 lines, 5,092,200 bytes; `CREATE FUNCTION` `Time: 6875.310 ms`; first `COMMIT` `Time: 5911.403 ms`, second `Time: 0.201 ms`; a new backend's first `COMMIT` `Time: 5515.656 ms`. Control B `trailing 85 84` (same counts, every handle armed): 15,301 lines, 892,777 bytes; `Time: 661.948 ms`; first `COMMIT` `Time: 726.487 ms`, second `Time: 0.197 ms`, new backend `Time: 740.026 ms`. Projection C `per-arm 216 215`: 373,038 lines, 33,080,443 bytes; `Time: 254614.071 ms`; first `COMMIT` `Time: 211350.087 ms`, second `Time: 4.522 ms`, new backend `Time: 208581.437 ms`. The signal held: A's first minus second is 5,911 ms (at least 2,000), the new backend repeats it within 50 percent, and B's difference, 726 ms, is under half of A's. B pays a first call too (726 ms): the cost scales with size and the per-arm shape is about eight times larger in time.                 | none applied. Two candidates: a thin arm relation for `template` would arm every handle and restore the trailing shape (a modeling change the spec declines: the Mind's and operator's call, escalated in the phase-2 slice list), and the per-test-file budget of `repair1-22` (`src/test/settings.ts`, `leaseTestTimeoutMs`), which only raises the timeout. | `p2-06`, `repair1-21`                                                                                 |
+| The first call of the alternatives reverse law function in each backend takes time that grows as the square of (participating tables x handles) (one unarmed: 43 handles 0.32 s, 85 handles 5.0 s, 128 handles 24.3 s; all armed: 216 handles 24.9 s), and one handle without an arm multiplies it about 8 times: the refusal block repeats in every `WHEN`, and the `CASE` in every table's branch. At 85 handles `grizzle generate` gives 59,008 lines and 5.46 MB (first call 5.0 s, `snapshot.json` 99.4 MB) against 15,578 lines (0.61 s, 17.6 MB) all armed; in `Qti` the first law-checked write of every pool passes vitest's 5,000 ms default, `migrate` took 25.6 s and `snapshot.json` 22.6 MB to 102.5 MB | defect | confirmed                                                                    | `armed` is true only when every handle has an arm (`packages/engine/src/laws/families/alternatives/index.ts:44`); when it is false each `WHEN` body is the probe plus the whole refusal (`index.ts:57`) and the dispatch gets `else: []` with no trailing refusal (`index.ts:61-64`), as the doc comment says (`index.ts:34-36`); the skeleton dispatches on `TG_TABLE_NAME` over every participating table and splices the family's steps into each branch (`packages/engine/src/laws/residual/skeleton.ts:205-210`, `:315-316`), so each branch repeats the whole `CASE`, armed or not. The README's flagship example leaves a handle unarmed (`README.md:639`) and its Limits list (`README.md:1881`) names no such cost: a defect, not a limit. Measured: the time is PL/pgSQL compilation (`check_function_bodies=off` leaves the first call at 4,806.796 ms) and follows the count of `WHEN` and `IF`, not bytes (5.09 MB takes 5.0 s, 5.57 MB 24.9 s). Working theory, source-traced in PostgreSQL 19rc1 and not profiled: `src/pl/plpgsql/src/pl_scanner.c:581-583` rescans the body from the top for each `WHEN` (`pl_gram.y:1269`) and `IF` (`:1196`); the draft has the controls.                                             | The standalone project of the draft below (section "Filed issues"): the two packed tarballs, `effect` 4.0.7, a 12-line `schema.ts` of a closed roster `Kind` of `ARMS` handles (plus `unarmed` when `UNARMED=1`), `Node { id, kind }`, one arm relation per handle and `alternatives(Node, "kind", Kind, { k1: A1, ... })`. `ARMS=85 UNARMED=1 grizzle generate` drafts a function of 59,008 lines and 5,464,132 bytes (`WHEN` 7,310, `RAISE` 7,310, `ELSE` 86) and a `snapshot.json` of 99,437,981 bytes; control `UNARMED=0`: 15,578 lines, 917,054 bytes (`RAISE` 86, `ELSE` 0), 17,633,763 bytes. Installed on PostgreSQL 19rc1 (`jit` off), one `psql` process per backend, a probe of two transactions that insert a `Node` row of kind `k1` and its `A1` row: `UNARMED=1` `CREATE FUNCTION` 5,142.443 ms, first `COMMIT` 5,015.567 ms, second 0.184 ms, new backend 5,070.420 ms; control 633.908 ms, 613.540 ms, 0.161 ms, 612.351 ms. The scaling tool `gen.sh <shape> <arms> <branches>` (in the draft; `per-arm` or `trailing`) writes the same shape as plain SQL: first `COMMIT` `per-arm 85 84` 4,991.574 ms, `trailing 85 84` 607.762 ms, `per-arm 43 42` 319.570 ms, `per-arm 128 127` 24,332.238 ms, `trailing 216 215` 24,913.960 ms, `per-arm 216 215` 211,350.087 ms. The signal held: first minus second `COMMIT` is 5,015 ms (at least 2,000), the new backend repeats it within 50 percent, and the control's difference, 613 ms, is under half of it.                                            | none applied. Two candidates: a thin arm relation for `template` would arm every handle and restore the trailing shape (a modeling change the spec declines: the Mind's and operator's call, escalated in the phase-2 slice list), and the per-test-file budget of `repair1-22` (`src/test/settings.ts`, `leaseTestTimeoutMs`), which only raises the timeout. | `p2-06`, `repair1-21`, `row27-rev1`                                                                   |
 
 The first three came from grizzle's own test suites, before this package existed.
 
 ## Filed issues
 
-Filed: [bjornpagen/grizzle#4](https://github.com/bjornpagen/grizzle/issues/4), the drift replay (rows 12 and 13), whose draft is kept below; rows 1 to 3 were filed as #1 to #3 before this package existed. Drafted: the alternatives law function (row 27), below, ready for steps 3 and 5; not filed. Considered and not filed: the `K.handle` row check (row 23), a documented limit, below. The other defect rows are `unconfirmed` and have no draft. For the drift draft, steps 3 and 5 were done before it was filed. Step 3 was an independent check (auditor task 65d7f348, report mail 2bcf260b, verdict confirmed grizzle defect). Step 5 was a cold read of the first draft (hater a6f49dce) and a merit extraction (head-cxo 5f552904); this draft applies the head's change list and adds a psql-only reproduction that was run on the local cluster in one rolled-back session. `gh repo view bjornpagen/grizzle` answered, as `aidenzepp`, that the repository is private with issues enabled and discussions disabled, and `gh issue list --repo bjornpagen/grizzle --state all` lists issues 1 to 3 only (the three rows above), with no pull request: a search of issues for `drift`, `search_path`, `shadow`, `42804`, `DriftUnchecked`, `pg_catalog`, `composite` and `Drifted` found no duplicate. Permalinks are pinned to `65203c443fa969cc47c539666a998436595f42fe` and resolve for collaborators only. One draft stands for the two confirmed defect rows that share a cause (the `Text` refusal and the `Uuid` false `Drifted`).
+Filed: [bjornpagen/grizzle#4](https://github.com/bjornpagen/grizzle/issues/4), the drift replay (rows 12 and 13), whose draft is kept below; rows 1 to 3 were filed as #1 to #3 before this package existed. Drafted: the alternatives law function (row 27), below, revised after the step-3 check (auditor `fefcd9a3`, verdict confirmed grizzle defect), ready for step 5; not filed. Considered and not filed: the `K.handle` row check (row 23), a documented limit, below. The other defect rows are `unconfirmed` and have no draft. For the drift draft, steps 3 and 5 were done before it was filed. Step 3 was an independent check (auditor task 65d7f348, report mail 2bcf260b, verdict confirmed grizzle defect). Step 5 was a cold read of the first draft (hater a6f49dce) and a merit extraction (head-cxo 5f552904); this draft applies the head's change list and adds a psql-only reproduction that was run on the local cluster in one rolled-back session. `gh repo view bjornpagen/grizzle` answered, as `aidenzepp`, that the repository is private with issues enabled and discussions disabled, and `gh issue list --repo bjornpagen/grizzle --state all` lists issues 1 to 3 only (the three rows above), with no pull request: a search of issues for `drift`, `search_path`, `shadow`, `42804`, `DriftUnchecked`, `pg_catalog`, `composite` and `Drifted` found no duplicate. Permalinks are pinned to `65203c443fa969cc47c539666a998436595f42fe` and resolve for collaborators only. One draft stands for the two confirmed defect rows that share a cause (the `Text` refusal and the `Uuid` false `Drifted`).
 
 Settings for the filer: repository `bjornpagen/grizzle` (private; `aidenzepp` holds write access); vendored commit `65203c4` (grizzle 1.0.0-beta.0); filed by `aidenzepp`, the operator's account, through the six-step gate; labels none; assignee none; the only action on the repository is opening this issue (rule 485ad014). The disclosure block names the Provider and Model of every seat that wrote text: one group, because the drafter and the reviser are the same model.
 
@@ -245,16 +245,16 @@ For each of the `Text` and `Tree`, `Uuid` and `Vote`, and `Money` and `Wallet` s
 
 ### Draft: the alternatives law function with an unarmed handle (row 27)
 
-Drafted by `repair1-21`, not filed. Step 1: triaged against the clone at `65203c4` (row 27: a defect, not a documented limit; the Limits list names none of it; the doc comment of `alternatives/index.ts:34-36` describes the shape but promises no size). Step 2: the reproduction ran, outside this repository, on the local cluster in a scratch database that was dropped after (the `Time:` lines in the row and the draft are from that run; an earlier run of the same shape with a longer constraint name gave 4,841.690 ms for A's first `COMMIT`, 590.811 ms for B and 207,268.470 ms for C), with the control B. Step 4: `issue-authoring` lint printed `ok` for the title below and the body; `gh issue list --repo bjornpagen/grizzle --state all --search` for `alternatives`, `law function`, `plpgsql`, `CASE_NOT_FOUND`, `unarmed`, `first call`, `RAISE`, `migration size` and `snapshot` found no duplicate (issue 4 matched `RAISE`, `snapshot` and `first call` words only, and concerns the drift replay), and the repository has no pull request. Steps 3 (independent check) and 5 (hater pass) are not done. Permalinks are pinned to `65203c443fa969cc47c539666a998436595f42fe`. Title: `alternatives` reverse law function grows as tables x armed handles when one handle is unarmed, and its first call takes seconds.
+Drafted by `repair1-21`, revised by `row27-rev1` after step 3, not filed. One issue (decision 37): the headline is the first-call cost, which grows as the square of (participating tables x handles) in every shape, and the unarmed handle's multiplier of about 8 times is a section of it. Step 1: triaged against the clone at `65203c4` (row 27: a defect, not a documented limit; the README's Limits list names none of it and its flagship example leaves a handle unarmed, `README.md:639`; the doc comment of `alternatives/index.ts:34-36` describes the per-arm shape as deliberate and promises no size). Step 2: the standalone grizzle project and the scaling tool `gen.sh` ran outside this repository, on the local cluster in a scratch database that was dropped after, with the control `UNARMED=0` and the all-armed `trailing` shape. Step 3: auditor `fefcd9a3` (Opus 5.5; the drafter was Sonnet 5.5, the same provider) re-ran both, re-read every anchor, ran the fix direction against the generator's SQL and ran the no-grizzle controls, and confirmed a grizzle defect; its nine changes are applied here (the rows of 43, 85 and 128 handles, the all-armed 216 / 215 row, the `fixed` rows and the Cause controls are its measurements). Step 4: `issue-authoring` lint printed `ok` for the title below and the body (`--forbid` of this repository's names); `gh issue list --repo bjornpagen/grizzle --state all` lists issues 1 to 4 (the drift replay, numeric display scale, all-serial head fields, `audit.test.ts` seeds), none a duplicate, and the repository has no pull request. Step 5 (hater pass) is not done. Permalinks are pinned to `65203c443fa969cc47c539666a998436595f42fe`. Title: `alternatives` law function: first call per backend grows as the square of tables x handles, about 8 times more with an unarmed handle
 
 ````text
 ### Summary
-When the arm map of `alternatives` omits a handle, the reverse law's function repeats the whole refusal block in every armed `WHEN`, and repeats the whole `CASE` in every participating table's branch, so its text grows as (participating tables) x (armed handles). At 85 armed handles and 84 branches the function is 57,721 lines and 5.09 MB, and the first call in each backend takes 5.9 s. With every handle armed the same counts give 15,301 lines and 0.89 MB and a first call of 0.73 s.
+The first call of the `alternatives` reverse law function in each backend takes time that grows as the square of (participating tables x handles). In a standalone project, 85 handles over 86 tables give a function of 15,578 lines whose first call takes 0.61 s when every handle has an arm, and 128 handles over 127 branches take 24.3 s in the per-arm shape. One handle without an arm repeats the refusal block in every `WHEN` and multiplies the cost about 8 times: the same 85 handles and one unarmed handle give 59,008 lines, 5.46 MB and a first call of 5.0 s.
 
-Ran against PostgreSQL 19rc1 (`jit = off`) with plain SQL generated to the shape of the function, and read at `bjornpagen/grizzle@65203c4`. The function was not produced by a standalone grizzle schema (see Not confirmed).
+Ran `grizzle generate` on a standalone schema, and timed the generated function and generator-written variants on PostgreSQL 19rc1 (`jit = off`). Read at `bjornpagen/grizzle@65203c4`.
 
 ### Code path
-1. The doc comment of `alternativesFamily` sketches one `CASE` with one `IF NOT FOUND THEN RAISE ... END IF` after `END CASE`. It states that an omitted handle makes the `CASE` need an `ELSE`, and that "with an ELSE each armed branch raises after its own probe".
+1. The doc comment of `alternativesFamily` states that an omitted handle makes the `CASE` need an `ELSE`, and that "with an ELSE each armed branch raises after its own probe; with every handle armed the one refusal follows END CASE".
 
 https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/laws/families/alternatives/index.ts#L34-L36
 
@@ -270,14 +270,90 @@ https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f4
 
 https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/laws/families/alternatives/index.ts#L61-L64
 
-5. The residual skeleton dispatches on `TG_TABLE_NAME` over every participating table and splices the family's steps into each branch, so the per-arm blocks of step 3 are repeated once per branch.
+5. The residual skeleton dispatches on `TG_TABLE_NAME` over every participating table and splices the family's steps into each branch, so the whole `CASE` is repeated once per branch, armed or not.
 
 https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/laws/residual/skeleton.ts#L205-L210
 
 https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/laws/residual/skeleton.ts#L315-L316
 
 ### Reproduction
-1. Save the generator below as `gen.sh`. It prints a schema `repro_law`, an enum `kind` of `<arms>` handles (plus one extra handle `unarmed` for `per-arm`), a table `node`, one table per arm, and the function in the shape that `armed` selects. The refusal block is the one grizzle emits, with `DETAIL` kept at 353 characters. A trigger fires it at commit.
+1. Create a project with the two packed tarballs of `@bjornpagen/grizzle` and `@bjornpagen/grizzle-engine` at `1.0.0-beta.0`, `effect` at 4.0.7 and `@effect/platform-node-shared` at 4.0.7 (pinned so the CLI runs). `package.json` depends on `@bjornpagen/grizzle` as `file:<path to its tarball>`, and `pnpm-workspace.yaml` overrides `@bjornpagen/grizzle-engine` with `file:<path to its tarball>`.
+
+2. Save `schema.ts`. `ARMS` sets the number of handles with an arm, and `UNARMED=1` adds one handle to the roster that has no arm.
+
+```ts
+import { alternatives, closed, closedId, login, relation, role, schema, uuid } from "@bjornpagen/grizzle"
+
+const arms = Number(process.env.ARMS ?? "3")
+const unarmed = process.env.UNARMED === "1"
+const handles = Array.from({ length: arms }, (_, i) => `k${i + 1}`)
+export const Kind = closed("Kind", [...handles, ...(unarmed ? ["unarmed"] : [])] as [string, ...string[]])
+export const Node = relation("Node", { id: uuid, kind: closedId(Kind) }, ["id"])
+const armRelations = Object.fromEntries(handles.map((h, i) => [`A${i + 1}`, relation(`A${i + 1}`, { id: uuid }, ["id"])]))
+const armMap = Object.fromEntries(handles.map((h, i) => [h, armRelations[`A${i + 1}`]]))
+export const Repro = schema("Repro", { Kind, Node, ...armRelations } as any, [alternatives(Node, "kind", Kind, armMap as any)] as any)
+const stored = { Node, ...armRelations } as any
+export const Author = role(Repro, "author", stored, { write: Object.keys(stored) } as any)
+export const App = login(Repro, "app", [Author], { workload: [] })
+```
+
+and `grizzle.config.ts`:
+
+```ts
+import { defineConfig } from "@bjornpagen/grizzle"
+import { App, Repro } from "./schema.ts"
+export default defineConfig({ logins: [App], schemas: [Repro] })
+```
+
+3. Generate the schema with one unarmed handle and with every handle armed, and read the function in `03-validate.sql` of each migration folder.
+
+```sh
+ARMS=85 UNARMED=1 grizzle generate --name init
+ARMS=85 UNARMED=0 grizzle generate --name init
+```
+
+```text
+UNARMED=1: function 59,008 lines, 5,464,132 bytes; WHEN 7,310, RAISE 7,310, TG_TABLE_NAME 85, ELSE 86; snapshot.json 99,437,981 bytes
+UNARMED=0: function 15,578 lines,   917,054 bytes; WHEN 7,310, RAISE    86, TG_TABLE_NAME 85, ELSE  0; snapshot.json  17,633,763 bytes
+```
+
+The counts are the function's lines and bytes, and the occurrences of each keyword inside it. At `ARMS=3 UNARMED=1` the function has the shape the doc comment describes: the probe and `IF NOT FOUND THEN RAISE ... END IF;` in every `WHEN`, an `ELSE` with an empty body, no trailing refusal, and the whole `CASE` in each `TG_TABLE_NAME` branch.
+
+4. Install each generated function in an empty scratch database with hand-written equivalents of the enum, the tables and the deferred constraint trigger on `Node` insert (the script of step 5 writes the same objects around its own function). Run the file, then a probe, each as its own `psql` process (one process is one backend), with `\timing on`. The probe is two transactions that each insert a `Node` row of kind `k1` and its `A1` row, so the deferred trigger fires at each `COMMIT`.
+
+<details>
+<summary>psql output, PostgreSQL 19rc1, `jit = off`. The label line is `wc -lc` of the installed SQL file; the rest is the `Time:` line after each statement.</summary>
+
+```text
+== grizzle-generated, 85 armed, unarmed=1:    59098 5469019
+CREATE FUNCTION
+Time: 5142.443 ms (00:05.142)
+COMMIT
+Time: 5015.567 ms (00:05.016)
+COMMIT
+Time: 0.184 ms
+COMMIT
+Time: 5070.420 ms (00:05.070)
+COMMIT
+Time: 0.193 ms
+== grizzle-generated, 85 armed, unarmed=0:    15668  921930
+CREATE FUNCTION
+Time: 633.908 ms
+COMMIT
+Time: 613.540 ms
+COMMIT
+Time: 0.161 ms
+COMMIT
+Time: 612.351 ms
+COMMIT
+Time: 0.197 ms
+```
+
+</details>
+
+The first `COMMIT` of each backend pays the cost and the second takes under 1 ms. The unarmed function takes 5.0 s against 0.61 s for the all-armed function (**Control**: the same schema with `UNARMED=0`).
+
+5. Scaling tool. `gen.sh` writes SQL in the shape `grizzle generate` emits, so the sizes and handle counts can be varied without a generate run. Its `read` strips the leading spaces of the first line of the refusal block, which changes whitespace only.
 
 <details>
 <summary>gen.sh (bash, 43 lines)</summary>
@@ -330,7 +406,7 @@ RAISE
 
 </details>
 
-2. Save the two probes. Each is one backend: two transactions that insert a `node` row of kind `k1` and its `a1` row, so the deferred trigger fires at each `COMMIT`.
+The probe for its tables:
 
 ```sh
 mk() { printf "BEGIN;\nINSERT INTO repro_law.node VALUES ('00000000-0000-0000-0000-00000000000$1', 'k1');\nINSERT INTO repro_law.a1 VALUES ('00000000-0000-0000-0000-00000000000$1');\nCOMMIT;\n"; }
@@ -338,77 +414,76 @@ mk() { printf "BEGIN;\nINSERT INTO repro_law.node VALUES ('00000000-0000-0000-00
 { mk 3; mk 4; } > probe2.sql
 ```
 
-3. Between the shapes, run `DROP SCHEMA repro_law CASCADE`. In an empty scratch database, run the file, then `probe.sql`, then `probe2.sql`, each as its own `psql` process (one process is one backend), with `\timing on`.
+Between runs, `DROP SCHEMA repro_law CASCADE`. Each shape is one file run, then `probe.sql`, then `probe2.sql`, each as its own `psql` process with `\timing on`:
 
 ```sh
 ./gen.sh per-arm 85 84 > a.sql
-wc -lc a.sql
 psql -X -v ON_ERROR_STOP=1 -c '\timing on' -f a.sql
 psql -X -v ON_ERROR_STOP=1 -c '\timing on' -f probe.sql
 psql -X -v ON_ERROR_STOP=1 -c '\timing on' -f probe2.sql
 ```
 
-```text
-   57721 5092200 a.sql
-CREATE FUNCTION
-Time: 6875.310 ms (00:06.875)
-COMMIT
-Time: 5911.403 ms (00:05.911)
-COMMIT
-Time: 0.201 ms
-COMMIT
-Time: 5515.656 ms (00:05.516)
-COMMIT
-Time: 0.226 ms
-```
-
-The lines are the `wc` result and the `Time:` line that follows each `CREATE FUNCTION` and `COMMIT`; the rest of the `psql` output is omitted. The first `COMMIT` of `probe.sql` and of `probe2.sql` each take about 5.5 to 5.9 s, and the second of each takes under 1 ms.
-
-**Control.** `./gen.sh trailing 85 84` has the same tables and the same 84 branches, and every handle is armed, so the function carries one refusal per branch after `END CASE`.
-
-```text
-   15301 892777 b.sql
-CREATE FUNCTION
-Time: 661.948 ms
-COMMIT
-Time: 726.487 ms
-COMMIT
-Time: 0.197 ms
-COMMIT
-Time: 740.026 ms
-COMMIT
-Time: 4.783 ms
-```
-
 ### Expected
-The doc comment sketches one refusal after `END CASE` (the first link of Code path). The function's text and its first-call time should not multiply the refusal block by the number of armed handles, and the README's [Limits](https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/README.md#L1881) list names no such cost.
+The README's flagship `alternatives` example leaves a handle unarmed: `open` has no arm in `alternatives(Invoice, "state", InvoiceState, { paid: Payment, void: Voiding })`, so the unarmed case is the documented main path.
+
+https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/README.md#L639
+
+The README's Limits list names no law-function size or first-call cost.
+
+https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/README.md#L1881
+
+A schema with an unarmed handle should generate a function about as large, and cost about as much on its first call, as the same schema with every handle armed, and a law check should return the same results. The fix direction below keeps the results.
 
 ### What changes the result
-  | Shape | Branches x handles | Function size | `CREATE FUNCTION` | First `COMMIT`, backend 1 | Second `COMMIT` | First `COMMIT`, backend 2 |
-  | --- | --- | --- | --- | --- | --- | --- |
-  | `per-arm`, one handle unarmed | 84 x 85 | 57,721 lines, 5,092,200 bytes | 6,875.310 ms | 5,911.403 ms | 0.201 ms | 5,515.656 ms |
-  | `trailing`, all armed | 84 x 85 | 15,301 lines, 892,777 bytes | 661.948 ms | 726.487 ms | 0.197 ms | 740.026 ms |
-  | `per-arm`, one handle unarmed | 215 x 216 | 373,038 lines, 33,080,443 bytes | 254,614.071 ms | 211,350.087 ms | 4.522 ms | 208,581.437 ms |
+Sizes are the whole generated file, DDL included. `Handles` is the number of handles with an arm, and `per-arm` adds one unarmed handle.
 
-The first call in each backend pays the cost and a later call in the same backend does not. The `trailing` shape pays it too: 0.73 s against 5.9 s.
+  | Shape | Handles / branches | File size | `CREATE FUNCTION` | First `COMMIT` | Second `COMMIT` |
+  | --- | --- | --- | --- | --- | --- |
+  | `per-arm` | 43 / 42 | 14,755 lines, 1,293,972 bytes | 332.080 ms | 319.570 ms | 0.238 ms |
+  | `per-arm` | 85 / 84 | 57,721 lines, 5,092,200 bytes | 5,660.142 ms | 4,991.574 ms | 0.160 ms |
+  | `per-arm` | 128 / 127 | 130,950 lines, 11,583,363 bytes | 29,489.004 ms | 24,332.238 ms | 0.221 ms |
+  | `per-arm` | 216 / 215 | 373,038 lines, 33,080,443 bytes | 254,614.071 ms | 211,350.087 ms | 4.522 ms |
+  | `trailing`, all armed | 85 / 84 | 15,301 lines, 892,777 bytes | 628.701 ms | 607.762 ms | 0.189 ms |
+  | `trailing`, all armed | 216 / 215 | 95,473 lines, 5,573,762 bytes | 24,182.895 ms | 24,913.960 ms | 0.252 ms |
+  | `fixed` (see Fix direction) | 85 / 84 | 15,469 lines, 895,644 bytes | 636.437 ms | 617.382 ms | 0.287 ms |
+  | `fixed` (see Fix direction) | 216 / 215 | 95,903 lines, 5,581,083 bytes | 24,412.614 ms | 24,410.357 ms | 0.155 ms |
 
-In an application schema with one unarmed handle among 86, `grizzle migrate` of the three folders of the migration that republishes the function took 25.6 s, `snapshot.json` grew from 22.6 MB to 102.5 MB, and the first write through each pool took 5.4 to 5.7 s.
+The first call in each backend pays the cost, and a later call in the same backend does not. A second backend pays it again: 5,070.420 ms for `per-arm` and 612.351 ms for all-armed at 85 handles in the standalone run.
+
+**The first call is quadratic in every shape.** For `per-arm`, the cells (handles x branches) are 1,806, 7,140 and 16,256, and the first `COMMIT` is 0.32 s, 4.99 s and 24.3 s: ratios of 15.6 and 4.9 against 15.6 and 5.2 for the squares of the cells. The all-armed `trailing` shape at 216 / 215 takes 24.9 s, so the cost is not linear in size: the `per-arm` 85 / 84 file (5.09 MB) takes 5.0 s, and the all-armed 216 / 215 file (5.57 MB) takes 24.9 s.
+
+**The unarmed handle multiplies it about 8 times.** At 85 handles the standalone function is 59,008 lines against 15,578, and the first call is 5.0 s against 0.61 s. At 216 / 215 the `per-arm` first call is 211 s against 24.9 s. `snapshot.json` is 99.4 MB against 17.6 MB at 85 handles.
 
 ### Cause
-Working theory. The size is the product above, and PL/pgSQL parses and compiles the function body on the first call in a backend. The timings fit the size but a profile was not taken.
+The measured facts:
 
-https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/laws/families/alternatives/index.ts#L57
+- The cost is paid by the first call in a backend, and `CREATE FUNCTION` pays the same compile once (5.66 s for the `per-arm` 85 / 84 file). With `PGOPTIONS='-c check_function_bodies=off'`, `CREATE FUNCTION` of the same file takes 10.758 ms and its first `COMMIT` still takes 4,806.796 ms. The time is PL/pgSQL compilation of the body.
+- The time follows the number of `WHEN` and `IF` statements, not the bytes (see the table).
+- Two controls with no grizzle: a function of 10,000, 20,000 and 40,000 flat `PERFORM 1 FROM t WHERE id = x;` statements creates in 12.4, 24.6 and 47.6 ms, which is linear. A function with one `CASE` of 10,000, 20,000 and 40,000 `WHEN i THEN PERFORM 1;` arms creates in 640.014, 2,766.804 and 12,320.484 ms, which is quadratic.
+
+Working theory for the quadratic term, traced in source and not profiled. PostgreSQL 19rc1 `src/pl/plpgsql/src/pl_scanner.c:581-583` reads `/* be correct, but not fast, if input location goes backwards */` and calls `location_lineno_init`, which rescans the body line by line from the start. Every `CASE ... WHEN` computes its line number after its body is parsed (`pl_gram.y:1269`, `plpgsql_location_to_lineno`), and so does every `IF` (`pl_gram.y:1196`). Each `WHEN` and each `IF NOT FOUND` then pays one scan from the top.
+
+The size is grizzle's: (participating tables) x (handles) `WHEN` arms in one function (Code path 5), and with an unarmed handle the 8-line `IF NOT FOUND` refusal block is added to every arm (Code path 3). `unlessFound` is used outside `alternatives` only at `mirrors/index.ts:51`, where it is one probe per branch of constant size, so no other family multiplies in this way.
+
+### Impact
+The first law-checked write in every backend takes seconds at this size, and `grizzle generate` writes a 99.4 MB `snapshot.json` for the 85-handle schema with one unarmed handle.
 
 ### Not confirmed
-- Whether the time is parse, plan or compile. Only the first-call and second-call difference and the size scaling were measured.
-- Whether a function from a standalone grizzle schema with one unarmed handle matches `gen.sh`. The generator was written to the shape of the function that `grizzle generate` drafted in an application schema, and was not produced by running grizzle on a minimal schema.
-- Any other family that emits per-arm refusals. Only `alternatives` was read.
+- The `pl_scanner.c` rescan is the mechanism of the quadratic term. It fits the measured curve and the no-grizzle control, and was not profiled.
+- Whether a patched grizzle emits the `fixed` shape and keeps the results. The fix direction was run on SQL produced by `gen.sh`, not on a change to grizzle.
+- Timings come from one machine and one run per row.
 
 ### Fix direction
-Possible change, untested. When a handle is unarmed, emit the refusal once per branch after `END CASE`, as the armed shape does, and make the `ELSE` branch leave `FOUND` true (for example with `PERFORM 1;`), so the refusal is not repeated in each `WHEN`. The raised error and its `DETAIL` would stay the same, and a schema with every handle armed would generate the same text as today.
+Possible change, tested on the generator's SQL and not on grizzle. When a handle is unarmed, emit the refusal once per branch after `END CASE`, as the armed shape does, and make the `ELSE` branch leave `FOUND` true with `PERFORM 1;`. The raised error and its `DETAIL` stay the same, and a schema with every handle armed generates the same text as today.
+
+Five transactions at 2 handles and 2 branches (an unarmed parent alone; `k1` with no payload; `k1` with its payload; `k2` with only an `a1` payload; an unarmed parent plus a `k2` parent with its payload) end in COMMIT, ERROR, COMMIT, ERROR, COMMIT for `per-arm` and for the `fixed` shape. The same shape with an empty `ELSE` ends in ERROR, ERROR, COMMIT, ERROR, ERROR: it refuses an unarmed parent because `FOUND` is false at the first loop iteration, so the `PERFORM 1;` is needed. At 85 / 84 the `fixed` function is 15,469 lines and 895,644 bytes (1.1 percent more than all-armed) and its first `COMMIT` takes 617.382 ms.
+
+This removes only the constant factor of about 8. At 216 / 215 the `fixed` shape takes 24.4 s, the same as all-armed, because the `CASE` is still repeated in every `TG_TABLE_NAME` branch.
+
+A deeper direction, untested: collect the affected keys per `TG_TABLE_NAME` branch and dispatch the `CASE` once per call, so the function grows as tables + handles and not as their product.
 
 ### Acceptance check
-A schema with one unarmed handle over 85 armed handles and 84 branches generates a function within 10 percent of the line count of the same schema with every handle armed, and the first `COMMIT` of `probe.sql` against it takes under twice as long as against the all-armed function.
+`ARMS=85 UNARMED=1 grizzle generate` of the standalone schema writes a function within 10 percent of the line count of the `UNARMED=0` function (15,578 lines), and the first `COMMIT` of the probe against it takes under twice as long as against the `UNARMED=0` function (613.540 ms). The check covers the unarmed multiplier only.
 
 ---
 **AI disclosure:** Written by AI, checked by independent AI reviewers, and filed without the account holder's review.
