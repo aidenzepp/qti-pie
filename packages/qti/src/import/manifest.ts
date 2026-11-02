@@ -16,6 +16,7 @@ import { collapse, replace, Rows, treeRows, typedAttribute } from "#qti/import/t
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { readEntry } from "#qti/package/read.ts";
 import type { Entry, PackageReadError } from "#qti/package/read.ts";
+import type { ZipRefusal } from "#qti/package/zip.ts";
 import * as md from "#qti/schema/metadata.ts";
 import { Edge } from "#qti/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
@@ -290,7 +291,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     rows: Rows;
     version: SchemaVersionHandle;
   },
-  NotQti3 | PackageReadError | UnmodeledVocabulary | PlatformError.PlatformError,
+  NotQti3 | PackageReadError | UnmodeledVocabulary | PlatformError.PlatformError | ZipRefusal,
   FileSystem.FileSystem
 > {
   const version = yield* versionOf(doc);

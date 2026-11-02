@@ -587,7 +587,7 @@ layer(TestLayer, { excludeTestServices: true })("package/read.ts over a .zip", (
       const failure = yield* Effect.flip(readEntry(SIMPLE_ZIP, "nope.xml"));
 
       if (!(failure instanceof PackageReadError)) {
-        return assert.fail(`expected a PackageReadError, got ${failure._tag}`);
+        assert.fail(`expected a PackageReadError, got ${failure._tag}`);
       }
 
       assert.strictEqual(failure.rule, "entry-path");
@@ -602,7 +602,7 @@ layer(TestLayer, { excludeTestServices: true })("package/read.ts over a .zip", (
       const failure = yield* Effect.flip(listPackage(file));
 
       if (!(failure instanceof PackageReadError)) {
-        return assert.fail(`expected a PackageReadError, got ${failure._tag}`);
+        assert.fail(`expected a PackageReadError, got ${failure._tag}`);
       }
 
       assert.strictEqual(failure.rule, "manifest-root");
@@ -620,7 +620,7 @@ layer(TestLayer, { excludeTestServices: true })("package/read.ts over a .zip", (
         yield* Effect.flip(readEntry(file, "imsmanifest.xml")),
       ]) {
         if (!(failure instanceof ZipRefusal)) {
-          return assert.fail(`expected a ZipRefusal, got ${failure._tag}`);
+          assert.fail(`expected a ZipRefusal, got ${failure._tag}`);
         }
 
         assert.strictEqual(failure.rule, "href-path");
