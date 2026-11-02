@@ -188,6 +188,31 @@ export const FileContent = relation(
   ["package", "path"],
 );
 
+/**
+ * The `cp:metadata` child of a file, at most once per file.
+ */
+export const FileMetadata = relation("FileMetadata", { file: uuid, id: uuid }, ["id"]);
+
+/**
+ * The relations of the file metadata, staged: not yet spread into `relations`.
+ */
+export const fileMetadataRelations = { FileMetadata };
+
+/**
+ * The statements over `FileMetadata`: at most one per file, hung under its file by an edge, and
+ * naming a file of a package. Staged beside the relation.
+ */
+export const fileMetadataRules = [
+  key(FileMetadata, ["file"]),
+  contained(on(FileMetadata, "id", "file"), on(Edge, "child", "parent")),
+  contained(on(FileMetadata, "file"), on(File, "id")),
+] as const;
+
+/**
+ * The arm of the file metadata, keyed by its `NodeKind` handle. Staged beside the relation.
+ */
+export const fileMetadataArms = { "cp:metadata.file": FileMetadata };
+
 const drdLeaf = <Name extends string>(name: Name, value: ReturnType<typeof str.regex>) =>
   relation(name, { id: uuid, owner: uuid, value }, ["id"]);
 
