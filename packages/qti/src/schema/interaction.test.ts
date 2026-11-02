@@ -1,4 +1,4 @@
-import { schema } from "@bjornpagen/grizzle";
+import { check, Compute, schema } from "@bjornpagen/grizzle";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Predicate } from "effect";
@@ -321,7 +321,7 @@ describe("interaction", () => {
     );
   });
 
-  it("holds AdaptiveFeedback over ancestry and adaptive, from the one fbFlagged roster", () => {
+  it("holds AdaptiveFeedback over ancestry and adaptive, true or 1, from the one fbFlagged roster", () => {
     const rule = interaction.rules.find(
       (candidate) => candidate.kind === "check" && candidate.name === "AdaptiveFeedback",
     );
@@ -340,6 +340,28 @@ describe("interaction", () => {
     assert.include(text, "true");
     for (const handle of fbFlagged) {
       assert.include(text, handle);
+    }
+
+    const feedback = node.Ancestry.handles.filter((handle) => fbFlagged.includes(handle));
+    const expected: unknown = check(
+      "AdaptiveFeedback",
+      interaction.relations.InteractionBinding,
+      (b) => b.or(b.not(Compute.in(b.ancestry, feedback)), Compute.in(b.adaptive, ["true", "1"])),
+    );
+    // The description carries the call site (`loc`), which differs between the two builds.
+    if (
+      Predicate.hasProperty(expected, "desc") &&
+      Predicate.isObject(expected.desc) &&
+      Predicate.hasProperty(described, "desc") &&
+      Predicate.isObject(described.desc)
+    ) {
+      const options = { depth: null, maxStringLength: 100_000 };
+      assert.strictEqual(
+        inspect({ ...described.desc, loc: undefined }, options),
+        inspect({ ...expected.desc, loc: undefined }, options),
+      );
+    } else {
+      assert.fail("a check without a description");
     }
   });
 
