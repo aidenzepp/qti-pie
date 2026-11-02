@@ -905,6 +905,289 @@ export const arms = {
 };
 
 /**
+ * The 92 at-most-one asserts of the LOM loose binding's Schematron (R30), asserts 1 to 94 except
+ * 36 and 57, which `LomGeneralTitle` and `LomGeneral` enforce as candidate keys on `(lom)`. A row
+ * names the assert by `n`, its `context` path with the `lom:` prefix dropped, the context's last
+ * step as `parent`, and the capped element as `child`, with the dotted handles applied for
+ * `duration` under a `Duration.Type` container, and `source` and `entry` under `taxonPath` and
+ * `taxon`.
+ */
+export const r30Asserts = [
+  {
+    child: "lom:source",
+    context: "lom/general/aggregationLevel",
+    n: 1,
+    parent: "lom:aggregationLevel",
+  },
+  {
+    child: "lom:value",
+    context: "lom/general/aggregationLevel",
+    n: 2,
+    parent: "lom:aggregationLevel",
+  },
+  { child: "lom:entity", context: "lom/annotation", n: 3, parent: "lom:annotation" },
+  { child: "lom:date", context: "lom/annotation", n: 4, parent: "lom:annotation" },
+  { child: "lom:description", context: "lom/annotation", n: 5, parent: "lom:annotation" },
+  { child: "lom:purpose", context: "lom/classification", n: 6, parent: "lom:classification" },
+  { child: "lom:description", context: "lom/classification", n: 7, parent: "lom:classification" },
+  { child: "lom:source", context: "lom/educational/context", n: 8, parent: "lom:context" },
+  { child: "lom:value", context: "lom/educational/context", n: 9, parent: "lom:context" },
+  { child: "lom:role", context: "lom/lifeCycle/contribute", n: 10, parent: "lom:contribute" },
+  { child: "lom:date", context: "lom/lifeCycle/contribute", n: 11, parent: "lom:contribute" },
+  { child: "lom:role", context: "lom/metaMetadata/contribute", n: 12, parent: "lom:contribute" },
+  { child: "lom:date", context: "lom/metaMetadata/contribute", n: 13, parent: "lom:contribute" },
+  {
+    child: "lom:source",
+    context: "lom/rights/copyrightAndOtherRestrictions",
+    n: 14,
+    parent: "lom:copyrightAndOtherRestrictions",
+  },
+  {
+    child: "lom:value",
+    context: "lom/rights/copyrightAndOtherRestrictions",
+    n: 15,
+    parent: "lom:copyrightAndOtherRestrictions",
+  },
+  { child: "lom:source", context: "lom/rights/cost", n: 16, parent: "lom:cost" },
+  { child: "lom:value", context: "lom/rights/cost", n: 17, parent: "lom:cost" },
+  { child: "lom:dateTime", context: "lom/annotation/date", n: 18, parent: "lom:date" },
+  { child: "lom:description", context: "lom/annotation/date", n: 19, parent: "lom:date" },
+  { child: "lom:dateTime", context: "lom/lifeCycle/contribute/date", n: 20, parent: "lom:date" },
+  { child: "lom:description", context: "lom/lifeCycle/contribute/date", n: 21, parent: "lom:date" },
+  { child: "lom:dateTime", context: "lom/metaMetadata/contribute/date", n: 22, parent: "lom:date" },
+  {
+    child: "lom:description",
+    context: "lom/metaMetadata/contribute/date",
+    n: 23,
+    parent: "lom:date",
+  },
+  { child: "lom:source", context: "lom/educational/difficulty", n: 24, parent: "lom:difficulty" },
+  { child: "lom:value", context: "lom/educational/difficulty", n: 25, parent: "lom:difficulty" },
+  {
+    child: "lom:duration.string",
+    context: "lom/educational/typicalLearningTime",
+    n: 26,
+    parent: "lom:typicalLearningTime",
+  },
+  {
+    child: "lom:description",
+    context: "lom/educational/typicalLearningTime",
+    n: 27,
+    parent: "lom:typicalLearningTime",
+  },
+  {
+    child: "lom:duration.string",
+    context: "lom/technical/duration",
+    n: 28,
+    parent: "lom:duration",
+  },
+  { child: "lom:description", context: "lom/technical/duration", n: 29, parent: "lom:duration" },
+  { child: "lom:interactivityType", context: "lom/educational", n: 30, parent: "lom:educational" },
+  { child: "lom:interactivityLevel", context: "lom/educational", n: 31, parent: "lom:educational" },
+  { child: "lom:semanticDensity", context: "lom/educational", n: 32, parent: "lom:educational" },
+  { child: "lom:difficulty", context: "lom/educational", n: 33, parent: "lom:educational" },
+  {
+    child: "lom:typicalLearningTime",
+    context: "lom/educational",
+    n: 34,
+    parent: "lom:educational",
+  },
+  { child: "lom:description", context: "lom/educational", n: 35, parent: "lom:educational" },
+  { child: "lom:structure", context: "lom/general", n: 37, parent: "lom:general" },
+  { child: "lom:aggregationLevel", context: "lom/general", n: 38, parent: "lom:general" },
+  { child: "lom:catalog", context: "lom/general/identifier", n: 39, parent: "lom:identifier" },
+  { child: "lom:entry", context: "lom/general/identifier", n: 40, parent: "lom:identifier" },
+  { child: "lom:catalog", context: "lom/metaMetadata/identifier", n: 41, parent: "lom:identifier" },
+  { child: "lom:entry", context: "lom/metaMetadata/identifier", n: 42, parent: "lom:identifier" },
+  {
+    child: "lom:catalog",
+    context: "lom/relation/resource/identifier",
+    n: 43,
+    parent: "lom:identifier",
+  },
+  {
+    child: "lom:entry",
+    context: "lom/relation/resource/identifier",
+    n: 44,
+    parent: "lom:identifier",
+  },
+  {
+    child: "lom:source",
+    context: "lom/educational/intendedEndUserRole",
+    n: 45,
+    parent: "lom:intendedEndUserRole",
+  },
+  {
+    child: "lom:value",
+    context: "lom/educational/intendedEndUserRole",
+    n: 46,
+    parent: "lom:intendedEndUserRole",
+  },
+  {
+    child: "lom:source",
+    context: "lom/educational/interactivityLevel",
+    n: 47,
+    parent: "lom:interactivityLevel",
+  },
+  {
+    child: "lom:value",
+    context: "lom/educational/interactivityLevel",
+    n: 48,
+    parent: "lom:interactivityLevel",
+  },
+  {
+    child: "lom:source",
+    context: "lom/educational/interactivityType",
+    n: 49,
+    parent: "lom:interactivityType",
+  },
+  {
+    child: "lom:value",
+    context: "lom/educational/interactivityType",
+    n: 50,
+    parent: "lom:interactivityType",
+  },
+  { child: "lom:source", context: "lom/relation/kind", n: 51, parent: "lom:kind" },
+  { child: "lom:value", context: "lom/relation/kind", n: 52, parent: "lom:kind" },
+  {
+    child: "lom:source",
+    context: "lom/educational/learningResourceType",
+    n: 53,
+    parent: "lom:learningResourceType",
+  },
+  {
+    child: "lom:value",
+    context: "lom/educational/learningResourceType",
+    n: 54,
+    parent: "lom:learningResourceType",
+  },
+  { child: "lom:version", context: "lom/lifeCycle", n: 55, parent: "lom:lifeCycle" },
+  { child: "lom:status", context: "lom/lifeCycle", n: 56, parent: "lom:lifeCycle" },
+  { child: "lom:lifeCycle", context: "lom", n: 58, parent: "lom:lom" },
+  { child: "lom:metaMetadata", context: "lom", n: 59, parent: "lom:lom" },
+  { child: "lom:technical", context: "lom", n: 60, parent: "lom:lom" },
+  { child: "lom:rights", context: "lom", n: 61, parent: "lom:lom" },
+  { child: "lom:language", context: "lom/metaMetadata", n: 62, parent: "lom:metaMetadata" },
+  {
+    child: "lom:source",
+    context: "lom/technical/requirement/orComposite/name",
+    n: 63,
+    parent: "lom:name",
+  },
+  {
+    child: "lom:value",
+    context: "lom/technical/requirement/orComposite/name",
+    n: 64,
+    parent: "lom:name",
+  },
+  {
+    child: "lom:type",
+    context: "lom/technical/requirement/orComposite",
+    n: 65,
+    parent: "lom:orComposite",
+  },
+  {
+    child: "lom:name",
+    context: "lom/technical/requirement/orComposite",
+    n: 66,
+    parent: "lom:orComposite",
+  },
+  {
+    child: "lom:minimumVersion",
+    context: "lom/technical/requirement/orComposite",
+    n: 67,
+    parent: "lom:orComposite",
+  },
+  {
+    child: "lom:maximumVersion",
+    context: "lom/technical/requirement/orComposite",
+    n: 68,
+    parent: "lom:orComposite",
+  },
+  { child: "lom:source", context: "lom/classification/purpose", n: 69, parent: "lom:purpose" },
+  { child: "lom:value", context: "lom/classification/purpose", n: 70, parent: "lom:purpose" },
+  { child: "lom:kind", context: "lom/relation", n: 71, parent: "lom:relation" },
+  { child: "lom:resource", context: "lom/relation", n: 72, parent: "lom:relation" },
+  { child: "lom:cost", context: "lom/rights", n: 73, parent: "lom:rights" },
+  {
+    child: "lom:copyrightAndOtherRestrictions",
+    context: "lom/rights",
+    n: 74,
+    parent: "lom:rights",
+  },
+  { child: "lom:description", context: "lom/rights", n: 75, parent: "lom:rights" },
+  { child: "lom:source", context: "lom/lifeCycle/contribute/role", n: 76, parent: "lom:role" },
+  { child: "lom:value", context: "lom/lifeCycle/contribute/role", n: 77, parent: "lom:role" },
+  { child: "lom:source", context: "lom/metaMetadata/contribute/role", n: 78, parent: "lom:role" },
+  { child: "lom:value", context: "lom/metaMetadata/contribute/role", n: 79, parent: "lom:role" },
+  {
+    child: "lom:source",
+    context: "lom/educational/semanticDensity",
+    n: 80,
+    parent: "lom:semanticDensity",
+  },
+  {
+    child: "lom:value",
+    context: "lom/educational/semanticDensity",
+    n: 81,
+    parent: "lom:semanticDensity",
+  },
+  { child: "lom:source", context: "lom/lifeCycle/status", n: 82, parent: "lom:status" },
+  { child: "lom:value", context: "lom/lifeCycle/status", n: 83, parent: "lom:status" },
+  { child: "lom:source", context: "lom/general/structure", n: 84, parent: "lom:structure" },
+  { child: "lom:value", context: "lom/general/structure", n: 85, parent: "lom:structure" },
+  { child: "lom:id", context: "lom/classification/taxonPath/taxon", n: 86, parent: "lom:taxon" },
+  {
+    child: "lom:entry.langString",
+    context: "lom/classification/taxonPath/taxon",
+    n: 87,
+    parent: "lom:taxon",
+  },
+  {
+    child: "lom:source.langString",
+    context: "lom/classification/taxonPath",
+    n: 88,
+    parent: "lom:taxonPath",
+  },
+  { child: "lom:size", context: "lom/technical", n: 89, parent: "lom:technical" },
+  { child: "lom:installationRemarks", context: "lom/technical", n: 90, parent: "lom:technical" },
+  {
+    child: "lom:otherPlatformRequirements",
+    context: "lom/technical",
+    n: 91,
+    parent: "lom:technical",
+  },
+  { child: "lom:duration.string", context: "lom/technical", n: 92, parent: "lom:technical" },
+  {
+    child: "lom:source",
+    context: "lom/technical/requirement/orComposite/type",
+    n: 93,
+    parent: "lom:type",
+  },
+  {
+    child: "lom:value",
+    context: "lom/technical/requirement/orComposite/type",
+    n: 94,
+    parent: "lom:type",
+  },
+] as const;
+
+/**
+ * The capacity statements of the 92 asserts: one per distinct `(parent, child)` pair, 80 in all,
+ * because the kinds `lom:contribute`, `lom:date`, `lom:identifier` and `lom:role` are one kind
+ * each, so a cap holds wherever the kind sits. Each caps the parent's rows at one `Edge` row of
+ * the child kind.
+ */
+export const r30Capacities = [
+  ...new Map(r30Asserts.map((row) => [`${row.parent} ${row.child}`, row] as const)).values(),
+].map((row) =>
+  capacity(on(arms[row.parent], "id"), {
+    from: on(select(Edge, { childKind: row.child }), "parent"),
+    within: within(0n, 1n),
+  }),
+);
+
+/**
  * The relations and rosters of this module, as schema members.
  */
 export const relations = {
@@ -999,6 +1282,7 @@ export const relations = {
  */
 export const rules = [
   ...lomRemainderRules,
+  ...r30Capacities,
   key(Lom, ["id", "owner"]),
   key(Lom, ["id", "package"]),
   contained(on(Lom, "id", "package"), on(Node, "id", "tree")),
