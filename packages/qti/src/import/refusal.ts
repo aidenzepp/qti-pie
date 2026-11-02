@@ -454,7 +454,7 @@ export type ReadRefusal =
  *
  * A guard's `rule` is the rule of the same name; `PackageReadError` maps by its own rule, a missing
  * manifest to `manifest-root` and an entry path outside the package to `href-path` (R8's pattern
- * law names the same cause); `ItemRefusal` is `binding-declared`.
+ * law names the same cause); `ItemRefusal` is `binding-declared` or `typed-copy`.
  *
  * @param e - The error raised.
  * @returns The refusal naming its rule.
