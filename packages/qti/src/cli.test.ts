@@ -1,7 +1,9 @@
+import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Cause, Console, Effect, Exit, Stdio } from "effect";
+import { Cause, Console, Effect, Exit, Stdio, Stream } from "effect";
 import { Command } from "effect/cli";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { cli } from "#qti/cli.ts";
 
 /**
@@ -35,6 +37,40 @@ const run = Effect.fn("cli.test.run")(function* run(args: readonly string[]) {
  */
 const failures = (exit: Exit.Exit<unknown, unknown>): string =>
   Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "";
+
+/**
+ * Run the CLI as a child process, as a person's shell would, and collect how it ended.
+ *
+ * @param args - The command line after the program name.
+ * @returns The exit code and what the process wrote to standard error and standard output.
+ */
+const spawnCli = Effect.fn("cli.test.spawnCli")(function* spawnCli(args: readonly string[]) {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
+  return yield* Effect.scoped(
+    Effect.gen(function* collect() {
+      const handle = yield* spawner.spawn(
+        ChildProcess.make(
+          process.execPath,
+          [path.resolve(import.meta.dirname, "cli.ts"), ...args],
+          {
+            cwd: path.resolve(import.meta.dirname, ".."),
+            stdin: "ignore",
+          },
+        ),
+      );
+
+      return yield* Effect.all(
+        {
+          code: handle.exitCode,
+          stderr: Stream.mkString(Stream.decodeText(handle.stderr)),
+          stdout: Stream.mkString(Stream.decodeText(handle.stdout)),
+        },
+        { concurrency: "unbounded" },
+      );
+    }),
+  ).pipe(Effect.orDie);
+});
 
 layer(NodeServices.layer, { excludeTestServices: true })("cli.ts, database-free", (it) => {
   it.effect("--help lists import, export and roundtrip", () =>
@@ -76,4 +112,24 @@ layer(NodeServices.layer, { excludeTestServices: true })("cli.ts, database-free"
       assert.include(output, "dir");
     }),
   );
+
+  it.effect("the process exits 0 for --help", () =>
+    Effect.gen(function* helpExit() {
+      const { code } = yield* spawnCli(["--help"]);
+
+      assert.strictEqual(code, ChildProcessSpawner.ExitCode(0));
+    }),
+  );
+
+  for (const command of ["import", "roundtrip"]) {
+    it.effect(`${command} of a missing directory exits 1 with its message once and no stack`, () =>
+      Effect.gen(function* refusalOnce() {
+        const { code, stderr, stdout } = yield* spawnCli([command, "/nonexistent"]);
+
+        assert.notMatch(`${stdout}\n${stderr}`, /^\s+at /mu);
+        assert.strictEqual(code, ChildProcessSpawner.ExitCode(1));
+        assert.strictEqual(stderr.split("is not a directory").length - 1, 1);
+      }),
+    );
+  }
 });
