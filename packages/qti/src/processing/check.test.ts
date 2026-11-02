@@ -714,6 +714,22 @@ const refusals = [
   ["p21-sum-as-condition", "response", "P21", "qti-response-if"],
   ["p22-string-into-lookup", "response", "P22", "qti-lookup-outcome-value"],
   ["p22-lookup-without-table", "response", "P22", "qti-lookup-outcome-value"],
+  ["p23-and-string-operand", "response", "P23", "qti-and"],
+  ["p23-match-duration-pair", "response", "P23", "qti-match"],
+  ["p23-gt-strings", "response", "P23", "qti-gt"],
+  ["p23-duration-lt-integers", "response", "P23", "qti-duration-lt"],
+  ["p23-member-multiple-first", "response", "P23", "qti-member"],
+  ["p23-contains-singles", "response", "P23", "qti-contains"],
+  ["p23-substring-integers", "response", "P23", "qti-substring"],
+  ["p23-inside-integer", "response", "P23", "qti-inside"],
+  ["p23-multiple-two-base-types", "response", "P23", "qti-multiple"],
+  ["p23-index-single", "response", "P23", "qti-index"],
+  ["p23-field-value-single", "response", "P23", "qti-field-value"],
+  ["p23-sum-record", "response", "P23", "qti-sum"],
+  ["p23-gcd-floats", "response", "P23", "qti-gcd"],
+  ["p23-divide-multiple", "response", "P23", "qti-divide"],
+  ["p23-integer-divide-floats", "response", "P23", "qti-integer-divide"],
+  ["p23-stats-operator-single", "response", "P23", "qti-stats-operator"],
   ["p24-figures-float-variable", "response", "P24", "qti-equal-rounded"],
   ["p25-number-correct-in-response", "response", "P25", "qti-number-correct"],
   ["p25-number-correct-in-template", "template", "P25", "qti-number-correct"],
@@ -735,6 +751,25 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts ru
       }),
     );
   }
+
+  suite.effect("refuses p29-test-variables-weight-integer.xml naming P29 in test mode", () =>
+    Effect.gen(function* refuseWeight() {
+      const fs = yield* FileSystem.FileSystem;
+      const document = yield* readXml(
+        yield* fs.readFile(path.join(brokenDirectory, "p29-test-variables-weight-integer.xml")),
+      );
+      const ast = yield* parseProcessing(document.root, "outcome");
+      const countEnvironment = withDeclarations(emptyEnvironment("test"), [
+        outcomeOf("COUNT", "integer"),
+      ]);
+      const result = checkProcessing(ast, countEnvironment);
+      assert.strictEqual(result._tag, "refused");
+      if (result._tag === "refused") {
+        assert.strictEqual(result.rule, "P29");
+        assert.strictEqual(result.kind, "qti-test-variables");
+      }
+    }),
+  );
 
   suite.effect("accepts a template rule that reads QTI_CONTEXT", () =>
     Effect.gen(function* acceptContext() {

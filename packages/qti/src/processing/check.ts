@@ -11,7 +11,12 @@ import type {
 import type { DeclarationEntry, Environment } from "#qti/processing/env.ts";
 import { literalOrRef, patternOrRef } from "#qti/processing/parse.ts";
 import { resultType } from "#qti/processing/types.ts";
-import type { BaseTypeOrAny, EffectiveType, ResultAttributes } from "#qti/processing/types.ts";
+import type {
+  BaseTypeOrAny,
+  Cardinality,
+  EffectiveType,
+  ResultAttributes,
+} from "#qti/processing/types.ts";
 import { BaseType } from "#qti/schema/declaration.ts";
 
 /**
@@ -150,6 +155,181 @@ const compatible = (a: EffectiveType, b: EffectiveType): boolean =>
     a.baseType === "unknown" ||
     b.baseType === "unknown") &&
   (a.cardinality === b.cardinality || a.cardinality === "unknown" || b.cardinality === "unknown");
+
+/**
+ * An operand rule: whether the operand types of one expression break its family's typing (P23).
+ */
+type OperandRule = (operands: readonly EffectiveType[]) => boolean;
+
+/**
+ * Whether a base type says nothing yet (`any`, `unknown`), so no rule can fault it.
+ */
+const silent = (baseType: BaseTypeOrAny): boolean => baseType === "any" || baseType === "unknown";
+
+/**
+ * Whether a type is a base type of the list, or says nothing.
+ */
+const baseIn = (type: EffectiveType, basics: readonly BaseTypeOrAny[]): boolean =>
+  silent(type.baseType) || basics.includes(type.baseType);
+
+/**
+ * Whether a type has a cardinality of the list, or says nothing.
+ */
+const cardinalIn = (type: EffectiveType, cardinalities: readonly Cardinality[]): boolean =>
+  type.cardinality === "unknown" || cardinalities.includes(type.cardinality);
+
+/**
+ * Whether every operand is of the base types given and single.
+ */
+const allSingle =
+  (basics: readonly BaseTypeOrAny[]): OperandRule =>
+  (operands) =>
+    operands.every((type) => baseIn(type, basics) && cardinalIn(type, ["single"]));
+
+/**
+ * Whether two operands agree on their base type, or one says nothing.
+ */
+const sameBase = (a: EffectiveType, b: EffectiveType): boolean =>
+  silent(a.baseType) || silent(b.baseType) || a.baseType === b.baseType;
+
+/**
+ * Whether no pair of operands disagrees on its base type.
+ */
+const oneBase = (operands: readonly EffectiveType[]): boolean =>
+  operands.every((type) => operands.every((other) => sameBase(type, other)));
+
+const numericalBases: readonly BaseTypeOrAny[] = ["float", "integer"];
+
+/**
+ * Every operator family of 4.10's P23 table: the rule an operator's operand types must satisfy,
+ * each row read against `info.html` 6.9. Numerical is integer or float, never duration (4.12), and
+ * a type that says nothing (`any`, `unknown`) satisfies every row.
+ */
+const operandRules: ReadonlyMap<string, OperandRule> = new Map<string, OperandRule>([
+  // boolean
+  ...["qti-and", "qti-any-n", "qti-not", "qti-or"].map((k): [string, OperandRule] => [
+    k,
+    allSingle(["boolean"]),
+  ]),
+  // match
+  [
+    "qti-match",
+    ([a, b]) =>
+      a === undefined ||
+      b === undefined ||
+      (compatible(a, b) && a.baseType !== "duration" && b.baseType !== "duration"),
+  ],
+  // numerical comparison
+  ...["qti-equal", "qti-equal-rounded", "qti-gt", "qti-gte", "qti-lt", "qti-lte"].map(
+    (k): [string, OperandRule] => [k, allSingle(numericalBases)],
+  ),
+  // duration comparison
+  ...["qti-duration-gte", "qti-duration-lt"].map((k): [string, OperandRule] => [
+    k,
+    allSingle(["duration"]),
+  ]),
+  // membership
+  [
+    "qti-member",
+    ([a, b]) =>
+      a === undefined ||
+      b === undefined ||
+      (sameBase(a, b) &&
+        a.baseType !== "duration" &&
+        b.baseType !== "duration" &&
+        cardinalIn(a, ["single"]) &&
+        cardinalIn(b, ["multiple", "ordered"])),
+  ],
+  [
+    "qti-delete",
+    ([a, b]) =>
+      a === undefined ||
+      b === undefined ||
+      (sameBase(a, b) && cardinalIn(a, ["single"]) && cardinalIn(b, ["multiple", "ordered"])),
+  ],
+  // containment
+  [
+    "qti-contains",
+    ([a, b]) =>
+      a === undefined ||
+      b === undefined ||
+      (compatible(a, b) &&
+        a.baseType !== "duration" &&
+        b.baseType !== "duration" &&
+        cardinalIn(a, ["multiple", "ordered"]) &&
+        cardinalIn(b, ["multiple", "ordered"])),
+  ],
+  // string
+  ...["qti-pattern-match", "qti-string-match", "qti-substring"].map((k): [string, OperandRule] => [
+    k,
+    allSingle(["string"]),
+  ]),
+  // point
+  [
+    "qti-inside",
+    (operands) =>
+      operands.every(
+        (type) => baseIn(type, ["point"]) && cardinalIn(type, ["multiple", "ordered", "single"]),
+      ),
+  ],
+  // container constructors
+  [
+    "qti-multiple",
+    (operands) =>
+      oneBase(operands) && operands.every((type) => cardinalIn(type, ["single", "multiple"])),
+  ],
+  ...["qti-ordered", "qti-repeat"].map((k): [string, OperandRule] => [
+    k,
+    (operands) =>
+      oneBase(operands) && operands.every((type) => cardinalIn(type, ["single", "ordered"])),
+  ]),
+  // container readers
+  ...["qti-container-size", "qti-index", "qti-random"].map((k): [string, OperandRule] => [
+    k,
+    (operands) => operands.every((type) => cardinalIn(type, ["multiple", "ordered"])),
+  ]),
+  // record
+  ["qti-field-value", (operands) => operands.every((type) => cardinalIn(type, ["record"]))],
+  // numerical aggregate
+  ...["qti-max", "qti-min", "qti-product", "qti-sum"].map((k): [string, OperandRule] => [
+    k,
+    (operands) =>
+      operands.every(
+        (type) =>
+          baseIn(type, numericalBases) && cardinalIn(type, ["multiple", "ordered", "single"]),
+      ),
+  ]),
+  // integer aggregate
+  ...["qti-gcd", "qti-lcm"].map((k): [string, OperandRule] => [
+    k,
+    (operands) =>
+      operands.every(
+        (type) => baseIn(type, ["integer"]) && cardinalIn(type, ["multiple", "ordered", "single"]),
+      ),
+  ]),
+  // numerical single
+  ...[
+    "qti-divide",
+    "qti-math-operator",
+    "qti-power",
+    "qti-round",
+    "qti-round-to",
+    "qti-subtract",
+    "qti-truncate",
+  ].map((k): [string, OperandRule] => [k, allSingle(numericalBases)]),
+  // integer single
+  ...["qti-integer-divide", "qti-integer-modulus", "qti-integer-to-float"].map(
+    (k): [string, OperandRule] => [k, allSingle(["integer"])],
+  ),
+  // statistics
+  [
+    "qti-stats-operator",
+    (operands) =>
+      operands.every(
+        (type) => baseIn(type, numericalBases) && cardinalIn(type, ["multiple", "ordered"]),
+      ),
+  ],
+]);
 
 /**
  * The base type a reference attribute of a kind must name (P24): `pattern` a string, the `min`,
@@ -318,6 +498,25 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
     }
   };
 
+  /**
+   * P29: a `qti-test-variables` with a `weight-identifier` is a float or has no `base-type`; only
+   * outcome processing under a test environment checks it.
+   */
+  const checkWeight = (node: ExpressionNode): void => {
+    const kind: string = node.kind;
+    const written = processed(node, "base-type");
+    if (
+      kind === "qti-test-variables" &&
+      processed(node, "weight-identifier") !== undefined &&
+      written !== undefined &&
+      written !== "float" &&
+      ast.language === "outcome" &&
+      env.mode === "test"
+    ) {
+      refuse("P29", kind, node.position);
+    }
+  };
+
   const typeExpression = (node: ExpressionNode): TypedExpression => {
     const kind: string = node.kind;
     if (outcomeOnlyKinds.has(kind) && ast.language !== "outcome") {
@@ -340,6 +539,7 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
       checkMapping(node);
     } else if (kind === "qti-base-value" || kind === "qti-test-variables") {
       own = { ...attrs, baseType: baseTypeOf(processed(node, "base-type")) };
+      checkWeight(node);
     } else if (kind === "qti-custom-operator") {
       note(processed(node, "class") ?? "", node.position, "custom-operator");
     } else if (kind === "qti-field-value") {
@@ -347,15 +547,15 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
     }
 
     const operands = node.operands.map(typeExpression);
+    const operandTypes = operands.map((operand) => operand.type);
+    if (operandRules.get(kind)?.(operandTypes) === false) {
+      refuse("P23", kind, node.position);
+    }
 
     return {
       ...node,
       operands,
-      type: resultType(
-        node.kind,
-        operands.map((operand) => operand.type),
-        own,
-      ),
+      type: resultType(node.kind, operandTypes, own),
     };
   };
 
