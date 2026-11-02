@@ -16,6 +16,7 @@ import { collapse, replace, Rows, treeRows, typedAttribute } from "#qti/import/t
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { readEntry } from "#qti/package/read.ts";
 import type { Entry, PackageReadError } from "#qti/package/read.ts";
+import { ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
 import * as md from "#qti/schema/metadata.ts";
 import { Edge } from "#qti/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
@@ -139,8 +140,10 @@ interface LomResource {
  */
 interface LomFindings {
   readonly entries: { collapsed: string; position: bigint }[];
+  hasGeneral: boolean;
   hasIdentifier: boolean;
   hasTitle: boolean;
+  readonly languages: Set<string>;
   readonly titles: { collapsed: string; position: bigint }[];
 }
 
@@ -422,6 +425,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     },
     "lom:general": (c) => {
       add(md.LomGeneral, [{ id: c.id, lom: c.lom }]);
+      c.findings.hasGeneral = true;
     },
     "lom:identifier": (c) => {
       add(md.LomIdentifier, [{ id: c.id, lom: c.lom, owner: c.owner, position: c.position }]);
@@ -437,6 +441,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       add(md.LomLanguage, [
         { id: c.id, lom: c.lom, owner: c.owner, position: c.position, value: c.value },
       ]);
+      if (c.parentKind === "lom:general") {
+        c.findings.languages.add(c.value);
+      }
     },
     "lom:lifeCycle": (c) => {
       add(md.LomLifeCycle, [{ id: c.id, lom: c.lom }]);
@@ -609,8 +616,10 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
 
     const findings: LomFindings = {
       entries: [],
+      hasGeneral: false,
       hasIdentifier: false,
       hasTitle: false,
+      languages: new Set(),
       titles: [],
     };
     if (resource === null) {
@@ -650,6 +659,21 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       resource: resource.identifier,
       type: resource.type,
     };
+    if (findings.hasGeneral) {
+      add(ResourceLomGeneral, [
+        { lom: node.id, package: packageId, resource: resource.identifier },
+      ]);
+    }
+
+    add(
+      ResourceLomLanguageSet,
+      [...findings.languages].map((value) => ({
+        lom: node.id,
+        package: packageId,
+        resource: resource.identifier,
+        value,
+      })),
+    );
     if (findings.hasIdentifier) {
       add(md.ResourceLomIdentified, [bound]);
     }

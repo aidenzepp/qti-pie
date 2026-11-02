@@ -6,7 +6,14 @@ import { Effect, FileSystem, Option, Predicate } from "effect";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { inject } from "vitest";
 import { itemGuards, ItemGuardRefusal } from "#qti/import/guards/item.ts";
-import { ItemRefusal, itemRows, standardTemplate } from "#qti/import/item.ts";
+import {
+  documentLangRows,
+  ItemRefusal,
+  itemRows,
+  standardTemplate,
+  withParents,
+} from "#qti/import/item.ts";
+import { manifestRows } from "#qti/import/manifest.ts";
 import { Rows, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { NodeIndex } from "#qti/import/tree.ts";
 import {
@@ -25,7 +32,19 @@ import {
 } from "#qti/schema/declaration.ts";
 import { Document, DocumentId, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#qti/schema/html.ts";
-import { AssessmentItem, DeclaredAdaptive, ItemBody, Prompt } from "#qti/schema/item.ts";
+import {
+  AssessmentItem,
+  AssessmentItemLabel,
+  DeclaredAdaptive,
+  ItemBody,
+  ItemTool,
+  ItemToolBoth,
+  ItemToolName,
+  ItemToolVersion,
+  Prompt,
+} from "#qti/schema/item.ts";
+import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
+import { Lom, ResourceLom } from "#qti/schema/metadata.ts";
 import {
   ChoiceInteraction,
   ChoiceInteractionMinSelectionsMessage,
@@ -44,6 +63,7 @@ import {
   EntityReference,
   TextNode,
 } from "#qti/schema/node.ts";
+import { NodeLabel } from "#qti/schema/attributes.ts";
 import {
   ResponseProcessing,
   ResponseProcessingItem,
@@ -103,13 +123,17 @@ const idAt = (nodes: NodeIndex, kind: string, index: number) =>
 /**
  * The item rows of a decoded `choice.xml`, for the resource the tests describe.
  */
-const itemOf = (doc: Effect.Success<ReturnType<typeof readChoice>>) =>
+const itemOf = (
+  doc: Effect.Success<ReturnType<typeof readChoice>>,
+  resourceLomHasGeneral = false,
+) =>
   itemRows(
     {
       doc,
       packageId,
       path: "choice.xml",
       resource: "choice",
+      resourceLomHasGeneral,
       resourceType: "imsqti_item_xmlv3p0",
       version: "3.0.0",
     },
@@ -834,4 +858,212 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
       }),
     );
   }
+});
+
+const itemNamespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
+
+/**
+ * The item rows of a hand-written item whose root carries `rootAttributes` and whose body is
+ * `body`.
+ */
+const handWritten = (rootAttributes: string, body: string, resourceLomHasGeneral = false) =>
+  Effect.gen(function* handWrittenItem() {
+    const text = `<qti-assessment-item xmlns="${itemNamespace}" identifier="hand" title="Hand" time-dependent="false" ${rootAttributes}><qti-item-body>${body}</qti-item-body></qti-assessment-item>`;
+    const doc = yield* readXml(new TextEncoder().encode(text));
+
+    return yield* itemOf(doc, resourceLomHasGeneral);
+  });
+
+/**
+ * The manifest rows of a hand-written manifest whose one item resource carries a LOM `general`
+ * with `general`'s children, or no `general` when it is `undefined`.
+ */
+const handManifest = (general?: string) =>
+  Effect.gen(function* handWrittenManifest() {
+    const lom = general === undefined ? "" : `<imsmd:general>${general}</imsmd:general>`;
+    const text = `<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.0</schemaversion></metadata><organizations/><resources><resource identifier="choice" type="imsqti_item_xmlv3p0" href="choice.xml"><metadata><imsmd:lom>${lom}</imsmd:lom></metadata></resource></resources></manifest>`;
+    const doc = yield* readXml(new TextEncoder().encode(text));
+
+    return yield* manifestRows("", [], doc, Rows.empty());
+  });
+
+/**
+ * The `DocumentLang` rows `documentLangRows` writes for a hand-written item, read without the
+ * tree walk: `treeRows` refuses `xml:lang` until the attribute builder admits it.
+ */
+const languagesOf = (body: string, rootAttributes: string, resourceLomHasGeneral: boolean) =>
+  Effect.gen(function* languageRows() {
+    const text = `<qti-assessment-item xmlns="${itemNamespace}" identifier="hand" title="Hand" time-dependent="false" ${rootAttributes}><qti-item-body>${body}</qti-item-body></qti-assessment-item>`;
+    const doc = yield* readXml(new TextEncoder().encode(text));
+
+    return documentLangRows(
+      Rows.empty(),
+      { packageId, resource: "choice", resourceLomHasGeneral },
+      "doc",
+      withParents(doc.root, Option.none()),
+    );
+  });
+
+layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts root rows", (suite) => {
+  suite.effect(
+    "DocumentLang holds each distinct xml:lang of the tree, flagged by the manifest",
+    () =>
+      Effect.gen(function* documentLanguages() {
+        const rows = yield* languagesOf(
+          '<p xml:lang="fr">a</p><p xml:lang=" fr ">b</p>',
+          'xml:lang="en"',
+          true,
+        );
+
+        assert.deepStrictEqual(
+          Rows.of(rows, DocumentLang).map((row) => row.value),
+          ["en", "fr"],
+        );
+        for (const row of Rows.of(rows, DocumentLang)) {
+          assert.deepStrictEqual(row, {
+            document: "doc",
+            lomGeneral: "yes",
+            package: packageId,
+            resource: "choice",
+            value: row.value,
+          });
+        }
+      }),
+  );
+
+  suite.effect("DocumentLang is flagged no when the resource record has no general", () =>
+    Effect.gen(function* unflaggedLanguages() {
+      const rows = yield* languagesOf("", 'xml:lang="en"', false);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, DocumentLang).map((row) => [row.value, row.lomGeneral]),
+        [["en", "no"]],
+      );
+    }),
+  );
+
+  suite.effect("tool-name alone is a nameOnly ItemTool with an ItemToolName row", () =>
+    Effect.gen(function* nameOnlyTool() {
+      const { documentId, rows } = yield* handWritten('tool-name="Authoring"', "");
+
+      assert.deepStrictEqual(Rows.of(rows, ItemTool), [{ shape: "nameOnly", tree: documentId }]);
+      assert.deepStrictEqual(Rows.of(rows, ItemToolName), [
+        { toolName: "Authoring", tree: documentId },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, ItemToolBoth), []);
+      assert.deepStrictEqual(Rows.of(rows, ItemToolVersion), []);
+    }),
+  );
+
+  suite.effect("tool-version alone is versionOnly and both is both, kept as read", () =>
+    Effect.gen(function* otherTools() {
+      const versionOnly = yield* handWritten('tool-version=" 2 "', "");
+      assert.deepStrictEqual(
+        Rows.of(versionOnly.rows, ItemTool).map((row) => row.shape),
+        ["versionOnly"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(versionOnly.rows, ItemToolVersion).map((row) => row.toolVersion),
+        [" 2 "],
+      );
+
+      const both = yield* handWritten('tool-name="A" tool-version="1"', "");
+      assert.deepStrictEqual(
+        Rows.of(both.rows, ItemTool).map((row) => row.shape),
+        ["both"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(both.rows, ItemToolBoth).map((row) => [row.toolName, row.toolVersion]),
+        [["A", "1"]],
+      );
+
+      const none = yield* handWritten("", "");
+      assert.deepStrictEqual(Rows.of(none.rows, ItemTool), []);
+    }),
+  );
+
+  suite.effect("a 3.0.0 root label is one AssessmentItemLabel row and no NodeLabel row", () =>
+    Effect.gen(function* rootLabel() {
+      const { documentId, nodes, rows } = yield* handWritten('label="L"', "");
+
+      assert.deepStrictEqual(Rows.of(rows, AssessmentItemLabel), [
+        {
+          node: onlyId(nodes, "qti-assessment-item"),
+          tree: documentId,
+          value: "L",
+          version: "3.0.0",
+        },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, NodeLabel), []);
+      assert.deepStrictEqual(Rows.of(rows, ItemTool), []);
+    }),
+  );
+
+  suite.effect("a root label with a tab is replaced and keeps its lexical form", () =>
+    Effect.gen(function* replacedLabel() {
+      const { rows } = yield* handWritten('label="a&#9;b"', "");
+
+      assert.deepStrictEqual(
+        Rows.of(rows, AssessmentItemLabel).map((row) => row.value),
+        ["a b"],
+      );
+      assert.isTrue(
+        Rows.of(rows, AttributeLexical).some(
+          (row) => row.attribute === "label" && row.value === "a\tb",
+        ),
+      );
+    }),
+  );
+
+  suite.effect("a resource LOM general lists its language once in ResourceLomLanguageSet", () =>
+    Effect.gen(function* oneLanguage() {
+      const { rows } = yield* handManifest(
+        "<imsmd:language>en</imsmd:language><imsmd:language>en</imsmd:language>",
+      );
+      const [lom] = Rows.of(rows, ResourceLom);
+      const resourceLom = Option.getOrThrow(Option.fromNullishOr(lom));
+
+      assert.deepStrictEqual(Rows.of(rows, ResourceLomLanguageSet), [
+        {
+          lom: resourceLom.lom,
+          package: resourceLom.package,
+          resource: "choice",
+          value: "en",
+        },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, ResourceLomGeneral), [
+        { lom: resourceLom.lom, package: resourceLom.package, resource: "choice" },
+      ]);
+      assert.strictEqual(Rows.of(rows, Lom).length, 1);
+    }),
+  );
+
+  suite.effect("an empty general language is the empty set row", () =>
+    Effect.gen(function* emptyLanguage() {
+      const { rows } = yield* handManifest("<imsmd:language></imsmd:language>");
+
+      assert.deepStrictEqual(
+        Rows.of(rows, ResourceLomLanguageSet).map((row) => row.value),
+        [""],
+      );
+    }),
+  );
+
+  suite.effect("a general with no language has a general row and no set row", () =>
+    Effect.gen(function* noGeneralLanguage() {
+      const { rows } = yield* handManifest("<imsmd:keyword/>");
+
+      assert.strictEqual(Rows.of(rows, ResourceLomGeneral).length, 1);
+      assert.deepStrictEqual(Rows.of(rows, ResourceLomLanguageSet), []);
+    }),
+  );
+
+  suite.effect("a resource LOM with no general has neither row", () =>
+    Effect.gen(function* noGeneral() {
+      const { rows } = yield* handManifest();
+
+      assert.deepStrictEqual(Rows.of(rows, ResourceLomGeneral), []);
+      assert.deepStrictEqual(Rows.of(rows, ResourceLomLanguageSet), []);
+    }),
+  );
 });
