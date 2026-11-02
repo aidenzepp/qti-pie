@@ -33,3 +33,31 @@ export const hasLease = Option.isSome(settings.leaseDatabase);
  * pass. A lease suite that only reads keeps vitest's default.
  */
 export const leaseTestTimeoutMs = 60_000;
+
+/**
+ * The timeout, in milliseconds, for the `layer` hook that builds `AuthorAppLayer`.
+ *
+ * The hook decodes the 120 MB migrations snapshot and compiles the login, and with no
+ * `timeout` option it falls to vitest's 10 s `hookTimeout`, which the parallel leased full suite
+ * exceeded under load averages of 8 to 15 on 14 CPUs (merges `8b3f2a65`, `1a3d4f4c`, `998fe309`
+ * and `655ddd9f`). Measured on 2026-11-02 at `0f151af` with the snapshot at 120,065,687 bytes
+ * and no database: five quiet builds had a median of 7.35 s, and six concurrent builds, one per
+ * test file that builds the layer, had a maximum of 9.29 s at load averages of 4 to 6, each
+ * process peaking near 1.5 GB resident. The budget is the larger of twice that maximum
+ * (18.6 s) and 20 s, the floor being twice the default.
+ * Raise it only on a new measurement recorded here, never to make a run pass.
+ */
+export const authorLayerHookTimeoutMs = 20_000;
+
+/**
+ * The timeout, in milliseconds, for one test that spawns the CLI as a child process.
+ *
+ * Such a test pays Node's start and the module graph of `cli.ts`, not the snapshot, and vitest's
+ * 5 s default was exceeded by the parallel leased full suite under load averages of 8 to 15 on 14
+ * CPUs (merges `8b3f2a65`, `1a3d4f4c`, `998fe309` and `655ddd9f`). Measured on 2026-11-02 at
+ * `0f151af`: fifteen quiet spawns had a median of 3.8 s, and spawns beside six concurrent
+ * layer builds had a maximum of 4.5 s at load averages of 4 to 6. The budget is the larger of
+ * twice that maximum (9 s) and 10 s, the floor being twice the default.
+ * Raise it only on a new measurement recorded here, never to make a run pass.
+ */
+export const cliProcessTestTimeoutMs = 10_000;

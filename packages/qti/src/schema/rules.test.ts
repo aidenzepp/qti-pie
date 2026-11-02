@@ -68,7 +68,7 @@ import {
   relations as valueRelations,
 } from "#qti/schema/value.ts";
 import { readXml } from "#qti/xml/read.ts";
-import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**
  * A row as a test edits it: every field of the schema is text or a bigint.
@@ -1005,37 +1005,35 @@ describe.skipIf(!hasLease)(
   "schema/rules.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
-    layer(Layer.mergeAll(AuthorAppLayer, SimpleRowsLayer), { excludeTestServices: true })(
-      "the schema's bin 1 rules, by direct ChangeSet",
-      (it) => {
-        for (const negative of negatives) {
-          it.effect(negative.name, () =>
-            Effect.gen(function* refused() {
-              const draft = draftOf(yield* SimpleRows);
-              negative.alter(draft);
+    layer(Layer.mergeAll(AuthorAppLayer, SimpleRowsLayer), {
+      excludeTestServices: true,
+      timeout: authorLayerHookTimeoutMs,
+    })("the schema's bin 1 rules, by direct ChangeSet", (it) => {
+      for (const negative of negatives) {
+        it.effect(negative.name, () =>
+          Effect.gen(function* refused() {
+            const draft = draftOf(yield* SimpleRows);
+            negative.alter(draft);
 
-              const outcome = yield* apply(draft);
+            const outcome = yield* apply(draft);
 
-              assert.strictEqual(outcome.kind, "invariant-rejected");
-              if (outcome.kind === "invariant-rejected") {
-                const named = negative.laws.find((law) => isDeepStrictEqual(outcome.law, law));
-                const reported: unknown = outcome.law;
-                assert.deepStrictEqual(reported, named ?? negative.laws[0]);
-              }
-            }),
-          );
-        }
-
-        it.effect(
-          "the unaltered rows are accepted, so each refusal above is its alteration's",
-          () =>
-            Effect.gen(function* accepted() {
-              const outcome = yield* apply(draftOf(yield* simpleRows));
-
-              assert.strictEqual(outcome.kind, "accepted");
-            }),
+            assert.strictEqual(outcome.kind, "invariant-rejected");
+            if (outcome.kind === "invariant-rejected") {
+              const named = negative.laws.find((law) => isDeepStrictEqual(outcome.law, law));
+              const reported: unknown = outcome.law;
+              assert.deepStrictEqual(reported, named ?? negative.laws[0]);
+            }
+          }),
         );
-      },
-    );
+      }
+
+      it.effect("the unaltered rows are accepted, so each refusal above is its alteration's", () =>
+        Effect.gen(function* accepted() {
+          const outcome = yield* apply(draftOf(yield* simpleRows));
+
+          assert.strictEqual(outcome.kind, "accepted");
+        }),
+      );
+    });
   },
 );
