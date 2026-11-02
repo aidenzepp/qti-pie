@@ -792,6 +792,7 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
       adaptive: judgedLater(Option.getOrElse(adaptive.value, () => "false")),
       id: rootNode.id,
       timeDependent: judgedLater(timeDependent.value.value),
+      tree: documentId,
     },
   ]);
   built = Rows.add(

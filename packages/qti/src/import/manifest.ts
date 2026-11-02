@@ -434,7 +434,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       add(md.LomKeyword, [{ id: c.id, lom: c.lom }]);
     },
     "lom:language": (c) => {
-      add(md.LomLanguage, [{ id: c.id, lom: c.lom, position: c.position, value: c.value }]);
+      add(md.LomLanguage, [
+        { id: c.id, lom: c.lom, owner: c.owner, position: c.position, value: c.value },
+      ]);
     },
     "lom:lifeCycle": (c) => {
       add(md.LomLifeCycle, [{ id: c.id, lom: c.lom }]);

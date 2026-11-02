@@ -183,7 +183,7 @@ export const LomStringLanguage = relation("LomStringLanguage", { node: uuid, val
  */
 export const LomLanguage = relation(
   "LomLanguage",
-  { id: uuid, lom: uuid, position: pg.bigint, value: language },
+  { id: uuid, lom: uuid, owner: closedId(LomOwner), position: pg.bigint, value: language },
   ["id"],
 );
 
@@ -824,6 +824,7 @@ export const rules = [
   key(LomStringLanguage, ["node"]),
   contained(on(LomStringLanguage, "node"), on(LomString, "id")),
   contained(on(LomLanguage, "lom"), on(Lom, "id")),
+  contained(on(LomLanguage, "lom", "owner"), on(Lom, "id", "owner")),
   contained(on(LomLanguage, "id", "position"), on(Edge, "child", "position")),
   contained(on(LomDescription, "lom"), on(Lom, "id")),
   contained(on(LomKeyword, "lom"), on(Lom, "id")),
