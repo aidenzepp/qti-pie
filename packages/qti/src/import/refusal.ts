@@ -98,6 +98,7 @@ export const ImportRule = Schema.Literals([
   "q-punctuation",
   "bcp47-syntax",
   "attribute-admission",
+  "idref-target",
   "coords-owner",
   "ancestry-ban",
   "ancestry-step",
@@ -402,6 +403,7 @@ const capacityRule = (target: LawSide, from: LawSide): Rule | undefined => {
  */
 const containedRules = new Map<string, Rule>([
   ["AssessmentItemLabel>ItemToolBoth", "label-tool"],
+  ["AttributeIdref>DocumentId", "idref-target"],
   ["ContextDeclarationArm>ContextDeclarationId", "context-id"],
   ["DeclaredValue>TypedValueSet", "value-base-type"],
   ["Dependency>Resource", "dependency-target"],
@@ -411,6 +413,7 @@ const containedRules = new Map<string, Rule>([
   ["File>PackageEntry", "file-exists"],
   ["FileContent>PackageEntry", "file-exists"],
   ["HeadersTarget>AttributeIdref", "idref-copy"],
+  ["HeadersTarget>HtmlId", "idref-target"],
   ["InteractionBinding>AssessmentItem", "adaptive-feedback"],
   ["InteractionBinding>Declaration", "binding-declared"],
   ["Mapping>MappableBaseType", "mapping-base-type"],
@@ -741,7 +744,7 @@ export type ReadRefusal =
  *
  * A guard's `rule` is the rule of the same name; `PackageReadError` maps by its own rule, a missing
  * manifest to `manifest-root` and an entry path outside the package to `href-path` (R8's pattern
- * law names the same cause); `ItemRefusal` is `binding-declared` or `typed-copy`.
+ * law names the same cause); `ItemRefusal` names the importer rule it carries (`import/tree.ts`).
  *
  * `ContentGuardRefusal` is accepted beside {@link ReadRefusal}, not inside it: `ReadRefusal` is the
  * error channel `import/package.ts` narrows to, and the content guards join that channel when
