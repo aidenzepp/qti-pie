@@ -2,11 +2,29 @@
  * Prints what the composed schema costs: fields, SQL bytes and what `grizzle generate` exposes, as
  * `key: value` lines, each beside the fixed compiler ceiling it is measured against. Run with `node
  * scripts/measure.ts` from `packages/qti`; it reads the committed migrations and writes nothing.
+ *
+ * With `--programs` it also compiles the author application's programs, which needs the lease
+ * database `GR8DES_PG_DATABASE` names: each export query of the workload, and the import as one
+ * `ChangeSet` with a member for each relation the author writes, in growing prefixes of the roster.
+ * grizzle exposes no size of a compiled program, so the script reads what each compilation's budget
+ * meter was charged, and a prefix whose compilation is refused prints the refusal's own figure.
  */
+import { createRequire } from "node:module";
+import nodePath from "node:path";
+import { pathToFileURL } from "node:url";
+import { ChangeSet, Db } from "@bjornpagen/grizzle";
+import type { AnyRelation } from "@bjornpagen/grizzle";
 import { NodeFileSystem, NodeRuntime } from "@effect/platform-node";
-import { Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
 import snapshot from "#migrations/qti/snapshot.json" with { type: "json" };
+import { AuthorAppLayer } from "#qti/db/layer.ts";
+import { documentIdsOf, nodeQueries, treeOf } from "#qti/export/queries.ts";
+import type { LooseQuery } from "#qti/export/queries.ts";
+import { NodeKind } from "#qti/schema/node.ts";
 import { Qti } from "#qti/schema/qti.ts";
+import { Package } from "#qti/schema/package.ts";
+import { Author } from "#qti/schema/roles.ts";
+import { AuthorApp } from "#qti/schema/logins.ts";
 
 /**
  * The compiler's fixed ceilings (`docs/research/d8105349.md` section 22).
@@ -63,6 +81,334 @@ const alarm = (name: string, measured: number, ceiling: number): readonly string
     ? [`alarm: ${name} ${measured} is at least 80 percent of ${ceiling} (${ceiling * ALARM})`]
     : [];
 
+/**
+ * Whether the run compiles the author application's programs, which needs the lease database.
+ */
+const programsMode = process.argv.includes("--programs");
+
+/**
+ * The budgets a compilation is metered against, in the order grizzle's meter reports them.
+ */
+const BUDGETS = ["nodes", "fields", "sqlBytes", "params", "variants"] as const;
+
+type Budget = (typeof BUDGETS)[number];
+
+/**
+ * The ceiling of each budget, by the name grizzle's meter gives it.
+ */
+const LIMIT: Readonly<Record<Budget, number>> = {
+  fields: CEILING.fields,
+  nodes: CEILING.fields,
+  params: CEILING.bindParameters,
+  sqlBytes: CEILING.sqlBytes,
+  variants: CEILING.variants,
+};
+
+/**
+ * What one budget meter reports: for each budget, what the compilation was charged and its limit.
+ */
+const MeterUsage = Schema.Record(
+  Schema.String,
+  Schema.Struct({ limit: Schema.Number, used: Schema.Number }),
+);
+
+type MeterUsageOf = typeof MeterUsage.Type;
+
+/**
+ * A budget meter of grizzle's engine, which the compiler charges and which reports its usage.
+ */
+interface Meter {
+  readonly usage: () => MeterUsageOf;
+}
+
+/**
+ * What a charge answers: whether the meter took it.
+ */
+interface Charged {
+  readonly ok: boolean;
+}
+
+type Charging = (this: Meter, ...args: unknown[]) => Charged;
+
+/**
+ * The two methods of a meter that charge it.
+ */
+interface MeterPrototype {
+  charge: Charging;
+  chargeSql: Charging;
+}
+
+/**
+ * The engine file that holds the meter class.
+ */
+interface EngineBudget {
+  readonly BudgetMeter: { readonly prototype: MeterPrototype };
+}
+
+const isEngineBudget = (value: unknown): value is EngineBudget =>
+  Predicate.hasProperty(value, "BudgetMeter") &&
+  Predicate.hasProperty(value.BudgetMeter, "prototype") &&
+  Predicate.hasProperty(value.BudgetMeter.prototype, "charge") &&
+  Predicate.hasProperty(value.BudgetMeter.prototype, "chargeSql");
+
+/**
+ * What a compilation was charged on its own meter, and the refusal when it failed.
+ */
+interface Measured {
+  readonly charged: Readonly<Record<Budget, number>>;
+  readonly refusal: string | undefined;
+}
+
+/**
+ * One `ChangeSet` with a member for each of the relations the author writes from `from` up to but
+ * not including `to`, each an empty array, so what compiles is the program of an import that takes
+ * the rows of each relation as a parameter. The first relation of the roster is always the first
+ * member, as in `changeSetOf`.
+ */
+const importChanges = (from: number, to: number) => {
+  let changes = ChangeSet.empty(Author).insert(Package, []);
+  const members: readonly AnyRelation[] = Author.write
+    .slice(from, to)
+    .map((name) => Author.relations[name]);
+  for (const relation of members.filter((member) => member !== Package)) {
+    // SAFETY: the same erased insert as `changeSetOf`: the member is the relation's own name and an empty array, and `insert` reads no more at run time.
+    changes = changes.insert(
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+      relation as typeof Package,
+      [],
+    );
+  }
+
+  return changes;
+};
+
+/**
+ * A program the script compiles: an export query, or the import `ChangeSet`.
+ */
+type Program = typeof documentIdsOf | LooseQuery | ReturnType<typeof importChanges>;
+
+/**
+ * The relation prefixes of the import `ChangeSet` the script compiles whole, ending with every
+ * relation the author writes: the sizes at which the compilation is refused.
+ */
+const IMPORT_PREFIXES = [100, 200, 400, Author.write.length] as const;
+
+/**
+ * How many relations one slice of the import holds when the slices are compiled and summed.
+ */
+const IMPORT_SLICE = 100;
+
+/**
+ * Arms the goal's milestone table adds after M1 that it counts: M2's MathML elements (193) and SSML
+ * elements (12), part B and part E. M3 adds its expression and rule arms (64 expressions, six
+ * response, six outcome and six template rules, part D) to other relations, counted as the same
+ * kind of arm. The table gives M4 and M5 no arm count, so they add none here.
+ */
+const MILESTONE_ARMS = [
+  ["M2", 193 + 12],
+  ["M3", 64 + 18],
+  ["M4", 0],
+  ["M5", 0],
+] as const;
+
+/**
+ * Wrap the budget meter of grizzle's engine so every meter a compilation makes is kept.
+ *
+ * Grizzle exposes no size of a compiled program, so the script reads the meter the compiler
+ * charges. The class is imported from the engine's own file, which is the instance the compiler
+ * uses, and its two charging methods remember the meter they ran on.
+ */
+const watchMeters = Effect.gen(function* watchesMeters() {
+  const grizzle = createRequire(import.meta.url).resolve("@bjornpagen/grizzle");
+  const engine = createRequire(grizzle).resolve("@bjornpagen/grizzle-engine");
+  const budget: unknown = yield* Effect.promise(
+    () => import(pathToFileURL(nodePath.join(nodePath.dirname(engine), "core", "budget.js")).href),
+  );
+  if (!isEngineBudget(budget)) {
+    return yield* Effect.die(new Error("grizzle's engine exports no BudgetMeter to watch"));
+  }
+
+  const meters = new Set<Meter>();
+  const { prototype } = budget.BudgetMeter;
+  for (const method of ["charge", "chargeSql"] as const) {
+    const original = prototype[method];
+    prototype[method] = function charged(this: Meter, ...args: unknown[]) {
+      meters.add(this);
+
+      return original.apply(this, args);
+    };
+  }
+
+  return meters;
+});
+
+/**
+ * Compile `program` and report what its compilation was charged.
+ */
+const measure = (
+  compile: (program: Program) => Effect.Effect<void, unknown>,
+  meters: Set<Meter>,
+  program: Program,
+): Effect.Effect<Measured> =>
+  Effect.gen(function* measures() {
+    meters.clear();
+
+    const result = yield* Effect.result(compile(program));
+    const charged: Record<Budget, number> = {
+      fields: 0,
+      nodes: 0,
+      params: 0,
+      sqlBytes: 0,
+      variants: 0,
+    };
+    for (const meter of meters) {
+      const usage = meter.usage();
+      // The compilation's own meter holds the compiler's SQL ceiling; the artifacts' lowering
+      // meters have no limit on SQL.
+      if (usage["sqlBytes"]?.limit === CEILING.sqlBytes) {
+        for (const budget of BUDGETS) {
+          charged[budget] = Math.max(charged[budget], usage[budget]?.used ?? 0);
+        }
+      }
+    }
+    if (result._tag === "Success") {
+      return { charged, refusal: undefined };
+    }
+
+    return {
+      charged,
+      refusal: Predicate.hasProperty(result.failure, "message")
+        ? String(result.failure.message)
+        : String(result.failure),
+    };
+  });
+
+/**
+ * One measured program as a line: its name, whether it compiled, and what each budget was charged
+ * against its ceiling.
+ */
+const programLine = (name: string, measured: Measured): string => {
+  const charges = BUDGETS.map(
+    (budget) => `${budget} ${measured.charged[budget]}/${LIMIT[budget]}`,
+  ).join(" ");
+  const state = measured.refusal === undefined ? "compiled" : "refused";
+
+  return `${name}: ${state} ${charges}${measured.refusal === undefined ? "" : ` (${measured.refusal})`}`;
+};
+
+/**
+ * The lines of the programs mode: each export query as the author application compiles it, the
+ * import in growing relation prefixes, and the extrapolation to the arms the goal's later
+ * milestones add.
+ */
+const programLines = Effect.gen(function* programLinesOf() {
+  const meters = yield* watchMeters;
+  const db = yield* Db.open(AuthorApp.roles.author, {});
+  const compile = (program: Program) =>
+    Effect.scoped(
+      // SAFETY: `db.compile` is generic over the program's type, which the run-time view of the export builder and a `ChangeSet` built in a loop cannot state; it reads the value, whose type is not read.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+      db.compile(program as never),
+    ).pipe(Effect.asVoid);
+  const lines: string[] = [];
+
+  const exports: readonly (readonly [string, Program])[] = [
+    ["documentIdsOf", documentIdsOf],
+    ["treeOf", treeOf],
+    ...nodeQueries.map((nodeQuery, run) => [`nodeQuery${run}`, nodeQuery] as const),
+  ];
+  const exported: Record<Budget, number> = {
+    fields: 0,
+    nodes: 0,
+    params: 0,
+    sqlBytes: 0,
+    variants: 0,
+  };
+  const largest: Record<Budget, number> = {
+    fields: 0,
+    nodes: 0,
+    params: 0,
+    sqlBytes: 0,
+    variants: 0,
+  };
+  for (const [name, program] of exports) {
+    const measured = yield* measure(compile, meters, program);
+    lines.push(programLine(`program_export ${name}`, measured));
+    for (const budget of BUDGETS) {
+      lines.push(...alarm(`${name} ${budget}`, measured.charged[budget], LIMIT[budget]));
+      exported[budget] += measured.charged[budget];
+      largest[budget] = Math.max(largest[budget], measured.charged[budget]);
+    }
+  }
+
+  for (const count of IMPORT_PREFIXES) {
+    lines.push(
+      programLine(
+        `program_import first ${count} relations`,
+        yield* measure(compile, meters, importChanges(0, count)),
+      ),
+    );
+  }
+
+  // A refused compilation reports only the charge that crossed the ceiling, so the whole import is
+  // measured as slices that each compile, and the slices' charges are summed. Each slice also holds
+  // the `Package` member and the program's fixed cost, which the whole import holds once, so the cost
+  // of a slice with no other relation is taken off for each slice past the first.
+  const base = yield* measure(compile, meters, importChanges(0, 0));
+  const total: Record<Budget, number> = {
+    fields: 0,
+    nodes: 0,
+    params: 0,
+    sqlBytes: 0,
+    variants: 0,
+  };
+  let slices = 0;
+  for (let from = 0; from < Author.write.length; from += IMPORT_SLICE) {
+    const slice = yield* measure(compile, meters, importChanges(from, from + IMPORT_SLICE));
+    slices += 1;
+    if (slice.refusal !== undefined) {
+      lines.push(programLine(`program_import slice ${from}`, slice));
+    }
+
+    for (const budget of BUDGETS) {
+      total[budget] += slice.charged[budget] - (slices > 1 ? base.charged[budget] : 0);
+    }
+  }
+  lines.push(
+    `program_import all ${Author.write.length} relations as ${slices} slices of ${IMPORT_SLICE} (the Package-only program of ${base.charged.sqlBytes} bytes taken off for each slice past the first), charges summed: ${BUDGETS.map((budget) => `${budget} ${total[budget]}/${LIMIT[budget]}`).join(" ")}`,
+  );
+
+  const arms = NodeKind.handles.length;
+  lines.push(
+    `extrapolation_assumption: ${arms} Node arms and ${Author.write.length} relations measured; linear in arms with all of the import's cost attributed to arms, an upper estimate; arms added ${MILESTONE_ARMS.map(([milestone, added]) => `${milestone} ${added}`).join(", ")}`,
+  );
+  for (const budget of BUDGETS) {
+    const perArm = total[budget] / arms;
+    let projected = total[budget];
+    for (const [milestone, added] of MILESTONE_ARMS) {
+      projected += perArm * added;
+      lines.push(
+        `extrapolated_import ${budget} through ${milestone}: ${Math.round(projected)} of ${LIMIT[budget]}`,
+      );
+    }
+  }
+
+  // The export reads a run of attachments at a time, so a program stays the size of its run and the
+  // roster's growth adds programs: the programs of the sum below, and their largest, are the cost.
+  lines.push(
+    `export_programs: ${exports.length} programs, charges summed ${BUDGETS.map((budget) => `${budget} ${exported[budget]}`).join(" ")}; largest ${BUDGETS.map((budget) => `${budget} ${largest[budget]}`).join(" ")}`,
+  );
+  let programs = exports.length;
+  for (const [milestone, added] of MILESTONE_ARMS) {
+    programs += Math.ceil(((exports.length - 2) * added) / arms);
+    lines.push(
+      `extrapolated_export programs through ${milestone}: ${programs} programs, each no larger than the largest above while a run holds the same attachments`,
+    );
+  }
+
+  return lines;
+}).pipe(Effect.scoped);
+
 const main = Effect.gen(function* main() {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -97,7 +443,7 @@ const main = Effect.gen(function* main() {
     `sql_bytes_total: ${sqlBytesTotal} (migration bytes, a measurement beside the per-compilation ceiling ${CEILING.sqlBytes}, not against it)`,
     ...perFolder.map(([folder, bytes]) => `sql_bytes_per_folder: ${folder} ${bytes}`),
     `access_paths: ${snapshot.accessPaths.length}`,
-    "programs: none (no workloads)",
+    `programs: ${programsMode ? "compiled below" : "not measured (run with --programs on a lease)"}`,
     `ceiling_fields: ${CEILING.fields}`,
     `ceiling_sql_bytes: ${CEILING.sqlBytes}`,
     `ceiling_bind_parameters: ${CEILING.bindParameters}`,
@@ -105,6 +451,7 @@ const main = Effect.gen(function* main() {
     `alarm_fields: ${CEILING.fields * ALARM}`,
     `alarm_sql_bytes: ${Math.round(CEILING.sqlBytes * ALARM)} (800 KiB, per compiled program)`,
     ...alarm("fields", fields, CEILING.fields),
+    ...(programsMode ? yield* programLines : []),
   ];
 
   yield* Effect.sync(() => {
@@ -112,4 +459,6 @@ const main = Effect.gen(function* main() {
   });
 });
 
-NodeRuntime.runMain(main.pipe(Effect.provide(NodeFileSystem.layer), Effect.provide(Path.layer)));
+NodeRuntime.runMain(
+  main.pipe(Effect.provide(Layer.mergeAll(NodeFileSystem.layer, Path.layer, AuthorAppLayer))),
+);
