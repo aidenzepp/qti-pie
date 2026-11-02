@@ -1,4 +1,5 @@
 import { defineConfig } from "@bjornpagen/grizzle";
-import { AuthorApp, Smoke } from "#qti/smoke/schema.ts";
+import { AuthorApp } from "#qti/schema/logins.ts";
+import { Qti } from "#qti/schema/qti.ts";
 
-export default defineConfig({ logins: [AuthorApp], schemas: [Smoke] });
+export default defineConfig({ logins: [AuthorApp], schemas: [Qti] });

@@ -1,0 +1,239 @@
+import { schema } from "@bjornpagen/grizzle";
+import { assert, describe, it } from "@effect/vitest";
+import { Predicate } from "effect";
+import { admission } from "#qti/schema/kinds/cp.ts";
+import * as node from "#qti/schema/node.ts";
+import { RootKind } from "#qti/schema/node.ts";
+import * as pkg from "#qti/schema/package.ts";
+import { resourceTypes } from "#qti/schema/seed/resource-types.ts";
+import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
+
+const versions = ["3.0.0", "3.0.1"] as const;
+
+const childrenOf = (parent: string, version: (typeof versions)[number]) =>
+  admission
+    .filter((row) => row.parent === parent && row.version === version)
+    .map((row) => row.child)
+    .toSorted();
+
+const under = (type: string) =>
+  resourceTypes.filter((row) => row.type === type).map((row) => row.version);
+
+describe("resource types", () => {
+  it("has 19 rows for 3.0.0 and 20 for 3.0.1", () => {
+    assert.strictEqual(resourceTypes.filter((row) => row.version === "3.0.0").length, 19);
+    assert.strictEqual(resourceTypes.filter((row) => row.version === "3.0.1").length, 20);
+    assert.strictEqual(resourceTypes.length, 39);
+  });
+
+  it("has no duplicate (version, type) row", () => {
+    const keys = new Set(resourceTypes.map((row) => `${row.version} ${row.type}`));
+    assert.strictEqual(keys.size, resourceTypes.length);
+  });
+
+  it("keeps each LTI type under its own version", () => {
+    assert.deepStrictEqual(under("imslti_xmlv1p1"), ["3.0.1"]);
+    assert.deepStrictEqual(under("imsltia_xmlv1p0"), ["3.0.1"]);
+    assert.deepStrictEqual(under("imsbasiclti_xmlv1p3"), ["3.0.0"]);
+  });
+});
+
+describe("rootOfType", () => {
+  it("has one row per QTI root kind, as many as the roster minus the manifest", () => {
+    const roots = RootKind.handles.filter((root) => root !== "manifest");
+    assert.strictEqual(rootOfType.length, roots.length);
+    assert.deepStrictEqual(rootOfType.map((row) => row.root).toSorted(), [...roots].toSorted());
+  });
+
+  it("names a type that is a resource type under both versions", () => {
+    for (const row of rootOfType) {
+      for (const version of versions) {
+        assert.isTrue(
+          resourceTypes.some((entry) => entry.type === row.type && entry.version === version),
+          `${row.type} under ${version}`,
+        );
+      }
+    }
+  });
+});
+
+describe("cp admission", () => {
+  it("admits only comment and pi under cp:organizations", () => {
+    for (const version of versions) {
+      assert.deepStrictEqual(childrenOf("cp:organizations", version), ["comment", "pi"]);
+    }
+  });
+
+  it("admits the five simpleContent kinds under cp:schemaversion", () => {
+    for (const version of versions) {
+      assert.deepStrictEqual(childrenOf("cp:schemaversion", version), [
+        "comment",
+        "entityRef",
+        "pi",
+        "text",
+        "ws",
+      ]);
+    }
+  });
+
+  it("holds every row for both versions", () => {
+    for (const row of admission) {
+      const other = row.version === "3.0.0" ? "3.0.1" : "3.0.0";
+      assert.isTrue(
+        admission.some(
+          (entry) =>
+            entry.parent === row.parent && entry.child === row.child && entry.version === other,
+        ),
+        `${row.parent} ${row.child} under ${other}`,
+      );
+    }
+    assert.isAbove(admission.length, 0);
+  });
+
+  it("admits the spec's children under each cp kind", () => {
+    const expected = {
+      "cp:dependency": ["comment", "pi"],
+      "cp:file": ["comment", "pi", "ws"],
+      "cp:manifest": [
+        "comment",
+        "cp:metadata.manifest",
+        "cp:organizations",
+        "cp:resources",
+        "pi",
+        "ws",
+      ],
+      "cp:metadata.manifest": ["comment", "cp:schema", "cp:schemaversion", "lom:lom", "pi", "ws"],
+      "cp:metadata.resource": ["comment", "lom:lom", "pi", "qmd:qtiMetadata", "ws"],
+      "cp:resource": ["comment", "cp:dependency", "cp:file", "cp:metadata.resource", "pi", "ws"],
+      "cp:resources": ["comment", "cp:resource", "pi", "ws"],
+      "cp:schema": ["comment", "entityRef", "pi", "text", "ws"],
+    };
+    for (const [parent, children] of Object.entries(expected)) {
+      for (const version of versions) {
+        assert.deepStrictEqual(childrenOf(parent, version), children, `${parent} ${version}`);
+      }
+    }
+  });
+});
+
+/**
+ * The schema over node's relations and rules and this module's.
+ */
+const probe = () =>
+  schema("QtiPackageProbe", { ...node.relations, ...pkg.relations }, [...node.rules, ...pkg.rules]);
+
+/**
+ * The inclusive bounds a capacity statement carries on its description, which the public statement
+ * type does not expose.
+ */
+const boundsOf = (rule: (typeof pkg.rules)[number]): readonly [unknown, unknown] => {
+  const within =
+    Predicate.hasProperty(rule, "desc") &&
+    Predicate.hasProperty(rule.desc, "within") &&
+    Predicate.hasProperty(rule.desc.within, "low") &&
+    Predicate.hasProperty(rule.desc.within, "high")
+      ? rule.desc.within
+      : undefined;
+
+  assert.isDefined(within, "capacity description");
+
+  return [within.low, within.high];
+};
+
+/**
+ * The capacity statements of this module.
+ */
+const capacities = () => pkg.rules.filter((rule) => rule.kind === "capacity");
+
+describe("package", () => {
+  it("builds a schema over node and package relations and rules without refusal", () => {
+    const built = probe();
+    for (const name of Object.keys(pkg.relations)) {
+      assert.isTrue(name in built.relations, name);
+    }
+    assert.strictEqual(built.statements.length, node.rules.length + pkg.rules.length);
+  });
+
+  it("declares the package relations and the roster", () => {
+    assert.deepStrictEqual(Object.keys(pkg.relations).toSorted(), [
+      "Dependency",
+      "EntryKind",
+      "File",
+      "FileContent",
+      "Manifest",
+      "ManifestMetadata",
+      "ManifestSchema",
+      "ManifestSchemaVersion",
+      "Organizations",
+      "Package",
+      "PackageEntry",
+      "Resource",
+      "ResourceHref",
+      "ResourceMetadata",
+      "ResourceTypeOf",
+      "Resources",
+      "RootOfType",
+    ]);
+  });
+
+  it("holds three capacity statements targeting Package, each exactly one", () => {
+    const onPackage = capacities().filter((rule) => rule.target.source === pkg.relations.Package);
+    assert.strictEqual(onPackage.length, 3);
+    for (const rule of onPackage) {
+      assert.deepStrictEqual([...rule.target.fields], ["id"]);
+      assert.deepStrictEqual(boundsOf(rule), [1n, 1n]);
+    }
+    assert.deepStrictEqual(onPackage.map((rule) => rule.from.source.name).toSorted(), [
+      "ManifestMetadata",
+      "Organizations",
+      "Resources",
+    ]);
+  });
+
+  it("holds two capacity statements targeting ManifestMetadata, each exactly one", () => {
+    const onMetadata = capacities().filter(
+      (rule) => rule.target.source === pkg.relations.ManifestMetadata,
+    );
+    assert.strictEqual(onMetadata.length, 2);
+    for (const rule of onMetadata) {
+      assert.deepStrictEqual(boundsOf(rule), [1n, 1n]);
+    }
+    assert.deepStrictEqual(onMetadata.map((rule) => rule.from.source.name).toSorted(), [
+      "ManifestSchema",
+      "ManifestSchemaVersion",
+    ]);
+  });
+
+  it("keys the arms by their NodeKind handles", () => {
+    assert.deepStrictEqual(Object.keys(pkg.arms).toSorted(), [
+      "cp:dependency",
+      "cp:file",
+      "cp:manifest",
+      "cp:metadata.manifest",
+      "cp:metadata.resource",
+      "cp:organizations",
+      "cp:resource",
+      "cp:resources",
+      "cp:schema",
+      "cp:schemaversion",
+    ]);
+  });
+
+  it("holds the File into Resource capacity, one or more", () => {
+    const onResource = capacities().filter((rule) => rule.target.source === pkg.relations.Resource);
+    assert.strictEqual(onResource.length, 1);
+    for (const rule of onResource) {
+      assert.strictEqual(rule.from.source, pkg.relations.File);
+      assert.deepStrictEqual([...rule.target.fields], ["id"]);
+      assert.deepStrictEqual([...rule.from.fields], ["resource"]);
+      assert.deepStrictEqual(boundsOf(rule), [1n, "*"]);
+    }
+  });
+
+  it("holds the DependencyNotSelf check over Dependency", () => {
+    const names = pkg.rules.flatMap((rule) =>
+      rule.kind === "check" && rule.relation === pkg.relations.Dependency ? [rule.name] : [],
+    );
+    assert.deepStrictEqual(names, ["DependencyNotSelf"]);
+  });
+});

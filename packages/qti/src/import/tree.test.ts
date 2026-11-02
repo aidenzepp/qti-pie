@@ -1,0 +1,523 @@
+/* oxlint-disable unicorn/text-encoding-identifier-case -- The tests spell the XML encoding labels (`UTF-8`) the declarations under test carry. */
+import path from "node:path";
+import { NodeServices } from "@effect/platform-node";
+import { assert, it, layer } from "@effect/vitest";
+import { Effect, Exit, FileSystem, Option } from "effect";
+import { inject } from "vitest";
+import {
+  AttributeEntityReference,
+  AttributeLexical,
+  Comment,
+  Edge,
+  EntityReference,
+  NamespaceDeclaration,
+  Node,
+  Pi,
+  SchemaLocation,
+  TextNode,
+  Tree,
+  TreeDoctype,
+  TreeExportCharset,
+  TreeMisc,
+  TreeRoot,
+  TreeXmlEncoding,
+  TreeXmlStandalone,
+  TreeXmlVersion,
+  Ws,
+} from "#qti/schema/node.ts";
+import { materialize } from "#qti/test/fixtures.ts";
+import { GuardRefusal, treeGuards } from "#qti/import/guards/tree.ts";
+import {
+  collapse,
+  kindOf,
+  replace,
+  Rows,
+  treeRows,
+  typedAttribute,
+  UnmodeledVocabulary,
+} from "#qti/import/tree.ts";
+import type { TreeInput } from "#qti/import/tree.ts";
+import { readXml } from "#qti/xml/read.ts";
+import type { Element } from "#qti/xml/tree.ts";
+
+const treeId = "11111111-1111-4111-8111-111111111111";
+
+/**
+ * The input of an item document whose charset is the one the reader decoded it under.
+ */
+const itemInput = (charset: string): TreeInput => ({
+  charset,
+  id: treeId,
+  kind: "document",
+  root: "item",
+  version: "3.0.0",
+});
+
+/**
+ * Read `choice.xml` of a materialized fixture directory, after replacing the first occurrence of
+ * `search` with `replacement` when an edit is given.
+ */
+const readChoice = (directory: string, edit?: readonly [search: string, replacement: string]) =>
+  Effect.gen(function* readChoiceFile() {
+    const fs = yield* FileSystem.FileSystem;
+    const bytes = yield* fs.readFile(path.join(directory, "choice.xml"));
+    if (edit === undefined) {
+      return yield* readXml(bytes);
+    }
+
+    const text = new TextDecoder().decode(bytes);
+    assert.isTrue(text.includes(edit[0]), `choice.xml holds ${edit[0]}`);
+
+    return yield* readXml(new TextEncoder().encode(text.replace(edit[0], edit[1])));
+  });
+
+layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suite) => {
+  suite.effect("choice.xml yields one Tree row and the prolog fidelity rows", () =>
+    Effect.gen(function* choiceRows() {
+      const doc = yield* readChoice(inject("fixtures").simple);
+      const { rows } = yield* treeRows(doc, itemInput(doc.charset), Rows.empty());
+
+      assert.deepStrictEqual(Rows.of(rows, Tree), [
+        { charset: "UTF-8", id: treeId, kind: "document", root: "item", version: "3.0.0" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, TreeMisc), [
+        {
+          kind: "comment",
+          placement: "prolog",
+          position: 0n,
+          text: " This example adapted from the PET Handbook, copyright University of Cambridge ESOL Examinations ",
+          tree: treeId,
+        },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, TreeXmlVersion), [{ tree: treeId, value: "1.0" }]);
+      assert.deepStrictEqual(Rows.of(rows, TreeXmlEncoding), [{ tree: treeId, value: "UTF-8" }]);
+      assert.deepStrictEqual(Rows.of(rows, TreeXmlStandalone), []);
+      assert.deepStrictEqual(Rows.of(rows, TreeDoctype), []);
+      assert.deepStrictEqual(Rows.of(rows, TreeExportCharset), []);
+    }),
+  );
+
+  suite.effect("the windows-1252 fixture yields a TreeExportCharset row of UTF-8", () =>
+    Effect.gen(function* windows1252() {
+      const doc = yield* readChoice(yield* materialize("windows-1252"));
+      const { rows } = yield* treeRows(doc, itemInput(doc.charset), Rows.empty());
+
+      assert.deepStrictEqual(
+        Rows.of(rows, Tree).map((row) => row.charset),
+        ["windows-1252"],
+      );
+      assert.deepStrictEqual(Rows.of(rows, TreeExportCharset), [{ label: "UTF-8", tree: treeId }]);
+    }),
+  );
+
+  suite.effect("the doctype fixture yields a TreeDoctype row holding the DOCTYPE text whole", () =>
+    Effect.gen(function* doctype() {
+      const doc = yield* readChoice(yield* materialize("doctype"));
+      const { rows } = yield* treeRows(doc, itemInput(doc.charset), Rows.empty());
+      const text = Option.getOrThrow(doc.doctype);
+
+      assert.isTrue(text.startsWith("<!DOCTYPE qti-assessment-item"));
+      assert.deepStrictEqual(Rows.of(rows, TreeDoctype), [{ text, tree: treeId }]);
+    }),
+  );
+
+  suite.effect("choice.xml yields its node, edge, arm, namespace and root rows", () =>
+    Effect.gen(function* choiceNodes() {
+      const doc = yield* readChoice(inject("fixtures").simple);
+      const { nodes, rows } = yield* treeRows(doc, itemInput(doc.charset), Rows.empty());
+      const nodeRows = Rows.of(rows, Node);
+      const byId = new Map(nodeRows.map((row) => [row.id, row]));
+      const ofKind = (kind: string) => nodeRows.filter((row) => row.kind === kind);
+      const elements = nodeRows.filter(
+        (row) => !["text", "ws", "comment", "pi", "entityRef"].includes(row.kind),
+      );
+
+      // The spec's 3.4 count of elements in choice.xml.
+      assert.strictEqual(elements.length, 17);
+      assert.strictEqual(nodes.size, 17);
+
+      // One whitespace run lies between every pair of tags of an element that holds elements: the
+      // root 4 children (5 runs), the response and outcome declarations and their value holders
+      // (2 each, 4 elements), the item body 3 (4), the second p 1 (2) and the interaction 4 (5).
+      assert.strictEqual(ofKind("ws").length, 24);
+      assert.deepStrictEqual(
+        Rows.of(rows, TextNode)
+          .map((row) => row.value)
+          .toSorted(),
+        [
+          "0",
+          "ChoiceA",
+          "Do not let someone else look after your luggage.",
+          "Look at the text in the picture.",
+          "Remember your luggage when you leave.",
+          "What does it say?",
+          "You must stay with your luggage at all times.",
+        ],
+      );
+      assert.strictEqual(ofKind("text").length, 7);
+      assert.strictEqual(Rows.of(rows, Ws).length, 24);
+      assert.strictEqual(nodeRows.length, 17 + 24 + 7);
+      assert.isTrue(
+        nodeRows.every(
+          (row) =>
+            row.tree === treeId &&
+            row.version === "3.0.0" &&
+            row.rootKind === "item" &&
+            (elements.includes(row) || row.prefix === ""),
+        ),
+      );
+
+      const edges = Rows.of(rows, Edge);
+      assert.strictEqual(edges.length, nodeRows.length - 1);
+
+      const children = Map.groupBy(edges, (edge) => edge.parent);
+      for (const [parent, own] of children) {
+        assert.deepStrictEqual(
+          own.map((edge) => edge.position).toSorted((a, b) => Number(a - b)),
+          own.map((_, position) => BigInt(position)),
+          `positions under ${parent}`,
+        );
+        for (const edge of own) {
+          assert.strictEqual(edge.parentKind, byId.get(parent)?.kind);
+          assert.strictEqual(edge.childKind, byId.get(edge.child)?.kind);
+          assert.strictEqual(edge.tree, treeId);
+          assert.strictEqual(edge.version, "3.0.0");
+        }
+      }
+
+      const root = Option.getOrThrow(Option.fromNullishOr(nodes.get(doc.root)));
+      assert.deepStrictEqual(Rows.of(rows, TreeRoot), [{ node: root.id, tree: treeId }]);
+      assert.strictEqual(root.id, treeId);
+      assert.strictEqual(root.kind, "qti-assessment-item");
+      assert.isFalse(edges.some((edge) => edge.child === root.id));
+      assert.deepStrictEqual(Rows.of(rows, NamespaceDeclaration), [
+        { node: root.id, position: 0n, prefix: "", uri: doc.root.namespace },
+        {
+          node: root.id,
+          position: 1n,
+          prefix: "xsi",
+          uri: "http://www.w3.org/2001/XMLSchema-instance",
+        },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, SchemaLocation), [
+        {
+          node: root.id,
+          prefix: "xsi",
+          value:
+            "http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd",
+        },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, Comment), []);
+      assert.deepStrictEqual(Rows.of(rows, Pi), []);
+      assert.deepStrictEqual(Rows.of(rows, EntityReference), []);
+      assert.deepStrictEqual(Rows.of(rows, AttributeEntityReference), []);
+    }),
+  );
+
+  suite.effect("imsmanifest.xml yields 58 element nodes and four namespace declarations", () =>
+    Effect.gen(function* manifestNodes() {
+      const fs = yield* FileSystem.FileSystem;
+      const bytes = yield* fs.readFile(path.join(inject("fixtures").simple, "imsmanifest.xml"));
+      const doc = yield* readXml(bytes);
+      const { nodes, rows } = yield* treeRows(
+        doc,
+        { charset: doc.charset, id: treeId, kind: "manifest", root: "manifest", version: "3.0.0" },
+        Rows.empty(),
+      );
+      const root = Option.getOrThrow(Option.fromNullishOr(nodes.get(doc.root)));
+
+      assert.strictEqual(nodes.size, 58);
+      assert.deepStrictEqual(Rows.of(rows, TreeRoot), [{ node: treeId, tree: treeId }]);
+      assert.strictEqual(root.id, treeId);
+      assert.strictEqual(
+        Rows.of(rows, Node).filter(
+          (row) => !["text", "ws", "comment", "pi", "entityRef"].includes(row.kind),
+        ).length,
+        58,
+      );
+      assert.strictEqual(Rows.of(rows, NamespaceDeclaration).length, 4);
+      assert.isTrue(Rows.of(rows, NamespaceDeclaration).every((row) => row.node === root.id));
+      assert.deepStrictEqual(
+        Rows.of(rows, NamespaceDeclaration).map((row) => row.position),
+        [0n, 1n, 2n, 3n],
+      );
+    }),
+  );
+
+  suite.effect("an entity reference in the prompt and in alt yields node and attribute rows", () =>
+    Effect.gen(function* externalReferences() {
+      const doc = yield* readChoice(yield* materialize("external"));
+      const { nodes, rows } = yield* treeRows(doc, itemInput(doc.charset), Rows.empty());
+      const refNodes = Rows.of(rows, Node).filter((row) => row.kind === "entityRef");
+      const refNode = Option.getOrThrow(Option.fromNullishOr(refNodes[0]));
+      const prompt = Option.getOrThrow(
+        Option.fromNullishOr(Rows.of(rows, Node).find((row) => row.kind === "qti-prompt")),
+      );
+      const img = Option.getOrThrow(
+        Option.fromNullishOr([...nodes].find(([element]) => element.local === "img")?.[1]),
+      );
+
+      assert.strictEqual(refNodes.length, 1);
+      assert.deepStrictEqual(Rows.of(rows, EntityReference), [
+        { id: refNode.id, name: "undeclared" },
+      ]);
+      assert.deepStrictEqual(
+        Rows.of(rows, Edge)
+          .filter((edge) => edge.child === refNode.id)
+          .map((edge) => [edge.parent, edge.parentKind, edge.childKind]),
+        [[prompt.id, "qti-prompt", "entityRef"]],
+      );
+      // `NEVER LEAVE LUGGAGE &undeclared;`: the `&` is at zero-based index 20.
+      assert.deepStrictEqual(Rows.of(rows, AttributeEntityReference), [
+        { attribute: "alt", name: "undeclared", node: img.id, offset: 20n },
+      ]);
+    }),
+  );
+
+  suite.effect("an element outside the registries is refused by name", () =>
+    Effect.gen(function* unmodeledElement() {
+      const doc = yield* readChoice(inject("fixtures").simple, [
+        "<qti-prompt>",
+        "<div>x</div><qti-prompt>",
+      ]);
+      const exit = yield* Effect.exit(treeRows(doc, itemInput(doc.charset), Rows.empty()));
+
+      assert.isTrue(Exit.isFailure(exit));
+
+      const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
+      const refusal = Option.getOrThrow(failure);
+      assert.instanceOf(refusal, UnmodeledVocabulary);
+      assert.strictEqual(refusal.kind, "element");
+      assert.strictEqual(refusal.name, "div");
+      assert.deepStrictEqual(refusal.parent, Option.some("qti-choice-interaction"));
+    }),
+  );
+
+  suite.effect("an attribute outside the registry is refused by name", () =>
+    Effect.gen(function* unmodeledAttribute() {
+      const doc = yield* readChoice(inject("fixtures").simple, [
+        "<qti-assessment-item ",
+        '<qti-assessment-item class="x" ',
+      ]);
+      const exit = yield* Effect.exit(treeRows(doc, itemInput(doc.charset), Rows.empty()));
+
+      const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
+      const refusal = Option.getOrThrow(failure);
+      assert.instanceOf(refusal, UnmodeledVocabulary);
+      assert.strictEqual(refusal.kind, "attribute");
+      assert.strictEqual(refusal.name, "class");
+      assert.deepStrictEqual(refusal.parent, Option.some("qti-assessment-item"));
+    }),
+  );
+});
+
+/**
+ * Run `treeGuards` over `rows` and return the refusal it fails with.
+ */
+const refusalOf = (rows: Rows) =>
+  Effect.gen(function* refusal() {
+    const exit = yield* Effect.exit(treeGuards(rows));
+    const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
+
+    return Option.getOrThrow(failure);
+  });
+
+layer(NodeServices.layer, { excludeTestServices: true })("import/guards/tree.ts", (suite) => {
+  const choiceTree = Effect.gen(function* choiceTree() {
+    const doc = yield* readChoice(inject("fixtures").simple);
+
+    return (yield* treeRows(doc, itemInput(doc.charset), Rows.empty())).rows;
+  });
+
+  suite.effect("choice.xml passes both guards", () =>
+    Effect.gen(function* passes() {
+      yield* treeGuards(yield* choiceTree);
+    }),
+  );
+
+  suite.effect("a ring of edges detached from the root is refused as reachability", () =>
+    Effect.gen(function* ring() {
+      const rows = yield* choiceTree;
+      const template = Option.getOrThrow(Option.fromNullishOr(Rows.of(rows, Node)[0]));
+      const edge = Option.getOrThrow(Option.fromNullishOr(Rows.of(rows, Edge)[0]));
+      const a = "33333333-3333-4333-8333-333333333333";
+      const b = "44444444-4444-4444-8444-444444444444";
+      const withNodes = Rows.add(rows, Node, [
+        { ...template, id: a },
+        { ...template, id: b },
+      ]);
+      const ringed = Rows.add(withNodes, Edge, [
+        { ...edge, child: b, parent: a, position: 0n },
+        { ...edge, child: a, parent: b, position: 0n },
+      ]);
+      const refusal = yield* refusalOf(ringed);
+
+      assert.instanceOf(refusal, GuardRefusal);
+      assert.strictEqual(refusal.rule, "reachability");
+    }),
+  );
+
+  suite.effect("a node no edge leads to is refused as reachability", () =>
+    Effect.gen(function* orphan() {
+      const rows = yield* choiceTree;
+      const template = Option.getOrThrow(Option.fromNullishOr(Rows.of(rows, Node)[0]));
+      const refusal = yield* refusalOf(
+        Rows.add(rows, Node, [{ ...template, id: "55555555-5555-4555-8555-555555555555" }]),
+      );
+
+      assert.strictEqual(refusal.rule, "reachability");
+    }),
+  );
+
+  suite.effect("edge positions 0 and 2 under one parent are refused as ordering", () =>
+    Effect.gen(function* gap() {
+      const rows = yield* choiceTree;
+      const edges = Rows.of(rows, Edge);
+      const target = Option.getOrThrow(Option.fromNullishOr(edges.find((e) => e.position === 1n)));
+      const gapped = new Map(rows).set(
+        Edge,
+        edges.map((e) => (e === target ? { ...e, position: 2n } : e)),
+      );
+      const refusal = yield* refusalOf(gapped);
+
+      assert.strictEqual(refusal.rule, "ordering");
+    }),
+  );
+
+  suite.effect("a repeated edge position under one parent is refused as ordering", () =>
+    Effect.gen(function* repeat() {
+      const rows = yield* choiceTree;
+      const edges = Rows.of(rows, Edge);
+      const target = Option.getOrThrow(Option.fromNullishOr(edges.find((e) => e.position === 1n)));
+      const repeated = new Map(rows).set(
+        Edge,
+        edges.map((e) => (e === target ? { ...e, position: 0n } : e)),
+      );
+      const refusal = yield* refusalOf(repeated);
+
+      assert.strictEqual(refusal.rule, "ordering");
+    }),
+  );
+});
+
+it("replace turns tab, line feed and carriage return into spaces", () => {
+  assert.strictEqual(replace("a\tb\nc\rd\r\ne"), "a b c d  e");
+});
+
+it("collapse replaces, trims and joins runs of spaces", () => {
+  assert.strictEqual(collapse(" \ta \n\r b\t "), "a b");
+});
+
+const node = "22222222-2222-4222-8222-222222222222";
+
+it("typedAttribute on a padded collapse value returns it collapsed with one AttributeLexical row", () => {
+  const result = typedAttribute(
+    Rows.empty(),
+    node,
+    "qti-assessment-item",
+    "adaptive",
+    " true ",
+    "collapse",
+  );
+
+  assert.strictEqual(result.value, "true");
+  assert.deepStrictEqual(Rows.of(result.rows, AttributeLexical), [
+    { attribute: "adaptive", kind: "qti-assessment-item", node, value: " true " },
+  ]);
+});
+
+it("typedAttribute on an already collapsed value appends no row", () => {
+  const result = typedAttribute(
+    Rows.empty(),
+    node,
+    "qti-assessment-item",
+    "adaptive",
+    "true",
+    "collapse",
+  );
+
+  assert.strictEqual(result.value, "true");
+  assert.deepStrictEqual(Rows.of(result.rows, AttributeLexical), []);
+});
+
+it("typedAttribute on a replace value holding a tab returns it replaced with one row", () => {
+  const result = typedAttribute(
+    Rows.empty(),
+    node,
+    "qti-assessment-item",
+    "title",
+    "Unattended\tLuggage",
+    "replace",
+  );
+
+  assert.strictEqual(result.value, "Unattended Luggage");
+  assert.deepStrictEqual(Rows.of(result.rows, AttributeLexical), [
+    { attribute: "title", kind: "qti-assessment-item", node, value: "Unattended\tLuggage" },
+  ]);
+});
+
+it("typedAttribute on a replace value without a tab, line feed or carriage return appends no row", () => {
+  const result = typedAttribute(
+    Rows.empty(),
+    node,
+    "qti-assessment-item",
+    "title",
+    "Unattended  Luggage",
+    "replace",
+  );
+
+  assert.strictEqual(result.value, "Unattended  Luggage");
+  assert.deepStrictEqual(Rows.of(result.rows, AttributeLexical), []);
+});
+
+it("typedAttribute on a preserve value is returned unchanged with no row", () => {
+  const result = typedAttribute(
+    Rows.empty(),
+    node,
+    "qti-assessment-item",
+    "title",
+    "a\tb",
+    "preserve",
+  );
+
+  assert.strictEqual(result.value, "a\tb");
+  assert.deepStrictEqual(Rows.of(result.rows, AttributeLexical), []);
+});
+
+/**
+ * An attribute-free, childless element in `namespace`.
+ */
+const bare = (namespace: string, local: string): Element => ({
+  attributes: [],
+  children: [],
+  kind: "element",
+  local,
+  namespace,
+  prefix: "",
+  qname: local,
+});
+
+const cpNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
+
+const lomNamespace = "http://ltsc.ieee.org/xsd/LOM";
+
+it("kindOf resolves a dotted handle by the parent's kind", () => {
+  const metadata = bare(cpNamespace, "metadata");
+  const duration = bare(lomNamespace, "duration");
+
+  assert.deepStrictEqual(
+    kindOf(metadata, Option.some("cp:manifest")),
+    Option.some("cp:metadata.manifest"),
+  );
+  assert.deepStrictEqual(
+    kindOf(metadata, Option.some("cp:resource")),
+    Option.some("cp:metadata.resource"),
+  );
+  assert.deepStrictEqual(kindOf(metadata, Option.some("cp:resources")), Option.none());
+  assert.deepStrictEqual(kindOf(metadata, Option.none()), Option.none());
+  assert.deepStrictEqual(kindOf(duration, Option.some("lom:general")), Option.some("lom:duration"));
+  assert.deepStrictEqual(
+    kindOf(duration, Option.some("lom:duration")),
+    Option.some("lom:duration.string"),
+  );
+});
