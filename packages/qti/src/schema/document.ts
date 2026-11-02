@@ -20,7 +20,7 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import { Node, NodeKind, RootKind, SchemaVersion, Tree } from "#qti/schema/node.ts";
+import { AttributeName, Node, NodeKind, RootKind, SchemaVersion, Tree } from "#qti/schema/node.ts";
 import type { RootKindHandle } from "#qti/schema/node.ts";
 import { Package, PackageEntry, Resource, RootOfType } from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
@@ -109,11 +109,18 @@ export const DocumentId = relation(
 /**
  * The `id` of an element of the HTML profile, with the kind of the element that holds it. The
  * `(node)` key holds because an element has one `id`, and a containment can only reach a
- * projection that is keyed.
+ * projection that is keyed. `attribute` is always `id`: it makes `(kind, attribute)` the pair the
+ * `AttributeAdmission` containment reads, because a containment into a selected target is refused.
  */
 export const HtmlId = relation(
   "HtmlId",
-  { document: uuid, id: ncName, kind: closedId(NodeKind), node: uuid },
+  {
+    attribute: closedId(AttributeName),
+    document: uuid,
+    id: ncName,
+    kind: closedId(NodeKind),
+    node: uuid,
+  },
   ["document", "id"],
 );
 

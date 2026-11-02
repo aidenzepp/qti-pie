@@ -17,6 +17,7 @@ import * as feedback from "#qti/schema/feedback.ts";
 import * as html from "#qti/schema/html.ts";
 import * as htmlMedia from "#qti/schema/html/media.ts";
 import * as htmlStructure from "#qti/schema/html/structure.ts";
+import * as htmlTemplate from "#qti/schema/html/template.ts";
 import * as htmlText from "#qti/schema/html/text.ts";
 import * as interaction from "#qti/schema/interaction.ts";
 import * as associate from "#qti/schema/interactions/associate.ts";
@@ -56,6 +57,7 @@ export const Qti = schema(
     ...htmlText.relations,
     ...htmlStructure.relations,
     ...htmlMedia.relations,
+    ...htmlTemplate.relations,
     ...choices.relations,
     ...coords.relations,
     ...order.relations,
@@ -87,6 +89,7 @@ export const Qti = schema(
     ...htmlText.rules,
     ...htmlStructure.rules,
     ...htmlMedia.rules,
+    ...htmlTemplate.rules,
     ...choices.rules,
     ...coords.rules,
     ...order.rules,
@@ -115,6 +118,7 @@ export const Qti = schema(
       ...htmlText.arms,
       ...htmlStructure.arms,
       ...htmlMedia.arms,
+      ...htmlTemplate.arms,
       ...choices.arms,
       ...coords.arms,
       ...order.arms,

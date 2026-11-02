@@ -999,6 +999,8 @@ export const arms = {};
  */
 export const rules = [
   contained(on(AttributeLexical, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  contained(on(HtmlId, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("HtmlIdAttribute", HtmlId, (row) => row.eq(row.attribute, "id")),
   contained(on(NodeClass, "node", "kind"), on(Node, "id", "kind")),
   contained(on(NodeClass, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
   check("NodeClassAttribute", NodeClass, (row) => row.eq(row.attribute, "class")),

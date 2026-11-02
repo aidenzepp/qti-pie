@@ -636,6 +636,7 @@ export const Author = role(
     TdRowspan: Qti.relations.TdRowspan,
     TdScope: Qti.relations.TdScope,
     TdValign: Qti.relations.TdValign,
+    Template: Qti.relations.Template,
     TemplateBlock: Qti.relations.TemplateBlock,
     TemplateContentRef: Qti.relations.TemplateContentRef,
     TemplateDeclarationArm: Qti.relations.TemplateDeclarationArm,

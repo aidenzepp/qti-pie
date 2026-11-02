@@ -155,7 +155,7 @@ describe("qti", () => {
     assert.isAbove(relations.length, 0);
   });
 
-  it("gives every NodeKind handle but template an arm in the Node alternatives statement", () => {
+  it("gives every NodeKind handle an arm in the Node alternatives statement", () => {
     const [rule, ...rest] = Qti.statements.filter(
       (statement) => statement.kind === "alternatives" && statement.parent === Node,
     );
@@ -169,7 +169,7 @@ describe("qti", () => {
     const arms = Object.keys(rule.arms);
     assert.deepStrictEqual(
       NodeKind.handles.filter((handle) => !arms.includes(handle)),
-      ["template"],
+      [],
     );
     assert.deepStrictEqual(
       arms.filter((arm) => !NodeKind.handles.some((handle) => handle === arm)),

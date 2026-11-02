@@ -352,6 +352,13 @@ describe("patterns", () => {
     assert.isFalse(admits(patterns.xsLanguage, "u", subtagTag(129)));
   });
 
+  it("xsLanguageOrEmpty bounds its subtags at 128 and admits the empty string", () => {
+    const { xsLanguageOrEmpty } = patterns;
+    assert.isTrue(admits(xsLanguageOrEmpty, "u", subtagTag(128)));
+    assert.isFalse(admits(xsLanguageOrEmpty, "u", subtagTag(129)));
+    assert.isTrue(admits(xsLanguageOrEmpty, "u", ""));
+  });
+
   it("bcp47 bounds variants, extensions and private-use subtags", () => {
     const { bcp47, xsLanguage } = patterns;
     const cases: readonly (readonly [string, (n: number) => string])[] = [
@@ -378,6 +385,7 @@ describe("patterns", () => {
     ].join("-");
     assert.isTrue(admits(bcp47, "u", widest));
     assert.isTrue(admits(xsLanguage, "u", widest));
+    assert.isTrue(admits(patterns.xsLanguageOrEmpty, "u", widest));
   });
 
   it("positiveInteger", () => {
