@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import { Db } from "@bjornpagen/grizzle";
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
-import { assert, layer } from "@effect/vitest";
+import { assert, it as unitIt, layer } from "@effect/vitest";
 import { Context, Effect, Layer, Option, Predicate } from "effect";
 import { describe, inject } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
@@ -1939,6 +1939,32 @@ const r30Pairs = [
 const ownPosition = new Set(["lom:entity"]);
 
 /**
+ * The `(parent, child)` pairs the LOM content model admits and no R30 assert caps, whose child kind
+ * R30 caps under another parent. The 80 capacities are lowered to one unique index per child kind,
+ * so each of these pairs is capped today although the content model lets it repeat.
+ */
+const uncappedPairs = [
+  { child: "lom:entity", context: "lom/lifeCycle/contribute", parent: "lom:contribute" },
+  { child: "lom:language", context: "lom/general", parent: "lom:general" },
+  { child: "lom:language", context: "lom/educational", parent: "lom:educational" },
+  { child: "lom:description", context: "lom/general", parent: "lom:general" },
+  { child: "lom:description", context: "lom/relation/resource", parent: "lom:resource" },
+] as const;
+
+unitIt("the LOM pairs an R30 child kind sits in uncapped are the five uncappedPairs", () => {
+  const cappedChildren = new Set<string>(r30Pairs.map((row) => row.child));
+  const capped = new Set(r30Pairs.map((row) => `${row.parent} ${row.child}`));
+  const derived = new Set(
+    lomAdmission
+      .filter((row) => cappedChildren.has(row.child) && !capped.has(`${row.parent} ${row.child}`))
+      .map((row) => `${row.parent} ${row.child}`),
+  );
+  const named = new Set(uncappedPairs.map((row) => `${row.parent} ${row.child}`));
+
+  assert.deepStrictEqual([...derived].toSorted(), [...named].toSorted());
+});
+
+/**
  * The law a second `child` under one `parent` breaks, as the declarations order the statements.
  *
  * The child's arm keys its parent where the schema lists the assert's child kind as a candidate
@@ -2131,6 +2157,40 @@ describe.skipIf(!hasLease)(
                 if (outcome.kind === "invariant-rejected") {
                   const reported: unknown = outcome.law;
                   assert.deepStrictEqual(reported, lawOfPair(pair));
+                }
+              }),
+          );
+        }
+
+        for (const pair of uncappedPairs) {
+          const declared = r30Pairs.find((candidate) => candidate.child === pair.child);
+
+          it.effect(
+            `R30 over-cap control: one ${pair.child} under ${pair.parent} is accepted`,
+            () =>
+              Effect.gen(function* control() {
+                const outcome = yield* apply(
+                  draftOf(yield* recordRows(pair.context, pair.child, 1)),
+                );
+
+                assert.strictEqual(outcome.kind, "accepted");
+              }),
+          );
+
+          it.effect(
+            `R30 over-cap probe: two ${pair.child} under one ${pair.parent} are refused today by the first R30 capacity declared for ${pair.child}`,
+            () =>
+              Effect.gen(function* probe() {
+                assert.isDefined(declared);
+
+                const outcome = yield* apply(
+                  draftOf(yield* recordRows(pair.context, pair.child, 2)),
+                );
+
+                assert.strictEqual(outcome.kind, "invariant-rejected");
+                if (outcome.kind === "invariant-rejected" && declared !== undefined) {
+                  const reported: unknown = outcome.law;
+                  assert.deepStrictEqual(reported, lawOfPair(declared));
                 }
               }),
           );
