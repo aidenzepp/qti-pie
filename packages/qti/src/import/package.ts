@@ -196,7 +196,7 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
 
   if (outcome.kind === "accepted" || outcome.kind === "committed") {
     if (outcome.kind === "accepted") {
-      yield* Effect.logInfo(
+      yield* Effect.logDebug(
         "import applied",
         Object.fromEntries(outcome.counts.map((c) => [c.relation, String(c.added)])),
       );

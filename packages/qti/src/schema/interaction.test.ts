@@ -181,9 +181,22 @@ describe("interaction", () => {
     }
   });
 
-  it("equals the seed module's rows and holds the two choice rows", () => {
+  it("the seed rows are distinct, roster-valid, and hold phase 1's two choice rows", () => {
+    const keys = bindingFit.map((row) =>
+      [row.interactionKind, row.baseType, row.cardinality].join("\u0000"),
+    );
+    assert.strictEqual(new Set(keys).size, bindingFit.length);
+
+    for (const row of bindingFit) {
+      assert.include(node.relations.NodeKind.handles, row.interactionKind);
+      assert.include(declaration.relations.BaseType.handles, row.baseType);
+      assert.include(declaration.relations.TypedCardinality.handles, row.cardinality);
+    }
+
     assert.deepStrictEqual(
-      bindingFit.toSorted((a, b) => a.cardinality.localeCompare(b.cardinality)),
+      bindingFit
+        .filter((row) => row.interactionKind === "qti-choice-interaction")
+        .toSorted((a, b) => a.cardinality.localeCompare(b.cardinality)),
       [
         {
           baseType: "identifier",
