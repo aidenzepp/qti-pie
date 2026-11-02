@@ -22,7 +22,25 @@ import * as md from "#qti/schema/metadata.ts";
 import { Edge } from "#qti/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
 import {
+  AccessForAllResource,
   Dependency,
+  DrdAccessMode,
+  DrdAccessModeAdapted,
+  DrdAdaptationDetail,
+  DrdAdaptationMediaType,
+  DrdAdaptationType,
+  DrdApiInteroperable,
+  DrdAtInteroperable,
+  DrdControlFlexibility,
+  DrdDisplayTransformability,
+  DrdEducationalComplexityOfAdaptation,
+  DrdEducationalLevelOfAdaptation,
+  DrdHasAdaptation,
+  DrdHazard,
+  DrdIsAdaptationOf,
+  DrdIsFullAdaptationOf,
+  DrdIsPartialAdaptationOf,
+  DrdLanguageOfAdaptation,
   File,
   FileContent,
   FileMetadata,
@@ -30,6 +48,7 @@ import {
   ManifestId,
   ManifestIdOfManifest,
   ManifestIdOfResource,
+  ManifestIdOfVariant,
   ManifestMetadata,
   ManifestSchema,
   ManifestSchemaVersion,
@@ -40,6 +59,8 @@ import {
   ResourceHref,
   ResourceMetadata,
   Resources,
+  Variant,
+  VariantMetadata,
 } from "#qti/schema/package.ts";
 import type { Element, XmlDocument } from "#qti/xml/tree.ts";
 
@@ -123,6 +144,53 @@ const qmdLeaves = {
   "qmd:toolVendor": { arm: md.QmdToolVendor, class: "preserve" },
   "qmd:toolVersion": { arm: md.QmdToolVersion, class: "preserve" },
 } as const;
+
+/**
+ * The 17 `drd:` leaves of a digital resource description, each with its arm and the whitespace
+ * class of its content: the enumerations, tool strings and unions are kept as read, the boolean and
+ * the four URIs collapse, and the two normalized strings replace.
+ */
+const drdLeaves = {
+  "drd:accessMode": { arm: DrdAccessMode, class: "preserve" },
+  "drd:accessModeAdapted": { arm: DrdAccessModeAdapted, class: "preserve" },
+  "drd:adaptationDetail": { arm: DrdAdaptationDetail, class: "preserve" },
+  "drd:adaptationMediaType": { arm: DrdAdaptationMediaType, class: "preserve" },
+  "drd:adaptationType": { arm: DrdAdaptationType, class: "preserve" },
+  "drd:apiInteroperable": { arm: DrdApiInteroperable, class: "preserve" },
+  "drd:atInteroperable": { arm: DrdAtInteroperable, class: "collapse" },
+  "drd:controlFlexibility": { arm: DrdControlFlexibility, class: "preserve" },
+  "drd:displayTransformability": { arm: DrdDisplayTransformability, class: "preserve" },
+  "drd:educationalComplexityOfAdaptation": {
+    arm: DrdEducationalComplexityOfAdaptation,
+    class: "preserve",
+  },
+  "drd:educationalLevelOfAdaptation": { arm: DrdEducationalLevelOfAdaptation, class: "replace" },
+  "drd:hasAdaptation": { arm: DrdHasAdaptation, class: "collapse" },
+  "drd:hazard": { arm: DrdHazard, class: "preserve" },
+  "drd:isAdaptationOf": { arm: DrdIsAdaptationOf, class: "collapse" },
+  "drd:isFullAdaptationOf": { arm: DrdIsFullAdaptationOf, class: "collapse" },
+  "drd:isPartialAdaptationOf": { arm: DrdIsPartialAdaptationOf, class: "collapse" },
+  "drd:languageOfAdaptation": { arm: DrdLanguageOfAdaptation, class: "replace" },
+} as const;
+
+/**
+ * Whether `kind` is one of {@link drdLeaves}.
+ */
+const isDrdLeaf = (kind: string): kind is keyof typeof drdLeaves => kind in drdLeaves;
+
+/**
+ * The resource types whose one entry is read as a document beside the QTI ones: a record of
+ * metadata and a record of usage data.
+ */
+const recordTypes: ReadonlySet<string> = new Set(["resourcemetadata/xml", "qtiusagedata/xml"]);
+
+/**
+ * The QTI document types that also name their one file when they have no `href`.
+ */
+const soleFileTypes: ReadonlySet<string> = new Set([
+  "imsqti_outcomes_xmlv3p0",
+  "imsqti_resprocessing_xmlv3p0",
+]);
 
 /**
  * Whether `kind` is one of {@link qmdLeaves}.
@@ -235,6 +303,23 @@ const attributeOf = (element: Element, local: string): Option.Option<string> =>
     element.attributes.find((attribute) => attribute.namespace === "" && attribute.local === local)
       ?.value,
   );
+
+/**
+ * The one file a resource with no `href` is read from as a document: its only file, when its type
+ * is a record, usage or outcome type and it has no `href`.
+ */
+const soleFileDocument = (
+  resource: Element,
+  type: string,
+  fileHrefs: readonly string[],
+): string | undefined => {
+  const [only, ...rest] = fileHrefs;
+  const named = recordTypes.has(type) || soleFileTypes.has(type);
+
+  return named && rest.length === 0 && Option.isNone(attributeOf(resource, "href"))
+    ? only
+    : undefined;
+};
 
 /**
  * Check the manifest is a QTI 3 one before any row is written.
@@ -765,7 +850,8 @@ export const csmSetRows = (rows: Rows, nodes: NodeIndex, set: Element, host: str
  * @param doc - The manifest as the reader gave it.
  * @param rows - The rows so far.
  * @returns The rows with the manifest's added, the node index, the package id, the version and one
- *   document per resource of a QTI type that has an `href`; `NotQti3` for a manifest that is not
+ *   document per resource of a QTI, record or usage type that names one (its `href`, else its one
+ *   file); `NotQti3` for a manifest that is not
  *   QTI 3, `UnmodeledVocabulary` for an element or attribute no registry names, and
  *   `PackageReadError` for an entry that is not a regular file inside the package.
  */
@@ -1063,6 +1149,57 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     metadataChildren(metadataElement, { id: metadataId, kind: "cp:metadata.manifest" }, null);
   };
 
+  /**
+   * Write the rows of one `cpx:variant` of a resource: the variant and its `ManifestId`, its
+   * metadata, the access-for-all resource under it and one arm row per DRD leaf.
+   */
+  const variantRows = (
+    variant: Element,
+    id: string,
+    resource: { readonly identifier: string; readonly node: string },
+  ): void => {
+    const identifier = typed(variant, "identifier", "collapse");
+    add(Variant, [
+      {
+        id,
+        identifier,
+        identifierref: typed(variant, "identifierref", "collapse"),
+        package: packageId,
+        resource: resource.node,
+        resourceIdentifier: resource.identifier,
+      },
+    ]);
+    add(ManifestId, [{ holder: "variant", id: identifier, package: packageId }]);
+    add(ManifestIdOfVariant, [{ id: identifier, package: packageId }]);
+
+    for (const metadata of elementChildren(variant)) {
+      const metadataId = kindIs(metadata, "cpx:metadata");
+      if (metadataId === undefined) {
+        continue;
+      }
+
+      add(VariantMetadata, [{ id: metadataId, variant: id }]);
+      for (const description of elementChildren(metadata)) {
+        const descriptionId = kindIs(description, "drd:accessForAllResource");
+        if (descriptionId === undefined) {
+          continue;
+        }
+
+        add(AccessForAllResource, [{ id: descriptionId, metadata: metadataId }]);
+        for (const leaf of elementChildren(description)) {
+          const found = nodes.get(leaf);
+          if (found !== undefined && isDrdLeaf(found.kind)) {
+            const spec = drdLeaves[found.kind];
+            const value = classed(contentOf(leaf), spec.class);
+            // SAFETY: the leaf's column pattern judges the value at commit, which is the importer's refusal for it.
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+            add(spec.arm, [{ id: found.id, owner: descriptionId, value }] as never);
+          }
+        }
+      }
+    }
+  };
+
   const resourceRows = (resource: Element): void => {
     const node = nodes.get(resource);
     if (node === undefined) {
@@ -1078,7 +1215,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     if (Option.isSome(attributeOf(resource, "href"))) {
       const href = typed(resource, "href", "collapse");
       add(ResourceHref, [{ href, package: packageId, resource: node.id }]);
-      if (qtiDocumentType.test(type)) {
+      if (qtiDocumentType.test(type) || recordTypes.has(type)) {
         documents.push({ path: href, resource: identifier, resourceId: node.id, type });
       }
     }
@@ -1095,14 +1232,18 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       }
     }
 
+    const fileHrefs: string[] = [];
     for (const file of childrenNamed(resource, "file")) {
       const id = kindIs(file, "cp:file");
       const position = id === undefined ? undefined : positions.get(id);
       if (id !== undefined && position !== undefined) {
         fileMetadataRows(file, id);
+
+        const href = typed(file, "href", "collapse");
+        fileHrefs.push(href);
         add(File, [
           {
-            href: typed(file, "href", "collapse"),
+            href,
             id,
             package: packageId,
             position,
@@ -1110,6 +1251,11 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
           },
         ]);
       }
+    }
+
+    const sole = soleFileDocument(resource, type, fileHrefs);
+    if (sole !== undefined) {
+      documents.push({ path: sole, resource: identifier, resourceId: node.id, type });
     }
 
     for (const dependency of childrenNamed(resource, "dependency")) {
@@ -1123,6 +1269,13 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
             target: typed(dependency, "identifierref", "collapse"),
           },
         ]);
+      }
+    }
+
+    for (const child of elementChildren(resource)) {
+      const variant = nodes.get(child);
+      if (variant?.kind === "cpx:variant") {
+        variantRows(child, variant.id, { identifier, node: node.id });
       }
     }
   };
