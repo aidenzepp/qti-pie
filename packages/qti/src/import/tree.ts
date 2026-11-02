@@ -204,6 +204,8 @@ export const typedAttribute = (
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
+const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
+
 const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
 
 /**
@@ -281,6 +283,8 @@ export const kindOf = (
 
 /**
  * The first element or attribute of `element`'s subtree that no registry models, in document order.
+ * An attribute in the XML namespace is modeled when its kind's registry lists its prefixed name
+ * (`xml:lang`, `xml:base`); any other `xml:` name is not.
  * An element whose ancestry no `Ancestry` handle names is refused as an element: it sits inside a
  * combination of flags the model cannot hold.
  */
@@ -305,7 +309,8 @@ const firstUnmodeled = (
     (attribute) =>
       attribute.namespace !== xmlnsNamespace &&
       !(attribute.namespace === xsiNamespace && attribute.local === "schemaLocation") &&
-      !(attribute.namespace === "" && own.has(attribute.local)),
+      !(attribute.namespace === "" && own.has(attribute.local)) &&
+      !(attribute.namespace === xmlNamespace && own.has(`xml:${attribute.local}`)),
   );
   if (stray !== undefined) {
     return Option.some(
@@ -503,7 +508,8 @@ const miscRow = (item: Misc): { kind: "comment" | "pi"; text: string } =>
  * @returns The rows with this tree's added, and the node index holding every element; the node,
  *   edge and generic-arm rows, `TreeRoot`, the namespace declarations, the `xsi:schemaLocation` and
  *   the attribute entity references are among them; `UnmodeledVocabulary` for the first element or
- *   attribute no registry names.
+ *   attribute no registry names. The XML-namespace names a kind's registry lists are modeled; their
+ *   rows are `attributeRows`'s.
  */
 export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
   doc: XmlDocument,
