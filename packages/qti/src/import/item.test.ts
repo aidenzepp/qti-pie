@@ -371,6 +371,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
           document: documentId,
           id: response,
           identifier: "RESPONSE",
+          kind: "response",
         },
         {
           baseType: "float",
@@ -378,6 +379,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
           document: documentId,
           id: outcome,
           identifier: "SCORE",
+          kind: "outcome",
         },
       ]);
       assert.deepStrictEqual(Rows.of(rows, DocumentId), [
