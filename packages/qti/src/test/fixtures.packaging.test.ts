@@ -301,6 +301,56 @@ const contentNames: readonly FixtureName[] = contentCuts.flatMap((cut) => [
 ]);
 
 /**
+ * How many times a text holds a needle.
+ *
+ * @param text - The text to search.
+ * @param needle - The string to count.
+ * @returns The number of non-overlapping occurrences.
+ */
+const occurrences = (text: string, needle: string): number => text.split(needle).length - 1;
+
+/**
+ * The tarball member the usage-data fixtures derive from.
+ */
+const usageMember = "qtiv3-examples/packaging/usageData/usageData.zip";
+
+/**
+ * The namespace of the QTI 3 usage-data root, which the IMS 2.2 usage data does not share.
+ */
+const usageNamespace = "http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0";
+
+/**
+ * The three positives of the usage-data cut and the hand-broken copies of the first, each a copy of
+ * `usage3` with one edit.
+ */
+const usageCuts: readonly ContentCut[] = [
+  {
+    member: usageMember,
+    name: "usage3",
+    negatives: [
+      "usage3-integer-float",
+      "usage3-float-padded",
+      "usage3-no-target",
+      "usage3-two-values",
+      "usage3-ordinary-mapping",
+      "usage3-no-map-entry",
+      "usage3-bad-month",
+      "usage3-feb-30",
+      "usage3-bad-context",
+      "usage3-bad-name",
+    ],
+    resources: 1,
+  },
+  { member: usageMember, name: "usage3-typed", negatives: [], resources: 1 },
+  { member: usageMember, name: "usage3-padded", negatives: [], resources: 1 },
+];
+
+/**
+ * Every name of the usage-data cut, positives and negatives.
+ */
+const usageNames: readonly FixtureName[] = usageCuts.flatMap((cut) => [cut.name, ...cut.negatives]);
+
+/**
  * Digest every file of a package, so two packages are equal exactly when they hold the same paths
  * with the same bytes.
  *
@@ -456,6 +506,21 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts (pack
       ),
     );
   }
+
+  it.effect("the usage-data cut's names are distinct, in the table and under distinct hashes", () =>
+    Effect.sync(() => {
+      assert.strictEqual(new Set(usageNames).size, usageNames.length);
+
+      for (const name of usageNames) {
+        assert.include(fixtureNames, name);
+      }
+
+      assert.strictEqual(
+        new Set(usageNames.map((name) => transformHash(specOf(name), FIXTURES_VERSION))).size,
+        usageNames.length,
+      );
+    }),
+  );
 
   it.effect("the table's names and the cuts' transform hashes are distinct", () =>
     Effect.sync(() => {
@@ -722,6 +787,115 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts (pack
         ),
       );
     }
+  }
+
+  for (const name of usageNames) {
+    it.effect(`usage ${name} is in the table and materializes under the hash it names`, () =>
+      inFreshRoot((root) =>
+        Effect.gen(function* usagePath() {
+          assert.include(fixtureNames, name);
+
+          const spec = specOf(name);
+
+          assert.strictEqual(spec.name, name);
+          assert.strictEqual(spec.member, usageMember, name);
+          assert.strictEqual(
+            yield* materialize(name),
+            `${root}/${name}-${transformHash(spec, FIXTURES_VERSION).slice(0, 12)}`,
+          );
+        }),
+      ),
+    );
+  }
+
+  for (const cut of usageCuts) {
+    it.effect(
+      `usage positive ${cut.name} holds one resource and the usage file, no USAGE-*.xml`,
+      () =>
+        inFreshRoot(() =>
+          Effect.gen(function* usageResource() {
+            const dir = yield* materialize(cut.name);
+            const elements = yield* manifestElements(dir);
+            const files = yield* filesUnder(dir);
+
+            assert.strictEqual(
+              elements.filter(
+                (element) => element.local === "resource" && element.namespace === cpNamespace,
+              ).length,
+              cut.resources,
+              cut.name,
+            );
+            assert.deepStrictEqual(files, ["example.xml", "imsmanifest.xml"], cut.name);
+            assert.isFalse(
+              files.some((file) => /^USAGE-.*\.xml$/u.test(file)),
+              cut.name,
+            );
+          }),
+        ),
+    );
+  }
+
+  it.effect("usage3's example.xml is a usageData root in the QTI 3 usage-data namespace", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* usageRoot() {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* materialize("usage3");
+        const doc = yield* Effect.orDie(readXml(yield* fs.readFile(`${dir}/example.xml`)));
+
+        assert.strictEqual(doc.root.local, "usageData");
+        assert.strictEqual(doc.root.namespace, usageNamespace);
+        assert.notInclude(yield* fs.readFileString(`${dir}/example.xml`), "baseType");
+      }),
+    ),
+  );
+
+  it.effect("usage3-typed types every value, as float or as identifier", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* typedValues() {
+        const fs = yield* FileSystem.FileSystem;
+        const typed = yield* fs.readFileString(`${yield* materialize("usage3-typed")}/example.xml`);
+        const plain = yield* fs.readFileString(`${yield* materialize("usage3")}/example.xml`);
+
+        assert.isAbove(occurrences(typed, 'baseType="float"'), 0);
+        assert.isAbove(occurrences(typed, 'baseType="identifier"'), 0);
+        assert.strictEqual(
+          occurrences(typed, 'baseType="float"') + occurrences(typed, 'baseType="identifier"'),
+          occurrences(plain, "<value>"),
+        );
+        assert.strictEqual(occurrences(typed, "<value>"), 0);
+      }),
+    ),
+  );
+
+  it.effect("usage3-padded keeps its name, tab and value padding as written", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* paddedUsage() {
+        const fs = yield* FileSystem.FileSystem;
+        const padded = yield* fs.readFileString(
+          `${yield* materialize("usage3-padded")}/example.xml`,
+        );
+        const plain = yield* fs.readFileString(`${yield* materialize("usage3")}/example.xml`);
+
+        assert.match(padded, /name=" \S+ "/u);
+        assert.include(padded, "&#9;");
+        assert.include(padded, "> 0.87 <");
+        assert.include(padded, 'identifier=" item1 "');
+        assert.notInclude(plain, "&#9;");
+        assert.notInclude(plain, "> 0.87 <");
+      }),
+    ),
+  );
+
+  for (const name of usageCuts.flatMap((cut) => cut.negatives)) {
+    it.effect(`usage negative ${name} differs from its positive usage3`, () =>
+      inFreshRoot(() =>
+        Effect.gen(function* usageNegativeDiffers() {
+          const base = yield* treeDigest(yield* materialize("usage3"));
+
+          assert.notDeepEqual(yield* treeDigest(yield* materialize(name)), base, name);
+        }),
+      ),
+    );
   }
 
   it.effect("no packaging test names a cache or fixtures path literal", () =>
