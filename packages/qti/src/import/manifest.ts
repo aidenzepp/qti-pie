@@ -12,6 +12,7 @@
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
+import { attributeRows } from "#qti/import/attributes.ts";
 import { collapse, replace, Rows, treeRows, typedAttribute } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { readEntry } from "#qti/package/read.ts";
@@ -271,6 +272,10 @@ const versionOf = (doc: XmlDocument): Effect.Effect<SchemaVersionHandle, NotQti3
  * names. A `file`'s position is its element's `Edge` position under the resource, every child
  * counted.
  *
+ * `attributeRows` runs first on the rows `treeRows` wrote, since it reads the root kind from the
+ * `Tree` row and fails without it: it writes the one family attribute a manifest registry lists,
+ * `lom:string`'s `xml:lang`, and refuses an unregistered manifest attribute.
+ *
  * @param dir - The package directory, where the bytes of unclaimed files are read.
  * @param entries - The package's entries, as `listPackage` returns them.
  * @param doc - The manifest as the reader gave it.
@@ -304,7 +309,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     rows,
   );
   const { nodes } = tree;
-  let built = tree.rows;
+  let built = yield* attributeRows(doc.root, nodes, packageId, tree.rows);
   const positions = new Map(Rows.of(built, Edge).map((edge) => [edge.child, edge.position]));
 
   const add = <R extends AnyRelation>(relation: R, facts: readonly Fact<R>[]): void => {

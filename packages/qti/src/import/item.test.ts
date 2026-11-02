@@ -24,7 +24,13 @@ import {
   ResponseDeclarationId,
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
-import { Document, DocumentId, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
+import {
+  Document,
+  DocumentId,
+  DocumentIdentifier,
+  DocumentTitle,
+  HtmlId,
+} from "#qti/schema/document.ts";
 import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#qti/schema/html.ts";
 import {
   AssessmentItem,
@@ -57,7 +63,11 @@ import {
   EntityReference,
   TextNode,
 } from "#qti/schema/node.ts";
-import { NodeLabel } from "#qti/schema/attributes.ts";
+import { NodeClass, NodeLabel, NodeXmlLang } from "#qti/schema/attributes.ts";
+import { ObjectElement } from "#qti/schema/html/media.ts";
+import { HotspotChoice, HotspotInteraction } from "#qti/schema/interactions/hot.ts";
+import { GraphicOrderInteraction, OrderInteraction } from "#qti/schema/interactions/order.ts";
+import { Coords } from "#qti/schema/shapes.ts";
 import {
   ResponseProcessing,
   ResponseProcessingItem,
@@ -65,6 +75,7 @@ import {
   StandardTemplateReference,
 } from "#qti/schema/processing.ts";
 import * as value from "#qti/schema/value.ts";
+import { listPackage, readEntry } from "#qti/package/read.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import { readXml } from "#qti/xml/read.ts";
 
@@ -883,7 +894,7 @@ const handManifest = (general?: string) =>
 
 /**
  * The `DocumentLang` rows `documentLangRows` writes for a hand-written item, read without the
- * tree walk: `treeRows` refuses `xml:lang` until the attribute builder admits it.
+ * tree walk; `treeRows` has admitted `xml:lang` since `p2-66`, so the helper may stay.
  */
 const languagesOf = (body: string, rootAttributes: string, resourceLomHasGeneral: boolean) =>
   Effect.gen(function* languageRows() {
@@ -1058,6 +1069,162 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts root ro
 
       assert.deepStrictEqual(Rows.of(rows, ResourceLomGeneral), []);
       assert.deepStrictEqual(Rows.of(rows, ResourceLomLanguageSet), []);
+    }),
+  );
+});
+
+const encode = (text: string) => new TextEncoder().encode(text);
+
+const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
+
+/**
+ * The rows `importPackage`'s pre-apply half builds for `SHARED`: the manifest's, then each listed
+ * document's. `editManifest` and `editItem` rewrite the text of `imsmanifest.xml` and of the
+ * document at the path the edit names.
+ */
+const sharedRows = (
+  editManifest: (text: string) => string = (text) => text,
+  editItem: (path: string, text: string) => string = (_path, text) => text,
+) =>
+  Effect.gen(function* sharedPackageRows() {
+    const directory = yield* materialize("sharedMedia");
+    const entries = yield* listPackage(directory);
+    const manifest = yield* readXml(
+      encode(editManifest(decode(yield* readEntry(directory, "imsmanifest.xml")))),
+    );
+    const built = yield* manifestRows(directory, entries, manifest, Rows.empty());
+    let { rows } = built;
+    for (const document of built.documents) {
+      const text = decode(yield* readEntry(directory, document.path));
+      const doc = yield* readXml(encode(editItem(document.path, text)));
+      ({ rows } = yield* itemRows(
+        {
+          doc,
+          packageId: built.packageId,
+          path: document.path,
+          resource: document.resource,
+          resourceLomHasGeneral: Rows.of(built.rows, ResourceLomGeneral).some(
+            (general) => general.resource === document.resource,
+          ),
+          resourceType: document.type,
+          version: built.version,
+        },
+        rows,
+      ));
+    }
+
+    return rows;
+  });
+
+layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts composition", (suite) => {
+  suite.effect("SHARED holds the rows of the M1 builders, each counted once", () =>
+    Effect.gen(function* sharedComposition() {
+      const rows = yield* sharedRows();
+
+      assert.isAbove(Rows.of(rows, ObjectElement).length, 0);
+      assert.strictEqual(Rows.of(rows, GraphicOrderInteraction).length, 1);
+      assert.strictEqual(Rows.of(rows, HotspotInteraction).length, 1);
+
+      const choices = Rows.of(rows, HotspotChoice);
+      assert.isAbove(choices.length, 0);
+      assert.deepStrictEqual(
+        Rows.of(rows, Coords)
+          .map((row) => row.node)
+          .toSorted(),
+        choices.map((choice) => choice.id).toSorted(),
+      );
+      assert.strictEqual(new Set(choices.map((choice) => choice.id)).size, choices.length);
+    }),
+  );
+
+  suite.effect("the attribute pass writes id, class and xml:lang of an edited hotspot item", () =>
+    Effect.gen(function* editedAttributes() {
+      const search = '<qti-hotspot-interaction response-identifier="RESPONSE"';
+      const rows = yield* sharedRows(
+        (text) => text,
+        (itemPath, text) => {
+          if (itemPath !== "example/hotspot.xml") {
+            return text;
+          }
+
+          assert.isTrue(text.includes(search), "hotspot.xml holds the interaction start tag");
+
+          return text.replace(
+            search,
+            '<qti-hotspot-interaction id="hi1" class="a b" xml:lang="en" response-identifier="RESPONSE"',
+          );
+        },
+      );
+
+      assert.deepStrictEqual(
+        Rows.of(rows, HtmlId).map((row) => [row.attribute, row.id, row.kind]),
+        [["id", "hi1", "qti-hotspot-interaction"]],
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, NodeClass).map((row) => row.value),
+        ["a b"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, NodeXmlLang).map((row) => [row.value, row.rootKind]),
+        [["en", "item"]],
+      );
+    }),
+  );
+
+  suite.effect("a manifest lom:string xml:lang writes one NodeXmlLang row of the manifest", () =>
+    Effect.gen(function* manifestLanguage() {
+      const search = '<imsmd:string language="en">';
+      const rows = yield* sharedRows((text) => {
+        assert.isTrue(text.includes(search), "imsmanifest.xml holds an imsmd:string");
+
+        return text.replace(search, '<imsmd:string language="en" xml:lang="en">');
+      });
+
+      assert.deepStrictEqual(
+        Rows.of(rows, NodeXmlLang).map((row) => [row.kind, row.rootKind]),
+        [["lom:string", "manifest"]],
+      );
+    }),
+  );
+
+  suite.effect("an order interaction writes each simple choice once, for the interaction", () =>
+    Effect.gen(function* orderedChoices() {
+      const text = `<qti-assessment-item xmlns="${itemNamespace}" identifier="hand" title="Hand" time-dependent="false"><qti-response-declaration identifier="R" cardinality="ordered" base-type="identifier"/><qti-item-body><qti-order-interaction response-identifier="R"><qti-simple-choice identifier="A">a</qti-simple-choice><qti-simple-choice identifier="B">b</qti-simple-choice></qti-order-interaction></qti-item-body></qti-assessment-item>`;
+      const doc = yield* readXml(new TextEncoder().encode(text));
+      const { nodes, rows } = yield* itemOf(doc);
+
+      const interaction = onlyId(nodes, "qti-order-interaction");
+      assert.deepStrictEqual(
+        Rows.of(rows, OrderInteraction).map((row) => row.id),
+        [interaction],
+      );
+
+      const choices = Rows.of(rows, SimpleChoice);
+      assert.strictEqual(choices.length, 2);
+      for (const choice of choices) {
+        assert.strictEqual(choice.interaction, interaction);
+      }
+    }),
+  );
+
+  suite.effect("a choice interaction keeps its binding and one SimpleChoice per element", () =>
+    Effect.gen(function* choiceComposition() {
+      const directory = yield* materialize("simple");
+      const doc = yield* readChoice(directory);
+      const { nodes, rows } = yield* itemOf(doc);
+
+      const interaction = onlyId(nodes, "qti-choice-interaction");
+      assert.deepStrictEqual(
+        Rows.of(rows, ChoiceInteraction).map((row) => row.id),
+        [interaction],
+      );
+      assert.strictEqual(Rows.of(rows, TypedBinding).length, 1);
+
+      const choices = Rows.of(rows, SimpleChoice);
+      assert.strictEqual(choices.length, idsOf(nodes, "qti-simple-choice").length);
+      for (const choice of choices) {
+        assert.strictEqual(choice.interaction, interaction);
+      }
     }),
   );
 });
