@@ -98,14 +98,13 @@ export const exportPackage = Effect.fn("export.exportPackage")(function* exportP
       label === undefined ? doc : declaring(doc, label),
       label ?? doc.charset,
     );
-    const [found] =
+    const [row] =
       treeId === packageId
         ? [{ path: MANIFEST_PATH }]
         : yield* (yield* db.execute(documentPathOf, { id: treeId })).collect;
-
-    if (found === undefined) {
-      return yield* Effect.die(`The package ${packageId} has no document row for tree ${treeId}.`);
-    }
+    const found =
+      row ??
+      (yield* Effect.die(`The package ${packageId} has no document row for tree ${treeId}.`));
 
     yield* write(found.path, bytes);
   }
