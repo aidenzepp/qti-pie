@@ -84,9 +84,10 @@ export class NotQti3 extends Schema.TaggedError<NotQti3>()("NotQti3", {
 const cpNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
 
 /**
- * The resource types that name a QTI document: `imsqti_<kind>_xmlv3p0`.
+ * The resource types that name a QTI document: `imsqti_<kind>_xmlv3p0`, except
+ * `imsqti_fragment_xmlv3p0`, whose file is stored as bytes until M4 reads fragments.
  */
-const qtiDocumentType = /^imsqti_.+_xmlv3p0$/u;
+const qtiDocumentType = /^imsqti_(?!fragment_).+_xmlv3p0$/u;
 
 /**
  * The schema versions this importer reads.
