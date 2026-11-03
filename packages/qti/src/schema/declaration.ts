@@ -160,10 +160,7 @@ const outcomeValue = <Name extends string, Value extends FieldBase>(name: Name, 
 /**
  * The `view` attribute: a space-separated list of views.
  */
-export const DeclarationView = outcomeValue(
-  "DeclarationView",
-  str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags),
-);
+export const DeclarationView = outcomeValue("DeclarationView", str.regex(patterns.viewList));
 
 /**
  * The `interpretation` attribute, an `xs:string`.
