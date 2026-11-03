@@ -21,8 +21,8 @@ import { rptemplateRows } from "#qti/import/rptemplate.ts";
 import { Rows, UnmodeledVocabulary, kindOf } from "#qti/import/tree.ts";
 import { usageRows } from "#qti/import/usage.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
+import { ResourceLomGeneral } from "#qti/schema/lang.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
-import { Node } from "#qti/schema/node.ts";
 import type { RootKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
 import { Package } from "#qti/schema/package.ts";
 import { Author } from "#qti/schema/roles.ts";
@@ -153,6 +153,11 @@ export interface DocumentInput {
   readonly packageId: string;
   readonly path: string;
   readonly resource: string;
+  /**
+   * Whether the manifest's LOM record for this resource has a `general` category, as the manifest
+   * pass found it.
+   */
+  readonly resourceLomHasGeneral: boolean;
   readonly resourceType: string;
   readonly version: SchemaVersionHandle;
 }
@@ -223,7 +228,7 @@ export const documentRows = Effect.fn("import.documentRows")(function* documentR
 /**
  * Read the package at `dir` into rows and judge them, without the database: the manifest's, then
  * every document it lists, each built by {@link documentRows}, then the tree, manifest, item,
- * processing and usage guards.
+ * content, processing and usage guards.
  */
 export const readRows = Effect.fn("import.readRows")(function* readRows(dir: string) {
   const entries = yield* listPackage(dir);
@@ -239,6 +244,9 @@ export const readRows = Effect.fn("import.readRows")(function* readRows(dir: str
         packageId: built.packageId,
         path: document.path,
         resource: document.resource,
+        resourceLomHasGeneral: Rows.of(built.rows, ResourceLomGeneral).some(
+          (general) => general.resource === document.resource,
+        ),
         resourceType: document.type,
         version: built.version,
       },
@@ -277,10 +285,10 @@ export const changeSetOf = (rows: Rows) => {
  * Import the package at `dir`.
  *
  * Reads `imsmanifest.xml` and every QTI document it lists, judges the rows with the tree, manifest,
- * item and processing guards, and applies them in one `ChangeSet` through the author role.
- * `Db.open` and `db.apply` are retried on a transient refusal and on nothing else. When the
- * commit's outcome is unknown the package row is read back by its id: present, the import was
- * accepted; absent, the error is the answer.
+ * item, content, processing and usage guards, and applies them in one `ChangeSet` through the
+ * author role. `Db.open` and `db.apply` are retried on a transient refusal and on nothing else.
+ * When the commit's outcome is unknown the package row is read back by its id: present, the import
+ * was accepted; absent, the error is the answer.
  *
  * @param dir - The package directory.
  * @param options - Replacements for the retry schedule and the apply step, for tests.
@@ -317,12 +325,9 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   );
 
   if (outcome.kind === "invariant-rejected") {
-    const nodeKinds = new Map(Rows.of(rows, Node).map((node) => [node.id, node.kind]));
-
     return yield* refusalOfLaw(
       outcome.law satisfies ImportLaw,
       outcome.witness satisfies ImportWitness,
-      (id) => nodeKinds.get(id),
     );
   }
 

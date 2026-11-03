@@ -52,6 +52,7 @@ import {
   TemplateIfArm,
   TemplateProcessing,
 } from "#qti/schema/rule.ts";
+import { ancestryStepRows, KindEnters } from "#qti/schema/seed/ancestry.ts";
 import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
 import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 
@@ -75,8 +76,11 @@ const roundTripped = [
  *
  * The checker's P8, P20, P21, P22 (the lookup without a table), P23, P24, P25 (the response case),
  * P27 come from `broken/`, the builder's P5 and the guard's P30 from `guards/`, and the two padded
- * packages are refused by the database (P6: the pattern law on `figures`; `value-lexical`: the
- * identifier value arm's pattern on the content as read, which a pattern law cannot tell from P7).
+ * packages are refused by the database (`attribute-lexical`: the pattern law on `figures`, whose
+ * source is the one string that `main`'s `integerOrVariableRef` (P6) and content's
+ * `integerOrVariableString` both are, so the refusal names content's rule, the side the
+ * forward-merge plan's F2 took for identical pairs; `value-lexical`: the identifier value arm's
+ * pattern on the content as read, which a pattern law cannot tell from P7).
  * `p29-test-variables-weight-integer` has a test root, which the reader refuses as
  * `unmodeled-vocabulary`; its XML path is M4's. Five packages hold content's vocabulary
  * (`qti-template-declaration`, `qti-context-declaration`, `qti-match-table`) that the reader
@@ -113,7 +117,7 @@ const refused: readonly (readonly [ProcessingFixtureName, Rule])[] = [
   ["p29-test-variables-weight-integer", "unmodeled-vocabulary"],
   ["missing-identifier", "P5"],
   ["else-before-if", "P30"],
-  ["padded-reference", "P6"],
+  ["padded-reference", "attribute-lexical"],
   ["padded-literal", "value-lexical"],
 ];
 
@@ -309,10 +313,17 @@ const nextPosition = (draft: Draft, parent: string): bigint => {
 const addNode = (draft: Draft, kind: string, parent: string): string => {
   const above = find(draft, Node, (row) => text(row, "id") === parent);
   const id = crypto.randomUUID();
+  const parentAncestry = text(above, "ancestry");
+  const parentKind = text(above, "kind");
+  // The ancestry the importer computes for the child: the step of the parent's kind at its ancestry.
+  const childAncestry =
+    ancestryStepRows([parentKind], KindEnters).find((step) => step.ancestry === parentAncestry)
+      ?.next ?? parentAncestry;
   const tree = text(above, "tree");
   const version = text(above, "version");
 
   of(draft, Node).push({
+    ancestry: childAncestry,
     id,
     kind,
     prefix: "",
@@ -322,9 +333,11 @@ const addNode = (draft: Draft, kind: string, parent: string): string => {
   });
   of(draft, Edge).push({
     child: id,
+    childAncestry,
     childKind: kind,
     parent,
-    parentKind: text(above, "kind"),
+    parentAncestry,
+    parentKind,
     position: nextPosition(draft, parent),
     tree,
     version,
@@ -822,9 +835,10 @@ const negatives: readonly Negative[] = [
         { coords: "0,0" },
       );
     },
-    laws: [`pattern ${patterns.coords}`],
+    laws: [`pattern ${patterns.coordsAny}`],
     name: "P6: an Inside with coords 0,0 is refused by the coords pattern",
-    rule: "P6",
+    rule: "attribute-lexical",
+    spec: "P6",
   },
   {
     alter: (draft) => {
@@ -848,9 +862,10 @@ const negatives: readonly Negative[] = [
         { coords: "0,0,10,10 " },
       );
     },
-    laws: [`pattern ${patterns.coords}`],
+    laws: [`pattern ${patterns.coordsAny}`],
     name: "P6: an Inside with coords 0,0,10,10 and a trailing space is refused (the replace witness)",
-    rule: "P6",
+    rule: "attribute-lexical",
+    spec: "P6",
   },
   {
     alter: (draft) => {

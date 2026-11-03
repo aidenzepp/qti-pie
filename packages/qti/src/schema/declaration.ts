@@ -1,12 +1,12 @@
 /**
- * Variable declarations: the `qti-response-declaration` and `qti-outcome-declaration` elements of
- * an item, and the context and template kinds the roster reserves for later arms.
+ * Variable declarations: the `qti-response-declaration`, `qti-outcome-declaration`,
+ * `qti-template-declaration` and `qti-context-declaration` elements of an item.
  *
  * A declaration names a variable once per document. It is typed, with a base type and a
  * cardinality, or a record, which has neither; the shape arms say which, so a base type exists
  * exactly when the shape is typed. The declaration's kind is a thin arm of its own for the two
- * kinds this module owns. Three names belong to the processing engine and no declaration takes
- * them.
+ * four kinds. Three names belong to the processing engine and no declaration takes them, and
+ * the outcomes the processing engine types itself keep those types.
  */
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `DeclarationShape` and the `shape` field are the contract the value and processing modules name; the shape here is the typed-or-record choice, not a structure. */
 import {
@@ -83,7 +83,8 @@ export const Declaration = relation(
 
 /**
  * A declaration with a base type and a cardinality. `document` and `identifier` copy the
- * declaration's so the pair stays unique for the typed shape alone.
+ * declaration's so the pair stays unique for the typed shape alone, and `kind` copies it so the
+ * reserved outcomes can be typed.
  */
 export const TypedDeclaration = relation(
   "TypedDeclaration",
@@ -93,6 +94,7 @@ export const TypedDeclaration = relation(
     document: uuid,
     id: uuid,
     identifier: ncName,
+    kind: closedId(DeclarationKind),
   },
   ["id"],
 );
@@ -111,6 +113,41 @@ export const ResponseDeclarationArm = relation("ResponseDeclarationArm", { id: u
  * The `qti-outcome-declaration` element: a declaration of the outcome kind.
  */
 export const OutcomeDeclarationArm = relation("OutcomeDeclarationArm", { id: uuid }, ["id"]);
+
+/**
+ * The `qti-template-declaration` element: a declaration of the template kind. The two booleans are
+ * written as the source wrote them; a marker below says whether the source wrote each.
+ */
+export const TemplateDeclarationArm = relation(
+  "TemplateDeclarationArm",
+  {
+    id: uuid,
+    mathVariable: str.regex(patterns.xsBoolean),
+    paramVariable: str.regex(patterns.xsBoolean),
+  },
+  ["id"],
+);
+
+/**
+ * The source wrote `math-variable` on this template declaration; absent, it is `false`.
+ */
+export const DeclaredMathVariable = relation("DeclaredMathVariable", { node: uuid }, ["node"]);
+
+/**
+ * The source wrote `param-variable` on this template declaration; absent, it is `false`.
+ */
+export const DeclaredParamVariable = relation("DeclaredParamVariable", { node: uuid }, ["node"]);
+
+/**
+ * The `qti-context-declaration` element: a declaration of the context kind. The version copies
+ * the node's, because a 3.0.0 context declaration must hold an `identifier` the document's ids
+ * list, which 3.0.1 does not require.
+ */
+export const ContextDeclarationArm = relation(
+  "ContextDeclarationArm",
+  { id: uuid, version: closedId(node.SchemaVersion) },
+  ["id"],
+);
 
 /**
  * An optional-value relation of an outcome declaration: one row where the attribute is written.
@@ -147,7 +184,7 @@ export const DeclarationLongInterpretation = outcomeValue(
  */
 export const DeclarationNormalMaximum = outcomeValue(
   "DeclarationNormalMaximum",
-  str.regex(patterns.xsDouble),
+  str.regex(patterns.positiveDouble),
 );
 
 /**
@@ -196,6 +233,7 @@ export const ResponseDeclarationId = relation(
  */
 export const relations = {
   BaseType,
+  ContextDeclarationArm,
   Declaration,
   DeclarationExternalScored,
   DeclarationInterpretation,
@@ -207,29 +245,34 @@ export const relations = {
   DeclarationShape,
   DeclarationVariableIdentifierRef,
   DeclarationView,
+  DeclaredMathVariable,
+  DeclaredParamVariable,
   OutcomeDeclarationArm,
   RecordDeclaration,
   ResponseDeclarationArm,
   ResponseDeclarationId,
+  TemplateDeclarationArm,
   TypedCardinality,
   TypedDeclaration,
 };
 
 /**
- * The element arms of this module, by element name. The `context` and `template` kinds have none
- * yet; their arms belong to the phase that reads those elements.
+ * The element arms of this module, by element name.
  */
 export const arms = {
+  "qti-context-declaration": ContextDeclarationArm,
   "qti-outcome-declaration": OutcomeDeclarationArm,
   "qti-response-declaration": ResponseDeclarationArm,
+  "qti-template-declaration": TemplateDeclarationArm,
 };
 
 /**
  * The statements over this module's relations: a declaration is named once per document and lies
  * on a node of that document's tree; it is typed or a record, each shape's row copying the
- * declaration's document and identifier where it keeps them; a response or outcome arm exists
- * exactly for a declaration of its kind; and no declaration takes a name the processing engine
- * sets itself.
+ * declaration's document, identifier and kind where it keeps them; each kind's arm exists
+ * exactly for a declaration of its kind; no declaration takes a name the processing engine sets
+ * itself; the reserved outcomes keep their base types; and a 3.0.0 context declaration holds an
+ * `identifier` the document's id list holds.
  */
 export const rules = [
   key(Declaration, ["document", "identifier"]),
@@ -248,6 +291,28 @@ export const rules = [
   ),
   mirrors(on(ResponseDeclarationArm, "id"), on(select(Declaration, { kind: "response" }), "id")),
   mirrors(on(OutcomeDeclarationArm, "id"), on(select(Declaration, { kind: "outcome" }), "id")),
+  mirrors(on(TemplateDeclarationArm, "id"), on(select(Declaration, { kind: "template" }), "id")),
+  mirrors(on(ContextDeclarationArm, "id"), on(select(Declaration, { kind: "context" }), "id")),
+  contained(on(TypedDeclaration, "id", "kind"), on(Declaration, "id", "kind")),
+  check("ReservedOutcomeTypes", TypedDeclaration, (d) =>
+    d.and(
+      d.or(
+        d.not(d.and(d.eq(d.kind, "outcome"), d.in(d.identifier, ["SCORE", "MAXSCORE"]))),
+        d.eq(d.baseType, "float"),
+      ),
+      d.or(
+        d.not(d.and(d.eq(d.kind, "outcome"), d.eq(d.identifier, "PASSED"))),
+        d.eq(d.baseType, "boolean"),
+      ),
+    ),
+  ),
+  contained(on(DeclaredMathVariable, "node"), on(TemplateDeclarationArm, "id")),
+  contained(on(DeclaredParamVariable, "node"), on(TemplateDeclarationArm, "id")),
+  contained(on(ContextDeclarationArm, "id", "version"), on(node.Node, "id", "version")),
+  contained(
+    on(select(ContextDeclarationArm, { version: "3.0.0" }), "id"),
+    on(document.ContextDeclarationId, "node"),
+  ),
   ...[
     DeclarationExternalScored,
     DeclarationInterpretation,
@@ -263,6 +328,10 @@ export const rules = [
     on(select(Declaration, { kind: "response" }), "id", "document", "identifier"),
   ),
   alternatives(document.DocumentId, "holder", document.IdHolder, {
+    contextDeclaration: document.ContextDeclarationId,
+    htmlId: document.HtmlId,
+    itemBody: document.ItemBodyId,
+    printedVariable: document.PrintedVariableId,
     responseDeclaration: ResponseDeclarationId,
   }),
 ] as const;

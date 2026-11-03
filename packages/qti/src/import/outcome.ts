@@ -4,10 +4,10 @@
  * declaration to the document and to the identifier both carry.
  */
 import { Effect, Option } from "effect";
-import { semanticRows, withParents } from "#qti/import/item.ts";
-import type { ItemInput, ItemRefusal } from "#qti/import/item.ts";
-import { kindOf, Rows, treeRows, UnmodeledVocabulary } from "#qti/import/tree.ts";
-import type { NodeIndex } from "#qti/import/tree.ts";
+import { semanticRows } from "#qti/import/item.ts";
+import type { ItemInput } from "#qti/import/item.ts";
+import { kindOf, Rows, treeRows, UnmodeledVocabulary, withParents } from "#qti/import/tree.ts";
+import type { ItemRefusal, NodeIndex } from "#qti/import/tree.ts";
 import { Declaration } from "#qti/schema/declaration.ts";
 import { Document, DocumentIdentifier } from "#qti/schema/document.ts";
 import { Edge } from "#qti/schema/node.ts";
@@ -67,18 +67,18 @@ export const outcomeRows = Effect.fn("import.outcomeRows")(function* outcomeRows
         version,
       },
     ]),
-    { documentId, nodes, positions, rootId: documentId },
+    { adaptive: "false", documentId, nodes, positions, rootId: documentId },
     withParents(root, Option.none()),
   );
 
-  const identifier = Rows.of(declared, Declaration).find(
+  const identifier = Rows.of(declared.rows, Declaration).find(
     (declaration) => declaration.id === documentId,
   )?.identifier;
   if (identifier === undefined) {
     return yield* Effect.die(new Error("The outcome document's root declaration has no row."));
   }
 
-  const built = Rows.add(declared, DocumentIdentifier, [
+  const built = Rows.add(declared.rows, DocumentIdentifier, [
     {
       document: documentId,
       package: packageId,

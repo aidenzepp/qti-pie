@@ -191,15 +191,17 @@ export const anyUri =
 
 /**
  * `xs:language` lexical space: dash-separated subtags of at most eight characters, the first
- * alphabetic.
+ * alphabetic. At most 128 subtags: a key or an index entry over the value needs a byte bound
+ * grizzle can prove, and no valid tag comes near it.
  */
-export const xsLanguage = "^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*$" as const;
+export const xsLanguage = "^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8}){0,127}$" as const;
 
 /**
  * `xsLanguage` or the empty string: the LOM language bar (`LomStringLanguage.value`,
- * `LomLanguage.value`).
+ * `LomLanguage.value`). It takes `xsLanguage`'s bound of 128 subtags, because a key over the value
+ * needs a byte bound grizzle can prove.
  */
-export const xsLanguageOrEmpty = "^(?:[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*)?$" as const;
+export const xsLanguageOrEmpty = "^(?:[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8}){0,127})?$" as const;
 
 /**
  * A media type: a type, a slash and a subtype, with no whitespace.
@@ -289,6 +291,301 @@ export const point = "^[+\\-]?[0-9]+ [+\\-]?[0-9]+$" as const;
  * The lexical space of a `pair` or `directedPair` value: two NCNames separated by one space.
  */
 export const pair = `^${ncNameBody} ${ncNameBody}$` as const;
+
+/**
+ * RFC 5646 (BCP 47) well-formedness: a language of two or three letters with up to three
+ * three-letter extlangs, or four letters, or five to eight; an optional script (four letters), an
+ * optional region (two letters or three digits), variants (five to eight alphanumerics, or a digit
+ * and three alphanumerics), extensions (a singleton other than `x` and subtags of two to eight
+ * alphanumerics) and a private-use tail; or the whole `x-` private-use form; or the empty string.
+ * Written as classes and groups, without `\p` or lookarounds. Well-formedness only: no subtag
+ * registry is consulted and the grandfathered tags are not admitted. Bounded for keys and index
+ * entries, which need a byte bound grizzle can prove: at most 8 variants, 8 extensions of at most
+ * 8 subtags each and 8 private-use subtags (95 subtags in all), so every non-empty value is an
+ * `xsLanguage` value.
+ */
+export const bcp47 =
+  "^(?:(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})(?:-[A-Za-z]{4})?(?:-(?:[A-Za-z]{2}|[0-9]{3}))?(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3})){0,8}(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8}){1,8}){0,8}(?:-[xX](?:-[A-Za-z0-9]{1,8}){1,8})?|[xX](?:-[A-Za-z0-9]{1,8}){1,8})?$" as const;
+
+/**
+ * `xs:positiveInteger` lexical space: digits with an optional leading plus and at least one
+ * non-zero digit, so the value is at least one.
+ */
+export const positiveInteger = "^\\+?0*[1-9][0-9]*$" as const;
+
+/**
+ * An `xs:double` whose value is strictly greater than zero: no sign, a mantissa with at least one
+ * non-zero digit, an optional exponent. `INF` and `NaN` are refused (`normal-maximum` does not
+ * admit them).
+ */
+export const positiveDouble =
+  "^\\+?(?:[0-9]*[1-9][0-9]*(?:\\.[0-9]*)?|[0-9]*\\.[0-9]*[1-9][0-9]*)(?:[eE][+\\-]?[0-9]+)?$" as const;
+
+/**
+ * An `xs:double` whose value is zero or greater: an optional plus, no minus, no `INF` and no `NaN`.
+ * A negative zero is refused too.
+ */
+export const nonNegativeDouble =
+  "^\\+?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+\\-]?[0-9]+)?$" as const;
+
+/**
+ * `xs:decimal` lexical space: an optional sign and digits with an optional fraction, no exponent.
+ */
+export const xsDecimal = "^[+\\-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)$" as const;
+
+/**
+ * `xs:int` lexical space: a signed integer of at most ten digits. The range check of `xs:int` is
+ * not encoded.
+ */
+export const xsInt = "^[+\\-]?[0-9]{1,10}$" as const;
+
+/**
+ * `xs:int` tokens separated by single spaces, or the empty string
+ * (`qti-position-object-interaction/@center-point`, an anonymous `xs:list` with no `minLength`,
+ * `imsqti_asiv3p0p1_v1p0.xsd` line 30461; campaign decision 22 admits the empty list). Judged on
+ * the collapsed value.
+ */
+export const integerList = "^([+\\-]?[0-9]+( [+\\-]?[0-9]+)*)?$" as const;
+
+/**
+ * An `xs:integer` or a `VariableStringDType` name (`[\i-[:]][\c-[:]]*`, an NCName,
+ * `imsqti_asiv3p0p1_v1p0.xsd` line 24152), at most 256 characters.
+ */
+export const integerOrVariableString = `^(?:[+\\-]?[0-9]+|${ncNameBody})$` as const;
+
+/**
+ * One or more NCNames separated by single spaces: any `xs:IDREFS`-typed value, whose built-in
+ * `minLength` is one. Judged on the collapsed value.
+ */
+export const ncNameList = `^${ncNameBody}(?: ${ncNameBody})*$` as const;
+
+/**
+ * NCNames separated by single spaces, or the empty string
+ * (`qti-simple-associable-choice/@match-group`, an anonymous `xs:list` with no `minLength`,
+ * `imsqti_asiv3p0p1_v1p0.xsd` line 24881; campaign decision 22).
+ */
+export const ncNameListOrEmpty = `^(?:${ncNameBody}(?: ${ncNameBody})*)?$` as const;
+
+/**
+ * A `class` list: space-separated tokens or the empty string (campaign decision 22: a list-typed
+ * attribute whose XSD type sets no minimum length admits the empty list).
+ */
+export const classList = "^([^ \\t\\r\\n]+( [^ \\t\\r\\n]+)*)?$" as const;
+
+/**
+ * `qti-rubric-block/@view`: one or more of `author candidate proctor scorer testConstructor tutor`
+ * separated by single spaces. The minimum of one is kept, an exception to campaign decision 22: the
+ * attribute is required and the QTI prose rule reads "one or more" (`1ed2f744.md` section 5).
+ */
+export const viewList =
+  "^(?:author|candidate|proctor|scorer|testConstructor|tutor)(?: (?:author|candidate|proctor|scorer|testConstructor|tutor))*$" as const;
+
+/**
+ * The `use` values of a rubric block: `instructions`, `scoring`, `navigation`, or an `ext:` name.
+ */
+export const useEnumExt = "^(instructions|scoring|navigation|ext:[a-zA-Z0-9_.-]+)$" as const;
+
+/**
+ * Media types separated by single spaces, or the empty list (`qti-upload-interaction/@type`, an
+ * unbounded `xs:list`; campaign decision 22). Each token has the body of `mimeType`.
+ */
+export const mimeTypeList =
+  "^(?:[^/ \\t\\r\\n]{1,127}/[^ \\t\\r\\n]{1,255}(?: [^/ \\t\\r\\n]{1,127}/[^ \\t\\r\\n]{1,255})*)?$" as const;
+
+/**
+ * A `printf`-style number format (R38): a percent sign, flags, a width, a precision and one of the
+ * conversions `E e f G g r R i o X x`.
+ */
+export const printfFormat = "^%[#0 +-]*[0-9]*(\\.[0-9]+)?[EefGgrRioXx]$" as const;
+
+/**
+ * `CoordsDType` token (`imsqti_asiv3p0p1_v1p0.xsd` lines 24088 to 24092): digits with an optional
+ * percent sign, judged on the value after whitespace replace.
+ */
+const coordsToken = "[0-9]+%?" as const;
+
+/**
+ * `shape="rect"` coordinates: exactly four comma-separated `CoordsDType` tokens, no spaces.
+ */
+export const coordsRect = `^${coordsToken}(?:,${coordsToken}){3}$` as const;
+
+/**
+ * `shape="ellipse"` coordinates: exactly four comma-separated tokens (centre and two radii).
+ */
+export const coordsEllipse = coordsRect;
+
+/**
+ * `shape="circle"` coordinates: exactly three comma-separated tokens.
+ */
+export const coordsCircle = `^${coordsToken}(?:,${coordsToken}){2}$` as const;
+
+/**
+ * `shape="poly"` coordinates: an even count of tokens, at least six.
+ */
+export const coordsPoly =
+  `^${coordsToken}(?:,${coordsToken}){5}(?:,${coordsToken},${coordsToken})*$` as const;
+
+/**
+ * `CoordsDType` itself (`imsqti_asiv3p0p1_v1p0.xsd` lines 24088 to 24092): three tokens, four
+ * tokens, or an even count of at least six.
+ */
+export const coordsAny =
+  `^(?:${coordsToken}(?:,${coordsToken}){2}(?:,${coordsToken})?|${coordsToken}(?:,${coordsToken}){5}(?:,${coordsToken},${coordsToken})*)$` as const;
+
+/**
+ * The `role` values of `ARIABaseDType` (`imsqti_asiv3p0p1_v1p0.xsd` lines 24404 to 24488, the
+ * anonymous restriction of `@role`; the XSD names no `ARIARoleDType`): 74 values.
+ */
+export const ariaRole =
+  "^(?:a(?:lert(?:dialog)?|pplication|rticle)|b(?:anner|utton)|c(?:heckbox|o(?:de|lumnheader|m(?:bobox|plementary)|ntentinfo))|d(?:e(?:finition|letion)|ialog|ocument)|emphasis|f(?:igure|orm)|g(?:eneric|r(?:id(?:cell)?|oup))|heading|i(?:mg|nsertion)|l(?:i(?:nk|st(?:box|item)?)|og)|m(?:a(?:in|rquee|th)|e(?:nu(?:bar|item(?:checkbox|radio)?)?|ter))|n(?:avigation|ote)|option|pr(?:esentation|ogressbar)|r(?:adio(?:group)?|egion|ow(?:group|header)?)|s(?:crollbar|e(?:arch(?:box)?|parator)|lider|pinbutton|t(?:atus|rong)|u(?:bscript|perscript)|witch)|t(?:ab(?:list|panel)?|e(?:rm|xtbox)|imer?|ool(?:bar|tip)|ree(?:grid|item)?))$" as const;
+
+/**
+ * The values of `aria-live`, default `off`: lines 24496 to 24509 (`imsqti_asiv3p0p1_v1p0.xsd`).
+ */
+export const ariaLive = "^(off|polite|assertive)$" as const;
+
+/**
+ * The values of `aria-orientation`, default `horizontal`: lines 24510 to 24522
+ * (`imsqti_asiv3p0p1_v1p0.xsd`).
+ */
+export const ariaOrientation = "^(vertical|horizontal)$" as const;
+
+/**
+ * The values of `aria-autocomplete`, default `none`: lines 24527 to 24541
+ * (`imsqti_asiv3p0p1_v1p0.xsd`).
+ */
+export const ariaAutocomplete = "^(inline|list|both|none)$" as const;
+
+/**
+ * The values of `aria-checked`, default `undefined`: lines 24543 to 24557
+ * (`imsqti_asiv3p0p1_v1p0.xsd`).
+ */
+export const ariaChecked = "^(true|false|mixed|undefined)$" as const;
+
+/**
+ * The values of `aria-expanded`, default `undefined`: lines 24559 to 24572
+ * (`imsqti_asiv3p0p1_v1p0.xsd`).
+ */
+export const ariaExpanded = "^(true|false|undefined)$" as const;
+
+/**
+ * The values of `aria-invalid`, default `false`: lines 24574 to 24588
+ * (`imsqti_asiv3p0p1_v1p0.xsd`).
+ */
+export const ariaInvalid = "^(true|false|grammar|spelling)$" as const;
+
+/**
+ * The values of `aria-pressed`, default `undefined`: lines 24592 to 24606
+ * (`imsqti_asiv3p0p1_v1p0.xsd`).
+ */
+export const ariaPressed = "^(true|false|mixed|undefined)$" as const;
+
+/**
+ * The values of `aria-selected`, default `undefined`: lines 24614 to 24627
+ * (`imsqti_asiv3p0p1_v1p0.xsd`).
+ */
+export const ariaSelected = "^(true|false|undefined)$" as const;
+
+/**
+ * The values of `aria-sort`, default `none`: lines 24629 to 24643 (`imsqti_asiv3p0p1_v1p0.xsd`).
+ */
+export const ariaSort = "^(ascending|descending|none|other)$" as const;
+
+/**
+ * The values of `aria-current`, default `false`: lines 24649 to 24669
+ * (`imsqti_asiv3p0p1_v1p0.xsd`).
+ */
+export const ariaCurrent = "^(page|step|location|date|time|true|false|undefined)$" as const;
+
+/**
+ * `aria-relevant` (`imsqti_asiv3p0p1_v1p0.xsd` lines 24608 to 24612, default `additions text`): an
+ * unbounded `xs:list` over `ARIARelevantListDType` (lines 23984 to 23992), so zero items are
+ * admitted (campaign decision 22). Judged on the collapsed value. The item type's fifth value,
+ * `additions text`, holds a space and can never be one list item, so it adds nothing.
+ */
+export const ariaRelevantList =
+  "^(?:(?:additions|removals|text|all)(?: (?:additions|removals|text|all))*)?$" as const;
+
+/**
+ * `@autoplay` of 3.0.1 (`imsqti_asiv3p0p1_v1p0.xsd` line 24978): `true`, `false` or the attribute
+ * name. Version 3.0.0 types it `xs:boolean`, which is `xsBoolean`.
+ */
+export const autoplayEnum = "^(true|false|autoplay)$" as const;
+
+/**
+ * `@loop` of 3.0.1 (`imsqti_asiv3p0p1_v1p0.xsd` line 24995): `true`, `false` or the attribute name.
+ * Version 3.0.0 types it `xs:boolean`, which is `xsBoolean`.
+ */
+export const loopEnum = "^(true|false|loop)$" as const;
+
+/**
+ * `@muted` of 3.0.1 (`imsqti_asiv3p0p1_v1p0.xsd` line 25011): `true`, `false` or the attribute
+ * name. Version 3.0.0 types it `xs:boolean`, which is `xsBoolean`.
+ */
+export const mutedEnum = "^(true|false|muted)$" as const;
+
+/**
+ * `@controls` of 3.0.1 (`imsqti_asiv3p0p1_v1p0.xsd` line 25027): `true`, `false` or the attribute
+ * name. Version 3.0.0 types it `xs:boolean`, which is `xsBoolean`.
+ */
+export const controlsEnum = "^(true|false|controls)$" as const;
+
+/**
+ * `@default` of 3.0.1 (`imsqti_asiv3p0p1_v1p0.xsd` line 33596): `true`, `false` or the attribute
+ * name. Version 3.0.0 types it `xs:boolean`, which is `xsBoolean`.
+ */
+export const defaultEnum = "^(true|false|default)$" as const;
+
+/**
+ * The values of `@dir`, default `auto` (line 25231) in `imsqti_asiv3p0p1_v1p0.xsd`.
+ */
+export const dirEnum = "^(ltr|rtl|auto)$" as const;
+
+/**
+ * The values of `data-qti-suppress-tts` (line 25247) in `imsqti_asiv3p0p1_v1p0.xsd`.
+ */
+export const suppressTts = "^(computer-read-aloud|screen-reader|all)$" as const;
+
+/**
+ * The values of `qti-param/@valuetype`, required (line 34491) in `imsqti_asiv3p0p1_v1p0.xsd`.
+ */
+export const valuetype = "^(DATA|REF)$" as const;
+
+/**
+ * The values of `td/@scope` (line 32491) in `imsqti_asiv3p0p1_v1p0.xsd`.
+ */
+export const scope = "^(row|col|rowgroup|colgroup)$" as const;
+
+/**
+ * The values of `@align` of table cells (line 32510) in `imsqti_asiv3p0p1_v1p0.xsd`.
+ */
+export const align = "^(left|center|right|justify|char)$" as const;
+
+/**
+ * The values of `@valign` of table cells (line 32527) in `imsqti_asiv3p0p1_v1p0.xsd`.
+ */
+export const valign = "^(bottom|middle|top|baseline)$" as const;
+
+/**
+ * The values of `@preload`, default `metadata` (line 24963) in `imsqti_asiv3p0p1_v1p0.xsd`.
+ */
+export const preload = "^(none|auto|metadata)$" as const;
+
+/**
+ * The values of `@crossorigin` (line 24950) in `imsqti_asiv3p0p1_v1p0.xsd`.
+ */
+export const crossorigin = "^(anonymous|use-credentials)$" as const;
+
+/**
+ * The values of `track/@kind` (line 33578) in `imsqti_asiv3p0p1_v1p0.xsd`.
+ */
+export const trackKind = "^(subtitles|captions|descriptions|chapters|metadata)$" as const;
+
+/**
+ * The values of `qti-extended-text-interaction/@format`, default `plain` (line 27165) in
+ * `imsqti_asiv3p0p1_v1p0.xsd`.
+ */
+export const textFormat = "^(plain|preformatted|xhtml)$" as const;
 
 /**
  * A collapsed `IdentifierListDType` value: NCNames one space apart, with no leading, trailing or

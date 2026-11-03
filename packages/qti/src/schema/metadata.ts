@@ -7,8 +7,8 @@
  * record hangs under, and every row below the record copies the record's id (and its owner where
  * the row's rules need it) so each can be judged against it. A parent or position a row copies is
  * bound to the `Edge` of the same child. The arms are the LOM kinds', keyed by node id; their
- * containments into `Node` are expanded from `alternatives(Node, "kind", NodeKind, ...)` in the
- * composed schema, so none is written here.
+ * containments into `Node` are bound by one `mirrors` per handle in the composed
+ * schema (`#qti/schema/qti.ts`), so none is written here.
  */
 import {
   alternatives,
@@ -202,12 +202,20 @@ export const LomStringLanguage = relation("LomStringLanguage", { node: uuid, val
 ]);
 
 /**
- * A `lom:language` at its position among the general category's children; the empty string is
- * admitted.
+ * A `lom:language` of the general or the meta-metadata category, at its position among its parent's
+ * children, with its parent's kind copied and bound to its `Edge` so that a rule can select the
+ * general category's languages; the empty string is admitted.
  */
 export const LomLanguage = relation(
   "LomLanguage",
-  { id: uuid, lom: uuid, position: pg.bigint, value: language },
+  {
+    id: uuid,
+    lom: uuid,
+    owner: closedId(LomOwner),
+    parentKind: closedId(NodeKind),
+    position: pg.bigint,
+    value: language,
+  },
   ["id"],
 );
 
@@ -1418,7 +1426,9 @@ export const rules = [
   key(LomStringLanguage, ["node"]),
   contained(on(LomStringLanguage, "node"), on(LomString, "id")),
   contained(on(LomLanguage, "lom"), on(Lom, "id")),
+  contained(on(LomLanguage, "lom", "owner"), on(Lom, "id", "owner")),
   contained(on(LomLanguage, "id", "position"), on(Edge, "child", "position")),
+  contained(on(LomLanguage, "id", "parentKind"), on(Edge, "child", "parentKind")),
   contained(on(LomDescription, "lom"), on(Lom, "id")),
   contained(on(LomKeyword, "lom"), on(Lom, "id")),
   contained(on(LomCoverage, "lom"), on(Lom, "id")),

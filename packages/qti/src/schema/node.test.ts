@@ -44,6 +44,7 @@ describe("node", () => {
     const probe = schema("QtiNodeProbe", node.relations, node.rules);
     assert.deepStrictEqual(Object.keys(probe.relations).toSorted(), [
       "Admission",
+      "Ancestry",
       "AttributeEntityReference",
       "AttributeLexical",
       "AttributeName",

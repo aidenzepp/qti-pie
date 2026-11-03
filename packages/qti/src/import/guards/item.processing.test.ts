@@ -28,6 +28,7 @@ const paddedRows = Effect.fn("paddedRows")(function* paddedRows() {
       packageId,
       path: "padded-processing.xml",
       resource: "padded-processing",
+      resourceLomHasGeneral: false,
       resourceType: "imsqti_item_xmlv3p0",
       version: "3.0.0",
     },

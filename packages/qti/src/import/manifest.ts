@@ -12,6 +12,7 @@
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
+import { attributeRows } from "#qti/import/attributes.ts";
 import { collapse, replace, Rows, treeRows, typedAttribute } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { classed, contentOf, elementChildren, qmdLeafRows } from "#qti/import/leaf.ts";
@@ -21,6 +22,7 @@ import { readEntry } from "#qti/package/read.ts";
 import type { Entry, PackageReadError } from "#qti/package/read.ts";
 import type { ZipRefusal } from "#qti/package/zip.ts";
 import * as csm from "#qti/schema/csm.ts";
+import { ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
 import * as md from "#qti/schema/metadata.ts";
 import { Edge } from "#qti/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
@@ -147,8 +149,10 @@ interface LomResource {
  */
 interface LomFindings {
   readonly entries: { collapsed: string; identifier: string; position: bigint }[];
+  hasGeneral: boolean;
   hasIdentifier: boolean;
   hasTitle: boolean;
+  readonly languages: Set<string>;
   readonly titles: { collapsed: string; position: bigint }[];
 }
 
@@ -463,6 +467,7 @@ export const lomSubtreeRows = (
     },
     "lom:general": (c) => {
       add(md.LomGeneral, [{ id: c.id, lom: c.lom }]);
+      c.findings.hasGeneral = true;
     },
     "lom:id": (c) => {
       add(md.LomId, [{ collapsed: c.collapsed, id: c.id, value: c.value }]);
@@ -492,7 +497,19 @@ export const lomSubtreeRows = (
       add(md.LomKind, [{ id: c.id, lom: c.lom }]);
     },
     "lom:language": (c) => {
-      add(md.LomLanguage, [{ id: c.id, lom: c.lom, position: c.position, value: c.value }]);
+      add(md.LomLanguage, [
+        {
+          id: c.id,
+          lom: c.lom,
+          owner: c.owner,
+          parentKind: c.parentKind,
+          position: c.position,
+          value: c.value,
+        },
+      ]);
+      if (c.parentKind === "lom:general") {
+        c.findings.languages.add(c.value);
+      }
     },
     "lom:learningResourceType": (c) => {
       add(md.LomLearningResourceType, [{ id: c.id, lom: c.lom }]);
@@ -786,6 +803,10 @@ export const csmSetRows = (rows: Rows, nodes: NodeIndex, set: Element, host: str
  * names. A `file`'s position is its element's `Edge` position under the resource, every child
  * counted.
  *
+ * `attributeRows` runs first on the rows `treeRows` wrote, since it reads the root kind from the
+ * `Tree` row and fails without it: it writes the one family attribute a manifest registry lists,
+ * `lom:string`'s `xml:lang`, and refuses an unregistered manifest attribute.
+ *
  * @param dir - The package directory, where the bytes of unclaimed files are read.
  * @param entries - The package's entries, as `listPackage` returns them.
  * @param doc - The manifest as the reader gave it.
@@ -826,7 +847,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     rows,
   );
   const { nodes } = tree;
-  let built = tree.rows;
+  let built = yield* attributeRows(doc.root, nodes, packageId, tree.rows);
   const positions = new Map(Rows.of(built, Edge).map((edge) => [edge.child, edge.position]));
 
   const add = <R extends AnyRelation>(relation: R, facts: readonly Fact<R>[]): void => {
@@ -909,8 +930,10 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
 
     const findings: LomFindings = {
       entries: [],
+      hasGeneral: false,
       hasIdentifier: false,
       hasTitle: false,
+      languages: new Set(),
       titles: [],
     };
     if (resource === null) {
@@ -958,6 +981,21 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       resource: resource.identifier,
       type: resource.type,
     };
+    if (findings.hasGeneral) {
+      add(ResourceLomGeneral, [
+        { lom: node.id, package: packageId, resource: resource.identifier },
+      ]);
+    }
+
+    add(
+      ResourceLomLanguageSet,
+      [...findings.languages].map((value) => ({
+        lom: node.id,
+        package: packageId,
+        resource: resource.identifier,
+        value,
+      })),
+    );
     if (findings.hasIdentifier) {
       add(md.ResourceLomIdentified, [bound]);
     }
@@ -1033,7 +1071,14 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
               position: positions.get(node.id) ?? 0n,
             },
             {
-              findings: { entries: [], hasIdentifier: false, hasTitle: false, titles: [] },
+              findings: {
+                entries: [],
+                hasGeneral: false,
+                hasIdentifier: false,
+                hasTitle: false,
+                languages: new Set(),
+                titles: [],
+              },
               lom: node.id,
               owner: "file",
             },

@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { inspect } from "node:util";
 import { schema } from "@bjornpagen/grizzle";
@@ -19,6 +18,7 @@ import {
   operatorArityUnbounded,
 } from "#qti/schema/seed/operator-arity.ts";
 import * as value from "#qti/schema/value.ts";
+import { printSeed } from "#qti/test/seed.ts";
 
 /**
  * The probe schema: the node and item modules' relations and rules with this module's.
@@ -443,7 +443,7 @@ describe("processing", () => {
   });
 
   it("prints as many OperatorArityUnbounded tuples as the seed module has rows", () => {
-    const sql = execFileSync(process.execPath, ["scripts/seed-sql.ts"], { encoding: "utf-8" });
+    const sql = printSeed([]);
     const prefix = 'INSERT INTO "qti"."operator_arity_unbounded" ("kind") VALUES ';
     const tuples = sql
       .split("\n")

@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
@@ -7,14 +6,15 @@ import { changeSetOf } from "#qti/import/package.ts";
 import type { Rows } from "#qti/import/tree.ts";
 import * as csmd from "#qti/schema/kinds/csmd.ts";
 import * as ud from "#qti/schema/kinds/ud.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
+import { AuthorApp, authorWork } from "#qti/schema/logins.ts";
 import { AttributeName, NodeKind } from "#qti/schema/node.ts";
-import { Qti } from "#qti/schema/qti.ts";
+import { Qti, nodeArms } from "#qti/schema/qti.ts";
 import { Author, seededNames } from "#qti/schema/roles.ts";
 import { admission } from "#qti/schema/seed/admission.ts";
 import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
 import * as csm from "#qti/schema/csm.ts";
 import * as usage from "#qti/schema/usage.ts";
+import { printSeed } from "#qti/test/seed.ts";
 
 /**
  * The part of a ChangeSet's description the test reads: each stratum's members by operation and
@@ -71,16 +71,11 @@ const tuplesOf = (sql: string, table: string): string[] => {
  * hold.
  */
 const recipe = (): string =>
-  execFileSync(
-    process.execPath,
-    [
-      "scripts/seed-sql.ts",
-      "--only",
-      "Admission,RootOfType",
-      ...earlierSeeds().flatMap((file) => ["--minus", file]),
-    ],
-    { encoding: "utf-8" },
-  );
+  printSeed([
+    "--only",
+    "Admission,RootOfType",
+    ...earlierSeeds().flatMap((file) => ["--minus", file]),
+  ]);
 
 describe("qti packaging composition", () => {
   it("holds every csmd and ud handle in the rosters", () => {
@@ -111,14 +106,7 @@ describe("qti packaging composition", () => {
       assert.include(Qti.statements, statement);
     }
 
-    const alternative = Qti.statements.find(
-      (statement) => statement.kind === "alternatives" && statement.parent === Qti.relations.Node,
-    );
-    if (alternative?.kind !== "alternatives") {
-      assert.fail("no Node alternatives statement");
-    }
-
-    const composed = new Map(Object.entries(alternative.arms));
+    const composed = new Map<string, unknown>(Object.entries(nodeArms));
     for (const [handle, arm] of [...Object.entries(csm.arms), ...Object.entries(usage.arms)]) {
       assert.strictEqual(composed.get(handle), arm);
     }
@@ -139,8 +127,8 @@ describe("qti packaging composition", () => {
     }
   });
 
-  it("declares no workload program, so the import call inserts every relation its rows hold", () => {
-    assert.deepStrictEqual(AuthorApp.workload, []);
+  it("declares the export workload alone, so the import call inserts every relation its rows hold", () => {
+    assert.deepStrictEqual(AuthorApp.workload, [authorWork]);
 
     const written = stored().filter(([name]) => !seeded.has(name));
     const rows: Rows = new Map(written.map(([, relation]) => [relation, [{}]]));

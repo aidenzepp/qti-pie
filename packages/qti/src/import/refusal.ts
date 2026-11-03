@@ -8,17 +8,17 @@
  * the schema that the apply broke. {@link ruleOfError} maps the first two and {@link ruleOfLaw} the
  * third, so a caller and a test see one closed roster, {@link ImportRule}, whichever refused.
  */
-import { Match, Predicate, Schema } from "effect";
+import { Match, Schema } from "effect";
+import type { ContentGuardRefusal } from "#qti/import/guards/content.ts";
 import type { ItemGuardRefusal } from "#qti/import/guards/item.ts";
 import type { ManifestGuardRefusal } from "#qti/import/guards/manifest.ts";
 import type { ProcessingGuardRefusal } from "#qti/import/guards/processing.ts";
 import type { GuardRefusal } from "#qti/import/guards/tree.ts";
 import type { UsageGuardRefusal } from "#qti/import/guards/usage.ts";
-import type { ExternalRefusal } from "#qti/import/record.ts";
-import type { ItemRefusal } from "#qti/import/item.ts";
 import type { NotQti3 } from "#qti/import/manifest.ts";
 import type { ProcessingRefused } from "#qti/import/processing.ts";
-import type { UnmodeledVocabulary } from "#qti/import/tree.ts";
+import type { ExternalRefusal } from "#qti/import/record.ts";
+import type { ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { PackageReadError } from "#qti/package/read.ts";
 import type { ZipRefusal } from "#qti/package/zip.ts";
 import * as patterns from "#qti/schema/patterns.ts";
@@ -95,6 +95,52 @@ export const ImportRule = Schema.Literals([
   "unmodeled-vocabulary",
   "well-formedness",
   "reader-refusal",
+  "union-count",
+  "idref-copy",
+  "varref-copy",
+  "lang-set-copy",
+  "owner-copy",
+  "max-strings-required",
+  "aria-value-range",
+  "mastery-range",
+  "string-identifier-distinct",
+  "same-table-headers",
+  "q-punctuation",
+  "attribute-admission",
+  "idref-target",
+  "coords-owner",
+  "ancestry-ban",
+  "ancestry-step",
+  "adaptive-feedback",
+  "gap-multiple",
+  "record-binding-fit",
+  "order-choice-count",
+  "template-ref",
+  "feedback-ref",
+  "printed-variable-ref",
+  "string-binding",
+  "match-sets",
+  "details-summary",
+  "picture-img",
+  "picture-source",
+  "table-parts",
+  "source-srcset",
+  "track-srclang",
+  "colgroup-span",
+  "bdo-dir",
+  "aria-role",
+  "modal-body",
+  "context-id",
+  "label-tool",
+  "document-lang",
+  "mapping-base-type",
+  "area-mapping-point",
+  "table-outcome",
+  "map-key-lexical",
+  "normal-maximum",
+  "reserved-type",
+  "hotspot-default",
+  "required-attribute",
   "lom-capacity",
   "lom-learning-resource-type",
   "qti-metadata-host",
@@ -181,14 +227,34 @@ export class ImportRefused extends Schema.TaggedError<ImportRefused>()("ImportRe
 }
 
 /**
+ * A value a law's selection holds: a handle, a number or one of the engine's value objects.
+ */
+type SelectedValue = bigint | boolean | number | object | string;
+
+/**
  * One side of a containment, mirrors or capacity law: a relation, the fields it names and the
- * columns the side selects on, as `Edge(parent)` selected on `childKind`.
+ * values the statement selects on it, as `Edge(parent)` selected on `childKind`. `selection` is
+ * absent on a hand-written law and empty on a side that selects nothing.
  */
 interface LawSide {
   readonly fields: readonly string[];
   readonly relation: string;
-  readonly selection?: readonly { readonly field: string; readonly value: unknown }[];
+  readonly selection?: readonly { readonly field: string; readonly value: SelectedValue }[];
 }
+
+/**
+ * Whether a side selects `field` equal to `value`, or on any value when none is given.
+ */
+const selects = (side: LawSide, field: string, value?: string): boolean =>
+  side.selection?.some(
+    (pair) => pair.field === field && (value === undefined || pair.value === value),
+  ) ?? false;
+
+/**
+ * Whether a side's fields are exactly `fields`, in order.
+ */
+const fieldsAre = (side: LawSide, ...fields: readonly string[]): boolean =>
+  side.fields.join(",") === fields.join(",");
 
 /**
  * A law as grizzle reports it in an `invariant-rejected` outcome (the engine's `Law`), the parts
@@ -272,6 +338,9 @@ const keyRules = new Map<string, Rule>([
   ["TemplateIfArm.(condition)", "P4"],
   ["TemplateProcessing.(item)", "P17"],
   ["TypedDeclaration.(document,identifier)", "declaration-key"],
+  ["StringBinding.(document,identifier)", "string-binding"],
+  ["ResourceLomGeneral.(package,resource)", "document-lang"],
+  ["ResourceLomLanguageSet.(package,resource,value)", "document-lang"],
   ["ValueSet.(declaration,role)", "value-set-role"],
 ]);
 
@@ -289,6 +358,14 @@ const keyRule = (relation: string, fields: readonly string[]): Rule | undefined 
     return "document-key";
   }
 
+  if (fields.join(",") === "interaction,identifier") {
+    return "choice-key";
+  }
+
+  if (fields.join(",") === "document,id") {
+    return "document-key";
+  }
+
   return relation.startsWith("Qmd") && fields.length === 1
     ? "qti-metadata-child-single"
     : undefined;
@@ -298,20 +375,48 @@ const keyRule = (relation: string, fields: readonly string[]): Rule | undefined 
  * The rule of a row check, by its name in the schema.
  */
 const checkRules = new Map<string, Rule>([
+  ["AdaptiveFeedback", "adaptive-feedback"],
+  ["AriaRoleH1", "aria-role"],
+  ["AriaRoleNotSource", "aria-role"],
+  ["AssociableHotspotBounds", "choice-bounds"],
+  ["AssociateBounds", "choice-bounds"],
+  ["BdoDirNotAuto", "bdo-dir"],
   ["BindingMax", "binding-max"],
   ["BuiltInRefKind", "P9"],
   ["ChoiceBounds", "choice-bounds"],
+  ["ChoiceTemplateRefType", "template-ref"],
   ["DeclarationNotReserved", "declaration-reserved"],
   ["DeclaredRefKind", "P8"],
   ["DependencyNotSelf", "dependency-target"],
   ["EqualRoundedFigures", "P10"],
+  ["FeedbackOutcomeRefType", "feedback-ref"],
+  ["GapImgBounds", "choice-bounds"],
+  ["GapMatchBounds", "choice-bounds"],
+  ["GapTextBounds", "choice-bounds"],
+  ["GraphicAssociateBounds", "choice-bounds"],
+  ["GraphicGapMatchBounds", "choice-bounds"],
+  ["GraphicOrderChoiceBounds", "choice-bounds"],
+  ["HotspotChoiceBounds", "choice-bounds"],
+  ["HottextChoiceBounds", "choice-bounds"],
   ["IndexPositive", "P11"],
   ["LomLearningResourceType", "lom-learning-resource-type"],
+  ["MatchBounds", "choice-bounds"],
+  ["MediaPlays", "choice-bounds"],
+  ["NoDefaultHotspotInGraphicGapMatch", "hotspot-default"],
+  ["NodeLabelNotRoot", "attribute-admission"],
+  ["OrderChoiceBounds", "choice-bounds"],
   ["OutcomeMinMaxKind", "outcome-minmax-kind"],
+  ["PositionObjectChoiceBounds", "choice-bounds"],
+  ["PrintedVariableRefKind", "printed-variable-ref"],
+  ["PrintedVariableVarRefType", "printed-variable-ref"],
   ["ProcessingRoot", "processing-root"],
   ["RepeatInt", "P6"],
+  ["ReservedOutcomeTypes", "reserved-type"],
   ["RoundToFigures", "P10"],
   ["RuleOperandKind", "P3"],
+  ["SelectPointChoiceBounds", "choice-bounds"],
+  ["SimpleAssociableChoiceBounds", "choice-bounds"],
+  ["TemplateContentRefType", "template-ref"],
   ["TemplateParameterReferrer", "P13"],
   ["TemplateParameterRoot", "P13"],
   ["VariableWeightInTest", "P12"],
@@ -319,17 +424,43 @@ const checkRules = new Map<string, Rule>([
 ]);
 
 /**
+ * The rule of a check whose name is a form, not a roster entry: `<Relation>Attribute` holds an
+ * attribute relation's constant `attribute` column (the relation's own containment into
+ * `AttributeAdmission` reads it), and `<Name>ByVersion` is a version-gated attribute value
+ * (goal 3.9). `HeadersTarget`'s constant belongs to the `IDREFS` copy it is contained by.
+ */
+const checkRuleByForm = (relation: string, name: string): Rule | undefined => {
+  if (name === `${relation}Attribute`) {
+    return relation === "HeadersTarget" ? "idref-copy" : "attribute-admission";
+  }
+
+  return name.endsWith("ByVersion") ? "attribute-lexical" : undefined;
+};
+
+/**
  * The rule of a capacity, by the relation it bounds and the one that fills it, as
  * `bounded<filler>`.
  */
 const capacityRules = new Map<string, Rule>([
+  ["AreaMapEntry<Coords", "coords-owner"],
+  ["AssociableHotspot<Coords", "coords-owner"],
   ["ChoiceInteraction<SimpleChoice", "choice-present"],
+  ["ColgroupSpan<Edge", "colgroup-span"],
+  ["Details<Edge", "details-summary"],
   ["Document<DocumentIdentifier", "root-identifier"],
   ["Document<DocumentTitle", "root-title"],
   ["Expression<Operand", "P2"],
   ["ExpressionMax<Operand", "P2"],
+  ["GapMatchBinding<Gap", "gap-multiple"],
+  ["GraphicOrderInteraction<HotspotChoice", "order-choice-count"],
+  ["HotspotChoice<Coords", "coords-owner"],
+  ["InlineChoiceInteraction<InlineChoice", "choice-present"],
   ["ManifestMetadata<ManifestSchema", "schema-single"],
   ["ManifestMetadata<ManifestSchemaVersion", "schema-single"],
+  ["MatchInteraction<Edge", "match-sets"],
+  ["ModalFeedback<Edge", "modal-body"],
+  ["Node<NodeDir", "bdo-dir"],
+  ["OrderInteraction<SimpleChoice", "order-choice-count"],
   ["Package<ManifestMetadata", "manifest-children"],
   ["Package<Organizations", "manifest-children"],
   ["Package<Resources", "manifest-children"],
@@ -338,27 +469,85 @@ const capacityRules = new Map<string, Rule>([
   ["ResourceLomIdentified<LomObjectIdentifier", "lom-identifier"],
   ["ResourceLomTitled<LomGeneralTitle", "lom-title-single"],
   ["ResourceLomTitled<LomObjectTitle", "lom-title"],
+  ["Table<Edge", "table-parts"],
   ["TypedValueSet<DeclaredValue", "value-single"],
   ["ValueSet<DeclaredValue", "value-present"],
 ]);
 
 /**
+ * The rule of a capacity. A capacity is named by the relation it bounds and the one that fills it;
+ * the two `Picture` capacities fill from the same `Edge` and differ by the child kind they select.
+ */
+const capacityRule = (target: LawSide, from: LawSide): Rule | undefined => {
+  if (target.relation === "Picture" && from.relation === "Edge") {
+    if (selects(from, "childKind", "img")) {
+      return "picture-img";
+    }
+
+    return selects(from, "childKind", "source") ? "picture-source" : undefined;
+  }
+
+  return capacityRules.get(`${target.relation}<${from.relation}`);
+};
+
+/**
  * The rule of a containment, by the relation it leaves and the one it enters, as `from>to`.
  */
 const containedRules = new Map<string, Rule>([
-  ["ChoiceInteraction>InteractionBinding", "binding-exists"],
+  ["AssessmentItemLabel>ItemToolBoth", "label-tool"],
+  ["AttributeIdref>DocumentId", "idref-target"],
+  ["AttributeIdref>Node", "idref-target"],
+  ["ContextDeclarationArm>ContextDeclarationId", "context-id"],
+  ["ContextDeclarationId>Node", "document-key"],
   ["DeclaredValue>TypedValueSet", "value-base-type"],
   ["Dependency>Resource", "dependency-target"],
   ["Document>PackageEntry", "file-exists"],
   ["Edge>Admission", "admission"],
+  ["Edge>AncestryStep", "ancestry-step"],
   ["File>PackageEntry", "file-exists"],
   ["FileContent>PackageEntry", "file-exists"],
+  ["HeadersTarget>AttributeIdref", "idref-copy"],
+  ["HeadersTarget>HtmlId", "idref-target"],
+  ["HtmlId>Node", "document-key"],
+  ["InteractionBinding>AssessmentItem", "adaptive-feedback"],
   ["InteractionBinding>Declaration", "binding-declared"],
+  ["ItemBodyId>Node", "document-key"],
+  ["Mapping>MappableBaseType", "mapping-base-type"],
+  ["Node>AncestryStep", "ancestry-ban"],
+  ["PrintedVariableId>Node", "document-key"],
+  ["RecordBinding>RecordBindingFit", "record-binding-fit"],
   ["ResponseProcessing>TreeRoot", "processing-root"],
   ["SimpleChoice>ChoiceInteraction", "choice-parent"],
   ["SimpleChoice>Edge", "choice-parent"],
+  ["Source>SourceSrcset", "source-srcset"],
+  ["Track>TrackSrclang", "track-srclang"],
   ["TypedBinding>BindingFit", "binding-fit"],
 ]);
+
+/**
+ * The rule of every containment that leaves one of these relations: each is a reference to a
+ * declared variable, or the binding of a string to one, and all its containments state one law.
+ */
+const referenceRules = new Map<string, Rule>([
+  ["ChoiceTemplateRef", "template-ref"],
+  ["FeedbackOutcomeRef", "feedback-ref"],
+  ["PrintedVariableRef", "printed-variable-ref"],
+  ["PrintedVariableVarRef", "printed-variable-ref"],
+  ["StringBinding", "string-binding"],
+  ["TemplateContentRef", "template-ref"],
+]);
+
+/**
+ * The relations of the document and LOM language sets: a containment that leaves or enters one of
+ * them is the rule that every `xml:lang` of a document is a `general.language` of its resource's
+ * record (R26) or that the record's set is complete.
+ */
+const languageRelations = new Set(["DocumentLang", "ResourceLomGeneral", "ResourceLomLanguageSet"]);
+
+/**
+ * The tables whose variable is a single-cardinality outcome.
+ */
+const tableRelations = new Set(["InterpolationTable", "MatchTable"]);
 
 /**
  * The relations the schema's `Literal` value arms are, `valueArms("Literal")`'s eleven.
@@ -462,25 +651,61 @@ const processingContainedRule = (from: LawSide, to: LawSide): Rule | undefined =
   return processingContained.get(`${from.relation}>${to.relation}`);
 };
 
-const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
-  if (from.relation === "LomObjectIdentifier") {
-    return "lom-identifier";
+const selectedContainedRule = (from: LawSide, to: LawSide): Rule | undefined => {
+  if (from.relation === "AreaMapping" && selects(to, "baseType", "point")) {
+    return "area-mapping-point";
   }
 
-  if (from.relation === "LomObjectTitle") {
-    return "lom-title";
+  return tableRelations.has(from.relation) && (to.selection?.length ?? 0) > 0
+    ? "table-outcome"
+    : undefined;
+};
+
+/**
+ * The rule of a containment by the relation it enters, or by the copy it binds to a node.
+ */
+const copyContainedRule = (from: LawSide, to: LawSide): Rule | undefined => {
+  if (to.relation === "AttributeAdmission") {
+    return "attribute-admission";
   }
 
-  const rule = containedRules.get(`${from.relation}>${to.relation}`);
-  if (rule !== undefined) {
-    return rule;
+  if (to.relation === "ItemToolBoth") {
+    return "label-tool";
   }
 
-  const processing = processingContainedRule(from, to);
-  if (processing !== undefined) {
-    return processing;
+  if (languageRelations.has(to.relation) || languageRelations.has(from.relation)) {
+    return "document-lang";
   }
 
+  if (to.relation === "InteractionBinding") {
+    return "binding-exists";
+  }
+
+  if (to.relation === "Node" && fieldsAre(to, "id", "kind")) {
+    if (fieldsAre(from, "node", "ownerKind")) {
+      return "coords-owner";
+    }
+
+    if (fieldsAre(from, "node", "kind")) {
+      return "attribute-admission";
+    }
+  }
+
+  if (to.relation === "Edge" && fieldsAre(from, "id", "interaction")) {
+    return "choice-parent";
+  }
+
+  if (from.relation === "Coords" && from.selection !== undefined && from.selection.length > 0) {
+    return "coords-owner";
+  }
+
+  return undefined;
+};
+
+/**
+ * The rule of a containment of the package and resource tables, by the relation it enters.
+ */
+const entryContainedRule = (to: LawSide): Rule | undefined => {
   if (to.relation === "ResourceTypeOf") {
     return "resource-type";
   }
@@ -494,27 +719,69 @@ const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
     : undefined;
 };
 
+const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
+  if (from.relation === "LomObjectIdentifier") {
+    return "lom-identifier";
+  }
+
+  if (from.relation === "LomObjectTitle") {
+    return "lom-title";
+  }
+
+  const rule =
+    containedRules.get(`${from.relation}>${to.relation}`) ??
+    referenceRules.get(from.relation) ??
+    selectedContainedRule(from, to) ??
+    processingContainedRule(from, to);
+  if (rule !== undefined) {
+    return rule;
+  }
+
+  return copyContainedRule(from, to) ?? entryContainedRule(to);
+};
+
 /**
  * The rule of a pattern, by its regex source. grizzle reports one pattern law for every column
  * that spells the same language, so a source names every column that uses it: `anyUri` is also the
  * `Uri` value arm's, the three DRD URIs', `CsmCaseItemUri.value`'s, `Statistic.context`'s and the
  * two glossaries' (every `anyUri` column of the usage and DRD relations is `uri-syntax` through
- * it); and `hrefInPackage` is the pattern of every path column. The `Literal` value arms share
- * their sources with `DeclaredValue`'s, so a pattern law cannot tell `P7` from `value-lexical`: P7
- * is named by the other laws of the `Literal` arms (the pattern law carries no relation).
+ * it); `hrefInPackage` is the pattern of every path column; and `xsBoolean` is
+ * `attribute-lexical` for every column that spells it, the M1 attribute flags, the QTI metadata
+ * flags, the DRD `atInteroperable` and the usage `caseSensitive` flag alike, since no earlier
+ * phase's row named it. The `Literal` value arms share their sources with `DeclaredValue`'s, so a
+ * pattern law cannot tell `P7` from `value-lexical`: P7 is named by the other laws of the `Literal`
+ * arms (the pattern law carries no relation).
  *
- * A source shared with another phase's columns keeps that phase's rule, since the law carries no
- * relation to tell the columns apart: `ncName`, `xsInteger`, `xsDouble`, `pair`, `point`,
- * `booleanLiteral` and `xsBoolean` (the DRD `atInteroperable` and the usage `caseSensitive` flag
- * spell the same language as the QTI metadata flags and the declared booleans) name
- * `value-lexical`, never `drd-value`, `usage-lexical` or `usage-typed-value`. Only a source no
- * earlier column spells names the new rule: the nine DRD vocabularies and the usage date.
+ * A source shared with an earlier phase's columns keeps that phase's rule, since the law carries
+ * no relation to tell the columns apart: `ncName`, `xsInteger`, `xsDouble`, `pair`, `point` and
+ * `booleanLiteral` name `value-lexical`, never `drd-value`, `usage-lexical` or
+ * `usage-typed-value`. Only a source no earlier column spells names the new rule: the nine DRD
+ * vocabularies and the usage date.
  */
 const patternRules = new Map<string, Rule>([
+  [patterns.align, "attribute-lexical"],
   [patterns.anyUri, "uri-syntax"],
+  [patterns.ariaAutocomplete, "attribute-lexical"],
+  [patterns.ariaChecked, "attribute-lexical"],
+  [patterns.ariaCurrent, "attribute-lexical"],
+  [patterns.ariaExpanded, "attribute-lexical"],
+  [patterns.ariaInvalid, "attribute-lexical"],
+  [patterns.ariaLive, "attribute-lexical"],
+  [patterns.ariaRelevantList, "attribute-lexical"],
+  [patterns.ariaRole, "attribute-lexical"],
+  [patterns.ariaSort, "attribute-lexical"],
   [patterns.baseType, "P6"],
+  [patterns.bcp47, "attribute-lexical"],
   [patterns.booleanLiteral, "value-lexical"],
+  [patterns.classList, "attribute-lexical"],
   [patterns.coords, "P6"],
+  [patterns.coordsAny, "attribute-lexical"],
+  [patterns.coordsCircle, "attribute-lexical"],
+  [patterns.coordsEllipse, "attribute-lexical"],
+  [patterns.coordsPoly, "attribute-lexical"],
+  [patterns.coordsRect, "attribute-lexical"],
+  [patterns.crossorigin, "attribute-lexical"],
+  [patterns.dirEnum, "attribute-lexical"],
   [patterns.drdAccessMode, "drd-value"],
   [patterns.drdAdaptationDetail, "drd-value"],
   [patterns.drdAdaptationMediaType, "drd-value"],
@@ -527,25 +794,49 @@ const patternRules = new Map<string, Rule>([
   [patterns.floatOrVariableRef, "P6"],
   [patterns.hrefInPackage, "href-path"],
   [patterns.identifierList, "P6"],
+  [patterns.integerList, "attribute-lexical"],
   [patterns.integerOrVariableRef, "P6"],
+  [patterns.integerOrVariableString, "attribute-lexical"],
   [patterns.intOrIdentifier, "P6"],
+  [patterns.lengthDType, "attribute-lexical"],
   [patterns.mathConstantName, "P6"],
   [patterns.mathOperatorName, "P6"],
+  [patterns.mimeTypeList, "attribute-lexical"],
   [patterns.ncName, "value-lexical"],
+  [patterns.ncNameList, "attribute-lexical"],
+  [patterns.ncNameListOrEmpty, "attribute-lexical"],
+  [patterns.nonNegativeDouble, "attribute-lexical"],
+  [patterns.orientation, "attribute-lexical"],
   [patterns.pair, "value-lexical"],
   [patterns.point, "value-lexical"],
+  [patterns.positiveDouble, "normal-maximum"],
+  [patterns.positiveInteger, "attribute-lexical"],
+  [patterns.preload, "attribute-lexical"],
+  [patterns.printfFormat, "attribute-lexical"],
   [patterns.roundingMode, "P6"],
+  [patterns.scope, "attribute-lexical"],
   [patterns.shape, "P6"],
+  [patterns.showHide, "attribute-lexical"],
   [patterns.statsOperatorName, "P6"],
+  [patterns.suppressTts, "attribute-lexical"],
+  [patterns.textFormat, "attribute-lexical"],
   [patterns.toleranceList, "P6"],
   [patterns.toleranceMode, "P6"],
   [patterns.toolString, "tool-string-length"],
+  [patterns.trackKind, "attribute-lexical"],
   [patterns.uncollapsed, "attribute-lexical"],
   [patterns.usageDate, "usage-lexical"],
+  [patterns.useEnumExt, "attribute-lexical"],
+  [patterns.valign, "attribute-lexical"],
+  [patterns.valuetype, "attribute-lexical"],
+  [patterns.viewList, "attribute-lexical"],
   [patterns.xincludeParse, "P6"],
-  [patterns.xsBoolean, "value-lexical"],
+  [patterns.xsBoolean, "attribute-lexical"],
+  [patterns.xsDecimal, "attribute-lexical"],
   [patterns.xsDouble, "value-lexical"],
+  [patterns.xsInt, "attribute-lexical"],
   [patterns.xsInteger, "value-lexical"],
+  [patterns.xsNonNegativeInteger, "attribute-lexical"],
 ]);
 
 /**
@@ -559,13 +850,6 @@ const isUsage = (relation: string): boolean =>
   relation === "CategorizedStatisticArm" ||
   relation === "DeclaredDefaultValue" ||
   relation === "OrdinaryStatisticArm";
-
-/**
- * Whether a side selects a column on a value, any value when none is given.
- */
-const selects = (side: LawSide, field: string, value?: string): boolean =>
-  side.selection?.some((s) => s.field === field && (value === undefined || s.value === value)) ===
-  true;
 
 const isStatisticArm = (relation: string): boolean =>
   relation === "CategorizedStatisticArm" || relation === "OrdinaryStatisticArm";
@@ -626,12 +910,13 @@ const phaseKeyRule = (relation: string, fields: readonly string[]): Rule | undef
 
 /**
  * The rule of a capacity by the relation that fills it, for the relations this phase added: the
- * `Edge` rows of a LOM category selected on `childKind`, a CSM or usage relation, a variant's
- * metadata.
+ * `Edge` rows of a LOM category selected on `parentKind` and `childKind` (R30), a CSM or usage
+ * relation, a variant's metadata. An `Edge` capacity selected on `childKind` alone is a content
+ * capacity (`capacityRule`).
  */
 const phaseCapacityRule = (from: LawSide): Rule | undefined => {
   if (from.relation === "Edge") {
-    return selects(from, "childKind") ? "lom-capacity" : undefined;
+    return selects(from, "childKind") && selects(from, "parentKind") ? "lom-capacity" : undefined;
   }
 
   if (from.relation.startsWith("Csm")) {
@@ -734,12 +1019,11 @@ const phaseSidesRule = (from: LawSide, to: LawSide): Rule | undefined =>
 
 /**
  * The rule of a law over the relations this phase added, or nothing when the law is an earlier
- * phase's (those rows follow). The alternatives over `Node` and `Lom` name no kind, so the `Node`
- * law of `qmd:qtiMetadata` is found among the containments and mirrors its expansion states, and
- * also by the kind of the row that breaks it: every node kind with an arm shares the one law, so
- * only `witnessKind` says a `qmd:qtiMetadata` lacks its host arm.
+ * phase's (those rows follow). Every `Node` kind with an arm has its own `mirrors` law, so a
+ * `qmd:qtiMetadata` that lacks its host arm breaks that handle's law, which the containments and
+ * mirrors the expansion states name.
  */
-const phaseRule = (law: ImportLaw, witnessKind?: string): Rule | undefined => {
+const phaseRule = (law: ImportLaw): Rule | undefined => {
   if (law.kind === "key" || law.kind === "primaryKey") {
     return phaseKeyRule(law.relation, law.fields);
   }
@@ -753,10 +1037,6 @@ const phaseRule = (law: ImportLaw, witnessKind?: string): Rule | undefined => {
   }
 
   if (law.kind === "alternatives") {
-    if (law.relation === "Node" && law.field === "kind" && witnessKind === "qmd:qtiMetadata") {
-      return "qti-metadata-host";
-    }
-
     if (law.relation === "ManifestId") {
       return "manifest-id-holder";
     }
@@ -784,8 +1064,8 @@ const conditionMirrors: ReadonlySet<string> = new Set([
 const some = (rule: Rule | undefined): Mapped | undefined =>
   rule === undefined ? undefined : named(rule);
 
-const recognized = (law: ImportLaw, witnessKind?: string): Mapped | undefined => {
-  const added = phaseRule(law, witnessKind);
+const recognized = (law: ImportLaw): Mapped | undefined => {
+  const added = phaseRule(law);
   if (added !== undefined) {
     return named(added);
   }
@@ -795,11 +1075,11 @@ const recognized = (law: ImportLaw, witnessKind?: string): Mapped | undefined =>
   }
 
   if (law.kind === "check") {
-    return some(checkRules.get(law.name));
+    return some(checkRules.get(law.name) ?? checkRuleByForm(law.relation, law.name));
   }
 
   if (law.kind === "capacity") {
-    return some(capacityRules.get(`${law.target.relation}<${law.from.relation}`));
+    return some(capacityRule(law.target, law.from));
   }
 
   if (law.kind === "contained") {
@@ -825,8 +1105,7 @@ const recognized = (law: ImportLaw, witnessKind?: string): Mapped | undefined =>
   return undefined;
 };
 
-const classify = (law: ImportLaw, witnessKind?: string): Mapped =>
-  recognized(law, witnessKind) ?? nearest(law);
+const classify = (law: ImportLaw): Mapped => recognized(law) ?? nearest(law);
 
 /**
  * The rule of the roster a schema law maps to.
@@ -836,22 +1115,17 @@ const classify = (law: ImportLaw, witnessKind?: string): Mapped =>
  * law verbatim in `detail`, and `isMappedLaw` tells the two apart.
  *
  * @param law - The `law` of an `invariant-rejected` outcome.
- * @param witnessKind - The node kind of the row the witness names, when the law is the `Node`
- *   alternatives, which names no arm.
  * @returns The rule the law breaks.
  */
-export const ruleOfLaw = (law: ImportLaw, witnessKind?: string): Rule =>
-  classify(law, witnessKind).rule;
+export const ruleOfLaw = (law: ImportLaw): Rule => classify(law).rule;
 
 /**
  * Whether {@link ruleOfLaw} recognized the law, not merely sorted it.
  *
  * @param law - The `law` of an `invariant-rejected` outcome.
- * @param witnessKind - The node kind of the row the witness names, as for {@link ruleOfLaw}.
  * @returns False when the law fell to the nearest rule; a test reports it as a finding.
  */
-export const isMappedLaw = (law: ImportLaw, witnessKind?: string): boolean =>
-  classify(law, witnessKind).mapped;
+export const isMappedLaw = (law: ImportLaw): boolean => classify(law).mapped;
 
 const sideText = (side: LawSide): string => `${side.relation}(${side.fields.join(", ")})`;
 
@@ -906,18 +1180,10 @@ const witnessText = (witness: ImportWitness): string =>
  * @param law - The `law` of the outcome.
  * @param witness - The `witness` of the outcome, when the caller has it; only a key witness is
  *   named.
- * @param nodeKind - The kind of the `Node` row with a given id, from the rows the import submitted;
- *   read only for a key witness on `Node`, to name the arm the `Node` alternatives law lacks.
  * @returns The refusal naming the rule.
  */
-export const refusalOfLaw = (
-  law: ImportLaw,
-  witness?: ImportWitness,
-  nodeKind?: (id: string) => string | undefined,
-): ImportRefused => {
-  const id = witness?.kind === "key" && witness.relation === "Node" ? witness.values : undefined;
-  const nodeId = id !== undefined && "id" in id && Predicate.isString(id.id) ? id.id : undefined;
-  const { mapped, rule } = classify(law, nodeId === undefined ? undefined : nodeKind?.(nodeId));
+export const refusalOfLaw = (law: ImportLaw, witness?: ImportWitness): ImportRefused => {
+  const { mapped, rule } = classify(law);
   const unmapped = mapped ? "" : "no rule names this law, so it is filed under the nearest: ";
 
   return new ImportRefused({
@@ -951,14 +1217,19 @@ export type ReadRefusal =
  *
  * A guard's `rule` is the rule of the same name; `PackageReadError` maps by its own rule, a missing
  * manifest to `manifest-root` and an entry path outside the package to `href-path` (R8's pattern
- * law names the same cause); `ItemRefusal` is `binding-declared` or `typed-copy`.
+ * law names the same cause); `ItemRefusal` names the importer rule it carries (`import/tree.ts`).
+ *
+ * `ContentGuardRefusal` is accepted beside {@link ReadRefusal}, not inside it: `ReadRefusal` is the
+ * error channel `import/package.ts` narrows to, and the content guards join that channel when
+ * `guards.ts` composes them.
  *
  * @param e - The error raised.
  * @returns The refusal naming its rule.
  */
-export const ruleOfError = (e: ReadRefusal): ImportRefused =>
+export const ruleOfError = (e: ContentGuardRefusal | ReadRefusal): ImportRefused =>
   Match.value(e).pipe(
     Match.tagsExhaustive({
+      ContentGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ExternalRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       GuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ItemGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),

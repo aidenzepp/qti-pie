@@ -12,6 +12,7 @@ import { manifestRows } from "#qti/import/manifest.ts";
 import { changeSetOf, retrySchedule } from "#qti/import/package.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
+import { ResourceLomGeneral } from "#qti/schema/lang.ts";
 import {
   OutcomeDeclarationArm,
   RecordDeclaration,
@@ -42,6 +43,7 @@ import {
   rules as metadataRules,
 } from "#qti/schema/metadata.ts";
 import { Admission, AttributeLexical, Edge, Node, Tree } from "#qti/schema/node.ts";
+import { ancestryStepRows, KindEnters } from "#qti/schema/seed/ancestry.ts";
 import {
   Dependency,
   File,
@@ -66,7 +68,7 @@ import {
   relations as valueRelations,
 } from "#qti/schema/value.ts";
 import { readXml } from "#qti/xml/read.ts";
-import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**
  * A row as a test edits it: every field of the schema is text or a bigint.
@@ -158,6 +160,9 @@ const simpleRows = Effect.gen(function* simpleRows() {
         packageId: built.packageId,
         path: listed.path,
         resource: listed.resource,
+        resourceLomHasGeneral: Rows.of(built.rows, ResourceLomGeneral).some(
+          (general) => general.resource === listed.resource,
+        ),
         resourceType: listed.type,
         version: built.version,
       },
@@ -267,6 +272,12 @@ const addNode = (draft: Draft, kind: string, parent: string): string => {
   assert.isDefined(above, parent);
 
   const id = crypto.randomUUID();
+  const parentAncestry = text(above ?? {}, "ancestry");
+  const parentKind = text(above ?? {}, "kind");
+  // The ancestry the importer computes for the child: the step of the parent's kind at its ancestry.
+  const childAncestry =
+    ancestryStepRows([parentKind], KindEnters).find((step) => step.ancestry === parentAncestry)
+      ?.next ?? parentAncestry;
   const tree = text(above ?? {}, "tree");
   const version = text(above ?? {}, "version");
   let last = 0n;
@@ -277,6 +288,7 @@ const addNode = (draft: Draft, kind: string, parent: string): string => {
   }
 
   of(draft, Node).push({
+    ancestry: childAncestry,
     id,
     kind,
     prefix: "",
@@ -286,9 +298,11 @@ const addNode = (draft: Draft, kind: string, parent: string): string => {
   });
   of(draft, Edge).push({
     child: id,
+    childAncestry,
     childKind: kind,
     parent,
-    parentKind: text(above ?? {}, "kind"),
+    parentAncestry,
+    parentKind,
     position: last + 2n,
     tree,
     version,
@@ -994,37 +1008,35 @@ describe.skipIf(!hasLease)(
   "schema/rules.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
-    layer(Layer.mergeAll(AuthorAppLayer, SimpleRowsLayer), { excludeTestServices: true })(
-      "the schema's bin 1 rules, by direct ChangeSet",
-      (it) => {
-        for (const negative of negatives) {
-          it.effect(negative.name, () =>
-            Effect.gen(function* refused() {
-              const draft = draftOf(yield* SimpleRows);
-              negative.alter(draft);
+    layer(Layer.mergeAll(AuthorAppLayer, SimpleRowsLayer), {
+      excludeTestServices: true,
+      timeout: authorLayerHookTimeoutMs,
+    })("the schema's bin 1 rules, by direct ChangeSet", (it) => {
+      for (const negative of negatives) {
+        it.effect(negative.name, () =>
+          Effect.gen(function* refused() {
+            const draft = draftOf(yield* SimpleRows);
+            negative.alter(draft);
 
-              const outcome = yield* apply(draft);
+            const outcome = yield* apply(draft);
 
-              assert.strictEqual(outcome.kind, "invariant-rejected");
-              if (outcome.kind === "invariant-rejected") {
-                const named = negative.laws.find((law) => isDeepStrictEqual(outcome.law, law));
-                const reported: unknown = outcome.law;
-                assert.deepStrictEqual(reported, named ?? negative.laws[0]);
-              }
-            }),
-          );
-        }
-
-        it.effect(
-          "the unaltered rows are accepted, so each refusal above is its alteration's",
-          () =>
-            Effect.gen(function* accepted() {
-              const outcome = yield* apply(draftOf(yield* simpleRows));
-
-              assert.strictEqual(outcome.kind, "accepted");
-            }),
+            assert.strictEqual(outcome.kind, "invariant-rejected");
+            if (outcome.kind === "invariant-rejected") {
+              const named = negative.laws.find((law) => isDeepStrictEqual(outcome.law, law));
+              const reported: unknown = outcome.law;
+              assert.deepStrictEqual(reported, named ?? negative.laws[0]);
+            }
+          }),
         );
-      },
-    );
+      }
+
+      it.effect("the unaltered rows are accepted, so each refusal above is its alteration's", () =>
+        Effect.gen(function* accepted() {
+          const outcome = yield* apply(draftOf(yield* simpleRows));
+
+          assert.strictEqual(outcome.kind, "accepted");
+        }),
+      );
+    });
   },
 );

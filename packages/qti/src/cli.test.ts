@@ -5,6 +5,7 @@ import { Cause, Console, Effect, Exit, Stdio, Stream } from "effect";
 import { Command } from "effect/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { cli } from "#qti/cli.ts";
+import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**
  * Run the command on `args` with the console captured, in place of writing to the terminal.
@@ -113,23 +114,29 @@ layer(NodeServices.layer, { excludeTestServices: true })("cli.ts, database-free"
     }),
   );
 
-  it.effect("the process exits 0 for --help", () =>
-    Effect.gen(function* helpExit() {
-      const { code } = yield* spawnCli(["--help"]);
+  it.effect(
+    "the process exits 0 for --help",
+    () =>
+      Effect.gen(function* helpExit() {
+        const { code } = yield* spawnCli(["--help"]);
 
-      assert.strictEqual(code, ChildProcessSpawner.ExitCode(0));
-    }),
+        assert.strictEqual(code, ChildProcessSpawner.ExitCode(0));
+      }),
+    cliProcessTestTimeoutMs,
   );
 
   for (const command of ["import", "roundtrip"]) {
-    it.effect(`${command} of a missing directory exits 1 with its message once and no stack`, () =>
-      Effect.gen(function* refusalOnce() {
-        const { code, stderr, stdout } = yield* spawnCli([command, "/nonexistent"]);
+    it.effect(
+      `${command} of a missing directory exits 1 with its message once and no stack`,
+      () =>
+        Effect.gen(function* refusalOnce() {
+          const { code, stderr, stdout } = yield* spawnCli([command, "/nonexistent"]);
 
-        assert.notMatch(`${stdout}\n${stderr}`, /^\s+at /mu);
-        assert.strictEqual(code, ChildProcessSpawner.ExitCode(1));
-        assert.strictEqual(stderr.split("is not a directory").length - 1, 1);
-      }),
+          assert.notMatch(`${stdout}\n${stderr}`, /^\s+at /mu);
+          assert.strictEqual(code, ChildProcessSpawner.ExitCode(1));
+          assert.strictEqual(stderr.split("is not a directory").length - 1, 1);
+        }),
+      cliProcessTestTimeoutMs,
     );
   }
 });

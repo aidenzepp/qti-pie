@@ -9,17 +9,10 @@
 import { Db } from "@bjornpagen/grizzle";
 import type { AnyRelation, DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle";
 import { Array as Arr, Effect, Option } from "effect";
-import {
-  documentIdsOf,
-  fieldNamesOf,
-  nodeQueries,
-  nodeRuns,
-  treeAttachments,
-  treeOf,
-} from "#qti/export/queries.ts";
-import type { Attachment, LooseQuery } from "#qti/export/queries.ts";
+import { fieldNamesOf, nodeQueries, nodeRuns, treeAttachments } from "#qti/export/queries.ts";
+import type { Attachment } from "#qti/export/queries.ts";
 import type { Rows } from "#qti/import/tree.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
+import { AuthorApp, nodeQueryName } from "#qti/schema/logins.ts";
 import { Node, Tree } from "#qti/schema/node.ts";
 import type { Author } from "#qti/schema/roles.ts";
 
@@ -41,11 +34,31 @@ interface Row {
  * its rows as {@link Row}s.
  */
 interface LooseDb {
-  readonly execute: (
-    query: LooseQuery,
-    params: Readonly<Record<string, string>>,
-  ) => Effect.Effect<{ readonly collect: Effect.Effect<readonly Row[], ReadError> }, ReadError>;
+  readonly workload: Readonly<
+    Record<
+      string,
+      {
+        readonly execute: (
+          params: Readonly<Record<string, string>>,
+        ) => Effect.Effect<
+          { readonly collect: Effect.Effect<readonly Row[], ReadError> },
+          ReadError
+        >;
+      }
+    >
+  >;
 }
+
+/**
+ * The rows the workload program `name` delivers for the tree `treeId`. A name the workload does not
+ * hold is a defect of this module, which names only the programs `#qti/schema/logins.ts` builds.
+ */
+const runOf = (db: LooseDb, name: string, treeId: string) =>
+  Effect.gen(function* programRows() {
+    const program = yield* Effect.fromNullishOr(db.workload[name]).pipe(Effect.orDie);
+
+    return yield* (yield* program.execute({ tree: treeId })).collect;
+  });
 
 /**
  * The ids of a package's trees: the manifest's, which is the package id, then every document's.
@@ -54,7 +67,8 @@ export const treesOf = Effect.fn("export.treesOf")(function* treesOf(
   packageId: string,
 ): Effect.fn.Return<readonly string[], OpenError | ReadError, DbLayer<typeof Author>> {
   const db = yield* Db.open(AuthorApp.roles.author, {});
-  const documents = yield* (yield* db.execute(documentIdsOf, { package: packageId })).collect;
+  const documents = yield* (yield* db.workload.documentIdsOf.execute({ package: packageId }))
+    .collect;
 
   return [packageId, ...documents.map((row) => row.id)];
 });
@@ -134,13 +148,13 @@ export const readTree = Effect.fn("export.readTree")(function* readTree(
   const db = opened as unknown as LooseDb;
   const rows = new Map<AnyRelation, object[]>();
 
-  for (const row of yield* (yield* db.execute(treeOf, { tree: treeId })).collect) {
+  for (const row of yield* runOf(db, "treeOf", treeId)) {
     append(rows, Tree, [columns(row, fieldNamesOf(Tree))]);
     addAttached(rows, row, treeAttachments);
   }
 
-  for (const [index, nodeQuery] of nodeQueries.entries()) {
-    for (const row of yield* (yield* db.execute(nodeQuery, { tree: treeId })).collect) {
+  for (const index of nodeQueries.keys()) {
+    for (const row of yield* runOf(db, nodeQueryName(index), treeId)) {
       if (index === 0) {
         append(rows, Node, [columns(row, fieldNamesOf(Node))]);
       }

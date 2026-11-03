@@ -145,7 +145,9 @@ export const registry: Readonly<Record<(typeof kinds)[number], RegistryRow>> = {
   "lom:source": row("source"),
   "lom:source.langString": row("source", [], Option.some("lom:taxonPath")),
   "lom:status": row("status"),
-  "lom:string": row("string", ["language"]),
+  // `xml:lang` is the one hand-written registry attribute: the loose LOM binding's `anyAttribute
+  // ##other lax` lets a `lom:string` carry it, and `asi.ts` declares the name first.
+  "lom:string": row("string", ["language", "xml:lang"]),
   "lom:structure": row("structure"),
   "lom:taxon": row("taxon"),
   "lom:taxonPath": row("taxonPath"),

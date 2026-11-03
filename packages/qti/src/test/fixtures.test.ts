@@ -15,6 +15,7 @@ import {
   transformHash,
 } from "#qti/test/fixtures.ts";
 import type { Edit, FixtureName, FixtureSpec } from "#qti/test/fixtures.ts";
+import { settings as hostSettings } from "#qti/test/settings.ts";
 
 /**
  * The directory every test root is made under: the package's gitignored `work/`.
@@ -282,7 +283,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
       ),
   );
 
-  it.effect.skipIf(process.env["GR8DES_CORPUS"] !== "1")(
+  it.effect.skipIf(!hostSettings.corpusRequested)(
     "materializeCorpus returns the 28 packages of the examples tarball holding 380 XML files",
     () =>
       inFreshRoot(() =>

@@ -461,8 +461,9 @@ const processingShadows: readonly (readonly [string, Shadow])[] = [
 ];
 
 /**
- * Every item attribute with a typed column, by element kind and attribute. An attribute the table
- * lacks has no typed column to shadow.
+ * The item attributes with a typed column, by element kind and attribute: the phase-1 attributes
+ * and the processing expressions' and rules' collapse-class attributes (`processingShadows`). A
+ * lexical row of any other attribute is the content guards' (`lexicalCopy` in `guards/content.ts`).
  */
 const shadows: ReadonlyMap<string, Shadow> = new Map<string, Shadow>([
   [
@@ -673,7 +674,8 @@ const hasReplaceable = (text: string): boolean => replace(text) !== text;
 
 /**
  * `typed-copy` of the interaction: each count equals the parse of its lexical column, and each
- * binding's `maxCount` equals its interaction's `maxChoicesN`.
+ * choice binding's `maxCount` equals its choice interaction's `maxChoicesN`. The other kinds'
+ * binding counts are the content guards' (`bindingCopy`).
  */
 const interactionCopy = (rows: Rows): Finding => {
   const interactions = Rows.of(rows, ChoiceInteraction);
@@ -694,6 +696,10 @@ const interactionCopy = (rows: Rows): Finding => {
   }
 
   for (const binding of Rows.of(rows, TypedBinding)) {
+    if (binding.interactionKind !== "qti-choice-interaction") {
+      continue;
+    }
+
     const owner = interactions.find((row) => row.id === binding.node);
     if (owner?.maxChoicesN !== binding.maxCount) {
       return refuse(
@@ -708,7 +714,8 @@ const interactionCopy = (rows: Rows): Finding => {
 
 /**
  * `typed-copy` of the lexical rows: each row of an item node names an attribute its kind's
- * registry carries, shadows a typed column, differs from it as read, and processes to it.
+ * registry carries. Where `shadows` holds the attribute, the row shadows that typed column, differs
+ * from it as read, and processes to it; any other attribute's row is left to the content guards.
  */
 const lexicalCopy = (rows: Rows, index: Index): Finding => {
   for (const row of Rows.of(rows, AttributeLexical)) {
@@ -725,8 +732,12 @@ const lexicalCopy = (rows: Rows, index: Index): Finding => {
     }
 
     const shadow = shadows.get(`${row.kind}/${row.attribute}`);
-    const typed = shadow?.column(rows, row.node);
-    if (shadow === undefined || typed === undefined) {
+    if (shadow === undefined) {
+      continue;
+    }
+
+    const typed = shadow.column(rows, row.node);
+    if (typed === undefined) {
       return refuse(
         "typed-copy",
         `The lexical ${row.attribute} of ${row.kind} ${row.node} shadows no typed column.`,

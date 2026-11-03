@@ -1,17 +1,22 @@
 /**
- * Prints the seed tables as SQL, one INSERT statement per 1000 rows, against the installed names
- * grizzle derives. Run with `node scripts/seed-sql.ts` from `packages/qti`; it touches no database.
+ * Prints the seed tables as SQL, one INSERT statement per 1000 rows, one statement per line,
+ * against the installed names grizzle derives. Run with `node scripts/seed-sql.ts` from
+ * `packages/qti`; it touches no database.
  *
- * `--only <Table,...>` prints only the named tables (PascalCase or installed snake_case names).
- * `--minus <path>`, repeatable, omits every row tuple already present in the named `01-seed.sql`,
- * or, for a directory, in any `01-seed.sql` one folder below it, and prints the remainder in the
- * same batched form.
+ * - `--only <Table,...>` prints only the named tables, by their declared names.
+ * - `--minus <path>`, repeatable, omits every row the named file holds, or, for a directory, every
+ *   row any `01-seed.sql` beneath it holds. The subtracted files may hold either form, batched
+ *   (many tuples to one statement) or one row to a statement, so each is first normalized to one
+ *   statement per row, and each kept row is compared in that single-row form.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import path from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import nodePath from "node:path";
 import { parseArgs } from "node:util";
 import type { AdmissionRow } from "#qti/schema/kinds/generic.ts";
-import { admission } from "#qti/schema/seed/admission.ts";
+import { AttributeName, Ancestry, NodeKind } from "#qti/schema/node.ts";
+import { admission, ancestryStep, attributeAdmission } from "#qti/schema/seed/admission.ts";
+import { mappableBaseType } from "#qti/schema/seed/mappable-base-type.ts";
+import { recordBindingFit } from "#qti/schema/seed/record-binding-fit.ts";
 import type { BindingFitRow } from "#qti/schema/seed/binding-fit.ts";
 import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
 import {
@@ -24,6 +29,9 @@ import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
 
 const SCHEMA = "qti";
 
+/**
+ * The most tuples one printed INSERT statement holds.
+ */
 const BATCH = 1000;
 
 /**
@@ -35,10 +43,11 @@ interface Column<Row> {
 }
 
 /**
- * A seed table: its installed name, its columns and its rows in deterministic order.
+ * A seed table: its declared and installed names, its columns and its rows in deterministic order.
  */
 interface Table<Row> {
   readonly columns: readonly Column<Row>[];
+  readonly declared: string;
   readonly name: string;
   readonly rows: readonly Row[];
 }
@@ -72,114 +81,49 @@ const integer = <Row>(name: string, get: (row: Row) => bigint): Column<Row> => (
 });
 
 /**
- * A seed table rendered: its installed name, its row count and its INSERT statements.
+ * A seed table rendered: its names, its INSERT head and one value tuple per row.
  */
 interface Rendered {
-  readonly count: number;
+  readonly declared: string;
+  readonly head: string;
   readonly name: string;
-  readonly statements: readonly string[];
+  readonly tuples: readonly string[];
 }
 
-/**
- * Collapses every run of whitespace to one space, so a row tuple compares by its text.
- */
-const normalize = (statement: string): string => statement.replaceAll(/\s+/gu, " ").trim();
+const insertHead = (name: string, columns: readonly string[]): string =>
+  `INSERT INTO ${quote(SCHEMA)}.${quote(name)} (${columns.map(quote).join(", ")}) VALUES `;
+
+const renderTable = <Row>(table: Table<Row>): Rendered => ({
+  declared: table.declared,
+  head: insertHead(
+    table.name,
+    table.columns.map((column) => column.name),
+  ),
+  name: table.name,
+  tuples: table.rows.map((row) => `(${table.columns.map((column) => column.sql(row)).join(", ")})`),
+});
 
 /**
- * The row tuples of one INSERT statement's VALUES list, split at the top level so quotes may hold
- * commas and parentheses.
+ * The position of each handle of a roster, so a seed sorts by roster order.
  */
-const tuplesOf = (values: string): readonly string[] => {
-  const tuples: string[] = [];
-  let depth = 0;
-  let quoted = false;
-  let start = 0;
-  for (let index = 0; index < values.length; index += 1) {
-    const char = values[index];
-    if (char === "'") {
-      quoted = !quoted;
-    } else if (!quoted && char === "(") {
-      if (depth === 0) {
-        start = index;
-      }
+const orderOf = (handles: readonly string[]): ((handle: string) => number) => {
+  const order = new Map(handles.map((name, index) => [name, index]));
 
-      depth += 1;
-    } else if (!quoted && char === ")") {
-      depth -= 1;
-      if (depth === 0) {
-        tuples.push(values.slice(start, index + 1));
-      }
+  return (name) => {
+    const position = order.get(name);
+    if (position === undefined) {
+      throw new Error(`a seed row names "${name}", which its roster does not declare`);
     }
-  }
 
-  return tuples;
+    return position;
+  };
 };
 
-const INSERT_HEAD = /INSERT INTO "[^"]*"\."(?<table>(?:[^"]|"")+)"\s*\([^)]*\)\s*VALUES\s/gu;
+const kindRank = orderOf(NodeKind.handles);
 
-/**
- * Every `table|tuple` key of the INSERT statements in one seed file.
- */
-const keysOfFile = (file: string): readonly string[] => {
-  const body = readFileSync(file, "utf-8");
-  const heads = [...body.matchAll(INSERT_HEAD)];
+const attributeRank = orderOf(AttributeName.handles);
 
-  return heads.flatMap((match, index) => {
-    const from = match.index + match[0].length;
-    const to = heads[index + 1]?.index ?? body.length;
-
-    return tuplesOf(body.slice(from, to)).map(
-      (tuple) => `${match.groups?.["table"]?.replaceAll('""', '"')}|${normalize(tuple)}`,
-    );
-  });
-};
-
-/**
- * The `01-seed.sql` files a `--minus` path names: the file itself, or every `01-seed.sql` one
- * folder below a directory.
- */
-const seedFilesOf = (target: string): readonly string[] =>
-  statSync(target).isDirectory()
-    ? readdirSync(target, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => path.join(target, entry.name, "01-seed.sql"))
-        .filter((file) => statSync(file, { throwIfNoEntry: false })?.isFile() === true)
-    : [target];
-
-const flags = parseArgs({
-  allowPositionals: false,
-  options: {
-    minus: { multiple: true, type: "string" },
-    only: { type: "string" },
-  },
-}).values;
-
-const subtracted: ReadonlySet<string> = new Set(
-  (flags.minus ?? []).flatMap(seedFilesOf).flatMap(keysOfFile),
-);
-
-const tableKey = (name: string): string => name.replaceAll("_", "").toLowerCase();
-
-const renderTable = <Row>(table: Table<Row>): Rendered => {
-  const kept = table.rows.filter(
-    (row) =>
-      !subtracted.has(
-        `${table.name}|${normalize(`(${table.columns.map((column) => column.sql(row)).join(", ")})`)}`,
-      ),
-  );
-  const head = `INSERT INTO ${quote(SCHEMA)}.${quote(table.name)} (${table.columns
-    .map((column) => quote(column.name))
-    .join(", ")}) VALUES `;
-  const batches: string[] = [];
-  for (let start = 0; start < kept.length; start += BATCH) {
-    const tuples = kept
-      .slice(start, start + BATCH)
-      .map((row) => `(${table.columns.map((column) => column.sql(row)).join(", ")})`);
-    batches.push(`${head}${tuples.join(", ")};`);
-  }
-
-  return { count: kept.length, name: table.name, statements: batches };
-};
+const ancestryRank = orderOf(Ancestry.handles);
 
 const bindingFitRows = bindingFit.toSorted(
   (a, b) =>
@@ -188,15 +132,42 @@ const bindingFitRows = bindingFit.toSorted(
     a.cardinality.localeCompare(b.cardinality),
 );
 
-const allTables: readonly Rendered[] = [
+const tables: readonly Rendered[] = [
   renderTable<AdmissionRow>({
     columns: [
       handle("version", "schema_version", (row) => row.version),
       handle("parent", "node_kind", (row) => row.parent),
       handle("child", "node_kind", (row) => row.child),
     ],
+    declared: "Admission",
     name: "admission",
     rows: admission,
+  }),
+  renderTable<(typeof attributeAdmission)[number]>({
+    columns: [
+      handle("kind", "node_kind", (row) => row.kind),
+      handle("attribute", "attribute_name", (row) => row.attribute),
+    ],
+    declared: "AttributeAdmission",
+    name: "attribute_admission",
+    rows: attributeAdmission.toSorted(
+      (a, b) =>
+        kindRank(a.kind) - kindRank(b.kind) ||
+        attributeRank(a.attribute) - attributeRank(b.attribute),
+    ),
+  }),
+  renderTable<(typeof ancestryStep)[number]>({
+    columns: [
+      handle("ancestry", "ancestry", (row) => row.ancestry),
+      handle("kind", "node_kind", (row) => row.kind),
+      handle("next", "ancestry", (row) => row.next),
+    ],
+    declared: "AncestryStep",
+    name: "ancestry_step",
+    rows: ancestryStep.toSorted(
+      (a, b) =>
+        ancestryRank(a.ancestry) - ancestryRank(b.ancestry) || kindRank(a.kind) - kindRank(b.kind),
+    ),
   }),
   renderTable<BindingFitRow>({
     columns: [
@@ -204,68 +175,163 @@ const allTables: readonly Rendered[] = [
       handle("base_type", "base_type", (row) => row.baseType),
       handle("cardinality", "typed_cardinality", (row) => row.cardinality),
     ],
+    declared: "BindingFit",
     name: "binding_fit",
     rows: bindingFitRows,
+  }),
+  renderTable<(typeof mappableBaseType)[number]>({
+    columns: [handle("base_type", "base_type", (row) => row.baseType)],
+    declared: "MappableBaseType",
+    name: "mappable_base_type",
+    rows: mappableBaseType,
+  }),
+  renderTable<(typeof recordBindingFit)[number]>({
+    columns: [handle("interaction_kind", "node_kind", (row) => row.interactionKind)],
+    declared: "RecordBindingFit",
+    name: "record_binding_fit",
+    rows: recordBindingFit,
   }),
   renderTable<(typeof resourceTypes)[number]>({
     columns: [
       handle("version", "schema_version", (row) => row.version),
       text("type", (row) => row.type),
     ],
+    declared: "ResourceTypeOf",
     name: "resource_type_of",
     rows: resourceTypes,
   }),
   renderTable<(typeof rootOfType)[number]>({
     columns: [text("type", (row) => row.type), handle("root", "root_kind", (row) => row.root)],
+    declared: "RootOfType",
     name: "root_of_type",
     rows: rootOfType,
   }),
   renderTable<(typeof operatorArity)[number]>({
     columns: [handle("kind", "node_kind", (row) => row.kind), integer("min", (row) => row.min)],
+    declared: "OperatorArity",
     name: "operator_arity",
     rows: operatorArity,
   }),
   renderTable<(typeof operatorArityMax)[number]>({
     columns: [handle("kind", "node_kind", (row) => row.kind), integer("max", (row) => row.max)],
+    declared: "OperatorArityMax",
     name: "operator_arity_max",
     rows: operatorArityMax,
   }),
   renderTable<(typeof operatorArityUnbounded)[number]>({
     columns: [handle("kind", "node_kind", (row) => row.kind)],
+    declared: "OperatorArityUnbounded",
     name: "operator_arity_unbounded",
     rows: operatorArityUnbounded,
   }),
 ];
 
-const named = flags.only?.split(",").map((name) => name.trim());
-
-const wanted = named?.map(tableKey);
-
-const unknown = (named ?? []).filter(
-  (name) => !allTables.some((table) => tableKey(table.name) === tableKey(name)),
-);
-
-if (unknown.length > 0) {
-  process.stderr.write(
-    `--only names no seed table: ${unknown.join(", ")}; the tables are ${allTables.map((table) => table.name).join(", ")}\n`,
-  );
-  process.exit(1);
-}
-
-const tables = allTables.filter(
-  (table) => wanted === undefined || wanted.includes(tableKey(table.name)),
-);
-
-const counts = tables.map((table) => `${table.name} ${table.count}`).join(", ");
-
-const lines = [`-- generated by scripts/seed-sql.ts; ${counts}`];
-
-for (const table of tables) {
-  if (table.count === 0) {
-    lines.push(`-- ${table.name}: no rows to insert`);
-  } else {
-    lines.push(...table.statements);
+/**
+ * The value tuples of one statement's tuple list, split at the commas outside single quotes and
+ * outside parentheses; a doubled quote inside a literal toggles twice and so stays inside.
+ */
+const splitTuples = (list: string): readonly string[] => {
+  const tuples: string[] = [];
+  let depth = 0;
+  let quoted = false;
+  let start = 0;
+  for (let at = 0; at < list.length; at += 1) {
+    const char = list[at];
+    if (char === "'") {
+      quoted = !quoted;
+    } else if (!quoted && char === "(") {
+      depth += 1;
+    } else if (!quoted && char === ")") {
+      depth -= 1;
+    } else if (!quoted && depth === 0 && char === ",") {
+      tuples.push(list.slice(start, at).trim());
+      start = at + 1;
+    }
   }
-}
+  tuples.push(list.slice(start).trim());
 
-process.stdout.write(`${lines.join("\n")}\n`);
+  return tuples.filter((tuple) => tuple !== "");
+};
+
+/**
+ * One file's text normalized to one single-row `INSERT INTO <head> VALUES (<tuple>);` statement per
+ * row; a line that is not an INSERT (a comment) passes through, and a file already in single-row
+ * form normalizes to itself.
+ */
+const normalize = (sql: string): readonly string[] =>
+  sql.split("\n").flatMap((line) => {
+    const trimmed = line.trim();
+    const at = trimmed.indexOf(" VALUES ");
+    if (!trimmed.startsWith("INSERT INTO ") || at === -1 || !trimmed.endsWith(";")) {
+      return [trimmed];
+    }
+
+    const head = trimmed.slice(0, at + " VALUES ".length);
+
+    return splitTuples(trimmed.slice(head.length, -1)).map((tuple) => `${head}${tuple};`);
+  });
+
+/**
+ * The files a `--minus` path names: the file itself, or every `01-seed.sql` beneath a directory.
+ */
+const filesOf = (target: string): readonly string[] =>
+  statSync(target).isDirectory()
+    ? readdirSync(target, { encoding: "utf-8", recursive: true })
+        .filter((entry) => nodePath.basename(entry) === "01-seed.sql")
+        .toSorted()
+        .map((entry) => nodePath.join(target, entry))
+    : [target];
+
+const { values } = parseArgs({
+  options: { minus: { multiple: true, type: "string" }, only: { type: "string" } },
+});
+
+const named = values.only === undefined ? undefined : values.only.split(",").map((n) => n.trim());
+
+const declared = tables.map((table) => table.declared);
+
+const unknown = (named ?? []).filter((name) => !declared.includes(name));
+
+const missing = (values.minus ?? []).filter((file) => !existsSync(file));
+
+if (unknown.length > 0 || missing.length > 0) {
+  const problems = [
+    ...unknown.map(
+      (name) =>
+        `--only names "${name}", which is no seed table; the tables are ${declared.join(", ")}`,
+    ),
+    ...missing.map((file) => `--minus names "${file}", which does not exist`),
+  ];
+  process.stderr.write(`${problems.join("\n")}\n`);
+  process.exitCode = 1;
+} else {
+  const subtracted: ReadonlySet<string> = new Set(
+    (values.minus ?? []).flatMap((target) =>
+      filesOf(target).flatMap((file) => normalize(readFileSync(file, "utf-8"))),
+    ),
+  );
+  const shown = tables
+    .filter((table) => named === undefined || named.includes(table.declared))
+    .map((table) => ({
+      ...table,
+      kept: table.tuples.filter((tuple) => !subtracted.has(`${table.head}${tuple};`)),
+    }));
+  const counts = shown.map((table) => `${table.name} ${table.kept.length}`).join(", ");
+  const lines = [`-- generated by scripts/seed-sql.ts; ${counts}`];
+
+  for (const table of shown) {
+    if (table.kept.length > 0) {
+      for (let start = 0; start < table.kept.length; start += BATCH) {
+        lines.push(`${table.head}${table.kept.slice(start, start + BATCH).join(", ")};`);
+      }
+    } else {
+      lines.push(
+        table.tuples.length === 0
+          ? `-- ${table.name}: no rows in this phase`
+          : `-- ${table.name}: every row is in the subtracted files`,
+      );
+    }
+  }
+
+  process.stdout.write(`${lines.join("\n")}\n`);
+}

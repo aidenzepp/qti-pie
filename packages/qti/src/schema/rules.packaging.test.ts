@@ -31,6 +31,7 @@ import {
   CsmSetResourceLabel,
   CsmSetResourcePartId,
 } from "#qti/schema/csm.ts";
+import { ResourceLomGeneral } from "#qti/schema/lang.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import {
   ExternalLom,
@@ -86,6 +87,7 @@ import {
 } from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { ResponseProcessing, ResponseProcessingItem } from "#qti/schema/processing.ts";
+import { ancestryStepRows, KindEnters } from "#qti/schema/seed/ancestry.ts";
 import {
   CategorizedStatisticArm,
   OrdinaryStatisticArm,
@@ -112,7 +114,7 @@ import {
 } from "#qti/schema/usage.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
-import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+import { fixtureRowsLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 import { readXml } from "#qti/xml/read.ts";
 
 /**
@@ -308,6 +310,12 @@ const moveUnder = (draft: Draft, child: string, parent: string, place = 1001n): 
 const addNode = (draft: Draft, kind: string, parent: string): string => {
   const above = rowWhere(draft, Node, "id", parent);
   const id = crypto.randomUUID();
+  const parentAncestry = text(above, "ancestry");
+  const parentKind = text(above, "kind");
+  // The ancestry the importer computes for the child: the step of the parent's kind at its ancestry.
+  const childAncestry =
+    ancestryStepRows([parentKind], KindEnters).find((step) => step.ancestry === parentAncestry)
+      ?.next ?? parentAncestry;
   const tree = text(above, "tree");
   const version = text(above, "version");
   let last = 0n;
@@ -318,6 +326,7 @@ const addNode = (draft: Draft, kind: string, parent: string): string => {
   }
 
   of(draft, Node).push({
+    ancestry: childAncestry,
     id,
     kind,
     prefix: "",
@@ -327,9 +336,11 @@ const addNode = (draft: Draft, kind: string, parent: string): string => {
   });
   of(draft, Edge).push({
     child: id,
+    childAncestry,
     childKind: kind,
     parent,
-    parentKind: text(above, "kind"),
+    parentAncestry,
+    parentKind,
     position: last + 2n,
     tree,
     version,
@@ -518,6 +529,9 @@ const rowsOfPackage = (
         packageId: built.packageId,
         path: listed.path,
         resource: listed.resource,
+        resourceLomHasGeneral: Rows.of(built.rows, ResourceLomGeneral).some(
+          (general) => general.resource === listed.resource,
+        ),
         resourceType: listed.type,
         version: built.version,
       };
@@ -1376,6 +1390,7 @@ const templateDocument = (draft: Draft): string => {
     version,
   });
   of(draft, Node).push({
+    ancestry: "root",
     id,
     kind: "qti-response-processing",
     prefix: "",
@@ -1765,8 +1780,17 @@ const packagingNegatives: readonly Negative[] = [
       );
     },
     base: "usage3",
-    laws: [{ field: "kind", kind: "alternatives", relation: Node.name }],
-    name: "an ordinary Statistic with no OrdinaryStatisticArm row is refused by the Node alternatives, ahead of the mirror",
+    laws: [
+      mirrorsLaw(
+        side(Node, ["id"], [{ field: "kind", value: "ud:ordinaryStatistic" }]),
+        side(OrdinaryStatisticArm, ["id"]),
+      ),
+      mirrorsLaw(
+        side(Statistic, ["id"], [{ field: "kind", value: "ordinary" }]),
+        side(OrdinaryStatisticArm, ["id"]),
+      ),
+    ],
+    name: "an ordinary Statistic with no OrdinaryStatisticArm row is refused by a mirrors law into the arm",
   },
   {
     alter: (draft) => {
@@ -1777,8 +1801,17 @@ const packagingNegatives: readonly Negative[] = [
       );
     },
     base: "usage3",
-    laws: [{ field: "kind", kind: "alternatives", relation: Node.name }],
-    name: "a categorized Statistic with no CategorizedStatisticArm row is refused by the Node alternatives, ahead of the mirror",
+    laws: [
+      mirrorsLaw(
+        side(Node, ["id"], [{ field: "kind", value: "ud:categorizedStatistic" }]),
+        side(CategorizedStatisticArm, ["id"]),
+      ),
+      mirrorsLaw(
+        side(Statistic, ["id"], [{ field: "kind", value: "categorized" }]),
+        side(CategorizedStatisticArm, ["id"]),
+      ),
+    ],
+    name: "a categorized Statistic with no CategorizedStatisticArm row is refused by a mirrors law into the arm",
   },
   {
     alter: (draft) => {
@@ -2111,134 +2144,126 @@ describe.skipIf(!hasLease)(
   "schema/rules.packaging.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
-    layer(Layer.mergeAll(AuthorAppLayer, FixtureRowsLayer), { excludeTestServices: true })(
-      "the schema's bin 1 rules over the packaging relations, by direct ChangeSet",
-      (it) => {
-        for (const negative of [...negatives, ...packagingNegatives]) {
-          it.effect(negative.name, () =>
-            Effect.gen(function* refused() {
-              const fixtures = yield* FixtureRows;
-              const draft = draftOf(fixtures[negative.base]);
-              negative.alter?.(draft);
+    layer(Layer.mergeAll(AuthorAppLayer, FixtureRowsLayer), {
+      excludeTestServices: true,
+      timeout: fixtureRowsLayerHookTimeoutMs,
+    })("the schema's bin 1 rules over the packaging relations, by direct ChangeSet", (it) => {
+      for (const negative of [...negatives, ...packagingNegatives]) {
+        it.effect(negative.name, () =>
+          Effect.gen(function* refused() {
+            const fixtures = yield* FixtureRows;
+            const draft = draftOf(fixtures[negative.base]);
+            negative.alter?.(draft);
 
-              const outcome = yield* apply(draft);
+            const outcome = yield* apply(draft);
 
-              assert.strictEqual(outcome.kind, "invariant-rejected");
-              if (outcome.kind === "invariant-rejected") {
-                const named = negative.laws.find((law) => isDeepStrictEqual(outcome.law, law));
-                const reported: unknown = outcome.law;
-                assert.deepStrictEqual(reported, named ?? negative.laws[0]);
-              }
-            }),
-          );
-        }
+            assert.strictEqual(outcome.kind, "invariant-rejected");
+            if (outcome.kind === "invariant-rejected") {
+              const named = negative.laws.find((law) => isDeepStrictEqual(outcome.law, law));
+              const reported: unknown = outcome.law;
+              assert.deepStrictEqual(reported, named ?? negative.laws[0]);
+            }
+          }),
+        );
+      }
 
-        for (const pair of r30Pairs) {
-          if (!lomAdmission.some((row) => row.parent === pair.parent && row.child === pair.child)) {
-            it.effect(
-              `one ${pair.child} under ${pair.parent}, a pair the content model never admits, is refused by the Edge containment into Admission`,
-              () =>
-                Effect.gen(function* unadmitted() {
-                  const outcome = yield* apply(
-                    draftOf(yield* recordRows(pair.context, pair.child, 1)),
-                  );
-
-                  assert.strictEqual(outcome.kind, "invariant-rejected");
-                  if (outcome.kind === "invariant-rejected") {
-                    const reported: unknown = outcome.law;
-                    assert.deepStrictEqual(reported, admission);
-                  }
-                }),
-            );
-            continue;
-          }
-
+      for (const pair of r30Pairs) {
+        if (!lomAdmission.some((row) => row.parent === pair.parent && row.child === pair.child)) {
           it.effect(
-            `two ${pair.child} under one ${pair.parent} are refused by the capacity on the ${pair.parent} row`,
+            `one ${pair.child} under ${pair.parent}, a pair the content model never admits, is refused by the Edge containment into Admission`,
             () =>
-              Effect.gen(function* capped() {
-                const one = yield* apply(draftOf(yield* recordRows(pair.context, pair.child, 1)));
-
-                assert.strictEqual(one.kind, "accepted");
-
+              Effect.gen(function* unadmitted() {
                 const outcome = yield* apply(
-                  draftOf(yield* recordRows(pair.context, pair.child, 2)),
+                  draftOf(yield* recordRows(pair.context, pair.child, 1)),
                 );
 
                 assert.strictEqual(outcome.kind, "invariant-rejected");
                 if (outcome.kind === "invariant-rejected") {
                   const reported: unknown = outcome.law;
-                  assert.deepStrictEqual(reported, lawOfPair(pair));
+                  assert.deepStrictEqual(reported, admission);
                 }
               }),
           );
-        }
-
-        for (const pair of uncappedPairs) {
-          it.effect(
-            `R30 over-cap control: one ${pair.child} under ${pair.parent} is accepted`,
-            () =>
-              Effect.gen(function* control() {
-                const outcome = yield* apply(
-                  draftOf(yield* recordRows(pair.context, pair.child, 1)),
-                );
-
-                assert.strictEqual(outcome.kind, "accepted");
-              }),
-          );
-
-          it.effect(
-            `two ${pair.child} under one ${pair.parent}, a pair no R30 assert caps, are accepted`,
-            () =>
-              Effect.gen(function* positive() {
-                const outcome = yield* apply(
-                  draftOf(yield* recordRows(pair.context, pair.child, 2)),
-                );
-
-                assert.strictEqual(outcome.kind, "accepted");
-              }),
-          );
-        }
-
-        for (const base of ["extmeta", "lomrest", "filelom", "nestedqmd", "outcome"] as const) {
-          it.effect(`the unaltered ${base} rows are accepted`, () =>
-            Effect.gen(function* accepted() {
-              const fixtures = yield* FixtureRows;
-              const draft = draftOf(fixtures[base]);
-              const outcome = yield* apply(draft);
-
-              assert.strictEqual(outcome.kind, "accepted");
-            }),
-          );
-        }
-
-        for (const base of ["csm", "usage3", "usage3Typed", "variant"] as const) {
-          it.effect(`the unaltered ${base} rows are accepted`, () =>
-            Effect.gen(function* accepted() {
-              const fixtures = yield* FixtureRows;
-              const outcome = yield* apply(draftOf(fixtures[base]));
-
-              assert.strictEqual(outcome.kind, "accepted");
-            }),
-          );
+          continue;
         }
 
         it.effect(
-          "an rptemplate Document under imsqti_resprocessing_xmlv3p0, with its ResponseProcessing row and no item row, is accepted",
+          `two ${pair.child} under one ${pair.parent} are refused by the capacity on the ${pair.parent} row`,
           () =>
-            Effect.gen(function* accepted() {
-              const fixtures = yield* FixtureRows;
-              const draft = draftOf(fixtures.resproc);
-              const document = templateDocument(draft);
+            Effect.gen(function* capped() {
+              const one = yield* apply(draftOf(yield* recordRows(pair.context, pair.child, 1)));
 
-              assert.isEmpty(rowsWhere(draft, ResponseProcessingItem, "id", document));
+              assert.strictEqual(one.kind, "accepted");
 
-              const outcome = yield* apply(draft);
+              const outcome = yield* apply(draftOf(yield* recordRows(pair.context, pair.child, 2)));
+
+              assert.strictEqual(outcome.kind, "invariant-rejected");
+              if (outcome.kind === "invariant-rejected") {
+                const reported: unknown = outcome.law;
+                assert.deepStrictEqual(reported, lawOfPair(pair));
+              }
+            }),
+        );
+      }
+
+      for (const pair of uncappedPairs) {
+        it.effect(`R30 over-cap control: one ${pair.child} under ${pair.parent} is accepted`, () =>
+          Effect.gen(function* control() {
+            const outcome = yield* apply(draftOf(yield* recordRows(pair.context, pair.child, 1)));
+
+            assert.strictEqual(outcome.kind, "accepted");
+          }),
+        );
+
+        it.effect(
+          `two ${pair.child} under one ${pair.parent}, a pair no R30 assert caps, are accepted`,
+          () =>
+            Effect.gen(function* positive() {
+              const outcome = yield* apply(draftOf(yield* recordRows(pair.context, pair.child, 2)));
 
               assert.strictEqual(outcome.kind, "accepted");
             }),
         );
-      },
-    );
+      }
+
+      for (const base of ["extmeta", "lomrest", "filelom", "nestedqmd", "outcome"] as const) {
+        it.effect(`the unaltered ${base} rows are accepted`, () =>
+          Effect.gen(function* accepted() {
+            const fixtures = yield* FixtureRows;
+            const draft = draftOf(fixtures[base]);
+            const outcome = yield* apply(draft);
+
+            assert.strictEqual(outcome.kind, "accepted");
+          }),
+        );
+      }
+
+      for (const base of ["csm", "usage3", "usage3Typed", "variant"] as const) {
+        it.effect(`the unaltered ${base} rows are accepted`, () =>
+          Effect.gen(function* accepted() {
+            const fixtures = yield* FixtureRows;
+            const outcome = yield* apply(draftOf(fixtures[base]));
+
+            assert.strictEqual(outcome.kind, "accepted");
+          }),
+        );
+      }
+
+      it.effect(
+        "an rptemplate Document under imsqti_resprocessing_xmlv3p0, with its ResponseProcessing row and no item row, is accepted",
+        () =>
+          Effect.gen(function* accepted() {
+            const fixtures = yield* FixtureRows;
+            const draft = draftOf(fixtures.resproc);
+            const document = templateDocument(draft);
+
+            assert.isEmpty(rowsWhere(draft, ResponseProcessingItem, "id", document));
+
+            const outcome = yield* apply(draft);
+
+            assert.strictEqual(outcome.kind, "accepted");
+          }),
+      );
+    });
   },
 );

@@ -13,7 +13,7 @@ import {
 } from "#qti/schema/declaration.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import { OutcomeDocument } from "#qti/schema/outcome.ts";
-import { Edge, TreeRoot } from "#qti/schema/node.ts";
+import { Edge, Node, TreeRoot } from "#qti/schema/node.ts";
 import * as value from "#qti/schema/value.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import { readXml } from "#qti/xml/read.ts";
@@ -54,6 +54,7 @@ const outcomeOf = (doc: Effect.Success<ReturnType<typeof readOutcome>>) =>
       packageId,
       path: "testoutcome01.xml",
       resource: "Outcome_01",
+      resourceLomHasGeneral: false,
       resourceType: "imsqti_outcomes_xmlv3p0",
       version: "3.0.0",
     },
@@ -99,6 +100,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/outcome.ts", (s
             document: documentId,
             id: documentId,
             identifier: "SCORE",
+            kind: "outcome",
           },
         ]);
 
@@ -164,15 +166,22 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/outcome.ts", (s
     }),
   );
 
-  suite.effect("an outcome declaration carrying a qti-match-table is unmodeled vocabulary", () =>
+  suite.effect("an outcome declaration carrying a qti-match-table writes it", () =>
     Effect.gen(function* matchTable() {
       const doc = yield* readOutcome((text) =>
-        text.replace("</qti-outcome-declaration>", "<qti-match-table/></qti-outcome-declaration>"),
+        text.replace(
+          "</qti-outcome-declaration>",
+          `<qti-match-table default-value="9"><qti-match-table-entry source-value="1" target-value="1.5"/></qti-match-table></qti-outcome-declaration>`,
+        ),
       );
-      const refusal = yield* Effect.flip(outcomeOf(doc));
+      const { documentId, rows } = yield* outcomeOf(doc);
 
-      assert.instanceOf(refusal, UnmodeledVocabulary);
-      assert.strictEqual(refusal.name, "qti-match-table");
+      const nodes = Rows.of(rows, Node);
+      const table = only(nodes.filter((node) => node.kind === "qti-match-table"));
+      only(nodes.filter((node) => node.kind === "qti-match-table-entry"));
+
+      const edge = only(Rows.of(rows, Edge).filter((candidate) => candidate.child === table.id));
+      assert.strictEqual(edge.parent, documentId);
     }),
   );
 });

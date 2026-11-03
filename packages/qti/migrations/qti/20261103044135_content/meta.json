@@ -1,0 +1,20 @@
+{
+	"decisions": {
+		"candidates": [],
+		"choices": [],
+		"confirms": [
+			{
+				"file": "03-structure.sql",
+				"statements": [
+					"CREATE TYPE \"qti\".\"__rebuild_attribute_name_f4a5lptb3a\" AS ENUM ('identifier', 'title', 'adaptive', 'time-dependent', 'cardinality', 'base-type', 'view', 'interpretation', 'long-interpretation', 'normal-maximum', 'normal-minimum', 'mastery-value', 'external-scored', 'variable-identifier-ref', 'field-identifier', 'response-identifier', 'shuffle', 'max-choices', 'min-choices', 'orientation', 'data-min-selections-message', 'data-max-selections-message', 'fixed', 'template-identifier', 'show-hide', 'template', 'template-location', 'label', 'xml:lang', 'tool-name', 'tool-version', 'id', 'class', 'dir', 'data-catalog-idref', 'role', 'aria-controls', 'aria-describedby', 'aria-flowto', 'aria-label', 'aria-labelledby', 'aria-level', 'aria-live', 'aria-orientation', 'aria-owns', 'aria-hidden', 'aria-activedescendant', 'aria-atomic', 'aria-autocomplete', 'aria-busy', 'aria-checked', 'aria-disabled', 'aria-expanded', 'aria-haspopup', 'aria-invalid', 'aria-multiline', 'aria-multiselectable', 'aria-posinset', 'aria-pressed', 'aria-readonly', 'aria-relevant', 'aria-required', 'aria-selected', 'aria-setsize', 'aria-sort', 'aria-valuemax', 'aria-valuemin', 'aria-valuenow', 'aria-valuetext', 'aria-modal', 'aria-current', 'aria-placeholder', 'aria-colcount', 'aria-rowcount', 'aria-colindex', 'aria-rowindex', 'aria-colspan', 'aria-rowspan', 'aria-keyshortcuts', 'aria-roledescription', 'aria-errormessage', 'aria-details', 'lang', 'xml:base', 'data-qti-suppress-tts', 'shape', 'coords', 'mapped-value', 'lower-bound', 'upper-bound', 'default-value', 'aria-keyshorts', 'match-group', 'hotspot-label', 'match-max', 'match-min', 'max-associations', 'min-associations', 'count-attempt', 'base', 'string-identifier', 'expected-length', 'pattern-mask', 'placeholder-text', 'max-strings', 'min-strings', 'expected-lines', 'format', 'data-patternmask-message', 'data-ssml', 'outcome-identifier', 'required', 'object-label', 'top', 'left', 'data-choices-container-width', 'data-prompt', 'source-value', 'include-boundary', 'target-value', 'map-key', 'case-sensitive', 'data-first-column-header', 'autostart', 'min-plays', 'max-plays', 'loop', 'center-point', 'index', 'power-form', 'field', 'delimiter', 'mapping-indicator', 'use', 'step', 'step-label', 'reverse', 'media', 'param-variable', 'math-variable', 'min', 'max', 'definition', 'tolerance-mode', 'tolerance', 'include-lower-bound', 'include-upper-bound', 'rounding-mode', 'figures', 'n', 'name', 'section-identifier', 'include-category', 'exclude-category', 'weight-identifier', 'pattern', 'number-repeats', 'substring', 'variable-identifier', 'src', 'alt', 'longdesc', 'height', 'width', 'crossorigin', 'preload', 'autoplay', 'mediagroup', 'muted', 'controls', 'cite', 'span', 'open', 'data', 'value', 'valuetype', 'srcset', 'sizes', 'summary', 'headers', 'scope', 'abbr', 'axis', 'rowspan', 'colspan', 'align', 'valign', 'kind', 'srclang', 'default', 'poster', 'type', 'href', 'identifierref', 'language', 'resourceLabel', 'resourcePartId', 'providerId', 'region', 'version', 'glossary', 'caseCount', 'context', 'lastUpdated', 'stdDeviation', 'stdError', 'objectType', 'partIdentifier', 'baseType', 'fieldIdentifier', 'defaultValue', 'lowerBound', 'upperBound', 'caseSensitive', 'mapKey', 'mappedValue', 'parse', 'xpointer', 'encoding', 'accept', 'accept-language')"
+				]
+			}
+		],
+		"losses": []
+	},
+	"kind": "drafted",
+	"schema": "qti",
+	"schemaName": "Qti",
+	"source": "878d994d4be2ac19e1def1c72deb7653a2d7748af240ea4c4bf01d9013058227",
+	"target": "cc50a4745eeb0c068d0a4f496aa568e267d8dc8da596daad347068e5d680b4b1"
+}

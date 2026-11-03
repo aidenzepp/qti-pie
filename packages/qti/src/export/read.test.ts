@@ -12,6 +12,7 @@ import { manifestRows } from "#qti/import/manifest.ts";
 import { importPackage } from "#qti/import/package.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { listPackage } from "#qti/package/read.ts";
+import { ResourceLomGeneral } from "#qti/schema/lang.ts";
 import { Author } from "#qti/schema/roles.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
@@ -51,6 +52,9 @@ const importFixture = (name: FixtureName) =>
         packageId: imported.packageId,
         path: document.path,
         resource: document.resource,
+        resourceLomHasGeneral: Rows.of(imported.rows, ResourceLomGeneral).some(
+          (general) => general.resource === document.resource,
+        ),
         resourceType: document.type,
         version: imported.version,
       },

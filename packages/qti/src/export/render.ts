@@ -4,50 +4,20 @@
  *
  * Every attribute comes from the column or optional-value row that holds it, written under the
  * name the kind's registry gives it. A typed copy of a value is never read: an element's text is
- * its text children, and an attribute whose node has an `AttributeLexical` row is written with that
- * row's value, because the typed column holds the collapsed or replaced form.
+ * its text children, the `<attribute>N` columns and the owner and version copies are never
+ * rendered, and an attribute whose node has an `AttributeLexical` row is written with that row's
+ * value, because the typed column holds the collapsed or replaced form.
+ *
+ * Attributes are placed in the order the module reads them: namespace declarations,
+ * `xsi:schemaLocation`, the kind's own attributes in the order of `ownAttributes`, then the
+ * families, `id`, `role` and ARIA. The order the source wrote them in is not stored, and it need
+ * not be: canonical XML sorts attributes, so canonical equality holds whatever this order is.
  */
 import { Option } from "effect";
-import { renderProcessing } from "#qti/export/processing.ts";
 import type { Rows as RowSet } from "#qti/import/tree.ts";
 import { Rows } from "#qti/import/tree.ts";
-import {
-  CsmMetadataProviderId,
-  CsmSetOfGuidsRegion,
-  CsmSetOfGuidsVersion,
-  CsmSetResourceLabel,
-  CsmSetResourcePartId,
-} from "#qti/schema/csm.ts";
-import {
-  Declaration,
-  DeclarationExternalScored,
-  DeclarationInterpretation,
-  DeclarationLongInterpretation,
-  DeclarationMasteryValue,
-  DeclarationNormalMaximum,
-  DeclarationNormalMinimum,
-  DeclarationVariableIdentifierRef,
-  DeclarationView,
-  TypedDeclaration,
-} from "#qti/schema/declaration.ts";
-import { DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
-import { Img, ImgHeight, ImgLongdesc, ImgWidth } from "#qti/schema/html.ts";
-import {
-  ChoiceInteraction,
-  ChoiceInteractionMaxSelectionsMessage,
-  ChoiceInteractionMinSelectionsMessage,
-  DeclaredFixed,
-  DeclaredMaxChoices,
-  DeclaredMinChoices,
-  DeclaredOrientation,
-  DeclaredShowHide,
-  DeclaredShuffle,
-  SimpleChoice,
-  SimpleChoiceTemplateIdentifier,
-} from "#qti/schema/interaction.ts";
-import { AssessmentItem, DeclaredAdaptive } from "#qti/schema/item.ts";
+import { by, indexOf, readersFor } from "#qti/schema/attribute-homes.ts";
 import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
-import { LomStringLanguage } from "#qti/schema/metadata.ts";
 import {
   AttributeEntityReference,
   AttributeLexical,
@@ -69,23 +39,13 @@ import {
   vocabularies,
   Ws,
 } from "#qti/schema/node.ts";
-import { Dependency, File, Package, Resource, ResourceHref, Variant } from "#qti/schema/package.ts";
-import {
-  ResponseProcessingTemplate,
-  ResponseProcessingTemplateLocation,
-} from "#qti/schema/processing.ts";
-import * as usage from "#qti/schema/usage.ts";
-import { DeclaredValue, RecordField, ValueSetInterpretation } from "#qti/schema/value.ts";
 import type { Attribute, Child, Misc, XmlDocument } from "#qti/xml/tree.ts";
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
-const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
+const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
 
-/**
- * Attribute names with their values, in the order the kind's registry lists them.
- */
-type Pairs = readonly (readonly [name: string, value: string])[];
+const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
 
 /**
  * The registry rows that name an element, by kind; the generic kinds are not elements and are left
@@ -108,338 +68,24 @@ if (renderRegistry.size !== elementRows.length) {
 }
 
 /**
- * `facts` keyed by `key`, the last fact winning a shared key.
+ * The attribute `qname` with `value` on the node `id`: `xml:*` names are in the XML namespace and
+ * every other name in none.
  */
-const by = <T extends object>(
-  facts: readonly T[],
-  key: (fact: T) => string,
-): ReadonlyMap<string, T> => new Map(facts.map((fact) => [key(fact), fact]));
-
-/**
- * The attribute `name` with `value`, none when `value` is absent.
- */
-const present = (name: string, value: string | undefined): Pairs =>
-  value === undefined ? [] : [[name, value]];
-
-/**
- * The attribute `name` with `value` when the source wrote it, which `marker` says by holding the
- * node.
- */
-const written = (
-  marker: ReadonlySet<string>,
-  id: string,
-  name: string,
-  value: string | undefined,
-) => (marker.has(id) ? present(name, value) : []);
-
-/**
- * An attribute set in no namespace, from its name and value.
- */
-const plain = (name: string, value: string, references: Attribute["references"]): Attribute => ({
-  local: name,
-  namespace: "",
-  prefix: "",
-  qname: name,
-  references,
-  value,
-});
-
-/**
- * The ids of a relation's facts, by `key`.
- */
-const idsOf = <T extends object>(
-  facts: readonly T[],
-  key: (fact: T) => string,
-): ReadonlySet<string> => new Set(facts.map(key));
-
-/**
- * What each element kind writes as attributes, read from the rows: for a node, its attributes with
- * the value its column or optional-value row holds, before any `AttributeLexical` row takes the
- * place of that value.
- *
- * Attributes with no XSD default are written whenever their column exists; a defaulted attribute is
- * written only when its marker row exists, so an absent one stays absent.
- */
-const attributeSources = (rows: RowSet): ReadonlyMap<string, (id: string) => Pairs> => {
-  const optional = <T extends { readonly value: string }>(
-    facts: readonly T[],
-    key: (fact: T) => string,
-  ) => {
-    const found = by(facts, key);
-
-    return (id: string): string | undefined => found.get(id)?.value;
-  };
-  const identifiers = by(Rows.of(rows, DocumentIdentifier), (fact) => fact.document);
-  const titles = by(Rows.of(rows, DocumentTitle), (fact) => fact.document);
-  const items = by(Rows.of(rows, AssessmentItem), (fact) => fact.id);
-  const adaptive = idsOf(Rows.of(rows, DeclaredAdaptive), (fact) => fact.node);
-  const declarations = by(Rows.of(rows, Declaration), (fact) => fact.id);
-  const typed = by(Rows.of(rows, TypedDeclaration), (fact) => fact.id);
-  const outcomeValues = {
-    externalScored: optional(Rows.of(rows, DeclarationExternalScored), (fact) => fact.declaration),
-    interpretation: optional(Rows.of(rows, DeclarationInterpretation), (fact) => fact.declaration),
-    longInterpretation: optional(
-      Rows.of(rows, DeclarationLongInterpretation),
-      (fact) => fact.declaration,
-    ),
-    masteryValue: optional(Rows.of(rows, DeclarationMasteryValue), (fact) => fact.declaration),
-    normalMaximum: optional(Rows.of(rows, DeclarationNormalMaximum), (fact) => fact.declaration),
-    normalMinimum: optional(Rows.of(rows, DeclarationNormalMinimum), (fact) => fact.declaration),
-    variableIdentifierRef: optional(
-      Rows.of(rows, DeclarationVariableIdentifierRef),
-      (fact) => fact.declaration,
-    ),
-    view: optional(Rows.of(rows, DeclarationView), (fact) => fact.declaration),
-  };
-  const setInterpretation = optional(
-    Rows.of(rows, ValueSetInterpretation),
-    (fact) => fact.valueSet,
-  );
-  const declaredValues = by(Rows.of(rows, DeclaredValue), (fact) => fact.id);
-  const fields = by(Rows.of(rows, RecordField), (fact) => fact.id);
-  const interactions = by(Rows.of(rows, ChoiceInteraction), (fact) => fact.id);
-  const shuffle = idsOf(Rows.of(rows, DeclaredShuffle), (fact) => fact.node);
-  const maxChoices = idsOf(Rows.of(rows, DeclaredMaxChoices), (fact) => fact.node);
-  const minChoices = idsOf(Rows.of(rows, DeclaredMinChoices), (fact) => fact.node);
-  const orientation = idsOf(Rows.of(rows, DeclaredOrientation), (fact) => fact.node);
-  const minMessage = optional(
-    Rows.of(rows, ChoiceInteractionMinSelectionsMessage),
-    (fact) => fact.node,
-  );
-  const maxMessage = optional(
-    Rows.of(rows, ChoiceInteractionMaxSelectionsMessage),
-    (fact) => fact.node,
-  );
-  const choices = by(Rows.of(rows, SimpleChoice), (fact) => fact.id);
-  const fixed = idsOf(Rows.of(rows, DeclaredFixed), (fact) => fact.node);
-  const showHide = idsOf(Rows.of(rows, DeclaredShowHide), (fact) => fact.node);
-  const templateIdentifier = optional(
-    Rows.of(rows, SimpleChoiceTemplateIdentifier),
-    (fact) => fact.node,
-  );
-  const template = by(Rows.of(rows, ResponseProcessingTemplate), (fact) => fact.node);
-  const templateLocation = by(
-    Rows.of(rows, ResponseProcessingTemplateLocation),
-    (fact) => fact.node,
-  );
-  const images = by(Rows.of(rows, Img), (fact) => fact.id);
-  const longdesc = optional(Rows.of(rows, ImgLongdesc), (fact) => fact.node);
-  const height = optional(Rows.of(rows, ImgHeight), (fact) => fact.node);
-  const width = optional(Rows.of(rows, ImgWidth), (fact) => fact.node);
-  const packages = by(Rows.of(rows, Package), (fact) => fact.id);
-  const resources = by(Rows.of(rows, Resource), (fact) => fact.id);
-  const hrefs = by(Rows.of(rows, ResourceHref), (fact) => fact.resource);
-  const files = by(Rows.of(rows, File), (fact) => fact.id);
-  const dependencies = by(Rows.of(rows, Dependency), (fact) => fact.id);
-  const languages = optional(Rows.of(rows, LomStringLanguage), (fact) => fact.node);
-  const variants = by(Rows.of(rows, Variant), (fact) => fact.id);
-  const resourceLabel = optional(Rows.of(rows, CsmSetResourceLabel), (fact) => fact.node);
-  const resourcePartId = optional(Rows.of(rows, CsmSetResourcePartId), (fact) => fact.node);
-  const providerId = optional(Rows.of(rows, CsmMetadataProviderId), (fact) => fact.node);
-  const region = optional(Rows.of(rows, CsmSetOfGuidsRegion), (fact) => fact.node);
-  const guidsVersion = optional(Rows.of(rows, CsmSetOfGuidsVersion), (fact) => fact.node);
-
-  const usageGlossary = optional(Rows.of(rows, usage.UsageDataGlossary), (fact) => fact.node);
-  const statisticRows = by(Rows.of(rows, usage.Statistic), (fact) => fact.id);
-  const statistics = {
-    caseCount: optional(Rows.of(rows, usage.StatisticCaseCount), (fact) => fact.node),
-    glossary: optional(Rows.of(rows, usage.StatisticGlossary), (fact) => fact.node),
-    lastUpdated: optional(Rows.of(rows, usage.StatisticLastUpdated), (fact) => fact.node),
-    stdDeviation: optional(Rows.of(rows, usage.StatisticStdDeviation), (fact) => fact.node),
-    stdError: optional(Rows.of(rows, usage.StatisticStdError), (fact) => fact.node),
-  };
-  const targets = by(Rows.of(rows, usage.TargetObject), (fact) => fact.id);
-  const partIdentifier = optional(
-    Rows.of(rows, usage.TargetObjectPartIdentifier),
-    (fact) => fact.node,
-  );
-  const objectType = optional(Rows.of(rows, usage.TargetObjectObjectType), (fact) => fact.node);
-  const usageBaseType = by(Rows.of(rows, usage.UsageValueBaseType), (fact) => fact.id);
-  const usageFieldIdentifier = optional(
-    Rows.of(rows, usage.UsageValueFieldIdentifier),
-    (fact) => fact.id,
-  );
-  const mappings = by(Rows.of(rows, usage.UsageMapping), (fact) => fact.id);
-  const declaredDefault = idsOf(Rows.of(rows, usage.DeclaredDefaultValue), (fact) => fact.node);
-  const lowerBound = optional(Rows.of(rows, usage.UsageMappingLowerBound), (fact) => fact.node);
-  const upperBound = optional(Rows.of(rows, usage.UsageMappingUpperBound), (fact) => fact.node);
-  const entries = by(Rows.of(rows, usage.UsageMapEntry), (fact) => fact.id);
-  const caseSensitive = optional(
-    Rows.of(rows, usage.UsageMapEntryCaseSensitive),
-    (fact) => fact.node,
-  );
-
-  const statistic = (id: string): Pairs => [
-    ...present("caseCount", statistics.caseCount(id)),
-    ...present("context", statisticRows.get(id)?.context),
-    ...present("glossary", statistics.glossary(id)),
-    ...present("lastUpdated", statistics.lastUpdated(id)),
-    ...present("name", statisticRows.get(id)?.name),
-    ...present("stdDeviation", statistics.stdDeviation(id)),
-    ...present("stdError", statistics.stdError(id)),
-  ];
-
-  const declared = (id: string): Pairs => {
-    const declaration = declarations.get(id);
-    const own = typed.get(id);
-    const typing: Pairs =
-      declaration?.shape === "record"
-        ? [["cardinality", "record"]]
-        : [...present("base-type", own?.baseType), ...present("cardinality", own?.cardinality)];
-
-    return [...present("identifier", declaration?.identifier), ...typing];
-  };
-
-  return new Map<string, (id: string) => Pairs>([
-    ...renderProcessing(rows),
-    [
-      "qti-assessment-item",
-      (id) => [
-        ...present("identifier", identifiers.get(id)?.value),
-        ...present("title", titles.get(id)?.value),
-        ...written(adaptive, id, "adaptive", items.get(id)?.adaptive),
-        ...present("time-dependent", items.get(id)?.timeDependent),
-      ],
-    ],
-    ["qti-response-declaration", declared],
-    [
-      "qti-outcome-declaration",
-      (id) => [
-        ...declared(id),
-        ...present("view", outcomeValues.view(id)),
-        ...present("interpretation", outcomeValues.interpretation(id)),
-        ...present("long-interpretation", outcomeValues.longInterpretation(id)),
-        ...present("normal-maximum", outcomeValues.normalMaximum(id)),
-        ...present("normal-minimum", outcomeValues.normalMinimum(id)),
-        ...present("mastery-value", outcomeValues.masteryValue(id)),
-        ...present("external-scored", outcomeValues.externalScored(id)),
-        ...present("variable-identifier-ref", outcomeValues.variableIdentifierRef(id)),
-      ],
-    ],
-    ["qti-correct-response", (id) => present("interpretation", setInterpretation(id))],
-    ["qti-default-value", (id) => present("interpretation", setInterpretation(id))],
-    [
-      "qti-value",
-      (id) => [
-        ...present("field-identifier", fields.get(id)?.fieldIdentifier),
-        ...(declaredValues.get(id)?.shape === "record"
-          ? present("base-type", declaredValues.get(id)?.baseType)
-          : []),
-      ],
-    ],
-    [
-      "qti-choice-interaction",
-      (id) => {
-        const own = interactions.get(id);
-
-        return [
-          ...present("response-identifier", own?.responseIdentifier),
-          ...written(shuffle, id, "shuffle", own?.shuffle),
-          ...written(maxChoices, id, "max-choices", own?.maxChoices),
-          ...written(minChoices, id, "min-choices", own?.minChoices),
-          ...written(orientation, id, "orientation", own?.orientation),
-          ...present("data-min-selections-message", minMessage(id)),
-          ...present("data-max-selections-message", maxMessage(id)),
-        ];
-      },
-    ],
-    [
-      "qti-simple-choice",
-      (id) => {
-        const own = choices.get(id);
-
-        return [
-          ...present("identifier", own?.identifier),
-          ...written(fixed, id, "fixed", own?.fixed),
-          ...present("template-identifier", templateIdentifier(id)),
-          ...written(showHide, id, "show-hide", own?.showHide),
-        ];
-      },
-    ],
-    [
-      "qti-response-processing",
-      (id) => [
-        ...present("template", template.get(id)?.uri),
-        ...present("template-location", templateLocation.get(id)?.uri),
-      ],
-    ],
-    [
-      "img",
-      (id) => [
-        ...present("src", images.get(id)?.src),
-        ...present("alt", images.get(id)?.alt),
-        ...present("longdesc", longdesc(id)),
-        ...present("height", height(id)),
-        ...present("width", width(id)),
-      ],
-    ],
-    ["ud:usageData", (id) => present("glossary", usageGlossary(id))],
-    ["ud:ordinaryStatistic", statistic],
-    ["ud:categorizedStatistic", statistic],
-    [
-      "ud:targetObject",
-      (id) => [
-        ...present("identifier", targets.get(id)?.identifier),
-        ...present("objectType", objectType(id)),
-        ...present("partIdentifier", partIdentifier(id)),
-      ],
-    ],
-    [
-      "ud:value",
-      (id) => [
-        ...present("baseType", usageBaseType.get(id)?.baseType),
-        ...present("fieldIdentifier", usageFieldIdentifier(id)),
-      ],
-    ],
-    [
-      "ud:mapping",
-      (id) => [
-        ...written(declaredDefault, id, "defaultValue", mappings.get(id)?.defaultValue),
-        ...present("lowerBound", lowerBound(id)),
-        ...present("upperBound", upperBound(id)),
-      ],
-    ],
-    [
-      "ud:mapEntry",
-      (id) => [
-        ...present("caseSensitive", caseSensitive(id)),
-        ...present("mapKey", entries.get(id)?.mapKey),
-        ...present("mappedValue", entries.get(id)?.mappedValue),
-      ],
-    ],
-    ["cp:manifest", (id) => present("identifier", packages.get(id)?.identifier)],
-    [
-      "cp:resource",
-      (id) => [
-        ...present("identifier", resources.get(id)?.identifier),
-        ...present("type", resources.get(id)?.type),
-        ...present("href", hrefs.get(id)?.href),
-      ],
-    ],
-    ["cp:file", (id) => present("href", files.get(id)?.href)],
-    ["cp:dependency", (id) => present("identifierref", dependencies.get(id)?.target)],
-    ["lom:string", (id) => present("language", languages(id))],
-    [
-      "cpx:variant",
-      (id) => [
-        ...present("identifier", variants.get(id)?.identifier),
-        ...present("identifierref", variants.get(id)?.identifierref),
-      ],
-    ],
-    [
-      "csmd:curriculumStandardsMetadataSet",
-      (id) => [
-        ...present("resourceLabel", resourceLabel(id)),
-        ...present("resourcePartId", resourcePartId(id)),
-      ],
-    ],
-    ["csmd:curriculumStandardsMetadata", (id) => present("providerId", providerId(id))],
-    [
-      "csmd:setOfGUIDs",
-      (id) => [...present("region", region(id)), ...present("version", guidsVersion(id))],
-    ],
-  ]);
-};
+const attributeOf = (
+  qname: string,
+  value: string,
+  references: Attribute["references"],
+): Attribute =>
+  qname.startsWith("xml:")
+    ? {
+        local: qname.slice("xml:".length),
+        namespace: xmlNamespace,
+        prefix: "xml",
+        qname,
+        references,
+        value,
+      }
+    : { local: qname, namespace: "", prefix: "", qname, references, value };
 
 /**
  * A comment or processing instruction of the prolog or epilog from its `TreeMisc` text: a
@@ -492,19 +138,34 @@ export const renderTree = (rows: RowSet, treeId: string): XmlDocument => {
   const entities = by(Rows.of(rows, EntityReference), (row) => row.id);
   const declarations = Map.groupBy(Rows.of(rows, NamespaceDeclaration), (row) => row.node);
   const schemaLocations = by(Rows.of(rows, SchemaLocation), (row) => row.node);
-  const lexical = new Map(
-    Rows.of(rows, AttributeLexical).map((row) => [`${row.node}\n${row.attribute}`, row.value]),
-  );
+  const lexical = Map.groupBy(Rows.of(rows, AttributeLexical), (row) => row.node);
   const references = Map.groupBy(
     Rows.of(rows, AttributeEntityReference),
     (row) => `${row.node}\n${row.attribute}`,
   );
-  const sources = attributeSources(rows);
+  const index = indexOf(rows);
+  const readersOf = readersFor(index);
 
   const referencesOf = (id: string, qname: string): Attribute["references"] =>
     (references.get(`${id}\n${qname}`) ?? [])
       .toSorted((left, right) => Number(left.offset - right.offset))
       .map((row) => ({ name: row.name, offset: Number(row.offset) }));
+
+  const stored = (id: string, kind: string): ReadonlyMap<string, string> => {
+    const values = new Map<string, string>();
+    for (const [name, read] of readersOf(kind)) {
+      const value = read(id);
+      if (value !== undefined) {
+        values.set(name, value);
+      }
+    }
+
+    for (const row of lexical.get(id) ?? []) {
+      values.set(row.attribute, row.value);
+    }
+
+    return values;
+  };
 
   const attributesOf = (id: string, kind: string): readonly Attribute[] => [
     ...(declarations.get(id) ?? [])
@@ -538,8 +199,8 @@ export const renderTree = (rows: RowSet, treeId: string): XmlDocument => {
         ];
       },
     }),
-    ...(sources.get(kind)?.(id) ?? []).map(([name, value]) =>
-      plain(name, lexical.get(`${id}\n${name}`) ?? value, referencesOf(id, name)),
+    ...[...stored(id, kind)].map(([name, value]) =>
+      attributeOf(name, value, referencesOf(id, name)),
     ),
   ];
 

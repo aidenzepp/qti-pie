@@ -19,6 +19,7 @@ import {
   CsmSetResourceLabel,
   CsmSetResourcePartId,
 } from "#qti/schema/csm.ts";
+import { ResourceLomGeneral } from "#qti/schema/lang.ts";
 import {
   arms,
   FileLom,
@@ -128,6 +129,9 @@ const builtOf = (dir: string) =>
             packageId: built.packageId,
             path: document.path,
             resource: document.resource,
+            resourceLomHasGeneral: Rows.of(built.rows, ResourceLomGeneral).some(
+              (general) => general.resource === document.resource,
+            ),
             resourceType: document.type,
             version: built.version,
           },

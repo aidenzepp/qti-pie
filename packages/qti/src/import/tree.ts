@@ -2,8 +2,9 @@
 
 /**
  * The tree-level half of the importer: the rows every tree has beside its nodes, the lookup that
- * names an element's kind, the refusal for vocabulary no registry models, and the whitespace
- * helpers every typed attribute passes through.
+ * names an element's kind, the refusal for vocabulary no registry models, the refusal for an item
+ * whose bindings do not hold together, the walk that pairs every element with its parent, and the
+ * whitespace helpers every typed attribute passes through.
  *
  * {@link treeRows} also walks the root and writes every tree's node, edge, generic-arm, namespace
  * and attribute-reference rows; the kind-specific arms and typed attribute columns belong to the
@@ -13,6 +14,7 @@ import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
 import {
+  Ancestry,
   AttributeEntityReference,
   AttributeLexical,
   Comment,
@@ -36,12 +38,15 @@ import {
   Ws,
 } from "#qti/schema/node.ts";
 import type {
+  AncestryHandle,
   AttributeNameHandle,
   NodeKindHandle,
   RootKindHandle,
   SchemaVersionHandle,
 } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
+import { FLAGS, handleOf, KindEnters } from "#qti/schema/seed/ancestry.ts";
+import type { Flag } from "#qti/schema/seed/ancestry.ts";
 import { exportCharset } from "#qti/xml/charset.ts";
 import type { Child, Element, Misc, XmlDocument } from "#qti/xml/tree.ts";
 
@@ -91,13 +96,19 @@ export const Rows = {
 };
 
 /**
+ * What the walk keeps of an element's node: its id, its kind, and the ancestry it sits in.
+ */
+export interface IndexedNode {
+  readonly ancestry: AncestryHandle;
+  readonly id: string;
+  readonly kind: NodeKindHandle;
+}
+
+/**
  * The node each element of a tree became, keyed by the tree's own `Element` objects by identity, so
  * later modules attach arm rows to the elements they walk.
  */
-export type NodeIndex = ReadonlyMap<
-  Element,
-  { readonly id: string; readonly kind: NodeKindHandle }
->;
+export type NodeIndex = ReadonlyMap<Element, IndexedNode>;
 
 /**
  * What the caller of {@link treeRows} decides about a tree: its id, which is also its root node's
@@ -126,6 +137,38 @@ export class UnmodeledVocabulary extends Schema.TaggedError<UnmodeledVocabulary>
     parent: Schema.Option(Schema.String),
   },
 ) {}
+
+/**
+ * An item the importer reads but whose bindings do not hold together.
+ *
+ * `rule` names the importer rule the item breaks and `detail` says which part of the item does. The
+ * rule may be a schema law's name when the importer meets that law first, as `ancestry-ban` for a
+ * gap that has no gap-match interaction to own it, and `admission` for a choice-like child that
+ * no interaction owns.
+ */
+export class ItemRefusal extends Schema.TaggedError<ItemRefusal>()("ItemRefusal", {
+  detail: Schema.String,
+  rule: Schema.Literals([
+    "binding-declared",
+    "typed-copy",
+    "ancestry-ban",
+    "admission",
+    "required-attribute",
+  ]),
+}) {}
+
+/**
+ * Every element of `element`'s subtree beside its parent element, in document order.
+ */
+export const withParents = (
+  element: Element,
+  parent: Option.Option<Element>,
+): readonly (readonly [Element, Option.Option<Element>])[] => [
+  [element, parent],
+  ...element.children.flatMap((child) =>
+    child.kind === "element" ? withParents(child, Option.some(element)) : [],
+  ),
+];
 
 /**
  * How an attribute's lexical value becomes its typed value: kept, with its tab, line feed and
@@ -194,6 +237,8 @@ export const typedAttribute = (
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
+const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
+
 const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
 
 /**
@@ -213,6 +258,19 @@ const rowsByHandle: ReadonlyMap<string, RegistryRow> = new Map(
     .flatMap((vocabulary) => Object.entries<RegistryRow>(vocabulary.registry))
     .filter(([, row]) => row.local !== ""),
 );
+
+/**
+ * The `Ancestry` handle a flag set is named by, `None` when the set is one no tree can reach.
+ */
+const ancestryOf = (flags: readonly Flag[]): Option.Option<AncestryHandle> =>
+  Option.fromNullishOr(Ancestry.handles.find((handle) => handle === handleOf(flags)));
+
+/**
+ * The flags in force under an element of `kind` that sits inside `flags`: those it sits inside and
+ * the ones its kind enters.
+ */
+const enteredBy = (flags: readonly Flag[], kind: NodeKindHandle): readonly Flag[] =>
+  FLAGS.filter((flag) => flags.includes(flag) || (KindEnters[kind] ?? []).includes(flag));
 
 /**
  * The parent kinds, beside a dotted handle's registry `parent`, under which its element name also
@@ -271,13 +329,18 @@ export const kindOf = (
 
 /**
  * The first element or attribute of `element`'s subtree that no registry models, in document order.
+ * An attribute in the XML namespace is modeled when its kind's registry lists its prefixed name
+ * (`xml:lang`, `xml:base`); any other `xml:` name is not.
+ * An element whose ancestry no `Ancestry` handle names is refused as an element: it sits inside a
+ * combination of flags the model cannot hold.
  */
 const firstUnmodeled = (
   element: Element,
   parent: Option.Option<{ readonly kind: NodeKindHandle; readonly name: string }>,
+  flags: readonly Flag[],
 ): Option.Option<UnmodeledVocabulary> => {
   const kind = kindOf(element, parent.pipe(Option.map((above) => above.kind)));
-  if (Option.isNone(kind)) {
+  if (Option.isNone(kind) || Option.isNone(ancestryOf(flags))) {
     return Option.some(
       new UnmodeledVocabulary({
         kind: "element",
@@ -292,7 +355,8 @@ const firstUnmodeled = (
     (attribute) =>
       attribute.namespace !== xmlnsNamespace &&
       !(attribute.namespace === xsiNamespace && attribute.local === "schemaLocation") &&
-      !(attribute.namespace === "" && own.has(attribute.local)),
+      !(attribute.namespace === "" && own.has(attribute.local)) &&
+      !(attribute.namespace === xmlNamespace && own.has(`xml:${attribute.local}`)),
   );
   if (stray !== undefined) {
     return Option.some(
@@ -305,9 +369,10 @@ const firstUnmodeled = (
   }
 
   const here = Option.some({ kind: kind.value, name: element.qname });
+  const inside = enteredBy(flags, kind.value);
   for (const child of element.children) {
     if (child.kind === "element") {
-      const found = firstUnmodeled(child, here);
+      const found = firstUnmodeled(child, here, inside);
       if (Option.isSome(found)) {
         return found;
       }
@@ -351,14 +416,29 @@ const isWhitespaceRun = (value: string): value is Fact<typeof Ws>["value"] =>
  */
 const walk = (
   child: Child,
-  parent: Option.Option<{ readonly id: string; readonly kind: NodeKindHandle }>,
+  parent: Option.Option<{
+    readonly ancestry: AncestryHandle;
+    readonly flags: readonly Flag[];
+    readonly id: string;
+    readonly kind: NodeKindHandle;
+  }>,
   position: number,
   input: TreeInput,
   walked: Walked,
-  index: Map<Element, { readonly id: string; readonly kind: NodeKindHandle }>,
+  index: Map<Element, IndexedNode>,
 ): void => {
   const common = { tree: input.id, version: input.version };
   const id = Option.isNone(parent) ? input.id : crypto.randomUUID();
+  const flags = parent.pipe(
+    Option.map((above) => above.flags),
+    Option.getOrElse((): readonly Flag[] => []),
+  );
+  const sitsAt = ancestryOf(flags);
+  if (Option.isNone(sitsAt)) {
+    return;
+  }
+
+  const { value: ancestry } = sitsAt;
   let kind: NodeKindHandle;
   let prefix = "";
 
@@ -370,7 +450,7 @@ const walk = (
 
     kind = found.value;
     ({ prefix } = child);
-    index.set(child, { id, kind });
+    index.set(child, { ancestry, id, kind });
   } else if (Option.isNone(parent)) {
     return;
   } else if (child.kind === "text") {
@@ -395,13 +475,15 @@ const walk = (
     walked.entityReferences.push({ id, name: child.name });
   }
 
-  walked.nodes.push({ ...common, id, kind, prefix, rootKind: input.root });
+  walked.nodes.push({ ...common, ancestry, id, kind, prefix, rootKind: input.root });
   if (Option.isSome(parent)) {
     walked.edges.push({
       ...common,
       child: id,
+      childAncestry: ancestry,
       childKind: kind,
       parent: parent.value.id,
+      parentAncestry: parent.value.ancestry,
       parentKind: parent.value.kind,
       position: BigInt(position),
     });
@@ -435,7 +517,7 @@ const walk = (
     }
   }
 
-  const here = Option.some({ id, kind });
+  const here = Option.some({ ancestry, flags: enteredBy(flags, kind), id, kind });
   for (const [childPosition, grandchild] of child.children.entries()) {
     walk(grandchild, here, childPosition, input, walked, index);
   }
@@ -472,14 +554,15 @@ const miscRow = (item: Misc): { kind: "comment" | "pi"; text: string } =>
  * @returns The rows with this tree's added, and the node index holding every element; the node,
  *   edge and generic-arm rows, `TreeRoot`, the namespace declarations, the `xsi:schemaLocation` and
  *   the attribute entity references are among them; `UnmodeledVocabulary` for the first element or
- *   attribute no registry names.
+ *   attribute no registry names. The XML-namespace names a kind's registry lists are modeled; their
+ *   rows are `attributeRows`'s.
  */
 export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
   doc: XmlDocument,
   input: TreeInput,
   rows: Rows,
 ): Effect.fn.Return<{ rows: Rows; nodes: NodeIndex }, UnmodeledVocabulary> {
-  const refusal = firstUnmodeled(doc.root, Option.none());
+  const refusal = firstUnmodeled(doc.root, Option.none(), []);
   if (Option.isSome(refusal)) {
     return yield* refusal.value;
   }
@@ -547,7 +630,7 @@ export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
     texts: [],
     whitespace: [],
   };
-  const nodes = new Map<Element, { readonly id: string; readonly kind: NodeKindHandle }>();
+  const nodes = new Map<Element, IndexedNode>();
   walk(doc.root, Option.none(), 0, input, walked, nodes);
 
   const rootNode = nodes.get(doc.root);
