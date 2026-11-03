@@ -158,7 +158,7 @@ export const modeOfEnvironment = Effect.gen(function* resolveEnvironmentMode() {
 export const ErrorObject = Schema.Struct({
   command: Schema.String,
   error: Schema.Literal(true),
-  exit_code: Schema.Number,
+  exit_code: Schema.Int,
   help: Schema.String,
   kind: Schema.String,
   message: Schema.String,

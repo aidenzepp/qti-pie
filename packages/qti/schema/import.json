@@ -18,17 +18,11 @@
             "dry_run": { "type": "boolean", "enum": [true] },
             "package_dir": { "type": "string" },
             "relations": {
-              "anyOf": [
-                { "type": "number" },
-                { "type": "string", "enum": ["Infinity", "-Infinity", "NaN"] }
-              ]
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
             },
-            "rows": {
-              "anyOf": [
-                { "type": "number" },
-                { "type": "string", "enum": ["Infinity", "-Infinity", "NaN"] }
-              ]
-            }
+            "rows": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 }
           },
           "required": ["database_checked", "dry_run", "package_dir", "relations", "rows"],
           "additionalProperties": true

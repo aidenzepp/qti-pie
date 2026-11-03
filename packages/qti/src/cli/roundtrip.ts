@@ -42,7 +42,7 @@ const RoundtripEntry = Schema.Struct({ outcome: RoundtripOutcome, path: Schema.S
  * What `roundtrip` prints under `--output jsonl` after its entries: everything but them.
  */
 const RoundtripSummary = Schema.Struct({
-  differing: Schema.Number,
+  differing: Schema.Int,
   export_dir: Schema.String,
   package_id: Schema.String,
 });
@@ -66,8 +66,8 @@ const RoundtripPreview = Schema.Struct({
   export_dir: Schema.String,
   export_dir_action: Schema.Literals(["create", "replace"]),
   package_dir: Schema.String,
-  relations: Schema.Number,
-  rows: Schema.Number,
+  relations: Schema.Int,
+  rows: Schema.Int,
 });
 
 /**

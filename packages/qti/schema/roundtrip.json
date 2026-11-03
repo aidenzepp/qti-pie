@@ -9,10 +9,9 @@
           "type": "object",
           "properties": {
             "differing": {
-              "anyOf": [
-                { "type": "number" },
-                { "type": "string", "enum": ["Infinity", "-Infinity", "NaN"] }
-              ]
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
             },
             "export_dir": { "type": "string" },
             "package_id": { "type": "string" },
@@ -65,17 +64,11 @@
             "export_dir_action": { "type": "string", "enum": ["create", "replace"] },
             "package_dir": { "type": "string" },
             "relations": {
-              "anyOf": [
-                { "type": "number" },
-                { "type": "string", "enum": ["Infinity", "-Infinity", "NaN"] }
-              ]
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
             },
-            "rows": {
-              "anyOf": [
-                { "type": "number" },
-                { "type": "string", "enum": ["Infinity", "-Infinity", "NaN"] }
-              ]
-            }
+            "rows": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 }
           },
           "required": [
             "database_checked",

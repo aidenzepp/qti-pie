@@ -15,10 +15,9 @@
                 "type": "object",
                 "properties": {
                   "bytes": {
-                    "anyOf": [
-                      { "type": "number" },
-                      { "type": "string", "enum": ["Infinity", "-Infinity", "NaN"] }
-                    ]
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
                   },
                   "path": { "type": "string" }
                 },
@@ -42,10 +41,9 @@
                 "type": "object",
                 "properties": {
                   "bytes": {
-                    "anyOf": [
-                      { "type": "number" },
-                      { "type": "string", "enum": ["Infinity", "-Infinity", "NaN"] }
-                    ]
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
                   },
                   "path": { "type": "string" }
                 },
