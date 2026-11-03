@@ -662,8 +662,8 @@ export const ownAttributes = {
     identifierOf(R.GapImg),
     ["template-identifier", choiceTemplate],
     ["match-group", optional(R.MatchGroup)],
-    ["match-max", arm(R.GapImg, "matchMax")],
-    ["match-min", optional(R.GapImgMatchMin)],
+    ["match-max", arm(R.GapImg, "matchMaxN")],
+    ["match-min", marked(R.GapImgMatchMin, arm(R.GapImg, "matchMinN"))],
     ["object-label", optional(R.GapImgObjectLabel)],
     ["top", optional(R.GapImgTop)],
     ["left", optional(R.GapImgLeft)],
@@ -672,8 +672,14 @@ export const ownAttributes = {
   "qti-gap-match-interaction": [
     responseIdentifierOf(R.GapMatchInteraction),
     ["shuffle", marked(R.DeclaredGapMatchShuffle, arm(R.GapMatchInteraction, "shuffle"))],
-    ["min-associations", optional(R.GapMatchMinAssociations)],
-    ["max-associations", optional(R.GapMatchMaxAssociations)],
+    [
+      "min-associations",
+      marked(R.GapMatchMinAssociations, arm(R.GapMatchInteraction, "minAssociationsN")),
+    ],
+    [
+      "max-associations",
+      marked(R.DeclaredGapMatchMaxAssociations, arm(R.GapMatchInteraction, "maxAssociationsN")),
+    ],
     ["data-min-selections-message", optional(R.GapMatchMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.GapMatchMaxSelectionsMessage)],
     ["data-choices-container-width", optional(R.GapMatchChoicesContainerWidth)],
@@ -682,8 +688,8 @@ export const ownAttributes = {
     identifierOf(R.GapText),
     ["template-identifier", choiceTemplate],
     ["match-group", optional(R.MatchGroup)],
-    ["match-max", arm(R.GapText, "matchMax")],
-    ["match-min", optional(R.GapTextMatchMin)],
+    ["match-max", arm(R.GapText, "matchMaxN")],
+    ["match-min", marked(R.GapTextMatchMin, arm(R.GapText, "matchMinN"))],
     ["show-hide", marked(R.DeclaredGapTextShowHide, arm(R.GapText, "showHide"))],
   ],
   "qti-graphic-associate-interaction": [
@@ -705,8 +711,20 @@ export const ownAttributes = {
   ],
   "qti-graphic-gap-match-interaction": [
     responseIdentifierOf(R.GraphicGapMatchInteraction),
-    ["min-associations", optional(R.GraphicGapMatchMinAssociations)],
-    ["max-associations", optional(R.GraphicGapMatchMaxAssociations)],
+    [
+      "min-associations",
+      marked(
+        R.GraphicGapMatchMinAssociations,
+        arm(R.GraphicGapMatchInteraction, "minAssociationsN"),
+      ),
+    ],
+    [
+      "max-associations",
+      marked(
+        R.DeclaredGraphicGapMatchMaxAssociations,
+        arm(R.GraphicGapMatchInteraction, "maxAssociationsN"),
+      ),
+    ],
     ["data-min-selections-message", optional(R.GraphicGapMatchMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.GraphicGapMatchMaxSelectionsMessage)],
     ["data-choices-container-width", optional(R.GraphicGapMatchChoicesContainerWidth)],

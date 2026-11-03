@@ -51,21 +51,7 @@ import {
   GraphicAssociateInteraction,
   MatchInteraction,
 } from "#qti/schema/interactions/associate.ts";
-import {
-  Gap,
-  GapImg,
-  GapImgLeft,
-  GapImgMatchMin,
-  GapImgTop,
-  GapMatchInteraction,
-  GapMatchMaxAssociations,
-  GapMatchMinAssociations,
-  GapText,
-  GapTextMatchMin,
-  GraphicGapMatchInteraction,
-  GraphicGapMatchMaxAssociations,
-  GraphicGapMatchMinAssociations,
-} from "#qti/schema/interactions/gap.ts";
+import { Gap, GapImgLeft, GapImgTop, GapMatchInteraction } from "#qti/schema/interactions/gap.ts";
 import {
   Hottext,
   HottextInteraction,
@@ -603,71 +589,6 @@ const choiceBounds = (
     },
   ]);
 
-const associationBounds = (
-  owner: string,
-  facts: readonly {
-    readonly id: string;
-    readonly maxAssociationsN: bigint;
-    readonly minAssociationsN: bigint;
-  }[],
-  lexical: { readonly max: Written; readonly min: Written },
-): readonly Count[] =>
-  facts.flatMap((fact) => [
-    {
-      actual: fact.maxAssociationsN,
-      column: "maxAssociationsN",
-      fallback: 1n,
-      id: fact.id,
-      owner,
-      written: lexical.max.get(fact.id),
-    },
-    {
-      actual: fact.minAssociationsN,
-      column: "minAssociationsN",
-      fallback: 0n,
-      id: fact.id,
-      owner,
-      written: lexical.min.get(fact.id),
-    },
-  ]);
-
-/**
- * A gap text's or gap image's match bounds: `matchMax` is the attribute on the row, and `match-min`
- * has a relation of its own where the schema writes one.
- */
-const matchBounds = (
-  owner: string,
-  facts: readonly {
-    readonly id: string;
-    readonly matchMax: string;
-    readonly matchMaxN: bigint;
-    readonly matchMinN: bigint;
-  }[],
-  min?: Written,
-): readonly Count[] =>
-  facts.flatMap((fact) => [
-    {
-      actual: fact.matchMaxN,
-      column: "matchMaxN",
-      fallback: 0n,
-      id: fact.id,
-      owner,
-      written: fact.matchMax,
-    },
-    ...(min === undefined
-      ? []
-      : [
-          {
-            actual: fact.matchMinN,
-            column: "matchMinN",
-            fallback: 0n,
-            id: fact.id,
-            owner,
-            written: min.get(fact.id),
-          },
-        ]),
-  ]);
-
 /**
  * Every typed count of the interactions and their choices (spec 3.9, 4.5) with its source. A count
  * whose attribute has no lexical relation of its own is not here.
@@ -706,14 +627,6 @@ const countsOf = (rows: Rows): readonly Count[] => {
       maxFallback: 0n,
       min: of(GraphicOrderMinChoices),
     }),
-    ...associationBounds("GapMatchInteraction", Rows.of(rows, GapMatchInteraction), {
-      max: of(GapMatchMaxAssociations),
-      min: of(GapMatchMinAssociations),
-    }),
-    ...associationBounds("GraphicGapMatchInteraction", Rows.of(rows, GraphicGapMatchInteraction), {
-      max: of(GraphicGapMatchMaxAssociations),
-      min: of(GraphicGapMatchMinAssociations),
-    }),
     ...Rows.of(rows, MediaInteraction).flatMap((fact): readonly Count[] => [
       {
         actual: fact.maxPlaysN,
@@ -732,8 +645,6 @@ const countsOf = (rows: Rows): readonly Count[] => {
         written: of(MediaMinPlays).get(fact.id),
       },
     ]),
-    ...matchBounds("GapText", Rows.of(rows, GapText), of(GapTextMatchMin)),
-    ...matchBounds("GapImg", Rows.of(rows, GapImg), of(GapImgMatchMin)),
   ];
 };
 

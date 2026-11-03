@@ -8,7 +8,8 @@
 import { judgedLater } from "#qti/import/judged.ts";
 import { Effect, Option } from "effect";
 import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
-import { ItemRefusal, Rows, withParents } from "#qti/import/tree.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
+import { ItemRefusal, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
 import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { MatchGroup } from "#qti/schema/choices.ts";
 import {
@@ -27,7 +28,6 @@ import {
   GapImgTop,
   GapMatchChoicesContainerWidth,
   GapMatchInteraction,
-  GapMatchMaxAssociations,
   GapMatchMaxSelectionsMessage,
   GapMatchMinAssociations,
   GapMatchMinSelectionsMessage,
@@ -35,11 +35,11 @@ import {
   GapTextMatchMin,
   GraphicGapMatchChoicesContainerWidth,
   GraphicGapMatchInteraction,
-  GraphicGapMatchMaxAssociations,
   GraphicGapMatchMaxSelectionsMessage,
   GraphicGapMatchMinAssociations,
   GraphicGapMatchMinSelectionsMessage,
 } from "#qti/schema/interactions/gap.ts";
+import type { AttributeNameHandle } from "#qti/schema/node.ts";
 import type { Element } from "#qti/xml/tree.ts";
 
 /**
@@ -50,38 +50,92 @@ const written = <Value, Made>(value: Option.Option<Value>, make: (own: Value) =>
 
 /**
  * What the two interactions read the same way: the response identifier and the two association
- * bounds, as written and as the typed columns hold them.
+ * bounds, as the typed columns hold them.
  */
 interface Associations {
-  readonly max: Option.Option<string>;
   readonly maxN: bigint;
-  readonly min: Option.Option<string>;
   readonly minN: bigint;
   readonly responseIdentifier: string;
 }
 
 /**
- * Read the response identifier and the two association bounds of an interaction; an absent
- * `max-associations` reads as 1 and an absent `min-associations` as 0.
+ * The value of an integer attribute of `node`, and the rows with its spelling kept where the
+ * source spelled it other than the way the value is written.
+ *
+ * @param rows - The rows so far.
+ * @param node - The element that carries the attribute.
+ * @param name - The attribute's registry name.
+ * @param text - The attribute's text after its whitespace step.
+ * @returns The value and the rows; `ImportRefused` (`attribute-lexical`) for text outside the
+ *   non-negative integers.
  */
-const associationsOf = (ctx: InteractionContext, attributes: AttributeReader): Associations => {
-  const max = attributes.read("max-associations");
-  const min = attributes.read("min-associations");
-
-  return {
-    max,
-    maxN: ctx.shared.typedCopy(max, 1n),
-    min,
-    minN: ctx.shared.typedCopy(min, 0n),
-    responseIdentifier: Option.getOrElse(attributes.read("response-identifier"), () => ""),
-  };
-};
+const spelled = (rows: Rows, node: IndexedNode, name: AttributeNameHandle, text: string) =>
+  spelledInteger(
+    rows,
+    node.id,
+    node.kind,
+    name,
+    text,
+    "nonNegativeInteger",
+    "attribute-lexical",
+    `${node.kind} ${name}`,
+  );
 
 /**
- * Write an interaction's binding to the response variable it names; the count is the
- * `maxCountDefault` of its kind, which a graphic gap match leaves at 1.
+ * The value of an integer attribute that may be absent: `fallback` where the source omits it, and
+ * otherwise what {@link spelled} makes of its text.
  */
-const bind = (ctx: InteractionContext, rows: Rows, node: IndexedNode, associations: Associations) =>
+const spelledOr = (
+  rows: Rows,
+  node: IndexedNode,
+  name: AttributeNameHandle,
+  text: Option.Option<string>,
+  fallback: bigint,
+) =>
+  Option.match(text, {
+    onNone: () => Effect.succeed({ rows, value: fallback }),
+    onSome: (own) => spelled(rows, node, name, own),
+  });
+
+/**
+ * Read the response identifier and the two association bounds of an interaction; an absent
+ * `max-associations` reads as 1 and an absent `min-associations` as 0.
+ *
+ * The caller reads its other attributes first: the rows returned are the reader's rows at the
+ * moment of the call, with the spelling rows added.
+ *
+ * @param attributes - The interaction's attribute reader.
+ * @param node - The interaction's node.
+ * @returns The bounds and the rows; `ImportRefused` (`attribute-lexical`) for a bound outside the
+ *   non-negative integers.
+ */
+const associationsOf = Effect.fn("import.associationsOf")(function* associationsOf(
+  attributes: AttributeReader,
+  node: IndexedNode,
+): Effect.fn.Return<{ associations: Associations; rows: Rows }, ImportRefused> {
+  const max = attributes.read("max-associations");
+  const min = attributes.read("min-associations");
+  const responseIdentifier = Option.getOrElse(attributes.read("response-identifier"), () => "");
+  const maximum = yield* spelledOr(attributes.rows(), node, "max-associations", max, 1n);
+  const minimum = yield* spelledOr(maximum.rows, node, "min-associations", min, 0n);
+
+  return {
+    associations: { maxN: maximum.value, minN: minimum.value, responseIdentifier },
+    rows: minimum.rows,
+  };
+});
+
+/**
+ * Write an interaction's binding to the response variable it names, with the count it holds: the
+ * interaction's `max-associations` for a gap-match, 1 for a graphic gap-match.
+ */
+const bind = (
+  ctx: InteractionContext,
+  rows: Rows,
+  node: IndexedNode,
+  associations: Associations,
+  count: bigint,
+) =>
   ctx.shared.bindingRows(
     rows,
     node.id,
@@ -91,15 +145,7 @@ const bind = (ctx: InteractionContext, rows: Rows, node: IndexedNode, associatio
     Option.fromNullishOr(ctx.declarations.get(associations.responseIdentifier)),
     node.ancestry,
     ctx.item.adaptive,
-    ctx.shared.maxCountDefault(
-      node.kind,
-      new Map(
-        Option.match(associations.max, {
-          onNone: (): [string, string][] => [],
-          onSome: (own): [string, string][] => [["max-associations", own]],
-        }),
-      ),
-    ),
+    count,
   );
 
 /**
@@ -111,14 +157,15 @@ const gapMatch = Effect.fn("import.gapMatch")(function* gapMatch(
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
-  const associations = associationsOf(ctx, attributes);
   const shuffle = attributes.read("shuffle");
   const minMessage = attributes.read("data-min-selections-message");
   const maxMessage = attributes.read("data-max-selections-message");
   const width = attributes.read("data-choices-container-width");
-  let built = yield* bind(ctx, attributes.rows(), node, associations);
+  const read = yield* associationsOf(attributes, node);
+  const { associations } = read;
+  let built = yield* bind(ctx, read.rows, node, associations, associations.maxN);
   const declared = ctx.declarations.get(associations.responseIdentifier);
   if (declared !== undefined) {
     built = ctx.shared.gapMatchBindingRow(built, node.id, declared);
@@ -134,16 +181,6 @@ const gapMatch = Effect.fn("import.gapMatch")(function* gapMatch(
       shuffle: judgedLater(Option.getOrElse(shuffle, () => "false")),
     },
   ]);
-  built = Rows.add(
-    built,
-    GapMatchMaxAssociations,
-    written(associations.max, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
-  built = Rows.add(
-    built,
-    GapMatchMinAssociations,
-    written(associations.min, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
   built = Rows.add(
     built,
     GapMatchMinSelectionsMessage,
@@ -164,6 +201,7 @@ const gapMatch = Effect.fn("import.gapMatch")(function* gapMatch(
     built,
     {
       "max-associations": DeclaredGapMatchMaxAssociations,
+      "min-associations": GapMatchMinAssociations,
       shuffle: DeclaredGapMatchShuffle,
     },
     node.id,
@@ -180,13 +218,14 @@ const graphicGapMatch = Effect.fn("import.graphicGapMatch")(function* graphicGap
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
-  const associations = associationsOf(ctx, attributes);
   const minMessage = attributes.read("data-min-selections-message");
   const maxMessage = attributes.read("data-max-selections-message");
   const width = attributes.read("data-choices-container-width");
-  let built = yield* bind(ctx, attributes.rows(), node, associations);
+  const read = yield* associationsOf(attributes, node);
+  const { associations } = read;
+  let built = yield* bind(ctx, read.rows, node, associations, 1n);
   built = Rows.add(built, GraphicGapMatchInteraction, [
     {
       id: node.id,
@@ -196,16 +235,6 @@ const graphicGapMatch = Effect.fn("import.graphicGapMatch")(function* graphicGap
       rootKind: "item",
     },
   ]);
-  built = Rows.add(
-    built,
-    GraphicGapMatchMaxAssociations,
-    written(associations.max, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
-  built = Rows.add(
-    built,
-    GraphicGapMatchMinAssociations,
-    written(associations.min, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
   built = Rows.add(
     built,
     GraphicGapMatchMinSelectionsMessage,
@@ -224,7 +253,10 @@ const graphicGapMatch = Effect.fn("import.graphicGapMatch")(function* graphicGap
 
   return ctx.shared.markers(
     built,
-    { "max-associations": DeclaredGraphicGapMatchMaxAssociations },
+    {
+      "max-associations": DeclaredGraphicGapMatchMaxAssociations,
+      "min-associations": GraphicGapMatchMinAssociations,
+    },
     node.id,
     attributes.written(),
   );
@@ -319,18 +351,20 @@ const gapOwner = (ctx: InteractionContext, element: Element): Option.Option<stri
   );
 
 /**
- * The rows of one `qti-gap-text`: the text, its match bounds, its `match-min` when written, its
- * match group and its template variable.
+ * The rows of one `qti-gap-text`: the text, its match bounds, its `match-min` marker when written,
+ * its match group and its template variable.
  *
  * @returns The rows; `ItemRefusal` for a gap text that sits in no gap interaction (rule
- *   `admission`) and for a `template-identifier` that names no typed variable.
+ *   `admission`) and for a `template-identifier` that names no typed variable; `ImportRefused`
+ *   (`attribute-lexical`) for a `match-max` that is absent or a `match-max` or `match-min` outside
+ *   the non-negative integers.
  */
 const gapText = Effect.fn("import.gapText")(function* gapText(
   ctx: InteractionContext,
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const owner = gapOwner(ctx, element);
   if (Option.isNone(owner)) {
     return yield* new ItemRefusal({
@@ -345,27 +379,28 @@ const gapText = Effect.fn("import.gapText")(function* gapText(
   const matchMax = attributes.read("match-max");
   const matchMin = attributes.read("match-min");
   const showHide = attributes.read("show-hide");
-  let built = Rows.add(attributes.rows(), GapText, [
+  const maximum = yield* spelled(
+    attributes.rows(),
+    node,
+    "match-max",
+    Option.getOrElse(matchMax, () => ""),
+  );
+  const minimum = yield* spelledOr(maximum.rows, node, "match-min", matchMin, 0n);
+  let built = Rows.add(minimum.rows, GapText, [
     {
       id: node.id,
       identifier,
       interaction: owner.value,
-      matchMax: judgedLater(Option.getOrElse(matchMax, () => "")),
-      matchMaxN: ctx.shared.typedCopy(matchMax, 0n),
-      matchMinN: ctx.shared.typedCopy(matchMin, 0n),
+      matchMaxN: maximum.value,
+      matchMinN: minimum.value,
       showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
     },
   ]);
   built = ctx.shared.markers(
     built,
-    { "show-hide": DeclaredGapTextShowHide },
+    { "match-min": GapTextMatchMin, "show-hide": DeclaredGapTextShowHide },
     node.id,
     attributes.written(),
-  );
-  built = Rows.add(
-    built,
-    GapTextMatchMin,
-    written(matchMin, (own) => ({ node: node.id, value: judgedLater(own) })),
   );
 
   return yield* groupAndTemplate(ctx, built, attributes, node);
@@ -376,14 +411,16 @@ const gapText = Effect.fn("import.gapText")(function* gapText(
  * match group and its template variable. The `object` or `img` it holds is the HTML rows' own.
  *
  * @returns The rows; `ItemRefusal` for a gap image that sits in no gap interaction (rule
- *   `admission`) and for a `template-identifier` that names no typed variable.
+ *   `admission`) and for a `template-identifier` that names no typed variable; `ImportRefused`
+ *   (`attribute-lexical`) for a `match-max` that is absent or a `match-max` or `match-min` outside
+ *   the non-negative integers.
  */
 const gapImg = Effect.fn("import.gapImg")(function* gapImg(
   ctx: InteractionContext,
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const owner = gapOwner(ctx, element);
   if (Option.isNone(owner)) {
     return yield* new ItemRefusal({
@@ -401,27 +438,28 @@ const gapImg = Effect.fn("import.gapImg")(function* gapImg(
   const top = attributes.read("top");
   const left = attributes.read("left");
   const showHide = attributes.read("show-hide");
-  let built = Rows.add(attributes.rows(), GapImg, [
+  const maximum = yield* spelled(
+    attributes.rows(),
+    node,
+    "match-max",
+    Option.getOrElse(matchMax, () => ""),
+  );
+  const minimum = yield* spelledOr(maximum.rows, node, "match-min", matchMin, 0n);
+  let built = Rows.add(minimum.rows, GapImg, [
     {
       id: node.id,
       identifier,
       interaction: owner.value,
-      matchMax: judgedLater(Option.getOrElse(matchMax, () => "")),
-      matchMaxN: ctx.shared.typedCopy(matchMax, 0n),
-      matchMinN: ctx.shared.typedCopy(matchMin, 0n),
+      matchMaxN: maximum.value,
+      matchMinN: minimum.value,
       showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
     },
   ]);
   built = ctx.shared.markers(
     built,
-    { "show-hide": DeclaredGapImgShowHide },
+    { "match-min": GapImgMatchMin, "show-hide": DeclaredGapImgShowHide },
     node.id,
     attributes.written(),
-  );
-  built = Rows.add(
-    built,
-    GapImgMatchMin,
-    written(matchMin, (own) => ({ node: node.id, value: judgedLater(own) })),
   );
   built = Rows.add(
     built,
@@ -451,12 +489,13 @@ const gapImg = Effect.fn("import.gapImg")(function* gapImg(
  * @returns The rows with every gap-match and graphic-gap-match interaction, gap, gap text and gap
  *   image of the item; `ItemRefusal` for an interaction whose `response-identifier` names no
  *   declaration, a gap, gap text or gap image outside its interaction, and a `template-identifier`
- *   that names no typed variable.
+ *   that names no typed variable; `ImportRefused` for an association or match bound outside the
+ *   non-negative integers.
  */
 export const gapRows = Effect.fn("import.gapRows")(function* gapRows(
   ctx: InteractionContext,
   rows: Rows,
-): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | UnmodeledVocabulary | ItemRefusal> {
   let built = rows;
   for (const [element] of withParents(ctx.root, Option.none())) {
     const node = ctx.nodes.get(element);
