@@ -7,7 +7,8 @@
 import { judgedLater } from "#qti/import/judged.ts";
 import { Effect, Option } from "effect";
 import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
-import { Rows, withParents } from "#qti/import/tree.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
+import { Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
 import type { IndexedNode, ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import {
   DeclaredFixed,
@@ -18,20 +19,17 @@ import {
 import {
   DeclaredOrderShuffle,
   GraphicOrderInteraction,
-  GraphicOrderMaxChoices,
   GraphicOrderMaxChoicesN,
-  GraphicOrderMinChoices,
   GraphicOrderMinChoicesN,
   OrderChoicesContainerWidth,
   OrderInteraction,
-  OrderMaxChoices,
   OrderMaxChoicesN,
   OrderMaxSelectionsMessage,
-  OrderMinChoices,
   OrderMinChoicesN,
   OrderMinSelectionsMessage,
   OrderOrientation,
 } from "#qti/schema/interactions/order.ts";
+import type { AttributeNameHandle } from "#qti/schema/node.ts";
 import type { Element } from "#qti/xml/tree.ts";
 
 /**
@@ -42,7 +40,7 @@ const written = <Value, Made>(value: Option.Option<Value>, make: (own: Value) =>
 
 /**
  * What the two order interactions read the same way: the response identifier and the two bounds, as
- * written and as the typed columns hold them.
+ * the typed columns hold them, and whether the source wrote each.
  */
 interface Choices {
   readonly max: Option.Option<string>;
@@ -53,21 +51,76 @@ interface Choices {
 }
 
 /**
+ * The value of an integer attribute that may be absent, and the rows with its spelling kept where
+ * the source spelled it other than the way the value is written: 0 where the source omits it.
+ *
+ * @param rows - The rows so far.
+ * @param node - The element that carries the attribute.
+ * @param name - The attribute's registry name.
+ * @param text - The attribute's text after its whitespace step, none when it is omitted.
+ * @param space - The integer space the attribute is written in.
+ * @returns The value and the rows; `ImportRefused` (`attribute-lexical`) for text outside `space`.
+ */
+const spelledOr = (
+  rows: Rows,
+  node: IndexedNode,
+  name: AttributeNameHandle,
+  text: Option.Option<string>,
+  space: "nonNegativeInteger" | "positiveInteger",
+) =>
+  Option.match(text, {
+    onNone: () => Effect.succeed({ rows, value: 0n }),
+    onSome: (own) =>
+      spelledInteger(
+        rows,
+        node.id,
+        node.kind,
+        name,
+        own,
+        space,
+        "attribute-lexical",
+        `${node.kind} ${name}`,
+      ),
+  });
+
+/**
  * Read the response identifier and the two bounds of an order interaction; an absent `max-choices`
  * or `min-choices` reads as 0, and a `max-choices` of 0 is unbounded.
+ *
+ * The caller reads its other attributes first: the rows returned are the reader's rows at the
+ * moment of the call, with the spelling rows added.
+ *
+ * @param attributes - The interaction's attribute reader.
+ * @param node - The interaction's node.
+ * @returns The bounds and the rows; `ImportRefused` (`attribute-lexical`) for a `max-choices`
+ *   outside the non-negative integers or a `min-choices` outside the positive integers.
  */
-const choicesOf = (ctx: InteractionContext, attributes: AttributeReader): Choices => {
+const choicesOf = Effect.fn("import.choicesOf")(function* choicesOf(
+  attributes: AttributeReader,
+  node: IndexedNode,
+): Effect.fn.Return<{ choices: Choices; rows: Rows }, ImportRefused> {
   const max = attributes.read("max-choices");
   const min = attributes.read("min-choices");
+  const maximum = yield* spelledOr(
+    attributes.rows(),
+    node,
+    "max-choices",
+    max,
+    "nonNegativeInteger",
+  );
+  const minimum = yield* spelledOr(maximum.rows, node, "min-choices", min, "positiveInteger");
 
   return {
-    max,
-    maxN: ctx.shared.typedCopy(max, 0n),
-    min,
-    minN: ctx.shared.typedCopy(min, 0n),
-    responseIdentifier: Option.getOrElse(attributes.read("response-identifier"), () => ""),
+    choices: {
+      max,
+      maxN: maximum.value,
+      min,
+      minN: minimum.value,
+      responseIdentifier: Option.getOrElse(attributes.read("response-identifier"), () => ""),
+    },
+    rows: minimum.rows,
   };
-};
+});
 
 /**
  * Write an order interaction's binding to the response variable it names. The count is 1: an order
@@ -94,15 +147,16 @@ const order = Effect.fn("import.order")(function* order(
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
-  const choices = choicesOf(ctx, attributes);
   const shuffle = attributes.read("shuffle");
   const orientation = attributes.read("orientation");
   const minMessage = attributes.read("data-min-selections-message");
   const maxMessage = attributes.read("data-max-selections-message");
   const width = attributes.read("data-choices-container-width");
-  let built = yield* bind(ctx, attributes.rows(), node, choices);
+  const read = yield* choicesOf(attributes, node);
+  const { choices } = read;
+  let built = yield* bind(ctx, read.rows, node, choices);
   built = Rows.add(built, OrderInteraction, [
     {
       id: node.id,
@@ -114,16 +168,6 @@ const order = Effect.fn("import.order")(function* order(
       shuffle: judgedLater(Option.getOrElse(shuffle, () => "false")),
     },
   ]);
-  built = Rows.add(
-    built,
-    OrderMaxChoices,
-    written(choices.max, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
-  built = Rows.add(
-    built,
-    OrderMinChoices,
-    written(choices.min, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
   built = Rows.add(
     built,
     OrderMaxChoicesN,
@@ -172,10 +216,11 @@ const graphicOrder = Effect.fn("import.graphicOrder")(function* graphicOrder(
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
-  const choices = choicesOf(ctx, attributes);
-  let built = yield* bind(ctx, attributes.rows(), node, choices);
+  const read = yield* choicesOf(attributes, node);
+  const { choices } = read;
+  let built = yield* bind(ctx, read.rows, node, choices);
   built = Rows.add(built, GraphicOrderInteraction, [
     {
       id: node.id,
@@ -186,16 +231,6 @@ const graphicOrder = Effect.fn("import.graphicOrder")(function* graphicOrder(
       rootKind: "item",
     },
   ]);
-  built = Rows.add(
-    built,
-    GraphicOrderMaxChoices,
-    written(choices.max, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
-  built = Rows.add(
-    built,
-    GraphicOrderMinChoices,
-    written(choices.min, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
   built = Rows.add(
     built,
     GraphicOrderMaxChoicesN,
@@ -255,12 +290,14 @@ const choice = (
  * @param rows - The rows so far.
  * @returns The rows with every order and graphic-order interaction of the item and each simple
  *   choice directly beneath an order interaction; `ItemRefusal` for an interaction whose
- *   `response-identifier` names no declaration.
+ *   `response-identifier` names no declaration; `ImportRefused` (`attribute-lexical`) for a
+ *   `max-choices` outside the non-negative integers or a `min-choices` outside the positive
+ *   integers.
  */
 export const orderRows = Effect.fn("import.orderRows")(function* orderRows(
   ctx: InteractionContext,
   rows: Rows,
-): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | UnmodeledVocabulary | ItemRefusal> {
   let built = rows;
   for (const [element, parentElement] of withParents(ctx.root, Option.none())) {
     const node = ctx.nodes.get(element);

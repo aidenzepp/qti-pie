@@ -9,7 +9,6 @@ import * as item from "#qti/schema/item.ts";
 import * as order from "#qti/schema/interactions/order.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
-import * as patterns from "#qti/schema/patterns.ts";
 
 /**
  * The probe schema: the spine relations the module reads, with its own.
@@ -37,11 +36,6 @@ const probe = () =>
       ...order.rules,
     ],
   );
-
-/**
- * Whether a pattern's whole-string form admits a value.
- */
-const admits = (source: string, value: string): boolean => new RegExp(source, "u").test(value);
 
 /**
  * The selection a containment or capacity side holds, or undefined where it names a relation whole.
@@ -75,7 +69,7 @@ const boundOf = (rule: CapacityRule, end: "low" | "high"): string => {
 describe("interactions/order", () => {
   it("builds a schema over node, declaration, interaction, rosters and order without refusal", () => {
     const built = probe();
-    for (const name of ["OrderInteraction", "GraphicOrderInteraction", "OrderMinChoices"]) {
+    for (const name of ["OrderInteraction", "GraphicOrderInteraction", "OrderMinChoicesN"]) {
       assert.include(Object.keys(built.relations), name);
     }
   });
@@ -130,13 +124,15 @@ describe("interactions/order", () => {
     ]);
   });
 
-  it("holds the choice-bounds check on each arm", () => {
+  it("holds the choice-bounds check on each arm and the positive-minimum check on each minimum and the positive-minimum check on each minimum", () => {
     const checks = order.rules.filter((rule) => rule.kind === "check");
     assert.deepStrictEqual(
       checks.map((rule) => [rule.name, rule.relation]),
       [
         ["OrderChoiceBounds", order.relations.OrderInteraction],
         ["GraphicOrderChoiceBounds", order.relations.GraphicOrderInteraction],
+        ["OrderMinChoicesPositive", order.relations.OrderMinChoicesN],
+        ["GraphicOrderMinChoicesPositive", order.relations.GraphicOrderMinChoicesN],
       ],
     );
   });
@@ -171,18 +167,25 @@ describe("interactions/order", () => {
     ]);
   });
 
-  it("refuses 0 and admits 1 under OrderMinChoices", () => {
-    const { value } = order.relations.OrderMinChoices.fields;
-    assert.strictEqual(value.pattern.source, patterns.positiveInteger);
-    assert.isFalse(admits(value.pattern.source, "0"));
-    assert.isTrue(admits(value.pattern.source, "1"));
-  });
-
-  it("types the lexical maximum as a non-negative integer and the typed copies as bigints", () => {
-    const { OrderMaxChoices, OrderMaxChoicesN, OrderMinChoicesN } = order.relations;
-    assert.strictEqual(OrderMaxChoices.fields.value.pattern.source, patterns.xsNonNegativeInteger);
-    assert.strictEqual(OrderMaxChoicesN.fields.value, pg.bigint);
-    assert.strictEqual(OrderMinChoicesN.fields.value, pg.bigint);
+  it("holds the typed copies as bigints and no lexical bound relation", () => {
+    const { OrderMaxChoicesN, OrderMinChoicesN, GraphicOrderMaxChoicesN, GraphicOrderMinChoicesN } =
+      order.relations;
+    for (const relation of [
+      OrderMaxChoicesN,
+      OrderMinChoicesN,
+      GraphicOrderMaxChoicesN,
+      GraphicOrderMinChoicesN,
+    ]) {
+      assert.strictEqual(relation.fields.value, pg.bigint, relation.name);
+    }
+    for (const name of [
+      "OrderMinChoices",
+      "OrderMaxChoices",
+      "GraphicOrderMinChoices",
+      "GraphicOrderMaxChoices",
+    ]) {
+      assert.notInclude(Object.keys(order.relations), name);
+    }
   });
 
   it("contains every optional value into the arm it belongs to", () => {
@@ -190,17 +193,9 @@ describe("interactions/order", () => {
     const owners = [
       [relations.DeclaredOrderShuffle, relations.OrderInteraction],
       [relations.OrderOrientation, relations.OrderInteraction],
-      [relations.OrderMinChoices, relations.OrderInteraction],
-      [relations.OrderMaxChoices, relations.OrderInteraction],
-      [relations.OrderMinChoicesN, relations.OrderInteraction],
-      [relations.OrderMaxChoicesN, relations.OrderInteraction],
       [relations.OrderMinSelectionsMessage, relations.OrderInteraction],
       [relations.OrderMaxSelectionsMessage, relations.OrderInteraction],
       [relations.OrderChoicesContainerWidth, relations.OrderInteraction],
-      [relations.GraphicOrderMinChoices, relations.GraphicOrderInteraction],
-      [relations.GraphicOrderMaxChoices, relations.GraphicOrderInteraction],
-      [relations.GraphicOrderMinChoicesN, relations.GraphicOrderInteraction],
-      [relations.GraphicOrderMaxChoicesN, relations.GraphicOrderInteraction],
     ] as const;
 
     for (const [optional, arm] of owners) {
@@ -211,6 +206,26 @@ describe("interactions/order", () => {
       assert.strictEqual(owned[0]?.right.source, arm, optional.name);
       assert.deepStrictEqual([...(owned[0]?.left.fields ?? [])], ["node"]);
       assert.deepStrictEqual([...(owned[0]?.right.fields ?? [])], ["id"]);
+    }
+  });
+
+  it("contains each bound marker through (node, value) into the arm's own bound column", () => {
+    const { relations } = order;
+    const bounds = [
+      [relations.OrderMinChoicesN, relations.OrderInteraction, "minChoicesN"],
+      [relations.OrderMaxChoicesN, relations.OrderInteraction, "maxChoicesN"],
+      [relations.GraphicOrderMinChoicesN, relations.GraphicOrderInteraction, "minChoicesN"],
+      [relations.GraphicOrderMaxChoicesN, relations.GraphicOrderInteraction, "maxChoicesN"],
+    ] as const;
+
+    for (const [marker, arm, column] of bounds) {
+      const owned = order.rules.filter(
+        (rule): rule is ContainedRule => rule.kind === "contained" && rule.left.source === marker,
+      );
+      assert.strictEqual(owned.length, 1, marker.name);
+      assert.strictEqual(owned[0]?.right.source, arm, marker.name);
+      assert.deepStrictEqual([...(owned[0]?.left.fields ?? [])], ["node", "value"]);
+      assert.deepStrictEqual([...(owned[0]?.right.fields ?? [])], ["id", column]);
     }
   });
 });

@@ -18,6 +18,7 @@ import {
 import type { DeclaredVariable, InteractionContext, Shared } from "#qti/import/interactions.ts";
 import { orderRows } from "#qti/import/interactions/order.ts";
 import { itemRows } from "#qti/import/item.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
 import {
@@ -31,21 +32,17 @@ import {
 import {
   DeclaredOrderShuffle,
   GraphicOrderInteraction,
-  GraphicOrderMaxChoices,
   GraphicOrderMaxChoicesN,
-  GraphicOrderMinChoices,
   GraphicOrderMinChoicesN,
   OrderChoicesContainerWidth,
   OrderInteraction,
-  OrderMaxChoices,
   OrderMaxChoicesN,
   OrderMaxSelectionsMessage,
-  OrderMinChoices,
   OrderMinChoicesN,
   OrderMinSelectionsMessage,
   OrderOrientation,
 } from "#qti/schema/interactions/order.ts";
-import { AttributeLexical, NodeKind } from "#qti/schema/node.ts";
+import { AttributeLexical, AttributeSpelling, NodeKind } from "#qti/schema/node.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import { readXml } from "#qti/xml/read.ts";
 import type { Attribute, Element } from "#qti/xml/tree.ts";
@@ -213,8 +210,6 @@ describe("orderRows on an order interaction", () => {
         },
       ]);
       for (const relation of [
-        OrderMinChoices,
-        OrderMaxChoices,
         OrderMinChoicesN,
         OrderMaxChoicesN,
         OrderOrientation,
@@ -268,8 +263,6 @@ describe("orderRows on an order interaction", () => {
         [["bounded", 3n, 2n, "true"]],
       );
       assert.deepStrictEqual(Rows.of(built, DeclaredOrderShuffle), [{ node: "node-2" }]);
-      assert.deepStrictEqual(Rows.of(built, OrderMaxChoices), [{ node: "node-2", value: "3" }]);
-      assert.deepStrictEqual(Rows.of(built, OrderMinChoices), [{ node: "node-2", value: "2" }]);
       assert.deepStrictEqual(Rows.of(built, OrderMaxChoicesN), [{ node: "node-2", value: 3n }]);
       assert.deepStrictEqual(Rows.of(built, OrderMinChoicesN), [{ node: "node-2", value: 2n }]);
       assert.deepStrictEqual(Rows.of(built, OrderOrientation), [
@@ -322,12 +315,9 @@ describe("orderRows on an order interaction", () => {
     }),
   );
 
-  it.effect("reads a zero maximum as unbounded and a malformed count as 0", () =>
+  it.effect("reads a zero maximum as unbounded", () =>
     Effect.gen(function* zero() {
-      const ctx = contextOf(
-        [orderItem({ "max-choices": "0", "min-choices": "two" }, [simpleChoice("A")])],
-        declared,
-      );
+      const ctx = contextOf([orderItem({ "max-choices": "0" }, [simpleChoice("A")])], declared);
 
       const built = yield* orderRows(ctx, Rows.empty());
 
@@ -339,11 +329,8 @@ describe("orderRows on an order interaction", () => {
         ]),
         [["unlimited", 0n, 0n]],
       );
-      assert.deepStrictEqual(Rows.of(built, OrderMaxChoices), [{ node: "node-2", value: "0" }]);
-      assert.deepStrictEqual(
-        Rows.of(built, OrderMinChoices).map((row) => `${row.node}=${row.value}`),
-        ["node-2=two"],
-      );
+      assert.deepStrictEqual(Rows.of(built, OrderMaxChoicesN), [{ node: "node-2", value: 0n }]);
+      assert.strictEqual(Rows.of(built, OrderMinChoicesN).length, 0);
     }),
   );
 
@@ -420,12 +407,6 @@ describe("orderRows on a graphic order interaction", () => {
         ]),
         [["bounded", 4n, 1n]],
       );
-      assert.deepStrictEqual(Rows.of(built, GraphicOrderMaxChoices), [
-        { node: "node-2", value: "4" },
-      ]);
-      assert.deepStrictEqual(Rows.of(built, GraphicOrderMinChoices), [
-        { node: "node-2", value: "1" },
-      ]);
       assert.deepStrictEqual(Rows.of(built, GraphicOrderMaxChoicesN), [
         { node: "node-2", value: 4n },
       ]);
@@ -492,3 +473,72 @@ layer(NodeServices.layer, { excludeTestServices: true })(
     );
   },
 );
+
+const importRuleOf = (exit: Exit.Exit<Rows, unknown>): string => {
+  const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
+
+  return Option.isSome(failure) && failure.value instanceof ImportRefused ? failure.value.rule : "";
+};
+
+describe("orderRows on an integer outside its space", () => {
+  const refused: readonly (readonly [string, Element])[] = [
+    ["min-choices of 0 on an order interaction", orderItem({ "min-choices": "0" })],
+    ["min-choices of -1 on an order interaction", orderItem({ "min-choices": "-1" })],
+    ["min-choices of two on an order interaction", orderItem({ "min-choices": "two" })],
+    ["max-choices of -1 on an order interaction", orderItem({ "max-choices": "-1" })],
+    ["max-choices of 1.5 on an order interaction", orderItem({ "max-choices": "1.5" })],
+    ["min-choices of 0 on a graphic order interaction", graphicOrderItem({ "min-choices": "0" })],
+    ["max-choices of x on a graphic order interaction", graphicOrderItem({ "max-choices": "x" })],
+  ];
+
+  for (const [name, tree] of refused) {
+    it.effect(`refuses ${name} under attribute-lexical before any row is written`, () =>
+      Effect.gen(function* outside() {
+        const exit = yield* Effect.exit(orderRows(contextOf([tree], declared), Rows.empty()));
+
+        assert.strictEqual(importRuleOf(exit), "attribute-lexical");
+      }),
+    );
+  }
+});
+
+describe("orderRows on a non-canonical integer spelling", () => {
+  it.effect("keeps a signed min-choices on an order interaction as one spelling row", () =>
+    Effect.gen(function* signed() {
+      const ctx = contextOf([orderItem({ "max-choices": "3", "min-choices": "+2" })], declared);
+
+      const built = yield* orderRows(ctx, Rows.empty());
+
+      assert.deepStrictEqual(Rows.of(built, OrderMinChoicesN), [{ node: "node-2", value: 2n }]);
+      assert.deepStrictEqual(Rows.of(built, AttributeSpelling), [
+        { attribute: "min-choices", kind: "qti-order-interaction", node: "node-2", value: "+2" },
+      ]);
+    }),
+  );
+
+  it.effect("keeps a padded max-choices on a graphic order interaction as one spelling row", () =>
+    Effect.gen(function* padded() {
+      const ctx = contextOf([graphicOrderItem({ "max-choices": "04" })], declared);
+
+      const built = yield* orderRows(ctx, Rows.empty());
+
+      assert.deepStrictEqual(Rows.of(built, GraphicOrderMaxChoicesN), [
+        { node: "node-2", value: 4n },
+      ]);
+      assert.deepStrictEqual(
+        Rows.of(built, AttributeSpelling).map((row) => [row.attribute, row.value]),
+        [["max-choices", "04"]],
+      );
+    }),
+  );
+
+  it.effect("writes no spelling row for a canonical value", () =>
+    Effect.gen(function* canonical() {
+      const ctx = contextOf([orderItem({ "max-choices": "3", "min-choices": "2" })], declared);
+
+      const built = yield* orderRows(ctx, Rows.empty());
+
+      assert.strictEqual(Rows.of(built, AttributeSpelling).length, 0);
+    }),
+  );
+});

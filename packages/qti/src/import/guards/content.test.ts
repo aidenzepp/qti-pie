@@ -10,6 +10,7 @@ import { AssociableHotspot } from "#qti/schema/interactions/associate.ts";
 import { Gap, GapText } from "#qti/schema/interactions/gap.ts";
 import { HottextOwner } from "#qti/schema/interactions/hot.ts";
 import { OrderInteraction } from "#qti/schema/interactions/order.ts";
+import { MediaInteraction } from "#qti/schema/interactions/other.ts";
 import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
 import { ResourceLom } from "#qti/schema/metadata.ts";
 import { AttributeLexical, AttributeSpelling, Node } from "#qti/schema/node.ts";
@@ -273,27 +274,24 @@ describe("contentGuards typed-copy", () => {
     Effect.gen(function* optionalCount() {
       const written = yield* rowsOf(
         "3.0.1",
-        `<qti-order-interaction response-identifier="PAIRS" max-choices="3"><qti-simple-choice identifier="A">a</qti-simple-choice></qti-order-interaction>`,
+        `<qti-media-interaction response-identifier="RESPONSE" autostart="false" max-plays="3">${media}</qti-media-interaction>`,
       );
       yield* contentGuards(written);
       yield* refusalOfRows(
         "typed-copy",
-        edited(written, OrderInteraction, (facts) =>
-          facts.map((fact) => ({ ...fact, maxChoicesN: 2n })),
+        edited(written, MediaInteraction, (facts) =>
+          facts.map((fact) => ({ ...fact, maxPlaysN: 2n })),
         ),
-        "maxChoicesN",
+        "maxPlaysN",
       );
 
-      const omitted = yield* rowsOf(
-        "3.0.1",
-        `<qti-order-interaction response-identifier="PAIRS"><qti-simple-choice identifier="A">a</qti-simple-choice></qti-order-interaction>`,
-      );
+      const omitted = yield* rowsOf("3.0.1", mediaInteraction(media));
       yield* refusalOfRows(
         "typed-copy",
-        edited(omitted, OrderInteraction, (facts) =>
-          facts.map((fact) => ({ ...fact, minChoicesN: 4n })),
+        edited(omitted, MediaInteraction, (facts) =>
+          facts.map((fact) => ({ ...fact, minPlaysN: 4n })),
         ),
-        "minChoicesN",
+        "minPlaysN",
       );
     }),
   );
