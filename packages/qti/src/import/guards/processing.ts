@@ -7,8 +7,6 @@
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { Effect, Predicate, Schema } from "effect";
 import { Rows } from "#qti/import/tree.ts";
-import { literalOrRef } from "#qti/processing/parse.ts";
-import * as attributed from "#qti/schema/expression-attributes.ts";
 import { expressionKinds } from "#qti/schema/kinds/asi.ts";
 import { Edge, EntityReference, Node, TextNode, vocabularies, Ws } from "#qti/schema/node.ts";
 import * as processing from "#qti/schema/processing.ts";
@@ -301,18 +299,6 @@ const literalArms: readonly AnyRelation[] = Object.values<unknown>(processing.re
 );
 
 /**
- * The typed copy of a mixed-union column as the importer writes it: the kind and, for a literal
- * integer, the number.
- */
-const copyOf = (column: string): { readonly kind: "literal" | "ref"; readonly value: bigint } => {
-  const parsed = literalOrRef(column);
-
-  return parsed._tag === "ref"
-    ? { kind: "ref", value: 0n }
-    : { kind: "literal", value: /^[+-]?[0-9]+$/u.test(parsed.value) ? BigInt(parsed.value) : 0n };
-};
-
-/**
  * `P32` of the literals: each arm row holds the concatenation of its node's text children.
  */
 const literalCopy = (rows: Rows, index: Index): Finding => {
@@ -329,60 +315,6 @@ const literalCopy = (rows: Rows, index: Index): Finding => {
           `${relation.name} ${row.id} holds ${quoted(row.value)}; its text children give ${quoted(expected)}.`,
         );
       }
-    }
-  }
-
-  return undefined;
-};
-
-/**
- * `P32` of the integer copies: `figuresValue`, `nValue` and `numberRepeatsValue` and their kinds
- * agree with the lexical column beside them.
- */
-const integerCopy = (rows: Rows): Finding => {
-  const copies: readonly {
-    readonly column: string;
-    readonly id: string;
-    readonly kind: string;
-    readonly name: string;
-    readonly value: bigint;
-  }[] = [
-    ...Rows.of(rows, attributed.EqualRounded).map((row) => ({
-      column: row.figures,
-      id: row.id,
-      kind: row.figuresKind,
-      name: "EqualRounded.figures",
-      value: row.figuresValue,
-    })),
-    ...Rows.of(rows, attributed.RoundTo).map((row) => ({
-      column: row.figures,
-      id: row.id,
-      kind: row.figuresKind,
-      name: "RoundTo.figures",
-      value: row.figuresValue,
-    })),
-    ...Rows.of(rows, attributed.Index).map((row) => ({
-      column: row.n,
-      id: row.id,
-      kind: row.nKind,
-      name: "Index.n",
-      value: row.nValue,
-    })),
-    ...Rows.of(rows, attributed.Repeat).map((row) => ({
-      column: row.numberRepeats,
-      id: row.id,
-      kind: row.numberRepeatsKind,
-      name: "Repeat.numberRepeats",
-      value: row.numberRepeatsValue,
-    })),
-  ];
-  for (const copy of copies) {
-    const expected = copyOf(copy.column);
-    if (copy.kind !== expected.kind || copy.value !== expected.value) {
-      return refuse(
-        "P32",
-        `${copy.name} ${copy.id} holds ${quoted(copy.column)}, a ${expected.kind} of ${expected.value}; its copy is a ${copy.kind} of ${copy.value}.`,
-      );
     }
   }
 
@@ -445,7 +377,6 @@ export const processingGuards = Effect.fn("processingGuards")(function* processi
     ordering(rows, index) ??
     operandRows(rows) ??
     literalCopy(rows, index) ??
-    integerCopy(rows) ??
     arityCopy(rows);
   if (found !== undefined) {
     yield* found;

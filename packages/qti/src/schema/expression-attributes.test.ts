@@ -1,4 +1,5 @@
 import { schema } from "@bjornpagen/grizzle";
+import type { AnyRelation } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
 import { inspect } from "node:util";
@@ -121,6 +122,34 @@ const tableA = [
 ];
 
 /**
+ * The four reference arms of a number-or-variable attribute: each is keyed by the node it names,
+ * carries the variable's `identifier` and belongs to the parent whose kind column says `ref`.
+ */
+const refArms = {
+  EqualRoundedFiguresRef: ["EqualRounded", "figuresKind", "figuresValue"],
+  IndexNRef: ["Index", "nKind", "nValue"],
+  RepeatNumberRepeatsRef: ["Repeat", "numberRepeatsKind", "numberRepeatsValue"],
+  RoundToFiguresRef: ["RoundTo", "figuresKind", "figuresValue"],
+} as const;
+
+/**
+ * Whether a containment or capacity side selects `relation` where `kindField` is `ref`.
+ */
+const selectionOn = (
+  side: { readonly source: object },
+  relation: AnyRelation | undefined,
+  kindField: string,
+): boolean => {
+  const selection =
+    "relation" in side.source && "bindings" in side.source ? side.source : undefined;
+
+  return (
+    selection?.relation === relation &&
+    JSON.stringify(selection?.bindings) === JSON.stringify({ [kindField]: "ref" })
+  );
+};
+
+/**
  * The markers and optional values `Equal` and `EqualRounded` own, and the relation that is not an
  * arm: `EqualTolerance` and `OutcomeMinMax` and the roster the typed copies name.
  */
@@ -228,10 +257,15 @@ describe("expression-attributes", () => {
     }
   });
 
-  it("adds exactly the 21 arms, the optional relations and the three others", () => {
+  it("adds exactly the 21 arms, the optional relations, the four reference arms and the three others", () => {
     assert.deepStrictEqual(
       Object.keys(expressionAttributes.relations).toSorted(),
-      [...Object.values(armNames), ...Object.keys(optional), ...others].toSorted(),
+      [
+        ...Object.values(armNames),
+        ...Object.keys(optional),
+        ...Object.keys(refArms),
+        ...others,
+      ].toSorted(),
     );
   });
 
@@ -258,26 +292,19 @@ describe("expression-attributes", () => {
     ]);
     assert.deepStrictEqual(fields("EqualTolerance"), ["node", "toleranceMode", "value"]);
     assert.deepStrictEqual(fields("EqualRounded"), [
-      "figures",
       "figuresKind",
       "figuresValue",
       "id",
       "roundingMode",
     ]);
     assert.deepStrictEqual(fields("RoundTo"), [
-      "figures",
       "figuresKind",
       "figuresValue",
       "id",
       "roundingMode",
     ]);
-    assert.deepStrictEqual(fields("Index"), ["id", "n", "nKind", "nValue"]);
-    assert.deepStrictEqual(fields("Repeat"), [
-      "id",
-      "numberRepeats",
-      "numberRepeatsKind",
-      "numberRepeatsValue",
-    ]);
+    assert.deepStrictEqual(fields("Index"), ["id", "nKind", "nValue"]);
+    assert.deepStrictEqual(fields("Repeat"), ["id", "numberRepeatsKind", "numberRepeatsValue"]);
     assert.deepStrictEqual(fields("OutcomeMinMax"), ["id", "kind", "outcomeIdentifier"]);
     assert.deepStrictEqual(fields("OutcomeMinimumArm"), ["id"]);
     assert.deepStrictEqual(fields("OutcomeMaximumArm"), ["id"]);
@@ -370,9 +397,11 @@ describe("expression-attributes", () => {
         maxStringLength: 100_000,
       });
     };
-    for (const name of ["EqualRounded", "RoundTo", "Index", "Repeat", "VariableWeightIdentifier"]) {
-      assert.strictEqual(onRelation(name).length, 1, name);
+    for (const name of ["EqualRounded", "RoundTo", "Index", "Repeat"]) {
+      assert.strictEqual(onRelation(name).length, 2, name);
     }
+
+    assert.strictEqual(onRelation("VariableWeightIdentifier").length, 1);
     for (const rule of checks) {
       assert.isTrue(
         [...relationsByName.values()].some((relation) => relation === rule.relation),
@@ -419,8 +448,74 @@ describe("expression-attributes", () => {
 
   it("builds a schema over the leaves without refusal", () => {
     const built = probe();
-    for (const name of [...Object.values(armNames), ...Object.keys(optional), ...others]) {
+    for (const name of [
+      ...Object.values(armNames),
+      ...Object.keys(optional),
+      ...Object.keys(refArms),
+      ...others,
+    ]) {
       assert.include(Object.keys(built.relations), name);
     }
+  });
+
+  it("states each reference arm by form: containment, capacity of one and zero beside it", () => {
+    let statements = 0;
+    for (const [name, [parentName, kindField, valueField]] of Object.entries(refArms)) {
+      const reference = relationsByName.get(name);
+      const parent = relationsByName.get(parentName);
+      assert.deepStrictEqual(Object.keys(reference?.fields ?? {}), ["identifier", "node"], name);
+      assert.deepStrictEqual([...(reference?.primaryKey ?? [])], ["node"], name);
+
+      const contained = expressionAttributes.rules.filter(
+        (rule) =>
+          rule.kind === "contained" &&
+          rule.left.source === reference &&
+          selectionOn(rule.right, parent, kindField),
+      );
+      assert.strictEqual(contained.length, 1, name);
+      for (const rule of contained) {
+        if (rule.kind === "contained") {
+          assert.deepStrictEqual([...rule.left.fields], ["node"], name);
+          assert.deepStrictEqual([...rule.right.fields], ["id"], name);
+        }
+      }
+
+      const capacities = expressionAttributes.rules.filter(
+        (rule) =>
+          rule.kind === "capacity" &&
+          rule.from.source === reference &&
+          selectionOn(rule.target, parent, kindField),
+      );
+      assert.strictEqual(capacities.length, 1, name);
+      for (const rule of capacities) {
+        const within = inspect(Predicate.hasProperty(rule, "desc") ? rule.desc : undefined, {
+          depth: null,
+        });
+        assert.match(within, /low: 1n/u, name);
+        assert.match(within, /high: 1n/u, name);
+      }
+
+      const zero = expressionAttributes.rules.filter(
+        (rule) => rule.kind === "check" && rule.name === `${name}Zero`,
+      );
+      assert.strictEqual(zero.length, 1, name);
+      for (const rule of zero) {
+        if (rule.kind === "check") {
+          assert.strictEqual(rule.relation, parent, name);
+
+          const text = inspect(Predicate.hasProperty(rule, "desc") ? rule.desc : undefined, {
+            depth: null,
+            maxStringLength: 100_000,
+          });
+          for (const needle of [kindField, valueField, "literal", "0n"]) {
+            assert.include(text, needle, name);
+          }
+        }
+      }
+
+      statements += contained.length + capacities.length + zero.length;
+    }
+
+    assert.strictEqual(statements, 12);
   });
 });

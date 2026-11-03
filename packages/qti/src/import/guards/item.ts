@@ -293,7 +293,9 @@ const filteredKinds: readonly string[] = [
  * The shadows of the collapse-class attributes of processing expressions and rules (spec 4.3
  * "Attribute storage"): the importer writes a lexical row for one whose value as read differs from
  * its collapse, and each entry names the typed column it shadows. For a mixed union (`figures`,
- * `min`, `max`, `step`) the importer writes a lexical row only for a collapsed literal.
+ * `min`, `max`, `step`) the importer writes a lexical row only for a collapsed literal. A
+ * number-or-variable attribute that has a typed copy (`figures`, `n`, `number-repeats`) is read as
+ * the copy's number for a literal and as the `*Ref` row's identifier for a reference.
  */
 const processingShadows: readonly (readonly [string, Shadow])[] = [
   ...collapsedBy(referringKinds, "identifier", referenceOf),
@@ -386,32 +388,42 @@ const processingShadows: readonly (readonly [string, Shadow])[] = [
     (rows, node) =>
       Rows.of(rows, attributed.Substring).find((row) => row.id === node)?.caseSensitive,
   ),
-  ...collapsedBy(
-    ["qti-equal-rounded"],
-    "figures",
-    (rows, node) => Rows.of(rows, attributed.EqualRounded).find((row) => row.id === node)?.figures,
-  ),
-  ...collapsedBy(
-    ["qti-round-to"],
-    "figures",
-    (rows, node) => Rows.of(rows, attributed.RoundTo).find((row) => row.id === node)?.figures,
-  ),
+  ...collapsedBy(["qti-equal-rounded"], "figures", (rows, node) => {
+    const held = Rows.of(rows, attributed.EqualRounded).find((row) => row.id === node);
+
+    return held?.figuresKind === "ref"
+      ? Rows.of(rows, attributed.EqualRoundedFiguresRef).find((row) => row.node === node)
+          ?.identifier
+      : held?.figuresValue.toString();
+  }),
+  ...collapsedBy(["qti-round-to"], "figures", (rows, node) => {
+    const held = Rows.of(rows, attributed.RoundTo).find((row) => row.id === node);
+
+    return held?.figuresKind === "ref"
+      ? Rows.of(rows, attributed.RoundToFiguresRef).find((row) => row.node === node)?.identifier
+      : held?.figuresValue.toString();
+  }),
   ...collapsedBy(
     ["qti-field-value"],
     "field-identifier",
     (rows, node) =>
       Rows.of(rows, attributed.FieldValue).find((row) => row.id === node)?.fieldIdentifier,
   ),
-  ...collapsedBy(
-    ["qti-index"],
-    "n",
-    (rows, node) => Rows.of(rows, attributed.Index).find((row) => row.id === node)?.n,
-  ),
-  ...collapsedBy(
-    ["qti-repeat"],
-    "number-repeats",
-    (rows, node) => Rows.of(rows, attributed.Repeat).find((row) => row.id === node)?.numberRepeats,
-  ),
+  ...collapsedBy(["qti-index"], "n", (rows, node) => {
+    const held = Rows.of(rows, attributed.Index).find((row) => row.id === node);
+
+    return held?.nKind === "ref"
+      ? Rows.of(rows, attributed.IndexNRef).find((row) => row.node === node)?.identifier
+      : held?.nValue.toString();
+  }),
+  ...collapsedBy(["qti-repeat"], "number-repeats", (rows, node) => {
+    const held = Rows.of(rows, attributed.Repeat).find((row) => row.id === node);
+
+    return held?.numberRepeatsKind === "ref"
+      ? Rows.of(rows, attributed.RepeatNumberRepeatsRef).find((row) => row.node === node)
+          ?.identifier
+      : held?.numberRepeatsValue.toString();
+  }),
   ...collapsedBy(
     ["qti-any-n"],
     "min",
