@@ -99,7 +99,14 @@ export const externalRows = Effect.fn("import.externalRows")(function* externalR
       position: positions.get(lom.id) ?? 0n,
     },
     {
-      findings: { entries: [], hasIdentifier: false, hasTitle: false, titles: [] },
+      findings: {
+        entries: [],
+        hasGeneral: false,
+        hasIdentifier: false,
+        hasTitle: false,
+        languages: new Set(),
+        titles: [],
+      },
       lom: lom.id,
       owner: "external",
     },

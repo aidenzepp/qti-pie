@@ -54,6 +54,7 @@ const outcomeOf = (doc: Effect.Success<ReturnType<typeof readOutcome>>) =>
       packageId,
       path: "testoutcome01.xml",
       resource: "Outcome_01",
+      resourceLomHasGeneral: false,
       resourceType: "imsqti_outcomes_xmlv3p0",
       version: "3.0.0",
     },
@@ -99,6 +100,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/outcome.ts", (s
             document: documentId,
             id: documentId,
             identifier: "SCORE",
+            kind: "outcome",
           },
         ]);
 

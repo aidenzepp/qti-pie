@@ -31,6 +31,7 @@ import {
   CsmSetResourceLabel,
   CsmSetResourcePartId,
 } from "#qti/schema/csm.ts";
+import { ResourceLomGeneral } from "#qti/schema/lang.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import {
   ExternalLom,
@@ -518,6 +519,9 @@ const rowsOfPackage = (
         packageId: built.packageId,
         path: listed.path,
         resource: listed.resource,
+        resourceLomHasGeneral: Rows.of(built.rows, ResourceLomGeneral).some(
+          (general) => general.resource === listed.resource,
+        ),
         resourceType: listed.type,
         version: built.version,
       };

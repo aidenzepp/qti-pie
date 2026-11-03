@@ -120,7 +120,6 @@ export const attributes = [
   "span",
   "open",
   "data",
-  "name",
   "value",
   "valuetype",
   "srcset",

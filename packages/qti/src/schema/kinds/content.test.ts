@@ -4,11 +4,16 @@ import { hostAdditions } from "#qti/schema/content/sets.ts";
 import { entryOf, inventory } from "#qti/schema/content/xsd-inventory.ts";
 import * as asi from "#qti/schema/kinds/asi.ts";
 import * as cp from "#qti/schema/kinds/cp.ts";
+import * as cpx from "#qti/schema/kinds/cpx.ts";
+import * as csmd from "#qti/schema/kinds/csmd.ts";
+import * as drd from "#qti/schema/kinds/drd.ts";
 import * as generic from "#qti/schema/kinds/generic.ts";
 import type { AdmissionRow, RegistryRow, SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
 import * as html from "#qti/schema/kinds/html.ts";
 import * as lom from "#qti/schema/kinds/lom.ts";
 import * as qmd from "#qti/schema/kinds/qmd.ts";
+import * as ud from "#qti/schema/kinds/ud.ts";
+import * as xi from "#qti/schema/kinds/xi.ts";
 import { AttributeName, NodeKind } from "#qti/schema/node.ts";
 import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
 
@@ -247,6 +252,11 @@ const registries: readonly Readonly<Record<string, RegistryRow>>[] = [
   cp.registry,
   lom.registry,
   qmd.registry,
+  cpx.registry,
+  drd.registry,
+  csmd.registry,
+  ud.registry,
+  xi.registry,
 ];
 
 const attributeTuples: readonly (readonly string[])[] = [
@@ -256,11 +266,19 @@ const attributeTuples: readonly (readonly string[])[] = [
   cp.attributes,
   lom.attributes,
   qmd.attributes,
+  cpx.attributes,
+  drd.attributes,
+  csmd.attributes,
+  ud.attributes,
+  xi.attributes,
 ];
 
 describe("the roster append", () => {
-  it("appends 58 ASI and 74 HTML handles to phase-1's", () => {
-    assert.strictEqual(asi.kinds.length, m0Asi.length + 58);
+  it("appends 58 ASI and 74 HTML handles to phase-1's, beside phase-3's processing kinds", () => {
+    assert.strictEqual(
+      asi.kinds.length,
+      m0Asi.length + 58 + asi.expressionKinds.length + asi.ruleKinds.length,
+    );
     assert.strictEqual(html.kinds.length, m0Html.length + 74);
     assert.deepStrictEqual(asi.kinds.slice(0, m0Asi.length), [...m0Asi]);
     assert.deepStrictEqual(html.kinds.slice(0, m0Html.length), [...m0Html]);
@@ -280,8 +298,11 @@ describe("the roster append", () => {
     }
   });
 
-  it("composes NodeKind from the six tuples", () => {
-    const sum = [generic, asi, html, cp, lom, qmd].reduce((n, kinds) => n + kinds.kinds.length, 0);
+  it("composes NodeKind from the eleven tuples", () => {
+    const sum = [generic, asi, html, cp, lom, qmd, cpx, drd, csmd, ud, xi].reduce(
+      (n, kinds) => n + kinds.kinds.length,
+      0,
+    );
     assert.strictEqual(NodeKind.handles.length, sum);
     assert.strictEqual(new Set(NodeKind.handles).size, sum);
   });

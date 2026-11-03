@@ -29,6 +29,11 @@ export const registries = [
   cp.registry,
   lom.registry,
   qmd.registry,
+  cpx.registry,
+  drd.registry,
+  csmd.registry,
+  ud.registry,
+  xi.registry,
 ];
 
 const kindOrder: ReadonlyMap<string, number> = new Map(

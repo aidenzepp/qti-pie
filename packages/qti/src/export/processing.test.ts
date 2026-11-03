@@ -323,6 +323,7 @@ layer(TestLayer, { excludeTestServices: true })("export/processing.ts", (suite) 
           packageId: crypto.randomUUID(),
           path: "response.xml",
           resource: "response",
+          resourceLomHasGeneral: false,
           resourceType: "imsqti_item_xmlv3p0",
           version: "3.0.0",
         },
