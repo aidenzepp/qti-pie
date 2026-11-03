@@ -87,6 +87,18 @@ const textOf = (fact: Columns | undefined, field: string): string | undefined =>
 };
 
 /**
+ * The canonical rendering of an integer spelling: what `String` makes of the integer the
+ * spelling parses to. An `AttributeSpelling` row is consistent with the typed value it sits
+ * beside exactly when this equals the reader's text; text that is not an integer spelling has
+ * none.
+ *
+ * @param spelling - A stored spelling, such as `+5`, `05` or `-0`.
+ * @returns The canonical text of its value, or `undefined` when it is not an integer.
+ */
+export const spelledText = (spelling: string): string | undefined =>
+  /^[+-]?[0-9]+$/u.test(spelling) ? String(BigInt(spelling)) : undefined;
+
+/**
  * The value of the column `field` in the row of `relation` whose column `key` is the node's id:
  * written whenever that row exists, which is always for an arm's required column and only where
  * the source wrote the attribute for an optional-value relation.

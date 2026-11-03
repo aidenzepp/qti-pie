@@ -16,7 +16,7 @@ import { HottextInteraction, HottextOwner } from "#qti/schema/interactions/hot.t
 import { OrderInteraction } from "#qti/schema/interactions/order.ts";
 import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
 import { ResourceLom } from "#qti/schema/metadata.ts";
-import { AttributeLexical, Node } from "#qti/schema/node.ts";
+import { AttributeLexical, AttributeSpelling, Node } from "#qti/schema/node.ts";
 import type { SchemaVersionHandle } from "#qti/schema/node.ts";
 import { PrintedVariableVarRef } from "#qti/schema/template.ts";
 import { readXml } from "#qti/xml/read.ts";
@@ -379,6 +379,41 @@ describe("contentGuards typed-copy", () => {
           { attribute: "class", kind: "p", node: paragraph, value: "a b" },
         ]),
         "equals",
+      );
+    }),
+  );
+
+  it.effect("refuses a spelling that does not parse to the typed value beside it", () =>
+    Effect.gen(function* spellingOther() {
+      const rows = yield* rowsOf("3.0.1", choiceInteraction(choices));
+      yield* contentGuards(rows);
+      yield* refusalOfRows(
+        "typed-copy",
+        Rows.add(rows, AttributeSpelling, [
+          {
+            attribute: "max-choices",
+            kind: "qti-choice-interaction",
+            node: nodeId(rows, "qti-choice-interaction"),
+            value: "+6",
+          },
+        ]),
+        "does not parse to the typed value",
+      );
+    }),
+  );
+
+  it.effect("admits a spelling that parses to the typed value, beside its lexical row", () =>
+    Effect.gen(function* spellingAndLexical() {
+      const rows = yield* rowsOf("3.0.1", choiceInteraction(choices));
+      const node = nodeId(rows, "qti-choice-interaction");
+      yield* contentGuards(
+        Rows.add(
+          Rows.add(rows, AttributeSpelling, [
+            { attribute: "max-choices", kind: "qti-choice-interaction", node, value: "+1" },
+          ]),
+          AttributeLexical,
+          [{ attribute: "max-choices", kind: "qti-choice-interaction", node, value: " +1 " }],
+        ),
       );
     }),
   );

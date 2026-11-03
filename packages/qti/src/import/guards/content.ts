@@ -15,7 +15,7 @@ import { collapse, replace, Rows } from "#qti/import/tree.ts";
 import type { WhiteSpace } from "#qti/import/tree.ts";
 import { IdrefAttribute } from "#qti/schema/content/rosters.ts";
 import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
-import { typedValues } from "#qti/schema/attribute-homes.ts";
+import { spelledText, typedValues } from "#qti/schema/attribute-homes.ts";
 import * as shared from "#qti/schema/attributes.ts";
 import {
   AriaLabel,
@@ -122,6 +122,7 @@ import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/s
 import { LomLanguage, ResourceLom } from "#qti/schema/metadata.ts";
 import {
   AttributeLexical,
+  AttributeSpelling,
   Edge,
   EntityReference,
   Node,
@@ -1071,10 +1072,12 @@ const familyValues = (rows: Rows): ReadonlyMap<string, Written> =>
   );
 
 /**
- * `typed-copy` of the lexical rows: each `AttributeLexical` row differs from the value its class
- * makes of it and, where a typed column holds the attribute, processes to that column. The column
- * is the family relation's or, for any other attribute, the one the renderer reads
- * (`typedValues`), so one table says where each attribute's typed value lives.
+ * `typed-copy` of the lexical and spelling rows: each `AttributeLexical` row differs from the
+ * value its class makes of it and, where a typed column holds the attribute, processes to that
+ * column, or to the node's `AttributeSpelling` row when it has one for the attribute; each spelling
+ * row parses to the column it sits beside. The column is the family relation's or, for any other
+ * attribute, the one the renderer reads (`typedValues`), so one table says where each attribute's
+ * typed value lives.
  *
  * An empty `headers` is carried by a lexical row of `""` because no token row can, so the form
  * does not differ there.
@@ -1082,6 +1085,22 @@ const familyValues = (rows: Rows): ReadonlyMap<string, Written> =>
 const lexicalCopy = (rows: Rows): Finding => {
   const typed = familyValues(rows);
   const value = typedValues(rows);
+  const columnOf = (node: string, kind: string, attribute: string): string | undefined =>
+    typed.get(attribute)?.get(node) ?? value(node, kind, attribute);
+
+  const spellings = new Map<string, string>();
+  for (const row of Rows.of(rows, AttributeSpelling)) {
+    spellings.set(`${row.node}\n${row.attribute}`, row.value);
+
+    const column = columnOf(row.node, row.kind, row.attribute);
+    if (column !== undefined && spelledText(row.value) !== column) {
+      return refuse(
+        "typed-copy",
+        `The spelling ${quoted(row.value)} of ${row.attribute} of ${row.kind} ${row.node} does not parse to the typed value ${quoted(column)} it sits beside.`,
+      );
+    }
+  }
+
   for (const row of Rows.of(rows, AttributeLexical)) {
     const whiteSpace = classOf(row.kind, row.attribute);
     if (whiteSpace === undefined || (row.attribute === "headers" && row.value === "")) {
@@ -1097,7 +1116,7 @@ const lexicalCopy = (rows: Rows): Finding => {
     }
 
     const column =
-      typed.get(row.attribute)?.get(row.node) ?? value(row.node, row.kind, row.attribute);
+      spellings.get(`${row.node}\n${row.attribute}`) ?? columnOf(row.node, row.kind, row.attribute);
     if (column !== undefined && column !== expected) {
       return refuse(
         "typed-copy",

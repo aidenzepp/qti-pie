@@ -20,7 +20,7 @@ import * as drd from "#qti/schema/kinds/drd.ts";
 import * as lom from "#qti/schema/kinds/lom.ts";
 import * as ud from "#qti/schema/kinds/ud.ts";
 import { ResourceLomGeneral } from "#qti/schema/lang.ts";
-import { Node } from "#qti/schema/node.ts";
+import { AttributeLexical, AttributeSpelling, Node } from "#qti/schema/node.ts";
 import { registries } from "#qti/schema/seed/admission.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
 import { fixtureNames, materialize, materializeCorpus } from "#qti/test/fixtures.ts";
@@ -221,6 +221,17 @@ const sixKindsItem = `<?xml version="1.0" encoding="UTF-8"?>
 </qti-assessment-item>`;
 
 /**
+ * An item with a choice interaction that writes `max-choices="5"`.
+ */
+const spelledChoiceItem = `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="choice" title="Choice" adaptive="false" time-dependent="false">
+  <qti-response-declaration identifier="RESPONSE" cardinality="multiple" base-type="identifier"/>
+  <qti-item-body>
+    <qti-choice-interaction response-identifier="RESPONSE" max-choices="5"><qti-simple-choice identifier="A">a</qti-simple-choice></qti-choice-interaction>
+  </qti-item-body>
+</qti-assessment-item>`;
+
+/**
  * An item with a graphic associate interaction whose first hotspot writes `match-min` and whose
  * second omits it.
  */
@@ -377,6 +388,41 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         assert.strictEqual(rendered, textOf(canonicalize(doc)));
         assert.strictEqual(rendered.split('match-min="').length - 1, 1);
         assert.include(rendered, 'match-min="1"');
+      }),
+    );
+
+    it.effect("a spelling row renders in place of the typed value, and a lexical row over it", () =>
+      Effect.gen(function* spelledAttribute() {
+        const doc = yield* readXml(new TextEncoder().encode(spelledChoiceItem));
+        const { documentId, rows } = yield* itemRows(
+          {
+            doc,
+            packageId: crypto.randomUUID(),
+            path: "choice.xml",
+            resource: "choice",
+            resourceLomHasGeneral: false,
+            resourceType: "imsqti_item_xmlv3p0",
+            version: "3.0.1",
+          },
+          Rows.empty(),
+        );
+        const node = Rows.of(rows, Node).find((row) => row.kind === "qti-choice-interaction")?.id;
+        assert.isDefined(node);
+
+        const attribute = "max-choices";
+        const kind = "qti-choice-interaction";
+        const canonical = textOf(canonicalize(renderTree(rows, documentId)));
+        assert.include(canonical, 'max-choices="5"');
+
+        const spelled = Rows.add(rows, AttributeSpelling, [{ attribute, kind, node, value: "+5" }]);
+        const spelledOut = textOf(canonicalize(renderTree(spelled, documentId)));
+        assert.include(spelledOut, 'max-choices="+5"');
+        assert.notInclude(spelledOut, 'max-choices="5"');
+
+        const both = Rows.add(spelled, AttributeLexical, [
+          { attribute, kind, node, value: " +5 " },
+        ]);
+        assert.include(textOf(canonicalize(renderTree(both, documentId))), 'max-choices=" +5 "');
       }),
     );
 
