@@ -7,6 +7,23 @@ import { modeOfArguments, modeOfEnvironment } from "#qti/cli/output.ts";
 import { commandOfArguments, formatterFor, presenterFor, printFailures } from "#qti/cli/present.ts";
 
 /**
+ * Read `-v` as `--verbose`. Effect's `--version` built-in claims the alias `v`, and an alias on the
+ * command tree would collide with it under Effect's default configuration, so the runner rewrites
+ * each argument that is exactly `-v` before the first `--`. A cluster that holds `v`, such as
+ * `-qv`, is left alone and fails as an unknown flag.
+ *
+ * @param args - The command line after the program name.
+ * @returns The same line with each bare `-v` before `--` spelled `--verbose`.
+ */
+export const rewriteVerbose = (args: readonly string[]): readonly string[] => {
+  const end = args.indexOf("--");
+
+  return args.map((arg, index) =>
+    arg === "-v" && (end === -1 || index < end) ? "--verbose" : arg,
+  );
+};
+
+/**
  * Run `command` on the arguments `Stdio` supplies, with this program's presenter and built-in
  * flags, printing what failed. The process and every in-process test run through here, so both
  * behave as a shell does.
@@ -22,7 +39,8 @@ export const runCli = <Name extends string, Input, ContextInput, E, R>(
   Effect.gen(function* runWithMode() {
     // The mode is read from the raw arguments before `Command.run` parses them, so a parse error
     // under `--json` is JSON too.
-    const args = yield* (yield* Stdio.Stdio).args;
+    const stdio = yield* Stdio.Stdio;
+    const args = rewriteVerbose(yield* stdio.args);
     const shown = {
       command: commandOfArguments(
         args,
@@ -34,6 +52,7 @@ export const runCli = <Name extends string, Input, ContextInput, E, R>(
     } as const;
 
     return yield* Command.run(command, config).pipe(
+      Effect.provideService(Stdio.Stdio, { ...stdio, args: Effect.succeed(args) }),
       printFailures(shown),
       Effect.provide(CliOutput.layerPresenter(presenterFor(shown))),
       Effect.provide(CliOutput.layer(formatterFor(shown))),
