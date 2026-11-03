@@ -1,14 +1,14 @@
-import { ChangeSet, Db, query, uuid, v } from "@bjornpagen/grizzle";
+import { Db, query, v } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import { describe, inject } from "vitest";
+import { describe } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { importPackage } from "#qti/import/package.ts";
 import * as asi from "#qti/schema/kinds/asi.ts";
 import * as xi from "#qti/schema/kinds/xi.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
-import { Admission, AttributeLexical, Node, TreeRoot } from "#qti/schema/node.ts";
+import { AttributeAdmission } from "#qti/schema/attributes.ts";
+import { Admission } from "#qti/schema/node.ts";
 import type { AttributeNameHandle } from "#qti/schema/node.ts";
 import { OperatorArity, OperatorArityMax, OperatorArityUnbounded } from "#qti/schema/processing.ts";
 import { Author } from "#qti/schema/roles.ts";
@@ -18,8 +18,6 @@ import {
   operatorArityUnbounded,
 } from "#qti/schema/seed/operator-arity.ts";
 import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
-
-const fixtures = inject("fixtures");
 
 /**
  * The 20 expression kinds outside `NumericLogic1toManyDType`'s choice, so the 44 others are the
@@ -53,12 +51,13 @@ const generic = ["ws", "comment", "pi"];
 const mixed = ["text", "ws", "entityRef", "comment", "pi"];
 
 /**
- * The 64 expression kinds and 25 rule kinds this phase appends to `asi.kinds`, after the 11 of M0
- * and M1 (`qti-response-processing` is the eleventh), in `asi.ts`'s append-only order.
+ * The 64 expression kinds and 25 rule kinds of the M3 roster, by `asi.ts`'s named rosters
+ * `expressionKinds` and `ruleKinds`, never by position in `asi.kinds`, whose order other
+ * modules' kinds interleave.
  */
-const expressions = asi.kinds.slice(11, 75);
+const expressions = asi.expressionKinds;
 
-const rules = asi.kinds.slice(75);
+const rules = asi.ruleKinds;
 
 /**
  * The 25 attribute names of the spec's 3.9 that the M0 roster does not hold, then the 5 of
@@ -121,25 +120,10 @@ const arityUnboundedRows = query(Author).rule((r) => {
   return r.match(OperatorArityUnbounded, { kind }).find({ kind });
 });
 
-/**
- * The root node of one tree, with its kind.
- */
-const rootOf = query(Author).rule((r) => {
-  const { id, kind } = v(Node);
+const attributeAdmissionRows = query(Author).rule((r) => {
+  const { attribute } = v(AttributeAdmission);
 
-  return r
-    .match(TreeRoot, { node: id, tree: r.param("tree", uuid) })
-    .match(Node, { id, kind })
-    .find({ id, kind });
-});
-
-const lexicalsOf = query(Author).rule((r) => {
-  const { attribute, node } = v(AttributeLexical);
-
-  return r
-    .match(AttributeLexical, { attribute, node })
-    .where(r.eq(node, r.param("node", uuid)))
-    .find({ attribute });
+  return r.match(AttributeAdmission, { attribute }).find({ attribute });
 });
 
 const keyOf = (row: {
@@ -298,46 +282,23 @@ describe.skipIf(!hasLease)(
           }),
       );
 
-      it.effect("stores each of the 30 M3 AttributeName labels through a written row", () =>
-        Effect.gen(function* storesTheAttributeNames() {
-          const packageId = yield* importPackage(fixtures.simple);
-          const db = yield* Db.open(AuthorApp.roles.author, {});
-          const roots = yield* (yield* db.execute(rootOf, { tree: packageId })).collect;
+      it.effect(
+        "carries the 30 M3 AttributeName labels, read through the closed column of AttributeAdmission",
+        () =>
+          Effect.gen(function* carriesTheAttributeNames() {
+            const db = yield* Db.open(AuthorApp.roles.author, {});
+            const rows = yield* (yield* db.execute(attributeAdmissionRows, {})).collect;
+            const named = new Set(rows.map((row) => row.attribute));
 
-          assert.strictEqual(roots.length, 1);
-
-          const [root] = roots;
-
-          assert.isDefined(root);
-          if (root === undefined) {
-            return;
-          }
-
-          // The attribute names are not carried by a seeded relation, so the thirty labels are written as
-          // `AttributeLexical` rows on the manifest's root and read back; the table only names the
-          // node, its kind and the attribute.
-          const written = yield* db.apply(
-            ChangeSet.empty(Author).insert(
-              AttributeLexical,
-              attributeNames.map((attribute) => ({
-                attribute,
-                kind: root.kind,
-                node: root.id,
-                value: " padded",
-              })),
-            ),
-            {},
-          );
-
-          assert.strictEqual(written.kind, "accepted");
-
-          const found = yield* (yield* db.execute(lexicalsOf, { node: root.id })).collect;
-
-          assert.deepStrictEqual(
-            found.map((row) => row.attribute).toSorted(),
-            attributeNames.toSorted(),
-          );
-        }),
+            // `closed` rosters are not relations, so no query reads `pg_enum`; `AttributeAdmission`'s
+            // `attribute` column is the closed `AttributeName` roster, so a label the installed enum
+            // lacked could not be stored in it.
+            assert.strictEqual(attributeNames.length, 30);
+            assert.deepStrictEqual(
+              attributeNames.filter((label) => !named.has(label)),
+              [],
+            );
+          }),
       );
     });
   },
