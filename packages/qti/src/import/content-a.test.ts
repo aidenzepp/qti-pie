@@ -92,7 +92,7 @@ import { Coords, CoordsDefault, CoordsRect } from "#qti/schema/shapes.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
 import { rowsOf } from "#qti/test/rows.ts";
-import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+import { fixtureRowsLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**
  * The directory every export is written under: the package's gitignored `work/`.
@@ -1042,63 +1042,63 @@ describe.skipIf(!hasLease)(
   "import/content-a.test.ts, the negatives, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
-    layer(Layer.mergeAll(AuthorAppLayer, FixtureRowsLayer), { excludeTestServices: true })(
-      "interactions, choices and bindings are refused by the database",
-      (it) => {
-        for (const negative of negatives) {
-          it.effect(negative.name, () =>
-            Effect.gen(function* refused() {
-              const fixtures = yield* FixtureRows;
-              const rows = fixtures.get(negative.fixture);
-              assert.isDefined(rows, negative.fixture);
+    layer(Layer.mergeAll(AuthorAppLayer, FixtureRowsLayer), {
+      excludeTestServices: true,
+      timeout: fixtureRowsLayerHookTimeoutMs,
+    })("interactions, choices and bindings are refused by the database", (it) => {
+      for (const negative of negatives) {
+        it.effect(negative.name, () =>
+          Effect.gen(function* refused() {
+            const fixtures = yield* FixtureRows;
+            const rows = fixtures.get(negative.fixture);
+            assert.isDefined(rows, negative.fixture);
 
-              const draft = draftOf(rows ?? Rows.empty());
-              negative.alter(draft);
+            const draft = draftOf(rows ?? Rows.empty());
+            negative.alter(draft);
 
-              const outcome = yield* apply(draft);
+            const outcome = yield* apply(draft);
 
-              assert.strictEqual(outcome.kind, "invariant-rejected");
-              if (outcome.kind === "invariant-rejected") {
-                const reported: unknown = outcome.law;
-                const named = negative.laws.find((law) => isDeepStrictEqual(reported, law));
-                assert.deepStrictEqual(reported, named ?? negative.laws[0]);
-                assert.strictEqual(ruleOfLaw(outcome.law satisfies ImportLaw), negative.rule);
-              }
-            }),
-          );
-        }
+            assert.strictEqual(outcome.kind, "invariant-rejected");
+            if (outcome.kind === "invariant-rejected") {
+              const reported: unknown = outcome.law;
+              const named = negative.laws.find((law) => isDeepStrictEqual(reported, law));
+              assert.deepStrictEqual(reported, named ?? negative.laws[0]);
+              assert.strictEqual(ruleOfLaw(outcome.law satisfies ImportLaw), negative.rule);
+            }
+          }),
+        );
+      }
 
-        for (const name of negativeFixtures.filter((fixture) => fixture !== "cut-hottext")) {
-          it.effect(
-            `the unaltered rows of ${name} are accepted, so each refusal above is its alteration's`,
-            () =>
-              Effect.gen(function* unaltered() {
-                const rows = (yield* FixtureRows).get(name);
-                assert.isDefined(rows, name);
+      for (const name of negativeFixtures.filter((fixture) => fixture !== "cut-hottext")) {
+        it.effect(
+          `the unaltered rows of ${name} are accepted, so each refusal above is its alteration's`,
+          () =>
+            Effect.gen(function* unaltered() {
+              const rows = (yield* FixtureRows).get(name);
+              assert.isDefined(rows, name);
 
-                const outcome = yield* apply(draftOf(rows ?? Rows.empty()));
-
-                assert.strictEqual(outcome.kind, "accepted");
-              }),
-          );
-        }
-
-        for (const positive of admitted) {
-          it.effect(positive.name, () =>
-            Effect.gen(function* admit() {
-              const rows = (yield* FixtureRows).get(positive.fixture);
-              assert.isDefined(rows, positive.fixture);
-
-              const draft = draftOf(rows ?? Rows.empty());
-              positive.alter(draft);
-
-              const outcome = yield* apply(draft);
+              const outcome = yield* apply(draftOf(rows ?? Rows.empty()));
 
               assert.strictEqual(outcome.kind, "accepted");
             }),
-          );
-        }
-      },
-    );
+        );
+      }
+
+      for (const positive of admitted) {
+        it.effect(positive.name, () =>
+          Effect.gen(function* admit() {
+            const rows = (yield* FixtureRows).get(positive.fixture);
+            assert.isDefined(rows, positive.fixture);
+
+            const draft = draftOf(rows ?? Rows.empty());
+            positive.alter(draft);
+
+            const outcome = yield* apply(draft);
+
+            assert.strictEqual(outcome.kind, "accepted");
+          }),
+        );
+      }
+    });
   },
 );

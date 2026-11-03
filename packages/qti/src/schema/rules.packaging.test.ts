@@ -113,7 +113,7 @@ import {
 } from "#qti/schema/usage.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
-import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+import { fixtureRowsLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 import { readXml } from "#qti/xml/read.ts";
 
 /**
@@ -2133,134 +2133,126 @@ describe.skipIf(!hasLease)(
   "schema/rules.packaging.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
-    layer(Layer.mergeAll(AuthorAppLayer, FixtureRowsLayer), { excludeTestServices: true })(
-      "the schema's bin 1 rules over the packaging relations, by direct ChangeSet",
-      (it) => {
-        for (const negative of [...negatives, ...packagingNegatives]) {
-          it.effect(negative.name, () =>
-            Effect.gen(function* refused() {
-              const fixtures = yield* FixtureRows;
-              const draft = draftOf(fixtures[negative.base]);
-              negative.alter?.(draft);
+    layer(Layer.mergeAll(AuthorAppLayer, FixtureRowsLayer), {
+      excludeTestServices: true,
+      timeout: fixtureRowsLayerHookTimeoutMs,
+    })("the schema's bin 1 rules over the packaging relations, by direct ChangeSet", (it) => {
+      for (const negative of [...negatives, ...packagingNegatives]) {
+        it.effect(negative.name, () =>
+          Effect.gen(function* refused() {
+            const fixtures = yield* FixtureRows;
+            const draft = draftOf(fixtures[negative.base]);
+            negative.alter?.(draft);
 
-              const outcome = yield* apply(draft);
+            const outcome = yield* apply(draft);
 
-              assert.strictEqual(outcome.kind, "invariant-rejected");
-              if (outcome.kind === "invariant-rejected") {
-                const named = negative.laws.find((law) => isDeepStrictEqual(outcome.law, law));
-                const reported: unknown = outcome.law;
-                assert.deepStrictEqual(reported, named ?? negative.laws[0]);
-              }
-            }),
-          );
-        }
+            assert.strictEqual(outcome.kind, "invariant-rejected");
+            if (outcome.kind === "invariant-rejected") {
+              const named = negative.laws.find((law) => isDeepStrictEqual(outcome.law, law));
+              const reported: unknown = outcome.law;
+              assert.deepStrictEqual(reported, named ?? negative.laws[0]);
+            }
+          }),
+        );
+      }
 
-        for (const pair of r30Pairs) {
-          if (!lomAdmission.some((row) => row.parent === pair.parent && row.child === pair.child)) {
-            it.effect(
-              `one ${pair.child} under ${pair.parent}, a pair the content model never admits, is refused by the Edge containment into Admission`,
-              () =>
-                Effect.gen(function* unadmitted() {
-                  const outcome = yield* apply(
-                    draftOf(yield* recordRows(pair.context, pair.child, 1)),
-                  );
-
-                  assert.strictEqual(outcome.kind, "invariant-rejected");
-                  if (outcome.kind === "invariant-rejected") {
-                    const reported: unknown = outcome.law;
-                    assert.deepStrictEqual(reported, admission);
-                  }
-                }),
-            );
-            continue;
-          }
-
+      for (const pair of r30Pairs) {
+        if (!lomAdmission.some((row) => row.parent === pair.parent && row.child === pair.child)) {
           it.effect(
-            `two ${pair.child} under one ${pair.parent} are refused by the capacity on the ${pair.parent} row`,
+            `one ${pair.child} under ${pair.parent}, a pair the content model never admits, is refused by the Edge containment into Admission`,
             () =>
-              Effect.gen(function* capped() {
-                const one = yield* apply(draftOf(yield* recordRows(pair.context, pair.child, 1)));
-
-                assert.strictEqual(one.kind, "accepted");
-
+              Effect.gen(function* unadmitted() {
                 const outcome = yield* apply(
-                  draftOf(yield* recordRows(pair.context, pair.child, 2)),
+                  draftOf(yield* recordRows(pair.context, pair.child, 1)),
                 );
 
                 assert.strictEqual(outcome.kind, "invariant-rejected");
                 if (outcome.kind === "invariant-rejected") {
                   const reported: unknown = outcome.law;
-                  assert.deepStrictEqual(reported, lawOfPair(pair));
+                  assert.deepStrictEqual(reported, admission);
                 }
               }),
           );
-        }
-
-        for (const pair of uncappedPairs) {
-          it.effect(
-            `R30 over-cap control: one ${pair.child} under ${pair.parent} is accepted`,
-            () =>
-              Effect.gen(function* control() {
-                const outcome = yield* apply(
-                  draftOf(yield* recordRows(pair.context, pair.child, 1)),
-                );
-
-                assert.strictEqual(outcome.kind, "accepted");
-              }),
-          );
-
-          it.effect(
-            `two ${pair.child} under one ${pair.parent}, a pair no R30 assert caps, are accepted`,
-            () =>
-              Effect.gen(function* positive() {
-                const outcome = yield* apply(
-                  draftOf(yield* recordRows(pair.context, pair.child, 2)),
-                );
-
-                assert.strictEqual(outcome.kind, "accepted");
-              }),
-          );
-        }
-
-        for (const base of ["extmeta", "lomrest", "filelom", "nestedqmd", "outcome"] as const) {
-          it.effect(`the unaltered ${base} rows are accepted`, () =>
-            Effect.gen(function* accepted() {
-              const fixtures = yield* FixtureRows;
-              const draft = draftOf(fixtures[base]);
-              const outcome = yield* apply(draft);
-
-              assert.strictEqual(outcome.kind, "accepted");
-            }),
-          );
-        }
-
-        for (const base of ["csm", "usage3", "usage3Typed", "variant"] as const) {
-          it.effect(`the unaltered ${base} rows are accepted`, () =>
-            Effect.gen(function* accepted() {
-              const fixtures = yield* FixtureRows;
-              const outcome = yield* apply(draftOf(fixtures[base]));
-
-              assert.strictEqual(outcome.kind, "accepted");
-            }),
-          );
+          continue;
         }
 
         it.effect(
-          "an rptemplate Document under imsqti_resprocessing_xmlv3p0, with its ResponseProcessing row and no item row, is accepted",
+          `two ${pair.child} under one ${pair.parent} are refused by the capacity on the ${pair.parent} row`,
           () =>
-            Effect.gen(function* accepted() {
-              const fixtures = yield* FixtureRows;
-              const draft = draftOf(fixtures.resproc);
-              const document = templateDocument(draft);
+            Effect.gen(function* capped() {
+              const one = yield* apply(draftOf(yield* recordRows(pair.context, pair.child, 1)));
 
-              assert.isEmpty(rowsWhere(draft, ResponseProcessingItem, "id", document));
+              assert.strictEqual(one.kind, "accepted");
 
-              const outcome = yield* apply(draft);
+              const outcome = yield* apply(draftOf(yield* recordRows(pair.context, pair.child, 2)));
+
+              assert.strictEqual(outcome.kind, "invariant-rejected");
+              if (outcome.kind === "invariant-rejected") {
+                const reported: unknown = outcome.law;
+                assert.deepStrictEqual(reported, lawOfPair(pair));
+              }
+            }),
+        );
+      }
+
+      for (const pair of uncappedPairs) {
+        it.effect(`R30 over-cap control: one ${pair.child} under ${pair.parent} is accepted`, () =>
+          Effect.gen(function* control() {
+            const outcome = yield* apply(draftOf(yield* recordRows(pair.context, pair.child, 1)));
+
+            assert.strictEqual(outcome.kind, "accepted");
+          }),
+        );
+
+        it.effect(
+          `two ${pair.child} under one ${pair.parent}, a pair no R30 assert caps, are accepted`,
+          () =>
+            Effect.gen(function* positive() {
+              const outcome = yield* apply(draftOf(yield* recordRows(pair.context, pair.child, 2)));
 
               assert.strictEqual(outcome.kind, "accepted");
             }),
         );
-      },
-    );
+      }
+
+      for (const base of ["extmeta", "lomrest", "filelom", "nestedqmd", "outcome"] as const) {
+        it.effect(`the unaltered ${base} rows are accepted`, () =>
+          Effect.gen(function* accepted() {
+            const fixtures = yield* FixtureRows;
+            const draft = draftOf(fixtures[base]);
+            const outcome = yield* apply(draft);
+
+            assert.strictEqual(outcome.kind, "accepted");
+          }),
+        );
+      }
+
+      for (const base of ["csm", "usage3", "usage3Typed", "variant"] as const) {
+        it.effect(`the unaltered ${base} rows are accepted`, () =>
+          Effect.gen(function* accepted() {
+            const fixtures = yield* FixtureRows;
+            const outcome = yield* apply(draftOf(fixtures[base]));
+
+            assert.strictEqual(outcome.kind, "accepted");
+          }),
+        );
+      }
+
+      it.effect(
+        "an rptemplate Document under imsqti_resprocessing_xmlv3p0, with its ResponseProcessing row and no item row, is accepted",
+        () =>
+          Effect.gen(function* accepted() {
+            const fixtures = yield* FixtureRows;
+            const draft = draftOf(fixtures.resproc);
+            const document = templateDocument(draft);
+
+            assert.isEmpty(rowsWhere(draft, ResponseProcessingItem, "id", document));
+
+            const outcome = yield* apply(draft);
+
+            assert.strictEqual(outcome.kind, "accepted");
+          }),
+      );
+    });
   },
 );
