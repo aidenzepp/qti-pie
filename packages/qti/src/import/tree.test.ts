@@ -30,7 +30,9 @@ import { attributeRows } from "#qti/import/attributes.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import { GuardRefusal, treeGuards } from "#qti/import/guards/tree.ts";
 import {
+  closedOf,
   collapse,
+  integerOf,
   kindOf,
   replace,
   Rows,
@@ -700,3 +702,140 @@ it("kindOf resolves a dotted handle by the parent's kind", () => {
     Option.some("lom:duration.string"),
   );
 });
+
+const spaces = ["integer", "nonNegativeInteger", "positiveInteger"] as const;
+
+const refusedRule = <Value>(effect: Effect.Effect<Value, { readonly rule: string }>) =>
+  Effect.map(Effect.flip(effect), (refusal) => refusal.rule);
+
+it.effect("integerOf refuses text outside every space under the rule it was given", () =>
+  Effect.gen(function* refusesOutside() {
+    for (const space of spaces) {
+      for (const text of ["abc", "", "1.5", " 1", "0x10"]) {
+        assert.strictEqual(
+          yield* refusedRule(integerOf(text, space, "attribute-lexical", "the a attribute of b")),
+          "attribute-lexical",
+        );
+      }
+    }
+  }),
+);
+
+it.effect("integerOf passes the rule it is given through unchanged", () =>
+  Effect.gen(function* passesRule() {
+    assert.strictEqual(
+      yield* refusedRule(integerOf("abc", "integer", "P7", "the a attribute of b")),
+      "P7",
+    );
+  }),
+);
+
+it.effect("integerOf reads a nonNegativeInteger", () =>
+  Effect.gen(function* readsNonNegative() {
+    const refused = yield* refusedRule(
+      integerOf("-1", "nonNegativeInteger", "attribute-lexical", "the a attribute of b"),
+    );
+    assert.strictEqual(refused, "attribute-lexical");
+    assert.strictEqual(
+      yield* integerOf("+5", "nonNegativeInteger", "attribute-lexical", "the a attribute of b"),
+      5n,
+    );
+    assert.strictEqual(
+      yield* integerOf("05", "nonNegativeInteger", "attribute-lexical", "the a attribute of b"),
+      5n,
+    );
+    assert.strictEqual(
+      yield* integerOf("0", "nonNegativeInteger", "attribute-lexical", "the a attribute of b"),
+      0n,
+    );
+  }),
+);
+
+it.effect("integerOf reads a positiveInteger", () =>
+  Effect.gen(function* readsPositive() {
+    const refused = yield* refusedRule(
+      integerOf("0", "positiveInteger", "attribute-lexical", "the a attribute of b"),
+    );
+    assert.strictEqual(refused, "attribute-lexical");
+    assert.strictEqual(
+      yield* integerOf("1", "positiveInteger", "attribute-lexical", "the a attribute of b"),
+      1n,
+    );
+  }),
+);
+
+it.effect("integerOf reads an integer, signs included", () =>
+  Effect.gen(function* readsInteger() {
+    assert.strictEqual(
+      yield* integerOf("-0", "integer", "attribute-lexical", "the a attribute of b"),
+      0n,
+    );
+    assert.strictEqual(
+      yield* integerOf("-3", "integer", "attribute-lexical", "the a attribute of b"),
+      -3n,
+    );
+    assert.strictEqual(
+      yield* integerOf("+3", "integer", "attribute-lexical", "the a attribute of b"),
+      3n,
+    );
+  }),
+);
+
+it.effect("integerOf refuses a value outside the signed 64-bit range", () =>
+  Effect.gen(function* refusesRange() {
+    for (const space of spaces) {
+      assert.strictEqual(
+        yield* refusedRule(
+          integerOf("9223372036854775808", space, "attribute-lexical", "the a attribute of b"),
+        ),
+        "attribute-lexical",
+      );
+    }
+    assert.strictEqual(
+      yield* refusedRule(
+        integerOf("-9223372036854775809", "integer", "attribute-lexical", "the a attribute of b"),
+      ),
+      "attribute-lexical",
+    );
+    assert.strictEqual(
+      yield* integerOf(
+        "9223372036854775807",
+        "integer",
+        "attribute-lexical",
+        "the a attribute of b",
+      ),
+      9_223_372_036_854_775_807n,
+    );
+    assert.strictEqual(
+      yield* integerOf(
+        "-9223372036854775808",
+        "integer",
+        "attribute-lexical",
+        "the a attribute of b",
+      ),
+      -9_223_372_036_854_775_808n,
+    );
+  }),
+);
+
+it.effect("closedOf returns a member's handle and refuses anything else", () =>
+  Effect.gen(function* closes() {
+    const roster = ["exact", "case-insensitive"] as const;
+    assert.strictEqual(
+      yield* closedOf(roster, "case-insensitive", "attribute-lexical", "the a attribute of b"),
+      "case-insensitive",
+    );
+    assert.strictEqual(
+      yield* refusedRule(closedOf(roster, "other", "attribute-lexical", "the a attribute of b")),
+      "attribute-lexical",
+    );
+    assert.strictEqual(
+      yield* refusedRule(closedOf(roster, " exact", "P7", "the a attribute of b")),
+      "P7",
+    );
+    assert.strictEqual(
+      yield* refusedRule(closedOf(roster, "", "attribute-lexical", "the a attribute of b")),
+      "attribute-lexical",
+    );
+  }),
+);

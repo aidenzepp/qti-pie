@@ -1061,6 +1061,12 @@ const conditionMirrors: ReadonlySet<string> = new Set([
   "TemplateConditionArm",
 ]);
 
+/**
+ * The rule each named contract of the schema maps to. Empty until the contract slices fill it; a
+ * contract no row names falls to {@link nearest}, `value-lexical`, unmapped.
+ */
+const contractRules: ReadonlyMap<string, Rule> = new Map();
+
 const some = (rule: Rule | undefined): Mapped | undefined =>
   rule === undefined ? undefined : named(rule);
 
@@ -1100,6 +1106,10 @@ const recognized = (law: ImportLaw): Mapped | undefined => {
 
   if (law.kind === "pattern") {
     return some(patternRules.get(law.source)) ?? { mapped: false, rule: "value-lexical" };
+  }
+
+  if (law.kind === "contract") {
+    return some(contractRules.get(law.contract));
   }
 
   return undefined;
