@@ -63,45 +63,30 @@ const declaring = (doc: XmlDocument, label: string): XmlDocument => ({
 });
 
 /**
- * Write the package `packageId` to `target`: a directory of the files it was imported from, or,
- * when `target` ends `.zip`, one zip file holding the same entries.
+ * The entries an export of the package `packageId` writes, in the order it writes them, without
+ * writing any.
  *
  * Every tree is read back, rendered and encoded in its export label: the `TreeExportCharset` row's
  * when the tree has one, with the declaration then naming that label, otherwise the charset it was
- * read in. A document that cannot be written in its label fails the export; nothing falls back to
+ * read in. A document that cannot be written in its label fails here; nothing falls back to
  * another charset. Documents go under their `Document.path`, the manifest under `imsmanifest.xml`,
- * and every stored file's decoded bytes under its path. A zip target holds those entries at those
- * paths, written by `writeZip`, and its directory is created when absent.
+ * and every stored file's decoded bytes under its path.
  *
  * @param packageId - The id of the imported package.
- * @param target - The directory to write under, or the `.zip` file to write, created when absent.
- * @returns Nothing. Fails with the database's, the encoder's or the file system's error.
+ * @returns The path and bytes of every entry. Fails with the database's or the encoder's error,
+ *   every one an export raises before it writes.
  */
-export const exportPackage = Effect.fn("export.exportPackage")(function* exportPackage(
+export const exportEntries = Effect.fn("export.exportEntries")(function* exportEntries(
   packageId: string,
-  target: string,
-): Effect.fn.Return<void, ExportError, DbLayer<typeof Author> | FileSystem.FileSystem | Path.Path> {
-  yield* Effect.annotateCurrentSpan({ packageId, target });
+): Effect.fn.Return<
+  readonly ZipEntry[],
+  OpenError | ReadError | EncodeError,
+  DbLayer<typeof Author>
+> {
+  yield* Effect.annotateCurrentSpan({ packageId });
 
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
   const db = yield* Db.open(AuthorApp.roles.author, {});
-
-  const zipping = target.endsWith(".zip");
   const entries: ZipEntry[] = [];
-
-  const write = Effect.fn("export.write")(function* write(entry: string, bytes: Uint8Array) {
-    if (zipping) {
-      entries.push({ bytes, path: entry });
-
-      return;
-    }
-
-    const file = path.join(target, entry);
-
-    yield* fs.makeDirectory(path.dirname(file), { recursive: true });
-    yield* fs.writeFile(file, bytes);
-  });
 
   for (const treeId of yield* treesOf(packageId)) {
     const rows = yield* readTree(packageId, treeId);
@@ -119,15 +104,49 @@ export const exportPackage = Effect.fn("export.exportPackage")(function* exportP
       row ??
       (yield* Effect.die(`The package ${packageId} has no document row for tree ${treeId}.`));
 
-    yield* write(found.path, bytes);
+    entries.push({ bytes, path: found.path });
   }
 
   for (const file of yield* (yield* db.execute(contentsOf, { package: packageId })).collect) {
-    yield* write(file.path, Buffer.from(file.content, "base64"));
+    entries.push({ bytes: Buffer.from(file.content, "base64"), path: file.path });
   }
 
-  if (zipping) {
+  return entries;
+});
+
+/**
+ * Write the package `packageId` to `target`: a directory of the files it was imported from, or,
+ * when `target` ends `.zip`, one zip file holding the same entries.
+ *
+ * The entries are those of {@link exportEntries}, all read, rendered and encoded before anything
+ * is written, so an export that cannot be made writes nothing. A zip target holds those entries at
+ * those paths, written by `writeZip`, and its directory is created when absent.
+ *
+ * @param packageId - The id of the imported package.
+ * @param target - The directory to write under, or the `.zip` file to write, created when absent.
+ * @returns Nothing. Fails with the database's, the encoder's or the file system's error.
+ */
+export const exportPackage = Effect.fn("export.exportPackage")(function* exportPackage(
+  packageId: string,
+  target: string,
+): Effect.fn.Return<void, ExportError, DbLayer<typeof Author> | FileSystem.FileSystem | Path.Path> {
+  yield* Effect.annotateCurrentSpan({ packageId, target });
+
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const entries = yield* exportEntries(packageId);
+
+  if (target.endsWith(".zip")) {
     yield* fs.makeDirectory(path.dirname(target), { recursive: true });
     yield* fs.writeFile(target, writeZip(entries));
+
+    return;
+  }
+
+  for (const entry of entries) {
+    const file = path.join(target, entry.path);
+
+    yield* fs.makeDirectory(path.dirname(file), { recursive: true });
+    yield* fs.writeFile(file, entry.bytes);
   }
 });
