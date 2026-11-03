@@ -14,7 +14,7 @@ import { registries } from "#qti/schema/seed/admission.ts";
 import { listPackage } from "#qti/package/read.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
 import { fixtureNames, materialize, materializeCorpus } from "#qti/test/fixtures.ts";
-import { settings } from "#qti/test/settings.ts";
+import { cutItemRenderTestTimeoutMs, settings } from "#qti/test/settings.ts";
 import { canonicalize } from "#qti/xml/canonical.ts";
 import { xmllintC14n } from "#qti/xml/oracle.ts";
 import type { Element } from "#qti/xml/tree.ts";
@@ -165,6 +165,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           assert.deepStrictEqual(failures, []);
           assert.strictEqual(files, cutNames.length);
         }),
+      { timeout: cutItemRenderTestTimeoutMs },
     );
   },
 );
@@ -521,6 +522,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
           const failures: string[] = [];
           const refused: string[] = [];
+          const refusedFiles: string[] = [];
 
           for (const { dir, file, version } of pure) {
             const label = `${path.basename(dir)}/${file}`;
@@ -551,6 +553,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               // writes an attribute the XSD does not give its element (`alt` on `object`) is pure
               // and is refused by the importer, which is the rule working: it has no tree to render.
               refused.push(`${label}: ${JSON.stringify(outcome.failure)}`);
+              refusedFiles.push(file);
             } else {
               failures.push(`${label}: ${JSON.stringify(outcome.failure)}`);
             }
@@ -561,7 +564,17 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             refused,
           );
 
-          assert.isAbove(pure.length, 0);
+          // The census holds 131 pure item documents, and exactly the three `Graphic_Gap_Match`
+          // items are refused, for the `alt` the XSD does not give `object` (the ledger's
+          // phase-2 record, :860). The rendered count, `pure.length - refusedFiles.length -
+          // failures.length`, follows. A later phase that admits `object/@alt`, or that grows the
+          // census, re-pins these numbers on its own measurement.
+          assert.strictEqual(pure.length, 131);
+          assert.deepStrictEqual(refusedFiles.toSorted(), [
+            "Items/Item_QTI3_Graphic_Gap_Match_01/graphic-gap-match-qti3.xml",
+            "Items/Item_QTI3_Graphic_Gap_Match_02/graphic-gap-match-qti3.xml",
+            "Items/Item_QTI3_Graphic_Gap_Match_03/graphic-gap-match-qti3.xml",
+          ]);
           assert.deepStrictEqual(failures, []);
         }),
       { timeout: 600_000 },

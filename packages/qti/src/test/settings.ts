@@ -61,3 +61,19 @@ export const authorLayerHookTimeoutMs = 20_000;
  * Raise it only on a new measurement recorded here, never to make a run pass.
  */
 export const cliProcessTestTimeoutMs = 10_000;
+
+/**
+ * The timeout, in milliseconds, for the one test that materializes the 19 `cut-*` fixtures and
+ * renders each to the oracle's bytes.
+ *
+ * `global-setup.ts` materializes only `simple` and four packages, so this test cuts and writes
+ * the 19 items itself, and vitest's 5 s default was exceeded under load (a fresh tree timed out at
+ * 5033 ms at a load average of 20.6; that figure is censored by the timeout, so the true time was
+ * longer). Measured on 2026-11-02 at `8a2decc`, with no `cut-*` directory in the fixtures root:
+ * three cold runs alone took 2902, 2821 and 2699 ms at load averages of 8.75, 8.37 and 8.53, and
+ * six concurrent cold runs, each with its own fixtures root, took 3265, 3279, 3289, 3289, 3343 and
+ * 3249 ms at a load average of 8.1. The budget is the larger of twice the maximum (3343 ms, so
+ * 6.7 s) and 10 s, the floor being twice the default, rounded up to the next second.
+ * Raise it only on a new measurement recorded here, never to make a run pass.
+ */
+export const cutItemRenderTestTimeoutMs = 10_000;
