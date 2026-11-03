@@ -410,6 +410,15 @@ describe("declaration", () => {
     assert.strictEqual(describeField(value), describeField(str.regex(patterns.positiveDouble)));
     assert.notStrictEqual(describeField(value), describeField(str.regex(patterns.xsDouble)));
   });
+
+  it("types DeclarationView.value as the view list", () => {
+    const { value } = declaration.relations.DeclarationView.fields;
+    assert.strictEqual(describeField(value), describeField(str.regex(patterns.viewList)));
+    assert.notStrictEqual(
+      describeField(value),
+      describeField(str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags)),
+    );
+  });
 });
 
 layer(NodeServices.layer, { excludeTestServices: true })("declaration importer", (suite) => {
