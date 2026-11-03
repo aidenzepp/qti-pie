@@ -43,6 +43,7 @@ import {
   rules as metadataRules,
 } from "#qti/schema/metadata.ts";
 import { Admission, AttributeLexical, Edge, Node, Tree } from "#qti/schema/node.ts";
+import { AncestryStep } from "#qti/schema/ancestry.ts";
 import { ancestryStepRows, KindEnters } from "#qti/schema/seed/ancestry.ts";
 import {
   Dependency,
@@ -531,8 +532,14 @@ const negatives: readonly Negative[] = [
         side(Edge, ["version", "parentKind", "childKind"]),
         side(Admission, ["version", "parent", "child"]),
       ),
+      // The edge's (parentAncestry, parentKind, childAncestry) triple has no AncestryStep row either,
+      // so this containment can fire first: the firing-order class, not the caller's choice.
+      contained(
+        side(Edge, ["parentAncestry", "parentKind", "childAncestry"]),
+        side(AncestryStep, ["ancestry", "kind", "next"]),
+      ),
     ],
-    name: "an edge from qti-prompt to qti-simple-choice is refused by Admission",
+    name: "an edge from qti-prompt to qti-simple-choice is refused by Admission or by AncestryStep",
   },
   {
     alter: (draft) => {
