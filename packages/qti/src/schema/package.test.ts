@@ -153,6 +153,43 @@ const boundsOf = (rule: (typeof pkg.rules)[number]): readonly [unknown, unknown]
  */
 const capacities = () => pkg.rules.filter((rule) => rule.kind === "capacity");
 
+/**
+ * One side of a containment statement: a relation and the fields it names.
+ */
+interface Side {
+  readonly fields: readonly string[];
+  readonly source: unknown;
+}
+
+const isSide = (value: unknown): value is Side =>
+  Predicate.hasProperty(value, "fields") &&
+  Array.isArray(value.fields) &&
+  Predicate.hasProperty(value, "source");
+
+/**
+ * The containment statements of this module that start at `source`, each as
+ * `left fields in Target(right fields)`; the public statement type exposes the sides only through
+ * its union.
+ */
+const containmentsFrom = (source: (typeof pkg.relations)[keyof typeof pkg.relations]): string[] =>
+  pkg.rules.flatMap((rule) => {
+    if (
+      !Predicate.hasProperty(rule, "left") ||
+      !Predicate.hasProperty(rule, "right") ||
+      !isSide(rule.left) ||
+      !isSide(rule.right) ||
+      rule.left.source !== source ||
+      !Predicate.hasProperty(rule.right.source, "name") ||
+      !Predicate.isString(rule.right.source.name)
+    ) {
+      return [];
+    }
+
+    return [
+      `${rule.left.fields.join(",")} in ${rule.right.source.name}(${rule.right.fields.join(",")})`,
+    ];
+  });
+
 describe("package", () => {
   it("builds a schema over node and package relations and rules without refusal", () => {
     const built = probe();
@@ -199,6 +236,23 @@ describe("package", () => {
       "ManifestMetadata",
       "Organizations",
       "Resources",
+    ]);
+  });
+
+  it("states ManifestSchemaVersion as a closed copy of its package's version, by two containments", () => {
+    const row = pkg.relations.ManifestSchemaVersion;
+    assert.deepStrictEqual(Object.keys(row.fields).toSorted(), [
+      "id",
+      "metadata",
+      "package",
+      "version",
+    ]);
+
+    const forms = containmentsFrom(row);
+    assert.includeMembers(forms, [
+      "metadata in ManifestMetadata(id)",
+      "metadata,package in ManifestMetadata(id,manifest)",
+      "package,version in Package(id,schemaversion)",
     ]);
   });
 

@@ -1108,7 +1108,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       const id = kindIs(leaf, "cp:schemaversion");
       const value = textOf(leaf);
       if (id !== undefined && isSchemaVersion(value)) {
-        add(ManifestSchemaVersion, [{ id, metadata: metadataId, value }]);
+        add(ManifestSchemaVersion, [
+          { id, metadata: metadataId, package: packageId, version: value },
+        ]);
       }
     }
 
