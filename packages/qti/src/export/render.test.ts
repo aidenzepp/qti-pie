@@ -232,14 +232,14 @@ const spelledChoiceItem = `<?xml version="1.0" encoding="UTF-8"?>
 </qti-assessment-item>`;
 
 /**
- * An item with a graphic associate interaction whose first hotspot writes `match-min` and whose
- * second omits it.
+ * An item with a graphic associate interaction whose first hotspot writes `match-min="03"` and
+ * whose second writes `match-max="+2"` and omits `match-min`.
  */
 const hotspotItem = `<?xml version="1.0" encoding="UTF-8"?>
 <qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="hotspot" title="Hotspot" adaptive="false" time-dependent="false">
   <qti-response-declaration identifier="RESPONSE" cardinality="multiple" base-type="directedPair"/>
   <qti-item-body>
-    <qti-graphic-associate-interaction response-identifier="RESPONSE"><img src="a.png" alt="a"/><qti-associable-hotspot identifier="H1" shape="rect" coords="0,0,5,5" match-max="1" match-min="1"/><qti-associable-hotspot identifier="H2" shape="rect" coords="6,6,9,9" match-max="1"/></qti-graphic-associate-interaction>
+    <qti-graphic-associate-interaction response-identifier="RESPONSE"><img src="a.png" alt="a"/><qti-associable-hotspot identifier="H1" shape="rect" coords="0,0,5,5" match-max="1" match-min="03"/><qti-associable-hotspot identifier="H2" shape="rect" coords="6,6,9,9" match-max="+2"/></qti-graphic-associate-interaction>
   </qti-item-body>
 </qti-assessment-item>`;
 
@@ -370,7 +370,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         }),
     );
 
-    it.effect("an associable hotspot's written match-min is kept", () =>
+    it.effect("an associable hotspot's written match-min and match-max spellings are kept", () =>
       Effect.gen(function* hotspotMatchMin() {
         const doc = yield* readXml(new TextEncoder().encode(hotspotItem));
         const input: ItemInput = {
@@ -387,7 +387,8 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
         assert.strictEqual(rendered, textOf(canonicalize(doc)));
         assert.strictEqual(rendered.split('match-min="').length - 1, 1);
-        assert.include(rendered, 'match-min="1"');
+        assert.include(rendered, 'match-min="03"');
+        assert.include(rendered, 'match-max="+2"');
       }),
     );
 

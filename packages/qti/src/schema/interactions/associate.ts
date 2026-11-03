@@ -5,10 +5,9 @@
  * names.
  *
  * Each interaction carries the typed bounds `maxAssociationsN` and `minAssociationsN` as NOT NULL
- * columns, 1 and 0 where the source omits the attribute, beside the optional lexical
- * `max-associations` and `min-associations` relations and the markers that say the source wrote
- * them. A choice or hotspot carries `matchMax` as written and the typed `matchMaxN` and
- * `matchMinN`.
+ * columns, 1 and 0 where the source omits the attribute, beside the markers that say the source
+ * wrote them; a non-canonical spelling of either is an `AttributeSpelling` row. A choice or hotspot
+ * carries the typed `matchMaxN` and `matchMinN` the same way.
  *
  * A `qti-simple-associable-choice` sits directly under an associate interaction or under one of the
  * two `qti-simple-match-set` elements of a match interaction. Its `interaction` is the nearest
@@ -45,11 +44,6 @@ import * as patterns from "#qti/schema/patterns.ts";
  * An `xs:boolean` attribute's lexical form.
  */
 const xsBoolean = str.regex(patterns.xsBoolean);
-
-/**
- * An `xs:nonNegativeInteger` attribute's lexical form.
- */
-const xsNonNegativeInteger = str.regex(patterns.xsNonNegativeInteger);
 
 /**
  * An `xs:normalizedString` attribute's value, as the typed column holds it after replacement.
@@ -115,8 +109,7 @@ export const GraphicAssociateInteraction = relation(
 
 /**
  * A `qti-simple-associable-choice`, by its identifier within the interaction that owns it.
- * `matchMax` is the attribute as written and `matchMaxN` and `matchMinN` the integer values the
- * match bounds are checked on.
+ * `matchMaxN` and `matchMinN` are the integer values the match bounds are checked on.
  */
 export const SimpleAssociableChoice = relation(
   "SimpleAssociableChoice",
@@ -124,7 +117,6 @@ export const SimpleAssociableChoice = relation(
     id: uuid,
     identifier: ncName,
     interaction: uuid,
-    matchMax: xsNonNegativeInteger,
     matchMaxN: pg.bigint,
     matchMinN: pg.bigint,
   },
@@ -147,7 +139,6 @@ export const AssociableHotspot = relation(
     id: uuid,
     identifier: ncName,
     interaction: uuid,
-    matchMax: xsNonNegativeInteger,
     matchMaxN: pg.bigint,
     matchMinN: pg.bigint,
     parentKind: closedId(NodeKind),
@@ -217,8 +208,7 @@ export const DeclaredMatchMinAssociations = relation(
 );
 
 /**
- * The source wrote `max-associations` on this graphic associate interaction. Its `min-associations`
- * has no default, so the optional relation alone says whether the source wrote it.
+ * The source wrote `max-associations` on this graphic associate interaction.
  */
 export const DeclaredGraphicAssociateMaxAssociations = relation(
   "DeclaredGraphicAssociateMaxAssociations",
@@ -227,56 +217,11 @@ export const DeclaredGraphicAssociateMaxAssociations = relation(
 );
 
 /**
- * An associate interaction's `max-associations` as written, when it has one.
- */
-export const AssociateMaxAssociations = relation(
-  "AssociateMaxAssociations",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
-
-/**
- * An associate interaction's `min-associations` as written, when it has one.
- */
-export const AssociateMinAssociations = relation(
-  "AssociateMinAssociations",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
-
-/**
- * A match interaction's `max-associations` as written, when it has one.
- */
-export const MatchMaxAssociations = relation(
-  "MatchMaxAssociations",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
-
-/**
- * A match interaction's `min-associations` as written, when it has one.
- */
-export const MatchMinAssociations = relation(
-  "MatchMinAssociations",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
-
-/**
- * A graphic associate interaction's `max-associations` as written, when it has one.
- */
-export const GraphicAssociateMaxAssociations = relation(
-  "GraphicAssociateMaxAssociations",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
-
-/**
- * A graphic associate interaction's `min-associations` as written, when it has one.
+ * The source wrote `min-associations` on this graphic associate interaction.
  */
 export const GraphicAssociateMinAssociations = relation(
   "GraphicAssociateMinAssociations",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid },
   ["node"],
 );
 
@@ -335,11 +280,11 @@ export const SimpleAssociableChoiceShowHide = relation(
 );
 
 /**
- * A simple associable choice's `match-min` as written, when it has one.
+ * The source wrote `match-min` on this simple associable choice.
  */
 export const SimpleAssociableChoiceMatchMin = relation(
   "SimpleAssociableChoiceMatchMin",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid },
   ["node"],
 );
 
@@ -353,13 +298,11 @@ export const AssociableHotspotLabel = relation(
 );
 
 /**
- * An associable hotspot's `match-min` as written, when it has one.
+ * The source wrote `match-min` on this associable hotspot.
  */
-export const AssociableHotspotMatchMin = relation(
-  "AssociableHotspotMatchMin",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
+export const AssociableHotspotMatchMin = relation("AssociableHotspotMatchMin", { node: uuid }, [
+  "node",
+]);
 
 /**
  * The arms of the six associate kinds, keyed by their `NodeKind` handles. Their containments into
@@ -382,8 +325,6 @@ export const relations = {
   AssociableHotspotLabel,
   AssociableHotspotMatchMin,
   AssociateInteraction,
-  AssociateMaxAssociations,
-  AssociateMinAssociations,
   DeclaredAssociableHotspotShowHide,
   DeclaredAssociateMaxAssociations,
   DeclaredAssociateMinAssociations,
@@ -393,13 +334,10 @@ export const relations = {
   DeclaredMatchMinAssociations,
   DeclaredMatchShuffle,
   GraphicAssociateInteraction,
-  GraphicAssociateMaxAssociations,
   GraphicAssociateMinAssociations,
   MatchFirstColumnHeader,
   MatchInteraction,
-  MatchMaxAssociations,
   MatchMaxSelectionsMessage,
-  MatchMinAssociations,
   MatchMinSelectionsMessage,
   SimpleAssociableChoice,
   SimpleAssociableChoiceFixed,
@@ -472,13 +410,9 @@ export const rules = [
   contained(on(DeclaredAssociateShuffle, "node"), on(AssociateInteraction, "id")),
   contained(on(DeclaredAssociateMaxAssociations, "node"), on(AssociateInteraction, "id")),
   contained(on(DeclaredAssociateMinAssociations, "node"), on(AssociateInteraction, "id")),
-  contained(on(AssociateMaxAssociations, "node"), on(AssociateInteraction, "id")),
-  contained(on(AssociateMinAssociations, "node"), on(AssociateInteraction, "id")),
   contained(on(DeclaredMatchShuffle, "node"), on(MatchInteraction, "id")),
   contained(on(DeclaredMatchMaxAssociations, "node"), on(MatchInteraction, "id")),
   contained(on(DeclaredMatchMinAssociations, "node"), on(MatchInteraction, "id")),
-  contained(on(MatchMaxAssociations, "node"), on(MatchInteraction, "id")),
-  contained(on(MatchMinAssociations, "node"), on(MatchInteraction, "id")),
   contained(on(MatchMinSelectionsMessage, "node"), on(MatchInteraction, "id")),
   contained(on(MatchMaxSelectionsMessage, "node"), on(MatchInteraction, "id")),
   contained(on(MatchFirstColumnHeader, "node"), on(MatchInteraction, "id")),
@@ -486,7 +420,6 @@ export const rules = [
     on(DeclaredGraphicAssociateMaxAssociations, "node"),
     on(GraphicAssociateInteraction, "id"),
   ),
-  contained(on(GraphicAssociateMaxAssociations, "node"), on(GraphicAssociateInteraction, "id")),
   contained(on(GraphicAssociateMinAssociations, "node"), on(GraphicAssociateInteraction, "id")),
   contained(on(SimpleAssociableChoiceFixed, "node"), on(SimpleAssociableChoice, "id")),
   contained(on(SimpleAssociableChoiceShowHide, "node"), on(SimpleAssociableChoice, "id")),

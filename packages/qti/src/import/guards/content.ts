@@ -47,19 +47,9 @@ import {
 } from "#qti/schema/html/media.ts";
 import { TypedBinding } from "#qti/schema/interaction.ts";
 import {
-  AssociableHotspot,
-  AssociableHotspotMatchMin,
   AssociateInteraction,
-  AssociateMaxAssociations,
-  AssociateMinAssociations,
   GraphicAssociateInteraction,
-  GraphicAssociateMaxAssociations,
-  GraphicAssociateMinAssociations,
   MatchInteraction,
-  MatchMaxAssociations,
-  MatchMinAssociations,
-  SimpleAssociableChoice,
-  SimpleAssociableChoiceMatchMin,
 } from "#qti/schema/interactions/associate.ts";
 import {
   Gap,
@@ -642,7 +632,7 @@ const associationBounds = (
   ]);
 
 /**
- * A choice's or hotspot's match bounds: `matchMax` is the attribute on the row, and `match-min`
+ * A gap text's or gap image's match bounds: `matchMax` is the attribute on the row, and `match-min`
  * has a relation of its own where the schema writes one.
  */
 const matchBounds = (
@@ -716,22 +706,6 @@ const countsOf = (rows: Rows): readonly Count[] => {
       maxFallback: 0n,
       min: of(GraphicOrderMinChoices),
     }),
-    ...associationBounds("AssociateInteraction", Rows.of(rows, AssociateInteraction), {
-      max: of(AssociateMaxAssociations),
-      min: of(AssociateMinAssociations),
-    }),
-    ...associationBounds("MatchInteraction", Rows.of(rows, MatchInteraction), {
-      max: of(MatchMaxAssociations),
-      min: of(MatchMinAssociations),
-    }),
-    ...associationBounds(
-      "GraphicAssociateInteraction",
-      Rows.of(rows, GraphicAssociateInteraction),
-      {
-        max: of(GraphicAssociateMaxAssociations),
-        min: of(GraphicAssociateMinAssociations),
-      },
-    ),
     ...associationBounds("GapMatchInteraction", Rows.of(rows, GapMatchInteraction), {
       max: of(GapMatchMaxAssociations),
       min: of(GapMatchMinAssociations),
@@ -758,16 +732,6 @@ const countsOf = (rows: Rows): readonly Count[] => {
         written: of(MediaMinPlays).get(fact.id),
       },
     ]),
-    ...matchBounds(
-      "SimpleAssociableChoice",
-      Rows.of(rows, SimpleAssociableChoice),
-      of(SimpleAssociableChoiceMatchMin),
-    ),
-    ...matchBounds(
-      "AssociableHotspot",
-      Rows.of(rows, AssociableHotspot),
-      of(AssociableHotspotMatchMin),
-    ),
     ...matchBounds("GapText", Rows.of(rows, GapText), of(GapTextMatchMin)),
     ...matchBounds("GapImg", Rows.of(rows, GapImg), of(GapImgMatchMin)),
   ];

@@ -35,16 +35,10 @@ import {
 import {
   AssociableHotspot,
   AssociateInteraction,
-  AssociateMaxAssociations,
-  AssociateMinAssociations,
   DeclaredAssociateMaxAssociations,
   DeclaredAssociateMinAssociations,
   GraphicAssociateInteraction,
-  GraphicAssociateMaxAssociations,
-  GraphicAssociateMinAssociations,
   MatchInteraction,
-  MatchMaxAssociations,
-  MatchMinAssociations,
   SimpleAssociableChoice,
   SimpleAssociableChoiceMatchMin,
   SimpleMatchSet,
@@ -452,20 +446,22 @@ const retypeResponse = (
 
 /**
  * Give an association-bearing interaction `max-associations` 1 and `min-associations` 2, in its
- * typed columns and in the lexical rows beside them.
+ * typed columns and, where `lexical` names them, in the lexical rows beside them.
  */
 const invertAssociations = (
   draft: Draft,
   arm: AnyRelation,
-  lexical: { readonly max: AnyRelation; readonly min: AnyRelation },
+  lexical?: { readonly max: AnyRelation; readonly min: AnyRelation },
 ): void => {
   const row = find(draft, arm);
   const id = text(row, "id");
 
   row["maxAssociationsN"] = 1n;
   row["minAssociationsN"] = 2n;
-  setValue(draft, lexical.max, id, "1");
-  setValue(draft, lexical.min, id, "2");
+  if (lexical !== undefined) {
+    setValue(draft, lexical.max, id, "1");
+    setValue(draft, lexical.min, id, "2");
+  }
 };
 
 /**
@@ -586,8 +582,6 @@ const negatives: readonly Negative[] = [
       find(draft, AssociateInteraction)["maxAssociationsN"] = 1n;
       find(draft, AssociateInteraction)["minAssociationsN"] = 2n;
       where(draft, TypedBinding, "node", id)["maxCount"] = 1n;
-      setValue(draft, AssociateMaxAssociations, id, "1");
-      setValue(draft, AssociateMinAssociations, id, "2");
       mark(draft, DeclaredAssociateMaxAssociations, id);
       mark(draft, DeclaredAssociateMinAssociations, id);
     },
@@ -617,7 +611,7 @@ const negatives: readonly Negative[] = [
 
       choice["matchMaxN"] = 1n;
       choice["matchMinN"] = 2n;
-      setValue(draft, SimpleAssociableChoiceMatchMin, text(choice, "id"), "2");
+      mark(draft, SimpleAssociableChoiceMatchMin, text(choice, "id"));
     },
     fixture: "cut-associate",
     laws: [checkLaw(SimpleAssociableChoice, "SimpleAssociableChoiceBounds")],
@@ -834,10 +828,7 @@ const negatives: readonly Negative[] = [
   },
   {
     alter: (draft) => {
-      invertAssociations(draft, MatchInteraction, {
-        max: MatchMaxAssociations,
-        min: MatchMinAssociations,
-      });
+      invertAssociations(draft, MatchInteraction);
     },
     fixture: "cut-match",
     laws: [checkLaw(MatchInteraction, "MatchBounds")],
@@ -846,10 +837,7 @@ const negatives: readonly Negative[] = [
   },
   {
     alter: (draft) => {
-      invertAssociations(draft, GraphicAssociateInteraction, {
-        max: GraphicAssociateMaxAssociations,
-        min: GraphicAssociateMinAssociations,
-      });
+      invertAssociations(draft, GraphicAssociateInteraction);
     },
     fixture: "cut-graphic-associate",
     laws: [checkLaw(GraphicAssociateInteraction, "GraphicAssociateBounds")],
