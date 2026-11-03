@@ -29,7 +29,6 @@ import {
 import { AssessmentItem } from "#qti/schema/item.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import { Edge, Node } from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
 import {
   BuiltInRef,
   DeclaredRef,
@@ -78,8 +77,8 @@ const roundTripped = [
  * packages are refused by the database (`attribute-lexical`: the pattern law on `figures`, whose
  * source is the one string that `main`'s `integerOrVariableRef` (P6) and content's
  * `integerOrVariableString` both are, so the refusal names content's rule, the side the
- * forward-merge plan's F2 took for identical pairs; `value-lexical`: the identifier value arm's
- * pattern on the content as read, which a pattern law cannot tell from P7).
+ * forward-merge plan's F2 took for identical pairs; `P7`: the contract law of the identifier
+ * literal arm, `LiteralIdentifierValue`, on the content as read).
  * `p29-test-variables-weight-integer` has a test root, which the reader refuses as
  * `unmodeled-vocabulary`; its XML path is M4's. Five packages hold content's vocabulary
  * (`qti-template-declaration`, `qti-context-declaration`, `qti-match-table`) that the reader
@@ -117,18 +116,18 @@ const refused: readonly (readonly [ProcessingFixtureName, Rule])[] = [
   ["missing-identifier", "P5"],
   ["else-before-if", "P30"],
   ["padded-reference", "attribute-lexical"],
-  ["padded-literal", "value-lexical"],
+  ["padded-literal", "P7"],
 ];
 
 /**
- * A pattern law as grizzle reports it: the regex and its flags, and no relation.
+ * A contract law as grizzle reports it: the contract's name, and no relation.
  */
-const PatternLaw = Schema.Struct({ kind: Schema.Literal("pattern"), source: Schema.String });
+const ContractLaw = Schema.Struct({ contract: Schema.String, kind: Schema.Literal("contract") });
 
 /**
- * Whether a refusal's law is a pattern law.
+ * Whether a refusal's law is a contract law.
  */
-const isPatternLaw = Schema.is(PatternLaw);
+const isContractLaw = Schema.is(ContractLaw);
 
 /**
  * The rows an apply added to one relation.
@@ -822,10 +821,9 @@ const negatives: readonly Negative[] = [
         { coords: "0,0" },
       );
     },
-    laws: [`pattern ${patterns.coordsAny}`],
-    name: "P6: an Inside with coords 0,0 is refused by the coords pattern",
-    rule: "attribute-lexical",
-    spec: "P6",
+    laws: ["contract ExpressionCoords"],
+    name: "P6: an Inside with coords 0,0 is refused by the ExpressionCoords contract",
+    rule: "P6",
   },
   {
     alter: (draft) => {
@@ -849,10 +847,9 @@ const negatives: readonly Negative[] = [
         { coords: "0,0,10,10 " },
       );
     },
-    laws: [`pattern ${patterns.coordsAny}`],
+    laws: ["contract ExpressionCoords"],
     name: "P6: an Inside with coords 0,0,10,10 and a trailing space is refused (the replace witness)",
-    rule: "attribute-lexical",
-    spec: "P6",
+    rule: "P6",
   },
   {
     alter: (draft) => {
@@ -1183,17 +1180,17 @@ describe.skipIf(!hasLease)(
               );
 
               if (name === "padded-literal" && result.failure instanceof ImportRefused) {
-                // A pattern law carries no relation (`refusal.ts`), so the map cannot tell P7 from
-                // `value-lexical`: the law is the `LiteralIdentifier` arm's `ncName` pattern.
+                // A contract law names the contract and no relation (`refusal.ts`): the law is the
+                // `LiteralIdentifier` arm's contract, whose rule is P7.
                 const { law } = result.failure;
 
                 assert.isTrue(
-                  isPatternLaw(law),
-                  `law is not a pattern law: ${JSON.stringify(law)}`,
+                  isContractLaw(law),
+                  `law is not a contract law: ${JSON.stringify(law)}`,
                 );
 
-                if (isPatternLaw(law)) {
-                  assert.strictEqual(law.source, patterns.ncName);
+                if (isContractLaw(law)) {
+                  assert.strictEqual(law.contract, "LiteralIdentifierValue");
                 }
 
                 yield* Effect.log(`padded-literal detail: ${result.failure.detail}`);
@@ -1278,8 +1275,11 @@ describe.skipIf(!hasLease)(
               assert.strictEqual(refusal.rule, negative.rule);
               assert.strictEqual(isMappedLaw(law), negative.mapped ?? true, lawOf(law));
 
-              if (law.kind === "pattern") {
-                assert.isTrue(isPatternLaw(refusal.law), "the refusal's law is not a pattern law");
+              if (law.kind === "contract") {
+                assert.isTrue(
+                  isContractLaw(refusal.law),
+                  "the refusal's law is not a contract law",
+                );
               }
             }
           }),
