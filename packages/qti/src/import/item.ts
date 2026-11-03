@@ -16,6 +16,7 @@ import { contentRows } from "#qti/import/content.ts";
 import { htmlRows } from "#qti/import/html.ts";
 import { interactionRows } from "#qti/import/interactions.ts";
 import { mappingRows } from "#qti/import/mapping.ts";
+import { requiredAttribute } from "#qti/import/required.ts";
 import {
   collapse,
   ItemRefusal,
@@ -937,13 +938,9 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
       built = longdesc.rows;
       const height = lexicalOf(element, "height");
       const width = lexicalOf(element, "width");
-      built = Rows.add(built, Img, [
-        {
-          alt: Option.getOrElse(lexicalOf(element, "alt"), () => ""),
-          id: node.id,
-          src: Option.getOrElse(src.value, () => ""),
-        },
-      ]);
+      const alt = yield* requiredAttribute(element, "alt", lexicalOf(element, "alt"));
+      const imgSrc = yield* requiredAttribute(element, "src", src.value);
+      built = Rows.add(built, Img, [{ alt, id: node.id, src: imgSrc }]);
       built = Rows.add(
         built,
         ImgLongdesc,
