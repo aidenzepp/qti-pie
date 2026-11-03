@@ -8,6 +8,9 @@ import { inject } from "vitest";
 import { itemGuards, ItemGuardRefusal } from "#qti/import/guards/item.ts";
 import { documentLangRows, itemRows, standardTemplate } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
+import { renderTree } from "#qti/export/render.ts";
+import { canonicalize } from "#qti/xml/canonical.ts";
 import { ItemRefusal, Rows, UnmodeledVocabulary, withParents } from "#qti/import/tree.ts";
 import type { NodeIndex } from "#qti/import/tree.ts";
 import {
@@ -451,9 +454,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
       assert.deepStrictEqual(Rows.of(rows, ChoiceInteraction), [
         {
           id: interaction,
-          maxChoices: "1",
           maxChoicesN: 1n,
-          minChoices: "0",
           minChoicesN: 0n,
           orientation: "vertical",
           responseIdentifier: "RESPONSE",
@@ -550,12 +551,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
       const interaction = onlyId(nodes, "qti-choice-interaction");
 
       assert.deepStrictEqual(
-        Rows.of(rows, ChoiceInteraction).map((row) => [
-          row.responseIdentifier,
-          row.maxChoices,
-          row.maxChoicesN,
-        ]),
-        [["RESPONSE", "1", 1n]],
+        Rows.of(rows, ChoiceInteraction).map((row) => [row.responseIdentifier, row.maxChoicesN]),
+        [["RESPONSE", 1n]],
       );
       assert.strictEqual(Rows.of(rows, SimpleChoice)[0]?.identifier, "ChoiceA");
       assert.deepStrictEqual(
@@ -709,7 +706,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
   );
 
   suite.effect(
-    "typed-copy refuses a maxChoicesN or minChoicesN that is not its lexical's parse",
+    "typed-copy refuses a maxChoicesN its binding does not hold, or a minChoicesN its spelling does not parse to",
     () =>
       Effect.gen(function* choiceCounts() {
         yield* refusal("typed-copy", inject("fixtures").simple, {
@@ -717,11 +714,71 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
             mapRows(rows, ChoiceInteraction, (row) => patched(row, { maxChoicesN: 2n })),
         });
 
-        const failure = yield* refusal("typed-copy", inject("fixtures").simple, {
+        yield* refusal("typed-copy", inject("fixtures").simple, {
           alter: (rows) =>
             mapRows(rows, ChoiceInteraction, (row) => patched(row, { minChoicesN: 1n })),
+          edit: ['max-choices="1"', 'max-choices="1" min-choices="00"'],
         });
-        assert.include(failure.detail, "minChoicesN");
+      }),
+  );
+
+  suite.effect(
+    "max-choices spelled 02 reads 2, keeps one spelling row and renders as written",
+    () =>
+      Effect.gen(function* spelledMax() {
+        const doc = yield* readChoice(inject("fixtures").simple, [
+          'max-choices="1"',
+          'max-choices="02"',
+        ]);
+        const { documentId, nodes, rows } = yield* itemOf(doc);
+        const interaction = onlyId(nodes, "qti-choice-interaction");
+
+        assert.deepStrictEqual(
+          Rows.of(rows, ChoiceInteraction).map((row) => [row.maxChoicesN, row.minChoicesN]),
+          [[2n, 0n]],
+        );
+        assert.deepStrictEqual(
+          Rows.of(rows, TypedBinding).map((row) => row.maxCount),
+          [2n],
+        );
+        assert.deepStrictEqual(
+          Rows.of(rows, AttributeSpelling).filter((row) => row.node === interaction),
+          [
+            {
+              attribute: "max-choices",
+              kind: "qti-choice-interaction",
+              node: interaction,
+              value: "02",
+            },
+          ],
+        );
+        assert.include(
+          new TextDecoder().decode(canonicalize(renderTree(rows, documentId))),
+          'max-choices="02"',
+        );
+      }),
+  );
+
+  suite.effect(
+    "a max-choices or min-choices outside the non-negative integers is refused attribute-lexical",
+    () =>
+      Effect.gen(function* refusedBounds() {
+        const edits: readonly (readonly [string, string])[] = [
+          ['max-choices="1"', 'max-choices="abc"'],
+          ['max-choices="1"', 'max-choices="-1"'],
+          ['max-choices="1"', 'max-choices="-0"'],
+          ['max-choices="1"', 'max-choices="1" min-choices="-1"'],
+        ];
+        for (const edit of edits) {
+          const doc = yield* readChoice(inject("fixtures").simple, edit);
+          const failure = yield* Effect.flip(itemOf(doc));
+
+          assert.strictEqual(failure._tag, "ImportRefused");
+          assert.strictEqual(
+            failure instanceof ImportRefused ? failure.rule : "",
+            "attribute-lexical",
+          );
+        }
       }),
   );
 

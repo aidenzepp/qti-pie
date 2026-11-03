@@ -11,6 +11,7 @@
  * and body rows are in.
  */
 import { judgedLater } from "#qti/import/judged.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
 import { Effect, Option } from "effect";
 import { attributeRows } from "#qti/import/attributes.ts";
 import { contentRows } from "#qti/import/content.ts";
@@ -26,6 +27,7 @@ import {
   kindOf,
   replace,
   Rows,
+  spelledInteger,
   treeRows,
   typedAttribute,
   UnmodeledVocabulary,
@@ -280,13 +282,6 @@ const textOf = (element: Element): string =>
   element.children.map((child) => (child.kind === "text" ? child.value : "")).join("");
 
 /**
- * The non-negative integer a lexical form writes. A form that is not one reads as 0: the lexical
- * column beside it carries the form and its pattern refuses it at commit.
- */
-const naturalOf = (lexical: string): bigint =>
-  /^\+?[0-9]+$/u.test(lexical) ? BigInt(lexical) : 0n;
-
-/**
  * The variable a declaration names, as the values and bindings of the document copy it.
  */
 interface Declared {
@@ -505,7 +500,8 @@ const valueRows = (
  * the pass calls it beside them.
  *
  * @returns The rows; `ItemRefusal` for a `response-identifier` that no declaration of the document
- *   names, since no type can be copied to the binding.
+ *   names, since no type can be copied to the binding; `ImportRefused` (`attribute-lexical`) for a
+ *   `max-choices` or `min-choices` outside the non-negative integers.
  */
 const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
   function* choiceInteractionRows(
@@ -514,7 +510,7 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
     node: NodeEntry,
     item: { readonly adaptive: string; readonly documentId: string },
     declarations: ReadonlyMap<string, Declared>,
-  ): Effect.fn.Return<Rows, ItemRefusal> {
+  ): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
     const { adaptive, documentId } = item;
     const attributes = reader(rows, element, node);
     const responseIdentifier = Option.getOrElse(
@@ -535,17 +531,35 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
       });
     }
 
-    const maxLexical = Option.getOrElse(maxChoices, () => "1");
-    const minLexical = Option.getOrElse(minChoices, () => "0");
     const interactionKind = "qti-choice-interaction";
-    let built = attributes.rows();
+    const bound = (
+      at: Rows,
+      name: "max-choices" | "min-choices",
+      text: Option.Option<string>,
+      fallback: bigint,
+    ) =>
+      Option.match(text, {
+        onNone: () => Effect.succeed({ rows: at, value: fallback }),
+        onSome: (spelling) =>
+          spelledInteger(
+            at,
+            node.id,
+            interactionKind,
+            name,
+            spelling,
+            "nonNegativeInteger",
+            "attribute-lexical",
+            `${interactionKind} ${name}`,
+          ),
+      });
+    const max = yield* bound(attributes.rows(), "max-choices", maxChoices, 1n);
+    const min = yield* bound(max.rows, "min-choices", minChoices, 0n);
+    let built = min.rows;
     built = Rows.add(built, ChoiceInteraction, [
       {
         id: node.id,
-        maxChoices: judgedLater(maxLexical),
-        maxChoicesN: naturalOf(maxLexical),
-        minChoices: judgedLater(minLexical),
-        minChoicesN: naturalOf(minLexical),
+        maxChoicesN: max.value,
+        minChoicesN: min.value,
         orientation: judgedLater(Option.getOrElse(orientation, () => "vertical")),
         responseIdentifier,
         rootKind: "item",
@@ -589,7 +603,7 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
             cardinality: declared.cardinality.value,
             document: documentId,
             interactionKind,
-            maxCount: naturalOf(maxLexical),
+            maxCount: max.value,
             node: node.id,
             responseIdentifier,
           },
@@ -719,13 +733,17 @@ interface SemanticInput {
  *
  * @returns The rows and the declared variables by identifier, the first declaration of an
  *   identifier winning; `ItemRefusal` for an interaction whose `response-identifier` names no
- *   declaration.
+ *   declaration; `ImportRefused` for a choice interaction's `max-choices` or `min-choices` outside
+ *   the non-negative integers.
  */
 export const semanticRows = Effect.fn("import.semanticRows")(function* semanticRows(
   rows: Rows,
   input: SemanticInput,
   walked: readonly (readonly [Element, Option.Option<Element>])[],
-): Effect.fn.Return<{ declarations: ReadonlyMap<string, Declared>; rows: Rows }, ItemRefusal> {
+): Effect.fn.Return<
+  { declarations: ReadonlyMap<string, Declared>; rows: Rows },
+  ImportRefused | ItemRefusal
+> {
   const { adaptive, documentId, nodes, positions, rootId } = input;
   let built = rows;
   const declaredBy = new Map<Element, Declared>();
@@ -806,14 +824,15 @@ export const semanticRows = Effect.fn("import.semanticRows")(function* semanticR
  * @returns The rows with this item's added, the node index of its tree and the document's id, which
  *   is the tree's; `UnmodeledVocabulary` for a root that is not `qti-assessment-item` in the ASI
  *   namespace, naming it, and for any element or attribute the registries do not model;
- *   `ProcessingRefused` for a response or template processing the processing checker refuses.
+ *   `ProcessingRefused` for a response or template processing the processing checker refuses;
+ *   `ImportRefused` for a choice interaction's bound outside the non-negative integers.
  */
 export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
   input: ItemInput,
   rows: Rows,
 ): Effect.fn.Return<
   { rows: Rows; nodes: NodeIndex; documentId: string },
-  UnmodeledVocabulary | ItemRefusal | ProcessingRefused
+  ImportRefused | UnmodeledVocabulary | ItemRefusal | ProcessingRefused
 > {
   const { doc, packageId, version } = input;
   const { root } = doc;

@@ -589,11 +589,17 @@ const shadows: ReadonlyMap<string, Shadow> = new Map<string, Shadow>([
   ],
   [
     "qti-choice-interaction/max-choices",
-    { column: (rows, node) => interaction(rows, node)?.maxChoices, whiteSpace: "collapse" },
+    {
+      column: (rows, node) => interaction(rows, node)?.maxChoicesN?.toString(),
+      whiteSpace: "collapse",
+    },
   ],
   [
     "qti-choice-interaction/min-choices",
-    { column: (rows, node) => interaction(rows, node)?.minChoices, whiteSpace: "collapse" },
+    {
+      column: (rows, node) => interaction(rows, node)?.minChoicesN?.toString(),
+      whiteSpace: "collapse",
+    },
   ],
   [
     "qti-choice-interaction/orientation",
@@ -663,40 +669,17 @@ const shadows: ReadonlyMap<string, Shadow> = new Map<string, Shadow>([
 export const shadowedAttributes: ReadonlySet<string> = new Set(shadows.keys());
 
 /**
- * The lexical form of a non-negative integer as the importer reads it: an unparseable form reads
- * 0, and the lexical column beside it refuses the form at commit.
- */
-const naturalOf = (lexical: string): bigint =>
-  /^\+?[0-9]+$/u.test(lexical) ? BigInt(lexical) : 0n;
-
-/**
  * A column that holds no tab, line feed or carriage return, as the `replace` class guarantees.
  */
 const hasReplaceable = (text: string): boolean => replace(text) !== text;
 
 /**
- * `typed-copy` of the interaction: each count equals the parse of its lexical column, and each
- * choice binding's `maxCount` equals its choice interaction's `maxChoicesN`. The other kinds'
- * binding counts are the content guards' (`bindingCopy`).
+ * `typed-copy` of the interaction: each choice binding's `maxCount` equals its choice
+ * interaction's `maxChoicesN`. The other kinds' binding counts are the content guards'
+ * (`bindingCopy`).
  */
 const interactionCopy = (rows: Rows): Finding => {
   const interactions = Rows.of(rows, ChoiceInteraction);
-  for (const row of interactions) {
-    if (row.maxChoicesN !== naturalOf(row.maxChoices)) {
-      return refuse(
-        "typed-copy",
-        `ChoiceInteraction ${row.id} holds maxChoicesN ${row.maxChoicesN} beside maxChoices ${quoted(row.maxChoices)}.`,
-      );
-    }
-
-    if (row.minChoicesN !== naturalOf(row.minChoices)) {
-      return refuse(
-        "typed-copy",
-        `ChoiceInteraction ${row.id} holds minChoicesN ${row.minChoicesN} beside minChoices ${quoted(row.minChoices)}.`,
-      );
-    }
-  }
-
   for (const binding of Rows.of(rows, TypedBinding)) {
     if (binding.interactionKind !== "qti-choice-interaction") {
       continue;

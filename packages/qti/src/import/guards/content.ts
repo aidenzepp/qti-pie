@@ -45,7 +45,7 @@ import {
   VideoPoster,
   VideoSrc,
 } from "#qti/schema/html/media.ts";
-import { ChoiceInteraction, TypedBinding } from "#qti/schema/interaction.ts";
+import { TypedBinding } from "#qti/schema/interaction.ts";
 import {
   AssociableHotspot,
   AssociableHotspotMatchMin,
@@ -684,14 +684,8 @@ const matchBounds = (
  */
 const countsOf = (rows: Rows): readonly Count[] => {
   const of = (relation: AnyRelation): Written => valuesOfRelation(rows, relation);
-  const choice = Rows.of(rows, ChoiceInteraction);
 
   return [
-    ...choiceBounds("ChoiceInteraction", choice, {
-      max: new Map(choice.map((fact) => [fact.id, fact.maxChoices])),
-      maxFallback: 1n,
-      min: new Map(choice.map((fact) => [fact.id, fact.minChoices])),
-    }),
     ...choiceBounds("HottextInteraction", Rows.of(rows, HottextInteraction), {
       max: of(HottextMaxChoices),
       maxFallback: 1n,

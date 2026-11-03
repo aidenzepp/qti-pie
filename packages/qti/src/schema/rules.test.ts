@@ -900,7 +900,7 @@ const negatives: readonly Negative[] = [
   {
     alter: (draft) => {
       set(first(draft, TypedBinding), "maxCount", 2n);
-      Object.assign(first(draft, ChoiceInteraction), { maxChoices: "2", maxChoicesN: 2n });
+      Object.assign(first(draft, ChoiceInteraction), { maxChoicesN: 2n });
     },
     laws: [{ kind: "check", name: "BindingMax", relation: TypedBinding.name }],
     name: "a binding with maxCount 2 on a single variable is refused by BindingMax",
@@ -922,9 +922,7 @@ const negatives: readonly Negative[] = [
   {
     alter: (draft) => {
       Object.assign(first(draft, ChoiceInteraction), {
-        maxChoices: "1",
         maxChoicesN: 1n,
-        minChoices: "2",
         minChoicesN: 2n,
       });
     },

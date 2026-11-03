@@ -589,8 +589,8 @@ export const ownAttributes = {
   "qti-choice-interaction": [
     responseIdentifierOf(R.ChoiceInteraction),
     ["shuffle", marked(R.DeclaredShuffle, arm(R.ChoiceInteraction, "shuffle"))],
-    ["max-choices", marked(R.DeclaredMaxChoices, arm(R.ChoiceInteraction, "maxChoices"))],
-    ["min-choices", marked(R.DeclaredMinChoices, arm(R.ChoiceInteraction, "minChoices"))],
+    ["max-choices", marked(R.DeclaredMaxChoices, arm(R.ChoiceInteraction, "maxChoicesN"))],
+    ["min-choices", marked(R.DeclaredMinChoices, arm(R.ChoiceInteraction, "minChoicesN"))],
     ["orientation", marked(R.DeclaredOrientation, arm(R.ChoiceInteraction, "orientation"))],
     ["data-min-selections-message", optional(R.ChoiceInteractionMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.ChoiceInteractionMaxSelectionsMessage)],
