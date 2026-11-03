@@ -14,6 +14,7 @@ import * as interaction from "#qti/schema/interaction.ts";
 import * as item from "#qti/schema/item.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { fbFlagged } from "#qti/schema/seed/ancestry.ts";
 import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
@@ -194,13 +195,21 @@ describe("interaction", () => {
     }
   });
 
-  it("types the selection messages as xsNormalizedString and the orientation by its pattern", () => {
-    const { ChoiceInteraction, ChoiceInteractionMinSelectionsMessage } = interaction.relations;
+  it("types the selection messages as xsNormalizedString", () => {
+    const { ChoiceInteractionMinSelectionsMessage } = interaction.relations;
     assert.strictEqual(
       ChoiceInteractionMinSelectionsMessage.fields.value.pattern.source,
       patterns.xsNormalizedString,
     );
-    assert.strictEqual(ChoiceInteraction.fields.orientation.pattern.source, patterns.orientation);
+  });
+
+  it("types the choice and binding attributes as closedId of their rosters", () => {
+    const { ChoiceInteraction, InteractionBinding, SimpleChoice } = interaction.relations;
+    assert.strictEqual(ChoiceInteraction.fields.orientation.roster, rosters.Orientation);
+    assert.strictEqual(ChoiceInteraction.fields.shuffle.roster, rosters.XsBoolean);
+    assert.strictEqual(SimpleChoice.fields.fixed.roster, rosters.XsBoolean);
+    assert.strictEqual(SimpleChoice.fields.showHide.roster, rosters.ShowHide);
+    assert.strictEqual(InteractionBinding.fields.adaptive.roster, rosters.XsBoolean);
   });
 
   it("keys each arm by its NodeKind handle and by id", () => {

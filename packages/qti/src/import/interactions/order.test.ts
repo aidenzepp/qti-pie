@@ -542,3 +542,36 @@ describe("orderRows on a non-canonical integer spelling", () => {
     }),
   );
 });
+
+describe("orderRows on a simple choice outside its rosters", () => {
+  const refused: readonly (readonly [string, Element])[] = [
+    ["fixed of yes", simpleChoice("A", { fixed: "yes" })],
+    ["show-hide of hidden", simpleChoice("A", { "show-hide": "hidden" })],
+  ];
+
+  for (const [name, choice] of refused) {
+    it.effect(`refuses ${name} under attribute-lexical before any row is written`, () =>
+      Effect.gen(function* outside() {
+        const exit = yield* Effect.exit(
+          orderRows(contextOf([orderItem({}, [choice])], declared), Rows.empty()),
+        );
+
+        assert.strictEqual(importRuleOf(exit), "attribute-lexical");
+      }),
+    );
+  }
+
+  it.effect("admits the xs:boolean spellings 1 and 0 for fixed", () =>
+    Effect.gen(function* admitted() {
+      const built = yield* orderRows(
+        contextOf([orderItem({}, [simpleChoice("A", { fixed: "1" })])], declared),
+        Rows.empty(),
+      );
+
+      assert.deepStrictEqual(
+        Rows.of(built, SimpleChoice).map((row) => row.fixed),
+        ["1"],
+      );
+    }),
+  );
+});

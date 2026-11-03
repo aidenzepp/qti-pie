@@ -41,6 +41,7 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
+import { Orientation, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as item from "#qti/schema/item.ts";
 import * as node from "#qti/schema/node.ts";
@@ -53,11 +54,6 @@ import { fbFlagged } from "#qti/schema/seed/ancestry.ts";
 const feedbackAncestries = node.Ancestry.handles.filter((handle) => fbFlagged.includes(handle));
 
 /**
- * An `xs:boolean` attribute's lexical form.
- */
-const xsBoolean = str.regex(patterns.xsBoolean);
-
-/**
  * An `xs:normalizedString` attribute's value, as the typed column holds it after replacement.
  */
 const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags);
@@ -66,16 +62,6 @@ const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNor
  * An identifier: an `xs:NCName`.
  */
 const ncName = str.regex(patterns.ncName);
-
-/**
- * A choice interaction's `orientation`: `vertical` or `horizontal`.
- */
-const orientation = str.regex(patterns.orientation);
-
-/**
- * A choice's `show-hide`: `show` or `hide`.
- */
-const showHide = str.regex(patterns.showHide);
 
 /**
  * A `qti-choice-interaction`.
@@ -89,10 +75,10 @@ export const ChoiceInteraction = relation(
     id: uuid,
     maxChoicesN: pg.bigint,
     minChoicesN: pg.bigint,
-    orientation,
+    orientation: closedId(Orientation),
     responseIdentifier: ncName,
     rootKind: closedId(node.RootKind),
-    shuffle: xsBoolean,
+    shuffle: closedId(XsBoolean),
   },
   ["id"],
 );
@@ -103,11 +89,11 @@ export const ChoiceInteraction = relation(
 export const SimpleChoice = relation(
   "SimpleChoice",
   {
-    fixed: xsBoolean,
+    fixed: closedId(XsBoolean),
     id: uuid,
     identifier: ncName,
     interaction: uuid,
-    showHide,
+    showHide: closedId(ShowHide),
   },
   ["id"],
 );
@@ -190,7 +176,7 @@ export const BindingFit = relation(
 export const InteractionBinding = relation(
   "InteractionBinding",
   {
-    adaptive: xsBoolean,
+    adaptive: closedId(XsBoolean),
     ancestry: closedId(node.Ancestry),
     document: uuid,
     interactionKind: closedId(node.NodeKind),

@@ -22,6 +22,7 @@ import { processingRows as processingTreeRows } from "#qti/import/processing.ts"
 import type { ProcessingRefused } from "#qti/import/processing.ts";
 import { requiredAttribute } from "#qti/import/required.ts";
 import {
+  closedOf,
   collapse,
   ItemRefusal,
   kindOf,
@@ -54,6 +55,8 @@ import {
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
 import type { DeclarationShape } from "#qti/schema/declaration.ts";
+import { Orientation, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
+import type { XsBooleanHandle } from "#qti/schema/content/rosters.ts";
 import { Document, DocumentId, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#qti/schema/html.ts";
 import {
@@ -508,7 +511,7 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
     rows: Rows,
     element: Element,
     node: NodeEntry,
-    item: { readonly adaptive: string; readonly documentId: string },
+    item: { readonly adaptive: XsBooleanHandle; readonly documentId: string },
     declarations: ReadonlyMap<string, Declared>,
   ): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
     const { adaptive, documentId } = item;
@@ -554,16 +557,28 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
       });
     const max = yield* bound(attributes.rows(), "max-choices", maxChoices, 1n);
     const min = yield* bound(max.rows, "min-choices", minChoices, 0n);
+    const orientationHandle = yield* closedOf(
+      Orientation.handles,
+      Option.getOrElse(orientation, () => "vertical"),
+      "attribute-lexical",
+      `the orientation attribute of ${interactionKind}`,
+    );
+    const shuffleHandle = yield* closedOf(
+      XsBoolean.handles,
+      Option.getOrElse(shuffle, () => "false"),
+      "attribute-lexical",
+      `the shuffle attribute of ${interactionKind}`,
+    );
     let built = min.rows;
     built = Rows.add(built, ChoiceInteraction, [
       {
         id: node.id,
         maxChoicesN: max.value,
         minChoicesN: min.value,
-        orientation: judgedLater(Option.getOrElse(orientation, () => "vertical")),
+        orientation: orientationHandle,
         responseIdentifier,
         rootKind: "item",
-        shuffle: judgedLater(Option.getOrElse(shuffle, () => "false")),
+        shuffle: shuffleHandle,
       },
     ]);
     const marker = (value: Option.Option<string>) => written(value, () => ({ node: node.id }));
@@ -583,7 +598,7 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
     );
     built = Rows.add(built, InteractionBinding, [
       {
-        adaptive: judgedLater(adaptive),
+        adaptive,
         ancestry: node.ancestry,
         document: documentId,
         interactionKind,
@@ -615,21 +630,38 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
 /**
  * The rows of one `qti-simple-choice` of the interaction `interaction`.
  */
-const choiceRows = (rows: Rows, element: Element, node: NodeEntry, interaction: string): Rows => {
+const choiceRows = Effect.fn("import.choiceRows")(function* choiceRows(
+  rows: Rows,
+  element: Element,
+  node: NodeEntry,
+  interaction: string,
+): Effect.fn.Return<Rows, ImportRefused> {
   const attributes = reader(rows, element, node);
   const identifier = Option.getOrElse(attributes.read("identifier", "collapse"), () => "");
   const fixed = attributes.read("fixed", "collapse");
   const templateIdentifier = attributes.read("template-identifier", "collapse");
   const showHide = attributes.read("show-hide", "preserve");
+  const fixedHandle = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(fixed, () => "false"),
+    "attribute-lexical",
+    "the fixed attribute of qti-simple-choice",
+  );
+  const showHideHandle = yield* closedOf(
+    ShowHide.handles,
+    Option.getOrElse(showHide, () => "show"),
+    "attribute-lexical",
+    "the show-hide attribute of qti-simple-choice",
+  );
 
   let built = attributes.rows();
   built = Rows.add(built, SimpleChoice, [
     {
-      fixed: judgedLater(Option.getOrElse(fixed, () => "false")),
+      fixed: fixedHandle,
       id: node.id,
       identifier,
       interaction,
-      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
+      showHide: showHideHandle,
     },
   ]);
   built = Rows.add(
@@ -648,7 +680,7 @@ const choiceRows = (rows: Rows, element: Element, node: NodeEntry, interaction: 
     SimpleChoiceTemplateIdentifier,
     written(templateIdentifier, (own) => ({ node: node.id, value: own })),
   );
-};
+});
 
 /**
  * The lexical prefixes of a published template's URI; a name follows each, with or without `.xml`.
@@ -714,7 +746,7 @@ const processingRows = (rows: Rows, element: Element, node: NodeEntry, item: str
  * element and the position of each node under its parent.
  */
 interface SemanticInput {
-  readonly adaptive: string;
+  readonly adaptive: XsBooleanHandle;
   readonly documentId: string;
   readonly nodes: NodeIndex;
   readonly positions: ReadonlyMap<string, bigint>;
@@ -794,7 +826,7 @@ export const semanticRows = Effect.fn("import.semanticRows")(function* semanticR
       Option.isSome(parentNode) &&
       parentNode.value.kind === "qti-choice-interaction"
     ) {
-      built = choiceRows(built, element, node, parentNode.value.id);
+      built = yield* choiceRows(built, element, node, parentNode.value.id);
     } else if (node.kind === "qti-response-processing") {
       built = processingRows(built, element, node, rootId);
     }
@@ -908,12 +940,23 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
     });
   }
 
-  const adaptiveLexical = Option.getOrElse(adaptive.value, () => "false");
+  const adaptiveLexical = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(adaptive.value, () => "false"),
+    "attribute-lexical",
+    "the adaptive attribute of qti-assessment-item",
+  );
+  const timeDependentHandle = yield* closedOf(
+    XsBoolean.handles,
+    timeDependent.value.value,
+    "attribute-lexical",
+    "the time-dependent attribute of qti-assessment-item",
+  );
   built = Rows.add(built, AssessmentItem, [
     {
-      adaptive: judgedLater(adaptiveLexical),
+      adaptive: adaptiveLexical,
       id: rootNode.id,
-      timeDependent: judgedLater(timeDependent.value.value),
+      timeDependent: timeDependentHandle,
       tree: documentId,
     },
   ]);

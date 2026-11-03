@@ -8,7 +8,8 @@ import { judgedLater } from "#qti/import/judged.ts";
 import { Effect, Option } from "effect";
 import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
 import type { ImportRefused } from "#qti/import/refusal.ts";
-import { Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
+import { closedOf, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
+import { ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import type { IndexedNode, ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import {
   DeclaredFixed,
@@ -249,24 +250,36 @@ const graphicOrder = Effect.fn("import.graphicOrder")(function* graphicOrder(
  * markers of the defaulted attributes the source wrote, and its template identifier when it has
  * one.
  */
-const choice = (
+const choice = Effect.fn("import.orderChoice")(function* choice(
   ctx: InteractionContext,
   rows: Rows,
   element: Element,
   node: IndexedNode,
   interaction: IndexedNode,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
   const attributes = ctx.shared.attributes(rows, element, node);
   const fixed = attributes.read("fixed");
   const showHide = attributes.read("show-hide");
   const template = attributes.read("template-identifier");
+  const fixedHandle = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(fixed, () => "false"),
+    "attribute-lexical",
+    "the fixed attribute of qti-simple-choice",
+  );
+  const showHideHandle = yield* closedOf(
+    ShowHide.handles,
+    Option.getOrElse(showHide, () => "show"),
+    "attribute-lexical",
+    "the show-hide attribute of qti-simple-choice",
+  );
   const built = Rows.add(attributes.rows(), SimpleChoice, [
     {
-      fixed: judgedLater(Option.getOrElse(fixed, () => "false")),
+      fixed: fixedHandle,
       id: node.id,
       identifier: Option.getOrElse(attributes.read("identifier"), () => ""),
       interaction: interaction.id,
-      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
+      showHide: showHideHandle,
     },
   ]);
 
@@ -280,7 +293,7 @@ const choice = (
     SimpleChoiceTemplateIdentifier,
     written(template, (own) => ({ node: node.id, value: judgedLater(own) })),
   );
-};
+});
 
 /**
  * The order interactions' rows: the two interactions with their bindings, and the simple choices
@@ -315,7 +328,7 @@ export const orderRows = Effect.fn("import.orderRows")(function* orderRows(
       Option.isSome(parent) &&
       parent.value.kind === "qti-order-interaction"
     ) {
-      built = choice(ctx, built, element, node, parent.value);
+      built = yield* choice(ctx, built, element, node, parent.value);
     }
   }
 
