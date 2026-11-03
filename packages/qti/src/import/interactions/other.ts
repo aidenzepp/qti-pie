@@ -7,6 +7,7 @@
  * they accept.
  */
 import { judgedLater } from "#qti/import/judged.ts";
+import { requiredAttribute } from "#qti/import/required.ts";
 import { Effect, Option } from "effect";
 import type { InteractionContext, MarkerRelation, NodeRef } from "#qti/import/interactions.ts";
 import { Rows, typedAttribute } from "#qti/import/tree.ts";
@@ -112,7 +113,7 @@ const mediaRows = Effect.fn("import.mediaRows")(function* mediaRows(
 ): Effect.fn.Return<Rows, ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
   const responseIdentifier = Option.getOrElse(attributes.read("response-identifier"), () => "");
-  const autostart = attributes.read("autostart");
+  const autostart = yield* requiredAttribute(element, "autostart", attributes.read("autostart"));
   const loop = attributes.read("loop");
   const maxPlays = attributes.read("max-plays");
   const minPlays = attributes.read("min-plays");
@@ -121,7 +122,7 @@ const mediaRows = Effect.fn("import.mediaRows")(function* mediaRows(
   let built = attributes.rows();
   built = Rows.add(built, MediaInteraction, [
     {
-      autostart: judgedLater(Option.getOrElse(autostart, () => "")),
+      autostart: judgedLater(autostart),
       id: node.id,
       loop: judgedLater(Option.getOrElse(loop, () => "false")),
       maxPlaysN: playsOf(ctx, maxPlays),
@@ -197,8 +198,16 @@ const sliderRows = Effect.fn("import.sliderRows")(function* sliderRows(
 ): Effect.fn.Return<Rows, ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
   const responseIdentifier = Option.getOrElse(attributes.read("response-identifier"), () => "");
-  const lowerBound = attributes.read("lower-bound");
-  const upperBound = attributes.read("upper-bound");
+  const lowerBound = yield* requiredAttribute(
+    element,
+    "lower-bound",
+    attributes.read("lower-bound"),
+  );
+  const upperBound = yield* requiredAttribute(
+    element,
+    "upper-bound",
+    attributes.read("upper-bound"),
+  );
   const step = attributes.read("step");
   const stepLabel = attributes.read("step-label");
   const orientation = attributes.read("orientation");
@@ -208,11 +217,11 @@ const sliderRows = Effect.fn("import.sliderRows")(function* sliderRows(
   built = Rows.add(built, SliderInteraction, [
     {
       id: node.id,
-      lowerBound: judgedLater(Option.getOrElse(lowerBound, () => "")),
+      lowerBound: judgedLater(lowerBound),
       responseIdentifier,
       rootKind: "item",
       stepLabel: judgedLater(Option.getOrElse(stepLabel, () => "false")),
-      upperBound: judgedLater(Option.getOrElse(upperBound, () => "")),
+      upperBound: judgedLater(upperBound),
     },
   ]);
   built = ctx.shared.markers(
@@ -239,19 +248,15 @@ const endAttemptRows = Effect.fn("import.endAttemptRows")(function* endAttemptRo
 ): Effect.fn.Return<Rows, ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
   const responseIdentifier = Option.getOrElse(attributes.read("response-identifier"), () => "");
-  const title = attributes.read("title");
+  const title = yield* requiredAttribute(element, "title", attributes.read("title"));
   const countAttempt = attributes.read("count-attempt");
 
   let built = attributes.rows();
-  let stored = "";
-  if (Option.isSome(title)) {
-    const typed = typedAttribute(built, node.id, node.kind, "title", title.value, "replace");
-    built = typed.rows;
-    stored = typed.value;
-  }
+  const typed = typedAttribute(built, node.id, node.kind, "title", title, "replace");
+  built = typed.rows;
 
   built = Rows.add(built, EndAttemptInteraction, [
-    { id: node.id, responseIdentifier, rootKind: "item", title: stored },
+    { id: node.id, responseIdentifier, rootKind: "item", title: typed.value },
   ]);
   built = Rows.add(built, EndAttemptCountAttempt, valueFact(node.id, countAttempt, flag));
 

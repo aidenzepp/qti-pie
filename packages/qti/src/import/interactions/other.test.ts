@@ -137,6 +137,22 @@ const one = (
   return { ctx: contextOf([found], [[found, kind]], [["RESPONSE", variable]]), id: `${kind}-2` };
 };
 
+/**
+ * The rule of the `ItemRefusal` a run fails with; the empty string when it fails otherwise or not
+ * at all.
+ */
+const refusedRule = (ctx: InteractionContext) =>
+  Effect.exit(run(ctx)).pipe(
+    Effect.map((exit) =>
+      Exit.isFailure(exit)
+        ? Exit.findErrorOption(exit).pipe(
+            Option.filter((e) => e instanceof ItemRefusal),
+            Option.match({ onNone: () => "", onSome: (e) => e.rule }),
+          )
+        : "",
+    ),
+  );
+
 describe("otherRows: media", () => {
   it.effect(
     "copies the plays, writes the lexical optional and the loop marker only as written",
@@ -200,6 +216,19 @@ describe("otherRows: media", () => {
         Rows.of(rows, AttributeLexical).map((row) => row.attribute),
         ["coords"],
       );
+    }),
+  );
+
+  it.effect("refuses a media interaction with no autostart", () =>
+    Effect.gen(function* check() {
+      const { ctx } = one(
+        "qti-media-interaction",
+        "qti-media-interaction",
+        [["response-identifier", "RESPONSE"]],
+        stringSingle,
+      );
+
+      assert.strictEqual(yield* refusedRule(ctx), "required-attribute");
     }),
   );
 });
@@ -323,6 +352,38 @@ describe("otherRows: slider", () => {
       assert.strictEqual(Rows.of(rows, SliderInteraction)[0]?.stepLabel, "true");
     }),
   );
+
+  it.effect("refuses a slider with no lower-bound", () =>
+    Effect.gen(function* check() {
+      const { ctx } = one(
+        "qti-slider-interaction",
+        "qti-slider-interaction",
+        [
+          ["response-identifier", "RESPONSE"],
+          ["upper-bound", "10"],
+        ],
+        stringSingle,
+      );
+
+      assert.strictEqual(yield* refusedRule(ctx), "required-attribute");
+    }),
+  );
+
+  it.effect("refuses a slider with no upper-bound", () =>
+    Effect.gen(function* check() {
+      const { ctx } = one(
+        "qti-slider-interaction",
+        "qti-slider-interaction",
+        [
+          ["response-identifier", "RESPONSE"],
+          ["lower-bound", "0"],
+        ],
+        stringSingle,
+      );
+
+      assert.strictEqual(yield* refusedRule(ctx), "required-attribute");
+    }),
+  );
 });
 
 describe("otherRows: end-attempt", () => {
@@ -379,6 +440,39 @@ describe("otherRows: end-attempt", () => {
         { attribute: "title", kind: "qti-end-attempt-interaction", node: id, value: "Show\thint" },
       ]);
       assert.deepStrictEqual(Rows.of(rows, EndAttemptCountAttempt), [{ node: id, value: "false" }]);
+    }),
+  );
+
+  it.effect("refuses an end-attempt interaction with no title", () =>
+    Effect.gen(function* check() {
+      const { ctx } = one(
+        "qti-end-attempt-interaction",
+        "qti-end-attempt-interaction",
+        [["response-identifier", "RESPONSE"]],
+        booleanSingle,
+      );
+
+      assert.strictEqual(yield* refusedRule(ctx), "required-attribute");
+    }),
+  );
+
+  it.effect("admits an empty title as a value", () =>
+    Effect.gen(function* check() {
+      const { ctx } = one(
+        "qti-end-attempt-interaction",
+        "qti-end-attempt-interaction",
+        [
+          ["response-identifier", "RESPONSE"],
+          ["title", ""],
+        ],
+        booleanSingle,
+      );
+      const rows = yield* run(ctx);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, EndAttemptInteraction).map((row) => row.title),
+        [""],
+      );
     }),
   );
 });
