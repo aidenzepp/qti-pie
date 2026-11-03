@@ -7,6 +7,7 @@ import { inject } from "vitest";
 import {
   AttributeEntityReference,
   AttributeLexical,
+  AttributeSpelling,
   Comment,
   Edge,
   EntityReference,
@@ -36,6 +37,7 @@ import {
   kindOf,
   replace,
   Rows,
+  spelledInteger,
   treeRows,
   typedAttribute,
   UnmodeledVocabulary,
@@ -664,6 +666,111 @@ it("typedAttribute on a preserve value is returned unchanged with no row", () =>
   assert.strictEqual(result.value, "a\tb");
   assert.deepStrictEqual(Rows.of(result.rows, AttributeLexical), []);
 });
+
+const spell = (processed: string, space: "integer" | "nonNegativeInteger") =>
+  spelledInteger(
+    Rows.empty(),
+    node,
+    "qti-choice-interaction",
+    "max-choices",
+    processed,
+    space,
+    "attribute-lexical",
+    "qti-choice-interaction max-choices",
+  );
+
+it.effect(
+  "spelledInteger on a plus-signed integer keeps the spelling in one AttributeSpelling row",
+  () =>
+    Effect.gen(function* plusSigned() {
+      const result = yield* spell("+5", "nonNegativeInteger");
+
+      assert.strictEqual(result.value, 5n);
+      assert.deepStrictEqual(Rows.of(result.rows, AttributeSpelling), [
+        { attribute: "max-choices", kind: "qti-choice-interaction", node, value: "+5" },
+      ]);
+    }),
+);
+
+it.effect("spelledInteger on a canonical integer appends no row", () =>
+  Effect.gen(function* canonical() {
+    const result = yield* spell("5", "nonNegativeInteger");
+
+    assert.strictEqual(result.value, 5n);
+    assert.deepStrictEqual(Rows.of(result.rows, AttributeSpelling), []);
+  }),
+);
+
+it.effect("spelledInteger on a zero-padded integer keeps the spelling", () =>
+  Effect.gen(function* padded() {
+    const result = yield* spell("05", "nonNegativeInteger");
+
+    assert.strictEqual(result.value, 5n);
+    assert.deepStrictEqual(Rows.of(result.rows, AttributeSpelling), [
+      { attribute: "max-choices", kind: "qti-choice-interaction", node, value: "05" },
+    ]);
+  }),
+);
+
+it.effect(
+  "spelledInteger after typedAttribute keeps the padded text and the collapsed spelling",
+  () =>
+    Effect.gen(function* afterTyped() {
+      const typed = typedAttribute(
+        Rows.empty(),
+        node,
+        "qti-choice-interaction",
+        "max-choices",
+        " +5 ",
+        "collapse",
+      );
+      const result = yield* spelledInteger(
+        typed.rows,
+        node,
+        "qti-choice-interaction",
+        "max-choices",
+        typed.value,
+        "nonNegativeInteger",
+        "attribute-lexical",
+        "qti-choice-interaction max-choices",
+      );
+
+      assert.strictEqual(result.value, 5n);
+      assert.deepStrictEqual(Rows.of(result.rows, AttributeLexical), [
+        { attribute: "max-choices", kind: "qti-choice-interaction", node, value: " +5 " },
+      ]);
+      assert.deepStrictEqual(Rows.of(result.rows, AttributeSpelling), [
+        { attribute: "max-choices", kind: "qti-choice-interaction", node, value: "+5" },
+      ]);
+    }),
+);
+
+it.effect("spelledInteger on a negative number in a non-negative space is refused", () =>
+  Effect.gen(function* refused() {
+    const exit = yield* Effect.exit(spell("-1", "nonNegativeInteger"));
+
+    assert.isTrue(Exit.isFailure(exit));
+    assert.strictEqual(
+      Exit.isFailure(exit) ? Option.getOrThrow(Exit.findErrorOption(exit))._tag : "",
+      "ImportRefused",
+    );
+    assert.strictEqual(
+      Exit.isFailure(exit) ? Option.getOrThrow(Exit.findErrorOption(exit)).rule : "",
+      "attribute-lexical",
+    );
+  }),
+);
+
+it.effect("spelledInteger on minus zero under integer gives zero and keeps the spelling", () =>
+  Effect.gen(function* minusZero() {
+    const result = yield* spell("-0", "integer");
+
+    assert.strictEqual(result.value, 0n);
+    assert.deepStrictEqual(Rows.of(result.rows, AttributeSpelling), [
+      { attribute: "max-choices", kind: "qti-choice-interaction", node, value: "-0" },
+    ]);
+  }),
+);
 
 /**
  * An attribute-free, childless element in `namespace`.

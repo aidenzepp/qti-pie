@@ -19,6 +19,7 @@ import {
   Ancestry,
   AttributeEntityReference,
   AttributeLexical,
+  AttributeSpelling,
   Comment,
   Edge,
   EntityReference,
@@ -319,6 +320,42 @@ export const integerOf = (
     ? refuse(`which is outside ${smallest} to ${largest}. Write a value inside that range`)
     : Effect.succeed(value);
 };
+
+/**
+ * Read one integer attribute and keep its spelling when the package spells it non-canonically.
+ *
+ * Writes a spelling row exactly when the collapsed text parses and differs from
+ * `String(parse(collapsed))`.
+ *
+ * @param rows - The rows so far.
+ * @param node - The id of the element that carries the attribute.
+ * @param kind - The element's kind.
+ * @param name - The attribute's registry name.
+ * @param text - The attribute's text after its whitespace step.
+ * @param space - The integer space the attribute is declared in.
+ * @param rule - The rule a refusal carries.
+ * @param where - The element and attribute, in a short phrase, for the refusal's detail.
+ * @returns The value, and the rows with one `AttributeSpelling` row appended exactly when
+ *   `text` differs from `String(value)`; or an `ImportRefused` under `rule` when
+ *   {@link integerOf} refuses the text.
+ */
+export const spelledInteger = (
+  rows: Rows,
+  node: string,
+  kind: NodeKindHandle,
+  name: AttributeNameHandle,
+  text: string,
+  space: IntegerSpace,
+  rule: Rule,
+  where: string,
+): Effect.Effect<{ value: bigint; rows: Rows }, ImportRefused> =>
+  Effect.map(integerOf(text, space, rule, where), (value) => ({
+    rows:
+      text === String(value)
+        ? rows
+        : Rows.add(rows, AttributeSpelling, [{ attribute: name, kind, node, value: text }]),
+    value,
+  }));
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
