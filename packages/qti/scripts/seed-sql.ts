@@ -18,7 +18,11 @@ import { mappableBaseType } from "#qti/schema/seed/mappable-base-type.ts";
 import { recordBindingFit } from "#qti/schema/seed/record-binding-fit.ts";
 import type { BindingFitRow } from "#qti/schema/seed/binding-fit.ts";
 import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
-import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
+import {
+  operatorArity,
+  operatorArityMax,
+  operatorArityUnbounded,
+} from "#qti/schema/seed/operator-arity.ts";
 import { resourceTypes } from "#qti/schema/seed/resource-types.ts";
 import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
 
@@ -211,6 +215,12 @@ const tables: readonly Rendered[] = [
     declared: "OperatorArityMax",
     name: "operator_arity_max",
     rows: operatorArityMax,
+  }),
+  renderTable<(typeof operatorArityUnbounded)[number]>({
+    columns: [handle("kind", "node_kind", (row) => row.kind)],
+    declared: "OperatorArityUnbounded",
+    name: "operator_arity_unbounded",
+    rows: operatorArityUnbounded,
   }),
 ];
 

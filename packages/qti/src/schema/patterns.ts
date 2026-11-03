@@ -58,10 +58,15 @@ export const xsNonNegativeInteger = "^\\+?[0-9]+$" as const;
 export const xsInteger = "^[+\\-]?[0-9]+$" as const;
 
 /**
+ * The `xs:double` lexical space without anchors, so a list pattern can repeat it.
+ */
+const xsDoubleBody =
+  "(?:[+\\-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+\\-]?[0-9]+)?|-?INF|NaN)" as const;
+
+/**
  * `xs:double` lexical space: a decimal with an optional exponent, `INF`, `-INF`, or `NaN`.
  */
-export const xsDouble =
-  "^(?:[+\\-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+\\-]?[0-9]+)?|-?INF|NaN)$" as const;
+export const xsDouble = `^${xsDoubleBody}$` as const;
 
 /**
  * `xs:string` lexical space: any text, whitespace preserved. The same source as `wildcard`; the
@@ -581,3 +586,190 @@ export const trackKind = "^(subtitles|captions|descriptions|chapters|metadata)$"
  * `imsqti_asiv3p0p1_v1p0.xsd`.
  */
 export const textFormat = "^(plain|preformatted|xhtml)$" as const;
+
+/**
+ * A collapsed `IdentifierListDType` value: NCNames one space apart, with no leading, trailing or
+ * doubled space. The empty list is admitted because the XSD list has no `minLength` (XSD line
+ * 34443 of `imsqti_asiv3p0p1_v1p0.xsd`; campaign decision 22).
+ */
+export const identifierList = `^(?:${ncNameBody}(?: ${ncNameBody})*)?$` as const;
+
+/**
+ * A collapsed `ToleranceListDType` value: `xs:double` or NCName tokens one space apart (XSD line
+ * 23973, a union of `xs:string` and `xs:double`). The empty list is admitted because the XSD list
+ * has no `minLength` (line 27029; campaign decision 22); presence under `absolute` and `relative`
+ * is a containment, not this pattern's.
+ */
+export const toleranceList =
+  `^(?:(?:${xsDoubleBody}|${ncNameBody})(?: (?:${xsDoubleBody}|${ncNameBody}))*)?$` as const;
+
+/**
+ * The `CoordsDType` pattern of `imsqti_asiv3p0p1_v1p0.xsd` (line 24090), anchored: three
+ * alternatives over `[0-9]+%?` and `,`, with no space admitted. The attribute's `whiteSpace` class
+ * is `replace`, so a tab, line feed or carriage return becomes a space, which this refuses.
+ */
+export const coords =
+  "^(?:(?:[0-9]+%?,){2}[0-9]+%?|(?:[0-9]+%?,){3}[0-9]+%?|(?:[0-9]+%?,){2}(?:(?:[0-9]+%?,){2})+[0-9]+%?,[0-9]+%?)$" as const;
+
+/**
+ * A collapsed integer or a variable reference: the mixed unions `min`, `max` and `step` of
+ * `qti-any-n` and `qti-random-integer` and `figures`. A value whose collapse is a number is the
+ * literal and a bare NCName as read is the reference; a padded reference admits neither member.
+ */
+export const integerOrVariableRef = `^(?:[+\\-]?[0-9]+|${ncNameBody})$` as const;
+
+/**
+ * A collapsed `xs:double` or a variable reference: `min` and `max` of `qti-random-float`.
+ */
+export const floatOrVariableRef = `^(?:${xsDoubleBody}|${ncNameBody})$` as const;
+
+/**
+ * An NCName or a collapsed integer: `n` of `qti-index` and `number-repeats` of `qti-repeat`. The
+ * `xs:int` range is the typed copy's check, not this pattern's.
+ */
+export const intOrIdentifier = `^(?:${ncNameBody}|[+\\-]?[0-9]+)$` as const;
+
+/**
+ * The eleven `base-type` values of `TestVariablesBaseType` in `imsqti_asiv3p0p1_v1p0.xsd`, in XSD
+ * order: `boolean directedPair duration file float identifier integer pair point string uri`. The
+ * `whiteSpace` class is `preserve`, so a padded value is refused as the XSD refuses it. Phase 1's
+ * `BaseType` roster stays the column type elsewhere.
+ */
+export const baseType =
+  "^(boolean|directedPair|duration|file|float|identifier|integer|pair|point|string|uri)$" as const;
+
+/**
+ * The three `tolerance-mode` values of the ASI XSD, in XSD order: `absolute exact relative`.
+ */
+export const toleranceMode = "^(absolute|exact|relative)$" as const;
+
+/**
+ * The two `rounding-mode` values of the ASI XSD, in XSD order: `decimalPlaces significantFigures`.
+ */
+export const roundingMode = "^(decimalPlaces|significantFigures)$" as const;
+
+/**
+ * The five `shape` values of the ASI XSD, in XSD order: `circle default ellipse poly rect`.
+ */
+// oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the XSD attribute name of the hotspot enumeration (`circle default ellipse poly rect`), the contract the interaction and processing modules name, not a structure.
+export const shape = "^(circle|default|ellipse|poly|rect)$" as const;
+
+/**
+ * The 28 `name` values of `qti-math-operator` (`MathOperatorDType`), in XSD order: `sin cos tan
+ * sec csc cot asin acos atan atan2 asec acsc acot sinh cosh tanh sech csch coth log ln exp abs
+ * signum floor ceil toDegrees toRadians`.
+ */
+export const mathOperatorName =
+  "^(sin|cos|tan|sec|csc|cot|asin|acos|atan|atan2|asec|acsc|acot|sinh|cosh|tanh|sech|csch|coth|log|ln|exp|abs|signum|floor|ceil|toDegrees|toRadians)$" as const;
+
+/**
+ * The five `name` values of `qti-stats-operator` (`StatsOperatorDType`), in XSD order: `mean
+ * sampleVariance sampleSD popVariance popSD`.
+ */
+export const statsOperatorName = "^(mean|sampleVariance|sampleSD|popVariance|popSD)$" as const;
+
+/**
+ * The two `name` values of `qti-math-constant` (`MathConstantDType`), in XSD order: `pi e`.
+ */
+export const mathConstantName = "^(pi|e)$" as const;
+
+/**
+ * The two `parse` values of `xi:include` (`parseType` in `w3/XInclude.xsd`): `xml text`.
+ */
+export const xincludeParse = "^(xml|text)$" as const;
+
+/**
+ * The `ExtensionString.Type` half of every DRD union, as the XSD writes it
+ * (`imsqtiv3p0_afa3p0drd_v1p0.xsd` lines 369 to 373, pattern `(ext:)[ a-z | A-Z | 0-9 | . | _ ]+`):
+ * `ext:` then one or more of space, `|`, letters, digits, `.` and `_`. The XSD's class lists space
+ * and `|` as members, so both are admitted (the spec's Q6: admit exactly what the XSD admits). The
+ * class is `preserve`, so the text is judged as read.
+ */
+export const drdExt = "^ext:[ a-zA-Z0-9|._]+$" as const;
+
+/**
+ * The `accessMode` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line 131,
+ * enumeration at lines 136 to 145), in XSD order, then the extension arm. The class is `preserve`:
+ * a value with a trailing space is outside the pattern.
+ */
+export const drdAccessMode =
+  "^(auditory|colour|itemSize|olfactory|orientation|position|tactile|textOnImage|textual|visual|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `accessModeAdapted` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line
+ * 155, enumeration at lines 160 to 169), in XSD order, then the extension arm. The class is
+ * `preserve`: a value with a trailing space is outside the pattern.
+ */
+export const drdAccessModeAdapted =
+  "^(auditory|colour|itemSize|olfactory|orientation|position|tactile|textOnImage|textual|visual|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `adaptationDetail` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line 179,
+ * enumeration at lines 187 to 192), in XSD order, then the extension arm. The class is `preserve`:
+ * a value with a trailing space is outside the pattern.
+ */
+export const drdAdaptationDetail =
+  "^(enhanced|verbatim|realTime|symbolic|recorded|synthesized|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `adaptationMediaType` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line
+ * 199, enumeration at lines 207 to 217), in XSD order, then the extension arm. The class is
+ * `preserve`: a value with a trailing space is outside the pattern.
+ */
+export const drdAdaptationMediaType =
+  "^(Daisy|braille|NIMAS|MathML|ChemML|LaTeX|OEBPS|PDF|LIT|Nemeth|EPUB3|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `adaptationType` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line 224,
+ * enumeration at lines 232 to 240), in XSD order, then the extension arm. The class is `preserve`:
+ * a value with a trailing space is outside the pattern.
+ */
+export const drdAdaptationType =
+  "^(alternativeText|audioDescription|captions|e-book|haptic|highContrast|longDescription|signLanguage|transcript|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `apiInteroperable` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line 247,
+ * enumeration at lines 255 to 264), in XSD order, then the extension arm. The class is `preserve`:
+ * a value with a trailing space is outside the pattern.
+ */
+export const drdApiInteroperable =
+  "^(AndroidAccessibility|ARIA|ATK|AT-SPI|BlackberryAccessibility|iAccessible2|JavaAccessibility|MacOSXAccessibility|MSAA|UIAutomation|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `controlFlexibility` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line
+ * 271, enumeration at lines 279 to 280), in XSD order, then the extension arm. The class is
+ * `preserve`: a value with a trailing space is outside the pattern.
+ */
+export const drdControlFlexibility =
+  "^(fullKeyboardControl|fullMouseControl|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `displayTransformability` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at
+ * line 287, enumeration at lines 295 to 306), in XSD order, then the extension arm. The class is
+ * `preserve`: a value with a trailing space is outside the pattern.
+ */
+export const drdDisplayTransformability =
+  "^(backgroundColour|cursorPresentation|fontFace|fontSize|fontWeight|foregroundColour|highlightPresentation|layout|letterSpacing|lineHeight|structurePresentation|wordSpacing|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `educationalComplexityOfAdaptation` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd`
+ * element at line 313, enumeration at lines 321 to 322), in XSD order, then the extension arm. The
+ * class is `preserve`: a value with a trailing space is outside the pattern.
+ */
+export const drdEducationalComplexityOfAdaptation =
+  "^(enriched|simplified|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `hazard` union of the DRD XSD (`imsqtiv3p0_afa3p0drd_v1p0.xsd` element at line 329,
+ * enumeration at lines 337 to 340), in XSD order, then the extension arm. The class is `preserve`:
+ * a value with a trailing space is outside the pattern.
+ */
+export const drdHazard =
+  "^(flashing|sound|olfactoryHazard|motionSimulation|ext:[ a-zA-Z0-9|._]+)$" as const;
+
+/**
+ * The `lastUpdated` date of the usage-data XSD (`imsqti_usagedatav3p0_v1p0.xsd`), tightened to the
+ * month and day ranges a regular expression can state, written for the value after `collapse`.
+ * February and leap-day validity, which `xs:date` requires, is a guard's, not the pattern's.
+ */
+export const usageDate = "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$" as const;

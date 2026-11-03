@@ -6,8 +6,9 @@
  * choices, the response processing with the standard template it names, and the body, prompt,
  * paragraph and image.
  *
- * Expressions inside the response processing are written by the module that reads the
- * {@link NodeIndex} this one returns.
+ * The expressions and rules inside the response and template processing are written by
+ * `processingRows` over the {@link NodeIndex} this module's tree rows built, once the declaration
+ * and body rows are in.
  */
 import { judgedLater } from "#qti/import/judged.ts";
 import { Effect, Option } from "effect";
@@ -16,6 +17,8 @@ import { contentRows } from "#qti/import/content.ts";
 import { htmlRows } from "#qti/import/html.ts";
 import { interactionRows } from "#qti/import/interactions.ts";
 import { mappingRows } from "#qti/import/mapping.ts";
+import { processingRows as processingTreeRows } from "#qti/import/processing.ts";
+import type { ProcessingRefused } from "#qti/import/processing.ts";
 import { requiredAttribute } from "#qti/import/required.ts";
 import {
   collapse,
@@ -29,6 +32,7 @@ import {
   withParents,
 } from "#qti/import/tree.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
+import { environmentOf } from "#qti/processing/env.ts";
 import {
   BaseType,
   Declaration,
@@ -717,7 +721,7 @@ interface SemanticInput {
  *   identifier winning; `ItemRefusal` for an interaction whose `response-identifier` names no
  *   declaration.
  */
-const semanticRows = Effect.fn("import.semanticRows")(function* semanticRows(
+export const semanticRows = Effect.fn("import.semanticRows")(function* semanticRows(
   rows: Rows,
   input: SemanticInput,
   walked: readonly (readonly [Element, Option.Option<Element>])[],
@@ -783,7 +787,8 @@ const semanticRows = Effect.fn("import.semanticRows")(function* semanticRows(
 
 /**
  * Write the rows of an item document: its tree, its `Document` row with the identifier and title
- * rows, the item root and the body, prompt, paragraph and image rows under it.
+ * rows, the item root and the body, prompt, paragraph and image rows under it, and, after those,
+ * the rows of its response and template processing trees.
  *
  * Every attribute passes through `typedAttribute` with its whitespace class: `identifier`,
  * `adaptive`, `time-dependent`, `src` and `longdesc` collapse, `title` replaces, and `alt`,
@@ -800,14 +805,15 @@ const semanticRows = Effect.fn("import.semanticRows")(function* semanticRows(
  * @param rows - The rows so far.
  * @returns The rows with this item's added, the node index of its tree and the document's id, which
  *   is the tree's; `UnmodeledVocabulary` for a root that is not `qti-assessment-item` in the ASI
- *   namespace, naming it, and for any element or attribute the registries do not model.
+ *   namespace, naming it, and for any element or attribute the registries do not model;
+ *   `ProcessingRefused` for a response or template processing the processing checker refuses.
  */
 export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
   input: ItemInput,
   rows: Rows,
 ): Effect.fn.Return<
   { rows: Rows; nodes: NodeIndex; documentId: string },
-  UnmodeledVocabulary | ItemRefusal
+  UnmodeledVocabulary | ItemRefusal | ProcessingRefused
 > {
   const { doc, packageId, version } = input;
   const { root } = doc;
@@ -980,6 +986,27 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
   );
   built = yield* contentRows(root, nodes, documentId, declarations, built);
   built = yield* mappingRows(root, nodes, documentId, declarations, built);
+
+  const env = environmentOf(doc, "item");
+  for (const [element] of walked) {
+    const node = nodes.get(element);
+    if (node?.kind === "qti-response-processing" || node?.kind === "qti-template-processing") {
+      built = yield* processingTreeRows(
+        {
+          document: documentId,
+          env,
+          language: node.kind === "qti-response-processing" ? "response" : "template",
+          mode: "item",
+          nodes,
+          root: element,
+          rootKind: "item",
+          tree: documentId,
+          version,
+        },
+        built,
+      );
+    }
+  }
 
   return { documentId, nodes, rows: built };
 });

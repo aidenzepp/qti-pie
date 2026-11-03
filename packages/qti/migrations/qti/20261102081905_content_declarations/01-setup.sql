@@ -1,1 +1,0 @@
-CREATE DOMAIN "qti"."__text_acxfo763jg" AS text COLLATE "pg_catalog"."pg_c_utf8" CONSTRAINT "check" CHECK ((VALUE ~ '\A\+?(?:[0-9]*\.[0-9]*[1-9][0-9]*|[0-9]*[1-9][0-9]*(?:\.[0-9]*)?)(?:[Ee][\+\-]?[0-9]+)?\Z'::text) IS TRUE);

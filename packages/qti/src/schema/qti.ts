@@ -12,8 +12,11 @@ import { alternatives, contained, mirrors, on, schema, select } from "@bjornpage
 import * as ancestry from "#qti/schema/ancestry.ts";
 import * as attributes from "#qti/schema/attributes.ts";
 import * as choices from "#qti/schema/choices.ts";
+import * as csm from "#qti/schema/csm.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
+import * as expression from "#qti/schema/expression.ts";
+import * as expressionAttributes from "#qti/schema/expression-attributes.ts";
 import * as document from "#qti/schema/document.ts";
 import * as feedback from "#qti/schema/feedback.ts";
 import * as html from "#qti/schema/html.ts";
@@ -33,11 +36,14 @@ import * as lang from "#qti/schema/lang.ts";
 import * as mapping from "#qti/schema/mapping.ts";
 import * as metadata from "#qti/schema/metadata.ts";
 import * as node from "#qti/schema/node.ts";
+import * as outcome from "#qti/schema/outcome.ts";
 import * as pkg from "#qti/schema/package.ts";
 import * as processing from "#qti/schema/processing.ts";
 import * as rubric from "#qti/schema/rubric.ts";
+import * as rule from "#qti/schema/rule.ts";
 import * as coords from "#qti/schema/shapes.ts";
 import * as template from "#qti/schema/template.ts";
+import * as usage from "#qti/schema/usage.ts";
 import * as value from "#qti/schema/value.ts";
 
 /**
@@ -49,10 +55,15 @@ export const nodeArms = {
   ...value.arms,
   ...interaction.arms,
   ...processing.arms,
+  ...expression.arms,
+  ...expressionAttributes.arms,
+  ...rule.arms,
   ...item.arms,
   ...html.arms,
   ...pkg.arms,
   ...metadata.arms,
+  ...csm.arms,
+  ...usage.arms,
   ...ancestry.arms,
   ...attributes.arms,
   ...htmlText.arms,
@@ -85,6 +96,9 @@ export const Qti = schema(
     ...value.relations,
     ...interaction.relations,
     ...processing.relations,
+    ...expression.relations,
+    ...expressionAttributes.relations,
+    ...rule.relations,
     ...item.relations,
     ...html.relations,
     ...rosters.relations,
@@ -107,6 +121,11 @@ export const Qti = schema(
     ...rubric.relations,
     ...mapping.relations,
     ...lang.relations,
+    ...outcome.relations,
+    ...csm.relations,
+    ...usage.relations,
+    StatisticKind: usage.StatisticKind,
+    TargetObjectType: usage.TargetObjectType,
   },
   [
     ...node.rules,
@@ -117,6 +136,9 @@ export const Qti = schema(
     ...value.rules,
     ...interaction.rules,
     ...processing.rules,
+    ...expression.rules,
+    ...expressionAttributes.rules,
+    ...rule.rules,
     ...item.rules,
     ...html.rules,
     ...rosters.rules,
@@ -139,6 +161,9 @@ export const Qti = schema(
     ...rubric.rules,
     ...mapping.rules,
     ...lang.rules,
+    ...outcome.rules,
+    ...csm.rules,
+    ...usage.rules,
     contained(on(node.Node, "kind"), on(node.NodeKind, "id")),
     ...node.NodeKind.handles.map((kind) =>
       mirrors(on(select(node.Node, { kind }), "id"), on(nodeArms[kind], "id")),

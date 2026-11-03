@@ -71,7 +71,15 @@ const countsOf = (
     .map((rule) => ({ bounds: boundsOf(rule), root: rootOf(rule) }));
 
 /**
- * The bounds each root handle carries for identifiers.
+ * The bounds `document.ts` gives any root handle's count: none, or exactly one.
+ */
+const countBounds: readonly (readonly [unknown, unknown])[] = [
+  [0n, 0n],
+  [1n, 1n],
+];
+
+/**
+ * The identifier bounds of phase 1's root handles.
  */
 const identifierBounds = {
   item: [1n, 1n],
@@ -85,7 +93,7 @@ const identifierBounds = {
 } as const;
 
 /**
- * The bounds each root handle carries for titles.
+ * The title bounds of phase 1's root handles.
  */
 const titleBounds = {
   ...identifierBounds,
@@ -154,23 +162,37 @@ describe("document", () => {
     assert.deepStrictEqual(document.arms, {});
   });
 
-  it("holds one identifier capacity per root handle, with the bounds above", () => {
+  it("holds one identifier capacity per root handle, of none or one, phase 1's at the bounds above", () => {
     const rows = countsOf(document.relations.DocumentIdentifier);
-    assert.strictEqual(rows.length, RootKind.handles.length);
-    for (const handle of RootKind.handles) {
+    const roots: string[] = [...RootKind.handles];
+    assert.strictEqual(rows.length, roots.length);
+    for (const handle of roots) {
       const row = rows.find((entry) => entry.root === handle);
       assert.isDefined(row, `identifier ${handle}`);
-      assert.deepStrictEqual(row.bounds, identifierBounds[handle], `identifier ${handle}`);
+      assert.deepInclude(countBounds, row.bounds, `identifier ${handle}`);
+    }
+    assert.includeMembers(roots, Object.keys(identifierBounds));
+    for (const [handle, bounds] of Object.entries(identifierBounds)) {
+      const row = rows.find((entry) => entry.root === handle);
+      assert.isDefined(row, `identifier ${handle}`);
+      assert.deepStrictEqual(row.bounds, bounds, `identifier ${handle}`);
     }
   });
 
-  it("holds one title capacity per root handle, with the bounds above", () => {
+  it("holds one title capacity per root handle, of none or one, phase 1's at the bounds above", () => {
     const rows = countsOf(document.relations.DocumentTitle);
-    assert.strictEqual(rows.length, RootKind.handles.length);
-    for (const handle of RootKind.handles) {
+    const roots: string[] = [...RootKind.handles];
+    assert.strictEqual(rows.length, roots.length);
+    for (const handle of roots) {
       const row = rows.find((entry) => entry.root === handle);
       assert.isDefined(row, `title ${handle}`);
-      assert.deepStrictEqual(row.bounds, titleBounds[handle], `title ${handle}`);
+      assert.deepInclude(countBounds, row.bounds, `title ${handle}`);
+    }
+    assert.includeMembers(roots, Object.keys(titleBounds));
+    for (const [handle, bounds] of Object.entries(titleBounds)) {
+      const row = rows.find((entry) => entry.root === handle);
+      assert.isDefined(row, `title ${handle}`);
+      assert.deepStrictEqual(row.bounds, bounds, `title ${handle}`);
     }
   });
 

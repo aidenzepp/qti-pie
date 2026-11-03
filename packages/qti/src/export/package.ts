@@ -9,6 +9,8 @@ import type { PlatformError } from "effect";
 import { readTree, treesOf } from "#qti/export/read.ts";
 import { renderTree } from "#qti/export/render.ts";
 import { Rows } from "#qti/import/tree.ts";
+import { writeZip } from "#qti/package/zip.ts";
+import type { ZipEntry } from "#qti/package/zip.ts";
 import { Document } from "#qti/schema/document.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import { TreeExportCharset } from "#qti/schema/node.ts";
@@ -61,33 +63,44 @@ const declaring = (doc: XmlDocument, label: string): XmlDocument => ({
 });
 
 /**
- * Write the package `packageId` to the directory `dir` as the files it was imported from.
+ * Write the package `packageId` to `target`: a directory of the files it was imported from, or,
+ * when `target` ends `.zip`, one zip file holding the same entries.
  *
  * Every tree is read back, rendered and encoded in its export label: the `TreeExportCharset` row's
  * when the tree has one, with the declaration then naming that label, otherwise the charset it was
  * read in. A document that cannot be written in its label fails the export; nothing falls back to
  * another charset. Documents go under their `Document.path`, the manifest under `imsmanifest.xml`,
- * and every stored file's decoded bytes under its path.
+ * and every stored file's decoded bytes under its path. A zip target holds those entries at those
+ * paths, written by `writeZip`, and its directory is created when absent.
  *
  * @param packageId - The id of the imported package.
- * @param dir - The directory to write under, created when absent.
+ * @param target - The directory to write under, or the `.zip` file to write, created when absent.
  * @returns Nothing. Fails with the database's, the encoder's or the file system's error.
  */
 export const exportPackage = Effect.fn("export.exportPackage")(function* exportPackage(
   packageId: string,
-  dir: string,
+  target: string,
 ): Effect.fn.Return<void, ExportError, DbLayer<typeof Author> | FileSystem.FileSystem | Path.Path> {
-  yield* Effect.annotateCurrentSpan({ dir, packageId });
+  yield* Effect.annotateCurrentSpan({ packageId, target });
 
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const db = yield* Db.open(AuthorApp.roles.author, {});
 
-  const write = Effect.fn("export.write")(function* write(entry: string, bytes: Uint8Array) {
-    const target = path.join(dir, entry);
+  const zipping = target.endsWith(".zip");
+  const entries: ZipEntry[] = [];
 
-    yield* fs.makeDirectory(path.dirname(target), { recursive: true });
-    yield* fs.writeFile(target, bytes);
+  const write = Effect.fn("export.write")(function* write(entry: string, bytes: Uint8Array) {
+    if (zipping) {
+      entries.push({ bytes, path: entry });
+
+      return;
+    }
+
+    const file = path.join(target, entry);
+
+    yield* fs.makeDirectory(path.dirname(file), { recursive: true });
+    yield* fs.writeFile(file, bytes);
   });
 
   for (const treeId of yield* treesOf(packageId)) {
@@ -111,5 +124,10 @@ export const exportPackage = Effect.fn("export.exportPackage")(function* exportP
 
   for (const file of yield* (yield* db.execute(contentsOf, { package: packageId })).collect) {
     yield* write(file.path, Buffer.from(file.content, "base64"));
+  }
+
+  if (zipping) {
+    yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+    yield* fs.writeFile(target, writeZip(entries));
   }
 });

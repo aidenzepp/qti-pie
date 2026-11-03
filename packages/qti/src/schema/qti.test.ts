@@ -9,7 +9,7 @@ import * as html from "#qti/schema/kinds/html.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import { Ancestry, Node, NodeKind } from "#qti/schema/node.ts";
 import { Qti, nodeArms } from "#qti/schema/qti.ts";
-import { Author } from "#qti/schema/roles.ts";
+import { Author, seededNames } from "#qti/schema/roles.ts";
 import {
   admission,
   ancestryStep,
@@ -25,20 +25,9 @@ import { resourceTypes } from "#qti/schema/seed/resource-types.ts";
 import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
 
 /**
- * The relations the migration seeds, which no role writes.
+ * The relations the migration seeds, which no role writes: the list is `roles.ts`'s.
  */
-const seeded = new Set([
-  "Admission",
-  "AncestryStep",
-  "AttributeAdmission",
-  "BindingFit",
-  "MappableBaseType",
-  "OperatorArity",
-  "OperatorArityMax",
-  "RecordBindingFit",
-  "ResourceTypeOf",
-  "RootOfType",
-]);
+const seeded: ReadonlySet<string> = new Set(seededNames);
 
 /**
  * The composed schema's relations, rosters aside: those that declare fields.
@@ -294,23 +283,39 @@ describe("qti", () => {
     for (const name of names) {
       assert.include(Object.keys(Author.relations), name);
     }
+    assert.includeMembers(names, [...seededNames]);
+    assert.strictEqual(seeded.size, seededNames.length);
+
     const writable = names.filter((name) => !seeded.has(name)).toSorted();
     assert.deepStrictEqual([...Author.write].toSorted(), writable);
   });
 
-  it("prints as many seed tuples as each seed module has rows", () => {
+  it("prints one table per seeded relation and as many seed tuples as each seed module has rows", () => {
     const sql = execFileSync("node", ["scripts/seed-sql.ts"], {
       encoding: "utf-8",
       maxBuffer: SEED_BUFFER,
     });
+    const [header = ""] = sql.split("\n", 1);
+    assert.strictEqual(
+      header.slice(header.indexOf("; ") + 2).split(", ").length,
+      seededNames.length,
+    );
     assert.strictEqual(tuples(sql, "admission"), admission.length);
     assert.strictEqual(tuples(sql, "binding_fit"), bindingFit.length);
     assert.strictEqual(tuples(sql, "resource_type_of"), resourceTypes.length);
     assert.strictEqual(tuples(sql, "root_of_type"), rootOfType.length);
     assert.strictEqual(tuples(sql, "operator_arity"), operatorArity.length);
     assert.strictEqual(tuples(sql, "operator_arity_max"), operatorArityMax.length);
-    assert.strictEqual(operatorArity.length, 0);
-    assert.strictEqual(operatorArityMax.length, 0);
+  });
+
+  it("keeps each arity seed distinct by kind and over NodeKind handles", () => {
+    for (const kinds of [
+      operatorArity.map((row) => row.kind),
+      operatorArityMax.map((row) => row.kind),
+    ]) {
+      assert.strictEqual(new Set(kinds).size, kinds.length);
+      assert.includeMembers([...NodeKind.handles], kinds);
+    }
   });
 
   it("prints one INSERT line per row of the four content seed tables, and only the named ones", () => {

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd" identifier="template" title="Template processing" adaptive="false" time-dependent="false">
+    <qti-context-declaration identifier="CTX" cardinality="single" base-type="integer">
+        <qti-default-value>
+            <qti-value>1</qti-value>
+        </qti-default-value>
+    </qti-context-declaration>
+    <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer"/>
+    <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+        <qti-default-value>
+            <qti-value>0</qti-value>
+        </qti-default-value>
+    </qti-outcome-declaration>
+    <qti-template-declaration identifier="A" cardinality="single" base-type="integer" param-variable="true"/>
+    <qti-template-declaration identifier="N" cardinality="single" base-type="integer"/>
+    <qti-template-declaration identifier="M" cardinality="single" base-type="integer"/>
+    <qti-template-processing>
+        <qti-set-template-value identifier="N">
+            <qti-random-integer min="5" max="10"/>
+        </qti-set-template-value>
+        <qti-template-condition>
+            <qti-template-if>
+                <qti-gt>
+                    <qti-variable identifier="CTX"/>
+                    <qti-base-value base-type="integer">0</qti-base-value>
+                </qti-gt>
+                <qti-set-template-value identifier="M">
+                    <qti-random-integer min="1" max="N"/>
+                </qti-set-template-value>
+            </qti-template-if>
+            <qti-template-else-if>
+                <qti-is-null>
+                    <qti-variable identifier="A"/>
+                </qti-is-null>
+                <qti-set-template-value identifier="M">
+                    <qti-base-value base-type="integer">1</qti-base-value>
+                </qti-set-template-value>
+            </qti-template-else-if>
+            <qti-template-else>
+                <qti-set-template-value identifier="M">
+                    <qti-variable identifier="A"/>
+                </qti-set-template-value>
+                <qti-exit-template/>
+            </qti-template-else>
+        </qti-template-condition>
+        <qti-template-constraint>
+            <qti-gt>
+                <qti-variable identifier="N"/>
+                <qti-variable identifier="M"/>
+            </qti-gt>
+        </qti-template-constraint>
+        <qti-set-default-value identifier="SCORE">
+            <qti-integer-to-float>
+                <qti-variable identifier="M"/>
+            </qti-integer-to-float>
+        </qti-set-default-value>
+        <qti-set-correct-response identifier="RESPONSE">
+            <qti-sum>
+                <qti-variable identifier="N"/>
+                <qti-variable identifier="M"/>
+            </qti-sum>
+        </qti-set-correct-response>
+    </qti-template-processing>
+    <qti-item-body>
+        <p>Enter the sum of the two numbers.</p>
+        <p>
+            <qti-text-entry-interaction response-identifier="RESPONSE" base="10"/>
+        </p>
+    </qti-item-body>
+</qti-assessment-item>

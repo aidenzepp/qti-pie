@@ -14,9 +14,17 @@
  * not be: canonical XML sorts attributes, so canonical equality holds whatever this order is.
  */
 import { Option } from "effect";
+import { renderProcessing } from "#qti/export/processing.ts";
 import type { Rows as RowSet } from "#qti/import/tree.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { by, indexOf, readersFor } from "#qti/schema/attribute-homes.ts";
+import {
+  CsmMetadataProviderId,
+  CsmSetOfGuidsRegion,
+  CsmSetOfGuidsVersion,
+  CsmSetResourceLabel,
+  CsmSetResourcePartId,
+} from "#qti/schema/csm.ts";
 import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
 import {
   AttributeEntityReference,
@@ -39,6 +47,8 @@ import {
   vocabularies,
   Ws,
 } from "#qti/schema/node.ts";
+import { Variant } from "#qti/schema/package.ts";
+import * as usage from "#qti/schema/usage.ts";
 import type { Attribute, Child, Misc, XmlDocument } from "#qti/xml/tree.ts";
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
@@ -61,9 +71,9 @@ const elementRows = vocabularies
  * A kind named by two registries would let the later row replace the earlier, so building the map
  * refuses one.
  */
-const names: ReadonlyMap<string, RegistryRow> = new Map(elementRows);
+export const renderRegistry: ReadonlyMap<string, RegistryRow> = new Map(elementRows);
 
-if (names.size !== elementRows.length) {
+if (renderRegistry.size !== elementRows.length) {
   throw new Error("Two vocabulary registries name the same element kind.");
 }
 
@@ -86,6 +96,161 @@ const attributeOf = (
         value,
       }
     : { local: qname, namespace: "", prefix: "", qname, references, value };
+
+/**
+ * Attribute names with their values, in the order the kind's registry lists them.
+ */
+type Pairs = readonly (readonly [name: string, value: string])[];
+
+/**
+ * The attribute `name` with `value`, none when `value` is absent.
+ */
+const present = (name: string, value: string | undefined): Pairs =>
+  value === undefined ? [] : [[name, value]];
+
+/**
+ * The attribute `name` with `value` when the source wrote it, which `marker` says by holding the
+ * node.
+ */
+const written = (
+  marker: ReadonlySet<string>,
+  id: string,
+  name: string,
+  value: string | undefined,
+) => (marker.has(id) ? present(name, value) : []);
+
+/**
+ * The ids of a relation's facts, by `key`.
+ */
+const idsOf = <T extends object>(
+  facts: readonly T[],
+  key: (fact: T) => string,
+): ReadonlySet<string> => new Set(facts.map(key));
+
+/**
+ * The `value` of the fact `key` gives for a node, read through the facts by that key; none when no
+ * fact holds the node.
+ */
+const optional = <T extends { readonly value: string }>(
+  facts: readonly T[],
+  key: (fact: T) => string,
+) => {
+  const found = by(facts, key);
+
+  return (id: string): string | undefined => found.get(id)?.value;
+};
+
+/**
+ * The attributes of the kinds `attribute-homes.ts` does not name yet, read from the rows, before
+ * any `AttributeLexical` row takes the place of a value: every processing kind and `xi:include`
+ * through {@link renderProcessing}, and the usage-data, variant and curriculum standards kinds.
+ * A defaulted attribute is written only when its marker row exists.
+ */
+const unhomedSources = (rows: RowSet): ReadonlyMap<string, (id: string) => Pairs> => {
+  const variants = by(Rows.of(rows, Variant), (fact) => fact.id);
+  const resourceLabel = optional(Rows.of(rows, CsmSetResourceLabel), (fact) => fact.node);
+  const resourcePartId = optional(Rows.of(rows, CsmSetResourcePartId), (fact) => fact.node);
+  const providerId = optional(Rows.of(rows, CsmMetadataProviderId), (fact) => fact.node);
+  const region = optional(Rows.of(rows, CsmSetOfGuidsRegion), (fact) => fact.node);
+  const guidsVersion = optional(Rows.of(rows, CsmSetOfGuidsVersion), (fact) => fact.node);
+
+  const usageGlossary = optional(Rows.of(rows, usage.UsageDataGlossary), (fact) => fact.node);
+  const statisticRows = by(Rows.of(rows, usage.Statistic), (fact) => fact.id);
+  const statistics = {
+    caseCount: optional(Rows.of(rows, usage.StatisticCaseCount), (fact) => fact.node),
+    glossary: optional(Rows.of(rows, usage.StatisticGlossary), (fact) => fact.node),
+    lastUpdated: optional(Rows.of(rows, usage.StatisticLastUpdated), (fact) => fact.node),
+    stdDeviation: optional(Rows.of(rows, usage.StatisticStdDeviation), (fact) => fact.node),
+    stdError: optional(Rows.of(rows, usage.StatisticStdError), (fact) => fact.node),
+  };
+  const targets = by(Rows.of(rows, usage.TargetObject), (fact) => fact.id);
+  const partIdentifier = optional(
+    Rows.of(rows, usage.TargetObjectPartIdentifier),
+    (fact) => fact.node,
+  );
+  const objectType = optional(Rows.of(rows, usage.TargetObjectObjectType), (fact) => fact.node);
+  const usageBaseType = by(Rows.of(rows, usage.UsageValueBaseType), (fact) => fact.id);
+  const usageFieldIdentifier = optional(
+    Rows.of(rows, usage.UsageValueFieldIdentifier),
+    (fact) => fact.id,
+  );
+  const mappings = by(Rows.of(rows, usage.UsageMapping), (fact) => fact.id);
+  const declaredDefault = idsOf(Rows.of(rows, usage.DeclaredDefaultValue), (fact) => fact.node);
+  const lowerBound = optional(Rows.of(rows, usage.UsageMappingLowerBound), (fact) => fact.node);
+  const upperBound = optional(Rows.of(rows, usage.UsageMappingUpperBound), (fact) => fact.node);
+  const entries = by(Rows.of(rows, usage.UsageMapEntry), (fact) => fact.id);
+  const caseSensitive = optional(
+    Rows.of(rows, usage.UsageMapEntryCaseSensitive),
+    (fact) => fact.node,
+  );
+
+  const statistic = (id: string): Pairs => [
+    ...present("caseCount", statistics.caseCount(id)),
+    ...present("context", statisticRows.get(id)?.context),
+    ...present("glossary", statistics.glossary(id)),
+    ...present("lastUpdated", statistics.lastUpdated(id)),
+    ...present("name", statisticRows.get(id)?.name),
+    ...present("stdDeviation", statistics.stdDeviation(id)),
+    ...present("stdError", statistics.stdError(id)),
+  ];
+
+  return new Map<string, (id: string) => Pairs>([
+    ...renderProcessing(rows),
+    ["ud:usageData", (id) => present("glossary", usageGlossary(id))],
+    ["ud:ordinaryStatistic", statistic],
+    ["ud:categorizedStatistic", statistic],
+    [
+      "ud:targetObject",
+      (id) => [
+        ...present("identifier", targets.get(id)?.identifier),
+        ...present("objectType", objectType(id)),
+        ...present("partIdentifier", partIdentifier(id)),
+      ],
+    ],
+    [
+      "ud:value",
+      (id) => [
+        ...present("baseType", usageBaseType.get(id)?.baseType),
+        ...present("fieldIdentifier", usageFieldIdentifier(id)),
+      ],
+    ],
+    [
+      "ud:mapping",
+      (id) => [
+        ...written(declaredDefault, id, "defaultValue", mappings.get(id)?.defaultValue),
+        ...present("lowerBound", lowerBound(id)),
+        ...present("upperBound", upperBound(id)),
+      ],
+    ],
+    [
+      "ud:mapEntry",
+      (id) => [
+        ...present("caseSensitive", caseSensitive(id)),
+        ...present("mapKey", entries.get(id)?.mapKey),
+        ...present("mappedValue", entries.get(id)?.mappedValue),
+      ],
+    ],
+    [
+      "cpx:variant",
+      (id) => [
+        ...present("identifier", variants.get(id)?.identifier),
+        ...present("identifierref", variants.get(id)?.identifierref),
+      ],
+    ],
+    [
+      "csmd:curriculumStandardsMetadataSet",
+      (id) => [
+        ...present("resourceLabel", resourceLabel(id)),
+        ...present("resourcePartId", resourcePartId(id)),
+      ],
+    ],
+    ["csmd:curriculumStandardsMetadata", (id) => present("providerId", providerId(id))],
+    [
+      "csmd:setOfGUIDs",
+      (id) => [...present("region", region(id)), ...present("version", guidsVersion(id))],
+    ],
+  ]);
+};
 
 /**
  * A comment or processing instruction of the prolog or epilog from its `TreeMisc` text: a
@@ -145,6 +310,7 @@ export const renderTree = (rows: RowSet, treeId: string): XmlDocument => {
   );
   const index = indexOf(rows);
   const readersOf = readersFor(index);
+  const unhomed = unhomedSources(rows);
 
   const referencesOf = (id: string, qname: string): Attribute["references"] =>
     (references.get(`${id}\n${qname}`) ?? [])
@@ -158,6 +324,10 @@ export const renderTree = (rows: RowSet, treeId: string): XmlDocument => {
       if (value !== undefined) {
         values.set(name, value);
       }
+    }
+
+    for (const [name, value] of unhomed.get(kind)?.(id) ?? []) {
+      values.set(name, value);
     }
 
     for (const row of lexical.get(id) ?? []) {
@@ -239,7 +409,7 @@ export const renderTree = (rows: RowSet, treeId: string): XmlDocument => {
       };
     }
 
-    const name = names.get(node.kind) ?? missing("registry row for the kind", node.kind);
+    const name = renderRegistry.get(node.kind) ?? missing("registry row for the kind", node.kind);
 
     return {
       attributes: attributesOf(id, node.kind),

@@ -3,6 +3,10 @@ import type { PlatformError } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import type { PackageReadError } from "#qti/package/read.ts";
+import type { ZipRefusal } from "#qti/package/zip.ts";
+import { recordTypes, soleFileTypes } from "#qti/import/record.ts";
+import { collapse } from "#qti/import/tree.ts";
+import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
 import { canonicalize } from "#qti/xml/canonical.ts";
 import type { ReaderRefusal, WellFormednessError } from "#qti/xml/errors.ts";
 import { xmllintC14n } from "#qti/xml/oracle.ts";
@@ -34,6 +38,7 @@ export type Report = readonly { path: string; outcome: Outcome }[];
  */
 type CompareError =
   | PackageReadError
+  | ZipRefusal
   | PlatformError.PlatformError
   | OracleError
   | WellFormednessError
@@ -45,9 +50,21 @@ type CompareError =
 type CompareContext = FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner;
 
 /**
- * The prefix of a resource `type` that marks a QTI document.
+ * The namespace of the manifest's elements.
  */
-const QTI_RESOURCE_TYPE = "imsqti_";
+const cpNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
+
+/**
+ * The resource types of the documents the export writes from a tree: the types the seed names a
+ * root for.
+ */
+const documentTypes: ReadonlySet<string> = new Set(rootOfType.map((row) => row.type));
+
+/**
+ * The resource types whose one `file` is a document when the resource has no `href`: the import's
+ * record types and its sole-file types.
+ */
+const soleFileDocumentTypes: ReadonlySet<string> = new Set([...recordTypes, ...soleFileTypes]);
 
 /**
  * Find the first offset at which two byte strings differ.
@@ -102,26 +119,76 @@ const holdsReference = (element: Element): boolean =>
   );
 
 /**
- * Collect the `href` of every manifest resource whose `type` is a QTI resource type.
+ * The element children of `element` in the manifest namespace with local name `local`.
  *
- * @param element - The element to search, with its descendants.
- * @returns The hrefs in document order.
+ * @param element - The parent.
+ * @param local - The local name.
+ * @returns The children in document order.
  */
-const qtiHrefs = (element: Element): readonly string[] => {
-  const own =
-    element.local === "resource" &&
-    element.attributes.some(
-      (attribute) => attribute.qname === "type" && attribute.value.startsWith(QTI_RESOURCE_TYPE),
-    )
-      ? element.attributes
-          .filter((attribute) => attribute.qname === "href")
-          .map((attribute) => attribute.value)
-      : [];
+const childrenNamed = (element: Element, local: string): readonly Element[] =>
+  element.children.filter(
+    (child): child is Element =>
+      child.kind === "element" && child.namespace === cpNamespace && child.local === local,
+  );
 
-  return [
-    ...own,
-    ...element.children.flatMap((child) => (child.kind === "element" ? qtiHrefs(child) : [])),
-  ];
+/**
+ * The collapsed value of an element's attribute that has no namespace.
+ *
+ * @param element - The element.
+ * @param local - The attribute's local name.
+ * @returns The value, or `undefined` when the attribute is absent.
+ */
+const attributeOf = (element: Element, local: string): string | undefined => {
+  const value = element.attributes.find(
+    (attribute) => attribute.namespace === "" && attribute.local === local,
+  )?.value;
+
+  return value === undefined ? undefined : collapse(value);
+};
+
+/**
+ * The entries the export writes from a tree, which are the import's documents.
+ *
+ * A resource with an `href` adds it when its type is one the seed's `rootOfType` names. A resource
+ * with no `href` adds the `href` of its only `file` when it has exactly one and its type is in
+ * {@link soleFileDocumentTypes}. Every other entry is stored as bytes, so it is written back as it
+ * was read.
+ *
+ * @param manifest - The source manifest.
+ * @returns The paths, each as the import reads it after whitespace collapse.
+ */
+const rewrittenEntries = (manifest: XmlDocument): ReadonlySet<string> => {
+  const paths = new Set<string>();
+
+  for (const container of childrenNamed(manifest.root, "resources")) {
+    for (const resource of childrenNamed(container, "resource")) {
+      const type = resource.attributes.find(
+        (attribute) => attribute.namespace === "" && attribute.local === "type",
+      )?.value;
+      const href = attributeOf(resource, "href");
+
+      if (type === undefined) {
+        continue;
+      }
+
+      if (href !== undefined) {
+        if (documentTypes.has(type)) {
+          paths.add(href);
+        }
+
+        continue;
+      }
+
+      const files = childrenNamed(resource, "file").map((file) => attributeOf(file, "href"));
+      const [only, ...rest] = files;
+
+      if (soleFileDocumentTypes.has(type) && rest.length === 0 && only !== undefined) {
+        paths.add(only);
+      }
+    }
+  }
+
+  return paths;
 };
 
 /**
@@ -180,9 +247,10 @@ const compareBytes = Effect.fn("compare.compareBytes")(function* compareBytes(
 /**
  * Compare an export directory with the package it was made from.
  *
- * Every entry of the source is looked up in the export. The manifest and every QTI document, the
- * resources' `imsqti_*` hrefs, compare canonically; every other entry compares byte for byte. An
- * entry the export lacks differs at `missing`. Entries only the export has are not reported.
+ * Every entry of the source is looked up in the export. The manifest and every entry the export
+ * writes from a tree ({@link rewrittenEntries}: the QTI, record, usage-data and outcome documents)
+ * compare canonically; every other entry, a stored file, compares byte for byte. An entry the
+ * export lacks differs at `missing`. Entries only the export has are not reported.
  *
  * @param sourceDir - The source package directory.
  * @param exportDir - The export directory.
@@ -196,7 +264,7 @@ export const comparePackage = Effect.fn("compare.comparePackage")(function* comp
   const fs = yield* FileSystem.FileSystem;
   const entries = yield* listPackage(sourceDir);
   const manifest = yield* readXml(yield* readEntry(sourceDir, "imsmanifest.xml"));
-  const documents = new Set(qtiHrefs(manifest.root));
+  const documents = rewrittenEntries(manifest);
 
   const report: { path: string; outcome: Outcome }[] = [];
 

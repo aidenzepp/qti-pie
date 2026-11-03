@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd" identifier="response" title="Response processing, every expression kind" adaptive="false" time-dependent="false">
+    <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
+        <qti-correct-response>
+            <qti-value>ChoiceA</qti-value>
+        </qti-correct-response>
+    </qti-response-declaration>
+    <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">
+        <qti-default-value>
+            <qti-value>0</qti-value>
+        </qti-default-value>
+    </qti-outcome-declaration>
+    <qti-outcome-declaration identifier="COUNT" cardinality="single" base-type="integer"/>
+    <qti-outcome-declaration identifier="FLAG" cardinality="single" base-type="boolean"/>
+    <qti-outcome-declaration identifier="NOTE" cardinality="single" base-type="string"/>
+    <qti-outcome-declaration identifier="SPOT" cardinality="single" base-type="point"/>
+    <qti-outcome-declaration identifier="BAG" cardinality="multiple" base-type="identifier"/>
+    <qti-outcome-declaration identifier="LIST" cardinality="ordered" base-type="identifier"/>
+    <qti-outcome-declaration identifier="TAKEN" cardinality="single" base-type="duration"/>
+    <qti-item-body>
+        <p>Look at the text in the picture.</p>
+        <p>
+            <img src="images/sign.png" alt="NEVER LEAVE LUGGAGE UNATTENDED"/>
+        </p>
+        <qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1">
+            <qti-prompt>What does it say?</qti-prompt>
+            <qti-simple-choice identifier="ChoiceA">You must stay with your luggage at all times.</qti-simple-choice>
+            <qti-simple-choice identifier="ChoiceB">Do not let someone else look after your luggage.</qti-simple-choice>
+            <qti-simple-choice identifier="ChoiceC">Remember your luggage when you leave.</qti-simple-choice>
+        </qti-choice-interaction>
+    </qti-item-body>
+    <qti-response-processing>
+        <!-- FLAG: boolean single from every boolean-valued expression kind -->
+        <qti-set-outcome-value identifier="FLAG">
+            <qti-and>
+                <qti-match>
+                    <qti-variable identifier="RESPONSE"/>
+                    <qti-correct identifier="RESPONSE"/>
+                </qti-match>
+                <qti-not>
+                    <qti-is-null>
+                        <qti-variable identifier="RESPONSE"/>
+                    </qti-is-null>
+                </qti-not>
+                <qti-or>
+                    <qti-gt>
+                        <qti-variable identifier="SCORE"/>
+                        <qti-base-value base-type="float">0.5</qti-base-value>
+                    </qti-gt>
+                    <qti-gte>
+                        <qti-variable identifier="SCORE"/>
+                        <qti-base-value base-type="integer">1</qti-base-value>
+                    </qti-gte>
+                    <qti-lt>
+                        <qti-variable identifier="COUNT"/>
+                        <qti-base-value base-type="integer">100</qti-base-value>
+                    </qti-lt>
+                    <qti-lte>
+                        <qti-variable identifier="COUNT"/>
+                        <qti-base-value base-type="integer">99</qti-base-value>
+                    </qti-lte>
+                </qti-or>
+                <qti-equal>
+                    <qti-variable identifier="SCORE"/>
+                    <qti-base-value base-type="float">1.0</qti-base-value>
+                </qti-equal>
+                <qti-equal tolerance-mode="absolute" tolerance="0.5 1" include-lower-bound="true" include-upper-bound="false">
+                    <qti-variable identifier="SCORE"/>
+                    <qti-base-value base-type="float">1.25</qti-base-value>
+                </qti-equal>
+                <qti-equal-rounded rounding-mode="decimalPlaces" figures="COUNT">
+                    <qti-variable identifier="SCORE"/>
+                    <qti-base-value base-type="float">1.234</qti-base-value>
+                </qti-equal-rounded>
+                <qti-equal-rounded figures="3">
+                    <qti-variable identifier="SCORE"/>
+                    <qti-base-value base-type="float">1.234</qti-base-value>
+                </qti-equal-rounded>
+                <qti-any-n min="1" max="COUNT">
+                    <qti-base-value base-type="boolean">true</qti-base-value>
+                    <qti-base-value base-type="boolean">false</qti-base-value>
+                </qti-any-n>
+                <qti-duration-lt>
+                    <qti-variable identifier="TAKEN"/>
+                    <qti-base-value base-type="duration">60</qti-base-value>
+                </qti-duration-lt>
+                <qti-duration-gte>
+                    <qti-variable identifier="TAKEN"/>
+                    <qti-base-value base-type="duration">30</qti-base-value>
+                </qti-duration-gte>
+                <qti-inside shape="rect" coords="0,0,10,10">
+                    <qti-variable identifier="SPOT"/>
+                </qti-inside>
+                <qti-member>
+                    <qti-base-value base-type="identifier">ChoiceA</qti-base-value>
+                    <qti-variable identifier="BAG"/>
+                </qti-member>
+                <qti-contains>
+                    <qti-variable identifier="BAG"/>
+                    <qti-multiple>
+                        <qti-base-value base-type="identifier">ChoiceA</qti-base-value>
+                    </qti-multiple>
+                </qti-contains>
+                <qti-string-match case-sensitive="true" substring="false">
+                    <qti-variable identifier="NOTE"/>
+                    <qti-base-value base-type="string">alpha</qti-base-value>
+                </qti-string-match>
+                <qti-substring case-sensitive="false">
+                    <qti-base-value base-type="string">alp</qti-base-value>
+                    <qti-variable identifier="NOTE"/>
+                </qti-substring>
+                <qti-pattern-match pattern="[a-z]+">
+                    <qti-variable identifier="NOTE"/>
+                </qti-pattern-match>
+                <qti-pattern-match pattern="{NOTE}">
+                    <qti-index n="1">
+                        <qti-ordered>
+                            <qti-base-value base-type="string">alpha</qti-base-value>
+                            <qti-base-value base-type="string">beta</qti-base-value>
+                        </qti-ordered>
+                    </qti-index>
+                </qti-pattern-match>
+                <qti-is-null>
+                    <qti-null/>
+                </qti-is-null>
+                <qti-is-null>
+                    <qti-custom-operator class="com.example.Operator" definition="https://example.org/operators/custom">
+                        <qti-variable identifier="COUNT"/>
+                    </qti-custom-operator>
+                </qti-is-null>
+                <qti-is-null>
+                    <qti-field-value field-identifier="level">
+                        <qti-variable identifier="QTI_CONTEXT"/>
+                    </qti-field-value>
+                </qti-is-null>
+            </qti-and>
+        </qti-set-outcome-value>
+        <!-- SCORE: float single from the float-valued numerical kinds -->
+        <qti-set-outcome-value identifier="SCORE">
+            <qti-sum>
+                <qti-default identifier="SCORE"/>
+                <qti-product>
+                    <qti-variable identifier="SCORE"/>
+                    <qti-base-value base-type="float">2.5</qti-base-value>
+                </qti-product>
+                <qti-divide>
+                    <qti-base-value base-type="integer">9</qti-base-value>
+                    <qti-base-value base-type="integer">3</qti-base-value>
+                </qti-divide>
+                <qti-subtract>
+                    <qti-base-value base-type="float">5</qti-base-value>
+                    <qti-base-value base-type="float">1</qti-base-value>
+                </qti-subtract>
+                <qti-power>
+                    <qti-base-value base-type="float">2</qti-base-value>
+                    <qti-base-value base-type="integer">3</qti-base-value>
+                </qti-power>
+                <qti-integer-to-float>
+                    <qti-integer-divide>
+                        <qti-base-value base-type="integer">7</qti-base-value>
+                        <qti-integer-modulus>
+                            <qti-base-value base-type="integer">9</qti-base-value>
+                            <qti-base-value base-type="integer">4</qti-base-value>
+                        </qti-integer-modulus>
+                    </qti-integer-divide>
+                </qti-integer-to-float>
+                <qti-math-constant name="pi"/>
+                <qti-math-constant name="e"/>
+                <qti-math-operator name="ln">
+                    <qti-base-value base-type="float">10</qti-base-value>
+                </qti-math-operator>
+                <qti-round-to rounding-mode="decimalPlaces" figures="2">
+                    <qti-variable identifier="SCORE"/>
+                </qti-round-to>
+                <qti-stats-operator name="mean">
+                    <qti-multiple>
+                        <qti-base-value base-type="float">1</qti-base-value>
+                        <qti-base-value base-type="float">2</qti-base-value>
+                    </qti-multiple>
+                </qti-stats-operator>
+                <qti-random-float min="0" max="1"/>
+                <qti-max>
+                    <qti-variable identifier="SCORE"/>
+                    <qti-base-value base-type="float">1.0</qti-base-value>
+                </qti-max>
+                <qti-min>
+                    <qti-variable identifier="SCORE"/>
+                    <qti-base-value base-type="float">2.0</qti-base-value>
+                </qti-min>
+            </qti-sum>
+        </qti-set-outcome-value>
+        <!-- COUNT: integer single from the integer-valued kinds -->
+        <qti-set-outcome-value identifier="COUNT">
+            <qti-sum>
+                <qti-container-size>
+                    <qti-delete>
+                        <qti-base-value base-type="identifier">ChoiceA</qti-base-value>
+                        <qti-variable identifier="BAG"/>
+                    </qti-delete>
+                </qti-container-size>
+                <qti-round>
+                    <qti-variable identifier="SCORE"/>
+                </qti-round>
+                <qti-truncate>
+                    <qti-variable identifier="SCORE"/>
+                </qti-truncate>
+                <qti-gcd>
+                    <qti-base-value base-type="integer">12</qti-base-value>
+                    <qti-base-value base-type="integer">18</qti-base-value>
+                </qti-gcd>
+                <qti-lcm>
+                    <qti-base-value base-type="integer">4</qti-base-value>
+                    <qti-base-value base-type="integer">6</qti-base-value>
+                </qti-lcm>
+                <qti-math-operator name="signum">
+                    <qti-variable identifier="SCORE"/>
+                </qti-math-operator>
+                <qti-random-integer min="0" max="10" step="2"/>
+                <qti-max>
+                    <qti-variable identifier="COUNT"/>
+                    <qti-base-value base-type="integer">1</qti-base-value>
+                </qti-max>
+                <qti-min>
+                    <qti-variable identifier="COUNT"/>
+                    <qti-base-value base-type="integer">5</qti-base-value>
+                </qti-min>
+            </qti-sum>
+        </qti-set-outcome-value>
+        <!-- the four remaining target types -->
+        <qti-set-outcome-value identifier="SPOT">
+            <qti-base-value base-type="point">10 20</qti-base-value>
+        </qti-set-outcome-value>
+        <qti-set-outcome-value identifier="TAKEN">
+            <qti-base-value base-type="duration">60</qti-base-value>
+        </qti-set-outcome-value>
+        <qti-set-outcome-value identifier="BAG">
+            <qti-multiple>
+                <qti-variable identifier="BAG"/>
+                <qti-base-value base-type="identifier">ChoiceB</qti-base-value>
+            </qti-multiple>
+        </qti-set-outcome-value>
+        <qti-set-outcome-value identifier="LIST">
+            <qti-repeat number-repeats="2">
+                <qti-ordered>
+                    <qti-base-value base-type="identifier">ChoiceA</qti-base-value>
+                    <qti-base-value base-type="identifier">ChoiceC</qti-base-value>
+                </qti-ordered>
+            </qti-repeat>
+        </qti-set-outcome-value>
+        <qti-set-outcome-value identifier="NOTE">
+            <qti-random>
+                <qti-multiple>
+                    <qti-base-value base-type="string">alpha</qti-base-value>
+                    <qti-base-value base-type="string">beta</qti-base-value>
+                </qti-multiple>
+            </qti-random>
+        </qti-set-outcome-value>
+        <qti-response-condition>
+            <qti-response-if>
+                <qti-variable identifier="FLAG"/>
+                <qti-set-outcome-value identifier="completionStatus">
+                    <qti-base-value base-type="identifier">completed</qti-base-value>
+                </qti-set-outcome-value>
+                <qti-exit-response/>
+            </qti-response-if>
+            <qti-response-else-if>
+                <qti-gt>
+                    <qti-variable identifier="SCORE"/>
+                    <qti-base-value base-type="float">0.5</qti-base-value>
+                </qti-gt>
+                <qti-set-outcome-value identifier="completionStatus">
+                    <qti-base-value base-type="identifier">incomplete</qti-base-value>
+                </qti-set-outcome-value>
+            </qti-response-else-if>
+            <qti-response-else-if>
+                <qti-is-null>
+                    <qti-variable identifier="RESPONSE"/>
+                </qti-is-null>
+                <qti-set-outcome-value identifier="NOTE">
+                    <qti-null/>
+                </qti-set-outcome-value>
+            </qti-response-else-if>
+            <qti-response-else>
+                <qti-set-outcome-value identifier="FLAG">
+                    <qti-base-value base-type="boolean">true</qti-base-value>
+                </qti-set-outcome-value>
+                <qti-response-condition>
+                    <qti-response-if>
+                        <qti-not>
+                            <qti-variable identifier="FLAG"/>
+                        </qti-not>
+                        <qti-set-outcome-value identifier="NOTE">
+                            <qti-base-value base-type="string">wrong</qti-base-value>
+                        </qti-set-outcome-value>
+                    </qti-response-if>
+                </qti-response-condition>
+            </qti-response-else>
+        </qti-response-condition>
+        <qti-response-processing-fragment>
+            <qti-set-outcome-value identifier="SCORE">
+                <qti-base-value base-type="float">1</qti-base-value>
+            </qti-set-outcome-value>
+            <xi:include href="shared-rules.xml" parse="xml">
+                <xi:fallback>fallback</xi:fallback>
+            </xi:include>
+        </qti-response-processing-fragment>
+    </qti-response-processing>
+</qti-assessment-item>

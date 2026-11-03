@@ -14,6 +14,7 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `DeclarationShape` is the roster the declaration module names; this module reads it only through the value arms. */
 import {
   alternatives,
+  capacity,
   check,
   closed,
   closedId,
@@ -22,10 +23,12 @@ import {
   mirrors,
   on,
   pg,
+  ref,
   relation,
   select,
   str,
   uuid,
+  within,
 } from "@bjornpagen/grizzle";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as item from "#qti/schema/item.ts";
@@ -91,17 +94,39 @@ export const StandardTemplateReference = relation(
 );
 
 /**
- * A node of an expression kind, in the document that holds it.
+ * Whether an expression kind has an upper bound on its operands.
+ */
+export const ArityBound = closed("ArityBound", ["bounded", "unbounded"]);
+
+/**
+ * A node of an expression kind, in the document that holds it. `min` and `bounded` copy the
+ * seeded arity of its kind, so the operand capacities can read them.
  */
 export const Expression = relation(
   "Expression",
-  { document: uuid, id: uuid, kind: closedId(node.NodeKind) },
+  {
+    bounded: closedId(ArityBound),
+    document: uuid,
+    id: uuid,
+    kind: closedId(node.NodeKind),
+    min: pg.bigint,
+  },
+  ["id"],
+);
+
+/**
+ * The most operands a bounded expression admits, a copy of its kind's `OperatorArityMax` row. An
+ * unbounded expression has no row.
+ */
+export const ExpressionMax = relation(
+  "ExpressionMax",
+  { id: uuid, kind: closedId(node.NodeKind), max: pg.bigint },
   ["id"],
 );
 
 /**
  * The fewest operands an expression kind admits. Seeded by a custom migration and read-only to
- * every role; empty until phase 3 appends the expression kinds.
+ * every role.
  */
 export const OperatorArity = relation(
   "OperatorArity",
@@ -116,6 +141,16 @@ export const OperatorArity = relation(
 export const OperatorArityMax = relation(
   "OperatorArityMax",
   { kind: closedId(node.NodeKind), max: pg.bigint },
+  ["kind"],
+);
+
+/**
+ * The expression kinds with no upper bound on their operands. Seeded and read-only like
+ * `OperatorArity`; it and `OperatorArityMax` partition the kinds of `OperatorArity`.
+ */
+export const OperatorArityUnbounded = relation(
+  "OperatorArityUnbounded",
+  { kind: closedId(node.NodeKind) },
   ["kind"],
 );
 
@@ -145,6 +180,7 @@ export const RefKind = closed("RefKind", [
   "itemVariable",
   "itemInstanceVariable",
   "sectionDuration",
+  "templateParameter",
 ]);
 
 /**
@@ -167,18 +203,46 @@ export const VariableRef = relation(
 );
 
 /**
- * A reference to a variable the document declares.
+ * A reference to a variable the document declares, with the kind of node that refers and the kind
+ * of declaration it names.
  */
 export const DeclaredRef = relation(
   "DeclaredRef",
-  { document: uuid, id: uuid, identifier: ncName },
+  {
+    declarationKind: closedId(declaration.DeclarationKind),
+    document: uuid,
+    id: uuid,
+    identifier: ncName,
+    referrerKind: closedId(node.NodeKind),
+  },
   ["id"],
 );
 
 /**
- * A reference to a built-in variable.
+ * A reference to a built-in variable, with the kind of node that refers.
  */
-export const BuiltInRef = relation("BuiltInRef", { id: uuid, name: closedId(BuiltIn) }, ["id"]);
+export const BuiltInRef = relation(
+  "BuiltInRef",
+  { id: uuid, name: closedId(BuiltIn), referrerKind: closedId(node.NodeKind) },
+  ["id"],
+);
+
+/**
+ * A reference inside a response-processing template document, whose names resolve to nothing in
+ * the document itself: the identifier as written, with the kind of node that refers and the root
+ * kind of its tree.
+ */
+export const TemplateParameterRef = relation(
+  "TemplateParameterRef",
+  {
+    document: uuid,
+    id: uuid,
+    identifier: ncName,
+    referrerKind: closedId(node.NodeKind),
+    rootKind: closedId(node.RootKind),
+  },
+  ["id"],
+);
 
 /**
  * The response processing kind's arm, keyed by its `NodeKind` handle.
@@ -195,10 +259,12 @@ export const arms = {
  * The relations of this module, as schema members.
  */
 export const relations = {
+  ArityBound,
   BuiltIn,
   BuiltInRef,
   DeclaredRef,
   Expression,
+  ExpressionMax,
   Literal,
   LiteralBoolean: literalArms.boolean,
   LiteralDirectedPair: literalArms.directedPair,
@@ -214,6 +280,7 @@ export const relations = {
   Operand,
   OperatorArity,
   OperatorArityMax,
+  OperatorArityUnbounded,
   RefKind,
   ResponseProcessing,
   ResponseProcessingItem,
@@ -221,6 +288,7 @@ export const relations = {
   ResponseProcessingTemplateLocation,
   StandardTemplate,
   StandardTemplateReference,
+  TemplateParameterRef,
   VariableRef,
 };
 
@@ -229,13 +297,18 @@ export const relations = {
  * item-rooted one and its item row name each other, and the row hangs under its item by an edge; a
  * template-rooted one is the root of its tree; the template attributes belong to a processing
  * node, and a standard template reference to a written `template`. An expression is a node of
- * its document's tree, a literal is an expression with an arm per base type, an operand hangs
- * from its expression at a position, and a variable reference is a node of its document's tree
- * with a declared or a built-in arm.
+ * its document's tree, a literal is an expression with an arm per base type, and an operand hangs
+ * from its expression at a position and from the same edge in the tree. An expression copies its
+ * kind's seeded arity: the lower bound is a capacity over `min`, the upper bound a capacity over
+ * `ExpressionMax`, which every bounded expression has and no unbounded one can. A variable
+ * reference is a node of its document's tree with a declared, a built-in or a template-parameter
+ * arm, each naming the kind of node that refers.
  *
- * The row check names the root kinds as literals: `RootKind.handle("item")` is typed exactly
- * `"item"`, and a comparison against a `closedId` field takes the field's own type, so the handle
- * term is refused there.
+ * The row checks name root kinds and node kinds as literals: `RootKind.handle("item")` is typed
+ * exactly `"item"`, and a comparison against a `closedId` field takes the field's own type, so the
+ * handle term is refused there. The declared and built-in checks list the allowed pairs and
+ * refuse every other referring kind, so they are also the check that the kind is one of the ten
+ * that refer; the template-parameter arm has a check of its own for that.
  */
 export const rules = [
   contained(on(ResponseProcessing, "id", "rootKind"), on(node.Node, "id", "rootKind")),
@@ -257,15 +330,92 @@ export const rules = [
   contained(on(ResponseProcessingTemplateLocation, "node"), on(ResponseProcessing, "id")),
   contained(on(StandardTemplateReference, "node"), on(ResponseProcessingTemplate, "node")),
   contained(on(Expression, "id", "document", "kind"), on(node.Node, "id", "tree", "kind")),
+  contained(on(Expression, "kind", "min"), on(OperatorArity, "kind", "min")),
+  contained(on(select(Expression, { bounded: "bounded" }), "kind"), on(OperatorArityMax, "kind")),
+  contained(
+    on(select(Expression, { bounded: "unbounded" }), "kind"),
+    on(OperatorArityUnbounded, "kind"),
+  ),
+  contained(on(ExpressionMax, "id", "kind"), on(Expression, "id", "kind")),
+  contained(on(ExpressionMax, "kind", "max"), on(OperatorArityMax, "kind", "max")),
+  contained(
+    on(select(Expression, { bounded: "bounded" }), "id", "kind"),
+    on(ExpressionMax, "id", "kind"),
+  ),
+  capacity(on(Expression, "id"), {
+    from: on(Operand, "expression"),
+    within: within(ref("min"), "*"),
+  }),
+  capacity(on(ExpressionMax, "id"), {
+    from: on(Operand, "expression"),
+    within: within(0n, ref("max")),
+  }),
   contained(on(Literal, "id"), on(Expression, "id")),
   alternatives(Literal, "baseType", declaration.BaseType, literalArms),
   key(Operand, ["child"]),
   contained(on(Operand, "expression"), on(Expression, "id")),
   contained(on(Operand, "child"), on(Expression, "id")),
-  contained(on(VariableRef, "id", "document"), on(node.Node, "id", "tree")),
-  alternatives(VariableRef, "kind", RefKind, { builtIn: BuiltInRef, declared: DeclaredRef }),
   contained(
-    on(DeclaredRef, "document", "identifier"),
-    on(declaration.Declaration, "document", "identifier"),
+    on(Operand, "child", "expression", "position"),
+    on(node.Edge, "child", "parent", "position"),
+  ),
+  contained(on(VariableRef, "id", "document"), on(node.Node, "id", "tree")),
+  alternatives(VariableRef, "kind", RefKind, {
+    builtIn: BuiltInRef,
+    declared: DeclaredRef,
+    templateParameter: TemplateParameterRef,
+  }),
+  contained(
+    on(DeclaredRef, "document", "identifier", "declarationKind"),
+    on(declaration.Declaration, "document", "identifier", "kind"),
+  ),
+  contained(on(DeclaredRef, "id", "referrerKind"), on(node.Node, "id", "kind")),
+  check("DeclaredRefKind", DeclaredRef, (r) =>
+    r.or(
+      r.in(r.referrerKind, ["qti-variable", "qti-default"]),
+      r.and(
+        r.in(r.referrerKind, [
+          "qti-correct",
+          "qti-map-response",
+          "qti-map-response-point",
+          "qti-set-correct-response",
+        ]),
+        r.eq(r.declarationKind, "response"),
+      ),
+      r.and(
+        r.in(r.referrerKind, ["qti-set-outcome-value", "qti-lookup-outcome-value"]),
+        r.eq(r.declarationKind, "outcome"),
+      ),
+      r.and(r.eq(r.referrerKind, "qti-set-template-value"), r.eq(r.declarationKind, "template")),
+      r.and(
+        r.eq(r.referrerKind, "qti-set-default-value"),
+        r.in(r.declarationKind, ["response", "outcome"]),
+      ),
+    ),
+  ),
+  contained(on(BuiltInRef, "id", "referrerKind"), on(node.Node, "id", "kind")),
+  check("BuiltInRefKind", BuiltInRef, (r) =>
+    r.or(
+      r.in(r.referrerKind, ["qti-variable", "qti-default"]),
+      r.and(r.eq(r.referrerKind, "qti-set-outcome-value"), r.eq(r.name, "completionStatus")),
+    ),
+  ),
+  contained(on(TemplateParameterRef, "id", "rootKind"), on(node.Node, "id", "rootKind")),
+  contained(on(TemplateParameterRef, "id", "document"), on(node.Node, "id", "tree")),
+  contained(on(TemplateParameterRef, "id", "referrerKind"), on(node.Node, "id", "kind")),
+  check("TemplateParameterRoot", TemplateParameterRef, (r) => r.eq(r.rootKind, "rptemplate")),
+  check("TemplateParameterReferrer", TemplateParameterRef, (r) =>
+    r.in(r.referrerKind, [
+      "qti-variable",
+      "qti-default",
+      "qti-correct",
+      "qti-map-response",
+      "qti-map-response-point",
+      "qti-set-outcome-value",
+      "qti-lookup-outcome-value",
+      "qti-set-template-value",
+      "qti-set-default-value",
+      "qti-set-correct-response",
+    ]),
   ),
 ] as const;

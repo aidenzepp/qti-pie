@@ -198,7 +198,8 @@ after every step, but never leave it for someone else.
 - Parallel work uses git worktrees under `.worktrees/<slice>` in this repo, or under `.claude/worktrees/` when Claude
   Code's subagent isolation creates them. Both are ignored by git, and both count toward the limit. Never create a
   worktree anywhere else, `/tmp` included.
-- At most 6 exist at once. That matches the number of database connections a parallel run can hold (see below).
+- At most 10 exist at once, slice and merge worktrees together. Only one seat holds the database at a time (see below),
+  so worktrees that need no database are the ones that run in parallel.
 - A worktree is removed (`git worktree remove`, then its branch deleted) as soon as its slice is merged or abandoned. The
   orchestrator runs `git worktree prune` and confirms `git worktree list` shows only active slices at the end of every
   phase.
@@ -218,7 +219,7 @@ after every step, but never leave it for someone else.
 
 **Disk.**
 
-- Budget: the worktrees and `gr8des_*` databases together stay under 10 GB. The orchestrator reports their size at the end
+- Budget: the worktrees and `gr8des_*` databases together stay under 20 GB. The orchestrator reports their size at the end
   of every phase (`du -sh .worktrees`, and `pg_database_size` for each `gr8des_%` database).
 - Downloaded inputs, such as specifications, schema files and 1EdTech's QTI example packages, are fetched once into
   `~/.cache/gr8des/`, never into the repository or once per worktree.

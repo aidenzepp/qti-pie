@@ -7,19 +7,19 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { readTree, treesOf } from "#qti/export/read.ts";
 import { renderTree } from "#qti/export/render.ts";
-import { importPackage } from "#qti/import/package.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
+import { importPackage } from "#qti/import/package.ts";
 import { Rows } from "#qti/import/tree.ts";
+import { listPackage } from "#qti/package/read.ts";
 import { ResourceLomGeneral } from "#qti/schema/lang.ts";
 import { Author } from "#qti/schema/roles.ts";
-import { listPackage } from "#qti/package/read.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
+import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 import { canonicalize } from "#qti/xml/canonical.ts";
 import { xmllintC14n } from "#qti/xml/oracle.ts";
 import { readXml } from "#qti/xml/read.ts";
-import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**
  * The text of a canonical form, so a failed comparison prints the two documents and not two byte
