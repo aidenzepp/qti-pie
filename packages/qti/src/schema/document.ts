@@ -23,9 +23,8 @@ import {
 import { AttributeName, Node, NodeKind, RootKind, SchemaVersion, Tree } from "#qti/schema/node.ts";
 import type { RootKindHandle } from "#qti/schema/node.ts";
 import { Package, PackageEntry, Resource, RootOfType } from "#qti/schema/package.ts";
+import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-
-const hrefInPackage = str.regex(patterns.hrefInPackage);
 
 const ncName = str.regex(patterns.ncName);
 
@@ -52,8 +51,8 @@ export const Document = relation(
   {
     id: uuid,
     package: uuid,
-    path: hrefInPackage,
-    resource: ncName,
+    path: PackagePath,
+    resource: ManifestIdentifier,
     resourceType,
     root: closedId(RootKind),
     version: closedId(SchemaVersion),
@@ -70,7 +69,7 @@ export const DocumentIdentifier = relation(
   {
     document: uuid,
     package: uuid,
-    resource: ncName,
+    resource: ManifestIdentifier,
     root: closedId(RootKind),
     value: ncName,
   },
@@ -90,7 +89,7 @@ export const DocumentTitle = relation(
     collapsed: str.regex(patterns.boundedToken, patterns.boundedTokenFlags),
     document: uuid,
     package: uuid,
-    resource: ncName,
+    resource: ManifestIdentifier,
     root: closedId(RootKind),
     value: str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags),
   },

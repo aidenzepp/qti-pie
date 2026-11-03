@@ -515,7 +515,7 @@ const ordering = (rows: Rows): Finding => {
  * `file-listed`: every file entry of the package is the `href` of some `File`.
  */
 const fileListed = (rows: Rows, entries: readonly Entry[]): Finding => {
-  const listed = new Set(Rows.of(rows, File).map((file) => file.href));
+  const listed = new Set<string>(Rows.of(rows, File).map((file) => file.href));
   const held = [
     ...entries,
     ...Rows.of(rows, PackageEntry).map(({ kind, path }) => ({ kind, path })),
@@ -528,12 +528,18 @@ const fileListed = (rows: Rows, entries: readonly Entry[]): Finding => {
 };
 
 /**
+ * Whether two columns of different contracts hold the same text: each contract brands its own
+ * type, so a direct comparison across two of them is refused.
+ */
+const sameText = (left: string, right: string): boolean => left === right;
+
+/**
  * `href-listed`: every resource `href` is the `href` of a `File` of the same resource.
  */
 const hrefListed = (rows: Rows): Finding => {
   const files = Rows.of(rows, File);
   const missing = Rows.of(rows, ResourceHref).find(
-    (row) => !files.some((file) => file.resource === row.resource && file.href === row.href),
+    (row) => !files.some((file) => file.resource === row.resource && sameText(file.href, row.href)),
   );
 
   return missing === undefined
@@ -662,7 +668,7 @@ const rootTypeReverse = Effect.fn("manifestGuards.rootTypeReverse")(function* ro
       ),
     { concurrency: 4 },
   );
-  const bytes = new Set(Rows.of(rows, FileContent).map((entry) => entry.path));
+  const bytes = new Set<string>(Rows.of(rows, FileContent).map((entry) => entry.path));
   const roots = new Map<string, RootKindHandle>([
     ...Rows.of(rows, Document).map((row): [string, RootKindHandle] => [row.path, row.root]),
     ...stored.flatMap(([path, root]): [string, RootKindHandle][] =>

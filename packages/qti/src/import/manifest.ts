@@ -22,6 +22,12 @@ import type { ImportRefused } from "#qti/import/refusal.ts";
 import { readEntry } from "#qti/package/read.ts";
 import type { Entry, PackageReadError } from "#qti/package/read.ts";
 import type { ZipRefusal } from "#qti/package/zip.ts";
+import {
+  FileMediaType,
+  ManifestIdentifier,
+  PackagePath,
+  ResourceEntryHref,
+} from "#qti/schema/contracts.ts";
 import * as csm from "#qti/schema/csm.ts";
 import { ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
 import { CpSchema, XsBoolean } from "#qti/schema/content/rosters.ts";
@@ -136,10 +142,21 @@ const drdLeaves = {
 const isDrdLeaf = (kind: string): kind is keyof typeof drdLeaves => kind in drdLeaves;
 
 /**
+ * An `xs:ID` of the manifest as its contract brands it: the value a writer holds once the source's
+ * text has been collapsed, before the column's pattern judges it at commit.
+ */
+export type ManifestIdentifierText = ReturnType<typeof ManifestIdentifier>;
+
+/**
+ * A path inside the package as its contract brands it.
+ */
+export type PackagePathText = ReturnType<typeof PackagePath>;
+
+/**
  * The resource-level facts the record of an item resource is bound to.
  */
 interface LomResource {
-  readonly identifier: string;
+  readonly identifier: ManifestIdentifierText;
   readonly node: string;
   readonly type: string;
 }
@@ -185,8 +202,8 @@ interface LomContext {
  * One document a resource of a QTI type names by `href`.
  */
 export interface ManifestDocument {
-  readonly path: string;
-  readonly resource: string;
+  readonly path: PackagePathText;
+  readonly resource: ManifestIdentifierText;
   readonly resourceId: string;
   readonly type: string;
 }
@@ -252,8 +269,8 @@ const attributeOf = (element: Element, local: string): Option.Option<string> =>
 const soleFileDocument = (
   resource: Element,
   type: string,
-  fileHrefs: readonly string[],
-): string | undefined => {
+  fileHrefs: readonly PackagePathText[],
+): PackagePathText | undefined => {
   const [only, ...rest] = fileHrefs;
   const named = type === "qtiusagedata/xml" || soleFileTypes.has(type);
 
@@ -1135,14 +1152,14 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
   const variantRows = Effect.fn("import.manifest.variantRows")(function* variantRows(
     variant: Element,
     id: string,
-    resource: { readonly identifier: string; readonly node: string },
+    resource: { readonly identifier: ManifestIdentifierText; readonly node: string },
   ): Effect.fn.Return<void, ImportRefused> {
-    const identifier = typed(variant, "identifier", "collapse");
+    const identifier = ManifestIdentifier(typed(variant, "identifier", "collapse"));
     add(Variant, [
       {
         id,
         identifier,
-        identifierref: typed(variant, "identifierref", "collapse"),
+        identifierref: ManifestIdentifier(typed(variant, "identifierref", "collapse")),
         package: packageId,
         resource: resource.node,
         resourceIdentifier: resource.identifier,
@@ -1193,8 +1210,8 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
   });
 
   const hrefless: {
-    readonly files: readonly string[];
-    readonly identifier: string;
+    readonly files: readonly PackagePathText[];
+    readonly identifier: ManifestIdentifierText;
     readonly resourceId: string;
     readonly type: string;
   }[] = [];
@@ -1207,7 +1224,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       return;
     }
 
-    const identifier = typed(resource, "identifier", "collapse");
+    const identifier = ManifestIdentifier(typed(resource, "identifier", "collapse"));
     const type = typed(resource, "type", "preserve");
     add(Resource, [{ id: node.id, identifier, package: packageId, type, version }]);
     add(ManifestId, [{ holder: "resource", id: identifier, package: packageId }]);
@@ -1215,9 +1232,14 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
 
     if (Option.isSome(attributeOf(resource, "href"))) {
       const href = typed(resource, "href", "collapse");
-      add(ResourceHref, [{ href, package: packageId, resource: node.id }]);
+      add(ResourceHref, [{ href: ResourceEntryHref(href), package: packageId, resource: node.id }]);
       if (qtiDocumentType.test(type) || recordTypes.has(type)) {
-        documents.push({ path: href, resource: identifier, resourceId: node.id, type });
+        documents.push({
+          path: PackagePath(href),
+          resource: identifier,
+          resourceId: node.id,
+          type,
+        });
       }
     }
 
@@ -1233,14 +1255,14 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       }
     }
 
-    const fileHrefs: string[] = [];
+    const fileHrefs: PackagePathText[] = [];
     for (const file of childrenNamed(resource, "file")) {
       const id = kindIs(file, "cp:file");
       const position = id === undefined ? undefined : positions.get(id);
       if (id !== undefined && position !== undefined) {
         fileMetadataRows(file, id);
 
-        const href = typed(file, "href", "collapse");
+        const href = PackagePath(typed(file, "href", "collapse"));
         fileHrefs.push(href);
         add(File, [
           {
@@ -1271,7 +1293,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
             id,
             package: packageId,
             resource: identifier,
-            target: typed(dependency, "identifierref", "collapse"),
+            target: ManifestIdentifier(typed(dependency, "identifierref", "collapse")),
           },
         ]);
       }
@@ -1285,7 +1307,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     }
   });
 
-  const manifestIdentifier = typed(root, "identifier", "collapse");
+  const manifestIdentifier = ManifestIdentifier(typed(root, "identifier", "collapse"));
   add(Package, [{ id: packageId, identifier: manifestIdentifier, schemaversion: version }]);
   add(ManifestId, [{ holder: "manifest", id: manifestIdentifier, package: packageId }]);
   add(ManifestIdOfManifest, [{ id: manifestIdentifier, package: packageId }]);
@@ -1321,11 +1343,11 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
 
   add(
     PackageEntry,
-    entries.map(({ kind, path }) => ({ kind, package: packageId, path })),
+    entries.map(({ kind, path }) => ({ kind, package: packageId, path: PackagePath(path) })),
   );
 
   for (const record of hrefless) {
-    const path = yield* recordFile({ files: record.files, href: Option.none() });
+    const path = PackagePath(yield* recordFile({ files: record.files, href: Option.none() }));
     documents.push({
       path,
       resource: record.identifier,
@@ -1334,7 +1356,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     });
   }
 
-  const claimed = new Set(documents.map((document) => document.path));
+  const claimed = new Set<string>(documents.map((document) => document.path));
   const unclaimed = entries.filter((entry) => entry.kind === "file" && !claimed.has(entry.path));
   const contents = yield* Effect.forEach(
     unclaimed,
@@ -1343,9 +1365,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
         Effect.map((bytes) => ({
           byteLength: BigInt(bytes.length),
           content: Buffer.from(bytes).toString("base64"),
-          mimeType: mimeTypeOf(entry.path),
+          mimeType: FileMediaType(mimeTypeOf(entry.path)),
           package: packageId,
-          path: entry.path,
+          path: PackagePath(entry.path),
         })),
       ),
     { concurrency: 4 },

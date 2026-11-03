@@ -8,6 +8,7 @@ import { manifestGuards, ManifestGuardRefusal } from "#qti/import/guards/manifes
 import { manifestRows, NotQti3 } from "#qti/import/manifest.ts";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import { Rows } from "#qti/import/tree.ts";
+import { ManifestIdentifier, PackagePath, ResourceEntryHref } from "#qti/schema/contracts.ts";
 import { ResourceLomLanguageSet } from "#qti/schema/lang.ts";
 import type { Entry } from "#qti/package/read.ts";
 import { listPackage, PackageReadError, readEntry } from "#qti/package/read.ts";
@@ -158,7 +159,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
       assert.deepStrictEqual(Rows.of(rows, Package), [
         {
           id: packageId,
-          identifier: "MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390",
+          identifier: ManifestIdentifier("MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"),
           schemaversion: "3.0.0",
         },
       ]);
@@ -214,7 +215,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
 
       const resource = only(resources);
       assert.deepStrictEqual(Rows.of(rows, ResourceHref), [
-        { href: "choice.xml", package: packageId, resource: resource.id },
+        { href: ResourceEntryHref("choice.xml"), package: packageId, resource: resource.id },
       ]);
       assert.deepStrictEqual(
         Rows.of(rows, File).map(({ href, position, resource: owner }) => ({
@@ -235,8 +236,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
       }
       assert.deepStrictEqual(documents, [
         {
-          path: "choice.xml",
-          resource: "choice",
+          path: PackagePath("choice.xml"),
+          resource: ManifestIdentifier("choice"),
           resourceId: resource.id,
           type: "imsqti_item_xmlv3p0",
         },
@@ -269,9 +270,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
       const { packageId, rows } = yield* importManifest(inject("fixtures").simple);
 
       assert.deepStrictEqual(Rows.of(rows, PackageEntry), [
-        { kind: "file", package: packageId, path: "choice.xml" },
-        { kind: "file", package: packageId, path: "images/sign.png" },
-        { kind: "manifest", package: packageId, path: "imsmanifest.xml" },
+        { kind: "file", package: packageId, path: PackagePath("choice.xml") },
+        { kind: "file", package: packageId, path: PackagePath("images/sign.png") },
+        { kind: "manifest", package: packageId, path: PackagePath("imsmanifest.xml") },
       ]);
 
       const content = only(Rows.of(rows, FileContent));

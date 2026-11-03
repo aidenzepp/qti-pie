@@ -54,6 +54,7 @@ import {
   TypedCardinality,
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
+import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
 import type { DeclarationShape } from "#qti/schema/declaration.ts";
 import {
   BooleanLiteral,
@@ -219,7 +220,7 @@ export const documentLangRows = (
       document: documentId,
       lomGeneral: input.resourceLomHasGeneral ? "yes" : "no",
       package: input.packageId,
-      resource: input.resource,
+      resource: ManifestIdentifier(input.resource),
       value,
     })),
   );
@@ -938,8 +939,8 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
     {
       id: documentId,
       package: packageId,
-      path: input.path,
-      resource: input.resource,
+      path: PackagePath(input.path),
+      resource: ManifestIdentifier(input.resource),
       resourceType: input.resourceType,
       root: "item",
       version,
@@ -957,7 +958,7 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
   const common = {
     document: documentId,
     package: packageId,
-    resource: input.resource,
+    resource: ManifestIdentifier(input.resource),
     root: "item",
   } as const;
   const identifier = attributeOf(built, root, rootNode, "identifier", "collapse");

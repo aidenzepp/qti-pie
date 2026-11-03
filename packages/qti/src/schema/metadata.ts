@@ -36,6 +36,7 @@ import {
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import { Edge, Node, NodeKind, TreeRoot } from "#qti/schema/node.ts";
 import { File, FileMetadata, Resource, ResourceMetadata } from "#qti/schema/package.ts";
+import { ManifestIdentifier } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
@@ -76,7 +77,7 @@ export const ManifestLom = relation("ManifestLom", { lom: uuid, metadata: uuid, 
  */
 export const ResourceLom = relation(
   "ResourceLom",
-  { lom: uuid, metadata: uuid, package: uuid, resource: ncName, type: resourceType },
+  { lom: uuid, metadata: uuid, package: uuid, resource: ManifestIdentifier, type: resourceType },
   ["lom"],
 );
 
@@ -96,7 +97,7 @@ export const FileLom = relation(
  */
 export const ExternalLom = relation(
   "ExternalLom",
-  { document: uuid, lom: uuid, package: uuid, resource: ncName },
+  { document: uuid, lom: uuid, package: uuid, resource: ManifestIdentifier },
   ["lom"],
 );
 
@@ -486,7 +487,7 @@ export const LomCopyrightAndOtherRestrictions = relation(
  */
 export const ResourceLomIdentified = relation(
   "ResourceLomIdentified",
-  { lom: uuid, package: uuid, resource: ncName, type: resourceType },
+  { lom: uuid, package: uuid, resource: ManifestIdentifier, type: resourceType },
   ["lom"],
 );
 
@@ -502,7 +503,7 @@ export const LomObjectIdentifier = relation(
     lom: uuid,
     package: uuid,
     position: pg.bigint,
-    resource: ncName,
+    resource: ManifestIdentifier,
     type: resourceType,
   },
   ["lom"],
@@ -514,7 +515,7 @@ export const LomObjectIdentifier = relation(
  */
 export const ResourceLomTitled = relation(
   "ResourceLomTitled",
-  { lom: uuid, package: uuid, resource: ncName, type: resourceType },
+  { lom: uuid, package: uuid, resource: ManifestIdentifier, type: resourceType },
   ["lom"],
 );
 
@@ -532,7 +533,7 @@ export const LomObjectTitle = relation(
     lom: uuid,
     package: uuid,
     position: pg.bigint,
-    resource: ncName,
+    resource: ManifestIdentifier,
     type: resourceType,
   },
   ["lom"],
@@ -554,7 +555,7 @@ export const QtiMetadataHost = closed("QtiMetadataHost", [
  */
 export const QtiMetadata = relation(
   "QtiMetadata",
-  { host: closedId(QtiMetadataHost), id: uuid, package: uuid, resource: ncName },
+  { host: closedId(QtiMetadataHost), id: uuid, package: uuid, resource: ManifestIdentifier },
   ["id"],
 );
 
@@ -564,7 +565,7 @@ export const QtiMetadata = relation(
  */
 export const QtiMetadataInMetadata = relation(
   "QtiMetadataInMetadata",
-  { id: uuid, metadata: uuid, package: uuid, resource: ncName, resourceNode: uuid },
+  { id: uuid, metadata: uuid, package: uuid, resource: ManifestIdentifier, resourceNode: uuid },
   ["id"],
 );
 
@@ -573,7 +574,7 @@ export const QtiMetadataInMetadata = relation(
  */
 export const QtiMetadataInResourceLom = relation(
   "QtiMetadataInResourceLom",
-  { id: uuid, lom: uuid, package: uuid, resource: ncName },
+  { id: uuid, lom: uuid, package: uuid, resource: ManifestIdentifier },
   ["id"],
 );
 
@@ -582,7 +583,7 @@ export const QtiMetadataInResourceLom = relation(
  */
 export const QtiMetadataInExternalLom = relation(
   "QtiMetadataInExternalLom",
-  { id: uuid, lom: uuid, package: uuid, resource: ncName },
+  { id: uuid, lom: uuid, package: uuid, resource: ManifestIdentifier },
   ["id"],
 );
 
