@@ -13,8 +13,30 @@ import { Effect, Option } from "effect";
 import { attributeReader } from "#qti/import/interactions.ts";
 import type { AttributeReader, NodeRef } from "#qti/import/interactions.ts";
 import { requiredAttribute } from "#qti/import/required.ts";
-import { Rows, typedAttribute, UnmodeledVocabulary, withParents } from "#qti/import/tree.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
+import {
+  closedOf,
+  Rows,
+  typedAttribute,
+  UnmodeledVocabulary,
+  withParents,
+} from "#qti/import/tree.ts";
 import type { ItemRefusal, NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
+import {
+  CellAlign,
+  CellScope,
+  CellValign,
+  CrossOrigin,
+  MediaAutoplay,
+  MediaControls,
+  MediaLoop,
+  MediaMuted,
+  MediaPreload,
+  ParamValuetype,
+  TrackDefaultValue,
+  TrackKind,
+  XsBoolean,
+} from "#qti/schema/content/rosters.ts";
 import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
 import * as media from "#qti/schema/html/media.ts";
 import * as structure from "#qti/schema/html/structure.ts";
@@ -46,11 +68,12 @@ type Write = (rows: Rows) => Rows;
  * One part of an element's rows: the own attributes it reads and the step that reads and records
  * them. A step reads every attribute it records before it returns its `Write`, because the
  * `AttributeLexical` rows are taken once every step has run. A step that reads a required
- * attribute fails with `ItemRefusal` where the element omits it.
+ * attribute fails with `ItemRefusal` where the element omits it, and a step that reads a closed
+ * attribute fails with `ImportRefused` under `attribute-lexical` for a value outside its roster.
  */
 interface Piece {
   readonly reads: readonly AttributeNameHandle[];
-  readonly step: (subject: Subject) => Effect.Effect<Write, ItemRefusal>;
+  readonly step: (subject: Subject) => Effect.Effect<Write, ItemRefusal | ImportRefused>;
 }
 
 /**
@@ -69,13 +92,14 @@ interface ValueRow {
 }
 
 /**
- * The fact `row` of `relation`, whose columns its regex laws judge at commit.
+ * The fact `row` of `relation`, whose open columns its regex laws judge at commit and whose closed
+ * columns the caller narrowed to a handle through `closedOf` before the call.
  */
 // oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- `R` is the relation the caller adds the fact to; the call site names it by inference.
 const factOf = <R extends AnyRelation>(_relation: R, row: ValueRow): Fact<R> => {
   const written: object = row;
 
-  // SAFETY: the caller builds `row` from the relation's own columns, and the column laws judge each value at commit, which is the importer's refusal for it (spec 3.9, 4.5).
+  // SAFETY: the caller builds `row` from the relation's own columns, and the column laws judge each open value at commit, which is the importer's refusal for it, and each closed value is a handle `closedOf` returned (spec 3.9, 4.5).
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
   return written as Fact<R>;
 };
@@ -114,6 +138,50 @@ const optional = <R extends AnyRelation>(name: AttributeNameHandle, relation: R)
 });
 
 /**
+ * The piece of an own optional attribute whose column is a closed roster: its `(node, value)` row
+ * where the element writes it, the value a handle of `handles`.
+ *
+ * @param name - The attribute.
+ * @param relation - The relation of `node` and `value` that holds it.
+ * @param handles - The roster's handles.
+ */
+// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- `R` types the fact that `factOf` makes for the relation; the signature names it once because the relation is the only argument it comes from.
+const closedOptional = <R extends AnyRelation>(
+  name: AttributeNameHandle,
+  relation: R,
+  handles: readonly string[],
+): Piece => ({
+  reads: [name],
+  step: Effect.fn("import.html.closedOptional")(function* closedOptionalStep({
+    attributes,
+    element,
+    node,
+  }) {
+    const value = attributes.read(name);
+    const handle = Option.isSome(value)
+      ? Option.some(
+          yield* closedOf(
+            handles,
+            value.value,
+            "attribute-lexical",
+            `the ${name} attribute of ${element.local}`,
+          ),
+        )
+      : Option.none();
+
+    return (rows: Rows) =>
+      Rows.add(
+        rows,
+        relation,
+        Option.match(handle, {
+          onNone: () => [],
+          onSome: (own) => [factOf(relation, { node: node.id, value: own })],
+        }),
+      );
+  }),
+});
+
+/**
  * The whitespace class the media booleans and `track/@default` take in each schema version: 3.0.0
  * declares them `xs:boolean`, which collapses, and 3.0.1 an enumeration, which is kept as read
  * (spec 3.9).
@@ -132,26 +200,50 @@ const booleanClass: Readonly<Record<SchemaVersionHandle, WhiteSpace>> = {
  * @param relation - The relation of `node`, `value` and `version` that holds it.
  */
 // oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- `R` types the fact that `factOf` makes for the relation; the signature names it once because the relation is the only argument it comes from.
-const versioned = <R extends AnyRelation>(name: AttributeNameHandle, relation: R): Piece => ({
+const versioned = <R extends AnyRelation>(
+  name: AttributeNameHandle,
+  relation: R,
+  handles: readonly string[],
+): Piece => ({
   reads: [name],
-  step: ({ element, node, version }) => {
+  step: Effect.fn("import.html.versioned")(function* versionedStep({ element, node, version }) {
     const lexical = Option.fromNullishOr(
       element.attributes.find((found) => found.namespace === "" && found.local === name),
     ).pipe(Option.map((found) => found.value));
+    const handle = Option.isSome(lexical)
+      ? Option.some(
+          yield* closedOf(
+            handles,
+            typedAttribute(
+              Rows.empty(),
+              node.id,
+              node.kind,
+              name,
+              lexical.value,
+              booleanClass[version],
+            ).value,
+            "attribute-lexical",
+            `the ${name} attribute of ${element.local}`,
+          ),
+        )
+      : Option.none();
 
-    return Effect.succeed((rows: Rows) =>
+    return (rows: Rows) =>
       Option.match(lexical, {
         onNone: () => rows,
         onSome: (own) => {
           const typed = typedAttribute(rows, node.id, node.kind, name, own, booleanClass[version]);
 
           return Rows.add(typed.rows, relation, [
-            factOf(relation, { node: node.id, value: typed.value, version }),
+            factOf(relation, {
+              node: node.id,
+              value: Option.getOrElse(handle, () => typed.value),
+              version,
+            }),
           ]);
         },
-      }),
-    );
-  },
+      });
+  }),
 });
 
 /**
@@ -227,13 +319,16 @@ const sourceArm: Piece = {
 const trackArm: Piece = {
   reads: ["kind", "src"],
   step: Effect.fn("import.html.track")(function* trackStep({ attributes, element, node }) {
-    const kind = Option.getOrElse(attributes.read("kind"), () => "subtitles");
+    const kind = yield* closedOf(
+      TrackKind.handles,
+      Option.getOrElse(attributes.read("kind"), () => "subtitles"),
+      "attribute-lexical",
+      "the kind attribute of track",
+    );
     const src = yield* requiredAttribute(element, "src", attributes.read("src"));
 
     return (rows: Rows) =>
-      Rows.add(rows, media.Track, [
-        { id: node.id, kind: judgedLater(kind), src: judgedLater(src) },
-      ]);
+      Rows.add(rows, media.Track, [{ id: node.id, kind, src: judgedLater(src) }]);
   }),
 };
 
@@ -262,7 +357,12 @@ const paramArm: Piece = {
   step: Effect.fn("import.html.param")(function* paramStep({ attributes, element, node }) {
     const name = yield* requiredAttribute(element, "name", attributes.read("name"));
     const value = yield* requiredAttribute(element, "value", attributes.read("value"));
-    const valuetype = Option.getOrElse(attributes.read("valuetype"), () => "DATA");
+    const valuetype = yield* closedOf(
+      ParamValuetype.handles,
+      Option.getOrElse(attributes.read("valuetype"), () => "DATA"),
+      "attribute-lexical",
+      "the valuetype attribute of param",
+    );
 
     return (rows: Rows) =>
       Rows.add(rows, media.Param, [
@@ -270,7 +370,7 @@ const paramArm: Piece = {
           id: node.id,
           name: judgedLater(name),
           value: judgedLater(value),
-          valuetype: judgedLater(valuetype),
+          valuetype,
         },
       ]);
   }),
@@ -288,13 +388,13 @@ const cellPieces = (
   align: AnyRelation,
   valign: AnyRelation,
 ): readonly Piece[] => [
-  optional("scope", scope),
+  closedOptional("scope", scope, CellScope.handles),
   optional("abbr", abbr),
   optional("axis", axis),
   optional("rowspan", rowspan),
   optional("colspan", colspan),
-  optional("align", align),
-  optional("valign", valign),
+  closedOptional("align", align, CellAlign.handles),
+  closedOptional("valign", valign, CellValign.handles),
 ];
 
 /**
@@ -317,19 +417,19 @@ const extras = new Map<string, readonly Piece[]>(
     audio: [
       mediaArm(media.Audio),
       optional("src", media.AudioSrc),
-      optional("crossorigin", media.AudioCrossorigin),
-      optional("preload", media.AudioPreload),
+      closedOptional("crossorigin", media.AudioCrossorigin, CrossOrigin.handles),
+      closedOptional("preload", media.AudioPreload, MediaPreload.handles),
       optional("mediagroup", media.AudioMediagroup),
-      versioned("autoplay", media.AudioAutoplay),
-      versioned("controls", media.AudioControls),
-      versioned("loop", media.AudioLoop),
-      versioned("muted", media.AudioMuted),
+      versioned("autoplay", media.AudioAutoplay, MediaAutoplay.handles),
+      versioned("controls", media.AudioControls, MediaControls.handles),
+      versioned("loop", media.AudioLoop, MediaLoop.handles),
+      versioned("muted", media.AudioMuted, MediaMuted.handles),
     ],
     bdo: [optional("title", text.BdoTitle)],
     blockquote: [optional("cite", text.BlockquoteCite)],
     col: [optional("span", structure.ColSpan)],
     colgroup: [optional("span", structure.ColgroupSpan)],
-    details: [optional("open", structure.DetailsOpen)],
+    details: [closedOptional("open", structure.DetailsOpen, XsBoolean.handles)],
     object: [
       objectArm,
       optional("width", media.ObjectWidth),
@@ -371,21 +471,21 @@ const extras = new Map<string, readonly Piece[]>(
       trackArm,
       marker("kind", media.DeclaredTrackKind),
       optional("srclang", media.TrackSrclang),
-      versioned("default", media.TrackDefault),
+      versioned("default", media.TrackDefault, TrackDefaultValue.handles),
     ],
     video: [
       mediaArm(media.Video),
       optional("src", media.VideoSrc),
-      optional("crossorigin", media.VideoCrossorigin),
-      optional("preload", media.VideoPreload),
+      closedOptional("crossorigin", media.VideoCrossorigin, CrossOrigin.handles),
+      closedOptional("preload", media.VideoPreload, MediaPreload.handles),
       optional("mediagroup", media.VideoMediagroup),
       optional("poster", media.VideoPoster),
       optional("width", media.VideoWidth),
       optional("height", media.VideoHeight),
-      versioned("autoplay", media.VideoAutoplay),
-      versioned("controls", media.VideoControls),
-      versioned("loop", media.VideoLoop),
-      versioned("muted", media.VideoMuted),
+      versioned("autoplay", media.VideoAutoplay, MediaAutoplay.handles),
+      versioned("controls", media.VideoControls, MediaControls.handles),
+      versioned("loop", media.VideoLoop, MediaLoop.handles),
+      versioned("muted", media.VideoMuted, MediaMuted.handles),
     ],
   }),
 );
@@ -451,13 +551,14 @@ const unread = (
  * @returns The rows with the HTML arms; `UnmodeledVocabulary` for an HTML element that is the
  *   tree's root or has no node above it, and for an own attribute of an element that this module
  *   does not model; `ItemRefusal` under `required-attribute` for an `a`, `track`, `object` or
- *   `param` that omits a required attribute.
+ *   `param` that omits a required attribute; `ImportRefused` under `attribute-lexical` for a closed
+ *   attribute whose value is outside its roster.
  */
 export const htmlRows = Effect.fn("import.htmlRows")(function* htmlRows(
   root: Element,
   nodes: NodeIndex,
   rows: Rows,
-): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal> {
+): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal | ImportRefused> {
   const versions = new Map(Rows.of(rows, Node).map((found) => [found.id, found.version]));
   let built = rows;
   for (const [element, parent] of withParents(root, Option.none())) {

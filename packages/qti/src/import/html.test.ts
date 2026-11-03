@@ -5,6 +5,7 @@ import { Effect, Exit, FileSystem, Option } from "effect";
 import { renderTree } from "#qti/export/render.ts";
 import { htmlRows } from "#qti/import/html.ts";
 import { itemRows } from "#qti/import/item.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows, treeRows, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { NodeIndex, TreeInput } from "#qti/import/tree.ts";
 import { Img, P } from "#qti/schema/html.ts";
@@ -355,8 +356,14 @@ describe("htmlRows over the inventory", () => {
               )
               .map((found) => ` ${found.name}="x"`)
               .join("");
+            // A closed attribute reads "x" and refuses it under `attribute-lexical`: it has a home.
             const exit = yield* Effect.exit(
-              built("3.0.1", `<${kind} ${tested.name}="x"${alongside}/>`),
+              built("3.0.1", `<${kind} ${tested.name}="x"${alongside}/>`).pipe(
+                Effect.catchIf(
+                  (refusal) => refusal instanceof ImportRefused,
+                  () => Effect.void,
+                ),
+              ),
             );
 
             assert.isTrue(Exit.isSuccess(exit), `${kind}/@${tested.name} has no home in htmlRows`);
@@ -430,6 +437,68 @@ layer(NodeServices.layer, { excludeTestServices: true })("a padded href", (suite
 
       assert.strictEqual(rendered, new TextDecoder().decode(canonicalize(doc)));
       assert.include(rendered, 'href=" x.html "');
+    }),
+  );
+});
+
+describe("htmlRows refuses a closed attribute outside its roster", () => {
+  const negatives: readonly (readonly [string, TreeInput["version"], string])[] = [
+    ["track kind", "3.0.1", '<video><track kind="lyrics" src="a.vtt"/></video>'],
+    ["video autoplay", "3.0.1", '<video autoplay="on"/>'],
+    ["audio loop", "3.0.0", '<audio loop="yes"/>'],
+    ["track default", "3.0.1", '<video><track default="on" src="a.vtt"/></video>'],
+    ["audio crossorigin", "3.0.1", '<audio crossorigin="any"/>'],
+    ["video preload", "3.0.1", '<video preload="all"/>'],
+    [
+      "param valuetype",
+      "3.0.1",
+      '<object data="a.png" type="image/png"><param name="a" value="1" valuetype="FILE"/></object>',
+    ],
+    ["details open", "3.0.1", '<details open="open"><summary>s</summary></details>'],
+    ["td scope", "3.0.1", '<table><tbody><tr><td scope="cell">x</td></tr></tbody></table>'],
+    ["th align", "3.0.1", '<table><tbody><tr><th align="start">x</th></tr></tbody></table>'],
+    ["td valign", "3.0.1", '<table><tbody><tr><td valign="center">x</td></tr></tbody></table>'],
+  ];
+
+  for (const [label, version, fragment] of negatives) {
+    it.effect(`refuses ${label} under attribute-lexical`, () =>
+      Effect.gen(function* outside() {
+        const refusal = yield* Effect.flip(built(version, fragment));
+
+        assert.instanceOf(refusal, ImportRefused);
+        assert.strictEqual(
+          refusal instanceof ImportRefused ? refusal.rule : "",
+          "attribute-lexical",
+        );
+      }),
+    );
+  }
+
+  it.effect("admits a collapsed 3.0.0 boolean and each written closed value", () =>
+    Effect.gen(function* inside() {
+      const { nodes, rows } = yield* built(
+        "3.0.1",
+        '<video autoplay="autoplay" preload="auto" crossorigin="anonymous"><track kind="captions" src="a.vtt" default="default"/></video>',
+      );
+      const videoId = idOf(nodes, "video");
+
+      assert.deepStrictEqual(Rows.of(rows, media.relations.VideoAutoplay), [
+        { node: videoId, value: "autoplay", version: "3.0.1" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, media.relations.VideoPreload), [
+        { node: videoId, value: "auto" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, media.relations.VideoCrossorigin), [
+        { node: videoId, value: "anonymous" },
+      ]);
+      assert.deepStrictEqual(
+        Rows.of(rows, media.relations.Track).map((row) => row.kind),
+        ["captions"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, media.relations.TrackDefault).map((row) => row.value),
+        ["default"],
+      );
     }),
   );
 });
