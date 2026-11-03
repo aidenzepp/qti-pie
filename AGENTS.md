@@ -1,9 +1,12 @@
 # Agent instructions
 
-gr8des is a pnpm workspace. `packages/qti` implements IMS QTI 3.0 on [grizzle](vendor/README.md), and exists first to
-put grizzle through a large, real data model. Read [docs/qti-intent.md](docs/qti-intent.md) before planning or changing
-the QTI model. Everything runs locally; there is no deploy target. The shared repository is
-[aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (private), the remote `origin`.
+qti-pie (the first local checkout is still the folder `gr8des`) is a pnpm workspace. `packages/qti` implements IMS QTI
+3.0 on [grizzle](vendor/README.md), and exists first to put grizzle through a large, real data model. Read
+[docs/qti-intent.md](docs/qti-intent.md) before planning or changing the QTI model. `packages/renderer` is planned: it
+renders QTI 3.0, and its intent and rules arrive with its own goal; the qti package's intent (a grizzle test vehicle,
+delivery out of scope) does not bind it. Both packages read the specifications the same way:
+[docs/spec-readings.md](docs/spec-readings.md). Everything runs locally; there is no deploy target. The shared repository
+is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (private), the remote `origin`.
 
 ## Toolchain
 
@@ -165,12 +168,14 @@ This is the workflow `factory` records in its ledger; it meets shipyard's five r
   freeze, run `pnpm check` and the affected package's full test suite. These checks belong to the merge seat, never to a
   hand. The Mind accepts the merge task; that feature-branch tip is the slice's ref. The Mind does not run git itself.
 - **Integration.** A feature, or a `gate/<name>` fix, reaches `main` through a pull request on `origin`, on a merge
-  task. The merge seat first merges it into `main` locally and runs the integration checks (`pnpm check`,
+  task. Two checkouts push to `origin`, so the merge seat first fetches `origin` and fast-forwards local `main` to
+  `origin/main`. It then merges the branch into `main` locally and runs the integration checks (`pnpm check`,
   `grizzle check`, the full suite under a lease). Only on green does it push the branch, open the pull request as
   `aidenzepp` (`GH_TOKEN="$(gh auth token --user aidenzepp)"` on that command only, `gh pr create --base main`), merge
   it with `gh pr merge --merge` (a merge commit, never squash or rebase), and fast-forward local `main`. A failed check
-  leaves no pull request. Slices still merge into their feature branch locally and are never pushed.
-- **Remote.** Push only `main`, `qti/<feature>/main` and `gate/<name>`. Never force-push, and never rewrite a pushed
+  leaves no pull request. If `origin/main` moves after the checks ran, fetch, merge again and re-run the checks before
+  merging the pull request. Slices still merge into their feature branch locally and are never pushed.
+- **Remote.** Push only `main`, `qti/<feature>/main`, `renderer/<feature>/main` and `gate/<name>`. Never force-push, and never rewrite a pushed
   branch: fixes go forward and are pushed again. Issues that track this project's work may be opened on `origin`.
 - **Audits** take a frozen range on the feature branch. Never rewrite accepted history, never force anything, fix
   forward. The one exception was the operator-authorized move of `snapshot.json` into Git LFS on 2026-11-03, which
@@ -209,6 +214,22 @@ subagents of the Mind's session (`harness: subagent`): the Mind files the task f
 four-line tugboat pointer and nothing else, and a hand gets its own worktree. `scripts/boot-probe` measures the
 resource budget for `vivi boot`.
 
+### Two checkouts, two Minds
+
+Two checkouts of `origin` work at once, each with its own Mind and its own vivi mailspace:
+
+| Checkout                                               | Package             | Feature branches          | Mailspace        |
+| ------------------------------------------------------ | ------------------- | ------------------------- | ---------------- |
+| `~/Documents/dev/workspaces/personal/gr8des`           | `packages/qti`      | `qti/<feature>/main`      | its own `.vivi/` |
+| `~/Documents/dev/workspaces/personal/qti-pie-renderer` | `packages/renderer` | `renderer/<feature>/main` | its own `.vivi/` |
+
+- A Mind and its seats work only in their own checkout and its worktrees. Never run `vivi` against the other checkout,
+  and never create a worktree of one checkout inside the other.
+- A checkout changes the other package's files only through a `gate/<name>` pull request the operator asked for. Files
+  both touch (`AGENTS.md`, `docs/spec-readings.md`, the root `package.json`, `pnpm-lock.yaml`, the lint and TypeScript
+  configuration) change by pull request, and a conflict is fixed forward.
+- The two Minds do not mail each other. They coordinate through the operator and through the repository.
+
 ## Shared machine resources
 
 This runs on one laptop with limited disk. Storage, databases and ports are not free, and leftovers are a defect. Every
@@ -220,7 +241,7 @@ after every step, but never leave it for someone else.
 - Parallel work uses git worktrees under `.worktrees/<slice>` in this repo, or under `.claude/worktrees/` when Claude
   Code's subagent isolation creates them. Both are ignored by git, and both count toward the limit. Never create a
   worktree anywhere else, `/tmp` included.
-- At most 10 exist at once, slice and merge worktrees together. Only one seat holds the database at a time (see below),
+- At most 10 exist at once in each checkout, slice and merge worktrees together. Only one seat holds the database at a time (see below),
   so worktrees that need no database are the ones that run in parallel.
 - A worktree is removed (`git worktree remove`, then its branch deleted) as soon as its slice is merged or abandoned. The
   orchestrator runs `git worktree prune` and confirms `git worktree list` shows only active slices at the end of every
@@ -244,7 +265,9 @@ after every step, but never leave it for someone else.
 
 **Disk.**
 
-- Budget: the worktrees and `gr8des_*` databases together stay under 20 GB. The orchestrator reports their size at the end
+- Budget: each checkout's worktrees and databases together stay under 20 GB. The renderer uses no database; its dev
+  servers and browsers take ports its own plan fixes, never 5433 or 5435, and are stopped when their slice ends.
+- Size report: each orchestrator reports its checkout's size at the end
   of every phase (`du -sh .worktrees`, and `pg_database_size` for each `gr8des_%` database on both servers, plus `du -sh` of server B's data directory,
   `~/.local/var/grizzle/pg19rc1-coverage`).
 - Downloaded inputs, such as specifications, schema files and 1EdTech's QTI example packages, are fetched once into
