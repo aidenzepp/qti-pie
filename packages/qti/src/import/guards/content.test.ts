@@ -18,7 +18,6 @@ import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/s
 import { ResourceLom } from "#qti/schema/metadata.ts";
 import { AttributeLexical, Node } from "#qti/schema/node.ts";
 import type { SchemaVersionHandle } from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
 import { PrintedVariableVarRef } from "#qti/schema/template.ts";
 import { readXml } from "#qti/xml/read.ts";
 
@@ -693,15 +692,6 @@ describe("contentGuards q-punctuation", () => {
       yield* refusal("q-punctuation", "3.0.1", `<p><q>x</q>” now</p>`);
       yield* refusal("q-punctuation", "3.0.1", `<p><q>"x</q></p>`);
       yield* refusal("q-punctuation", "3.0.1", `<p><q>x&quot;</q></p>`);
-    }),
-  );
-});
-
-describe("contentGuards bcp47-syntax", () => {
-  it.effect("is absent: p2-01 built bcp47 without the xs:language fallback", () =>
-    Effect.gen(function* absent() {
-      assert.isFalse(new RegExp(patterns.bcp47, "u").test("en--x"));
-      yield* guarded("3.0.1", `<p lang="en--x">a</p>`);
     }),
   );
 });

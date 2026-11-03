@@ -96,7 +96,6 @@ export const ImportRule = Schema.Literals([
   "string-identifier-distinct",
   "same-table-headers",
   "q-punctuation",
-  "bcp47-syntax",
   "attribute-admission",
   "idref-target",
   "coords-owner",

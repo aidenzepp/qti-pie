@@ -169,7 +169,6 @@ export class ContentGuardRefusal extends Schema.TaggedError<ContentGuardRefusal>
       "string-identifier-distinct",
       "same-table-headers",
       "q-punctuation",
-      "bcp47-syntax",
     ]),
   },
 ) {
@@ -1633,9 +1632,7 @@ const qPunctuation = (rows: Rows, index: Index): Finding => {
 /**
  * Run the content guards over the rows an import built.
  *
- * Reads rows only; writes nothing. `bcp47-syntax` has no guard: `p2-01` built the full `bcp47`
- * pattern without the `xs:language` fallback, so `NodeLang`, `NodeXmlLang` and `DocumentLang`
- * refuse a malformed tag at commit and the rule name stays declared for the importer's map.
+ * Reads rows only; writes nothing.
  *
  * @param rows - The rows the import built.
  * @returns Nothing when every guard passes; fails with the first {@link ContentGuardRefusal}
