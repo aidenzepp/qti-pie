@@ -391,6 +391,58 @@ const media = (
 ];
 
 /**
+ * The `identifier` of a node that refers to a declaration: the `identifier` of its declared
+ * reference, of its template-parameter reference, or the name of its built-in, whichever row the
+ * node has.
+ */
+const referenced: Source = first(
+  arm(R.DeclaredRef, "identifier"),
+  arm(R.TemplateParameterRef, "identifier"),
+  arm(R.BuiltInRef, "name"),
+);
+
+/**
+ * The attributes that narrow a test-wide expression to a section or to categories.
+ */
+const filters: readonly Own[] = [
+  ["section-identifier", optional(R.ExpressionSectionIdentifier)],
+  ["include-category", optional(R.ExpressionIncludeCategory)],
+  ["exclude-category", optional(R.ExpressionExcludeCategory)],
+];
+
+/**
+ * The attributes of `qti-outcome-maximum` and `qti-outcome-minimum`.
+ */
+const outcomeBound: readonly Own[] = [
+  ["outcome-identifier", arm(R.OutcomeMinMax, "outcomeIdentifier")],
+  ["weight-identifier", optional(R.ExpressionWeightIdentifier)],
+  ...filters,
+];
+
+/**
+ * The attributes of the kinds whose only attributes are the {@link filters}.
+ */
+const counting: readonly Own[] = filters;
+
+/**
+ * The attributes of `ud:ordinaryStatistic` and `ud:categorizedStatistic`, which share one relation.
+ */
+const statistic: readonly Own[] = [
+  ["caseCount", optional(R.StatisticCaseCount)],
+  ["context", arm(R.Statistic, "context")],
+  ["glossary", optional(R.StatisticGlossary)],
+  ["lastUpdated", optional(R.StatisticLastUpdated)],
+  ["name", arm(R.Statistic, "name")],
+  ["stdDeviation", optional(R.StatisticStdDeviation)],
+  ["stdError", optional(R.StatisticStdError)],
+];
+
+/**
+ * The attributes of a kind whose one attribute is the `identifier` of a declaration it refers to.
+ */
+const referring: readonly Own[] = [["identifier", referenced]];
+
+/**
  * The own attributes of every element kind that has any, by kind: each name with where its value
  * lives, which is how {@link renderTree} reads a node's attributes back.
  *
@@ -432,6 +484,19 @@ export const ownAttributes = {
     ["type", arm(R.Resource, "type")],
     ["href", column(R.ResourceHref, "href", "resource")],
   ],
+  "cpx:variant": [
+    ["identifier", arm(R.Variant, "identifier")],
+    ["identifierref", arm(R.Variant, "identifierref")],
+  ],
+  "csmd:curriculumStandardsMetadata": [["providerId", optional(R.CsmMetadataProviderId)]],
+  "csmd:curriculumStandardsMetadataSet": [
+    ["resourceLabel", optional(R.CsmSetResourceLabel)],
+    ["resourcePartId", optional(R.CsmSetResourcePartId)],
+  ],
+  "csmd:setOfGUIDs": [
+    ["region", optional(R.CsmSetOfGuidsRegion)],
+    ["version", optional(R.CsmSetOfGuidsVersion)],
+  ],
   details: [["open", optional(R.DetailsOpen)]],
   img: [
     ["src", arm(R.Img, "src")],
@@ -454,6 +519,10 @@ export const ownAttributes = {
     ["type", optional(R.ParamType)],
   ],
   q: [["cite", optional(R.QCite)]],
+  "qti-any-n": [
+    ["min", arm(R.AnyN, "min")],
+    ["max", arm(R.AnyN, "max")],
+  ],
   "qti-area-map-entry": [
     ["shape", arm(R.AreaMapEntry, "shape")],
     ["coords", optional(R.Coords)],
@@ -504,6 +573,7 @@ export const ownAttributes = {
     ["max-associations", optional(R.AssociateMaxAssociations)],
     ["min-associations", optional(R.AssociateMinAssociations)],
   ],
+  "qti-base-value": [["base-type", arm(R.Literal, "baseType")]],
   "qti-choice-interaction": [
     responseIdentifierOf(R.ChoiceInteraction),
     ["shuffle", marked(R.DeclaredShuffle, arm(R.ChoiceInteraction, "shuffle"))],
@@ -514,15 +584,31 @@ export const ownAttributes = {
     ["data-max-selections-message", optional(R.ChoiceInteractionMaxSelectionsMessage)],
   ],
   "qti-context-declaration": declared,
+  "qti-correct": referring,
   "qti-correct-response": [
     ["interpretation", column(R.ValueSetInterpretation, "value", "valueSet")],
   ],
+  "qti-custom-operator": [
+    ["class", optional(R.CustomOperatorClass)],
+    ["definition", optional(R.CustomOperatorDefinition)],
+  ],
+  "qti-default": referring,
   "qti-default-value": [["interpretation", column(R.ValueSetInterpretation, "value", "valueSet")]],
   "qti-drawing-interaction": [responseIdentifierOf(R.DrawingInteraction)],
   "qti-end-attempt-interaction": [
     responseIdentifierOf(R.EndAttemptInteraction),
     ["title", arm(R.EndAttemptInteraction, "title")],
     ["count-attempt", optional(R.EndAttemptCountAttempt)],
+  ],
+  "qti-equal": [
+    ["tolerance-mode", marked(R.DeclaredToleranceMode, arm(R.Equal, "toleranceMode"))],
+    ["tolerance", optional(R.EqualTolerance)],
+    ["include-lower-bound", marked(R.DeclaredIncludeLowerBound, arm(R.Equal, "includeLowerBound"))],
+    ["include-upper-bound", marked(R.DeclaredIncludeUpperBound, arm(R.Equal, "includeUpperBound"))],
+  ],
+  "qti-equal-rounded": [
+    ["rounding-mode", marked(R.DeclaredRoundingMode, arm(R.EqualRounded, "roundingMode"))],
+    ["figures", arm(R.EqualRounded, "figures")],
   ],
   "qti-extended-text-interaction": [
     responseIdentifierOf(R.ExtendedTextInteraction),
@@ -546,6 +632,7 @@ export const ownAttributes = {
     R.DeclaredTemplateFeedbackBlockShowHide,
   ),
   "qti-feedback-inline": feedback(R.FeedbackInline, R.DeclaredFeedbackInlineShowHide),
+  "qti-field-value": [["field-identifier", arm(R.FieldValue, "fieldIdentifier")]],
   "qti-gap": [
     identifierOf(R.Gap),
     ["template-identifier", choiceTemplate],
@@ -626,6 +713,7 @@ export const ownAttributes = {
     ["data-min-selections-message", optional(R.HottextMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.HottextMaxSelectionsMessage)],
   ],
+  "qti-index": [["n", arm(R.Index, "n")]],
   "qti-inline-choice": [
     identifierOf(R.InlineChoice),
     ["fixed", marked(R.DeclaredInlineChoiceFixed, arm(R.InlineChoice, "fixed"))],
@@ -646,6 +734,10 @@ export const ownAttributes = {
     ["data-min-selections-message", optional(R.InlineChoiceMinSelectionsMessage)],
     ["data-prompt", optional(R.InlineChoicePrompt)],
   ],
+  "qti-inside": [
+    ["shape", arm(R.Inside, "shape")],
+    ["coords", arm(R.Inside, "coords")],
+  ],
   "qti-interpolation-table": [
     ["default-value", byBaseType(interpolationDefaults, "node", "value")],
   ],
@@ -657,11 +749,14 @@ export const ownAttributes = {
     ],
     ["target-value", byBaseType(interpolationTargets, "id", "targetValue")],
   ],
+  "qti-lookup-outcome-value": referring,
   "qti-map-entry": [
     ["map-key", byBaseType(mapKeys, "id", "mapKey")],
     ["mapped-value", arm(R.MapEntry, "mappedValue")],
     ["case-sensitive", marked(R.DeclaredMapEntryCaseSensitive, arm(R.MapEntry, "caseSensitive"))],
   ],
+  "qti-map-response": referring,
+  "qti-map-response-point": referring,
   "qti-mapping": [
     ["lower-bound", optional(R.MappingLowerBound)],
     ["upper-bound", optional(R.MappingUpperBound)],
@@ -681,6 +776,8 @@ export const ownAttributes = {
     ["source-value", arm(R.MatchTableEntry, "sourceValue")],
     ["target-value", byBaseType(matchTargets, "id", "targetValue")],
   ],
+  "qti-math-constant": [["name", arm(R.MathConstant, "name")]],
+  "qti-math-operator": [["name", arm(R.MathOperator, "name")]],
   "qti-media-interaction": [
     responseIdentifierOf(R.MediaInteraction),
     ["autostart", arm(R.MediaInteraction, "autostart")],
@@ -695,6 +792,11 @@ export const ownAttributes = {
     identifierOf(R.ModalFeedback),
     ["title", optional(R.ModalFeedbackTitle)],
   ],
+  "qti-number-correct": counting,
+  "qti-number-incorrect": counting,
+  "qti-number-presented": counting,
+  "qti-number-responded": counting,
+  "qti-number-selected": counting,
   "qti-order-interaction": [
     responseIdentifierOf(R.OrderInteraction),
     ["shuffle", marked(R.DeclaredOrderShuffle, arm(R.OrderInteraction, "shuffle"))],
@@ -716,6 +818,9 @@ export const ownAttributes = {
     ["external-scored", column(R.DeclarationExternalScored, "value", "declaration")],
     ["variable-identifier-ref", column(R.DeclarationVariableIdentifierRef, "value", "declaration")],
   ],
+  "qti-outcome-maximum": outcomeBound,
+  "qti-outcome-minimum": outcomeBound,
+  "qti-pattern-match": [["pattern", arm(R.PatternMatch, "pattern")]],
   "qti-position-object-interaction": [
     responseIdentifierOf(R.PositionObjectInteraction),
     ["center-point", optional(R.PositionObjectCenterPoint)],
@@ -735,10 +840,24 @@ export const ownAttributes = {
       marked(R.DeclaredPrintedVariableMappingIndicator, arm(R.PrintedVariable, "mappingIndicator")),
     ],
   ],
+  "qti-random-float": [
+    ["min", optional(R.RandomFloatMin)],
+    ["max", arm(R.RandomFloat, "max")],
+  ],
+  "qti-random-integer": [
+    ["min", optional(R.RandomIntegerMin)],
+    ["max", arm(R.RandomInteger, "max")],
+    ["step", optional(R.RandomIntegerStep)],
+  ],
+  "qti-repeat": [["number-repeats", arm(R.Repeat, "numberRepeats")]],
   "qti-response-declaration": declared,
   "qti-response-processing": [
     ["template", column(R.ResponseProcessingTemplate, "uri", "node")],
     ["template-location", column(R.ResponseProcessingTemplateLocation, "uri", "node")],
+  ],
+  "qti-round-to": [
+    ["rounding-mode", arm(R.RoundTo, "roundingMode")],
+    ["figures", arm(R.RoundTo, "figures")],
   ],
   "qti-rubric-block": [
     ["use", arm(R.RubricBlock, "use")],
@@ -749,6 +868,10 @@ export const ownAttributes = {
     ["min-choices", optional(R.SelectPointMinChoices)],
     ["max-choices", optional(R.SelectPointMaxChoices)],
   ],
+  "qti-set-correct-response": referring,
+  "qti-set-default-value": referring,
+  "qti-set-outcome-value": referring,
+  "qti-set-template-value": referring,
   "qti-simple-associable-choice": [
     identifierOf(R.SimpleAssociableChoice),
     ["fixed", optional(R.SimpleAssociableChoiceFixed)],
@@ -773,12 +896,18 @@ export const ownAttributes = {
     ["orientation", optional(R.SliderOrientation)],
     ["reverse", optional(R.SliderReverse)],
   ],
+  "qti-stats-operator": [["name", arm(R.StatsOperator, "name")]],
+  "qti-string-match": [
+    ["case-sensitive", arm(R.StringMatch, "caseSensitive")],
+    ["substring", marked(R.DeclaredSubstring, arm(R.StringMatch, "substring"))],
+  ],
   "qti-stylesheet": [
     ["href", arm(R.Stylesheet, "href")],
     ["type", arm(R.Stylesheet, "type")],
     ["media", optional(R.StylesheetMedia)],
     ["title", optional(R.StylesheetTitle)],
   ],
+  "qti-substring": [["case-sensitive", arm(R.Substring, "caseSensitive")]],
   "qti-template-block": templating(R.TemplateBlock, R.DeclaredTemplateBlockShowHide),
   "qti-template-block.rubric": templating(
     R.RubricTemplateBlock,
@@ -800,6 +929,12 @@ export const ownAttributes = {
     R.RubricTemplateInline,
     R.DeclaredRubricTemplateInlineShowHide,
   ),
+  "qti-test-variables": [
+    ["variable-identifier", arm(R.TestVariables, "variableIdentifier")],
+    ["base-type", optional(R.TestVariablesBaseType)],
+    ["weight-identifier", optional(R.ExpressionWeightIdentifier)],
+    ...filters,
+  ],
   "qti-text-entry-interaction": [
     responseIdentifierOf(R.TextEntryInteraction),
     ["base", marked(R.DeclaredTextEntryBase, arm(R.TextEntryInteraction, "base"))],
@@ -818,6 +953,10 @@ export const ownAttributes = {
     ["field-identifier", arm(R.RecordField, "fieldIdentifier")],
     ["base-type", recordValueBaseType],
   ],
+  "qti-variable": [
+    ["identifier", referenced],
+    ["weight-identifier", optional(R.VariableWeightIdentifier)],
+  ],
   source: [
     ["src", sourceSrc],
     ["type", optional(R.SourceType)],
@@ -834,6 +973,28 @@ export const ownAttributes = {
     ["srclang", optional(R.TrackSrclang)],
     ["default", optional(R.TrackDefault)],
   ],
+  "ud:categorizedStatistic": statistic,
+  "ud:mapEntry": [
+    ["caseSensitive", optional(R.UsageMapEntryCaseSensitive)],
+    ["mapKey", arm(R.UsageMapEntry, "mapKey")],
+    ["mappedValue", arm(R.UsageMapEntry, "mappedValue")],
+  ],
+  "ud:mapping": [
+    ["defaultValue", marked(R.DeclaredDefaultValue, arm(R.UsageMapping, "defaultValue"))],
+    ["lowerBound", optional(R.UsageMappingLowerBound)],
+    ["upperBound", optional(R.UsageMappingUpperBound)],
+  ],
+  "ud:ordinaryStatistic": statistic,
+  "ud:targetObject": [
+    ["identifier", arm(R.TargetObject, "identifier")],
+    ["objectType", optional(R.TargetObjectObjectType)],
+    ["partIdentifier", optional(R.TargetObjectPartIdentifier)],
+  ],
+  "ud:usageData": [["glossary", optional(R.UsageDataGlossary)]],
+  "ud:value": [
+    ["baseType", arm(R.UsageValueBaseType, "baseType")],
+    ["fieldIdentifier", column(R.UsageValueFieldIdentifier, "value", "id")],
+  ],
   video: [
     ...media(
       R.VideoSrc,
@@ -848,6 +1009,14 @@ export const ownAttributes = {
     ["poster", optional(R.VideoPoster)],
     ["width", optional(R.VideoWidth)],
     ["height", optional(R.VideoHeight)],
+  ],
+  "xi:include": [
+    ["href", optional(R.XIncludeHref)],
+    ["parse", optional(R.XIncludeParse)],
+    ["xpointer", optional(R.XIncludeXpointer)],
+    ["encoding", optional(R.XIncludeEncoding)],
+    ["accept", optional(R.XIncludeAccept)],
+    ["accept-language", optional(R.XIncludeAcceptLanguage)],
   ],
 } satisfies Readonly<Record<string, readonly Own[]>>;
 
