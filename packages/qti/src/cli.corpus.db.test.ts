@@ -132,12 +132,13 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
     const envelope = Schema.decodeUnknownSync(roundtripEnvelope)(cli.stdout);
     const differing = report.filter(({ outcome }) => outcome.kind === "differs").length;
 
-    assert.isTrue(
-      isUuid(envelope.data.package_id),
-      `${entry.name}: the CLI's package_id is a UUID`,
-    );
+    const written = envelope.data;
+    const packageId = "package_id" in written ? written.package_id : "";
+    const entries = "entries" in written ? written.entries : [];
+
+    assert.isTrue(isUuid(packageId), `${entry.name}: the CLI's package_id is a UUID`);
     assert.deepStrictEqual(
-      envelope.data.entries.map(({ outcome, path: at }) => ({ kind: outcome.kind, path: at })),
+      entries.map(({ outcome, path: at }) => ({ kind: outcome.kind, path: at })),
       report.map(({ outcome, path: at }) => ({ kind: outcome.kind, path: at })),
       `${entry.name}: the CLI's entries are the importer's`,
     );
