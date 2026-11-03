@@ -557,6 +557,15 @@ describe("contentRows", () => {
     }),
   );
 
+  it.effect("refuses a qti-stylesheet with no href", () =>
+    Effect.gen(function* run() {
+      const error = yield* Effect.flip(built({ tail: `<qti-stylesheet type="text/css"/>` }));
+
+      assert.instanceOf(error, ItemRefusal);
+      assert.strictEqual(error.rule, "required-attribute");
+    }),
+  );
+
   it.effect("writes the rubric and template content bodies by their dotted kind", () =>
     Effect.gen(function* run() {
       const { rows } = yield* built({

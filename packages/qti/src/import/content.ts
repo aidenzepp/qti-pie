@@ -15,6 +15,7 @@ import { judgedLater } from "#qti/import/judged.ts";
 import type { Relation, uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import { attributeReader, markers } from "#qti/import/interactions.ts";
+import { requiredAttribute } from "#qti/import/required.ts";
 import type { DeclaredVariable, NodeRef } from "#qti/import/interactions.ts";
 import {
   collapse,
@@ -781,11 +782,16 @@ const rubricRows = (rows: Rows, element: Element, node: NodeRef): Rows => {
 };
 
 /**
- * The rows of a `qti-stylesheet` and its optional `media` and `title`.
+ * The rows of a `qti-stylesheet` and its optional `media` and `title`; a stylesheet with no `href`
+ * is refused.
  */
-const stylesheetRows = (rows: Rows, element: Element, node: NodeRef): Rows => {
+const stylesheetRows = Effect.fn("import.stylesheetRows")(function* stylesheetRows(
+  rows: Rows,
+  element: Element,
+  node: NodeRef,
+): Effect.fn.Return<Rows, ItemRefusal> {
   const attributes = attributeReader(rows, element, node);
-  const href = Option.getOrElse(attributes.read("href"), () => "");
+  const href = yield* requiredAttribute(element, "href", attributes.read("href"));
   const type = Option.getOrElse(attributes.read("type"), () => "");
   const media = attributes.read("media");
   const title = attributes.read("title");
@@ -803,7 +809,7 @@ const stylesheetRows = (rows: Rows, element: Element, node: NodeRef): Rows => {
     StylesheetTitle,
     written(title, (value) => ({ node: node.id, value: judgedLater(value) })),
   );
-};
+});
 
 /**
  * A relation of one `id` column that no attribute adds to.
@@ -865,7 +871,7 @@ const builders: ReadonlyMap<NodeKindHandle, Builder> = new Map<NodeKindHandle, B
   ["qti-modal-feedback", modalRows],
   ["qti-printed-variable", printedRows],
   ["qti-rubric-block", (rows, element, node) => Effect.succeed(rubricRows(rows, element, node))],
-  ["qti-stylesheet", (rows, element, node) => Effect.succeed(stylesheetRows(rows, element, node))],
+  ["qti-stylesheet", stylesheetRows],
   ["qti-template-block", templateRows],
   ["qti-template-block.rubric", templateRows],
   ["qti-template-inline", templateRows],
