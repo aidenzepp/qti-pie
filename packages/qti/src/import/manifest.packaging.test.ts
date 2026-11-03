@@ -9,7 +9,7 @@ import { ImportRefused } from "#qti/import/refusal.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import type { Entry } from "#qti/package/read.ts";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
-import { FileMediaType, PackagePath } from "#qti/schema/contracts.ts";
+import { FileMediaType, LomVocabularyValue, PackagePath } from "#qti/schema/contracts.ts";
 import * as cpx from "#qti/schema/kinds/cpx.ts";
 import * as drd from "#qti/schema/kinds/drd.ts";
 import { Document } from "#qti/schema/document.ts";
@@ -743,7 +743,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
     Effect.gen(function* textCopies() {
       const simple = yield* builtOf(yield* materialize("simple"));
       const unfolded = mapRows(simple.rows, LomValue, (row) =>
-        row.collapsed === undefined ? row : { ...row, collapsed: `${row.collapsed}!` },
+        row.collapsed === undefined
+          ? row
+          : { ...row, collapsed: LomVocabularyValue(`${row.collapsed}!`) },
       );
       assert.strictEqual((yield* verdictOf(unfolded, simple.entries)).rule, "text-copy");
 

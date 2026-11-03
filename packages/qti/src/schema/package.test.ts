@@ -340,3 +340,23 @@ describe("manifest contracts (package)", () => {
     assert.strictEqual(pkg.FileContent.fields.mimeType.name, contracts.FileMediaType.name);
   });
 });
+
+describe("contracts (drd)", () => {
+  it("types the four adaptation links DrdAdaptationUri", () => {
+    for (const relation of [
+      pkg.DrdHasAdaptation,
+      pkg.DrdIsAdaptationOf,
+      pkg.DrdIsFullAdaptationOf,
+      pkg.DrdIsPartialAdaptationOf,
+    ]) {
+      assert.strictEqual(relation.fields.value.name, contracts.DrdAdaptationUri.name);
+    }
+  });
+  it("types the access modes AccessMode and AccessModeAdapted", () => {
+    assert.strictEqual(pkg.DrdAccessMode.fields.value.name, contracts.AccessMode.name);
+    assert.strictEqual(
+      pkg.DrdAccessModeAdapted.fields.value.name,
+      contracts.AccessModeAdapted.name,
+    );
+  });
+});

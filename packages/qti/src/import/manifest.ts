@@ -23,7 +23,12 @@ import { readEntry } from "#qti/package/read.ts";
 import type { Entry, PackageReadError } from "#qti/package/read.ts";
 import type { ZipRefusal } from "#qti/package/zip.ts";
 import {
+  CaseItemUri,
   FileMediaType,
+  LangStringLanguage,
+  LomToken,
+  LomVocabularySource,
+  LomVocabularyValue,
   ManifestIdentifier,
   PackagePath,
   ResourceEntryHref,
@@ -384,7 +389,7 @@ export const lomSubtreeRows = (
     "lom:catalog": (c) => {
       add(md.LomIdentifierCatalog, [
         {
-          collapsed: c.collapsed,
+          collapsed: LomToken(c.collapsed),
           id: c.id,
           identifier: c.parent,
           lom: c.lom,
@@ -417,7 +422,7 @@ export const lomSubtreeRows = (
     },
     "lom:dateTime": (c) => {
       add(md.LomDateTime, [
-        { collapsed: c.collapsed, date: c.parent, id: c.id, lom: c.lom, value: c.value },
+        { collapsed: LomToken(c.collapsed), date: c.parent, id: c.id, lom: c.lom, value: c.value },
       ]);
     },
     "lom:description": (c) => {
@@ -431,7 +436,13 @@ export const lomSubtreeRows = (
     },
     "lom:duration.string": (c) => {
       add(md.LomDurationString, [
-        { collapsed: c.collapsed, duration: c.parent, id: c.id, lom: c.lom, value: c.value },
+        {
+          collapsed: LomToken(c.collapsed),
+          duration: c.parent,
+          id: c.id,
+          lom: c.lom,
+          value: c.value,
+        },
       ]);
     },
     "lom:educational": (c) => {
@@ -440,7 +451,7 @@ export const lomSubtreeRows = (
     "lom:entity": (c) => {
       add(md.LomEntity, [
         {
-          collapsed: c.collapsed,
+          collapsed: LomToken(c.collapsed),
           contribute: c.parent,
           id: c.id,
           lom: c.lom,
@@ -475,7 +486,7 @@ export const lomSubtreeRows = (
     "lom:format": (c) => {
       add(md.LomFormat, [
         {
-          collapsed: c.collapsed,
+          collapsed: LomToken(c.collapsed),
           id: c.id,
           lom: c.lom,
           position: c.position,
@@ -489,7 +500,7 @@ export const lomSubtreeRows = (
       c.findings.hasGeneral = true;
     },
     "lom:id": (c) => {
-      add(md.LomId, [{ collapsed: c.collapsed, id: c.id, value: c.value }]);
+      add(md.LomId, [{ collapsed: LomToken(c.collapsed), id: c.id, value: c.value }]);
     },
     "lom:identifier": (c) => {
       add(md.LomIdentifier, [
@@ -539,7 +550,7 @@ export const lomSubtreeRows = (
     "lom:location": (c) => {
       add(md.LomLocation, [
         {
-          collapsed: c.collapsed,
+          collapsed: LomToken(c.collapsed),
           id: c.id,
           lom: c.lom,
           position: c.position,
@@ -550,7 +561,13 @@ export const lomSubtreeRows = (
     },
     "lom:maximumVersion": (c) => {
       add(md.LomMaximumVersion, [
-        { collapsed: c.collapsed, id: c.id, lom: c.lom, orComposite: c.parent, value: c.value },
+        {
+          collapsed: LomToken(c.collapsed),
+          id: c.id,
+          lom: c.lom,
+          orComposite: c.parent,
+          value: c.value,
+        },
       ]);
     },
     "lom:metaMetadata": (c) => {
@@ -559,7 +576,7 @@ export const lomSubtreeRows = (
     "lom:metadataschema": (c) => {
       add(md.LomMetadataschema, [
         {
-          collapsed: c.collapsed,
+          collapsed: LomToken(c.collapsed),
           id: c.id,
           lom: c.lom,
           metaMetadata: c.parent,
@@ -570,7 +587,13 @@ export const lomSubtreeRows = (
     },
     "lom:minimumVersion": (c) => {
       add(md.LomMinimumVersion, [
-        { collapsed: c.collapsed, id: c.id, lom: c.lom, orComposite: c.parent, value: c.value },
+        {
+          collapsed: LomToken(c.collapsed),
+          id: c.id,
+          lom: c.lom,
+          orComposite: c.parent,
+          value: c.value,
+        },
       ]);
     },
     "lom:name": (c) => {
@@ -607,11 +630,19 @@ export const lomSubtreeRows = (
     },
     "lom:size": (c) => {
       add(md.LomSize, [
-        { collapsed: c.collapsed, id: c.id, lom: c.lom, technical: c.parent, value: c.value },
+        {
+          collapsed: LomToken(c.collapsed),
+          id: c.id,
+          lom: c.lom,
+          technical: c.parent,
+          value: c.value,
+        },
       ]);
     },
     "lom:source": (c) => {
-      add(md.LomSource, [{ collapsed: c.collapsed, id: c.id, value: c.value }]);
+      add(md.LomSource, [
+        { collapsed: LomVocabularySource(c.collapsed), id: c.id, value: c.value },
+      ]);
     },
     "lom:source.langString": (c) => {
       add(md.LomSourceLangString, [{ id: c.id, lom: c.lom }]);
@@ -639,7 +670,7 @@ export const lomSubtreeRows = (
 
       if (Option.isSome(attributeOf(c.element, "language"))) {
         add(md.LomStringLanguage, [
-          { node: c.id, value: typed(c.element, "language", "preserve") },
+          { node: c.id, value: LangStringLanguage(typed(c.element, "language", "preserve")) },
         ]);
       }
     },
@@ -670,7 +701,12 @@ export const lomSubtreeRows = (
     },
     "lom:value": (c) => {
       add(md.LomValue, [
-        { collapsed: c.collapsed, id: c.id, parentKind: c.parentKind, value: c.value },
+        {
+          collapsed: LomVocabularyValue(c.collapsed),
+          id: c.id,
+          parentKind: c.parentKind,
+          value: c.value,
+        },
       ]);
     },
     "lom:version": (c) => {
@@ -765,7 +801,9 @@ export const csmSetRows = (rows: Rows, nodes: NodeIndex, set: Element, host: str
       } else if (node.kind === "csmd:GUID") {
         add(csm.CsmGuid, [{ id: node.id, labelledGuid, value: replace(content) }]);
       } else if (node.kind === "csmd:caseItemURI") {
-        add(csm.CsmCaseItemUri, [{ id: node.id, labelledGuid, value: collapse(content) }]);
+        add(csm.CsmCaseItemUri, [
+          { id: node.id, labelledGuid, value: CaseItemUri(collapse(content)) },
+        ]);
       }
     }
   };

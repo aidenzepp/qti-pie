@@ -28,6 +28,9 @@ import type { FieldBase } from "@bjornpagen/grizzle";
 import { CpSchema, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { Edge, Node, RootKind, SchemaVersion, Tree } from "#qti/schema/node.ts";
 import {
+  AccessMode,
+  AccessModeAdapted,
+  DrdAdaptationUri,
   FileMediaType,
   ManifestIdentifier,
   PackagePath,
@@ -252,15 +255,12 @@ export const AccessForAllResource = relation("AccessForAllResource", { id: uuid,
 /**
  * The `drd:accessMode` text of a digital resource description.
  */
-export const DrdAccessMode = drdLeaf("DrdAccessMode", str.regex(patterns.drdAccessMode));
+export const DrdAccessMode = drdLeaf("DrdAccessMode", AccessMode);
 
 /**
  * The `drd:accessModeAdapted` text.
  */
-export const DrdAccessModeAdapted = drdLeaf(
-  "DrdAccessModeAdapted",
-  str.regex(patterns.drdAccessModeAdapted),
-);
+export const DrdAccessModeAdapted = drdLeaf("DrdAccessModeAdapted", AccessModeAdapted);
 
 /**
  * The `drd:adaptationDetail` text.
@@ -334,7 +334,7 @@ export const DrdEducationalLevelOfAdaptation = drdLeaf(
 /**
  * The `drd:hasAdaptation` text: an `xs:anyURI` on the collapsed value.
  */
-export const DrdHasAdaptation = drdLeaf("DrdHasAdaptation", str.regex(patterns.anyUri));
+export const DrdHasAdaptation = drdLeaf("DrdHasAdaptation", DrdAdaptationUri);
 
 /**
  * The `drd:hazard` text.
@@ -344,20 +344,17 @@ export const DrdHazard = drdLeaf("DrdHazard", str.regex(patterns.drdHazard));
 /**
  * The `drd:isAdaptationOf` text: an `xs:anyURI` on the collapsed value.
  */
-export const DrdIsAdaptationOf = drdLeaf("DrdIsAdaptationOf", str.regex(patterns.anyUri));
+export const DrdIsAdaptationOf = drdLeaf("DrdIsAdaptationOf", DrdAdaptationUri);
 
 /**
  * The `drd:isFullAdaptationOf` text: an `xs:anyURI` on the collapsed value.
  */
-export const DrdIsFullAdaptationOf = drdLeaf("DrdIsFullAdaptationOf", str.regex(patterns.anyUri));
+export const DrdIsFullAdaptationOf = drdLeaf("DrdIsFullAdaptationOf", DrdAdaptationUri);
 
 /**
  * The `drd:isPartialAdaptationOf` text: an `xs:anyURI` on the collapsed value.
  */
-export const DrdIsPartialAdaptationOf = drdLeaf(
-  "DrdIsPartialAdaptationOf",
-  str.regex(patterns.anyUri),
-);
+export const DrdIsPartialAdaptationOf = drdLeaf("DrdIsPartialAdaptationOf", DrdAdaptationUri);
 
 /**
  * The `drd:languageOfAdaptation` text: an `xs:normalizedString`.

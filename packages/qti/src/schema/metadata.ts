@@ -36,7 +36,16 @@ import {
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import { Edge, Node, NodeKind, TreeRoot } from "#qti/schema/node.ts";
 import { File, FileMetadata, Resource, ResourceMetadata } from "#qti/schema/package.ts";
-import { ManifestIdentifier } from "#qti/schema/contracts.ts";
+import {
+  LangStringLanguage,
+  LomToken,
+  LomVocabularySource,
+  LomVocabularyValue,
+  ManifestIdentifier,
+  ToolName,
+  ToolVendor,
+  ToolVersion,
+} from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
@@ -50,8 +59,6 @@ const boundedToken = str.regex(patterns.boundedToken, patterns.boundedTokenFlags
 const wildcard = str.regex(patterns.wildcard, patterns.wildcardFlags);
 
 const language = str.regex(patterns.xsLanguageOrEmpty);
-
-const toolString = str.regex(patterns.toolString, patterns.toolStringFlags);
 
 /**
  * The elements that own a LOM record: the manifest, a resource, a file, and an external metadata
@@ -124,7 +131,7 @@ export const LomIdentifier = relation(
 export const LomIdentifierCatalog = relation(
   "LomIdentifierCatalog",
   {
-    collapsed: token,
+    collapsed: LomToken,
     id: uuid,
     identifier: uuid,
     lom: uuid,
@@ -196,9 +203,11 @@ export const LomTitle = relation(
 /**
  * The `language` attribute of a `lom:string`; the empty string is admitted.
  */
-export const LomStringLanguage = relation("LomStringLanguage", { node: uuid, value: language }, [
-  "node",
-]);
+export const LomStringLanguage = relation(
+  "LomStringLanguage",
+  { node: uuid, value: LangStringLanguage },
+  ["node"],
+);
 
 /**
  * A `lom:language` of the general or the meta-metadata category, at its position among its parent's
@@ -246,16 +255,18 @@ export const LomAggregationLevel = relation("LomAggregationLevel", { id: uuid, l
 /**
  * A `lom:source` leaf of a vocabulary container.
  */
-export const LomSource = relation("LomSource", { collapsed: token, id: uuid, value: wildcard }, [
-  "id",
-]);
+export const LomSource = relation(
+  "LomSource",
+  { collapsed: LomVocabularySource, id: uuid, value: wildcard },
+  ["id"],
+);
 
 /**
  * A `lom:value` leaf of a vocabulary container.
  */
 export const LomValue = relation(
   "LomValue",
-  { collapsed: token, id: uuid, parentKind: closedId(NodeKind), value: wildcard },
+  { collapsed: LomVocabularyValue, id: uuid, parentKind: closedId(NodeKind), value: wildcard },
   ["id"],
 );
 
@@ -297,7 +308,7 @@ export const LomRole = relation("LomRole", { contribute: uuid, id: uuid, lom: uu
 export const LomEntity = relation(
   "LomEntity",
   {
-    collapsed: token,
+    collapsed: LomToken,
     contribute: uuid,
     id: uuid,
     lom: uuid,
@@ -318,7 +329,7 @@ export const LomDate = relation("LomDate", { contribute: uuid, id: uuid, lom: uu
  */
 export const LomDateTime = relation(
   "LomDateTime",
-  { collapsed: token, date: uuid, id: uuid, lom: uuid, value: wildcard },
+  { collapsed: LomToken, date: uuid, id: uuid, lom: uuid, value: wildcard },
   ["id"],
 );
 
@@ -334,7 +345,7 @@ export const LomMetaMetadata = relation("LomMetaMetadata", { id: uuid, lom: uuid
 export const LomMetadataschema = relation(
   "LomMetadataschema",
   {
-    collapsed: token,
+    collapsed: LomToken,
     id: uuid,
     lom: uuid,
     metaMetadata: uuid,
@@ -355,7 +366,14 @@ export const LomTechnical = relation("LomTechnical", { id: uuid, lom: uuid }, ["
  */
 export const LomFormat = relation(
   "LomFormat",
-  { collapsed: token, id: uuid, lom: uuid, position: pg.bigint, technical: uuid, value: wildcard },
+  {
+    collapsed: LomToken,
+    id: uuid,
+    lom: uuid,
+    position: pg.bigint,
+    technical: uuid,
+    value: wildcard,
+  },
   ["id"],
 );
 
@@ -365,7 +383,7 @@ export const LomFormat = relation(
  */
 export const LomSize = relation(
   "LomSize",
-  { collapsed: token, id: uuid, lom: uuid, technical: uuid, value: wildcard },
+  { collapsed: LomToken, id: uuid, lom: uuid, technical: uuid, value: wildcard },
   ["id"],
 );
 
@@ -375,7 +393,14 @@ export const LomSize = relation(
  */
 export const LomLocation = relation(
   "LomLocation",
-  { collapsed: token, id: uuid, lom: uuid, position: pg.bigint, technical: uuid, value: wildcard },
+  {
+    collapsed: LomToken,
+    id: uuid,
+    lom: uuid,
+    position: pg.bigint,
+    technical: uuid,
+    value: wildcard,
+  },
   ["id"],
 );
 
@@ -413,7 +438,7 @@ export const LomName = relation("LomName", { id: uuid, lom: uuid, orComposite: u
  */
 export const LomMinimumVersion = relation(
   "LomMinimumVersion",
-  { collapsed: token, id: uuid, lom: uuid, orComposite: uuid, value: wildcard },
+  { collapsed: LomToken, id: uuid, lom: uuid, orComposite: uuid, value: wildcard },
   ["id"],
 );
 
@@ -423,7 +448,7 @@ export const LomMinimumVersion = relation(
  */
 export const LomMaximumVersion = relation(
   "LomMaximumVersion",
-  { collapsed: token, id: uuid, lom: uuid, orComposite: uuid, value: wildcard },
+  { collapsed: LomToken, id: uuid, lom: uuid, orComposite: uuid, value: wildcard },
   ["id"],
 );
 
@@ -458,7 +483,7 @@ export const LomDuration = relation("LomDuration", { id: uuid, lom: uuid, techni
  */
 export const LomDurationString = relation(
   "LomDurationString",
-  { collapsed: token, duration: uuid, id: uuid, lom: uuid, value: wildcard },
+  { collapsed: LomToken, duration: uuid, id: uuid, lom: uuid, value: wildcard },
   ["id"],
 );
 
@@ -655,7 +680,7 @@ export const QmdScoringMode = relation(
  */
 export const QmdToolName = relation(
   "QmdToolName",
-  { id: uuid, qtiMetadata: uuid, value: toolString },
+  { id: uuid, qtiMetadata: uuid, value: ToolName },
   ["id"],
 );
 
@@ -664,7 +689,7 @@ export const QmdToolName = relation(
  */
 export const QmdToolVersion = relation(
   "QmdToolVersion",
-  { id: uuid, qtiMetadata: uuid, value: toolString },
+  { id: uuid, qtiMetadata: uuid, value: ToolVersion },
   ["id"],
 );
 
@@ -673,7 +698,7 @@ export const QmdToolVersion = relation(
  */
 export const QmdToolVendor = relation(
   "QmdToolVendor",
-  { id: uuid, qtiMetadata: uuid, value: toolString },
+  { id: uuid, qtiMetadata: uuid, value: ToolVendor },
   ["id"],
 );
 
@@ -823,7 +848,7 @@ export const LomEntryLangString = relation("LomEntryLangString", { id: uuid, lom
 /**
  * The `lom:id` leaf of a record: its text as read and its collapsed form.
  */
-export const LomId = relation("LomId", { collapsed: token, id: uuid, value: wildcard }, ["id"]);
+export const LomId = relation("LomId", { collapsed: LomToken, id: uuid, value: wildcard }, ["id"]);
 
 /**
  * The remainder's relations.

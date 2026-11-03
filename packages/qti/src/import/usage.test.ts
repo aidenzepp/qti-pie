@@ -9,7 +9,12 @@ import { ImportRefused } from "#qti/import/refusal.ts";
 import { Rows, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { usageRows } from "#qti/import/usage.ts";
-import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
+import {
+  ManifestIdentifier,
+  PackagePath,
+  UsageMappingScore,
+  UsageValueToken,
+} from "#qti/schema/contracts.ts";
 import { AttributeLexical, Edge, Tree, TreeRoot } from "#qti/schema/node.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import * as ud from "#qti/schema/usage.ts";
@@ -361,7 +366,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
       const { rows } = yield* rowsOf("usage3-padded");
       const padded = firstOf(Rows.of(rows, ud.UsageValue).filter((row) => row.value === " 0.87 "));
       const edited = changed(rows, ud.UsageValue, (values) =>
-        values.map((row) => (row.id === padded.id ? { ...row, collapsed: padded.value } : row)),
+        values.map((row) =>
+          row.id === padded.id ? { ...row, collapsed: UsageValueToken(padded.value) } : row,
+        ),
       );
 
       assert.strictEqual((yield* refusal(edited)).rule, "text-copy");
@@ -387,7 +394,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
       yield* usageGuards(padded);
 
       const edited = changed(padded, ud.UsageMapping, (list) =>
-        list.map((row) => (row.id === written.id ? { ...row, defaultValue: "1" } : row)),
+        list.map((row) =>
+          row.id === written.id ? { ...row, defaultValue: UsageMappingScore("1") } : row,
+        ),
       );
       const failure = yield* refusal(edited);
 
@@ -404,7 +413,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
         list.filter((row) => row.node !== mapping.id),
       );
       const edited = changed(stripped, ud.UsageMapping, (list) =>
-        list.map((row) => (row.id === mapping.id ? { ...row, defaultValue: "1" } : row)),
+        list.map((row) =>
+          row.id === mapping.id ? { ...row, defaultValue: UsageMappingScore("1") } : row,
+        ),
       );
 
       assert.strictEqual((yield* refusal(edited)).rule, "typed-copy");

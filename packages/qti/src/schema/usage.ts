@@ -26,21 +26,22 @@ import { XsBoolean } from "#qti/schema/content/rosters.ts";
 import { Document } from "#qti/schema/document.ts";
 import type * as ud from "#qti/schema/kinds/ud.ts";
 import { BaseType } from "#qti/schema/declaration.ts";
+import {
+  GlossaryUri,
+  StatisticContextUri,
+  StatisticMeasure,
+  StatisticName,
+  UsageCaseCount,
+  UsageFieldIdentifier,
+  UsageMappingScore,
+  UsagePartIdentifier,
+  UsageValueToken,
+} from "#qti/schema/contracts.ts";
 import { Edge, TreeRoot } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { valueArms } from "#qti/schema/value.ts";
 
-const anyUri = str.regex(patterns.anyUri);
-
-const ncName = str.regex(patterns.ncName);
-
-const xsInteger = str.regex(patterns.xsInteger);
-
 const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags);
-
-const xsToken = str.regex(patterns.xsToken, patterns.xsTokenFlags);
-
-const xsDouble = str.regex(patterns.xsDouble);
 
 const xsString = str.regex(patterns.xsString, patterns.xsStringFlags);
 
@@ -73,7 +74,7 @@ export const UsageData = relation("UsageData", { document: uuid, id: uuid }, ["i
 /**
  * The `glossary` of a usage-data root, when it has one.
  */
-export const UsageDataGlossary = relation("UsageDataGlossary", { node: uuid, value: anyUri }, [
+export const UsageDataGlossary = relation("UsageDataGlossary", { node: uuid, value: GlossaryUri }, [
   "node",
 ]);
 
@@ -84,10 +85,10 @@ export const UsageDataGlossary = relation("UsageDataGlossary", { node: uuid, val
 export const Statistic = relation(
   "Statistic",
   {
-    context: anyUri,
+    context: StatisticContextUri,
     id: uuid,
     kind: closedId(StatisticKind),
-    name: ncName,
+    name: StatisticName,
     position: pg.bigint,
     usageData: uuid,
   },
@@ -110,22 +111,22 @@ const optional = <Name extends string, Value extends FieldBase>(name: Name, valu
 /**
  * The optional `glossary` of a statistic.
  */
-export const StatisticGlossary = optional("StatisticGlossary", anyUri);
+export const StatisticGlossary = optional("StatisticGlossary", GlossaryUri);
 
 /**
  * The optional `caseCount` of a statistic.
  */
-export const StatisticCaseCount = optional("StatisticCaseCount", xsInteger);
+export const StatisticCaseCount = optional("StatisticCaseCount", UsageCaseCount);
 
 /**
  * The optional `stdError` of a statistic.
  */
-export const StatisticStdError = optional("StatisticStdError", xsDouble);
+export const StatisticStdError = optional("StatisticStdError", StatisticMeasure);
 
 /**
  * The optional `stdDeviation` of a statistic.
  */
-export const StatisticStdDeviation = optional("StatisticStdDeviation", xsDouble);
+export const StatisticStdDeviation = optional("StatisticStdDeviation", StatisticMeasure);
 
 /**
  * The optional `lastUpdated` date of a statistic.
@@ -145,7 +146,10 @@ export const TargetObject = relation(
 /**
  * The optional `partIdentifier` of a target object.
  */
-export const TargetObjectPartIdentifier = optional("TargetObjectPartIdentifier", ncName);
+export const TargetObjectPartIdentifier = optional(
+  "TargetObjectPartIdentifier",
+  UsagePartIdentifier,
+);
 
 /**
  * The optional `objectType` of a target object.
@@ -162,7 +166,7 @@ export const TargetObjectObjectType = relation(
  */
 export const UsageValue = relation(
   "UsageValue",
-  { collapsed: xsToken, id: uuid, statistic: uuid, value: xsNormalizedString },
+  { collapsed: UsageValueToken, id: uuid, statistic: uuid, value: xsNormalizedString },
   ["id"],
 );
 
@@ -171,7 +175,7 @@ export const UsageValue = relation(
  */
 export const UsageValueFieldIdentifier = relation(
   "UsageValueFieldIdentifier",
-  { id: uuid, value: ncName },
+  { id: uuid, value: UsageFieldIdentifier },
   ["id"],
 );
 
@@ -202,7 +206,7 @@ const typedValueArms = valueArms("UsageTypedValue", "Usage");
  */
 export const UsageMapping = relation(
   "UsageMapping",
-  { defaultValue: xsDouble, id: uuid, statistic: uuid },
+  { defaultValue: UsageMappingScore, id: uuid, statistic: uuid },
   ["id"],
 );
 
@@ -214,12 +218,12 @@ export const DeclaredDefaultValue = relation("DeclaredDefaultValue", { node: uui
 /**
  * The optional `lowerBound` of a mapping.
  */
-export const UsageMappingLowerBound = optional("UsageMappingLowerBound", xsDouble);
+export const UsageMappingLowerBound = optional("UsageMappingLowerBound", UsageMappingScore);
 
 /**
  * The optional `upperBound` of a mapping.
  */
-export const UsageMappingUpperBound = optional("UsageMappingUpperBound", xsDouble);
+export const UsageMappingUpperBound = optional("UsageMappingUpperBound", UsageMappingScore);
 
 /**
  * A map entry at its position among its mapping's children. `mapKey` holds the value after
@@ -230,7 +234,7 @@ export const UsageMapEntry = relation(
   {
     id: uuid,
     mapKey: xsNormalizedString,
-    mappedValue: xsDouble,
+    mappedValue: UsageMappingScore,
     mapping: uuid,
     position: pg.bigint,
   },
