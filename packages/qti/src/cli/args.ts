@@ -1,4 +1,4 @@
-import { Effect, FileSystem } from "effect";
+import { Config, Effect, FileSystem } from "effect";
 import { Flag } from "effect/cli";
 import { NotADirectory } from "#qti/cli/errors.ts";
 
@@ -26,6 +26,9 @@ export const requirePackage = Effect.fn("cli.requirePackage")(function* requireP
  * The flag that makes an export a zip file instead of a directory.
  */
 export const zipFlag = Flag.Boolean("zip").pipe(
+  Flag.withFallbackConfig(Config.Boolean("QTI_ZIP")),
   Flag.withDefault(false),
-  Flag.withDescription("Write the export as a .zip file, adding .zip to the path when it lacks it"),
+  Flag.withDescription(
+    "Write the export as a .zip file, adding .zip to the path when it lacks it [env: QTI_ZIP] [default: false]",
+  ),
 );

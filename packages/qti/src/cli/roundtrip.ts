@@ -43,6 +43,16 @@ export const roundtripCommand = Command.make(
   }),
 ).pipe(
   Command.withDescription(
-    "Import <dir>, export it to work/export/<name> (<name>.zip under --zip), and compare the two",
+    "Import <dir>, export it to work/export/<name> (<name>.zip under --zip), and compare the two (writes the database and work/export/<name>)",
   ),
+  Command.withExamples([
+    {
+      command: "qti roundtrip ./my-package",
+      description: "Import a package, export it again and compare the two",
+    },
+    {
+      command: "qti roundtrip --zip ./my-package.zip",
+      description: "Do the same with a zipped package, writing the export as a zip file",
+    },
+  ]),
 );
