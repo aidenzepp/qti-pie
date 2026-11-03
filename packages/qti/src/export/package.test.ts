@@ -198,23 +198,29 @@ const kindOf = (report: Report, entry: string) =>
  * Run the command line on `args` with the console captured, in place of writing to the terminal.
  *
  * @param args - The command line after the program name.
- * @returns What the run wrote with `log` and `error` joined by line feeds, and how it ended.
+ * @returns How the run ended, and what it wrote with `log` (standard output) and with `error`
+ *   (standard error), each joined by line feeds.
  */
 const runCli = Effect.fn("export/package.test.runCli")(function* runCli(args: readonly string[]) {
-  const lines: string[] = [];
-  const capture = (...parts: readonly unknown[]): void => {
-    lines.push(parts.join(" "));
-  };
+  const out: string[] = [];
+  const err: string[] = [];
   const exit = yield* Command.run(cli, { version: "0.0.0" }).pipe(
     Effect.provide(Stdio.layerTest({ args: Effect.succeed(args) })),
     Effect.provideService(
       Console.Console,
-      Object.assign(Object.create(console), { error: capture, log: capture }),
+      Object.assign(Object.create(console), {
+        error: (...parts: readonly unknown[]): void => {
+          err.push(parts.join(" "));
+        },
+        log: (...parts: readonly unknown[]): void => {
+          out.push(parts.join(" "));
+        },
+      }),
     ),
     Effect.exit,
   );
 
-  return { exit, output: lines.join("\n") };
+  return { exit, stderr: err.join("\n"), stdout: out.join("\n") };
 });
 
 describe.skipIf(!hasLease)(
@@ -263,11 +269,11 @@ describe.skipIf(!hasLease)(
         Effect.gen(function* sharedMediaCli() {
           const source = yield* materialize("sharedMedia");
           const { report } = yield* roundTrip("sharedMedia");
-          const { exit, output } = yield* runCli(["roundtrip", source]);
+          const { exit, stderr, stdout } = yield* runCli(["roundtrip", source]);
 
-          assert.isTrue(Exit.isSuccess(exit), output);
-          assert.strictEqual(output, renderReport(report));
-          assert.strictEqual(output.split("\n").at(-1), "all equal");
+          assert.isTrue(Exit.isSuccess(exit), stderr);
+          assert.strictEqual(stdout, renderReport(report));
+          assert.strictEqual(stdout.split("\n").at(-1), "all equal");
         }),
       );
 
