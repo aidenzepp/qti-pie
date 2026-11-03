@@ -17,7 +17,17 @@ import type { Language } from "#qti/processing/ast.ts";
 import { emptyEnvironment, environmentOf, withDeclarations } from "#qti/processing/env.ts";
 import type { DeclarationEntry, Environment, Mode } from "#qti/processing/env.ts";
 import { corpusPackage, materializeProcessing } from "#qti/processing/fixtures.ts";
-import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
+import {
+  CustomOperatorClassName,
+  CustomOperatorDefinitionUri,
+  ExpressionCoords,
+  ExpressionIntegerOrVariable,
+  ManifestIdentifier,
+  PackagePath,
+  RecordFieldIdentifier,
+  VariableReference,
+  XIncludeUri,
+} from "#qti/schema/contracts.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import * as expression from "#qti/schema/expression.ts";
 import * as attributed from "#qti/schema/expression-attributes.ts";
@@ -509,7 +519,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
         },
       );
       assert.deepStrictEqual(of(built, attributed.EqualRoundedFiguresRef), [
-        { identifier: "COUNT", node: byReference },
+        { identifier: VariableReference("COUNT"), node: byReference },
       ]);
       assert.deepStrictEqual(
         rounded.find((row) => row.id === byNumber),
@@ -523,12 +533,14 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       assert.deepStrictEqual(of(built, attributed.DeclaredRoundingMode), [{ node: byReference }]);
 
       const integer = idAt(prepared, "qti-random-integer");
-      assert.deepStrictEqual(of(built, attributed.RandomInteger), [{ id: integer, max: "10" }]);
+      assert.deepStrictEqual(of(built, attributed.RandomInteger), [
+        { id: integer, max: ExpressionIntegerOrVariable("10") },
+      ]);
       assert.deepStrictEqual(of(built, attributed.RandomIntegerMin), [
-        { node: integer, value: "0" },
+        { node: integer, value: ExpressionIntegerOrVariable("0") },
       ]);
       assert.deepStrictEqual(of(built, attributed.RandomIntegerStep), [
-        { node: integer, value: "2" },
+        { node: integer, value: ExpressionIntegerOrVariable("2") },
       ]);
 
       const float = idAt(prepared, "qti-random-float");
@@ -536,7 +548,13 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       assert.deepStrictEqual(of(built, attributed.RandomFloatMin), [{ node: float, value: "0" }]);
 
       const anyN = idAt(prepared, "qti-any-n");
-      assert.deepStrictEqual(of(built, attributed.AnyN), [{ id: anyN, max: "COUNT", min: "1" }]);
+      assert.deepStrictEqual(of(built, attributed.AnyN), [
+        {
+          id: anyN,
+          max: ExpressionIntegerOrVariable("COUNT"),
+          min: ExpressionIntegerOrVariable("1"),
+        },
+      ]);
     }),
   );
 
@@ -546,7 +564,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       const built = yield* processed(prepared);
       const id = (kind: string, index = 0) => idAt(prepared, kind, index);
       assert.deepStrictEqual(of(built, attributed.Inside), [
-        { coords: "0,0,10,10", id: id("qti-inside"), shape: "rect" },
+        { coords: ExpressionCoords("0,0,10,10"), id: id("qti-inside"), shape: "rect" },
       ]);
       assert.deepStrictEqual(of(built, attributed.StringMatch), [
         { caseSensitive: "true", id: id("qti-string-match"), substring: "false" },
@@ -597,13 +615,16 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
         },
       ]);
       assert.deepStrictEqual(of(built, attributed.FieldValue), [
-        { fieldIdentifier: "level", id: id("qti-field-value") },
+        { fieldIdentifier: RecordFieldIdentifier("level"), id: id("qti-field-value") },
       ]);
       assert.deepStrictEqual(of(built, attributed.CustomOperatorClass), [
-        { node: id("qti-custom-operator"), value: "com.example.Operator" },
+        { node: id("qti-custom-operator"), value: CustomOperatorClassName("com.example.Operator") },
       ]);
       assert.deepStrictEqual(of(built, attributed.CustomOperatorDefinition), [
-        { node: id("qti-custom-operator"), value: "https://example.org/operators/custom" },
+        {
+          node: id("qti-custom-operator"),
+          value: CustomOperatorDefinitionUri("https://example.org/operators/custom"),
+        },
       ]);
       assert.deepStrictEqual(of(built, AttributeLexical), []);
     }),
@@ -763,7 +784,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
         { figuresKind: "ref", figuresValue: 0n, id: node, roundingMode: "decimalPlaces" },
       ]);
       assert.deepStrictEqual(of(built, attributed.EqualRoundedFiguresRef), [
-        { identifier: "digits", node },
+        { identifier: VariableReference("digits"), node },
       ]);
       assert.deepStrictEqual(of(built, AttributeSpelling), []);
     }),
@@ -1074,7 +1095,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
 
       const testVariables = idAt(prepared, "qti-test-variables");
       assert.deepStrictEqual(of(built, attributed.TestVariables), [
-        { id: testVariables, variableIdentifier: "SCORE" },
+        { id: testVariables, variableIdentifier: VariableReference("SCORE") },
       ]);
       assert.deepStrictEqual(of(built, attributed.TestVariablesBaseType), [
         { node: testVariables, value: "float" },
@@ -1243,7 +1264,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       const fallback = idAt(prepared, "fallback");
       assert.deepStrictEqual(of(built, ruleSchema.XInclude), [{ id: include }]);
       assert.deepStrictEqual(of(built, ruleSchema.XIncludeHref), [
-        { node: include, value: "shared-rules.xml" },
+        { node: include, value: XIncludeUri("shared-rules.xml") },
       ]);
       assert.deepStrictEqual(of(built, ruleSchema.XIncludeParse), [
         { node: include, value: "xml" },
@@ -1271,7 +1292,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       const built = yield* processed(prepared);
       const include = idAt(prepared, "include");
       assert.deepStrictEqual(of(built, ruleSchema.XIncludeHref), [
-        { node: include, value: "rules.xml" },
+        { node: include, value: XIncludeUri("rules.xml") },
       ]);
       assert.deepStrictEqual(of(built, ruleSchema.XIncludeParse), [
         { node: include, value: "text" },

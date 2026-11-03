@@ -3,6 +3,7 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option } from "effect";
+import { VariableReference } from "#qti/schema/contracts.ts";
 import {
   attributeReader,
   bindingRows,
@@ -289,7 +290,7 @@ describe("orderRows on an order interaction", () => {
       assert.deepStrictEqual(Rows.of(built, DeclaredFixed), [{ node: "node-3" }]);
       assert.deepStrictEqual(Rows.of(built, DeclaredShowHide), [{ node: "node-3" }]);
       assert.deepStrictEqual(Rows.of(built, SimpleChoiceTemplateIdentifier), [
-        { node: "node-3", value: "T" },
+        { node: "node-3", value: VariableReference("T") },
       ]);
     }),
   );

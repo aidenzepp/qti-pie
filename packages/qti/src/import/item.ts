@@ -54,7 +54,14 @@ import {
   TypedCardinality,
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
-import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
+import {
+  LongInterpretationUri,
+  ManifestIdentifier,
+  OutcomeScaleValue,
+  PackagePath,
+  RecordFieldIdentifier,
+  VariableReference,
+} from "#qti/schema/contracts.ts";
 import type { DeclarationShape } from "#qti/schema/declaration.ts";
 import {
   BooleanLiteral,
@@ -391,18 +398,30 @@ const declarationRows = Effect.fn("import.item.declarationRows")(function* decla
     : Option.none();
   const owned = (value: Option.Option<string>) =>
     written(value, (own) => ({ declaration, value: own }));
+  const ownedAs = <Value extends string>(
+    value: Option.Option<string>,
+    brand: (text: string) => Value,
+  ) => written(value, (own) => ({ declaration, value: brand(own) }));
   built = Rows.add(built, DeclarationView, owned(view));
   built = Rows.add(built, DeclarationInterpretation, owned(interpretation));
-  built = Rows.add(built, DeclarationLongInterpretation, owned(longInterpretation));
+  built = Rows.add(
+    built,
+    DeclarationLongInterpretation,
+    ownedAs(longInterpretation, LongInterpretationUri),
+  );
   built = Rows.add(built, DeclarationNormalMaximum, owned(normalMaximum));
-  built = Rows.add(built, DeclarationNormalMinimum, owned(normalMinimum));
-  built = Rows.add(built, DeclarationMasteryValue, owned(masteryValue));
+  built = Rows.add(built, DeclarationNormalMinimum, ownedAs(normalMinimum, OutcomeScaleValue));
+  built = Rows.add(built, DeclarationMasteryValue, ownedAs(masteryValue, OutcomeScaleValue));
   built = Rows.add(
     built,
     DeclarationExternalScored,
     written(externalScoredHandle, (own) => ({ declaration, value: own })),
   );
-  built = Rows.add(built, DeclarationVariableIdentifierRef, owned(variableIdentifierRef));
+  built = Rows.add(
+    built,
+    DeclarationVariableIdentifierRef,
+    ownedAs(variableIdentifierRef, VariableReference),
+  );
 
   return { declared, identifier: text, rows: built };
 });
@@ -543,7 +562,7 @@ const valueRows = Effect.fn("import.valueRows")(function* valueRows(
 
   return set.owner.shape === "record"
     ? Rows.add(withArm, values.RecordField, [
-        { fieldIdentifier: Option.getOrElse(field, () => ""), id: node.id },
+        { fieldIdentifier: RecordFieldIdentifier(Option.getOrElse(field, () => "")), id: node.id },
       ])
     : withArm;
 });
@@ -730,7 +749,7 @@ const choiceRows = Effect.fn("import.choiceRows")(function* choiceRows(
   return Rows.add(
     built,
     SimpleChoiceTemplateIdentifier,
-    written(templateIdentifier, (own) => ({ node: node.id, value: own })),
+    written(templateIdentifier, (own) => ({ node: node.id, value: VariableReference(own) })),
   );
 });
 

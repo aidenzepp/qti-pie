@@ -4,6 +4,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, it, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option } from "effect";
 import { inject } from "vitest";
+import { NamespacePrefix, NamespaceUri, XmlEntityName } from "#qti/schema/contracts.ts";
 import {
   AttributeEntityReference,
   AttributeLexical,
@@ -245,18 +246,18 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
       assert.strictEqual(root.kind, "qti-assessment-item");
       assert.isFalse(edges.some((edge) => edge.child === root.id));
       assert.deepStrictEqual(Rows.of(rows, NamespaceDeclaration), [
-        { node: root.id, position: 0n, prefix: "", uri: doc.root.namespace },
+        { node: root.id, position: 0n, prefix: "", uri: NamespaceUri(doc.root.namespace) },
         {
           node: root.id,
           position: 1n,
           prefix: "xsi",
-          uri: "http://www.w3.org/2001/XMLSchema-instance",
+          uri: NamespaceUri("http://www.w3.org/2001/XMLSchema-instance"),
         },
       ]);
       assert.deepStrictEqual(Rows.of(rows, SchemaLocation), [
         {
           node: root.id,
-          prefix: "xsi",
+          prefix: NamespacePrefix("xsi"),
           value:
             "http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd",
         },
@@ -313,7 +314,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
 
       assert.strictEqual(refNodes.length, 1);
       assert.deepStrictEqual(Rows.of(rows, EntityReference), [
-        { id: refNode.id, name: "undeclared" },
+        { id: refNode.id, name: XmlEntityName("undeclared") },
       ]);
       assert.deepStrictEqual(
         Rows.of(rows, Edge)
@@ -323,7 +324,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
       );
       // `NEVER LEAVE LUGGAGE &undeclared;`: the `&` is at zero-based index 20.
       assert.deepStrictEqual(Rows.of(rows, AttributeEntityReference), [
-        { attribute: "alt", name: "undeclared", node: img.id, offset: 20n },
+        { attribute: "alt", name: XmlEntityName("undeclared"), node: img.id, offset: 20n },
       ]);
     }),
   );

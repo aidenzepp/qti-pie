@@ -30,6 +30,7 @@ import {
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
 import { Edge, Node, SchemaVersion } from "#qti/schema/node.ts";
+import { VariableReference } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
@@ -41,7 +42,12 @@ const ncName = str.regex(patterns.ncName);
  */
 export const FeedbackBlock = relation(
   "FeedbackBlock",
-  { id: uuid, identifier: ncName, outcomeIdentifier: ncName, showHide: closedId(ShowHide) },
+  {
+    id: uuid,
+    identifier: ncName,
+    outcomeIdentifier: VariableReference,
+    showHide: closedId(ShowHide),
+  },
   ["id"],
 );
 
@@ -60,7 +66,12 @@ export const DeclaredFeedbackBlockShowHide = relation(
  */
 export const TemplateFeedbackBlock = relation(
   "TemplateFeedbackBlock",
-  { id: uuid, identifier: ncName, outcomeIdentifier: ncName, showHide: closedId(ShowHide) },
+  {
+    id: uuid,
+    identifier: ncName,
+    outcomeIdentifier: VariableReference,
+    showHide: closedId(ShowHide),
+  },
   ["id"],
 );
 
@@ -78,7 +89,12 @@ export const DeclaredTemplateFeedbackBlockShowHide = relation(
  */
 export const FeedbackInline = relation(
   "FeedbackInline",
-  { id: uuid, identifier: ncName, outcomeIdentifier: ncName, showHide: closedId(ShowHide) },
+  {
+    id: uuid,
+    identifier: ncName,
+    outcomeIdentifier: VariableReference,
+    showHide: closedId(ShowHide),
+  },
   ["id"],
 );
 
@@ -100,7 +116,7 @@ export const ModalFeedback = relation(
   {
     id: uuid,
     identifier: ncName,
-    outcomeIdentifier: ncName,
+    outcomeIdentifier: VariableReference,
     showHide: closedId(ShowHide),
     version: closedId(SchemaVersion),
   },

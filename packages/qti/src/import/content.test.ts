@@ -6,6 +6,7 @@ import { contentRows } from "#qti/import/content.ts";
 import type { DeclaredVariable } from "#qti/import/interactions.ts";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows, treeRows } from "#qti/import/tree.ts";
+import { RecordFieldIdentifier } from "#qti/schema/contracts.ts";
 import {
   ContextDeclarationArm,
   Declaration,
@@ -276,7 +277,7 @@ describe("contentRows", () => {
         { node: idOf(written), value: "VAR" },
       ]);
       assert.deepStrictEqual(Rows.of(full.rows, PrintedVariableField), [
-        { node: idOf(written), value: "x" },
+        { node: idOf(written), value: RecordFieldIdentifier("x") },
       ]);
       assert.deepStrictEqual(
         Rows.of(full.rows, PrintedVariableVarRef).map((ref) => [ref.attribute, ref.identifier]),

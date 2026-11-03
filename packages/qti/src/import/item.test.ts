@@ -35,7 +35,7 @@ import {
   DocumentTitle,
   HtmlId,
 } from "#qti/schema/document.ts";
-import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
+import { ManifestIdentifier, PackagePath, TemplateUri } from "#qti/schema/contracts.ts";
 import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#qti/schema/html.ts";
 import {
   AssessmentItem,
@@ -524,7 +524,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
       assert.deepStrictEqual(Rows.of(rows, ResponseProcessingTemplate), [
         {
           node: processing,
-          uri: "https://www.imsglobal.org/question/qti_v3p0/rptemplates/match_correct.xml",
+          uri: TemplateUri(
+            "https://www.imsglobal.org/question/qti_v3p0/rptemplates/match_correct.xml",
+          ),
         },
       ]);
       assert.deepStrictEqual(Rows.of(rows, StandardTemplateReference), [

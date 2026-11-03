@@ -28,6 +28,7 @@ import { BooleanLiteral } from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as node from "#qti/schema/node.ts";
 import type { Rule } from "#qti/import/refusal.ts";
+import { RecordFieldIdentifier } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -206,7 +207,7 @@ export const DeclaredValue = relation(
  */
 export const RecordField = relation(
   "RecordField",
-  { fieldIdentifier: str.regex(patterns.ncName), id: uuid },
+  { fieldIdentifier: RecordFieldIdentifier, id: uuid },
   ["id"],
 );
 

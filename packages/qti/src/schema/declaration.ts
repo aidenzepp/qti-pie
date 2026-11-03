@@ -27,6 +27,11 @@ import type { FieldBase } from "@bjornpagen/grizzle";
 import { ExternalScored, XsBoolean } from "#qti/schema/content/rosters.ts";
 import * as document from "#qti/schema/document.ts";
 import * as node from "#qti/schema/node.ts";
+import {
+  LongInterpretationUri,
+  OutcomeScaleValue,
+  VariableReference,
+} from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
@@ -175,7 +180,7 @@ export const DeclarationInterpretation = outcomeValue(
  */
 export const DeclarationLongInterpretation = outcomeValue(
   "DeclarationLongInterpretation",
-  str.regex(patterns.anyUri),
+  LongInterpretationUri,
 );
 
 /**
@@ -189,18 +194,12 @@ export const DeclarationNormalMaximum = outcomeValue(
 /**
  * The `normal-minimum` attribute.
  */
-export const DeclarationNormalMinimum = outcomeValue(
-  "DeclarationNormalMinimum",
-  str.regex(patterns.xsDouble),
-);
+export const DeclarationNormalMinimum = outcomeValue("DeclarationNormalMinimum", OutcomeScaleValue);
 
 /**
  * The `mastery-value` attribute.
  */
-export const DeclarationMasteryValue = outcomeValue(
-  "DeclarationMasteryValue",
-  str.regex(patterns.xsDouble),
-);
+export const DeclarationMasteryValue = outcomeValue("DeclarationMasteryValue", OutcomeScaleValue);
 
 /**
  * The `external-scored` attribute: `human` or `externalMachine`.
@@ -215,7 +214,7 @@ export const DeclarationExternalScored = outcomeValue(
  */
 export const DeclarationVariableIdentifierRef = outcomeValue(
   "DeclarationVariableIdentifierRef",
-  ncName,
+  VariableReference,
 );
 
 /**

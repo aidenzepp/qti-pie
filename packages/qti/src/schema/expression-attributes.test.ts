@@ -3,6 +3,7 @@ import type { AnyRelation } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
 import { inspect } from "node:util";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
@@ -562,5 +563,110 @@ describe("expression-attributes", () => {
     }
 
     assert.strictEqual(statements, 12);
+  });
+});
+
+describe("contracts (expression-attributes)", () => {
+  it("types VariableWeightIdentifier.value WeightReference", () => {
+    assert.strictEqual(
+      expressionAttributes.VariableWeightIdentifier.fields.value.name,
+      contracts.WeightReference.name,
+    );
+  });
+  it("types ExpressionWeightIdentifier.value WeightReference", () => {
+    assert.strictEqual(
+      expressionAttributes.ExpressionWeightIdentifier.fields.value.name,
+      contracts.WeightReference.name,
+    );
+  });
+  it("types AnyN.max ExpressionIntegerOrVariable", () => {
+    assert.strictEqual(
+      expressionAttributes.AnyN.fields.max.name,
+      contracts.ExpressionIntegerOrVariable.name,
+    );
+  });
+  it("types AnyN.min ExpressionIntegerOrVariable", () => {
+    assert.strictEqual(
+      expressionAttributes.AnyN.fields.min.name,
+      contracts.ExpressionIntegerOrVariable.name,
+    );
+  });
+  it("types RandomInteger.max ExpressionIntegerOrVariable", () => {
+    assert.strictEqual(
+      expressionAttributes.RandomInteger.fields.max.name,
+      contracts.ExpressionIntegerOrVariable.name,
+    );
+  });
+  it("types RandomIntegerMin.value ExpressionIntegerOrVariable", () => {
+    assert.strictEqual(
+      expressionAttributes.RandomIntegerMin.fields.value.name,
+      contracts.ExpressionIntegerOrVariable.name,
+    );
+  });
+  it("types RandomIntegerStep.value ExpressionIntegerOrVariable", () => {
+    assert.strictEqual(
+      expressionAttributes.RandomIntegerStep.fields.value.name,
+      contracts.ExpressionIntegerOrVariable.name,
+    );
+  });
+  it("types FieldValue.fieldIdentifier RecordFieldIdentifier", () => {
+    assert.strictEqual(
+      expressionAttributes.FieldValue.fields.fieldIdentifier.name,
+      contracts.RecordFieldIdentifier.name,
+    );
+  });
+  it("types Inside.coords ExpressionCoords", () => {
+    assert.strictEqual(
+      expressionAttributes.Inside.fields.coords.name,
+      contracts.ExpressionCoords.name,
+    );
+  });
+  it("types CustomOperatorClass.value CustomOperatorClassName", () => {
+    assert.strictEqual(
+      expressionAttributes.CustomOperatorClass.fields.value.name,
+      contracts.CustomOperatorClassName.name,
+    );
+  });
+  it("types CustomOperatorDefinition.value CustomOperatorDefinitionUri", () => {
+    assert.strictEqual(
+      expressionAttributes.CustomOperatorDefinition.fields.value.name,
+      contracts.CustomOperatorDefinitionUri.name,
+    );
+  });
+  it("types TestVariables.variableIdentifier VariableReference", () => {
+    assert.strictEqual(
+      expressionAttributes.TestVariables.fields.variableIdentifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types EqualRoundedFiguresRef.identifier VariableReference", () => {
+    assert.strictEqual(
+      expressionAttributes.EqualRoundedFiguresRef.fields.identifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types RoundToFiguresRef.identifier VariableReference", () => {
+    assert.strictEqual(
+      expressionAttributes.RoundToFiguresRef.fields.identifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types IndexNRef.identifier VariableReference", () => {
+    assert.strictEqual(
+      expressionAttributes.IndexNRef.fields.identifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types RepeatNumberRepeatsRef.identifier VariableReference", () => {
+    assert.strictEqual(
+      expressionAttributes.RepeatNumberRepeatsRef.fields.identifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types OutcomeMinMax.outcomeIdentifier VariableReference", () => {
+    assert.strictEqual(
+      expressionAttributes.OutcomeMinMax.fields.outcomeIdentifier.name,
+      contracts.VariableReference.name,
+    );
   });
 });

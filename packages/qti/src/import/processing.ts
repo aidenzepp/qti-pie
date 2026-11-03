@@ -37,6 +37,7 @@ import {
   XIncludeParseValue,
   XsBoolean,
 } from "#qti/schema/content/rosters.ts";
+import { XIncludeUri } from "#qti/schema/contracts.ts";
 import { BaseType } from "#qti/schema/declaration.ts";
 import * as expression from "#qti/schema/expression.ts";
 import * as attributed from "#qti/schema/expression-attributes.ts";
@@ -1369,7 +1370,11 @@ const includeRows = Effect.fn("import.processing.includeRows")(function* include
       ),
   });
   let built = Rows.add(attributes.rows(), ruleSchema.XInclude, [{ id: entry.id }]);
-  built = Rows.add(built, ruleSchema.XIncludeHref, written(href, own));
+  built = Rows.add(
+    built,
+    ruleSchema.XIncludeHref,
+    written(href, (value) => ({ node: entry.id, value: XIncludeUri(value) })),
+  );
   built = Rows.add(
     built,
     ruleSchema.XIncludeParse,

@@ -2,6 +2,7 @@ import { inspect } from "node:util";
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as node from "#qti/schema/node.ts";
@@ -182,7 +183,7 @@ describe("template content and printed variables", () => {
       PrintedVariableIndex.fields.value.pattern.source,
       patterns.integerOrVariableString,
     );
-    assert.strictEqual(PrintedVariableField.fields.value.pattern.source, patterns.ncName);
+    assert.strictEqual(PrintedVariableField.fields.value.base.pattern.source, patterns.ncName);
     assert.deepStrictEqual(Object.keys(PrintedVariable.fields), [
       "base",
       "delimiter",
@@ -309,5 +310,44 @@ describe("template content and printed variables", () => {
     ]) {
       assert.include(text, name);
     }
+  });
+});
+
+describe("contracts (template)", () => {
+  it("types TemplateBlock.templateIdentifier VariableReference", () => {
+    assert.strictEqual(
+      template.TemplateBlock.fields.templateIdentifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types RubricTemplateBlock.templateIdentifier VariableReference", () => {
+    assert.strictEqual(
+      template.RubricTemplateBlock.fields.templateIdentifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types TemplateInline.templateIdentifier VariableReference", () => {
+    assert.strictEqual(
+      template.TemplateInline.fields.templateIdentifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types RubricTemplateInline.templateIdentifier VariableReference", () => {
+    assert.strictEqual(
+      template.RubricTemplateInline.fields.templateIdentifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types PrintedVariable.identifier VariableReference", () => {
+    assert.strictEqual(
+      template.PrintedVariable.fields.identifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types PrintedVariableField.value RecordFieldIdentifier", () => {
+    assert.strictEqual(
+      template.PrintedVariableField.fields.value.name,
+      contracts.RecordFieldIdentifier.name,
+    );
   });
 });

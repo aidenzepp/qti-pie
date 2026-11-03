@@ -2,6 +2,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import type { Statement } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as item from "#qti/schema/item.ts";
@@ -423,5 +424,11 @@ describe("kinds/xi", () => {
       "parse",
       "xpointer",
     ]);
+  });
+});
+
+describe("contracts (rule)", () => {
+  it("types XIncludeHref.value XIncludeUri", () => {
+    assert.strictEqual(rule.XIncludeHref.fields.value.name, contracts.XIncludeUri.name);
   });
 });
