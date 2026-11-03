@@ -12,6 +12,8 @@
  */
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
+import { ImportRefused } from "#qti/import/refusal.ts";
+import type { Rule } from "#qti/import/refusal.ts";
 import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
 import {
   Ancestry,
@@ -233,6 +235,89 @@ export const typedAttribute = (
         rows: Rows.add(rows, AttributeLexical, [{ attribute: name, kind, node, value: lexical }]),
         value,
       };
+};
+
+/**
+ * The integer spaces {@link integerOf} reads: `xs:integer`, `xs:nonNegativeInteger` and
+ * `xs:positiveInteger`.
+ */
+export type IntegerSpace = "integer" | "nonNegativeInteger" | "positiveInteger";
+
+/**
+ * The handle of a closed roster that `text` equals.
+ *
+ * @param handles - The roster's handles.
+ * @param text - The attribute's text, as the caller processed it.
+ * @param rule - The rule a refusal carries.
+ * @param where - The element and attribute, in a short phrase, for the refusal's detail.
+ * @returns The handle equal to `text`, or an `ImportRefused` under `rule` when none is.
+ */
+export const closedOf = <const Handle extends string>(
+  handles: readonly Handle[],
+  text: string,
+  rule: Rule,
+  where: string,
+): Effect.Effect<Handle, ImportRefused> => {
+  const handle = handles.find((member) => member === text);
+
+  return handle === undefined
+    ? Effect.fail(
+        new ImportRefused({
+          detail: `${where} is "${text}", which is not one of ${handles.map((member) => `"${member}"`).join(", ")}. Write exactly one of those values.`,
+          rule,
+        }),
+      )
+    : Effect.succeed(handle);
+};
+
+const integerForms: Readonly<Record<IntegerSpace, RegExp>> = {
+  integer: /^[+-]?[0-9]+$/u,
+  nonNegativeInteger: /^\+?[0-9]+$/u,
+  positiveInteger: /^\+?[0-9]+$/u,
+};
+
+const integerNames: Readonly<Record<IntegerSpace, string>> = {
+  integer: "an integer, optionally signed",
+  nonNegativeInteger: "a whole number of zero or more",
+  positiveInteger: "a whole number of one or more",
+};
+
+const smallest = -9_223_372_036_854_775_808n;
+
+const largest = 9_223_372_036_854_775_807n;
+
+/**
+ * The integer `text` writes in `space`.
+ *
+ * @param text - The attribute's text, collapsed by the caller.
+ * @param space - The integer space the attribute is declared in.
+ * @param rule - The rule a refusal carries.
+ * @param where - The element and attribute, in a short phrase, for the refusal's detail.
+ * @returns The value, or an `ImportRefused` under `rule` when the text is outside the space or the
+ *   value outside the signed 64-bit range.
+ */
+export const integerOf = (
+  text: string,
+  space: IntegerSpace,
+  rule: Rule,
+  where: string,
+): Effect.Effect<bigint, ImportRefused> => {
+  const refuse = (why: string) =>
+    Effect.fail(new ImportRefused({ detail: `${where} is "${text}", ${why}.`, rule }));
+
+  if (!integerForms[space].test(text)) {
+    return refuse(`which is not ${integerNames[space]}. Write ${integerNames[space]}`);
+  }
+
+  const value = BigInt(text);
+
+  if (space === "positiveInteger" && value < 1n) {
+    return refuse(`which is not ${integerNames[space]}. Write ${integerNames[space]}`);
+  }
+
+  return value < smallest || value > largest
+    ? refuse(`which is outside ${smallest} to ${largest}. Write a value inside that range`)
+    : Effect.succeed(value);
 };
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
