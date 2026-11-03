@@ -1,6 +1,12 @@
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, Path, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
-import { requirePackage, zipFlag } from "#qti/cli/args.ts";
+import {
+  replaceWith,
+  requirePackage,
+  requireReplaceable,
+  yesFlag,
+  zipFlag,
+} from "#qti/cli/args.ts";
 import { RoundtripDiffers } from "#qti/cli/errors.ts";
 import { emitSuccess, outputMode } from "#qti/cli/output.ts";
 import type { Outcome } from "#qti/export/compare.ts";
@@ -53,22 +59,24 @@ export const RoundtripData = Schema.Struct({
  * Import the package in `dir`, export it to `work/export/<name of dir>/` (`<name>.zip` under
  * `--zip`), and print the comparison.
  *
+ * An export already at `work/export/<name>` needs `--yes`, which replaces it, and the old one goes
+ * only once the new export is written.
+ *
  * The engine loads when the handler runs, so `--help` and a usage error never pay for it.
  */
 export const roundtripCommand = Command.make(
   "roundtrip",
-  { dir: Argument.String("dir"), zip: zipFlag },
-  Effect.fn("cli.roundtrip")(function* roundtripHandler({ dir, zip }) {
+  { dir: Argument.String("dir"), yes: yesFlag, zip: zipFlag },
+  Effect.fn("cli.roundtrip")(function* roundtripHandler({ dir, yes, zip }) {
     const mode = yield* outputMode;
 
     yield* requirePackage(dir);
 
-    const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const name = path.basename(path.resolve(dir)).replace(/\.zip$/u, "");
     const exportDir = path.join("work", "export", zip ? `${name}.zip` : name);
 
-    yield* fs.remove(exportDir, { force: true, recursive: true });
+    yield* requireReplaceable(exportDir, yes);
 
     const { AuthorAppLayer } = yield* Effect.promise(() => import("#qti/db/layer.ts"));
     const { comparePackage, renderReport } = yield* Effect.promise(
@@ -78,7 +86,9 @@ export const roundtripCommand = Command.make(
     const { importPackage } = yield* Effect.promise(() => import("#qti/import/package.ts"));
     const packageId = yield* importPackage(dir).pipe(Effect.provide(AuthorAppLayer));
 
-    yield* exportPackage(packageId, exportDir).pipe(Effect.provide(AuthorAppLayer));
+    yield* replaceWith(exportDir, (written) =>
+      exportPackage(packageId, written).pipe(Effect.provide(AuthorAppLayer)),
+    );
 
     const report = yield* comparePackage(dir, exportDir);
     const differing = report.filter(({ outcome }) => outcome.kind === "differs").length;
@@ -103,7 +113,7 @@ export const roundtripCommand = Command.make(
   }),
 ).pipe(
   Command.withDescription(
-    "Import <dir>, export it to work/export/<name> (<name>.zip under --zip), and compare the two (writes the database and work/export/<name>)",
+    "Import <dir>, export it to work/export/<name> (<name>.zip under --zip), and compare the two (writes the database and work/export/<name>). An export already at work/export/<name> is replaced only with --yes, and the old one goes once the new export is written",
   ),
   Command.withExamples([
     {

@@ -269,7 +269,7 @@ describe.skipIf(!hasLease)(
         Effect.gen(function* sharedMediaCli() {
           const source = yield* materialize("sharedMedia");
           const { report } = yield* roundTrip("sharedMedia");
-          const { exit, stderr, stdout } = yield* runCli(["roundtrip", source]);
+          const { exit, stderr, stdout } = yield* runCli(["roundtrip", "--yes", source]);
 
           assert.isTrue(Exit.isSuccess(exit), stderr);
           assert.strictEqual(stdout, renderReport(report));

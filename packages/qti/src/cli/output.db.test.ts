@@ -75,7 +75,12 @@ describe.skipIf(!hasLease)(
       it.effect("--json roundtrip prints the report's entries and no differing", () =>
         Effect.gen(function* roundtripJson() {
           const copy = yield* packageCopy(fixtures.simple, "copy-output-json-simple");
-          const { exit, stderr, stdout } = yield* captureCli(["--json", "roundtrip", copy]);
+          const { exit, stderr, stdout } = yield* captureCli([
+            "--json",
+            "roundtrip",
+            "--yes",
+            copy,
+          ]);
 
           assert.isTrue(Exit.isSuccess(exit), stderr);
           assert.strictEqual(stdout.split("\n").length, 1);
@@ -99,6 +104,7 @@ describe.skipIf(!hasLease)(
             "--output",
             "jsonl",
             "roundtrip",
+            "--yes",
             copy,
           ]);
 
