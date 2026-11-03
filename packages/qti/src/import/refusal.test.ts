@@ -7,7 +7,10 @@ import {
   ruleOfLaw,
 } from "#qti/import/refusal.ts";
 import type { ImportLaw } from "#qti/import/refusal.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
+import * as valueContracts from "#qti/schema/value-contracts.ts";
+import * as value from "#qti/schema/value.ts";
 
 it("sends a contract no row names to value-lexical, unmapped", () => {
   const law: ImportLaw = { contract: "NoSuchContract", kind: "contract" };
@@ -209,5 +212,173 @@ describe("the rules of a pattern", () => {
     assertMapped(pattern(patterns.useEnumExt), "attribute-lexical");
     assertMapped(pattern(patterns.viewList), "attribute-lexical");
     assertMapped(pattern(patterns.ariaRelevantList), "attribute-lexical");
+  });
+});
+
+/**
+ * A synthetic contract law.
+ */
+const contractLaw = (name: string): ImportLaw => ({ contract: name, kind: "contract" });
+
+/**
+ * The rule of each written-out contract, from the contracts document's per-contract sections. The
+ * four pairs of one language told apart by contract are `CategoryList` and `MatchGroupList`,
+ * `ExpressionIntegerOrVariable` and `PrintedVariableIntegerOrVariable`, `ExpressionCoords` and
+ * `ShapeCoords`, and `ClassList` and `LomToken`.
+ */
+const writtenRules = {
+  P6: ["CategoryList", "ExpressionCoords", "ExpressionIntegerOrVariable"],
+  "attribute-lexical": [
+    "AriaInteger",
+    "AriaPositiveInteger",
+    "ChoiceCount",
+    "ClassList",
+    "ContainerWidth",
+    "ContentLanguage",
+    "ContentMediaType",
+    "ExpectedLength",
+    "ExpectedLines",
+    "IdReference",
+    "InterpolationSourceValue",
+    "MappingScore",
+    "MatchGroupList",
+    "MatchSourceValue",
+    "MediaRectCoords",
+    "PrintedVariableIntegerOrVariable",
+    "RectCoords",
+    "ShapeCoords",
+    "ShowHideIdentifier",
+    "StringCount",
+    "TableSpan",
+    "TrackLanguage",
+  ],
+  "drd-value": ["AccessMode", "AccessModeAdapted"],
+  "href-path": ["PackagePath", "ResourceEntryHref"],
+  "manifest-identifier": ["ManifestIdentifier"],
+  "tool-string-length": ["ToolName", "ToolVendor", "ToolVersion"],
+  "uri-syntax": [
+    "CaseItemUri",
+    "CitationUri",
+    "CustomOperatorDefinitionUri",
+    "DrdAdaptationUri",
+    "EmbedSourceUri",
+    "GlossaryUri",
+    "HyperlinkUri",
+    "LongDescriptionUri",
+    "LongInterpretationUri",
+    "NamespaceUri",
+    "StatisticContextUri",
+    "StylesheetUri",
+    "TemplateLocationUri",
+    "TemplateUri",
+    "XIncludeUri",
+    "XmlBaseUri",
+  ],
+  "usage-lexical": [
+    "StatisticMeasure",
+    "StatisticName",
+    "UsageCaseCount",
+    "UsageFieldIdentifier",
+    "UsageMappingScore",
+    "UsagePartIdentifier",
+    "UsageValueToken",
+  ],
+  "value-lexical": [
+    "ChoiceIdentifier",
+    "CustomOperatorClassName",
+    "FileMediaType",
+    "LangStringLanguage",
+    "LomToken",
+    "LomVocabularySource",
+    "LomVocabularyValue",
+    "NamespacePrefix",
+    "OutcomeScaleValue",
+    "PiTarget",
+    "RecordFieldIdentifier",
+    "SectionReference",
+    "TemplateParameterName",
+    "VariableReference",
+    "WeightReference",
+    "XmlEntityName",
+  ],
+} satisfies Record<string, readonly string[]>;
+
+/**
+ * Every contract name of the schema with the rule it maps to: the written-out contracts, then the
+ * arms, each of which takes its context's rule from `valueContexts`.
+ */
+const expectedRules = (): ReadonlyMap<string, string> => {
+  const expected = new Map<string, string>();
+
+  for (const [rule, names] of Object.entries(writtenRules)) {
+    for (const name of names) {
+      expected.set(name, rule);
+    }
+  }
+  for (const { context, rule } of value.valueContexts) {
+    for (const arm of Object.values<Named>(valueContracts.valueArmContracts()[context])) {
+      expected.set(arm.name, rule);
+    }
+  }
+
+  return expected;
+};
+
+/**
+ * A contract as the tests read it: its name.
+ */
+interface Named {
+  readonly name: string;
+}
+
+/**
+ * The name of every contract the schema makes.
+ */
+const everyContract = (): readonly string[] => {
+  const arms = Object.values(valueContracts.valueArmContracts()).flatMap((byBase) =>
+    Object.values<Named>(byBase).map((made) => made.name),
+  );
+
+  return [...Object.values<Named>(contracts).map((made) => made.name), ...arms];
+};
+
+describe("the rules of a contract", () => {
+  it("names 136 contracts, each in the expected table once", () => {
+    const names = everyContract();
+
+    assert.strictEqual(names.length, 136);
+    assert.strictEqual(expectedRules().size, 136);
+    assert.deepStrictEqual([...expectedRules().keys()].toSorted(), names.toSorted());
+  });
+
+  it("maps every contract of the schema to its rule, mapped", () => {
+    const expected = expectedRules();
+
+    for (const name of everyContract()) {
+      const law = contractLaw(name);
+
+      assert.isTrue(isMappedLaw(law), `${name} has no entry`);
+      assert.strictEqual(ruleOfLaw(law), expected.get(name), name);
+    }
+  });
+
+  it("makes the Literal arms P7, the usage arms usage-typed-value and the MapKey arms map-key-lexical", () => {
+    assertMapped(contractLaw("LiteralIdentifierValue"), "P7");
+    assertMapped(contractLaw("LiteralUriValue"), "P7");
+    assertMapped(contractLaw("UsageIntegerValue"), "usage-typed-value");
+    assertMapped(contractLaw("UsageUriValue"), "usage-typed-value");
+    assertMapped(contractLaw("MapKeyFloatValue"), "map-key-lexical");
+    assertMapped(contractLaw("StatisticName"), "usage-lexical");
+  });
+
+  it("tells apart the four languages two contracts share", () => {
+    assertMapped(contractLaw("CategoryList"), "P6");
+    assertMapped(contractLaw("MatchGroupList"), "attribute-lexical");
+    assertMapped(contractLaw("ExpressionIntegerOrVariable"), "P6");
+    assertMapped(contractLaw("PrintedVariableIntegerOrVariable"), "attribute-lexical");
+    assertMapped(contractLaw("ExpressionCoords"), "P6");
+    assertMapped(contractLaw("ShapeCoords"), "attribute-lexical");
+    assertMapped(contractLaw("ClassList"), "attribute-lexical");
+    assertMapped(contractLaw("LomToken"), "value-lexical");
   });
 });

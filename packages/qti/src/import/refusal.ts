@@ -1076,10 +1076,141 @@ const conditionMirrors: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The rule each named contract of the schema maps to. Empty until the contract slices fill it; a
- * contract no row names falls to {@link nearest}, `value-lexical`, unmapped.
+ * The contracts of the schema that `valueContexts` does not mint, each rule beside the names it
+ * judges. A contract is a branded domain, so two contracts of one language are told apart by name
+ * here: `CategoryList` is `P6` and `MatchGroupList` `attribute-lexical`,
+ * `ExpressionIntegerOrVariable` `P6` and `PrintedVariableIntegerOrVariable` `attribute-lexical`,
+ * `ExpressionCoords` `P6` and `ShapeCoords` `attribute-lexical`, `ClassList` `attribute-lexical`
+ * and `LomToken` `value-lexical`.
  */
-const contractRules: ReadonlyMap<string, Rule> = new Map();
+const writtenContractRules: readonly (readonly [Rule, readonly string[]])[] = [
+  [
+    "attribute-lexical",
+    [
+      "AriaInteger",
+      "AriaPositiveInteger",
+      "ChoiceCount",
+      "ClassList",
+      "ContainerWidth",
+      "ContentLanguage",
+      "ContentMediaType",
+      "ExpectedLength",
+      "ExpectedLines",
+      "IdReference",
+      "InterpolationSourceValue",
+      "MappingScore",
+      "MatchGroupList",
+      "MatchSourceValue",
+      "MediaRectCoords",
+      "PrintedVariableIntegerOrVariable",
+      "RectCoords",
+      "ShapeCoords",
+      "ShowHideIdentifier",
+      "StringCount",
+      "TableSpan",
+      "TrackLanguage",
+    ],
+  ],
+  ["drd-value", ["AccessMode", "AccessModeAdapted"]],
+  ["href-path", ["PackagePath", "ResourceEntryHref"]],
+  ["manifest-identifier", ["ManifestIdentifier"]],
+  ["P6", ["CategoryList", "ExpressionCoords", "ExpressionIntegerOrVariable"]],
+  ["tool-string-length", ["ToolName", "ToolVendor", "ToolVersion"]],
+  [
+    "uri-syntax",
+    [
+      "CaseItemUri",
+      "CitationUri",
+      "CustomOperatorDefinitionUri",
+      "DrdAdaptationUri",
+      "EmbedSourceUri",
+      "GlossaryUri",
+      "HyperlinkUri",
+      "LongDescriptionUri",
+      "LongInterpretationUri",
+      "NamespaceUri",
+      "StatisticContextUri",
+      "StylesheetUri",
+      "TemplateLocationUri",
+      "TemplateUri",
+      "XIncludeUri",
+      "XmlBaseUri",
+    ],
+  ],
+  [
+    "usage-lexical",
+    [
+      "StatisticMeasure",
+      "StatisticName",
+      "UsageCaseCount",
+      "UsageFieldIdentifier",
+      "UsageMappingScore",
+      "UsagePartIdentifier",
+      "UsageValueToken",
+    ],
+  ],
+  [
+    "value-lexical",
+    [
+      "ChoiceIdentifier",
+      "CustomOperatorClassName",
+      "FileMediaType",
+      "LangStringLanguage",
+      "LomToken",
+      "LomVocabularySource",
+      "LomVocabularyValue",
+      "NamespacePrefix",
+      "OutcomeScaleValue",
+      "PiTarget",
+      "RecordFieldIdentifier",
+      "SectionReference",
+      "TemplateParameterName",
+      "VariableReference",
+      "WeightReference",
+      "XmlEntityName",
+    ],
+  ],
+];
+
+/**
+ * The rule of each of the eight contexts of a typed value, for the eight arm contracts
+ * `<Context><BaseType>Value` it mints. This repeats the `rule` of `valueContexts` in
+ * `schema/value.ts`, which this module cannot import: that module imports this one's `Rule`.
+ */
+const armContextRules: readonly (readonly [string, Rule])[] = [
+  ["Declared", "value-lexical"],
+  ["InterpolationDefault", "attribute-lexical"],
+  ["InterpolationTarget", "attribute-lexical"],
+  ["Literal", "P7"],
+  ["MapKey", "map-key-lexical"],
+  ["MatchDefault", "attribute-lexical"],
+  ["MatchTarget", "attribute-lexical"],
+  ["Usage", "usage-typed-value"],
+];
+
+const armBaseTypes = [
+  "DirectedPair",
+  "Duration",
+  "Float",
+  "Identifier",
+  "Integer",
+  "Pair",
+  "Point",
+  "Uri",
+] as const;
+
+/**
+ * The rule each named contract of the schema maps to: the written-out contracts, then the 64 arms.
+ * A contract no row names falls to {@link nearest}, `value-lexical`, unmapped.
+ */
+const contractRules: ReadonlyMap<string, Rule> = new Map([
+  ...writtenContractRules.flatMap(([rule, names]) =>
+    names.map((name): [string, Rule] => [name, rule]),
+  ),
+  ...armContextRules.flatMap(([context, rule]) =>
+    armBaseTypes.map((base): [string, Rule] => [`${context}${base}Value`, rule]),
+  ),
+]);
 
 const some = (rule: Rule | undefined): Mapped | undefined =>
   rule === undefined ? undefined : named(rule);
