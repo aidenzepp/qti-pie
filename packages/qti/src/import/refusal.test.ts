@@ -1,6 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
-import { ImportRefused, isMappedLaw, ruleOfError, ruleOfLaw } from "#qti/import/refusal.ts";
+import {
+  ImportRefused,
+  isMappedLaw,
+  patternRuleSources,
+  ruleOfError,
+  ruleOfLaw,
+} from "#qti/import/refusal.ts";
 import type { ImportLaw } from "#qti/import/refusal.ts";
+import * as patterns from "#qti/schema/patterns.ts";
 
 it("sends a contract no row names to value-lexical, unmapped", () => {
   const law: ImportLaw = { contract: "NoSuchContract", kind: "contract" };
@@ -161,5 +168,46 @@ describe("the rules of the canonical wave's new laws", () => {
       contained("Resource", ["package", "schemaversion"], "Package", ["id", "schemaversion"]),
       "schema-version",
     );
+  });
+});
+
+/**
+ * A synthetic pattern law over one regex source.
+ */
+const pattern = (source: string): ImportLaw => ({ flags: "u", kind: "pattern", source });
+
+describe("the rules of a pattern", () => {
+  const sources = new Set<string>(
+    Object.entries(patterns)
+      .filter(([name]) => !name.endsWith("Flags"))
+      .map(([, source]) => source),
+  );
+
+  it("keeps a row only for a source the schema still exports", () => {
+    assert.isAbove(patternRuleSources.length, 0);
+    for (const source of patternRuleSources) {
+      assert.isTrue(sources.has(source), source);
+    }
+  });
+
+  it("keeps the DRD and rubric-use rows", () => {
+    const drd = [
+      patterns.drdAccessMode,
+      patterns.drdAdaptationDetail,
+      patterns.drdAdaptationMediaType,
+      patterns.drdAdaptationType,
+      patterns.drdApiInteroperable,
+      patterns.drdControlFlexibility,
+      patterns.drdDisplayTransformability,
+      patterns.drdEducationalComplexityOfAdaptation,
+      patterns.drdHazard,
+    ];
+
+    for (const source of drd) {
+      assertMapped(pattern(source), "drd-value");
+    }
+    assertMapped(pattern(patterns.useEnumExt), "attribute-lexical");
+    assertMapped(pattern(patterns.viewList), "attribute-lexical");
+    assertMapped(pattern(patterns.ariaRelevantList), "attribute-lexical");
   });
 });
