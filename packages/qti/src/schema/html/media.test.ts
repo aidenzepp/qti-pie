@@ -1,6 +1,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Schema } from "effect";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as media from "#qti/schema/html/media.ts";
 import * as html from "#qti/schema/html.ts";
 import * as node from "#qti/schema/node.ts";
@@ -236,5 +237,32 @@ describe("html/media", () => {
     for (const name of Object.keys(media.relations)) {
       assert.property(probe.relations, name);
     }
+  });
+});
+
+describe("contracts (html/media)", () => {
+  it("types ObjectElement.data EmbedSourceUri", () => {
+    assert.strictEqual(media.ObjectElement.fields.data.name, contracts.EmbedSourceUri.name);
+  });
+  it("types ObjectElement.type ContentMediaType", () => {
+    assert.strictEqual(media.ObjectElement.fields.type.name, contracts.ContentMediaType.name);
+  });
+  it("types TrackSrclang.value TrackLanguage", () => {
+    assert.strictEqual(media.TrackSrclang.fields.value.name, contracts.TrackLanguage.name);
+  });
+  it("types SourceType.value ContentMediaType", () => {
+    assert.strictEqual(media.SourceType.fields.value.name, contracts.ContentMediaType.name);
+  });
+  it("types ParamType.value ContentMediaType", () => {
+    assert.strictEqual(media.ParamType.fields.value.name, contracts.ContentMediaType.name);
+  });
+});
+
+describe("contracts (html)", () => {
+  it("types Img.src EmbedSourceUri", () => {
+    assert.strictEqual(html.Img.fields.src.name, contracts.EmbedSourceUri.name);
+  });
+  it("types ImgLongdesc.value LongDescriptionUri", () => {
+    assert.strictEqual(html.ImgLongdesc.fields.value.name, contracts.LongDescriptionUri.name);
   });
 });

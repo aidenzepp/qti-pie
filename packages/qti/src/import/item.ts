@@ -55,6 +55,8 @@ import {
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
 import {
+  EmbedSourceUri,
+  LongDescriptionUri,
   LongInterpretationUri,
   ManifestIdentifier,
   OutcomeScaleValue,
@@ -1079,13 +1081,13 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
       const width = lexicalOf(element, "width");
       const alt = yield* requiredAttribute(element, "alt", lexicalOf(element, "alt"));
       const imgSrc = yield* requiredAttribute(element, "src", src.value);
-      built = Rows.add(built, Img, [{ alt, id: node.id, src: imgSrc }]);
+      built = Rows.add(built, Img, [{ alt, id: node.id, src: EmbedSourceUri(imgSrc) }]);
       built = Rows.add(
         built,
         ImgLongdesc,
         Option.match(longdesc.value, {
           onNone: () => [],
-          onSome: (value) => [{ node: node.id, value }],
+          onSome: (value) => [{ node: node.id, value: LongDescriptionUri(value) }],
         }),
       );
       built = Rows.add(

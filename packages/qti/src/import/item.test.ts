@@ -35,7 +35,12 @@ import {
   DocumentTitle,
   HtmlId,
 } from "#qti/schema/document.ts";
-import { ManifestIdentifier, PackagePath, TemplateUri } from "#qti/schema/contracts.ts";
+import {
+  EmbedSourceUri,
+  ManifestIdentifier,
+  PackagePath,
+  TemplateUri,
+} from "#qti/schema/contracts.ts";
 import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#qti/schema/html.ts";
 import {
   AssessmentItem,
@@ -300,7 +305,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
           {
             alt: "NEVER LEAVE LUGGAGE UNATTENDED",
             id: idOf("img"),
-            src: "images/sign.png",
+            src: EmbedSourceUri("images/sign.png"),
           },
         ]);
         assert.deepStrictEqual(Rows.of(rows, ImgLongdesc), []);

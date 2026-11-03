@@ -3,6 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Option, Predicate } from "effect";
 import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
 import * as structure from "#qti/schema/html/structure.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
@@ -114,6 +115,16 @@ const childKindOf = (rule: Capacity): string | undefined => {
     : undefined;
 };
 
+/**
+ * The source of a column's base pattern, whether the column is a bare pattern or a contract over
+ * one.
+ */
+const sourceOf = (
+  field:
+    | { readonly pattern: { readonly source: string } }
+    | { readonly base: { readonly pattern: { readonly source: string } } },
+): string => ("base" in field ? field.base.pattern.source : field.pattern.source);
+
 describe("html/structure", () => {
   it("keys 20 arms by the V05 handles", () => {
     assert.strictEqual(handles.length, 20);
@@ -144,7 +155,7 @@ describe("html/structure", () => {
       const relation = structure.relations[name];
       assert.deepStrictEqual([...relation.primaryKey], ["node"], name);
       assert.deepStrictEqual(Object.keys(relation.fields), ["node", "value"], name);
-      assert.strictEqual(relation.fields.value.pattern.source, pattern, name);
+      assert.strictEqual(sourceOf(relation.fields.value), pattern, name);
       assert.deepStrictEqual(containments(structure.rules, relation), [
         [["node"], structure.relations[arm], ["id"]],
       ]);
@@ -197,5 +208,26 @@ describe("html/structure", () => {
       Object.keys(structure.relations).length,
       20 + optional.length + closedOptional.length,
     );
+  });
+});
+
+describe("contracts (html/structure)", () => {
+  it("types ColSpan.value TableSpan", () => {
+    assert.strictEqual(structure.ColSpan.fields.value.name, contracts.TableSpan.name);
+  });
+  it("types ColgroupSpan.value TableSpan", () => {
+    assert.strictEqual(structure.ColgroupSpan.fields.value.name, contracts.TableSpan.name);
+  });
+  it("types TdRowspan.value TableSpan", () => {
+    assert.strictEqual(structure.TdRowspan.fields.value.name, contracts.TableSpan.name);
+  });
+  it("types TdColspan.value TableSpan", () => {
+    assert.strictEqual(structure.TdColspan.fields.value.name, contracts.TableSpan.name);
+  });
+  it("types ThRowspan.value TableSpan", () => {
+    assert.strictEqual(structure.ThRowspan.fields.value.name, contracts.TableSpan.name);
+  });
+  it("types ThColspan.value TableSpan", () => {
+    assert.strictEqual(structure.ThColspan.fields.value.name, contracts.TableSpan.name);
   });
 });

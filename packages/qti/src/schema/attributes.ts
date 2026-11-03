@@ -107,6 +107,14 @@ import {
   NodeKind,
   RootKind,
 } from "#qti/schema/node.ts";
+import {
+  AriaInteger,
+  AriaPositiveInteger,
+  ClassList,
+  ContentLanguage,
+  IdReference,
+  XmlBaseUri,
+} from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -127,7 +135,7 @@ export const NodeClass = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.classList),
+    value: ClassList,
   },
   ["node"],
 );
@@ -141,7 +149,7 @@ export const NodeLang = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.bcp47),
+    value: ContentLanguage,
   },
   ["node"],
 );
@@ -202,7 +210,7 @@ export const NodeXmlBase = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.anyUri),
+    value: XmlBaseUri,
   },
   ["node"],
 );
@@ -232,7 +240,7 @@ export const NodeCatalogIdref = relation(
     document: uuid,
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ncName),
+    value: IdReference,
   },
   ["node"],
 );
@@ -280,7 +288,7 @@ export const AriaActivedescendant = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ncName),
+    value: IdReference,
   },
   ["node"],
 );
@@ -350,7 +358,7 @@ export const AriaColcount = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsInteger),
+    value: AriaInteger,
   },
   ["node"],
 );
@@ -364,7 +372,7 @@ export const AriaColindex = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsInteger),
+    value: AriaInteger,
   },
   ["node"],
 );
@@ -378,7 +386,7 @@ export const AriaColspan = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsInteger),
+    value: AriaInteger,
   },
   ["node"],
 );
@@ -434,7 +442,7 @@ export const AriaDetails = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ncName),
+    value: IdReference,
   },
   ["node"],
 );
@@ -462,7 +470,7 @@ export const AriaErrormessage = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ncName),
+    value: IdReference,
   },
   ["node"],
 );
@@ -602,7 +610,7 @@ export const AriaLevel = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.positiveInteger),
+    value: AriaPositiveInteger,
   },
   ["node"],
 );
@@ -714,7 +722,7 @@ export const AriaPosinset = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.positiveInteger),
+    value: AriaPositiveInteger,
   },
   ["node"],
 );
@@ -812,7 +820,7 @@ export const AriaRowcount = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsInteger),
+    value: AriaInteger,
   },
   ["node"],
 );
@@ -826,7 +834,7 @@ export const AriaRowindex = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsInteger),
+    value: AriaInteger,
   },
   ["node"],
 );
@@ -840,7 +848,7 @@ export const AriaRowspan = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsInteger),
+    value: AriaInteger,
   },
   ["node"],
 );
@@ -868,7 +876,7 @@ export const AriaSetsize = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsInteger),
+    value: AriaInteger,
   },
   ["node"],
 );

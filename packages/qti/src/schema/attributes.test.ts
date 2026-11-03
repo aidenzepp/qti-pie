@@ -4,6 +4,7 @@ import { Predicate } from "effect";
 
 import { inventory } from "#qti/schema/content/xsd-inventory.ts";
 import * as attributes from "#qti/schema/attributes.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as document from "#qti/schema/document.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as asi from "#qti/schema/kinds/asi.ts";
@@ -296,5 +297,62 @@ describe("attributes", () => {
     );
     assert.include(Object.keys(probe.relations), "AttributeAdmission");
     assert.include(Object.keys(probe.relations), "AttributeIdref");
+  });
+});
+
+describe("contracts (attributes)", () => {
+  it("types NodeCatalogIdref.value IdReference", () => {
+    assert.strictEqual(attributes.NodeCatalogIdref.fields.value.name, contracts.IdReference.name);
+  });
+  it("types AriaActivedescendant.value IdReference", () => {
+    assert.strictEqual(
+      attributes.AriaActivedescendant.fields.value.name,
+      contracts.IdReference.name,
+    );
+  });
+  it("types AriaDetails.value IdReference", () => {
+    assert.strictEqual(attributes.AriaDetails.fields.value.name, contracts.IdReference.name);
+  });
+  it("types AriaErrormessage.value IdReference", () => {
+    assert.strictEqual(attributes.AriaErrormessage.fields.value.name, contracts.IdReference.name);
+  });
+  it("types NodeXmlBase.value XmlBaseUri", () => {
+    assert.strictEqual(attributes.NodeXmlBase.fields.value.name, contracts.XmlBaseUri.name);
+  });
+  it("types NodeClass.value ClassList", () => {
+    assert.strictEqual(attributes.NodeClass.fields.value.name, contracts.ClassList.name);
+  });
+  it("types NodeLang.value ContentLanguage", () => {
+    assert.strictEqual(attributes.NodeLang.fields.value.name, contracts.ContentLanguage.name);
+  });
+  it("types AriaColcount.value AriaInteger", () => {
+    assert.strictEqual(attributes.AriaColcount.fields.value.name, contracts.AriaInteger.name);
+  });
+  it("types AriaColindex.value AriaInteger", () => {
+    assert.strictEqual(attributes.AriaColindex.fields.value.name, contracts.AriaInteger.name);
+  });
+  it("types AriaColspan.value AriaInteger", () => {
+    assert.strictEqual(attributes.AriaColspan.fields.value.name, contracts.AriaInteger.name);
+  });
+  it("types AriaRowcount.value AriaInteger", () => {
+    assert.strictEqual(attributes.AriaRowcount.fields.value.name, contracts.AriaInteger.name);
+  });
+  it("types AriaRowindex.value AriaInteger", () => {
+    assert.strictEqual(attributes.AriaRowindex.fields.value.name, contracts.AriaInteger.name);
+  });
+  it("types AriaRowspan.value AriaInteger", () => {
+    assert.strictEqual(attributes.AriaRowspan.fields.value.name, contracts.AriaInteger.name);
+  });
+  it("types AriaSetsize.value AriaInteger", () => {
+    assert.strictEqual(attributes.AriaSetsize.fields.value.name, contracts.AriaInteger.name);
+  });
+  it("types AriaLevel.value AriaPositiveInteger", () => {
+    assert.strictEqual(attributes.AriaLevel.fields.value.name, contracts.AriaPositiveInteger.name);
+  });
+  it("types AriaPosinset.value AriaPositiveInteger", () => {
+    assert.strictEqual(
+      attributes.AriaPosinset.fields.value.name,
+      contracts.AriaPositiveInteger.name,
+    );
   });
 });
