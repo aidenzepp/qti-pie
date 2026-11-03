@@ -11,6 +11,7 @@ import {
   kinds as qmdKinds,
   registry as qmdRegistry,
 } from "#qti/schema/kinds/qmd.ts";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import * as document from "#qti/schema/document.ts";
 import * as metadata from "#qti/schema/metadata.ts";
 import * as node from "#qti/schema/node.ts";
@@ -339,5 +340,23 @@ describe("metadata", () => {
       assert.isTrue(admits(lomAdmission, host, "pi"), `(${host}, pi)`);
     }
     assert.isTrue(admits(lomAdmission, "lom:string", "text"));
+  });
+
+  it("holds the four qmd booleans and three vocabularies to their rosters", () => {
+    const { relations } = metadata;
+    const closed: readonly (readonly [{ readonly roster: unknown }, unknown])[] = [
+      [relations.QmdItemTemplate.fields.value, rosters.XsBoolean],
+      [relations.QmdTimeDependent.fields.value, rosters.XsBoolean],
+      [relations.QmdComposite.fields.value, rosters.XsBoolean],
+      [relations.QmdSolutionAvailable.fields.value, rosters.XsBoolean],
+      [relations.QmdInteractionType.fields.value, rosters.QmdInteractionTypeValue],
+      [relations.QmdFeedbackType.fields.value, rosters.QmdFeedbackTypeValue],
+      [relations.QmdScoringMode.fields.value, rosters.QmdScoringModeValue],
+    ];
+
+    assert.strictEqual(closed.length, 7);
+    for (const [field, roster] of closed) {
+      assert.strictEqual(field.roster, roster);
+    }
   });
 });

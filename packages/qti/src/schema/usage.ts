@@ -22,6 +22,7 @@ import {
   within,
 } from "@bjornpagen/grizzle";
 import type { AnyRelation, FieldBase } from "@bjornpagen/grizzle";
+import { XsBoolean } from "#qti/schema/content/rosters.ts";
 import { Document } from "#qti/schema/document.ts";
 import type * as ud from "#qti/schema/kinds/ud.ts";
 import { BaseType } from "#qti/schema/declaration.ts";
@@ -34,8 +35,6 @@ const anyUri = str.regex(patterns.anyUri);
 const ncName = str.regex(patterns.ncName);
 
 const xsInteger = str.regex(patterns.xsInteger);
-
-const xsBoolean = str.regex(patterns.xsBoolean);
 
 const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags);
 
@@ -241,7 +240,10 @@ export const UsageMapEntry = relation(
 /**
  * The optional `caseSensitive` of a map entry.
  */
-export const UsageMapEntryCaseSensitive = optional("UsageMapEntryCaseSensitive", xsBoolean);
+export const UsageMapEntryCaseSensitive = optional(
+  "UsageMapEntryCaseSensitive",
+  closedId(XsBoolean),
+);
 
 /**
  * The relations of this module, as schema members.

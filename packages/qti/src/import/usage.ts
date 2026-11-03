@@ -19,7 +19,7 @@ import {
 } from "#qti/import/tree.ts";
 import type { ImportRefused } from "#qti/import/refusal.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
-import { BooleanLiteral } from "#qti/schema/content/rosters.ts";
+import { BooleanLiteral, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { BaseType } from "#qti/schema/declaration.ts";
 import { Document } from "#qti/schema/document.ts";
 import { Edge } from "#qti/schema/node.ts";
@@ -308,7 +308,10 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     }
   });
 
-  const mappingRows = (element: Element, statistic: string): void => {
+  const mappingRows = Effect.fn("import.usage.mappingRows")(function* mappingRows(
+    element: Element,
+    statistic: string,
+  ): Effect.fn.Return<void, ImportRefused> {
     const node = nodes.get(element);
     if (node === undefined) {
       return;
@@ -352,12 +355,19 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
           position: positionOf(entryNode.id),
         },
       ]);
-      optional(ud.UsageMapEntryCaseSensitive, entry, "caseSensitive", "collapse", (id, value) => ({
-        node: id,
-        value: judgedLater(value),
-      }));
+
+      const caseSensitive = read(entry, "caseSensitive", "collapse");
+      if (Option.isSome(caseSensitive)) {
+        const closed = yield* closedOf(
+          XsBoolean.handles,
+          caseSensitive.value,
+          "attribute-lexical",
+          "the caseSensitive attribute of ud:mapEntry",
+        );
+        add(ud.UsageMapEntryCaseSensitive, [{ node: entryNode.id, value: closed }]);
+      }
     }
-  };
+  });
 
   const statisticRows = Effect.fn("import.usage.statisticRows")(function* statisticRows(
     element: Element,
@@ -415,7 +425,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
       } else if (kindHere === "ud:value") {
         yield* valueRows(child, node.id);
       } else if (kindHere === "ud:mapping") {
-        mappingRows(child, node.id);
+        yield* mappingRows(child, node.id);
       }
     }
   });

@@ -5,6 +5,7 @@ import { manifestGuards } from "#qti/import/guards/manifest.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
 import { kindOf, Rows } from "#qti/import/tree.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import type { Entry } from "#qti/package/read.ts";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
@@ -864,5 +865,20 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
           assert.strictEqual(verdict.rule, "pass", `${name}: ${verdict.detail}`);
         }
       }),
+  );
+
+  suite.effect("refuses a drd:atInteroperable of maybe as attribute-lexical before the write", () =>
+    Effect.gen(function* strayInteroperable() {
+      const dir = yield* materialize("variant-padded");
+      const entries = yield* listPackage(dir);
+      const text = new TextDecoder().decode(yield* readEntry(dir, "imsmanifest.xml"));
+      assert.isTrue(text.includes(" true "));
+
+      const doc = yield* readXml(new TextEncoder().encode(text.replace(" true ", "maybe")));
+      const failure = yield* Effect.flip(manifestRows(dir, entries, doc, Rows.empty()));
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "attribute-lexical");
+    }),
   );
 });

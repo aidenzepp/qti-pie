@@ -122,7 +122,7 @@ export const externalRows = Effect.fn("import.externalRows")(function* externalR
       add(md.QtiMetadataInExternalLom, [
         { id: node.id, lom: lom.id, package: input.package, resource: input.resource },
       ]);
-      built = qmdLeafRows(built, nodes, child, node.id);
+      built = yield* qmdLeafRows(built, nodes, child, node.id);
     } else if (node?.kind === "csmd:curriculumStandardsMetadataSet") {
       built = csmSetRows(built, nodes, child, lom.id);
     }

@@ -6,6 +6,7 @@ import { Effect, FileSystem } from "effect";
 import { inject } from "vitest";
 import { manifestGuards, ManifestGuardRefusal } from "#qti/import/guards/manifest.ts";
 import { manifestRows, NotQti3 } from "#qti/import/manifest.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { ResourceLomLanguageSet } from "#qti/schema/lang.ts";
 import type { Entry } from "#qti/package/read.ts";
@@ -43,6 +44,15 @@ import {
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { materialize, materializePackage } from "#qti/test/fixtures.ts";
 import { readXml } from "#qti/xml/read.ts";
+
+/**
+ * A leaf row reduced to the fields every qmd leaf shares, its value read as text.
+ */
+const plain = (leaf: {
+  readonly id: string;
+  readonly qtiMetadata: string;
+  readonly value: string;
+}): { readonly id: string; readonly qtiMetadata: string; readonly value: string } => leaf;
 
 /**
  * The one row of a list that holds exactly one.
@@ -395,10 +405,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
 
       assert.strictEqual(record.resource, only(Rows.of(rows, Resource)).identifier);
       for (const [leaves, value] of [
-        [Rows.of(rows, QmdTimeDependent), "false"],
-        [Rows.of(rows, QmdInteractionType), "choiceInteraction"],
-        [Rows.of(rows, QmdFeedbackType), "none"],
-        [Rows.of(rows, QmdSolutionAvailable), "true"],
+        [Rows.of(rows, QmdTimeDependent).map(plain), "false"],
+        [Rows.of(rows, QmdInteractionType).map(plain), "choiceInteraction"],
+        [Rows.of(rows, QmdFeedbackType).map(plain), "none"],
+        [Rows.of(rows, QmdSolutionAvailable).map(plain), "true"],
       ] as const) {
         const leaf = only(leaves);
         assert.strictEqual(leaf.qtiMetadata, record.id);
@@ -646,4 +656,60 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
       }),
     );
   }
+
+  suite.effect("a cp:schema outside the seven QTI names is refused value-lexical", () =>
+    Effect.gen(function* strayName() {
+      const failure = yield* Effect.flip(
+        importManifest(inject("fixtures").simple, [
+          "<schema>QTI Package</schema>",
+          "<schema>QTI Thing</schema>",
+        ]),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "value-lexical");
+    }),
+  );
+
+  suite.effect("a qmd:scoringMode outside its three values is refused value-lexical", () =>
+    Effect.gen(function* strayMode() {
+      const failure = yield* Effect.flip(
+        importManifest(inject("fixtures").simple, [
+          "<imsqti:feedbackType>none</imsqti:feedbackType>",
+          "<imsqti:feedbackType>none</imsqti:feedbackType><imsqti:scoringMode>robot</imsqti:scoringMode>",
+        ]),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "value-lexical");
+    }),
+  );
+
+  suite.effect("a qmd:timeDependent outside xs:boolean is refused attribute-lexical", () =>
+    Effect.gen(function* strayBoolean() {
+      const failure = yield* Effect.flip(
+        importManifest(inject("fixtures").simple, [
+          "<imsqti:timeDependent>false</imsqti:timeDependent>",
+          "<imsqti:timeDependent>perhaps</imsqti:timeDependent>",
+        ]),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "attribute-lexical");
+    }),
+  );
+
+  suite.effect("a padded qmd:timeDependent collapses to its handle", () =>
+    Effect.gen(function* paddedBoolean() {
+      const { rows } = yield* importManifest(inject("fixtures").simple, [
+        "<imsqti:timeDependent>false</imsqti:timeDependent>",
+        "<imsqti:timeDependent> true </imsqti:timeDependent>",
+      ]);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, QmdTimeDependent).map((row) => row.value),
+        ["true"],
+      );
+    }),
+  );
 });

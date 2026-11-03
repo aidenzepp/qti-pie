@@ -27,6 +27,12 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
+import {
+  QmdFeedbackTypeValue,
+  QmdInteractionTypeValue,
+  QmdScoringModeValue,
+  XsBoolean,
+} from "#qti/schema/content/rosters.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import { Edge, Node, NodeKind, TreeRoot } from "#qti/schema/node.ts";
 import { File, FileMetadata, Resource, ResourceMetadata } from "#qti/schema/package.ts";
@@ -43,14 +49,6 @@ const boundedToken = str.regex(patterns.boundedToken, patterns.boundedTokenFlags
 const wildcard = str.regex(patterns.wildcard, patterns.wildcardFlags);
 
 const language = str.regex(patterns.xsLanguageOrEmpty);
-
-const xsBoolean = str.regex(patterns.xsBoolean);
-
-const interactionTypeValue = str.regex(patterns.qmdInteractionType);
-
-const feedbackTypeValue = str.regex(patterns.qmdFeedbackType);
-
-const scoringModeValue = str.regex(patterns.qmdScoringMode);
 
 const toolString = str.regex(patterns.toolString, patterns.toolStringFlags);
 
@@ -593,7 +591,7 @@ export const QtiMetadataInExternalLom = relation(
  */
 export const QmdItemTemplate = relation(
   "QmdItemTemplate",
-  { id: uuid, qtiMetadata: uuid, value: xsBoolean },
+  { id: uuid, qtiMetadata: uuid, value: closedId(XsBoolean) },
   ["id"],
 );
 
@@ -602,7 +600,7 @@ export const QmdItemTemplate = relation(
  */
 export const QmdTimeDependent = relation(
   "QmdTimeDependent",
-  { id: uuid, qtiMetadata: uuid, value: xsBoolean },
+  { id: uuid, qtiMetadata: uuid, value: closedId(XsBoolean) },
   ["id"],
 );
 
@@ -611,7 +609,7 @@ export const QmdTimeDependent = relation(
  */
 export const QmdComposite = relation(
   "QmdComposite",
-  { id: uuid, qtiMetadata: uuid, value: xsBoolean },
+  { id: uuid, qtiMetadata: uuid, value: closedId(XsBoolean) },
   ["id"],
 );
 
@@ -620,7 +618,7 @@ export const QmdComposite = relation(
  */
 export const QmdSolutionAvailable = relation(
   "QmdSolutionAvailable",
-  { id: uuid, qtiMetadata: uuid, value: xsBoolean },
+  { id: uuid, qtiMetadata: uuid, value: closedId(XsBoolean) },
   ["id"],
 );
 
@@ -629,7 +627,7 @@ export const QmdSolutionAvailable = relation(
  */
 export const QmdInteractionType = relation(
   "QmdInteractionType",
-  { id: uuid, qtiMetadata: uuid, value: interactionTypeValue },
+  { id: uuid, qtiMetadata: uuid, value: closedId(QmdInteractionTypeValue) },
   ["id"],
 );
 
@@ -638,7 +636,7 @@ export const QmdInteractionType = relation(
  */
 export const QmdFeedbackType = relation(
   "QmdFeedbackType",
-  { id: uuid, qtiMetadata: uuid, value: feedbackTypeValue },
+  { id: uuid, qtiMetadata: uuid, value: closedId(QmdFeedbackTypeValue) },
   ["id"],
 );
 
@@ -647,7 +645,7 @@ export const QmdFeedbackType = relation(
  */
 export const QmdScoringMode = relation(
   "QmdScoringMode",
-  { id: uuid, qtiMetadata: uuid, value: scoringModeValue },
+  { id: uuid, qtiMetadata: uuid, value: closedId(QmdScoringModeValue) },
   ["id"],
 );
 

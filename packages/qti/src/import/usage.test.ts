@@ -496,4 +496,30 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
       );
     }),
   );
+
+  suite.effect("a caseSensitive outside xs:boolean is refused attribute-lexical", () =>
+    Effect.gen(function* strayCaseSensitive() {
+      const failure = yield* Effect.flip(
+        rowsOf("usage3", (text) =>
+          text.replace('<mapEntry mapKey="d1"', '<mapEntry caseSensitive="maybe" mapKey="d1"'),
+        ),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "attribute-lexical");
+    }),
+  );
+
+  suite.effect("a padded caseSensitive collapses to its handle", () =>
+    Effect.gen(function* paddedCaseSensitive() {
+      const { rows } = yield* rowsOf("usage3", (text) =>
+        text.replace('<mapEntry mapKey="d1"', '<mapEntry caseSensitive=" true " mapKey="d1"'),
+      );
+
+      assert.deepStrictEqual(
+        Rows.of(rows, ud.UsageMapEntryCaseSensitive).map((row) => row.value),
+        ["true"],
+      );
+    }),
+  );
 });
