@@ -15,6 +15,7 @@ import {
 } from "#qti/import/interactions.ts";
 import type { DeclaredVariable, InteractionContext } from "#qti/import/interactions.ts";
 import { textRows } from "#qti/import/interactions/text.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
 import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
@@ -688,6 +689,98 @@ describe("textRows: other kinds", () => {
       assert.strictEqual(Rows.of(rows, TextEntryInteraction).length, 1);
       assert.strictEqual(Rows.of(rows, ExtendedTextInteraction).length, 1);
       assert.strictEqual(Rows.of(rows, InteractionBinding).length, 2);
+    }),
+  );
+});
+
+const importRuleOf = (exit: Exit.Exit<Rows, unknown>): string => {
+  const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
+
+  return Option.isSome(failure) && failure.value instanceof ImportRefused ? failure.value.rule : "";
+};
+
+const choice = (attributes: readonly (readonly [string, string])[]) =>
+  element("qti-inline-choice", [["identifier", "A"], ...attributes]);
+
+describe("textRows: a flag or format outside its roster", () => {
+  const inline = (
+    attributes: readonly (readonly [string, string])[],
+    child: Element = choice([]),
+  ) => {
+    const found = element(
+      "qti-inline-choice-interaction",
+      [["response-identifier", "RESPONSE"], ...attributes],
+      [child],
+    );
+
+    return contextOf(
+      [found],
+      [
+        [found, "qti-inline-choice-interaction"],
+        [child, "qti-inline-choice"],
+      ],
+      [["RESPONSE", identifierSingle]],
+    );
+  };
+  const refused: readonly (readonly [string, InteractionContext])[] = [
+    [
+      'format of "rich" on an extended text interaction',
+      (() => {
+        const found = extended([
+          ["response-identifier", "RESPONSE"],
+          ["format", "rich"],
+        ]);
+
+        return contextOf(
+          [found],
+          [[found, "qti-extended-text-interaction"]],
+          [["RESPONSE", stringSingle]],
+        );
+      })(),
+    ],
+    ["required of yes on an inline choice interaction", inline([["required", "yes"]])],
+    ["shuffle of yes on an inline choice interaction", inline([["shuffle", "yes"]])],
+    ["fixed of yes on an inline choice", inline([], choice([["fixed", "yes"]]))],
+    ["show-hide of visible on an inline choice", inline([], choice([["show-hide", "visible"]]))],
+  ];
+
+  for (const [name, ctx] of refused) {
+    it.effect(`refuses ${name} under attribute-lexical before any row is written`, () =>
+      Effect.gen(function* outside() {
+        const exit = yield* Effect.exit(run(ctx));
+
+        assert.strictEqual(importRuleOf(exit), "attribute-lexical");
+      }),
+    );
+  }
+
+  it.effect("admits the xs:boolean spelling 1 and the format preformatted", () =>
+    Effect.gen(function* admitted() {
+      const found = extended([
+        ["response-identifier", "RESPONSE"],
+        ["format", "preformatted"],
+      ]);
+      const rows = yield* run(
+        contextOf(
+          [found],
+          [[found, "qti-extended-text-interaction"]],
+          [["RESPONSE", stringSingle]],
+        ),
+      );
+      const flagged = yield* run(inline([["shuffle", "1"]], choice([["fixed", "0"]])));
+
+      assert.deepStrictEqual(
+        Rows.of(rows, ExtendedTextInteraction).map((row) => row.format),
+        ["preformatted"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(flagged, InlineChoiceInteraction).map((row) => row.shuffle),
+        ["1"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(flagged, InlineChoice).map((row) => row.fixed),
+        ["0"],
+      );
     }),
   );
 });

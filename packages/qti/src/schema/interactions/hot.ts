@@ -46,7 +46,7 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import { Shape } from "#qti/schema/content/rosters.ts";
+import { Shape, ShowHide } from "#qti/schema/content/rosters.ts";
 import { GraphicOrderInteraction } from "#qti/schema/interactions/order.ts";
 import { InteractionBinding } from "#qti/schema/interaction.ts";
 import { Edge, Node, RootKind } from "#qti/schema/node.ts";
@@ -62,11 +62,6 @@ const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNor
  * An identifier: an `xs:NCName`.
  */
 const ncName = str.regex(patterns.ncName);
-
-/**
- * A choice's `show-hide`: `show` or `hide`.
- */
-const showHide = str.regex(patterns.showHide);
 
 /**
  * A `center-point`: a list of `xs:int` tokens, possibly empty.
@@ -93,7 +88,11 @@ export const HottextInteraction = relation(
  * A `qti-hottext`, by the identifier its owner, where it has one, keys. `showHide` is `show` where
  * the source omits it.
  */
-export const Hottext = relation("Hottext", { id: uuid, identifier: ncName, showHide }, ["id"]);
+export const Hottext = relation(
+  "Hottext",
+  { id: uuid, identifier: ncName, showHide: closedId(ShowHide) },
+  ["id"],
+);
 
 /**
  * The hottext interaction that owns a hottext: one row where the nearest enclosing interaction of
@@ -127,7 +126,13 @@ export const HotspotInteraction = relation(
  */
 export const HotspotChoice = relation(
   "HotspotChoice",
-  { id: uuid, identifier: ncName, interaction: uuid, shape: closedId(Shape), showHide },
+  {
+    id: uuid,
+    identifier: ncName,
+    interaction: uuid,
+    shape: closedId(Shape),
+    showHide: closedId(ShowHide),
+  },
   ["id"],
 );
 

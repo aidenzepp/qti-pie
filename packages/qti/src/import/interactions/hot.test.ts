@@ -805,3 +805,49 @@ describe("hotRows on a non-canonical integer spelling", () => {
     }),
   );
 });
+
+describe("hotRows on a choice outside the show-hide roster", () => {
+  const refused: readonly (readonly [string, Element])[] = [
+    [
+      "show-hide of visible on a hottext",
+      element("qti-hottext-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-hottext", { identifier: "A", "show-hide": "visible" }),
+      ]),
+    ],
+    [
+      "show-hide of visible on a hotspot choice",
+      element("qti-hotspot-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-hotspot-choice", {
+          coords: "0,0,1,1",
+          identifier: "A",
+          shape: "rect",
+          "show-hide": "visible",
+        }),
+      ]),
+    ],
+  ];
+
+  for (const [name, tree] of refused) {
+    it.effect(`refuses ${name} under attribute-lexical before any row is written`, () =>
+      Effect.gen(function* outside() {
+        const exit = yield* Effect.exit(hotRows(contextOf([tree], single), Rows.empty()));
+
+        assert.strictEqual(importRuleOf(exit), "attribute-lexical");
+      }),
+    );
+  }
+
+  it.effect("admits show-hide of hide on a hottext", () =>
+    Effect.gen(function* admitted() {
+      const tree = element("qti-hottext-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-hottext", { identifier: "A", "show-hide": "hide" }),
+      ]);
+      const built = yield* hotRows(contextOf([tree], single), Rows.empty());
+
+      assert.deepStrictEqual(
+        Rows.of(built, Hottext).map((row) => row.showHide),
+        ["hide"],
+      );
+    }),
+  );
+});

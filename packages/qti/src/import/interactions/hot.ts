@@ -11,9 +11,9 @@ import { judgedLater } from "#qti/import/judged.ts";
 import { Effect, Option } from "effect";
 import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
 import type { ImportRefused } from "#qti/import/refusal.ts";
-import { ItemRefusal, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
+import { closedOf, ItemRefusal, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
 import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
-import { Shape } from "#qti/schema/content/rosters.ts";
+import { Shape, ShowHide } from "#qti/schema/content/rosters.ts";
 import type { ShapeHandle } from "#qti/schema/content/rosters.ts";
 import {
   DeclaredHotspotChoiceShowHide,
@@ -332,20 +332,27 @@ const positionObject = Effect.fn("import.positionObject")(function* positionObje
  * The rows of one `qti-hottext`: the hottext, its owner row when the nearest enclosing interaction
  * is a hottext interaction, and the template variable it names.
  *
- * @returns The rows; `ItemRefusal` for a `template-identifier` that names no typed variable.
+ * @returns The rows; `ItemRefusal` for a `template-identifier` that names no typed variable;
+ *   `ImportRefused` (`attribute-lexical`) for a `show-hide` outside `show` and `hide`.
  */
 const hottext = Effect.fn("import.hottext")(function* hottext(
   ctx: InteractionContext,
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
   const identifier = Option.getOrElse(attributes.read("identifier"), () => "");
   const template = attributes.read("template-identifier");
   const showHide = attributes.read("show-hide");
+  const showHideHandle = yield* closedOf(
+    ShowHide.handles,
+    Option.getOrElse(showHide, () => "show"),
+    "attribute-lexical",
+    "the show-hide attribute of qti-hottext",
+  );
   let built = Rows.add(attributes.rows(), Hottext, [
-    { id: node.id, identifier, showHide: judgedLater(Option.getOrElse(showHide, () => "show")) },
+    { id: node.id, identifier, showHide: showHideHandle },
   ]);
   built = ctx.shared.markers(
     built,
@@ -378,7 +385,8 @@ const hottext = Effect.fn("import.hottext")(function* hottext(
  * label when it has one, its template variable, and its coordinates.
  *
  * @returns The rows; `ItemRefusal` for a choice with no valid `shape`, no enclosing interaction
- *   (rule `admission`), or a `template-identifier` that names no typed variable. A choice with no
+ *   (rule `admission`), or a `template-identifier` that names no typed variable; `ImportRefused`
+ *   (`attribute-lexical`) for a `show-hide` outside `show` and `hide`. A choice with no
  *   `coords` has no `Coords` row, and the shape's capacity refuses it at commit.
  */
 const hotspotChoice = Effect.fn("import.hotspotChoice")(function* hotspotChoice(
@@ -386,7 +394,7 @@ const hotspotChoice = Effect.fn("import.hotspotChoice")(function* hotspotChoice(
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const owner = ctx.shared.nearestInteraction(ctx.nodes, element);
   if (Option.isNone(owner)) {
     return yield* new ItemRefusal({
@@ -409,13 +417,19 @@ const hotspotChoice = Effect.fn("import.hotspotChoice")(function* hotspotChoice(
   const label = attributes.read("hotspot-label");
   const template = attributes.read("template-identifier");
   const showHide = attributes.read("show-hide");
+  const showHideHandle = yield* closedOf(
+    ShowHide.handles,
+    Option.getOrElse(showHide, () => "show"),
+    "attribute-lexical",
+    "the show-hide attribute of qti-hotspot-choice",
+  );
   let built = Rows.add(attributes.rows(), HotspotChoice, [
     {
       id: node.id,
       identifier,
       interaction: owner.value.id,
       shape: shape.value,
-      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
+      showHide: showHideHandle,
     },
   ]);
   built = ctx.shared.markers(

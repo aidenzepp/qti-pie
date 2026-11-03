@@ -180,10 +180,7 @@ describe("interactions/text", () => {
   });
 
   it("types extended-text format as the enumeration and text-entry format as free text", () => {
-    assert.strictEqual(
-      relations.ExtendedTextInteraction.fields.format.pattern.source,
-      patterns.textFormat,
-    );
+    assert.strictEqual(relations.ExtendedTextInteraction.fields.format.roster, rosters.TextFormat);
     assert.strictEqual(
       relations.TextEntryFormat.fields.value.pattern.source,
       patterns.xsNormalizedString,
@@ -270,5 +267,13 @@ describe("interactions/text", () => {
     assert.deepStrictEqual(Object.keys(relations.QtiLabel.fields), ["id"]);
     assert.notProperty(relations, "Label");
     assert.notProperty(relations, "InlineChoiceTemplate");
+  });
+
+  it("types its boolean, show-hide, orientation and format columns as closedId of their rosters", () => {
+    assert.strictEqual(relations.InlineChoiceInteraction.fields.required.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.InlineChoiceInteraction.fields.shuffle.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.InlineChoice.fields.fixed.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.InlineChoice.fields.showHide.roster, rosters.ShowHide);
+    assert.strictEqual(relations.ExtendedTextInteraction.fields.format.roster, rosters.TextFormat);
   });
 });

@@ -9,9 +9,10 @@ import { judgedLater } from "#qti/import/judged.ts";
 import { Effect, Option } from "effect";
 import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
 import type { ImportRefused } from "#qti/import/refusal.ts";
-import { ItemRefusal, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
+import { closedOf, ItemRefusal, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
 import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { MatchGroup } from "#qti/schema/choices.ts";
+import { ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import {
   DeclaredGapImgShowHide,
   DeclaredGapMatchMaxAssociations,
@@ -151,6 +152,9 @@ const bind = (
 /**
  * The rows of one `qti-gap-match-interaction`: the interaction, its binding and the
  * `GapMatchBinding` copied from the variable, and the optionals and markers the source wrote.
+ *
+ * @returns The rows; `ImportRefused` (`attribute-lexical`) for a `shuffle` outside `xs:boolean`'s
+ *   four spellings or a bound outside the non-negative integers.
  */
 const gapMatch = Effect.fn("import.gapMatch")(function* gapMatch(
   ctx: InteractionContext,
@@ -163,6 +167,12 @@ const gapMatch = Effect.fn("import.gapMatch")(function* gapMatch(
   const minMessage = attributes.read("data-min-selections-message");
   const maxMessage = attributes.read("data-max-selections-message");
   const width = attributes.read("data-choices-container-width");
+  const shuffleHandle = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(shuffle, () => "false"),
+    "attribute-lexical",
+    "the shuffle attribute of qti-gap-match-interaction",
+  );
   const read = yield* associationsOf(attributes, node);
   const { associations } = read;
   let built = yield* bind(ctx, read.rows, node, associations, associations.maxN);
@@ -178,7 +188,7 @@ const gapMatch = Effect.fn("import.gapMatch")(function* gapMatch(
       minAssociationsN: associations.minN,
       responseIdentifier: associations.responseIdentifier,
       rootKind: "item",
-      shuffle: judgedLater(Option.getOrElse(shuffle, () => "false")),
+      shuffle: shuffleHandle,
     },
   ]);
   built = Rows.add(
@@ -296,14 +306,15 @@ const groupAndTemplate = Effect.fn("import.gapGroupAndTemplate")(function* group
  * `required` flag and marker, its match group and its template variable.
  *
  * @returns The rows; `ItemRefusal` with rule `ancestry-ban` for a gap that sits in no gap-match
- *   interaction, and `ItemRefusal` for a `template-identifier` that names no typed variable.
+ *   interaction, and `ItemRefusal` for a `template-identifier` that names no typed variable;
+ *   `ImportRefused` (`attribute-lexical`) for a `required` or `show-hide` outside its roster.
  */
 const gap = Effect.fn("import.gap")(function* gap(
   ctx: InteractionContext,
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const owner = ctx.shared.nearestInteraction(ctx.nodes, element);
   if (Option.isNone(owner) || owner.value.kind !== "qti-gap-match-interaction") {
     return yield* new ItemRefusal({
@@ -317,13 +328,25 @@ const gap = Effect.fn("import.gap")(function* gap(
   const identifier = Option.getOrElse(attributes.read("identifier"), () => "");
   const required = attributes.read("required");
   const showHide = attributes.read("show-hide");
+  const requiredHandle = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(required, () => "false"),
+    "attribute-lexical",
+    "the required attribute of qti-gap",
+  );
+  const showHideHandle = yield* closedOf(
+    ShowHide.handles,
+    Option.getOrElse(showHide, () => "show"),
+    "attribute-lexical",
+    "the show-hide attribute of qti-gap",
+  );
   const built = Rows.add(attributes.rows(), Gap, [
     {
       id: node.id,
       identifier,
       interaction: owner.value.id,
-      required: judgedLater(Option.getOrElse(required, () => "false")),
-      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
+      required: requiredHandle,
+      showHide: showHideHandle,
     },
   ]);
   const grouped = yield* groupAndTemplate(ctx, built, attributes, node);
@@ -356,8 +379,8 @@ const gapOwner = (ctx: InteractionContext, element: Element): Option.Option<stri
  *
  * @returns The rows; `ItemRefusal` for a gap text that sits in no gap interaction (rule
  *   `admission`) and for a `template-identifier` that names no typed variable; `ImportRefused`
- *   (`attribute-lexical`) for a `match-max` that is absent or a `match-max` or `match-min` outside
- *   the non-negative integers.
+ *   (`attribute-lexical`) for a `match-max` that is absent, a `match-max` or `match-min` outside
+ *   the non-negative integers, or a `show-hide` outside `show` and `hide`.
  */
 const gapText = Effect.fn("import.gapText")(function* gapText(
   ctx: InteractionContext,
@@ -379,6 +402,12 @@ const gapText = Effect.fn("import.gapText")(function* gapText(
   const matchMax = attributes.read("match-max");
   const matchMin = attributes.read("match-min");
   const showHide = attributes.read("show-hide");
+  const showHideHandle = yield* closedOf(
+    ShowHide.handles,
+    Option.getOrElse(showHide, () => "show"),
+    "attribute-lexical",
+    "the show-hide attribute of qti-gap-text",
+  );
   const maximum = yield* spelled(
     attributes.rows(),
     node,
@@ -393,7 +422,7 @@ const gapText = Effect.fn("import.gapText")(function* gapText(
       interaction: owner.value,
       matchMaxN: maximum.value,
       matchMinN: minimum.value,
-      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
+      showHide: showHideHandle,
     },
   ]);
   built = ctx.shared.markers(
@@ -412,8 +441,8 @@ const gapText = Effect.fn("import.gapText")(function* gapText(
  *
  * @returns The rows; `ItemRefusal` for a gap image that sits in no gap interaction (rule
  *   `admission`) and for a `template-identifier` that names no typed variable; `ImportRefused`
- *   (`attribute-lexical`) for a `match-max` that is absent or a `match-max` or `match-min` outside
- *   the non-negative integers.
+ *   (`attribute-lexical`) for a `match-max` that is absent, a `match-max` or `match-min` outside
+ *   the non-negative integers, or a `show-hide` outside `show` and `hide`.
  */
 const gapImg = Effect.fn("import.gapImg")(function* gapImg(
   ctx: InteractionContext,
@@ -438,6 +467,12 @@ const gapImg = Effect.fn("import.gapImg")(function* gapImg(
   const top = attributes.read("top");
   const left = attributes.read("left");
   const showHide = attributes.read("show-hide");
+  const showHideHandle = yield* closedOf(
+    ShowHide.handles,
+    Option.getOrElse(showHide, () => "show"),
+    "attribute-lexical",
+    "the show-hide attribute of qti-gap-img",
+  );
   const maximum = yield* spelled(
     attributes.rows(),
     node,
@@ -452,7 +487,7 @@ const gapImg = Effect.fn("import.gapImg")(function* gapImg(
       interaction: owner.value,
       matchMaxN: maximum.value,
       matchMinN: minimum.value,
-      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
+      showHide: showHideHandle,
     },
   ]);
   built = ctx.shared.markers(

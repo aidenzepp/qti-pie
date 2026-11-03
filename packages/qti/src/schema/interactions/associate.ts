@@ -33,17 +33,12 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import { Shape } from "#qti/schema/content/rosters.ts";
+import { Shape, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { matchBoundsCheck } from "#qti/schema/choices.ts";
 import { coordsBinding, shapeCapacities } from "#qti/schema/shapes.ts";
 import { InteractionBinding } from "#qti/schema/interaction.ts";
 import { Edge, Node, NodeKind, RootKind } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-
-/**
- * An `xs:boolean` attribute's lexical form.
- */
-const xsBoolean = str.regex(patterns.xsBoolean);
 
 /**
  * An `xs:normalizedString` attribute's value, as the typed column holds it after replacement.
@@ -56,11 +51,6 @@ const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNor
 const ncName = str.regex(patterns.ncName);
 
 /**
- * A choice's `show-hide`: `show` or `hide`.
- */
-const showHide = str.regex(patterns.showHide);
-
-/**
  * A `qti-associate-interaction`.
  */
 export const AssociateInteraction = relation(
@@ -71,7 +61,7 @@ export const AssociateInteraction = relation(
     minAssociationsN: pg.bigint,
     responseIdentifier: ncName,
     rootKind: closedId(RootKind),
-    shuffle: xsBoolean,
+    shuffle: closedId(XsBoolean),
   },
   ["id"],
 );
@@ -87,7 +77,7 @@ export const MatchInteraction = relation(
     minAssociationsN: pg.bigint,
     responseIdentifier: ncName,
     rootKind: closedId(RootKind),
-    shuffle: xsBoolean,
+    shuffle: closedId(XsBoolean),
   },
   ["id"],
 );
@@ -143,7 +133,7 @@ export const AssociableHotspot = relation(
     matchMinN: pg.bigint,
     parentKind: closedId(NodeKind),
     shape: closedId(Shape),
-    showHide,
+    showHide: closedId(ShowHide),
   },
   ["id"],
 );
@@ -257,7 +247,7 @@ export const MatchFirstColumnHeader = relation(
  */
 export const SimpleAssociableChoiceFixed = relation(
   "SimpleAssociableChoiceFixed",
-  { node: uuid, value: xsBoolean },
+  { node: uuid, value: closedId(XsBoolean) },
   ["node"],
 );
 
@@ -275,7 +265,7 @@ export const DeclaredAssociableHotspotShowHide = relation(
  */
 export const SimpleAssociableChoiceShowHide = relation(
   "SimpleAssociableChoiceShowHide",
-  { node: uuid, value: showHide },
+  { node: uuid, value: closedId(ShowHide) },
   ["node"],
 );
 

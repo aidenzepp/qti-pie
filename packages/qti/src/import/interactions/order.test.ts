@@ -575,3 +575,40 @@ describe("orderRows on a simple choice outside its rosters", () => {
     }),
   );
 });
+
+describe("orderRows on an order interaction outside its rosters", () => {
+  const refused: readonly (readonly [string, Element])[] = [
+    ["shuffle of yes", orderItem({ shuffle: "yes" })],
+    ["orientation of diagonal", orderItem({ orientation: "diagonal" })],
+  ];
+
+  for (const [name, interaction] of refused) {
+    it.effect(`refuses ${name} under attribute-lexical before any row is written`, () =>
+      Effect.gen(function* outside() {
+        const exit = yield* Effect.exit(
+          orderRows(contextOf([interaction], declared), Rows.empty()),
+        );
+
+        assert.strictEqual(importRuleOf(exit), "attribute-lexical");
+      }),
+    );
+  }
+
+  it.effect("admits the xs:boolean spelling 1 for shuffle and a roster orientation", () =>
+    Effect.gen(function* admitted() {
+      const built = yield* orderRows(
+        contextOf([orderItem({ orientation: "horizontal", shuffle: "1" })], declared),
+        Rows.empty(),
+      );
+
+      assert.deepStrictEqual(
+        Rows.of(built, OrderInteraction).map((row) => row.shuffle),
+        ["1"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(built, OrderOrientation).map((row) => row.value),
+        ["horizontal"],
+      );
+    }),
+  );
+});

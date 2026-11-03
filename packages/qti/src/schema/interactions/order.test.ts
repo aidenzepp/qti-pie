@@ -228,4 +228,9 @@ describe("interactions/order", () => {
       assert.deepStrictEqual([...(owned[0]?.right.fields ?? [])], ["id", column]);
     }
   });
+
+  it("types its boolean, show-hide, orientation and format columns as closedId of their rosters", () => {
+    assert.strictEqual(order.relations.OrderInteraction.fields.shuffle.roster, rosters.XsBoolean);
+    assert.strictEqual(order.relations.OrderOrientation.fields.value.roster, rosters.Orientation);
+  });
 });

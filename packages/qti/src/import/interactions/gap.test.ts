@@ -721,3 +721,73 @@ describe("gapRows on a non-canonical integer spelling", () => {
     }),
   );
 });
+
+describe("gapRows on a flag outside its roster", () => {
+  const refused: readonly (readonly [string, Element])[] = [
+    [
+      "shuffle of yes on a gap-match interaction",
+      element("qti-gap-match-interaction", { "response-identifier": "RESPONSE", shuffle: "yes" }),
+    ],
+    [
+      "required of yes on a gap",
+      element("qti-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-gap", { identifier: "G", required: "yes" }),
+      ]),
+    ],
+    [
+      "show-hide of visible on a gap",
+      element("qti-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-gap", { identifier: "G", "show-hide": "visible" }),
+      ]),
+    ],
+    [
+      "show-hide of visible on a gap text",
+      element("qti-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+        gapText("A", { "show-hide": "visible" }),
+      ]),
+    ],
+    [
+      "show-hide of visible on a gap image",
+      element("qti-graphic-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-gap-img", { identifier: "I1", "match-max": "1", "show-hide": "visible" }),
+      ]),
+    ],
+  ];
+
+  for (const [name, tree] of refused) {
+    it.effect(`refuses ${name} under attribute-lexical before any row is written`, () =>
+      Effect.gen(function* outside() {
+        const exit = yield* Effect.exit(gapRows(contextOf([tree], pairs), Rows.empty()));
+
+        assert.strictEqual(importRuleOf(exit), "attribute-lexical");
+      }),
+    );
+  }
+
+  it.effect("admits the xs:boolean spelling 1 for shuffle and required", () =>
+    Effect.gen(function* admitted() {
+      const built = yield* gapRows(
+        contextOf(
+          [
+            element(
+              "qti-gap-match-interaction",
+              { "response-identifier": "RESPONSE", shuffle: "1" },
+              [element("qti-gap", { identifier: "G", required: "1" })],
+            ),
+          ],
+          pairs,
+        ),
+        Rows.empty(),
+      );
+
+      assert.deepStrictEqual(
+        Rows.of(built, GapMatchInteraction).map((row) => row.shuffle),
+        ["1"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(built, Gap).map((row) => row.required),
+        ["1"],
+      );
+    }),
+  );
+});

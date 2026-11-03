@@ -31,15 +31,10 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import { Bound } from "#qti/schema/content/rosters.ts";
+import { Bound, Orientation, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { InteractionBinding, SimpleChoice } from "#qti/schema/interaction.ts";
 import { Node, RootKind } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-
-/**
- * An `xs:boolean` attribute's lexical form.
- */
-const xsBoolean = str.regex(patterns.xsBoolean);
 
 /**
  * An `xs:nonNegativeInteger` attribute's lexical form.
@@ -57,11 +52,6 @@ const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNor
 const ncName = str.regex(patterns.ncName);
 
 /**
- * An `orientation`: `vertical` or `horizontal`.
- */
-const orientation = str.regex(patterns.orientation);
-
-/**
  * A `qti-order-interaction`. `maxBound` says whether `max-choices` bounds the order.
  */
 export const OrderInteraction = relation(
@@ -73,7 +63,7 @@ export const OrderInteraction = relation(
     minChoicesN: pg.bigint,
     responseIdentifier: ncName,
     rootKind: closedId(RootKind),
-    shuffle: xsBoolean,
+    shuffle: closedId(XsBoolean),
   },
   ["id"],
 );
@@ -102,9 +92,11 @@ export const GraphicOrderInteraction = relation(
 /**
  * An order interaction's `orientation`, when it has one.
  */
-export const OrderOrientation = relation("OrderOrientation", { node: uuid, value: orientation }, [
-  "node",
-]);
+export const OrderOrientation = relation(
+  "OrderOrientation",
+  { node: uuid, value: closedId(Orientation) },
+  ["node"],
+);
 
 /**
  * An order interaction's `min-choices` value, written when the attribute is present: at least 1.
