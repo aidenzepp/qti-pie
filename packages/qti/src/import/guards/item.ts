@@ -9,6 +9,7 @@ import { Effect, Option, Predicate, Schema } from "effect";
 import { standardTemplate } from "#qti/import/item.ts";
 import { collapse, replace, Rows } from "#qti/import/tree.ts";
 import type { WhiteSpace } from "#qti/import/tree.ts";
+import { spelledText } from "#qti/schema/attribute-homes.ts";
 import {
   Declaration,
   DeclarationLongInterpretation,
@@ -33,6 +34,7 @@ import {
 import { AssessmentItem } from "#qti/schema/item.ts";
 import {
   AttributeLexical,
+  AttributeSpelling,
   Edge,
   EntityReference,
   Node,
@@ -713,11 +715,32 @@ const interactionCopy = (rows: Rows): Finding => {
 };
 
 /**
- * `typed-copy` of the lexical rows: each row of an item node names an attribute its kind's
- * registry carries. Where `shadows` holds the attribute, the row shadows that typed column, differs
- * from it as read, and processes to it; any other attribute's row is left to the content guards.
+ * `typed-copy` of the lexical and spelling rows: each row of an item node names an attribute its
+ * kind's registry carries. Where `shadows` holds the attribute, a spelling row parses to the typed
+ * value it sits beside, and a lexical row shadows that value, differs from it as read, and
+ * processes to it. Where the node also has a spelling row, the lexical row's processed value is
+ * the spelling and not the typed column's text (`" 05 "` processes to `"05"`, the column holds
+ * `"5"`). Any other attribute's row is left to the content guards.
  */
 const lexicalCopy = (rows: Rows, index: Index): Finding => {
+  const spellings = new Map<string, string>();
+  for (const row of Rows.of(rows, AttributeSpelling)) {
+    const node = index.nodes.get(row.node);
+    if (node === undefined || !index.itemTrees.has(node.tree)) {
+      continue;
+    }
+
+    spellings.set(`${row.node}\n${row.attribute}`, row.value);
+
+    const typed = shadows.get(`${row.kind}/${row.attribute}`)?.column(rows, row.node);
+    if (typed !== undefined && spelledText(row.value) !== typed) {
+      return refuse(
+        "typed-copy",
+        `The spelling ${quoted(row.value)} of ${row.attribute} of ${row.kind} ${row.node} does not parse to the typed value ${quoted(typed)} it sits beside.`,
+      );
+    }
+  }
+
   for (const row of Rows.of(rows, AttributeLexical)) {
     const node = index.nodes.get(row.node);
     if (node === undefined || !index.itemTrees.has(node.tree)) {
@@ -744,18 +767,19 @@ const lexicalCopy = (rows: Rows, index: Index): Finding => {
       );
     }
 
+    const held = spellings.get(`${row.node}\n${row.attribute}`) ?? typed;
     const expected = processed(row.value, shadow.whiteSpace);
-    if (expected !== typed) {
+    if (expected !== held) {
       return refuse(
         "typed-copy",
-        `The lexical ${row.attribute} ${quoted(row.value)} of ${row.kind} ${row.node} processes to ${quoted(expected)}, and its column holds ${quoted(typed)}.`,
+        `The lexical ${row.attribute} ${quoted(row.value)} of ${row.kind} ${row.node} processes to ${quoted(expected)}, and its column holds ${quoted(held)}.`,
       );
     }
 
-    if (row.value === typed) {
+    if (row.value === held) {
       return refuse(
         "typed-copy",
-        `The lexical ${row.attribute} of ${row.kind} ${row.node} equals its column ${quoted(typed)}; a lexical row exists only where processing changed the value.`,
+        `The lexical ${row.attribute} of ${row.kind} ${row.node} equals its column ${quoted(held)}; a lexical row exists only where processing changed the value.`,
       );
     }
   }

@@ -59,6 +59,7 @@ import {
 import {
   AttributeEntityReference,
   AttributeLexical,
+  AttributeSpelling,
   Edge,
   EntityReference,
   TextNode,
@@ -737,6 +738,42 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
             },
           ]),
       });
+    }),
+  );
+
+  suite.effect("typed-copy refuses a spelling that does not parse to the typed value", () =>
+    Effect.gen(function* spellingOther() {
+      const failure = yield* refusal("typed-copy", inject("fixtures").simple, {
+        alter: (rows, nodes) =>
+          Rows.add(rows, AttributeSpelling, [
+            {
+              attribute: "max-choices",
+              kind: "qti-choice-interaction",
+              node: onlyId(nodes, "qti-choice-interaction"),
+              value: "+6",
+            },
+          ]),
+      });
+      assert.include(failure.detail, "does not parse to the typed value");
+    }),
+  );
+
+  suite.effect("typed-copy admits a spelling beside its lexical row", () =>
+    Effect.gen(function* spellingAndLexical() {
+      const guards = yield* guarded(inject("fixtures").simple, {
+        alter: (rows, nodes) => {
+          const node = onlyId(nodes, "qti-choice-interaction");
+
+          return Rows.add(
+            Rows.add(rows, AttributeSpelling, [
+              { attribute: "max-choices", kind: "qti-choice-interaction", node, value: "+1" },
+            ]),
+            AttributeLexical,
+            [{ attribute: "max-choices", kind: "qti-choice-interaction", node, value: " +1 " }],
+          );
+        },
+      });
+      assert.isUndefined(guards);
     }),
   );
 
