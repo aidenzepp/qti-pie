@@ -1,0 +1,514 @@
+{
+	"decisions": {
+		"candidates": [
+			{
+				"label": "the candidate rename of \"qti\".\"manifest_schema_version\".\"value\" to \"package\"",
+				"renames": {
+					"added": "\"qti\".\"manifest_schema_version\".\"package\"",
+					"kind": "field",
+					"removed": "\"qti\".\"manifest_schema_version\".\"value\""
+				},
+				"requires": [],
+				"witness": {
+					"choice": 0,
+					"statement": 0
+				}
+			},
+			{
+				"label": "the candidate rename of \"qti\".\"manifest_schema_version\".\"value\" to \"version\"",
+				"renames": {
+					"added": "\"qti\".\"manifest_schema_version\".\"version\"",
+					"kind": "field",
+					"removed": "\"qti\".\"manifest_schema_version\".\"value\""
+				},
+				"requires": [],
+				"witness": {
+					"choice": 1,
+					"statement": 0
+				}
+			}
+		],
+		"choices": [
+			{
+				"file": "02-structure.sql",
+				"keep": "ALTER TABLE \"qti\".\"manifest_schema_version\" ADD COLUMN \"package\" uuid DEFAULT __GRIZZLE_PLACEHOLDER__ NOT NULL",
+				"offers": [
+					{
+						"candidate": 0,
+						"statements": [
+							"ALTER TABLE \"qti\".\"manifest_schema_version\" RENAME COLUMN \"value\" TO \"package\"",
+							"ALTER TABLE \"qti\".\"manifest_schema_version\" ALTER COLUMN \"package\" TYPE uuid USING __GRIZZLE_PLACEHOLDER__"
+						]
+					}
+				],
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"file": "02-structure.sql",
+				"keep": "ALTER TABLE \"qti\".\"manifest_schema_version\" ADD COLUMN \"version\" \"qti\".\"schema_version\" DEFAULT __GRIZZLE_PLACEHOLDER__ NOT NULL",
+				"offers": [
+					{
+						"candidate": 1,
+						"statements": [
+							"ALTER TABLE \"qti\".\"manifest_schema_version\" RENAME COLUMN \"value\" TO \"version\"",
+							"ALTER TABLE \"qti\".\"manifest_schema_version\" ALTER COLUMN \"version\" TYPE \"qti\".\"schema_version\" USING __GRIZZLE_PLACEHOLDER__"
+						]
+					}
+				],
+				"within": {
+					"kind": "top"
+				}
+			}
+		],
+		"confirms": [],
+		"losses": [
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"value\"",
+					"kind": "field",
+					"relation": "\"qti\".\"simple_associable_choice_match_min\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"simple_associable_choice_match_min\" DROP COLUMN \"value\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"match_max\"",
+					"kind": "field",
+					"relation": "\"qti\".\"simple_associable_choice\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"simple_associable_choice\" DROP COLUMN \"match_max\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"value\"",
+					"kind": "field",
+					"relation": "\"qti\".\"position_object_min_choices\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"position_object_min_choices\" DROP COLUMN \"value\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"value\"",
+					"kind": "field",
+					"relation": "\"qti\".\"media_min_plays\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"media_min_plays\" DROP COLUMN \"value\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"value\"",
+					"kind": "field",
+					"relation": "\"qti\".\"media_max_plays\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"media_max_plays\" DROP COLUMN \"value\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [
+					0,
+					1
+				],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"value\"",
+					"kind": "field",
+					"relation": "\"qti\".\"manifest_schema_version\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"manifest_schema_version\" DROP COLUMN \"value\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"value\"",
+					"kind": "field",
+					"relation": "\"qti\".\"graphic_gap_match_min_associations\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"graphic_gap_match_min_associations\" DROP COLUMN \"value\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"value\"",
+					"kind": "field",
+					"relation": "\"qti\".\"graphic_associate_min_associations\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"graphic_associate_min_associations\" DROP COLUMN \"value\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"value\"",
+					"kind": "field",
+					"relation": "\"qti\".\"gap_text_match_min\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"gap_text_match_min\" DROP COLUMN \"value\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"match_max\"",
+					"kind": "field",
+					"relation": "\"qti\".\"gap_text\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"gap_text\" DROP COLUMN \"match_max\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"value\"",
+					"kind": "field",
+					"relation": "\"qti\".\"gap_match_min_associations\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"gap_match_min_associations\" DROP COLUMN \"value\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"value\"",
+					"kind": "field",
+					"relation": "\"qti\".\"gap_img_match_min\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"gap_img_match_min\" DROP COLUMN \"value\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"match_max\"",
+					"kind": "field",
+					"relation": "\"qti\".\"gap_img\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"gap_img\" DROP COLUMN \"match_max\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"max_choices\"",
+					"kind": "field",
+					"relation": "\"qti\".\"choice_interaction\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"choice_interaction\" DROP COLUMN \"max_choices\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"min_choices\"",
+					"kind": "field",
+					"relation": "\"qti\".\"choice_interaction\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"choice_interaction\" DROP COLUMN \"min_choices\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"value\"",
+					"kind": "field",
+					"relation": "\"qti\".\"associable_hotspot_match_min\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"associable_hotspot_match_min\" DROP COLUMN \"value\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"field": "\"match_max\"",
+					"kind": "field",
+					"relation": "\"qti\".\"associable_hotspot\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"associable_hotspot\" DROP COLUMN \"match_max\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"select_point_min_choices\""
+				},
+				"statement": "DROP TABLE \"qti\".\"select_point_min_choices\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"select_point_max_choices\""
+				},
+				"statement": "DROP TABLE \"qti\".\"select_point_max_choices\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"position_object_max_choices\""
+				},
+				"statement": "DROP TABLE \"qti\".\"position_object_max_choices\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"order_min_choices\""
+				},
+				"statement": "DROP TABLE \"qti\".\"order_min_choices\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"order_max_choices\""
+				},
+				"statement": "DROP TABLE \"qti\".\"order_max_choices\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"match_min_associations\""
+				},
+				"statement": "DROP TABLE \"qti\".\"match_min_associations\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"match_max_associations\""
+				},
+				"statement": "DROP TABLE \"qti\".\"match_max_associations\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"hottext_min_choices\""
+				},
+				"statement": "DROP TABLE \"qti\".\"hottext_min_choices\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"hottext_max_choices\""
+				},
+				"statement": "DROP TABLE \"qti\".\"hottext_max_choices\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"hotspot_min_choices\""
+				},
+				"statement": "DROP TABLE \"qti\".\"hotspot_min_choices\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"hotspot_max_choices\""
+				},
+				"statement": "DROP TABLE \"qti\".\"hotspot_max_choices\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"graphic_order_min_choices\""
+				},
+				"statement": "DROP TABLE \"qti\".\"graphic_order_min_choices\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"graphic_order_max_choices\""
+				},
+				"statement": "DROP TABLE \"qti\".\"graphic_order_max_choices\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"graphic_gap_match_max_associations\""
+				},
+				"statement": "DROP TABLE \"qti\".\"graphic_gap_match_max_associations\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"graphic_associate_max_associations\""
+				},
+				"statement": "DROP TABLE \"qti\".\"graphic_associate_max_associations\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"gap_match_max_associations\""
+				},
+				"statement": "DROP TABLE \"qti\".\"gap_match_max_associations\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"associate_min_associations\""
+				},
+				"statement": "DROP TABLE \"qti\".\"associate_min_associations\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "06-publish.sql",
+				"loses": {
+					"kind": "relation",
+					"relation": "\"qti\".\"associate_max_associations\""
+				},
+				"statement": "DROP TABLE \"qti\".\"associate_max_associations\"",
+				"within": {
+					"kind": "top"
+				}
+			}
+		]
+	},
+	"kind": "drafted",
+	"schema": "qti",
+	"schemaName": "Qti",
+	"source": "cc50a4745eeb0c068d0a4f496aa568e267d8dc8da596daad347068e5d680b4b1",
+	"target": "c3b1413f4779b8ca5c1f563117c8ba7e4c957f8d2648c096e95835d5c4c0fe7f"
+}
