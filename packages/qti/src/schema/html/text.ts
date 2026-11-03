@@ -3,8 +3,8 @@
  *
  * An arm carries a column only for an own attribute that is required; an own optional attribute is
  * a row of its own relation. The global families and ARIA belong to `attributes.ts` and
- * `aria.ts`, and appear on no arm here. The arms' containments into `Node` are expanded by
- * `alternatives` in the composed schema, not written here.
+ * `aria.ts`, and appear on no arm here. The arms' containments into `Node` are bound by
+ * one `mirrors` per handle in the composed schema, not written here.
  */
 import { contained, on, relation, str, uuid } from "@bjornpagen/grizzle";
 import * as patterns from "#qti/schema/patterns.ts";

@@ -258,8 +258,8 @@ export const RecordBindingFit = relation(
 /**
  * The choice kinds' arms, keyed by their `NodeKind` handles.
  *
- * Their containments into `Node` are not written here: `alternatives(Node, "kind", NodeKind, ...)`
- * in the composed schema expands to them, and writing both is a duplicate identity.
+ * Their containments into `Node` are not written here: one `mirrors` per handle in the composed
+ * schema (`#qti/schema/qti.ts`) binds them.
  */
 export const arms = {
   "qti-choice-interaction": ChoiceInteraction,

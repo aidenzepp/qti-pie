@@ -5,8 +5,8 @@
  * An arm carries a column only for an own attribute that is required, and none of these has one: an
  * own optional attribute is a row of its own relation. `headers` of `td` and `th` is a row of
  * `AttributeIdref`, not of this module. The global families and ARIA belong to `attributes.ts` and
- * `aria.ts`, and appear on no arm here. The arms' containments into `Node` are expanded by
- * `alternatives` in the composed schema, not written here.
+ * `aria.ts`, and appear on no arm here. The arms' containments into `Node` are bound by
+ * one `mirrors` per handle in the composed schema, not written here.
  */
 import { capacity, contained, on, relation, select, str, uuid, within } from "@bjornpagen/grizzle";
 import * as node from "#qti/schema/node.ts";

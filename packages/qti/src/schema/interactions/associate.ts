@@ -363,7 +363,7 @@ export const AssociableHotspotMatchMin = relation(
 
 /**
  * The arms of the six associate kinds, keyed by their `NodeKind` handles. Their containments into
- * `Node` are expanded by `alternatives` in the composed schema.
+ * `Node` are bound by one `mirrors` per handle in the composed schema.
  */
 export const arms = {
   "qti-associable-hotspot": AssociableHotspot,

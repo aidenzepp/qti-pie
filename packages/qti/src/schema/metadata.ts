@@ -7,8 +7,8 @@
  * record hangs under, and every row below the record copies the record's id (and its owner where
  * the row's rules need it) so each can be judged against it. A parent or position a row copies is
  * bound to the `Edge` of the same child. The arms are the LOM kinds', keyed by node id; their
- * containments into `Node` are expanded from `alternatives(Node, "kind", NodeKind, ...)` in the
- * composed schema, so none is written here.
+ * containments into `Node` are bound by one `mirrors` per handle in the composed
+ * schema (`#qti/schema/qti.ts`), so none is written here.
  */
 import {
   alternatives,

@@ -300,11 +300,11 @@ export const relations = {
 
 /**
  * The template kinds' arms, keyed by their `NodeKind` handles. Each handle has its own arm:
- * `alternatives` binds each arm row to a node of every handle that lists the arm, and a node has
+ * each handle's `mirrors` law binds every row of its arm to a node of that handle, and a node has
  * one kind, so an arm listed under two handles admits no row.
  *
- * Their containments into `Node` are not written here: `alternatives(Node, "kind", NodeKind, ...)`
- * in the composed schema expands to them, and writing both is a duplicate identity.
+ * Their containments into `Node` are not written here: one `mirrors` per handle in the composed
+ * schema (`#qti/schema/qti.ts`) binds them.
  */
 export const arms = {
   "qti-printed-variable": PrintedVariable,

@@ -8,7 +8,7 @@ import * as asi from "#qti/schema/kinds/asi.ts";
 import * as html from "#qti/schema/kinds/html.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import { Ancestry, Node, NodeKind } from "#qti/schema/node.ts";
-import { Qti } from "#qti/schema/qti.ts";
+import { Qti, nodeArms } from "#qti/schema/qti.ts";
 import { Author } from "#qti/schema/roles.ts";
 import {
   admission,
@@ -135,6 +135,35 @@ const modelOf = (host: string): ReadonlySet<string> => {
   ]);
 };
 
+/**
+ * The `mirrors` laws that state a `Node` selection's identity as an arm's, one per `NodeKind`
+ * handle, as `[handle, arm]` pairs in statement order.
+ */
+const nodeArmLaws = (): [string, unknown][] =>
+  Qti.statements.flatMap((statement) => {
+    if (statement.kind !== "mirrors") {
+      return [];
+    }
+
+    const { left, right } = statement;
+    const source: unknown = left.source;
+    if (
+      !Predicate.hasProperty(source, "relation") ||
+      source.relation !== Node ||
+      !Predicate.hasProperty(source, "bindings") ||
+      !Predicate.hasProperty(source.bindings, "kind") ||
+      !Predicate.isString(source.bindings.kind) ||
+      left.fields.length !== 1 ||
+      left.fields[0] !== "id" ||
+      right.fields.length !== 1 ||
+      right.fields[0] !== "id"
+    ) {
+      return [];
+    }
+
+    return [[source.bindings.kind, right.source]];
+  });
+
 describe("qti", () => {
   it("builds the composed schema, the author role and the author login", () => {
     assert.strictEqual(Qti.name, "Qti");
@@ -156,43 +185,16 @@ describe("qti", () => {
     assert.isAbove(relations.length, 0);
   });
 
-  it("gives every NodeKind handle an arm in the Node alternatives statement", () => {
-    const [rule, ...rest] = Qti.statements.filter(
-      (statement) => statement.kind === "alternatives" && statement.parent === Node,
-    );
-    assert.strictEqual(rest.length, 0);
-    if (rule?.kind !== "alternatives") {
-      assert.fail("no Node alternatives statement");
-    }
-
-    assert.strictEqual(rule.roster, NodeKind);
-
-    const arms = Object.keys(rule.arms);
-    assert.deepStrictEqual(
-      NodeKind.handles.filter((handle) => !arms.includes(handle)),
-      [],
-    );
-    assert.deepStrictEqual(
-      arms.filter((arm) => !NodeKind.handles.some((handle) => handle === arm)),
-      [],
-    );
+  it("states one mirrors law from each NodeKind handle's Node selection into its arm", () => {
+    const laws = nodeArmLaws();
+    assert.deepStrictEqual(laws.map(([handle]) => handle).toSorted(), NodeKind.handles.toSorted());
+    assert.strictEqual(laws.length, NodeKind.handles.length);
   });
 
   it("gives each Node arm one NodeKind handle", () => {
-    const rule = Qti.statements.find(
-      (statement) => statement.kind === "alternatives" && statement.parent === Node,
-    );
-    if (rule?.kind !== "alternatives") {
-      assert.fail("no Node alternatives statement");
-    }
-
-    const handlesByArm = new Map<object, string[]>();
-    for (const [handle, member] of Object.entries(rule.arms)) {
-      if (!Predicate.isObject(member)) {
-        assert.fail(`the arm of ${handle} is not a relation`);
-      }
-
-      handlesByArm.set(member, [...(handlesByArm.get(member) ?? []), handle]);
+    const handlesByArm = new Map<unknown, string[]>();
+    for (const [handle, arm] of nodeArmLaws()) {
+      handlesByArm.set(arm, [...(handlesByArm.get(arm) ?? []), handle]);
     }
 
     assert.deepStrictEqual(
@@ -200,6 +202,41 @@ describe("qti", () => {
       [],
     );
     assert.strictEqual(handlesByArm.size, NodeKind.handles.length);
+
+    const armOfHandle = new Map<string, unknown>(Object.entries(nodeArms));
+    for (const [handle, arm] of nodeArmLaws()) {
+      assert.strictEqual(arm, armOfHandle.get(handle));
+    }
+  });
+
+  it("binds Node.kind to NodeKind and states no Node alternatives", () => {
+    const bindings = Qti.statements.filter((statement) => {
+      if (statement.kind !== "contained") {
+        return false;
+      }
+
+      const { left, right } = statement;
+      const from: unknown = left.source;
+      const into: unknown = right.source;
+
+      return (
+        from === Node &&
+        left.fields.length === 1 &&
+        left.fields[0] === "kind" &&
+        into === NodeKind &&
+        right.fields.length === 1 &&
+        right.fields[0] === "id"
+      );
+    });
+    assert.strictEqual(bindings.length, 1);
+    assert.deepStrictEqual(
+      Qti.statements.filter((statement) => {
+        const parent: unknown = statement.kind === "alternatives" ? statement.parent : undefined;
+
+        return parent === Node;
+      }),
+      [],
+    );
   });
 
   it("composes the Admission rows of p, div, qti-item-body and qti-modal-feedback per host", () => {

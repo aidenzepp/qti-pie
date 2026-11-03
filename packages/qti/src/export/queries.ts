@@ -17,7 +17,7 @@ import type { AnyRelation } from "@bjornpagen/grizzle";
 import { Predicate } from "effect";
 import { Document } from "#qti/schema/document.ts";
 import { Edge, Node, Tree, TreeRoot } from "#qti/schema/node.ts";
-import { Qti } from "#qti/schema/qti.ts";
+import { nodeArms as nodeArmsOfKind } from "#qti/schema/qti.ts";
 import { Author } from "#qti/schema/roles.ts";
 
 /**
@@ -49,8 +49,8 @@ interface LooseRule {
 }
 
 /**
- * How an attachment's child is delivered: every child, at most one, or the arm of one handle of the
- * `Node` alternatives.
+ * How an attachment's child is delivered: every child, at most one, or the arm of one handle's
+ * `Node` law.
  */
 type Delivery = "array" | "option" | ReturnType<typeof arm<"kind", string>>;
 
@@ -92,15 +92,10 @@ const looseVars = v as unknown as (source: AnyRelation) => Terms;
 const written: readonly AnyRelation[] = Author.write.map((name) => Author.relations[name]);
 
 /**
- * The `Node` alternatives' arms, by the node kind handle each belongs to.
+ * The arms of `Node`, by the node kind handle each belongs to: the target of that handle's
+ * `mirrors` law.
  */
-const nodeArms: ReadonlyMap<string, AnyRelation> = new Map(
-  Qti.statements.flatMap((statement) =>
-    statement.kind === "alternatives" && statement.parent === Node
-      ? Object.entries<AnyRelation>(statement.arms)
-      : [],
-  ),
-);
+const nodeArms: ReadonlyMap<string, AnyRelation> = new Map(Object.entries(nodeArmsOfKind));
 
 /**
  * The names of the relations a node's attachments do not carry: `Node` and `Edge` are the walk's

@@ -2,8 +2,8 @@
  * The HTML elements of the model's first milestone: the paragraph and the image.
  *
  * The HTML and QTI base attribute families are not modeled: a document carrying one is refused as
- * unmodeled vocabulary. The arms' containments into `Node` are expanded by `alternatives` in the
- * composed schema, not written here.
+ * unmodeled vocabulary. The arms' containments into `Node` are bound by one `mirrors` per handle in
+ * the composed schema, not written here.
  */
 import { contained, on, relation, str, uuid } from "@bjornpagen/grizzle";
 import * as patterns from "#qti/schema/patterns.ts";
