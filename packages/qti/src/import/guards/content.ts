@@ -1550,16 +1550,17 @@ const sameTableHeaders = (rows: Rows, index: Index): Finding => {
 };
 
 /**
- * The quotation punctuation of rule 15: the straight quotes, the curly and low quotes and the
- * guillemets.
+ * The quotation punctuation of rule 15: the double quote, the curly and low quotes, the left single
+ * quote and the guillemets. The ASCII apostrophe and the right single quotation mark are not here:
+ * rule 15 is about quotation, its spec row names only the double quote, and a possessive or an
+ * elision writes an apostrophe beside a `q` without quoting (the head-cxo ruling `6c752747`; the
+ * findings row records the choice).
  */
 const quotationMarks: ReadonlySet<string> = new Set([
   '"',
-  "'",
   "«",
   "»",
   "‘",
-  "’",
   "‚",
   "‛",
   "“",
@@ -1571,16 +1572,14 @@ const quotationMarks: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The two predefined entities that spell a quote.
+ * The one predefined entity that spells a quote. `&apos;` is not in it, for the reason the
+ * apostrophe is not in `quotationMarks`, so it stands for its own spelling.
  */
-const quoteEntities: ReadonlyMap<string, string> = new Map([
-  ["apos", "'"],
-  ["quot", '"'],
-]);
+const quoteEntities: ReadonlyMap<string, string> = new Map([["quot", '"']]);
 
 /**
- * The characters each text-bearing node stands for. An entity reference other than the two quote
- * entities is not text this rule can judge, and stands for its own spelling.
+ * The characters each text-bearing node stands for. An entity reference other than the quote
+ * entity is not text this rule can judge, and stands for its own spelling.
  */
 const textPieces = (rows: Rows): ReadonlyMap<string, string> =>
   new Map([

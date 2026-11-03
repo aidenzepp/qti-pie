@@ -694,4 +694,12 @@ describe("contentGuards q-punctuation", () => {
       yield* refusal("q-punctuation", "3.0.1", `<p><q>x&quot;</q></p>`);
     }),
   );
+
+  it.effect("admits an apostrophe beside a q", () =>
+    Effect.gen(function* apostrophes() {
+      yield* guarded("3.0.1", `<p>the students'<q>x</q></p>`);
+      yield* guarded("3.0.1", `<p>the students’<q>x</q></p>`);
+      yield* guarded("3.0.1", `<p>it&apos;<q>x</q></p>`);
+    }),
+  );
 });
