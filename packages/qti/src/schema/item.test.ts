@@ -103,8 +103,8 @@ describe("item", () => {
   it("gives AssessmentItem its two boolean attributes and its tree, and no identifier or title", () => {
     const { fields } = item.relations.AssessmentItem;
     assert.deepStrictEqual(Object.keys(fields), ["adaptive", "id", "timeDependent", "tree"]);
-    assert.strictEqual(fields.adaptive.pattern.source, patterns.xsBoolean);
-    assert.strictEqual(fields.timeDependent.pattern.source, patterns.xsBoolean);
+    assert.strictEqual(fields.adaptive.roster, rosters.XsBoolean);
+    assert.strictEqual(fields.timeDependent.roster, rosters.XsBoolean);
   });
 
   it("gives Img a preserved alt, an anyUri src and three optional-value rows", () => {

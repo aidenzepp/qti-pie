@@ -17,7 +17,7 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
-import { ToolShape } from "#qti/schema/content/rosters.ts";
+import { ToolShape, XsBoolean } from "#qti/schema/content/rosters.ts";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
@@ -34,9 +34,9 @@ const toolString = str.regex(patterns.toolString, patterns.toolStringFlags);
 export const AssessmentItem = relation(
   "AssessmentItem",
   {
-    adaptive: str.regex(patterns.xsBoolean),
+    adaptive: closedId(XsBoolean),
     id: uuid,
-    timeDependent: str.regex(patterns.xsBoolean),
+    timeDependent: closedId(XsBoolean),
     tree: uuid,
   },
   ["id"],

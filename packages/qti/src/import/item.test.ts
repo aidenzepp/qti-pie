@@ -232,6 +232,17 @@ const bodyBeforeDeclarations = (text: string): string => {
     .replace(/<qti-response-declaration/u, (first) => `${body}\n${first}`);
 };
 
+/**
+ * An edit that sets `attribute` to `spelling` on the first `tag` element, replacing the attribute
+ * when the element already writes it.
+ */
+const setting =
+  (tag: string, attribute: string, spelling: string) =>
+  (text: string): string =>
+    text
+      .replace(new RegExp(`(<${tag}\\b[^>]*?)\\s${attribute}="[^"]*"`, "u"), "$1")
+      .replace(`<${tag}`, `<${tag} ${attribute}="${spelling}"`);
+
 layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suite) => {
   suite.effect(
     "choice.xml yields the document, the item root, its body, prompt, ps and image",
@@ -780,6 +791,60 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
           );
         }
       }),
+  );
+
+  suite.effect(
+    "an xs:boolean, orientation or show-hide attribute outside its roster is refused attribute-lexical before the write",
+    () =>
+      Effect.gen(function* refusedRosters() {
+        const edits = [
+          setting("qti-choice-interaction", "shuffle", "yes"),
+          setting("qti-choice-interaction", "orientation", "diagonal"),
+          setting("qti-simple-choice", "fixed", "yes"),
+          setting("qti-simple-choice", "show-hide", "hidden"),
+          setting("qti-assessment-item", "adaptive", "yes"),
+          setting("qti-assessment-item", "time-dependent", "maybe"),
+        ];
+        for (const edit of edits) {
+          const doc = yield* readChoice(inject("fixtures").simple, edit);
+          const failure = yield* Effect.flip(itemOf(doc));
+
+          assert.strictEqual(failure._tag, "ImportRefused");
+          assert.strictEqual(
+            failure instanceof ImportRefused ? failure.rule : "",
+            "attribute-lexical",
+          );
+        }
+      }),
+  );
+
+  suite.effect("the xs:boolean spellings 1 and 0 are admitted on an item and a choice", () =>
+    Effect.gen(function* admittedBooleans() {
+      const doc = yield* readChoice(inject("fixtures").simple, (text) =>
+        setting(
+          "qti-assessment-item",
+          "adaptive",
+          "1",
+        )(
+          setting(
+            "qti-simple-choice",
+            "fixed",
+            "0",
+          )(setting("qti-choice-interaction", "shuffle", "1")(text)),
+        ),
+      );
+      const { rows } = yield* itemOf(doc);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, ChoiceInteraction).map((row) => row.shuffle),
+        ["1"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, AssessmentItem).map((row) => row.adaptive),
+        ["1"],
+      );
+      assert.strictEqual(Rows.of(rows, SimpleChoice)[0]?.fixed, "0");
+    }),
   );
 
   suite.effect("typed-copy refuses a lexical row whose processed value is not its column", () =>

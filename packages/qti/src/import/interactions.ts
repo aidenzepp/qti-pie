@@ -7,7 +7,6 @@
  * The family builders of `interactions/*.ts` read the elements of one item and write the arm rows
  * of the interaction kinds they own; each takes an {@link InteractionContext} and the rows so far.
  */
-import { judgedLater } from "#qti/import/judged.ts";
 import type { Relation, uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import { associateRows } from "#qti/import/interactions/associate.ts";
@@ -20,7 +19,7 @@ import type { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, replace, Rows, typedAttribute } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary, WhiteSpace } from "#qti/import/tree.ts";
 import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
-import type { BoundHandle, ShapeHandle } from "#qti/schema/content/rosters.ts";
+import type { BoundHandle, ShapeHandle, XsBooleanHandle } from "#qti/schema/content/rosters.ts";
 import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
 import type { BaseType, DeclarationShape, TypedCardinality } from "#qti/schema/declaration.ts";
 import {
@@ -52,11 +51,11 @@ export interface DeclaredVariable {
 }
 
 /**
- * What the builders need to know about the item beside its tree: the effective `adaptive` lexical
+ * What the builders need to know about the item beside its tree: the effective `adaptive` value
  * of its `qti-assessment-item`, which every binding copies.
  */
 export interface ItemFacts {
-  readonly adaptive: string;
+  readonly adaptive: XsBooleanHandle;
 }
 
 /**
@@ -399,7 +398,7 @@ export const nearestInteraction = (nodes: NodeIndex, node: Element): Option.Opti
  * @param responseIdentifier - The interaction's `response-identifier`.
  * @param declaration - The variable the identifier names, `None` when no declaration names it.
  * @param ancestry - The ancestry the interaction's node sits in.
- * @param adaptive - The item's effective `adaptive` lexical form.
+ * @param adaptive - The item's effective `adaptive` value.
  * @param maxCount - The count the typed binding holds, from {@link maxCountDefault}.
  * @returns The rows with the `InteractionBinding` and its `TypedBinding` or `RecordBinding`;
  *   `ItemRefusal` for a `response-identifier` that no declaration of the document names, since no
@@ -413,7 +412,7 @@ export const bindingRows = Effect.fn("import.bindingRows")(function* bindingRows
   responseIdentifier: string,
   declaration: Option.Option<DeclaredVariable>,
   ancestry: AncestryHandle,
-  adaptive: string,
+  adaptive: XsBooleanHandle,
   maxCount: bigint,
 ): Effect.fn.Return<Rows, ItemRefusal> {
   if (Option.isNone(declaration)) {
@@ -426,7 +425,7 @@ export const bindingRows = Effect.fn("import.bindingRows")(function* bindingRows
   const declared = declaration.value;
   const built = Rows.add(rows, InteractionBinding, [
     {
-      adaptive: judgedLater(adaptive),
+      adaptive,
       ancestry,
       document,
       interactionKind: kind,
