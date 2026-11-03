@@ -1,9 +1,10 @@
 import path from "node:path";
-import { Console, Effect, FileSystem, Stdio, Stream } from "effect";
+import { ConfigProvider, Console, Effect, FileSystem, Layer, Stdio, Stream } from "effect";
 import type { Exit } from "effect";
-import { Command } from "effect/cli";
+import type { Command } from "effect/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { cli } from "#qti/cli.ts";
+import { runCli } from "#qti/cli/run.ts";
 
 /**
  * The package folder, `packages/qti`: where the program runs by default and where `work/` is.
@@ -16,20 +17,43 @@ const packageRoot = path.resolve(import.meta.dirname, "..", "..");
 const copiesRoot = path.join(packageRoot, "work", "cli-copies");
 
 /**
- * Run the command line on `args` in this process, with the console captured in place of the
- * terminal.
+ * Run the command line on `args` in this process, through the same runner as the program, with the
+ * console captured in place of the terminal.
  *
  * @param args - The command line after the program name.
+ * @param options - The command to run in place of `cli`, and the environment its settings read.
+ *   With `env`, the run reads its configuration from those variables alone, in place of the
+ *   process environment, so pass every variable the run needs.
  * @returns How the run ended, and what it wrote with `Console.log` (standard output) and with
  *   `Console.error` (standard error), each joined by line feeds.
  */
-export const captureCli = Effect.fn("test.cli.captureCli")(function* captureCli(
+export const captureCli = Effect.fn("test.cli.captureCli")(function* captureCli<
+  C extends Command.Command.Any = typeof cli,
+>(
   args: readonly string[],
+  options?: {
+    readonly command?: C;
+    readonly env?: Readonly<Record<string, string>>;
+  },
 ) {
   const out: string[] = [];
   const err: string[] = [];
-  const exit: Exit.Exit<unknown, unknown> = yield* Command.run(cli, { version: "0.0.0" }).pipe(
+  const command: Command.Command.Any = options?.command ?? cli;
+  // SAFETY: `runCli` cannot infer a command's services from the `Any` bound, which reads them as
+  // the command itself. They are the services of `C`, plus the environment `Command.run` adds.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+  const run = runCli(command, { version: "0.0.0" }) as Effect.Effect<
+    void,
+    unknown,
+    Command.Services<C> | Command.Environment
+  >;
+  const exit: Exit.Exit<unknown, unknown> = yield* run.pipe(
     Effect.provide(Stdio.layerTest({ args: Effect.succeed(args) })),
+    Effect.provide(
+      options?.env === undefined
+        ? Layer.empty
+        : ConfigProvider.layer(ConfigProvider.fromUnknown(options.env)),
+    ),
     Effect.provideService(
       Console.Console,
       Object.assign(Object.create(console), {
