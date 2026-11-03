@@ -7,6 +7,7 @@ import { importCommand } from "#qti/cli/import.ts";
 import { outputGlobalFlags } from "#qti/cli/output.ts";
 import { roundtripCommand } from "#qti/cli/roundtrip.ts";
 import { runMain } from "#qti/cli/run.ts";
+import { verbosityGlobalFlags, withVerbosity } from "#qti/cli/verbosity.ts";
 
 /**
  * What each exit code means, in the order the help prints them. Codes 0 and 130 have no kind.
@@ -70,6 +71,9 @@ export const cli = Command.make("qti").pipe(
   Command.withSubcommands([importCommand, exportCommand, roundtripCommand]),
   // `--output`, `--json` and `--jsonl` reach every command; a handler reads the mode it prints in.
   Command.withGlobalFlags(outputGlobalFlags),
+  // `--quiet` and `--verbose` choose the minimum log level the chosen handler runs at.
+  withVerbosity,
+  Command.withGlobalFlags(verbosityGlobalFlags),
   // Log lines are diagnostics: they go to standard error, so standard output carries only the data
   // asked for. The root's handler runs the chosen subcommand's, so this reaches every handler.
   Command.provideSync(Logger.LogToStderr, true),
