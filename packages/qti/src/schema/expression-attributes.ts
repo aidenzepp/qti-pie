@@ -15,6 +15,7 @@
  */
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the XSD attribute `qti-inside` names and the `shape` pattern of the patterns module; it is the region kind, not a structure. */
 import {
+  capacity,
   check,
   closed,
   closedId,
@@ -25,6 +26,7 @@ import {
   select,
   str,
   uuid,
+  within,
 } from "@bjornpagen/grizzle";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
@@ -39,8 +41,6 @@ const baseType = str.regex(patterns.baseType);
 const coords = str.regex(patterns.coords);
 
 const floatOrVariableRef = str.regex(patterns.floatOrVariableRef);
-
-const intOrIdentifier = str.regex(patterns.intOrIdentifier);
 
 const integerOrVariableRef = str.regex(patterns.integerOrVariableRef);
 
@@ -277,13 +277,12 @@ export const EqualTolerance = relation(
 );
 
 /**
- * The `qti-equal-rounded` operator: `figures` as read, whether it was a number or a variable name,
- * and the number where it was one.
+ * The `qti-equal-rounded` operator: whether `figures` was a number or a variable name, and the
+ * number where it was one; the variable name is the `EqualRoundedFiguresRef` row.
  */
 export const EqualRounded = relation(
   "EqualRounded",
   {
-    figures: integerOrVariableRef,
     figuresKind: closedId(RefOrLiteral),
     figuresValue: pg.bigint,
     id: uuid,
@@ -303,7 +302,6 @@ export const DeclaredRoundingMode = relation("DeclaredRoundingMode", { node: uui
 export const RoundTo = relation(
   "RoundTo",
   {
-    figures: integerOrVariableRef,
     figuresKind: closedId(RefOrLiteral),
     figuresValue: pg.bigint,
     id: uuid,
@@ -313,28 +311,57 @@ export const RoundTo = relation(
 );
 
 /**
- * The `qti-index` operator: `n` as read, whether it was a number or a variable name, and the number
- * where it was one.
+ * The `qti-index` operator: whether `n` was a number or a variable name, and the number where it
+ * was one; the variable name is the `IndexNRef` row.
  */
 export const Index = relation(
   "Index",
-  { id: uuid, n: intOrIdentifier, nKind: closedId(RefOrLiteral), nValue: pg.bigint },
+  { id: uuid, nKind: closedId(RefOrLiteral), nValue: pg.bigint },
   ["id"],
 );
 
 /**
- * The `qti-repeat` operator: `number-repeats` as read, whether it was a number or a variable name,
- * and the number where it was one.
+ * The `qti-repeat` operator: whether `number-repeats` was a number or a variable name, and the
+ * number where it was one; the variable name is the `RepeatNumberRepeatsRef` row.
  */
 export const Repeat = relation(
   "Repeat",
   {
     id: uuid,
-    numberRepeats: intOrIdentifier,
     numberRepeatsKind: closedId(RefOrLiteral),
     numberRepeatsValue: pg.bigint,
   },
   ["id"],
+);
+
+/**
+ * The variable `figures` names on a `qti-equal-rounded` whose `figuresKind` is `ref`.
+ */
+export const EqualRoundedFiguresRef = relation(
+  "EqualRoundedFiguresRef",
+  { identifier: ncName, node: uuid },
+  ["node"],
+);
+
+/**
+ * The variable `figures` names on a `qti-round-to` whose `figuresKind` is `ref`.
+ */
+export const RoundToFiguresRef = relation("RoundToFiguresRef", { identifier: ncName, node: uuid }, [
+  "node",
+]);
+
+/**
+ * The variable `n` names on a `qti-index` whose `nKind` is `ref`.
+ */
+export const IndexNRef = relation("IndexNRef", { identifier: ncName, node: uuid }, ["node"]);
+
+/**
+ * The variable `number-repeats` names on a `qti-repeat` whose `numberRepeatsKind` is `ref`.
+ */
+export const RepeatNumberRepeatsRef = relation(
+  "RepeatNumberRepeatsRef",
+  { identifier: ncName, node: uuid },
+  ["node"],
 );
 
 /**
@@ -399,10 +426,12 @@ export const relations = {
   DeclaredToleranceMode,
   Equal,
   EqualRounded,
+  EqualRoundedFiguresRef,
   EqualTolerance,
   ExpressionWeightIdentifier,
   FieldValue,
   Index,
+  IndexNRef,
   Inside,
   MathConstant,
   MathOperator,
@@ -417,7 +446,9 @@ export const relations = {
   RandomIntegerStep,
   RefOrLiteral,
   Repeat,
+  RepeatNumberRepeatsRef,
   RoundTo,
+  RoundToFiguresRef,
   StatsOperator,
   StringMatch,
   Substring,
@@ -496,6 +527,42 @@ export const rules = [
         r.le(r.numberRepeatsValue, 2_147_483_647n),
       ),
     ),
+  ),
+  contained(
+    on(EqualRoundedFiguresRef, "node"),
+    on(select(EqualRounded, { figuresKind: "ref" }), "id"),
+  ),
+  capacity(on(select(EqualRounded, { figuresKind: "ref" }), "id"), {
+    from: on(EqualRoundedFiguresRef, "node"),
+    within: within(1n, 1n),
+  }),
+  check("EqualRoundedFiguresRefZero", EqualRounded, (e) =>
+    e.or(e.eq(e.figuresKind, "literal"), e.eq(e.figuresValue, 0n)),
+  ),
+  contained(on(RoundToFiguresRef, "node"), on(select(RoundTo, { figuresKind: "ref" }), "id")),
+  capacity(on(select(RoundTo, { figuresKind: "ref" }), "id"), {
+    from: on(RoundToFiguresRef, "node"),
+    within: within(1n, 1n),
+  }),
+  check("RoundToFiguresRefZero", RoundTo, (r) =>
+    r.or(r.eq(r.figuresKind, "literal"), r.eq(r.figuresValue, 0n)),
+  ),
+  contained(on(IndexNRef, "node"), on(select(Index, { nKind: "ref" }), "id")),
+  capacity(on(select(Index, { nKind: "ref" }), "id"), {
+    from: on(IndexNRef, "node"),
+    within: within(1n, 1n),
+  }),
+  check("IndexNRefZero", Index, (i) => i.or(i.eq(i.nKind, "literal"), i.eq(i.nValue, 0n))),
+  contained(
+    on(RepeatNumberRepeatsRef, "node"),
+    on(select(Repeat, { numberRepeatsKind: "ref" }), "id"),
+  ),
+  capacity(on(select(Repeat, { numberRepeatsKind: "ref" }), "id"), {
+    from: on(RepeatNumberRepeatsRef, "node"),
+    within: within(1n, 1n),
+  }),
+  check("RepeatNumberRepeatsRefZero", Repeat, (r) =>
+    r.or(r.eq(r.numberRepeatsKind, "literal"), r.eq(r.numberRepeatsValue, 0n)),
   ),
   contained(on(OutcomeMinMax, "id", "kind"), on(node.Node, "id", "kind")),
   check("OutcomeMinMaxKind", OutcomeMinMax, (o) =>

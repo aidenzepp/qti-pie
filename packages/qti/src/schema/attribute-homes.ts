@@ -130,6 +130,35 @@ const column = (relation: AnyRelation, field: string, key: string): Source => {
 const arm = (relation: AnyRelation, field: string): Source => column(relation, field, "id");
 
 /**
+ * An attribute that is a number or a variable name: the number of `valueField` where `kindField`
+ * says `literal`, and the `identifier` of the arm's `reference` row where it says `ref`.
+ *
+ * @param relation - The arm that holds the kind and the number, keyed by `id`.
+ * @param kindField - The column that says whether the source wrote a number or a variable name.
+ * @param valueField - The column that holds the number.
+ * @param reference - The relation of one `node` and `identifier` that holds the variable name.
+ * @returns The source of the attribute.
+ */
+const literalOrRef = (
+  relation: AnyRelation,
+  kindField: string,
+  valueField: string,
+  reference: AnyRelation,
+): Source => {
+  const literal = arm(relation, valueField);
+  const kind = arm(relation, kindField);
+  const named = column(reference, "identifier", "node");
+
+  return (index) => {
+    const readLiteral = literal(index);
+    const readKind = kind(index);
+    const readNamed = named(index);
+
+    return (id) => (readKind(id) === "ref" ? readNamed(id) : readLiteral(id));
+  };
+};
+
+/**
  * The `value` of an optional-value relation, whose rows are keyed by `node` and exist only where
  * the source wrote the attribute.
  */
@@ -626,7 +655,10 @@ export const ownAttributes = {
   ],
   "qti-equal-rounded": [
     ["rounding-mode", marked(R.DeclaredRoundingMode, arm(R.EqualRounded, "roundingMode"))],
-    ["figures", arm(R.EqualRounded, "figures")],
+    [
+      "figures",
+      literalOrRef(R.EqualRounded, "figuresKind", "figuresValue", R.EqualRoundedFiguresRef),
+    ],
   ],
   "qti-extended-text-interaction": [
     responseIdentifierOf(R.ExtendedTextInteraction),
@@ -761,7 +793,7 @@ export const ownAttributes = {
     ["data-min-selections-message", optional(R.HottextMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.HottextMaxSelectionsMessage)],
   ],
-  "qti-index": [["n", arm(R.Index, "n")]],
+  "qti-index": [["n", literalOrRef(R.Index, "nKind", "nValue", R.IndexNRef)]],
   "qti-inline-choice": [
     identifierOf(R.InlineChoice),
     ["fixed", marked(R.DeclaredInlineChoiceFixed, arm(R.InlineChoice, "fixed"))],
@@ -909,7 +941,12 @@ export const ownAttributes = {
     ["max", arm(R.RandomInteger, "max")],
     ["step", optional(R.RandomIntegerStep)],
   ],
-  "qti-repeat": [["number-repeats", arm(R.Repeat, "numberRepeats")]],
+  "qti-repeat": [
+    [
+      "number-repeats",
+      literalOrRef(R.Repeat, "numberRepeatsKind", "numberRepeatsValue", R.RepeatNumberRepeatsRef),
+    ],
+  ],
   "qti-response-declaration": declared,
   "qti-response-processing": [
     ["template", column(R.ResponseProcessingTemplate, "uri", "node")],
@@ -917,7 +954,7 @@ export const ownAttributes = {
   ],
   "qti-round-to": [
     ["rounding-mode", arm(R.RoundTo, "roundingMode")],
-    ["figures", arm(R.RoundTo, "figures")],
+    ["figures", literalOrRef(R.RoundTo, "figuresKind", "figuresValue", R.RoundToFiguresRef)],
   ],
   "qti-rubric-block": [
     ["use", arm(R.RubricBlock, "use")],

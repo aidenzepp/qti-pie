@@ -236,6 +236,22 @@ layer(TestLayer, { excludeTestServices: true })("renderTree on processing docume
     }),
   );
 
+  suite.effect("renders a plus-signed figures and a figures naming a variable as written", () =>
+    Effect.gen(function* figuresForms() {
+      for (const figures of ["+3", "COUNT"]) {
+        const doc = yield* readXml(
+          new TextEncoder().encode(
+            `<qti-outcome-processing xmlns="${asiNamespace}"><qti-set-outcome-value identifier="PASSED"><qti-equal-rounded rounding-mode="decimalPlaces" figures="${figures}"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value></qti-equal-rounded></qti-set-outcome-value></qti-outcome-processing>`,
+          ),
+        );
+        const forms = yield* roundTrip(doc, "qti-outcome-processing", outcomeSetting);
+
+        assert.strictEqual(forms.rendered, forms.read);
+        assert.include(forms.rendered, `figures="${figures}"`);
+      }
+    }),
+  );
+
   suite.effect("renders the qti-outcome-processing of outcome.xml as it was read", () =>
     Effect.gen(function* outcomeSubtree() {
       const doc = yield* readFixture("valid", "outcome");

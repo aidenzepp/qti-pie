@@ -11,7 +11,8 @@
  * `treeRows` already wrote under the same {@link NodeIndex}.
  */
 import { Effect, Option, Schema } from "effect";
-import { Rows, typedAttribute } from "#qti/import/tree.ts";
+import type { ImportRefused, Rule } from "#qti/import/refusal.ts";
+import { Rows, spelledInteger, typedAttribute } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary, WhiteSpace } from "#qti/import/tree.ts";
 import type {
   AttributeValue,
@@ -390,18 +391,54 @@ const readerOf = (
 const noUnion: UnionValue = { parsed: { _tag: "literal", value: "" }, value: "" };
 
 /**
- * The integer a literal writes, `0` for a reference or for text that is not an integer: the column
- * beside it carries the text and its pattern refuses it at commit.
- *
- * @param parsed - The union value as read.
- * @returns The kind of the value and the typed copy.
+ * A number-or-variable attribute as the rows hold it: its kind, the number a literal writes (`0`
+ * for a reference), the variable a reference names and the rows with the literal's spelling kept.
  */
-const copyOf = (
+interface Counted {
+  readonly identifier: Option.Option<string>;
+  readonly kind: "literal" | "ref";
+  readonly rows: Rows;
+  readonly value: bigint;
+}
+
+/**
+ * Read the integer of a number-or-variable attribute: a reference is the variable it names and a
+ * literal must be an integer, refused before any row is written when it is not.
+ *
+ * @param rows - The rows so far.
+ * @param entry - The node that carries the attribute.
+ * @param name - The attribute's registry name.
+ * @param parsed - The attribute's value, told apart as a literal or a reference.
+ * @param rule - The rule a refused literal carries.
+ * @param where - The element and attribute, for the refusal's detail.
+ * @returns The kind, the number, the variable and the rows; `ImportRefused` for a literal that is
+ *   not an integer.
+ */
+const countRows = Effect.fn("import.processing.countRows")(function* countRows(
+  rows: Rows,
+  entry: NodeEntry,
+  name: AttributeNameHandle,
   parsed: LiteralOrRef,
-): { readonly kind: "literal" | "ref"; readonly value: bigint } =>
-  parsed._tag === "ref"
-    ? { kind: "ref", value: 0n }
-    : { kind: "literal", value: /^[+-]?[0-9]+$/u.test(parsed.value) ? BigInt(parsed.value) : 0n };
+  rule: Rule,
+  where: string,
+): Effect.fn.Return<Counted, ImportRefused> {
+  if (parsed._tag === "ref") {
+    return { identifier: Option.some(parsed.identifier), kind: "ref", rows, value: 0n };
+  }
+
+  const spelled = yield* spelledInteger(
+    rows,
+    entry.id,
+    entry.kind,
+    name,
+    parsed.value,
+    "integer",
+    rule,
+    where,
+  );
+
+  return { identifier: Option.none(), kind: "literal", rows: spelled.rows, value: spelled.value };
+});
 
 /**
  * One fact of an optional-value relation where the attribute was written, none where it was not.
@@ -599,17 +636,44 @@ const weightOf = (rows: Rows, id: string, weight: Option.Option<string>): Rows =
   );
 
 /**
- * The `figures` columns of a rounding operator: the value as the column holds it, its kind and the
- * typed copy.
+ * The `figures` columns of a rounding operator and the rows its value adds: the kind, the typed
+ * number and the spelling or the variable it names.
  *
+ * `figures` is refused under `attribute-lexical` as it is at the commit today (decision 123).
+ *
+ * @param arm - The reads of the node and its entry.
  * @param figures - The `figures` attribute.
- * @returns The three columns.
+ * @param element - The operator's kind, for the refusal's detail.
+ * @returns The columns, the rows with the spelling kept and the variable `figures` names, if it
+ *   names one.
  */
-const roundingFigures = (figures: UnionValue) => {
-  const copy = copyOf(figures.parsed);
+const roundingFigures = Effect.fn("import.processing.roundingFigures")(function* roundingFigures(
+  { attributes, entry }: Arm,
+  figures: UnionValue,
+  element: "qti-equal-rounded" | "qti-round-to",
+): Effect.fn.Return<
+  {
+    readonly columns: { readonly figuresKind: "literal" | "ref"; readonly figuresValue: bigint };
+    readonly identifier: Option.Option<string>;
+    readonly rows: Rows;
+  },
+  ImportRefused
+> {
+  const counted = yield* countRows(
+    attributes.rows(),
+    entry,
+    "figures",
+    figures.parsed,
+    "attribute-lexical",
+    `${element} figures`,
+  );
 
-  return { figures: judgedLater(figures.value), figuresKind: copy.kind, figuresValue: copy.value };
-};
+  return {
+    columns: { figuresKind: counted.kind, figuresValue: counted.value },
+    identifier: counted.identifier,
+    rows: counted.rows,
+  };
+});
 
 /**
  * The rows of a `qti-outcome-minimum` or `qti-outcome-maximum`: the shared `OutcomeMinMax` row, the
@@ -706,36 +770,11 @@ const armBuilders: Readonly<Partial<Record<RuleOrExpressionKind, (arm: Arm) => R
       })),
     );
   },
-  "qti-equal-rounded": ({ attributes, entry }) => {
-    const mode = attributes.read("rounding-mode");
-    const figures = Option.getOrElse(attributes.union("figures"), () => noUnion);
-    const built = Rows.add(attributes.rows(), attributed.EqualRounded, [
-      {
-        ...roundingFigures(figures),
-        id: entry.id,
-        roundingMode: judgedLater(Option.getOrElse(mode, () => "significantFigures")),
-      },
-    ]);
-
-    return Rows.add(
-      built,
-      attributed.DeclaredRoundingMode,
-      written(mode, () => ({ node: entry.id })),
-    );
-  },
   "qti-field-value": ({ attributes, entry }) => {
     const field = need(attributes.read("field-identifier"));
 
     return Rows.add(attributes.rows(), attributed.FieldValue, [
       { fieldIdentifier: judgedLater(field), id: entry.id },
-    ]);
-  },
-  "qti-index": ({ attributes, entry }) => {
-    const found = need(attributes.read("n"));
-    const copy = copyOf(literalOrRef(found));
-
-    return Rows.add(attributes.rows(), attributed.Index, [
-      { id: entry.id, n: judgedLater(found), nKind: copy.kind, nValue: copy.value },
     ]);
   },
   "qti-inside": ({ attributes, entry }) => {
@@ -799,27 +838,6 @@ const armBuilders: Readonly<Partial<Record<RuleOrExpressionKind, (arm: Arm) => R
       attributed.RandomIntegerStep,
       written(step, (own) => ({ node: entry.id, value: judgedLater(own.value) })),
     );
-  },
-  "qti-repeat": ({ attributes, entry }) => {
-    const found = need(attributes.read("number-repeats"));
-    const copy = copyOf(literalOrRef(found));
-
-    return Rows.add(attributes.rows(), attributed.Repeat, [
-      {
-        id: entry.id,
-        numberRepeats: judgedLater(found),
-        numberRepeatsKind: copy.kind,
-        numberRepeatsValue: copy.value,
-      },
-    ]);
-  },
-  "qti-round-to": ({ attributes, entry }) => {
-    const mode = need(attributes.read("rounding-mode"));
-    const figures = Option.getOrElse(attributes.union("figures"), () => noUnion);
-
-    return Rows.add(attributes.rows(), attributed.RoundTo, [
-      { ...roundingFigures(figures), id: entry.id, roundingMode: judgedLater(mode) },
-    ]);
   },
   "qti-stats-operator": ({ attributes, entry }) => {
     const name = need(attributes.read("name"));
@@ -894,6 +912,92 @@ const armBuilders: Readonly<Partial<Record<RuleOrExpressionKind, (arm: Arm) => R
 };
 
 /**
+ * The attributed arms whose number-or-variable attribute is read before the rows are written, by
+ * kind: a literal that is not an integer is refused.
+ */
+const countedArmBuilders: Readonly<
+  Partial<Record<RuleOrExpressionKind, (arm: Arm) => Effect.Effect<Rows, ImportRefused>>>
+> = {
+  "qti-equal-rounded": Effect.fn("import.processing.equalRounded")(function* equalRounded(
+    arm: Arm,
+  ) {
+    const { attributes, entry } = arm;
+    const mode = attributes.read("rounding-mode");
+    const figures = Option.getOrElse(attributes.union("figures"), () => noUnion);
+    const counted = yield* roundingFigures(arm, figures, "qti-equal-rounded");
+    const built = Rows.add(counted.rows, attributed.EqualRounded, [
+      {
+        ...counted.columns,
+        id: entry.id,
+        roundingMode: judgedLater(Option.getOrElse(mode, () => "significantFigures")),
+      },
+    ]);
+
+    return Rows.add(
+      Rows.add(
+        built,
+        attributed.EqualRoundedFiguresRef,
+        written(counted.identifier, (own) => ({ identifier: judgedLater(own), node: entry.id })),
+      ),
+      attributed.DeclaredRoundingMode,
+      written(mode, () => ({ node: entry.id })),
+    );
+  }),
+  "qti-index": Effect.fn("import.processing.index")(function* index({ attributes, entry }: Arm) {
+    const found = need(attributes.read("n"));
+    const counted = yield* countRows(
+      attributes.rows(),
+      entry,
+      "n",
+      literalOrRef(found),
+      "P6",
+      "qti-index n",
+    );
+
+    return Rows.add(
+      Rows.add(counted.rows, attributed.Index, [
+        { id: entry.id, nKind: counted.kind, nValue: counted.value },
+      ]),
+      attributed.IndexNRef,
+      written(counted.identifier, (own) => ({ identifier: judgedLater(own), node: entry.id })),
+    );
+  }),
+  "qti-repeat": Effect.fn("import.processing.repeat")(function* repeat({ attributes, entry }: Arm) {
+    const found = need(attributes.read("number-repeats"));
+    const counted = yield* countRows(
+      attributes.rows(),
+      entry,
+      "number-repeats",
+      literalOrRef(found),
+      "P6",
+      "qti-repeat number-repeats",
+    );
+
+    return Rows.add(
+      Rows.add(counted.rows, attributed.Repeat, [
+        { id: entry.id, numberRepeatsKind: counted.kind, numberRepeatsValue: counted.value },
+      ]),
+      attributed.RepeatNumberRepeatsRef,
+      written(counted.identifier, (own) => ({ identifier: judgedLater(own), node: entry.id })),
+    );
+  }),
+  "qti-round-to": Effect.fn("import.processing.roundTo")(function* roundTo(arm: Arm) {
+    const { attributes, entry } = arm;
+    const mode = need(attributes.read("rounding-mode"));
+    const figures = Option.getOrElse(attributes.union("figures"), () => noUnion);
+    const counted = yield* roundingFigures(arm, figures, "qti-round-to");
+
+    return Rows.add(
+      Rows.add(counted.rows, attributed.RoundTo, [
+        { ...counted.columns, id: entry.id, roundingMode: judgedLater(mode) },
+      ]),
+      attributed.RoundToFiguresRef,
+      written(counted.identifier, (own) => ({ identifier: judgedLater(own), node: entry.id })),
+    );
+  }),
+};
+
+/**
  * The expression kinds whose thin arm also takes the section and category filters.
  */
 const countingKinds: ReadonlySet<string> = new Set([
@@ -935,12 +1039,12 @@ const isThin = (kind: string): kind is ThinKind =>
  * @param entry - The node it became.
  * @returns The rows with the expression's added.
  */
-const expressionRows = (
+const expressionRows = Effect.fn("import.processing.expressionRows")(function* expressionRows(
   rows: Rows,
   input: ProcessingInput,
   node: ExpressionLike,
   entry: NodeEntry,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
   const seeded = arity.get(entry.kind);
   const bounded = seeded !== undefined && Option.isSome(seeded.max);
   let built = rows;
@@ -981,6 +1085,11 @@ const expressionRows = (
 
   const attributes = readerOf(built, node, entry);
   const arm: Arm = { attributes, entry, input, node };
+  const counted = countedArmBuilders[node.kind];
+  if (counted !== undefined) {
+    return yield* counted(arm);
+  }
+
   const builder = armBuilders[node.kind];
   if (builder !== undefined) {
     return builder(arm);
@@ -1001,7 +1110,7 @@ const expressionRows = (
     onNone: () => thin,
     onSome: (own) => referenceRows(thin, input, entry, own),
   });
-};
+});
 
 /**
  * Write the reference rows of a value-setting rule: the variable it names, read from its
@@ -1214,13 +1323,14 @@ const rootRows = (rows: Rows, entry: NodeEntry): Rows => {
  *   ids, the root kind and the mode, language and environment it is checked in.
  * @param rows - The rows so far, which already hold the tree's node and edge rows.
  * @returns The rows with this tree's added; `ProcessingRefused` for a missing required attribute
- *   (`P5`) or a rule of the checker, and `UnmodeledVocabulary` for an element or attribute the
+ *   (`P5`) or a rule of the checker, `ImportRefused` for a `figures`, `n` or `number-repeats`
+ *   literal that is not an integer, and `UnmodeledVocabulary` for an element or attribute the
  *   processing vocabulary does not hold at that place.
  */
 export const processingRows = Effect.fn("import.processingRows")(function* processingRows(
   input: ProcessingInput,
   rows: Rows,
-): Effect.fn.Return<Rows, ProcessingRefused | UnmodeledVocabulary> {
+): Effect.fn.Return<Rows, ImportRefused | ProcessingRefused | UnmodeledVocabulary> {
   const ast = yield* parseProcessing(input.root, input.language);
   const missing = firstMissing(flatten(ast.rules));
   if (Option.isSome(missing)) {
@@ -1245,7 +1355,7 @@ export const processingRows = Effect.fn("import.processingRows")(function* proce
   for (const node of tree.expressions) {
     const entry = input.nodes.get(node.element);
     if (entry !== undefined) {
-      built = expressionRows(built, input, node, entry);
+      built = yield* expressionRows(built, input, node, entry);
     }
   }
 
