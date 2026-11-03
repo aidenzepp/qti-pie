@@ -1,13 +1,13 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { assert, layer } from "@effect/vitest";
+import { assert, beforeAll, layer } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
 import { BadPackageId, replaceWith, TargetNotEmpty } from "#qti/cli/args.ts";
 import { describeFailure } from "#qti/cli/errors.ts";
 import { exitCodeOf } from "#qti/cli/run.ts";
-import { captureCli } from "#qti/test/cli.ts";
+import { captureCli, preloadEngine } from "#qti/test/cli.ts";
 import { makeScratch, scratchEnv } from "#qti/test/scratch.ts";
-import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
+import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#qti/test/settings.ts";
 
 /**
  * The folder every case here works under, `packages/qti/work/cli-export`. No other test file
@@ -71,6 +71,12 @@ const siblingsIn = Effect.fn("test.export.siblingsIn")(function* siblingsIn(fold
 
   return (yield* fs.readDirectory(folder)).filter((entry) => /^\..*\.qti-/u.test(entry));
 });
+
+/**
+ * Loads the engine once, before this file's first test, so no test pays that load inside its own
+ * timeout.
+ */
+beforeAll(() => preloadEngine, engineLoadHookTimeoutMs);
 
 layer(NodeServices.layer, { excludeTestServices: true })("export's target guard", (it) => {
   it.effect("(1) a folder holding a file needs --yes, and keeps the file", () =>

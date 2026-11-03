@@ -74,9 +74,27 @@ export const fixtureRowsLayerHookTimeoutMs = 21_000;
  * `0f151af`: fifteen quiet spawns had a median of 3.8 s, and spawns beside six concurrent
  * layer builds had a maximum of 4.5 s at load averages of 4 to 6. The budget is the larger of
  * twice that maximum (9 s) and 10 s, the floor being twice the default.
+ * A test file whose handlers load the engine loads it first in a `beforeAll` under
+ * `engineLoadHookTimeoutMs`, so no test pays that load.
  * Raise it only on a new measurement recorded here, never to make a run pass.
  */
 export const cliProcessTestTimeoutMs = 10_000;
+
+/**
+ * The timeout, in milliseconds, for the hook that loads the engine once per CLI test file.
+ *
+ * Since `p14-u2a` the command handlers import the engine (`#qti/db/layer.ts` and the import and
+ * export modules) when they run, about 5.3 s alone, and vitest's 10 s `hookTimeout` is not enough
+ * beside the parallel CLI set: 13 concurrent loads took 15.5 to 15.8 s at load averages of 9 to 26.
+ * Measured on 2026-11-03 at `fd586ee`, from `packages/qti`: thirteen concurrent runs (vitest's
+ * default worker count on 14 CPUs, `availableParallelism() - 1`) of one process that imports the
+ * six modules `preloadEngine` imports took 12412, 12548, 12579, 12583, 12583, 12606, 12607, 12619,
+ * 12559, 12673, 12703, 12741 and 12644 ms, a maximum of 12741 ms, at a one-minute load average of
+ * 27.9 before and 30.4 after. The budget is the larger of twice that maximum (25.5 s) and 20 s,
+ * rounded up to the next second.
+ * Raise it only on a new measurement recorded here, never to make a run pass.
+ */
+export const engineLoadHookTimeoutMs = 26_000;
 
 /**
  * The timeout, in milliseconds, for the one test that materializes the 19 `cut-*` fixtures and

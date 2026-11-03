@@ -1,15 +1,15 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { assert, layer, inject } from "@effect/vitest";
+import { assert, beforeAll, layer, inject } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem, Schema } from "effect";
 import { TargetNotEmpty } from "#qti/cli/args.ts";
 import { describeFailure } from "#qti/cli/errors.ts";
 import { successEnvelope } from "#qti/cli/output.ts";
 import { RoundtripData } from "#qti/cli/roundtrip.ts";
 import { exitCodeOf } from "#qti/cli/run.ts";
-import { captureCli, packageCopy } from "#qti/test/cli.ts";
+import { captureCli, packageCopy, preloadEngine } from "#qti/test/cli.ts";
 import { makeScratch, scratchEnv } from "#qti/test/scratch.ts";
-import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
+import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#qti/test/settings.ts";
 
 const fixtures = inject("fixtures");
 
@@ -53,6 +53,12 @@ const earlierExport = Effect.fn("test.roundtrip.earlierExport")(function* earlie
 
   return file;
 });
+
+/**
+ * Loads the engine once, before this file's first test, so no test pays that load inside its own
+ * timeout.
+ */
+beforeAll(() => preloadEngine, engineLoadHookTimeoutMs);
 
 layer(NodeServices.layer, { excludeTestServices: true })("roundtrip's target guard", (it) => {
   it.effect(
