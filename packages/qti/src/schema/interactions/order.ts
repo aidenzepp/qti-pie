@@ -83,6 +83,11 @@ export const OrderInteraction = relation(
 );
 
 /**
+ * The source wrote `shuffle` on this order interaction.
+ */
+export const DeclaredOrderShuffle = relation("DeclaredOrderShuffle", { node: uuid }, ["node"]);
+
+/**
  * A `qti-graphic-order-interaction`.
  */
 export const GraphicOrderInteraction = relation(
@@ -211,6 +216,7 @@ export const arms = {
  * The relations of this module, as schema members.
  */
 export const relations = {
+  DeclaredOrderShuffle,
   GraphicOrderInteraction,
   GraphicOrderMaxChoices,
   GraphicOrderMaxChoicesN,
@@ -259,6 +265,7 @@ export const rules = [
     from: on(SimpleChoice, "interaction"),
     within: within(ref("minChoicesN"), "*"),
   }),
+  contained(on(DeclaredOrderShuffle, "node"), on(OrderInteraction, "id")),
   contained(on(OrderOrientation, "node"), on(OrderInteraction, "id")),
   contained(on(OrderMinChoices, "node"), on(OrderInteraction, "id")),
   contained(on(OrderMaxChoices, "node"), on(OrderInteraction, "id")),

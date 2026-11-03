@@ -171,17 +171,20 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
 /**
  * An item that writes the attributes whose absence and presence must both survive: an empty and a
- * padded `headers`, a padded ARIA reference, an order interaction with and without `shuffle`, a
- * `source` with no `src`, and a root with a `label`, an `xml:lang` and a padded `title`.
+ * padded `headers`, a padded ARIA reference, an order interaction that writes `shuffle="true"`, one
+ * that writes `shuffle="false"` and one that omits it, a `source` with no `src`, and a root with a
+ * `label`, an `xml:lang` and a padded `title`.
  */
 const synthetic = `<?xml version="1.0" encoding="UTF-8"?>
 <qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="synthetic" title="  Padded   title " label="L  1" adaptive="false" time-dependent="false" xml:lang="en">
   <qti-response-declaration identifier="RESPONSE" cardinality="ordered" base-type="identifier"/>
   <qti-response-declaration identifier="OTHER" cardinality="ordered" base-type="identifier"/>
+  <qti-response-declaration identifier="THIRD" cardinality="ordered" base-type="identifier"/>
   <qti-item-body class=" a   b " id="body">
     <table summary="s"><tbody><tr><td headers="" colspan="2">a</td><td headers=" h1   h2 " aria-labelledby=" x  y " role="cell">b</td></tr></tbody></table>
     <qti-order-interaction response-identifier="RESPONSE" shuffle="true"><qti-simple-choice identifier="A" fixed="true">a</qti-simple-choice><qti-simple-choice identifier="B">b</qti-simple-choice></qti-order-interaction>
     <qti-order-interaction response-identifier="OTHER"><qti-simple-choice identifier="C">c</qti-simple-choice></qti-order-interaction>
+    <qti-order-interaction response-identifier="THIRD" shuffle="false"><qti-simple-choice identifier="D">d</qti-simple-choice></qti-order-interaction>
     <picture><source srcset="a.svg" type="image/svg"/><img src="a.png" alt=""/></picture>
   </qti-item-body>
 </qti-assessment-item>`;
@@ -275,7 +278,8 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         assert.strictEqual(rendered, textOf(canonicalize(doc)));
         assert.include(rendered, 'headers=""');
         assert.include(rendered, 'headers=" h1   h2 "');
-        assert.strictEqual(rendered.split('shuffle="').length - 1, 1);
+        assert.strictEqual(rendered.split('shuffle="').length - 1, 2);
+        assert.include(rendered, 'shuffle="false"');
         assert.notInclude(rendered, 'src=""');
         assert.notInclude(rendered, "owner");
       }),
