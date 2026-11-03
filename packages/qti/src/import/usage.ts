@@ -19,7 +19,19 @@ import {
 } from "#qti/import/tree.ts";
 import type { ImportRefused } from "#qti/import/refusal.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
-import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
+import {
+  GlossaryUri,
+  ManifestIdentifier,
+  PackagePath,
+  StatisticContextUri,
+  StatisticMeasure,
+  StatisticName,
+  UsageCaseCount,
+  UsageFieldIdentifier,
+  UsageMappingScore,
+  UsagePartIdentifier,
+  UsageValueToken,
+} from "#qti/schema/contracts.ts";
 import { BooleanLiteral, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { BaseType } from "#qti/schema/declaration.ts";
 import { Document } from "#qti/schema/document.ts";
@@ -253,7 +265,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     ]);
     optional(ud.TargetObjectPartIdentifier, element, "partIdentifier", "collapse", (id, value) => ({
       node: id,
-      value: judgedLater(value),
+      value: UsagePartIdentifier(value),
     }));
 
     const objectType = read(element, "objectType", "preserve");
@@ -277,7 +289,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     const content = contentOf(element);
     add(ud.UsageValue, [
       {
-        collapsed: judgedLater(collapse(content)),
+        collapsed: UsageValueToken(collapse(content)),
         id: node.id,
         statistic,
         value: judgedLater(replace(content)),
@@ -285,7 +297,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     ]);
     optional(ud.UsageValueFieldIdentifier, element, "fieldIdentifier", "collapse", (id, value) => ({
       id,
-      value: judgedLater(value),
+      value: UsageFieldIdentifier(value),
     }));
 
     const lexical = read(element, "baseType", "preserve");
@@ -321,7 +333,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     const defaultValue = read(element, "defaultValue", "collapse");
     add(ud.UsageMapping, [
       {
-        defaultValue: judgedLater(Option.getOrElse(defaultValue, () => "0")),
+        defaultValue: UsageMappingScore(Option.getOrElse(defaultValue, () => "0")),
         id: node.id,
         statistic,
       },
@@ -332,11 +344,11 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
 
     optional(ud.UsageMappingLowerBound, element, "lowerBound", "collapse", (id, value) => ({
       node: id,
-      value: judgedLater(value),
+      value: UsageMappingScore(value),
     }));
     optional(ud.UsageMappingUpperBound, element, "upperBound", "collapse", (id, value) => ({
       node: id,
-      value: judgedLater(value),
+      value: UsageMappingScore(value),
     }));
 
     for (const entry of elementChildren(element)) {
@@ -349,7 +361,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
         {
           id: entryNode.id,
           mapKey: judgedLater(Option.getOrElse(read(entry, "mapKey", "replace"), () => "")),
-          mappedValue: judgedLater(
+          mappedValue: UsageMappingScore(
             Option.getOrElse(read(entry, "mappedValue", "collapse"), () => ""),
           ),
           mapping: node.id,
@@ -382,10 +394,12 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     const kind = node.kind === "ud:ordinaryStatistic" ? "ordinary" : "categorized";
     add(ud.Statistic, [
       {
-        context: judgedLater(Option.getOrElse(read(element, "context", "collapse"), () => "")),
+        context: StatisticContextUri(
+          Option.getOrElse(read(element, "context", "collapse"), () => ""),
+        ),
         id: node.id,
         kind,
-        name: judgedLater(Option.getOrElse(read(element, "name", "collapse"), () => "")),
+        name: StatisticName(Option.getOrElse(read(element, "name", "collapse"), () => "")),
         position: positionOf(node.id),
         usageData,
       },
@@ -398,19 +412,19 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
 
     optional(ud.StatisticGlossary, element, "glossary", "collapse", (id, value) => ({
       node: id,
-      value: judgedLater(value),
+      value: GlossaryUri(value),
     }));
     optional(ud.StatisticCaseCount, element, "caseCount", "collapse", (id, value) => ({
       node: id,
-      value: judgedLater(value),
+      value: UsageCaseCount(judgedLater(value)),
     }));
     optional(ud.StatisticStdError, element, "stdError", "collapse", (id, value) => ({
       node: id,
-      value: judgedLater(value),
+      value: StatisticMeasure(value),
     }));
     optional(ud.StatisticStdDeviation, element, "stdDeviation", "collapse", (id, value) => ({
       node: id,
-      value: judgedLater(value),
+      value: StatisticMeasure(value),
     }));
     optional(ud.StatisticLastUpdated, element, "lastUpdated", "collapse", (id, value) => ({
       node: id,
@@ -434,7 +448,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
   add(ud.UsageData, [{ document: documentId, id: documentId }]);
   optional(ud.UsageDataGlossary, root, "glossary", "collapse", (id, value) => ({
     node: id,
-    value: judgedLater(value),
+    value: GlossaryUri(value),
   }));
   for (const child of elementChildren(root)) {
     const kind = Option.getOrUndefined(kindOf(child, Option.some("ud:usageData")));

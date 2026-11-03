@@ -18,6 +18,7 @@ import * as htmlKinds from "#qti/schema/kinds/html.ts";
 import * as item from "#qti/schema/item.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -371,4 +372,13 @@ layer(NodeServices.layer, { excludeTestServices: true })("the importers' copies"
       assert.isTrue(languages.some((language) => owners.get(language.lom) === "manifest"));
     }),
   );
+});
+
+describe("contracts (item)", () => {
+  it("types the item tool name ToolName and the tool version ToolVersion", () => {
+    assert.strictEqual(item.ItemToolBoth.fields.toolName.name, contracts.ToolName.name);
+    assert.strictEqual(item.ItemToolBoth.fields.toolVersion.name, contracts.ToolVersion.name);
+    assert.strictEqual(item.ItemToolName.fields.toolName.name, contracts.ToolName.name);
+    assert.strictEqual(item.ItemToolVersion.fields.toolVersion.name, contracts.ToolVersion.name);
+  });
 });

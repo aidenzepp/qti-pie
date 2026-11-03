@@ -380,3 +380,39 @@ describe("manifest contracts (metadata)", () => {
     }
   });
 });
+
+describe("contracts (lom)", () => {
+  it("types the eleven collapsed LOM tokens LomToken", () => {
+    for (const relation of [
+      metadata.LomIdentifierCatalog,
+      metadata.LomEntity,
+      metadata.LomDateTime,
+      metadata.LomMetadataschema,
+      metadata.LomFormat,
+      metadata.LomSize,
+      metadata.LomLocation,
+      metadata.LomMinimumVersion,
+      metadata.LomMaximumVersion,
+      metadata.LomDurationString,
+      metadata.LomId,
+    ]) {
+      assert.strictEqual(relation.fields.collapsed.name, contracts.LomToken.name);
+    }
+  });
+  it("types the vocabulary source, value and language", () => {
+    assert.strictEqual(
+      metadata.LomSource.fields.collapsed.name,
+      contracts.LomVocabularySource.name,
+    );
+    assert.strictEqual(metadata.LomValue.fields.collapsed.name, contracts.LomVocabularyValue.name);
+    assert.strictEqual(
+      metadata.LomStringLanguage.fields.value.name,
+      contracts.LangStringLanguage.name,
+    );
+  });
+  it("types the three QMD tool leaves", () => {
+    assert.strictEqual(metadata.QmdToolName.fields.value.name, contracts.ToolName.name);
+    assert.strictEqual(metadata.QmdToolVendor.fields.value.name, contracts.ToolVendor.name);
+    assert.strictEqual(metadata.QmdToolVersion.fields.value.name, contracts.ToolVersion.name);
+  });
+});

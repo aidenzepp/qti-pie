@@ -63,6 +63,8 @@ import {
   OutcomeScaleValue,
   PackagePath,
   RecordFieldIdentifier,
+  ToolName,
+  ToolVersion,
   VariableReference,
 } from "#qti/schema/contracts.ts";
 import type { DeclarationShape } from "#qti/schema/declaration.ts";
@@ -244,19 +246,19 @@ const toolRows = (rows: Rows, root: Element, tree: string): Rows => {
   const version = lexicalOf(root, "tool-version");
   if (Option.isSome(name) && Option.isSome(version)) {
     return Rows.add(Rows.add(rows, ItemTool, [{ shape: "both", tree }]), ItemToolBoth, [
-      { toolName: name.value, toolVersion: version.value, tree },
+      { toolName: ToolName(name.value), toolVersion: ToolVersion(version.value), tree },
     ]);
   }
 
   if (Option.isSome(name)) {
     return Rows.add(Rows.add(rows, ItemTool, [{ shape: "nameOnly", tree }]), ItemToolName, [
-      { toolName: name.value, tree },
+      { toolName: ToolName(name.value), tree },
     ]);
   }
 
   return Option.isSome(version)
     ? Rows.add(Rows.add(rows, ItemTool, [{ shape: "versionOnly", tree }]), ItemToolVersion, [
-        { toolVersion: version.value, tree },
+        { toolVersion: ToolVersion(version.value), tree },
       ])
     : rows;
 };

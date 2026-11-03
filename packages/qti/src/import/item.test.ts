@@ -41,6 +41,7 @@ import {
   ManifestIdentifier,
   PackagePath,
   TemplateUri,
+  ToolName,
 } from "#qti/schema/contracts.ts";
 import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#qti/schema/html.ts";
 import {
@@ -1140,7 +1141,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts root ro
 
       assert.deepStrictEqual(Rows.of(rows, ItemTool), [{ shape: "nameOnly", tree: documentId }]);
       assert.deepStrictEqual(Rows.of(rows, ItemToolName), [
-        { toolName: "Authoring", tree: documentId },
+        { toolName: ToolName("Authoring"), tree: documentId },
       ]);
       assert.deepStrictEqual(Rows.of(rows, ItemToolBoth), []);
       assert.deepStrictEqual(Rows.of(rows, ItemToolVersion), []);
