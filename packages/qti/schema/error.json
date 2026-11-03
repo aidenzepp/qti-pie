@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "command": { "type": "string" },
+    "error": { "type": "boolean", "enum": [true] },
+    "exit_code": {
+      "anyOf": [
+        { "type": "number" },
+        { "type": "string", "enum": ["Infinity", "-Infinity", "NaN"] }
+      ]
+    },
+    "help": { "type": "string" },
+    "kind": { "type": "string" },
+    "message": { "type": "string" },
+    "ok": { "type": "boolean", "enum": [false] },
+    "rule": { "type": "string" },
+    "schema_version": { "type": "number", "enum": [1] }
+  },
+  "required": ["command", "error", "exit_code", "help", "kind", "message", "ok", "schema_version"],
+  "additionalProperties": true,
+  "$defs": {}
+}
