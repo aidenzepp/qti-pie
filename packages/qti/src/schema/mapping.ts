@@ -23,17 +23,12 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
-import { Shape } from "#qti/schema/content/rosters.ts";
+import { Shape, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { BaseType, Declaration, TypedDeclaration } from "#qti/schema/declaration.ts";
 import { Edge } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { coordsBinding, shapeCapacities } from "#qti/schema/shapes.ts";
 import { lexicalOf } from "#qti/schema/value.ts";
-
-/**
- * An `xs:boolean` attribute's lexical form.
- */
-const xsBoolean = str.regex(patterns.xsBoolean);
 
 /**
  * An `xs:double` attribute's lexical form.
@@ -86,7 +81,7 @@ export const MapEntry = relation(
   "MapEntry",
   {
     baseType: closedId(BaseType),
-    caseSensitive: xsBoolean,
+    caseSensitive: closedId(XsBoolean),
     declaration: uuid,
     id: uuid,
     mappedValue: xsDouble,
@@ -210,7 +205,7 @@ export const InterpolationTableEntry = relation(
     baseType: closedId(BaseType),
     declaration: uuid,
     id: uuid,
-    includeBoundary: xsBoolean,
+    includeBoundary: closedId(XsBoolean),
     position: pg.bigint,
     sourceValue: xsDouble,
     table: uuid,

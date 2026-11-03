@@ -541,3 +541,45 @@ describe("mappingRows on a boolean value", () => {
     }),
   );
 });
+
+const entry = (attribute: string) =>
+  identifierDeclaration(
+    `<qti-mapping><qti-map-entry map-key="A" mapped-value="1"${attribute}/></qti-mapping>`,
+  );
+
+const boundary = (attribute: string) =>
+  `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"><qti-interpolation-table default-value="0"><qti-interpolation-table-entry source-value="10"${attribute} target-value="1"/></qti-interpolation-table></qti-outcome-declaration>`;
+
+describe("mappingRows on a boolean attribute of an entry", () => {
+  it.effect(
+    "refuses case-sensitive and include-boundary outside xs:boolean as attribute-lexical",
+    () =>
+      Effect.gen(function* outsideBoolean() {
+        for (const declaration of [
+          entry(' case-sensitive="yes"'),
+          boundary(' include-boundary="yes"'),
+        ]) {
+          const failure = yield* Effect.flip(mapped(declaration));
+
+          assert.instanceOf(failure, ImportRefused, declaration);
+          assert.strictEqual(failure.rule, "attribute-lexical", declaration);
+        }
+      }),
+  );
+
+  it.effect("admits the spellings 1 and a padded false, written as their handles", () =>
+    Effect.gen(function* inside() {
+      const sensitive = yield* mapped(entry(' case-sensitive=" 1 "'));
+      const bounded = yield* mapped(boundary(' include-boundary=" false "'));
+
+      assert.deepStrictEqual(
+        Rows.of(sensitive.built, MapEntry).map((row) => row.caseSensitive),
+        ["1"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(bounded.built, InterpolationTableEntry).map((row) => row.includeBoundary),
+        ["false"],
+      );
+    }),
+  );
+});

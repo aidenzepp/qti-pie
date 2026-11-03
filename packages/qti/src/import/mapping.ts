@@ -17,7 +17,7 @@ import { attributeReader, coordsRows, markers } from "#qti/import/interactions.t
 import type { DeclaredVariable, NodeRef } from "#qti/import/interactions.ts";
 import { closedOf, ItemRefusal, Rows, typedAttribute, withParents } from "#qti/import/tree.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
-import { BooleanLiteral, Shape } from "#qti/schema/content/rosters.ts";
+import { BooleanLiteral, Shape, XsBoolean } from "#qti/schema/content/rosters.ts";
 import type { BaseType } from "#qti/schema/declaration.ts";
 import * as mapping from "#qti/schema/mapping.ts";
 import { Edge } from "#qti/schema/node.ts";
@@ -428,12 +428,17 @@ const mapEntryElement = Effect.fn("import.mapEntryElement")(function* mapEntryEl
 
   const attributes = attributeReader(rows, element, node);
   const mappedValue = attributes.read("mapped-value");
-  const caseSensitive = attributes.read("case-sensitive");
+  const caseSensitive = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(attributes.read("case-sensitive"), () => "false"),
+    "attribute-lexical",
+    "the case-sensitive attribute of qti-map-entry",
+  );
   const key = valueOf(attributes.rows(), element, node, "map-key", holder.baseType);
   let built = Rows.add(key.rows, mapping.MapEntry, [
     {
       baseType: holder.baseType,
-      caseSensitive: judgedLater(Option.getOrElse(caseSensitive, () => "false")),
+      caseSensitive,
       declaration: holder.declaration,
       id: node.id,
       mappedValue: Option.getOrElse(mappedValue, () => ""),
@@ -624,11 +629,16 @@ const tableEntryElement = Effect.fn("import.tableEntryElement")(function* tableE
       : yield* armRows(matchTargetArms, holder.baseType, built, node.id, target.value.value);
   }
 
-  const includeBoundary = attributes.read("include-boundary");
+  const includeBoundary = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(attributes.read("include-boundary"), () => "true"),
+    "attribute-lexical",
+    "the include-boundary attribute of qti-interpolation-table-entry",
+  );
   const built = Rows.add(target.rows, mapping.InterpolationTableEntry, [
     {
       ...fact,
-      includeBoundary: judgedLater(Option.getOrElse(includeBoundary, () => "true")),
+      includeBoundary,
     },
   ]);
   const withTarget = Option.isNone(target.value)
