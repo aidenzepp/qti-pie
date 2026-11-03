@@ -3,6 +3,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { usageGuards } from "#qti/import/guards/usage.ts";
+import { judgedLater } from "#qti/import/judged.ts";
 import { NotQti3 } from "#qti/import/manifest.ts";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import { Rows, UnmodeledVocabulary } from "#qti/import/tree.ts";
@@ -419,7 +420,11 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
       );
       const arm = firstOf(Rows.of(rows, ud.relations.UsageTypedValueFloat));
       const armEdited = changed(rows, ud.relations.UsageTypedValueFloat, (list) =>
-        list.map((row) => (row.id === arm.id ? { ...row, value: `${row.value}1` } : row)),
+        list.map((row) =>
+          row.id === arm.id
+            ? { ...row, value: judgedLater<typeof row.value>(`${row.value}1`) }
+            : row,
+        ),
       );
 
       assert.strictEqual((yield* refusal(edited)).rule, "typed-copy");

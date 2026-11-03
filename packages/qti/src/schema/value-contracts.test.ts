@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
+import * as valueContexts from "#qti/schema/value-contexts.ts";
 import * as valueContracts from "#qti/schema/value-contracts.ts";
-import * as value from "#qti/schema/value.ts";
 
 /**
  * A contract as the tests read it: its name.
@@ -20,7 +20,7 @@ describe("schema/value-contracts", () => {
     const minted = valueContracts.valueArmContracts();
     assert.deepStrictEqual(
       Object.keys(minted).toSorted(),
-      value.valueContexts.map(({ context }) => context).toSorted(),
+      valueContexts.valueContexts.map(({ context }) => context).toSorted(),
     );
     for (const [context, byBase] of Object.entries<Readonly<Record<string, Named>>>(minted)) {
       assert.deepStrictEqual(armNames(byBase).toSorted(), [
@@ -38,8 +38,8 @@ describe("schema/value-contracts", () => {
 
   it("gives each arm the language of its context's lexical form", () => {
     const minted = valueContracts.valueArmContracts();
-    for (const { context } of value.valueContexts) {
-      const lexical = value.lexicalOf(context);
+    for (const { context } of valueContexts.valueContexts) {
+      const lexical = valueContexts.lexicalOf(context);
       const arms = minted[context];
       assert.strictEqual(arms.integer.base.pattern.source, lexical.integer.pattern.source);
       assert.strictEqual(arms.float.base.pattern.source, lexical.float.pattern.source);

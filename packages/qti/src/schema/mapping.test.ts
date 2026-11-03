@@ -365,4 +365,50 @@ describe("mapping", () => {
       );
     }
   });
+
+  it("types the eight mapping score columns, and the two table source values, with their contracts", () => {
+    const scores = [
+      mapping.Mapping.fields.defaultValue,
+      mapping.MappingLowerBound.fields.value,
+      mapping.MappingUpperBound.fields.value,
+      mapping.MapEntry.fields.mappedValue,
+      mapping.AreaMapping.fields.defaultValue,
+      mapping.AreaMappingLowerBound.fields.value,
+      mapping.AreaMappingUpperBound.fields.value,
+      mapping.AreaMapEntry.fields.mappedValue,
+    ];
+    for (const field of scores) {
+      assert.strictEqual(field.name, "MappingScore");
+    }
+    assert.strictEqual(mapping.MatchTableEntry.fields.sourceValue.name, "MatchSourceValue");
+    assert.strictEqual(
+      mapping.InterpolationTableEntry.fields.sourceValue.name,
+      "InterpolationSourceValue",
+    );
+  });
+
+  it("types the eight non-text arms of each context's entries with the context's contracts", () => {
+    const keyed = [
+      ["MapKey", relations.MapEntryInteger.fields.mapKey, "MapKeyIntegerValue"],
+      ["MatchTarget", relations.MatchTableEntryFloat.fields.targetValue, "MatchTargetFloatValue"],
+      [
+        "InterpolationTarget",
+        relations.InterpolationTableEntryUri.fields.targetValue,
+        "InterpolationTargetUriValue",
+      ],
+      [
+        "MatchDefault",
+        relations.MatchTableDefaultValueIdentifier.fields.value,
+        "MatchDefaultIdentifierValue",
+      ],
+      [
+        "InterpolationDefault",
+        relations.InterpolationTableDefaultValuePoint.fields.value,
+        "InterpolationDefaultPointValue",
+      ],
+    ] as const;
+    for (const [, field, name] of keyed) {
+      assert.strictEqual(field.name, name);
+    }
+  });
 });
