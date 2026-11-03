@@ -1,7 +1,10 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Cause, Effect, Exit } from "effect";
-import { CliError } from "effect/cli";
+import { Cause, Effect, Exit, Stdio } from "effect";
+import { CliError, Command } from "effect/cli";
+import { cli } from "#qti/cli.ts";
+import { commandOfArguments, valuedGlobalFlags } from "#qti/cli/present.ts";
+import { exitCodeOf, rewriteVerbose } from "#qti/cli/run.ts";
 import { captureCli, spawnCli } from "#qti/test/cli.ts";
 
 layer(NodeServices.layer, { excludeTestServices: true })("p14-u2d: no wizard", (it) => {
@@ -36,4 +39,91 @@ layer(NodeServices.layer, { excludeTestServices: true })("p14-u2d: no wizard", (
       assert.strictEqual(stdout, "");
     }),
   );
+});
+
+layer(NodeServices.layer, { excludeTestServices: true })("p14-u8b: -V and -v", (it) => {
+  it.effect("-V and --version print the same line and succeed", () =>
+    Effect.gen(function* versionFlags() {
+      const short = yield* captureCli(["-V"]);
+      const long = yield* captureCli(["--version"]);
+
+      assert.isTrue(Exit.isSuccess(short.exit));
+      assert.isTrue(Exit.isSuccess(long.exit));
+      assert.notStrictEqual(long.stdout, "");
+      assert.strictEqual(short.stdout, long.stdout);
+    }),
+  );
+
+  it.effect("-v is verbose, not the version", () =>
+    Effect.gen(function* verboseShort() {
+      const { exit, stdout } = yield* captureCli(["-v", "import", "/nonexistent"]);
+
+      assert.strictEqual(exitCodeOf(exit), 2);
+      assert.include(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "", "/nonexistent");
+      assert.notInclude(stdout, "0.0.0");
+    }),
+  );
+
+  it("rewrites -v before the first --, and only the bare flag", () => {
+    assert.deepStrictEqual(rewriteVerbose(["-v", "import", "x"]), ["--verbose", "import", "x"]);
+    assert.deepStrictEqual(rewriteVerbose(["import", "--", "-v"]), ["import", "--", "-v"]);
+    assert.deepStrictEqual(rewriteVerbose(["-qv", "import", "x"]), ["-qv", "import", "x"]);
+  });
+
+  it.effect("the tree runs under Effect's default CliConfig, so it holds no -v alias", () =>
+    Effect.gen(function* defaultConfig() {
+      yield* Command.run(cli, { version: "0.0.0" }).pipe(
+        Effect.provide(Stdio.layerTest({ args: Effect.succeed(["--help"]) })),
+      );
+    }),
+  );
+});
+
+layer(NodeServices.layer, { excludeTestServices: true })("p14-u8b: a valued flag's -v", (it) => {
+  it("lists every valued global flag", () => {
+    assert.deepStrictEqual(valuedGlobalFlags.toSorted(), [
+      "--completions",
+      "--log-level",
+      "--output",
+      "--timeout",
+    ]);
+  });
+
+  it("leaves a -v that is a valued flag's value alone", () => {
+    for (const flag of valuedGlobalFlags) {
+      assert.deepStrictEqual(rewriteVerbose([flag, "-v", "-v"]), [flag, "-v", "--verbose"]);
+      assert.deepStrictEqual(rewriteVerbose([`${flag}=x`, "-v"]), [`${flag}=x`, "--verbose"]);
+    }
+  });
+
+  it("reads the command past each valued flag's value", () => {
+    for (const flag of valuedGlobalFlags) {
+      assert.strictEqual(commandOfArguments([flag, "5s", "import"], ["import"], "qti"), "import");
+      assert.strictEqual(commandOfArguments([flag, "import"], ["import"], "qti"), "qti");
+    }
+  });
+
+  for (const flag of ["--output", "--log-level", "--completions"]) {
+    it.effect(`${flag} -v leaves -v unrewritten`, () =>
+      Effect.gen(function* valuedThenV() {
+        const { exit } = yield* captureCli([flag, "-v"]);
+
+        const failure = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+
+        assert.strictEqual(exitCodeOf(exit), 2);
+        assert.isTrue(CliError.isCliError(failure) && failure._tag === "ShowHelp");
+
+        // Effect's parser refuses a flag followed by a dash word, so the flag has no value and the
+        // `-v` stays the word the user typed: an unrecognized option, never `--verbose`.
+        const kinds =
+          CliError.isCliError(failure) && failure._tag === "ShowHelp"
+            ? failure.errors.map(
+                (error) => `${error._tag}:${"option" in error ? error.option : ""}`,
+              )
+            : [];
+
+        assert.include(kinds, "UnrecognizedOption:-v");
+      }),
+    );
+  }
 });
