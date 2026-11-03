@@ -8,6 +8,14 @@ import { itemRows } from "#qti/import/item.ts";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows, treeRows, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { NodeIndex, TreeInput } from "#qti/import/tree.ts";
+import {
+  CitationUri,
+  ContentMediaType,
+  EmbedSourceUri,
+  HyperlinkUri,
+  TableSpan,
+  TrackLanguage,
+} from "#qti/schema/contracts.ts";
 import { Img, P } from "#qti/schema/html.ts";
 import * as media from "#qti/schema/html/media.ts";
 import * as structure from "#qti/schema/html/structure.ts";
@@ -65,7 +73,7 @@ describe("htmlRows on a 3.0.1 video", () => {
         { id: sourceId, parentKind: "video", src: "a.mp4" },
       ]);
       assert.deepStrictEqual(Rows.of(rows, media.relations.SourceType), [
-        { node: sourceId, value: "video/mp4" },
+        { node: sourceId, value: ContentMediaType("video/mp4") },
       ]);
     }),
   );
@@ -144,7 +152,7 @@ describe("htmlRows defaults", () => {
         { node: writtenId },
       ]);
       assert.deepStrictEqual(Rows.of(written.rows, media.relations.TrackSrclang), [
-        { node: writtenId, value: "en" },
+        { node: writtenId, value: TrackLanguage("en") },
       ]);
       assert.deepStrictEqual(Rows.of(written.rows, media.relations.TrackDefault), [
         { node: writtenId, value: "default", version: "3.0.1" },
@@ -172,7 +180,7 @@ describe("htmlRows defaults", () => {
         { node: second?.id ?? "" },
       ]);
       assert.deepStrictEqual(Rows.of(rows, media.relations.ParamType), [
-        { node: second?.id ?? "", value: "text/plain" },
+        { node: second?.id ?? "", value: ContentMediaType("text/plain") },
       ]);
       assert.strictEqual(Rows.of(rows, media.relations.Object).length, 1);
       assert.isDefined(idOf(nodes, "object"));
@@ -217,18 +225,22 @@ describe("htmlRows on the text and structure elements", () => {
 
       assert.strictEqual(Rows.of(rows, text.Div).length, 1);
       assert.strictEqual(Rows.of(rows, text.Span).length, 1);
-      assert.deepStrictEqual(Rows.of(rows, text.A), [{ href: "x.html", id: idOf(nodes, "a") }]);
+      assert.deepStrictEqual(Rows.of(rows, text.A), [
+        { href: HyperlinkUri("x.html"), id: idOf(nodes, "a") },
+      ]);
       assert.deepStrictEqual(
         Rows.of(rows, AttributeLexical).map((row) => [row.node, row.attribute, row.value]),
         [[idOf(nodes, "a"), "href", " x.html "]],
       );
       assert.deepStrictEqual(Rows.of(rows, text.AType), [
-        { node: idOf(nodes, "a"), value: "text/html" },
+        { node: idOf(nodes, "a"), value: ContentMediaType("text/html") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, text.BlockquoteCite), [
-        { node: idOf(nodes, "blockquote"), value: "c" },
+        { node: idOf(nodes, "blockquote"), value: CitationUri("c") },
       ]);
-      assert.deepStrictEqual(Rows.of(rows, text.QCite), [{ node: idOf(nodes, "q"), value: "d" }]);
+      assert.deepStrictEqual(Rows.of(rows, text.QCite), [
+        { node: idOf(nodes, "q"), value: CitationUri("d") },
+      ]);
       assert.deepStrictEqual(Rows.of(rows, text.BdoTitle), [
         { node: idOf(nodes, "bdo"), value: "t" },
       ]);
@@ -243,15 +255,19 @@ describe("htmlRows on the text and structure elements", () => {
       );
       const cell = idOf(nodes, "td");
 
-      assert.deepStrictEqual(Rows.of(rows, structure.TdColspan), [{ node: cell, value: "2" }]);
-      assert.deepStrictEqual(Rows.of(rows, structure.TdRowspan), [{ node: cell, value: "3" }]);
+      assert.deepStrictEqual(Rows.of(rows, structure.TdColspan), [
+        { node: cell, value: TableSpan("2") },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, structure.TdRowspan), [
+        { node: cell, value: TableSpan("3") },
+      ]);
       assert.deepStrictEqual(Rows.of(rows, structure.TdScope), [{ node: cell, value: "row" }]);
       assert.deepStrictEqual(Rows.of(rows, structure.TdAlign), [{ node: cell, value: "left" }]);
       assert.deepStrictEqual(Rows.of(rows, structure.TdValign), [{ node: cell, value: "top" }]);
       assert.deepStrictEqual(Rows.of(rows, structure.TdAbbr), [{ node: cell, value: "a" }]);
       assert.deepStrictEqual(Rows.of(rows, structure.TdAxis), [{ node: cell, value: "x" }]);
       assert.deepStrictEqual(Rows.of(rows, structure.ThColspan), [
-        { node: idOf(nodes, "th"), value: "1" },
+        { node: idOf(nodes, "th"), value: TableSpan("1") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, structure.TableSummary), [
         { node: idOf(nodes, "table"), value: "s" },
@@ -307,7 +323,9 @@ describe("htmlRows refuses an absent required attribute", () => {
     Effect.gen(function* empty() {
       const { nodes, rows } = yield* built("3.0.1", '<div><a href="">go</a></div>');
 
-      assert.deepStrictEqual(Rows.of(rows, text.A), [{ href: "", id: idOf(nodes, "a") }]);
+      assert.deepStrictEqual(Rows.of(rows, text.A), [
+        { href: HyperlinkUri(""), id: idOf(nodes, "a") },
+      ]);
     }),
   );
 });
@@ -404,7 +422,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("htmlRows on sharedMedi
       const objectId = idOf(tree.nodes, "object");
 
       assert.deepStrictEqual(Rows.of(rows, media.relations.Object), [
-        { data: "ukair.png", id: objectId, type: "image/png" },
+        { data: EmbedSourceUri("ukair.png"), id: objectId, type: ContentMediaType("image/png") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, media.relations.ObjectWidth), [
         { node: objectId, value: "206" },

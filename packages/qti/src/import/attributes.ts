@@ -30,6 +30,7 @@ import {
 } from "#qti/schema/content/rosters.ts";
 import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
 import * as family from "#qti/schema/attributes.ts";
+import { ClassList, ContentLanguage, IdReference, XmlBaseUri } from "#qti/schema/contracts.ts";
 import { DocumentId, HtmlId, ItemBodyId, PrintedVariableId } from "#qti/schema/document.ts";
 import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
 import { AttributeLexical, AttributeName, Tree } from "#qti/schema/node.ts";
@@ -276,9 +277,9 @@ const writeFamily = (
     const scoped = { ...own, rootKind, tree };
     const where = `the ${name} attribute of ${kind}`;
     if (name === "class") {
-      emit(written, family.NodeClass, own);
+      emit(written, family.NodeClass, { ...own, value: ClassList(value) });
     } else if (name === "lang") {
-      emit(written, family.NodeLang, own);
+      emit(written, family.NodeLang, { ...own, value: ContentLanguage(value) });
     } else if (name === "xml:lang") {
       emit(written, family.NodeXmlLang, scoped);
     } else if (name === "label") {
@@ -287,12 +288,16 @@ const writeFamily = (
       const dir = yield* closedOf(TextDirection.handles, value, "attribute-lexical", where);
       emit(written, family.NodeDir, { ...own, value: dir });
     } else if (name === "xml:base") {
-      emit(written, family.NodeXmlBase, own);
+      emit(written, family.NodeXmlBase, { ...own, value: XmlBaseUri(value) });
     } else if (name === "data-qti-suppress-tts") {
       const mode = yield* closedOf(SuppressTtsMode.handles, value, "attribute-lexical", where);
       emit(written, family.NodeSuppressTts, { ...own, value: mode });
     } else if (name === "data-catalog-idref") {
-      emit(written, family.NodeCatalogIdref, { ...own, document: documentId });
+      emit(written, family.NodeCatalogIdref, {
+        ...own,
+        document: documentId,
+        value: IdReference(value),
+      });
     } else if (name === "id") {
       writeId(written, subject);
     } else {

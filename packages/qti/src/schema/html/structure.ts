@@ -21,6 +21,7 @@ import {
 } from "@bjornpagen/grizzle";
 import { CellAlign, CellScope, CellValign, XsBoolean } from "#qti/schema/content/rosters.ts";
 import * as node from "#qti/schema/node.ts";
+import { TableSpan } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -135,20 +136,12 @@ export const TableSummary = relation(
 /**
  * A `col` element's `span`, when written.
  */
-export const ColSpan = relation(
-  "ColSpan",
-  { node: uuid, value: str.regex(patterns.positiveInteger) },
-  ["node"],
-);
+export const ColSpan = relation("ColSpan", { node: uuid, value: TableSpan }, ["node"]);
 
 /**
  * A `colgroup` element's `span`, when written.
  */
-export const ColgroupSpan = relation(
-  "ColgroupSpan",
-  { node: uuid, value: str.regex(patterns.positiveInteger) },
-  ["node"],
-);
+export const ColgroupSpan = relation("ColgroupSpan", { node: uuid, value: TableSpan }, ["node"]);
 
 /**
  * A `details` element's `open`, when written.
@@ -183,20 +176,12 @@ export const TdAxis = relation(
 /**
  * A `td` element's `rowspan`, when written.
  */
-export const TdRowspan = relation(
-  "TdRowspan",
-  { node: uuid, value: str.regex(patterns.positiveInteger) },
-  ["node"],
-);
+export const TdRowspan = relation("TdRowspan", { node: uuid, value: TableSpan }, ["node"]);
 
 /**
  * A `td` element's `colspan`, when written.
  */
-export const TdColspan = relation(
-  "TdColspan",
-  { node: uuid, value: str.regex(patterns.positiveInteger) },
-  ["node"],
-);
+export const TdColspan = relation("TdColspan", { node: uuid, value: TableSpan }, ["node"]);
 
 /**
  * A `td` element's `align`, when written.
@@ -234,20 +219,12 @@ export const ThAxis = relation(
 /**
  * A `th` element's `rowspan`, when written.
  */
-export const ThRowspan = relation(
-  "ThRowspan",
-  { node: uuid, value: str.regex(patterns.positiveInteger) },
-  ["node"],
-);
+export const ThRowspan = relation("ThRowspan", { node: uuid, value: TableSpan }, ["node"]);
 
 /**
  * A `th` element's `colspan`, when written.
  */
-export const ThColspan = relation(
-  "ThColspan",
-  { node: uuid, value: str.regex(patterns.positiveInteger) },
-  ["node"],
-);
+export const ThColspan = relation("ThColspan", { node: uuid, value: TableSpan }, ["node"]);
 
 /**
  * A `th` element's `align`, when written.

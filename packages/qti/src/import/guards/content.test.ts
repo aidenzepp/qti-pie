@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { ContentGuardRefusal, contentGuards } from "#qti/import/guards/content.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { Rows } from "#qti/import/tree.ts";
-import { ManifestIdentifier } from "#qti/schema/contracts.ts";
+import { CitationUri, ClassList, HyperlinkUri, ManifestIdentifier } from "#qti/schema/contracts.ts";
 import { AttributeIdref, HeadersTarget, NodeClass, NodeLabel } from "#qti/schema/attributes.ts";
 import { A, BlockquoteCite } from "#qti/schema/html/text.ts";
 import { AssociableHotspot } from "#qti/schema/interactions/associate.ts";
@@ -410,7 +410,9 @@ describe("contentGuards typed-copy", () => {
       yield* contentGuards(rows);
       yield* refusalOfRows(
         "typed-copy",
-        edited(rows, NodeClass, (facts) => facts.map((fact) => ({ ...fact, value: "a c" }))),
+        edited(rows, NodeClass, (facts) =>
+          facts.map((fact) => ({ ...fact, value: ClassList("a c") })),
+        ),
         "processes to",
       );
     }),
@@ -428,7 +430,7 @@ describe("contentGuards typed-copy", () => {
       yield* contentGuards(rows);
       yield* refusalOfRows(
         "typed-copy",
-        edited(rows, A, (facts) => facts.map((fact) => ({ ...fact, href: "v" }))),
+        edited(rows, A, (facts) => facts.map((fact) => ({ ...fact, href: HyperlinkUri("v") }))),
         "processes to",
       );
     }),
@@ -442,7 +444,9 @@ describe("contentGuards typed-copy", () => {
         yield* contentGuards(rows);
         yield* refusalOfRows(
           "typed-copy",
-          edited(rows, BlockquoteCite, (facts) => facts.map((fact) => ({ ...fact, value: "d" }))),
+          edited(rows, BlockquoteCite, (facts) =>
+            facts.map((fact) => ({ ...fact, value: CitationUri("d") })),
+          ),
           "processes to",
         );
       }),

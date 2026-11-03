@@ -4,7 +4,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, it, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option } from "effect";
 import { inject } from "vitest";
-import { NamespacePrefix, NamespaceUri, XmlEntityName } from "#qti/schema/contracts.ts";
+import { XmlBaseUri, NamespacePrefix, NamespaceUri, XmlEntityName } from "#qti/schema/contracts.ts";
 import {
   AttributeEntityReference,
   AttributeLexical,
@@ -398,7 +398,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
       const paragraph = idOf(nodes, "p");
 
       assert.deepStrictEqual(Rows.of(built, NodeXmlBase), [
-        { attribute: "xml:base", kind: "p", node: paragraph, value: "a/" },
+        { attribute: "xml:base", kind: "p", node: paragraph, value: XmlBaseUri("a/") },
       ]);
     }),
   );

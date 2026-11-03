@@ -6,7 +6,7 @@ import { contentRows } from "#qti/import/content.ts";
 import type { DeclaredVariable } from "#qti/import/interactions.ts";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows, treeRows } from "#qti/import/tree.ts";
-import { RecordFieldIdentifier } from "#qti/schema/contracts.ts";
+import { StylesheetUri, RecordFieldIdentifier } from "#qti/schema/contracts.ts";
 import {
   ContextDeclarationArm,
   Declaration,
@@ -541,12 +541,12 @@ describe("contentRows", () => {
         [...sheets.keys()].toSorted((a, b) => a.localeCompare(b)),
         ["a.css", "b.css"],
       );
-      assert.strictEqual(sheets.get("a.css")?.type, "text/css");
+      assert.strictEqual(sheets.get(StylesheetUri("a.css"))?.type, "text/css");
       assert.deepStrictEqual(Rows.of(rows, StylesheetMedia), [
-        { node: idOf(sheets.get("a.css")), value: "screen" },
+        { node: idOf(sheets.get(StylesheetUri("a.css"))), value: "screen" },
       ]);
       assert.deepStrictEqual(Rows.of(rows, StylesheetTitle), [
-        { node: idOf(sheets.get("a.css")), value: "Main" },
+        { node: idOf(sheets.get(StylesheetUri("a.css"))), value: "Main" },
       ]);
       assert.strictEqual(Rows.of(rows, CatalogInfo).length, 1);
       assert.strictEqual(Rows.of(rows, CompanionMaterialsInfo).length, 1);

@@ -3,6 +3,7 @@ import { Effect, Option } from "effect";
 import { attributeRows } from "#qti/import/attributes.ts";
 import { kindOf, Rows, treeRows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
+import { ClassList, ContentLanguage, IdReference, XmlBaseUri } from "#qti/schema/contracts.ts";
 import * as attributes from "#qti/schema/attributes.ts";
 import { DocumentId, HtmlId, ItemBodyId, PrintedVariableId } from "#qti/schema/document.ts";
 import { AttributeLexical, Tree } from "#qti/schema/node.ts";
@@ -125,10 +126,10 @@ describe("attributeRows on the family, ARIA and id attributes", () => {
         { document: documentId, holder: "htmlId", id: "p1" },
       ]);
       assert.deepStrictEqual(Rows.of(rows, attributes.NodeClass), [
-        { attribute: "class", kind: "p", node: pId, value: "a b" },
+        { attribute: "class", kind: "p", node: pId, value: ClassList("a b") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, attributes.NodeLang), [
-        { attribute: "lang", kind: "p", node: pId, value: "en" },
+        { attribute: "lang", kind: "p", node: pId, value: ContentLanguage("en") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, attributes.AriaDescribedby), [
         { attribute: "aria-describedby", kind: "p", node: pId, value: "p1 x1" },
@@ -162,7 +163,7 @@ describe("attributeRows on the family, ARIA and id attributes", () => {
       const pId = idOf(nodes, "p");
 
       assert.deepStrictEqual(Rows.of(rows, attributes.NodeClass), [
-        { attribute: "class", kind: "p", node: pId, value: "a b" },
+        { attribute: "class", kind: "p", node: pId, value: ClassList("a b") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, AttributeLexical), [
         { attribute: "class", kind: "p", node: pId, value: " a  b " },
@@ -249,7 +250,7 @@ describe("attributeRows on the family, ARIA and id attributes", () => {
           document: documentId,
           kind: "p",
           node: pId,
-          value: "c1",
+          value: IdReference("c1"),
         },
       ]);
       assert.deepStrictEqual(Rows.of(rows, attributes.AttributeIdref), [
@@ -432,7 +433,7 @@ describe("attributeRows on a tree of either root", () => {
       const pId = idOf(nodes, "p");
 
       assert.deepStrictEqual(Rows.of(built, attributes.NodeXmlBase), [
-        { attribute: "xml:base", kind: "p", node: pId, value: "a/" },
+        { attribute: "xml:base", kind: "p", node: pId, value: XmlBaseUri("a/") },
       ]);
       assert.deepStrictEqual(
         Rows.of(built, attributes.NodeXmlLang).map((row) => [row.value, row.rootKind]),

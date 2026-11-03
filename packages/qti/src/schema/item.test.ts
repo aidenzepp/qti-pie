@@ -59,6 +59,16 @@ const containments = (
       : [],
   );
 
+/**
+ * The source of a column's base pattern, whether the column is a bare pattern or a contract over
+ * one.
+ */
+const sourceOf = (
+  field:
+    | { readonly pattern: { readonly source: string } }
+    | { readonly base: { readonly pattern: { readonly source: string } } },
+): string => ("base" in field ? field.base.pattern.source : field.pattern.source);
+
 describe("item", () => {
   it("builds the probe schema over node, item and html without refusal", () => {
     const probe = schema(
@@ -112,7 +122,7 @@ describe("item", () => {
     assert.deepStrictEqual(Object.keys(fields), ["alt", "id", "src"]);
     assert.strictEqual(fields.alt.pattern.source, patterns.xsString);
     assert.strictEqual(fields.alt.pattern.flags, patterns.xsStringFlags);
-    assert.strictEqual(fields.src.pattern.source, patterns.anyUri);
+    assert.strictEqual(fields.src.base.pattern.source, patterns.anyUri);
 
     const optional = [
       [html.relations.ImgLongdesc, patterns.anyUri],
@@ -122,7 +132,7 @@ describe("item", () => {
 
     for (const [relation, pattern] of optional) {
       assert.deepStrictEqual([...relation.primaryKey], ["node"]);
-      assert.strictEqual(relation.fields.value.pattern.source, pattern);
+      assert.strictEqual(sourceOf(relation.fields.value), pattern);
       assert.deepStrictEqual(containments(html.rules, relation), [
         [["node"], html.relations.Img, ["id"]],
       ]);

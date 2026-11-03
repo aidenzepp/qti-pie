@@ -38,6 +38,7 @@ import {
   TrackKind,
 } from "#qti/schema/content/rosters.ts";
 import * as node from "#qti/schema/node.ts";
+import { ContentMediaType, EmbedSourceUri, TrackLanguage } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -96,7 +97,7 @@ export const Picture = relation("Picture", { id: uuid }, ["id"]);
  */
 export const ObjectElement = relation(
   "Object",
-  { data: str.regex(patterns.anyUri), id: uuid, type: str.regex(patterns.mimeType) },
+  { data: EmbedSourceUri, id: uuid, type: ContentMediaType },
   ["id"],
 );
 
@@ -198,11 +199,7 @@ export const VideoHeight = relation(
 /**
  * A source's `type`, when written.
  */
-export const SourceType = relation(
-  "SourceType",
-  { node: uuid, value: str.regex(patterns.mimeType) },
-  ["node"],
-);
+export const SourceType = relation("SourceType", { node: uuid, value: ContentMediaType }, ["node"]);
 
 /**
  * A source's `srcset`, when written.
@@ -224,11 +221,9 @@ export const SourceSizes = relation("SourceSizes", { node: uuid, value: xsString
 /**
  * A track's `srclang`, when written.
  */
-export const TrackSrclang = relation(
-  "TrackSrclang",
-  { node: uuid, value: str.regex(patterns.bcp47) },
-  ["node"],
-);
+export const TrackSrclang = relation("TrackSrclang", { node: uuid, value: TrackLanguage }, [
+  "node",
+]);
 
 /**
  * An object's `width`, when written.
@@ -251,11 +246,7 @@ export const ObjectHeight = relation(
 /**
  * A param's `type`, when written.
  */
-export const ParamType = relation(
-  "ParamType",
-  { node: uuid, value: str.regex(patterns.mimeType) },
-  ["node"],
-);
+export const ParamType = relation("ParamType", { node: uuid, value: ContentMediaType }, ["node"]);
 
 /**
  * The source wrote `kind` on this track.
