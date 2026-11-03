@@ -87,6 +87,87 @@ export const outputMode = Effect.gen(function* resolveOutputMode() {
 }).pipe(Effect.withSpan("cli.outputMode"));
 
 /**
+ * The mode of several that were named: the first that is not `text`, else `text`, else none.
+ */
+const pickMode = (named: readonly OutputMode[]): OutputMode | undefined =>
+  named.find((mode) => mode !== "text") ?? named[0];
+
+/**
+ * The value `--output` gives in `arg`: the next word for `--output`, the rest for `--output=…`.
+ */
+const outputValue = (arg: string, next: string | undefined): string | undefined => {
+  const prefix = "--output=";
+
+  if (arg === "--output") {
+    return next;
+  }
+
+  return arg.startsWith(prefix) ? arg.slice(prefix.length) : undefined;
+};
+
+/**
+ * The mode the arguments before the first `--` name, read as a person typed them and before
+ * anything parses them: `--output <mode>`, `--output=<mode>`, `--json` and `--jsonl`. When they
+ * name more than one mode, the first machine-readable one wins, so a program that asked for JSON
+ * still gets JSON for the error that says its flags disagree.
+ *
+ * @param args - The command line after the program name.
+ * @returns The mode, or `undefined` when the arguments name none.
+ */
+export const modeOfArguments = (args: readonly string[]): OutputMode | undefined => {
+  const end = args.indexOf("--");
+  const before = end === -1 ? args : args.slice(0, end);
+  const named = before.flatMap((arg, index): readonly OutputMode[] => {
+    if (arg === "--json" || arg === "--jsonl") {
+      return [arg === "--json" ? "json" : "jsonl"];
+    }
+
+    const value = outputValue(arg, before[index + 1]);
+
+    return outputModes.filter((mode) => mode === value);
+  });
+
+  return pickMode(named);
+};
+
+/**
+ * The mode `QTI_OUTPUT`, `QTI_JSON` and `QTI_JSONL` name, none when none is set. A value
+ * that is malformed names no mode here; the settings report it when a handler reads them.
+ */
+export const modeOfEnvironment = Effect.gen(function* resolveEnvironmentMode() {
+  const output = yield* Config.schema(Schema.Literals(outputModes), "QTI_OUTPUT").pipe(
+    Config.option,
+  );
+  const json = yield* Config.Boolean("QTI_JSON").pipe(Config.withDefault(false));
+  const jsonl = yield* Config.Boolean("QTI_JSONL").pipe(Config.withDefault(false));
+
+  return Option.fromNullishOr(
+    pickMode([
+      ...Option.toArray(output),
+      ...(json ? (["json"] as const) : []),
+      ...(jsonl ? (["jsonl"] as const) : []),
+    ]),
+  );
+}).pipe(Effect.orElseSucceed(() => Option.none<OutputMode>()));
+
+/**
+ * What a failure prints under `json` and `jsonl`: one line on standard error, in the shape of the
+ * success envelope's `schema_version`, `command` and `ok`, with `error` true and the failure's
+ * kind, message, next step and exit code. `rule` is present only when an import was refused.
+ */
+export const ErrorObject = Schema.Struct({
+  command: Schema.String,
+  error: Schema.Literal(true),
+  exit_code: Schema.Number,
+  help: Schema.String,
+  kind: Schema.String,
+  message: Schema.String,
+  ok: Schema.Literal(false),
+  rule: Schema.optionalKey(Schema.String),
+  schema_version: Schema.Literal(1),
+});
+
+/**
  * The envelope every command wraps its data in when it prints `json` or `jsonl`.
  *
  * @param command - The command's name, which the envelope's `command` field must equal.
