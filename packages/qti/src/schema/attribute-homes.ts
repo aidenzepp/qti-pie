@@ -170,11 +170,24 @@ const unlessDefault =
   };
 
 /**
- * An attribute written only where its value is not empty: a required column the importer fills
- * with the empty text when the source wrote no attribute, so an absent attribute cannot be told
- * from an empty one.
+ * The `src` of a `source`, written except where the importer filled it: rule 11's picture clause
+ * lets a `source` in a `picture` hold `srcset` and no `src`, and the importer stores the empty
+ * text for it, so an empty `src` under `picture` is left absent. Under `audio` and `video` the
+ * importer refuses an absent `src`, so an empty one there is a value the source wrote and is kept.
+ *
+ * The one loss is an explicit `src=""` on a `source` in a `picture`, which cannot be told from the
+ * fill.
  */
-const unlessEmpty = (source: Source): Source => unlessDefault(source, "");
+const sourceSrc: Source = (index) => {
+  const src = arm(R.Source, "src")(index);
+  const parentKind = arm(R.Source, "parentKind")(index);
+
+  return (id) => {
+    const value = src(id);
+
+    return value === "" && parentKind(id) === "picture" ? undefined : value;
+  };
+};
 
 /**
  * The `cardinality` of a variable declaration: `record` for a record declaration and the typed
@@ -823,7 +836,7 @@ export const ownAttributes = {
     ["base-type", recordValueBaseType],
   ],
   source: [
-    ["src", unlessEmpty(arm(R.Source, "src"))],
+    ["src", sourceSrc],
     ["type", optional(R.SourceType)],
     ["srcset", optional(R.SourceSrcset)],
     ["media", optional(R.SourceMedia)],
