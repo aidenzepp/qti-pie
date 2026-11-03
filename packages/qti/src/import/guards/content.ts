@@ -55,19 +55,11 @@ import { Gap, GapImgLeft, GapImgTop, GapMatchInteraction } from "#qti/schema/int
 import {
   Hottext,
   HottextInteraction,
-  HottextMaxChoices,
-  HottextMinChoices,
   HottextOwner,
   HotspotChoice,
   HotspotInteraction,
-  HotspotMaxChoices,
-  HotspotMinChoices,
   PositionObjectInteraction,
-  PositionObjectMaxChoices,
-  PositionObjectMinChoices,
   SelectPointInteraction,
-  SelectPointMaxChoices,
-  SelectPointMinChoices,
 } from "#qti/schema/interactions/hot.ts";
 import {
   GraphicOrderInteraction,
@@ -597,26 +589,6 @@ const countsOf = (rows: Rows): readonly Count[] => {
   const of = (relation: AnyRelation): Written => valuesOfRelation(rows, relation);
 
   return [
-    ...choiceBounds("HottextInteraction", Rows.of(rows, HottextInteraction), {
-      max: of(HottextMaxChoices),
-      maxFallback: 1n,
-      min: of(HottextMinChoices),
-    }),
-    ...choiceBounds("HotspotInteraction", Rows.of(rows, HotspotInteraction), {
-      max: of(HotspotMaxChoices),
-      maxFallback: 1n,
-      min: of(HotspotMinChoices),
-    }),
-    ...choiceBounds("SelectPointInteraction", Rows.of(rows, SelectPointInteraction), {
-      max: of(SelectPointMaxChoices),
-      maxFallback: 0n,
-      min: of(SelectPointMinChoices),
-    }),
-    ...choiceBounds("PositionObjectInteraction", Rows.of(rows, PositionObjectInteraction), {
-      max: of(PositionObjectMaxChoices),
-      maxFallback: 1n,
-      min: of(PositionObjectMinChoices),
-    }),
     ...choiceBounds("OrderInteraction", Rows.of(rows, OrderInteraction), {
       max: of(OrderMaxChoices),
       maxFallback: 0n,

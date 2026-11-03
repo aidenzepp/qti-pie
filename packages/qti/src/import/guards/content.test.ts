@@ -8,7 +8,7 @@ import { AttributeIdref, HeadersTarget, NodeClass, NodeLabel } from "#qti/schema
 import { A, BlockquoteCite } from "#qti/schema/html/text.ts";
 import { AssociableHotspot } from "#qti/schema/interactions/associate.ts";
 import { Gap, GapText } from "#qti/schema/interactions/gap.ts";
-import { HottextInteraction, HottextOwner } from "#qti/schema/interactions/hot.ts";
+import { HottextOwner } from "#qti/schema/interactions/hot.ts";
 import { OrderInteraction } from "#qti/schema/interactions/order.ts";
 import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
 import { ResourceLom } from "#qti/schema/metadata.ts";
@@ -273,21 +273,24 @@ describe("contentGuards typed-copy", () => {
     Effect.gen(function* optionalCount() {
       const written = yield* rowsOf(
         "3.0.1",
-        `<qti-hottext-interaction response-identifier="PAIRS" max-choices="3">${hottext("H")}</qti-hottext-interaction>`,
+        `<qti-order-interaction response-identifier="PAIRS" max-choices="3"><qti-simple-choice identifier="A">a</qti-simple-choice></qti-order-interaction>`,
       );
       yield* contentGuards(written);
       yield* refusalOfRows(
         "typed-copy",
-        edited(written, HottextInteraction, (facts) =>
+        edited(written, OrderInteraction, (facts) =>
           facts.map((fact) => ({ ...fact, maxChoicesN: 2n })),
         ),
         "maxChoicesN",
       );
 
-      const omitted = yield* rowsOf("3.0.1", hottextInteraction(hottext("H")));
+      const omitted = yield* rowsOf(
+        "3.0.1",
+        `<qti-order-interaction response-identifier="PAIRS"><qti-simple-choice identifier="A">a</qti-simple-choice></qti-order-interaction>`,
+      );
       yield* refusalOfRows(
         "typed-copy",
-        edited(omitted, HottextInteraction, (facts) =>
+        edited(omitted, OrderInteraction, (facts) =>
           facts.map((fact) => ({ ...fact, minChoicesN: 4n })),
         ),
         "minChoicesN",

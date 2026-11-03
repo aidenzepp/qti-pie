@@ -338,18 +338,42 @@ describe("interactions/hot", () => {
     assert.match("-3 4", new RegExp(patterns.integerList, "u"));
   });
 
+  it("holds the choice bounds as integers only, with no lexical relation beside them", () => {
+    for (const name of [
+      "HottextMaxChoices",
+      "HottextMinChoices",
+      "HotspotMaxChoices",
+      "HotspotMinChoices",
+      "SelectPointMaxChoices",
+      "SelectPointMinChoices",
+      "PositionObjectMaxChoices",
+    ]) {
+      assert.notInclude(Object.keys(relations), name);
+    }
+
+    assert.deepStrictEqual(Object.keys(relations.PositionObjectMinChoices.fields), ["node"]);
+
+    for (const arm of [
+      relations.HottextInteraction,
+      relations.HotspotInteraction,
+      relations.SelectPointInteraction,
+      relations.PositionObjectInteraction,
+    ]) {
+      const fields = Object.keys(arm.fields);
+
+      assert.include(fields, "maxChoicesN", arm.name);
+      assert.include(fields, "minChoicesN", arm.name);
+    }
+  });
+
   it("contains every marker and optional value into the arm it belongs to", () => {
     const owners = [
       [relations.DeclaredHottextMaxChoices, relations.HottextInteraction],
       [relations.DeclaredHottextMinChoices, relations.HottextInteraction],
-      [relations.HottextMaxChoices, relations.HottextInteraction],
-      [relations.HottextMinChoices, relations.HottextInteraction],
       [relations.HottextMinSelectionsMessage, relations.HottextInteraction],
       [relations.HottextMaxSelectionsMessage, relations.HottextInteraction],
       [relations.DeclaredHotspotMaxChoices, relations.HotspotInteraction],
       [relations.DeclaredHotspotMinChoices, relations.HotspotInteraction],
-      [relations.HotspotMaxChoices, relations.HotspotInteraction],
-      [relations.HotspotMinChoices, relations.HotspotInteraction],
       [relations.HotspotMinSelectionsMessage, relations.HotspotInteraction],
       [relations.HotspotMaxSelectionsMessage, relations.HotspotInteraction],
       [relations.HotspotChoiceLabel, relations.HotspotChoice],
@@ -357,10 +381,7 @@ describe("interactions/hot", () => {
       [relations.DeclaredHotspotChoiceShowHide, relations.HotspotChoice],
       [relations.DeclaredSelectPointMaxChoices, relations.SelectPointInteraction],
       [relations.DeclaredSelectPointMinChoices, relations.SelectPointInteraction],
-      [relations.SelectPointMaxChoices, relations.SelectPointInteraction],
-      [relations.SelectPointMinChoices, relations.SelectPointInteraction],
       [relations.DeclaredPositionObjectMaxChoices, relations.PositionObjectInteraction],
-      [relations.PositionObjectMaxChoices, relations.PositionObjectInteraction],
       [relations.PositionObjectMinChoices, relations.PositionObjectInteraction],
       [relations.PositionObjectCenterPoint, relations.PositionObjectInteraction],
     ] as const;
