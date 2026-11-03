@@ -270,28 +270,19 @@ const gapMatchOf = (identifier: string) =>
   gapMatch(`${gapText}<p>a <qti-gap identifier="${identifier}"/></p>`);
 
 describe("contentGuards typed-copy", () => {
-  it.effect("refuses a typed count that differs from its optional lexical row or default", () =>
-    Effect.gen(function* optionalCount() {
-      const written = yield* rowsOf(
+  it.effect("refuses a media interaction's plays spelling that differs from its typed count", () =>
+    Effect.gen(function* mediaPlays() {
+      const rows = yield* rowsOf(
         "3.0.1",
-        `<qti-media-interaction response-identifier="RESPONSE" autostart="false" max-plays="3">${media}</qti-media-interaction>`,
+        `<qti-media-interaction response-identifier="RESPONSE" autostart="false" min-plays="+1">${media}</qti-media-interaction>`,
       );
-      yield* contentGuards(written);
+      yield* contentGuards(rows);
       yield* refusalOfRows(
         "typed-copy",
-        edited(written, MediaInteraction, (facts) =>
-          facts.map((fact) => ({ ...fact, maxPlaysN: 2n })),
-        ),
-        "maxPlaysN",
-      );
-
-      const omitted = yield* rowsOf("3.0.1", mediaInteraction(media));
-      yield* refusalOfRows(
-        "typed-copy",
-        edited(omitted, MediaInteraction, (facts) =>
+        edited(rows, MediaInteraction, (facts) =>
           facts.map((fact) => ({ ...fact, minPlaysN: 4n })),
         ),
-        "minPlaysN",
+        "does not parse to the typed value",
       );
     }),
   );

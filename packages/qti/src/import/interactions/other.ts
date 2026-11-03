@@ -10,7 +10,8 @@ import { judgedLater } from "#qti/import/judged.ts";
 import { requiredAttribute } from "#qti/import/required.ts";
 import { Effect, Option } from "effect";
 import type { InteractionContext, MarkerRelation, NodeRef } from "#qti/import/interactions.ts";
-import { Rows, typedAttribute } from "#qti/import/tree.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
+import { Rows, spelledInteger, typedAttribute } from "#qti/import/tree.ts";
 import type { ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import {
   DeclaredMediaLoop,
@@ -57,11 +58,6 @@ const valueFact = <T extends string>(
 const plain = (read: string): string => read;
 
 /**
- * A count as an `xs:nonNegativeInteger` column holds it.
- */
-const natural = (read: string): `${number}` | `+${number}` => judgedLater(read);
-
-/**
  * A flag as an `xs:boolean` column holds it.
  */
 const flag = (read: string): "0" | "1" | "false" | "true" => judgedLater(read);
@@ -97,20 +93,47 @@ const bound = (
   );
 
 /**
- * The plays of a media interaction as its typed column holds them: 0 where the source omits them.
+ * The plays of a media interaction as its typed column holds them: 0 where the source omits them,
+ * and otherwise the value of the attribute, with its spelling kept where the source spelled it
+ * other than the way the value is written.
  */
-const playsOf = (ctx: InteractionContext, lexical: Option.Option<string>): bigint =>
-  ctx.shared.typedCopy(lexical, 0n);
+const playsOf = (
+  rows: Rows,
+  node: Owned,
+  name: "max-plays" | "min-plays",
+  text: Option.Option<string>,
+) =>
+  Option.match(text, {
+    onNone: () => Effect.succeed({ rows, value: 0n }),
+    onSome: (own) =>
+      spelledInteger(
+        rows,
+        node.id,
+        node.kind,
+        name,
+        own,
+        "nonNegativeInteger",
+        "attribute-lexical",
+        `${node.kind} ${name}`,
+      ),
+  });
 
 /**
  * The rows of one `qti-media-interaction`.
+ *
+ * @param ctx - The tree, its node index, the document and the shared writers.
+ * @param rows - The rows so far.
+ * @param element - The interaction's element.
+ * @param node - The interaction's node.
+ * @returns The rows with the arm, its markers and its binding; `ImportRefused`
+ *   (`attribute-lexical`) for a `max-plays` or `min-plays` outside the non-negative integers.
  */
 const mediaRows = Effect.fn("import.mediaRows")(function* mediaRows(
   ctx: InteractionContext,
   rows: Rows,
   element: Element,
   node: Owned,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
   const responseIdentifier = Option.getOrElse(attributes.read("response-identifier"), () => "");
   const autostart = yield* requiredAttribute(element, "autostart", attributes.read("autostart"));
@@ -119,26 +142,31 @@ const mediaRows = Effect.fn("import.mediaRows")(function* mediaRows(
   const minPlays = attributes.read("min-plays");
   const coords = attributes.read("coords");
 
-  let built = attributes.rows();
+  const maximum = yield* playsOf(attributes.rows(), node, "max-plays", maxPlays);
+  const minimum = yield* playsOf(maximum.rows, node, "min-plays", minPlays);
+
+  let built = minimum.rows;
   built = Rows.add(built, MediaInteraction, [
     {
       autostart: judgedLater(autostart),
       id: node.id,
       loop: judgedLater(Option.getOrElse(loop, () => "false")),
-      maxPlaysN: playsOf(ctx, maxPlays),
-      minPlaysN: playsOf(ctx, minPlays),
+      maxPlaysN: maximum.value,
+      minPlaysN: minimum.value,
       responseIdentifier,
       rootKind: "item",
     },
   ]);
   built = ctx.shared.markers(
     built,
-    { loop: DeclaredMediaLoop } satisfies MarkerSet,
+    {
+      loop: DeclaredMediaLoop,
+      "max-plays": MediaMaxPlays,
+      "min-plays": MediaMinPlays,
+    } satisfies MarkerSet,
     node.id,
     attributes.written(),
   );
-  built = Rows.add(built, MediaMaxPlays, valueFact(node.id, maxPlays, natural));
-  built = Rows.add(built, MediaMinPlays, valueFact(node.id, minPlays, natural));
   built = Rows.add(built, MediaCoords, valueFact(node.id, coords, plain));
 
   return yield* bound(ctx, built, node, responseIdentifier);
@@ -270,12 +298,13 @@ const endAttemptRows = Effect.fn("import.endAttemptRows")(function* endAttemptRo
  * @param rows - The rows so far.
  * @returns The rows with each media, upload, drawing, slider and end-attempt interaction's arm,
  *   optional values, markers and binding; `ItemRefusal` for a `response-identifier` no declaration
- *   of the item names.
+ *   of the item names; `ImportRefused` (`attribute-lexical`) for a `max-plays` or `min-plays`
+ *   outside the non-negative integers.
  */
 export const otherRows = Effect.fn("import.otherRows")(function* otherRows(
   ctx: InteractionContext,
   rows: Rows,
-): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | UnmodeledVocabulary | ItemRefusal> {
   let built = rows;
   for (const [element, indexed] of ctx.nodes) {
     const node = { ancestry: indexed.ancestry, id: indexed.id, kind: indexed.kind };
