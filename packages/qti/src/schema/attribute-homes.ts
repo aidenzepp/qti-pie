@@ -744,8 +744,8 @@ export const ownAttributes = {
   ],
   "qti-hotspot-interaction": [
     responseIdentifierOf(R.HotspotInteraction),
-    ["min-choices", optional(R.HotspotMinChoices)],
-    ["max-choices", optional(R.HotspotMaxChoices)],
+    ["min-choices", marked(R.DeclaredHotspotMinChoices, arm(R.HotspotInteraction, "minChoicesN"))],
+    ["max-choices", marked(R.DeclaredHotspotMaxChoices, arm(R.HotspotInteraction, "maxChoicesN"))],
     ["data-min-selections-message", optional(R.HotspotMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.HotspotMaxSelectionsMessage)],
   ],
@@ -756,8 +756,8 @@ export const ownAttributes = {
   ],
   "qti-hottext-interaction": [
     responseIdentifierOf(R.HottextInteraction),
-    ["max-choices", optional(R.HottextMaxChoices)],
-    ["min-choices", optional(R.HottextMinChoices)],
+    ["max-choices", marked(R.DeclaredHottextMaxChoices, arm(R.HottextInteraction, "maxChoicesN"))],
+    ["min-choices", marked(R.DeclaredHottextMinChoices, arm(R.HottextInteraction, "minChoicesN"))],
     ["data-min-selections-message", optional(R.HottextMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.HottextMaxSelectionsMessage)],
   ],
@@ -878,8 +878,14 @@ export const ownAttributes = {
   "qti-position-object-interaction": [
     responseIdentifierOf(R.PositionObjectInteraction),
     ["center-point", optional(R.PositionObjectCenterPoint)],
-    ["min-choices", optional(R.PositionObjectMinChoices)],
-    ["max-choices", optional(R.PositionObjectMaxChoices)],
+    [
+      "min-choices",
+      marked(R.PositionObjectMinChoices, arm(R.PositionObjectInteraction, "minChoicesN")),
+    ],
+    [
+      "max-choices",
+      marked(R.DeclaredPositionObjectMaxChoices, arm(R.PositionObjectInteraction, "maxChoicesN")),
+    ],
   ],
   "qti-printed-variable": [
     identifierOf(R.PrintedVariable),
@@ -919,8 +925,14 @@ export const ownAttributes = {
   ],
   "qti-select-point-interaction": [
     responseIdentifierOf(R.SelectPointInteraction),
-    ["min-choices", optional(R.SelectPointMinChoices)],
-    ["max-choices", optional(R.SelectPointMaxChoices)],
+    [
+      "min-choices",
+      marked(R.DeclaredSelectPointMinChoices, arm(R.SelectPointInteraction, "minChoicesN")),
+    ],
+    [
+      "max-choices",
+      marked(R.DeclaredSelectPointMaxChoices, arm(R.SelectPointInteraction, "maxChoicesN")),
+    ],
   ],
   "qti-set-correct-response": referring,
   "qti-set-default-value": referring,

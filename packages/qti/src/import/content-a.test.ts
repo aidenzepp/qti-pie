@@ -48,12 +48,7 @@ import {
   GapMatchInteraction,
   GraphicGapMatchInteraction,
 } from "#qti/schema/interactions/gap.ts";
-import {
-  Hottext,
-  HottextOwner,
-  SelectPointInteraction,
-  SelectPointMaxChoices,
-} from "#qti/schema/interactions/hot.ts";
+import { Hottext, HottextOwner, SelectPointInteraction } from "#qti/schema/interactions/hot.ts";
 import {
   OrderInteraction,
   OrderMaxChoices,
@@ -495,7 +490,6 @@ const negatives: readonly Negative[] = [
       const id = text(point, "id");
       point["maxChoicesN"] = 0n;
       where(draft, TypedBinding, "node", id)["maxCount"] = 0n;
-      setValue(draft, SelectPointMaxChoices, id, "0");
     },
     fixture: "cut-select-point",
     laws: [checkLaw(TypedBinding, "BindingMax")],

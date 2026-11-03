@@ -10,7 +10,8 @@
 import { judgedLater } from "#qti/import/judged.ts";
 import { Effect, Option } from "effect";
 import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
-import { ItemRefusal, Rows, withParents } from "#qti/import/tree.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
+import { ItemRefusal, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
 import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { Shape } from "#qti/schema/content/rosters.ts";
 import type { ShapeHandle } from "#qti/schema/content/rosters.ts";
@@ -27,27 +28,20 @@ import {
   HotspotChoice,
   HotspotChoiceLabel,
   HotspotInteraction,
-  HotspotMaxChoices,
   HotspotMaxSelectionsMessage,
-  HotspotMinChoices,
   HotspotMinSelectionsMessage,
   Hottext,
   HottextInteraction,
-  HottextMaxChoices,
   HottextMaxSelectionsMessage,
-  HottextMinChoices,
   HottextMinSelectionsMessage,
   HottextOwner,
   PositionObjectCenterPoint,
   PositionObjectInteraction,
-  PositionObjectMaxChoices,
   PositionObjectMinChoices,
   PositionObjectStage,
   SelectPointInteraction,
-  SelectPointMaxChoices,
-  SelectPointMinChoices,
 } from "#qti/schema/interactions/hot.ts";
-import type { NodeKindHandle } from "#qti/schema/node.ts";
+import type { AttributeNameHandle } from "#qti/schema/node.ts";
 import type { Element } from "#qti/xml/tree.ts";
 
 /**
@@ -72,44 +66,88 @@ const shapeOf = (text: Option.Option<string>): Option.Option<ShapeHandle> =>
 
 /**
  * What the four interactions read the same way: the response identifier and the choice bounds, as
- * written and as the typed columns hold them.
+ * the typed columns hold them.
  */
 interface Bounds {
-  readonly max: Option.Option<string>;
   readonly maxN: bigint;
-  readonly min: Option.Option<string>;
   readonly minN: bigint;
   readonly responseIdentifier: string;
 }
 
 /**
+ * The value of an integer attribute of `node`, and the rows with its spelling kept where the
+ * source spelled it other than the way the value is written.
+ *
+ * @param rows - The rows so far.
+ * @param node - The element that carries the attribute.
+ * @param name - The attribute's registry name.
+ * @param text - The attribute's text after its whitespace step.
+ * @returns The value and the rows; `ImportRefused` (`attribute-lexical`) for text outside the
+ *   non-negative integers.
+ */
+const spelled = (rows: Rows, node: IndexedNode, name: AttributeNameHandle, text: string) =>
+  spelledInteger(
+    rows,
+    node.id,
+    node.kind,
+    name,
+    text,
+    "nonNegativeInteger",
+    "attribute-lexical",
+    `${node.kind} ${name}`,
+  );
+
+/**
+ * The value of an integer attribute that may be absent: `fallback` where the source omits it, and
+ * otherwise what {@link spelled} makes of its text.
+ */
+const spelledOr = (
+  rows: Rows,
+  node: IndexedNode,
+  name: AttributeNameHandle,
+  text: Option.Option<string>,
+  fallback: bigint,
+) =>
+  Option.match(text, {
+    onNone: () => Effect.succeed({ rows, value: fallback }),
+    onSome: (own) => spelled(rows, node, name, own),
+  });
+
+/**
  * Read the response identifier and the two choice bounds of an interaction; an absent
  * `max-choices` reads as the kind's default and an absent `min-choices` as 0.
+ *
+ * The caller reads its other attributes first: the rows returned are the reader's rows at the
+ * moment of the call, with the spelling rows added.
+ *
+ * @param ctx - The tree, its node index, the document and the shared writers.
+ * @param attributes - The interaction's attribute reader.
+ * @param node - The interaction's node.
+ * @returns The bounds and the rows; `ImportRefused` (`attribute-lexical`) for a bound outside the
+ *   non-negative integers.
  */
-const boundsOf = (
+const boundsOf = Effect.fn("import.boundsOf")(function* boundsOf(
   ctx: InteractionContext,
   attributes: AttributeReader,
-  kind: NodeKindHandle,
-): Bounds => {
+  node: IndexedNode,
+): Effect.fn.Return<{ bounds: Bounds; rows: Rows }, ImportRefused> {
   const max = attributes.read("max-choices");
   const min = attributes.read("min-choices");
+  const responseIdentifier = Option.getOrElse(attributes.read("response-identifier"), () => "");
+  const maximum = yield* spelledOr(
+    attributes.rows(),
+    node,
+    "max-choices",
+    max,
+    ctx.shared.maxCountDefault(node.kind, new Map()),
+  );
+  const minimum = yield* spelledOr(maximum.rows, node, "min-choices", min, 0n);
 
   return {
-    max,
-    maxN: ctx.shared.maxCountDefault(
-      kind,
-      new Map(
-        Option.match(max, {
-          onNone: (): [string, string][] => [],
-          onSome: (own): [string, string][] => [["max-choices", own]],
-        }),
-      ),
-    ),
-    min,
-    minN: ctx.shared.typedCopy(min, 0n),
-    responseIdentifier: Option.getOrElse(attributes.read("response-identifier"), () => ""),
+    bounds: { maxN: maximum.value, minN: minimum.value, responseIdentifier },
+    rows: minimum.rows,
   };
-};
+});
 
 /**
  * Write an interaction's binding to the response variable it names; the count is its
@@ -136,12 +174,13 @@ const hottextInteraction = Effect.fn("import.hottextInteraction")(function* hott
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
-  const bounds = boundsOf(ctx, attributes, node.kind);
   const minMessage = attributes.read("data-min-selections-message");
   const maxMessage = attributes.read("data-max-selections-message");
-  let built = yield* bind(ctx, attributes.rows(), node, bounds);
+  const read = yield* boundsOf(ctx, attributes, node);
+  const { bounds } = read;
+  let built = yield* bind(ctx, read.rows, node, bounds);
   built = Rows.add(built, HottextInteraction, [
     {
       id: node.id,
@@ -151,16 +190,6 @@ const hottextInteraction = Effect.fn("import.hottextInteraction")(function* hott
       rootKind: "item",
     },
   ]);
-  built = Rows.add(
-    built,
-    HottextMaxChoices,
-    written(bounds.max, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
-  built = Rows.add(
-    built,
-    HottextMinChoices,
-    written(bounds.min, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
   built = Rows.add(
     built,
     HottextMinSelectionsMessage,
@@ -188,12 +217,13 @@ const hotspotInteraction = Effect.fn("import.hotspotInteraction")(function* hots
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
-  const bounds = boundsOf(ctx, attributes, node.kind);
   const minMessage = attributes.read("data-min-selections-message");
   const maxMessage = attributes.read("data-max-selections-message");
-  let built = yield* bind(ctx, attributes.rows(), node, bounds);
+  const read = yield* boundsOf(ctx, attributes, node);
+  const { bounds } = read;
+  let built = yield* bind(ctx, read.rows, node, bounds);
   built = Rows.add(built, HotspotInteraction, [
     {
       id: node.id,
@@ -203,16 +233,6 @@ const hotspotInteraction = Effect.fn("import.hotspotInteraction")(function* hots
       rootKind: "item",
     },
   ]);
-  built = Rows.add(
-    built,
-    HotspotMaxChoices,
-    written(bounds.max, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
-  built = Rows.add(
-    built,
-    HotspotMinChoices,
-    written(bounds.min, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
   built = Rows.add(
     built,
     HotspotMinSelectionsMessage,
@@ -241,10 +261,11 @@ const selectPoint = Effect.fn("import.selectPoint")(function* selectPoint(
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
-  const bounds = boundsOf(ctx, attributes, node.kind);
-  let built = yield* bind(ctx, attributes.rows(), node, bounds);
+  const read = yield* boundsOf(ctx, attributes, node);
+  const { bounds } = read;
+  let built = yield* bind(ctx, read.rows, node, bounds);
   built = Rows.add(built, SelectPointInteraction, [
     {
       id: node.id,
@@ -254,16 +275,6 @@ const selectPoint = Effect.fn("import.selectPoint")(function* selectPoint(
       rootKind: "item",
     },
   ]);
-  built = Rows.add(
-    built,
-    SelectPointMaxChoices,
-    written(bounds.max, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
-  built = Rows.add(
-    built,
-    SelectPointMinChoices,
-    written(bounds.min, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
 
   return ctx.shared.markers(
     built,
@@ -278,18 +289,19 @@ const selectPoint = Effect.fn("import.selectPoint")(function* selectPoint(
 
 /**
  * The rows of one `qti-position-object-interaction` and its binding. Its `min-choices` has no
- * schema default, so the optional relation alone says whether the source wrote it.
+ * schema default, so its marker alone says whether the source wrote it.
  */
 const positionObject = Effect.fn("import.positionObject")(function* positionObject(
   ctx: InteractionContext,
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
-  const bounds = boundsOf(ctx, attributes, node.kind);
   const center = attributes.read("center-point");
-  let built = yield* bind(ctx, attributes.rows(), node, bounds);
+  const read = yield* boundsOf(ctx, attributes, node);
+  const { bounds } = read;
+  let built = yield* bind(ctx, read.rows, node, bounds);
   built = Rows.add(built, PositionObjectInteraction, [
     {
       id: node.id,
@@ -301,23 +313,16 @@ const positionObject = Effect.fn("import.positionObject")(function* positionObje
   ]);
   built = Rows.add(
     built,
-    PositionObjectMaxChoices,
-    written(bounds.max, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
-  built = Rows.add(
-    built,
-    PositionObjectMinChoices,
-    written(bounds.min, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
-  built = Rows.add(
-    built,
     PositionObjectCenterPoint,
     written(center, (own) => ({ node: node.id, value: judgedLater(own) })),
   );
 
   return ctx.shared.markers(
     built,
-    { "max-choices": DeclaredPositionObjectMaxChoices },
+    {
+      "max-choices": DeclaredPositionObjectMaxChoices,
+      "min-choices": PositionObjectMinChoices,
+    },
     node.id,
     attributes.written(),
   );
@@ -450,12 +455,13 @@ const hotspotChoice = Effect.fn("import.hotspotChoice")(function* hotspotChoice(
  * @returns The rows with every hottext, hotspot, select-point and position-object interaction and
  *   the elements beneath them; `ItemRefusal` for an interaction whose `response-identifier` names
  *   no declaration, a choice whose `template-identifier` names no typed variable, and a hotspot
- *   choice with no valid shape or no enclosing interaction.
+ *   choice with no valid shape or no enclosing interaction; `ImportRefused` (`attribute-lexical`)
+ *   for a `max-choices` or `min-choices` outside the non-negative integers.
  */
 export const hotRows = Effect.fn("import.hotRows")(function* hotRows(
   ctx: InteractionContext,
   rows: Rows,
-): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | UnmodeledVocabulary | ItemRefusal> {
   let built = rows;
   for (const [element] of withParents(ctx.root, Option.none())) {
     const node = ctx.nodes.get(element);
