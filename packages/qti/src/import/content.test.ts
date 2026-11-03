@@ -32,7 +32,7 @@ import {
   TemplateFeedbackBlock,
 } from "#qti/schema/feedback.ts";
 import { AttributeLexical, Node } from "#qti/schema/node.ts";
-import { Qti } from "#qti/schema/qti.ts";
+import { nodeArms } from "#qti/schema/qti.ts";
 import type { SchemaVersionHandle } from "#qti/schema/node.ts";
 import {
   CatalogInfo,
@@ -140,15 +140,9 @@ const sixKinds = `<qti-rubric-block use="instructions" view="candidate"><qti-con
 const sixKindsHead = `<qti-template-declaration identifier="T" cardinality="single" base-type="identifier"/>`;
 
 /**
- * The arm each of the six kind handles names in `Node`'s alternatives.
+ * The arm each of the six kind handles has under its own `mirrors` law from `Node`.
  */
-const armOfKind: ReadonlyMap<string, AnyRelation> = new Map(
-  Qti.statements.flatMap((statement) =>
-    statement.kind === "alternatives" && statement.parent === Node
-      ? Object.entries<AnyRelation>(statement.arms)
-      : [],
-  ),
-);
+const armOfKind: ReadonlyMap<string, AnyRelation> = new Map(Object.entries(nodeArms));
 
 const sixHandles = [
   "qti-feedback-block",
@@ -633,40 +627,38 @@ describe("contentRows", () => {
     }),
   );
 
-  it.effect(
-    "puts each feedback and template node's row in the arm Node's alternatives name for its kind",
-    () =>
-      Effect.gen(function* run() {
-        const { rows } = yield* built({ body: sixKinds, head: sixKindsHead });
-        const arms = sixHandles.map((handle) => armOfKind.get(handle));
-        const idsOf = (relation: AnyRelation | undefined): readonly string[] =>
-          relation === undefined
-            ? []
-            : Rows.of(rows, relation).flatMap((row) =>
-                Predicate.hasProperty(row, "id") ? [String(row.id)] : [],
-              );
-        const nodes = Rows.of(rows, Node).filter((row) =>
-          sixHandles.some((handle) => handle === row.kind),
+  it.effect("puts each feedback and template node's row in the arm its kind's Node law names", () =>
+    Effect.gen(function* run() {
+      const { rows } = yield* built({ body: sixKinds, head: sixKindsHead });
+      const arms = sixHandles.map((handle) => armOfKind.get(handle));
+      const idsOf = (relation: AnyRelation | undefined): readonly string[] =>
+        relation === undefined
+          ? []
+          : Rows.of(rows, relation).flatMap((row) =>
+              Predicate.hasProperty(row, "id") ? [String(row.id)] : [],
+            );
+      const nodes = Rows.of(rows, Node).filter((row) =>
+        sixHandles.some((handle) => handle === row.kind),
+      );
+
+      assert.strictEqual(nodes.length, 6);
+      for (const node of nodes) {
+        const own = armOfKind.get(node.kind);
+
+        assert.isDefined(own, node.kind);
+        assert.deepStrictEqual(
+          idsOf(own).filter((id) => id === node.id),
+          [node.id],
+          node.kind,
         );
-
-        assert.strictEqual(nodes.length, 6);
-        for (const node of nodes) {
-          const own = armOfKind.get(node.kind);
-
-          assert.isDefined(own, node.kind);
+        for (const other of arms.filter((arm) => arm !== own)) {
           assert.deepStrictEqual(
-            idsOf(own).filter((id) => id === node.id),
-            [node.id],
+            idsOf(other).filter((id) => id === node.id),
+            [],
             node.kind,
           );
-          for (const other of arms.filter((arm) => arm !== own)) {
-            assert.deepStrictEqual(
-              idsOf(other).filter((id) => id === node.id),
-              [],
-              node.kind,
-            );
-          }
         }
-      }),
+      }
+    }),
   );
 });

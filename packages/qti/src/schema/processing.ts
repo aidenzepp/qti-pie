@@ -184,8 +184,8 @@ export const BuiltInRef = relation("BuiltInRef", { id: uuid, name: closedId(Buil
  * The response processing kind's arm, keyed by its `NodeKind` handle.
  *
  * `ResponseProcessingItem` is a companion row, not an arm. The containment of the arm into `Node`
- * is not written here: `alternatives(Node, "kind", NodeKind, ...)` in the composed schema expands
- * to it.
+ * is not written here: one `mirrors` per handle in the composed schema (`#qti/schema/qti.ts`)
+ * binds it.
  */
 export const arms = {
   "qti-response-processing": ResponseProcessing,

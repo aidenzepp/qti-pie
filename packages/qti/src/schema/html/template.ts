@@ -5,10 +5,10 @@
  * The arm carries no payload. The first milestone seeds no `Admission` row naming `template`, so
  * no node of that kind is imported or stored; the second milestone's M2e gives the arm its fields.
  *
- * It exists because grizzle compiles the `Node` alternatives only when every `NodeKind` handle has
- * an arm: at this size, one unarmed handle grows the `alternatives` law past what the printer can
- * emit, and `grizzle check` ends in a stack overflow (findings row 27). The arm's containment into
- * `Node` is expanded by `alternatives` in the composed schema, not written here.
+ * It exists because every `NodeKind` handle has an arm: the arm was added when it was (E5 (a),
+ * `p2-65`), and it stays. Whether to thin arms is phase 6's question, not this module's. The arm's
+ * containment into `Node` is bound by one `mirrors` per handle in the composed schema
+ * (`#qti/schema/qti.ts`), not written here.
  */
 import { relation, uuid } from "@bjornpagen/grizzle";
 

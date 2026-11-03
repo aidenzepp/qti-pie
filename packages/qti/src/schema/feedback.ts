@@ -187,7 +187,7 @@ export const relations = {
 
 /**
  * The feedback kinds' arms, keyed by their `NodeKind` handles. Each handle has its own arm:
- * `alternatives` binds each arm row to a node of every handle that lists the arm, and a node has
+ * each handle's `mirrors` law binds every row of its arm to a node of that handle, and a node has
  * one kind, so an arm listed under two handles admits no row.
  */
 export const arms = {

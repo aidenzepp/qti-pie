@@ -4,8 +4,8 @@
  * `html.ts`.
  *
  * An arm carries a column only for an own attribute that is required; an own optional attribute is
- * a row of its own relation. The arms' containments into `Node` are expanded by `alternatives` in
- * the composed schema, not written here.
+ * a row of its own relation. The arms' containments into `Node` are bound by one `mirrors` per
+ * handle in the composed schema, not written here.
  *
  * Goal 3.9: `autoplay`, `loop`, `muted` and `controls` on `audio` and `video`, and `default` on
  * `track`, are `xs:boolean` in 3.0.0 and an enumeration that names the attribute in 3.0.1. Their

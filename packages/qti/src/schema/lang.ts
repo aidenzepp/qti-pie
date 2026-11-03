@@ -63,7 +63,7 @@ export const ResourceLomGeneral = relation(
 export const relations = { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet };
 
 /**
- * The arms this module adds to `alternatives`: none.
+ * The arms this module adds to the `Node` arm laws: none.
  */
 export const arms = {};
 

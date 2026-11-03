@@ -212,7 +212,7 @@ export const DeclaredSliderStepLabel = relation("DeclaredSliderStepLabel", { nod
 
 /**
  * The arms of the five kinds, keyed by their `NodeKind` handles. Their containments into `Node`
- * are expanded by `alternatives` in the composed schema.
+ * are bound by one `mirrors` per handle in the composed schema.
  */
 export const arms = {
   "qti-drawing-interaction": DrawingInteraction,

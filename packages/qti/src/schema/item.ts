@@ -4,7 +4,7 @@
  *
  * `identifier` and `title` are not here: they are the `DocumentIdentifier` and `DocumentTitle` rows
  * of the document. The arms' containments into `Node` are not written here either:
- * `alternatives(Node, "kind", NodeKind, ...)` in the composed schema expands to them.
+ * one `mirrors` per handle in the composed schema (`#qti/schema/qti.ts`) binds them.
  */
 import {
   alternatives,

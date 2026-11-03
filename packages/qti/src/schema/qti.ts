@@ -1,12 +1,14 @@
 /**
- * The composed schema: every module's relations and rosters, every module's statements, and the
- * two alternatives statements that bind the node and tree rosters to their arms.
+ * The composed schema: every module's relations and rosters, every module's statements, the
+ * `Node` law, and the alternatives statement that binds the tree roster to its arms.
  *
- * `grizzle` requires exactly one `closed("NodeKind")` and one `alternatives` over it, so the `Node`
- * statement is written here and nowhere else; the modules export their arms and leave the
- * containments into `Node` to it.
+ * The `Node` law is one `contained` from `Node.kind` into `NodeKind` plus one `mirrors` per
+ * handle, from the `Node` rows of that kind into the handle's arm. That is the `alternatives`
+ * helper's own expansion (grizzle `statements.ts:341-346`), written out so that no single
+ * function holds every arm. It is written here and nowhere else; the modules export their arms
+ * and leave the containments into `Node` to it.
  */
-import { alternatives, schema } from "@bjornpagen/grizzle";
+import { alternatives, contained, mirrors, on, schema, select } from "@bjornpagen/grizzle";
 import * as ancestry from "#qti/schema/ancestry.ts";
 import * as attributes from "#qti/schema/attributes.ts";
 import * as choices from "#qti/schema/choices.ts";
@@ -37,6 +39,40 @@ import * as rubric from "#qti/schema/rubric.ts";
 import * as coords from "#qti/schema/shapes.ts";
 import * as template from "#qti/schema/template.ts";
 import * as value from "#qti/schema/value.ts";
+
+/**
+ * The arm of each `NodeKind` handle, one relation per handle.
+ */
+export const nodeArms = {
+  ...node.arms,
+  ...declaration.arms,
+  ...value.arms,
+  ...interaction.arms,
+  ...processing.arms,
+  ...item.arms,
+  ...html.arms,
+  ...pkg.arms,
+  ...metadata.arms,
+  ...ancestry.arms,
+  ...attributes.arms,
+  ...htmlText.arms,
+  ...htmlStructure.arms,
+  ...htmlMedia.arms,
+  ...htmlTemplate.arms,
+  ...choices.arms,
+  ...coords.arms,
+  ...order.arms,
+  ...associate.arms,
+  ...gap.arms,
+  ...hot.arms,
+  ...textInteraction.arms,
+  ...other.arms,
+  ...feedback.arms,
+  ...template.arms,
+  ...rubric.arms,
+  ...mapping.arms,
+  ...lang.arms,
+};
 
 export const Qti = schema(
   "Qti",
@@ -103,36 +139,10 @@ export const Qti = schema(
     ...rubric.rules,
     ...mapping.rules,
     ...lang.rules,
-    alternatives(node.Node, "kind", node.NodeKind, {
-      ...node.arms,
-      ...declaration.arms,
-      ...value.arms,
-      ...interaction.arms,
-      ...processing.arms,
-      ...item.arms,
-      ...html.arms,
-      ...pkg.arms,
-      ...metadata.arms,
-      ...ancestry.arms,
-      ...attributes.arms,
-      ...htmlText.arms,
-      ...htmlStructure.arms,
-      ...htmlMedia.arms,
-      ...htmlTemplate.arms,
-      ...choices.arms,
-      ...coords.arms,
-      ...order.arms,
-      ...associate.arms,
-      ...gap.arms,
-      ...hot.arms,
-      ...textInteraction.arms,
-      ...other.arms,
-      ...feedback.arms,
-      ...template.arms,
-      ...rubric.arms,
-      ...mapping.arms,
-      ...lang.arms,
-    }),
+    contained(on(node.Node, "kind"), on(node.NodeKind, "id")),
+    ...node.NodeKind.handles.map((kind) =>
+      mirrors(on(select(node.Node, { kind }), "id"), on(nodeArms[kind], "id")),
+    ),
     alternatives(node.Tree, "kind", node.TreeKind, {
       document: document.Document,
       manifest: pkg.Manifest,

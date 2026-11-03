@@ -205,7 +205,7 @@ export const GraphicOrderMaxChoicesN = relation(
 
 /**
  * The arms of the two order kinds, keyed by their `NodeKind` handles. Their containments into
- * `Node` are expanded by `alternatives` in the composed schema.
+ * `Node` are bound by one `mirrors` per handle in the composed schema.
  */
 export const arms = {
   "qti-graphic-order-interaction": GraphicOrderInteraction,
