@@ -23,6 +23,7 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
+import type { FieldBase } from "@bjornpagen/grizzle";
 import * as document from "#qti/schema/document.ts";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
@@ -152,7 +153,7 @@ export const ContextDeclarationArm = relation(
 /**
  * An optional-value relation of an outcome declaration: one row where the attribute is written.
  */
-const outcomeValue = <Name extends string>(name: Name, value: ReturnType<typeof str.regex>) =>
+const outcomeValue = <Name extends string, Value extends FieldBase>(name: Name, value: Value) =>
   relation(name, { declaration: uuid, value }, ["declaration"]);
 
 /**
@@ -204,12 +205,15 @@ export const DeclarationMasteryValue = outcomeValue(
 );
 
 /**
+ * The `external-scored` pattern, typed as a plain regex text so the importer keeps writing a string
+ * here until the attribute's column is a closed roster.
+ */
+const externalScored: ReturnType<typeof str.regex> = str.regex(patterns.externalScored);
+
+/**
  * The `external-scored` attribute: `human` or `externalMachine`.
  */
-export const DeclarationExternalScored = outcomeValue(
-  "DeclarationExternalScored",
-  str.regex(patterns.externalScored),
-);
+export const DeclarationExternalScored = outcomeValue("DeclarationExternalScored", externalScored);
 
 /**
  * The `variable-identifier-ref` attribute: the identifier of another variable.

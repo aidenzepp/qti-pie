@@ -227,8 +227,35 @@ describe("value", () => {
     assert.strictEqual(value.arms["qti-default-value"], value.relations.DefaultValueArm);
   });
 
+  it("names the eight value contexts, their prefixes and rules, and the eleven field types of each", () => {
+    assert.deepStrictEqual(value.valueContexts, [
+      { context: "Declared", prefix: "DeclaredValue", rule: "value-lexical" },
+      { context: "Literal", prefix: "Literal", rule: "P7" },
+      { context: "Usage", prefix: "UsageTypedValue", rule: "usage-typed-value" },
+      { context: "MapKey", prefix: "MapEntry", rule: "map-key-lexical" },
+      { context: "MatchDefault", prefix: "MatchTableDefaultValue", rule: "attribute-lexical" },
+      { context: "MatchTarget", prefix: "MatchTableEntry", rule: "attribute-lexical" },
+      {
+        context: "InterpolationDefault",
+        prefix: "InterpolationTableDefaultValue",
+        rule: "attribute-lexical",
+      },
+      {
+        context: "InterpolationTarget",
+        prefix: "InterpolationTableEntry",
+        rule: "attribute-lexical",
+      },
+    ]);
+    for (const { context } of value.valueContexts) {
+      assert.deepStrictEqual(
+        Object.keys(value.lexicalOf(context)).toSorted(),
+        [...baseTypes].toSorted(),
+      );
+    }
+  });
+
   it("builds the eleven value arms of a prefix, each keyed by id with a typed value", () => {
-    const built = value.valueArms("Probe");
+    const built = value.valueArms("Probe", "Declared");
     assert.deepStrictEqual(Object.keys(built).toSorted(), [...baseTypes].toSorted());
 
     const expected = [
@@ -350,7 +377,7 @@ describe("value", () => {
 
   it("refuses an identifier with a space or padding by the identifier arm's pattern", () => {
     const pattern = new RegExp(
-      value.valueArms("Probe").identifier.fields.value.pattern.source,
+      value.valueArms("Probe", "Declared").identifier.fields.value.pattern.source,
       "u",
     );
     assert.isTrue(pattern.test("ChoiceA"));
