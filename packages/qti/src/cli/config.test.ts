@@ -3,6 +3,7 @@ import { assert, layer } from "@effect/vitest";
 import { Cause, Effect, Exit, Stdio } from "effect";
 import { CliError, Command } from "effect/cli";
 import { cli } from "#qti/cli.ts";
+import { commandOfArguments, valuedGlobalFlags } from "#qti/cli/present.ts";
 import { exitCodeOf, rewriteVerbose } from "#qti/cli/run.ts";
 import { captureCli, spawnCli } from "#qti/test/cli.ts";
 
@@ -76,4 +77,53 @@ layer(NodeServices.layer, { excludeTestServices: true })("p14-u8b: -V and -v", (
       );
     }),
   );
+});
+
+layer(NodeServices.layer, { excludeTestServices: true })("p14-u8b: a valued flag's -v", (it) => {
+  it("lists every valued global flag", () => {
+    assert.deepStrictEqual(valuedGlobalFlags.toSorted(), [
+      "--completions",
+      "--log-level",
+      "--output",
+      "--timeout",
+    ]);
+  });
+
+  it("leaves a -v that is a valued flag's value alone", () => {
+    for (const flag of valuedGlobalFlags) {
+      assert.deepStrictEqual(rewriteVerbose([flag, "-v", "-v"]), [flag, "-v", "--verbose"]);
+      assert.deepStrictEqual(rewriteVerbose([`${flag}=x`, "-v"]), [`${flag}=x`, "--verbose"]);
+    }
+  });
+
+  it("reads the command past each valued flag's value", () => {
+    for (const flag of valuedGlobalFlags) {
+      assert.strictEqual(commandOfArguments([flag, "5s", "import"], ["import"], "qti"), "import");
+      assert.strictEqual(commandOfArguments([flag, "import"], ["import"], "qti"), "qti");
+    }
+  });
+
+  for (const flag of ["--output", "--log-level", "--completions"]) {
+    it.effect(`${flag} -v leaves -v unrewritten`, () =>
+      Effect.gen(function* valuedThenV() {
+        const { exit } = yield* captureCli([flag, "-v"]);
+
+        const failure = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+
+        assert.strictEqual(exitCodeOf(exit), 2);
+        assert.isTrue(CliError.isCliError(failure) && failure._tag === "ShowHelp");
+
+        // Effect's parser refuses a flag followed by a dash word, so the flag has no value and the
+        // `-v` stays the word the user typed: an unrecognized option, never `--verbose`.
+        const kinds =
+          CliError.isCliError(failure) && failure._tag === "ShowHelp"
+            ? failure.errors.map(
+                (error) => `${error._tag}:${"option" in error ? error.option : ""}`,
+              )
+            : [];
+
+        assert.include(kinds, "UnrecognizedOption:-v");
+      }),
+    );
+  }
 });

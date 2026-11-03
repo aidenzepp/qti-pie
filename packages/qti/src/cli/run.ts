@@ -4,13 +4,20 @@ import { CliConfig, CliOutput, Command } from "effect/cli";
 import { builtIns } from "#qti/cli/config.ts";
 import { describeFailure, kindExitCode } from "#qti/cli/errors.ts";
 import { modeOfArguments, modeOfEnvironment } from "#qti/cli/output.ts";
-import { commandOfArguments, formatterFor, presenterFor, printFailures } from "#qti/cli/present.ts";
+import {
+  commandOfArguments,
+  formatterFor,
+  presenterFor,
+  printFailures,
+  valuedGlobalFlags,
+} from "#qti/cli/present.ts";
 
 /**
  * Read `-v` as `--verbose`. Effect's `--version` built-in claims the alias `v`, and an alias on the
  * command tree would collide with it under Effect's default configuration, so the runner rewrites
  * each argument that is exactly `-v` before the first `--`. A cluster that holds `v`, such as
- * `-qv`, is left alone and fails as an unknown flag.
+ * `-qv`, is left alone and fails as an unknown flag, and so is a `-v` that is the value of a
+ * valued global flag (`valuedGlobalFlags`).
  *
  * @param args - The command line after the program name.
  * @returns The same line with each bare `-v` before `--` spelled `--verbose`.
@@ -19,7 +26,11 @@ export const rewriteVerbose = (args: readonly string[]): readonly string[] => {
   const end = args.indexOf("--");
 
   return args.map((arg, index) =>
-    arg === "-v" && (end === -1 || index < end) ? "--verbose" : arg,
+    arg === "-v" &&
+    (end === -1 || index < end) &&
+    !valuedGlobalFlags.includes(args[index - 1] ?? "")
+      ? "--verbose"
+      : arg,
   );
 };
 

@@ -56,6 +56,17 @@ export interface Presentation {
 }
 
 /**
+ * The root's global flags that take a value, as the command line spells them. The runner's `-v`
+ * rewrite and the command lookup both skip the word after one of these.
+ */
+export const valuedGlobalFlags: readonly string[] = [
+  "--completions",
+  "--log-level",
+  "--output",
+  "--timeout",
+];
+
+/**
  * The subcommand the arguments name: the first word that is neither a flag nor a flag's value,
  * when it is one of `names`, else `fallback`.
  *
@@ -69,11 +80,10 @@ export const commandOfArguments = (
   names: readonly string[],
   fallback: string,
 ): string => {
-  const valued = new Set(["--completions", "--log-level", "--output"]);
   const end = args.indexOf("--");
   const before = end === -1 ? args : args.slice(0, end);
   const word = before.find(
-    (arg, index) => !arg.startsWith("-") && !valued.has(before[index - 1] ?? ""),
+    (arg, index) => !arg.startsWith("-") && !valuedGlobalFlags.includes(before[index - 1] ?? ""),
   );
 
   return word !== undefined && names.includes(word) ? word : fallback;
