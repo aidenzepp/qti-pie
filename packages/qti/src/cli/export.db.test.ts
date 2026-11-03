@@ -6,8 +6,9 @@ import { describe, inject } from "vitest";
 import { TargetNotEmpty } from "#qti/cli/args.ts";
 import { describeFailure } from "#qti/cli/errors.ts";
 import { ExportData } from "#qti/cli/export.ts";
-import { successEnvelope } from "#qti/cli/output.ts";
+import { ErrorObject, successEnvelope } from "#qti/cli/output.ts";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
+import { PackageNotFound } from "#qti/export/package.ts";
 import { importPackage } from "#qti/import/package.ts";
 import { exitCodeOf } from "#qti/cli/run.ts";
 import { captureCli } from "#qti/test/cli.ts";
@@ -20,6 +21,12 @@ const fixtures = inject("fixtures");
  * folders under it, and no other test file writes there.
  */
 const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-export-db");
+
+/**
+ * A well-formed package id that no test here ever imports, so the lease database holds no package
+ * with it.
+ */
+const absentId = "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40";
 
 /**
  * The envelope of `export`, as a reader decodes it from a line of standard output.
@@ -196,6 +203,79 @@ describe.skipIf(!hasLease)(
           assert.deepStrictEqual(yield* filesUnder(linked), ["kept.txt"]);
           assert.strictEqual(yield* fs.readFileString(path.join(linked, "kept.txt")), "kept");
         }),
+      );
+
+      it.effect.each([
+        { command: ["export"], name: "export" },
+        { command: ["export", "--dry-run"], name: "export --dry-run" },
+      ])(
+        "$name of a package id no package has fails as not-found, exit 1, naming the id",
+        ({ command, name }) =>
+          Effect.gen(function* absentPackage() {
+            const fs = yield* FileSystem.FileSystem;
+            const folder = yield* fresh(`absent-${name.replace(" ", "-")}`);
+            const target = path.join(folder, "target");
+            const { exit, stderr } = yield* captureCli([...command, target, absentId]);
+            const failure = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+
+            assert.strictEqual(exitCodeOf(exit), 1);
+            assert.instanceOf(failure, PackageNotFound);
+            assert.strictEqual(
+              failure instanceof PackageNotFound ? failure.packageId : "",
+              absentId,
+            );
+            assert.strictEqual(describeFailure(failure).kind, "not-found");
+            assert.isTrue(stderr.startsWith("error[not-found]:"), stderr);
+            assert.include(stderr, absentId);
+            assert.notInclude(stderr, "error[internal]");
+            assert.isFalse(yield* fs.exists(target));
+          }),
+      );
+
+      it.effect(
+        "--yes onto a folder holding a file, of a package id no package has, keeps it",
+        () =>
+          Effect.gen(function* absentPackageKeeps() {
+            const fs = yield* FileSystem.FileSystem;
+            const folder = yield* fresh("absent-yes");
+            const target = path.join(folder, "target");
+            const file = path.join(target, "a.txt");
+
+            yield* fs.makeDirectory(target, { recursive: true });
+            yield* fs.writeFileString(file, "kept");
+
+            const { exit } = yield* captureCli(["export", "--yes", target, absentId]);
+            const failure = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+
+            assert.strictEqual(exitCodeOf(exit), 1);
+            assert.strictEqual(describeFailure(failure).kind, "not-found");
+            assert.strictEqual(yield* fs.readFileString(file), "kept");
+            assert.deepStrictEqual(yield* fs.readDirectory(target), ["a.txt"]);
+            assert.deepStrictEqual(yield* fs.readDirectory(folder), ["target"]);
+          }),
+      );
+
+      it.effect(
+        "--json export --dry-run of a package id no package has prints one error object",
+        () =>
+          Effect.gen(function* absentPackageJson() {
+            const folder = yield* fresh("absent-json");
+            const { exit, stderr } = yield* captureCli([
+              "--json",
+              "export",
+              "--dry-run",
+              path.join(folder, "target"),
+              absentId,
+            ]);
+
+            assert.strictEqual(exitCodeOf(exit), 1);
+            assert.strictEqual(stderr.trimEnd().split("\n").length, 1);
+
+            const error = Schema.decodeUnknownSync(Schema.fromJsonString(ErrorObject))(stderr);
+
+            assert.strictEqual(error.kind, "not-found");
+            assert.strictEqual(error.exit_code, 1);
+          }),
       );
     });
   },

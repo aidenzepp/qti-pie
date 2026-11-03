@@ -3,6 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Config, ConfigProvider, Effect, Result } from "effect";
 import { describeFailure, kindExitCode, kindHelp, RoundtripDiffers } from "#qti/cli/errors.ts";
 import { ClusterConfigError, SnapshotLoadError } from "#qti/db/layer.ts";
+import { PackageNotFound } from "#qti/export/package.ts";
 
 /**
  * What a failure is, without its help: the kind and the exit code.
@@ -90,5 +91,14 @@ describe("describeFailure, what to do next", () => {
     const failure = new RoundtripDiffers({ differing: 2, exportDir: "work/export/pkg" });
 
     assert.include(describeFailure(failure).help, "diff -r");
+  });
+});
+
+describe("describeFailure, a package id no package has", () => {
+  it("a PackageNotFound exits 1 as not-found, with the help of its kind", () => {
+    const failure = new PackageNotFound({ packageId: "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40" });
+
+    assert.deepStrictEqual(identity(failure), { exitCode: 1, kind: "not-found" });
+    assert.strictEqual(describeFailure(failure).help, kindHelp["not-found"]);
   });
 });

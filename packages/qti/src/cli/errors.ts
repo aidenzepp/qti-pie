@@ -70,7 +70,8 @@ export const kindHelp: Readonly<Record<Kind, string>> = {
   internal:
     "This is a defect in qti. Report it with the command you ran and the trace printed below.",
   io: "Check that the path exists, is readable or writable, and that the disk has room, then run the command again.",
-  "not-found": "List the imported packages to find a valid package id, then run the command again.",
+  "not-found":
+    "Use the id that `qti import` printed when it stored the package, in the same database, or import the package again.",
   "roundtrip-differs": "Compare the package with its export by hand to see which entries differ.",
   "target-not-empty": "Choose an empty or new target, or pass --yes to replace what is there.",
   timeout: "Run the command again with a larger --timeout.",
@@ -244,6 +245,10 @@ const kindOf = (failure: unknown): Kind => {
     return "import-refused";
   }
 
+  if (tag === "PackageNotFound") {
+    return "not-found";
+  }
+
   if (tag === "PlatformError") {
     return "io";
   }
@@ -274,8 +279,9 @@ const helpOf = (failure: unknown, kind: Kind): string =>
  * An error this program defines names its own kind through {@link cliKind}. Every other failure is
  * mapped by what it is, without importing the module that defines it, so the program starts
  * without loading the engine: Effect's CLI errors are `cli-usage`, an `ImportRefused` is
- * `import-refused`, a `PlatformError` is `io`, a missing or unreadable local set-up is `config`
- * and grizzle's other errors are `database`. Anything else, a defect included, is `internal`.
+ * `import-refused`, a `PackageNotFound` is `not-found`, a `PlatformError` is `io`, a missing or
+ * unreadable local set-up is `config` and grizzle's other errors are `database`. Anything else, a
+ * defect included, is `internal`.
  *
  * @param failure - What a run failed with: the squashed cause of its exit.
  * @returns The kind, the exit code of that kind, and what to do next.
