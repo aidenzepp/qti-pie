@@ -615,6 +615,7 @@ describe("contentRows", () => {
       assert.deepStrictEqual(Rows.of(rows, DeclaredRubricTemplateInlineShowHide), [
         { node: idByIdentifier.get("ri") ?? "" },
       ]);
+      // None: the fixture's `qti-feedback-block` `fa`, its only plain feedback block, writes no `show-hide`.
       assert.deepStrictEqual(Rows.of(rows, DeclaredFeedbackBlockShowHide), []);
       assert.deepStrictEqual(Rows.of(rows, DeclaredTemplateBlockShowHide), []);
       assert.deepStrictEqual(Rows.of(rows, DeclaredTemplateInlineShowHide), []);

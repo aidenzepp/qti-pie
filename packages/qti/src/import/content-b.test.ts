@@ -9,7 +9,6 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { comparePackage, renderReport } from "#qti/export/compare.ts";
 import { exportPackage } from "#qti/export/package.ts";
-import { readTree, treesOf } from "#qti/export/read.ts";
 import { changeSetOf, importPackage, readRows, retrySchedule } from "#qti/import/package.ts";
 import { ImportRefused, isMappedLaw, ruleOfLaw } from "#qti/import/refusal.ts";
 import type { ImportLaw, Rule } from "#qti/import/refusal.ts";
@@ -69,6 +68,7 @@ import {
 } from "#qti/schema/template.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
+import { rowsOf } from "#qti/test/rows.ts";
 import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**
@@ -553,10 +553,9 @@ const table = (draft: Draft, captions: number) => {
 };
 
 /**
- * The outcome reference of a feedback that reads `identifier`, on the item's first paragraph. No
- * feedback block carries it: `FeedbackBlock` and `TemplateBlock` each serve two kind handles with
- * one arm, and the engine refuses an arm row of either with its `mirrors` law (see the report), so
- * the reference law is reached on a plain node, which is all the law reads.
+ * The outcome reference of a feedback that reads `identifier`, on the item's first paragraph. The
+ * reference laws read only the reference's own row and a node of the document's tree, never the
+ * node's kind, so a plain node reaches them and no feedback block is built.
  */
 const feedbackRef = (draft: Draft, identifier: string) => {
   const { baseType, cardinality, document } = declared(draft, identifier);
@@ -1263,17 +1262,6 @@ describe.skipIf(!hasLease)(
     });
   },
 );
-
-/**
- * The rows of `relation` an imported package holds, from every tree it has.
- */
-const rowsOf = <R extends AnyRelation>(id: string, relation: R) =>
-  Effect.gen(function* rowsOfPackage() {
-    const trees = yield* treesOf(id);
-    const read = yield* Effect.all(trees.map((tree) => readTree(id, tree)));
-
-    return read.flatMap((rows) => Rows.of(rows, relation));
-  });
 
 /**
  * Assert that a round trip of `name` compares all equal.

@@ -10,7 +10,6 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { comparePackage, renderReport } from "#qti/export/compare.ts";
 import { exportPackage } from "#qti/export/package.ts";
-import { readTree, treesOf } from "#qti/export/read.ts";
 import { changeSetOf, importPackage, readRows, retrySchedule } from "#qti/import/package.ts";
 import { ImportRefused, isMappedLaw, ruleOfLaw } from "#qti/import/refusal.ts";
 import type { ImportLaw, Rule } from "#qti/import/refusal.ts";
@@ -44,6 +43,7 @@ import * as patterns from "#qti/schema/patterns.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
+import { rowsOf } from "#qti/test/rows.ts";
 import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**
@@ -815,17 +815,6 @@ const roundTrip = (name: FixtureName) =>
     yield* fs.writeFileString(`${exported}.report.txt`, `${renderReport(report)}\n`);
 
     return { id, report };
-  });
-
-/**
- * The rows of `relation` an imported package holds, from every tree it has.
- */
-const rowsOf = <R extends AnyRelation>(id: string, relation: R) =>
-  Effect.gen(function* rowsOfPackage() {
-    const trees = yield* treesOf(id);
-    const read = yield* Effect.all(trees.map((tree) => readTree(id, tree)));
-
-    return read.flatMap((rows) => Rows.of(rows, relation));
   });
 
 /**
