@@ -5,7 +5,7 @@ import { Effect, Exit, FileSystem, Option } from "effect";
 import { renderTree } from "#qti/export/render.ts";
 import { htmlRows } from "#qti/import/html.ts";
 import { itemRows } from "#qti/import/item.ts";
-import { Rows, treeRows, UnmodeledVocabulary } from "#qti/import/tree.ts";
+import { ItemRefusal, Rows, treeRows, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { NodeIndex, TreeInput } from "#qti/import/tree.ts";
 import { Img, P } from "#qti/schema/html.ts";
 import * as media from "#qti/schema/html/media.ts";
@@ -273,6 +273,42 @@ describe("htmlRows on the text and structure elements", () => {
   );
 });
 
+describe("htmlRows refuses an absent required attribute", () => {
+  const negatives: readonly (readonly [string, string])[] = [
+    ["a/@href", '<div><a type="text/html">go</a></div>'],
+    ["track/@src", '<video><track kind="captions" srclang="en"/></video>'],
+    ["object/@data", '<object type="image/png"/>'],
+    ["object/@type", '<object data="a.png"/>'],
+    ["param/@name", '<object data="a.png" type="image/png"><param value="1"/></object>'],
+    ["param/@value", '<object data="a.png" type="image/png"><param name="a"/></object>'],
+  ];
+
+  for (const [label, fragment] of negatives) {
+    it.effect(`refuses ${label}`, () =>
+      Effect.gen(function* absent() {
+        const exit = yield* Effect.exit(built("3.0.1", fragment));
+
+        assert.isTrue(Exit.isFailure(exit), `${label} was admitted`);
+
+        const refusal = yield* Effect.flip(built("3.0.1", fragment));
+        assert.instanceOf(refusal, ItemRefusal);
+        assert.strictEqual(
+          refusal instanceof ItemRefusal ? refusal.rule : "",
+          "required-attribute",
+        );
+      }),
+    );
+  }
+
+  it.effect("admits an explicit empty href, which is a value", () =>
+    Effect.gen(function* empty() {
+      const { nodes, rows } = yield* built("3.0.1", '<div><a href="">go</a></div>');
+
+      assert.deepStrictEqual(Rows.of(rows, text.A), [{ href: "", id: idOf(nodes, "a") }]);
+    }),
+  );
+});
+
 describe("htmlRows over the inventory", () => {
   const kinds = [
     ...Object.keys(text.arms),
@@ -288,16 +324,25 @@ describe("htmlRows over the inventory", () => {
           const own = entryOf(kind).pipe(
             Option.match({
               onNone: () => [],
-              onSome: (entry) =>
-                entry.attributes
-                  .filter((found) => found.family === "own")
-                  .map((found) => found.name),
+              onSome: (entry) => entry.attributes.filter((found) => found.family === "own"),
             }),
           );
-          for (const name of own.filter((found) => found !== "headers")) {
-            const exit = yield* Effect.exit(built("3.0.1", `<${kind} ${name}="x"/>`));
+          for (const tested of own.filter((found) => found.name !== "headers")) {
+            // `param/@valuetype` stays optional on this importer, so `name` and `value` are all it needs.
+            const alongside = own
+              .filter(
+                (found) =>
+                  found.use === "required" &&
+                  found.name !== tested.name &&
+                  !(kind === "param" && found.name === "valuetype"),
+              )
+              .map((found) => ` ${found.name}="x"`)
+              .join("");
+            const exit = yield* Effect.exit(
+              built("3.0.1", `<${kind} ${tested.name}="x"${alongside}/>`),
+            );
 
-            assert.isTrue(Exit.isSuccess(exit), `${kind}/@${name} has no home in htmlRows`);
+            assert.isTrue(Exit.isSuccess(exit), `${kind}/@${tested.name} has no home in htmlRows`);
           }
         }
       }),

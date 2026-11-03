@@ -12,8 +12,9 @@ import type { AnyRelation, Fact, Relation, uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import { attributeReader } from "#qti/import/interactions.ts";
 import type { AttributeReader, NodeRef } from "#qti/import/interactions.ts";
+import { requiredAttribute } from "#qti/import/required.ts";
 import { Rows, typedAttribute, UnmodeledVocabulary, withParents } from "#qti/import/tree.ts";
-import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
+import type { ItemRefusal, NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
 import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
 import * as media from "#qti/schema/html/media.ts";
 import * as structure from "#qti/schema/html/structure.ts";
@@ -44,11 +45,12 @@ type Write = (rows: Rows) => Rows;
 /**
  * One part of an element's rows: the own attributes it reads and the step that reads and records
  * them. A step reads every attribute it records before it returns its `Write`, because the
- * `AttributeLexical` rows are taken once every step has run.
+ * `AttributeLexical` rows are taken once every step has run. A step that reads a required
+ * attribute fails with `ItemRefusal` where the element omits it.
  */
 interface Piece {
   readonly reads: readonly AttributeNameHandle[];
-  readonly step: (subject: Subject) => Write;
+  readonly step: (subject: Subject) => Effect.Effect<Write, ItemRefusal>;
 }
 
 /**
@@ -79,21 +81,11 @@ const factOf = <R extends AnyRelation>(_relation: R, row: ValueRow): Fact<R> => 
 };
 
 /**
- * The value of a required attribute, empty where the element omits it: the column's pattern
- * refuses the empty value at commit, which is the importer's refusal for an element without it.
- */
-const required = (attributes: AttributeReader, name: AttributeNameHandle): string =>
-  Option.getOrElse(attributes.read(name), () => "");
-
-/**
  * The piece of an element whose arm holds its id alone.
  */
 const thin = (relation: ThinRelation): Piece => ({
   reads: [],
-  step:
-    ({ node }) =>
-    (rows) =>
-      Rows.add(rows, relation, [{ id: node.id }]),
+  step: ({ node }) => Effect.succeed((rows) => Rows.add(rows, relation, [{ id: node.id }])),
 });
 
 /**
@@ -108,7 +100,7 @@ const optional = <R extends AnyRelation>(name: AttributeNameHandle, relation: R)
   step: ({ attributes, node }) => {
     const value = attributes.read(name);
 
-    return (rows) =>
+    return Effect.succeed((rows: Rows) =>
       Rows.add(
         rows,
         relation,
@@ -116,7 +108,8 @@ const optional = <R extends AnyRelation>(name: AttributeNameHandle, relation: R)
           onNone: () => [],
           onSome: (own) => [factOf(relation, { node: node.id, value: own })],
         }),
-      );
+      ),
+    );
   },
 });
 
@@ -146,7 +139,7 @@ const versioned = <R extends AnyRelation>(name: AttributeNameHandle, relation: R
       element.attributes.find((found) => found.namespace === "" && found.local === name),
     ).pipe(Option.map((found) => found.value));
 
-    return (rows) =>
+    return Effect.succeed((rows: Rows) =>
       Option.match(lexical, {
         onNone: () => rows,
         onSome: (own) => {
@@ -156,7 +149,8 @@ const versioned = <R extends AnyRelation>(name: AttributeNameHandle, relation: R
             factOf(relation, { node: node.id, value: typed.value, version }),
           ]);
         },
-      });
+      }),
+    );
   },
 });
 
@@ -166,12 +160,12 @@ const versioned = <R extends AnyRelation>(name: AttributeNameHandle, relation: R
  */
 const marker = (name: AttributeNameHandle, relation: ThinMarker): Piece => ({
   reads: [],
-  step:
-    ({ element, node }) =>
-    (rows) =>
+  step: ({ element, node }) =>
+    Effect.succeed((rows) =>
       element.attributes.some((found) => found.namespace === "" && found.local === name)
         ? Rows.add(rows, relation, [{ node: node.id }])
         : rows,
+    ),
 });
 
 /**
@@ -184,11 +178,11 @@ type ThinMarker = Relation<string, { readonly node: typeof uuid }, readonly ["no
  */
 const anchor: Piece = {
   reads: ["href"],
-  step: ({ attributes, node }) => {
-    const href = required(attributes, "href");
+  step: Effect.fn("import.html.anchor")(function* anchorStep({ attributes, element, node }) {
+    const href = yield* requiredAttribute(element, "href", attributes.read("href"));
 
-    return (rows) => Rows.add(rows, text.A, [{ href: judgedLater(href), id: node.id }]);
-  },
+    return (rows: Rows) => Rows.add(rows, text.A, [{ href: judgedLater(href), id: node.id }]);
+  }),
 };
 
 /**
@@ -196,10 +190,8 @@ const anchor: Piece = {
  */
 const mediaArm = (relation: typeof media.Audio | typeof media.Video): Piece => ({
   reads: [],
-  step:
-    ({ node, version }) =>
-    (rows) =>
-      Rows.add(rows, relation, [{ id: node.id, version }]),
+  step: ({ node, version }) =>
+    Effect.succeed((rows) => Rows.add(rows, relation, [{ id: node.id, version }])),
 });
 
 /**
@@ -208,12 +200,14 @@ const mediaArm = (relation: typeof media.Audio | typeof media.Video): Piece => (
 const sourceArm: Piece = {
   reads: ["src"],
   step: ({ attributes, node, parent }) => {
-    const src = required(attributes, "src");
+    // A `source` in a `picture` omits `src`; `repair2-6` rules on it, so the absent attribute is still read as empty here.
+    const src = Option.getOrElse(attributes.read("src"), () => "");
 
-    return (rows) =>
+    return Effect.succeed((rows: Rows) =>
       Rows.add(rows, media.Source, [
         { id: node.id, parentKind: parent.kind, src: judgedLater(src) },
-      ]);
+      ]),
+    );
   },
 };
 
@@ -223,15 +217,15 @@ const sourceArm: Piece = {
  */
 const trackArm: Piece = {
   reads: ["kind", "src"],
-  step: ({ attributes, node }) => {
+  step: Effect.fn("import.html.track")(function* trackStep({ attributes, element, node }) {
     const kind = Option.getOrElse(attributes.read("kind"), () => "subtitles");
-    const src = required(attributes, "src");
+    const src = yield* requiredAttribute(element, "src", attributes.read("src"));
 
-    return (rows) =>
+    return (rows: Rows) =>
       Rows.add(rows, media.Track, [
         { id: node.id, kind: judgedLater(kind), src: judgedLater(src) },
       ]);
-  },
+  }),
 };
 
 /**
@@ -239,15 +233,15 @@ const trackArm: Piece = {
  */
 const objectArm: Piece = {
   reads: ["data", "type"],
-  step: ({ attributes, node }) => {
-    const data = required(attributes, "data");
-    const type = required(attributes, "type");
+  step: Effect.fn("import.html.object")(function* objectStep({ attributes, element, node }) {
+    const data = yield* requiredAttribute(element, "data", attributes.read("data"));
+    const type = yield* requiredAttribute(element, "type", attributes.read("type"));
 
-    return (rows) =>
+    return (rows: Rows) =>
       Rows.add(rows, media.relations.Object, [
         { data: judgedLater(data), id: node.id, type: judgedLater(type) },
       ]);
-  },
+  }),
 };
 
 /**
@@ -256,12 +250,12 @@ const objectArm: Piece = {
  */
 const paramArm: Piece = {
   reads: ["name", "value", "valuetype"],
-  step: ({ attributes, node }) => {
-    const name = required(attributes, "name");
-    const value = required(attributes, "value");
+  step: Effect.fn("import.html.param")(function* paramStep({ attributes, element, node }) {
+    const name = yield* requiredAttribute(element, "name", attributes.read("name"));
+    const value = yield* requiredAttribute(element, "value", attributes.read("value"));
     const valuetype = Option.getOrElse(attributes.read("valuetype"), () => "DATA");
 
-    return (rows) =>
+    return (rows: Rows) =>
       Rows.add(rows, media.Param, [
         {
           id: node.id,
@@ -270,7 +264,7 @@ const paramArm: Piece = {
           valuetype: judgedLater(valuetype),
         },
       ]);
-  },
+  }),
 };
 
 /**
@@ -447,13 +441,14 @@ const unread = (
  * @param rows - The rows so far, which hold the tree's `Node` rows.
  * @returns The rows with the HTML arms; `UnmodeledVocabulary` for an HTML element that is the
  *   tree's root or has no node above it, and for an own attribute of an element that this module
- *   does not model.
+ *   does not model; `ItemRefusal` under `required-attribute` for an `a`, `track`, `object` or
+ *   `param` that omits a required attribute.
  */
 export const htmlRows = Effect.fn("import.htmlRows")(function* htmlRows(
   root: Element,
   nodes: NodeIndex,
   rows: Rows,
-): Effect.fn.Return<Rows, UnmodeledVocabulary> {
+): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal> {
   const versions = new Map(Rows.of(rows, Node).map((found) => [found.id, found.version]));
   let built = rows;
   for (const [element, parent] of withParents(root, Option.none())) {
@@ -483,9 +478,11 @@ export const htmlRows = Effect.fn("import.htmlRows")(function* htmlRows(
     }
 
     const attributes = attributeReader(built, element, node);
-    const writes = pieces.map((piece) =>
-      piece.step({ attributes, element, node, parent: above.value, version }),
-    );
+    const writes: Write[] = [];
+    for (const piece of pieces) {
+      writes.push(yield* piece.step({ attributes, element, node, parent: above.value, version }));
+    }
+
     built = attributes.rows();
     for (const write of writes) {
       built = write(built);
