@@ -1,7 +1,7 @@
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 
 import os from "node:os";
-import { Config, Effect, Exit, FileSystem, Option, Path, Runtime, Schema } from "effect";
+import { Config, Effect, FileSystem, Option, Path, Runtime, Schema } from "effect";
 import { Flag } from "effect/cli";
 import { cliKind, kindExitCode, NotADirectory } from "#qti/cli/errors.ts";
 import type { Kind } from "#qti/cli/errors.ts";
@@ -60,11 +60,9 @@ export const dryRunFlag = Flag.Boolean("dry-run").pipe(
 );
 
 /**
- * The target already has something in it, or is a place the command never replaces, and `--yes`
- * was not given or cannot lift the refusal.
+ * The target already has something in it, and `--yes` was not given.
  */
 export class TargetNotEmpty extends Schema.TaggedError<TargetNotEmpty>()("TargetNotEmpty", {
-  protects: Schema.optionalKey(Schema.String),
   target: Schema.String,
 }) {
   /**
@@ -84,21 +82,57 @@ export class TargetNotEmpty extends Schema.TaggedError<TargetNotEmpty>()("Target
   }
 
   /**
-   * What is in the way: something already there, or a folder the command never replaces.
+   * What is in the way.
    */
   override get message(): string {
-    return this.protects === undefined
-      ? `${this.target} already has something in it, so nothing was written.`
-      : `${this.target} is ${this.protects}, which the command never replaces, so nothing was written.`;
+    return `${this.target} already has something in it, so nothing was written.`;
   }
 
   /**
    * What to do about it.
    */
+  // oxlint-disable-next-line typescript/class-literal-property-style, eslint/class-methods-use-this -- A field would be an own property of the error.
   get help(): string {
-    return this.protects === undefined
-      ? "Pass --yes to replace it, or name a new or empty directory."
-      : "Name a new or empty directory instead, even with --yes.";
+    return "Pass --yes to replace it, or name a new or empty directory.";
+  }
+}
+
+/**
+ * The target is the folder the person is in, a folder above it, their home folder or the
+ * filesystem root, which no command replaces, `--yes` or not.
+ */
+export class TargetProtected extends Schema.TaggedError<TargetProtected>()("TargetProtected", {
+  target: Schema.String,
+}) {
+  /**
+   * This error's kind, `cli-bad-argument`. A getter, so the kind stays on the prototype and is no
+   * field of the error's data.
+   */
+  // oxlint-disable-next-line typescript/class-literal-property-style, eslint/class-methods-use-this -- A field would be an own property of the error.
+  get [cliKind](): Kind {
+    return "cli-bad-argument";
+  }
+
+  /**
+   * The exit code of this error's kind.
+   */
+  override get [Runtime.errorExitCode](): number {
+    return kindExitCode[this[cliKind]];
+  }
+
+  /**
+   * The target and what the command never replaces.
+   */
+  override get message(): string {
+    return `${this.target} is the folder you are in, a folder above it, your home folder or the root. The command never replaces those, so nothing was written.`;
+  }
+
+  /**
+   * What to do about it.
+   */
+  // oxlint-disable-next-line typescript/class-literal-property-style, eslint/class-methods-use-this -- A field would be an own property of the error.
+  get help(): string {
+    return "Name a new or empty directory instead, even with --yes.";
   }
 }
 
@@ -172,10 +206,10 @@ const resolvedTarget = Effect.fn("cli.resolvedTarget")(function* resolvedTarget(
 });
 
 /**
- * Name what a target is that no replacement may take: the current folder, one of its parents, the
- * home folder, or the filesystem root. Returns nothing when the target is none of them.
+ * Whether no replacement may take `target`: it is the current folder, one of its parents, the home
+ * folder, or the filesystem root.
  */
-const protectedAs = Effect.fn("cli.protectedAs")(function* protectedAs(target: string) {
+const isProtected = Effect.fn("cli.isProtected")(function* isProtected(target: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const here = yield* fs.realPath(process.cwd()).pipe(Effect.orElseSucceed(() => process.cwd()));
@@ -183,21 +217,12 @@ const protectedAs = Effect.fn("cli.protectedAs")(function* protectedAs(target: s
   const homeReal = yield* fs.realPath(home).pipe(Effect.orElseSucceed(() => path.resolve(home)));
   const place = yield* resolvedTarget(target);
 
-  if (place === path.parse(place).root) {
-    return "the filesystem root";
-  }
-
-  if (place === homeReal) {
-    return "your home folder";
-  }
-
-  if (place === here) {
-    return "the current folder";
-  }
-
-  return here.startsWith(place.endsWith(path.sep) ? place : `${place}${path.sep}`)
-    ? "a parent of the current folder"
-    : undefined;
+  return (
+    place === path.parse(place).root ||
+    place === homeReal ||
+    here === place ||
+    here.startsWith(place.endsWith(path.sep) ? place : `${place}${path.sep}`)
+  );
 });
 
 /**
@@ -239,10 +264,8 @@ export const requireReplaceable = Effect.fn("cli.requireReplaceable")(function* 
     return;
   }
 
-  const protects = yield* protectedAs(target);
-
-  if (protects !== undefined) {
-    yield* new TargetNotEmpty({ protects, target });
+  if (yield* isProtected(target)) {
+    yield* new TargetProtected({ target });
   }
 
   if (content === "something" && !yes) {
@@ -251,12 +274,16 @@ export const requireReplaceable = Effect.fn("cli.requireReplaceable")(function* 
 });
 
 /**
- * Write to a sibling of `target`, and only when that succeeds take the place of `target`.
+ * Write to a private staging folder beside `target`, and only when that succeeds take the place
+ * of `target`.
  *
- * `write` runs on `.<name>.qti-<pid>` in the target's folder, which keeps a trailing `.zip` last
- * because the export decides zip or folder by the suffix. When it succeeds, the old target is
- * removed (a symlink as a link, never what it points to) and the sibling is renamed into its
- * place. When it fails, the sibling is removed and the old target is as it was.
+ * The target is resolved to an absolute path first. `write` runs on `<staging>/<name>`, where the
+ * staging folder is made fresh beside the target (random name, owner-only), so nothing a
+ * process left at a guessable name is ever followed, and the name keeps a trailing `.zip` last
+ * because the export decides zip or folder by the suffix. When `write` succeeds, the old target is
+ * removed (a symlink as a link, never what it points to) and the written item is renamed onto its
+ * place. The staging folder is removed on every exit, so a failure, a defect or an interruption
+ * leaves the old target as it was.
  *
  * @param target - The directory or file being replaced.
  * @param write - Writes the new content at the path it is given.
@@ -267,21 +294,21 @@ export const replaceWith = Effect.fn("cli.replaceWith")(function* replaceWith<A,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const name = path.basename(target);
-  const zip = name.endsWith(".zip");
-  const stem = zip ? name.slice(0, -".zip".length) : name;
-  const sibling = path.join(
-    path.dirname(target),
-    `.${stem}.qti-${process.pid}${zip ? ".zip" : ""}`,
-  );
+  const absolute = path.resolve(target);
+  const folder = path.dirname(absolute);
+  const name = path.basename(absolute);
 
-  yield* write(sibling).pipe(
-    Effect.onExit((exit) =>
-      Exit.isSuccess(exit)
-        ? Effect.void
-        : fs.remove(sibling, { force: true, recursive: true }).pipe(Effect.ignore),
-    ),
+  yield* fs.makeDirectory(folder, { recursive: true });
+  yield* Effect.acquireUseRelease(
+    fs.makeTempDirectory({ directory: folder, prefix: `.${name}.qti-` }),
+    (staging) =>
+      Effect.gen(function* swap() {
+        const written = path.join(staging, name);
+
+        yield* write(written);
+        yield* fs.remove(absolute, { force: true, recursive: true });
+        yield* fs.rename(written, absolute);
+      }),
+    (staging) => fs.remove(staging, { force: true, recursive: true }).pipe(Effect.ignore),
   );
-  yield* fs.remove(target, { force: true, recursive: true });
-  yield* fs.rename(sibling, target);
 });

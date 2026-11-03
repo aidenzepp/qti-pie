@@ -1,24 +1,18 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Cause, Effect, Exit, FileSystem } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
 import { BadPackageId, replaceWith, TargetNotEmpty } from "#qti/cli/args.ts";
 import { describeFailure } from "#qti/cli/errors.ts";
 import { exitCodeOf } from "#qti/cli/run.ts";
 import { captureCli } from "#qti/test/cli.ts";
+import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**
  * The folder every case here works under, `packages/qti/work/cli-export`. No other test file
  * writes there.
  */
 const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-export");
-
-/**
- * The timeout, in milliseconds, for a case that reaches the database step. The first run in a
- * process loads the engine and decodes the migrations snapshot before the cluster config fails;
- * measured at 7.2 s on 2026-11-03 at 224e12e with no database, past vitest's 5 s default.
- */
-const configFailureTimeoutMs = 30_000;
 
 /**
  * An id no package has.
@@ -111,7 +105,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("export's target guard"
         assert.strictEqual(yield* fs.readFileString(file), "kept");
         assert.deepStrictEqual(yield* siblingsIn(path.dirname(dir)), []);
       }),
-    configFailureTimeoutMs,
+    cliProcessTestTimeoutMs,
   );
 
   it.effect("(3) an id that is not a UUID exits 2, not config", () =>
@@ -136,7 +130,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("export's target guard"
         assert.strictEqual(describeFailure(failureOf(exit)).kind, "config");
         assert.isFalse(yield* fs.exists(target));
       }),
-    configFailureTimeoutMs,
+    cliProcessTestTimeoutMs,
   );
 
   it.effect("(5) a symlink to a non-empty folder needs --yes, and the linked folder stays", () =>
@@ -159,6 +153,27 @@ layer(NodeServices.layer, { excludeTestServices: true })("export's target guard"
     }),
   );
 
+  it.effect("(5b) a dangling symlink, and a symlink to an empty folder, need --yes and stay", () =>
+    Effect.gen(function* linkedEmpty() {
+      const fs = yield* FileSystem.FileSystem;
+      const dir = yield* fresh("five-b");
+      const empty = path.join(dir, "empty");
+      const dangling = path.join(dir, "dangling");
+      const toEmpty = path.join(dir, "to-empty");
+
+      yield* fs.makeDirectory(empty);
+      yield* fs.symlink(path.join(dir, "absent"), dangling);
+      yield* fs.symlink(empty, toEmpty);
+
+      for (const link of [dangling, toEmpty]) {
+        const { exit } = yield* captureCli(["export", link, packageId], { env });
+
+        assert.instanceOf(failureOf(exit), TargetNotEmpty, link);
+        assert.strictEqual((yield* fs.lstat(link)).type, "SymbolicLink", link);
+      }
+    }),
+  );
+
   it.effect("(6) QTI_ZIP with a file at out.zip and no --yes needs --yes", () =>
     Effect.gen(function* zipped() {
       const fs = yield* FileSystem.FileSystem;
@@ -175,22 +190,23 @@ layer(NodeServices.layer, { excludeTestServices: true })("export's target guard"
     }),
   );
 
-  it.effect("(C7) --yes still refuses the current folder, its parent, the home folder and /", () =>
-    Effect.gen(function* never() {
-      const dir = yield* fresh("seven");
+  it.effect(
+    "(decision 130) --yes still refuses the current folder, its parent, the home folder and /",
+    () =>
+      Effect.gen(function* never() {
+        const dir = yield* fresh("seven");
 
-      yield* put(env.HOME, "a.txt");
-      yield* put(dir, "a.txt");
+        yield* put(env.HOME, "a.txt");
+        yield* put(dir, "a.txt");
 
-      for (const target of [".", "..", env.HOME, "/"]) {
-        const { exit } = yield* captureCli(["export", "--yes", target, packageId], { env });
-        const failure = failureOf(exit);
+        for (const target of [".", "..", env.HOME, "/"]) {
+          const { exit } = yield* captureCli(["export", "--yes", target, packageId], { env });
+          const failure = failureOf(exit);
 
-        assert.instanceOf(failure, TargetNotEmpty, target);
-        assert.isTrue(failure instanceof TargetNotEmpty && failure.protects !== undefined, target);
-        assert.strictEqual(exitCodeOf(exit), 1, target);
-      }
-    }),
+          assert.strictEqual(describeFailure(failure).kind, "cli-bad-argument", target);
+          assert.strictEqual(exitCodeOf(exit), 2, target);
+        }
+      }),
   );
 });
 
@@ -275,6 +291,101 @@ layer(NodeServices.layer, { excludeTestServices: true })("replaceWith", (it) => 
         assert.strictEqual(yield* fs.readFileString(file), "kept");
         assert.deepStrictEqual(yield* siblingsIn(dir), []);
       }),
+  );
+
+  it.effect("(7b) an interrupted write leaves the target as it was and no sibling", () =>
+    Effect.gen(function* interrupted() {
+      const fs = yield* FileSystem.FileSystem;
+      const dir = yield* fresh("seven-b");
+      const target = path.join(dir, "out");
+      const started = yield* Deferred.make<string>();
+
+      yield* fs.makeDirectory(target);
+      yield* put(target, "a.txt");
+
+      const fiber = yield* Effect.forkChild(
+        replaceWith(target, (staged) =>
+          Effect.gen(function* hang() {
+            yield* fs.makeDirectory(staged);
+            yield* fs.writeFileString(path.join(staged, wrote), "new");
+            yield* Deferred.succeed(started, "written");
+            yield* Effect.never;
+          }),
+        ),
+      );
+
+      yield* Deferred.await(started);
+      yield* Fiber.interrupt(fiber);
+
+      assert.deepStrictEqual(yield* fs.readDirectory(target), ["a.txt"]);
+      assert.deepStrictEqual(yield* siblingsIn(dir), []);
+    }),
+  );
+
+  it.effect("(7c) a write that dies leaves the target as it was and no sibling", () =>
+    Effect.gen(function* died() {
+      const fs = yield* FileSystem.FileSystem;
+      const dir = yield* fresh("seven-c");
+      const target = path.join(dir, "out");
+
+      yield* fs.makeDirectory(target);
+      yield* put(target, "a.txt");
+
+      const exit = yield* Effect.exit(
+        replaceWith(target, (staged) =>
+          Effect.gen(function* explode() {
+            yield* fs.makeDirectory(staged);
+            yield* Effect.die("defect");
+          }),
+        ),
+      );
+
+      assert.isTrue(Exit.isFailure(exit) && Cause.hasDies(exit.cause));
+      assert.deepStrictEqual(yield* fs.readDirectory(target), ["a.txt"]);
+      assert.deepStrictEqual(yield* siblingsIn(dir), []);
+    }),
+  );
+
+  it.effect("(C3) a relative target is resolved first, and the write lands at the target", () =>
+    Effect.gen(function* relative() {
+      const fs = yield* FileSystem.FileSystem;
+      const dir = yield* fresh("relative");
+      const target = path.join(dir, "out");
+
+      yield* fs.makeDirectory(target);
+      yield* put(target, "a.txt");
+      yield* replaceWith(path.relative(process.cwd(), target), writing(false));
+
+      assert.deepStrictEqual(yield* fs.readDirectory(target), [wrote]);
+      assert.deepStrictEqual(yield* siblingsIn(dir), []);
+    }),
+  );
+
+  it.effect("(staging) an entry at the old predictable sibling name is never followed", () =>
+    Effect.gen(function* staged() {
+      const fs = yield* FileSystem.FileSystem;
+      const dir = yield* fresh("staging");
+      const decoy = path.join(dir, "decoy");
+      const target = path.join(dir, "out");
+      const old = path.join(dir, `.out.qti-${process.pid}`);
+
+      yield* fs.makeDirectory(decoy);
+
+      const file = yield* put(decoy, "a.txt");
+
+      yield* fs.symlink(decoy, old);
+      yield* put(dir, "out");
+
+      for (const fails of [true, false]) {
+        yield* Effect.exit(replaceWith(target, writing(fails)));
+
+        assert.strictEqual((yield* fs.lstat(old)).type, "SymbolicLink");
+        assert.deepStrictEqual(yield* fs.readDirectory(decoy), ["a.txt"]);
+        assert.strictEqual(yield* fs.readFileString(file), "kept");
+      }
+
+      assert.deepStrictEqual(yield* fs.readDirectory(target), [wrote]);
+    }),
   );
 
   it.effect("(C8) a .zip target keeps .zip last on the sibling and ends as the new file", () =>
