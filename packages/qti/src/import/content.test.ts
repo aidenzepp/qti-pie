@@ -689,3 +689,93 @@ describe("contentRows", () => {
     }),
   );
 });
+
+const feedback = (attribute: string) =>
+  `<qti-feedback-block outcome-identifier="FEEDBACK" identifier="a"${attribute}><p>x</p></qti-feedback-block>`;
+
+describe("contentRows on a closed attribute outside its roster", () => {
+  const refused: readonly (readonly [string, Item])[] = [
+    ["show-hide of a feedback block", { body: feedback(' show-hide="visible"') }],
+    [
+      "show-hide of a template feedback block",
+      {
+        body: `<qti-template-block template-identifier="T" identifier="b"><qti-content-body>${feedback(' show-hide="visible"')}</qti-content-body></qti-template-block>`,
+        head: sixKindsHead,
+      },
+    ],
+    [
+      "show-hide of a feedback inline",
+      {
+        body: `<p><qti-feedback-inline outcome-identifier="FEEDBACK" identifier="c" show-hide="visible">z</qti-feedback-inline></p>`,
+      },
+    ],
+    [
+      "show-hide of a modal feedback",
+      {
+        tail: `<qti-modal-feedback outcome-identifier="FEEDBACK" show-hide="visible" identifier="m"><qti-content-body><p>x</p></qti-content-body></qti-modal-feedback>`,
+      },
+    ],
+    [
+      "math-variable of a template declaration",
+      {
+        head: `<qti-template-declaration identifier="T" cardinality="single" base-type="integer" math-variable="yes"/>`,
+      },
+    ],
+    [
+      "param-variable of a template declaration",
+      {
+        head: `<qti-template-declaration identifier="T" cardinality="single" base-type="integer" param-variable="yes"/>`,
+      },
+    ],
+    [
+      "power-form of a printed variable",
+      { body: `<p><qti-printed-variable identifier="SCORE" power-form="yes"/></p>` },
+    ],
+  ];
+
+  for (const [name, item] of refused) {
+    it.effect(`refuses the ${name} under attribute-lexical before the write`, () =>
+      Effect.gen(function* run() {
+        const failure = yield* Effect.flip(built(item));
+
+        assert.instanceOf(failure, ImportRefused);
+        assert.strictEqual(failure.rule, "attribute-lexical");
+      }),
+    );
+  }
+
+  it.effect("refuses a padded show-hide, which is an xs:string and does not collapse", () =>
+    Effect.gen(function* run() {
+      const failure = yield* Effect.flip(built({ body: feedback(' show-hide=" hide "') }));
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "attribute-lexical");
+    }),
+  );
+
+  it.effect("admits the xs:boolean spellings 1, true and 0, padded, written as their handles", () =>
+    Effect.gen(function* run() {
+      const feedbackItem = yield* built({ body: feedback(' show-hide="hide"') });
+      const declared = yield* built({
+        body: `<p><qti-printed-variable identifier="SCORE" power-form=" 0 "/></p>`,
+        head: `<qti-template-declaration identifier="T" cardinality="single" base-type="integer" math-variable="1" param-variable=" true "/>`,
+      });
+
+      assert.deepStrictEqual(
+        Rows.of(feedbackItem.rows, FeedbackBlock).map((row) => row.showHide),
+        ["hide"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(declared.rows, TemplateDeclarationArm).map((row) => [
+          row.mathVariable,
+          row.paramVariable,
+        ]),
+        [["1", "true"]],
+      );
+      assert.deepStrictEqual(
+        Rows.of(declared.rows, PrintedVariable).map((row) => row.powerForm),
+        ["0"],
+      );
+    }),
+  );
+});

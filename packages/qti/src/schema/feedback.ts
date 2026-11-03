@@ -22,6 +22,7 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
+import { ShowHide } from "#qti/schema/content/rosters.ts";
 import {
   BaseType,
   Declaration,
@@ -34,18 +35,13 @@ import * as patterns from "#qti/schema/patterns.ts";
 const ncName = str.regex(patterns.ncName);
 
 /**
- * A feedback's `show-hide`: `show` or `hide`.
- */
-const showHide = str.regex(patterns.showHide);
-
-/**
  * A `qti-feedback-block`: the identifier its outcome value is matched against, the outcome it reads
  * and whether a match shows or hides it. The same element inside a template content body is a
  * `TemplateFeedbackBlock`.
  */
 export const FeedbackBlock = relation(
   "FeedbackBlock",
-  { id: uuid, identifier: ncName, outcomeIdentifier: ncName, showHide },
+  { id: uuid, identifier: ncName, outcomeIdentifier: ncName, showHide: closedId(ShowHide) },
   ["id"],
 );
 
@@ -64,7 +60,7 @@ export const DeclaredFeedbackBlockShowHide = relation(
  */
 export const TemplateFeedbackBlock = relation(
   "TemplateFeedbackBlock",
-  { id: uuid, identifier: ncName, outcomeIdentifier: ncName, showHide },
+  { id: uuid, identifier: ncName, outcomeIdentifier: ncName, showHide: closedId(ShowHide) },
   ["id"],
 );
 
@@ -82,7 +78,7 @@ export const DeclaredTemplateFeedbackBlockShowHide = relation(
  */
 export const FeedbackInline = relation(
   "FeedbackInline",
-  { id: uuid, identifier: ncName, outcomeIdentifier: ncName, showHide },
+  { id: uuid, identifier: ncName, outcomeIdentifier: ncName, showHide: closedId(ShowHide) },
   ["id"],
 );
 
@@ -105,7 +101,7 @@ export const ModalFeedback = relation(
     id: uuid,
     identifier: ncName,
     outcomeIdentifier: ncName,
-    showHide,
+    showHide: closedId(ShowHide),
     version: closedId(SchemaVersion),
   },
   ["id"],

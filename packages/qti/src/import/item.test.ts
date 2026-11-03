@@ -15,6 +15,7 @@ import { ItemRefusal, Rows, UnmodeledVocabulary, withParents } from "#qti/import
 import type { NodeIndex } from "#qti/import/tree.ts";
 import {
   Declaration,
+  DeclarationExternalScored,
   DeclarationInterpretation,
   DeclarationLongInterpretation,
   DeclarationMasteryValue,
@@ -1039,6 +1040,12 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
 const itemNamespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 
 /**
+ * An item with one outcome declaration that writes `external-scored` as `spelling`.
+ */
+const externalScoredItem = (spelling: string) =>
+  `<qti-assessment-item xmlns="${itemNamespace}" identifier="hand" title="Hand" time-dependent="false"><qti-outcome-declaration identifier="O" cardinality="single" base-type="float" external-scored="${spelling}"/><qti-item-body><p>x</p></qti-item-body></qti-assessment-item>`;
+
+/**
  * The item rows of a hand-written item whose root carries `rootAttributes` and whose body is
  * `body`.
  */
@@ -1452,6 +1459,36 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts composi
       assert.deepStrictEqual(
         Rows.of(rows, value.relations.DeclaredValueBoolean).map((row) => row.value),
         ["false"],
+      );
+    }),
+  );
+
+  suite.effect(
+    "external-scored outside human and externalMachine, padded included, is refused value-lexical",
+    () =>
+      Effect.gen(function* refusedExternalScored() {
+        for (const spelling of ["robot", " human"]) {
+          const doc = yield* readXml(new TextEncoder().encode(externalScoredItem(spelling)));
+          const failure = yield* Effect.flip(itemOf(doc));
+
+          assert.strictEqual(failure._tag, "ImportRefused", spelling);
+          assert.strictEqual(
+            failure instanceof ImportRefused ? failure.rule : "",
+            "value-lexical",
+            spelling,
+          );
+        }
+      }),
+  );
+
+  suite.effect("external-scored externalMachine is written as its handle", () =>
+    Effect.gen(function* admittedExternalScored() {
+      const doc = yield* readXml(new TextEncoder().encode(externalScoredItem("externalMachine")));
+      const { rows } = yield* itemOf(doc);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, DeclarationExternalScored).map((row) => row.value),
+        ["externalMachine"],
       );
     }),
   );

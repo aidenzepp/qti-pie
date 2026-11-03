@@ -24,6 +24,7 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { FieldBase } from "@bjornpagen/grizzle";
+import { ExternalScored, XsBoolean } from "#qti/schema/content/rosters.ts";
 import * as document from "#qti/schema/document.ts";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
@@ -123,8 +124,8 @@ export const TemplateDeclarationArm = relation(
   "TemplateDeclarationArm",
   {
     id: uuid,
-    mathVariable: str.regex(patterns.xsBoolean),
-    paramVariable: str.regex(patterns.xsBoolean),
+    mathVariable: closedId(XsBoolean),
+    paramVariable: closedId(XsBoolean),
   },
   ["id"],
 );
@@ -205,15 +206,12 @@ export const DeclarationMasteryValue = outcomeValue(
 );
 
 /**
- * The `external-scored` pattern, typed as a plain regex text so the importer keeps writing a string
- * here until the attribute's column is a closed roster.
- */
-const externalScored: ReturnType<typeof str.regex> = str.regex(patterns.externalScored);
-
-/**
  * The `external-scored` attribute: `human` or `externalMachine`.
  */
-export const DeclarationExternalScored = outcomeValue("DeclarationExternalScored", externalScored);
+export const DeclarationExternalScored = outcomeValue(
+  "DeclarationExternalScored",
+  closedId(ExternalScored),
+);
 
 /**
  * The `variable-identifier-ref` attribute: the identifier of another variable.

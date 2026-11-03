@@ -19,7 +19,7 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
-import { ShowHide } from "#qti/schema/content/rosters.ts";
+import { ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import {
   BaseType,
   Declaration,
@@ -33,8 +33,6 @@ import * as patterns from "#qti/schema/patterns.ts";
 const ncName = str.regex(patterns.ncName);
 
 const xsString = str.regex(patterns.xsString, patterns.xsStringFlags);
-
-const xsBoolean = str.regex(patterns.xsBoolean);
 
 const integerOrVariableString = str.regex(patterns.integerOrVariableString);
 
@@ -172,7 +170,7 @@ export const PrintedVariable = relation(
     id: uuid,
     identifier: ncName,
     mappingIndicator: xsString,
-    powerForm: xsBoolean,
+    powerForm: closedId(XsBoolean),
   },
   ["id"],
 );

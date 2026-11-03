@@ -60,7 +60,7 @@ import {
 import { Edge, Node } from "#qti/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-import { BooleanLiteral, ShowHide } from "#qti/schema/content/rosters.ts";
+import { BooleanLiteral, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import {
   CatalogInfo,
   CompanionMaterialsInfo,
@@ -346,6 +346,22 @@ const declarationRows = Effect.fn("import.content.declarationRows")(function* de
   const mathVariable = attributes.read("math-variable");
   const paramVariable = attributes.read("param-variable");
   const variable: KnownVariable = { baseType, cardinality, id: node.id, kind, shape };
+  const mathVariableHandle = template
+    ? yield* closedOf(
+        XsBoolean.handles,
+        Option.getOrElse(mathVariable, () => "false"),
+        "attribute-lexical",
+        "the math-variable attribute of qti-template-declaration",
+      )
+    : "false";
+  const paramVariableHandle = template
+    ? yield* closedOf(
+        XsBoolean.handles,
+        Option.getOrElse(paramVariable, () => "false"),
+        "attribute-lexical",
+        "the param-variable attribute of qti-template-declaration",
+      )
+    : "false";
 
   let built = attributes.rows();
   built = Rows.add(built, Declaration, [
@@ -370,8 +386,8 @@ const declarationRows = Effect.fn("import.content.declarationRows")(function* de
     built = Rows.add(built, TemplateDeclarationArm, [
       {
         id: node.id,
-        mathVariable: judgedLater(Option.getOrElse(mathVariable, () => "false")),
-        paramVariable: judgedLater(Option.getOrElse(paramVariable, () => "false")),
+        mathVariable: mathVariableHandle,
+        paramVariable: paramVariableHandle,
       },
     ]);
     built = markers(
@@ -493,12 +509,15 @@ const feedbackRows = Effect.fn("import.feedbackRows")(function* feedbackRows(
   element: Element,
   node: NodeRef,
   context: Context,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = attributeReader(rows, element, node);
   const outcomeIdentifier = Option.getOrElse(attributes.read("outcome-identifier"), () => "");
   const identifier = Option.getOrElse(attributes.read("identifier"), () => "");
-  const showHide = judgedLater<"show" | "hide">(
+  const showHide = yield* closedOf(
+    ShowHide.handles,
     Option.getOrElse(attributes.read("show-hide"), () => "show"),
+    "attribute-lexical",
+    `the show-hide attribute of ${node.kind}`,
   );
   const fact = [{ id: node.id, identifier, outcomeIdentifier, showHide }];
   let built = attributes.rows();
@@ -539,11 +558,16 @@ const modalRows = Effect.fn("import.modalRows")(function* modalRows(
   element: Element,
   node: NodeRef,
   context: Context,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = attributeReader(rows, element, node);
   const outcomeIdentifier = Option.getOrElse(attributes.read("outcome-identifier"), () => "");
   const identifier = Option.getOrElse(attributes.read("identifier"), () => "");
-  const showHide = Option.getOrElse(attributes.read("show-hide"), () => "");
+  const showHide = yield* closedOf(
+    ShowHide.handles,
+    Option.getOrElse(attributes.read("show-hide"), () => ""),
+    "attribute-lexical",
+    "the show-hide attribute of qti-modal-feedback",
+  );
   const title = attributes.read("title");
   const version = context.versions.get(node.id) ?? "3.0.1";
   let built = attributes.rows();
@@ -552,7 +576,7 @@ const modalRows = Effect.fn("import.modalRows")(function* modalRows(
       id: node.id,
       identifier,
       outcomeIdentifier,
-      showHide: judgedLater(showHide),
+      showHide,
       version: judgedLater(version),
     },
   ]);
@@ -668,7 +692,7 @@ const printedRows = Effect.fn("import.printedRows")(function* printedRows(
   element: Element,
   node: NodeRef,
   context: Context,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = attributeReader(rows, element, node);
   const identifier = Option.getOrElse(attributes.read("identifier"), () => "");
   const delimiter = attributes.read("delimiter");
@@ -679,6 +703,12 @@ const printedRows = Effect.fn("import.printedRows")(function* printedRows(
   const baseText = attributes.read("base");
   const indexText = attributes.read("index");
   const written$ = attributes.written();
+  const powerFormHandle = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(powerForm, () => "false"),
+    "attribute-lexical",
+    "the power-form attribute of qti-printed-variable",
+  );
   let built = attributes.rows();
 
   const base = unionAttribute(
@@ -695,7 +725,7 @@ const printedRows = Effect.fn("import.printedRows")(function* printedRows(
       id: node.id,
       identifier,
       mappingIndicator: judgedLater(Option.getOrElse(mappingIndicator, () => "=")),
-      powerForm: judgedLater(Option.getOrElse(powerForm, () => "false")),
+      powerForm: powerFormHandle,
     },
   ]);
   built = markers(
@@ -873,7 +903,7 @@ type Builder = (
   element: Element,
   node: NodeRef,
   context: Context,
-) => Effect.Effect<Rows, ItemRefusal>;
+) => Effect.Effect<Rows, ImportRefused | ItemRefusal>;
 
 /**
  * The builder of each kind that has attributes or references; the thin kinds are written by

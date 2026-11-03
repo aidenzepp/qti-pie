@@ -55,7 +55,13 @@ import {
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
 import type { DeclarationShape } from "#qti/schema/declaration.ts";
-import { BooleanLiteral, Orientation, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
+import {
+  BooleanLiteral,
+  ExternalScored,
+  Orientation,
+  ShowHide,
+  XsBoolean,
+} from "#qti/schema/content/rosters.ts";
 import type { XsBooleanHandle } from "#qti/schema/content/rosters.ts";
 import { Document, DocumentId, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#qti/schema/html.ts";
@@ -309,12 +315,12 @@ interface DeclarationRows {
  * kind arm, its typed or record row, the outcome's optional values, and for a response declaration
  * the document's id holder.
  */
-const declarationRows = (
+const declarationRows = Effect.fn("import.item.declarationRows")(function* declarationRows(
   rows: Rows,
   element: Element,
   node: NodeEntry,
   documentId: string,
-): DeclarationRows => {
+): Effect.fn.Return<DeclarationRows, ImportRefused> {
   const attributes = reader(rows, element, node);
   const text = Option.getOrElse(attributes.read("identifier", "collapse"), () => "");
   const cardinalityText = attributes.read("cardinality", "preserve");
@@ -372,6 +378,16 @@ const declarationRows = (
     return { declared, identifier: text, rows: built };
   }
 
+  const externalScoredHandle = Option.isSome(externalScored)
+    ? Option.some(
+        yield* closedOf(
+          ExternalScored.handles,
+          externalScored.value,
+          "value-lexical",
+          "the external-scored attribute of qti-outcome-declaration",
+        ),
+      )
+    : Option.none();
   const owned = (value: Option.Option<string>) =>
     written(value, (own) => ({ declaration, value: own }));
   built = Rows.add(built, DeclarationView, owned(view));
@@ -380,11 +396,15 @@ const declarationRows = (
   built = Rows.add(built, DeclarationNormalMaximum, owned(normalMaximum));
   built = Rows.add(built, DeclarationNormalMinimum, owned(normalMinimum));
   built = Rows.add(built, DeclarationMasteryValue, owned(masteryValue));
-  built = Rows.add(built, DeclarationExternalScored, owned(externalScored));
+  built = Rows.add(
+    built,
+    DeclarationExternalScored,
+    written(externalScoredHandle, (own) => ({ declaration, value: own })),
+  );
   built = Rows.add(built, DeclarationVariableIdentifierRef, owned(variableIdentifierRef));
 
   return { declared, identifier: text, rows: built };
-};
+});
 
 /**
  * The rows of one `qti-correct-response` or `qti-default-value`: the set, its role arm, its typed
@@ -817,7 +837,7 @@ export const semanticRows = Effect.fn("import.semanticRows")(function* semanticR
       node !== undefined &&
       (node.kind === "qti-response-declaration" || node.kind === "qti-outcome-declaration")
     ) {
-      const declaration = declarationRows(built, element, node, documentId);
+      const declaration = yield* declarationRows(built, element, node, documentId);
       built = declaration.rows;
       declaredBy.set(element, declaration.declared);
       if (!declarations.has(declaration.identifier)) {
