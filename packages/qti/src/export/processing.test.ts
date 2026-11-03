@@ -206,7 +206,7 @@ const readFixture = (directory: string, name: string) =>
     return yield* readXml(yield* fs.readFile(path.join(fixtures, directory, `${name}.xml`)));
   });
 
-layer(TestLayer, { excludeTestServices: true })("export/processing.ts", (suite) => {
+layer(TestLayer, { excludeTestServices: true })("renderTree on processing documents", (suite) => {
   suite.effect("renders the qti-response-processing of response.xml as it was read", () =>
     Effect.gen(function* responseSubtree() {
       const doc = yield* readFixture("valid", "response");
