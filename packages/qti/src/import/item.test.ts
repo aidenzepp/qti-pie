@@ -456,10 +456,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
         },
         { baseType: "float", id: defaultValue, position: 1n, shape: "typed", valueSet: initial },
       ]);
-      assert.deepStrictEqual(Rows.of(rows, value.relations.DeclaredValueIdentifier), [
+      assert.deepStrictEqual<unknown>(Rows.of(rows, value.relations.DeclaredValueIdentifier), [
         { id: correctValue, value: "ChoiceA" },
       ]);
-      assert.deepStrictEqual(Rows.of(rows, value.relations.DeclaredValueFloat), [
+      assert.deepStrictEqual<unknown>(Rows.of(rows, value.relations.DeclaredValueFloat), [
         { id: defaultValue, value: "0" },
       ]);
       assert.deepStrictEqual(Rows.of(rows, value.RecordField), []);

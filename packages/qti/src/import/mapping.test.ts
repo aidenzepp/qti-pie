@@ -169,14 +169,18 @@ describe("mappingRows on a mapping", () => {
       const mapping = idOf(nodes, "qti-mapping");
       const declaration = declarationOf(variables, "RESPONSE");
 
-      assert.deepStrictEqual(Rows.of(built, Mapping), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, Mapping), [
         { baseType: "identifier", declaration, defaultValue: "0", document: treeId, id: mapping },
       ]);
-      assert.deepStrictEqual(Rows.of(built, MappingLowerBound), [{ node: mapping, value: "0" }]);
-      assert.deepStrictEqual(Rows.of(built, MappingUpperBound), [{ node: mapping, value: "3" }]);
+      assert.deepStrictEqual<unknown>(Rows.of(built, MappingLowerBound), [
+        { node: mapping, value: "0" },
+      ]);
+      assert.deepStrictEqual<unknown>(Rows.of(built, MappingUpperBound), [
+        { node: mapping, value: "3" },
+      ]);
 
       const [first, second] = pairOf(nodes, "qti-map-entry");
-      assert.deepStrictEqual(Rows.of(built, MapEntry), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, MapEntry), [
         {
           baseType: "identifier",
           caseSensitive: "false",
@@ -196,7 +200,7 @@ describe("mappingRows on a mapping", () => {
           position: 1n,
         },
       ]);
-      assert.deepStrictEqual(Rows.of(built, MapEntryIdentifier), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, MapEntryIdentifier), [
         { id: first, mapKey: "A" },
         { id: second, mapKey: "B" },
       ]);
@@ -251,7 +255,9 @@ describe("mappingRows on a mapping", () => {
       );
       const entry = idOf(nodes, "qti-map-entry");
 
-      assert.deepStrictEqual(Rows.of(built, MapEntryInteger), [{ id: entry, mapKey: "12" }]);
+      assert.deepStrictEqual<unknown>(Rows.of(built, MapEntryInteger), [
+        { id: entry, mapKey: "12" },
+      ]);
       assert.deepStrictEqual(
         Rows.of(built, AttributeLexical).map((row) => [row.node, row.attribute, row.value]),
         [[entry, "map-key", " 12 "]],
@@ -287,7 +293,7 @@ describe("mappingRows on an area mapping", () => {
         { node: idOf(written.nodes, "qti-area-mapping") },
       ]);
       assert.strictEqual(Rows.of(omitted.built, DeclaredAreaMappingDefaultValue).length, 0);
-      assert.deepStrictEqual(
+      assert.deepStrictEqual<unknown>(
         Rows.of(omitted.built, AreaMapping).map((row) => row.defaultValue),
         ["0"],
       );
@@ -302,18 +308,18 @@ describe("mappingRows on an area mapping", () => {
       const mapping = idOf(nodes, "qti-area-mapping");
       const declaration = declarationOf(variables, "RESPONSE");
 
-      assert.deepStrictEqual(Rows.of(built, AreaMapping), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, AreaMapping), [
         { declaration, defaultValue: "0.5", document: treeId, id: mapping },
       ]);
-      assert.deepStrictEqual(Rows.of(built, AreaMappingLowerBound), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, AreaMappingLowerBound), [
         { node: mapping, value: "0" },
       ]);
-      assert.deepStrictEqual(Rows.of(built, AreaMappingUpperBound), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, AreaMappingUpperBound), [
         { node: mapping, value: "2" },
       ]);
 
       const [first, second] = pairOf(nodes, "qti-area-map-entry");
-      assert.deepStrictEqual(Rows.of(built, AreaMapEntry), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, AreaMapEntry), [
         { areaMapping: mapping, id: first, mappedValue: "1", position: 0n, shape: "rect" },
         { areaMapping: mapping, id: second, mappedValue: "2", position: 1n, shape: "circle" },
       ]);
@@ -350,19 +356,19 @@ describe("mappingRows on a match table", () => {
       assert.deepStrictEqual(Rows.of(built, MatchTable), [
         { baseType: "float", declaration, document: treeId, id },
       ]);
-      assert.deepStrictEqual(Rows.of(built, MatchTableDefaultValue), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, MatchTableDefaultValue), [
         { baseType: "float", node: id },
       ]);
-      assert.deepStrictEqual(Rows.of(built, MatchTableDefaultValueFloat), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, MatchTableDefaultValueFloat), [
         { node: id, value: "9" },
       ]);
 
       const [first, second] = pairOf(nodes, "qti-match-table-entry");
-      assert.deepStrictEqual(Rows.of(built, MatchTableEntry), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, MatchTableEntry), [
         { baseType: "float", declaration, id: first, position: 0n, sourceValue: "1", table: id },
         { baseType: "float", declaration, id: second, position: 1n, sourceValue: "2", table: id },
       ]);
-      assert.deepStrictEqual(Rows.of(built, MatchTableEntryFloat), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, MatchTableEntryFloat), [
         { id: first, targetValue: "1.5" },
         { id: second, targetValue: "2.5" },
       ]);
@@ -392,15 +398,15 @@ describe("mappingRows on an interpolation table", () => {
       assert.deepStrictEqual(Rows.of(built, InterpolationTable), [
         { baseType: "float", declaration, document: treeId, id },
       ]);
-      assert.deepStrictEqual(Rows.of(built, InterpolationTableDefaultValue), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, InterpolationTableDefaultValue), [
         { baseType: "float", node: id },
       ]);
-      assert.deepStrictEqual(Rows.of(built, InterpolationTableDefaultValueFloat), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, InterpolationTableDefaultValueFloat), [
         { node: id, value: "0" },
       ]);
 
       const [first, second] = pairOf(nodes, "qti-interpolation-table-entry");
-      assert.deepStrictEqual(Rows.of(built, InterpolationTableEntry), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, InterpolationTableEntry), [
         {
           baseType: "float",
           declaration,
@@ -420,7 +426,7 @@ describe("mappingRows on an interpolation table", () => {
           table: id,
         },
       ]);
-      assert.deepStrictEqual(Rows.of(built, InterpolationTableEntryFloat), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, InterpolationTableEntryFloat), [
         { id: first, targetValue: "1" },
         { id: second, targetValue: "0.5" },
       ]);

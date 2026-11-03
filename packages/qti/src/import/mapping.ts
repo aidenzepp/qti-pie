@@ -385,7 +385,7 @@ const mappingElement = (
     {
       baseType,
       declaration: owner.id,
-      defaultValue: Option.getOrElse(defaultValue, () => "0"),
+      defaultValue: judgedLater(Option.getOrElse(defaultValue, () => "0")),
       document: pass.documentId,
       id: node.id,
     },
@@ -393,13 +393,13 @@ const mappingElement = (
   built = Rows.add(
     built,
     mapping.MappingLowerBound,
-    written(lower, (own) => ({ node: node.id, value: own })),
+    written(lower, (own) => ({ node: node.id, value: judgedLater(own) })),
   );
 
   built = Rows.add(
     built,
     mapping.MappingUpperBound,
-    written(upper, (own) => ({ node: node.id, value: own })),
+    written(upper, (own) => ({ node: node.id, value: judgedLater(own) })),
   );
 
   return markers(
@@ -441,7 +441,7 @@ const mapEntryElement = Effect.fn("import.mapEntryElement")(function* mapEntryEl
       caseSensitive,
       declaration: holder.declaration,
       id: node.id,
-      mappedValue: Option.getOrElse(mappedValue, () => ""),
+      mappedValue: judgedLater(Option.getOrElse(mappedValue, () => "")),
       mapping: holderId,
       position: pass.positions.get(node.id) ?? 0n,
     },
@@ -476,7 +476,7 @@ const areaMappingElement = (
   let built = Rows.add(attributes.rows(), mapping.AreaMapping, [
     {
       declaration,
-      defaultValue: Option.getOrElse(defaultValue, () => "0"),
+      defaultValue: judgedLater(Option.getOrElse(defaultValue, () => "0")),
       document: pass.documentId,
       id: node.id,
     },
@@ -484,13 +484,13 @@ const areaMappingElement = (
   built = Rows.add(
     built,
     mapping.AreaMappingLowerBound,
-    written(lower, (own) => ({ node: node.id, value: own })),
+    written(lower, (own) => ({ node: node.id, value: judgedLater(own) })),
   );
 
   built = Rows.add(
     built,
     mapping.AreaMappingUpperBound,
-    written(upper, (own) => ({ node: node.id, value: own })),
+    written(upper, (own) => ({ node: node.id, value: judgedLater(own) })),
   );
 
   return markers(
@@ -531,7 +531,7 @@ const areaMapEntryElement = Effect.fn("import.areaMapEntryElement")(function* ar
     {
       areaMapping,
       id: node.id,
-      mappedValue: Option.getOrElse(mappedValue, () => ""),
+      mappedValue: judgedLater(Option.getOrElse(mappedValue, () => "")),
       position: pass.positions.get(node.id) ?? 0n,
       shape: shape.value,
     },
@@ -618,11 +618,12 @@ const tableEntryElement = Effect.fn("import.tableEntryElement")(function* tableE
     declaration: holder.declaration,
     id: node.id,
     position,
-    sourceValue: source,
     table: tableId,
   };
   if (node.kind === "qti-match-table-entry") {
-    const built = Rows.add(target.rows, mapping.MatchTableEntry, [fact]);
+    const built = Rows.add(target.rows, mapping.MatchTableEntry, [
+      { ...fact, sourceValue: judgedLater(source) },
+    ]);
 
     return Option.isNone(target.value)
       ? built
@@ -639,6 +640,7 @@ const tableEntryElement = Effect.fn("import.tableEntryElement")(function* tableE
     {
       ...fact,
       includeBoundary,
+      sourceValue: judgedLater(source),
     },
   ]);
   const withTarget = Option.isNone(target.value)

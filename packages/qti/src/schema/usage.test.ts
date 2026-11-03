@@ -218,7 +218,7 @@ describe("usage", () => {
   });
 
   it("refuses a padded or trailing-junk float in the typed float arm and admits a bare one", () => {
-    const { pattern } = usage.relations.UsageTypedValueFloat.fields.value;
+    const { pattern } = usage.relations.UsageTypedValueFloat.fields.value.base;
     const float = new RegExp(pattern.source, pattern.flags);
     assert.isTrue(float.test("0.87"));
     assert.isFalse(float.test("0.87x"));

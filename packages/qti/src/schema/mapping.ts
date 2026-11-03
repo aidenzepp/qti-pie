@@ -20,20 +20,14 @@ import {
   pg,
   relation,
   select,
-  str,
   uuid,
 } from "@bjornpagen/grizzle";
 import { Shape, XsBoolean } from "#qti/schema/content/rosters.ts";
+import { InterpolationSourceValue, MappingScore, MatchSourceValue } from "#qti/schema/contracts.ts";
 import { BaseType, Declaration, TypedDeclaration } from "#qti/schema/declaration.ts";
 import { Edge } from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
 import { coordsBinding, shapeCapacities } from "#qti/schema/shapes.ts";
-import { lexicalOf } from "#qti/schema/value.ts";
-
-/**
- * An `xs:double` attribute's lexical form.
- */
-const xsDouble = str.regex(patterns.xsDouble);
+import { fieldsOf } from "#qti/schema/value.ts";
 
 /**
  * The base types a mapping or a map entry may be of: every base type but `file` and `duration`.
@@ -52,7 +46,7 @@ export const Mapping = relation(
   {
     baseType: closedId(BaseType),
     declaration: uuid,
-    defaultValue: xsDouble,
+    defaultValue: MappingScore,
     document: uuid,
     id: uuid,
   },
@@ -62,16 +56,20 @@ export const Mapping = relation(
 /**
  * A mapping's `lower-bound`, when it has one.
  */
-export const MappingLowerBound = relation("MappingLowerBound", { node: uuid, value: xsDouble }, [
-  "node",
-]);
+export const MappingLowerBound = relation(
+  "MappingLowerBound",
+  { node: uuid, value: MappingScore },
+  ["node"],
+);
 
 /**
  * A mapping's `upper-bound`, when it has one.
  */
-export const MappingUpperBound = relation("MappingUpperBound", { node: uuid, value: xsDouble }, [
-  "node",
-]);
+export const MappingUpperBound = relation(
+  "MappingUpperBound",
+  { node: uuid, value: MappingScore },
+  ["node"],
+);
 
 /**
  * A `qti-map-entry`, at its position in its mapping. `caseSensitive` is `false` where the source
@@ -84,7 +82,7 @@ export const MapEntry = relation(
     caseSensitive: closedId(XsBoolean),
     declaration: uuid,
     id: uuid,
-    mappedValue: xsDouble,
+    mappedValue: MappingScore,
     mapping: uuid,
     position: pg.bigint,
   },
@@ -121,7 +119,7 @@ export const DeclaredAreaMappingDefaultValue = relation(
  */
 export const AreaMapping = relation(
   "AreaMapping",
-  { declaration: uuid, defaultValue: xsDouble, document: uuid, id: uuid },
+  { declaration: uuid, defaultValue: MappingScore, document: uuid, id: uuid },
   ["id"],
 );
 
@@ -130,7 +128,7 @@ export const AreaMapping = relation(
  */
 export const AreaMappingLowerBound = relation(
   "AreaMappingLowerBound",
-  { node: uuid, value: xsDouble },
+  { node: uuid, value: MappingScore },
   ["node"],
 );
 
@@ -139,7 +137,7 @@ export const AreaMappingLowerBound = relation(
  */
 export const AreaMappingUpperBound = relation(
   "AreaMappingUpperBound",
-  { node: uuid, value: xsDouble },
+  { node: uuid, value: MappingScore },
   ["node"],
 );
 
@@ -152,7 +150,7 @@ export const AreaMapEntry = relation(
   {
     areaMapping: uuid,
     id: uuid,
-    mappedValue: xsDouble,
+    mappedValue: MappingScore,
     position: pg.bigint,
     shape: closedId(Shape),
   },
@@ -189,7 +187,7 @@ export const MatchTableEntry = relation(
     declaration: uuid,
     id: uuid,
     position: pg.bigint,
-    sourceValue: xsDouble,
+    sourceValue: MatchSourceValue,
     table: uuid,
   },
   ["id"],
@@ -207,7 +205,7 @@ export const InterpolationTableEntry = relation(
     id: uuid,
     includeBoundary: closedId(XsBoolean),
     position: pg.bigint,
-    sourceValue: xsDouble,
+    sourceValue: InterpolationSourceValue,
     table: uuid,
   },
   ["id"],
@@ -239,7 +237,7 @@ export const InterpolationTableDefaultValue = relation(
   ["node"],
 );
 
-const mapEntryLexical = lexicalOf("MapKey");
+const mapEntryLexical = fieldsOf("MapKey");
 
 /**
  * The eleven `map-key` arms of a map entry, one per base type, each holding the key in the lexical
@@ -265,7 +263,7 @@ const mapEntryArms = {
   uri: relation("MapEntryUri", { id: uuid, mapKey: mapEntryLexical.uri }, ["id"]),
 };
 
-const matchTableEntryLexical = lexicalOf("MatchTarget");
+const matchTableEntryLexical = fieldsOf("MatchTarget");
 
 /**
  * The eleven `target-value` arms of a match table entry, one per base type.
@@ -318,7 +316,7 @@ const matchTableEntryArms = {
   ]),
 };
 
-const interpolationTableEntryLexical = lexicalOf("InterpolationTarget");
+const interpolationTableEntryLexical = fieldsOf("InterpolationTarget");
 
 /**
  * The eleven `target-value` arms of an interpolation table entry, one per base type.
@@ -381,7 +379,7 @@ const interpolationTableEntryArms = {
   ),
 };
 
-const matchTableDefaultValueLexical = lexicalOf("MatchDefault");
+const matchTableDefaultValueLexical = fieldsOf("MatchDefault");
 
 /**
  * The eleven typed values a match table's `default-value` may hold, one per base type.
@@ -444,7 +442,7 @@ const matchTableDefaultValueArms = {
   ),
 };
 
-const interpolationTableDefaultValueLexical = lexicalOf("InterpolationDefault");
+const interpolationTableDefaultValueLexical = fieldsOf("InterpolationDefault");
 
 /**
  * The eleven typed values an interpolation table's `default-value` may hold, one per base type.

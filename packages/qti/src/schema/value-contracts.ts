@@ -1,13 +1,14 @@
 /**
- * The value-arm contracts of the schema: for each context of the value table of `value.ts`, one
- * grizzle `contract` per base type, over the field type `lexicalOf` returns for it.
+ * The value-arm contracts of the schema: for each context of the value table of
+ * `value-contexts.ts`, one grizzle `contract` per base type, over the field type `lexicalOf`
+ * returns for it.
  *
- * They live apart from the written-out contracts of `contracts.ts` because they read `value.ts`,
- * which reads the schema in turn; `contracts.ts` imports only `patterns`.
+ * They live apart from the written-out contracts of `contracts.ts` because they read the context
+ * table of `value-contexts.ts`; `contracts.ts` imports only `patterns`. `value.ts` applies them.
  */
 import { contract } from "@bjornpagen/grizzle";
-import type { ValueContext } from "#qti/schema/value.ts";
-import { lexicalOf } from "#qti/schema/value.ts";
+import type { ValueContext } from "#qti/schema/value-contexts.ts";
+import { lexicalOf } from "#qti/schema/value-contexts.ts";
 
 /**
  * The base types a value arm holds a contract for, as the keys of one context's contracts.
@@ -32,9 +33,9 @@ interface Arm {
 /**
  * Mint the 64 value-arm contracts: for each of the eight contexts of `valueContexts`, one contract
  * named `<Context><BaseType>Value` for each of the base types `Integer`, `Float`, `Duration`,
- * `Pair`, `DirectedPair`, `Point`, `Uri` and `Identifier`, over the field type
- * `lexicalOf(context)` returns for it, so the table in `value.ts` stays the one source of the
- * lexical forms. The result is keyed by context and then by base type.
+ * `Pair`, `DirectedPair`, `Point`, `Uri` and `Identifier`, over the field type `lexicalOf(context)`
+ * returns for it, so the table in `value-contexts.ts` stays the one source of the lexical forms.
+ * The result is keyed by context and then by base type.
  *
  * A contract's name is a literal type, so each name is written out; the `satisfies` clause refuses
  * a context of the table that is missing here, and the module's test compares the keys and the

@@ -471,7 +471,7 @@ describe("contentRows", () => {
             [idOf(set), "integer"],
           ],
         );
-        assert.deepStrictEqual(
+        assert.deepStrictEqual<unknown>(
           stored.map((row) => valueOf.get(row.id)),
           ["3", "4"],
         );
