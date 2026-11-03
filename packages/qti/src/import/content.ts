@@ -576,7 +576,7 @@ const modalRows = Effect.fn("import.modalRows")(function* modalRows(
   const identifier = Option.getOrElse(attributes.read("identifier"), () => "");
   const showHide = yield* closedOf(
     ShowHide.handles,
-    Option.getOrElse(attributes.read("show-hide"), () => ""),
+    yield* requiredAttribute(element, "show-hide", attributes.read("show-hide")),
     "attribute-lexical",
     "the show-hide attribute of qti-modal-feedback",
   );
@@ -610,25 +610,24 @@ const templateRows = Effect.fn("import.templateRows")(function* templateRows(
   element: Element,
   node: NodeRef,
   context: Context,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = attributeReader(rows, element, node);
   const templateIdentifier = Option.getOrElse(attributes.read("template-identifier"), () => "");
   const identifier = Option.getOrElse(attributes.read("identifier"), () => "");
-  const showHide = Option.match(attributes.read("show-hide"), {
-    onNone: () => Option.some<(typeof ShowHide.handles)[number]>("show"),
-    onSome: (text) => handleOf(ShowHide.handles, Option.some(text)),
-  });
-  const fact = Option.match(showHide, {
-    onNone: () => [],
-    onSome: (value) => [
-      {
-        id: node.id,
-        identifier: ShowHideIdentifier(identifier),
-        showHide: value,
-        templateIdentifier: VariableReference(templateIdentifier),
-      },
-    ],
-  });
+  const showHide = yield* closedOf(
+    ShowHide.handles,
+    Option.getOrElse(attributes.read("show-hide"), () => "show"),
+    "attribute-lexical",
+    `the show-hide attribute of ${node.kind}`,
+  );
+  const fact = [
+    {
+      id: node.id,
+      identifier: ShowHideIdentifier(identifier),
+      showHide,
+      templateIdentifier: VariableReference(templateIdentifier),
+    },
+  ];
   let built = attributes.rows();
   if (node.kind === "qti-template-inline") {
     built = Rows.add(built, TemplateInline, fact);

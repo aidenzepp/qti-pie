@@ -725,6 +725,20 @@ describe("contentRows on a closed attribute outside its roster", () => {
       },
     ],
     [
+      "show-hide of a template block",
+      {
+        body: `<qti-template-block template-identifier="T" identifier="b" show-hide="visible"><qti-content-body><p>x</p></qti-content-body></qti-template-block>`,
+        head: sixKindsHead,
+      },
+    ],
+    [
+      "show-hide of a template inline",
+      {
+        body: `<p><qti-template-inline template-identifier="T" identifier="i" show-hide="visible">x</qti-template-inline></p>`,
+        head: sixKindsHead,
+      },
+    ],
+    [
       "math-variable of a template declaration",
       {
         head: `<qti-template-declaration identifier="T" cardinality="single" base-type="integer" math-variable="yes"/>`,
@@ -759,6 +773,33 @@ describe("contentRows on a closed attribute outside its roster", () => {
 
       assert.instanceOf(failure, ImportRefused);
       assert.strictEqual(failure.rule, "attribute-lexical");
+    }),
+  );
+
+  it.effect("refuses a padded show-hide of a template block under attribute-lexical", () =>
+    Effect.gen(function* run() {
+      const failure = yield* Effect.flip(
+        built({
+          body: `<qti-template-block template-identifier="T" identifier="b" show-hide=" hide "><qti-content-body><p>x</p></qti-content-body></qti-template-block>`,
+          head: sixKindsHead,
+        }),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "attribute-lexical");
+    }),
+  );
+
+  it.effect("refuses a modal feedback with no show-hide under required-attribute", () =>
+    Effect.gen(function* run() {
+      const failure = yield* Effect.flip(
+        built({
+          tail: `<qti-modal-feedback outcome-identifier="FEEDBACK" identifier="m"><qti-content-body><p>x</p></qti-content-body></qti-modal-feedback>`,
+        }),
+      );
+
+      assert.instanceOf(failure, ItemRefusal);
+      assert.strictEqual(failure.rule, "required-attribute");
     }),
   );
 
