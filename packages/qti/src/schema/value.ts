@@ -24,6 +24,7 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
+import { BooleanLiteral } from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as node from "#qti/schema/node.ts";
 import type { Rule } from "#qti/import/refusal.ts";
@@ -123,11 +124,11 @@ const double = str.regex(patterns.xsDouble);
 const pair = str.regex(patterns.pair);
 
 /**
- * The lexical form of a value of each base type: a duration is a number of seconds, and a string
- * or a file is the text after replacement.
+ * The lexical form of a value of each base type: a boolean is a handle of `BooleanLiteral`, a
+ * duration is a number of seconds, and a string or a file is the text after replacement.
  */
 const lexicalForms = {
-  boolean: str.regex(patterns.booleanLiteral),
+  boolean: closedId(BooleanLiteral),
   directedPair: pair,
   duration: double,
   file: normalized,

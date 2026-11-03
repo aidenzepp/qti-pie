@@ -40,7 +40,6 @@ import {
   ResponseProcessingItem,
   TemplateParameterRef,
   VariableRef,
-  relations as processingRelations,
 } from "#qti/schema/processing.ts";
 import {
   ResponseConditionArm,
@@ -815,18 +814,6 @@ const negatives: readonly Negative[] = [
     laws: ["check BuiltInRef.BuiltInRefKind"],
     name: "P9: a BuiltInRef (qti-set-correct-response, numAttempts) is refused by the check",
     rule: "P9",
-  },
-  {
-    alter: (draft) => {
-      Object.assign(
-        find(draft, processingRelations.LiteralBoolean, () => true),
-        { value: "yes" },
-      );
-    },
-    laws: [`pattern ${patterns.booleanLiteral}`],
-    name: "P7: a boolean Literal arm row with value yes is refused by the booleanLiteral pattern",
-    rule: "value-lexical",
-    spec: "P7",
   },
   {
     alter: (draft) => {

@@ -55,7 +55,7 @@ import {
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
 import type { DeclarationShape } from "#qti/schema/declaration.ts";
-import { Orientation, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
+import { BooleanLiteral, Orientation, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import type { XsBooleanHandle } from "#qti/schema/content/rosters.ts";
 import { Document, DocumentId, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#qti/schema/html.ts";
@@ -428,11 +428,13 @@ const valueSetRows = (rows: Rows, element: Element, node: NodeEntry, owner: Decl
 };
 
 /**
- * The row of a `qti-value` in the arm of its base type.
+ * The row of a `qti-value` in the arm of each base type but boolean, which {@link booleanValueRow}
+ * narrows to its roster first.
  */
-const valueArmRows: Record<BaseTypeHandle, (rows: Rows, id: string, text: string) => Rows> = {
-  boolean: (rows, id, text) =>
-    Rows.add(rows, values.relations.DeclaredValueBoolean, [{ id, value: judgedLater(text) }]),
+const valueArmRows: Record<
+  Exclude<BaseTypeHandle, "boolean">,
+  (rows: Rows, id: string, text: string) => Rows
+> = {
   directedPair: (rows, id, text) =>
     Rows.add(rows, values.relations.DeclaredValueDirectedPair, [{ id, value: judgedLater(text) }]),
   duration: (rows, id, text) =>
@@ -456,17 +458,42 @@ const valueArmRows: Record<BaseTypeHandle, (rows: Rows, id: string, text: string
 };
 
 /**
+ * The row of a boolean `qti-value`: its text, a handle of `BooleanLiteral`.
+ *
+ * @param rows - The rows so far.
+ * @param id - The value node's id.
+ * @param text - The `replace`d text of the value, which the `text-copy` guard requires the row to
+ *   copy.
+ * @returns The rows with the arm added; `ImportRefused` (`value-lexical`) for text that is neither
+ *   `true` nor `false`.
+ */
+const booleanValueRow = Effect.fn("import.booleanValueRow")(function* booleanValueRow(
+  rows: Rows,
+  id: string,
+  text: string,
+): Effect.fn.Return<Rows, ImportRefused> {
+  const value = yield* closedOf(
+    BooleanLiteral.handles,
+    text,
+    "value-lexical",
+    "a boolean qti-value",
+  );
+
+  return Rows.add(rows, values.relations.DeclaredValueBoolean, [{ id, value }]);
+});
+
+/**
  * The rows of one `qti-value`: the value at its position, its arm, and for a record value its
  * field. A typed value has its set's base type and a record field has the one it wrote; a value
  * with no base type has no row, and the missing arm is the commit's refusal.
  */
-const valueRows = (
+const valueRows = Effect.fn("import.valueRows")(function* valueRows(
   rows: Rows,
   element: Element,
   node: NodeEntry,
   set: { readonly id: string; readonly owner: Declared },
   position: bigint,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
   const attributes = reader(rows, element, node);
   const field = attributes.read("field-identifier", "collapse");
   const baseType =
@@ -487,14 +514,18 @@ const valueRows = (
       valueSet: set.id,
     },
   ]);
-  const withArm = valueArmRows[baseType.value](withValue, node.id, replace(textOf(element)));
+  const text = replace(textOf(element));
+  const withArm =
+    baseType.value === "boolean"
+      ? yield* booleanValueRow(withValue, node.id, text)
+      : valueArmRows[baseType.value](withValue, node.id, text);
 
   return set.owner.shape === "record"
     ? Rows.add(withArm, values.RecordField, [
         { fieldIdentifier: Option.getOrElse(field, () => ""), id: node.id },
       ])
     : withArm;
-};
+});
 
 /**
  * The rows of one `qti-choice-interaction` and its binding to the response variable it names.
@@ -812,7 +843,7 @@ export const semanticRows = Effect.fn("import.semanticRows")(function* semanticR
       built = valueSetRows(built, element, node, owner.value);
       setOwners.set(element, { id: node.id, owner: owner.value });
     } else if (node.kind === "qti-value" && Option.isSome(set)) {
-      built = valueRows(built, element, node, set.value, positions.get(node.id) ?? 0n);
+      built = yield* valueRows(built, element, node, set.value, positions.get(node.id) ?? 0n);
     } else if (node.kind === "qti-choice-interaction") {
       built = yield* choiceInteractionRows(
         built,

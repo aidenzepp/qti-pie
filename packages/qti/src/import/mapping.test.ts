@@ -3,6 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option } from "effect";
 import type { DeclaredVariable } from "#qti/import/interactions.ts";
 import { mappingRows } from "#qti/import/mapping.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { Rows, treeRows } from "#qti/import/tree.ts";
 import type { NodeIndex } from "#qti/import/tree.ts";
 import {
@@ -32,11 +33,16 @@ import { readXml } from "#qti/xml/read.ts";
 import type { Element } from "#qti/xml/tree.ts";
 
 const {
+  InterpolationTableDefaultValueBoolean,
   InterpolationTableDefaultValueFloat,
+  InterpolationTableEntryBoolean,
   InterpolationTableEntryFloat,
+  MapEntryBoolean,
   MapEntryIdentifier,
   MapEntryInteger,
+  MatchTableDefaultValueBoolean,
   MatchTableDefaultValueFloat,
+  MatchTableEntryBoolean,
   MatchTableEntryFloat,
 } = relations;
 
@@ -430,6 +436,108 @@ describe("mappingRows on an interpolation table", () => {
       for (const entry of Rows.of(built, InterpolationTableEntry)) {
         assert.strictEqual(entry.position, edges.get(entry.id));
       }
+    }),
+  );
+});
+
+/**
+ * A single-cardinality boolean declaration of the given kind holding `body`.
+ */
+const boolean = (body: string, kind = "response") =>
+  `<qti-${kind}-declaration identifier="RESPONSE" cardinality="single" base-type="boolean">${body}</qti-${kind}-declaration>`;
+
+describe("mappingRows on a boolean value", () => {
+  const contexts: readonly (readonly [string, string, string])[] = [
+    [
+      "a map key",
+      boolean('<qti-mapping><qti-map-entry map-key="yes" mapped-value="1"/></qti-mapping>'),
+      "map-key-lexical",
+    ],
+    [
+      "a match table target",
+      boolean(
+        '<qti-match-table><qti-match-table-entry source-value="1" target-value="yes"/></qti-match-table>',
+        "outcome",
+      ),
+      "attribute-lexical",
+    ],
+    [
+      "an interpolation table target",
+      boolean(
+        '<qti-interpolation-table><qti-interpolation-table-entry source-value="1" target-value="yes"/></qti-interpolation-table>',
+        "outcome",
+      ),
+      "attribute-lexical",
+    ],
+    [
+      "a match table default",
+      boolean('<qti-match-table default-value="yes"/>', "outcome"),
+      "attribute-lexical",
+    ],
+    [
+      "an interpolation table default",
+      boolean('<qti-interpolation-table default-value="no"/>', "outcome"),
+      "attribute-lexical",
+    ],
+  ];
+
+  it.effect("refuses a boolean outside true and false under the context's rule", () =>
+    Effect.gen(function* outsideRoster() {
+      for (const [name, declaration, rule] of contexts) {
+        const failure = yield* Effect.flip(mapped(declaration));
+
+        assert.instanceOf(failure, ImportRefused, name);
+        assert.strictEqual(failure.rule, rule, name);
+      }
+    }),
+  );
+
+  it.effect("admits a padded boolean attribute, which collapses to its handle", () =>
+    Effect.gen(function* padded() {
+      const { built, nodes } = yield* mapped(
+        boolean('<qti-mapping><qti-map-entry map-key=" true " mapped-value="1"/></qti-mapping>'),
+      );
+      const entry = idOf(nodes, "qti-map-entry");
+
+      assert.deepStrictEqual(Rows.of(built, MapEntryBoolean), [{ id: entry, mapKey: "true" }]);
+      assert.deepStrictEqual(
+        Rows.of(built, AttributeLexical).map((row) => [row.node, row.attribute, row.value]),
+        [[entry, "map-key", " true "]],
+      );
+    }),
+  );
+
+  it.effect("writes the boolean arms of the tables with the handles", () =>
+    Effect.gen(function* tables() {
+      const match = yield* mapped(
+        boolean(
+          '<qti-match-table default-value="false"><qti-match-table-entry source-value="1" target-value="true"/></qti-match-table>',
+          "outcome",
+        ),
+      );
+      const interpolation = yield* mapped(
+        boolean(
+          '<qti-interpolation-table default-value="true"><qti-interpolation-table-entry source-value="1" target-value="false"/></qti-interpolation-table>',
+          "outcome",
+        ),
+      );
+
+      assert.deepStrictEqual(
+        Rows.of(match.built, MatchTableDefaultValueBoolean).map((row) => row.value),
+        ["false"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(match.built, MatchTableEntryBoolean).map((row) => row.targetValue),
+        ["true"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(interpolation.built, InterpolationTableDefaultValueBoolean).map((row) => row.value),
+        ["true"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(interpolation.built, InterpolationTableEntryBoolean).map((row) => row.targetValue),
+        ["false"],
+      );
     }),
   );
 });

@@ -27,6 +27,7 @@ import type { PId } from "#qti/processing/check.ts";
 import type { Environment, Mode } from "#qti/processing/env.ts";
 import { literalOrRef, parseProcessing } from "#qti/processing/parse.ts";
 import {
+  BooleanLiteral,
   MathConstantName,
   MathOperatorName,
   RoundingMode,
@@ -561,11 +562,13 @@ const referenceRows = (
 type BaseTypeHandle = (typeof BaseType.handles)[number];
 
 /**
- * The row of a literal's value in the arm of its base type.
+ * The row of a literal's value in the arm of each base type but boolean, which the `qti-base-value`
+ * builder narrows to its roster first.
  */
-const literalArmRows: Record<BaseTypeHandle, (rows: Rows, id: string, text: string) => Rows> = {
-  boolean: (rows, id, text) =>
-    Rows.add(rows, processing.relations.LiteralBoolean, [{ id, value: judgedLater(text) }]),
+const literalArmRows: Record<
+  Exclude<BaseTypeHandle, "boolean">,
+  (rows: Rows, id: string, text: string) => Rows
+> = {
   directedPair: (rows, id, text) =>
     Rows.add(rows, processing.relations.LiteralDirectedPair, [{ id, value: judgedLater(text) }]),
   duration: (rows, id, text) =>
@@ -719,20 +722,6 @@ const armBuilders: Readonly<Partial<Record<RuleOrExpressionKind, (arm: Arm) => R
       { id: entry.id, max: judgedLater(max), min: judgedLater(min) },
     ]);
   },
-  "qti-base-value": ({ attributes, entry, node }) => {
-    const baseType = BaseType.handles.find(
-      (handle) => handle === need(attributes.read("base-type")),
-    );
-    const built = attributes.rows();
-
-    return baseType === undefined
-      ? built
-      : literalArmRows[baseType](
-          Rows.add(built, processing.Literal, [{ baseType, id: entry.id }]),
-          entry.id,
-          Option.getOrElse(node.text, () => ""),
-        );
-  },
   "qti-custom-operator": ({ attributes, entry }) => {
     const className = attributes.read("class");
     const definition = attributes.read("definition");
@@ -825,6 +814,36 @@ const armBuilders: Readonly<Partial<Record<RuleOrExpressionKind, (arm: Arm) => R
 const countedArmBuilders: Readonly<
   Partial<Record<RuleOrExpressionKind, (arm: Arm) => Effect.Effect<Rows, ImportRefused>>>
 > = {
+  "qti-base-value": Effect.fn("import.processing.baseValue")(function* baseValue({
+    attributes,
+    entry,
+    node,
+  }: Arm) {
+    const baseType = BaseType.handles.find(
+      (handle) => handle === need(attributes.read("base-type")),
+    );
+    const built = attributes.rows();
+    if (baseType === undefined) {
+      return built;
+    }
+
+    const text = Option.getOrElse(node.text, () => "");
+    const withLiteral = Rows.add(built, processing.Literal, [{ baseType, id: entry.id }]);
+
+    return baseType === "boolean"
+      ? Rows.add(withLiteral, processing.relations.LiteralBoolean, [
+          {
+            id: entry.id,
+            value: yield* closedOf(
+              BooleanLiteral.handles,
+              text,
+              "P7",
+              "the text of a boolean qti-base-value",
+            ),
+          },
+        ])
+      : literalArmRows[baseType](withLiteral, entry.id, text);
+  }),
   "qti-equal": Effect.fn("import.processing.equal")(function* equal({ attributes, entry }: Arm) {
     const mode = attributes.read("tolerance-mode");
     const lower = attributes.read("include-lower-bound");

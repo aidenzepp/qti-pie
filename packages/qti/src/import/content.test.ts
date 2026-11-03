@@ -4,6 +4,7 @@ import { Effect, Exit, Option, Predicate } from "effect";
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { contentRows } from "#qti/import/content.ts";
 import type { DeclaredVariable } from "#qti/import/interactions.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows, treeRows } from "#qti/import/tree.ts";
 import {
   ContextDeclarationArm,
@@ -659,6 +660,32 @@ describe("contentRows", () => {
           );
         }
       }
+    }),
+  );
+
+  it.effect("a boolean default value outside true and false is refused under value-lexical", () =>
+    Effect.gen(function* run() {
+      const failure = yield* Effect.flip(
+        built({
+          head: `<qti-template-declaration identifier="T" cardinality="single" base-type="boolean"><qti-default-value><qti-value>yes</qti-value></qti-default-value></qti-template-declaration>`,
+        }),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "value-lexical");
+    }),
+  );
+
+  it.effect("a boolean default value of true or false is written in its arm", () =>
+    Effect.gen(function* run() {
+      const { rows } = yield* built({
+        head: `<qti-template-declaration identifier="T" cardinality="multiple" base-type="boolean"><qti-default-value><qti-value>true</qti-value><qti-value>false</qti-value></qti-default-value></qti-template-declaration>`,
+      });
+
+      assert.deepStrictEqual(
+        Rows.of(rows, values.relations.DeclaredValueBoolean).map((row) => row.value),
+        ["true", "false"],
+      );
     }),
   );
 });

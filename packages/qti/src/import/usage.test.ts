@@ -4,6 +4,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { usageGuards } from "#qti/import/guards/usage.ts";
 import { NotQti3 } from "#qti/import/manifest.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { Rows, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { usageRows } from "#qti/import/usage.ts";
@@ -467,6 +468,32 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
 
         assert.strictEqual((yield* refusal(edited)).rule, "typed-copy");
       }
+    }),
+  );
+
+  suite.effect("a typed boolean value outside true and false is refused usage-typed-value", () =>
+    Effect.gen(function* typedBoolean() {
+      const failure = yield* Effect.flip(
+        rowsOf("usage3", (text) =>
+          text.replace("<value>0.87</value>", '<value baseType="boolean">yes</value>'),
+        ),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "usage-typed-value");
+    }),
+  );
+
+  suite.effect("a typed boolean value of true is written in its arm", () =>
+    Effect.gen(function* typedTrue() {
+      const { rows } = yield* rowsOf("usage3", (text) =>
+        text.replace("<value>0.87</value>", '<value baseType="boolean">true</value>'),
+      );
+
+      assert.deepStrictEqual(
+        Rows.of(rows, ud.relations.UsageTypedValueBoolean).map((row) => row.value),
+        ["true"],
+      );
     }),
   );
 });

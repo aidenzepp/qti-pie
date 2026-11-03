@@ -8,6 +8,7 @@ import { Effect, Option } from "effect";
 import { contentOf, elementChildren } from "#qti/import/leaf.ts";
 import { NotQti3 } from "#qti/import/manifest.ts";
 import {
+  closedOf,
   collapse,
   kindOf,
   replace,
@@ -18,6 +19,7 @@ import {
 } from "#qti/import/tree.ts";
 import type { ImportRefused } from "#qti/import/refusal.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
+import { BooleanLiteral } from "#qti/schema/content/rosters.ts";
 import { BaseType } from "#qti/schema/declaration.ts";
 import { Document } from "#qti/schema/document.ts";
 import { Edge } from "#qti/schema/node.ts";
@@ -55,11 +57,13 @@ const judgedLater = <T extends string>(value: string): T =>
   value as T;
 
 /**
- * The row of a typed `ud:value` in the arm of its base type.
+ * The row of a typed `ud:value` in the arm of each base type but boolean, which `valueRows`
+ * narrows to its roster first.
  */
-const typedArmRows: Record<BaseTypeHandle, (rows: Rows, id: string, text: string) => Rows> = {
-  boolean: (rows, id, text) =>
-    Rows.add(rows, ud.relations.UsageTypedValueBoolean, [{ id, value: judgedLater(text) }]),
+const typedArmRows: Record<
+  Exclude<BaseTypeHandle, "boolean">,
+  (rows: Rows, id: string, text: string) => Rows
+> = {
   directedPair: (rows, id, text) =>
     Rows.add(rows, ud.relations.UsageTypedValueDirectedPair, [{ id, value: judgedLater(text) }]),
   duration: (rows, id, text) =>
@@ -260,7 +264,10 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     }
   };
 
-  const valueRows = (element: Element, statistic: string): void => {
+  const valueRows = Effect.fn("import.usage.valueRows")(function* valueRows(
+    element: Element,
+    statistic: string,
+  ): Effect.fn.Return<void, ImportRefused> {
     const node = nodes.get(element);
     if (node === undefined) {
       return;
@@ -287,9 +294,19 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     if (baseType !== undefined) {
       add(ud.UsageValueBaseType, [{ baseType, id: node.id }]);
       add(ud.UsageTypedValue, [{ baseType, id: node.id, value: judgedLater(replace(content)) }]);
-      built = typedArmRows[baseType](built, node.id, replace(content));
+      if (baseType === "boolean") {
+        const literal = yield* closedOf(
+          BooleanLiteral.handles,
+          replace(content),
+          "usage-typed-value",
+          'a boolean ud:value with baseType="boolean"',
+        );
+        add(ud.relations.UsageTypedValueBoolean, [{ id: node.id, value: literal }]);
+      } else {
+        built = typedArmRows[baseType](built, node.id, replace(content));
+      }
     }
-  };
+  });
 
   const mappingRows = (element: Element, statistic: string): void => {
     const node = nodes.get(element);
@@ -342,7 +359,10 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     }
   };
 
-  const statisticRows = (element: Element, usageData: string): void => {
+  const statisticRows = Effect.fn("import.usage.statisticRows")(function* statisticRows(
+    element: Element,
+    usageData: string,
+  ): Effect.fn.Return<void, ImportRefused> {
     const node = nodes.get(element);
     if (node === undefined) {
       return;
@@ -393,12 +413,12 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
       if (kindHere === "ud:targetObject") {
         targetObjectRows(child, node.id);
       } else if (kindHere === "ud:value") {
-        valueRows(child, node.id);
+        yield* valueRows(child, node.id);
       } else if (kindHere === "ud:mapping") {
         mappingRows(child, node.id);
       }
     }
-  };
+  });
 
   add(ud.UsageData, [{ document: documentId, id: documentId }]);
   optional(ud.UsageDataGlossary, root, "glossary", "collapse", (id, value) => ({
@@ -408,7 +428,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
   for (const child of elementChildren(root)) {
     const kind = Option.getOrUndefined(kindOf(child, Option.some("ud:usageData")));
     if (kind === "ud:ordinaryStatistic" || kind === "ud:categorizedStatistic") {
-      statisticRows(child, documentId);
+      yield* statisticRows(child, documentId);
     }
   }
 

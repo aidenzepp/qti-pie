@@ -14,10 +14,12 @@
 import { judgedLater } from "#qti/import/judged.ts";
 import type { Relation, uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
+import type { ImportRefused } from "#qti/import/refusal.ts";
 import { attributeReader, markers } from "#qti/import/interactions.ts";
 import { requiredAttribute } from "#qti/import/required.ts";
 import type { DeclaredVariable, NodeRef } from "#qti/import/interactions.ts";
 import {
+  closedOf,
   collapse,
   ItemRefusal,
   replace,
@@ -58,7 +60,7 @@ import {
 import { Edge, Node } from "#qti/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-import { ShowHide } from "#qti/schema/content/rosters.ts";
+import { BooleanLiteral, ShowHide } from "#qti/schema/content/rosters.ts";
 import {
   CatalogInfo,
   CompanionMaterialsInfo,
@@ -169,13 +171,13 @@ const undeclared = (
  * Write the rows of one value of a default value: its position, its arm and, for a record value,
  * its field.
  */
-const valueRows = (
+const valueRows = Effect.fn("import.content.valueRows")(function* valueRows(
   rows: Rows,
   element: Element,
   node: NodeRef,
   set: { readonly id: string; readonly owner: DeclaredVariable },
   position: bigint,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
   const attributes = attributeReader(rows, element, node);
   const field = attributes.read("field-identifier");
   const baseType =
@@ -198,11 +200,7 @@ const valueRows = (
   ]);
   const text = replace(textOf(element));
   const { id } = node;
-  const arms: Record<BaseTypeHandle, () => Rows> = {
-    boolean: () =>
-      Rows.add(withValue, values.relations.DeclaredValueBoolean, [
-        { id, value: judgedLater(text) },
-      ]),
+  const arms: Record<Exclude<BaseTypeHandle, "boolean">, () => Rows> = {
     directedPair: () =>
       Rows.add(withValue, values.relations.DeclaredValueDirectedPair, [
         { id, value: judgedLater(text) },
@@ -232,24 +230,37 @@ const valueRows = (
     uri: () =>
       Rows.add(withValue, values.relations.DeclaredValueUri, [{ id, value: judgedLater(text) }]),
   };
-  const withArm = arms[baseType.value]();
+  const withArm =
+    baseType.value === "boolean"
+      ? Rows.add(withValue, values.relations.DeclaredValueBoolean, [
+          {
+            id,
+            value: yield* closedOf(
+              BooleanLiteral.handles,
+              text,
+              "value-lexical",
+              "a boolean qti-value",
+            ),
+          },
+        ])
+      : arms[baseType.value]();
 
   return set.owner.shape === "record"
     ? Rows.add(withArm, values.RecordField, [
         { fieldIdentifier: Option.getOrElse(field, () => ""), id },
       ])
     : withArm;
-};
+});
 
 /**
  * Write the `qti-default-value` children of a declaration, each with its values.
  */
-const defaultValueRows = (
+const defaultValueRows = Effect.fn("import.content.defaultValueRows")(function* defaultValueRows(
   rows: Rows,
   element: Element,
   owner: DeclaredVariable,
   context: Context,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
   let built = rows;
   for (const child of element.children) {
     const node = child.kind === "element" ? context.nodes.get(child) : undefined;
@@ -286,7 +297,7 @@ const defaultValueRows = (
     for (const grandchild of child.children) {
       const valueNode = grandchild.kind === "element" ? context.nodes.get(grandchild) : undefined;
       if (grandchild.kind === "element" && valueNode?.kind === "qti-value") {
-        built = valueRows(
+        built = yield* valueRows(
           built,
           grandchild,
           valueNode,
@@ -299,7 +310,7 @@ const defaultValueRows = (
   }
 
   return built;
-};
+});
 
 /**
  * What a template or context declaration hands on: the variable it declares, the identifier it
@@ -318,12 +329,12 @@ interface DeclarationResult {
  *
  * @returns The rows, and the variable the declaration names.
  */
-const declarationRows = (
+const declarationRows = Effect.fn("import.content.declarationRows")(function* declarationRows(
   rows: Rows,
   element: Element,
   node: NodeRef,
   context: Context,
-): DeclarationResult => {
+): Effect.fn.Return<DeclarationResult, ImportRefused> {
   const attributes = attributeReader(rows, element, node);
   const identifier = Option.getOrElse(attributes.read("identifier"), () => "");
   const cardinalityText = attributes.read("cardinality");
@@ -384,8 +395,12 @@ const declarationRows = (
     }
   }
 
-  return { identifier, rows: defaultValueRows(built, element, variable, context), variable };
-};
+  return {
+    identifier,
+    rows: yield* defaultValueRows(built, element, variable, context),
+    variable,
+  };
+});
 
 /**
  * The typed variable a reference names, for a reference that copies its type.
@@ -892,13 +907,13 @@ interface DeclarationPass {
  *
  * @returns The rows and the variables.
  */
-const declarationPass = (
+const declarationPass = Effect.fn("import.content.declarationPass")(function* declarationPass(
   walked: readonly (readonly [Element, Option.Option<Element>])[],
   nodes: NodeIndex,
   declarations: ReadonlyMap<string, DeclaredVariable>,
   rows: Rows,
   base: Omit<Context, "variables">,
-): DeclarationPass => {
+): Effect.fn.Return<DeclarationPass, ImportRefused> {
   const variables = new Map<string, KnownVariable>();
   let built = rows;
   for (const [element] of walked) {
@@ -916,7 +931,7 @@ const declarationPass = (
       node?.kind === "qti-template-declaration" ||
       node?.kind === "qti-context-declaration"
     ) {
-      const declaration = declarationRows(built, element, node, { ...base, variables });
+      const declaration = yield* declarationRows(built, element, node, { ...base, variables });
       built = declaration.rows;
       if (!variables.has(declaration.identifier)) {
         variables.set(declaration.identifier, declaration.variable);
@@ -925,7 +940,7 @@ const declarationPass = (
   }
 
   return { rows: built, variables };
-};
+});
 
 /**
  * Write the rows of the content families of an item.
@@ -938,8 +953,9 @@ const declarationPass = (
  * @param rows - The rows so far, which hold the item's tree.
  * @returns The rows with the feedback, template, printed-variable, rubric, stylesheet, hook,
  *   content-body and template and context declaration rows of the item; `ItemRefusal` for a
- *   feedback, template block or inline, or printed variable that names a variable no declaration
- *   of the item declares with a type, since no type can be copied to its reference.
+ *   feedback, template block or inline, or printed variable that names a variable no declaration of
+ *   the item declares with a type, since no type can be copied to its reference; `ImportRefused`
+ *   (`value-lexical`) for a boolean default value that is neither `true` nor `false`.
  */
 export const contentRows = Effect.fn("import.contentRows")(function* contentRows(
   root: Element,
@@ -947,7 +963,7 @@ export const contentRows = Effect.fn("import.contentRows")(function* contentRows
   documentId: string,
   declarations: ReadonlyMap<string, DeclaredVariable>,
   rows: Rows,
-): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal> {
+): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal | ImportRefused> {
   const walked = withParents(root, Option.none());
   const base = {
     documentId,
@@ -955,7 +971,7 @@ export const contentRows = Effect.fn("import.contentRows")(function* contentRows
     positions: new Map(Rows.of(rows, Edge).map((edge) => [edge.child, edge.position])),
     versions: new Map(Rows.of(rows, Node).map((node) => [node.id, node.version])),
   };
-  const declared = declarationPass(walked, nodes, declarations, rows, base);
+  const declared = yield* declarationPass(walked, nodes, declarations, rows, base);
   const context: Context = { ...base, variables: declared.variables };
   let built = declared.rows;
   for (const [element] of walked) {
