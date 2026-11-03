@@ -73,7 +73,8 @@ const targetActionOf = Effect.fn("cli.targetActionOf")(function* targetActionOf(
  *
  * Under `--dry-run` nothing is written and the target is not touched: the entries the export would
  * write are listed with their sizes, and whether the target would be created or replaced. A dry run
- * does not need `--yes`, and it refuses the folders no export replaces.
+ * refuses what the real run would refuse, before it opens the database: a target with something in
+ * it without `--yes`, and the folders no export replaces.
  */
 export const exportCommand = Command.make(
   "export",
@@ -89,7 +90,7 @@ export const exportCommand = Command.make(
     const target = zip && !dir.endsWith(".zip") ? `${dir}.zip` : dir;
 
     yield* requirePackageId(packageId);
-    yield* requireReplaceable(target, yes || dryRun);
+    yield* requireReplaceable(target, yes);
 
     const { AuthorAppLayer } = yield* Effect.promise(() => import("#qti/db/layer.ts"));
 
@@ -144,7 +145,7 @@ export const exportCommand = Command.make(
   }),
 ).pipe(
   Command.withDescription(
-    "Export the package <package-id> to <dir>, or to the zip file <dir>.zip under --zip (writes files; --dry-run lists them and writes nothing). A <dir> that already has something in it needs --yes, which replaces it, and the old one goes only once the new export is written; a symlink is replaced, never followed",
+    "Export the package <package-id> to <dir>, or to the zip file <dir>.zip under --zip (writes files; --dry-run lists them, writes nothing and refuses what the real run would refuse). A <dir> that already has something in it needs --yes, which replaces it, and the old one goes only once the new export is written; a symlink is replaced, never followed",
   ),
   Command.withExamples([
     {

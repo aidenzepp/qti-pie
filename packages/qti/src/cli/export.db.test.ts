@@ -1,12 +1,15 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Exit, FileSystem, Layer, Schema } from "effect";
+import { Cause, Effect, Exit, FileSystem, Layer, Schema } from "effect";
 import { describe, inject } from "vitest";
+import { TargetNotEmpty } from "#qti/cli/args.ts";
+import { describeFailure } from "#qti/cli/errors.ts";
 import { ExportData } from "#qti/cli/export.ts";
 import { successEnvelope } from "#qti/cli/output.ts";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { importPackage } from "#qti/import/package.ts";
+import { exitCodeOf } from "#qti/cli/run.ts";
 import { captureCli } from "#qti/test/cli.ts";
 import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 
@@ -123,6 +126,54 @@ describe.skipIf(!hasLease)(
               },
             );
           }),
+      );
+
+      it.effect("--dry-run onto a non-empty folder without --yes refuses and writes nothing", () =>
+        Effect.gen(function* dryRunRefused() {
+          const fs = yield* FileSystem.FileSystem;
+          const folder = yield* fresh("dry-run-refused");
+          const id = yield* importPackage(fixtures.simple);
+          const file = path.join(folder, "a.txt");
+
+          yield* fs.writeFileString(file, "kept");
+
+          const { exit } = yield* captureCli(["export", "--dry-run", folder, id]);
+          const failure = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
+
+          assert.instanceOf(failure, TargetNotEmpty);
+          assert.strictEqual(describeFailure(failure).kind, "target-not-empty");
+          assert.strictEqual(exitCodeOf(exit), 1);
+          assert.deepStrictEqual(yield* fs.readDirectory(folder), ["a.txt"]);
+          assert.strictEqual(yield* fs.readFileString(file), "kept");
+        }),
+      );
+
+      it.effect("--yes --dry-run onto a non-empty folder reports replace and writes nothing", () =>
+        Effect.gen(function* dryRunReplace() {
+          const fs = yield* FileSystem.FileSystem;
+          const folder = yield* fresh("dry-run-replace");
+          const id = yield* importPackage(fixtures.simple);
+          const file = path.join(folder, "a.txt");
+
+          yield* fs.writeFileString(file, "kept");
+
+          const { exit, stderr, stdout } = yield* captureCli([
+            "--json",
+            "export",
+            "--yes",
+            "--dry-run",
+            folder,
+            id,
+          ]);
+
+          assert.isTrue(Exit.isSuccess(exit), stderr);
+
+          const { data } = Schema.decodeUnknownSync(exportEnvelope)(stdout);
+
+          assert.strictEqual("target_action" in data ? data.target_action : undefined, "replace");
+          assert.deepStrictEqual(yield* fs.readDirectory(folder), ["a.txt"]);
+          assert.strictEqual(yield* fs.readFileString(file), "kept");
+        }),
       );
 
       it.effect("--yes onto a symlink replaces the link and leaves what it pointed to", () =>
