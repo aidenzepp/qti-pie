@@ -55,6 +55,7 @@ import {
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
 import {
+  ChoiceIdentifier,
   EmbedSourceUri,
   LongDescriptionUri,
   LongInterpretationUri,
@@ -732,7 +733,7 @@ const choiceRows = Effect.fn("import.choiceRows")(function* choiceRows(
     {
       fixed: fixedHandle,
       id: node.id,
-      identifier,
+      identifier: ChoiceIdentifier(identifier),
       interaction,
       showHide: showHideHandle,
     },

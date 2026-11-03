@@ -176,11 +176,11 @@ describe("template content and printed variables", () => {
   it("stores base and index under the integer-or-variable pattern, field under ncName", () => {
     const { PrintedVariable, PrintedVariableField, PrintedVariableIndex } = template.relations;
     assert.strictEqual(
-      PrintedVariable.fields.base.pattern.source,
+      PrintedVariable.fields.base.base.pattern.source,
       patterns.integerOrVariableString,
     );
     assert.strictEqual(
-      PrintedVariableIndex.fields.value.pattern.source,
+      PrintedVariableIndex.fields.value.base.pattern.source,
       patterns.integerOrVariableString,
     );
     assert.strictEqual(PrintedVariableField.fields.value.base.pattern.source, patterns.ncName);
@@ -192,9 +192,9 @@ describe("template content and printed variables", () => {
       "mappingIndicator",
       "powerForm",
     ]);
-    assert.isTrue(admits(PrintedVariable.fields.base.pattern.source, "16"));
-    assert.isTrue(admits(PrintedVariable.fields.base.pattern.source, "BASE"));
-    assert.isFalse(admits(PrintedVariable.fields.base.pattern.source, "1.5"));
+    assert.isTrue(admits(PrintedVariable.fields.base.base.pattern.source, "16"));
+    assert.isTrue(admits(PrintedVariable.fields.base.base.pattern.source, "BASE"));
+    assert.isFalse(admits(PrintedVariable.fields.base.base.pattern.source, "1.5"));
   });
 
   it("contains each optional and each default marker in PrintedVariable by node", () => {
@@ -348,6 +348,45 @@ describe("contracts (template)", () => {
     assert.strictEqual(
       template.PrintedVariableField.fields.value.name,
       contracts.RecordFieldIdentifier.name,
+    );
+  });
+});
+
+describe("contracts (template)", () => {
+  it("types TemplateBlock.identifier ShowHideIdentifier", () => {
+    assert.strictEqual(
+      template.TemplateBlock.fields.identifier.name,
+      contracts.ShowHideIdentifier.name,
+    );
+  });
+  it("types RubricTemplateBlock.identifier ShowHideIdentifier", () => {
+    assert.strictEqual(
+      template.RubricTemplateBlock.fields.identifier.name,
+      contracts.ShowHideIdentifier.name,
+    );
+  });
+  it("types TemplateInline.identifier ShowHideIdentifier", () => {
+    assert.strictEqual(
+      template.TemplateInline.fields.identifier.name,
+      contracts.ShowHideIdentifier.name,
+    );
+  });
+  it("types RubricTemplateInline.identifier ShowHideIdentifier", () => {
+    assert.strictEqual(
+      template.RubricTemplateInline.fields.identifier.name,
+      contracts.ShowHideIdentifier.name,
+    );
+  });
+  it("types PrintedVariable.base PrintedVariableIntegerOrVariable", () => {
+    assert.strictEqual(
+      template.PrintedVariable.fields.base.name,
+      contracts.PrintedVariableIntegerOrVariable.name,
+    );
+  });
+  it("types PrintedVariableIndex.value PrintedVariableIntegerOrVariable", () => {
+    assert.strictEqual(
+      template.PrintedVariableIndex.fields.value.name,
+      contracts.PrintedVariableIntegerOrVariable.name,
     );
   });
 });

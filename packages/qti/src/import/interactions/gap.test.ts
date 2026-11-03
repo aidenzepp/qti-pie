@@ -18,6 +18,7 @@ import { gapRows } from "#qti/import/interactions/gap.ts";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
+import { ContainerWidth, MatchGroupList } from "#qti/schema/contracts.ts";
 import { ChoiceTemplateRef, MatchGroup } from "#qti/schema/choices.ts";
 import {
   DeclaredGapImgShowHide,
@@ -320,12 +321,14 @@ describe("gapRows on a gap-match interaction", () => {
         { node: "node-2", value: "too many" },
       ]);
       assert.deepStrictEqual(Rows.of(built, GapMatchChoicesContainerWidth), [
-        { node: "node-2", value: "300" },
+        { node: "node-2", value: ContainerWidth("300") },
       ]);
       assert.deepStrictEqual(Rows.of(built, DeclaredGapMatchShuffle), [{ node: "node-2" }]);
       assert.deepStrictEqual(Rows.of(built, DeclaredGapMatchMaxAssociations), [{ node: "node-2" }]);
       assert.deepStrictEqual(Rows.of(built, GapTextMatchMin), [{ node: "node-3" }]);
-      assert.deepStrictEqual(Rows.of(built, MatchGroup), [{ node: "node-3", value: "G1 G2" }]);
+      assert.deepStrictEqual(Rows.of(built, MatchGroup), [
+        { node: "node-3", value: MatchGroupList("G1 G2") },
+      ]);
       assert.deepStrictEqual(
         Rows.of(built, GapText).map((row) => row.matchMinN),
         [1n],

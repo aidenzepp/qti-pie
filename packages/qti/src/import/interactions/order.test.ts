@@ -3,7 +3,7 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option } from "effect";
-import { VariableReference } from "#qti/schema/contracts.ts";
+import { ChoiceIdentifier, ContainerWidth, VariableReference } from "#qti/schema/contracts.ts";
 import {
   attributeReader,
   bindingRows,
@@ -198,14 +198,14 @@ describe("orderRows on an order interaction", () => {
         {
           fixed: "false",
           id: "node-3",
-          identifier: "A",
+          identifier: ChoiceIdentifier("A"),
           interaction: "node-2",
           showHide: "show",
         },
         {
           fixed: "false",
           id: "node-4",
-          identifier: "B",
+          identifier: ChoiceIdentifier("B"),
           interaction: "node-2",
           showHide: "show",
         },
@@ -276,7 +276,7 @@ describe("orderRows on an order interaction", () => {
         { node: "node-2", value: "too many" },
       ]);
       assert.deepStrictEqual(Rows.of(built, OrderChoicesContainerWidth), [
-        { node: "node-2", value: "300" },
+        { node: "node-2", value: ContainerWidth("300") },
       ]);
       assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 1n);
       assert.deepStrictEqual(

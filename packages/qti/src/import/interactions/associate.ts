@@ -16,6 +16,7 @@ import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { MatchGroup } from "#qti/schema/choices.ts";
 import { Shape, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import type { ShapeHandle } from "#qti/schema/content/rosters.ts";
+import { ChoiceIdentifier } from "#qti/schema/contracts.ts";
 import {
   AssociableHotspot,
   AssociableHotspotLabel,
@@ -365,7 +366,7 @@ const choice = Effect.fn("import.associableChoice")(function* choice(
   built = Rows.add(built, SimpleAssociableChoice, [
     {
       id: node.id,
-      identifier,
+      identifier: ChoiceIdentifier(identifier),
       interaction: owner.value.id,
       matchMaxN: maximum.value,
       matchMinN: minimum.value,
@@ -479,7 +480,7 @@ const hotspot = Effect.fn("import.associableHotspot")(function* hotspot(
   built = Rows.add(built, AssociableHotspot, [
     {
       id: node.id,
-      identifier,
+      identifier: ChoiceIdentifier(identifier),
       interaction: owner.value.id,
       matchMaxN: maximum.value,
       matchMinN: minimum.value,

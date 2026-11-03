@@ -6,7 +6,12 @@ import { contentRows } from "#qti/import/content.ts";
 import type { DeclaredVariable } from "#qti/import/interactions.ts";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows, treeRows } from "#qti/import/tree.ts";
-import { StylesheetUri, RecordFieldIdentifier } from "#qti/schema/contracts.ts";
+import {
+  PrintedVariableIntegerOrVariable,
+  RecordFieldIdentifier,
+  ShowHideIdentifier,
+  StylesheetUri,
+} from "#qti/schema/contracts.ts";
 import {
   ContextDeclarationArm,
   Declaration,
@@ -207,7 +212,7 @@ describe("contentRows", () => {
           document: documentId,
           identifier: "VAR",
           kind: "outcome",
-          node: idOf(bases.get("VAR")),
+          node: idOf(bases.get(PrintedVariableIntegerOrVariable("VAR"))),
         });
         assert.strictEqual(Rows.of(rows, PrintedVariableRef).length, 2);
       }),
@@ -274,7 +279,7 @@ describe("contentRows", () => {
         { node: idOf(written), value: "%.2f" },
       ]);
       assert.deepStrictEqual(Rows.of(full.rows, PrintedVariableIndex), [
-        { node: idOf(written), value: "VAR" },
+        { node: idOf(written), value: PrintedVariableIntegerOrVariable("VAR") },
       ]);
       assert.deepStrictEqual(Rows.of(full.rows, PrintedVariableField), [
         { node: idOf(written), value: RecordFieldIdentifier("x") },
@@ -326,15 +331,15 @@ describe("contentRows", () => {
       const blocks = new Map(Rows.of(rows, FeedbackBlock).map((row) => [row.identifier, row]));
       const inlines = new Map(Rows.of(rows, FeedbackInline).map((row) => [row.identifier, row]));
 
-      assert.strictEqual(blocks.get("a")?.showHide, "show");
-      assert.strictEqual(blocks.get("b")?.showHide, "hide");
-      assert.strictEqual(inlines.get("c")?.showHide, "show");
-      assert.strictEqual(inlines.get("d")?.showHide, "hide");
+      assert.strictEqual(blocks.get(ShowHideIdentifier("a"))?.showHide, "show");
+      assert.strictEqual(blocks.get(ShowHideIdentifier("b"))?.showHide, "hide");
+      assert.strictEqual(inlines.get(ShowHideIdentifier("c"))?.showHide, "show");
+      assert.strictEqual(inlines.get(ShowHideIdentifier("d"))?.showHide, "hide");
       assert.deepStrictEqual(Rows.of(rows, DeclaredFeedbackBlockShowHide), [
-        { node: idOf(blocks.get("b")) },
+        { node: idOf(blocks.get(ShowHideIdentifier("b"))) },
       ]);
       assert.deepStrictEqual(Rows.of(rows, DeclaredFeedbackInlineShowHide), [
-        { node: idOf(inlines.get("d")) },
+        { node: idOf(inlines.get(ShowHideIdentifier("d"))) },
       ]);
       assert.strictEqual(Rows.of(rows, FeedbackOutcomeRef).length, 4);
     }),
@@ -370,12 +375,12 @@ describe("contentRows", () => {
       const blocks = new Map(Rows.of(rows, TemplateBlock).map((row) => [row.identifier, row]));
       const [inline] = Rows.of(rows, TemplateInline);
 
-      assert.strictEqual(blocks.get("b1")?.showHide, "hide");
-      assert.strictEqual(blocks.get("b2")?.showHide, "show");
-      assert.strictEqual(blocks.get("b1")?.templateIdentifier, "T");
+      assert.strictEqual(blocks.get(ShowHideIdentifier("b1"))?.showHide, "hide");
+      assert.strictEqual(blocks.get(ShowHideIdentifier("b2"))?.showHide, "show");
+      assert.strictEqual(blocks.get(ShowHideIdentifier("b1"))?.templateIdentifier, "T");
       assert.strictEqual(inline?.showHide, "show");
       assert.deepStrictEqual(Rows.of(rows, DeclaredTemplateBlockShowHide), [
-        { node: idOf(blocks.get("b1")) },
+        { node: idOf(blocks.get(ShowHideIdentifier("b1"))) },
       ]);
 
       const refs = new Map(Rows.of(rows, TemplateContentRef).map((ref) => [ref.node, ref]));
@@ -388,7 +393,10 @@ describe("contentRows", () => {
         identifier: "U",
         node: idOf(inline),
       });
-      assert.strictEqual(refs.get(blocks.get("b2")?.id ?? "")?.cardinality, "single");
+      assert.strictEqual(
+        refs.get(blocks.get(ShowHideIdentifier("b2"))?.id ?? "")?.cardinality,
+        "single",
+      );
     }),
   );
 
@@ -612,13 +620,13 @@ describe("contentRows", () => {
       assert.deepStrictEqual(identifiers(TemplateInline), ["ti"]);
       assert.deepStrictEqual(identifiers(RubricTemplateInline), ["ri"]);
       assert.deepStrictEqual(Rows.of(rows, DeclaredTemplateFeedbackBlockShowHide), [
-        { node: idByIdentifier.get("ft") ?? "" },
+        { node: idByIdentifier.get(ShowHideIdentifier("ft")) ?? "" },
       ]);
       assert.deepStrictEqual(Rows.of(rows, DeclaredRubricTemplateBlockShowHide), [
-        { node: idByIdentifier.get("rb") ?? "" },
+        { node: idByIdentifier.get(ShowHideIdentifier("rb")) ?? "" },
       ]);
       assert.deepStrictEqual(Rows.of(rows, DeclaredRubricTemplateInlineShowHide), [
-        { node: idByIdentifier.get("ri") ?? "" },
+        { node: idByIdentifier.get(ShowHideIdentifier("ri")) ?? "" },
       ]);
       // None: the fixture's `qti-feedback-block` `fa`, its only plain feedback block, writes no `show-hide`.
       assert.deepStrictEqual(Rows.of(rows, DeclaredFeedbackBlockShowHide), []);

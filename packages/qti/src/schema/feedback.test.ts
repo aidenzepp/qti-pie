@@ -224,3 +224,30 @@ describe("contracts (feedback)", () => {
     );
   });
 });
+
+describe("contracts (feedback)", () => {
+  it("types FeedbackBlock.identifier ShowHideIdentifier", () => {
+    assert.strictEqual(
+      feedback.FeedbackBlock.fields.identifier.name,
+      contracts.ShowHideIdentifier.name,
+    );
+  });
+  it("types TemplateFeedbackBlock.identifier ShowHideIdentifier", () => {
+    assert.strictEqual(
+      feedback.TemplateFeedbackBlock.fields.identifier.name,
+      contracts.ShowHideIdentifier.name,
+    );
+  });
+  it("types FeedbackInline.identifier ShowHideIdentifier", () => {
+    assert.strictEqual(
+      feedback.FeedbackInline.fields.identifier.name,
+      contracts.ShowHideIdentifier.name,
+    );
+  });
+  it("types ModalFeedback.identifier ShowHideIdentifier", () => {
+    assert.strictEqual(
+      feedback.ModalFeedback.fields.identifier.name,
+      contracts.ShowHideIdentifier.name,
+    );
+  });
+});

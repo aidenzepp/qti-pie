@@ -4,7 +4,13 @@ import { Effect } from "effect";
 import { ContentGuardRefusal, contentGuards } from "#qti/import/guards/content.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { Rows } from "#qti/import/tree.ts";
-import { CitationUri, ClassList, HyperlinkUri, ManifestIdentifier } from "#qti/schema/contracts.ts";
+import {
+  ChoiceIdentifier,
+  CitationUri,
+  ClassList,
+  HyperlinkUri,
+  ManifestIdentifier,
+} from "#qti/schema/contracts.ts";
 import { AttributeIdref, HeadersTarget, NodeClass, NodeLabel } from "#qti/schema/attributes.ts";
 import { A, BlockquoteCite } from "#qti/schema/html/text.ts";
 import { AssociableHotspot } from "#qti/schema/interactions/associate.ts";
@@ -625,7 +631,7 @@ describe("contentGuards owner-copy", () => {
         "owner-copy",
         Rows.add(rows, HottextOwner, [
           {
-            identifier: "H",
+            identifier: ChoiceIdentifier("H"),
             interaction: nodeId(rows, "qti-choice-interaction"),
             node: nodeId(rows, "qti-hottext"),
           },

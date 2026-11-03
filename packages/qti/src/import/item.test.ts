@@ -36,6 +36,7 @@ import {
   HtmlId,
 } from "#qti/schema/document.ts";
 import {
+  ChoiceIdentifier,
   EmbedSourceUri,
   ManifestIdentifier,
   PackagePath,
@@ -512,7 +513,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
         ["ChoiceA", "ChoiceB", "ChoiceC"].map((identifier, index) => ({
           fixed: "false" as const,
           id: idAt(nodes, "qti-simple-choice", index),
-          identifier,
+          identifier: ChoiceIdentifier(identifier),
           interaction,
           showHide: "show" as const,
         })),

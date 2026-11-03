@@ -45,7 +45,7 @@ import { Orientation, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts
 import * as declaration from "#qti/schema/declaration.ts";
 import * as item from "#qti/schema/item.ts";
 import * as node from "#qti/schema/node.ts";
-import { VariableReference } from "#qti/schema/contracts.ts";
+import { ChoiceIdentifier, VariableReference } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { fbFlagged } from "#qti/schema/seed/ancestry.ts";
 
@@ -92,7 +92,7 @@ export const SimpleChoice = relation(
   {
     fixed: closedId(XsBoolean),
     id: uuid,
-    identifier: ncName,
+    identifier: ChoiceIdentifier,
     interaction: uuid,
     showHide: closedId(ShowHide),
   },

@@ -18,6 +18,7 @@ import { otherRows } from "#qti/import/interactions/other.ts";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
+import { MediaRectCoords } from "#qti/schema/contracts.ts";
 import { InteractionBinding, TypedBinding } from "#qti/schema/interaction.ts";
 import {
   DeclaredMediaLoop,
@@ -212,7 +213,9 @@ describe("otherRows: media", () => {
       );
       assert.deepStrictEqual(Rows.of(rows, DeclaredMediaLoop), [{ node: id }]);
       assert.deepStrictEqual(Rows.of(rows, MediaMinPlays), [{ node: id }]);
-      assert.deepStrictEqual(Rows.of(rows, MediaCoords), [{ node: id, value: "0, 0,10,10" }]);
+      assert.deepStrictEqual(Rows.of(rows, MediaCoords), [
+        { node: id, value: MediaRectCoords("0, 0,10,10") },
+      ]);
       assert.deepStrictEqual(
         Rows.of(rows, AttributeLexical).map((row) => row.attribute),
         ["coords"],

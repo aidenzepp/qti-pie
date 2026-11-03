@@ -40,17 +40,19 @@ import { ShowHide, TextFormat, XsBoolean } from "#qti/schema/content/rosters.ts"
 import { Declaration } from "#qti/schema/declaration.ts";
 import { InteractionBinding } from "#qti/schema/interaction.ts";
 import { Edge, Node, RootKind } from "#qti/schema/node.ts";
+import {
+  ChoiceCount,
+  ChoiceIdentifier,
+  ExpectedLength,
+  ExpectedLines,
+  StringCount,
+} from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
  * An `xs:int` attribute's lexical form.
  */
 const xsInt = str.regex(patterns.xsInt);
-
-/**
- * An `xs:nonNegativeInteger` attribute's lexical form.
- */
-const xsNonNegativeInteger = str.regex(patterns.xsNonNegativeInteger);
 
 /**
  * An `xs:string` attribute's value, whitespace preserved.
@@ -87,7 +89,7 @@ export const ExtendedTextInteraction = relation(
     base: xsInt,
     format: closedId(TextFormat),
     id: uuid,
-    minStrings: xsNonNegativeInteger,
+    minStrings: StringCount,
     responseIdentifier: ncName,
     rootKind: closedId(RootKind),
   },
@@ -102,7 +104,7 @@ export const InlineChoiceInteraction = relation(
   "InlineChoiceInteraction",
   {
     id: uuid,
-    minChoices: xsNonNegativeInteger,
+    minChoices: ChoiceCount,
     required: closedId(XsBoolean),
     responseIdentifier: ncName,
     rootKind: closedId(RootKind),
@@ -120,7 +122,7 @@ export const InlineChoice = relation(
   {
     fixed: closedId(XsBoolean),
     id: uuid,
-    identifier: ncName,
+    identifier: ChoiceIdentifier,
     interaction: uuid,
     showHide: closedId(ShowHide),
   },
@@ -148,7 +150,7 @@ export const StringBinding = relation(
  */
 export const TextEntryExpectedLength = relation(
   "TextEntryExpectedLength",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid, value: ExpectedLength },
   ["node"],
 );
 
@@ -193,7 +195,7 @@ export const TextEntryPatternmaskMessage = relation(
  */
 export const ExtendedTextExpectedLength = relation(
   "ExtendedTextExpectedLength",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid, value: ExpectedLength },
   ["node"],
 );
 
@@ -220,7 +222,7 @@ export const ExtendedTextPlaceholderText = relation(
  */
 export const ExtendedTextMaxStrings = relation(
   "ExtendedTextMaxStrings",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid, value: StringCount },
   ["node"],
 );
 
@@ -229,7 +231,7 @@ export const ExtendedTextMaxStrings = relation(
  */
 export const ExtendedTextExpectedLines = relation(
   "ExtendedTextExpectedLines",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid, value: ExpectedLines },
   ["node"],
 );
 

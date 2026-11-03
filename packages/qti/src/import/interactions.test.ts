@@ -17,6 +17,7 @@ import {
 import type { DeclaredVariable } from "#qti/import/interactions.ts";
 import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
+import { RectCoords, ShapeCoords } from "#qti/schema/contracts.ts";
 import { CoordsRect, Coords } from "#qti/schema/shapes.ts";
 import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
 import {
@@ -187,9 +188,16 @@ describe("coordsRows", () => {
     const rows = coordsRows(Rows.empty(), nodeId, "qti-hotspot-choice", "rect", "1,2,3,4");
 
     assert.deepStrictEqual(Rows.of(rows, Coords), [
-      { node: nodeId, ownerKind: "qti-hotspot-choice", shape: "rect", value: "1,2,3,4" },
+      {
+        node: nodeId,
+        ownerKind: "qti-hotspot-choice",
+        shape: "rect",
+        value: ShapeCoords("1,2,3,4"),
+      },
     ]);
-    assert.deepStrictEqual(Rows.of(rows, CoordsRect), [{ node: nodeId, value: "1,2,3,4" }]);
+    assert.deepStrictEqual(Rows.of(rows, CoordsRect), [
+      { node: nodeId, value: RectCoords("1,2,3,4") },
+    ]);
     assert.strictEqual(Rows.of(rows, AttributeLexical).length, 0);
   });
 

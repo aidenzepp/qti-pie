@@ -39,7 +39,11 @@ import {
   TypedCardinality,
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
-import { RecordFieldIdentifier, VariableReference } from "#qti/schema/contracts.ts";
+import {
+  RecordFieldIdentifier,
+  ShowHideIdentifier,
+  VariableReference,
+} from "#qti/schema/contracts.ts";
 import type { DeclarationKind, DeclarationShape } from "#qti/schema/declaration.ts";
 import { ContextDeclarationId, DocumentId } from "#qti/schema/document.ts";
 import {
@@ -521,7 +525,12 @@ const feedbackRows = Effect.fn("import.feedbackRows")(function* feedbackRows(
     `the show-hide attribute of ${node.kind}`,
   );
   const fact = [
-    { id: node.id, identifier, outcomeIdentifier: VariableReference(outcomeIdentifier), showHide },
+    {
+      id: node.id,
+      identifier: ShowHideIdentifier(identifier),
+      outcomeIdentifier: VariableReference(outcomeIdentifier),
+      showHide,
+    },
   ];
   let built = attributes.rows();
   if (node.kind === "qti-feedback-inline") {
@@ -577,7 +586,7 @@ const modalRows = Effect.fn("import.modalRows")(function* modalRows(
   built = Rows.add(built, ModalFeedback, [
     {
       id: node.id,
-      identifier,
+      identifier: ShowHideIdentifier(identifier),
       outcomeIdentifier: VariableReference(outcomeIdentifier),
       showHide,
       version: judgedLater(version),
@@ -614,7 +623,7 @@ const templateRows = Effect.fn("import.templateRows")(function* templateRows(
     onSome: (value) => [
       {
         id: node.id,
-        identifier,
+        identifier: ShowHideIdentifier(identifier),
         showHide: value,
         templateIdentifier: VariableReference(templateIdentifier),
       },
