@@ -199,16 +199,25 @@ const mediaArm = (relation: typeof media.Audio | typeof media.Video): Piece => (
  */
 const sourceArm: Piece = {
   reads: ["src"],
-  step: ({ attributes, node, parent }) => {
-    // A `source` in a `picture` omits `src`; `repair2-6` rules on it, so the absent attribute is still read as empty here.
-    const src = Option.getOrElse(attributes.read("src"), () => "");
+  step: Effect.fn("import.html.source")(function* sourceStep({
+    attributes,
+    element,
+    node,
+    parent,
+  }) {
+    // Rule 11 has two clauses: a `source` under `audio` or `video` has `src`, and a `source` in a
+    // `picture` has `srcset` instead, so only a source outside `audio` and `video` (the `picture`
+    // one) may omit `src`, and it is stored as the empty fill.
+    const src =
+      parent.kind === "audio" || parent.kind === "video"
+        ? yield* requiredAttribute(element, "src", attributes.read("src"))
+        : Option.getOrElse(attributes.read("src"), () => "");
 
-    return Effect.succeed((rows: Rows) =>
+    return (rows: Rows) =>
       Rows.add(rows, media.Source, [
         { id: node.id, parentKind: parent.kind, src: judgedLater(src) },
-      ]),
-    );
-  },
+      ]);
+  }),
 };
 
 /**

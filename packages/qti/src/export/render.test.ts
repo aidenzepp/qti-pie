@@ -187,6 +187,15 @@ const synthetic = `<?xml version="1.0" encoding="UTF-8"?>
 </qti-assessment-item>`;
 
 /**
+ * An item that writes `src` empty on purpose: a `video` source and an `a`, beside an `img` with an
+ * empty `alt`. Each empty value is a value the source wrote, so the export keeps it.
+ */
+const explicitEmpty = `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="empty" title="Empty" adaptive="false" time-dependent="false">
+  <qti-item-body><video><source src="" type="video/mp4"/></video><p><a href="">go</a><img src="a.png" alt=""/></p></qti-item-body>
+</qti-assessment-item>`;
+
+/**
  * An item that holds one node of each feedback and template kind, three of them written with
  * `show-hide="hide"`.
  */
@@ -269,6 +278,26 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         assert.strictEqual(rendered.split('shuffle="').length - 1, 1);
         assert.notInclude(rendered, 'src=""');
         assert.notInclude(rendered, "owner");
+      }),
+    );
+
+    it.effect("an explicitly empty media source src, href and alt are written back", () =>
+      Effect.gen(function* explicitEmptyValues() {
+        const doc = yield* readXml(new TextEncoder().encode(explicitEmpty));
+        const input: ItemInput = {
+          doc,
+          packageId: crypto.randomUUID(),
+          path: "empty.xml",
+          resource: "empty",
+          resourceLomHasGeneral: false,
+          resourceType: "imsqti_item_xmlv3p0",
+          version: "3.0.1",
+        };
+        const { documentId, rows } = yield* itemRows(input, Rows.empty());
+        const rendered = textOf(canonicalize(renderTree(rows, documentId)));
+
+        assert.strictEqual(rendered, textOf(canonicalize(doc)));
+        assert.include(rendered, 'src=""');
       }),
     );
 

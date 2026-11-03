@@ -281,6 +281,8 @@ describe("htmlRows refuses an absent required attribute", () => {
     ["object/@type", '<object data="a.png"/>'],
     ["param/@name", '<object data="a.png" type="image/png"><param value="1"/></object>'],
     ["param/@value", '<object data="a.png" type="image/png"><param name="a"/></object>'],
+    ["video source/@src", '<video><source type="video/mp4"/></video>'],
+    ["audio source/@src", '<audio><source type="audio/mpeg"/></audio>'],
   ];
 
   for (const [label, fragment] of negatives) {
@@ -305,6 +307,21 @@ describe("htmlRows refuses an absent required attribute", () => {
       const { nodes, rows } = yield* built("3.0.1", '<div><a href="">go</a></div>');
 
       assert.deepStrictEqual(Rows.of(rows, text.A), [{ href: "", id: idOf(nodes, "a") }]);
+    }),
+  );
+});
+
+describe("htmlRows on an explicit empty media source src", () => {
+  it.effect("admits a video source whose src is written empty, and stores the empty value", () =>
+    Effect.gen(function* emptySrc() {
+      const { nodes, rows } = yield* built(
+        "3.0.1",
+        '<video><source src="" type="video/mp4"/></video>',
+      );
+
+      assert.deepStrictEqual(Rows.of(rows, media.relations.Source), [
+        { id: idOf(nodes, "source"), parentKind: "video", src: "" },
+      ]);
     }),
   );
 });
