@@ -21,6 +21,10 @@ export const importCommand = Command.make(
   }),
 ).pipe(
   Command.withDescription(
-    "Import the package in <dir>, a directory or a .zip file, and print its package id",
+    "Import the package in <dir>, a directory or a .zip file, and print its package id (writes the database)",
   ),
+  Command.withExamples([
+    { command: "qti import ./my-package", description: "Import an unzipped package" },
+    { command: "qti import ./my-package.zip", description: "Import a zipped package" },
+  ]),
 );

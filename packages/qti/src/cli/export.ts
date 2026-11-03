@@ -19,6 +19,16 @@ export const exportCommand = Command.make(
   }),
 ).pipe(
   Command.withDescription(
-    "Export the package <package-id> to <dir>, or to the zip file <dir>.zip under --zip",
+    "Export the package <package-id> to <dir>, or to the zip file <dir>.zip under --zip (writes files)",
   ),
+  Command.withExamples([
+    {
+      command: "qti export ./out 6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
+      description: "Write an imported package to the folder ./out",
+    },
+    {
+      command: "qti export --zip ./out 6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
+      description: "Write it to the zip file ./out.zip",
+    },
+  ]),
 );
