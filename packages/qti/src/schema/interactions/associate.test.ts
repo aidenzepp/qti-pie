@@ -295,23 +295,46 @@ describe("interactions/associate", () => {
     }
   });
 
+  it("holds the association and match bounds as integers only, with no lexical relation or column beside them", () => {
+    for (const name of [
+      "AssociateMaxAssociations",
+      "AssociateMinAssociations",
+      "GraphicAssociateMaxAssociations",
+      "MatchMaxAssociations",
+      "MatchMinAssociations",
+    ]) {
+      assert.notInclude(Object.keys(relations), name);
+    }
+
+    for (const marker of [
+      relations.GraphicAssociateMinAssociations,
+      relations.SimpleAssociableChoiceMatchMin,
+      relations.AssociableHotspotMatchMin,
+    ]) {
+      assert.deepStrictEqual(Object.keys(marker.fields), ["node"], marker.name);
+    }
+
+    for (const arm of [relations.SimpleAssociableChoice, relations.AssociableHotspot]) {
+      const fields = Object.keys(arm.fields);
+
+      assert.include(fields, "matchMaxN");
+      assert.include(fields, "matchMinN");
+      assert.notInclude(fields, "matchMax", arm.name);
+    }
+  });
+
   it("contains every marker and optional value into the arm it belongs to", () => {
     const owners = [
       [relations.DeclaredAssociateShuffle, relations.AssociateInteraction],
       [relations.DeclaredAssociateMaxAssociations, relations.AssociateInteraction],
       [relations.DeclaredAssociateMinAssociations, relations.AssociateInteraction],
-      [relations.AssociateMaxAssociations, relations.AssociateInteraction],
-      [relations.AssociateMinAssociations, relations.AssociateInteraction],
       [relations.DeclaredMatchShuffle, relations.MatchInteraction],
       [relations.DeclaredMatchMaxAssociations, relations.MatchInteraction],
       [relations.DeclaredMatchMinAssociations, relations.MatchInteraction],
-      [relations.MatchMaxAssociations, relations.MatchInteraction],
-      [relations.MatchMinAssociations, relations.MatchInteraction],
       [relations.MatchMinSelectionsMessage, relations.MatchInteraction],
       [relations.MatchMaxSelectionsMessage, relations.MatchInteraction],
       [relations.MatchFirstColumnHeader, relations.MatchInteraction],
       [relations.DeclaredGraphicAssociateMaxAssociations, relations.GraphicAssociateInteraction],
-      [relations.GraphicAssociateMaxAssociations, relations.GraphicAssociateInteraction],
       [relations.GraphicAssociateMinAssociations, relations.GraphicAssociateInteraction],
       [relations.SimpleAssociableChoiceFixed, relations.SimpleAssociableChoice],
       [relations.SimpleAssociableChoiceShowHide, relations.SimpleAssociableChoice],

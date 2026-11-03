@@ -572,8 +572,8 @@ export const ownAttributes = {
     ["shape", arm(R.AssociableHotspot, "shape")],
     ["coords", optional(R.Coords)],
     ["hotspot-label", optional(R.AssociableHotspotLabel)],
-    ["match-max", arm(R.AssociableHotspot, "matchMax")],
-    ["match-min", optional(R.AssociableHotspotMatchMin)],
+    ["match-max", arm(R.AssociableHotspot, "matchMaxN")],
+    ["match-min", marked(R.AssociableHotspotMatchMin, arm(R.AssociableHotspot, "matchMinN"))],
     [
       "show-hide",
       marked(R.DeclaredAssociableHotspotShowHide, arm(R.AssociableHotspot, "showHide")),
@@ -582,8 +582,14 @@ export const ownAttributes = {
   "qti-associate-interaction": [
     responseIdentifierOf(R.AssociateInteraction),
     ["shuffle", marked(R.DeclaredAssociateShuffle, arm(R.AssociateInteraction, "shuffle"))],
-    ["max-associations", optional(R.AssociateMaxAssociations)],
-    ["min-associations", optional(R.AssociateMinAssociations)],
+    [
+      "max-associations",
+      marked(R.DeclaredAssociateMaxAssociations, arm(R.AssociateInteraction, "maxAssociationsN")),
+    ],
+    [
+      "min-associations",
+      marked(R.DeclaredAssociateMinAssociations, arm(R.AssociateInteraction, "minAssociationsN")),
+    ],
   ],
   "qti-base-value": [["base-type", arm(R.Literal, "baseType")]],
   "qti-choice-interaction": [
@@ -682,8 +688,20 @@ export const ownAttributes = {
   ],
   "qti-graphic-associate-interaction": [
     responseIdentifierOf(R.GraphicAssociateInteraction),
-    ["min-associations", optional(R.GraphicAssociateMinAssociations)],
-    ["max-associations", optional(R.GraphicAssociateMaxAssociations)],
+    [
+      "min-associations",
+      marked(
+        R.GraphicAssociateMinAssociations,
+        arm(R.GraphicAssociateInteraction, "minAssociationsN"),
+      ),
+    ],
+    [
+      "max-associations",
+      marked(
+        R.DeclaredGraphicAssociateMaxAssociations,
+        arm(R.GraphicAssociateInteraction, "maxAssociationsN"),
+      ),
+    ],
   ],
   "qti-graphic-gap-match-interaction": [
     responseIdentifierOf(R.GraphicGapMatchInteraction),
@@ -777,8 +795,14 @@ export const ownAttributes = {
   "qti-match-interaction": [
     responseIdentifierOf(R.MatchInteraction),
     ["shuffle", marked(R.DeclaredMatchShuffle, arm(R.MatchInteraction, "shuffle"))],
-    ["max-associations", optional(R.MatchMaxAssociations)],
-    ["min-associations", optional(R.MatchMinAssociations)],
+    [
+      "max-associations",
+      marked(R.DeclaredMatchMaxAssociations, arm(R.MatchInteraction, "maxAssociationsN")),
+    ],
+    [
+      "min-associations",
+      marked(R.DeclaredMatchMinAssociations, arm(R.MatchInteraction, "minAssociationsN")),
+    ],
     ["data-min-selections-message", optional(R.MatchMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.MatchMaxSelectionsMessage)],
     ["data-first-column-header", optional(R.MatchFirstColumnHeader)],
@@ -890,8 +914,11 @@ export const ownAttributes = {
     ["template-identifier", choiceTemplate],
     ["show-hide", optional(R.SimpleAssociableChoiceShowHide)],
     ["match-group", optional(R.MatchGroup)],
-    ["match-max", arm(R.SimpleAssociableChoice, "matchMax")],
-    ["match-min", optional(R.SimpleAssociableChoiceMatchMin)],
+    ["match-max", arm(R.SimpleAssociableChoice, "matchMaxN")],
+    [
+      "match-min",
+      marked(R.SimpleAssociableChoiceMatchMin, arm(R.SimpleAssociableChoice, "matchMinN")),
+    ],
   ],
   "qti-simple-choice": [
     identifierOf(R.SimpleChoice),

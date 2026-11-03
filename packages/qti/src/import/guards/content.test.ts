@@ -6,10 +6,7 @@ import { itemRows } from "#qti/import/item.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { AttributeIdref, HeadersTarget, NodeClass, NodeLabel } from "#qti/schema/attributes.ts";
 import { A, BlockquoteCite } from "#qti/schema/html/text.ts";
-import {
-  AssociableHotspot,
-  AssociableHotspotMatchMin,
-} from "#qti/schema/interactions/associate.ts";
+import { AssociableHotspot } from "#qti/schema/interactions/associate.ts";
 import { Gap } from "#qti/schema/interactions/gap.ts";
 import { HottextInteraction, HottextOwner } from "#qti/schema/interactions/hot.ts";
 import { OrderInteraction } from "#qti/schema/interactions/order.ts";
@@ -298,28 +295,23 @@ describe("contentGuards typed-copy", () => {
     }),
   );
 
-  it.effect("refuses an associable hotspot's match-min that differs from its typed count", () =>
-    Effect.gen(function* hotspotMatchMin() {
-      const rows = yield* rowsOf(
-        "3.0.1",
-        `<qti-graphic-associate-interaction response-identifier="PAIRS"><img src="a.png" alt="a"/><qti-associable-hotspot identifier="H1" shape="rect" coords="0,0,5,5" match-max="1" match-min="1"/><qti-associable-hotspot identifier="H2" shape="rect" coords="6,6,9,9" match-max="1"/></qti-graphic-associate-interaction>`,
-      );
-      yield* contentGuards(rows);
-      yield* refusalOfRows(
-        "typed-copy",
-        edited(rows, AssociableHotspotMatchMin, (facts) =>
-          facts.map((fact) => ({ ...fact, value: "2" })),
-        ),
-        "matchMinN",
-      );
-      yield* refusalOfRows(
-        "typed-copy",
-        edited(rows, AssociableHotspot, (facts) =>
-          facts.map((fact) => ({ ...fact, matchMinN: 1n })),
-        ),
-        "matchMinN",
-      );
-    }),
+  it.effect(
+    "refuses an associable hotspot's match-min spelling that differs from its typed count",
+    () =>
+      Effect.gen(function* hotspotMatchMin() {
+        const rows = yield* rowsOf(
+          "3.0.1",
+          `<qti-graphic-associate-interaction response-identifier="PAIRS"><img src="a.png" alt="a"/><qti-associable-hotspot identifier="H1" shape="rect" coords="0,0,5,5" match-max="1" match-min="03"/><qti-associable-hotspot identifier="H2" shape="rect" coords="6,6,9,9" match-max="1"/></qti-graphic-associate-interaction>`,
+        );
+        yield* contentGuards(rows);
+        yield* refusalOfRows(
+          "typed-copy",
+          edited(rows, AssociableHotspot, (facts) =>
+            facts.map((fact) => ({ ...fact, matchMinN: 1n })),
+          ),
+          "does not parse to the typed value",
+        );
+      }),
   );
 
   it.effect("refuses an order interaction whose maxBound disagrees with its max-choices", () =>
