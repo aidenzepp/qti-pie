@@ -148,7 +148,13 @@ export class UnmodeledVocabulary extends Schema.TaggedError<UnmodeledVocabulary>
  */
 export class ItemRefusal extends Schema.TaggedError<ItemRefusal>()("ItemRefusal", {
   detail: Schema.String,
-  rule: Schema.Literals(["binding-declared", "typed-copy", "ancestry-ban", "admission"]),
+  rule: Schema.Literals([
+    "binding-declared",
+    "typed-copy",
+    "ancestry-ban",
+    "admission",
+    "required-attribute",
+  ]),
 }) {}
 
 /**
