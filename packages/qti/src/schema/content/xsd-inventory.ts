@@ -1,11 +1,12 @@
 /**
- * The derived XSD inventory: for every ASI and HTML kind handle, the element and type the ASI 3.0.1
- * XSD declares, whether the type is mixed, every attribute it declares and every element it
- * references.
+ * The derived XSD inventory: for every ASI, HTML and processing kind handle, the element and type
+ * the ASI 3.0.1 XSD declares, whether the type is mixed, every attribute it declares and every
+ * element it references.
  *
  * The inventory is data derived once from `imsqti_asiv3p0p1_v1p0.xsd` and read by the kinds files,
  * the attribute arms and the importer. Each vocabulary is a leaf file (`inventory/asi.ts`,
- * `inventory/html.ts`) composed here, so a later phase adds its own leaf and one spread line.
+ * `inventory/html.ts`, `inventory/processing.ts`) composed here, so a later phase adds its own leaf
+ * and one spread line.
  *
  * An attribute's `family` is `base` for the ten names every element shares (`id`, `class`, `lang`,
  * `xml:lang`, `label`, `dir`, `xml:base`, `data-qti-suppress-tts`, `data-catalog-idref`,
@@ -16,9 +17,9 @@
  * classes. A child's `min` and `max` are its own bounds multiplied by those of every enclosing
  * group, `None` for unbounded; the choice groups are listed in each leaf's module comment.
  *
- * The leaves are the output of this script, run from any directory as `python3 -I derive.py asi`
- * and `python3 -I derive.py html` with the XSD cached at `~/.cache/gr8des/qti3/xsd/`, then
- * formatted with `vp fmt`:
+ * The leaves are the output of this script, run from any directory as `python3 -I derive.py asi`,
+ * `python3 -I derive.py html` and `python3 -I derive.py processing` with the XSD cached at
+ * `~/.cache/gr8des/qti3/xsd/`, then formatted with `vp fmt`:
  *
  * ```python
  * import xml.etree.ElementTree as E, collections, os, re, sys, textwrap
@@ -29,6 +30,7 @@
  * M1=set("qti-area-map-entry qti-area-mapping qti-associable-hotspot qti-associate-interaction qti-catalog-info qti-companion-materials-info qti-context-declaration qti-drawing-interaction qti-end-attempt-interaction qti-extended-text-interaction qti-feedback-inline qti-gap qti-gap-img qti-gap-match-interaction qti-gap-text qti-graphic-associate-interaction qti-graphic-gap-match-interaction qti-graphic-order-interaction qti-hotspot-choice qti-hotspot-interaction qti-hottext qti-hottext-interaction qti-inline-choice qti-inline-choice-interaction qti-interpolation-table qti-interpolation-table-entry qti-label qti-map-entry qti-mapping qti-match-interaction qti-match-table qti-match-table-entry qti-media-interaction qti-modal-feedback qti-order-interaction qti-position-object-interaction qti-position-object-stage qti-printed-variable qti-select-point-interaction qti-simple-associable-choice qti-simple-match-set qti-slider-interaction qti-stylesheet qti-template-declaration qti-text-entry-interaction qti-upload-interaction".split())
  * DOTTED={"qti-content-body.feedback":("qti-content-body","FeedbackContentBodyDType"),"qti-content-body.modal":("qti-content-body","FeedbackFlowContentBodyDType"),"qti-content-body.rubric":("qti-content-body","RubricBlockContentBodyDType"),"qti-content-body.rubricTemplate":("qti-content-body","RubricBlockTemplateBlockContentBodyDType"),"qti-content-body.template":("qti-content-body","TemplateBlockContentBodyDType"),"qti-feedback-block":("qti-feedback-block","FeedbackBlockDType"),"qti-feedback-block.template":("qti-feedback-block","TemplateBlockFeedbackBlockDType"),"qti-rubric-block":("qti-rubric-block","RubricBlockDType"),"qti-template-block":("qti-template-block","TemplateBlockDType"),"qti-template-block.rubric":("qti-template-block","RubricBlockTemplateBlockDType"),"qti-template-inline":("qti-template-inline","TemplateInlineDType"),"qti-template-inline.rubric":("qti-template-inline","RubricBlockTemplateInlineDType")}
  * HTML="a abbr acronym address article aside audio b bdi bdo big blockquote br caption cite code col colgroup dd details dfn div dl dt em figcaption figure footer h1 h2 h3 h4 h5 h6 header hr i img kbd label li nav object ol p param picture pre q rb rp rt rtc ruby samp section small source span strong sub summary sup table tbody td template tfoot th thead tr track tt ul var video".split()
+ * PROC="qti-and qti-any-n qti-base-value qti-container-size qti-contains qti-correct qti-custom-operator qti-default qti-delete qti-divide qti-duration-gte qti-duration-lt qti-equal qti-equal-rounded qti-field-value qti-gcd qti-gt qti-gte qti-index qti-inside qti-integer-divide qti-integer-modulus qti-integer-to-float qti-is-null qti-lcm qti-lt qti-lte qti-map-response qti-map-response-point qti-match qti-math-constant qti-math-operator qti-max qti-member qti-min qti-multiple qti-not qti-null qti-number-correct qti-number-incorrect qti-number-presented qti-number-responded qti-number-selected qti-or qti-ordered qti-outcome-maximum qti-outcome-minimum qti-pattern-match qti-power qti-product qti-random qti-random-float qti-random-integer qti-repeat qti-round qti-round-to qti-stats-operator qti-string-match qti-substring qti-subtract qti-sum qti-test-variables qti-truncate qti-variable qti-response-condition qti-response-if qti-response-else-if qti-response-else qti-set-outcome-value qti-lookup-outcome-value qti-exit-response qti-response-processing-fragment qti-outcome-processing qti-outcome-condition qti-outcome-if qti-outcome-else-if qti-outcome-else qti-exit-test qti-outcome-processing-fragment qti-template-processing qti-template-condition qti-template-if qti-template-else-if qti-template-else qti-set-template-value qti-set-default-value qti-set-correct-response qti-template-constraint qti-exit-template".split()
  * FAMILY={"id","class","lang","xml:lang","label","dir","xml:base","data-qti-suppress-tts","data-catalog-idref","data-ssml"}
  * root=E.parse(PATH).getroot()
  * ST={s.get("name"):s for s in root.iter(XS+"simpleType") if s.get("name")}
@@ -134,6 +136,10 @@
  *             assert len(DECL[n])==1,n
  *             es.append(entry(n,n,next(iter(DECL[n]))))
  *         for h,(n,t) in DOTTED.items(): es.append(entry(h,n,t))
+ *     elif which=="processing":
+ *         for n in PROC:
+ *             assert len(DECL[n])==1,n
+ *             es.append(entry(n,n,next(iter(DECL[n]))))
  *     else:
  *         for n in HTML:
  *             assert len(DECL[n])==1,n
@@ -177,6 +183,7 @@
  *         L.append("    type: "+js(x["type"])+",")
  *         L.append("  },")
  *     return L
+ * VOCAB={"asi":"ASI","html":"HTML","processing":"ASI processing"}
  * def rng(b): return "%d..%s"%(b[0],"n" if b[1] is None else b[1])
  * def main(which):
  *     es=entries(which)
@@ -186,7 +193,7 @@
  *     def para(text,first=" * ",rest=" * "):
  *         print("\n".join(textwrap.wrap(text,width=100,initial_indent=first,subsequent_indent=rest,break_long_words=False,break_on_hyphens=False)))
  *     print("/**")
- *     para("The derived XSD inventory of the %s vocabulary: one entry per kind handle, %d entries."%("ASI" if which=="asi" else "HTML",len(es)))
+ *     para("The derived XSD inventory of the %s vocabulary: one entry per kind handle, %d entries."%(VOCAB[which],len(es)))
  *     print(" *")
  *     para("Generated by `python3 -I derive.py %s` over `imsqti_asiv3p0p1_v1p0.xsd`; the script is in the module comment of `xsd-inventory.ts`, and a re-run formatted with `vp fmt` reproduces this file byte for byte. Attribute declarations by `whiteSpace` class over these entries: %s."%(which,", ".join("%s %d"%(k,tot[k]) for k in ("collapse","preserve","replace","union"))))
  *     print(" *")
@@ -251,7 +258,7 @@
  *     ]: print(l)
  *
  *     print("/**")
- *     print(" * The %s inventory, keyed by kind handle."%("ASI" if which=="asi" else "HTML"))
+ *     print(" * The %s inventory, keyed by kind handle."%(VOCAB[which]))
  *     print(" *\x2f")
  *     print("export const %sInventory: InventoryLeaf = {"%which)
  *     print("\n".join(render(es)))
@@ -260,15 +267,18 @@
  *     main(sys.argv[1])
  * ```
  *
- * Over the 145 entries the attribute declarations number 4217 `collapse`, 2053 `preserve`, 396
- * `replace` and 3 `union`. The phase-2 spec's counts (4254, 2071, 399 and 4) add the 37, 18, 3 and
- * 1 declarations of `TestRubricBlockDType`, the type of `qti-rubric-block` that belongs to the test
- * vocabulary and has no entry here.
+ * Over the 145 entries of the ASI and HTML leaves the attribute declarations number 4217
+ * `collapse`, 2053 `preserve`, 396 `replace` and 3 `union`. The phase-2 spec's counts (4254, 2071,
+ * 399 and 4) add the 37, 18, 3 and 1 declarations of `TestRubricBlockDType`, the type of
+ * `qti-rubric-block` that belongs to the test vocabulary and has no entry here. The processing
+ * leaf's 89 entries add 52 `collapse`, 9 `preserve`, 1 `replace` and 10 `union`, which the spec's
+ * totals do not describe.
  */
 import { Option } from "effect";
 
 import { asiInventory } from "#qti/schema/content/inventory/asi.ts";
 import { htmlInventory } from "#qti/schema/content/inventory/html.ts";
+import { processingInventory } from "#qti/schema/content/inventory/processing.ts";
 
 /**
  * One attribute an XSD type declares, through its attribute groups and its extension bases.
@@ -318,18 +328,19 @@ export interface InventoryLeaf {
 }
 
 /**
- * The inventory of every ASI and HTML kind, keyed by handle.
+ * The inventory of every ASI, HTML and processing kind, keyed by handle.
  */
 export const inventory: InventoryLeaf = {
   ...asiInventory,
   ...htmlInventory,
+  ...processingInventory,
 };
 
 /**
  * Look up the inventory entry of a kind handle.
  *
  * @param handle - A kind handle such as `qti-simple-match-set` or `qti-content-body.modal`.
- * @returns The entry, or `None` when the handle is not an ASI or HTML kind.
+ * @returns The entry, or `None` when the handle is not an ASI, HTML or processing kind.
  */
 export const entryOf = (handle: string): Option.Option<InventoryEntry> =>
   Option.fromNullishOr(Object.hasOwn(inventory, handle) ? inventory[handle] : undefined);

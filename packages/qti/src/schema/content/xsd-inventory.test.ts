@@ -7,6 +7,7 @@ import type { InventoryAttribute } from "#qti/schema/content/xsd-inventory.ts";
 import { entryOf, inventory } from "#qti/schema/content/xsd-inventory.ts";
 import { asiInventory } from "#qti/schema/content/inventory/asi.ts";
 import { htmlInventory } from "#qti/schema/content/inventory/html.ts";
+import { processingInventory } from "#qti/schema/content/inventory/processing.ts";
 
 /**
  * Find a declared attribute of a kind, failing the test when the kind or attribute is absent.
@@ -47,10 +48,11 @@ const countByClass = (
 };
 
 describe("xsd inventory completeness", () => {
-  it("holds 69 ASI and 76 HTML entries", () => {
+  it("holds 69 ASI, 76 HTML and 89 processing entries", () => {
     assert.strictEqual(Object.keys(asiInventory).length, 69);
     assert.strictEqual(Object.keys(htmlInventory).length, 76);
-    assert.strictEqual(Object.keys(inventory).length, 145);
+    assert.strictEqual(Object.keys(processingInventory).length, 89);
+    assert.strictEqual(Object.keys(inventory).length, 69 + 76 + 89);
   });
 
   it("names every handle the kinds files hold", () => {
@@ -166,11 +168,11 @@ describe("xsd inventory whiteSpace classes", () => {
     assert.strictEqual(attributeOf("qti-choice-interaction", "shuffle").family, "own");
   });
 
-  it("reproduces the spec's declaration totals once the excluded M4 type is added", () => {
-    // Phase-2 spec 3.9 prints 4254, 2071, 399 and 4 over the 140 names. Its walk also counts the 37, 18,
-    // 3 and 1 declarations of TestRubricBlockDType, the test vocabulary's `qti-rubric-block`, which
-    // the inventory's roster omits.
-    const counts = countByClass(Object.values(inventory));
+  it("reproduces the spec's declaration totals over the ASI and HTML leaves once the excluded M4 type is added", () => {
+    // Phase-2 spec 3.9 prints 4254, 2071, 399 and 4 over the 140 names, the ASI and HTML leaves'
+    // 145 entries. Its walk also counts the 37, 18, 3 and 1 declarations of TestRubricBlockDType,
+    // the test vocabulary's `qti-rubric-block`, which the inventory's roster omits.
+    const counts = countByClass([...Object.values(asiInventory), ...Object.values(htmlInventory)]);
     assert.deepStrictEqual(
       {
         collapse: counts.collapse + 37,
