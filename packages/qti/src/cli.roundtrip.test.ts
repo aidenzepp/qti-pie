@@ -41,7 +41,7 @@ describe.skipIf(!hasLease)("cli.roundtrip.test.ts, on the lease", () => {
         "roundtrip of simple lists every entry equal and ends all equal",
         () =>
           Effect.gen(function* roundtripSimple() {
-            const { exit, output } = yield* run(["roundtrip", fixtures.simple]);
+            const { exit, output } = yield* run(["roundtrip", "--yes", fixtures.simple]);
 
             assert.isTrue(
               Exit.isSuccess(exit),

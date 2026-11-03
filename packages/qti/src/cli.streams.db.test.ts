@@ -24,6 +24,7 @@ describe.skipIf(!hasLease)(
             "--log-level",
             "debug",
             "roundtrip",
+            "--yes",
             copy,
           ]);
 
