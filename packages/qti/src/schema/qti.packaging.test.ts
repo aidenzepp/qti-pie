@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
@@ -15,6 +14,7 @@ import { admission } from "#qti/schema/seed/admission.ts";
 import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
 import * as csm from "#qti/schema/csm.ts";
 import * as usage from "#qti/schema/usage.ts";
+import { printSeed } from "#qti/test/seed.ts";
 
 /**
  * The part of a ChangeSet's description the test reads: each stratum's members by operation and
@@ -71,16 +71,11 @@ const tuplesOf = (sql: string, table: string): string[] => {
  * hold.
  */
 const recipe = (): string =>
-  execFileSync(
-    process.execPath,
-    [
-      "scripts/seed-sql.ts",
-      "--only",
-      "Admission,RootOfType",
-      ...earlierSeeds().flatMap((file) => ["--minus", file]),
-    ],
-    { encoding: "utf-8" },
-  );
+  printSeed([
+    "--only",
+    "Admission,RootOfType",
+    ...earlierSeeds().flatMap((file) => ["--minus", file]),
+  ]);
 
 describe("qti packaging composition", () => {
   it("holds every csmd and ud handle in the rosters", () => {
