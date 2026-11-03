@@ -23,6 +23,7 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
+import { YesNo } from "#qti/schema/content/rosters.ts";
 import * as asi from "#qti/schema/kinds/asi.ts";
 import * as cp from "#qti/schema/kinds/cp.ts";
 import * as cpx from "#qti/schema/kinds/cpx.ts";
@@ -255,7 +256,7 @@ export const TreeXmlEncoding = relation("TreeXmlEncoding", { tree: uuid, value: 
  */
 export const TreeXmlStandalone = relation(
   "TreeXmlStandalone",
-  { tree: uuid, value: str.regex(patterns.yesNo) },
+  { tree: uuid, value: closedId(YesNo) },
   ["tree"],
 );
 

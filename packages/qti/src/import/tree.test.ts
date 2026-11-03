@@ -28,6 +28,7 @@ import {
 } from "#qti/schema/node.ts";
 import { NodeXmlBase, NodeXmlLang } from "#qti/schema/attributes.ts";
 import { attributeRows } from "#qti/import/attributes.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import { GuardRefusal, treeGuards } from "#qti/import/guards/tree.ts";
 import {
@@ -109,6 +110,44 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
       assert.deepStrictEqual(Rows.of(rows, TreeXmlStandalone), []);
       assert.deepStrictEqual(Rows.of(rows, TreeDoctype), []);
       assert.deepStrictEqual(Rows.of(rows, TreeExportCharset), []);
+    }),
+  );
+
+  suite.effect("a standalone of yes or no is a TreeXmlStandalone handle", () =>
+    Effect.gen(function* standaloneRows() {
+      const doc = yield* readChoice(inject("fixtures").simple);
+      const { declaration } = doc;
+      assert.isTrue(Option.isSome(declaration));
+
+      for (const standalone of ["yes", "no"] as const) {
+        const declared = declaration.pipe(
+          Option.map((found) => ({ ...found, standalone: Option.some(standalone) })),
+        );
+        const { rows } = yield* treeRows(
+          { ...doc, declaration: declared },
+          itemInput(doc.charset),
+          Rows.empty(),
+        );
+
+        assert.deepStrictEqual(Rows.of(rows, TreeXmlStandalone), [
+          { tree: treeId, value: standalone },
+        ]);
+      }
+    }),
+  );
+
+  suite.effect("a standalone outside yes and no is refused value-lexical before any row", () =>
+    Effect.gen(function* standaloneRefused() {
+      const doc = yield* readChoice(inject("fixtures").simple);
+      const declared = doc.declaration.pipe(
+        Option.map((found) => ({ ...found, standalone: Option.some("maybe") })),
+      );
+      const failure = yield* Effect.flip(
+        treeRows({ ...doc, declaration: declared }, itemInput(doc.charset), Rows.empty()),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "value-lexical");
     }),
   );
 

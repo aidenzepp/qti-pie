@@ -14,6 +14,8 @@ import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import type { Rule } from "#qti/import/refusal.ts";
+import { YesNo } from "#qti/schema/content/rosters.ts";
+import type { YesNoHandle } from "#qti/schema/content/rosters.ts";
 import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
 import {
   Ancestry,
@@ -676,14 +678,14 @@ const miscRow = (item: Misc): { kind: "comment" | "pi"; text: string } =>
  * @returns The rows with this tree's added, and the node index holding every element; the node,
  *   edge and generic-arm rows, `TreeRoot`, the namespace declarations, the `xsi:schemaLocation` and
  *   the attribute entity references are among them; `UnmodeledVocabulary` for the first element or
- *   attribute no registry names. The XML-namespace names a kind's registry lists are modeled; their
- *   rows are `attributeRows`'s.
+ *   attribute no registry names, `ImportRefused` for a `standalone` that is neither `yes` nor `no`.
+ *   The XML-namespace names a kind's registry lists are modeled; their rows are `attributeRows`'s.
  */
 export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
   doc: XmlDocument,
   input: TreeInput,
   rows: Rows,
-): Effect.fn.Return<{ rows: Rows; nodes: NodeIndex }, UnmodeledVocabulary> {
+): Effect.fn.Return<{ rows: Rows; nodes: NodeIndex }, ImportRefused | UnmodeledVocabulary> {
   const refusal = firstUnmodeled(doc.root, Option.none(), []);
   if (Option.isSome(refusal)) {
     return yield* refusal.value;
@@ -704,9 +706,19 @@ export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
     .pipe(Option.map(({ version }) => version))
     .pipe(Option.filter(isXmlVersion));
   const encoding = declaration.pipe(Option.flatMap((found) => found.encoding));
-  const standalone = declaration
-    .pipe(Option.flatMap((found) => found.standalone))
-    .pipe(Option.filter((value) => value === "yes" || value === "no"));
+  const standalone = yield* Option.match(
+    declaration.pipe(Option.flatMap((found) => found.standalone)),
+    {
+      onNone: () => Effect.succeed(Option.none<YesNoHandle>()),
+      onSome: (value) =>
+        closedOf(
+          YesNo.handles,
+          value,
+          "value-lexical",
+          "the standalone pseudo-attribute of the XML declaration",
+        ).pipe(Effect.map(Option.some)),
+    },
+  );
   const withTree = Rows.add(rows, Tree, [
     { charset: input.charset, id, kind: input.kind, root: input.root, version: input.version },
   ]);

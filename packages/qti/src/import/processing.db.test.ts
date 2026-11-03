@@ -870,17 +870,6 @@ const negatives: readonly Negative[] = [
   {
     alter: (draft) => {
       Object.assign(
-        find(draft, Equal, (row) => text(row, "toleranceMode") === "exact"),
-        { toleranceMode: " exact" },
-      );
-    },
-    laws: [`pattern ${patterns.toleranceMode}`],
-    name: "P6: an Equal with toleranceMode ' exact' is refused (the preserve witness)",
-    rule: "P6",
-  },
-  {
-    alter: (draft) => {
-      Object.assign(
         find(draft, RoundTo, () => true),
         {
           figures: "0",

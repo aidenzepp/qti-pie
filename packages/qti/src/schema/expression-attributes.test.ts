@@ -3,6 +3,7 @@ import type { AnyRelation } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
 import { inspect } from "node:util";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as expression from "#qti/schema/expression.ts";
@@ -382,6 +383,50 @@ describe("expression-attributes", () => {
       assert.deepStrictEqual([...rule.left.fields], ["id"]);
       assert.isTrue(rule.right.source === tolerance);
       assert.deepStrictEqual([...rule.right.fields], ["node"]);
+    }
+  });
+
+  it("types the closed attributes as closedId of their rosters", () => {
+    const { relations } = expressionAttributes;
+    assert.strictEqual(relations.Substring.fields.caseSensitive.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.StringMatch.fields.caseSensitive.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.StringMatch.fields.substring.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.Equal.fields.includeLowerBound.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.Equal.fields.includeUpperBound.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.Equal.fields.toleranceMode.roster, rosters.ToleranceMode);
+    assert.strictEqual(relations.EqualTolerance.fields.toleranceMode.roster, rosters.ToleranceMode);
+    assert.strictEqual(relations.EqualRounded.fields.roundingMode.roster, rosters.RoundingMode);
+    assert.strictEqual(relations.RoundTo.fields.roundingMode.roster, rosters.RoundingMode);
+    assert.strictEqual(relations.TestVariablesBaseType.fields.value.roster, declaration.BaseType);
+    assert.strictEqual(relations.Inside.fields.shape.roster, rosters.Shape);
+    assert.strictEqual(relations.MathConstant.fields.name.roster, rosters.MathConstantName);
+    assert.strictEqual(relations.MathOperator.fields.name.roster, rosters.MathOperatorName);
+    assert.strictEqual(relations.StatsOperator.fields.name.roster, rosters.StatsOperatorName);
+  });
+
+  it("states the toleranceMode containments and roundingMode checks over handles of their rosters", () => {
+    const selected = expressionAttributes.rules.flatMap((rule) => {
+      const selection = rule.kind === "contained" ? selectionOf(rule.left) : undefined;
+
+      return selection === undefined ? [] : [selection.bindings];
+    });
+    assert.deepStrictEqual(selected, [
+      { toleranceMode: "absolute" },
+      { toleranceMode: "relative" },
+    ]);
+    assert.includeMembers([...rosters.ToleranceMode.handles], ["absolute", "relative"]);
+
+    for (const name of ["EqualRounded", "RoundTo"] as const) {
+      const rule = expressionAttributes.rules.find(
+        (found) => found.kind === "check" && found.relation === relationsByName.get(name),
+      );
+      const text = inspect(rule && "desc" in rule ? rule.desc : undefined, {
+        depth: null,
+        maxStringLength: 100_000,
+      });
+      for (const handle of rosters.RoundingMode.handles) {
+        assert.include(text, handle, name);
+      }
     }
   });
 

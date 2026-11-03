@@ -28,6 +28,16 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
+import {
+  MathConstantName,
+  MathOperatorName,
+  RoundingMode,
+  Shape,
+  StatsOperatorName,
+  ToleranceMode,
+  XsBoolean,
+} from "#qti/schema/content/rosters.ts";
+import { BaseType } from "#qti/schema/declaration.ts";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import * as processing from "#qti/schema/processing.ts";
@@ -36,29 +46,13 @@ const ncName = str.regex(patterns.ncName);
 
 const anyUri = str.regex(patterns.anyUri);
 
-const baseType = str.regex(patterns.baseType);
-
 const coords = str.regex(patterns.coords);
 
 const floatOrVariableRef = str.regex(patterns.floatOrVariableRef);
 
 const integerOrVariableRef = str.regex(patterns.integerOrVariableRef);
 
-const mathConstantName = str.regex(patterns.mathConstantName);
-
-const mathOperatorName = str.regex(patterns.mathOperatorName);
-
-const roundingMode = str.regex(patterns.roundingMode);
-
-const shape = str.regex(patterns.shape);
-
-const statsOperatorName = str.regex(patterns.statsOperatorName);
-
 const toleranceList = str.regex(patterns.toleranceList);
-
-const toleranceMode = str.regex(patterns.toleranceMode);
-
-const xsBoolean = str.regex(patterns.xsBoolean);
 
 const xsString = str.regex(patterns.xsString, patterns.xsStringFlags);
 
@@ -80,20 +74,30 @@ export const VariableWeightIdentifier = relation(
 /**
  * The `qti-math-constant` expression and the constant it names.
  */
-export const MathConstant = relation("MathConstant", { id: uuid, name: mathConstantName }, ["id"]);
+export const MathConstant = relation(
+  "MathConstant",
+  { id: uuid, name: closedId(MathConstantName) },
+  ["id"],
+);
 
 /**
  * The `qti-math-operator` expression and the function it names; its operands are `Operand` rows.
  */
-export const MathOperator = relation("MathOperator", { id: uuid, name: mathOperatorName }, ["id"]);
+export const MathOperator = relation(
+  "MathOperator",
+  { id: uuid, name: closedId(MathOperatorName) },
+  ["id"],
+);
 
 /**
  * The `qti-stats-operator` expression and the statistic it names; its operand is an `Operand`
  * row.
  */
-export const StatsOperator = relation("StatsOperator", { id: uuid, name: statsOperatorName }, [
-  "id",
-]);
+export const StatsOperator = relation(
+  "StatsOperator",
+  { id: uuid, name: closedId(StatsOperatorName) },
+  ["id"],
+);
 
 /**
  * The `qti-any-n` operator with its two required bounds, each an integer or a variable name as
@@ -152,7 +156,7 @@ export const FieldValue = relation("FieldValue", { fieldIdentifier: ncName, id: 
 /**
  * The `qti-inside` operator: the region, as a shape and its coordinates.
  */
-export const Inside = relation("Inside", { coords, id: uuid, shape }, ["id"]);
+export const Inside = relation("Inside", { coords, id: uuid, shape: closedId(Shape) }, ["id"]);
 
 /**
  * The `qti-pattern-match` operator and its pattern, a string or a braced reference as read.
@@ -162,7 +166,9 @@ export const PatternMatch = relation("PatternMatch", { id: uuid, pattern: xsStri
 /**
  * The `qti-substring` operator and its required `case-sensitive`.
  */
-export const Substring = relation("Substring", { caseSensitive: xsBoolean, id: uuid }, ["id"]);
+export const Substring = relation("Substring", { caseSensitive: closedId(XsBoolean), id: uuid }, [
+  "id",
+]);
 
 /**
  * The `qti-string-match` operator: `case-sensitive` is required, and `substring` is carried as read
@@ -170,7 +176,7 @@ export const Substring = relation("Substring", { caseSensitive: xsBoolean, id: u
  */
 export const StringMatch = relation(
   "StringMatch",
-  { caseSensitive: xsBoolean, id: uuid, substring: xsBoolean },
+  { caseSensitive: closedId(XsBoolean), id: uuid, substring: closedId(XsBoolean) },
   ["id"],
 );
 
@@ -212,7 +218,7 @@ export const TestVariables = relation("TestVariables", { id: uuid, variableIdent
  */
 export const TestVariablesBaseType = relation(
   "TestVariablesBaseType",
-  { node: uuid, value: baseType },
+  { node: uuid, value: closedId(BaseType) },
   ["node"],
 );
 
@@ -241,9 +247,9 @@ export const Equal = relation(
   "Equal",
   {
     id: uuid,
-    includeLowerBound: xsBoolean,
-    includeUpperBound: xsBoolean,
-    toleranceMode,
+    includeLowerBound: closedId(XsBoolean),
+    includeUpperBound: closedId(XsBoolean),
+    toleranceMode: closedId(ToleranceMode),
   },
   ["id"],
 );
@@ -272,7 +278,7 @@ export const DeclaredIncludeUpperBound = relation("DeclaredIncludeUpperBound", {
  */
 export const EqualTolerance = relation(
   "EqualTolerance",
-  { node: uuid, toleranceMode, value: toleranceList },
+  { node: uuid, toleranceMode: closedId(ToleranceMode), value: toleranceList },
   ["node"],
 );
 
@@ -286,7 +292,7 @@ export const EqualRounded = relation(
     figuresKind: closedId(RefOrLiteral),
     figuresValue: pg.bigint,
     id: uuid,
-    roundingMode,
+    roundingMode: closedId(RoundingMode),
   },
   ["id"],
 );
@@ -305,7 +311,7 @@ export const RoundTo = relation(
     figuresKind: closedId(RefOrLiteral),
     figuresValue: pg.bigint,
     id: uuid,
-    roundingMode,
+    roundingMode: closedId(RoundingMode),
   },
   ["id"],
 );

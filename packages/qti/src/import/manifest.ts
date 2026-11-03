@@ -16,6 +16,7 @@ import { attributeRows } from "#qti/import/attributes.ts";
 import { collapse, replace, Rows, treeRows, typedAttribute } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { classed, contentOf, elementChildren, qmdLeafRows } from "#qti/import/leaf.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
 import { recordFile, recordTypes, soleFileTypes } from "#qti/import/record.ts";
 import type { ExternalRefusal } from "#qti/import/record.ts";
 import type { ImportRefused } from "#qti/import/refusal.ts";

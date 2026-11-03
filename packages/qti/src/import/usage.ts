@@ -16,6 +16,7 @@ import {
   typedAttribute,
   UnmodeledVocabulary,
 } from "#qti/import/tree.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
 import { BaseType } from "#qti/schema/declaration.ts";
 import { Document } from "#qti/schema/document.ts";
@@ -153,7 +154,10 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
   doc: XmlDocument,
   input: UsageInput,
   rows: Rows,
-): Effect.fn.Return<{ rows: Rows; nodes: NodeIndex }, NotQti3 | UnmodeledVocabulary> {
+): Effect.fn.Return<
+  { rows: Rows; nodes: NodeIndex },
+  ImportRefused | NotQti3 | UnmodeledVocabulary
+> {
   const { root } = doc;
   if (root.namespace !== usageNamespace || root.local !== "usageData") {
     return yield* new NotQti3({

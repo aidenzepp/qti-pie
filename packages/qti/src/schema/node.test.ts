@@ -2,6 +2,7 @@ import { closed, schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
 import * as attributes from "#qti/schema/attributes.ts";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import * as generic from "#qti/schema/kinds/generic.ts";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
@@ -128,6 +129,10 @@ describe("node", () => {
       [...node.relations.Admission.primaryKey],
       ["version", "parent", "child"],
     );
+  });
+
+  it("types TreeXmlStandalone as closedId of YesNo", () => {
+    assert.strictEqual(node.relations.TreeXmlStandalone.fields.value.roster, rosters.YesNo);
   });
 
   it("keys AttributeLexical by node and attribute, an AttributeName over an uncollapsed value", () => {
