@@ -835,8 +835,8 @@ export const ownAttributes = {
   "qti-media-interaction": [
     responseIdentifierOf(R.MediaInteraction),
     ["autostart", arm(R.MediaInteraction, "autostart")],
-    ["min-plays", optional(R.MediaMinPlays)],
-    ["max-plays", optional(R.MediaMaxPlays)],
+    ["min-plays", marked(R.MediaMinPlays, arm(R.MediaInteraction, "minPlaysN"))],
+    ["max-plays", marked(R.MediaMaxPlays, arm(R.MediaInteraction, "maxPlaysN"))],
     ["loop", marked(R.DeclaredMediaLoop, arm(R.MediaInteraction, "loop"))],
     ["coords", optional(R.MediaCoords)],
   ],

@@ -574,8 +574,8 @@ const negatives: readonly Negative[] = [
 
       media["maxPlaysN"] = 1n;
       media["minPlaysN"] = 2n;
-      setValue(draft, MediaMaxPlays, id, "1");
-      setValue(draft, MediaMinPlays, id, "2");
+      mark(draft, MediaMaxPlays, id);
+      mark(draft, MediaMinPlays, id);
     },
     fixture: "cut-media",
     laws: [checkLaw(MediaInteraction, "MediaPlays")],

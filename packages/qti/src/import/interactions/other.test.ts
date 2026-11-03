@@ -15,6 +15,7 @@ import {
 } from "#qti/import/interactions.ts";
 import type { DeclaredVariable, InteractionContext } from "#qti/import/interactions.ts";
 import { otherRows } from "#qti/import/interactions/other.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
 import { InteractionBinding, TypedBinding } from "#qti/schema/interaction.ts";
@@ -35,7 +36,7 @@ import {
   UploadInteraction,
   UploadType,
 } from "#qti/schema/interactions/other.ts";
-import { AttributeLexical } from "#qti/schema/node.ts";
+import { AttributeLexical, AttributeSpelling } from "#qti/schema/node.ts";
 import type { NodeKindHandle } from "#qti/schema/node.ts";
 import type { Attribute, Element } from "#qti/xml/tree.ts";
 
@@ -155,7 +156,7 @@ const refusedRule = (ctx: InteractionContext) =>
 
 describe("otherRows: media", () => {
   it.effect(
-    "copies the plays, writes the lexical optional and the loop marker only as written",
+    "copies the plays and writes the plays markers and the loop marker only as written",
     () =>
       Effect.gen(function* check() {
         const { ctx, id } = one(
@@ -181,7 +182,7 @@ describe("otherRows: media", () => {
             rootKind: "item",
           },
         ]);
-        assert.deepStrictEqual(Rows.of(rows, MediaMaxPlays), [{ node: id, value: "2" }]);
+        assert.deepStrictEqual(Rows.of(rows, MediaMaxPlays), [{ node: id }]);
         assert.strictEqual(Rows.of(rows, MediaMinPlays).length, 0);
         assert.strictEqual(Rows.of(rows, DeclaredMediaLoop).length, 0);
         assert.strictEqual(Rows.of(rows, MediaCoords).length, 0);
@@ -210,12 +211,85 @@ describe("otherRows: media", () => {
         [["true", 1n, 0n]],
       );
       assert.deepStrictEqual(Rows.of(rows, DeclaredMediaLoop), [{ node: id }]);
-      assert.deepStrictEqual(Rows.of(rows, MediaMinPlays), [{ node: id, value: "1" }]);
+      assert.deepStrictEqual(Rows.of(rows, MediaMinPlays), [{ node: id }]);
       assert.deepStrictEqual(Rows.of(rows, MediaCoords), [{ node: id, value: "0, 0,10,10" }]);
       assert.deepStrictEqual(
         Rows.of(rows, AttributeLexical).map((row) => row.attribute),
         ["coords"],
       );
+    }),
+  );
+
+  for (const [name, value] of [
+    ["max-plays", "-1"],
+    ["min-plays", "x"],
+    ["max-plays", "1.5"],
+  ] as const) {
+    it.effect(`refuses ${name}="${value}" under attribute-lexical before any row is written`, () =>
+      Effect.gen(function* outside() {
+        const { ctx } = one(
+          "qti-media-interaction",
+          "qti-media-interaction",
+          [
+            ["response-identifier", "RESPONSE"],
+            ["autostart", "false"],
+            [name, value],
+          ],
+          stringSingle,
+        );
+        const exit = yield* Effect.exit(run(ctx));
+        const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
+
+        assert.isTrue(Option.isSome(failure) && failure.value instanceof ImportRefused);
+        assert.strictEqual(
+          Option.isSome(failure) && failure.value instanceof ImportRefused
+            ? failure.value.rule
+            : "",
+          "attribute-lexical",
+        );
+      }),
+    );
+  }
+
+  it.effect("keeps a signed min-plays as the value 1, a marker and one spelling row", () =>
+    Effect.gen(function* signed() {
+      const { ctx, id } = one(
+        "qti-media-interaction",
+        "qti-media-interaction",
+        [
+          ["response-identifier", "RESPONSE"],
+          ["autostart", "false"],
+          ["min-plays", "+1"],
+        ],
+        stringSingle,
+      );
+      const rows = yield* run(ctx);
+
+      assert.strictEqual(Rows.of(rows, MediaInteraction)[0]?.minPlaysN, 1n);
+      assert.deepStrictEqual(Rows.of(rows, MediaMinPlays), [{ node: id }]);
+      assert.deepStrictEqual(
+        Rows.of(rows, AttributeSpelling).map((row) => [row.attribute, row.value]),
+        [["min-plays", "+1"]],
+      );
+    }),
+  );
+
+  it.effect("writes no spelling row for a canonical value", () =>
+    Effect.gen(function* canonical() {
+      const { ctx } = one(
+        "qti-media-interaction",
+        "qti-media-interaction",
+        [
+          ["response-identifier", "RESPONSE"],
+          ["autostart", "false"],
+          ["max-plays", "3"],
+        ],
+        stringSingle,
+      );
+      const rows = yield* run(ctx);
+
+      assert.strictEqual(Rows.of(rows, MediaInteraction)[0]?.maxPlaysN, 3n);
+      assert.strictEqual(Rows.of(rows, AttributeSpelling).length, 0);
     }),
   );
 

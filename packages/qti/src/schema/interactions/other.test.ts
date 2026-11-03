@@ -188,6 +188,13 @@ describe("interactions/other", () => {
     }
   });
 
+  it("keeps the plays markers as a node alone, their values on the arm", () => {
+    assert.deepStrictEqual(Object.keys(relations.MediaMaxPlays.fields), ["node"]);
+    assert.deepStrictEqual(Object.keys(relations.MediaMinPlays.fields), ["node"]);
+    assert.deepStrictEqual([...relations.MediaMaxPlays.primaryKey], ["node"]);
+    assert.deepStrictEqual([...relations.MediaMinPlays.primaryKey], ["node"]);
+  });
+
   it("contains every marker and optional value into the arm it belongs to", () => {
     const owners = [
       [relations.DeclaredMediaLoop, relations.MediaInteraction],

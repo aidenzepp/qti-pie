@@ -62,12 +62,7 @@ import {
   SelectPointInteraction,
 } from "#qti/schema/interactions/hot.ts";
 import { GraphicOrderInteraction, OrderInteraction } from "#qti/schema/interactions/order.ts";
-import {
-  MediaCoords,
-  MediaInteraction,
-  MediaMaxPlays,
-  MediaMinPlays,
-} from "#qti/schema/interactions/other.ts";
+import { MediaCoords } from "#qti/schema/interactions/other.ts";
 import {
   ExtendedTextInteraction,
   ExtendedTextMaxStrings,
@@ -517,78 +512,10 @@ const isNodeValue = Schema.is(NodeValue);
 const valuesOfRelation = (rows: Rows, relation: AnyRelation): ReadonlyMap<string, string> =>
   new Map((rows.get(relation) ?? []).filter(isNodeValue).map((row) => [row.node, row.value]));
 
-/**
- * The non-negative integer a lexical form writes, 0 for a form that is no natural number, as the
- * importer reads it.
- */
-const naturalOf = (lexical: string): bigint =>
-  /^\+?[0-9]+$/u.test(lexical) ? BigInt(lexical) : 0n;
-
-/**
- * One typed `<attr>N` column of a row: what it holds, the attribute as the source wrote it (none
- * when it omitted the attribute) and the value the schema defaults the omitted attribute to.
- */
-interface Count {
-  readonly actual: bigint;
-  readonly column: string;
-  readonly fallback: bigint;
-  readonly id: string;
-  readonly owner: string;
-  readonly written: string | undefined;
-}
-
 type Written = ReadonlyMap<string, string>;
 
 const written = (facts: readonly { readonly node: string; readonly value: string }[]): Written =>
   new Map(facts.map((fact) => [fact.node, fact.value]));
-
-/**
- * Every typed count of the interactions and their choices (spec 3.9, 4.5) with its source. A count
- * whose attribute has no lexical relation of its own is not here.
- */
-const countsOf = (rows: Rows): readonly Count[] => {
-  const of = (relation: AnyRelation): Written => valuesOfRelation(rows, relation);
-
-  return Rows.of(rows, MediaInteraction).flatMap((fact): readonly Count[] => [
-    {
-      actual: fact.maxPlaysN,
-      column: "maxPlaysN",
-      fallback: 0n,
-      id: fact.id,
-      owner: "MediaInteraction",
-      written: of(MediaMaxPlays).get(fact.id),
-    },
-    {
-      actual: fact.minPlaysN,
-      column: "minPlaysN",
-      fallback: 0n,
-      id: fact.id,
-      owner: "MediaInteraction",
-      written: of(MediaMinPlays).get(fact.id),
-    },
-  ]);
-};
-
-const countCopy = (rows: Rows): Finding => {
-  const found = countsOf(rows).find(
-    (entry) =>
-      entry.actual !== (entry.written === undefined ? entry.fallback : naturalOf(entry.written)),
-  );
-  if (found === undefined) {
-    return undefined;
-  }
-
-  const expected = found.written === undefined ? found.fallback : naturalOf(found.written);
-
-  return refuse(
-    "typed-copy",
-    `${found.owner} ${found.id} holds ${found.column} ${found.actual}; ${
-      found.written === undefined
-        ? "the attribute is omitted, which reads"
-        : `${quoted(found.written)} reads`
-    } ${expected}.`,
-  );
-};
 
 /**
  * `maxBound` is `bounded` exactly when `max-choices` is not 0.
@@ -883,7 +810,6 @@ const emptyXmlLang = (rows: Rows): Finding => {
  * `typed-copy`: phase-1's class over this phase's columns (spec 4.11, bin 2).
  */
 const typedCopy = (rows: Rows): Finding =>
-  countCopy(rows) ??
   maxBoundCopy(rows) ??
   bindingCopy(rows) ??
   replaceClass(rows) ??

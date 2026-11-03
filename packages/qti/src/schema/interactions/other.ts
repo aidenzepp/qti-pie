@@ -5,12 +5,11 @@
  * of the five is the parent of a node of this module, so no relation here is the child of one: a
  * prompt, a media object or a drawing's picture belongs to its own module.
  *
- * A media interaction's `autostart` is required, and `loop` is `false`, `max-plays` and
- * `min-plays` are 0 where the source omits them. The plays are typed columns, 0 where omitted,
- * beside the lexical optionals `MediaMaxPlays` and `MediaMinPlays`, which hold the text as
- * written. A maximum of 0 means no limit, so the minimum is at most the maximum unless the maximum
- * is 0: the shipped schematron's rule, which also rejects `max-plays="0"` with a positive
- * `min-plays`, is wrong about that and is not reproduced.
+ * A media interaction's `autostart` is required, and `loop` is `false`, `max-plays` and `min-plays`
+ * are 0 where the source omits them. The plays are typed columns, 0 where omitted; `MediaMaxPlays`
+ * and `MediaMinPlays` mark the attribute the source wrote. A maximum of 0 means no limit, so the
+ * minimum is at most the maximum unless the maximum is 0: the shipped schematron's rule, which also
+ * rejects `max-plays="0"` with a positive `min-plays`, is wrong about that and is not reproduced.
  *
  * A slider's `step` has no column: the XSD's default of 1.0 is wrong for a slider bound to a float,
  * which is continuous where the source does not declare a step, so `SliderStep` holds it when the
@@ -35,11 +34,6 @@ import * as patterns from "#qti/schema/patterns.ts";
  * An `xs:boolean` attribute's lexical form.
  */
 const xsBoolean = str.regex(patterns.xsBoolean);
-
-/**
- * An `xs:nonNegativeInteger` attribute's lexical form.
- */
-const xsNonNegativeInteger = str.regex(patterns.xsNonNegativeInteger);
 
 /**
  * An `xs:normalizedString` attribute's value, as the typed column holds it after replacement.
@@ -143,22 +137,16 @@ export const EndAttemptInteraction = relation(
 );
 
 /**
- * A media interaction's `max-plays` as written, when it has one.
+ * The source wrote `max-plays` on this media interaction; `maxPlaysN` holds its value. The marker
+ * alone says whether the source wrote it.
  */
-export const MediaMaxPlays = relation(
-  "MediaMaxPlays",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
+export const MediaMaxPlays = relation("MediaMaxPlays", { node: uuid }, ["node"]);
 
 /**
- * A media interaction's `min-plays` as written, when it has one.
+ * The source wrote `min-plays` on this media interaction; `minPlaysN` holds its value. The marker
+ * alone says whether the source wrote it.
  */
-export const MediaMinPlays = relation(
-  "MediaMinPlays",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
+export const MediaMinPlays = relation("MediaMinPlays", { node: uuid }, ["node"]);
 
 /**
  * A media interaction's `coordinates`, when it has them: always a rectangle, so the shape is not
