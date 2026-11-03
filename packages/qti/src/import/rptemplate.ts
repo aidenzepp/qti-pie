@@ -18,6 +18,7 @@ import { Effect, Option } from "effect";
 import { processingRows } from "#qti/import/processing.ts";
 import type { ProcessingRefused } from "#qti/import/processing.ts";
 import { kindOf, Rows, treeRows, typedAttribute, UnmodeledVocabulary } from "#qti/import/tree.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
 import type { NodeIndex } from "#qti/import/tree.ts";
 import { emptyEnvironment } from "#qti/processing/env.ts";
 import { Document } from "#qti/schema/document.ts";
@@ -55,14 +56,15 @@ export interface RptemplateInput {
  * @returns The rows with this document's added, the node index of its tree and the document's id,
  *   which is the tree's; `UnmodeledVocabulary` for a root that is not `qti-response-processing` in
  *   the ASI namespace, naming it, and for any element or attribute the registries do not model;
- *   `ProcessingRefused` for a tree the processing checker refuses.
+ *   `ProcessingRefused` for a tree the processing checker refuses; `ImportRefused` as the
+ *   processing builder raises it.
  */
 export const rptemplateRows = Effect.fn("import.rptemplateRows")(function* rptemplateRows(
   input: RptemplateInput,
   rows: Rows,
 ): Effect.fn.Return<
   { rows: Rows; nodes: NodeIndex; documentId: string },
-  ProcessingRefused | UnmodeledVocabulary
+  ImportRefused | ProcessingRefused | UnmodeledVocabulary
 > {
   const { doc, packageId, version } = input;
   const { root } = doc;

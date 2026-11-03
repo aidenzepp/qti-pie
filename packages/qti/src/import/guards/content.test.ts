@@ -6,7 +6,6 @@ import { itemRows } from "#qti/import/item.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { AttributeIdref, HeadersTarget, NodeClass, NodeLabel } from "#qti/schema/attributes.ts";
 import { A, BlockquoteCite } from "#qti/schema/html/text.ts";
-import { ChoiceInteraction } from "#qti/schema/interaction.ts";
 import {
   AssociableHotspot,
   AssociableHotspotMatchMin,
@@ -273,21 +272,6 @@ const gapMatchOf = (identifier: string) =>
   gapMatch(`${gapText}<p>a <qti-gap identifier="${identifier}"/></p>`);
 
 describe("contentGuards typed-copy", () => {
-  it.effect("refuses a maxChoicesN that differs from max-choices", () =>
-    Effect.gen(function* maxChoicesCopy() {
-      const body = choiceInteraction(choices);
-      const rows = yield* rowsOf("3.0.1", body);
-      yield* contentGuards(rows);
-      yield* refusalOfRows(
-        "typed-copy",
-        edited(rows, ChoiceInteraction, (facts) =>
-          facts.map((fact) => ({ ...fact, maxChoicesN: 2n })),
-        ),
-        "maxChoicesN",
-      );
-    }),
-  );
-
   it.effect("refuses a typed count that differs from its optional lexical row or default", () =>
     Effect.gen(function* optionalCount() {
       const written = yield* rowsOf(

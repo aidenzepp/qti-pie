@@ -1206,11 +1206,13 @@ export const refusalOfLaw = (law: ImportLaw, witness?: ImportWitness): ImportRef
 };
 
 /**
- * Every error that refuses an import before the database does.
+ * Every error that refuses an import before the database does, an `ImportRefused` the importer
+ * raised itself among them.
  */
 export type ReadRefusal =
   | ExternalRefusal
   | GuardRefusal
+  | ImportRefused
   | ItemGuardRefusal
   | ItemRefusal
   | ManifestGuardRefusal
@@ -1230,6 +1232,8 @@ export type ReadRefusal =
  * A guard's `rule` is the rule of the same name; `PackageReadError` maps by its own rule, a missing
  * manifest to `manifest-root` and an entry path outside the package to `href-path` (R8's pattern
  * law names the same cause); `ItemRefusal` names the importer rule it carries (`import/tree.ts`).
+ * An `ImportRefused` is a refusal the importer raised itself before the write (`closedOf`,
+ * `integerOf`, `spelledInteger`); it already names its rule and is its own answer.
  *
  * `ContentGuardRefusal` is accepted beside {@link ReadRefusal}, not inside it: `ReadRefusal` is the
  * error channel `import/package.ts` narrows to, and the content guards join that channel when
@@ -1244,6 +1248,7 @@ export const ruleOfError = (e: ContentGuardRefusal | ReadRefusal): ImportRefused
       ContentGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ExternalRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       GuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
+      ImportRefused: (g) => g,
       ItemGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ItemRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ManifestGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),

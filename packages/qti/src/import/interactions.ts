@@ -16,6 +16,7 @@ import { hotRows } from "#qti/import/interactions/hot.ts";
 import { orderRows } from "#qti/import/interactions/order.ts";
 import { otherRows } from "#qti/import/interactions/other.ts";
 import { textRows } from "#qti/import/interactions/text.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, replace, Rows, typedAttribute } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary, WhiteSpace } from "#qti/import/tree.ts";
 import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
@@ -539,7 +540,8 @@ const shared: Shared = {
  * @param item - What the builders need to know about the item.
  * @param rows - The rows so far.
  * @returns The rows with every interaction's arm, binding, owner copy and attribute rows;
- *   `UnmodeledVocabulary` and `ItemRefusal` as the builders raise them.
+ *   `UnmodeledVocabulary` and `ItemRefusal` as the builders raise them, and `ImportRefused` as the
+ *   family builders raise it.
  */
 export const interactionRows = Effect.fn("import.interactionRows")(function* interactionRows(
   root: Element,
@@ -548,7 +550,7 @@ export const interactionRows = Effect.fn("import.interactionRows")(function* int
   declarations: ReadonlyMap<string, DeclaredVariable>,
   item: ItemFacts,
   rows: Rows,
-): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal | UnmodeledVocabulary> {
   const ctx: InteractionContext = { declarations, documentId, item, nodes, root, shared };
   let built = rows;
   built = yield* orderRows(ctx, built);

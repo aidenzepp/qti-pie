@@ -58,11 +58,6 @@ const feedbackAncestries = node.Ancestry.handles.filter((handle) => fbFlagged.in
 const xsBoolean = str.regex(patterns.xsBoolean);
 
 /**
- * An `xs:nonNegativeInteger` attribute's lexical form.
- */
-const xsNonNegativeInteger = str.regex(patterns.xsNonNegativeInteger);
-
-/**
  * An `xs:normalizedString` attribute's value, as the typed column holds it after replacement.
  */
 const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags);
@@ -85,16 +80,14 @@ const showHide = str.regex(patterns.showHide);
 /**
  * A `qti-choice-interaction`.
  *
- * `maxChoices` and `minChoices` are the attributes as written; `maxChoicesN` and `minChoicesN` are
- * their integer values.
+ * `maxChoicesN` and `minChoicesN` are the integer values of `max-choices` and `min-choices`; a
+ * spelling the package writes non-canonically is kept in an `AttributeSpelling` row.
  */
 export const ChoiceInteraction = relation(
   "ChoiceInteraction",
   {
     id: uuid,
-    maxChoices: xsNonNegativeInteger,
     maxChoicesN: pg.bigint,
-    minChoices: xsNonNegativeInteger,
     minChoicesN: pg.bigint,
     orientation,
     responseIdentifier: ncName,

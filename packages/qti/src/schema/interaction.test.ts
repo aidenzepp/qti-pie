@@ -104,6 +104,15 @@ describe("interaction", () => {
     );
   });
 
+  it("holds the choice bounds as integers only, with no lexical column beside them", () => {
+    const fields = Object.keys(interaction.ChoiceInteraction.fields);
+
+    assert.include(fields, "maxChoicesN");
+    assert.include(fields, "minChoicesN");
+    assert.notInclude(fields, "maxChoices");
+    assert.notInclude(fields, "minChoices");
+  });
+
   it("adds exactly the choice and binding relations", () => {
     assert.deepStrictEqual(Object.keys(interaction.relations).toSorted(), added);
   });
