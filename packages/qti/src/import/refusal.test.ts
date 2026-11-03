@@ -304,6 +304,17 @@ const writtenRules = {
 } satisfies Record<string, readonly string[]>;
 
 /**
+ * The five contexts whose Uri arm refuses under `uri-syntax` (decision 150).
+ */
+const uriContexts: ReadonlySet<string> = new Set([
+  "Declared",
+  "InterpolationDefault",
+  "InterpolationTarget",
+  "MatchDefault",
+  "MatchTarget",
+]);
+
+/**
  * Every contract name of the schema with the rule it maps to: the written-out contracts, then the
  * arms, each of which takes its context's rule from `valueContexts`.
  */
@@ -317,7 +328,10 @@ const expectedRules = (): ReadonlyMap<string, string> => {
   }
   for (const { context, rule } of value.valueContexts) {
     for (const arm of Object.values<Named>(valueContracts.valueArmContracts()[context])) {
-      expected.set(arm.name, rule);
+      expected.set(
+        arm.name,
+        uriContexts.has(context) && arm.name.endsWith("UriValue") ? "uri-syntax" : rule,
+      );
     }
   }
 
@@ -369,6 +383,21 @@ describe("the rules of a contract", () => {
     assertMapped(contractLaw("UsageUriValue"), "usage-typed-value");
     assertMapped(contractLaw("MapKeyFloatValue"), "map-key-lexical");
     assertMapped(contractLaw("StatisticName"), "usage-lexical");
+  });
+
+  it("sends the Uri arm of the five URI value contexts to uri-syntax, the others to their context's rule", () => {
+    for (const name of [
+      "DeclaredUriValue",
+      "MatchDefaultUriValue",
+      "MatchTargetUriValue",
+      "InterpolationDefaultUriValue",
+      "InterpolationTargetUriValue",
+    ]) {
+      assertMapped(contractLaw(name), "uri-syntax");
+    }
+    assertMapped(contractLaw("DeclaredIntegerValue"), "value-lexical");
+    assertMapped(contractLaw("MatchTargetIdentifierValue"), "attribute-lexical");
+    assertMapped(contractLaw("MapKeyUriValue"), "map-key-lexical");
   });
 
   it("tells apart the four languages two contracts share", () => {

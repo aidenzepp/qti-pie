@@ -1188,6 +1188,19 @@ const armContextRules: readonly (readonly [string, Rule])[] = [
   ["Usage", "usage-typed-value"],
 ];
 
+/**
+ * The contexts whose Uri arm refuses by the anyUri pattern rather than its context's rule: the
+ * merged tree refuses a bad URI in these columns under `uri-syntax`, and a moved refusal keeps its
+ * rule (decision 150).
+ */
+const uriSyntaxContexts: ReadonlySet<string> = new Set([
+  "Declared",
+  "InterpolationDefault",
+  "InterpolationTarget",
+  "MatchDefault",
+  "MatchTarget",
+]);
+
 const armBaseTypes = [
   "DirectedPair",
   "Duration",
@@ -1208,7 +1221,10 @@ const contractRules: ReadonlyMap<string, Rule> = new Map([
     names.map((name): [string, Rule] => [name, rule]),
   ),
   ...armContextRules.flatMap(([context, rule]) =>
-    armBaseTypes.map((base): [string, Rule] => [`${context}${base}Value`, rule]),
+    armBaseTypes.map((base): [string, Rule] => [
+      `${context}${base}Value`,
+      base === "Uri" && uriSyntaxContexts.has(context) ? "uri-syntax" : rule,
+    ]),
   ),
 ]);
 
