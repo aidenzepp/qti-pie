@@ -65,6 +65,10 @@ describe.skipIf(!hasLease)(
 
           assert.isTrue(envelope.ok);
           assert.strictEqual(envelope.schema_version, 1);
+          if ("dry_run" in envelope.data) {
+            assert.fail("a real import printed the dry-run arm");
+          }
+
           assert.match(
             envelope.data.package_id,
             /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,
@@ -89,6 +93,10 @@ describe.skipIf(!hasLease)(
           const report = yield* comparePackage(copy, "work/export/copy-output-json-simple");
 
           assert.isTrue(envelope.ok);
+          if ("dry_run" in envelope.data) {
+            assert.fail("a real roundtrip printed the dry-run arm");
+          }
+
           assert.strictEqual(envelope.data.differing, 0);
           assert.deepStrictEqual(
             envelope.data.entries.map(({ path }) => path),
