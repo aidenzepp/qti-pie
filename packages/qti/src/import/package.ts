@@ -23,7 +23,6 @@ import { usageRows } from "#qti/import/usage.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import { ResourceLomGeneral } from "#qti/schema/lang.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
-import { Node } from "#qti/schema/node.ts";
 import type { RootKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
 import { Package } from "#qti/schema/package.ts";
 import { Author } from "#qti/schema/roles.ts";
@@ -326,12 +325,9 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   );
 
   if (outcome.kind === "invariant-rejected") {
-    const nodeKinds = new Map(Rows.of(rows, Node).map((node) => [node.id, node.kind]));
-
     return yield* refusalOfLaw(
       outcome.law satisfies ImportLaw,
       outcome.witness satisfies ImportWitness,
-      (id) => nodeKinds.get(id),
     );
   }
 

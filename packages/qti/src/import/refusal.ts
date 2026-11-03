@@ -8,7 +8,7 @@
  * the schema that the apply broke. {@link ruleOfError} maps the first two and {@link ruleOfLaw} the
  * third, so a caller and a test see one closed roster, {@link ImportRule}, whichever refused.
  */
-import { Match, Predicate, Schema } from "effect";
+import { Match, Schema } from "effect";
 import type { ContentGuardRefusal } from "#qti/import/guards/content.ts";
 import type { ItemGuardRefusal } from "#qti/import/guards/item.ts";
 import type { ManifestGuardRefusal } from "#qti/import/guards/manifest.ts";
@@ -1019,12 +1019,11 @@ const phaseSidesRule = (from: LawSide, to: LawSide): Rule | undefined =>
 
 /**
  * The rule of a law over the relations this phase added, or nothing when the law is an earlier
- * phase's (those rows follow). The alternatives over `Node` and `Lom` name no kind, so the `Node`
- * law of `qmd:qtiMetadata` is found among the containments and mirrors its expansion states, and
- * also by the kind of the row that breaks it: every node kind with an arm shares the one law, so
- * only `witnessKind` says a `qmd:qtiMetadata` lacks its host arm.
+ * phase's (those rows follow). Every `Node` kind with an arm has its own `mirrors` law, so a
+ * `qmd:qtiMetadata` that lacks its host arm breaks that handle's law, which the containments and
+ * mirrors the expansion states name.
  */
-const phaseRule = (law: ImportLaw, witnessKind?: string): Rule | undefined => {
+const phaseRule = (law: ImportLaw): Rule | undefined => {
   if (law.kind === "key" || law.kind === "primaryKey") {
     return phaseKeyRule(law.relation, law.fields);
   }
@@ -1038,10 +1037,6 @@ const phaseRule = (law: ImportLaw, witnessKind?: string): Rule | undefined => {
   }
 
   if (law.kind === "alternatives") {
-    if (law.relation === "Node" && law.field === "kind" && witnessKind === "qmd:qtiMetadata") {
-      return "qti-metadata-host";
-    }
-
     if (law.relation === "ManifestId") {
       return "manifest-id-holder";
     }
@@ -1069,8 +1064,8 @@ const conditionMirrors: ReadonlySet<string> = new Set([
 const some = (rule: Rule | undefined): Mapped | undefined =>
   rule === undefined ? undefined : named(rule);
 
-const recognized = (law: ImportLaw, witnessKind?: string): Mapped | undefined => {
-  const added = phaseRule(law, witnessKind);
+const recognized = (law: ImportLaw): Mapped | undefined => {
+  const added = phaseRule(law);
   if (added !== undefined) {
     return named(added);
   }
@@ -1110,8 +1105,7 @@ const recognized = (law: ImportLaw, witnessKind?: string): Mapped | undefined =>
   return undefined;
 };
 
-const classify = (law: ImportLaw, witnessKind?: string): Mapped =>
-  recognized(law, witnessKind) ?? nearest(law);
+const classify = (law: ImportLaw): Mapped => recognized(law) ?? nearest(law);
 
 /**
  * The rule of the roster a schema law maps to.
@@ -1121,22 +1115,17 @@ const classify = (law: ImportLaw, witnessKind?: string): Mapped =>
  * law verbatim in `detail`, and `isMappedLaw` tells the two apart.
  *
  * @param law - The `law` of an `invariant-rejected` outcome.
- * @param witnessKind - The node kind of the row the witness names, when the law is the `Node`
- *   alternatives, which names no arm.
  * @returns The rule the law breaks.
  */
-export const ruleOfLaw = (law: ImportLaw, witnessKind?: string): Rule =>
-  classify(law, witnessKind).rule;
+export const ruleOfLaw = (law: ImportLaw): Rule => classify(law).rule;
 
 /**
  * Whether {@link ruleOfLaw} recognized the law, not merely sorted it.
  *
  * @param law - The `law` of an `invariant-rejected` outcome.
- * @param witnessKind - The node kind of the row the witness names, as for {@link ruleOfLaw}.
  * @returns False when the law fell to the nearest rule; a test reports it as a finding.
  */
-export const isMappedLaw = (law: ImportLaw, witnessKind?: string): boolean =>
-  classify(law, witnessKind).mapped;
+export const isMappedLaw = (law: ImportLaw): boolean => classify(law).mapped;
 
 const sideText = (side: LawSide): string => `${side.relation}(${side.fields.join(", ")})`;
 
@@ -1191,18 +1180,10 @@ const witnessText = (witness: ImportWitness): string =>
  * @param law - The `law` of the outcome.
  * @param witness - The `witness` of the outcome, when the caller has it; only a key witness is
  *   named.
- * @param nodeKind - The kind of the `Node` row with a given id, from the rows the import submitted;
- *   read only for a key witness on `Node`, to name the arm the `Node` alternatives law lacks.
  * @returns The refusal naming the rule.
  */
-export const refusalOfLaw = (
-  law: ImportLaw,
-  witness?: ImportWitness,
-  nodeKind?: (id: string) => string | undefined,
-): ImportRefused => {
-  const id = witness?.kind === "key" && witness.relation === "Node" ? witness.values : undefined;
-  const nodeId = id !== undefined && "id" in id && Predicate.isString(id.id) ? id.id : undefined;
-  const { mapped, rule } = classify(law, nodeId === undefined ? undefined : nodeKind?.(nodeId));
+export const refusalOfLaw = (law: ImportLaw, witness?: ImportWitness): ImportRefused => {
+  const { mapped, rule } = classify(law);
   const unmapped = mapped ? "" : "no rule names this law, so it is filed under the nearest: ";
 
   return new ImportRefused({
