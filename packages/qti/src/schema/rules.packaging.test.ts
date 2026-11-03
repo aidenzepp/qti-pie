@@ -145,6 +145,7 @@ type Law =
   | { readonly kind: "check"; readonly name: string; readonly relation: string }
   | { readonly from: Side; readonly kind: "contained"; readonly to: Side }
   | { readonly from: Side; readonly kind: "mirrors"; readonly to: Side }
+  | { readonly contract: string; readonly kind: "contract" }
   | { readonly flags: "su" | "u"; readonly kind: "pattern"; readonly source: string }
   | { readonly fields: readonly string[]; readonly kind: "primaryKey"; readonly relation: string }
   | {
@@ -174,6 +175,12 @@ const patternLaw = (source: string, flags: "su" | "u" = "u"): Law => ({
   kind: "pattern",
   source,
 });
+
+/**
+ * The contract law of a column: grizzle reports the contract's name and no relation, one law for
+ * every column that carries the contract.
+ */
+const contractLaw = (contract: string): Law => ({ contract, kind: "contract" });
 
 const primaryKeyOf = (relation: AnyRelation, fields: readonly string[]): Law => ({
   fields,
@@ -996,102 +1003,107 @@ const accessForAll = (draft: Draft): string => text(first(draft, AccessForAllRes
 
 /**
  * The 17 DRD leaves of the variant vocabulary, each with the value it is judged against and the
- * pattern law its column reports. A value outside an enumeration has no `ext:` prefix, which the
- * enumerations admit; the two `normalizedString` leaves admit every string and have no pattern
- * negative.
+ * pattern or contract law its column reports. A value outside an enumeration has no `ext:` prefix,
+ * which the enumerations admit; the two `normalizedString` leaves admit every string and have no
+ * pattern negative.
  */
 const drdLeaves = [
   {
     bad: "tactile ",
     handle: "drd:accessMode",
+    law: contractLaw("AccessMode"),
     relation: DrdAccessMode,
-    source: patterns.drdAccessMode,
   },
   {
     bad: "bogus",
     handle: "drd:accessModeAdapted",
+    law: contractLaw("AccessModeAdapted"),
     relation: DrdAccessModeAdapted,
-    source: patterns.drdAccessModeAdapted,
   },
   {
     bad: "bogus",
     handle: "drd:adaptationDetail",
+    law: patternLaw(patterns.drdAdaptationDetail),
     relation: DrdAdaptationDetail,
-    source: patterns.drdAdaptationDetail,
   },
   {
     bad: "bogus",
     handle: "drd:adaptationMediaType",
+    law: patternLaw(patterns.drdAdaptationMediaType),
     relation: DrdAdaptationMediaType,
-    source: patterns.drdAdaptationMediaType,
   },
   {
     bad: "bogus",
     handle: "drd:adaptationType",
+    law: patternLaw(patterns.drdAdaptationType),
     relation: DrdAdaptationType,
-    source: patterns.drdAdaptationType,
   },
   {
     bad: "bogus",
     handle: "drd:apiInteroperable",
+    law: patternLaw(patterns.drdApiInteroperable),
     relation: DrdApiInteroperable,
-    source: patterns.drdApiInteroperable,
   },
   {
     bad: undefined,
     handle: "drd:atInteroperable",
+    law: undefined,
     relation: DrdAtInteroperable,
-    source: undefined,
   },
   {
     bad: "bogus",
     handle: "drd:controlFlexibility",
+    law: patternLaw(patterns.drdControlFlexibility),
     relation: DrdControlFlexibility,
-    source: patterns.drdControlFlexibility,
   },
   {
     bad: "bogus",
     handle: "drd:displayTransformability",
+    law: patternLaw(patterns.drdDisplayTransformability),
     relation: DrdDisplayTransformability,
-    source: patterns.drdDisplayTransformability,
   },
   {
     bad: "bogus",
     handle: "drd:educationalComplexityOfAdaptation",
+    law: patternLaw(patterns.drdEducationalComplexityOfAdaptation),
     relation: DrdEducationalComplexityOfAdaptation,
-    source: patterns.drdEducationalComplexityOfAdaptation,
   },
   {
     bad: undefined,
     handle: "drd:educationalLevelOfAdaptation",
+    law: undefined,
     relation: DrdEducationalLevelOfAdaptation,
-    source: undefined,
   },
-  { bad: "a%zz", handle: "drd:hasAdaptation", relation: DrdHasAdaptation, source: patterns.anyUri },
-  { bad: "bogus", handle: "drd:hazard", relation: DrdHazard, source: patterns.drdHazard },
+  {
+    bad: "a%zz",
+    handle: "drd:hasAdaptation",
+    law: contractLaw("DrdAdaptationUri"),
+    relation: DrdHasAdaptation,
+  },
+  { bad: "bogus", handle: "drd:hazard", law: patternLaw(patterns.drdHazard), relation: DrdHazard },
   {
     bad: "a%zz",
     handle: "drd:isAdaptationOf",
+    law: contractLaw("DrdAdaptationUri"),
     relation: DrdIsAdaptationOf,
-    source: patterns.anyUri,
   },
   {
     bad: "a%zz",
     handle: "drd:isFullAdaptationOf",
+    law: contractLaw("DrdAdaptationUri"),
     relation: DrdIsFullAdaptationOf,
-    source: patterns.anyUri,
   },
   {
     bad: "a%zz",
     handle: "drd:isPartialAdaptationOf",
+    law: contractLaw("DrdAdaptationUri"),
     relation: DrdIsPartialAdaptationOf,
-    source: patterns.anyUri,
   },
   {
     bad: undefined,
     handle: "drd:languageOfAdaptation",
+    law: undefined,
     relation: DrdLanguageOfAdaptation,
-    source: undefined,
   },
 ] as const;
 
@@ -1149,16 +1161,6 @@ const typedArms = Object.entries(usageRelations)
   .map(([, relation]) => relation);
 
 /**
- * A pattern, as the schema spells it: its source and flags.
- */
-interface Spelling {
-  readonly flags: "su" | "u";
-  readonly pattern: string;
-}
-
-const plain = (pattern: string): Spelling => ({ flags: "u", pattern });
-
-/**
  * One column of the usage-data document with a value outside its pattern, and the alteration that
  * writes that value.
  */
@@ -1167,7 +1169,7 @@ interface UsagePattern {
   readonly bad: string;
   readonly base: "usage3" | "usage3Typed";
   readonly column: string;
-  readonly source: Spelling;
+  readonly law: Law;
 }
 
 /**
@@ -1241,10 +1243,10 @@ const floatMadeInteger =
   };
 
 /**
- * The columns of the usage-data document that carry a pattern the spec's 4.14 names, each with its
- * value. The two closed rosters, `TargetObjectType` and `BaseType`, name no value outside them, and
- * the `^.*$` patterns of the `replace` and `preserve` text columns admit every string, so none of
- * them has a negative here.
+ * The columns of the usage-data document that carry a pattern or contract the spec's 4.14 names,
+ * each with its value and the law it reports. The two closed rosters, `TargetObjectType` and
+ * `BaseType`, name no value outside them, and the `^.*$` patterns of the `replace` and `preserve`
+ * text columns admit every string, so none of them has a negative here.
  */
 const usagePatterns: readonly UsagePattern[] = [
   {
@@ -1252,112 +1254,112 @@ const usagePatterns: readonly UsagePattern[] = [
     bad: "1a",
     base: "usage3",
     column: "Statistic.name",
-    source: plain(patterns.ncName),
+    law: contractLaw("StatisticName"),
   },
   {
     alter: writeFirst(TargetObjectPartIdentifier, "value", "1a"),
     bad: "1a",
     base: "usage3",
     column: "TargetObjectPartIdentifier.value",
-    source: plain(patterns.ncName),
+    law: contractLaw("UsagePartIdentifier"),
   },
   {
     alter: addFor(UsageValueFieldIdentifier, UsageValue, "1a", "id"),
     bad: "1a",
     base: "usage3",
     column: "UsageValueFieldIdentifier.value",
-    source: plain(patterns.ncName),
+    law: contractLaw("UsageFieldIdentifier"),
   },
   {
     alter: writeFirst(Statistic, "context", "a%zz"),
     bad: "a%zz",
     base: "usage3",
     column: "Statistic.context",
-    source: plain(patterns.anyUri),
+    law: contractLaw("StatisticContextUri"),
   },
   {
     alter: addFor(UsageDataGlossary, UsageData, "a%zz"),
     bad: "a%zz",
     base: "usage3",
     column: "UsageDataGlossary.value",
-    source: plain(patterns.anyUri),
+    law: contractLaw("GlossaryUri"),
   },
   {
     alter: writeFirst(StatisticGlossary, "value", "a%zz"),
     bad: "a%zz",
     base: "usage3",
     column: "StatisticGlossary.value",
-    source: plain(patterns.anyUri),
+    law: contractLaw("GlossaryUri"),
   },
   {
     alter: writeFirst(StatisticCaseCount, "value", "1.5"),
     bad: "1.5",
     base: "usage3",
     column: "StatisticCaseCount.value",
-    source: plain(patterns.xsInteger),
+    law: contractLaw("UsageCaseCount"),
   },
   {
     alter: writeFirst(StatisticStdError, "value", "x"),
     bad: "x",
     base: "usage3",
     column: "StatisticStdError.value",
-    source: plain(patterns.xsDouble),
+    law: contractLaw("StatisticMeasure"),
   },
   {
     alter: addFor(StatisticStdDeviation, Statistic, "x"),
     bad: "x",
     base: "usage3",
     column: "StatisticStdDeviation.value",
-    source: plain(patterns.xsDouble),
+    law: contractLaw("StatisticMeasure"),
   },
   {
     alter: writeFirst(UsageMappingLowerBound, "value", "x"),
     bad: "x",
     base: "usage3",
     column: "UsageMappingLowerBound.value",
-    source: plain(patterns.xsDouble),
+    law: contractLaw("UsageMappingScore"),
   },
   {
     alter: writeFirst(UsageMappingUpperBound, "value", "x"),
     bad: "x",
     base: "usage3",
     column: "UsageMappingUpperBound.value",
-    source: plain(patterns.xsDouble),
+    law: contractLaw("UsageMappingScore"),
   },
   {
     alter: writeFirst(UsageMapping, "defaultValue", "x"),
     bad: "x",
     base: "usage3",
     column: "UsageMapping.defaultValue",
-    source: plain(patterns.xsDouble),
+    law: contractLaw("UsageMappingScore"),
   },
   {
     alter: writeFirst(UsageMapEntry, "mappedValue", "x"),
     bad: "x",
     base: "usage3",
     column: "UsageMapEntry.mappedValue",
-    source: plain(patterns.xsDouble),
+    law: contractLaw("UsageMappingScore"),
   },
   {
     alter: writeFirst(StatisticLastUpdated, "value", "2004-13-04"),
     bad: "2004-13-04",
     base: "usage3",
     column: "StatisticLastUpdated.value",
-    source: plain(patterns.usageDate),
+    law: patternLaw(patterns.usageDate),
   },
   {
     alter: floatMadeInteger("0.87"),
     bad: "0.87",
     base: "usage3Typed",
     column: "UsageTypedValueInteger.value",
-    source: plain(patterns.xsInteger),
+    law: contractLaw("UsageIntegerValue"),
   },
   {
     alter: floatWritten(" 0.87 ", "0.87"),
     bad: " 0.87 ",
     base: "usage3Typed",
     column: "UsageTypedValueFloat.value",
-    source: plain(patterns.xsDouble),
+    law: contractLaw("UsageFloatValue"),
   },
 ];
 
@@ -1502,7 +1504,7 @@ const packagingNegatives: readonly Negative[] = [
     name: "two AccessForAllResource rows for one cpx:metadata are refused by the key on metadata",
   },
   ...drdLeaves.flatMap((leaf): Negative[] =>
-    leaf.bad === undefined || leaf.source === undefined
+    leaf.bad === undefined || leaf.law === undefined
       ? []
       : [
           {
@@ -1510,8 +1512,8 @@ const packagingNegatives: readonly Negative[] = [
               addLeaf(draft, leaf, leaf.bad);
             },
             base: "variant",
-            laws: [patternLaw(leaf.source)],
-            name: `a ${leaf.handle} value ${JSON.stringify(leaf.bad)} is refused by its pattern`,
+            laws: [leaf.law],
+            name: `a ${leaf.handle} value ${JSON.stringify(leaf.bad)} is refused by its ${leaf.law.kind} law`,
           },
         ],
   ),
@@ -1715,8 +1717,8 @@ const packagingNegatives: readonly Negative[] = [
       set(first(draft, CsmCaseItemUri), "value", "a%zz");
     },
     base: "csm",
-    laws: [patternLaw(patterns.anyUri)],
-    name: "a caseItemURI of a%zz is refused by the uri-syntax pattern",
+    laws: [contractLaw("CaseItemUri")],
+    name: "a caseItemURI of a%zz is refused by the CaseItemUri contract",
   },
   ...[
     CsmSetResourceLabel,
@@ -1909,11 +1911,11 @@ const packagingNegatives: readonly Negative[] = [
     laws: [contained(side(UsageTypedValue, ["id", "value"]), side(UsageValue, ["id", "value"]))],
     name: "a UsageTypedValue whose value differs from its UsageValue is refused by the containment into UsageValue",
   },
-  ...usagePatterns.map(({ alter, base, bad, column, source }): Negative => ({
+  ...usagePatterns.map(({ alter, base, bad, column, law }): Negative => ({
     alter,
     base,
-    laws: [patternLaw(source.pattern, source.flags)],
-    name: `a ${column} of ${JSON.stringify(bad)} is refused by its pattern`,
+    laws: [law],
+    name: `a ${column} of ${JSON.stringify(bad)} is refused by its ${law.kind} law`,
   })),
   {
     alter: (draft) => {

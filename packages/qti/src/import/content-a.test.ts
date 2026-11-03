@@ -70,7 +70,6 @@ import {
   TemplateInline,
 } from "#qti/schema/template.ts";
 import { Edge, Node } from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
 import { Coords, CoordsDefault, CoordsRect } from "#qti/schema/shapes.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
@@ -213,7 +212,7 @@ interface Within {
 type Law =
   | { readonly fields: readonly string[]; readonly kind: "key"; readonly relation: string }
   | { readonly kind: "check"; readonly name: string; readonly relation: string }
-  | { readonly flags: "su" | "u"; readonly kind: "pattern"; readonly source: string }
+  | { readonly contract: string; readonly kind: "contract" }
   | { readonly from: Side; readonly kind: "contained"; readonly to: Side }
   | {
       readonly from: Side;
@@ -243,7 +242,7 @@ const checkLaw = (relation: AnyRelation, name: string): Law => ({
   relation: relation.name,
 });
 
-const patternLaw = (source: string): Law => ({ flags: "u", kind: "pattern", source });
+const contractLaw = (contract: string): Law => ({ contract, kind: "contract" });
 
 const capacityLaw = (target: Side, from: Side, within: Within): Law => ({
   from,
@@ -774,8 +773,8 @@ const negatives: readonly Negative[] = [
       where(draft, CoordsRect, "node", id)["value"] = "11,122,64";
     },
     fixture: "cut-graphic-gap-match",
-    laws: [patternLaw(patterns.coordsRect)],
-    name: "a rect with three coordinate tokens is refused by the coordsRect pattern",
+    laws: [contractLaw("RectCoords")],
+    name: "a rect with three coordinate tokens is refused by the RectCoords contract",
     rule: "attribute-lexical",
   },
   {

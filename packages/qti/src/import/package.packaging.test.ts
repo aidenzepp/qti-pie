@@ -6,8 +6,8 @@ import { Effect, FileSystem, Layer, Option, Ref, Schema } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { importPackage } from "#qti/import/package.ts";
+import type { Rule } from "#qti/import/refusal.ts";
 import { Document } from "#qti/schema/document.ts";
-import * as patterns from "#qti/schema/patterns.ts";
 import { FileContent, Package } from "#qti/schema/package.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import { AttributeLexical, Node, NodeKind } from "#qti/schema/node.ts";
@@ -90,16 +90,16 @@ const negatives = [
 ] as const satisfies readonly (readonly [FixtureName, readonly string[]])[];
 
 /**
- * The negatives whose refusal is a pattern law of a typed value. grizzle reports a pattern law by
- * its regex source and flags alone, one rule for every spelling of the same language, so the law
- * cannot name `usage-typed-value` or `usage-lexical`: the typed value arms reuse the value patterns
- * and `Statistic.name` is `ncName`. Each row pairs a fixture with the source its law must carry.
+ * The negatives whose refusal is a contract law of a typed value. grizzle reports a contract law by
+ * the contract's name, so each law names its own contract and `ruleOfLaw` maps it to the spec's
+ * rule: the typed value arms to `usage-typed-value` and `Statistic.name` to `usage-lexical`. Each
+ * row pairs a fixture with the contract its law must name and the rule that contract maps to.
  */
-const patternNegatives = [
-  ["usage3-integer-float", patterns.xsInteger],
-  ["usage3-float-padded", patterns.xsDouble],
-  ["usage3-bad-name", patterns.ncName],
-] as const satisfies readonly (readonly [FixtureName, string])[];
+const contractNegatives = [
+  ["usage3-integer-float", "UsageIntegerValue", "usage-typed-value"],
+  ["usage3-float-padded", "UsageFloatValue", "usage-typed-value"],
+  ["usage3-bad-name", "StatisticName", "usage-lexical"],
+] as const satisfies readonly (readonly [FixtureName, string, Rule])[];
 
 /**
  * How many times `nestedqmd-manifest-lom` is imported. The manifest-level `qmd:qtiMetadata` is the
@@ -108,8 +108,8 @@ const patternNegatives = [
  */
 const repeatedImports = 12;
 
-const isPatternLaw = Schema.is(
-  Schema.Struct({ kind: Schema.Literal("pattern"), source: Schema.String }),
+const isContractLaw = Schema.is(
+  Schema.Struct({ contract: Schema.String, kind: Schema.Literal("contract") }),
 );
 
 const documentsOf = query(Author).rule((r) => {
@@ -338,9 +338,9 @@ describe.skipIf(!hasLease)(
         }),
       );
 
-      for (const [name, source] of patternNegatives) {
-        it.effect(`refuses ${name} naming value-lexical under the pattern ${source}`, () =>
-          Effect.gen(function* refusesPattern() {
+      for (const [name, contract, rule] of contractNegatives) {
+        it.effect(`refuses ${name} naming ${rule} under the contract ${contract}`, () =>
+          Effect.gen(function* refusesContract() {
             const refused = yield* Effect.flip(importPackage(yield* materialize(name)));
 
             assert.strictEqual(refused._tag, "ImportRefused", `${name}: refused by another error`);
@@ -351,12 +351,12 @@ describe.skipIf(!hasLease)(
 
             yield* Effect.log(`${name} refused by rule`, refused.rule);
 
-            assert.strictEqual(refused.rule, "value-lexical");
-            assert.isTrue(isPatternLaw(refused.law), `${name}: the law is no pattern law`);
+            assert.strictEqual(refused.rule, rule);
+            assert.isTrue(isContractLaw(refused.law), `${name}: the law is no contract law`);
             assert.strictEqual(
-              isPatternLaw(refused.law) ? refused.law.source : undefined,
-              source,
-              `${name}: the pattern law carries another source`,
+              isContractLaw(refused.law) ? refused.law.contract : undefined,
+              contract,
+              `${name}: the contract law names another contract`,
             );
           }),
         );
