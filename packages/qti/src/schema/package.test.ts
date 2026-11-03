@@ -1,6 +1,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import { admission, kinds as cpKinds } from "#qti/schema/kinds/cp.ts";
 import * as node from "#qti/schema/node.ts";
 import { RootKind } from "#qti/schema/node.ts";
@@ -295,5 +296,9 @@ describe("package", () => {
       rule.kind === "check" && rule.relation === pkg.relations.Dependency ? [rule.name] : [],
     );
     assert.deepStrictEqual(names, ["DependencyNotSelf"]);
+  });
+
+  it("holds cp:schema to the seven names of CpSchema", () => {
+    assert.strictEqual(pkg.relations.ManifestSchema.fields.value.roster, rosters.CpSchema);
   });
 });

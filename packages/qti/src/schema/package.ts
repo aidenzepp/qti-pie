@@ -25,6 +25,7 @@ import {
   within,
 } from "@bjornpagen/grizzle";
 import type { FieldBase } from "@bjornpagen/grizzle";
+import { CpSchema, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { Edge, Node, RootKind, SchemaVersion, Tree } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
@@ -82,7 +83,7 @@ export const Resources = relation("Resources", { id: uuid, manifest: uuid }, ["i
  */
 export const ManifestSchema = relation(
   "ManifestSchema",
-  { id: uuid, metadata: uuid, value: str.regex(patterns.cpSchema) },
+  { id: uuid, metadata: uuid, value: closedId(CpSchema) },
   ["id"],
 );
 
@@ -296,7 +297,7 @@ export const DrdApiInteroperable = drdLeaf(
 /**
  * The `drd:atInteroperable` text: an `xs:boolean`, at most once per resource description.
  */
-export const DrdAtInteroperable = drdLeaf("DrdAtInteroperable", str.regex(patterns.xsBoolean));
+export const DrdAtInteroperable = drdLeaf("DrdAtInteroperable", closedId(XsBoolean));
 
 /**
  * The `drd:controlFlexibility` text.

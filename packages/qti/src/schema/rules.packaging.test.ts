@@ -101,7 +101,6 @@ import {
   UsageData,
   UsageDataGlossary,
   UsageMapEntry,
-  UsageMapEntryCaseSensitive,
   UsageMapping,
   UsageMappingLowerBound,
   UsageMappingUpperBound,
@@ -1039,10 +1038,10 @@ const drdLeaves = [
     source: patterns.drdApiInteroperable,
   },
   {
-    bad: "maybe",
+    bad: undefined,
     handle: "drd:atInteroperable",
     relation: DrdAtInteroperable,
-    source: patterns.xsBoolean,
+    source: undefined,
   },
   {
     bad: "bogus",
@@ -1338,13 +1337,6 @@ const usagePatterns: readonly UsagePattern[] = [
     base: "usage3",
     column: "UsageMapEntry.mappedValue",
     source: plain(patterns.xsDouble),
-  },
-  {
-    alter: addFor(UsageMapEntryCaseSensitive, UsageMapEntry, "maybe"),
-    bad: "maybe",
-    base: "usage3",
-    column: "UsageMapEntryCaseSensitive.value",
-    source: plain(patterns.xsBoolean),
   },
   {
     alter: writeFirst(StatisticLastUpdated, "value", "2004-13-04"),

@@ -1,6 +1,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import { kinds as cpxKinds } from "#qti/schema/kinds/cpx.ts";
 import { kinds as drdKinds } from "#qti/schema/kinds/drd.ts";
 import * as node from "#qti/schema/node.ts";
@@ -163,7 +164,7 @@ describe("package staged variant and DRD trio", () => {
       leafPatternSource(DrdEducationalComplexityOfAdaptation),
       patterns.drdEducationalComplexityOfAdaptation,
     );
-    assert.strictEqual(leafPatternSource(DrdAtInteroperable), patterns.xsBoolean);
+    assert.strictEqual(DrdAtInteroperable.fields.value.roster, rosters.XsBoolean);
   });
 
   it("keys the 0..1 leaves by owner and leaves the repeatable ones unkeyed", () => {

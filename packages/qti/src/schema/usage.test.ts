@@ -2,6 +2,7 @@ import { schema } from "@bjornpagen/grizzle";
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as ud from "#qti/schema/kinds/ud.ts";
@@ -249,5 +250,12 @@ describe("usage", () => {
         name,
       );
     }
+  });
+
+  it("holds caseSensitive to the XsBoolean roster", () => {
+    assert.strictEqual(
+      usage.relations.UsageMapEntryCaseSensitive.fields.value.roster,
+      rosters.XsBoolean,
+    );
   });
 });

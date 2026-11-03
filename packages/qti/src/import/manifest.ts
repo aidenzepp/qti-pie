@@ -13,7 +13,7 @@ import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { attributeRows } from "#qti/import/attributes.ts";
-import { collapse, replace, Rows, treeRows, typedAttribute } from "#qti/import/tree.ts";
+import { closedOf, collapse, replace, Rows, treeRows, typedAttribute } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { classed, contentOf, elementChildren, qmdLeafRows } from "#qti/import/leaf.ts";
 import { recordFile, recordTypes, soleFileTypes } from "#qti/import/record.ts";
@@ -24,6 +24,7 @@ import type { Entry, PackageReadError } from "#qti/package/read.ts";
 import type { ZipRefusal } from "#qti/package/zip.ts";
 import * as csm from "#qti/schema/csm.ts";
 import { ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
+import { CpSchema, XsBoolean } from "#qti/schema/content/rosters.ts";
 import * as md from "#qti/schema/metadata.ts";
 import { Edge } from "#qti/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
@@ -1092,7 +1093,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     }
   };
 
-  const metadataRows = (metadataElement: Element): void => {
+  const metadataRows = Effect.fn("import.manifest.metadataRows")(function* metadataRows(
+    metadataElement: Element,
+  ): Effect.fn.Return<void, ImportRefused> {
     const metadataId = kindIs(metadataElement, "cp:metadata.manifest");
     if (metadataId === undefined) {
       return;
@@ -1102,7 +1105,13 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     for (const leaf of childrenNamed(metadataElement, "schema")) {
       const id = kindIs(leaf, "cp:schema");
       if (id !== undefined) {
-        add(ManifestSchema, [{ id, metadata: metadataId, value: textOf(leaf) }]);
+        const schema = yield* closedOf(
+          CpSchema.handles,
+          textOf(leaf),
+          "value-lexical",
+          "the cp:schema of the manifest",
+        );
+        add(ManifestSchema, [{ id, metadata: metadataId, value: schema }]);
       }
     }
 
@@ -1117,17 +1126,17 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     }
 
     metadataChildren(metadataElement, { id: metadataId, kind: "cp:metadata.manifest" }, null);
-  };
+  });
 
   /**
    * Write the rows of one `cpx:variant` of a resource: the variant and its `ManifestId`, its
    * metadata, the access-for-all resource under it and one arm row per DRD leaf.
    */
-  const variantRows = (
+  const variantRows = Effect.fn("import.manifest.variantRows")(function* variantRows(
     variant: Element,
     id: string,
     resource: { readonly identifier: string; readonly node: string },
-  ): void => {
+  ): Effect.fn.Return<void, ImportRefused> {
     const identifier = typed(variant, "identifier", "collapse");
     add(Variant, [
       {
@@ -1161,6 +1170,19 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
           if (found !== undefined && isDrdLeaf(found.kind)) {
             const spec = drdLeaves[found.kind];
             const value = classed(contentOf(leaf), spec.class);
+            if (found.kind === "drd:atInteroperable") {
+              const interoperable = yield* closedOf(
+                XsBoolean.handles,
+                value,
+                "attribute-lexical",
+                "the drd:atInteroperable of a variant",
+              );
+              add(DrdAtInteroperable, [
+                { id: found.id, owner: descriptionId, value: interoperable },
+              ]);
+              continue;
+            }
+
             // SAFETY: the leaf's column pattern judges the value at commit, which is the importer's refusal for it.
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
             add(spec.arm, [{ id: found.id, owner: descriptionId, value }] as never);
@@ -1168,7 +1190,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
         }
       }
     }
-  };
+  });
 
   const hrefless: {
     readonly files: readonly string[];
@@ -1177,7 +1199,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     readonly type: string;
   }[] = [];
 
-  const resourceRows = (resource: Element): void => {
+  const resourceRows = Effect.fn("import.manifest.resourceRows")(function* resourceRows(
+    resource: Element,
+  ): Effect.fn.Return<void, ImportRefused> {
     const node = nodes.get(resource);
     if (node === undefined) {
       return;
@@ -1256,10 +1280,10 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     for (const child of elementChildren(resource)) {
       const variant = nodes.get(child);
       if (variant?.kind === "cpx:variant") {
-        variantRows(child, variant.id, { identifier, node: node.id });
+        yield* variantRows(child, variant.id, { identifier, node: node.id });
       }
     }
-  };
+  });
 
   const manifestIdentifier = typed(root, "identifier", "collapse");
   add(Package, [{ id: packageId, identifier: manifestIdentifier, schemaversion: version }]);
@@ -1268,7 +1292,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
   add(Manifest, [{ id: packageId }]);
 
   for (const metadataElement of childrenNamed(root, "metadata")) {
-    metadataRows(metadataElement);
+    yield* metadataRows(metadataElement);
   }
 
   for (const organizations of childrenNamed(root, "organizations")) {
@@ -1285,13 +1309,13 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     }
 
     for (const resource of childrenNamed(resources, "resource")) {
-      resourceRows(resource);
+      yield* resourceRows(resource);
     }
   }
 
   for (const [element, found] of nodes) {
     if (found.kind === "qmd:qtiMetadata") {
-      built = qmdLeafRows(built, nodes, element, found.id);
+      built = yield* qmdLeafRows(built, nodes, element, found.id);
     }
   }
 
