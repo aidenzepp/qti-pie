@@ -127,13 +127,13 @@ layer(NodeServices.layer, { excludeTestServices: true })("cli.ts, database-free"
 
   for (const command of ["import", "roundtrip"]) {
     it.effect(
-      `${command} of a missing directory exits 1 with its message once and no stack`,
+      `${command} of a missing directory exits 2 with its message once and no stack`,
       () =>
         Effect.gen(function* refusalOnce() {
           const { code, stderr, stdout } = yield* spawnCli([command, "/nonexistent"]);
 
           assert.notMatch(`${stdout}\n${stderr}`, /^\s+at /mu);
-          assert.strictEqual(code, ChildProcessSpawner.ExitCode(1));
+          assert.strictEqual(code, ChildProcessSpawner.ExitCode(2));
           assert.strictEqual(stderr.split("is not a directory").length - 1, 1);
         }),
       cliProcessTestTimeoutMs,
