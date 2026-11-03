@@ -1,9 +1,10 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, Option, Stdio } from "effect";
 import { CliConfig, CliOutput, Command } from "effect/cli";
 import { builtIns } from "#qti/cli/config.ts";
 import { describeFailure, kindExitCode } from "#qti/cli/errors.ts";
-import { presenter, printFailures } from "#qti/cli/present.ts";
+import { modeOfArguments, modeOfEnvironment } from "#qti/cli/output.ts";
+import { commandOfArguments, formatterFor, presenterFor, printFailures } from "#qti/cli/present.ts";
 
 /**
  * Run `command` on the arguments `Stdio` supplies, with this program's presenter and built-in
@@ -18,11 +19,27 @@ export const runCli = <Name extends string, Input, ContextInput, E, R>(
   command: Command.Command<Name, Input, ContextInput, E, R>,
   config: { readonly version: string },
 ) =>
-  Command.run(command, config).pipe(
-    printFailures,
-    Effect.provide(CliOutput.layerPresenter(presenter)),
-    Effect.provide(CliConfig.layer({ builtIns })),
-  );
+  Effect.gen(function* runWithMode() {
+    // The mode is read from the raw arguments before `Command.run` parses them, so a parse error
+    // under `--json` is JSON too.
+    const args = yield* (yield* Stdio.Stdio).args;
+    const shown = {
+      command: commandOfArguments(
+        args,
+        command.subcommands.flatMap(({ commands }) => commands.map(({ name }) => name)),
+        command.name,
+      ),
+      mode:
+        modeOfArguments(args) ?? Option.getOrElse(yield* modeOfEnvironment, () => "text" as const),
+    } as const;
+
+    return yield* Command.run(command, config).pipe(
+      printFailures(shown),
+      Effect.provide(CliOutput.layerPresenter(presenterFor(shown))),
+      Effect.provide(CliOutput.layer(formatterFor(shown))),
+      Effect.provide(CliConfig.layer({ builtIns })),
+    );
+  });
 
 /**
  * The exit code a run ends the process with: 0 for success, 130 when it was only interrupted, and
