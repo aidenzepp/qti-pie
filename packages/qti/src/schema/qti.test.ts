@@ -69,6 +69,19 @@ const linesOf = (lines: readonly string[], table: string): readonly string[] =>
   lines.filter((line) => line.startsWith(`INSERT INTO "qti"."${table}" `));
 
 /**
+ * The single-row statements of one table, one per printed tuple, whichever batch holds it.
+ */
+const rowsOf = (lines: readonly string[], table: string): readonly string[] =>
+  linesOf(lines, table).flatMap((line) => {
+    const at = line.indexOf(" VALUES ") + " VALUES ".length;
+
+    return line
+      .slice(at + 1, -2)
+      .split("), (")
+      .map((tuple) => `${line.slice(0, at)}(${tuple});`);
+  });
+
+/**
  * One statement holding every row of the given single-row statements of one table, in the batched
  * form `p1-46` prints.
  */
@@ -318,23 +331,36 @@ describe("qti", () => {
     }
   });
 
-  it("prints one INSERT line per row of the four content seed tables, and only the named ones", () => {
+  it("prints as many tuples as each of the four content seed tables has rows, 1,000 to a statement, and only the named ones", () => {
     const lines = printed([
       "--only",
       "AttributeAdmission,AncestryStep,MappableBaseType,RecordBindingFit",
     ]);
-    assert.strictEqual(linesOf(lines, "attribute_admission").length, attributeAdmission.length);
-    assert.strictEqual(linesOf(lines, "ancestry_step").length, ancestryStep.length);
-    assert.strictEqual(linesOf(lines, "mappable_base_type").length, 9);
+    const expected = [
+      ["attribute_admission", attributeAdmission.length],
+      ["ancestry_step", ancestryStep.length],
+      ["mappable_base_type", 9],
+      ["record_binding_fit", 2],
+    ] as const;
     assert.strictEqual(mappableBaseType.length, 9);
-    assert.strictEqual(linesOf(lines, "record_binding_fit").length, 2);
     assert.strictEqual(recordBindingFit.length, 2);
+    for (const [table, rows] of expected) {
+      const statements = linesOf(lines, table);
+      assert.strictEqual(rowsOf(lines, table).length, rows);
+      assert.strictEqual(statements.length, Math.ceil(rows / 1000));
+      for (const statement of statements) {
+        assert.isAtMost(tuples(statement, table), 1000);
+      }
+    }
     assert.strictEqual(linesOf(lines, "admission").length, 0);
-    assert.strictEqual(lines.length, attributeAdmission.length + ancestryStep.length + 11);
+    assert.strictEqual(
+      lines.length,
+      expected.reduce((total, [, rows]) => total + Math.ceil(rows / 1000), 0),
+    );
   });
 
   it("omits the rows of a subtracted file, whether it holds them batched or one to a statement", () => {
-    const all = linesOf(printed(["--only", "Admission"]), "admission");
+    const all = rowsOf(printed(["--only", "Admission"]), "admission");
     assert.strictEqual(all.length, admission.length);
 
     const ten = all.slice(0, 10);
@@ -345,14 +371,14 @@ describe("qti", () => {
     writeFileSync(single, `${ten.join("\n")}\n`);
 
     for (const target of [file, single]) {
-      const rest = linesOf(printed(["--only", "Admission", "--minus", target]), "admission");
+      const rest = rowsOf(printed(["--only", "Admission", "--minus", target]), "admission");
       assert.strictEqual(rest.length, admission.length - 10);
       assert.deepStrictEqual(rest, all.slice(10));
     }
   });
 
   it("subtracts every 01-seed.sql beneath a directory, and every repeated path", () => {
-    const all = linesOf(printed(["--only", "Admission"]), "admission");
+    const all = rowsOf(printed(["--only", "Admission"]), "admission");
     const folder = nodePath.join(scratch, "tree", "20260101000000_seed");
     mkdirSync(folder, { recursive: true });
     writeFileSync(nodePath.join(folder, "01-seed.sql"), `${batched(all.slice(0, 3))}\n`);
@@ -361,7 +387,7 @@ describe("qti", () => {
     const second = nodePath.join(scratch, "second.sql");
     writeFileSync(second, `${batched(all.slice(6, 8))}\n`);
 
-    const rest = linesOf(
+    const rest = rowsOf(
       printed([
         "--only",
         "Admission",
