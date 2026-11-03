@@ -731,8 +731,8 @@ export const ownAttributes = {
   ],
   "qti-graphic-order-interaction": [
     responseIdentifierOf(R.GraphicOrderInteraction),
-    ["min-choices", optional(R.GraphicOrderMinChoices)],
-    ["max-choices", optional(R.GraphicOrderMaxChoices)],
+    ["min-choices", optional(R.GraphicOrderMinChoicesN)],
+    ["max-choices", optional(R.GraphicOrderMaxChoicesN)],
   ],
   "qti-hotspot-choice": [
     identifierOf(R.HotspotChoice),
@@ -854,8 +854,8 @@ export const ownAttributes = {
   "qti-order-interaction": [
     responseIdentifierOf(R.OrderInteraction),
     ["shuffle", marked(R.DeclaredOrderShuffle, arm(R.OrderInteraction, "shuffle"))],
-    ["min-choices", optional(R.OrderMinChoices)],
-    ["max-choices", optional(R.OrderMaxChoices)],
+    ["min-choices", optional(R.OrderMinChoicesN)],
+    ["max-choices", optional(R.OrderMaxChoicesN)],
     ["orientation", optional(R.OrderOrientation)],
     ["data-min-selections-message", optional(R.OrderMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.OrderMaxSelectionsMessage)],

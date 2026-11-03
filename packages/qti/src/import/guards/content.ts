@@ -61,18 +61,7 @@ import {
   PositionObjectInteraction,
   SelectPointInteraction,
 } from "#qti/schema/interactions/hot.ts";
-import {
-  GraphicOrderInteraction,
-  GraphicOrderMaxChoices,
-  GraphicOrderMaxChoicesN,
-  GraphicOrderMinChoices,
-  GraphicOrderMinChoicesN,
-  OrderInteraction,
-  OrderMaxChoices,
-  OrderMaxChoicesN,
-  OrderMinChoices,
-  OrderMinChoicesN,
-} from "#qti/schema/interactions/order.ts";
+import { GraphicOrderInteraction, OrderInteraction } from "#qti/schema/interactions/order.ts";
 import {
   MediaCoords,
   MediaInteraction,
@@ -553,34 +542,6 @@ type Written = ReadonlyMap<string, string>;
 const written = (facts: readonly { readonly node: string; readonly value: string }[]): Written =>
   new Map(facts.map((fact) => [fact.node, fact.value]));
 
-const choiceBounds = (
-  owner: string,
-  facts: readonly {
-    readonly id: string;
-    readonly maxChoicesN: bigint;
-    readonly minChoicesN: bigint;
-  }[],
-  lexical: { readonly max: Written; readonly maxFallback: bigint; readonly min: Written },
-): readonly Count[] =>
-  facts.flatMap((fact) => [
-    {
-      actual: fact.maxChoicesN,
-      column: "maxChoicesN",
-      fallback: lexical.maxFallback,
-      id: fact.id,
-      owner,
-      written: lexical.max.get(fact.id),
-    },
-    {
-      actual: fact.minChoicesN,
-      column: "minChoicesN",
-      fallback: 0n,
-      id: fact.id,
-      owner,
-      written: lexical.min.get(fact.id),
-    },
-  ]);
-
 /**
  * Every typed count of the interactions and their choices (spec 3.9, 4.5) with its source. A count
  * whose attribute has no lexical relation of its own is not here.
@@ -588,36 +549,24 @@ const choiceBounds = (
 const countsOf = (rows: Rows): readonly Count[] => {
   const of = (relation: AnyRelation): Written => valuesOfRelation(rows, relation);
 
-  return [
-    ...choiceBounds("OrderInteraction", Rows.of(rows, OrderInteraction), {
-      max: of(OrderMaxChoices),
-      maxFallback: 0n,
-      min: of(OrderMinChoices),
-    }),
-    ...choiceBounds("GraphicOrderInteraction", Rows.of(rows, GraphicOrderInteraction), {
-      max: of(GraphicOrderMaxChoices),
-      maxFallback: 0n,
-      min: of(GraphicOrderMinChoices),
-    }),
-    ...Rows.of(rows, MediaInteraction).flatMap((fact): readonly Count[] => [
-      {
-        actual: fact.maxPlaysN,
-        column: "maxPlaysN",
-        fallback: 0n,
-        id: fact.id,
-        owner: "MediaInteraction",
-        written: of(MediaMaxPlays).get(fact.id),
-      },
-      {
-        actual: fact.minPlaysN,
-        column: "minPlaysN",
-        fallback: 0n,
-        id: fact.id,
-        owner: "MediaInteraction",
-        written: of(MediaMinPlays).get(fact.id),
-      },
-    ]),
-  ];
+  return Rows.of(rows, MediaInteraction).flatMap((fact): readonly Count[] => [
+    {
+      actual: fact.maxPlaysN,
+      column: "maxPlaysN",
+      fallback: 0n,
+      id: fact.id,
+      owner: "MediaInteraction",
+      written: of(MediaMaxPlays).get(fact.id),
+    },
+    {
+      actual: fact.minPlaysN,
+      column: "minPlaysN",
+      fallback: 0n,
+      id: fact.id,
+      owner: "MediaInteraction",
+      written: of(MediaMinPlays).get(fact.id),
+    },
+  ]);
 };
 
 const countCopy = (rows: Rows): Finding => {
@@ -639,66 +588,6 @@ const countCopy = (rows: Rows): Finding => {
         : `${quoted(found.written)} reads`
     } ${expected}.`,
   );
-};
-
-/**
- * The integer each node's row holds.
- */
-const copiesOf = (
-  facts: readonly { readonly node: string; readonly value: bigint }[],
-): ReadonlyMap<string, bigint> => new Map(facts.map((fact) => [fact.node, fact.value]));
-
-/**
- * The optional typed copy of an optional count: its lexical rows beside the rows holding the
- * integer, which are written exactly when the attribute is.
- */
-const optionalCopy = (rows: Rows): Finding => {
-  const pairs: readonly {
-    readonly copies: ReadonlyMap<string, bigint>;
-    readonly lexical: Written;
-    readonly name: string;
-  }[] = [
-    {
-      copies: copiesOf(Rows.of(rows, OrderMaxChoicesN)),
-      lexical: written(Rows.of(rows, OrderMaxChoices)),
-      name: "OrderMaxChoicesN",
-    },
-    {
-      copies: copiesOf(Rows.of(rows, OrderMinChoicesN)),
-      lexical: written(Rows.of(rows, OrderMinChoices)),
-      name: "OrderMinChoicesN",
-    },
-    {
-      copies: copiesOf(Rows.of(rows, GraphicOrderMaxChoicesN)),
-      lexical: written(Rows.of(rows, GraphicOrderMaxChoices)),
-      name: "GraphicOrderMaxChoicesN",
-    },
-    {
-      copies: copiesOf(Rows.of(rows, GraphicOrderMinChoicesN)),
-      lexical: written(Rows.of(rows, GraphicOrderMinChoices)),
-      name: "GraphicOrderMinChoicesN",
-    },
-  ];
-  for (const { copies, lexical, name } of pairs) {
-    for (const [node, text] of lexical) {
-      if (copies.get(node) !== naturalOf(text)) {
-        return refuse(
-          "typed-copy",
-          `${name} ${node} holds ${copies.get(node)?.toString() ?? "no row"}; the attribute ${quoted(text)} reads ${naturalOf(text)}.`,
-        );
-      }
-    }
-
-    const stray = [...copies.keys()].find((node) => !lexical.has(node));
-    if (stray !== undefined) {
-      return refuse(
-        "typed-copy",
-        `${name} ${stray} is written for a node that wrote no attribute.`,
-      );
-    }
-  }
-
-  return undefined;
 };
 
 /**
@@ -995,7 +884,6 @@ const emptyXmlLang = (rows: Rows): Finding => {
  */
 const typedCopy = (rows: Rows): Finding =>
   countCopy(rows) ??
-  optionalCopy(rows) ??
   maxBoundCopy(rows) ??
   bindingCopy(rows) ??
   replaceClass(rows) ??

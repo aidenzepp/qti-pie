@@ -51,9 +51,7 @@ import {
 import { Hottext, HottextOwner, SelectPointInteraction } from "#qti/schema/interactions/hot.ts";
 import {
   OrderInteraction,
-  OrderMaxChoices,
   OrderMaxChoicesN,
-  OrderMinChoices,
   OrderMinChoicesN,
 } from "#qti/schema/interactions/order.ts";
 import { MediaInteraction, MediaMaxPlays, MediaMinPlays } from "#qti/schema/interactions/other.ts";
@@ -546,8 +544,6 @@ const negatives: readonly Negative[] = [
       order["maxBound"] = "bounded";
       order["maxChoicesN"] = 2n;
       order["minChoicesN"] = 3n;
-      setValue(draft, OrderMaxChoices, id, "2");
-      setValue(draft, OrderMinChoices, id, "3");
       setValue(draft, OrderMaxChoicesN, id, 2n);
       setValue(draft, OrderMinChoicesN, id, 3n);
     },
@@ -601,18 +597,6 @@ const negatives: readonly Negative[] = [
   },
   {
     alter: (draft) => {
-      const id = text(find(draft, OrderInteraction), "id");
-
-      setValue(draft, OrderMinChoices, id, "0");
-      setValue(draft, OrderMinChoicesN, id, 0n);
-    },
-    fixture: "cut-order",
-    laws: [patternLaw(patterns.positiveInteger)],
-    name: "an order interaction with min-choices 0 is refused by the positiveInteger pattern",
-    rule: "attribute-lexical",
-  },
-  {
-    alter: (draft) => {
       const order = find(draft, OrderInteraction);
       const id = text(order, "id");
       const last = of(draft, SimpleChoice).at(2);
@@ -620,7 +604,6 @@ const negatives: readonly Negative[] = [
       removeSubtree(draft, text(last ?? {}, "id"));
       order["maxBound"] = "bounded";
       order["maxChoicesN"] = 3n;
-      setValue(draft, OrderMaxChoices, id, "3");
       setValue(draft, OrderMaxChoicesN, id, 3n);
     },
     fixture: "cut-order",
@@ -644,7 +627,6 @@ const negatives: readonly Negative[] = [
       // The bound is `bounded` and `maxChoicesN` keeps the fixture's value, so the maximum's capacity holds: a maximum of 3 over two choices would fire it too, and only the minimum's is to be broken.
       order["maxBound"] = "bounded";
       order["minChoicesN"] = 3n;
-      setValue(draft, OrderMinChoices, id, "3");
       setValue(draft, OrderMinChoicesN, id, 3n);
     },
     fixture: "cut-order",
