@@ -28,6 +28,7 @@ import { BaseType, Declaration, TypedDeclaration } from "#qti/schema/declaration
 import { Edge } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { coordsBinding, shapeCapacities } from "#qti/schema/shapes.ts";
+import { lexicalOf } from "#qti/schema/value.ts";
 
 /**
  * An `xs:boolean` attribute's lexical form.
@@ -38,25 +39,6 @@ const xsBoolean = str.regex(patterns.xsBoolean);
  * An `xs:double` attribute's lexical form.
  */
 const xsDouble = str.regex(patterns.xsDouble);
-
-/**
- * The lexical form of a value of each base type, the same as the value arms of a declaration's
- * values hold: a duration is a number of seconds, and a string or a file is the text after
- * replacement.
- */
-const lexical = {
-  boolean: str.regex(patterns.booleanLiteral),
-  directedPair: str.regex(patterns.pair),
-  duration: xsDouble,
-  file: str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags),
-  float: xsDouble,
-  identifier: str.regex(patterns.ncName),
-  integer: str.regex(patterns.xsInteger),
-  pair: str.regex(patterns.pair),
-  point: str.regex(patterns.point),
-  string: str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags),
-  uri: str.regex(patterns.anyUri),
-};
 
 /**
  * The base types a mapping or a map entry may be of: every base type but `file` and `duration`.
@@ -262,116 +244,212 @@ export const InterpolationTableDefaultValue = relation(
   ["node"],
 );
 
+const mapEntryLexical = lexicalOf("MapKey");
+
 /**
  * The eleven `map-key` arms of a map entry, one per base type, each holding the key in the lexical
  * form of its base type.
  */
 const mapEntryArms = {
-  boolean: relation("MapEntryBoolean", { id: uuid, mapKey: lexical.boolean }, ["id"]),
-  directedPair: relation("MapEntryDirectedPair", { id: uuid, mapKey: lexical.directedPair }, [
+  boolean: relation("MapEntryBoolean", { id: uuid, mapKey: mapEntryLexical.boolean }, ["id"]),
+  directedPair: relation(
+    "MapEntryDirectedPair",
+    { id: uuid, mapKey: mapEntryLexical.directedPair },
+    ["id"],
+  ),
+  duration: relation("MapEntryDuration", { id: uuid, mapKey: mapEntryLexical.duration }, ["id"]),
+  file: relation("MapEntryFile", { id: uuid, mapKey: mapEntryLexical.file }, ["id"]),
+  float: relation("MapEntryFloat", { id: uuid, mapKey: mapEntryLexical.float }, ["id"]),
+  identifier: relation("MapEntryIdentifier", { id: uuid, mapKey: mapEntryLexical.identifier }, [
     "id",
   ]),
-  duration: relation("MapEntryDuration", { id: uuid, mapKey: lexical.duration }, ["id"]),
-  file: relation("MapEntryFile", { id: uuid, mapKey: lexical.file }, ["id"]),
-  float: relation("MapEntryFloat", { id: uuid, mapKey: lexical.float }, ["id"]),
-  identifier: relation("MapEntryIdentifier", { id: uuid, mapKey: lexical.identifier }, ["id"]),
-  integer: relation("MapEntryInteger", { id: uuid, mapKey: lexical.integer }, ["id"]),
-  pair: relation("MapEntryPair", { id: uuid, mapKey: lexical.pair }, ["id"]),
-  point: relation("MapEntryPoint", { id: uuid, mapKey: lexical.point }, ["id"]),
-  string: relation("MapEntryString", { id: uuid, mapKey: lexical.string }, ["id"]),
-  uri: relation("MapEntryUri", { id: uuid, mapKey: lexical.uri }, ["id"]),
+  integer: relation("MapEntryInteger", { id: uuid, mapKey: mapEntryLexical.integer }, ["id"]),
+  pair: relation("MapEntryPair", { id: uuid, mapKey: mapEntryLexical.pair }, ["id"]),
+  point: relation("MapEntryPoint", { id: uuid, mapKey: mapEntryLexical.point }, ["id"]),
+  string: relation("MapEntryString", { id: uuid, mapKey: mapEntryLexical.string }, ["id"]),
+  uri: relation("MapEntryUri", { id: uuid, mapKey: mapEntryLexical.uri }, ["id"]),
 };
+
+const matchTableEntryLexical = lexicalOf("MatchTarget");
 
 /**
  * The eleven `target-value` arms of a match table entry, one per base type.
  */
 const matchTableEntryArms = {
-  boolean: relation("MatchTableEntryBoolean", { id: uuid, targetValue: lexical.boolean }, ["id"]),
-  directedPair: relation(
-    "MatchTableEntryDirectedPair",
-    { id: uuid, targetValue: lexical.directedPair },
+  boolean: relation(
+    "MatchTableEntryBoolean",
+    { id: uuid, targetValue: matchTableEntryLexical.boolean },
     ["id"],
   ),
-  duration: relation("MatchTableEntryDuration", { id: uuid, targetValue: lexical.duration }, [
+  directedPair: relation(
+    "MatchTableEntryDirectedPair",
+    { id: uuid, targetValue: matchTableEntryLexical.directedPair },
+    ["id"],
+  ),
+  duration: relation(
+    "MatchTableEntryDuration",
+    { id: uuid, targetValue: matchTableEntryLexical.duration },
+    ["id"],
+  ),
+  file: relation("MatchTableEntryFile", { id: uuid, targetValue: matchTableEntryLexical.file }, [
     "id",
   ]),
-  file: relation("MatchTableEntryFile", { id: uuid, targetValue: lexical.file }, ["id"]),
-  float: relation("MatchTableEntryFloat", { id: uuid, targetValue: lexical.float }, ["id"]),
-  identifier: relation("MatchTableEntryIdentifier", { id: uuid, targetValue: lexical.identifier }, [
+  float: relation("MatchTableEntryFloat", { id: uuid, targetValue: matchTableEntryLexical.float }, [
     "id",
   ]),
-  integer: relation("MatchTableEntryInteger", { id: uuid, targetValue: lexical.integer }, ["id"]),
-  pair: relation("MatchTableEntryPair", { id: uuid, targetValue: lexical.pair }, ["id"]),
-  point: relation("MatchTableEntryPoint", { id: uuid, targetValue: lexical.point }, ["id"]),
-  string: relation("MatchTableEntryString", { id: uuid, targetValue: lexical.string }, ["id"]),
-  uri: relation("MatchTableEntryUri", { id: uuid, targetValue: lexical.uri }, ["id"]),
+  identifier: relation(
+    "MatchTableEntryIdentifier",
+    { id: uuid, targetValue: matchTableEntryLexical.identifier },
+    ["id"],
+  ),
+  integer: relation(
+    "MatchTableEntryInteger",
+    { id: uuid, targetValue: matchTableEntryLexical.integer },
+    ["id"],
+  ),
+  pair: relation("MatchTableEntryPair", { id: uuid, targetValue: matchTableEntryLexical.pair }, [
+    "id",
+  ]),
+  point: relation("MatchTableEntryPoint", { id: uuid, targetValue: matchTableEntryLexical.point }, [
+    "id",
+  ]),
+  string: relation(
+    "MatchTableEntryString",
+    { id: uuid, targetValue: matchTableEntryLexical.string },
+    ["id"],
+  ),
+  uri: relation("MatchTableEntryUri", { id: uuid, targetValue: matchTableEntryLexical.uri }, [
+    "id",
+  ]),
 };
+
+const interpolationTableEntryLexical = lexicalOf("InterpolationTarget");
 
 /**
  * The eleven `target-value` arms of an interpolation table entry, one per base type.
  */
 const interpolationTableEntryArms = {
-  boolean: relation("InterpolationTableEntryBoolean", { id: uuid, targetValue: lexical.boolean }, [
-    "id",
-  ]),
+  boolean: relation(
+    "InterpolationTableEntryBoolean",
+    { id: uuid, targetValue: interpolationTableEntryLexical.boolean },
+    ["id"],
+  ),
   directedPair: relation(
     "InterpolationTableEntryDirectedPair",
-    { id: uuid, targetValue: lexical.directedPair },
+    { id: uuid, targetValue: interpolationTableEntryLexical.directedPair },
     ["id"],
   ),
   duration: relation(
     "InterpolationTableEntryDuration",
-    { id: uuid, targetValue: lexical.duration },
+    { id: uuid, targetValue: interpolationTableEntryLexical.duration },
     ["id"],
   ),
-  file: relation("InterpolationTableEntryFile", { id: uuid, targetValue: lexical.file }, ["id"]),
-  float: relation("InterpolationTableEntryFloat", { id: uuid, targetValue: lexical.float }, ["id"]),
+  file: relation(
+    "InterpolationTableEntryFile",
+    { id: uuid, targetValue: interpolationTableEntryLexical.file },
+    ["id"],
+  ),
+  float: relation(
+    "InterpolationTableEntryFloat",
+    { id: uuid, targetValue: interpolationTableEntryLexical.float },
+    ["id"],
+  ),
   identifier: relation(
     "InterpolationTableEntryIdentifier",
-    { id: uuid, targetValue: lexical.identifier },
+    { id: uuid, targetValue: interpolationTableEntryLexical.identifier },
     ["id"],
   ),
-  integer: relation("InterpolationTableEntryInteger", { id: uuid, targetValue: lexical.integer }, [
-    "id",
-  ]),
-  pair: relation("InterpolationTableEntryPair", { id: uuid, targetValue: lexical.pair }, ["id"]),
-  point: relation("InterpolationTableEntryPoint", { id: uuid, targetValue: lexical.point }, ["id"]),
-  string: relation("InterpolationTableEntryString", { id: uuid, targetValue: lexical.string }, [
-    "id",
-  ]),
-  uri: relation("InterpolationTableEntryUri", { id: uuid, targetValue: lexical.uri }, ["id"]),
+  integer: relation(
+    "InterpolationTableEntryInteger",
+    { id: uuid, targetValue: interpolationTableEntryLexical.integer },
+    ["id"],
+  ),
+  pair: relation(
+    "InterpolationTableEntryPair",
+    { id: uuid, targetValue: interpolationTableEntryLexical.pair },
+    ["id"],
+  ),
+  point: relation(
+    "InterpolationTableEntryPoint",
+    { id: uuid, targetValue: interpolationTableEntryLexical.point },
+    ["id"],
+  ),
+  string: relation(
+    "InterpolationTableEntryString",
+    { id: uuid, targetValue: interpolationTableEntryLexical.string },
+    ["id"],
+  ),
+  uri: relation(
+    "InterpolationTableEntryUri",
+    { id: uuid, targetValue: interpolationTableEntryLexical.uri },
+    ["id"],
+  ),
 };
+
+const matchTableDefaultValueLexical = lexicalOf("MatchDefault");
 
 /**
  * The eleven typed values a match table's `default-value` may hold, one per base type.
  */
 const matchTableDefaultValueArms = {
-  boolean: relation("MatchTableDefaultValueBoolean", { node: uuid, value: lexical.boolean }, [
-    "node",
-  ]),
+  boolean: relation(
+    "MatchTableDefaultValueBoolean",
+    { node: uuid, value: matchTableDefaultValueLexical.boolean },
+    ["node"],
+  ),
   directedPair: relation(
     "MatchTableDefaultValueDirectedPair",
-    { node: uuid, value: lexical.directedPair },
+    { node: uuid, value: matchTableDefaultValueLexical.directedPair },
     ["node"],
   ),
-  duration: relation("MatchTableDefaultValueDuration", { node: uuid, value: lexical.duration }, [
-    "node",
-  ]),
-  file: relation("MatchTableDefaultValueFile", { node: uuid, value: lexical.file }, ["node"]),
-  float: relation("MatchTableDefaultValueFloat", { node: uuid, value: lexical.float }, ["node"]),
+  duration: relation(
+    "MatchTableDefaultValueDuration",
+    { node: uuid, value: matchTableDefaultValueLexical.duration },
+    ["node"],
+  ),
+  file: relation(
+    "MatchTableDefaultValueFile",
+    { node: uuid, value: matchTableDefaultValueLexical.file },
+    ["node"],
+  ),
+  float: relation(
+    "MatchTableDefaultValueFloat",
+    { node: uuid, value: matchTableDefaultValueLexical.float },
+    ["node"],
+  ),
   identifier: relation(
     "MatchTableDefaultValueIdentifier",
-    { node: uuid, value: lexical.identifier },
+    { node: uuid, value: matchTableDefaultValueLexical.identifier },
     ["node"],
   ),
-  integer: relation("MatchTableDefaultValueInteger", { node: uuid, value: lexical.integer }, [
-    "node",
-  ]),
-  pair: relation("MatchTableDefaultValuePair", { node: uuid, value: lexical.pair }, ["node"]),
-  point: relation("MatchTableDefaultValuePoint", { node: uuid, value: lexical.point }, ["node"]),
-  string: relation("MatchTableDefaultValueString", { node: uuid, value: lexical.string }, ["node"]),
-  uri: relation("MatchTableDefaultValueUri", { node: uuid, value: lexical.uri }, ["node"]),
+  integer: relation(
+    "MatchTableDefaultValueInteger",
+    { node: uuid, value: matchTableDefaultValueLexical.integer },
+    ["node"],
+  ),
+  pair: relation(
+    "MatchTableDefaultValuePair",
+    { node: uuid, value: matchTableDefaultValueLexical.pair },
+    ["node"],
+  ),
+  point: relation(
+    "MatchTableDefaultValuePoint",
+    { node: uuid, value: matchTableDefaultValueLexical.point },
+    ["node"],
+  ),
+  string: relation(
+    "MatchTableDefaultValueString",
+    { node: uuid, value: matchTableDefaultValueLexical.string },
+    ["node"],
+  ),
+  uri: relation(
+    "MatchTableDefaultValueUri",
+    { node: uuid, value: matchTableDefaultValueLexical.uri },
+    ["node"],
+  ),
 };
+
+const interpolationTableDefaultValueLexical = lexicalOf("InterpolationDefault");
 
 /**
  * The eleven typed values an interpolation table's `default-value` may hold, one per base type.
@@ -379,45 +457,59 @@ const matchTableDefaultValueArms = {
 const interpolationTableDefaultValueArms = {
   boolean: relation(
     "InterpolationTableDefaultValueBoolean",
-    { node: uuid, value: lexical.boolean },
+    { node: uuid, value: interpolationTableDefaultValueLexical.boolean },
     ["node"],
   ),
   directedPair: relation(
     "InterpolationTableDefaultValueDirectedPair",
-    { node: uuid, value: lexical.directedPair },
+    { node: uuid, value: interpolationTableDefaultValueLexical.directedPair },
     ["node"],
   ),
   duration: relation(
     "InterpolationTableDefaultValueDuration",
-    { node: uuid, value: lexical.duration },
+    { node: uuid, value: interpolationTableDefaultValueLexical.duration },
     ["node"],
   ),
-  file: relation("InterpolationTableDefaultValueFile", { node: uuid, value: lexical.file }, [
-    "node",
-  ]),
-  float: relation("InterpolationTableDefaultValueFloat", { node: uuid, value: lexical.float }, [
-    "node",
-  ]),
+  file: relation(
+    "InterpolationTableDefaultValueFile",
+    { node: uuid, value: interpolationTableDefaultValueLexical.file },
+    ["node"],
+  ),
+  float: relation(
+    "InterpolationTableDefaultValueFloat",
+    { node: uuid, value: interpolationTableDefaultValueLexical.float },
+    ["node"],
+  ),
   identifier: relation(
     "InterpolationTableDefaultValueIdentifier",
-    { node: uuid, value: lexical.identifier },
+    { node: uuid, value: interpolationTableDefaultValueLexical.identifier },
     ["node"],
   ),
   integer: relation(
     "InterpolationTableDefaultValueInteger",
-    { node: uuid, value: lexical.integer },
+    { node: uuid, value: interpolationTableDefaultValueLexical.integer },
     ["node"],
   ),
-  pair: relation("InterpolationTableDefaultValuePair", { node: uuid, value: lexical.pair }, [
-    "node",
-  ]),
-  point: relation("InterpolationTableDefaultValuePoint", { node: uuid, value: lexical.point }, [
-    "node",
-  ]),
-  string: relation("InterpolationTableDefaultValueString", { node: uuid, value: lexical.string }, [
-    "node",
-  ]),
-  uri: relation("InterpolationTableDefaultValueUri", { node: uuid, value: lexical.uri }, ["node"]),
+  pair: relation(
+    "InterpolationTableDefaultValuePair",
+    { node: uuid, value: interpolationTableDefaultValueLexical.pair },
+    ["node"],
+  ),
+  point: relation(
+    "InterpolationTableDefaultValuePoint",
+    { node: uuid, value: interpolationTableDefaultValueLexical.point },
+    ["node"],
+  ),
+  string: relation(
+    "InterpolationTableDefaultValueString",
+    { node: uuid, value: interpolationTableDefaultValueLexical.string },
+    ["node"],
+  ),
+  uri: relation(
+    "InterpolationTableDefaultValueUri",
+    { node: uuid, value: interpolationTableDefaultValueLexical.uri },
+    ["node"],
+  ),
 };
 
 export const relations = {

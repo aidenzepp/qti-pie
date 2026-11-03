@@ -161,7 +161,7 @@ export const Literal = relation("Literal", { baseType: closedId(declaration.Base
   "id",
 ]);
 
-const literalArms = value.valueArms("Literal");
+const literalArms = value.valueArms("Literal", "Literal");
 
 /**
  * An expression held at a position under another expression.

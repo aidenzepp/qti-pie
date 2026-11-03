@@ -7,6 +7,7 @@
  * the two elements this module owns.
  */
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `DeclarationShape` and the `shape` field are the contract the declaration and processing modules name; the shape here is the typed-or-record choice, not a structure. */
+import type { FieldBase } from "@bjornpagen/grizzle";
 import {
   alternatives,
   capacity,
@@ -25,6 +26,7 @@ import {
 } from "@bjornpagen/grizzle";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as node from "#qti/schema/node.ts";
+import type { Rule } from "#qti/import/refusal.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -91,36 +93,96 @@ export const CorrectResponseArm = relation("CorrectResponseArm", { id: uuid }, [
 export const DefaultValueArm = relation("DefaultValueArm", { id: uuid }, ["id"]);
 
 /**
- * The eleven `qti-value` arms of a base type, named `<prefix><BaseType>`. Each holds the value,
- * the concatenation of the element's text children with each tab, line feed and carriage return
- * replaced by a space, which the base type's lexical pattern judges. The prefix lets another
- * parent reuse the arms without a name collision.
+ * The places a `qti-value`'s text is written as one of the eleven base types, each with the prefix
+ * of its arm relations and the refusal rule that judges the text before it is written.
  */
-export const valueArms = (prefix: string) => {
-  const arm = <const Name extends string, Value extends ReturnType<typeof str.regex>>(
-    name: Name,
-    value: Value,
-  ) => relation(`${prefix}${name}`, { id: uuid, value }, ["id"]);
-  const normalized = str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags);
-  const double = str.regex(patterns.xsDouble);
-  const pair = str.regex(patterns.pair);
+export const valueContexts = [
+  { context: "Declared", prefix: "DeclaredValue", rule: "value-lexical" },
+  { context: "Literal", prefix: "Literal", rule: "P7" },
+  { context: "Usage", prefix: "UsageTypedValue", rule: "usage-typed-value" },
+  { context: "MapKey", prefix: "MapEntry", rule: "map-key-lexical" },
+  { context: "MatchDefault", prefix: "MatchTableDefaultValue", rule: "attribute-lexical" },
+  { context: "MatchTarget", prefix: "MatchTableEntry", rule: "attribute-lexical" },
+  {
+    context: "InterpolationDefault",
+    prefix: "InterpolationTableDefaultValue",
+    rule: "attribute-lexical",
+  },
+  { context: "InterpolationTarget", prefix: "InterpolationTableEntry", rule: "attribute-lexical" },
+] as const satisfies readonly { context: string; prefix: string; rule: Rule }[];
+
+/**
+ * One of the eight contexts of `valueContexts`.
+ */
+export type ValueContext = (typeof valueContexts)[number]["context"];
+
+const normalized = str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags);
+
+const double = str.regex(patterns.xsDouble);
+
+const pair = str.regex(patterns.pair);
+
+/**
+ * The lexical form of a value of each base type: a duration is a number of seconds, and a string
+ * or a file is the text after replacement.
+ */
+const lexicalForms = {
+  boolean: str.regex(patterns.booleanLiteral),
+  directedPair: pair,
+  duration: double,
+  file: normalized,
+  float: double,
+  identifier: str.regex(patterns.ncName),
+  integer: str.regex(patterns.xsInteger),
+  pair,
+  point: str.regex(patterns.point),
+  string: normalized,
+  uri: str.regex(patterns.anyUri),
+};
+
+const lexicalByContext: Record<ValueContext, typeof lexicalForms> = {
+  Declared: lexicalForms,
+  InterpolationDefault: lexicalForms,
+  InterpolationTarget: lexicalForms,
+  Literal: lexicalForms,
+  MapKey: lexicalForms,
+  MatchDefault: lexicalForms,
+  MatchTarget: lexicalForms,
+  Usage: lexicalForms,
+};
+
+/**
+ * The field type of each of the eleven base types in a context.
+ */
+export const lexicalOf = (context: ValueContext) => lexicalByContext[context];
+
+/**
+ * The eleven `qti-value` arms of a base type in a context, named `<prefix><BaseType>`. Each holds
+ * the value, the concatenation of the element's text children with each tab, line feed and
+ * carriage return replaced by a space, which the context's field type for the base type judges.
+ * The prefix lets another parent reuse the arms without a name collision.
+ */
+export const valueArms = (prefix: string, context: ValueContext) => {
+  const arm = <const Name extends string, Value extends FieldBase>(name: Name, value: Value) =>
+    relation(`${prefix}${name}`, { id: uuid, value }, ["id"]);
+  const lexical = lexicalOf(context);
 
   return {
-    boolean: arm("Boolean", str.regex(patterns.booleanLiteral)),
-    directedPair: arm("DirectedPair", pair),
-    duration: arm("Duration", double),
-    file: arm("File", normalized),
-    float: arm("Float", double),
-    identifier: arm("Identifier", str.regex(patterns.ncName)),
-    integer: arm("Integer", str.regex(patterns.xsInteger)),
-    pair: arm("Pair", pair),
-    point: arm("Point", str.regex(patterns.point)),
-    string: arm("String", normalized),
-    uri: arm("Uri", str.regex(patterns.anyUri)),
+    boolean: arm("Boolean", lexical.boolean),
+    directedPair: arm("DirectedPair", lexical.directedPair),
+    duration: arm("Duration", lexical.duration),
+    file: arm("File", lexical.file),
+    float: arm("Float", lexical.float),
+    identifier: arm("Identifier", lexical.identifier),
+    integer: arm("Integer", lexical.integer),
+    pair: arm("Pair", lexical.pair),
+    point: arm("Point", lexical.point),
+    string: arm("String", lexical.string),
+    uri: arm("Uri", lexical.uri),
   };
 };
 
-const declaredValueArms = valueArms("DeclaredValue");
+const declaredValueArms = valueArms("DeclaredValue", "Declared");
 
 /**
  * One `qti-value` of a value set, at its position. A typed value has the base type of its set;

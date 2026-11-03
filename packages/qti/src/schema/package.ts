@@ -24,6 +24,7 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
+import type { FieldBase } from "@bjornpagen/grizzle";
 import { Edge, Node, RootKind, SchemaVersion, Tree } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
@@ -213,7 +214,7 @@ export const fileMetadataRules = [
  */
 export const fileMetadataArms = { "cp:metadata.file": FileMetadata };
 
-const drdLeaf = <Name extends string>(name: Name, value: ReturnType<typeof str.regex>) =>
+const drdLeaf = <Name extends string, Value extends FieldBase>(name: Name, value: Value) =>
   relation(name, { id: uuid, owner: uuid, value }, ["id"]);
 
 /**

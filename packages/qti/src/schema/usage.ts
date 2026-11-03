@@ -21,7 +21,7 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import type { AnyRelation } from "@bjornpagen/grizzle";
+import type { AnyRelation, FieldBase } from "@bjornpagen/grizzle";
 import { Document } from "#qti/schema/document.ts";
 import type * as ud from "#qti/schema/kinds/ud.ts";
 import { BaseType } from "#qti/schema/declaration.ts";
@@ -105,10 +105,8 @@ export const OrdinaryStatisticArm = relation("OrdinaryStatisticArm", { id: uuid 
  */
 export const CategorizedStatisticArm = relation("CategorizedStatisticArm", { id: uuid }, ["id"]);
 
-const optional = <Name extends string, Value extends ReturnType<typeof str.regex>>(
-  name: Name,
-  value: Value,
-) => relation(name, { node: uuid, value }, ["node"]);
+const optional = <Name extends string, Value extends FieldBase>(name: Name, value: Value) =>
+  relation(name, { node: uuid, value }, ["node"]);
 
 /**
  * The optional `glossary` of a statistic.
@@ -197,7 +195,7 @@ export const UsageTypedValue = relation(
   ["id"],
 );
 
-const typedValueArms = valueArms("UsageTypedValue");
+const typedValueArms = valueArms("UsageTypedValue", "Usage");
 
 /**
  * The `mapping` of a categorized statistic. `defaultValue` is the effective value after
