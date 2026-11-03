@@ -6,6 +6,7 @@ import { BadPackageId, replaceWith, TargetNotEmpty } from "#qti/cli/args.ts";
 import { describeFailure } from "#qti/cli/errors.ts";
 import { exitCodeOf } from "#qti/cli/run.ts";
 import { captureCli } from "#qti/test/cli.ts";
+import { makeScratch, scratchEnv } from "#qti/test/scratch.ts";
 import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**
@@ -23,10 +24,7 @@ const packageId = "6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40";
  * The environment of a run: a scratch home and a cluster state folder that is empty, so any step
  * that needs the database fails with kind `config`.
  */
-const env = {
-  GRIZZLE_PG_STATE: path.join(root, "state"),
-  HOME: path.join(root, "home"),
-} as const;
+const env = scratchEnv(root);
 
 /**
  * Make `work/cli-export/<name>` an empty folder and return its path.
@@ -37,8 +35,7 @@ const fresh = Effect.fn("test.export.fresh")(function* fresh(name: string) {
 
   yield* fs.remove(folder, { force: true, recursive: true });
   yield* fs.makeDirectory(folder, { recursive: true });
-  yield* fs.makeDirectory(env.GRIZZLE_PG_STATE, { recursive: true });
-  yield* fs.makeDirectory(env.HOME, { recursive: true });
+  yield* makeScratch(env);
 
   return folder;
 });

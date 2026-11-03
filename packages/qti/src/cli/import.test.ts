@@ -1,13 +1,14 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, inject, layer } from "@effect/vitest";
-import { Cause, Effect, Exit, FileSystem, Schema } from "effect";
+import { Cause, Effect, Exit, Schema } from "effect";
 import { ImportData } from "#qti/cli/import.ts";
 import { successEnvelope } from "#qti/cli/output.ts";
 import { exitCodeOf } from "#qti/cli/run.ts";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import { captureCli } from "#qti/test/cli.ts";
 import { materialize } from "#qti/test/fixtures.ts";
+import { makeScratch, scratchEnv } from "#qti/test/scratch.ts";
 import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
 
 const fixtures = inject("fixtures");
@@ -22,21 +23,7 @@ const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-import")
  * The environment of a run: a scratch home, a cluster state folder that is empty and a port nothing
  * listens on, so any step that needs the database fails with kind `config`.
  */
-const env = {
-  GR8DES_PG_PORT: "1",
-  GRIZZLE_PG_STATE: path.join(root, "state"),
-  HOME: path.join(root, "home"),
-} as const;
-
-/**
- * Make the scratch home and the empty cluster state folder.
- */
-const scratch = Effect.fn("test.import.scratch")(function* scratch() {
-  const fs = yield* FileSystem.FileSystem;
-
-  yield* fs.makeDirectory(env.GRIZZLE_PG_STATE, { recursive: true });
-  yield* fs.makeDirectory(env.HOME, { recursive: true });
-});
+const env = { GR8DES_PG_PORT: "1", ...scratchEnv(root) } as const;
 
 /**
  * The envelope `--json import` prints.
@@ -48,7 +35,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import --dry-run", (it
     "reads a package and says how many rows it holds, with no database",
     () =>
       Effect.gen(function* previews() {
-        yield* scratch();
+        yield* makeScratch(env);
 
         const { exit, stderr, stdout } = yield* captureCli(
           ["import", "--dry-run", fixtures.simple],
@@ -69,7 +56,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import --dry-run", (it
     "refuses a package a guard refuses, as an import refusal that exits 1",
     () =>
       Effect.gen(function* refused() {
-        yield* scratch();
+        yield* makeScratch(env);
 
         const { exit } = yield* captureCli(
           ["import", "--dry-run", yield* materialize("quoted-q")],
@@ -96,7 +83,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import --dry-run", (it
     "--json prints one line, the dry-run arm of the envelope",
     () =>
       Effect.gen(function* json() {
-        yield* scratch();
+        yield* makeScratch(env);
 
         const { exit, stderr, stdout } = yield* captureCli(
           ["--json", "import", "--dry-run", fixtures.simple],

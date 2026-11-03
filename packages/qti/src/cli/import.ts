@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
-import { dryRunFlag, requirePackage } from "#qti/cli/args.ts";
+import { databaseNotChecked, dryRunFlag, requirePackage } from "#qti/cli/args.ts";
 import { emitSuccess, outputMode } from "#qti/cli/output.ts";
 
 /**
@@ -25,11 +25,6 @@ const ImportPreview = Schema.Struct({
  * `--dry-run` what the package holds.
  */
 export const ImportData = Schema.Union([ImportStored, ImportPreview]);
-
-/**
- * What a dry run says about the database.
- */
-const databaseNotChecked = "the database's own checks did not run";
 
 /**
  * Import the package in `dir`, a directory or a `.zip` file, then print its id. Under `--dry-run`
