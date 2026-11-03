@@ -8,6 +8,7 @@ import { importCommand } from "#qti/cli/import.ts";
 import { outputGlobalFlags } from "#qti/cli/output.ts";
 import { roundtripCommand } from "#qti/cli/roundtrip.ts";
 import { runMain } from "#qti/cli/run.ts";
+import { schemaCommand } from "#qti/cli/schema.ts";
 import { timeoutGlobalFlags, withTimeout } from "#qti/cli/timeout.ts";
 import { verbosityGlobalFlags, withVerbosity } from "#qti/cli/verbosity.ts";
 
@@ -83,6 +84,7 @@ export const cli = Command.make("qti").pipe(
     exportCommand,
     roundtripCommand,
     completionsCommand(rootCommand),
+    schemaCommand,
   ]),
   // `--output`, `--json` and `--jsonl` reach every command; a handler reads the mode it prints in.
   Command.withGlobalFlags(outputGlobalFlags),

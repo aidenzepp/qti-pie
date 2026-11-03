@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "command": { "type": "string", "enum": ["export"] },
+    "data": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "dry_run": { "type": "boolean", "enum": [true] },
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "bytes": {
+                    "anyOf": [
+                      { "type": "number" },
+                      { "type": "string", "enum": ["Infinity", "-Infinity", "NaN"] }
+                    ]
+                  },
+                  "path": { "type": "string" }
+                },
+                "required": ["bytes", "path"],
+                "additionalProperties": true
+              }
+            },
+            "package_id": { "type": "string" },
+            "target": { "type": "string" },
+            "target_action": { "type": "string", "enum": ["create", "replace"] }
+          },
+          "required": ["dry_run", "entries", "package_id", "target", "target_action"],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "bytes": {
+                    "anyOf": [
+                      { "type": "number" },
+                      { "type": "string", "enum": ["Infinity", "-Infinity", "NaN"] }
+                    ]
+                  },
+                  "path": { "type": "string" }
+                },
+                "required": ["bytes", "path"],
+                "additionalProperties": true
+              }
+            },
+            "package_id": { "type": "string" },
+            "target": { "type": "string" }
+          },
+          "required": ["entries", "package_id", "target"],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "ok": { "type": "boolean" },
+    "schema_version": { "type": "number", "enum": [1] }
+  },
+  "required": ["command", "data", "ok", "schema_version"],
+  "additionalProperties": true,
+  "$defs": {}
+}
