@@ -1,15 +1,15 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { assert, inject, layer } from "@effect/vitest";
+import { assert, beforeAll, inject, layer } from "@effect/vitest";
 import { Cause, Effect, Exit, Schema } from "effect";
 import { ImportData } from "#qti/cli/import.ts";
 import { successEnvelope } from "#qti/cli/output.ts";
 import { exitCodeOf } from "#qti/cli/run.ts";
 import { ImportRefused } from "#qti/import/refusal.ts";
-import { captureCli } from "#qti/test/cli.ts";
+import { captureCli, preloadEngine } from "#qti/test/cli.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import { makeScratch, scratchEnv } from "#qti/test/scratch.ts";
-import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
+import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#qti/test/settings.ts";
 
 const fixtures = inject("fixtures");
 
@@ -29,6 +29,12 @@ const env = { GR8DES_PG_PORT: "1", ...scratchEnv(root) } as const;
  * The envelope `--json import` prints.
  */
 const importEnvelope = Schema.fromJsonString(successEnvelope("import", ImportData));
+
+/**
+ * Loads the engine once, before this file's first test, so no test pays that load inside its own
+ * timeout.
+ */
+beforeAll(() => preloadEngine, engineLoadHookTimeoutMs);
 
 layer(NodeServices.layer, { excludeTestServices: true })("import --dry-run", (it) => {
   it.effect(

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { assert, layer } from "@effect/vitest";
+import { assert, beforeAll, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Schema } from "effect";
 import { Command } from "effect/cli";
 import { inject } from "vitest";
@@ -14,7 +14,8 @@ import {
 } from "#qti/cli/output.ts";
 import { RoundtripData } from "#qti/cli/roundtrip.ts";
 import { exitCodeOf } from "#qti/cli/run.ts";
-import { captureCli } from "#qti/test/cli.ts";
+import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#qti/test/settings.ts";
+import { captureCli, preloadEngine } from "#qti/test/cli.ts";
 
 const fixtures = inject("fixtures");
 
@@ -52,6 +53,12 @@ const differing = Command.make(
     yield* new RoundtripDiffers({ differing: 1, exportDir: "work/export/x" });
   }),
 ).pipe(Command.withGlobalFlags(outputGlobalFlags));
+
+/**
+ * Loads the engine once, before this file's first test, so no test pays that load inside its own
+ * timeout.
+ */
+beforeAll(() => preloadEngine, engineLoadHookTimeoutMs);
 
 layer(NodeServices.layer, { excludeTestServices: true })("the text error shape", (it) => {
   it.effect("an unknown command prints its usage and the valid commands, not the whole help", () =>
@@ -166,9 +173,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("the JSON error shape",
         assert.strictEqual(error.kind, "config");
         assert.strictEqual(error.exit_code, 78);
       }),
-    // The run loads the engine before it reads the missing certificate: 4.9 s wall on 2026-11-03,
-    // past vitest's 5 s default under load.
-    { timeout: 30_000 },
+    cliProcessTestTimeoutMs,
   );
 
   it.effect("a differing roundtrip prints its envelope on stdout and the error on stderr", () =>

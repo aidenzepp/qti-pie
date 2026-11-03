@@ -17,6 +17,28 @@ const packageRoot = path.resolve(import.meta.dirname, "..", "..");
 const copiesRoot = path.join(packageRoot, "work", "cli-copies");
 
 /**
+ * Load every engine module a command handler imports when it runs, all at once.
+ *
+ * A test file pays that load once, in a `beforeAll` under `engineLoadHookTimeoutMs`, instead of
+ * inside its first test's timeout. The list must equal this command's output, so a new lazy import
+ * gets added here:
+ *
+ * ```sh
+ * cd packages/qti && grep -hoE 'import\("#qti/[^"]+"\)' src/cli.ts $(ls src/cli/*.ts | grep -v '\.test\.ts$') | sort -u
+ * ```
+ */
+export const preloadEngine = Effect.promise(() =>
+  Promise.all([
+    import("#qti/db/layer.ts"),
+    import("#qti/export/compare.ts"),
+    import("#qti/export/package.ts"),
+    import("#qti/import/package.ts"),
+    import("#qti/import/preview.ts"),
+    import("#qti/package/read.ts"),
+  ]),
+);
+
+/**
  * Run the command line on `args` in this process, through the same runner as the program, with the
  * console captured in place of the terminal.
  *

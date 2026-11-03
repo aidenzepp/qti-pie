@@ -1,17 +1,18 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { assert, layer } from "@effect/vitest";
+import { assert, beforeAll, layer } from "@effect/vitest";
 import { Cause, Console, Duration, Effect, Exit, FileSystem, Logger } from "effect";
 import { Command } from "effect/cli";
 import { inject } from "vitest";
 import { exitCodeOf } from "#qti/cli/run.ts";
+import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#qti/test/settings.ts";
 import {
   CommandTimedOut,
   timeoutGlobalFlags,
   timeoutSetting,
   withTimeout,
 } from "#qti/cli/timeout.ts";
-import { captureCli } from "#qti/test/cli.ts";
+import { captureCli, preloadEngine } from "#qti/test/cli.ts";
 
 const fixtures = inject("fixtures");
 
@@ -37,6 +38,12 @@ const show = Command.make("show", {}, () =>
     yield* Console.log(Duration.format(yield* timeoutSetting));
   }),
 ).pipe(withTimeout, Command.withGlobalFlags(timeoutGlobalFlags));
+
+/**
+ * Loads the engine once, before this file's first test, so no test pays that load inside its own
+ * timeout.
+ */
+beforeAll(() => preloadEngine, engineLoadHookTimeoutMs);
 
 layer(NodeServices.layer, { excludeTestServices: true })("p14-u8c: --timeout", (it) => {
   it.effect("a handler that outlasts --timeout fails with CommandTimedOut, exit 1", () =>
@@ -103,34 +110,38 @@ layer(NodeServices.layer, { excludeTestServices: true })("p14-u8c: --timeout", (
     }),
   );
 
-  it.effect("the real import is cut off at --timeout 1 millis with CommandTimedOut, exit 1", () =>
-    Effect.gen(function* realRoot() {
-      const fs = yield* FileSystem.FileSystem;
-      const home = path.join(scratch, "home");
-      const state = path.join(scratch, "state");
+  it.effect(
+    "the real import is cut off at --timeout 1 millis with CommandTimedOut, exit 1",
+    () =>
+      Effect.gen(function* realRoot() {
+        const fs = yield* FileSystem.FileSystem;
+        const home = path.join(scratch, "home");
+        const state = path.join(scratch, "state");
 
-      yield* fs.makeDirectory(path.join(state, "tls"), { recursive: true });
-      yield* fs.makeDirectory(home, { recursive: true });
-      yield* fs.writeFileString(path.join(state, "tls", "ca.crt"), "placeholder\n");
+        yield* fs.makeDirectory(path.join(state, "tls"), { recursive: true });
+        yield* fs.makeDirectory(home, { recursive: true });
+        yield* fs.writeFileString(path.join(state, "tls", "ca.crt"), "placeholder\n");
 
-      // The 1 ms timer fires while the handler still loads the layer or decodes the snapshot; port 1
-      // is where no cluster listens, in case a pool opens before it does.
-      const { exit, stdout } = yield* captureCli(
-        ["--timeout", "1 millis", "import", fixtures.simple],
-        {
-          env: { GR8DES_PG_PORT: "1", GRIZZLE_PG_STATE: state, HOME: home },
-        },
-      );
+        // The engine is already loaded, so the 1 ms timer fires while the handler reads the certificate
+        // and the 36 MB snapshot (`src/db/layer.ts:86-99`). The certificate exists, so nothing fails
+        // before the timer; port 1 is where no cluster listens, in case a pool opens before it does.
+        const { exit, stdout } = yield* captureCli(
+          ["--timeout", "1 millis", "import", fixtures.simple],
+          {
+            env: { GR8DES_PG_PORT: "1", GRIZZLE_PG_STATE: state, HOME: home },
+          },
+        );
 
-      assert.isTrue(Exit.isFailure(exit));
+        assert.isTrue(Exit.isFailure(exit));
 
-      if (Exit.isFailure(exit)) {
-        assert.instanceOf(Cause.squash(exit.cause), CommandTimedOut);
-      }
+        if (Exit.isFailure(exit)) {
+          assert.instanceOf(Cause.squash(exit.cause), CommandTimedOut);
+        }
 
-      assert.strictEqual(exitCodeOf(exit), 1);
-      assert.strictEqual(stdout, "");
-    }),
+        assert.strictEqual(exitCodeOf(exit), 1);
+        assert.strictEqual(stdout, "");
+      }),
+    cliProcessTestTimeoutMs,
   );
 
   it.effect("import --help lists --timeout", () =>
