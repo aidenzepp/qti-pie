@@ -6,13 +6,13 @@ import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
 
 layer(NodeServices.layer, { excludeTestServices: true })("cli.ts streams, database-free", (it) => {
   it.effect(
-    "a mistyped command prints its help to standard error and nothing to standard output",
+    "a mistyped command prints its usage line to standard error and nothing to standard output",
     () =>
       Effect.gen(function* usageOnStderr() {
         const { stderr, stdout } = yield* spawnCli(["export", "only-one"]);
 
         assert.strictEqual(stdout, "");
-        assert.include(stderr, "USAGE");
+        assert.include(stderr, "error[cli-usage]:");
         assert.include(stderr, "package-id");
       }),
     cliProcessTestTimeoutMs,

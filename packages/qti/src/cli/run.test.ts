@@ -19,6 +19,7 @@ import {
   describeFailure,
   grizzleErrorTags,
   kindExitCode,
+  kindHelp,
   NotADirectory,
   RoundtripDiffers,
 } from "#qti/cli/errors.ts";
@@ -76,7 +77,11 @@ describe("describeFailure and exitCodeOf", () => {
   it("an ImportRefused exits 1 as import-refused", () => {
     const refused = new ImportRefused({ detail: "x", rule: "admission" });
 
-    assert.deepStrictEqual(describeFailure(refused), { exitCode: 1, kind: "import-refused" });
+    assert.deepStrictEqual(describeFailure(refused), {
+      exitCode: 1,
+      help: kindHelp["import-refused"],
+      kind: "import-refused",
+    });
     assert.strictEqual(exitCodeOf(Exit.fail(refused)), 1);
   });
 
@@ -91,7 +96,11 @@ describe("describeFailure and exitCodeOf", () => {
   });
 
   it("a PlatformError exits 74 as io", () => {
-    assert.deepStrictEqual(describeFailure(readFailed), { exitCode: 74, kind: "io" });
+    assert.deepStrictEqual(describeFailure(readFailed), {
+      exitCode: 74,
+      help: kindHelp.io,
+      kind: "io",
+    });
     assert.strictEqual(exitCodeOf(Exit.fail(readFailed)), 74);
   });
 
@@ -101,7 +110,11 @@ describe("describeFailure and exitCodeOf", () => {
       suggestions: [],
     });
 
-    assert.deepStrictEqual(describeFailure(usage), { exitCode: 2, kind: "cli-usage" });
+    assert.deepStrictEqual(describeFailure(usage), {
+      exitCode: 2,
+      help: kindHelp["cli-usage"],
+      kind: "cli-usage",
+    });
     assert.strictEqual(exitCodeOf(Exit.fail(usage)), 2);
   });
 
@@ -112,9 +125,14 @@ describe("describeFailure and exitCodeOf", () => {
   });
 
   it("a bare kind property is not a kind: only the cliKind symbol names one", () => {
-    assert.deepStrictEqual(describeFailure({ kind: "config" }), { exitCode: 70, kind: "internal" });
+    assert.deepStrictEqual(describeFailure({ kind: "config" }), {
+      exitCode: 70,
+      help: kindHelp.internal,
+      kind: "internal",
+    });
     assert.deepStrictEqual(describeFailure({ [cliKind]: "config" }), {
       exitCode: 78,
+      help: kindHelp.config,
       kind: "config",
     });
     assert.strictEqual(describeFailure({ [cliKind]: "no-such-kind" }).kind, "internal");
@@ -140,7 +158,11 @@ describe("describeFailure and exitCodeOf", () => {
     it(`${error.name} exits 1 as database`, () => {
       const failure = { _tag: error.tag };
 
-      assert.deepStrictEqual(describeFailure(failure), { exitCode: 1, kind: "database" });
+      assert.deepStrictEqual(describeFailure(failure), {
+        exitCode: 1,
+        help: kindHelp.database,
+        kind: "database",
+      });
       assert.strictEqual(exitCodeOf(Exit.fail(failure)), 1);
     });
   }

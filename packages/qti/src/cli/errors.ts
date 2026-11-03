@@ -54,6 +54,33 @@ export const kindExitCode: Readonly<Record<Kind, number>> = {
 };
 
 /**
+ * What to do next after a failure of each kind, when the failure has no remedy of its own. Every
+ * kind has one, so a failure always ends on a next step.
+ */
+export const kindHelp: Readonly<Record<Kind, string>> = {
+  "cli-bad-argument":
+    "Check the value against the command's usage: run `qti <command> --help` to see what it accepts.",
+  "cli-path-missing":
+    "Name the directory of an unzipped QTI package, or its .zip file, that exists.",
+  "cli-usage": "Run `qti --help`, or `qti <command> --help`, to see valid usage.",
+  config:
+    "Start the local database cluster and migrate it, as the project's AGENTS.md describes, then run the command again.",
+  database:
+    "Check that the local database cluster is running (`pnpm pg start` in the grizzle clone), then run the command again.",
+  "import-refused":
+    "Fix the package as the message says, then import it again. Nothing was written.",
+  internal:
+    "This is a defect in qti. Report it with the command you ran and the trace printed below.",
+  io: "Check that the path exists, is readable or writable, and that the disk has room, then run the command again.",
+  "not-found": "List the imported packages to find a valid package id, then run the command again.",
+  "roundtrip-differs": "Compare the package with its export by hand to see which entries differ.",
+  "skill-target-outside":
+    "Choose a target folder inside the project, or pass the folder the skill belongs in.",
+  "target-not-empty": "Choose an empty or new target, or pass --yes to replace what is there.",
+  timeout: "Run the command again with a larger --timeout.",
+};
+
+/**
  * The key under which an error this program defines names its kind.
  *
  * {@link describeFailure} reads the kind of an error through this symbol and never through a bare
@@ -103,7 +130,15 @@ export class NotADirectory extends Schema.TaggedError<NotADirectory>()("NotADire
    * The path and what to do about it.
    */
   override get message(): string {
-    return `${this.path} is not a directory or a .zip file. Name the directory of an unzipped QTI package, or its .zip file.`;
+    return `${this.path} is not a directory or a .zip file.`;
+  }
+
+  /**
+   * What to do about it.
+   */
+  // oxlint-disable-next-line typescript/class-literal-property-style, eslint/class-methods-use-this -- A field would be an own property of the error.
+  get help(): string {
+    return "Name the directory of an unzipped QTI package, or its .zip file.";
   }
 }
 
@@ -136,13 +171,21 @@ export class RoundtripDiffers extends Schema.TaggedError<RoundtripDiffers>()("Ro
   override get message(): string {
     return `${this.differing} entries differ between the package and its export in ${this.exportDir}.`;
   }
+
+  /**
+   * How to see which entries differ.
+   */
+  get help(): string {
+    return `Run \`diff -r <dir> ${this.exportDir}\`, with the package you named for <dir>, to see which entries differ.`;
+  }
 }
 
 /**
- * What kind a failure is, and the exit code that kind ends the process with.
+ * What kind a failure is, the exit code that kind ends the process with, and what to do next.
  */
 export interface FailureDescription {
   readonly exitCode: number;
+  readonly help: string;
   readonly kind: Kind;
 }
 
@@ -217,6 +260,19 @@ const kindOf = (failure: unknown): Kind => {
 };
 
 /**
+ * What to do next: the failure's own `help` when this program defined it and it has one, else the
+ * help of its kind.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
+const helpOf = (failure: unknown, kind: Kind): string =>
+  Predicate.hasProperty(failure, cliKind) &&
+  Predicate.hasProperty(failure, "help") &&
+  Predicate.isString(failure.help) &&
+  failure.help !== ""
+    ? failure.help
+    : kindHelp[kind];
+
+/**
  * The kind of a failure.
  *
  * An error this program defines names its own kind through {@link cliKind}. Every other failure is
@@ -226,11 +282,11 @@ const kindOf = (failure: unknown): Kind => {
  * and grizzle's other errors are `database`. Anything else, a defect included, is `internal`.
  *
  * @param failure - What a run failed with: the squashed cause of its exit.
- * @returns The kind and the exit code of that kind.
+ * @returns The kind, the exit code of that kind, and what to do next.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A squashed cause can be any value, and this function is what parses it into a kind.
 export const describeFailure = (failure: unknown): FailureDescription => {
   const kind = kindOf(failure);
 
-  return { exitCode: kindExitCode[kind], kind };
+  return { exitCode: kindExitCode[kind], help: helpOf(failure, kind), kind };
 };
