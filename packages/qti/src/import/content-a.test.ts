@@ -91,6 +91,7 @@ import * as patterns from "#qti/schema/patterns.ts";
 import { Coords, CoordsDefault, CoordsRect } from "#qti/schema/shapes.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
+import { rowsOf } from "#qti/test/rows.ts";
 import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**
@@ -665,7 +666,7 @@ const negatives: readonly Negative[] = [
       const last = of(draft, SimpleChoice).at(2);
 
       removeSubtree(draft, text(last ?? {}, "id"));
-      // The bound is `bounded` with a maximum of 0 so that the maximum's capacity, which a minimum of 3 over two choices would fire with a maximum of 3, holds and only the minimum's is broken.
+      // The bound is `bounded` and `maxChoicesN` keeps the fixture's value, so the maximum's capacity holds: a maximum of 3 over two choices would fire it too, and only the minimum's is to be broken.
       order["maxBound"] = "bounded";
       order["minChoicesN"] = 3n;
       setValue(draft, OrderMinChoices, id, "3");
@@ -930,21 +931,6 @@ describe.skipIf(!hasLease)(
 );
 
 /**
- * The rows of `relation` an imported package holds, from every tree it has.
- *
- * @param id - The package id `importPackage` answered.
- * @param relation - The relation to read.
- * @returns The rows of the relation.
- */
-const rowsOf = <R extends AnyRelation>(id: string, relation: R) =>
-  Effect.gen(function* rowsOfPackage() {
-    const trees = yield* treesOf(id);
-    const read = yield* Effect.all(trees.map((tree) => readTree(id, tree)));
-
-    return read.flatMap((rows) => Rows.of(rows, relation));
-  });
-
-/**
  * The identifiers of the rows of an arm an imported package holds, sorted.
  *
  * @param id - The package id `importPackage` answered.
@@ -1002,6 +988,7 @@ describe.skipIf(!hasLease)(
               (yield* rowsOf(id, DeclaredTemplateFeedbackBlockShowHide)).length,
               1,
             );
+            // None: the fixture's `qti-feedback-block` `fa` writes no `show-hide`; only `ft` in the template block does.
             assert.strictEqual((yield* rowsOf(id, DeclaredFeedbackBlockShowHide)).length, 0);
           }),
       );

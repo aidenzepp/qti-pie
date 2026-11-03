@@ -4,6 +4,7 @@
  * A `qti-hotspot-choice` of a graphic order interaction is written by the hot builder, whatever its
  * parent. A `qti-simple-choice` is written here when its parent is an order interaction.
  */
+import { judgedLater } from "#qti/import/judged.ts";
 import { Effect, Option } from "effect";
 import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
 import { Rows, withParents } from "#qti/import/tree.ts";
@@ -31,17 +32,6 @@ import {
   OrderOrientation,
 } from "#qti/schema/interactions/order.ts";
 import type { Element } from "#qti/xml/tree.ts";
-
-/**
- * An attribute value whose column's pattern judges it at commit: the typed columns of booleans and
- * lists are template-literal types, and the value read is a string until that pattern says it
- * fits, so the cast narrows only the type; a value the pattern refuses is refused there.
- */
-// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- `T` is the column type the caller's row demands; the call site names it by inference.
-const judgedLater = <T extends string>(value: string): T =>
-  // SAFETY: the column's regex law judges the value at commit, which is the importer's refusal for it (spec 3.9, 4.5).
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-  value as T;
 
 /**
  * One fact of an optional-value relation where the attribute was written, none where it was not.

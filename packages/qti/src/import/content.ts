@@ -11,6 +11,7 @@
  * the printed variables read them, then resolves every reference against the variables of all four
  * kinds.
  */
+import { judgedLater } from "#qti/import/judged.ts";
 import type { Relation, uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import { attributeReader, markers } from "#qti/import/interactions.ts";
@@ -119,17 +120,6 @@ interface Context {
 const integerPattern = new RegExp(patterns.xsInteger, "u");
 
 const integerOrVariablePattern = new RegExp(patterns.integerOrVariableString, "u");
-
-/**
- * An attribute value whose column's pattern judges it at commit: the typed columns of booleans and
- * enumerations are template-literal types, and the value read is a string until that pattern says
- * it fits, so the cast narrows only the type; a value the pattern refuses is refused there.
- */
-// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- `T` is the column type the caller's row demands; the call site names it by inference.
-const judgedLater = <T extends string>(value: string): T =>
-  // SAFETY: the column's regex law judges the value at commit, which is the importer's refusal for it (spec 3.9, 4.5).
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-  value as T;
 
 /**
  * The handle a roster holds for `text`, none when the roster has no such handle.

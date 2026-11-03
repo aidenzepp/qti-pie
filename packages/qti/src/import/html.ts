@@ -7,6 +7,7 @@
  * (`class`, `id`, `lang`, `dir`, `label` and the rest) and a cell's `headers` belong to the
  * attribute pass.
  */
+import { judgedLater } from "#qti/import/judged.ts";
 import type { AnyRelation, Fact, Relation, uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import { attributeReader } from "#qti/import/interactions.ts";
@@ -54,18 +55,6 @@ interface Piece {
  * A relation of one `id` column that no attribute adds to.
  */
 type ThinRelation = Relation<string, { readonly id: typeof uuid }, readonly ["id"]>;
-
-/**
- * An attribute value whose column's pattern judges it at commit: the typed columns of booleans,
- * lengths and enumerations are template-literal types, and the value read is a string until that
- * pattern says it fits, so the cast narrows only the type; a value the pattern refuses is refused
- * there.
- */
-// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- `T` is the column type the caller's row demands; the call site names it by inference.
-const judgedLater = <T extends string>(value: string): T =>
-  // SAFETY: the column's regex law judges the value at commit, which is the importer's refusal for it (spec 3.9, 4.5).
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-  value as T;
 
 /**
  * The columns of an optional attribute's row: its node, its value and, where its value is judged

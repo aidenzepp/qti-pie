@@ -14,6 +14,7 @@ import { registries } from "#qti/schema/seed/admission.ts";
 import { listPackage } from "#qti/package/read.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
 import { fixtureNames, materialize, materializeCorpus } from "#qti/test/fixtures.ts";
+import { settings } from "#qti/test/settings.ts";
 import { canonicalize } from "#qti/xml/canonical.ts";
 import { xmllintC14n } from "#qti/xml/oracle.ts";
 import type { Element } from "#qti/xml/tree.ts";
@@ -369,7 +370,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
  * Whether the operator asked for the corpus run: it reads every package of the examples tarball
  * and spawns `xmllint` once per item document, so it runs only on request.
  */
-const requested = process.env["GR8DES_CORPUS"] === "1";
+const requested = settings.corpusRequested;
 
 /**
  * The part of the QTI 3 item namespace the census tests for, as in spec 3.6.

@@ -7,6 +7,7 @@
  * The family builders of `interactions/*.ts` read the elements of one item and write the arm rows
  * of the interaction kinds they own; each takes an {@link InteractionContext} and the rows so far.
  */
+import { judgedLater } from "#qti/import/judged.ts";
 import type { Relation, uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import { associateRows } from "#qti/import/interactions/associate.ts";
@@ -386,17 +387,6 @@ export const nearestInteraction = (nodes: NodeIndex, node: Element): Option.Opti
 
   return Option.none();
 };
-
-/**
- * An attribute value whose column's pattern judges it at commit: the typed columns of booleans are
- * template-literal types, and the value read is a string until that pattern says it fits, so the
- * cast narrows only the type; a value the pattern refuses is refused there.
- */
-// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- `T` is the column type the caller's row demands; the call site names it by inference.
-const judgedLater = <T extends string>(value: string): T =>
-  // SAFETY: the column's regex law judges the value at commit, which is the importer's refusal for it (spec 3.9, 4.5).
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-  value as T;
 
 /**
  * Write one interaction's binding to the response variable it names.
