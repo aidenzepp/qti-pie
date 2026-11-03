@@ -1,5 +1,6 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import { Predicate } from "effect";
 
 import { inventory } from "#qti/schema/content/xsd-inventory.ts";
 import * as attributes from "#qti/schema/attributes.ts";
@@ -112,6 +113,91 @@ describe("attributes", () => {
       .map((rule) => rule.name);
     assert.include(checks, "AriaRoleH1");
     assert.include(checks, "AriaRoleNotSource");
+  });
+
+  it("holds each closed family and ARIA value to its roster", () => {
+    const { relations } = attributes;
+    const closed: readonly (readonly [{ readonly roster: unknown }, unknown])[] = [
+      [relations.AriaAtomic.fields.value, rosters.XsBoolean],
+      [relations.AriaAutocomplete.fields.value, rosters.AriaAutocompleteValue],
+      [relations.AriaBusy.fields.value, rosters.XsBoolean],
+      [relations.AriaChecked.fields.value, rosters.AriaTristate],
+      [relations.AriaCurrent.fields.value, rosters.AriaCurrentValue],
+      [relations.AriaDisabled.fields.value, rosters.XsBoolean],
+      [relations.AriaExpanded.fields.value, rosters.AriaTrueFalseUndefined],
+      [relations.AriaHaspopup.fields.value, rosters.XsBoolean],
+      [relations.AriaHidden.fields.value, rosters.XsBoolean],
+      [relations.AriaInvalid.fields.value, rosters.AriaInvalidValue],
+      [relations.AriaLive.fields.value, rosters.AriaLiveValue],
+      [relations.AriaModal.fields.value, rosters.XsBoolean],
+      [relations.AriaMultiline.fields.value, rosters.XsBoolean],
+      [relations.AriaMultiselectable.fields.value, rosters.XsBoolean],
+      [relations.AriaOrientation.fields.value, rosters.AriaOrientationValue],
+      [relations.AriaPressed.fields.value, rosters.AriaTristate],
+      [relations.AriaReadonly.fields.value, rosters.XsBoolean],
+      [relations.AriaRequired.fields.value, rosters.XsBoolean],
+      [relations.AriaRole.fields.value, rosters.AriaRoleValue],
+      [relations.AriaSelected.fields.value, rosters.AriaTrueFalseUndefined],
+      [relations.AriaSort.fields.value, rosters.AriaSortValue],
+      [relations.NodeDir.fields.value, rosters.TextDirection],
+      [relations.NodeSuppressTts.fields.value, rosters.SuppressTtsMode],
+    ];
+
+    assert.strictEqual(closed.length, 23);
+    for (const [field, roster] of closed) {
+      assert.strictEqual(field.roster, roster);
+    }
+  });
+
+  it("states BdoDirNotAuto and AriaRoleH1 by form over handles", () => {
+    const predicates = new Map(
+      attributes.rules.flatMap((rule) =>
+        rule.kind === "check" &&
+        (rule.name === "BdoDirNotAuto" || rule.name === "AriaRoleH1") &&
+        Predicate.hasProperty(rule, "desc") &&
+        Predicate.hasProperty(rule.desc, "predicate")
+          ? [[rule.name, structuredClone(rule.desc.predicate)] as const]
+          : [],
+      ),
+    );
+
+    assert.deepStrictEqual(predicates.get("BdoDirNotAuto"), {
+      args: [
+        {
+          kind: "compare",
+          left: { field: "kind", kind: "field" },
+          op: "ne",
+          right: { kind: "literal", type: undefined, value: "bdo" },
+        },
+        {
+          kind: "compare",
+          left: { field: "value", kind: "field" },
+          op: "ne",
+          right: { kind: "literal", type: undefined, value: "auto" },
+        },
+      ],
+      kind: "or",
+    });
+    assert.deepStrictEqual(predicates.get("AriaRoleH1"), {
+      args: [
+        {
+          kind: "compare",
+          left: { field: "kind", kind: "field" },
+          op: "ne",
+          right: { kind: "literal", type: undefined, value: "h1" },
+        },
+        {
+          arg: { field: "value", kind: "field" },
+          kind: "in",
+          values: ["heading", "tab", "presentation"],
+        },
+      ],
+      kind: "or",
+    });
+    assert.include(rosters.TextDirection.handles, "auto");
+    for (const handle of ["heading", "tab", "presentation"]) {
+      assert.include(rosters.AriaRoleValue.handles, handle);
+    }
   });
 
   it("admits each family and ARIA relation by its kind and attribute together", () => {

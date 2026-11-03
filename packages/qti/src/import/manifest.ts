@@ -18,6 +18,7 @@ import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { classed, contentOf, elementChildren, qmdLeafRows } from "#qti/import/leaf.ts";
 import { recordFile, recordTypes, soleFileTypes } from "#qti/import/record.ts";
 import type { ExternalRefusal } from "#qti/import/record.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
 import { readEntry } from "#qti/package/read.ts";
 import type { Entry, PackageReadError } from "#qti/package/read.ts";
 import type { ZipRefusal } from "#qti/package/zip.ts";
@@ -832,6 +833,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     version: SchemaVersionHandle;
   },
   | ExternalRefusal
+  | ImportRefused
   | NotQti3
   | PackageReadError
   | PlatformError.PlatformError
