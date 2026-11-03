@@ -8,11 +8,36 @@ import { AuthorApp } from "#qti/schema/logins.ts";
 
 /**
  * The migrations snapshot could not be read from disk or is not a JSON object with a `fingerprint`.
+ * The usual cause is a checkout made without git-lfs, which leaves a pointer file where the
+ * snapshot belongs.
  */
 export class SnapshotLoadError extends Schema.TaggedError<SnapshotLoadError>()(
   "SnapshotLoadError",
   { path: Schema.String, reason: Schema.Unknown },
-) {}
+) {
+  /**
+   * The file, why that is likely, and the command that fixes it.
+   */
+  override get message(): string {
+    return `Cannot read the migrations snapshot at ${this.path}. Without git-lfs it checks out as a pointer file. Run \`git lfs pull\` in this checkout, then try again.`;
+  }
+}
+
+/**
+ * The development cluster's CA certificate could not be read, so the cluster is not set up for this
+ * user: its state folder is missing or was never initialised.
+ */
+export class ClusterConfigError extends Schema.TaggedError<ClusterConfigError>()(
+  "ClusterConfigError",
+  { path: Schema.String, setting: Schema.Literal("GRIZZLE_PG_STATE") },
+) {
+  /**
+   * The missing file and the two ways to supply it.
+   */
+  override get message(): string {
+    return `Cannot read the local database's CA certificate at ${this.path}. Start the cluster from the grizzle clone (\`pnpm pg:init\`, and \`pnpm pg start\` after a reboot), or set ${this.setting} to the folder that holds its tls/ca.crt.`;
+  }
+}
 
 /**
  * The snapshot file's text as the JSON value `DbLayer.make` takes: an object with its `fingerprint`
@@ -40,6 +65,11 @@ const localCluster = Config.all({
 /**
  * The author application's pool on the local cluster: verify-full TLS against grizzle's development
  * CA, and the password scripts/db.sh gave the login, read on each connection attempt.
+ *
+ * Building the layer fails with Effect's `ConfigError` for a missing or malformed setting, with a
+ * {@link ClusterConfigError} when the CA is unreadable, and with a {@link SnapshotLoadError} when
+ * the snapshot is. A missing password file is not found here: it fails each connection attempt
+ * with grizzle's `CredentialError`.
  */
 export const AuthorAppLayer = Layer.unwrap(
   Effect.gen(function* AuthorAppLayer() {
@@ -53,13 +83,20 @@ export const AuthorAppLayer = Layer.unwrap(
       cluster.secrets,
       () => `${cluster.home}/.local/var/gr8des/${cluster.database}`,
     );
+    const ca = yield* fs.readFileString(`${grizzleState}/tls/ca.crt`).pipe(
+      Effect.mapError(
+        () =>
+          new ClusterConfigError({
+            path: `${grizzleState}/tls/ca.crt`,
+            setting: "GRIZZLE_PG_STATE",
+          }),
+      ),
+    );
     const snapshotPath = fileURLToPath(import.meta.resolve("#migrations/qti/snapshot.json"));
     const snapshot = yield* fs.readFileString(snapshotPath).pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(SnapshotText)),
       Effect.mapError((reason) => new SnapshotLoadError({ path: snapshotPath, reason })),
-      Effect.orDie,
     );
-    const ca = yield* fs.readFileString(`${grizzleState}/tls/ca.crt`);
     const password = fs.readFileString(`${secrets}/qti__author_app.password`).pipe(
       Effect.map((text) => Redacted.make(text.trim())),
       Effect.mapError((cause) => CredentialError.make({ cause })),

@@ -163,6 +163,28 @@ const tagOf = (failure: unknown): string | undefined =>
     : undefined;
 
 /**
+ * The tags of the failures that mean the local set-up is missing or unreadable: the layer's two
+ * (`db/layer.ts`) and Effect's `ConfigError`, which a missing or malformed setting raises. They are
+ * matched by tag so this module imports neither the layer nor the engine.
+ */
+const configTags: ReadonlySet<string> = new Set([
+  "ClusterConfigError",
+  "ConfigError",
+  "SnapshotLoadError",
+]);
+
+/**
+ * Whether `failure` is grizzle's report of a password file that could not be read. grizzle never
+ * raises a bare `CredentialError`: an `OpenError` carries it as its `reason`, and a write's failed
+ * acquisition is a `TransportFailure` that does.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
+const isCredentialFailure = (failure: unknown): boolean =>
+  (tagOf(failure) === "OpenError" || tagOf(failure) === "TransportFailure") &&
+  Predicate.hasProperty(failure, "reason") &&
+  tagOf(failure.reason) === "CredentialError";
+
+/**
  * Name the kind of a failure by what it is.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
@@ -187,6 +209,10 @@ const kindOf = (failure: unknown): Kind => {
     return "io";
   }
 
+  if ((tag !== undefined && configTags.has(tag)) || isCredentialFailure(failure)) {
+    return "config";
+  }
+
   return tag !== undefined && grizzleErrorTags.has(tag) ? "database" : "internal";
 };
 
@@ -196,8 +222,8 @@ const kindOf = (failure: unknown): Kind => {
  * An error this program defines names its own kind through {@link cliKind}. Every other failure is
  * mapped by what it is, without importing the module that defines it, so the program starts
  * without loading the engine: Effect's CLI errors are `cli-usage`, an `ImportRefused` is
- * `import-refused`, a `PlatformError` is `io` and grizzle's errors are `database`. Anything else,
- * a defect included, is `internal`.
+ * `import-refused`, a `PlatformError` is `io`, a missing or unreadable local set-up is `config`
+ * and grizzle's other errors are `database`. Anything else, a defect included, is `internal`.
  *
  * @param failure - What a run failed with: the squashed cause of its exit.
  * @returns The kind and the exit code of that kind.
