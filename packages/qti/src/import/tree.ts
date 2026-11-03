@@ -49,6 +49,7 @@ import type {
   RootKindHandle,
   SchemaVersionHandle,
 } from "#qti/schema/node.ts";
+import { NamespacePrefix, NamespaceUri, PiTarget, XmlEntityName } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { FLAGS, handleOf, KindEnters } from "#qti/schema/seed/ancestry.ts";
 import type { Flag } from "#qti/schema/seed/ancestry.ts";
@@ -593,10 +594,10 @@ const walk = (
     walked.comments.push({ id, text: child.text });
   } else if (child.kind === "pi") {
     kind = "pi";
-    walked.pis.push({ data: child.data, id, target: child.target });
+    walked.pis.push({ data: child.data, id, target: PiTarget(child.target) });
   } else {
     kind = "entityRef";
-    walked.entityReferences.push({ id, name: child.name });
+    walked.entityReferences.push({ id, name: XmlEntityName(child.name) });
   }
 
   walked.nodes.push({ ...common, ancestry, id, kind, prefix, rootKind: input.root });
@@ -624,17 +625,21 @@ const walk = (
         node: id,
         position: BigInt(declared),
         prefix: attribute.qname === "xmlns" ? "" : attribute.local,
-        uri: attribute.value,
+        uri: NamespaceUri(attribute.value),
       });
       declared += 1;
     } else if (attribute.namespace === xsiNamespace && attribute.local === "schemaLocation") {
-      walked.schemaLocations.push({ node: id, prefix: attribute.prefix, value: attribute.value });
+      walked.schemaLocations.push({
+        node: id,
+        prefix: NamespacePrefix(attribute.prefix),
+        value: attribute.value,
+      });
     }
 
     for (const reference of attribute.references) {
       walked.attributeReferences.push({
         attribute: attribute.qname,
-        name: reference.name,
+        name: XmlEntityName(reference.name),
         node: id,
         offset: BigInt(reference.offset),
       });

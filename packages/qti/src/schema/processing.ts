@@ -33,6 +33,7 @@ import {
 import * as declaration from "#qti/schema/declaration.ts";
 import * as item from "#qti/schema/item.ts";
 import * as node from "#qti/schema/node.ts";
+import { TemplateLocationUri, TemplateParameterName, TemplateUri } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import * as value from "#qti/schema/value.ts";
 
@@ -71,7 +72,7 @@ export const ResponseProcessingItem = relation("ResponseProcessingItem", { id: u
  */
 export const ResponseProcessingTemplate = relation(
   "ResponseProcessingTemplate",
-  { node: uuid, uri: str.regex(patterns.anyUri) },
+  { node: uuid, uri: TemplateUri },
   ["node"],
 );
 
@@ -80,7 +81,7 @@ export const ResponseProcessingTemplate = relation(
  */
 export const ResponseProcessingTemplateLocation = relation(
   "ResponseProcessingTemplateLocation",
-  { node: uuid, uri: str.regex(patterns.anyUri) },
+  { node: uuid, uri: TemplateLocationUri },
   ["node"],
 );
 
@@ -237,7 +238,7 @@ export const TemplateParameterRef = relation(
   {
     document: uuid,
     id: uuid,
-    identifier: ncName,
+    identifier: TemplateParameterName,
     referrerKind: closedId(node.NodeKind),
     rootKind: closedId(node.RootKind),
   },

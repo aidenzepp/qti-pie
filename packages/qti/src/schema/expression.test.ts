@@ -1,5 +1,6 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as expression from "#qti/schema/expression.ts";
@@ -187,5 +188,26 @@ describe("expression", () => {
     for (const name of [...Object.values(thin), ...filters]) {
       assert.include(Object.keys(built.relations), name);
     }
+  });
+});
+
+describe("contracts (expression)", () => {
+  it("types ExpressionExcludeCategory.value CategoryList", () => {
+    assert.strictEqual(
+      expression.ExpressionExcludeCategory.fields.value.name,
+      contracts.CategoryList.name,
+    );
+  });
+  it("types ExpressionIncludeCategory.value CategoryList", () => {
+    assert.strictEqual(
+      expression.ExpressionIncludeCategory.fields.value.name,
+      contracts.CategoryList.name,
+    );
+  });
+  it("types ExpressionSectionIdentifier.value SectionReference", () => {
+    assert.strictEqual(
+      expression.ExpressionSectionIdentifier.fields.value.name,
+      contracts.SectionReference.name,
+    );
   });
 });

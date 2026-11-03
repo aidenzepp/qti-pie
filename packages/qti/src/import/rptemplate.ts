@@ -21,7 +21,12 @@ import { kindOf, Rows, treeRows, typedAttribute, UnmodeledVocabulary } from "#qt
 import type { ImportRefused } from "#qti/import/refusal.ts";
 import type { NodeIndex } from "#qti/import/tree.ts";
 import { emptyEnvironment } from "#qti/processing/env.ts";
-import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
+import {
+  ManifestIdentifier,
+  PackagePath,
+  TemplateLocationUri,
+  TemplateUri,
+} from "#qti/schema/contracts.ts";
 import { Document } from "#qti/schema/document.ts";
 import type { AttributeNameHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
 import {
@@ -133,7 +138,7 @@ export const rptemplateRows = Effect.fn("import.rptemplateRows")(function* rptem
     ResponseProcessingTemplate,
     Option.match(template, {
       onNone: () => [],
-      onSome: (uri) => [{ node: rootNode.id, uri }],
+      onSome: (uri) => [{ node: rootNode.id, uri: TemplateUri(uri) }],
     }),
   );
   built = Rows.add(
@@ -141,7 +146,7 @@ export const rptemplateRows = Effect.fn("import.rptemplateRows")(function* rptem
     ResponseProcessingTemplateLocation,
     Option.match(location, {
       onNone: () => [],
-      onSome: (uri) => [{ node: rootNode.id, uri }],
+      onSome: (uri) => [{ node: rootNode.id, uri: TemplateLocationUri(uri) }],
     }),
   );
 

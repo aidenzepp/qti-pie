@@ -2,6 +2,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
@@ -389,5 +390,14 @@ describe("value", () => {
     assert.isTrue(pattern.test("ChoiceA"));
     assert.isFalse(pattern.test("Choice A"));
     assert.isFalse(pattern.test(" ChoiceA "));
+  });
+});
+
+describe("contracts (value)", () => {
+  it("types RecordField.fieldIdentifier RecordFieldIdentifier", () => {
+    assert.strictEqual(
+      value.RecordField.fields.fieldIdentifier.name,
+      contracts.RecordFieldIdentifier.name,
+    );
   });
 });

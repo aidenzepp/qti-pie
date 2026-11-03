@@ -8,6 +8,7 @@ import { inject } from "vitest";
 import { itemRows } from "#qti/import/item.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { readXml } from "#qti/xml/read.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as interaction from "#qti/schema/interaction.ts";
@@ -477,4 +478,13 @@ layer(NodeServices.layer, { excludeTestServices: true })("the importer's copies"
       assert.strictEqual(binding?.adaptive, "false");
     }),
   );
+});
+
+describe("contracts (interaction)", () => {
+  it("types SimpleChoiceTemplateIdentifier.value VariableReference", () => {
+    assert.strictEqual(
+      interaction.SimpleChoiceTemplateIdentifier.fields.value.name,
+      contracts.VariableReference.name,
+    );
+  });
 });

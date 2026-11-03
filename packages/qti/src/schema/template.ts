@@ -28,6 +28,7 @@ import {
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
 import { Node } from "#qti/schema/node.ts";
+import { RecordFieldIdentifier, VariableReference } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
@@ -52,7 +53,7 @@ export const TemplateBlock = relation(
     id: uuid,
     identifier: ncName,
     showHide: closedId(ShowHide),
-    templateIdentifier: ncName,
+    templateIdentifier: VariableReference,
   },
   ["id"],
 );
@@ -76,7 +77,7 @@ export const RubricTemplateBlock = relation(
     id: uuid,
     identifier: ncName,
     showHide: closedId(ShowHide),
-    templateIdentifier: ncName,
+    templateIdentifier: VariableReference,
   },
   ["id"],
 );
@@ -100,7 +101,7 @@ export const TemplateInline = relation(
     id: uuid,
     identifier: ncName,
     showHide: closedId(ShowHide),
-    templateIdentifier: ncName,
+    templateIdentifier: VariableReference,
   },
   ["id"],
 );
@@ -124,7 +125,7 @@ export const RubricTemplateInline = relation(
     id: uuid,
     identifier: ncName,
     showHide: closedId(ShowHide),
-    templateIdentifier: ncName,
+    templateIdentifier: VariableReference,
   },
   ["id"],
 );
@@ -168,7 +169,7 @@ export const PrintedVariable = relation(
     base: integerOrVariableString,
     delimiter: xsString,
     id: uuid,
-    identifier: ncName,
+    identifier: VariableReference,
     mappingIndicator: xsString,
     powerForm: closedId(XsBoolean),
   },
@@ -232,7 +233,7 @@ export const PrintedVariableIndex = relation(
  */
 export const PrintedVariableField = relation(
   "PrintedVariableField",
-  { node: uuid, value: ncName },
+  { node: uuid, value: RecordFieldIdentifier },
   ["node"],
 );
 

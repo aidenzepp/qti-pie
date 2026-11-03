@@ -1,6 +1,7 @@
 import { closed, schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as attributes from "#qti/schema/attributes.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as generic from "#qti/schema/kinds/generic.ts";
@@ -202,5 +203,26 @@ describe("node", () => {
     // @ts-expect-error a widened roster is not a nonempty tuple of literals (TS2345)
     const loose = closed("Loose", [...plain]);
     assert.deepStrictEqual([...loose.handles], ["loose"]);
+  });
+});
+
+describe("contracts (node)", () => {
+  it("types NamespaceDeclaration.uri NamespaceUri", () => {
+    assert.strictEqual(node.NamespaceDeclaration.fields.uri.name, contracts.NamespaceUri.name);
+  });
+  it("types SchemaLocation.prefix NamespacePrefix", () => {
+    assert.strictEqual(node.SchemaLocation.fields.prefix.name, contracts.NamespacePrefix.name);
+  });
+  it("types AttributeEntityReference.name XmlEntityName", () => {
+    assert.strictEqual(
+      node.AttributeEntityReference.fields.name.name,
+      contracts.XmlEntityName.name,
+    );
+  });
+  it("types Pi.target PiTarget", () => {
+    assert.strictEqual(node.Pi.fields.target.name, contracts.PiTarget.name);
+  });
+  it("types EntityReference.name XmlEntityName", () => {
+    assert.strictEqual(node.EntityReference.fields.name.name, contracts.XmlEntityName.name);
   });
 });

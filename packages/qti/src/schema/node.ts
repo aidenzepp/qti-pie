@@ -36,6 +36,7 @@ import * as lom from "#qti/schema/kinds/lom.ts";
 import * as qmd from "#qti/schema/kinds/qmd.ts";
 import * as ud from "#qti/schema/kinds/ud.ts";
 import * as xi from "#qti/schema/kinds/xi.ts";
+import { NamespacePrefix, NamespaceUri, PiTarget, XmlEntityName } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { ancestryHandles } from "#qti/schema/seed/ancestry.ts";
 
@@ -336,7 +337,7 @@ export const NamespaceDeclaration = relation(
     node: uuid,
     position: pg.bigint,
     prefix: str.regex(patterns.ncNameOrEmpty),
-    uri: str.regex(patterns.anyUri),
+    uri: NamespaceUri,
   },
   ["node", "position"],
 );
@@ -348,7 +349,7 @@ export const SchemaLocation = relation(
   "SchemaLocation",
   {
     node: uuid,
-    prefix: str.regex(patterns.ncName),
+    prefix: NamespacePrefix,
     value: str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags),
   },
   ["node"],
@@ -362,7 +363,7 @@ export const AttributeEntityReference = relation(
   "AttributeEntityReference",
   {
     attribute: str.regex(patterns.qName),
-    name: str.regex(patterns.ncName),
+    name: XmlEntityName,
     node: uuid,
     offset: pg.bigint,
   },
@@ -426,18 +427,14 @@ export const Comment = relation("Comment", { id: uuid, text: wildcard }, ["id"])
 /**
  * A processing instruction inside the root element.
  */
-export const Pi = relation("Pi", { data: wildcard, id: uuid, target: str.regex(patterns.ncName) }, [
-  "id",
-]);
+export const Pi = relation("Pi", { data: wildcard, id: uuid, target: PiTarget }, ["id"]);
 
 /**
  * A general entity reference the reader kept unexpanded.
  */
-export const EntityReference = relation(
-  "EntityReference",
-  { id: uuid, name: str.regex(patterns.ncName) },
-  ["id"],
-);
+export const EntityReference = relation("EntityReference", { id: uuid, name: XmlEntityName }, [
+  "id",
+]);
 
 /**
  * The generic kinds' arms, keyed by their `NodeKind` handles.

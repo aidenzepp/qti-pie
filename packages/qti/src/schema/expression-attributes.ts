@@ -39,18 +39,19 @@ import {
 } from "#qti/schema/content/rosters.ts";
 import { BaseType } from "#qti/schema/declaration.ts";
 import * as node from "#qti/schema/node.ts";
+import {
+  CustomOperatorClassName,
+  CustomOperatorDefinitionUri,
+  ExpressionCoords,
+  ExpressionIntegerOrVariable,
+  RecordFieldIdentifier,
+  VariableReference,
+  WeightReference,
+} from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import * as processing from "#qti/schema/processing.ts";
 
-const ncName = str.regex(patterns.ncName);
-
-const anyUri = str.regex(patterns.anyUri);
-
-const coords = str.regex(patterns.coords);
-
 const floatOrVariableRef = str.regex(patterns.floatOrVariableRef);
-
-const integerOrVariableRef = str.regex(patterns.integerOrVariableRef);
 
 const toleranceList = str.regex(patterns.toleranceList);
 
@@ -67,7 +68,7 @@ export const Variable = relation("Variable", { id: uuid }, ["id"]);
  */
 export const VariableWeightIdentifier = relation(
   "VariableWeightIdentifier",
-  { node: uuid, rootKind: closedId(node.RootKind), value: ncName },
+  { node: uuid, rootKind: closedId(node.RootKind), value: WeightReference },
   ["node"],
 );
 
@@ -105,23 +106,25 @@ export const StatsOperator = relation(
  */
 export const AnyN = relation(
   "AnyN",
-  { id: uuid, max: integerOrVariableRef, min: integerOrVariableRef },
+  { id: uuid, max: ExpressionIntegerOrVariable, min: ExpressionIntegerOrVariable },
   ["id"],
 );
 
 /**
  * The `qti-random-integer` expression and its required upper bound.
  */
-export const RandomInteger = relation("RandomInteger", { id: uuid, max: integerOrVariableRef }, [
-  "id",
-]);
+export const RandomInteger = relation(
+  "RandomInteger",
+  { id: uuid, max: ExpressionIntegerOrVariable },
+  ["id"],
+);
 
 /**
  * The `min` of a `qti-random-integer` whose source wrote it.
  */
 export const RandomIntegerMin = relation(
   "RandomIntegerMin",
-  { node: uuid, value: integerOrVariableRef },
+  { node: uuid, value: ExpressionIntegerOrVariable },
   ["node"],
 );
 
@@ -130,7 +133,7 @@ export const RandomIntegerMin = relation(
  */
 export const RandomIntegerStep = relation(
   "RandomIntegerStep",
-  { node: uuid, value: integerOrVariableRef },
+  { node: uuid, value: ExpressionIntegerOrVariable },
   ["node"],
 );
 
@@ -151,12 +154,20 @@ export const RandomFloatMin = relation(
 /**
  * The `qti-field-value` operator and the record field it reads.
  */
-export const FieldValue = relation("FieldValue", { fieldIdentifier: ncName, id: uuid }, ["id"]);
+export const FieldValue = relation(
+  "FieldValue",
+  { fieldIdentifier: RecordFieldIdentifier, id: uuid },
+  ["id"],
+);
 
 /**
  * The `qti-inside` operator: the region, as a shape and its coordinates.
  */
-export const Inside = relation("Inside", { coords, id: uuid, shape: closedId(Shape) }, ["id"]);
+export const Inside = relation(
+  "Inside",
+  { coords: ExpressionCoords, id: uuid, shape: closedId(Shape) },
+  ["id"],
+);
 
 /**
  * The `qti-pattern-match` operator and its pattern, a string or a braced reference as read.
@@ -193,25 +204,29 @@ export const CustomOperator = relation("CustomOperator", { id: uuid }, ["id"]);
 /**
  * The `class` of a `qti-custom-operator` whose source wrote it.
  */
-export const CustomOperatorClass = relation("CustomOperatorClass", { node: uuid, value: ncName }, [
-  "node",
-]);
+export const CustomOperatorClass = relation(
+  "CustomOperatorClass",
+  { node: uuid, value: CustomOperatorClassName },
+  ["node"],
+);
 
 /**
  * The `definition` of a `qti-custom-operator` whose source wrote it.
  */
 export const CustomOperatorDefinition = relation(
   "CustomOperatorDefinition",
-  { node: uuid, value: anyUri },
+  { node: uuid, value: CustomOperatorDefinitionUri },
   ["node"],
 );
 
 /**
  * The `qti-test-variables` expression and the outcome it totals.
  */
-export const TestVariables = relation("TestVariables", { id: uuid, variableIdentifier: ncName }, [
-  "id",
-]);
+export const TestVariables = relation(
+  "TestVariables",
+  { id: uuid, variableIdentifier: VariableReference },
+  ["id"],
+);
 
 /**
  * The `base-type` of a `qti-test-variables` whose source wrote it.
@@ -228,7 +243,7 @@ export const TestVariablesBaseType = relation(
  */
 export const ExpressionWeightIdentifier = relation(
   "ExpressionWeightIdentifier",
-  { node: uuid, value: ncName },
+  { node: uuid, value: WeightReference },
   ["node"],
 );
 
@@ -345,28 +360,32 @@ export const Repeat = relation(
  */
 export const EqualRoundedFiguresRef = relation(
   "EqualRoundedFiguresRef",
-  { identifier: ncName, node: uuid },
+  { identifier: VariableReference, node: uuid },
   ["node"],
 );
 
 /**
  * The variable `figures` names on a `qti-round-to` whose `figuresKind` is `ref`.
  */
-export const RoundToFiguresRef = relation("RoundToFiguresRef", { identifier: ncName, node: uuid }, [
-  "node",
-]);
+export const RoundToFiguresRef = relation(
+  "RoundToFiguresRef",
+  { identifier: VariableReference, node: uuid },
+  ["node"],
+);
 
 /**
  * The variable `n` names on a `qti-index` whose `nKind` is `ref`.
  */
-export const IndexNRef = relation("IndexNRef", { identifier: ncName, node: uuid }, ["node"]);
+export const IndexNRef = relation("IndexNRef", { identifier: VariableReference, node: uuid }, [
+  "node",
+]);
 
 /**
  * The variable `number-repeats` names on a `qti-repeat` whose `numberRepeatsKind` is `ref`.
  */
 export const RepeatNumberRepeatsRef = relation(
   "RepeatNumberRepeatsRef",
-  { identifier: ncName, node: uuid },
+  { identifier: VariableReference, node: uuid },
   ["node"],
 );
 
@@ -376,7 +395,7 @@ export const RepeatNumberRepeatsRef = relation(
  */
 export const OutcomeMinMax = relation(
   "OutcomeMinMax",
-  { id: uuid, kind: closedId(node.NodeKind), outcomeIdentifier: ncName },
+  { id: uuid, kind: closedId(node.NodeKind), outcomeIdentifier: VariableReference },
   ["id"],
 );
 
