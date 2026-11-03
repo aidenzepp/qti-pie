@@ -2,7 +2,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit } from "effect";
 import { CliConfig, CliOutput, Command } from "effect/cli";
 import { builtIns } from "#qti/cli/config.ts";
-import { describeFailure } from "#qti/cli/errors.ts";
+import { describeFailure, kindExitCode } from "#qti/cli/errors.ts";
 import { presenter, printFailures } from "#qti/cli/present.ts";
 
 /**
@@ -40,8 +40,25 @@ export const exitCodeOf = (exit: Exit.Exit<unknown, unknown>): number => {
 };
 
 /**
+ * End the process when standard output fails, as a shell pipeline expects: a reader that closed
+ * early (`qti … | head`) is not an error, so the process exits 0 and says nothing, and any other
+ * failure is written once to standard error and exits with the code of the `io` kind.
+ *
+ * @param error - The error standard output emitted.
+ */
+const endOnStdoutError = (error: NodeJS.ErrnoException): never => {
+  if (error.code === "EPIPE") {
+    process.exit(0);
+  }
+
+  process.stderr.write(`error[io]: cannot write to standard output: ${error.message}\n`);
+  process.exit(kindExitCode.io);
+};
+
+/**
  * Run `command` as the program: print what failed, provide the Node services and end the process
- * with the run's exit code.
+ * with the run's exit code. A closed standard output ends the run quietly (see
+ * {@link endOnStdoutError}).
  *
  * @param command - The command line to run.
  */
@@ -53,6 +70,7 @@ export const runMain = <
 >(
   command: Command.Command<Name, Input, ContextInput, E, NodeServices.NodeServices>,
 ): void => {
+  process.stdout.on("error", endOnStdoutError);
   NodeRuntime.runMain(
     runCli(command, { version: "0.0.0" }).pipe(printFailures, Effect.provide(NodeServices.layer)),
     {
