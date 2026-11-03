@@ -68,7 +68,6 @@ describe("describeFailure and exitCodeOf", () => {
       io: 74,
       "not-found": 1,
       "roundtrip-differs": 1,
-      "skill-target-outside": 1,
       "target-not-empty": 1,
       timeout: 1,
     } satisfies Record<Kind, number>);
@@ -178,6 +177,48 @@ layer(NodeServices.layer, { excludeTestServices: true })("the run's exit code", 
         assert.strictEqual(exitCodeOf(exit), 2, args.join(" "));
       }
     }),
+  );
+
+  live.effect("bare qti, with or without --json, exits 0 with its help on stdout alone", () =>
+    Effect.gen(function* bare() {
+      for (const args of [[], ["--json"]]) {
+        const { exit, stderr, stdout } = yield* captureCli(args);
+
+        assert.strictEqual(exitCodeOf(exit), 0, args.join(" "));
+        assert.include(stdout, "EXAMPLES", args.join(" "));
+        assert.strictEqual(stderr, "", args.join(" "));
+      }
+    }),
+  );
+
+  live.effect("a real usage error still exits 2 and says so on stderr", () =>
+    Effect.gen(function* usage() {
+      for (const args of [["--frobnicate"], ["import"]]) {
+        const { exit, stderr } = yield* captureCli(args);
+
+        assert.strictEqual(exitCodeOf(exit), 2, args.join(" "));
+        assert.isTrue(stderr.startsWith("error[cli-usage]:"), args.join(" "));
+      }
+    }),
+  );
+
+  live.effect("--help lists no kind that no command can raise", () =>
+    Effect.gen(function* help() {
+      const { stdout } = yield* captureCli(["--help"]);
+
+      assert.notInclude(stdout, "skill-target-outside");
+    }),
+  );
+
+  live.effect(
+    "the process ends with 0 for bare qti, which proves the teardown uses the same code",
+    () =>
+      Effect.gen(function* spawnedBare() {
+        const { code } = yield* spawnCli([]);
+
+        assert.strictEqual(code, ChildProcessSpawner.ExitCode(0));
+      }),
+    cliProcessTestTimeoutMs,
   );
 
   live.effect(

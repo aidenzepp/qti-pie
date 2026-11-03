@@ -12,7 +12,7 @@ import { CliError } from "effect/cli";
  * Every kind a failure of this program has.
  *
  * - Exit 1, refused or the work failed: `import-refused`, `roundtrip-differs`, `target-not-empty`,
- *   `skill-target-outside`, `timeout`, `database`, `not-found`.
+ *   `timeout`, `database`, `not-found`.
  * - Exit 2, the command line is wrong: `cli-usage`, `cli-path-missing`, `cli-bad-argument`.
  * - Exit 70, a defect in qti: `internal`.
  * - Exit 74, reading the package or writing the output failed: `io`.
@@ -29,7 +29,6 @@ export type Kind =
   | "io"
   | "not-found"
   | "roundtrip-differs"
-  | "skill-target-outside"
   | "target-not-empty"
   | "timeout";
 
@@ -48,7 +47,6 @@ export const kindExitCode: Readonly<Record<Kind, number>> = {
   io: 74,
   "not-found": 1,
   "roundtrip-differs": 1,
-  "skill-target-outside": 1,
   "target-not-empty": 1,
   timeout: 1,
 };
@@ -74,8 +72,6 @@ export const kindHelp: Readonly<Record<Kind, string>> = {
   io: "Check that the path exists, is readable or writable, and that the disk has room, then run the command again.",
   "not-found": "List the imported packages to find a valid package id, then run the command again.",
   "roundtrip-differs": "Compare the package with its export by hand to see which entries differ.",
-  "skill-target-outside":
-    "Choose a target folder inside the project, or pass the folder the skill belongs in.",
   "target-not-empty": "Choose an empty or new target, or pass --yes to replace what is there.",
   timeout: "Run the command again with a larger --timeout.",
 };

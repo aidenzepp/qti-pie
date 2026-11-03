@@ -1,6 +1,6 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Option, Stdio } from "effect";
-import { CliConfig, CliOutput, Command } from "effect/cli";
+import { CliConfig, CliError, CliOutput, Command } from "effect/cli";
 import { builtIns } from "#qti/cli/config.ts";
 import { describeFailure, kindExitCode } from "#qti/cli/errors.ts";
 import { modeOfArguments, modeOfEnvironment } from "#qti/cli/output.ts";
@@ -72,8 +72,8 @@ export const runCli = <Name extends string, Input, ContextInput, E, R>(
   });
 
 /**
- * The exit code a run ends the process with: 0 for success, 130 when it was only interrupted, and
- * otherwise the code of the kind of its failure.
+ * The exit code a run ends the process with: 0 for success, and for help shown because no command
+ * was named, 130 when it was only interrupted, and otherwise the code of the kind of its failure.
  *
  * @param exit - How the run ended.
  * @returns The process exit code.
@@ -83,9 +83,19 @@ export const exitCodeOf = (exit: Exit.Exit<unknown, unknown>): number => {
     return 0;
   }
 
-  return Cause.hasInterruptsOnly(exit.cause)
-    ? 130
-    : describeFailure(Cause.squash(exit.cause)).exitCode;
+  if (Cause.hasInterruptsOnly(exit.cause)) {
+    return 130;
+  }
+
+  const failure = Cause.squash(exit.cause);
+
+  // Effect fails a bare command with a ShowHelp that holds no errors, after it printed the help.
+  // A real usage error is a ShowHelp that holds at least one.
+  if (CliError.isCliError(failure) && failure._tag === "ShowHelp" && failure.errors.length === 0) {
+    return 0;
+  }
+
+  return describeFailure(failure).exitCode;
 };
 
 /**
