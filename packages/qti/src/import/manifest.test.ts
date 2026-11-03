@@ -32,6 +32,8 @@ import {
   File,
   FileContent,
   Manifest,
+  ManifestMetadata,
+  ManifestSchemaVersion,
   Organizations,
   Package,
   PackageEntry,
@@ -161,6 +163,19 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
         [],
       );
       assert.deepStrictEqual(Rows.of(rows, AttributeLexical), []);
+    }),
+  );
+
+  suite.effect("simple yields a ManifestSchemaVersion row that copies its package's version", () =>
+    Effect.gen(function* versionRow() {
+      const { packageId, rows } = yield* importManifest(inject("fixtures").simple);
+      const metadata = only(Rows.of(rows, ManifestMetadata));
+      const row = only(Rows.of(rows, ManifestSchemaVersion));
+
+      assert.strictEqual(row.metadata, metadata.id);
+      assert.strictEqual(row.package, packageId);
+      assert.strictEqual(row.version, "3.0.0");
+      assert.notProperty(row, "value");
     }),
   );
 
@@ -493,19 +508,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
       const failure = yield* refusalOf(inject("fixtures").simple, undefined, withLeaf("a\tb"));
       assert.strictEqual(failure.rule, "text-copy");
     }),
-  );
-
-  suite.effect(
-    "a Package schemaversion that differs from the cp:schemaversion text is refused as typed-copy",
-    () =>
-      Effect.gen(function* versionCopy() {
-        const failure = yield* refusalOf(inject("fixtures").simple, undefined, (rows, entries) => [
-          mapRows(rows, Package, (row) => patched(row, { schemaversion: "3.0.1" })),
-          entries,
-        ]);
-
-        assert.strictEqual(failure.rule, "typed-copy");
-      }),
   );
 
   suite.effect("a second cp:schemaversion outside 3.0.0 and 3.0.1 is refused as typed-copy", () =>

@@ -87,13 +87,14 @@ export const ManifestSchema = relation(
 );
 
 /**
- * The `cp:schemaversion` text of a manifest's metadata, `3.0.0` or `3.0.1`. It is text, not a
- * `SchemaVersion` handle: a name belongs to one identity, and the copy on `Package` is guarded
- * outside the schema.
+ * The `cp:schemaversion` of a manifest's metadata, `3.0.0` or `3.0.1`. The row copies its package's
+ * `schemaversion`: `package` names the package whose manifest holds the metadata, and two
+ * containments state it, one that the metadata belongs to that package and one that the package
+ * holds this version.
  */
 export const ManifestSchemaVersion = relation(
   "ManifestSchemaVersion",
-  { id: uuid, metadata: uuid, value: str.regex(patterns.schemaVersion) },
+  { id: uuid, metadata: uuid, package: uuid, version: closedId(SchemaVersion) },
   ["id"],
 );
 
@@ -633,6 +634,11 @@ export const rules = [
   }),
   key(ManifestSchemaVersion, ["metadata"]),
   contained(on(ManifestSchemaVersion, "metadata"), on(ManifestMetadata, "id")),
+  contained(
+    on(ManifestSchemaVersion, "metadata", "package"),
+    on(ManifestMetadata, "id", "manifest"),
+  ),
+  contained(on(ManifestSchemaVersion, "package", "version"), on(Package, "id", "schemaversion")),
   contained(on(ManifestSchemaVersion, "id", "metadata"), on(Edge, "child", "parent")),
   capacity(on(ManifestMetadata, "id"), {
     from: on(ManifestSchemaVersion, "metadata"),
