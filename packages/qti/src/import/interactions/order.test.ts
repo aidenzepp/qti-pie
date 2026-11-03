@@ -29,6 +29,7 @@ import {
   TypedBinding,
 } from "#qti/schema/interaction.ts";
 import {
+  DeclaredOrderShuffle,
   GraphicOrderInteraction,
   GraphicOrderMaxChoices,
   GraphicOrderMaxChoicesN,
@@ -220,6 +221,7 @@ describe("orderRows on an order interaction", () => {
         OrderMinSelectionsMessage,
         OrderMaxSelectionsMessage,
         OrderChoicesContainerWidth,
+        DeclaredOrderShuffle,
         DeclaredFixed,
         DeclaredShowHide,
         SimpleChoiceTemplateIdentifier,
@@ -265,6 +267,7 @@ describe("orderRows on an order interaction", () => {
         ]),
         [["bounded", 3n, 2n, "true"]],
       );
+      assert.deepStrictEqual(Rows.of(built, DeclaredOrderShuffle), [{ node: "node-2" }]);
       assert.deepStrictEqual(Rows.of(built, OrderMaxChoices), [{ node: "node-2", value: "3" }]);
       assert.deepStrictEqual(Rows.of(built, OrderMinChoices), [{ node: "node-2", value: "2" }]);
       assert.deepStrictEqual(Rows.of(built, OrderMaxChoicesN), [{ node: "node-2", value: 3n }]);
@@ -295,6 +298,27 @@ describe("orderRows on an order interaction", () => {
       assert.deepStrictEqual(Rows.of(built, SimpleChoiceTemplateIdentifier), [
         { node: "node-3", value: "T" },
       ]);
+    }),
+  );
+
+  it.effect("marks a written shuffle of false, which an omitted shuffle does not get", () =>
+    Effect.gen(function* writtenFalse() {
+      const written = yield* orderRows(
+        contextOf([orderItem({ shuffle: "false" })], declared),
+        Rows.empty(),
+      );
+      const omitted = yield* orderRows(contextOf([orderItem()], declared), Rows.empty());
+
+      assert.deepStrictEqual(
+        Rows.of(written, OrderInteraction).map((row) => row.shuffle),
+        ["false"],
+      );
+      assert.deepStrictEqual(Rows.of(written, DeclaredOrderShuffle), [{ node: "node-2" }]);
+      assert.deepStrictEqual(
+        Rows.of(omitted, OrderInteraction).map((row) => row.shuffle),
+        ["false"],
+      );
+      assert.strictEqual(Rows.of(omitted, DeclaredOrderShuffle).length, 0);
     }),
   );
 

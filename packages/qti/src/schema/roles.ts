@@ -225,6 +225,7 @@ export const Author = role(
     DeclaredMaxChoices: Qti.relations.DeclaredMaxChoices,
     DeclaredMediaLoop: Qti.relations.DeclaredMediaLoop,
     DeclaredMinChoices: Qti.relations.DeclaredMinChoices,
+    DeclaredOrderShuffle: Qti.relations.DeclaredOrderShuffle,
     DeclaredOrientation: Qti.relations.DeclaredOrientation,
     DeclaredParamVariable: Qti.relations.DeclaredParamVariable,
     DeclaredPositionObjectMaxChoices: Qti.relations.DeclaredPositionObjectMaxChoices,

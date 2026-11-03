@@ -188,6 +188,7 @@ describe("interactions/order", () => {
   it("contains every optional value into the arm it belongs to", () => {
     const { relations } = order;
     const owners = [
+      [relations.DeclaredOrderShuffle, relations.OrderInteraction],
       [relations.OrderOrientation, relations.OrderInteraction],
       [relations.OrderMinChoices, relations.OrderInteraction],
       [relations.OrderMaxChoices, relations.OrderInteraction],

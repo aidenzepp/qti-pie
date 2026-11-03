@@ -16,6 +16,7 @@ import {
   SimpleChoiceTemplateIdentifier,
 } from "#qti/schema/interaction.ts";
 import {
+  DeclaredOrderShuffle,
   GraphicOrderInteraction,
   GraphicOrderMaxChoices,
   GraphicOrderMaxChoicesN,
@@ -149,10 +150,17 @@ const order = Effect.fn("import.order")(function* order(
     written(maxMessage, (own) => ({ node: node.id, value: judgedLater(own) })),
   );
 
-  return Rows.add(
+  built = Rows.add(
     built,
     OrderChoicesContainerWidth,
     written(width, (own) => ({ node: node.id, value: judgedLater(own) })),
+  );
+
+  return ctx.shared.markers(
+    built,
+    { shuffle: DeclaredOrderShuffle },
+    node.id,
+    attributes.written(),
   );
 });
 

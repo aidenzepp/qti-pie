@@ -153,23 +153,6 @@ const first =
   };
 
 /**
- * An attribute written only where its value is not `normal`, for a column that holds a value the
- * importer writes when the source wrote none, with no marker to say which: a stored `normal`
- * cannot be told from an absent attribute, so it is left absent.
- */
-const unlessDefault =
-  (source: Source, normal: string): Source =>
-  (index) => {
-    const read = source(index);
-
-    return (id) => {
-      const value = read(id);
-
-      return value === normal ? undefined : value;
-    };
-  };
-
-/**
  * The `src` of a `source`, written except where the importer filled it: rule 11's picture clause
  * lets a `source` in a `picture` hold `srcset` and no `src`, and the importer stores the empty
  * text for it, so an empty `src` under `picture` is left absent. Under `audio` and `video` the
@@ -714,7 +697,7 @@ export const ownAttributes = {
   ],
   "qti-order-interaction": [
     responseIdentifierOf(R.OrderInteraction),
-    ["shuffle", unlessDefault(arm(R.OrderInteraction, "shuffle"), "false")],
+    ["shuffle", marked(R.DeclaredOrderShuffle, arm(R.OrderInteraction, "shuffle"))],
     ["min-choices", optional(R.OrderMinChoices)],
     ["max-choices", optional(R.OrderMaxChoices)],
     ["orientation", optional(R.OrderOrientation)],
