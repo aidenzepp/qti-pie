@@ -227,7 +227,8 @@ const htmlElements = [
  * The names of the XML copies of phase 2's fixtures b (negatives, part one) and c: each is a cut of
  * one corpus item, or a copy of `simple` or `sharedMedia`, with a few edits. Of fixtures b's six,
  * three are refused by the database and three admitted; of fixtures c's six, one is refused
- * (`adaptive-zero-feedback`) and five admitted.
+ * (`adaptive-zero-feedback`) and five admitted. Fixtures a adds two admitted copies, one for each
+ * of the six feedback and template kinds' arms.
  */
 const copyNames = [
   "admission-choice-in-feedback",
@@ -242,6 +243,8 @@ const copyNames = [
   "item-lang-no-general",
   "adaptive-one-feedback",
   "adaptive-zero-feedback",
+  "feedback-block-kinds",
+  "rubric-template-kinds",
 ] as const;
 
 /**
@@ -249,7 +252,7 @@ const copyNames = [
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
  * `end-attempt`, phase 2's hand-written positive, the 19 cut items of {@link cutNames}, the 40
- * hand-written HTML positives of {@link htmlElements} and the 12 XML copies of
+ * hand-written HTML positives of {@link htmlElements} and the 14 XML copies of
  * {@link copyNames}.
  */
 export const fixtureNames = [
@@ -624,6 +627,19 @@ const simpleItemLang = replaceIn(
 );
 
 /**
+ * The question of {@link bgChoiceItem} with a `qti-template-inline` in it, which
+ * `rubric-template-kinds` writes in place of {@link bgChoiceQuestion}.
+ */
+const bgTemplateQuestion =
+  '<p>This is a True/False <qti-template-inline template-identifier="T" identifier="ti">question</qti-template-inline>?</p>';
+
+/**
+ * The declaration of a template variable `T`, which the template block and inline kinds read.
+ */
+const templateDeclaration =
+  '<qti-template-declaration base-type="identifier" cardinality="single" identifier="T"/>';
+
+/**
  * The edits of `adaptive-one-feedback` and `adaptive-zero-feedback`: the choice interaction of
  * {@link bgChoiceItem} goes in the content body of a feedback block, the `FEEDBACK` outcome the
  * block reads is declared, and the root writes `adaptive`, which the item does not.
@@ -679,6 +695,14 @@ const feedbackWrapped = (adaptive: string): readonly FileEdit[] => [
  * - `adaptive-one-feedback` wraps the choice interaction of {@link bgChoiceItem} in a feedback block
  *   and writes `adaptive="1"` on the root, an `xs:boolean` true.
  * - `adaptive-zero-feedback` is the same copy with `adaptive="0"`, which is false.
+ *
+ * Fixtures a (phase 2, V32) adds two, which between them hold each feedback and template kind once:
+ *
+ * - `feedback-block-kinds` holds a `qti-feedback-block`, a `qti-template-block` and, in that block's
+ *   content body, a `qti-feedback-block.template`, with the `FEEDBACK` outcome and the template
+ *   variable `T` declared.
+ * - `rubric-template-kinds` holds a `qti-rubric-block` with a `qti-template-block.rubric` and a
+ *   `qti-template-inline.rubric`, and a `qti-template-inline` in the question.
  */
 const copySpecs: Record<(typeof copyNames)[number], FixtureSpec> = {
   "adaptive-one-feedback": bgCopy("adaptive-one-feedback", feedbackWrapped("1")),
@@ -713,6 +737,18 @@ const copySpecs: Record<(typeof copyNames)[number], FixtureSpec> = {
       bgChoiceItem,
       bgChoiceQuestion,
       '<div class=""><p>This is a True/False question?</p></div><p class="  ">Choose one.</p>',
+    ),
+  ]),
+  "feedback-block-kinds": bgCopy("feedback-block-kinds", [
+    replaceIn(
+      bgChoiceItem,
+      "</qti-choice-interaction>",
+      '</qti-choice-interaction><qti-feedback-block outcome-identifier="FEEDBACK" identifier="fa"><qti-content-body><p>Wrong</p></qti-content-body></qti-feedback-block><qti-template-block template-identifier="T" identifier="tb"><qti-content-body><qti-feedback-block outcome-identifier="FEEDBACK" identifier="ft" show-hide="hide"><qti-content-body><p>Hint</p></qti-content-body></qti-feedback-block></qti-content-body></qti-template-block>',
+    ),
+    replaceIn(
+      bgChoiceItem,
+      "</qti-outcome-declaration>",
+      `</qti-outcome-declaration><qti-outcome-declaration base-type="identifier" cardinality="single" identifier="FEEDBACK"/>${templateDeclaration}`,
     ),
   ]),
   "gap-outside-gap-match": bgCopy("gap-outside-gap-match", [
@@ -776,6 +812,19 @@ const copySpecs: Record<(typeof copyNames)[number], FixtureSpec> = {
       bgChoiceItem,
       bgChoiceQuestion,
       '<p class=" a  b ">This is a True/False question?</p><div label="x&#9;y"><p>Choose one.</p></div><p><span aria-valuetext="a&#9;b">Answer.</span></p>',
+    ),
+  ]),
+  "rubric-template-kinds": bgCopy("rubric-template-kinds", [
+    replaceIn(
+      bgChoiceItem,
+      "<qti-item-body>",
+      '<qti-item-body><qti-rubric-block use="instructions" view="candidate"><qti-content-body><qti-template-block template-identifier="T" identifier="rb" show-hide="hide"><qti-content-body><p>Read</p></qti-content-body></qti-template-block><qti-template-inline template-identifier="T" identifier="ri" show-hide="hide">note</qti-template-inline></qti-content-body></qti-rubric-block>',
+    ),
+    replaceIn(bgChoiceItem, bgChoiceQuestion, bgTemplateQuestion),
+    replaceIn(
+      bgChoiceItem,
+      "</qti-outcome-declaration>",
+      `</qti-outcome-declaration>${templateDeclaration}`,
     ),
   ]),
 };

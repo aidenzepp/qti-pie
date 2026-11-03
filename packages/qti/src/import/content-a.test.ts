@@ -15,6 +15,12 @@ import { ruleOfLaw } from "#qti/import/refusal.ts";
 import type { ImportLaw, Rule } from "#qti/import/refusal.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
+import {
+  DeclaredFeedbackBlockShowHide,
+  FeedbackBlock,
+  DeclaredTemplateFeedbackBlockShowHide,
+  TemplateFeedbackBlock,
+} from "#qti/schema/feedback.ts";
 import { Declaration, RecordDeclaration, TypedDeclaration } from "#qti/schema/declaration.ts";
 import {
   BindingFit,
@@ -72,6 +78,14 @@ import {
   TextEntryInteraction,
 } from "#qti/schema/interactions/text.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
+import {
+  DeclaredRubricTemplateBlockShowHide,
+  DeclaredRubricTemplateInlineShowHide,
+  RubricTemplateBlock,
+  RubricTemplateInline,
+  TemplateBlock,
+  TemplateInline,
+} from "#qti/schema/template.ts";
 import { Edge, Node } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { Coords, CoordsDefault, CoordsRect } from "#qti/schema/shapes.ts";
@@ -911,6 +925,102 @@ describe.skipIf(!hasLease)(
           }),
         );
       }
+    });
+  },
+);
+
+/**
+ * The rows of `relation` an imported package holds, from every tree it has.
+ *
+ * @param id - The package id `importPackage` answered.
+ * @param relation - The relation to read.
+ * @returns The rows of the relation.
+ */
+const rowsOf = <R extends AnyRelation>(id: string, relation: R) =>
+  Effect.gen(function* rowsOfPackage() {
+    const trees = yield* treesOf(id);
+    const read = yield* Effect.all(trees.map((tree) => readTree(id, tree)));
+
+    return read.flatMap((rows) => Rows.of(rows, relation));
+  });
+
+/**
+ * The identifiers of the rows of an arm an imported package holds, sorted.
+ *
+ * @param id - The package id `importPackage` answered.
+ * @param arm - An arm that carries an `identifier` column.
+ * @returns The identifiers.
+ */
+const identifiersOf = (
+  id: string,
+  arm:
+    | typeof FeedbackBlock
+    | typeof RubricTemplateBlock
+    | typeof RubricTemplateInline
+    | typeof TemplateBlock
+    | typeof TemplateFeedbackBlock
+    | typeof TemplateInline,
+) => Effect.map(rowsOf(id, arm), (rows) => rows.map((row) => row.identifier).toSorted());
+
+/**
+ * Assert that a round trip compares all equal.
+ *
+ * @param report - The comparison report.
+ */
+const assertAllEqual = (report: Effect.Success<ReturnType<typeof roundTrip>>["report"]) => {
+  assert.isAbove(report.length, 1, "a package is at least a manifest and an item");
+  assert.strictEqual(
+    report.filter(
+      (item) => item.outcome.kind !== "canonical-equal" && item.outcome.kind !== "byte-identical",
+    ).length,
+    0,
+    renderReport(report),
+  );
+  assert.isTrue(renderReport(report).endsWith("\nall equal"), renderReport(report));
+};
+
+describe.skipIf(!hasLease)(
+  "import/content-a.test.ts, the feedback and template kinds, on the lease",
+  { timeout: leaseTestTimeoutMs },
+  () => {
+    layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
+      excludeTestServices: true,
+      timeout: "120 seconds",
+    })("the six feedback and template kinds each import into their own arm", (it) => {
+      it.effect(
+        "feedback-block-kinds imports, exports and compares all equal, each kind in its own arm",
+        () =>
+          Effect.gen(function* feedbackKinds() {
+            const { id, report } = yield* roundTrip("feedback-block-kinds");
+
+            assertAllEqual(report);
+
+            assert.deepStrictEqual(yield* identifiersOf(id, FeedbackBlock), ["fa"]);
+            assert.deepStrictEqual(yield* identifiersOf(id, TemplateFeedbackBlock), ["ft"]);
+            assert.deepStrictEqual(yield* identifiersOf(id, TemplateBlock), ["tb"]);
+            assert.strictEqual(
+              (yield* rowsOf(id, DeclaredTemplateFeedbackBlockShowHide)).length,
+              1,
+            );
+            assert.strictEqual((yield* rowsOf(id, DeclaredFeedbackBlockShowHide)).length, 0);
+          }),
+      );
+
+      it.effect(
+        "rubric-template-kinds imports, exports and compares all equal, each kind in its own arm",
+        () =>
+          Effect.gen(function* rubricKinds() {
+            const { id, report } = yield* roundTrip("rubric-template-kinds");
+
+            assertAllEqual(report);
+
+            assert.deepStrictEqual(yield* identifiersOf(id, RubricTemplateBlock), ["rb"]);
+            assert.deepStrictEqual(yield* identifiersOf(id, RubricTemplateInline), ["ri"]);
+            assert.deepStrictEqual(yield* identifiersOf(id, TemplateInline), ["ti"]);
+            assert.strictEqual((yield* rowsOf(id, DeclaredRubricTemplateBlockShowHide)).length, 1);
+            assert.strictEqual((yield* rowsOf(id, DeclaredRubricTemplateInlineShowHide)).length, 1);
+          }),
+      );
     });
   },
 );
