@@ -1,8 +1,18 @@
 import { CredentialError, OpenError, TokenError, TransportFailure } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Config, ConfigProvider, Effect, Result } from "effect";
-import { describeFailure } from "#qti/cli/errors.ts";
+import { describeFailure, kindExitCode, kindHelp, RoundtripDiffers } from "#qti/cli/errors.ts";
 import { ClusterConfigError, SnapshotLoadError } from "#qti/db/layer.ts";
+
+/**
+ * What a failure is, without its help: the kind and the exit code.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
+const identity = (failure: unknown) => {
+  const { exitCode, kind } = describeFailure(failure);
+
+  return { exitCode, kind };
+};
 
 const config = { exitCode: 78, kind: "config" };
 
@@ -20,13 +30,13 @@ describe("describeFailure, the local set-up", () => {
       setting: "GRIZZLE_PG_STATE",
     });
 
-    assert.deepStrictEqual(describeFailure(failure), config);
+    assert.deepStrictEqual(identity(failure), config);
   });
 
   it("a SnapshotLoadError exits 78 as config", () => {
     const failure = new SnapshotLoadError({ path: "/snapshot.json", reason: "pointer file" });
 
-    assert.deepStrictEqual(describeFailure(failure), config);
+    assert.deepStrictEqual(identity(failure), config);
   });
 
   it.effect("Effect's ConfigError exits 78 as config", () =>
@@ -38,27 +48,47 @@ describe("describeFailure, the local set-up", () => {
       assert.isTrue(Result.isFailure(result));
 
       if (Result.isFailure(result)) {
-        assert.deepStrictEqual(describeFailure(result.failure), config);
+        assert.deepStrictEqual(identity(result.failure), config);
       }
     }),
   );
 
   it("an OpenError or a TransportFailure carrying a CredentialError exits 78 as config", () => {
-    assert.deepStrictEqual(describeFailure(OpenError.make({ reason: credential })), config);
-    assert.deepStrictEqual(describeFailure(TransportFailure.make({ reason: credential })), config);
+    assert.deepStrictEqual(identity(OpenError.make({ reason: credential })), config);
+    assert.deepStrictEqual(identity(TransportFailure.make({ reason: credential })), config);
   });
 
   it("an OpenError with another reason stays database", () => {
     const other = TokenError.make({ cause: new Error("refused") });
 
-    assert.deepStrictEqual(describeFailure(OpenError.make({ reason: other })), database);
+    assert.deepStrictEqual(identity(OpenError.make({ reason: other })), database);
   });
 
   it("a TransportFailure with another reason, or none, stays database", () => {
     assert.deepStrictEqual(
-      describeFailure({ _tag: "TransportFailure", reason: { _tag: "LayerReleased" } }),
+      identity({ _tag: "TransportFailure", reason: { _tag: "LayerReleased" } }),
       database,
     );
-    assert.deepStrictEqual(describeFailure({ _tag: "TransportFailure" }), database);
+    assert.deepStrictEqual(identity({ _tag: "TransportFailure" }), database);
+  });
+});
+
+describe("describeFailure, what to do next", () => {
+  it("every kind has a non-empty help", () => {
+    assert.sameMembers(Object.keys(kindHelp), Object.keys(kindExitCode));
+
+    for (const help of Object.values(kindHelp)) {
+      assert.isAbove(help.length, 0);
+    }
+  });
+
+  it("a failure without a help of its own gets the help of its kind", () => {
+    assert.strictEqual(describeFailure({ _tag: "TransientFailure" }).help, kindHelp.database);
+  });
+
+  it("a RoundtripDiffers names the diff to run", () => {
+    const failure = new RoundtripDiffers({ differing: 2, exportDir: "work/export/pkg" });
+
+    assert.include(describeFailure(failure).help, "diff -r");
   });
 });

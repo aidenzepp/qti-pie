@@ -7,7 +7,8 @@ import { presenter, printFailures } from "#qti/cli/present.ts";
 
 /**
  * Run `command` on the arguments `Stdio` supplies, with this program's presenter and built-in
- * flags. The process and every in-process test run through here, so both behave as a shell does.
+ * flags, printing what failed. The process and every in-process test run through here, so both
+ * behave as a shell does.
  *
  * @param command - The command line to run.
  * @param config - The version `--version` prints.
@@ -18,6 +19,7 @@ export const runCli = <Name extends string, Input, ContextInput, E, R>(
   config: { readonly version: string },
 ) =>
   Command.run(command, config).pipe(
+    printFailures,
     Effect.provide(CliOutput.layerPresenter(presenter)),
     Effect.provide(CliConfig.layer({ builtIns })),
   );
@@ -56,23 +58,18 @@ const endOnStdoutError = (error: NodeJS.ErrnoException): never => {
 };
 
 /**
- * Run `command` as the program: print what failed, provide the Node services and end the process
- * with the run's exit code. A closed standard output ends the run quietly (see
+ * Run `command` as the program: provide the Node services and end the process with the run's exit
+ * code. A closed standard output ends the run quietly (see
  * {@link endOnStdoutError}).
  *
  * @param command - The command line to run.
  */
-export const runMain = <
-  Name extends string,
-  Input,
-  ContextInput,
-  E extends { readonly message: string },
->(
+export const runMain = <Name extends string, Input, ContextInput, E>(
   command: Command.Command<Name, Input, ContextInput, E, NodeServices.NodeServices>,
 ): void => {
   process.stdout.on("error", endOnStdoutError);
   NodeRuntime.runMain(
-    runCli(command, { version: "0.0.0" }).pipe(printFailures, Effect.provide(NodeServices.layer)),
+    runCli(command, { version: "0.0.0" }).pipe(Effect.provide(NodeServices.layer)),
     {
       disableErrorReporting: true,
       teardown: (exit, onExit) => {
