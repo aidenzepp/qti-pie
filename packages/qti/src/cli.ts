@@ -2,6 +2,7 @@ import { Logger } from "effect";
 import { Command } from "effect/cli";
 import { kindExitCode } from "#qti/cli/errors.ts";
 import type { Kind } from "#qti/cli/errors.ts";
+import { completionsCommand } from "#qti/cli/completions.ts";
 import { exportCommand } from "#qti/cli/export.ts";
 import { importCommand } from "#qti/cli/import.ts";
 import { outputGlobalFlags } from "#qti/cli/output.ts";
@@ -50,7 +51,15 @@ const description = [
 ].join("\n");
 
 /**
- * The command line: `import`, `export` and `roundtrip`, each printing text, `json` or `jsonl`.
+ * The root command, annotated so that `completions`, which reads it, does not make `cli`'s own
+ * type circular.
+ */
+// oxlint-disable-next-line eslint/no-use-before-define -- The function runs after `cli` is built; the annotation breaks the type cycle.
+const rootCommand = (): Command.Command.Any => cli;
+
+/**
+ * The command line: `import`, `export` and `roundtrip`, each printing text, `json` or `jsonl`, and
+ * `completions`.
  */
 export const cli = Command.make("qti").pipe(
   Command.withDescription(description),
@@ -69,7 +78,12 @@ export const cli = Command.make("qti").pipe(
       description: "Print the result as one line of JSON, for a program to read",
     },
   ]),
-  Command.withSubcommands([importCommand, exportCommand, roundtripCommand]),
+  Command.withSubcommands([
+    importCommand,
+    exportCommand,
+    roundtripCommand,
+    completionsCommand(rootCommand),
+  ]),
   // `--output`, `--json` and `--jsonl` reach every command; a handler reads the mode it prints in.
   Command.withGlobalFlags(outputGlobalFlags),
   // `--quiet` and `--verbose` choose the minimum log level the chosen handler runs at.
