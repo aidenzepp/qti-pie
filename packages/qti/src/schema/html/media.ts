@@ -10,7 +10,8 @@
  * Goal 3.9: `autoplay`, `loop`, `muted` and `controls` on `audio` and `video`, and `default` on
  * `track`, are `xs:boolean` in 3.0.0 and an enumeration that names the attribute in 3.0.1. Their
  * relations carry a `version` copy bound to the node's own version, and a row check admits each
- * version's lexical space. The value column is text, so both spaces fit and the check is the bar.
+ * version's lexical space. The value column is a roster of the union of both spaces, so the check
+ * is what judges each version's own subset.
  */
 import {
   capacity,
@@ -25,6 +26,17 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
+import {
+  CrossOrigin,
+  MediaAutoplay,
+  MediaControls,
+  MediaLoop,
+  MediaMuted,
+  MediaPreload,
+  ParamValuetype,
+  TrackDefaultValue,
+  TrackKind,
+} from "#qti/schema/content/rosters.ts";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
@@ -70,7 +82,7 @@ export const Source = relation(
  */
 export const Track = relation(
   "Track",
-  { id: uuid, kind: str.regex(patterns.trackKind), src: xsNormalizedString },
+  { id: uuid, kind: closedId(TrackKind), src: xsNormalizedString },
   ["id"],
 );
 
@@ -94,7 +106,7 @@ export const ObjectElement = relation(
  */
 export const Param = relation(
   "Param",
-  { id: uuid, name: xsString, value: xsString, valuetype: str.regex(patterns.valuetype) },
+  { id: uuid, name: xsString, value: xsString, valuetype: closedId(ParamValuetype) },
   ["id"],
 );
 
@@ -108,7 +120,7 @@ export const AudioSrc = relation("AudioSrc", { node: uuid, value: xsNormalizedSt
  */
 export const AudioCrossorigin = relation(
   "AudioCrossorigin",
-  { node: uuid, value: str.regex(patterns.crossorigin) },
+  { node: uuid, value: closedId(CrossOrigin) },
   ["node"],
 );
 
@@ -117,7 +129,7 @@ export const AudioCrossorigin = relation(
  */
 export const AudioPreload = relation(
   "AudioPreload",
-  { node: uuid, value: str.regex(patterns.preload) },
+  { node: uuid, value: closedId(MediaPreload) },
   ["node"],
 );
 
@@ -138,7 +150,7 @@ export const VideoSrc = relation("VideoSrc", { node: uuid, value: xsNormalizedSt
  */
 export const VideoCrossorigin = relation(
   "VideoCrossorigin",
-  { node: uuid, value: str.regex(patterns.crossorigin) },
+  { node: uuid, value: closedId(CrossOrigin) },
   ["node"],
 );
 
@@ -147,7 +159,7 @@ export const VideoCrossorigin = relation(
  */
 export const VideoPreload = relation(
   "VideoPreload",
-  { node: uuid, value: str.regex(patterns.preload) },
+  { node: uuid, value: closedId(MediaPreload) },
   ["node"],
 );
 
@@ -260,7 +272,7 @@ export const DeclaredValuetype = relation("DeclaredValuetype", { node: uuid }, [
  */
 export const AudioAutoplay = relation(
   "AudioAutoplay",
-  { node: uuid, value: xsString, version: closedId(node.SchemaVersion) },
+  { node: uuid, value: closedId(MediaAutoplay), version: closedId(node.SchemaVersion) },
   ["node"],
 );
 
@@ -269,7 +281,7 @@ export const AudioAutoplay = relation(
  */
 export const AudioControls = relation(
   "AudioControls",
-  { node: uuid, value: xsString, version: closedId(node.SchemaVersion) },
+  { node: uuid, value: closedId(MediaControls), version: closedId(node.SchemaVersion) },
   ["node"],
 );
 
@@ -278,7 +290,7 @@ export const AudioControls = relation(
  */
 export const AudioLoop = relation(
   "AudioLoop",
-  { node: uuid, value: xsString, version: closedId(node.SchemaVersion) },
+  { node: uuid, value: closedId(MediaLoop), version: closedId(node.SchemaVersion) },
   ["node"],
 );
 
@@ -287,7 +299,7 @@ export const AudioLoop = relation(
  */
 export const AudioMuted = relation(
   "AudioMuted",
-  { node: uuid, value: xsString, version: closedId(node.SchemaVersion) },
+  { node: uuid, value: closedId(MediaMuted), version: closedId(node.SchemaVersion) },
   ["node"],
 );
 
@@ -296,7 +308,7 @@ export const AudioMuted = relation(
  */
 export const VideoAutoplay = relation(
   "VideoAutoplay",
-  { node: uuid, value: xsString, version: closedId(node.SchemaVersion) },
+  { node: uuid, value: closedId(MediaAutoplay), version: closedId(node.SchemaVersion) },
   ["node"],
 );
 
@@ -305,7 +317,7 @@ export const VideoAutoplay = relation(
  */
 export const VideoControls = relation(
   "VideoControls",
-  { node: uuid, value: xsString, version: closedId(node.SchemaVersion) },
+  { node: uuid, value: closedId(MediaControls), version: closedId(node.SchemaVersion) },
   ["node"],
 );
 
@@ -314,7 +326,7 @@ export const VideoControls = relation(
  */
 export const VideoLoop = relation(
   "VideoLoop",
-  { node: uuid, value: xsString, version: closedId(node.SchemaVersion) },
+  { node: uuid, value: closedId(MediaLoop), version: closedId(node.SchemaVersion) },
   ["node"],
 );
 
@@ -323,7 +335,7 @@ export const VideoLoop = relation(
  */
 export const VideoMuted = relation(
   "VideoMuted",
-  { node: uuid, value: xsString, version: closedId(node.SchemaVersion) },
+  { node: uuid, value: closedId(MediaMuted), version: closedId(node.SchemaVersion) },
   ["node"],
 );
 
@@ -332,7 +344,7 @@ export const VideoMuted = relation(
  */
 export const TrackDefault = relation(
   "TrackDefault",
-  { node: uuid, value: xsString, version: closedId(node.SchemaVersion) },
+  { node: uuid, value: closedId(TrackDefaultValue), version: closedId(node.SchemaVersion) },
   ["node"],
 );
 

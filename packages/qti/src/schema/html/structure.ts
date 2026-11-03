@@ -8,7 +8,18 @@
  * `aria.ts`, and appear on no arm here. The arms' containments into `Node` are bound by
  * one `mirrors` per handle in the composed schema, not written here.
  */
-import { capacity, contained, on, relation, select, str, uuid, within } from "@bjornpagen/grizzle";
+import {
+  capacity,
+  closedId,
+  contained,
+  on,
+  relation,
+  select,
+  str,
+  uuid,
+  within,
+} from "@bjornpagen/grizzle";
+import { CellAlign, CellScope, CellValign, XsBoolean } from "#qti/schema/content/rosters.ts";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
@@ -142,18 +153,14 @@ export const ColgroupSpan = relation(
 /**
  * A `details` element's `open`, when written.
  */
-export const DetailsOpen = relation(
-  "DetailsOpen",
-  { node: uuid, value: str.regex(patterns.xsBoolean) },
-  ["node"],
-);
+export const DetailsOpen = relation("DetailsOpen", { node: uuid, value: closedId(XsBoolean) }, [
+  "node",
+]);
 
 /**
  * A `td` element's `scope`, when written.
  */
-export const TdScope = relation("TdScope", { node: uuid, value: str.regex(patterns.scope) }, [
-  "node",
-]);
+export const TdScope = relation("TdScope", { node: uuid, value: closedId(CellScope) }, ["node"]);
 
 /**
  * A `td` element's `abbr`, when written.
@@ -194,23 +201,17 @@ export const TdColspan = relation(
 /**
  * A `td` element's `align`, when written.
  */
-export const TdAlign = relation("TdAlign", { node: uuid, value: str.regex(patterns.align) }, [
-  "node",
-]);
+export const TdAlign = relation("TdAlign", { node: uuid, value: closedId(CellAlign) }, ["node"]);
 
 /**
  * A `td` element's `valign`, when written.
  */
-export const TdValign = relation("TdValign", { node: uuid, value: str.regex(patterns.valign) }, [
-  "node",
-]);
+export const TdValign = relation("TdValign", { node: uuid, value: closedId(CellValign) }, ["node"]);
 
 /**
  * A `th` element's `scope`, when written.
  */
-export const ThScope = relation("ThScope", { node: uuid, value: str.regex(patterns.scope) }, [
-  "node",
-]);
+export const ThScope = relation("ThScope", { node: uuid, value: closedId(CellScope) }, ["node"]);
 
 /**
  * A `th` element's `abbr`, when written.
@@ -251,16 +252,12 @@ export const ThColspan = relation(
 /**
  * A `th` element's `align`, when written.
  */
-export const ThAlign = relation("ThAlign", { node: uuid, value: str.regex(patterns.align) }, [
-  "node",
-]);
+export const ThAlign = relation("ThAlign", { node: uuid, value: closedId(CellAlign) }, ["node"]);
 
 /**
  * A `th` element's `valign`, when written.
  */
-export const ThValign = relation("ThValign", { node: uuid, value: str.regex(patterns.valign) }, [
-  "node",
-]);
+export const ThValign = relation("ThValign", { node: uuid, value: closedId(CellValign) }, ["node"]);
 
 /**
  * The arms, keyed by their `NodeKind` handles.

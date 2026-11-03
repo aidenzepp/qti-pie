@@ -21,21 +21,28 @@ const optional = [
   ["TableSummary", "Table", patterns.xsString],
   ["ColSpan", "Col", patterns.positiveInteger],
   ["ColgroupSpan", "Colgroup", patterns.positiveInteger],
-  ["DetailsOpen", "Details", patterns.xsBoolean],
-  ["TdScope", "Td", patterns.scope],
   ["TdAbbr", "Td", patterns.xsString],
   ["TdAxis", "Td", patterns.xsString],
   ["TdRowspan", "Td", patterns.positiveInteger],
   ["TdColspan", "Td", patterns.positiveInteger],
-  ["TdAlign", "Td", patterns.align],
-  ["TdValign", "Td", patterns.valign],
-  ["ThScope", "Th", patterns.scope],
   ["ThAbbr", "Th", patterns.xsString],
   ["ThAxis", "Th", patterns.xsString],
   ["ThRowspan", "Th", patterns.positiveInteger],
   ["ThColspan", "Th", patterns.positiveInteger],
-  ["ThAlign", "Th", patterns.align],
-  ["ThValign", "Th", patterns.valign],
+] as const;
+
+/**
+ * The optional-attribute relations whose value is a closed roster, each with its arm and the
+ * roster's name.
+ */
+const closedOptional = [
+  ["DetailsOpen", "Details", "XsBoolean"],
+  ["TdScope", "Td", "CellScope"],
+  ["TdAlign", "Td", "CellAlign"],
+  ["TdValign", "Td", "CellValign"],
+  ["ThScope", "Th", "CellScope"],
+  ["ThAlign", "Th", "CellAlign"],
+  ["ThValign", "Th", "CellValign"],
 ] as const;
 
 /**
@@ -144,6 +151,18 @@ describe("html/structure", () => {
     }
   });
 
+  it("holds a closed optional attribute as a node-keyed row over its roster", () => {
+    for (const [name, arm, roster] of closedOptional) {
+      const relation = structure.relations[name];
+      assert.deepStrictEqual([...relation.primaryKey], ["node"], name);
+      assert.deepStrictEqual(Object.keys(relation.fields), ["node", "value"], name);
+      assert.strictEqual(relation.fields.value.roster.name, roster, name);
+      assert.deepStrictEqual(containments(structure.rules, relation), [
+        [["node"], structure.relations[arm], ["id"]],
+      ]);
+    }
+  });
+
   it("holds the five capacities, each with its bounds", () => {
     const found = capacities().map((rule) => [
       childKindOf(rule),
@@ -174,6 +193,9 @@ describe("html/structure", () => {
     for (const name of Object.keys(structure.relations)) {
       assert.property(probe.relations, name);
     }
-    assert.strictEqual(Object.keys(structure.relations).length, 20 + optional.length);
+    assert.strictEqual(
+      Object.keys(structure.relations).length,
+      20 + optional.length + closedOptional.length,
+    );
   });
 });

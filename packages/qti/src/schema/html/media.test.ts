@@ -1,9 +1,9 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import { Schema } from "effect";
 import * as media from "#qti/schema/html/media.ts";
 import * as html from "#qti/schema/html.ts";
 import * as node from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
 
 /**
  * The seven handles of spec 4.8's V06 column.
@@ -55,6 +55,39 @@ const containmentsInto = (target: Owner) =>
       : [],
   );
 
+/**
+ * The shape of a ByVersion check's description that the handle lists live in: the predicate is an
+ * `and` of one `or` per version, each `or` holding the version comparison and the `in` term.
+ */
+const ByVersionCheck = Schema.Struct({
+  desc: Schema.Struct({
+    predicate: Schema.Struct({
+      args: Schema.Array(
+        Schema.Struct({
+          args: Schema.Array(
+            Schema.Struct({ values: Schema.optional(Schema.Array(Schema.String)) }),
+          ),
+        }),
+      ),
+    }),
+  }),
+});
+
+/**
+ * The attribute word each boolean relation's 3.0.1 enumeration names.
+ */
+const wordOf = {
+  AudioAutoplay: "autoplay",
+  AudioControls: "controls",
+  AudioLoop: "loop",
+  AudioMuted: "muted",
+  TrackDefault: "default",
+  VideoAutoplay: "autoplay",
+  VideoControls: "controls",
+  VideoLoop: "loop",
+  VideoMuted: "muted",
+} as const;
+
 describe("html/media", () => {
   it("keys 7 arms by the V06 handles", () => {
     assert.strictEqual(handles.length, 7);
@@ -82,8 +115,29 @@ describe("html/media", () => {
       "valuetype",
     ]);
     assert.deepStrictEqual(Object.keys(relations.Picture.fields), ["id"]);
-    assert.strictEqual(relations.Track.fields.kind.pattern.source, patterns.trackKind);
-    assert.strictEqual(relations.Param.fields.valuetype.pattern.source, patterns.valuetype);
+    assert.strictEqual(relations.Track.fields.kind.roster.name, "TrackKind");
+    assert.strictEqual(relations.Param.fields.valuetype.roster.name, "ParamValuetype");
+  });
+
+  it("closes the crossorigin, preload and boolean columns over their rosters", () => {
+    const { relations } = media;
+    assert.strictEqual(relations.AudioCrossorigin.fields.value.roster.name, "CrossOrigin");
+    assert.strictEqual(relations.VideoCrossorigin.fields.value.roster.name, "CrossOrigin");
+    assert.strictEqual(relations.AudioPreload.fields.value.roster.name, "MediaPreload");
+    assert.strictEqual(relations.VideoPreload.fields.value.roster.name, "MediaPreload");
+    for (const [name, roster] of [
+      ["AudioAutoplay", "MediaAutoplay"],
+      ["VideoAutoplay", "MediaAutoplay"],
+      ["AudioControls", "MediaControls"],
+      ["VideoControls", "MediaControls"],
+      ["AudioLoop", "MediaLoop"],
+      ["VideoLoop", "MediaLoop"],
+      ["AudioMuted", "MediaMuted"],
+      ["VideoMuted", "MediaMuted"],
+      ["TrackDefault", "TrackDefaultValue"],
+    ] as const) {
+      assert.strictEqual(relations[name].fields.value.roster.name, roster, name);
+    }
   });
 
   it("holds a boolean as a node-keyed row with its version copy, bound to its host", () => {
@@ -104,6 +158,27 @@ describe("html/media", () => {
       assert.strictEqual(found[0]?.relation, media.relations[name], name);
       assert.include(Object.keys(media.relations[name].fields), "version", name);
       assert.include(Object.keys(media.relations[name].fields), "value", name);
+    }
+  });
+
+  it("narrows each version's handles in each ByVersion check by the form of its attribute", () => {
+    for (const [name] of booleans) {
+      const rule = media.rules.find(
+        (found) => found.kind === "check" && found.name === `${name}ByVersion`,
+      );
+      const { desc } = Schema.decodeUnknownSync(ByVersionCheck)(rule);
+      const lists = desc.predicate.args.map((version) =>
+        version.args.flatMap((term) => term.values ?? []),
+      );
+
+      assert.deepStrictEqual(
+        lists,
+        [
+          ["true", "false", "1", "0"],
+          ["true", "false", wordOf[name]],
+        ],
+        name,
+      );
     }
   });
 
