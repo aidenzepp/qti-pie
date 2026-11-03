@@ -1417,4 +1417,42 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts composi
       }
     }),
   );
+
+  suite.effect(
+    "a boolean qti-value outside true and false is refused value-lexical before the write",
+    () =>
+      Effect.gen(function* refusedBoolean() {
+        for (const spelling of ["yes", "1", "TRUE", " true"]) {
+          const doc = yield* readChoice(inject("fixtures").simple, (text) =>
+            text
+              .replace('base-type="float"', 'base-type="boolean"')
+              .replace("<qti-value>0</qti-value>", `<qti-value>${spelling}</qti-value>`),
+          );
+          const failure = yield* Effect.flip(itemOf(doc));
+
+          assert.strictEqual(failure._tag, "ImportRefused", spelling);
+          assert.strictEqual(
+            failure instanceof ImportRefused ? failure.rule : "",
+            "value-lexical",
+            spelling,
+          );
+        }
+      }),
+  );
+
+  suite.effect("a boolean qti-value of true or false is written in its arm", () =>
+    Effect.gen(function* admittedBoolean() {
+      const doc = yield* readChoice(inject("fixtures").simple, (text) =>
+        text
+          .replace('base-type="float"', 'base-type="boolean"')
+          .replace("<qti-value>0</qti-value>", "<qti-value>false</qti-value>"),
+      );
+      const { rows } = yield* itemOf(doc);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, value.relations.DeclaredValueBoolean).map((row) => row.value),
+        ["false"],
+      );
+    }),
+  );
 });

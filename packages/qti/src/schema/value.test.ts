@@ -2,6 +2,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as node from "#qti/schema/node.ts";
@@ -18,6 +19,7 @@ const probe = () =>
     "QtiValueProbe",
     {
       ...node.relations,
+      ...rosters.relations,
       ...pkg.relations,
       ...document.relations,
       ...declaration.relations,
@@ -259,7 +261,6 @@ describe("value", () => {
     assert.deepStrictEqual(Object.keys(built).toSorted(), [...baseTypes].toSorted());
 
     const expected = [
-      [built.boolean, "ProbeBoolean", patterns.booleanLiteral],
       [built.directedPair, "ProbeDirectedPair", patterns.pair],
       [built.duration, "ProbeDuration", patterns.xsDouble],
       [built.file, "ProbeFile", patterns.xsNormalizedString],
@@ -277,6 +278,11 @@ describe("value", () => {
       assert.deepStrictEqual([...arm.primaryKey], ["id"]);
       assert.strictEqual(arm.fields.value.pattern.source, pattern);
     }
+
+    assert.strictEqual(built.boolean.name, "ProbeBoolean");
+    assert.deepStrictEqual(Object.keys(built.boolean.fields).toSorted(), ["id", "value"]);
+    assert.deepStrictEqual([...built.boolean.primaryKey], ["id"]);
+    assert.strictEqual(built.boolean.fields.value.roster, rosters.BooleanLiteral);
   });
 
   it("gives DeclaredValue its fields, key and containments", () => {

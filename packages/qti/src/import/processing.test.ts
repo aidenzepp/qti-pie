@@ -1696,4 +1696,34 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts read
       }
     }),
   );
+
+  suite.effect("refuses a boolean qti-base-value outside true and false under P7", () =>
+    Effect.gen(function* outsideLiteral() {
+      for (const spelling of ["yes", "1", "TRUE"]) {
+        const prepared = yield* prepareBody(
+          `<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="boolean">${spelling}</qti-base-value></qti-set-outcome-value>`,
+          { language: "outcome", mode: "test", rootKind: "test" },
+        );
+        const failure = yield* Effect.flip(processed(prepared));
+
+        assert.instanceOf(failure, ImportRefused, spelling);
+        assert.strictEqual(failure.rule, "P7", spelling);
+      }
+    }),
+  );
+
+  suite.effect("writes a boolean qti-base-value of true or false in its arm", () =>
+    Effect.gen(function* insideLiteral() {
+      const prepared = yield* prepareBody(
+        '<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="boolean">false</qti-base-value></qti-set-outcome-value>',
+        { language: "outcome", mode: "test", rootKind: "test" },
+      );
+      const built = yield* processed(prepared);
+
+      assert.deepStrictEqual(
+        of(built, processing.relations.LiteralBoolean).map((row) => row.value),
+        ["false"],
+      );
+    }),
+  );
 });

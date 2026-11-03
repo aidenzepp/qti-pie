@@ -11,12 +11,13 @@
  * (a record) has no mapping or table row, and the missing arm is the commit's refusal.
  */
 import { judgedLater } from "#qti/import/judged.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
 import { Effect, Option } from "effect";
 import { attributeReader, coordsRows, markers } from "#qti/import/interactions.ts";
 import type { DeclaredVariable, NodeRef } from "#qti/import/interactions.ts";
-import { ItemRefusal, Rows, typedAttribute, withParents } from "#qti/import/tree.ts";
+import { closedOf, ItemRefusal, Rows, typedAttribute, withParents } from "#qti/import/tree.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
-import { Shape } from "#qti/schema/content/rosters.ts";
+import { BooleanLiteral, Shape } from "#qti/schema/content/rosters.ts";
 import type { BaseType } from "#qti/schema/declaration.ts";
 import * as mapping from "#qti/schema/mapping.ts";
 import { Edge } from "#qti/schema/node.ts";
@@ -67,13 +68,44 @@ const valueOf = (
   });
 
 /**
- * A typed arm writer: the row of one value in the arm of its base type.
+ * A typed arm writer: the row of one value in the arm of its base type. The boolean arm narrows
+ * its text to `BooleanLiteral` first, so it is effectful and the others are not.
  */
-type ArmWriter = Record<BaseTypeHandle, (rows: Rows, id: string, text: string) => Rows>;
+type ArmWriter = Record<
+  Exclude<BaseTypeHandle, "boolean">,
+  (rows: Rows, id: string, text: string) => Rows
+> & {
+  readonly boolean: (rows: Rows, id: string, text: string) => Effect.Effect<Rows, ImportRefused>;
+};
+
+/**
+ * Write the row of one value in the arm of `baseType` of `writer`.
+ *
+ * @returns The rows with the arm added; `ImportRefused` for a boolean outside `BooleanLiteral`.
+ */
+const armRows = (
+  writer: ArmWriter,
+  baseType: BaseTypeHandle,
+  rows: Rows,
+  id: string,
+  text: string,
+): Effect.Effect<Rows, ImportRefused> =>
+  baseType === "boolean"
+    ? writer.boolean(rows, id, text)
+    : Effect.succeed(writer[baseType](rows, id, text));
 
 const mapKeyArms: ArmWriter = {
   boolean: (rows, id, text) =>
-    Rows.add(rows, mapping.relations.MapEntryBoolean, [{ id, mapKey: judgedLater(text) }]),
+    closedOf(
+      BooleanLiteral.handles,
+      text,
+      "map-key-lexical",
+      "the map-key attribute of a boolean qti-map-entry",
+    ).pipe(
+      Effect.map((literal) =>
+        Rows.add(rows, mapping.relations.MapEntryBoolean, [{ id, mapKey: literal }]),
+      ),
+    ),
   directedPair: (rows, id, text) =>
     Rows.add(rows, mapping.relations.MapEntryDirectedPair, [{ id, mapKey: judgedLater(text) }]),
   duration: (rows, id, text) =>
@@ -98,9 +130,16 @@ const mapKeyArms: ArmWriter = {
 
 const matchTargetArms: ArmWriter = {
   boolean: (rows, id, text) =>
-    Rows.add(rows, mapping.relations.MatchTableEntryBoolean, [
-      { id, targetValue: judgedLater(text) },
-    ]),
+    closedOf(
+      BooleanLiteral.handles,
+      text,
+      "attribute-lexical",
+      "the target-value attribute of a boolean qti-match-table-entry",
+    ).pipe(
+      Effect.map((literal) =>
+        Rows.add(rows, mapping.relations.MatchTableEntryBoolean, [{ id, targetValue: literal }]),
+      ),
+    ),
   directedPair: (rows, id, text) =>
     Rows.add(rows, mapping.relations.MatchTableEntryDirectedPair, [
       { id, targetValue: judgedLater(text) },
@@ -139,9 +178,18 @@ const matchTargetArms: ArmWriter = {
 
 const interpolationTargetArms: ArmWriter = {
   boolean: (rows, id, text) =>
-    Rows.add(rows, mapping.relations.InterpolationTableEntryBoolean, [
-      { id, targetValue: judgedLater(text) },
-    ]),
+    closedOf(
+      BooleanLiteral.handles,
+      text,
+      "attribute-lexical",
+      "the target-value attribute of a boolean qti-interpolation-table-entry",
+    ).pipe(
+      Effect.map((literal) =>
+        Rows.add(rows, mapping.relations.InterpolationTableEntryBoolean, [
+          { id, targetValue: literal },
+        ]),
+      ),
+    ),
   directedPair: (rows, id, text) =>
     Rows.add(rows, mapping.relations.InterpolationTableEntryDirectedPair, [
       { id, targetValue: judgedLater(text) },
@@ -186,9 +234,16 @@ const interpolationTargetArms: ArmWriter = {
 
 const matchDefaultArms: ArmWriter = {
   boolean: (rows, node, text) =>
-    Rows.add(rows, mapping.relations.MatchTableDefaultValueBoolean, [
-      { node, value: judgedLater(text) },
-    ]),
+    closedOf(
+      BooleanLiteral.handles,
+      text,
+      "attribute-lexical",
+      "the default-value attribute of a boolean qti-match-table",
+    ).pipe(
+      Effect.map((literal) =>
+        Rows.add(rows, mapping.relations.MatchTableDefaultValueBoolean, [{ node, value: literal }]),
+      ),
+    ),
   directedPair: (rows, node, text) =>
     Rows.add(rows, mapping.relations.MatchTableDefaultValueDirectedPair, [
       { node, value: judgedLater(text) },
@@ -233,9 +288,18 @@ const matchDefaultArms: ArmWriter = {
 
 const interpolationDefaultArms: ArmWriter = {
   boolean: (rows, node, text) =>
-    Rows.add(rows, mapping.relations.InterpolationTableDefaultValueBoolean, [
-      { node, value: judgedLater(text) },
-    ]),
+    closedOf(
+      BooleanLiteral.handles,
+      text,
+      "attribute-lexical",
+      "the default-value attribute of a boolean qti-interpolation-table",
+    ).pipe(
+      Effect.map((literal) =>
+        Rows.add(rows, mapping.relations.InterpolationTableDefaultValueBoolean, [
+          { node, value: literal },
+        ]),
+      ),
+    ),
   directedPair: (rows, node, text) =>
     Rows.add(rows, mapping.relations.InterpolationTableDefaultValueDirectedPair, [
       { node, value: judgedLater(text) },
@@ -350,13 +414,13 @@ const mappingElement = (
  * The rows of one `qti-map-entry`: the entry at its position, its key in the arm of its mapping's
  * base type, and the marker of a written `case-sensitive`.
  */
-const mapEntryElement = (
+const mapEntryElement = Effect.fn("import.mapEntryElement")(function* mapEntryElement(
   pass: Pass,
   rows: Rows,
   element: Element,
   node: NodeRef,
   holderId: string,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
   const holder = pass.holders.get(holderId);
   if (holder === undefined) {
     return rows;
@@ -377,10 +441,9 @@ const mapEntryElement = (
       position: pass.positions.get(node.id) ?? 0n,
     },
   ]);
-  built = Option.match(key.value, {
-    onNone: () => built,
-    onSome: (text) => mapKeyArms[holder.baseType](built, node.id, text),
-  });
+  if (Option.isSome(key.value)) {
+    built = yield* armRows(mapKeyArms, holder.baseType, built, node.id, key.value.value);
+  }
 
   return markers(
     built,
@@ -388,7 +451,7 @@ const mapEntryElement = (
     node.id,
     attributes.written(),
   );
-};
+});
 
 /**
  * The rows of one `qti-area-mapping`: the area mapping, its bounds where written, and its default
@@ -479,13 +542,13 @@ const areaMapEntryElement = Effect.fn("import.areaMapEntryElement")(function* ar
  * The rows of one `qti-match-table` or `qti-interpolation-table`: the table, and its default value
  * in the arm of its base type where written.
  */
-const tableElement = (
+const tableElement = Effect.fn("import.tableElement")(function* tableElement(
   pass: Pass,
   rows: Rows,
   element: Element,
   node: NodeRef,
   owner: DeclaredVariable,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
   if (Option.isNone(owner.baseType)) {
     return rows;
   }
@@ -506,32 +569,36 @@ const tableElement = (
   const text = defaultValue.value.value;
 
   return match
-    ? matchDefaultArms[baseType](
+    ? yield* armRows(
+        matchDefaultArms,
+        baseType,
         Rows.add(defaultValue.rows, mapping.MatchTableDefaultValue, [{ baseType, node: node.id }]),
         node.id,
         text,
       )
-    : interpolationDefaultArms[baseType](
+    : yield* armRows(
+        interpolationDefaultArms,
+        baseType,
         Rows.add(defaultValue.rows, mapping.InterpolationTableDefaultValue, [
           { baseType, node: node.id },
         ]),
         node.id,
         text,
       );
-};
+});
 
 /**
  * The rows of one `qti-match-table-entry` or `qti-interpolation-table-entry`: the entry at its
  * position, its target in the arm of its table's base type, and, for an interpolation entry, its
  * `include-boundary` and the marker of a written one.
  */
-const tableEntryElement = (
+const tableEntryElement = Effect.fn("import.tableEntryElement")(function* tableEntryElement(
   pass: Pass,
   rows: Rows,
   element: Element,
   node: NodeRef,
   tableId: string,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
   const holder = pass.holders.get(tableId);
   if (holder === undefined) {
     return rows;
@@ -552,10 +619,9 @@ const tableEntryElement = (
   if (node.kind === "qti-match-table-entry") {
     const built = Rows.add(target.rows, mapping.MatchTableEntry, [fact]);
 
-    return Option.match(target.value, {
-      onNone: () => built,
-      onSome: (text) => matchTargetArms[holder.baseType](built, node.id, text),
-    });
+    return Option.isNone(target.value)
+      ? built
+      : yield* armRows(matchTargetArms, holder.baseType, built, node.id, target.value.value);
   }
 
   const includeBoundary = attributes.read("include-boundary");
@@ -565,10 +631,9 @@ const tableEntryElement = (
       includeBoundary: judgedLater(Option.getOrElse(includeBoundary, () => "true")),
     },
   ]);
-  const withTarget = Option.match(target.value, {
-    onNone: () => built,
-    onSome: (text) => interpolationTargetArms[holder.baseType](built, node.id, text),
-  });
+  const withTarget = Option.isNone(target.value)
+    ? built
+    : yield* armRows(interpolationTargetArms, holder.baseType, built, node.id, target.value.value);
 
   return markers(
     withTarget,
@@ -576,7 +641,7 @@ const tableEntryElement = (
     node.id,
     attributes.written(),
   );
-};
+});
 
 /**
  * The rows of every mapping, area mapping, match table and interpolation table of an item, with
@@ -598,7 +663,7 @@ export const mappingRows = Effect.fn("import.mappingRows")(function* mappingRows
   documentId: string,
   declarations: ReadonlyMap<string, DeclaredVariable>,
   rows: Rows,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ItemRefusal | ImportRefused> {
   const pass: Pass = {
     documentId,
     holders: new Map(),
@@ -618,7 +683,7 @@ export const mappingRows = Effect.fn("import.mappingRows")(function* mappingRows
     if (node.kind === "qti-mapping" && owner !== undefined) {
       built = mappingElement(pass, built, element, node, owner);
     } else if (node.kind === "qti-map-entry") {
-      built = mapEntryElement(pass, built, element, node, parentId);
+      built = yield* mapEntryElement(pass, built, element, node, parentId);
     } else if (node.kind === "qti-area-mapping" && owner !== undefined) {
       built = areaMappingElement(pass, built, element, node, owner.id);
     } else if (node.kind === "qti-area-map-entry") {
@@ -627,12 +692,12 @@ export const mappingRows = Effect.fn("import.mappingRows")(function* mappingRows
       (node.kind === "qti-match-table" || node.kind === "qti-interpolation-table") &&
       owner !== undefined
     ) {
-      built = tableElement(pass, built, element, node, owner);
+      built = yield* tableElement(pass, built, element, node, owner);
     } else if (
       node.kind === "qti-match-table-entry" ||
       node.kind === "qti-interpolation-table-entry"
     ) {
-      built = tableEntryElement(pass, built, element, node, parentId);
+      built = yield* tableEntryElement(pass, built, element, node, parentId);
     }
   }
 
