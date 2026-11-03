@@ -31,15 +31,11 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
+import { ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { matchBoundsCheck } from "#qti/schema/choices.ts";
 import { GapMatchBinding, InteractionBinding } from "#qti/schema/interaction.ts";
 import { Edge, Node, RootKind } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-
-/**
- * An `xs:boolean` attribute's lexical form.
- */
-const xsBoolean = str.regex(patterns.xsBoolean);
 
 /**
  * An `xs:nonNegativeInteger` attribute's lexical form.
@@ -62,11 +58,6 @@ const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNor
 const ncName = str.regex(patterns.ncName);
 
 /**
- * A choice's `show-hide`: `show` or `hide`.
- */
-const showHide = str.regex(patterns.showHide);
-
-/**
  * A `qti-gap-match-interaction`.
  */
 export const GapMatchInteraction = relation(
@@ -77,7 +68,7 @@ export const GapMatchInteraction = relation(
     minAssociationsN: pg.bigint,
     responseIdentifier: ncName,
     rootKind: closedId(RootKind),
-    shuffle: xsBoolean,
+    shuffle: closedId(XsBoolean),
   },
   ["id"],
 );
@@ -104,7 +95,13 @@ export const GraphicGapMatchInteraction = relation(
  */
 export const Gap = relation(
   "Gap",
-  { id: uuid, identifier: ncName, interaction: uuid, required: xsBoolean, showHide },
+  {
+    id: uuid,
+    identifier: ncName,
+    interaction: uuid,
+    required: closedId(XsBoolean),
+    showHide: closedId(ShowHide),
+  },
   ["id"],
 );
 
@@ -121,7 +118,7 @@ export const GapText = relation(
     interaction: uuid,
     matchMaxN: pg.bigint,
     matchMinN: pg.bigint,
-    showHide,
+    showHide: closedId(ShowHide),
   },
   ["id"],
 );
@@ -137,7 +134,7 @@ export const GapImg = relation(
     interaction: uuid,
     matchMaxN: pg.bigint,
     matchMinN: pg.bigint,
-    showHide,
+    showHide: closedId(ShowHide),
   },
   ["id"],
 );

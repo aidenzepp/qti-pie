@@ -26,14 +26,10 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
+import { Orientation, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { InteractionBinding } from "#qti/schema/interaction.ts";
 import { Node, RootKind } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-
-/**
- * An `xs:boolean` attribute's lexical form.
- */
-const xsBoolean = str.regex(patterns.xsBoolean);
 
 /**
  * An `xs:normalizedString` attribute's value, as the typed column holds it after replacement.
@@ -56,11 +52,6 @@ const nonNegativeDouble = str.regex(patterns.nonNegativeDouble);
 const positiveDouble = str.regex(patterns.positiveDouble);
 
 /**
- * An `orientation`: `vertical` or `horizontal`.
- */
-const orientation = str.regex(patterns.orientation);
-
-/**
  * The coordinates of a rectangle: four `CoordsDType` tokens.
  */
 const coordsRect = str.regex(patterns.coordsRect);
@@ -77,9 +68,9 @@ const mimeTypeList = str.regex(patterns.mimeTypeList);
 export const MediaInteraction = relation(
   "MediaInteraction",
   {
-    autostart: xsBoolean,
+    autostart: closedId(XsBoolean),
     id: uuid,
-    loop: xsBoolean,
+    loop: closedId(XsBoolean),
     maxPlaysN: pg.bigint,
     minPlaysN: pg.bigint,
     responseIdentifier: ncName,
@@ -116,7 +107,7 @@ export const SliderInteraction = relation(
     lowerBound: nonNegativeDouble,
     responseIdentifier: ncName,
     rootKind: closedId(RootKind),
-    stepLabel: xsBoolean,
+    stepLabel: closedId(XsBoolean),
     upperBound: nonNegativeDouble,
   },
   ["id"],
@@ -168,21 +159,25 @@ export const SliderStep = relation("SliderStep", { node: uuid, value: positiveDo
 /**
  * A slider interaction's `orientation`, when it has one.
  */
-export const SliderOrientation = relation("SliderOrientation", { node: uuid, value: orientation }, [
-  "node",
-]);
+export const SliderOrientation = relation(
+  "SliderOrientation",
+  { node: uuid, value: closedId(Orientation) },
+  ["node"],
+);
 
 /**
  * A slider interaction's `reverse`, when it has one.
  */
-export const SliderReverse = relation("SliderReverse", { node: uuid, value: xsBoolean }, ["node"]);
+export const SliderReverse = relation("SliderReverse", { node: uuid, value: closedId(XsBoolean) }, [
+  "node",
+]);
 
 /**
  * An end-attempt interaction's `count-attempt`, when it has one: the XSD gives it no default.
  */
 export const EndAttemptCountAttempt = relation(
   "EndAttemptCountAttempt",
-  { node: uuid, value: xsBoolean },
+  { node: uuid, value: closedId(XsBoolean) },
   ["node"],
 );
 

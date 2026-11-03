@@ -845,3 +845,80 @@ describe("associateRows on a non-canonical integer spelling", () => {
     }),
   );
 });
+
+describe("associateRows on a flag outside its roster", () => {
+  const refused: readonly (readonly [string, Element, ReadonlyMap<string, DeclaredVariable>])[] = [
+    [
+      "shuffle of yes on an associate interaction",
+      element("qti-associate-interaction", { "response-identifier": "RESPONSE", shuffle: "yes" }),
+      associateDeclarations,
+    ],
+    [
+      "shuffle of yes on a match interaction",
+      element("qti-match-interaction", { "response-identifier": "RESPONSE", shuffle: "yes" }),
+      pairs,
+    ],
+    [
+      "fixed of yes on a simple associable choice",
+      element("qti-associate-interaction", { "response-identifier": "RESPONSE" }, [
+        choice("A", { fixed: "yes" }),
+      ]),
+      associateDeclarations,
+    ],
+    [
+      "show-hide of visible on a simple associable choice",
+      element("qti-associate-interaction", { "response-identifier": "RESPONSE" }, [
+        choice("A", { "show-hide": "visible" }),
+      ]),
+      associateDeclarations,
+    ],
+    [
+      "show-hide of visible on an associable hotspot",
+      hotspotOf({ "show-hide": "visible" }),
+      graphicDeclarations,
+    ],
+  ];
+
+  for (const [name, tree, declarations] of refused) {
+    it.effect(`refuses ${name} under attribute-lexical before any row is written`, () =>
+      Effect.gen(function* outside() {
+        const exit = yield* Effect.exit(
+          associateRows(contextOf([tree], declarations), Rows.empty()),
+        );
+
+        assert.strictEqual(importRuleOf(exit), "attribute-lexical");
+      }),
+    );
+  }
+
+  it.effect("admits the xs:boolean spelling 1 and the show-hide of hide", () =>
+    Effect.gen(function* admitted() {
+      const built = yield* associateRows(
+        contextOf(
+          [
+            element(
+              "qti-associate-interaction",
+              { "response-identifier": "RESPONSE", shuffle: "1" },
+              [choice("A", { fixed: "0", "show-hide": "hide" })],
+            ),
+          ],
+          associateDeclarations,
+        ),
+        Rows.empty(),
+      );
+
+      assert.deepStrictEqual(
+        Rows.of(built, AssociateInteraction).map((row) => row.shuffle),
+        ["1"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(built, SimpleAssociableChoiceFixed).map((row) => row.value),
+        ["0"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(built, SimpleAssociableChoiceShowHide).map((row) => row.value),
+        ["hide"],
+      );
+    }),
+  );
+});

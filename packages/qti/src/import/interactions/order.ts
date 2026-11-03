@@ -9,7 +9,7 @@ import { Effect, Option } from "effect";
 import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
 import type { ImportRefused } from "#qti/import/refusal.ts";
 import { closedOf, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
-import { ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
+import { Orientation, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import type { IndexedNode, ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import {
   DeclaredFixed,
@@ -155,6 +155,22 @@ const order = Effect.fn("import.order")(function* order(
   const minMessage = attributes.read("data-min-selections-message");
   const maxMessage = attributes.read("data-max-selections-message");
   const width = attributes.read("data-choices-container-width");
+  const shuffleHandle = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(shuffle, () => "false"),
+    "attribute-lexical",
+    "the shuffle attribute of qti-order-interaction",
+  );
+  const orientationHandle = Option.isSome(orientation)
+    ? Option.some(
+        yield* closedOf(
+          Orientation.handles,
+          orientation.value,
+          "attribute-lexical",
+          "the orientation attribute of qti-order-interaction",
+        ),
+      )
+    : Option.none();
   const read = yield* choicesOf(attributes, node);
   const { choices } = read;
   let built = yield* bind(ctx, read.rows, node, choices);
@@ -166,7 +182,7 @@ const order = Effect.fn("import.order")(function* order(
       minChoicesN: choices.minN,
       responseIdentifier: choices.responseIdentifier,
       rootKind: "item",
-      shuffle: judgedLater(Option.getOrElse(shuffle, () => "false")),
+      shuffle: shuffleHandle,
     },
   ]);
   built = Rows.add(
@@ -182,7 +198,7 @@ const order = Effect.fn("import.order")(function* order(
   built = Rows.add(
     built,
     OrderOrientation,
-    written(orientation, (own) => ({ node: node.id, value: judgedLater(own) })),
+    written(orientationHandle, (own) => ({ node: node.id, value: own })),
   );
   built = Rows.add(
     built,

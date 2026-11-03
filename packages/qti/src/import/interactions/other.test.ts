@@ -568,3 +568,97 @@ describe("otherRows: refusal", () => {
     }),
   );
 });
+
+const importRuleOf = (ctx: InteractionContext) =>
+  Effect.exit(run(ctx)).pipe(
+    Effect.map((exit) =>
+      Exit.isFailure(exit)
+        ? Exit.findErrorOption(exit).pipe(
+            Option.filter((e) => e instanceof ImportRefused),
+            Option.match({ onNone: () => "", onSome: (e) => e.rule }),
+          )
+        : "",
+    ),
+  );
+
+describe("otherRows: a flag or orientation outside its roster", () => {
+  const sliderBase: readonly (readonly [string, string])[] = [
+    ["response-identifier", "RESPONSE"],
+    ["lower-bound", "0"],
+    ["upper-bound", "10"],
+  ];
+  const refused: readonly (readonly [
+    string,
+    NodeKindHandle,
+    readonly (readonly [string, string])[],
+  ])[] = [
+    [
+      "autostart of yes on a media interaction",
+      "qti-media-interaction",
+      [
+        ["response-identifier", "RESPONSE"],
+        ["autostart", "yes"],
+      ],
+    ],
+    [
+      "loop of yes on a media interaction",
+      "qti-media-interaction",
+      [
+        ["response-identifier", "RESPONSE"],
+        ["autostart", "true"],
+        ["loop", "yes"],
+      ],
+    ],
+    [
+      "step-label of yes on a slider",
+      "qti-slider-interaction",
+      [...sliderBase, ["step-label", "yes"]],
+    ],
+    ["reverse of yes on a slider", "qti-slider-interaction", [...sliderBase, ["reverse", "yes"]]],
+    [
+      "orientation of diagonal on a slider",
+      "qti-slider-interaction",
+      [...sliderBase, ["orientation", "diagonal"]],
+    ],
+    [
+      "count-attempt of yes on an end-attempt interaction",
+      "qti-end-attempt-interaction",
+      [
+        ["response-identifier", "RESPONSE"],
+        ["title", "Go"],
+        ["count-attempt", "yes"],
+      ],
+    ],
+  ];
+
+  for (const [name, kind, attributes] of refused) {
+    it.effect(`refuses ${name} under attribute-lexical before any row is written`, () =>
+      Effect.gen(function* outside() {
+        const { ctx } = one(kind, kind, attributes, booleanSingle);
+
+        assert.strictEqual(yield* importRuleOf(ctx), "attribute-lexical");
+      }),
+    );
+  }
+
+  it.effect("admits the xs:boolean spelling 1 and a roster orientation on a slider", () =>
+    Effect.gen(function* admitted() {
+      const { ctx } = one(
+        "qti-slider-interaction",
+        "qti-slider-interaction",
+        [...sliderBase, ["reverse", "1"], ["orientation", "horizontal"]],
+        stringSingle,
+      );
+      const rows = yield* run(ctx);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, SliderReverse).map((row) => row.value),
+        ["1"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, SliderOrientation).map((row) => row.value),
+        ["horizontal"],
+      );
+    }),
+  );
+});

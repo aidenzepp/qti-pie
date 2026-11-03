@@ -288,4 +288,12 @@ describe("interactions/gap", () => {
       assert.deepStrictEqual(owned[0]?.right, ["id"]);
     }
   });
+
+  it("types its boolean, show-hide, orientation and format columns as closedId of their rosters", () => {
+    assert.strictEqual(relations.GapMatchInteraction.fields.shuffle.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.Gap.fields.required.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.Gap.fields.showHide.roster, rosters.ShowHide);
+    assert.strictEqual(relations.GapText.fields.showHide.roster, rosters.ShowHide);
+    assert.strictEqual(relations.GapImg.fields.showHide.roster, rosters.ShowHide);
+  });
 });

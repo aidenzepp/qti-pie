@@ -394,4 +394,9 @@ describe("interactions/hot", () => {
       assert.deepStrictEqual(owned[0]?.right, ["id"]);
     }
   });
+
+  it("types its boolean, show-hide, orientation and format columns as closedId of their rosters", () => {
+    assert.strictEqual(relations.Hottext.fields.showHide.roster, rosters.ShowHide);
+    assert.strictEqual(relations.HotspotChoice.fields.showHide.roster, rosters.ShowHide);
+  });
 });

@@ -352,4 +352,18 @@ describe("interactions/associate", () => {
       assert.deepStrictEqual(owned[0]?.right, ["id"]);
     }
   });
+
+  it("types its boolean, show-hide, orientation and format columns as closedId of their rosters", () => {
+    assert.strictEqual(relations.AssociateInteraction.fields.shuffle.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.MatchInteraction.fields.shuffle.roster, rosters.XsBoolean);
+    assert.strictEqual(
+      relations.SimpleAssociableChoiceFixed.fields.value.roster,
+      rosters.XsBoolean,
+    );
+    assert.strictEqual(
+      relations.SimpleAssociableChoiceShowHide.fields.value.roster,
+      rosters.ShowHide,
+    );
+    assert.strictEqual(relations.AssociableHotspot.fields.showHide.roster, rosters.ShowHide);
+  });
 });

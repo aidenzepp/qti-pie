@@ -11,10 +11,10 @@ import { judgedLater } from "#qti/import/judged.ts";
 import { Effect, Option } from "effect";
 import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
 import type { ImportRefused } from "#qti/import/refusal.ts";
-import { ItemRefusal, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
+import { closedOf, ItemRefusal, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
 import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { MatchGroup } from "#qti/schema/choices.ts";
-import { Shape } from "#qti/schema/content/rosters.ts";
+import { Shape, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import type { ShapeHandle } from "#qti/schema/content/rosters.ts";
 import {
   AssociableHotspot,
@@ -155,6 +155,9 @@ const bind = (ctx: InteractionContext, rows: Rows, node: IndexedNode, associatio
 
 /**
  * The rows of one `qti-associate-interaction` and its binding.
+ *
+ * @returns The rows; `ImportRefused` (`attribute-lexical`) for a `shuffle` outside `xs:boolean`'s
+ *   four spellings or a bound outside the non-negative integers.
  */
 const associate = Effect.fn("import.associate")(function* associate(
   ctx: InteractionContext,
@@ -164,6 +167,12 @@ const associate = Effect.fn("import.associate")(function* associate(
 ): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
   const shuffle = attributes.read("shuffle");
+  const shuffleHandle = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(shuffle, () => "false"),
+    "attribute-lexical",
+    "the shuffle attribute of qti-associate-interaction",
+  );
   const read = yield* associationsOf(attributes, node);
   const { associations } = read;
   let built = yield* bind(ctx, read.rows, node, associations);
@@ -174,7 +183,7 @@ const associate = Effect.fn("import.associate")(function* associate(
       minAssociationsN: associations.minN,
       responseIdentifier: associations.responseIdentifier,
       rootKind: "item",
-      shuffle: judgedLater(Option.getOrElse(shuffle, () => "false")),
+      shuffle: shuffleHandle,
     },
   ]);
 
@@ -192,6 +201,9 @@ const associate = Effect.fn("import.associate")(function* associate(
 
 /**
  * The rows of one `qti-match-interaction` and its binding.
+ *
+ * @returns The rows; `ImportRefused` (`attribute-lexical`) for a `shuffle` outside `xs:boolean`'s
+ *   four spellings or a bound outside the non-negative integers.
  */
 const match = Effect.fn("import.match")(function* match(
   ctx: InteractionContext,
@@ -204,6 +216,12 @@ const match = Effect.fn("import.match")(function* match(
   const minMessage = attributes.read("data-min-selections-message");
   const maxMessage = attributes.read("data-max-selections-message");
   const header = attributes.read("data-first-column-header");
+  const shuffleHandle = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(shuffle, () => "false"),
+    "attribute-lexical",
+    "the shuffle attribute of qti-match-interaction",
+  );
   const read = yield* associationsOf(attributes, node);
   const { associations } = read;
   let built = yield* bind(ctx, read.rows, node, associations);
@@ -214,7 +232,7 @@ const match = Effect.fn("import.match")(function* match(
       minAssociationsN: associations.minN,
       responseIdentifier: associations.responseIdentifier,
       rootKind: "item",
-      shuffle: judgedLater(Option.getOrElse(shuffle, () => "false")),
+      shuffle: shuffleHandle,
     },
   ]);
   built = Rows.add(
@@ -288,8 +306,9 @@ const graphicAssociate = Effect.fn("import.graphicAssociate")(function* graphicA
  *
  * @returns The rows; `ItemRefusal` for a choice that sits in no interaction (rule `admission`), and
  *   for a `template-identifier` that names no typed variable; `ImportRefused`
- *   (`attribute-lexical`) for a `match-max` that is absent or a `match-max` or `match-min` outside
- *   the non-negative integers.
+ *   (`attribute-lexical`) for a `match-max` that is absent, a `match-max` or `match-min` outside
+ *   the non-negative integers, a `fixed` outside `xs:boolean`'s four spellings, or a `show-hide`
+ *   outside `show` and `hide`.
  */
 const choice = Effect.fn("import.associableChoice")(function* choice(
   ctx: InteractionContext,
@@ -315,6 +334,26 @@ const choice = Effect.fn("import.associableChoice")(function* choice(
   const showHide = attributes.read("show-hide");
   const matchGroup = attributes.read("match-group");
   const template = attributes.read("template-identifier");
+  const fixedHandle = Option.isSome(fixed)
+    ? Option.some(
+        yield* closedOf(
+          XsBoolean.handles,
+          fixed.value,
+          "attribute-lexical",
+          "the fixed attribute of qti-simple-associable-choice",
+        ),
+      )
+    : Option.none();
+  const showHideHandle = Option.isSome(showHide)
+    ? Option.some(
+        yield* closedOf(
+          ShowHide.handles,
+          showHide.value,
+          "attribute-lexical",
+          "the show-hide attribute of qti-simple-associable-choice",
+        ),
+      )
+    : Option.none();
   const maximum = yield* spelled(
     attributes.rows(),
     node,
@@ -352,12 +391,12 @@ const choice = Effect.fn("import.associableChoice")(function* choice(
   built = Rows.add(
     built,
     SimpleAssociableChoiceFixed,
-    written(fixed, (own) => ({ node: node.id, value: judgedLater(own) })),
+    written(fixedHandle, (own) => ({ node: node.id, value: own })),
   );
   built = Rows.add(
     built,
     SimpleAssociableChoiceShowHide,
-    written(showHide, (own) => ({ node: node.id, value: judgedLater(own) })),
+    written(showHideHandle, (own) => ({ node: node.id, value: own })),
   );
   built = Rows.add(
     built,
@@ -389,7 +428,8 @@ const shapeOf = (text: Option.Option<string>): Option.Option<ShapeHandle> =>
  *
  * @returns The rows; `ItemRefusal` for a hotspot with no valid `shape`, and for one with no enclosing
  *   interaction (rule `admission`); `ImportRefused` (`attribute-lexical`) for a `match-max` that is
- *   absent or a `match-max` or `match-min` outside the non-negative integers.
+ *   absent, a `match-max` or `match-min` outside the non-negative integers, or a `show-hide`
+ *   outside `show` and `hide`.
  *   A hotspot with no `coords` has no `Coords` row, and the shape's capacity refuses it at commit.
  */
 const hotspot = Effect.fn("import.associableHotspot")(function* hotspot(
@@ -422,6 +462,12 @@ const hotspot = Effect.fn("import.associableHotspot")(function* hotspot(
   const matchMin = attributes.read("match-min");
   const label = attributes.read("hotspot-label");
   const showHide = attributes.read("show-hide");
+  const showHideHandle = yield* closedOf(
+    ShowHide.handles,
+    Option.getOrElse(showHide, () => "show"),
+    "attribute-lexical",
+    "the show-hide attribute of qti-associable-hotspot",
+  );
   const maximum = yield* spelled(
     attributes.rows(),
     node,
@@ -439,7 +485,7 @@ const hotspot = Effect.fn("import.associableHotspot")(function* hotspot(
       matchMinN: minimum.value,
       parentKind: parent.value.kind,
       shape: shape.value,
-      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
+      showHide: showHideHandle,
     },
   ]);
   built = ctx.shared.markers(

@@ -9,8 +9,10 @@
 import { judgedLater } from "#qti/import/judged.ts";
 import { Effect, Option } from "effect";
 import type { InteractionContext, MarkerRelation, NodeRef } from "#qti/import/interactions.ts";
-import { Rows } from "#qti/import/tree.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
+import { closedOf, Rows } from "#qti/import/tree.ts";
 import type { ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
+import { ShowHide, TextFormat, XsBoolean } from "#qti/schema/content/rosters.ts";
 import {
   DeclaredExtendedTextBase,
   DeclaredExtendedTextFormat,
@@ -180,7 +182,7 @@ const extendedTextRows = Effect.fn("import.extendedTextRows")(function* extended
   rows: Rows,
   element: Element,
   node: NodeRef & { readonly ancestry: AncestryHandle },
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
   const responseIdentifier = Option.getOrElse(attributes.read("response-identifier"), () => "");
   const base = attributes.read("base");
@@ -193,12 +195,18 @@ const extendedTextRows = Effect.fn("import.extendedTextRows")(function* extended
   const patternMask = attributes.read("pattern-mask");
   const placeholderText = attributes.read("placeholder-text");
   const message = attributes.read("data-patternmask-message");
+  const formatHandle = yield* closedOf(
+    TextFormat.handles,
+    Option.getOrElse(format, () => "plain"),
+    "attribute-lexical",
+    "the format attribute of qti-extended-text-interaction",
+  );
 
   let built = attributes.rows();
   built = Rows.add(built, ExtendedTextInteraction, [
     {
       base: judgedLater(Option.getOrElse(base, () => "10")),
-      format: judgedLater(Option.getOrElse(format, () => "plain")),
+      format: formatHandle,
       id: node.id,
       minStrings: judgedLater(Option.getOrElse(minStrings, () => "0")),
       responseIdentifier,
@@ -226,7 +234,7 @@ const inlineChoiceInteractionRows = Effect.fn("import.inlineChoiceInteractionRow
     rows: Rows,
     element: Element,
     node: NodeRef & { readonly ancestry: AncestryHandle },
-  ): Effect.fn.Return<Rows, ItemRefusal> {
+  ): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
     const attributes = ctx.shared.attributes(rows, element, node);
     const responseIdentifier = Option.getOrElse(attributes.read("response-identifier"), () => "");
     const shuffle = attributes.read("shuffle");
@@ -234,16 +242,28 @@ const inlineChoiceInteractionRows = Effect.fn("import.inlineChoiceInteractionRow
     const minChoices = attributes.read("min-choices");
     const prompt = attributes.read("data-prompt");
     const message = attributes.read("data-min-selections-message");
+    const requiredHandle = yield* closedOf(
+      XsBoolean.handles,
+      Option.getOrElse(required, () => "false"),
+      "attribute-lexical",
+      "the required attribute of qti-inline-choice-interaction",
+    );
+    const shuffleHandle = yield* closedOf(
+      XsBoolean.handles,
+      Option.getOrElse(shuffle, () => "false"),
+      "attribute-lexical",
+      "the shuffle attribute of qti-inline-choice-interaction",
+    );
 
     let built = attributes.rows();
     built = Rows.add(built, InlineChoiceInteraction, [
       {
         id: node.id,
         minChoices: judgedLater(Option.getOrElse(minChoices, () => "0")),
-        required: judgedLater(Option.getOrElse(required, () => "false")),
+        required: requiredHandle,
         responseIdentifier,
         rootKind: "item",
-        shuffle: judgedLater(Option.getOrElse(shuffle, () => "false")),
+        shuffle: shuffleHandle,
       },
     ]);
     built = ctx.shared.markers(
@@ -270,7 +290,7 @@ const inlineChoiceRows = Effect.fn("import.inlineChoiceRows")(function* inlineCh
   rows: Rows,
   element: Element,
   node: NodeRef & { readonly ancestry: AncestryHandle },
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const owner = ctx.shared.nearestInteraction(ctx.nodes, element);
   if (Option.isNone(owner)) {
     return rows;
@@ -281,15 +301,27 @@ const inlineChoiceRows = Effect.fn("import.inlineChoiceRows")(function* inlineCh
   const fixed = attributes.read("fixed");
   const showHide = attributes.read("show-hide");
   const templateIdentifier = attributes.read("template-identifier");
+  const fixedHandle = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(fixed, () => "false"),
+    "attribute-lexical",
+    "the fixed attribute of qti-inline-choice",
+  );
+  const showHideHandle = yield* closedOf(
+    ShowHide.handles,
+    Option.getOrElse(showHide, () => "show"),
+    "attribute-lexical",
+    "the show-hide attribute of qti-inline-choice",
+  );
 
   let built = attributes.rows();
   built = Rows.add(built, InlineChoice, [
     {
-      fixed: judgedLater(Option.getOrElse(fixed, () => "false")),
+      fixed: fixedHandle,
       id: node.id,
       identifier,
       interaction: owner.value.id,
-      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
+      showHide: showHideHandle,
     },
   ]);
   built = ctx.shared.markers(
@@ -319,12 +351,13 @@ const inlineChoiceRows = Effect.fn("import.inlineChoiceRows")(function* inlineCh
  * @returns The rows with each text-entry, extended-text and inline-choice interaction's arm,
  *   optional values, markers and binding, each inline choice's arm and template reference, and
  *   each `qti-label`'s arm; `ItemRefusal` for a `response-identifier` or a `template-identifier`
- *   no declaration of the item names.
+ *   no declaration of the item names; `ImportRefused` (`attribute-lexical`) for a `format`,
+ *   `required`, `shuffle`, `fixed` or `show-hide` outside its roster.
  */
 export const textRows = Effect.fn("import.textRows")(function* textRows(
   ctx: InteractionContext,
   rows: Rows,
-): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | UnmodeledVocabulary | ItemRefusal> {
   let built = rows;
   for (const [element, indexed] of ctx.nodes) {
     const node = { ancestry: indexed.ancestry, id: indexed.id, kind: indexed.kind };
