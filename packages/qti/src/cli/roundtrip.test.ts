@@ -8,6 +8,7 @@ import { successEnvelope } from "#qti/cli/output.ts";
 import { RoundtripData } from "#qti/cli/roundtrip.ts";
 import { exitCodeOf } from "#qti/cli/run.ts";
 import { captureCli, packageCopy } from "#qti/test/cli.ts";
+import { makeScratch, scratchEnv } from "#qti/test/scratch.ts";
 import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
 
 const fixtures = inject("fixtures");
@@ -22,11 +23,7 @@ const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-roundtri
  * The environment of a run: a scratch home and a cluster state folder that is empty, so the import
  * fails with kind `config` before it reads the package.
  */
-const env = {
-  GR8DES_PG_PORT: "1",
-  GRIZZLE_PG_STATE: path.join(root, "state"),
-  HOME: path.join(root, "home"),
-} as const;
+const env = { GR8DES_PG_PORT: "1", ...scratchEnv(root) } as const;
 
 /**
  * The failure a run ended with.
@@ -51,8 +48,7 @@ const earlierExport = Effect.fn("test.roundtrip.earlierExport")(function* earlie
 
   yield* fs.remove(folder, { force: true, recursive: true });
   yield* fs.makeDirectory(folder, { recursive: true });
-  yield* fs.makeDirectory(env.GRIZZLE_PG_STATE, { recursive: true });
-  yield* fs.makeDirectory(env.HOME, { recursive: true });
+  yield* makeScratch(env);
   yield* fs.writeFileString(file, "kept");
 
   return file;
@@ -125,8 +121,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("roundtrip --dry-run", 
         const copy = yield* packageCopy(fixtures.simple, label);
 
         yield* fs.remove(path.resolve("work", "export", label), { force: true, recursive: true });
-        yield* fs.makeDirectory(env.GRIZZLE_PG_STATE, { recursive: true });
-        yield* fs.makeDirectory(env.HOME, { recursive: true });
+        yield* makeScratch(env);
 
         const { exit, stderr, stdout } = yield* captureCli(["roundtrip", "--dry-run", copy], {
           env,
@@ -152,8 +147,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("roundtrip --dry-run", 
         const copy = yield* packageCopy(fixtures.simple, label);
 
         yield* fs.remove(path.resolve("work", "export", label), { force: true, recursive: true });
-        yield* fs.makeDirectory(env.GRIZZLE_PG_STATE, { recursive: true });
-        yield* fs.makeDirectory(env.HOME, { recursive: true });
+        yield* makeScratch(env);
 
         const { exit, stderr, stdout } = yield* captureCli(
           ["--json", "roundtrip", "--dry-run", copy],
@@ -225,8 +219,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("roundtrip --dry-run", 
 
         yield* fs.remove(folder, { force: true, recursive: true });
         yield* fs.makeDirectory(folder, { recursive: true });
-        yield* fs.makeDirectory(env.GRIZZLE_PG_STATE, { recursive: true });
-        yield* fs.makeDirectory(env.HOME, { recursive: true });
+        yield* makeScratch(env);
 
         const { exit, stderr, stdout } = yield* captureCli(
           ["--json", "roundtrip", "--dry-run", copy],

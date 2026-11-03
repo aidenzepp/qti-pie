@@ -59,12 +59,7 @@ export interface Presentation {
  * The root's global flags that take a value, as the command line spells them. The runner's `-v`
  * rewrite and the command lookup both skip the word after one of these.
  */
-export const valuedGlobalFlags: readonly string[] = [
-  "--completions",
-  "--log-level",
-  "--output",
-  "--timeout",
-];
+export const valuedGlobalFlags: readonly string[] = ["--log-level", "--output", "--timeout"];
 
 /**
  * The subcommand the arguments name: the first word that is neither a flag nor a flag's value,

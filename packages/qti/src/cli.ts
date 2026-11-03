@@ -59,8 +59,8 @@ const description = [
 const rootCommand = (): Command.Command.Any => cli;
 
 /**
- * The command line: `import`, `export` and `roundtrip`, each printing text, `json` or `jsonl`, and
- * `completions`.
+ * The command line: `import`, `export` and `roundtrip`, each printing text, `json` or `jsonl`, then
+ * `completions` and `schema`.
  */
 export const cli = Command.make("qti").pipe(
   Command.withDescription(description),

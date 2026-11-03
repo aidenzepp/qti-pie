@@ -4,6 +4,7 @@ import { assert, layer } from "@effect/vitest";
 import { Cause, Effect, Exit } from "effect";
 import { CliError } from "effect/cli";
 import { captureCli } from "#qti/test/cli.ts";
+import { scratchEnv } from "#qti/test/scratch.ts";
 
 /**
  * The folder the run's home and cluster state live under, `packages/qti/work/cli-completions`. No
@@ -15,11 +16,7 @@ const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-completi
  * The environment of a run, with the database pointed at nothing: `completions` reads no
  * configuration, so a run that touched it would fail.
  */
-const env = {
-  GR8DES_PG_PORT: "1",
-  GRIZZLE_PG_STATE: path.join(root, "state"),
-  HOME: path.join(root, "home"),
-} as const;
+const env = { GR8DES_PG_PORT: "1", ...scratchEnv(root) } as const;
 
 layer(NodeServices.layer, { excludeTestServices: true })("qti completions, database-free", (it) => {
   it.effect("completions zsh prints the zsh script", () =>

@@ -1,10 +1,12 @@
-import { Effect, FileSystem, Option, Path, Schema } from "effect";
+import { Effect, Path, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
 import {
+  databaseNotChecked,
   dryRunFlag,
   replaceWith,
   requirePackage,
   requireReplaceable,
+  wouldReplace,
   yesFlag,
   zipFlag,
 } from "#qti/cli/args.ts";
@@ -75,31 +77,6 @@ const RoundtripPreview = Schema.Struct({
  * do.
  */
 export const RoundtripData = Schema.Union([RoundtripReport, RoundtripPreview]);
-
-/**
- * What a dry run says about the database.
- */
-const databaseNotChecked = "the database's own checks did not run";
-
-/**
- * Whether writing to `target` would replace something: it holds an entry, or is a file or a link.
- * An absent target and an empty directory are created into.
- */
-const wouldReplace = Effect.fn("cli.wouldReplace")(function* wouldReplace(target: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const info = yield* fs.lstat(target).pipe(
-    Effect.map(Option.some),
-    Effect.catchTag("PlatformError", (error) =>
-      error.reason._tag === "NotFound" ? Effect.succeed(Option.none()) : Effect.fail(error),
-    ),
-  );
-
-  if (Option.isNone(info)) {
-    return false;
-  }
-
-  return info.value.type !== "Directory" || (yield* fs.readDirectory(target)).length > 0;
-});
 
 /**
  * Import the package in `dir`, export it to `work/export/<name of dir>/` (`<name>.zip` under

@@ -248,6 +248,19 @@ const contentOf = Effect.fn("cli.contentOf")(function* contentOf(target: string)
 });
 
 /**
+ * Whether writing to `target` would replace something: it holds an entry, or is a file or a link.
+ * An absent target and an empty directory are created into.
+ */
+export const wouldReplace = Effect.fn("cli.wouldReplace")(function* wouldReplace(target: string) {
+  return (yield* contentOf(target)) === "something";
+});
+
+/**
+ * What a dry run says about the database.
+ */
+export const databaseNotChecked = "the database's own checks did not run";
+
+/**
  * Refuse to write over something already on disk unless the person said `--yes`, and refuse the
  * current folder, its parents, the home folder and the filesystem root even then. Removes nothing.
  *

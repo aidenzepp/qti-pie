@@ -81,12 +81,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("p14-u8b: -V and -v", (
 
 layer(NodeServices.layer, { excludeTestServices: true })("p14-u8b: a valued flag's -v", (it) => {
   it("lists every valued global flag", () => {
-    assert.deepStrictEqual(valuedGlobalFlags.toSorted(), [
-      "--completions",
-      "--log-level",
-      "--output",
-      "--timeout",
-    ]);
+    assert.deepStrictEqual(valuedGlobalFlags.toSorted(), ["--log-level", "--output", "--timeout"]);
   });
 
   it("leaves a -v that is a valued flag's value alone", () => {
@@ -103,7 +98,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("p14-u8b: a valued flag
     }
   });
 
-  for (const flag of ["--output", "--log-level", "--completions"]) {
+  for (const flag of ["--output", "--log-level"]) {
     it.effect(`${flag} -v leaves -v unrewritten`, () =>
       Effect.gen(function* valuedThenV() {
         const { exit } = yield* captureCli([flag, "-v"]);
