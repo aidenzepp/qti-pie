@@ -384,6 +384,24 @@ export const AttributeLexical = relation(
 );
 
 /**
+ * The spelling of an integer attribute whose collapsed text parses to its typed value but is not
+ * that value's canonical rendering (`+5`, `05`, `-0`), kept for the round trip. A row exists only
+ * when the spelling differs from the canonical rendering, which the pattern states: a canonical
+ * spelling cannot be stored. That the spelling parses to the typed value it sits beside is a guard,
+ * not a statement.
+ */
+export const AttributeSpelling = relation(
+  "AttributeSpelling",
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.nonCanonicalInteger),
+  },
+  ["node", "attribute"],
+);
+
+/**
  * A text node holding at least one character that is not whitespace. The relation is named
  * `TextNode` because a table named after the builtin type `text` would shadow that type in
  * grizzle's drift replay (campaign decision 28).
@@ -443,6 +461,7 @@ export const relations = {
   AttributeEntityReference,
   AttributeLexical,
   AttributeName,
+  AttributeSpelling,
   Comment,
   Edge,
   EntityReference,
@@ -511,6 +530,7 @@ export const rules = [
   contained(on(SchemaLocation, "node"), on(Node, "id")),
   contained(on(AttributeEntityReference, "node"), on(Node, "id")),
   contained(on(AttributeLexical, "node", "kind"), on(Node, "id", "kind")),
+  contained(on(AttributeSpelling, "node", "kind"), on(Node, "id", "kind")),
   check("ManifestTreeHasManifestRoot", Tree, (row) =>
     row.or(row.ne(row.kind, "manifest"), row.eq(row.root, "manifest")),
   ),

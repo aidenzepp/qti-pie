@@ -30,6 +30,7 @@ const fields = [
     () => str.regex(patterns.nonWhitespaceText, patterns.nonWhitespaceTextFlags),
   ],
   ["uncollapsed", () => str.regex(patterns.uncollapsed, patterns.uncollapsedFlags)],
+  ["nonCanonicalInteger", () => str.regex(patterns.nonCanonicalInteger)],
   ["wildcard", () => str.regex(patterns.wildcard, patterns.wildcardFlags)],
   ["xmlVersion", () => str.regex(patterns.xmlVersion)],
   ["yesNo", () => str.regex(patterns.yesNo)],
@@ -198,6 +199,15 @@ describe("patterns", () => {
     }
     for (const value of ["true", "a b", ""]) {
       assert.isFalse(admits(uncollapsed, uncollapsedFlags, value), JSON.stringify(value));
+    }
+  });
+
+  it("nonCanonicalInteger", () => {
+    for (const value of ["+5", "05", "-0", "-05"]) {
+      assert.isTrue(admits(patterns.nonCanonicalInteger, "u", value), JSON.stringify(value));
+    }
+    for (const value of ["5", "0", "-5", ""]) {
+      assert.isFalse(admits(patterns.nonCanonicalInteger, "u", value), JSON.stringify(value));
     }
   });
 

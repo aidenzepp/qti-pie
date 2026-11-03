@@ -85,7 +85,14 @@ import {
 } from "@bjornpagen/grizzle";
 import { IdrefAttribute } from "#qti/schema/content/rosters.ts";
 import { DocumentId, HtmlId } from "#qti/schema/document.ts";
-import { AttributeLexical, AttributeName, Node, NodeKind, RootKind } from "#qti/schema/node.ts";
+import {
+  AttributeLexical,
+  AttributeName,
+  AttributeSpelling,
+  Node,
+  NodeKind,
+  RootKind,
+} from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -999,6 +1006,10 @@ export const arms = {};
  */
 export const rules = [
   contained(on(AttributeLexical, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  contained(
+    on(AttributeSpelling, "kind", "attribute"),
+    on(AttributeAdmission, "kind", "attribute"),
+  ),
   contained(on(HtmlId, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
   check("HtmlIdAttribute", HtmlId, (row) => row.eq(row.attribute, "id")),
   contained(on(NodeClass, "node", "kind"), on(Node, "id", "kind")),
