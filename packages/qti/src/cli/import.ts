@@ -16,8 +16,8 @@ const ImportPreview = Schema.Struct({
   database_checked: Schema.Literal(false),
   dry_run: Schema.Literal(true),
   package_dir: Schema.String,
-  relations: Schema.Number,
-  rows: Schema.Number,
+  relations: Schema.Int,
+  rows: Schema.Int,
 });
 
 /**

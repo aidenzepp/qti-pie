@@ -4,12 +4,7 @@
   "properties": {
     "command": { "type": "string" },
     "error": { "type": "boolean", "enum": [true] },
-    "exit_code": {
-      "anyOf": [
-        { "type": "number" },
-        { "type": "string", "enum": ["Infinity", "-Infinity", "NaN"] }
-      ]
-    },
+    "exit_code": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
     "help": { "type": "string" },
     "kind": { "type": "string" },
     "message": { "type": "string" },

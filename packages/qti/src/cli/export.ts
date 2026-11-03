@@ -13,7 +13,7 @@ import { emitSuccess, outputMode } from "#qti/cli/output.ts";
 /**
  * One file `export` wrote: its path inside the package and its size.
  */
-const ExportEntry = Schema.Struct({ bytes: Schema.Number, path: Schema.String });
+const ExportEntry = Schema.Struct({ bytes: Schema.Int, path: Schema.String });
 
 /**
  * What `export` returns under `--output json`: the package, where it was written and every file
