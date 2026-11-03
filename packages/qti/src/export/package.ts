@@ -4,7 +4,7 @@
  */
 import { Db, query, uuid, v } from "@bjornpagen/grizzle";
 import type { DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle";
-import { Effect, FileSystem, Option, Path } from "effect";
+import { Effect, FileSystem, Option, Path, Schema } from "effect";
 import type { PlatformError } from "effect";
 import { readTree, treesOf } from "#qti/export/read.ts";
 import { renderTree } from "#qti/export/render.ts";
@@ -14,7 +14,7 @@ import type { ZipEntry } from "#qti/package/zip.ts";
 import { Document } from "#qti/schema/document.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import { TreeExportCharset } from "#qti/schema/node.ts";
-import { FileContent } from "#qti/schema/package.ts";
+import { FileContent, Package } from "#qti/schema/package.ts";
 import { Author } from "#qti/schema/roles.ts";
 import { encode } from "#qti/xml/encode.ts";
 import type { EncodeError } from "#qti/xml/errors.ts";
@@ -35,6 +35,15 @@ const documentPathOf = query(Author).rule((r) => {
 });
 
 /**
+ * The manifest `identifier` of the package whose id is `id`; no row when no package has that id.
+ */
+const packageOf = query(Author).rule((r) => {
+  const { identifier } = v(Package);
+
+  return r.match(Package, { id: r.param("id", uuid), identifier }).find({ identifier });
+});
+
+/**
  * The path and base64 content of every stored file of a package.
  */
 const contentsOf = query(Author).rule((r) => {
@@ -47,10 +56,30 @@ const contentsOf = query(Author).rule((r) => {
 });
 
 /**
- * What can stop an export: the database, a document that cannot be written in its charset, or the
- * file system.
+ * An export of a package id that no imported package has.
  */
-type ExportError = OpenError | ReadError | EncodeError | PlatformError.PlatformError;
+// oxlint-disable-next-line unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown.
+export class PackageNotFound extends Schema.TaggedError<PackageNotFound>()("PackageNotFound", {
+  packageId: Schema.String,
+}) {
+  /**
+   * What is missing, naming the id.
+   */
+  override get message(): string {
+    return `No imported package has the id ${this.packageId}.`;
+  }
+}
+
+/**
+ * What can stop an export: the database, a package id no package has, a document that cannot be
+ * written in its charset, or the file system.
+ */
+type ExportError =
+  | OpenError
+  | ReadError
+  | PackageNotFound
+  | EncodeError
+  | PlatformError.PlatformError;
 
 /**
  * The document with its declared encoding set to `label`, when it has a declaration.
@@ -72,20 +101,29 @@ const declaring = (doc: XmlDocument, label: string): XmlDocument => ({
  * another charset. Documents go under their `Document.path`, the manifest under `imsmanifest.xml`,
  * and every stored file's decoded bytes under its path.
  *
+ * Fails with `PackageNotFound` when no imported package has the id, before anything is read or
+ * written.
+ *
  * @param packageId - The id of the imported package.
  * @returns The path and bytes of every entry. Fails with the database's or the encoder's error,
- *   every one an export raises before it writes.
+ *   or `PackageNotFound`, every one an export raises before it writes.
  */
 export const exportEntries = Effect.fn("export.exportEntries")(function* exportEntries(
   packageId: string,
 ): Effect.fn.Return<
   readonly ZipEntry[],
-  OpenError | ReadError | EncodeError,
+  OpenError | ReadError | PackageNotFound | EncodeError,
   DbLayer<typeof Author>
 > {
   yield* Effect.annotateCurrentSpan({ packageId });
 
   const db = yield* Db.open(AuthorApp.roles.author, {});
+  const [imported] = yield* (yield* db.execute(packageOf, { id: packageId })).collect;
+
+  if (imported === undefined) {
+    return yield* new PackageNotFound({ packageId });
+  }
+
   const entries: ZipEntry[] = [];
 
   for (const treeId of yield* treesOf(packageId)) {
