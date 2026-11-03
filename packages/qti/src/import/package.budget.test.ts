@@ -1,10 +1,11 @@
 import { Db } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
-import { assert, layer } from "@effect/vitest";
+import { assert, it as plain, layer } from "@effect/vitest";
 import { Console, Effect, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { changeSetOf, readRows } from "#qti/import/package.ts";
+import type { ProcessingFixtureName } from "#qti/processing/fixtures.ts";
 import { processingFixtureNames, materializeProcessing } from "#qti/processing/fixtures.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import { Package } from "#qti/schema/package.ts";
@@ -25,6 +26,42 @@ import { hasLease, leaseTestTimeoutMs, settings } from "#qti/test/settings.ts";
 const PROGRAM_BYTES_MAX = 819_200;
 
 /**
+ * The processing fixtures whose program is reported, not gated (decision 134): `processing-item`,
+ * `padded-reference`, `padded-literal` and `template-item` compile above `PROGRAM_BYTES_MAX` and
+ * below the compiler's ceiling. Each prints a `program_report_only:` line and still fails past the
+ * ceiling or a refusal. The list is re-measured at the regenerate (`p13-t40`'s merge) and at the
+ * freeze; nothing fails when a member falls under the gate.
+ */
+const REPORT_ONLY: ReadonlySet<ProcessingFixtureName> = new Set([
+  "padded-literal",
+  "padded-reference",
+  "processing-item",
+  "template-item",
+]);
+
+/**
+ * What a package's program size earns: `over-cap` past the compiler's ceiling for any package,
+ * `reported` for a listed package under it, `over-gate` for an unlisted package past the gate,
+ * else `within`.
+ */
+type Verdict = "over-cap" | "over-gate" | "reported" | "within";
+
+/**
+ * The verdict for a package of `bytes` SQL bytes, listed in `REPORT_ONLY` or not.
+ */
+const verdictOf = (reportOnly: boolean, bytes: number): Verdict => {
+  if (bytes > SQL_BYTES_CEILING) {
+    return "over-cap";
+  }
+
+  if (reportOnly) {
+    return "reported";
+  }
+
+  return bytes > PROGRAM_BYTES_MAX ? "over-gate" : "within";
+};
+
+/**
  * The corpus's packages when `GR8DES_CORPUS=1` and a lease is held, and none otherwise.
  *
  * Vitest declares a file's cases before any runs, so the corpus's names are listed while the file
@@ -36,11 +73,13 @@ const corpus =
     : [];
 
 /**
- * A package the gate measures: its name and the effect that makes its directory.
+ * A package the gate measures: its name, the effect that makes its directory and whether its
+ * program is reported, not gated.
  */
 interface Subject {
   readonly dir: Effect.Effect<string, unknown, unknown>;
   readonly name: string;
+  readonly reportOnly: boolean;
 }
 
 /**
@@ -48,12 +87,21 @@ interface Subject {
  * request, the corpus.
  */
 const subjects: readonly Subject[] = [
-  ...fixtureNames.map((name) => ({ dir: materialize(name), name: `fixture ${name}` })),
+  ...fixtureNames.map((name) => ({
+    dir: materialize(name),
+    name: `fixture ${name}`,
+    reportOnly: false,
+  })),
   ...processingFixtureNames.map((name) => ({
     dir: materializeProcessing(name),
     name: `processing ${name}`,
+    reportOnly: REPORT_ONLY.has(name),
   })),
-  ...corpus.map((entry) => ({ dir: Effect.succeed(entry.dir), name: `corpus ${entry.name}` })),
+  ...corpus.map((entry) => ({
+    dir: Effect.succeed(entry.dir),
+    name: `corpus ${entry.name}`,
+    reportOnly: false,
+  })),
 ];
 
 /**
@@ -67,7 +115,8 @@ const tally = {
 };
 
 /**
- * Judge one package: read it, compile its import, and hold the program to the bound.
+ * Judge one package: read it, compile its import, and hold the program to the bound: the gate for
+ * a gated package, the compiler's ceiling for a listed one.
  *
  * A package `readRows` refuses is counted as `refused_by_read` and not compiled.
  */
@@ -119,12 +168,48 @@ const judge = (subject: Subject) =>
       0,
       `${subject.name}: the meter watch saw no charge, so the size is unmeasured`,
     );
-    assert.isAtMost(
-      bytes,
-      PROGRAM_BYTES_MAX,
-      `${subject.name}: the import compiles to sqlBytes ${bytes}/${SQL_BYTES_CEILING}, over the gate of ${PROGRAM_BYTES_MAX}`,
+
+    const verdict = verdictOf(subject.reportOnly, bytes);
+
+    if (verdict === "reported") {
+      yield* Console.log(
+        `program_report_only: ${subject.name} sqlBytes ${bytes}/${SQL_BYTES_CEILING} gate ${PROGRAM_BYTES_MAX}`,
+      );
+    }
+
+    assert.include(
+      ["reported", "within"],
+      verdict,
+      `${subject.name}: the import compiles to sqlBytes ${bytes}/${SQL_BYTES_CEILING}, verdict ${verdict}: it crossed ${verdict === "over-cap" ? `the compiler's ceiling of ${SQL_BYTES_CEILING}` : `the gate of ${PROGRAM_BYTES_MAX}`}; shrink the program, or, for a package the operator rules report-only, list it in REPORT_ONLY`,
     );
   });
+
+describe("import/package.budget.test.ts, the verdict", () => {
+  plain("a listed package over the gate is reported", () => {
+    assert.strictEqual(verdictOf(true, 854_795), "reported");
+  });
+
+  plain("an unlisted package over the gate is over-gate", () => {
+    assert.strictEqual(verdictOf(false, 854_795), "over-gate");
+  });
+
+  plain("any package over the ceiling is over-cap", () => {
+    assert.strictEqual(verdictOf(true, 1_048_577), "over-cap");
+    assert.strictEqual(verdictOf(false, 1_048_577), "over-cap");
+  });
+
+  plain("the gate's edge holds", () => {
+    assert.strictEqual(verdictOf(false, 819_200), "within");
+    assert.strictEqual(verdictOf(false, 819_201), "over-gate");
+  });
+
+  plain("the report-only list holds the four processing fixtures", () => {
+    assert.strictEqual(REPORT_ONLY.size, 4);
+    for (const name of REPORT_ONLY) {
+      assert.include(processingFixtureNames, name);
+    }
+  });
+});
 
 describe.skipIf(!hasLease)(
   "import/package.budget.test.ts, on the lease",
@@ -136,7 +221,7 @@ describe.skipIf(!hasLease)(
     })("the import's program per package", (it) => {
       for (const subject of subjects) {
         it.effect(
-          `${subject.name} compiles within ${PROGRAM_BYTES_MAX} bytes`,
+          `${subject.name} compiles within ${subject.reportOnly ? `the cap of ${SQL_BYTES_CEILING}` : `${PROGRAM_BYTES_MAX}`} bytes`,
           () =>
             // SAFETY: the subject's directory effect needs the file system and process spawner `NodeServices` gives the layer; `Subject` erases that requirement so one list holds both kinds of fixture.
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
