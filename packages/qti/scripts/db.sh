@@ -8,6 +8,7 @@
 #   scripts/db.sh check-clear  list roles and gr8des_qti databases this one does not own; exit 1 if any, else 0
 #
 # Roles are cluster-wide, so drop removes the roles of every schema under migrations/ along with the database.
+# GR8DES_PG_DATABASE must match ^[a-z_][a-z0-9_]{0,62}$ (lowercase, at most 63 bytes), or every command exits 2.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -18,6 +19,11 @@ cd "$(dirname "$0")/.."
 : "${GR8DES_PG_PORT:=5433}"
 : "${GR8DES_PG_DATABASE:=gr8des_qti}"
 : "${GR8DES_PG_SECRETS:=$HOME/.local/var/gr8des/$GR8DES_PG_DATABASE}"
+
+if ! [[ $GR8DES_PG_DATABASE =~ ^[a-z_][a-z0-9_]{0,62}$ ]]; then
+	echo "GR8DES_PG_DATABASE is '$GR8DES_PG_DATABASE'; use 1 to 63 lowercase letters, digits or underscores, not starting with a digit (create folds an unquoted name to lowercase, but migrate connects as written)." >&2
+	exit 2
+fi
 
 owner=grizzle_dev
 ca="$GRIZZLE_PG_STATE/tls/ca.crt"
