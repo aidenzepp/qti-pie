@@ -28,6 +28,7 @@ import {
 import { ContextDeclarationId, DocumentId, DocumentIdentifier } from "#qti/schema/document.ts";
 import { AssessmentItemLabel, ItemTool, ItemToolBoth, ItemToolName } from "#qti/schema/item.ts";
 import { InteractionBinding } from "#qti/schema/interaction.ts";
+import { FeedbackBlock } from "#qti/schema/feedback.ts";
 import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
 import {
   AreaMapping,
@@ -983,9 +984,20 @@ describe.skipIf(!hasLease)(
           }),
       );
 
-      // `adaptive-one-feedback` has no test: every feedback block is refused by the `FeedbackBlock`
-      // mirrors law before R33 is judged (the report of p2-60 records the law), so an xs:boolean `1` is
-      // not reached on the database. `adaptive-zero-feedback`'s check fires first.
+      it.effect(
+        'adaptive-one-feedback is admitted: adaptive="1" is an xs:boolean true, so its feedback block is judged adaptive and keeps its FeedbackBlock row',
+        () =>
+          Effect.gen(function* adaptiveOne() {
+            const { id, report } = yield* roundTrip("adaptive-one-feedback");
+
+            assertAllEqual(report);
+
+            assert.deepStrictEqual(
+              (yield* rowsOf(id, FeedbackBlock)).map((row) => row.identifier),
+              ["shown"],
+            );
+          }),
+      );
 
       it.effect(`${refusedCopy} is refused by the database under the adaptive-feedback rule`, () =>
         Effect.gen(function* adaptiveZero() {
