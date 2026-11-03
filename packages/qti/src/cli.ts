@@ -1,8 +1,8 @@
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Cause, Console, Effect, FileSystem, Path, Schema } from "effect";
-import { Argument, CliError, Command, Flag } from "effect/cli";
+import { Cause, Console, Effect, FileSystem, Logger, Path, Schema } from "effect";
+import { Argument, CliError, CliOutput, Command, Flag } from "effect/cli";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { comparePackage, renderReport } from "#qti/export/compare.ts";
 import { exportPackage } from "#qti/export/package.ts";
@@ -140,7 +140,28 @@ const roundtripCommand = Command.make(
 export const cli = Command.make("qti").pipe(
   Command.withDescription("Import QTI packages into the database and export them back"),
   Command.withSubcommands([importCommand, exportCommand, roundtripCommand]),
+  // Log lines are diagnostics: they go to standard error, so standard output carries only the data
+  // asked for. The root's handler runs the chosen subcommand's, so this reaches every handler.
+  Command.provideSync(Logger.LogToStderr, true),
 );
+
+/**
+ * Presents Effect's help, version and usage-error events.
+ *
+ * Help and version were asked for, so they stay on standard output. A mistyped command's help is a
+ * diagnostic, so it joins its errors on standard error.
+ */
+const presenter: CliOutput.Presenter = {
+  present: (event) =>
+    event._tag === "InvalidInvocation"
+      ? Effect.gen(function* presentInvalidInvocation() {
+          const formatter = yield* CliOutput.Formatter;
+
+          yield* Console.error(formatter.formatHelpDoc(event.helpDoc));
+          yield* Console.error(formatter.formatErrors(event.errors));
+        })
+      : CliOutput.defaultPresenter.present(event),
+};
 
 if (import.meta.main) {
   const main = cli.pipe(
@@ -151,6 +172,7 @@ if (import.meta.main) {
       CliError.isCliError(failure) ? Effect.void : Console.error(failure.message),
     ),
     Effect.tapDefect((defect) => Console.error(Cause.pretty(Cause.die(defect)))),
+    Effect.provide(CliOutput.layerPresenter(presenter)),
     Effect.provide(NodeServices.layer),
   );
 
