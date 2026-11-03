@@ -1,6 +1,7 @@
-import { Effect, Path, Schema } from "effect";
+import { Effect, FileSystem, Option, Path, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
 import {
+  dryRunFlag,
   replaceWith,
   requirePackage,
   requireReplaceable,
@@ -47,12 +48,57 @@ const RoundtripSummary = Schema.Struct({
 });
 
 /**
- * What `roundtrip` returns under `--output json`: the package, where it was exported, how many
- * entries differ and the comparison of every entry.
+ * What `roundtrip` returns under `--output json` when it ran: the package, where it was exported,
+ * how many entries differ and the comparison of every entry.
  */
-export const RoundtripData = Schema.Struct({
+const RoundtripReport = Schema.Struct({
   ...RoundtripSummary.fields,
   entries: Schema.Array(RoundtripEntry),
+});
+
+/**
+ * What `roundtrip --dry-run` returns under `--output json`: what the package holds, where the
+ * export would go and whether that replaces something, and that the database did not check it.
+ */
+const RoundtripPreview = Schema.Struct({
+  database_checked: Schema.Literal(false),
+  dry_run: Schema.Literal(true),
+  export_dir: Schema.String,
+  export_dir_action: Schema.Literals(["create", "replace"]),
+  package_dir: Schema.String,
+  relations: Schema.Number,
+  rows: Schema.Number,
+});
+
+/**
+ * What `roundtrip` returns under `--output json`: its report, or under `--dry-run` what it would
+ * do.
+ */
+export const RoundtripData = Schema.Union([RoundtripReport, RoundtripPreview]);
+
+/**
+ * What a dry run says about the database.
+ */
+const databaseNotChecked = "the database's own checks did not run";
+
+/**
+ * Whether writing to `target` would replace something: it holds an entry, or is a file or a link.
+ * An absent target and an empty directory are created into.
+ */
+const wouldReplace = Effect.fn("cli.wouldReplace")(function* wouldReplace(target: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const info = yield* fs.lstat(target).pipe(
+    Effect.map(Option.some),
+    Effect.catchTag("PlatformError", (error) =>
+      error.reason._tag === "NotFound" ? Effect.succeed(Option.none()) : Effect.fail(error),
+    ),
+  );
+
+  if (Option.isNone(info)) {
+    return false;
+  }
+
+  return info.value.type !== "Directory" || (yield* fs.readDirectory(target)).length > 0;
 });
 
 /**
@@ -62,12 +108,16 @@ export const RoundtripData = Schema.Struct({
  * An export already at `work/export/<name>` needs `--yes`, which replaces it, and the old one goes
  * only once the new export is written.
  *
+ * Under `--dry-run` it reads and checks the package, says whether the export would be created or
+ * would replace one, and writes nothing. Every refusal of the real run before its first write is
+ * raised too: an earlier export without `--yes`, and a protected target.
+ *
  * The engine loads when the handler runs, so `--help` and a usage error never pay for it.
  */
 export const roundtripCommand = Command.make(
   "roundtrip",
-  { dir: Argument.String("dir"), yes: yesFlag, zip: zipFlag },
-  Effect.fn("cli.roundtrip")(function* roundtripHandler({ dir, yes, zip }) {
+  { dir: Argument.String("dir"), dryRun: dryRunFlag, yes: yesFlag, zip: zipFlag },
+  Effect.fn("cli.roundtrip")(function* roundtripHandler({ dir, dryRun, yes, zip }) {
     const mode = yield* outputMode;
 
     yield* requirePackage(dir);
@@ -77,6 +127,30 @@ export const roundtripCommand = Command.make(
     const exportDir = path.join("work", "export", zip ? `${name}.zip` : name);
 
     yield* requireReplaceable(exportDir, yes);
+
+    if (dryRun) {
+      const { previewPackage } = yield* Effect.promise(() => import("#qti/import/preview.ts"));
+      const { relations, rows } = yield* previewPackage(dir);
+      const action = (yield* wouldReplace(exportDir)) ? "replace" : "create";
+
+      yield* emitSuccess(mode, {
+        command: "roundtrip",
+        data: {
+          database_checked: false,
+          dry_run: true,
+          export_dir: exportDir,
+          export_dir_action: action,
+          package_dir: dir,
+          relations,
+          rows,
+        },
+        dataSchema: RoundtripData,
+        ok: true,
+        text: `would import ${dir}: ${rows} rows in ${relations} relations, then ${action} ${exportDir}; ${databaseNotChecked}`,
+      });
+
+      return;
+    }
 
     const { AuthorAppLayer } = yield* Effect.promise(() => import("#qti/db/layer.ts"));
     const { comparePackage, renderReport } = yield* Effect.promise(
@@ -113,7 +187,7 @@ export const roundtripCommand = Command.make(
   }),
 ).pipe(
   Command.withDescription(
-    "Import <dir>, export it to work/export/<name> (<name>.zip under --zip), and compare the two (writes the database and work/export/<name>). An export already at work/export/<name> is replaced only with --yes, and the old one goes once the new export is written",
+    "Import <dir>, export it to work/export/<name> (<name>.zip under --zip), and compare the two (writes the database and work/export/<name>; with --dry-run it reads and checks the package, says whether the export would be created or replaced, and writes nothing, and the database's own checks do not run). An export already at work/export/<name> is replaced only with --yes, and the old one goes once the new export is written",
   ),
   Command.withExamples([
     {
@@ -123,6 +197,10 @@ export const roundtripCommand = Command.make(
     {
       command: "qti roundtrip --zip ./my-package.zip",
       description: "Do the same with a zipped package, writing the export as a zip file",
+    },
+    {
+      command: "qti roundtrip --dry-run ./my-package",
+      description: "Read and check a package and say where the export would go, writing nothing",
     },
     {
       command: "qti roundtrip --output jsonl ./my-package",

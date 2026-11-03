@@ -1,9 +1,11 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer, inject } from "@effect/vitest";
-import { Cause, Effect, Exit, FileSystem } from "effect";
+import { Cause, Effect, Exit, FileSystem, Schema } from "effect";
 import { TargetNotEmpty } from "#qti/cli/args.ts";
 import { describeFailure } from "#qti/cli/errors.ts";
+import { successEnvelope } from "#qti/cli/output.ts";
+import { RoundtripData } from "#qti/cli/roundtrip.ts";
 import { exitCodeOf } from "#qti/cli/run.ts";
 import { captureCli, packageCopy } from "#qti/test/cli.ts";
 import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
@@ -21,6 +23,7 @@ const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-roundtri
  * fails with kind `config` before it reads the package.
  */
 const env = {
+  GR8DES_PG_PORT: "1",
   GRIZZLE_PG_STATE: path.join(root, "state"),
   HOME: path.join(root, "home"),
 } as const;
@@ -88,6 +91,151 @@ layer(NodeServices.layer, { excludeTestServices: true })("roundtrip's target gua
         assert.strictEqual(describeFailure(failureOf(exit)).kind, "config");
         assert.strictEqual(exitCodeOf(exit), 78);
         assert.strictEqual(yield* fs.readFileString(file), "kept");
+      }),
+    cliProcessTestTimeoutMs,
+  );
+});
+
+/**
+ * The envelope `--json roundtrip` prints.
+ */
+const roundtripEnvelope = Schema.fromJsonString(successEnvelope("roundtrip", RoundtripData));
+
+/**
+ * The dry-run arm of `--json roundtrip --dry-run`'s data, failing the test when the data is the
+ * other arm.
+ */
+const dryRunArm = (stdout: string) => {
+  const { data } = Schema.decodeUnknownSync(roundtripEnvelope)(stdout);
+
+  if (!("dry_run" in data)) {
+    return assert.fail("the data is not the dry-run arm");
+  }
+
+  return data;
+};
+
+layer(NodeServices.layer, { excludeTestServices: true })("roundtrip --dry-run", (it) => {
+  it.effect(
+    "previews the import, writes nothing and leaves no export behind",
+    () =>
+      Effect.gen(function* previews() {
+        const fs = yield* FileSystem.FileSystem;
+        const label = "copy-dryrun-simple";
+        const copy = yield* packageCopy(fixtures.simple, label);
+
+        yield* fs.remove(path.resolve("work", "export", label), { force: true, recursive: true });
+        yield* fs.makeDirectory(env.GRIZZLE_PG_STATE, { recursive: true });
+        yield* fs.makeDirectory(env.HOME, { recursive: true });
+
+        const { exit, stderr, stdout } = yield* captureCli(["roundtrip", "--dry-run", copy], {
+          env,
+        });
+
+        assert.isTrue(Exit.isSuccess(exit), stderr);
+        assert.match(
+          stdout,
+          /^would import .+: [1-9]\d* rows in [1-9]\d* relations, then create /u,
+        );
+        assert.include(stdout, "the database's own checks did not run");
+        assert.isFalse(yield* fs.exists(path.resolve("work", "export", label)));
+      }),
+    cliProcessTestTimeoutMs,
+  );
+
+  it.effect(
+    "--json prints the dry-run arm, with export_dir_action create while the export is absent",
+    () =>
+      Effect.gen(function* json() {
+        const fs = yield* FileSystem.FileSystem;
+        const label = "copy-dryrun-json-simple";
+        const copy = yield* packageCopy(fixtures.simple, label);
+
+        yield* fs.remove(path.resolve("work", "export", label), { force: true, recursive: true });
+        yield* fs.makeDirectory(env.GRIZZLE_PG_STATE, { recursive: true });
+        yield* fs.makeDirectory(env.HOME, { recursive: true });
+
+        const { exit, stderr, stdout } = yield* captureCli(
+          ["--json", "roundtrip", "--dry-run", copy],
+          { env },
+        );
+
+        assert.isTrue(Exit.isSuccess(exit), stderr);
+        assert.strictEqual(stdout.split("\n").length, 1);
+
+        const data = dryRunArm(stdout);
+
+        assert.isTrue(data.dry_run);
+        assert.isFalse(data.database_checked);
+        assert.isAbove(data.rows, 0);
+        assert.strictEqual(data.export_dir_action, "create");
+        assert.strictEqual(data.export_dir, path.join("work", "export", label));
+        assert.isFalse(yield* fs.exists(path.resolve("work", "export", label)));
+      }),
+    cliProcessTestTimeoutMs,
+  );
+
+  it.effect(
+    "onto an earlier export it refuses without --yes, exactly as the real command does",
+    () =>
+      Effect.gen(function* refused() {
+        const fs = yield* FileSystem.FileSystem;
+        const label = "copy-dryrun-refused-simple";
+        const copy = yield* packageCopy(fixtures.simple, label);
+        const file = yield* earlierExport(label);
+        const { exit } = yield* captureCli(["roundtrip", "--dry-run", copy], { env });
+        const failure = failureOf(exit);
+
+        assert.instanceOf(failure, TargetNotEmpty);
+        assert.strictEqual(describeFailure(failure).kind, "target-not-empty");
+        assert.strictEqual(exitCodeOf(exit), 1);
+        assert.strictEqual(yield* fs.readFileString(file), "kept");
+      }),
+    cliProcessTestTimeoutMs,
+  );
+
+  it.effect(
+    "onto an earlier export with --yes it reports replace and leaves the export as it was",
+    () =>
+      Effect.gen(function* replaces() {
+        const fs = yield* FileSystem.FileSystem;
+        const label = "copy-dryrun-replace-simple";
+        const copy = yield* packageCopy(fixtures.simple, label);
+        const file = yield* earlierExport(label);
+        const { exit, stderr, stdout } = yield* captureCli(
+          ["--json", "roundtrip", "--dry-run", "--yes", copy],
+          { env },
+        );
+
+        assert.isTrue(Exit.isSuccess(exit), stderr);
+        assert.strictEqual(dryRunArm(stdout).export_dir_action, "replace");
+        assert.strictEqual(yield* fs.readFileString(file), "kept");
+      }),
+    cliProcessTestTimeoutMs,
+  );
+
+  it.effect(
+    "onto an empty export folder it reports create, with or without --yes",
+    () =>
+      Effect.gen(function* empty() {
+        const fs = yield* FileSystem.FileSystem;
+        const label = "copy-dryrun-empty-simple";
+        const copy = yield* packageCopy(fixtures.simple, label);
+        const folder = path.resolve("work", "export", label);
+
+        yield* fs.remove(folder, { force: true, recursive: true });
+        yield* fs.makeDirectory(folder, { recursive: true });
+        yield* fs.makeDirectory(env.GRIZZLE_PG_STATE, { recursive: true });
+        yield* fs.makeDirectory(env.HOME, { recursive: true });
+
+        const { exit, stderr, stdout } = yield* captureCli(
+          ["--json", "roundtrip", "--dry-run", copy],
+          { env },
+        );
+
+        assert.isTrue(Exit.isSuccess(exit), stderr);
+        assert.strictEqual(dryRunArm(stdout).export_dir_action, "create");
+        assert.deepStrictEqual(yield* fs.readDirectory(folder), []);
       }),
     cliProcessTestTimeoutMs,
   );

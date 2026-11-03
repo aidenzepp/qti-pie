@@ -180,6 +180,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("the JSON error shape",
 
       assert.strictEqual(stdout.split("\n").length, 1);
       assert.isFalse(envelope.ok);
+      if ("dry_run" in envelope.data) {
+        assert.fail("a real roundtrip printed the dry-run arm");
+      }
+
       assert.strictEqual(envelope.data.differing, 1);
       assert.strictEqual(stderr.split("\n").length, 1);
       assert.strictEqual(errorLine(stderr).kind, "roundtrip-differs");
