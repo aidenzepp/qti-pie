@@ -2,13 +2,16 @@
 
 gr8des is a pnpm workspace. `packages/qti` implements IMS QTI 3.0 on [grizzle](vendor/README.md), and exists first to
 put grizzle through a large, real data model. Read [docs/qti-intent.md](docs/qti-intent.md) before planning or changing
-the QTI model. Everything runs locally; there is no deploy target.
+the QTI model. Everything runs locally; there is no deploy target. The shared repository is
+[aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (private), the remote `origin`.
 
 ## Toolchain
 
 - Node 24 or later runs TypeScript source directly. There is no build step.
 - pnpm workspace. Effect is pinned to `4.0.7`, and the workspace must keep exactly one copy (`pnpm why effect -r`).
 - grizzle `1.0.0-beta.0` is vendored as tarballs; see `vendor/README.md`.
+- Git LFS holds every `packages/*/migrations/**/snapshot.json` (`.gitattributes`). Install `git-lfs` before cloning;
+  without it the snapshot checks out as a pointer file and grizzle refuses it.
 - Vite+ (`vp`) formats, lints and runs tests. TypeScript `7.0.2` typechecks under the strict settings in `tsconfig.json`.
 
 Run before completing implementation:
@@ -151,10 +154,19 @@ This is the workflow `factory` records in its ledger; it meets shipyard's five r
   no database, the checks are `pnpm check` and that slice's own tests. A slice that touches the database, and the phase
   freeze, run `pnpm check` and the affected package's full test suite. These checks belong to the merge seat, never to a
   hand. The Mind accepts the merge task; that feature-branch tip is the slice's ref. The Mind does not run git itself.
-- **Integration.** An accepted feature merges into `main` locally, on a merge task. There is no remote and no pull
-  request.
+- **Integration.** A feature, or a `gate/<name>` fix, reaches `main` through a pull request on `origin`, on a merge
+  task. The merge seat first merges it into `main` locally and runs the integration checks (`pnpm check`,
+  `grizzle check`, the full suite under a lease). Only on green does it push the branch, open the pull request as
+  `aidenzepp` (`GH_TOKEN="$(gh auth token --user aidenzepp)"` on that command only, `gh pr create --base main`), merge
+  it with `gh pr merge --merge` (a merge commit, never squash or rebase), and fast-forward local `main`. A failed check
+  leaves no pull request. Slices still merge into their feature branch locally and are never pushed.
+- **Remote.** Push only `main`, `qti/<feature>/main` and `gate/<name>`. Never force-push, and never rewrite a pushed
+  branch: fixes go forward and are pushed again. Issues that track this project's work may be opened on `origin`.
 - **Audits** take a frozen range on the feature branch. Never rewrite accepted history, never force anything, fix
-  forward.
+  forward. The one exception was the operator-authorized move of `snapshot.json` into Git LFS on 2026-11-03, which
+  changed every commit hash. A hash written before it (in the ledger, a slice list, the findings or a commit message)
+  translates through `~/.local/var/gr8des/lfs-commit-map.csv` (old,new) and still resolves in the mirror
+  `~/.cache/gr8des/pre-lfs.git`.
 
 The shared machine resource rules below bind every stage:
 
