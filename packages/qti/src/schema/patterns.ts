@@ -143,6 +143,14 @@ export const uncollapsed =
 export const uncollapsedFlags = "su" as const;
 
 /**
+ * A collapsed spelling that parses as an integer but is not its canonical rendering: a leading plus
+ * sign, a leading zero, or a negative zero. Such a spelling, and only such a one, is kept in
+ * `AttributeSpelling.value`; a canonical spelling is the typed value's own rendering and cannot be
+ * stored.
+ */
+export const nonCanonicalInteger = "^(?:\\+[0-9]+|-?0[0-9]+|-0)$" as const;
+
+/**
  * Grizzle's own wildcard, any text: the type of the LOM leaves, the generic arms and the qmd
  * replace leaves.
  */

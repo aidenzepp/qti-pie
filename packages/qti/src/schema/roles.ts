@@ -131,6 +131,7 @@ export const Author = role(
     AttributeEntityReference: Qti.relations.AttributeEntityReference,
     AttributeIdref: Qti.relations.AttributeIdref,
     AttributeLexical: Qti.relations.AttributeLexical,
+    AttributeSpelling: Qti.relations.AttributeSpelling,
     Audio: Qti.relations.Audio,
     AudioAutoplay: Qti.relations.AudioAutoplay,
     AudioControls: Qti.relations.AudioControls,

@@ -1,5 +1,7 @@
 import { closed, schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import { Option, Schema } from "effect";
+import * as attributes from "#qti/schema/attributes.ts";
 import * as generic from "#qti/schema/kinds/generic.ts";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
@@ -48,6 +50,7 @@ describe("node", () => {
       "AttributeEntityReference",
       "AttributeLexical",
       "AttributeName",
+      "AttributeSpelling",
       "Comment",
       "Edge",
       "EntityReference",
@@ -133,6 +136,47 @@ describe("node", () => {
     assert.strictEqual(lexical.fields.attribute.roster.name, node.relations.AttributeName.name);
     assert.strictEqual(lexical.fields.value.pattern.source, patterns.uncollapsed);
     assert.strictEqual(lexical.fields.value.pattern.flags, patterns.uncollapsedFlags);
+  });
+
+  it("keys AttributeSpelling by node and attribute, an AttributeName over a non-canonical integer", () => {
+    const spelling = node.relations.AttributeSpelling;
+    assert.deepStrictEqual([...spelling.primaryKey], ["node", "attribute"]);
+    assert.deepStrictEqual(Object.keys(spelling.fields).toSorted(), [
+      "attribute",
+      "kind",
+      "node",
+      "value",
+    ]);
+    assert.strictEqual(spelling.fields.attribute.roster.name, node.relations.AttributeName.name);
+    assert.strictEqual(spelling.fields.kind.roster.name, node.relations.NodeKind.name);
+    assert.strictEqual(spelling.fields.value.pattern.source, patterns.nonCanonicalInteger);
+  });
+
+  it("contains an AttributeSpelling in its Node and in its AttributeAdmission, as AttributeLexical is", () => {
+    const Side = Schema.Struct({
+      fields: Schema.Array(Schema.String),
+      source: Schema.Struct({ name: Schema.String }),
+    });
+    const Containment = Schema.Struct({
+      kind: Schema.Literal("contained"),
+      left: Side,
+      right: Side,
+    });
+    const containments = (name: string) =>
+      [...node.rules, ...attributes.rules]
+        .flatMap((rule) => {
+          const decoded = Schema.decodeUnknownOption(Containment)(rule);
+
+          return Option.isSome(decoded) && decoded.value.left.source.name === name
+            ? [decoded.value]
+            : [];
+        })
+        .map(({ left, right }) => [left.fields, right.source.name, right.fields]);
+    assert.deepStrictEqual(containments("AttributeSpelling"), [
+      [["node", "kind"], "Node", ["id", "kind"]],
+      [["kind", "attribute"], "AttributeAdmission", ["kind", "attribute"]],
+    ]);
+    assert.deepStrictEqual(containments("AttributeSpelling"), containments("AttributeLexical"));
   });
 
   it("gives each generic kind its arm, keyed by its NodeKind handle", () => {
