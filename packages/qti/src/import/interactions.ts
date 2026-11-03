@@ -21,6 +21,7 @@ import type { NodeIndex, UnmodeledVocabulary, WhiteSpace } from "#qti/import/tre
 import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
 import type { BoundHandle, ShapeHandle, XsBooleanHandle } from "#qti/schema/content/rosters.ts";
 import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
+import { RectCoords, ShapeCoords } from "#qti/schema/contracts.ts";
 import type { BaseType, DeclarationShape, TypedCardinality } from "#qti/schema/declaration.ts";
 import {
   GapMatchBinding,
@@ -302,23 +303,26 @@ export const coordsRows = (
 ): Rows => {
   const value = replace(lexical);
   const lexicalRows = typedAttribute(rows, node, ownerKind, "coords", lexical, "replace").rows;
-  const withCoords = Rows.add(lexicalRows, Coords, [{ node, ownerKind, shape, value }]);
+  const withCoords = Rows.add(lexicalRows, Coords, [
+    { node, ownerKind, shape, value: ShapeCoords(value) },
+  ]);
   const fact = [{ node, value }];
+  const rect = [{ node, value: RectCoords(value) }];
   switch (shape) {
     case "circle": {
       return Rows.add(withCoords, CoordsCircle, fact);
     }
     case "default": {
-      return Rows.add(withCoords, CoordsDefault, fact);
+      return Rows.add(withCoords, CoordsDefault, [{ node, value: ShapeCoords(value) }]);
     }
     case "ellipse": {
-      return Rows.add(withCoords, CoordsEllipse, fact);
+      return Rows.add(withCoords, CoordsEllipse, rect);
     }
     case "poly": {
       return Rows.add(withCoords, CoordsPoly, fact);
     }
     case "rect": {
-      return Rows.add(withCoords, CoordsRect, fact);
+      return Rows.add(withCoords, CoordsRect, rect);
     }
     default: {
       return shape satisfies never;

@@ -15,6 +15,7 @@ import { closedOf, ItemRefusal, Rows, spelledInteger, withParents } from "#qti/i
 import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { Shape, ShowHide } from "#qti/schema/content/rosters.ts";
 import type { ShapeHandle } from "#qti/schema/content/rosters.ts";
+import { ChoiceIdentifier } from "#qti/schema/contracts.ts";
 import {
   DeclaredHotspotChoiceShowHide,
   DeclaredHotspotMaxChoices,
@@ -352,7 +353,7 @@ const hottext = Effect.fn("import.hottext")(function* hottext(
     "the show-hide attribute of qti-hottext",
   );
   let built = Rows.add(attributes.rows(), Hottext, [
-    { id: node.id, identifier, showHide: showHideHandle },
+    { id: node.id, identifier: ChoiceIdentifier(identifier), showHide: showHideHandle },
   ]);
   built = ctx.shared.markers(
     built,
@@ -363,7 +364,7 @@ const hottext = Effect.fn("import.hottext")(function* hottext(
   const owner = ctx.shared.nearestInteraction(ctx.nodes, element);
   if (Option.isSome(owner) && owner.value.kind === "qti-hottext-interaction") {
     built = Rows.add(built, HottextOwner, [
-      { identifier, interaction: owner.value.id, node: node.id },
+      { identifier: ChoiceIdentifier(identifier), interaction: owner.value.id, node: node.id },
     ]);
   }
 
@@ -426,7 +427,7 @@ const hotspotChoice = Effect.fn("import.hotspotChoice")(function* hotspotChoice(
   let built = Rows.add(attributes.rows(), HotspotChoice, [
     {
       id: node.id,
-      identifier,
+      identifier: ChoiceIdentifier(identifier),
       interaction: owner.value.id,
       shape: shape.value,
       showHide: showHideHandle,

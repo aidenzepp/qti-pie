@@ -30,7 +30,7 @@ import {
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
 import { Edge, Node, SchemaVersion } from "#qti/schema/node.ts";
-import { VariableReference } from "#qti/schema/contracts.ts";
+import { ShowHideIdentifier, VariableReference } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
@@ -44,7 +44,7 @@ export const FeedbackBlock = relation(
   "FeedbackBlock",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ShowHideIdentifier,
     outcomeIdentifier: VariableReference,
     showHide: closedId(ShowHide),
   },
@@ -68,7 +68,7 @@ export const TemplateFeedbackBlock = relation(
   "TemplateFeedbackBlock",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ShowHideIdentifier,
     outcomeIdentifier: VariableReference,
     showHide: closedId(ShowHide),
   },
@@ -91,7 +91,7 @@ export const FeedbackInline = relation(
   "FeedbackInline",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ShowHideIdentifier,
     outcomeIdentifier: VariableReference,
     showHide: closedId(ShowHide),
   },
@@ -115,7 +115,7 @@ export const ModalFeedback = relation(
   "ModalFeedback",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ShowHideIdentifier,
     outcomeIdentifier: VariableReference,
     showHide: closedId(ShowHide),
     version: closedId(SchemaVersion),

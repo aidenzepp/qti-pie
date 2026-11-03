@@ -29,6 +29,7 @@ import {
 import { Orientation, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { InteractionBinding } from "#qti/schema/interaction.ts";
 import { Node, RootKind } from "#qti/schema/node.ts";
+import { MediaRectCoords } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -50,11 +51,6 @@ const nonNegativeDouble = str.regex(patterns.nonNegativeDouble);
  * An `xs:double` that is greater than zero.
  */
 const positiveDouble = str.regex(patterns.positiveDouble);
-
-/**
- * The coordinates of a rectangle: four `CoordsDType` tokens.
- */
-const coordsRect = str.regex(patterns.coordsRect);
 
 /**
  * Media types separated by spaces, or the empty list.
@@ -143,7 +139,9 @@ export const MediaMinPlays = relation("MediaMinPlays", { node: uuid }, ["node"])
  * A media interaction's `coordinates`, when it has them: always a rectangle, so the shape is not
  * recorded and the value is not a `Coords` row.
  */
-export const MediaCoords = relation("MediaCoords", { node: uuid, value: coordsRect }, ["node"]);
+export const MediaCoords = relation("MediaCoords", { node: uuid, value: MediaRectCoords }, [
+  "node",
+]);
 
 /**
  * An upload interaction's `type`, when it has one. The empty list is a value the XSD admits.

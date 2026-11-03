@@ -1,6 +1,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as choices from "#qti/schema/choices.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
@@ -295,5 +296,29 @@ describe("interactions/gap", () => {
     assert.strictEqual(relations.Gap.fields.showHide.roster, rosters.ShowHide);
     assert.strictEqual(relations.GapText.fields.showHide.roster, rosters.ShowHide);
     assert.strictEqual(relations.GapImg.fields.showHide.roster, rosters.ShowHide);
+  });
+});
+
+describe("contracts (interactions/gap)", () => {
+  it("types Gap.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(gap.Gap.fields.identifier.name, contracts.ChoiceIdentifier.name);
+  });
+  it("types GapText.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(gap.GapText.fields.identifier.name, contracts.ChoiceIdentifier.name);
+  });
+  it("types GapImg.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(gap.GapImg.fields.identifier.name, contracts.ChoiceIdentifier.name);
+  });
+  it("types GapMatchChoicesContainerWidth.value ContainerWidth", () => {
+    assert.strictEqual(
+      gap.GapMatchChoicesContainerWidth.fields.value.name,
+      contracts.ContainerWidth.name,
+    );
+  });
+  it("types GraphicGapMatchChoicesContainerWidth.value ContainerWidth", () => {
+    assert.strictEqual(
+      gap.GraphicGapMatchChoicesContainerWidth.fields.value.name,
+      contracts.ContainerWidth.name,
+    );
   });
 });

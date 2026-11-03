@@ -27,6 +27,7 @@ import {
   MatchTableEntry,
   relations,
 } from "#qti/schema/mapping.ts";
+import { RectCoords } from "#qti/schema/contracts.ts";
 import { AttributeLexical, Edge } from "#qti/schema/node.ts";
 import { Coords, CoordsRect } from "#qti/schema/shapes.ts";
 import { readXml } from "#qti/xml/read.ts";
@@ -330,7 +331,9 @@ describe("mappingRows on an area mapping", () => {
           [second, "qti-area-map-entry", "circle", "5,5,3"],
         ],
       );
-      assert.deepStrictEqual(Rows.of(built, CoordsRect), [{ node: first, value: "0,0,10,10" }]);
+      assert.deepStrictEqual(Rows.of(built, CoordsRect), [
+        { node: first, value: RectCoords("0,0,10,10") },
+      ]);
     }),
   );
 

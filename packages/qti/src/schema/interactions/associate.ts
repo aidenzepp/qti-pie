@@ -38,6 +38,7 @@ import { matchBoundsCheck } from "#qti/schema/choices.ts";
 import { coordsBinding, shapeCapacities } from "#qti/schema/shapes.ts";
 import { InteractionBinding } from "#qti/schema/interaction.ts";
 import { Edge, Node, NodeKind, RootKind } from "#qti/schema/node.ts";
+import { ChoiceIdentifier } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -105,7 +106,7 @@ export const SimpleAssociableChoice = relation(
   "SimpleAssociableChoice",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ChoiceIdentifier,
     interaction: uuid,
     matchMaxN: pg.bigint,
     matchMinN: pg.bigint,
@@ -127,7 +128,7 @@ export const AssociableHotspot = relation(
   "AssociableHotspot",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ChoiceIdentifier,
     interaction: uuid,
     matchMaxN: pg.bigint,
     matchMinN: pg.bigint,

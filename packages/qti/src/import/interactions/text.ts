@@ -14,6 +14,13 @@ import { closedOf, Rows } from "#qti/import/tree.ts";
 import type { ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { ShowHide, TextFormat, XsBoolean } from "#qti/schema/content/rosters.ts";
 import {
+  ChoiceCount,
+  ChoiceIdentifier,
+  ExpectedLength,
+  ExpectedLines,
+  StringCount,
+} from "#qti/schema/contracts.ts";
+import {
   DeclaredExtendedTextBase,
   DeclaredExtendedTextFormat,
   DeclaredExtendedTextMinStrings,
@@ -74,6 +81,21 @@ const plain = (read: string): string => read;
  * A count as an `xs:nonNegativeInteger` column holds it.
  */
 const natural = (read: string): `${number}` | `+${number}` => judgedLater(read);
+
+/**
+ * An `expected-length` as its contract holds it.
+ */
+const expectedLengthOf = (read: string) => ExpectedLength(natural(read));
+
+/**
+ * An `expected-lines` as its contract holds it.
+ */
+const expectedLinesOf = (read: string) => ExpectedLines(natural(read));
+
+/**
+ * A `max-strings` as its contract holds it.
+ */
+const stringCountOf = (read: string) => StringCount(natural(read));
 
 /**
  * The marker relations of the defaulted attributes of one kind, by attribute name.
@@ -164,7 +186,11 @@ const textEntryRows = Effect.fn("import.textEntryRows")(function* textEntryRows(
     },
   ]);
   built = ctx.shared.markers(built, textEntryMarkers, node.id, attributes.written());
-  built = Rows.add(built, TextEntryExpectedLength, valueFact(node.id, expectedLength, natural));
+  built = Rows.add(
+    built,
+    TextEntryExpectedLength,
+    valueFact(node.id, expectedLength, expectedLengthOf),
+  );
   built = Rows.add(built, TextEntryPatternMask, valueFact(node.id, patternMask, plain));
   built = Rows.add(built, TextEntryPlaceholderText, valueFact(node.id, placeholderText, plain));
   built = Rows.add(built, TextEntryFormat, valueFact(node.id, format, plain));
@@ -208,15 +234,23 @@ const extendedTextRows = Effect.fn("import.extendedTextRows")(function* extended
       base: judgedLater(Option.getOrElse(base, () => "10")),
       format: formatHandle,
       id: node.id,
-      minStrings: judgedLater(Option.getOrElse(minStrings, () => "0")),
+      minStrings: stringCountOf(Option.getOrElse(minStrings, () => "0")),
       responseIdentifier,
       rootKind: "item",
     },
   ]);
   built = ctx.shared.markers(built, extendedTextMarkers, node.id, attributes.written());
-  built = Rows.add(built, ExtendedTextMaxStrings, valueFact(node.id, maxStrings, natural));
-  built = Rows.add(built, ExtendedTextExpectedLength, valueFact(node.id, expectedLength, natural));
-  built = Rows.add(built, ExtendedTextExpectedLines, valueFact(node.id, expectedLines, natural));
+  built = Rows.add(built, ExtendedTextMaxStrings, valueFact(node.id, maxStrings, stringCountOf));
+  built = Rows.add(
+    built,
+    ExtendedTextExpectedLength,
+    valueFact(node.id, expectedLength, expectedLengthOf),
+  );
+  built = Rows.add(
+    built,
+    ExtendedTextExpectedLines,
+    valueFact(node.id, expectedLines, expectedLinesOf),
+  );
   built = Rows.add(built, ExtendedTextPatternMask, valueFact(node.id, patternMask, plain));
   built = Rows.add(built, ExtendedTextPlaceholderText, valueFact(node.id, placeholderText, plain));
   built = Rows.add(built, ExtendedTextPatternmaskMessage, valueFact(node.id, message, plain));
@@ -259,7 +293,7 @@ const inlineChoiceInteractionRows = Effect.fn("import.inlineChoiceInteractionRow
     built = Rows.add(built, InlineChoiceInteraction, [
       {
         id: node.id,
-        minChoices: judgedLater(Option.getOrElse(minChoices, () => "0")),
+        minChoices: ChoiceCount(natural(Option.getOrElse(minChoices, () => "0"))),
         required: requiredHandle,
         responseIdentifier,
         rootKind: "item",
@@ -319,7 +353,7 @@ const inlineChoiceRows = Effect.fn("import.inlineChoiceRows")(function* inlineCh
     {
       fixed: fixedHandle,
       id: node.id,
-      identifier,
+      identifier: ChoiceIdentifier(identifier),
       interaction: owner.value.id,
       showHide: showHideHandle,
     },

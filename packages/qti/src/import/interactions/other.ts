@@ -14,6 +14,7 @@ import type { ImportRefused } from "#qti/import/refusal.ts";
 import { closedOf, Rows, spelledInteger, typedAttribute } from "#qti/import/tree.ts";
 import type { ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { Orientation, XsBoolean } from "#qti/schema/content/rosters.ts";
+import { MediaRectCoords } from "#qti/schema/contracts.ts";
 import {
   DeclaredMediaLoop,
   DeclaredSliderStepLabel,
@@ -195,7 +196,7 @@ const mediaRows = Effect.fn("import.mediaRows")(function* mediaRows(
     node.id,
     attributes.written(),
   );
-  built = Rows.add(built, MediaCoords, valueFact(node.id, coords, plain));
+  built = Rows.add(built, MediaCoords, valueFact(node.id, coords, MediaRectCoords));
 
   return yield* bound(ctx, built, node, responseIdentifier);
 });

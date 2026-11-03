@@ -1,5 +1,6 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
@@ -221,7 +222,7 @@ describe("interactions/other", () => {
   });
 
   it("types the media coordinates as a rect and the upload type as a media-type list", () => {
-    assert.strictEqual(relations.MediaCoords.fields.value.pattern.source, patterns.coordsRect);
+    assert.strictEqual(relations.MediaCoords.fields.value.base.pattern.source, patterns.coordsRect);
     assert.strictEqual(relations.UploadType.fields.value.pattern.source, patterns.mimeTypeList);
   });
 
@@ -245,5 +246,11 @@ describe("interactions/other", () => {
     assert.strictEqual(relations.SliderReverse.fields.value.roster, rosters.XsBoolean);
     assert.strictEqual(relations.EndAttemptCountAttempt.fields.value.roster, rosters.XsBoolean);
     assert.strictEqual(relations.SliderOrientation.fields.value.roster, rosters.Orientation);
+  });
+});
+
+describe("contracts (interactions/other)", () => {
+  it("types MediaCoords.value MediaRectCoords", () => {
+    assert.strictEqual(other.MediaCoords.fields.value.name, contracts.MediaRectCoords.name);
   });
 });

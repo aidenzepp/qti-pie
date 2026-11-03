@@ -488,3 +488,12 @@ describe("contracts (interaction)", () => {
     );
   });
 });
+
+describe("contracts (interaction)", () => {
+  it("types SimpleChoice.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(
+      interaction.SimpleChoice.fields.identifier.name,
+      contracts.ChoiceIdentifier.name,
+    );
+  });
+});

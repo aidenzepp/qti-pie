@@ -28,14 +28,17 @@ import {
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
 import { Node } from "#qti/schema/node.ts";
-import { RecordFieldIdentifier, VariableReference } from "#qti/schema/contracts.ts";
+import {
+  PrintedVariableIntegerOrVariable,
+  RecordFieldIdentifier,
+  ShowHideIdentifier,
+  VariableReference,
+} from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
 
 const xsString = str.regex(patterns.xsString, patterns.xsStringFlags);
-
-const integerOrVariableString = str.regex(patterns.integerOrVariableString);
 
 /**
  * The attributes of a printed variable that may name a variable instead of an integer.
@@ -51,7 +54,7 @@ export const TemplateBlock = relation(
   "TemplateBlock",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ShowHideIdentifier,
     showHide: closedId(ShowHide),
     templateIdentifier: VariableReference,
   },
@@ -75,7 +78,7 @@ export const RubricTemplateBlock = relation(
   "RubricTemplateBlock",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ShowHideIdentifier,
     showHide: closedId(ShowHide),
     templateIdentifier: VariableReference,
   },
@@ -99,7 +102,7 @@ export const TemplateInline = relation(
   "TemplateInline",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ShowHideIdentifier,
     showHide: closedId(ShowHide),
     templateIdentifier: VariableReference,
   },
@@ -123,7 +126,7 @@ export const RubricTemplateInline = relation(
   "RubricTemplateInline",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ShowHideIdentifier,
     showHide: closedId(ShowHide),
     templateIdentifier: VariableReference,
   },
@@ -166,7 +169,7 @@ export const TemplateContentRef = relation(
 export const PrintedVariable = relation(
   "PrintedVariable",
   {
-    base: integerOrVariableString,
+    base: PrintedVariableIntegerOrVariable,
     delimiter: xsString,
     id: uuid,
     identifier: VariableReference,
@@ -224,7 +227,7 @@ export const PrintedVariableFormat = relation(
  */
 export const PrintedVariableIndex = relation(
   "PrintedVariableIndex",
-  { node: uuid, value: integerOrVariableString },
+  { node: uuid, value: PrintedVariableIntegerOrVariable },
   ["node"],
 );
 

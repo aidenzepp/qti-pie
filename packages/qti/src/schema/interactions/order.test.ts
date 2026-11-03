@@ -1,6 +1,7 @@
 import { pg, schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
@@ -232,5 +233,14 @@ describe("interactions/order", () => {
   it("types its boolean, show-hide, orientation and format columns as closedId of their rosters", () => {
     assert.strictEqual(order.relations.OrderInteraction.fields.shuffle.roster, rosters.XsBoolean);
     assert.strictEqual(order.relations.OrderOrientation.fields.value.roster, rosters.Orientation);
+  });
+});
+
+describe("contracts (interactions/order)", () => {
+  it("types OrderChoicesContainerWidth.value ContainerWidth", () => {
+    assert.strictEqual(
+      order.OrderChoicesContainerWidth.fields.value.name,
+      contracts.ContainerWidth.name,
+    );
   });
 });

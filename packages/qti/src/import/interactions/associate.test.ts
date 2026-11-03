@@ -18,6 +18,7 @@ import { associateRows } from "#qti/import/interactions/associate.ts";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
+import { MatchGroupList } from "#qti/schema/contracts.ts";
 import { ChoiceTemplateRef, MatchGroup } from "#qti/schema/choices.ts";
 import {
   AssociableHotspot,
@@ -381,7 +382,9 @@ describe("associateRows on an associate interaction", () => {
         { node: "node-3", value: "hide" },
       ]);
       assert.deepStrictEqual(Rows.of(built, SimpleAssociableChoiceMatchMin), [{ node: "node-3" }]);
-      assert.deepStrictEqual(Rows.of(built, MatchGroup), [{ node: "node-3", value: "g1 g2" }]);
+      assert.deepStrictEqual(Rows.of(built, MatchGroup), [
+        { node: "node-3", value: MatchGroupList("g1 g2") },
+      ]);
       assert.deepStrictEqual(Rows.of(built, ChoiceTemplateRef), [
         {
           baseType: "identifier",

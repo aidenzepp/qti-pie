@@ -50,6 +50,7 @@ import { Shape, ShowHide } from "#qti/schema/content/rosters.ts";
 import { GraphicOrderInteraction } from "#qti/schema/interactions/order.ts";
 import { InteractionBinding } from "#qti/schema/interaction.ts";
 import { Edge, Node, RootKind } from "#qti/schema/node.ts";
+import { ChoiceIdentifier } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { coordsBinding, shapeCapacities } from "#qti/schema/shapes.ts";
 
@@ -90,7 +91,7 @@ export const HottextInteraction = relation(
  */
 export const Hottext = relation(
   "Hottext",
-  { id: uuid, identifier: ncName, showHide: closedId(ShowHide) },
+  { id: uuid, identifier: ChoiceIdentifier, showHide: closedId(ShowHide) },
   ["id"],
 );
 
@@ -100,7 +101,7 @@ export const Hottext = relation(
  */
 export const HottextOwner = relation(
   "HottextOwner",
-  { identifier: ncName, interaction: uuid, node: uuid },
+  { identifier: ChoiceIdentifier, interaction: uuid, node: uuid },
   ["node"],
 );
 
@@ -128,7 +129,7 @@ export const HotspotChoice = relation(
   "HotspotChoice",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ChoiceIdentifier,
     interaction: uuid,
     shape: closedId(Shape),
     showHide: closedId(ShowHide),

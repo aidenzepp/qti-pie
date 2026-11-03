@@ -13,6 +13,7 @@ import { closedOf, ItemRefusal, Rows, spelledInteger, withParents } from "#qti/i
 import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { MatchGroup } from "#qti/schema/choices.ts";
 import { ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
+import { ChoiceIdentifier } from "#qti/schema/contracts.ts";
 import {
   DeclaredGapImgShowHide,
   DeclaredGapMatchMaxAssociations,
@@ -343,7 +344,7 @@ const gap = Effect.fn("import.gap")(function* gap(
   const built = Rows.add(attributes.rows(), Gap, [
     {
       id: node.id,
-      identifier,
+      identifier: ChoiceIdentifier(identifier),
       interaction: owner.value.id,
       required: requiredHandle,
       showHide: showHideHandle,
@@ -418,7 +419,7 @@ const gapText = Effect.fn("import.gapText")(function* gapText(
   let built = Rows.add(minimum.rows, GapText, [
     {
       id: node.id,
-      identifier,
+      identifier: ChoiceIdentifier(identifier),
       interaction: owner.value,
       matchMaxN: maximum.value,
       matchMinN: minimum.value,
@@ -483,7 +484,7 @@ const gapImg = Effect.fn("import.gapImg")(function* gapImg(
   let built = Rows.add(minimum.rows, GapImg, [
     {
       id: node.id,
-      identifier,
+      identifier: ChoiceIdentifier(identifier),
       interaction: owner.value,
       matchMaxN: maximum.value,
       matchMinN: minimum.value,

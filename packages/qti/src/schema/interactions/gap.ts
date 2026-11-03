@@ -35,12 +35,8 @@ import { ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { matchBoundsCheck } from "#qti/schema/choices.ts";
 import { GapMatchBinding, InteractionBinding } from "#qti/schema/interaction.ts";
 import { Edge, Node, RootKind } from "#qti/schema/node.ts";
+import { ChoiceIdentifier, ContainerWidth } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-
-/**
- * An `xs:nonNegativeInteger` attribute's lexical form.
- */
-const xsNonNegativeInteger = str.regex(patterns.xsNonNegativeInteger);
 
 /**
  * An `xs:string` attribute's value, whitespace preserved.
@@ -97,7 +93,7 @@ export const Gap = relation(
   "Gap",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ChoiceIdentifier,
     interaction: uuid,
     required: closedId(XsBoolean),
     showHide: closedId(ShowHide),
@@ -114,7 +110,7 @@ export const GapText = relation(
   "GapText",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ChoiceIdentifier,
     interaction: uuid,
     matchMaxN: pg.bigint,
     matchMinN: pg.bigint,
@@ -130,7 +126,7 @@ export const GapImg = relation(
   "GapImg",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ChoiceIdentifier,
     interaction: uuid,
     matchMaxN: pg.bigint,
     matchMinN: pg.bigint,
@@ -216,7 +212,7 @@ export const GapMatchMaxSelectionsMessage = relation(
  */
 export const GapMatchChoicesContainerWidth = relation(
   "GapMatchChoicesContainerWidth",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid, value: ContainerWidth },
   ["node"],
 );
 
@@ -252,7 +248,7 @@ export const GraphicGapMatchMaxSelectionsMessage = relation(
  */
 export const GraphicGapMatchChoicesContainerWidth = relation(
   "GraphicGapMatchChoicesContainerWidth",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid, value: ContainerWidth },
   ["node"],
 );
 

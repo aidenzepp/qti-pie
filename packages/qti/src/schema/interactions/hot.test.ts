@@ -2,6 +2,7 @@
 import { closedId, schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as choices from "#qti/schema/choices.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
@@ -398,5 +399,31 @@ describe("interactions/hot", () => {
   it("types its boolean, show-hide, orientation and format columns as closedId of their rosters", () => {
     assert.strictEqual(relations.Hottext.fields.showHide.roster, rosters.ShowHide);
     assert.strictEqual(relations.HotspotChoice.fields.showHide.roster, rosters.ShowHide);
+  });
+});
+
+describe("contracts (interactions/hot)", () => {
+  it("types Hottext.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(hot.Hottext.fields.identifier.name, contracts.ChoiceIdentifier.name);
+  });
+  it("types HottextOwner.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(hot.HottextOwner.fields.identifier.name, contracts.ChoiceIdentifier.name);
+  });
+  it("types HotspotChoice.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(hot.HotspotChoice.fields.identifier.name, contracts.ChoiceIdentifier.name);
+  });
+  it("types Hottext.identifier and HottextOwner.identifier alike, so the pair is one containment component", () => {
+    assert.strictEqual(hot.Hottext.fields.identifier.name, hot.HottextOwner.fields.identifier.name);
+  });
+});
+
+describe("contracts (shapes)", () => {
+  it("types Coords.value and CoordsDefault.value ShapeCoords", () => {
+    assert.strictEqual(shapes.Coords.fields.value.name, contracts.ShapeCoords.name);
+    assert.strictEqual(shapes.CoordsDefault.fields.value.name, contracts.ShapeCoords.name);
+  });
+  it("types CoordsEllipse.value and CoordsRect.value RectCoords", () => {
+    assert.strictEqual(shapes.CoordsEllipse.fields.value.name, contracts.RectCoords.name);
+    assert.strictEqual(shapes.CoordsRect.fields.value.name, contracts.RectCoords.name);
   });
 });

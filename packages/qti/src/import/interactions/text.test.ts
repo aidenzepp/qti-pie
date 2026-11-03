@@ -18,6 +18,13 @@ import { textRows } from "#qti/import/interactions/text.ts";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
+import {
+  ChoiceCount,
+  ChoiceIdentifier,
+  ExpectedLength,
+  ExpectedLines,
+  StringCount,
+} from "#qti/schema/contracts.ts";
 import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
 import { InteractionBinding, RecordBinding, TypedBinding } from "#qti/schema/interaction.ts";
 import {
@@ -257,7 +264,7 @@ describe("textRows: text-entry", () => {
         { attribute: "base", kind: "qti-text-entry-interaction", node: textEntryId, value: " 16 " },
       ]);
       assert.deepStrictEqual(Rows.of(rows, TextEntryExpectedLength), [
-        { node: textEntryId, value: "20" },
+        { node: textEntryId, value: ExpectedLength("20") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, TextEntryPatternMask), [
         { node: textEntryId, value: "[a-z]+" },
@@ -333,7 +340,7 @@ describe("textRows: extended-text", () => {
           base: "10",
           format: "plain",
           id: extendedId,
-          minStrings: "0",
+          minStrings: StringCount("0"),
           responseIdentifier: "RESPONSE",
           rootKind: "item",
         },
@@ -406,13 +413,13 @@ describe("textRows: extended-text", () => {
         [["2", "1"]],
       );
       assert.deepStrictEqual(Rows.of(rows, ExtendedTextMaxStrings), [
-        { node: extendedId, value: "3" },
+        { node: extendedId, value: StringCount("3") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, ExtendedTextExpectedLength), [
-        { node: extendedId, value: "40" },
+        { node: extendedId, value: ExpectedLength("40") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, ExtendedTextExpectedLines), [
-        { node: extendedId, value: "5" },
+        { node: extendedId, value: ExpectedLines("5") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, ExtendedTextPatternMask), [
         { node: extendedId, value: ".*" },
@@ -519,7 +526,7 @@ describe("textRows: inline-choice", () => {
       assert.deepStrictEqual(Rows.of(rows, InlineChoiceInteraction), [
         {
           id: interactionId,
-          minChoices: "0",
+          minChoices: ChoiceCount("0"),
           required: "false",
           responseIdentifier: "RESPONSE",
           rootKind: "item",
@@ -556,14 +563,14 @@ describe("textRows: inline-choice", () => {
         {
           fixed: "false",
           id: "qti-inline-choice-4",
-          identifier: "A",
+          identifier: ChoiceIdentifier("A"),
           interaction: interactionId,
           showHide: "show",
         },
         {
           fixed: "true",
           id: "qti-inline-choice-5",
-          identifier: "B",
+          identifier: ChoiceIdentifier("B"),
           interaction: interactionId,
           showHide: "show",
         },

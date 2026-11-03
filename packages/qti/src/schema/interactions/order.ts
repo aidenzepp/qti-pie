@@ -34,12 +34,8 @@ import {
 import { Bound, Orientation, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { InteractionBinding, SimpleChoice } from "#qti/schema/interaction.ts";
 import { Node, RootKind } from "#qti/schema/node.ts";
+import { ContainerWidth } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-
-/**
- * An `xs:nonNegativeInteger` attribute's lexical form.
- */
-const xsNonNegativeInteger = str.regex(patterns.xsNonNegativeInteger);
 
 /**
  * An `xs:normalizedString` attribute's value, as the typed column holds it after replacement.
@@ -135,7 +131,7 @@ export const OrderMaxSelectionsMessage = relation(
  */
 export const OrderChoicesContainerWidth = relation(
   "OrderChoicesContainerWidth",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid, value: ContainerWidth },
   ["node"],
 );
 

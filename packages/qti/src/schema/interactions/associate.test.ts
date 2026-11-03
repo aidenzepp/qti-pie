@@ -2,6 +2,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as choices from "#qti/schema/choices.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
@@ -365,5 +366,20 @@ describe("interactions/associate", () => {
       rosters.ShowHide,
     );
     assert.strictEqual(relations.AssociableHotspot.fields.showHide.roster, rosters.ShowHide);
+  });
+});
+
+describe("contracts (interactions/associate)", () => {
+  it("types SimpleAssociableChoice.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(
+      associate.SimpleAssociableChoice.fields.identifier.name,
+      contracts.ChoiceIdentifier.name,
+    );
+  });
+  it("types AssociableHotspot.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(
+      associate.AssociableHotspot.fields.identifier.name,
+      contracts.ChoiceIdentifier.name,
+    );
   });
 });

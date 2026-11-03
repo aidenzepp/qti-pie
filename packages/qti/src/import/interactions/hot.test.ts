@@ -20,6 +20,7 @@ import { hotRows } from "#qti/import/interactions/hot.ts";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows, treeRows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
+import { ChoiceIdentifier, RectCoords } from "#qti/schema/contracts.ts";
 import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
 import {
   DeclaredHotspotChoiceShowHide,
@@ -261,7 +262,9 @@ describe("hotRows on a hotspot interaction", () => {
           ["node-4", "qti-hotspot-choice", "circle", "5,5,3"],
         ],
       );
-      assert.deepStrictEqual(Rows.of(built, CoordsRect), [{ node: "node-3", value: "0,0,10,10" }]);
+      assert.deepStrictEqual(Rows.of(built, CoordsRect), [
+        { node: "node-3", value: RectCoords("0,0,10,10") },
+      ]);
       assert.deepStrictEqual(Rows.of(built, CoordsCircle), [{ node: "node-4", value: "5,5,3" }]);
       assert.deepStrictEqual(Rows.of(built, TypedBinding), [
         {
@@ -559,7 +562,7 @@ describe("hotRows on hottexts", () => {
       const built = yield* hotRows(ctx, Rows.empty());
 
       assert.deepStrictEqual(Rows.of(built, Hottext), [
-        { id: idOf(ctx, "qti-hottext"), identifier: "X", showHide: "show" },
+        { id: idOf(ctx, "qti-hottext"), identifier: ChoiceIdentifier("X"), showHide: "show" },
       ]);
       assert.strictEqual(Rows.of(built, HottextOwner).length, 0);
       assert.strictEqual(Rows.of(built, HottextInteraction).length, 0);
@@ -573,7 +576,7 @@ describe("hotRows on hottexts", () => {
       const built = yield* hotRows(ctx, Rows.empty());
 
       assert.deepStrictEqual(Rows.of(built, Hottext), [
-        { id: "node-2", identifier: "Y", showHide: "show" },
+        { id: "node-2", identifier: ChoiceIdentifier("Y"), showHide: "show" },
       ]);
       assert.strictEqual(Rows.of(built, HottextOwner).length, 0);
     }),

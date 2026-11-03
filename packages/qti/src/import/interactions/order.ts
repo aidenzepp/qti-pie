@@ -10,6 +10,7 @@ import type { AttributeReader, InteractionContext } from "#qti/import/interactio
 import type { ImportRefused } from "#qti/import/refusal.ts";
 import { closedOf, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
 import { Orientation, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
+import { ChoiceIdentifier } from "#qti/schema/contracts.ts";
 import type { IndexedNode, ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import {
   DeclaredFixed,
@@ -293,7 +294,7 @@ const choice = Effect.fn("import.orderChoice")(function* choice(
     {
       fixed: fixedHandle,
       id: node.id,
-      identifier: Option.getOrElse(attributes.read("identifier"), () => ""),
+      identifier: ChoiceIdentifier(Option.getOrElse(attributes.read("identifier"), () => "")),
       interaction: interaction.id,
       showHide: showHideHandle,
     },
