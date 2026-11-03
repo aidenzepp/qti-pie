@@ -16,7 +16,7 @@ import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
 import { outcomeRows } from "#qti/import/outcome.ts";
 import type { ImportLaw, ImportRefused, ImportWitness } from "#qti/import/refusal.ts";
-import { refusalOfLaw, ruleOfError } from "#qti/import/refusal.ts";
+import { budgetRefusalOf, refusalOfLaw, ruleOfError } from "#qti/import/refusal.ts";
 import { rptemplateRows } from "#qti/import/rptemplate.ts";
 import { Rows, UnmodeledVocabulary, kindOf } from "#qti/import/tree.ts";
 import { usageRows } from "#qti/import/usage.ts";
@@ -293,9 +293,10 @@ export const changeSetOf = (rows: Rows) => {
  * @param dir - The package directory.
  * @param options - Replacements for the retry schedule and the apply step, for tests.
  * @returns The id of the committed package. Fails with `ImportRefused` naming the rule the package
- *   broke, whether a guard, the reader or the database refused it; with the platform's error when
- *   the directory cannot be read; and with grizzle's own error when the database failed for a
- *   reason that is not a refusal.
+ *   broke, whether a guard, the reader or the database refused it, and `program-budget` when the
+ *   package's import program is larger than grizzle compiles in one transaction; with the
+ *   platform's error when the directory cannot be read; and with grizzle's own error when the
+ *   database failed for a reason that is not a refusal.
  */
 export const importPackage = Effect.fn("import.importPackage")(function* importPackage(
   dir: string,
@@ -313,6 +314,9 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   const changes = changeSetOf(rows);
   const db = yield* retried("Db.open", Db.open(AuthorApp.roles.author, {}), schedule);
   const outcome = yield* retried("db.apply", wrap(db.apply(changes, {})), schedule).pipe(
+    Effect.catchTag("ExecutionFailure", (failure) =>
+      Effect.fail(Option.getOrElse(budgetRefusalOf(failure), () => failure)),
+    ),
     Effect.catchTag("CommitUnknown", (unknown) =>
       Effect.gen(function* readBack() {
         const found = yield* db

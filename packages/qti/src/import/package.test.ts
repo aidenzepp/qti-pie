@@ -1,4 +1,13 @@
-import { CommitUnknown, Db, query, TransientFailure, uuid, v } from "@bjornpagen/grizzle";
+import {
+  CommitUnknown,
+  CompileError,
+  Db,
+  ExecutionFailure,
+  query,
+  TransientFailure,
+  uuid,
+  v,
+} from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, it as plainIt, layer } from "@effect/vitest";
 import { Clock, Effect, Fiber, Layer, Ref, Result, Schedule, Schema } from "effect";
@@ -164,6 +173,19 @@ const serializationFailure = Schema.decodeUnknownSync(TransientFailure)({
     table: undefined,
   },
   reason: { _tag: "SerializationFailure" },
+});
+
+/**
+ * The failure grizzle's compiler gives a program over its `sqlBytes` budget, built by decoding a
+ * `CompileError` the engine made, since the reason's schema refuses an object literal.
+ */
+const budgetFailure = Schema.decodeUnknownSync(ExecutionFailure)({
+  _tag: "ExecutionFailure",
+  reason: CompileError.make({
+    _tag: "ResourceBound",
+    at: { label: "ChangeSet", path: [], site: undefined },
+    bound: { budget: "sqlBytes", kind: "budget", limit: 1_048_576, needed: 1_608_527 },
+  }),
 });
 
 /**
@@ -394,6 +416,34 @@ describe.skipIf(!hasLease)(
           assert.match(id, uuidPattern);
           assert.isAtLeast(yield* Ref.get(attempts), 2);
         }),
+      );
+
+      it.effect(
+        "refuses a program over the compile budget under program-budget, after one attempt",
+        () =>
+          Effect.gen(function* overBudget() {
+            const attempts = yield* Ref.make(0);
+            const result = yield* Effect.result(
+              importPackage(fixtures.simple, {
+                wrapApply: () =>
+                  Effect.andThen(
+                    Ref.update(attempts, (n) => n + 1),
+                    Effect.fail(budgetFailure),
+                  ),
+              }),
+            );
+
+            assert.isTrue(Result.isFailure(result));
+
+            const failure = Result.isFailure(result) ? result.failure : undefined;
+
+            assert.instanceOf(failure, ImportRefused);
+            assert.strictEqual(
+              failure instanceof ImportRefused ? failure.rule : undefined,
+              "program-budget",
+            );
+            assert.strictEqual(yield* Ref.get(attempts), 1);
+          }),
       );
 
       it.effect("fails with the TransientFailure itself after the last retry", () =>
