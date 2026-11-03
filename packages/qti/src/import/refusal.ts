@@ -786,34 +786,20 @@ const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
  * that spells the same language, so a source names every column that uses it: `anyUri` is also the
  * `Uri` value arm's, the three DRD URIs', `CsmCaseItemUri.value`'s, `Statistic.context`'s and the
  * two glossaries' (every `anyUri` column of the usage and DRD relations is `uri-syntax` through
- * it); `hrefInPackage` is the pattern of every path column; and `xsBoolean` is
- * `attribute-lexical` for every column that spells it, the M1 attribute flags, the QTI metadata
- * flags, the DRD `atInteroperable` and the usage `caseSensitive` flag alike, since no earlier
- * phase's row named it. The `Literal` value arms share their sources with `DeclaredValue`'s, so a
- * pattern law cannot tell `P7` from `value-lexical`: P7 is named by the other laws of the `Literal`
- * arms (the pattern law carries no relation).
+ * it); and `hrefInPackage` is the pattern of every path column. A closed vocabulary has no
+ * row: its column is a roster handle, so no pattern law names it. The `Literal` value arms share
+ * their sources with `DeclaredValue`'s, so a pattern law cannot tell `P7` from `value-lexical`: P7
+ * is named by the other laws of the `Literal` arms (the pattern law carries no relation).
  *
- * A source shared with an earlier phase's columns keeps that phase's rule, since the law carries
- * no relation to tell the columns apart: `ncName`, `xsInteger`, `xsDouble`, `pair`, `point` and
- * `booleanLiteral` name `value-lexical`, never `drd-value`, `usage-lexical` or
- * `usage-typed-value`. Only a source no earlier column spells names the new rule: the nine DRD
- * vocabularies and the usage date.
+ * A source shared with an earlier phase's columns keeps that phase's rule, since the law carries no
+ * relation to tell the columns apart: `ncName`, `xsInteger`, `xsDouble`, `pair` and `point` name
+ * `value-lexical`, never `drd-value`, `usage-lexical` or `usage-typed-value`. Only a source no
+ * earlier column spells names the new rule: the nine DRD vocabularies and the usage date.
  */
 const patternRules = new Map<string, Rule>([
-  [patterns.align, "attribute-lexical"],
   [patterns.anyUri, "uri-syntax"],
-  [patterns.ariaAutocomplete, "attribute-lexical"],
-  [patterns.ariaChecked, "attribute-lexical"],
-  [patterns.ariaCurrent, "attribute-lexical"],
-  [patterns.ariaExpanded, "attribute-lexical"],
-  [patterns.ariaInvalid, "attribute-lexical"],
-  [patterns.ariaLive, "attribute-lexical"],
   [patterns.ariaRelevantList, "attribute-lexical"],
-  [patterns.ariaRole, "attribute-lexical"],
-  [patterns.ariaSort, "attribute-lexical"],
-  [patterns.baseType, "P6"],
   [patterns.bcp47, "attribute-lexical"],
-  [patterns.booleanLiteral, "value-lexical"],
   [patterns.classList, "attribute-lexical"],
   [patterns.coords, "P6"],
   [patterns.coordsAny, "attribute-lexical"],
@@ -821,8 +807,6 @@ const patternRules = new Map<string, Rule>([
   [patterns.coordsEllipse, "attribute-lexical"],
   [patterns.coordsPoly, "attribute-lexical"],
   [patterns.coordsRect, "attribute-lexical"],
-  [patterns.crossorigin, "attribute-lexical"],
-  [patterns.dirEnum, "attribute-lexical"],
   [patterns.drdAccessMode, "drd-value"],
   [patterns.drdAdaptationDetail, "drd-value"],
   [patterns.drdAdaptationMediaType, "drd-value"],
@@ -840,45 +824,34 @@ const patternRules = new Map<string, Rule>([
   [patterns.integerOrVariableString, "attribute-lexical"],
   [patterns.intOrIdentifier, "P6"],
   [patterns.lengthDType, "attribute-lexical"],
-  [patterns.mathConstantName, "P6"],
-  [patterns.mathOperatorName, "P6"],
   [patterns.mimeTypeList, "attribute-lexical"],
   [patterns.ncName, "value-lexical"],
   [patterns.ncNameList, "attribute-lexical"],
   [patterns.ncNameListOrEmpty, "attribute-lexical"],
   [patterns.nonNegativeDouble, "attribute-lexical"],
-  [patterns.orientation, "attribute-lexical"],
   [patterns.pair, "value-lexical"],
   [patterns.point, "value-lexical"],
   [patterns.positiveDouble, "normal-maximum"],
   [patterns.positiveInteger, "attribute-lexical"],
-  [patterns.preload, "attribute-lexical"],
   [patterns.printfFormat, "attribute-lexical"],
-  [patterns.roundingMode, "P6"],
-  [patterns.scope, "attribute-lexical"],
-  [patterns.shape, "P6"],
-  [patterns.showHide, "attribute-lexical"],
-  [patterns.statsOperatorName, "P6"],
-  [patterns.suppressTts, "attribute-lexical"],
-  [patterns.textFormat, "attribute-lexical"],
   [patterns.toleranceList, "P6"],
-  [patterns.toleranceMode, "P6"],
   [patterns.toolString, "tool-string-length"],
-  [patterns.trackKind, "attribute-lexical"],
   [patterns.uncollapsed, "attribute-lexical"],
   [patterns.usageDate, "usage-lexical"],
   [patterns.useEnumExt, "attribute-lexical"],
-  [patterns.valign, "attribute-lexical"],
-  [patterns.valuetype, "attribute-lexical"],
   [patterns.viewList, "attribute-lexical"],
-  [patterns.xincludeParse, "P6"],
-  [patterns.xsBoolean, "attribute-lexical"],
   [patterns.xsDecimal, "attribute-lexical"],
   [patterns.xsDouble, "value-lexical"],
   [patterns.xsInt, "attribute-lexical"],
   [patterns.xsInteger, "value-lexical"],
   [patterns.xsNonNegativeInteger, "attribute-lexical"],
 ]);
+
+/**
+ * The regex source of every pattern that has a row, in the map's order: a read-only view for the
+ * test that each row names a pattern the schema still exports.
+ */
+export const patternRuleSources: readonly string[] = [...patternRules.keys()];
 
 /**
  * Whether a relation is one of the usage-data module's: the data, its statistics, their target
