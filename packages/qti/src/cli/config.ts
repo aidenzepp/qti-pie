@@ -20,12 +20,11 @@ const version: GlobalFlag.Action<boolean> = GlobalFlag.Action({
 
 /**
  * The built-in global flags the command line runs with, in the order Effect checks them: help,
- * version, completions and log level. There is no wizard: the program never prompts, so `--wizard`
- * is an unrecognized flag.
+ * version and log level. Completions are the `completions` command. There is no wizard: the program
+ * never prompts, so `--wizard` is an unrecognized flag.
  */
 export const builtIns: readonly GlobalFlag.BuiltIn[] = [
   GlobalFlag.Help,
   version,
-  GlobalFlag.Completions,
   GlobalFlag.LogLevel,
 ];
