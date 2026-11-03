@@ -352,7 +352,7 @@ const keyRule = (relation: string, fields: readonly string[]): Rule | undefined 
     return rule;
   }
 
-  if (relation === "AttributeLexical") {
+  if (relation === "AttributeLexical" || relation === "AttributeSpelling") {
     return "attribute-lexical";
   }
 
@@ -391,6 +391,7 @@ const checkRules = new Map<string, Rule>([
   ["DeclaredRefKind", "P8"],
   ["DependencyNotSelf", "dependency-target"],
   ["EqualRoundedFigures", "P10"],
+  ["EqualRoundedFiguresRefZero", "P32"],
   ["FeedbackOutcomeRefType", "feedback-ref"],
   ["GapImgBounds", "choice-bounds"],
   ["GapMatchBounds", "choice-bounds"],
@@ -398,8 +399,10 @@ const checkRules = new Map<string, Rule>([
   ["GraphicAssociateBounds", "choice-bounds"],
   ["GraphicGapMatchBounds", "choice-bounds"],
   ["GraphicOrderChoiceBounds", "choice-bounds"],
+  ["GraphicOrderMinChoicesPositive", "attribute-lexical"],
   ["HotspotChoiceBounds", "choice-bounds"],
   ["HottextChoiceBounds", "choice-bounds"],
+  ["IndexNRefZero", "P32"],
   ["IndexPositive", "P11"],
   ["LomLearningResourceType", "lom-learning-resource-type"],
   ["MatchBounds", "choice-bounds"],
@@ -407,14 +410,17 @@ const checkRules = new Map<string, Rule>([
   ["NoDefaultHotspotInGraphicGapMatch", "hotspot-default"],
   ["NodeLabelNotRoot", "attribute-admission"],
   ["OrderChoiceBounds", "choice-bounds"],
+  ["OrderMinChoicesPositive", "attribute-lexical"],
   ["OutcomeMinMaxKind", "outcome-minmax-kind"],
   ["PositionObjectChoiceBounds", "choice-bounds"],
   ["PrintedVariableRefKind", "printed-variable-ref"],
   ["PrintedVariableVarRefType", "printed-variable-ref"],
   ["ProcessingRoot", "processing-root"],
   ["RepeatInt", "P6"],
+  ["RepeatNumberRepeatsRefZero", "P32"],
   ["ReservedOutcomeTypes", "reserved-type"],
   ["RoundToFigures", "P10"],
+  ["RoundToFiguresRefZero", "P32"],
   ["RuleOperandKind", "P3"],
   ["SelectPointChoiceBounds", "choice-bounds"],
   ["SimpleAssociableChoiceBounds", "choice-bounds"],
@@ -449,6 +455,7 @@ const capacityRules = new Map<string, Rule>([
   ["ChoiceInteraction<SimpleChoice", "choice-present"],
   ["ColgroupSpan<Edge", "colgroup-span"],
   ["Details<Edge", "details-summary"],
+  ["EqualRounded<EqualRoundedFiguresRef", "P32"],
   ["Document<DocumentIdentifier", "root-identifier"],
   ["Document<DocumentTitle", "root-title"],
   ["Expression<Operand", "P2"],
@@ -456,6 +463,7 @@ const capacityRules = new Map<string, Rule>([
   ["GapMatchBinding<Gap", "gap-multiple"],
   ["GraphicOrderInteraction<HotspotChoice", "order-choice-count"],
   ["HotspotChoice<Coords", "coords-owner"],
+  ["Index<IndexNRef", "P32"],
   ["InlineChoiceInteraction<InlineChoice", "choice-present"],
   ["ManifestMetadata<ManifestSchema", "schema-single"],
   ["ManifestMetadata<ManifestSchemaVersion", "schema-single"],
@@ -466,11 +474,13 @@ const capacityRules = new Map<string, Rule>([
   ["Package<ManifestMetadata", "manifest-children"],
   ["Package<Organizations", "manifest-children"],
   ["Package<Resources", "manifest-children"],
+  ["Repeat<RepeatNumberRepeatsRef", "P32"],
   ["Resource<File", "resource-file-present"],
   ["ResourceLomIdentified<LomIdentifier", "lom-identifier"],
   ["ResourceLomIdentified<LomObjectIdentifier", "lom-identifier"],
   ["ResourceLomTitled<LomGeneralTitle", "lom-title-single"],
   ["ResourceLomTitled<LomObjectTitle", "lom-title"],
+  ["RoundTo<RoundToFiguresRef", "P32"],
   ["Table<Edge", "table-parts"],
   ["TypedValueSet<DeclaredValue", "value-single"],
   ["ValueSet<DeclaredValue", "value-present"],
@@ -538,6 +548,33 @@ const referenceRules = new Map<string, Rule>([
   ["StringBinding", "string-binding"],
   ["TemplateContentRef", "template-ref"],
 ]);
+
+/**
+ * The relations whose containments state one law, by the relation they leave: the copy of a count
+ * attribute's typed value to its interaction's column is a typed copy, and a reference arm of a
+ * processing attribute is held by the parent that selects it, `P32`.
+ */
+const copyLeaves = new Map<string, Rule>([
+  ["EqualRoundedFiguresRef", "P32"],
+  ["GraphicOrderMaxChoicesN", "typed-copy"],
+  ["GraphicOrderMinChoicesN", "typed-copy"],
+  ["IndexNRef", "P32"],
+  ["OrderMaxChoicesN", "typed-copy"],
+  ["OrderMinChoicesN", "typed-copy"],
+  ["RepeatNumberRepeatsRef", "P32"],
+  ["RoundToFiguresRef", "P32"],
+]);
+
+/**
+ * The rule of the two containments that state a manifest's `cp:schemaversion` is its package's
+ * `schemaversion`: both are a typed copy, though the second enters `Package.schemaversion`, which a
+ * resource's own containment names `schema-version`.
+ */
+const schemaVersionCopyRule = (from: LawSide): Rule | undefined =>
+  from.relation === "ManifestSchemaVersion" &&
+  (fieldsAre(from, "metadata", "package") || fieldsAre(from, "package", "version"))
+    ? "typed-copy"
+    : undefined;
 
 /**
  * The relations of the document and LOM language sets: a containment that leaves or enters one of
@@ -731,6 +768,8 @@ const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
   }
 
   const rule =
+    copyLeaves.get(from.relation) ??
+    schemaVersionCopyRule(from) ??
     containedRules.get(`${from.relation}>${to.relation}`) ??
     referenceRules.get(from.relation) ??
     selectedContainedRule(from, to) ??
