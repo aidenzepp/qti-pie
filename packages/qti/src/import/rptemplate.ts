@@ -21,6 +21,7 @@ import { kindOf, Rows, treeRows, typedAttribute, UnmodeledVocabulary } from "#qt
 import type { ImportRefused } from "#qti/import/refusal.ts";
 import type { NodeIndex } from "#qti/import/tree.ts";
 import { emptyEnvironment } from "#qti/processing/env.ts";
+import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
 import { Document } from "#qti/schema/document.ts";
 import type { AttributeNameHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
 import {
@@ -96,8 +97,8 @@ export const rptemplateRows = Effect.fn("import.rptemplateRows")(function* rptem
     {
       id: documentId,
       package: packageId,
-      path: input.path,
-      resource: input.resource,
+      path: PackagePath(input.path),
+      resource: ManifestIdentifier(input.resource),
       resourceType: input.resourceType,
       root: "rptemplate",
       version,

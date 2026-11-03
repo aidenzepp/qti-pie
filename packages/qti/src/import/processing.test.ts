@@ -17,6 +17,7 @@ import type { Language } from "#qti/processing/ast.ts";
 import { emptyEnvironment, environmentOf, withDeclarations } from "#qti/processing/env.ts";
 import type { DeclarationEntry, Environment, Mode } from "#qti/processing/env.ts";
 import { corpusPackage, materializeProcessing } from "#qti/processing/fixtures.ts";
+import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import * as expression from "#qti/schema/expression.ts";
 import * as attributed from "#qti/schema/expression-attributes.ts";
@@ -1572,8 +1573,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/rptemplate.ts",
       assert.deepStrictEqual(documents[0], {
         id: built.documentId,
         package: packageId,
-        path: "rptemplates/CC2_match.xml",
-        resource: "CC2_match",
+        path: PackagePath("rptemplates/CC2_match.xml"),
+        resource: ManifestIdentifier("CC2_match"),
         resourceType: "imsqti_rptemplate_xmlv3p0",
         root: "rptemplate",
         version: "3.0.0",

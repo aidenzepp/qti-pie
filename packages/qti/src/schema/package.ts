@@ -27,15 +27,15 @@ import {
 import type { FieldBase } from "@bjornpagen/grizzle";
 import { CpSchema, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { Edge, Node, RootKind, SchemaVersion, Tree } from "#qti/schema/node.ts";
+import {
+  FileMediaType,
+  ManifestIdentifier,
+  PackagePath,
+  ResourceEntryHref,
+} from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 const base64 = str.regex(patterns.base64);
-
-const hrefInPackage = str.regex(patterns.hrefInPackage);
-
-const mimeType = str.regex(patterns.mimeType);
-
-const ncName = str.regex(patterns.ncName);
 
 const resourceType = str.regex(patterns.resourceType);
 
@@ -52,7 +52,7 @@ export const Package = relation(
   "Package",
   {
     id: uuid,
-    identifier: str.regex(patterns.ncName),
+    identifier: ManifestIdentifier,
     schemaversion: closedId(SchemaVersion),
   },
   ["id"],
@@ -104,7 +104,7 @@ export const ManifestSchemaVersion = relation(
  */
 export const PackageEntry = relation(
   "PackageEntry",
-  { kind: closedId(EntryKind), package: uuid, path: str.regex(patterns.hrefInPackage) },
+  { kind: closedId(EntryKind), package: uuid, path: PackagePath },
   ["package", "path"],
 );
 
@@ -134,7 +134,7 @@ export const Resource = relation(
   "Resource",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ManifestIdentifier,
     package: uuid,
     type: resourceType,
     version: closedId(SchemaVersion),
@@ -147,7 +147,7 @@ export const Resource = relation(
  */
 export const ResourceHref = relation(
   "ResourceHref",
-  { href: hrefInPackage, package: uuid, resource: uuid },
+  { href: ResourceEntryHref, package: uuid, resource: uuid },
   ["resource"],
 );
 
@@ -162,7 +162,7 @@ export const ResourceMetadata = relation("ResourceMetadata", { id: uuid, resourc
  */
 export const File = relation(
   "File",
-  { href: hrefInPackage, id: uuid, package: uuid, position: pg.bigint, resource: uuid },
+  { href: PackagePath, id: uuid, package: uuid, position: pg.bigint, resource: uuid },
   ["id"],
 );
 
@@ -172,7 +172,7 @@ export const File = relation(
  */
 export const Dependency = relation(
   "Dependency",
-  { id: uuid, package: uuid, resource: ncName, target: ncName },
+  { id: uuid, package: uuid, resource: ManifestIdentifier, target: ManifestIdentifier },
   ["id"],
 );
 
@@ -184,9 +184,9 @@ export const FileContent = relation(
   {
     byteLength: pg.bigint,
     content: base64,
-    mimeType,
+    mimeType: FileMediaType,
     package: uuid,
-    path: hrefInPackage,
+    path: PackagePath,
   },
   ["package", "path"],
 );
@@ -228,11 +228,11 @@ export const Variant = relation(
   "Variant",
   {
     id: uuid,
-    identifier: ncName,
-    identifierref: ncName,
+    identifier: ManifestIdentifier,
+    identifierref: ManifestIdentifier,
     package: uuid,
     resource: uuid,
-    resourceIdentifier: ncName,
+    resourceIdentifier: ManifestIdentifier,
   },
   ["id"],
 );
@@ -499,7 +499,7 @@ export const ManifestIdHolder = closed("ManifestIdHolder", ["manifest", "resourc
  */
 export const ManifestId = relation(
   "ManifestId",
-  { holder: closedId(ManifestIdHolder), id: ncName, package: uuid },
+  { holder: closedId(ManifestIdHolder), id: ManifestIdentifier, package: uuid },
   ["package", "id"],
 );
 
@@ -508,7 +508,7 @@ export const ManifestId = relation(
  */
 export const ManifestIdOfManifest = relation(
   "ManifestIdOfManifest",
-  { id: ncName, package: uuid },
+  { id: ManifestIdentifier, package: uuid },
   ["package", "id"],
 );
 
@@ -517,17 +517,18 @@ export const ManifestIdOfManifest = relation(
  */
 export const ManifestIdOfResource = relation(
   "ManifestIdOfResource",
-  { id: ncName, package: uuid },
+  { id: ManifestIdentifier, package: uuid },
   ["package", "id"],
 );
 
 /**
  * The `ManifestId` of a variant: the variant's `identifier`.
  */
-export const ManifestIdOfVariant = relation("ManifestIdOfVariant", { id: ncName, package: uuid }, [
-  "package",
-  "id",
-]);
+export const ManifestIdOfVariant = relation(
+  "ManifestIdOfVariant",
+  { id: ManifestIdentifier, package: uuid },
+  ["package", "id"],
+);
 
 /**
  * The statements of the manifest-wide `xs:ID` space. Each id belongs to a package, and the

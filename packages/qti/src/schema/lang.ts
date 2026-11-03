@@ -15,11 +15,10 @@ import { YesNo } from "#qti/schema/content/rosters.ts";
 import { Document } from "#qti/schema/document.ts";
 import { ItemToolBoth } from "#qti/schema/item.ts";
 import { LomGeneral, LomLanguage, ResourceLom } from "#qti/schema/metadata.ts";
+import { ManifestIdentifier } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 const bcp47 = str.regex(patterns.bcp47);
-
-const ncName = str.regex(patterns.ncName);
 
 const xsLanguageOrEmpty = str.regex(patterns.xsLanguageOrEmpty);
 
@@ -33,7 +32,7 @@ export const DocumentLang = relation(
     document: uuid,
     lomGeneral: closedId(YesNo),
     package: uuid,
-    resource: ncName,
+    resource: ManifestIdentifier,
     value: bcp47,
   },
   ["document", "value"],
@@ -44,7 +43,7 @@ export const DocumentLang = relation(
  */
 export const ResourceLomLanguageSet = relation(
   "ResourceLomLanguageSet",
-  { lom: uuid, package: uuid, resource: ncName, value: xsLanguageOrEmpty },
+  { lom: uuid, package: uuid, resource: ManifestIdentifier, value: xsLanguageOrEmpty },
   ["lom", "value"],
 );
 
@@ -53,7 +52,7 @@ export const ResourceLomLanguageSet = relation(
  */
 export const ResourceLomGeneral = relation(
   "ResourceLomGeneral",
-  { lom: uuid, package: uuid, resource: ncName },
+  { lom: uuid, package: uuid, resource: ManifestIdentifier },
   ["lom"],
 );
 

@@ -8,6 +8,7 @@ import { ImportRefused } from "#qti/import/refusal.ts";
 import { Rows, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { usageRows } from "#qti/import/usage.ts";
+import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
 import { AttributeLexical, Edge, Tree, TreeRoot } from "#qti/schema/node.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import * as ud from "#qti/schema/usage.ts";
@@ -120,8 +121,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
         {
           id: tree.id,
           package: packageId,
-          path: "example.xml",
-          resource: "USAGE-TOTAL-TEST-106391",
+          path: PackagePath("example.xml"),
+          resource: ManifestIdentifier("USAGE-TOTAL-TEST-106391"),
           resourceType: "qtiusagedata/xml",
           root: "usagedata",
           version: "3.0.0",

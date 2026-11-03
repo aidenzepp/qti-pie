@@ -8,6 +8,7 @@ import { RootKind } from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
 import { resourceTypes } from "#qti/schema/seed/resource-types.ts";
 import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 
 const versions = ["3.0.0", "3.0.1"] as const;
 
@@ -300,5 +301,42 @@ describe("package", () => {
 
   it("holds cp:schema to the seven names of CpSchema", () => {
     assert.strictEqual(pkg.relations.ManifestSchema.fields.value.roster, rosters.CpSchema);
+  });
+});
+
+describe("manifest contracts (package)", () => {
+  const idColumns = [
+    pkg.Package.fields.identifier,
+    pkg.Resource.fields.identifier,
+    pkg.Dependency.fields.resource,
+    pkg.Dependency.fields.target,
+    pkg.Variant.fields.identifier,
+    pkg.Variant.fields.identifierref,
+    pkg.Variant.fields.resourceIdentifier,
+    pkg.ManifestId.fields.id,
+    pkg.ManifestIdOfManifest.fields.id,
+    pkg.ManifestIdOfResource.fields.id,
+    pkg.ManifestIdOfVariant.fields.id,
+  ];
+
+  it("types the eleven xs:ID columns ManifestIdentifier", () => {
+    for (const column of idColumns) {
+      assert.strictEqual(column.name, contracts.ManifestIdentifier.name);
+    }
+  });
+
+  it("types the path columns PackagePath, one contract on both sides", () => {
+    for (const column of [
+      pkg.File.fields.href,
+      pkg.FileContent.fields.path,
+      pkg.PackageEntry.fields.path,
+    ]) {
+      assert.strictEqual(column.name, contracts.PackagePath.name);
+    }
+  });
+
+  it("types the resource entry href and the file media type", () => {
+    assert.strictEqual(pkg.ResourceHref.fields.href.name, contracts.ResourceEntryHref.name);
+    assert.strictEqual(pkg.FileContent.fields.mimeType.name, contracts.FileMediaType.name);
   });
 });

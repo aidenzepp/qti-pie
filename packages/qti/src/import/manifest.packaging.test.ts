@@ -9,6 +9,7 @@ import { ImportRefused } from "#qti/import/refusal.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import type { Entry } from "#qti/package/read.ts";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
+import { FileMediaType, PackagePath } from "#qti/schema/contracts.ts";
 import * as cpx from "#qti/schema/kinds/cpx.ts";
 import * as drd from "#qti/schema/kinds/drd.ts";
 import { Document } from "#qti/schema/document.ts";
@@ -147,9 +148,9 @@ const builtOf = (dir: string) =>
             {
               byteLength: BigInt(bytes.length),
               content: Buffer.from(bytes).toString("base64"),
-              mimeType: "application/octet-stream",
+              mimeType: FileMediaType("application/octet-stream"),
               package: built.packageId,
-              path: document.path,
+              path: PackagePath(document.path),
             },
           ]);
         } else {
@@ -157,7 +158,7 @@ const builtOf = (dir: string) =>
             {
               id: crypto.randomUUID(),
               package: built.packageId,
-              path: document.path,
+              path: PackagePath(document.path),
               resource: document.resource,
               resourceType: document.type,
               root,
@@ -651,7 +652,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
         ["meta/choice.xml"],
       );
 
-      const contents = new Set(Rows.of(rows, FileContent).map((row) => row.path));
+      const contents = new Set<string>(Rows.of(rows, FileContent).map((row) => row.path));
       assert.isFalse(contents.has("meta/choice.xml"));
       assert.isTrue(contents.has("images/sign.png"));
       for (const document of documents) {
@@ -696,7 +697,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
         ["choice.xml"],
       );
 
-      const contents = new Set(Rows.of(rows, FileContent).map((row) => row.path));
+      const contents = new Set<string>(Rows.of(rows, FileContent).map((row) => row.path));
       assert.isTrue(contents.has("fragments/rtest01-fragment.xml"));
       assert.isTrue(contents.has("meta/other.xml"));
       for (const document of documents) {
@@ -832,9 +833,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
         {
           byteLength: 0n,
           content: "",
-          mimeType: "application/octet-stream",
+          mimeType: FileMediaType("application/octet-stream"),
           package: packageId,
-          path: path ?? "",
+          path: PackagePath(path ?? ""),
         },
       ]);
       const doubled = yield* verdictOf(both, entries);

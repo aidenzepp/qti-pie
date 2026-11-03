@@ -35,6 +35,7 @@ import {
   DocumentTitle,
   HtmlId,
 } from "#qti/schema/document.ts";
+import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
 import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#qti/schema/html.ts";
 import {
   AssessmentItem,
@@ -261,8 +262,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
           {
             id: documentId,
             package: packageId,
-            path: "choice.xml",
-            resource: "choice",
+            path: PackagePath("choice.xml"),
+            resource: ManifestIdentifier("choice"),
             resourceType: "imsqti_item_xmlv3p0",
             root: "item",
             version: "3.0.0",
@@ -272,7 +273,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
         const common = {
           document: documentId,
           package: packageId,
-          resource: "choice",
+          resource: ManifestIdentifier("choice"),
           root: "item" as const,
         };
         assert.deepStrictEqual(Rows.of(rows, DocumentIdentifier), [{ ...common, value: "choice" }]);
@@ -1210,12 +1211,16 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts root ro
         {
           lom: resourceLom.lom,
           package: resourceLom.package,
-          resource: "choice",
+          resource: ManifestIdentifier("choice"),
           value: "en",
         },
       ]);
       assert.deepStrictEqual(Rows.of(rows, ResourceLomGeneral), [
-        { lom: resourceLom.lom, package: resourceLom.package, resource: "choice" },
+        {
+          lom: resourceLom.lom,
+          package: resourceLom.package,
+          resource: ManifestIdentifier("choice"),
+        },
       ]);
       assert.strictEqual(Rows.of(rows, Lom).length, 1);
     }),

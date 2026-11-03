@@ -19,6 +19,7 @@ import {
 } from "#qti/import/tree.ts";
 import type { ImportRefused } from "#qti/import/refusal.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
+import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
 import { BooleanLiteral, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { BaseType } from "#qti/schema/declaration.ts";
 import { Document } from "#qti/schema/document.ts";
@@ -192,8 +193,8 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     {
       id: documentId,
       package: input.package,
-      path: input.path,
-      resource: input.resource,
+      path: PackagePath(input.path),
+      resource: ManifestIdentifier(input.resource),
       resourceType: input.resourceType,
       root: "usagedata",
       version: input.version,

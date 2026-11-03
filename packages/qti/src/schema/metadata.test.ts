@@ -18,6 +18,7 @@ import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { admission as seedAdmission } from "#qti/schema/seed/admission.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 
 /**
  * The schema over node's, package's, document's and this module's relations and rules.
@@ -357,6 +358,25 @@ describe("metadata", () => {
     assert.strictEqual(closed.length, 7);
     for (const [field, roster] of closed) {
       assert.strictEqual(field.roster, roster);
+    }
+  });
+});
+
+describe("manifest contracts (metadata)", () => {
+  it("types every resource column ManifestIdentifier", () => {
+    for (const column of [
+      metadata.ResourceLom.fields.resource,
+      metadata.ExternalLom.fields.resource,
+      metadata.ResourceLomIdentified.fields.resource,
+      metadata.LomObjectIdentifier.fields.resource,
+      metadata.ResourceLomTitled.fields.resource,
+      metadata.LomObjectTitle.fields.resource,
+      metadata.QtiMetadata.fields.resource,
+      metadata.QtiMetadataInMetadata.fields.resource,
+      metadata.QtiMetadataInResourceLom.fields.resource,
+      metadata.QtiMetadataInExternalLom.fields.resource,
+    ]) {
+      assert.strictEqual(column.name, contracts.ManifestIdentifier.name);
     }
   });
 });

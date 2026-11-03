@@ -6,6 +6,7 @@ import * as node from "#qti/schema/node.ts";
 import { RootKind } from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 
 /**
  * The schema over node's, package's and this module's relations and rules.
@@ -202,5 +203,18 @@ describe("document", () => {
       assert.deepStrictEqual([...rule.target.fields], ["id"]);
       assert.isDefined(rootOf(rule));
     }
+  });
+});
+
+describe("manifest contracts (document)", () => {
+  it("types the resource columns ManifestIdentifier and the path PackagePath", () => {
+    for (const column of [
+      document.Document.fields.resource,
+      document.DocumentIdentifier.fields.resource,
+      document.DocumentTitle.fields.resource,
+    ]) {
+      assert.strictEqual(column.name, contracts.ManifestIdentifier.name);
+    }
+    assert.strictEqual(document.Document.fields.path.name, contracts.PackagePath.name);
   });
 });

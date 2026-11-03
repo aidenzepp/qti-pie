@@ -9,6 +9,7 @@ import type { ItemInput } from "#qti/import/item.ts";
 import { kindOf, Rows, treeRows, UnmodeledVocabulary, withParents } from "#qti/import/tree.ts";
 import type { ImportRefused } from "#qti/import/refusal.ts";
 import type { ItemRefusal, NodeIndex } from "#qti/import/tree.ts";
+import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
 import { Declaration } from "#qti/schema/declaration.ts";
 import { Document, DocumentIdentifier } from "#qti/schema/document.ts";
 import { Edge } from "#qti/schema/node.ts";
@@ -62,8 +63,8 @@ export const outcomeRows = Effect.fn("import.outcomeRows")(function* outcomeRows
       {
         id: documentId,
         package: packageId,
-        path: input.path,
-        resource: input.resource,
+        path: PackagePath(input.path),
+        resource: ManifestIdentifier(input.resource),
         resourceType: input.resourceType,
         root: "outcomes",
         version,
@@ -84,7 +85,7 @@ export const outcomeRows = Effect.fn("import.outcomeRows")(function* outcomeRows
     {
       document: documentId,
       package: packageId,
-      resource: input.resource,
+      resource: ManifestIdentifier(input.resource),
       root: "outcomes",
       value: identifier,
     },

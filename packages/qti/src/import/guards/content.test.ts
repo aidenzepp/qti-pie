@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import { ContentGuardRefusal, contentGuards } from "#qti/import/guards/content.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { Rows } from "#qti/import/tree.ts";
+import { ManifestIdentifier } from "#qti/schema/contracts.ts";
 import { AttributeIdref, HeadersTarget, NodeClass, NodeLabel } from "#qti/schema/attributes.ts";
 import { A, BlockquoteCite } from "#qti/schema/html/text.ts";
 import { AssociableHotspot } from "#qti/schema/interactions/associate.ts";
@@ -538,7 +539,11 @@ describe("contentGuards lang-set-copy", () => {
       yield* refusalOfRows(
         "lang-set-copy",
         Rows.add(rows, ResourceLomGeneral, [
-          { lom: "33333333-3333-4333-8333-333333333333", package: packageId, resource: "hand" },
+          {
+            lom: "33333333-3333-4333-8333-333333333333",
+            package: packageId,
+            resource: ManifestIdentifier("hand"),
+          },
         ]),
         "lomGeneral",
       );
@@ -552,13 +557,19 @@ describe("contentGuards lang-set-copy", () => {
         const rows = yield* rowsOf("3.0.1", `<p>a</p>`);
         const lom = "33333333-3333-4333-8333-333333333333";
         const withLom = Rows.add(rows, ResourceLom, [
-          { lom, metadata: lom, package: packageId, resource: "hand", type: "imsqti_item_xmlv3p0" },
+          {
+            lom,
+            metadata: lom,
+            package: packageId,
+            resource: ManifestIdentifier("hand"),
+            type: "imsqti_item_xmlv3p0",
+          },
         ]);
         yield* contentGuards(withLom);
         yield* refusalOfRows(
           "lang-set-copy",
           Rows.add(withLom, ResourceLomLanguageSet, [
-            { lom, package: packageId, resource: "hand", value: "en" },
+            { lom, package: packageId, resource: ManifestIdentifier("hand"), value: "en" },
           ]),
           "ResourceLomLanguageSet",
         );
