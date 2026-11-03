@@ -806,6 +806,122 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
     }),
   );
 
+  suite.effect(
+    "refuses a closed attribute outside its roster under P6 before any row is written",
+    () =>
+      Effect.gen(function* outsideRoster() {
+        const floats =
+          '<qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value>';
+        const cases: readonly (readonly [string, string])[] = [
+          [
+            "tolerance-mode approximate",
+            `<qti-equal tolerance-mode="approximate">${floats}</qti-equal>`,
+          ],
+          [
+            "equal-rounded rounding-mode",
+            `<qti-equal-rounded rounding-mode="places" figures="2">${floats}</qti-equal-rounded>`,
+          ],
+          [
+            "round-to rounding-mode",
+            '<qti-round-to rounding-mode="places" figures="2"><qti-base-value base-type="float">1.5</qti-base-value></qti-round-to>',
+          ],
+          [
+            "inside shape",
+            '<qti-inside shape="square" coords="0,0,5,5"><qti-base-value base-type="point">1 1</qti-base-value></qti-inside>',
+          ],
+          ["math-constant name", '<qti-math-constant name="tau"/>'],
+          [
+            "math-operator name",
+            '<qti-math-operator name="sign"><qti-base-value base-type="float">1</qti-base-value></qti-math-operator>',
+          ],
+          [
+            "stats-operator name",
+            '<qti-stats-operator name="median"><qti-variable identifier="LIST"/></qti-stats-operator>',
+          ],
+          [
+            "test-variables base-type with padding",
+            '<qti-sum><qti-test-variables variable-identifier="SCORE" base-type=" integer "/></qti-sum>',
+          ],
+        ];
+        for (const [name, operator] of cases) {
+          const prepared = yield* prepareBody(
+            `<qti-set-outcome-value identifier="SCORE">${operator}</qti-set-outcome-value>`,
+            { language: "outcome", mode: "test", rootKind: "test" },
+          );
+          const failure = yield* Effect.flip(processed(prepared));
+          assert.instanceOf(failure, ImportRefused, name);
+          assert.strictEqual(failure.rule, "P6", name);
+        }
+      }),
+  );
+
+  suite.effect("refuses an xs:boolean attribute outside its roster under attribute-lexical", () =>
+    Effect.gen(function* outsideBoolean() {
+      const floats =
+        '<qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value>';
+      const strings =
+        '<qti-base-value base-type="string">a</qti-base-value><qti-base-value base-type="string">b</qti-base-value>';
+      const cases: readonly (readonly [string, string])[] = [
+        [
+          "include-lower-bound",
+          `<qti-equal tolerance-mode="exact" include-lower-bound="yes">${floats}</qti-equal>`,
+        ],
+        [
+          "include-upper-bound",
+          `<qti-equal tolerance-mode="exact" include-upper-bound="no">${floats}</qti-equal>`,
+        ],
+        [
+          "string-match case-sensitive",
+          `<qti-string-match case-sensitive="yes">${strings}</qti-string-match>`,
+        ],
+        [
+          "string-match substring",
+          `<qti-string-match case-sensitive="true" substring="maybe">${strings}</qti-string-match>`,
+        ],
+        [
+          "substring case-sensitive",
+          `<qti-substring case-sensitive="yes">${strings}</qti-substring>`,
+        ],
+      ];
+      for (const [name, operator] of cases) {
+        const prepared = yield* prepareBody(
+          `<qti-set-outcome-value identifier="SCORE">${operator}</qti-set-outcome-value>`,
+          { language: "outcome", mode: "test", rootKind: "test" },
+        );
+        const failure = yield* Effect.flip(processed(prepared));
+        assert.instanceOf(failure, ImportRefused, name);
+        assert.strictEqual(failure.rule, "attribute-lexical", name);
+      }
+    }),
+  );
+
+  suite.effect("refuses an xi:include parse outside xml and text under P6", () =>
+    Effect.gen(function* outsideParse() {
+      const prepared = yield* prepareBody(
+        '<xi:include href="shared-rules.xml" parse="binary"/>',
+        itemOptions,
+        ' xmlns:xi="http://www.w3.org/2001/XInclude"',
+      );
+      const failure = yield* Effect.flip(processed(prepared));
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "P6");
+    }),
+  );
+
+  suite.effect(
+    "refuses a tolerance-mode that is padded, as the importer case the lease case was",
+    () =>
+      Effect.gen(function* paddedMode() {
+        const prepared = yield* prepareBody(
+          '<qti-set-outcome-value identifier="SCORE"><qti-equal tolerance-mode=" exact"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value></qti-equal></qti-set-outcome-value>',
+          { language: "outcome", mode: "test", rootKind: "test" },
+        );
+        const failure = yield* Effect.flip(processed(prepared));
+        assert.instanceOf(failure, ImportRefused);
+        assert.strictEqual(failure.rule, "P6");
+      }),
+  );
+
   suite.effect("refuses a missing identifier naming P5 before any row", () =>
     Effect.gen(function* missingIdentifier() {
       const prepared = yield* prepareFixture("guards", "missing-identifier", itemOptions);

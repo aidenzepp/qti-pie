@@ -2,6 +2,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import type { Statement } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as item from "#qti/schema/item.ts";
 import * as xi from "#qti/schema/kinds/xi.ts";
@@ -330,6 +331,13 @@ describe("rule", () => {
         name,
       );
     }
+  });
+
+  it("types XIncludeParse as closedId of its roster", () => {
+    assert.strictEqual(
+      rule.relations.XIncludeParse.fields.value.roster,
+      rosters.XIncludeParseValue,
+    );
   });
 
   it("holds exactly three mirrors, each condition arm against its if arm's condition", () => {

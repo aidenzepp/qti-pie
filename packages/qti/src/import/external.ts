@@ -11,6 +11,7 @@ import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
 import { csmSetRows, lomSubtreeRows } from "#qti/import/manifest.ts";
 import { elementChildren, qmdLeafRows } from "#qti/import/leaf.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
 import { Rows, treeRows } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { Document } from "#qti/schema/document.ts";
@@ -48,7 +49,7 @@ export const externalRows = Effect.fn("import.externalRows")(function* externalR
   doc: XmlDocument,
   input: ExternalInput,
   rows: Rows,
-): Effect.fn.Return<{ rows: Rows; nodes: NodeIndex }, UnmodeledVocabulary> {
+): Effect.fn.Return<{ rows: Rows; nodes: NodeIndex }, ImportRefused | UnmodeledVocabulary> {
   const documentId = crypto.randomUUID();
   const tree = yield* treeRows(
     doc,
