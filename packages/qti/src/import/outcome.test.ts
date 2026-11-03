@@ -150,7 +150,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/outcome.ts", (s
         shape: "typed",
         valueSet: set.id,
       });
-      assert.deepStrictEqual(Rows.of(rows, value.relations.DeclaredValueFloat), [
+      assert.deepStrictEqual<unknown>(Rows.of(rows, value.relations.DeclaredValueFloat), [
         { id: declared.id, value: "0.0" },
       ]);
     }),

@@ -10,7 +10,7 @@ import type { ImportLaw } from "#qti/import/refusal.ts";
 import * as contracts from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import * as valueContracts from "#qti/schema/value-contracts.ts";
-import * as value from "#qti/schema/value.ts";
+import * as valueContexts from "#qti/schema/value-contexts.ts";
 
 it("sends a contract no row names to value-lexical, unmapped", () => {
   const law: ImportLaw = { contract: "NoSuchContract", kind: "contract" };
@@ -326,7 +326,7 @@ const expectedRules = (): ReadonlyMap<string, string> => {
       expected.set(name, rule);
     }
   }
-  for (const { context, rule } of value.valueContexts) {
+  for (const { context, rule } of valueContexts.valueContexts) {
     for (const arm of Object.values<Named>(valueContracts.valueArmContracts()[context])) {
       expected.set(
         arm.name,
