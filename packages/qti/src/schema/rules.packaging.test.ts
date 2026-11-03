@@ -1769,8 +1769,17 @@ const packagingNegatives: readonly Negative[] = [
       );
     },
     base: "usage3",
-    laws: [{ field: "kind", kind: "alternatives", relation: Node.name }],
-    name: "an ordinary Statistic with no OrdinaryStatisticArm row is refused by the Node alternatives, ahead of the mirror",
+    laws: [
+      mirrorsLaw(
+        side(Node, ["id"], [{ field: "kind", value: "ud:ordinaryStatistic" }]),
+        side(OrdinaryStatisticArm, ["id"]),
+      ),
+      mirrorsLaw(
+        side(Statistic, ["id"], [{ field: "kind", value: "ordinary" }]),
+        side(OrdinaryStatisticArm, ["id"]),
+      ),
+    ],
+    name: "an ordinary Statistic with no OrdinaryStatisticArm row is refused by a mirrors law into the arm",
   },
   {
     alter: (draft) => {
@@ -1781,8 +1790,17 @@ const packagingNegatives: readonly Negative[] = [
       );
     },
     base: "usage3",
-    laws: [{ field: "kind", kind: "alternatives", relation: Node.name }],
-    name: "a categorized Statistic with no CategorizedStatisticArm row is refused by the Node alternatives, ahead of the mirror",
+    laws: [
+      mirrorsLaw(
+        side(Node, ["id"], [{ field: "kind", value: "ud:categorizedStatistic" }]),
+        side(CategorizedStatisticArm, ["id"]),
+      ),
+      mirrorsLaw(
+        side(Statistic, ["id"], [{ field: "kind", value: "categorized" }]),
+        side(CategorizedStatisticArm, ["id"]),
+      ),
+    ],
+    name: "a categorized Statistic with no CategorizedStatisticArm row is refused by a mirrors law into the arm",
   },
   {
     alter: (draft) => {
