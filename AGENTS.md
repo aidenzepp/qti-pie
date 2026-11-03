@@ -27,7 +27,15 @@ pnpm test    # each package's tests, one package at a time
 
 The QTI package runs on grizzle's development cluster: PostgreSQL 19rc1 with grizzle's patches, on `localhost:5433`,
 verify-full TLS only. Build and start it from the grizzle clone (`pnpm pg:build`, `pnpm pg:init`, `pnpm pg:doctor`;
-`pnpm pg start` after a reboot). From `packages/qti`:
+`pnpm pg start` after a reboot).
+
+There are two servers of that build, both verify-full TLS only. Server A is grizzle's development cluster on
+`localhost:5433`, with its state in `~/.local/var/grizzle/pg19rc1`. Server B is grizzle's second cluster on
+`localhost:5435`, with its state in `~/.local/var/grizzle/pg19rc1-coverage`; `pnpm pg:init --coverage` in the grizzle
+clone creates it and `pnpm pg --coverage start` starts it. Its plpgsql_check profiler is off and `log_min_error_statement`
+is `panic`, both set in its generated `postgresql.conf`. `scripts/db.sh` and `src/db/layer.ts` read the server from the
+environment: a seat on server B exports `GRIZZLE_PG_STATE=$HOME/.local/var/grizzle/pg19rc1-coverage` and
+`GR8DES_PG_PORT=5435` beside `GR8DES_PG_DATABASE`, and with nothing exported they use server A. From `packages/qti`:
 
 ```sh
 scripts/db.sh create    # database gr8des_qti from grizzle_template, owned by grizzle_dev
@@ -36,7 +44,9 @@ scripts/db.sh reset     # drop the database and this package's roles, then creat
 ```
 
 Login passwords live outside the repo in `~/.local/var/gr8des/<database>/<role>.password`. PostgreSQL roles are
-cluster-wide, so a grizzle schema name is one installation per cluster: never reuse a name grizzle's own tests use.
+cluster-wide, so a grizzle schema name is one installation per cluster: each server holds at most one installation of
+the Qti schema at a time, a database name is never reused across the two servers, and no schema name is one grizzle's
+own tests use.
 
 ## grizzle
 
@@ -220,19 +230,23 @@ after every step, but never leave it for someone else.
 
 **PostgreSQL.**
 
-- There is one cluster: grizzle's development cluster on `localhost:5433`. Never start another cluster, run `initdb`,
-  open another port, or use Docker.
+- There are exactly two clusters: server A on `localhost:5433` and server B on `localhost:5435`, both grizzle's patched
+  PostgreSQL 19rc1 from the same binaries (the operator's ruling of 2026-11-03). Never start a third, run `initdb`
+  outside grizzle's `scripts/pg/init.sh`, open another port, or use Docker.
 - At most one database per active worktree, named `gr8des_qti_<slice>`, created from `grizzle_template` and dropped when
   its worktree is removed. The orchestrator lists `gr8des_%` databases at the end of every phase and drops any without
-  an active worktree.
-- Roles are cluster-wide: two worktrees cannot install the same grizzle schema at the same time, because the second
-  collides on its role names. The plan must say how parallel slices that need the database avoid that (for example,
-  one database lease at a time, or schema names unique per worktree) before any of them run.
+  an active worktree; the listing and the drop run on both servers.
+- Roles are cluster-wide per server: two worktrees cannot install the same grizzle schema on one server at the same
+  time, because the second collides on its role names. So one seat at a time holds a database on each server, two seats
+  in all. The Mind names the server in every task that holds a lease and grants at most one held database per server.
+  The plan must still say how parallel slices that need the database avoid the collision (one lease per server at a
+  time) before any of them run.
 
 **Disk.**
 
 - Budget: the worktrees and `gr8des_*` databases together stay under 20 GB. The orchestrator reports their size at the end
-  of every phase (`du -sh .worktrees`, and `pg_database_size` for each `gr8des_%` database).
+  of every phase (`du -sh .worktrees`, and `pg_database_size` for each `gr8des_%` database on both servers, plus `du -sh` of server B's data directory,
+  `~/.local/var/grizzle/pg19rc1-coverage`).
 - Downloaded inputs, such as specifications, schema files and 1EdTech's QTI example packages, are fetched once into
   `~/.cache/gr8des/`, never into the repository or once per worktree.
 - Scratch files go in the worktree's `work/` folder and leave with the worktree. Never use `/tmp` for repositories,
