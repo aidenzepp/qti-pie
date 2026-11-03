@@ -87,6 +87,7 @@ import {
 } from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { ResponseProcessing, ResponseProcessingItem } from "#qti/schema/processing.ts";
+import { ancestryStepRows, KindEnters } from "#qti/schema/seed/ancestry.ts";
 import {
   CategorizedStatisticArm,
   OrdinaryStatisticArm,
@@ -309,6 +310,12 @@ const moveUnder = (draft: Draft, child: string, parent: string, place = 1001n): 
 const addNode = (draft: Draft, kind: string, parent: string): string => {
   const above = rowWhere(draft, Node, "id", parent);
   const id = crypto.randomUUID();
+  const parentAncestry = text(above, "ancestry");
+  const parentKind = text(above, "kind");
+  // The ancestry the importer computes for the child: the step of the parent's kind at its ancestry.
+  const childAncestry =
+    ancestryStepRows([parentKind], KindEnters).find((step) => step.ancestry === parentAncestry)
+      ?.next ?? parentAncestry;
   const tree = text(above, "tree");
   const version = text(above, "version");
   let last = 0n;
@@ -319,6 +326,7 @@ const addNode = (draft: Draft, kind: string, parent: string): string => {
   }
 
   of(draft, Node).push({
+    ancestry: childAncestry,
     id,
     kind,
     prefix: "",
@@ -328,9 +336,11 @@ const addNode = (draft: Draft, kind: string, parent: string): string => {
   });
   of(draft, Edge).push({
     child: id,
+    childAncestry,
     childKind: kind,
     parent,
-    parentKind: text(above, "kind"),
+    parentAncestry,
+    parentKind,
     position: last + 2n,
     tree,
     version,
@@ -1380,6 +1390,7 @@ const templateDocument = (draft: Draft): string => {
     version,
   });
   of(draft, Node).push({
+    ancestry: "root",
     id,
     kind: "qti-response-processing",
     prefix: "",
