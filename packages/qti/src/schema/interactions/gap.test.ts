@@ -233,17 +233,38 @@ describe("interactions/gap", () => {
     );
   });
 
+  it("holds the association and match bounds as integers only, with no lexical relation or column beside them", () => {
+    for (const name of ["GapMatchMaxAssociations", "GraphicGapMatchMaxAssociations"]) {
+      assert.notInclude(Object.keys(relations), name);
+    }
+
+    for (const marker of [
+      relations.GapMatchMinAssociations,
+      relations.GraphicGapMatchMinAssociations,
+      relations.GapTextMatchMin,
+      relations.GapImgMatchMin,
+    ]) {
+      assert.deepStrictEqual(Object.keys(marker.fields), ["node"], marker.name);
+    }
+
+    for (const arm of [relations.GapText, relations.GapImg]) {
+      const fields = Object.keys(arm.fields);
+
+      assert.include(fields, "matchMaxN");
+      assert.include(fields, "matchMinN");
+      assert.notInclude(fields, "matchMax", arm.name);
+    }
+  });
+
   it("contains every marker and optional value into the arm it belongs to", () => {
     const owners = [
       [relations.DeclaredGapMatchShuffle, relations.GapMatchInteraction],
       [relations.DeclaredGapMatchMaxAssociations, relations.GapMatchInteraction],
-      [relations.GapMatchMaxAssociations, relations.GapMatchInteraction],
       [relations.GapMatchMinAssociations, relations.GapMatchInteraction],
       [relations.GapMatchMinSelectionsMessage, relations.GapMatchInteraction],
       [relations.GapMatchMaxSelectionsMessage, relations.GapMatchInteraction],
       [relations.GapMatchChoicesContainerWidth, relations.GapMatchInteraction],
       [relations.DeclaredGraphicGapMatchMaxAssociations, relations.GraphicGapMatchInteraction],
-      [relations.GraphicGapMatchMaxAssociations, relations.GraphicGapMatchInteraction],
       [relations.GraphicGapMatchMinAssociations, relations.GraphicGapMatchInteraction],
       [relations.GraphicGapMatchMinSelectionsMessage, relations.GraphicGapMatchInteraction],
       [relations.GraphicGapMatchMaxSelectionsMessage, relations.GraphicGapMatchInteraction],

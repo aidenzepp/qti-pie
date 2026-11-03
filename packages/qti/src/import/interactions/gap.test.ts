@@ -15,6 +15,7 @@ import {
 } from "#qti/import/interactions.ts";
 import type { DeclaredVariable, InteractionContext, Shared } from "#qti/import/interactions.ts";
 import { gapRows } from "#qti/import/interactions/gap.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
 import { ChoiceTemplateRef, MatchGroup } from "#qti/schema/choices.ts";
@@ -34,17 +35,16 @@ import {
   GapImgTop,
   GapMatchChoicesContainerWidth,
   GapMatchInteraction,
-  GapMatchMaxAssociations,
   GapMatchMaxSelectionsMessage,
   GapMatchMinAssociations,
   GapMatchMinSelectionsMessage,
   GapText,
   GapTextMatchMin,
   GraphicGapMatchInteraction,
-  GraphicGapMatchMaxAssociations,
+  GraphicGapMatchMinAssociations,
 } from "#qti/schema/interactions/gap.ts";
 import { GapMatchBinding, InteractionBinding, TypedBinding } from "#qti/schema/interaction.ts";
-import { AttributeLexical, NodeKind } from "#qti/schema/node.ts";
+import { AttributeLexical, AttributeSpelling, NodeKind } from "#qti/schema/node.ts";
 import type { Attribute, Element } from "#qti/xml/tree.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";
@@ -234,13 +234,12 @@ describe("gapRows on a gap-match interaction", () => {
           row.id,
           row.identifier,
           row.interaction,
-          row.matchMax,
           row.matchMaxN,
           row.matchMinN,
         ]),
         [
-          ["node-3", "A", "node-2", "1", 1n, 0n],
-          ["node-4", "B", "node-2", "1", 1n, 0n],
+          ["node-3", "A", "node-2", 1n, 0n],
+          ["node-4", "B", "node-2", 1n, 0n],
         ],
       );
       assert.deepStrictEqual(
@@ -263,7 +262,6 @@ describe("gapRows on a gap-match interaction", () => {
         DeclaredGapMatchShuffle,
         DeclaredGapMatchMaxAssociations,
         DeclaredGapRequired,
-        GapMatchMaxAssociations,
         GapMatchMinAssociations,
         GapMatchMinSelectionsMessage,
         GapMatchMaxSelectionsMessage,
@@ -272,6 +270,7 @@ describe("gapRows on a gap-match interaction", () => {
         MatchGroup,
         ChoiceTemplateRef,
         AttributeLexical,
+        AttributeSpelling,
       ] as const) {
         assert.strictEqual(Rows.of(built, relation).length, 0, relation.name);
       }
@@ -313,12 +312,7 @@ describe("gapRows on a gap-match interaction", () => {
         [[4n, 2n, "true"]],
       );
       assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 4n);
-      assert.deepStrictEqual(Rows.of(built, GapMatchMaxAssociations), [
-        { node: "node-2", value: "4" },
-      ]);
-      assert.deepStrictEqual(Rows.of(built, GapMatchMinAssociations), [
-        { node: "node-2", value: "2" },
-      ]);
+      assert.deepStrictEqual(Rows.of(built, GapMatchMinAssociations), [{ node: "node-2" }]);
       assert.deepStrictEqual(Rows.of(built, GapMatchMinSelectionsMessage), [
         { node: "node-2", value: "too few" },
       ]);
@@ -330,7 +324,7 @@ describe("gapRows on a gap-match interaction", () => {
       ]);
       assert.deepStrictEqual(Rows.of(built, DeclaredGapMatchShuffle), [{ node: "node-2" }]);
       assert.deepStrictEqual(Rows.of(built, DeclaredGapMatchMaxAssociations), [{ node: "node-2" }]);
-      assert.deepStrictEqual(Rows.of(built, GapTextMatchMin), [{ node: "node-3", value: "1" }]);
+      assert.deepStrictEqual(Rows.of(built, GapTextMatchMin), [{ node: "node-3" }]);
       assert.deepStrictEqual(Rows.of(built, MatchGroup), [{ node: "node-3", value: "G1 G2" }]);
       assert.deepStrictEqual(
         Rows.of(built, GapText).map((row) => row.matchMinN),
@@ -467,11 +461,10 @@ describe("gapRows on a graphic gap-match interaction", () => {
             row.id,
             row.identifier,
             row.interaction,
-            row.matchMax,
             row.matchMaxN,
             row.matchMinN,
           ]),
-          [["node-4", "I1", "node-2", "2", 2n, 0n]],
+          [["node-4", "I1", "node-2", 2n, 0n]],
         );
         assert.deepStrictEqual(
           Rows.of(built, GapText).map((row) => [row.id, row.interaction]),
@@ -483,6 +476,8 @@ describe("gapRows on a graphic gap-match interaction", () => {
           GapImgLeft,
           GapImgMatchMin,
           DeclaredGraphicGapMatchMaxAssociations,
+          GraphicGapMatchMinAssociations,
+          AttributeSpelling,
         ] as const) {
           assert.strictEqual(Rows.of(built, relation).length, 0, relation.name);
         }
@@ -495,7 +490,11 @@ describe("gapRows on a graphic gap-match interaction", () => {
         [
           element(
             "qti-graphic-gap-match-interaction",
-            { "max-associations": "3", "response-identifier": "RESPONSE" },
+            {
+              "max-associations": "3",
+              "min-associations": "1",
+              "response-identifier": "RESPONSE",
+            },
             [
               element("qti-gap-img", {
                 identifier: "I1",
@@ -513,13 +512,18 @@ describe("gapRows on a graphic gap-match interaction", () => {
 
       const built = yield* gapRows(ctx, Rows.empty());
 
-      assert.deepStrictEqual(Rows.of(built, GraphicGapMatchMaxAssociations), [
-        { node: "node-2", value: "3" },
-      ]);
+      assert.deepStrictEqual(
+        Rows.of(built, GraphicGapMatchInteraction).map((row) => [
+          row.maxAssociationsN,
+          row.minAssociationsN,
+        ]),
+        [[3n, 1n]],
+      );
+      assert.deepStrictEqual(Rows.of(built, GraphicGapMatchMinAssociations), [{ node: "node-2" }]);
       assert.deepStrictEqual(Rows.of(built, DeclaredGraphicGapMatchMaxAssociations), [
         { node: "node-2" },
       ]);
-      assert.deepStrictEqual(Rows.of(built, GapImgMatchMin), [{ node: "node-3", value: "1" }]);
+      assert.deepStrictEqual(Rows.of(built, GapImgMatchMin), [{ node: "node-3" }]);
       assert.deepStrictEqual(Rows.of(built, GapImgObjectLabel), [
         { node: "node-3", value: "Label" },
       ]);
@@ -544,6 +548,176 @@ describe("gapRows on a graphic gap-match interaction", () => {
       );
 
       assert.strictEqual(refusalRuleOf(exit), "admission");
+    }),
+  );
+});
+
+const importRuleOf = (exit: Exit.Exit<Rows, unknown>): string => {
+  const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
+
+  return Option.isSome(failure) && failure.value instanceof ImportRefused ? failure.value.rule : "";
+};
+
+describe("gapRows on an integer outside its space", () => {
+  const refused: readonly (readonly [string, Element])[] = [
+    [
+      "max-associations of a gap-match interaction",
+      element("qti-gap-match-interaction", {
+        "max-associations": "-1",
+        "response-identifier": "RESPONSE",
+      }),
+    ],
+    [
+      "min-associations of a gap-match interaction",
+      element("qti-gap-match-interaction", {
+        "min-associations": "x",
+        "response-identifier": "RESPONSE",
+      }),
+    ],
+    [
+      "max-associations of a graphic gap-match interaction",
+      element("qti-graphic-gap-match-interaction", {
+        "max-associations": "-0",
+        "response-identifier": "RESPONSE",
+      }),
+    ],
+    [
+      "min-associations of a graphic gap-match interaction",
+      element("qti-graphic-gap-match-interaction", {
+        "min-associations": "-1",
+        "response-identifier": "RESPONSE",
+      }),
+    ],
+    [
+      "match-max of a gap text",
+      element("qti-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+        gapText("A", { "match-max": "-1" }),
+      ]),
+    ],
+    [
+      "a missing match-max of a gap text",
+      element("qti-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-gap-text", { identifier: "A" }),
+      ]),
+    ],
+    [
+      "match-min of a gap text",
+      element("qti-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+        gapText("A", { "match-min": "abc" }),
+      ]),
+    ],
+    [
+      "match-max of a gap image",
+      element("qti-graphic-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-gap-img", { identifier: "I1", "match-max": "-1" }),
+      ]),
+    ],
+    [
+      "a missing match-max of a gap image",
+      element("qti-graphic-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-gap-img", { identifier: "I1" }),
+      ]),
+    ],
+    [
+      "match-min of a gap image",
+      element("qti-graphic-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-gap-img", { identifier: "I1", "match-max": "1", "match-min": "-1" }),
+      ]),
+    ],
+  ];
+
+  for (const [name, tree] of refused) {
+    it.effect(`refuses ${name} under attribute-lexical before any row is written`, () =>
+      Effect.gen(function* outside() {
+        const exit = yield* Effect.exit(gapRows(contextOf([tree], pairs), Rows.empty()));
+
+        assert.strictEqual(importRuleOf(exit), "attribute-lexical");
+      }),
+    );
+  }
+});
+
+describe("gapRows on a non-canonical integer spelling", () => {
+  it.effect("keeps a signed max-associations as the value, the count and one spelling row", () =>
+    Effect.gen(function* signed() {
+      const ctx = contextOf(
+        [
+          element("qti-gap-match-interaction", {
+            "max-associations": "+3",
+            "response-identifier": "RESPONSE",
+          }),
+        ],
+        pairs,
+      );
+
+      const built = yield* gapRows(ctx, Rows.empty());
+
+      assert.strictEqual(Rows.of(built, GapMatchInteraction)[0]?.maxAssociationsN, 3n);
+      assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 3n);
+      assert.deepStrictEqual(Rows.of(built, AttributeSpelling), [
+        {
+          attribute: "max-associations",
+          kind: "qti-gap-match-interaction",
+          node: "node-2",
+          value: "+3",
+        },
+      ]);
+    }),
+  );
+
+  it.effect("keeps a padded match-max and match-min on a gap text as two spelling rows", () =>
+    Effect.gen(function* padded() {
+      const ctx = contextOf(
+        [
+          element("qti-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+            gapText("A", { "match-max": "02", "match-min": "01" }),
+          ]),
+        ],
+        pairs,
+      );
+
+      const built = yield* gapRows(ctx, Rows.empty());
+
+      assert.deepStrictEqual(
+        Rows.of(built, GapText).map((row) => [row.matchMaxN, row.matchMinN]),
+        [[2n, 1n]],
+      );
+      assert.deepStrictEqual(
+        Rows.of(built, AttributeSpelling).map((row) => [row.attribute, row.value]),
+        [
+          ["match-max", "02"],
+          ["match-min", "01"],
+        ],
+      );
+    }),
+  );
+
+  it.effect("keeps a padded match-max on a gap image as one spelling row", () =>
+    Effect.gen(function* image() {
+      const ctx = contextOf(
+        [
+          element("qti-graphic-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+            element("qti-gap-img", { identifier: "I1", "match-max": "+2" }),
+          ]),
+        ],
+        pairs,
+      );
+
+      const built = yield* gapRows(ctx, Rows.empty());
+
+      assert.strictEqual(Rows.of(built, GapImg)[0]?.matchMaxN, 2n);
+      assert.deepStrictEqual(
+        Rows.of(built, AttributeSpelling).map((row) => [row.attribute, row.value]),
+        [["match-max", "+2"]],
+      );
+    }),
+  );
+
+  it.effect("writes no spelling row for a canonical value", () =>
+    Effect.gen(function* canonical() {
+      const built = yield* gapRows(contextOf([graphic()], pairs), Rows.empty());
+
+      assert.strictEqual(Rows.of(built, AttributeSpelling).length, 0);
     }),
   );
 });

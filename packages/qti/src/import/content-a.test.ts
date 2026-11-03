@@ -46,11 +46,7 @@ import {
 import {
   Gap,
   GapMatchInteraction,
-  GapMatchMaxAssociations,
-  GapMatchMinAssociations,
   GraphicGapMatchInteraction,
-  GraphicGapMatchMaxAssociations,
-  GraphicGapMatchMinAssociations,
 } from "#qti/schema/interactions/gap.ts";
 import {
   Hottext,
@@ -445,23 +441,14 @@ const retypeResponse = (
 };
 
 /**
- * Give an association-bearing interaction `max-associations` 1 and `min-associations` 2, in its
- * typed columns and, where `lexical` names them, in the lexical rows beside them.
+ * Give an association-bearing interaction `max-associations` 1 and `min-associations` 2 in its
+ * typed columns.
  */
-const invertAssociations = (
-  draft: Draft,
-  arm: AnyRelation,
-  lexical?: { readonly max: AnyRelation; readonly min: AnyRelation },
-): void => {
+const invertAssociations = (draft: Draft, arm: AnyRelation): void => {
   const row = find(draft, arm);
-  const id = text(row, "id");
 
   row["maxAssociationsN"] = 1n;
   row["minAssociationsN"] = 2n;
-  if (lexical !== undefined) {
-    setValue(draft, lexical.max, id, "1");
-    setValue(draft, lexical.min, id, "2");
-  }
 };
 
 /**
@@ -846,10 +833,7 @@ const negatives: readonly Negative[] = [
   },
   {
     alter: (draft) => {
-      invertAssociations(draft, GapMatchInteraction, {
-        max: GapMatchMaxAssociations,
-        min: GapMatchMinAssociations,
-      });
+      invertAssociations(draft, GapMatchInteraction);
     },
     fixture: "cut-gap-match",
     laws: [checkLaw(GapMatchInteraction, "GapMatchBounds")],
@@ -858,10 +842,7 @@ const negatives: readonly Negative[] = [
   },
   {
     alter: (draft) => {
-      invertAssociations(draft, GraphicGapMatchInteraction, {
-        max: GraphicGapMatchMaxAssociations,
-        min: GraphicGapMatchMinAssociations,
-      });
+      invertAssociations(draft, GraphicGapMatchInteraction);
     },
     fixture: "cut-graphic-gap-match",
     laws: [checkLaw(GraphicGapMatchInteraction, "GraphicGapMatchBounds")],

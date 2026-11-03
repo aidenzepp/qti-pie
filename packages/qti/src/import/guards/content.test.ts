@@ -7,7 +7,7 @@ import { Rows } from "#qti/import/tree.ts";
 import { AttributeIdref, HeadersTarget, NodeClass, NodeLabel } from "#qti/schema/attributes.ts";
 import { A, BlockquoteCite } from "#qti/schema/html/text.ts";
 import { AssociableHotspot } from "#qti/schema/interactions/associate.ts";
-import { Gap } from "#qti/schema/interactions/gap.ts";
+import { Gap, GapText } from "#qti/schema/interactions/gap.ts";
 import { HottextInteraction, HottextOwner } from "#qti/schema/interactions/hot.ts";
 import { OrderInteraction } from "#qti/schema/interactions/order.ts";
 import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
@@ -312,6 +312,23 @@ describe("contentGuards typed-copy", () => {
           "does not parse to the typed value",
         );
       }),
+  );
+
+  it.effect("refuses a gap text's match-max spelling that differs from its typed count", () =>
+    Effect.gen(function* gapTextMatchMax() {
+      const rows = yield* rowsOf(
+        "3.0.1",
+        gapMatch(
+          `<qti-gap-text identifier="G1" match-max="+2">a</qti-gap-text><p>a <qti-gap identifier="X"/></p>`,
+        ),
+      );
+      yield* contentGuards(rows);
+      yield* refusalOfRows(
+        "typed-copy",
+        edited(rows, GapText, (facts) => facts.map((fact) => ({ ...fact, matchMaxN: 3n }))),
+        "does not parse to the typed value",
+      );
+    }),
   );
 
   it.effect("refuses an order interaction whose maxBound disagrees with its max-choices", () =>
