@@ -1,9 +1,10 @@
+import { readFileSync } from "node:fs";
 import { str } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import * as contracts from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { Qti } from "#qti/schema/qti.ts";
-import * as value from "#qti/schema/value.ts";
+import * as valueContracts from "#qti/schema/value-contracts.ts";
 
 /**
  * The 136 contracts of the schema tightening, from the dry run `p13-d1` (its list (c)): the 254
@@ -163,19 +164,36 @@ const armNames = (byBase: Readonly<Record<string, Named>>): readonly string[] =>
   Object.values(byBase).map((made) => made.name);
 
 /**
- * The names of every contract the module makes: the written-out ones and the 64 minted arms.
+ * The names of every contract the two modules make: the written-out ones and the 64 minted arms.
  */
 const everyName = () => {
-  const { valueArmContracts, ...written } = contracts;
-  const minted: Readonly<Record<string, Readonly<Record<string, Named>>>> = valueArmContracts();
+  const minted: Readonly<Record<string, Readonly<Record<string, Named>>>> =
+    valueContracts.valueArmContracts();
 
   return {
     arms: Object.values(minted).flatMap(armNames),
-    written: Object.values<Named>(written).map((made) => made.name),
+    written: Object.values<Named>(contracts).map((made) => made.name),
   };
 };
 
+/**
+ * The module specifiers a source file imports, read from its `import ... from "..."` lines.
+ */
+const importsOf = (path: URL): readonly string[] =>
+  [...readFileSync(path, "utf-8").matchAll(/^import\b[^;]*?from\s+"(?<specifier>[^"]+)";/gmsu)].map(
+    (found) => found.groups?.["specifier"] ?? "",
+  );
+
 describe("schema/contracts", () => {
+  it("imports only the patterns module, so it cannot sit on a cycle through value.ts", () => {
+    assert.deepStrictEqual(
+      importsOf(new URL("contracts.ts", import.meta.url)).filter(
+        (specifier) => !specifier.startsWith("@") && specifier !== "#qti/schema/patterns.ts",
+      ),
+      [],
+    );
+  });
+
   it("makes exactly the 136 contracts the dry run derived", () => {
     const { arms, written } = everyName();
 
@@ -199,45 +217,6 @@ describe("schema/contracts", () => {
       [...written, ...arms].filter((name) => relations.has(name)),
       [],
     );
-  });
-
-  it("mints the arms for every context of the value table, one for each of eight base types", () => {
-    const minted = contracts.valueArmContracts();
-    assert.deepStrictEqual(
-      Object.keys(minted).toSorted(),
-      value.valueContexts.map(({ context }) => context).toSorted(),
-    );
-    for (const [context, byBase] of Object.entries<Readonly<Record<string, Named>>>(minted)) {
-      assert.deepStrictEqual(armNames(byBase).toSorted(), [
-        `${context}DirectedPairValue`,
-        `${context}DurationValue`,
-        `${context}FloatValue`,
-        `${context}IdentifierValue`,
-        `${context}IntegerValue`,
-        `${context}PairValue`,
-        `${context}PointValue`,
-        `${context}UriValue`,
-      ]);
-    }
-  });
-
-  it("gives each arm the language of its context's lexical form", () => {
-    const minted = contracts.valueArmContracts();
-    for (const { context } of value.valueContexts) {
-      const lexical = value.lexicalOf(context);
-      const arms = minted[context];
-      assert.strictEqual(arms.integer.base.pattern.source, lexical.integer.pattern.source);
-      assert.strictEqual(arms.float.base.pattern.source, lexical.float.pattern.source);
-      assert.strictEqual(arms.duration.base.pattern.source, lexical.duration.pattern.source);
-      assert.strictEqual(arms.pair.base.pattern.source, lexical.pair.pattern.source);
-      assert.strictEqual(
-        arms.directedPair.base.pattern.source,
-        lexical.directedPair.pattern.source,
-      );
-      assert.strictEqual(arms.point.base.pattern.source, lexical.point.pattern.source);
-      assert.strictEqual(arms.uri.base.pattern.source, lexical.uri.pattern.source);
-      assert.strictEqual(arms.identifier.base.pattern.source, lexical.identifier.pattern.source);
-    }
   });
 
   it("keeps each written-out contract's base pattern and flags", () => {
