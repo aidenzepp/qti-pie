@@ -50,6 +50,22 @@ export const leaseTestTimeoutMs = 60_000;
 export const authorLayerHookTimeoutMs = 20_000;
 
 /**
+ * The timeout, in milliseconds, for the `layer` hook that builds `AuthorAppLayer` beside a
+ * `FixtureRowsLayer`.
+ *
+ * The hook builds `AuthorAppLayer` and a `FixtureRowsLayer` that reads 11 fixtures through
+ * `rowsOfPackage` (`rules.packaging.test.ts`) or its own fixture set (`content-a.test.ts`), and
+ * with no `timeout` option it fell to vitest's 10 s `hookTimeout`, which both files exceeded: the
+ * first alone on a lease, the second under the leased full suite. Measured on 2026-11-03 at
+ * `68964ce` on a lease: five quiet runs per file had a median of 9.43 s for
+ * `rules.packaging.test.ts` and 9.26 s for `content-a.test.ts`, and six concurrent runs per file
+ * had a maximum of 10.50 s (`content-a.test.ts`; 10.28 s for the other) at load averages of 9 to 11.
+ * The budget is the larger of twice that maximum (21 s) and 20 s, the floor being twice the
+ * default. Raise it only on a new measurement recorded here, never to make a run pass.
+ */
+export const fixtureRowsLayerHookTimeoutMs = 21_000;
+
+/**
  * The timeout, in milliseconds, for one test that spawns the CLI as a child process.
  *
  * Such a test pays Node's start and the module graph of `cli.ts`, not the snapshot, and vitest's
