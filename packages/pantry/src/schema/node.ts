@@ -409,9 +409,7 @@ export const AttributeSpelling = relation(
 );
 
 /**
- * A text node holding at least one character that is not whitespace. The relation is named
- * `TextNode` because a table named after the builtin type `text` would shadow that type in
- * grizzle's drift replay (campaign decision 28).
+ * A text node holding at least one character that is not whitespace.
  */
 export const TextNode = relation(
   "TextNode",
