@@ -1,5 +1,5 @@
 import { Effect, Option, Schema } from "effect";
-import type { Attributes, Element, PartFunction } from "#plate/emit/node.ts";
+import type { Attributes, Element, Node, PartFunction } from "#plate/emit/node.ts";
 
 /**
  * The part keys of each interaction and of the item chrome, a part's name with a lower-case first
@@ -48,7 +48,7 @@ export type Position = "flow" | "phrasing";
  *
  * - `flow-container`, `phrasing-container`: any element of that container class.
  * - `prompt`: a flow or phrasing container, or `p`, so the prompt is valid in any parent.
- * - `form`, `button`, `li`, `textarea`: that element only.
+ * - `form`, `button`, `li`, `textarea`, `fieldset`, `legend`: that element only.
  * - `heading`: `h1` to `h6`. `list`: `ul`, `ol` or `menu`.
  * - `choice-list`: `ul`, `ol` or a flow container; a swap to a flow container adds the list roles.
  * - `choice-item`: `li`, or a flow container under a Choices that is not a list.
@@ -62,9 +62,11 @@ export type TagClass =
   | "button"
   | "choice-item"
   | "choice-list"
+  | "fieldset"
   | "flow-container"
   | "form"
   | "heading"
+  | "legend"
   | "li"
   | "list"
   | "native-input"
@@ -84,6 +86,11 @@ export interface PartRow {
   readonly element: string;
   readonly interaction: InteractionKey;
   /**
+   * Whether the part's first child is its `legend` Prompt, so a swap must keep that legend the
+   * first element child of the returned `fieldset`, the one place a legend names its group.
+   */
+  readonly legendOwner: boolean;
+  /**
    * Whether the part's children are the list items of a list part, so the list joint rule applies
    * to it on every emit, swapped or not.
    */
@@ -98,11 +105,27 @@ export interface PartRow {
   readonly merged: readonly string[];
   readonly part: PartKey;
   /**
-   * The part's `data-slot` marker value.
+   * The part's `data-slot` marker value, derived from the interaction and the part by
+   * {@link slotFor}.
    */
   readonly slot: string;
   readonly tagClass: TagClass;
 }
+
+/**
+ * A part named by its owner and its own key, as a `data-slot` marker names it.
+ */
+export type PartName = Pick<PartRow, "interaction" | "part">;
+
+/**
+ * The two markups of the Choice Prompt and its Root (operator ruling, rule `efed9867`).
+ *
+ * - `legend`: the Prompt is a `legend`, the Root `fieldset`'s first child, which names the group
+ *   natively. Only a Prompt of phrasing content takes it, because a legend holds phrasing content.
+ * - `labelledby`: the Prompt is its own element (`qti-prompt`), and the Root names it through
+ *   `aria-labelledby` → the Prompt's `id`.
+ */
+export type PromptMarkup = "labelledby" | "legend";
 
 /**
  * Where a part is placed, for the rows whose element depends on it.
@@ -116,6 +139,11 @@ export interface RowContext {
    * The Notice's position, phrasing by default.
    */
   readonly position?: Position;
+  /**
+   * The Choice Prompt's markup, which sets the Choice Root's and Prompt's rows, `labelledby` by
+   * default; {@link promptMarkupFor} picks it from the Prompt's content.
+   */
+  readonly promptMarkup?: PromptMarkup;
 }
 
 /**
@@ -170,6 +198,50 @@ const phrasingContainers: ReadonlySet<string> = new Set([
   "time",
   "u",
   "var",
+]);
+
+/**
+ * The phrasing content elements whose own content a Prompt's markup does not depend on: void and
+ * embedded elements and the controls, each phrasing content whatever it holds.
+ *
+ * @see https://html.spec.whatwg.org/multipage/dom.html#phrasing-content
+ */
+const phrasingLeaves: ReadonlySet<string> = new Set([
+  "audio",
+  "br",
+  "embed",
+  "iframe",
+  "img",
+  "input",
+  "math",
+  "object",
+  "picture",
+  "ruby",
+  "select",
+  "svg",
+  "textarea",
+  "video",
+  "wbr",
+]);
+
+/**
+ * The phrasing content elements, beside the phrasing containers, that stay phrasing content only
+ * while everything they hold is: the transparent ones (`a`, `del`, `ins`, `map`, `canvas`) and
+ * those whose content is phrasing content.
+ *
+ * @see https://html.spec.whatwg.org/multipage/dom.html#transparent-content-models
+ */
+const phrasingWhenContentIs: ReadonlySet<string> = new Set([
+  "a",
+  "button",
+  "canvas",
+  "del",
+  "ins",
+  "label",
+  "map",
+  "meter",
+  "output",
+  "progress",
 ]);
 
 /**
@@ -240,6 +312,32 @@ export const isFlowContainer = (tag: string): boolean =>
   isPhrasingContainer(tag) || blockContainers.has(tag);
 
 /**
+ * Tell whether a node is phrasing content, the content a `legend` holds.
+ *
+ * A custom element counts while its content does, as its content model is transparent.
+ *
+ * @param node The node, a Prompt's child or a node below one.
+ * @returns Whether `node` is text, a phrasing leaf, or a phrasing element holding phrasing content
+ *   only.
+ * @see https://html.spec.whatwg.org/multipage/form-elements.html#the-legend-element
+ */
+const isPhrasingContent = (node: Node): boolean =>
+  node.kind === "text" ||
+  phrasingLeaves.has(node.tag) ||
+  ((isPhrasingContainer(node.tag) || phrasingWhenContentIs.has(node.tag)) &&
+    node.children.every(isPhrasingContent));
+
+/**
+ * Pick the Choice Prompt's markup from its content (rule `efed9867`): the legend when every child
+ * is phrasing content, else its own element named through `aria-labelledby`.
+ *
+ * @param content The Prompt's children, as emitted.
+ * @returns `"legend"` when every node of `content` is phrasing content, else `"labelledby"`.
+ */
+export const promptMarkupFor = (content: readonly Node[]): PromptMarkup =>
+  content.every(isPhrasingContent) ? "legend" : "labelledby";
+
+/**
  * Tell whether an `input`'s `type` attribute is the text type, written or by default.
  *
  * @param type The `type` attribute's value, if present.
@@ -256,9 +354,11 @@ const admits = {
   button: ({ tag }) => tag === "button",
   "choice-item": ({ tag }) => tag === "li" || isFlowContainer(tag),
   "choice-list": ({ tag }) => tag === "ol" || tag === "ul" || isFlowContainer(tag),
+  fieldset: ({ tag }) => tag === "fieldset",
   "flow-container": ({ tag }) => isFlowContainer(tag),
   form: ({ tag }) => tag === "form",
   heading: ({ tag }) => headings.has(tag),
+  legend: ({ tag }) => tag === "legend",
   li: ({ tag }) => tag === "li",
   list: ({ tag }) => lists.has(tag),
   "native-input": ({ tag }) => tag === "input",
@@ -269,19 +369,16 @@ const admits = {
 } satisfies { readonly [C in TagClass]: (element: Element) => boolean };
 
 /**
- * The part table of spec §4.3, one row per part, in the spec's order.
- *
- * The Notice and the StatusHeading hold their context-free defaults, a phrasing `span` and `h1`;
- * {@link rowFor} gives the row for a placement.
+ * The rows of spec §4.3's part table, in the spec's order, before {@link partTable} derives each
+ * marker.
  */
-export const partTable: readonly PartRow[] = [
+const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
   {
     element: "qti-assessment-item",
     interaction: "item",
     listOwner: false,
     merged: ["lang", "id"],
     part: "root",
-    slot: "item",
     tagClass: "flow-container",
   },
   {
@@ -290,7 +387,6 @@ export const partTable: readonly PartRow[] = [
     listOwner: false,
     merged: ["method", "action", "novalidate"],
     part: "form",
-    slot: "form",
     tagClass: "form",
   },
   {
@@ -299,7 +395,6 @@ export const partTable: readonly PartRow[] = [
     listOwner: false,
     merged: ["id", "role", "aria-labelledby", "tabindex", "autofocus"],
     part: "status",
-    slot: "status",
     tagClass: "flow-container",
   },
   {
@@ -308,7 +403,6 @@ export const partTable: readonly PartRow[] = [
     listOwner: false,
     merged: ["id"],
     part: "statusHeading",
-    slot: "status-heading",
     tagClass: "heading",
   },
   {
@@ -317,7 +411,6 @@ export const partTable: readonly PartRow[] = [
     listOwner: false,
     merged: [],
     part: "messages",
-    slot: "messages",
     tagClass: "list",
   },
   {
@@ -326,7 +419,6 @@ export const partTable: readonly PartRow[] = [
     listOwner: false,
     merged: ["id"],
     part: "message",
-    slot: "message",
     tagClass: "li",
   },
   {
@@ -335,7 +427,6 @@ export const partTable: readonly PartRow[] = [
     listOwner: false,
     merged: ["type", "disabled"],
     part: "submit",
-    slot: "submit",
     tagClass: "button",
   },
   {
@@ -344,17 +435,15 @@ export const partTable: readonly PartRow[] = [
     listOwner: false,
     merged: ["role"],
     part: "notice",
-    slot: "notice",
     tagClass: "phrasing-container",
   },
   {
     element: "fieldset",
     interaction: "choice-interaction",
     listOwner: false,
-    merged: ["role", "aria-labelledby"],
+    merged: ["aria-labelledby"],
     part: "root",
-    slot: "root",
-    tagClass: "flow-container",
+    tagClass: "fieldset",
   },
   {
     element: "qti-prompt",
@@ -362,7 +451,6 @@ export const partTable: readonly PartRow[] = [
     listOwner: false,
     merged: ["id"],
     part: "prompt",
-    slot: "prompt",
     tagClass: "prompt",
   },
   {
@@ -371,7 +459,6 @@ export const partTable: readonly PartRow[] = [
     listOwner: true,
     merged: [],
     part: "choices",
-    slot: "choices",
     tagClass: "choice-list",
   },
   {
@@ -380,7 +467,6 @@ export const partTable: readonly PartRow[] = [
     listOwner: false,
     merged: [],
     part: "choice",
-    slot: "choice",
     tagClass: "choice-item",
   },
   {
@@ -399,7 +485,6 @@ export const partTable: readonly PartRow[] = [
       "aria-describedby",
     ],
     part: "control",
-    slot: "control",
     tagClass: "native-input",
   },
   {
@@ -408,7 +493,6 @@ export const partTable: readonly PartRow[] = [
     listOwner: false,
     merged: ["aria-hidden"],
     part: "indicator",
-    slot: "indicator",
     tagClass: "any",
   },
   {
@@ -417,7 +501,6 @@ export const partTable: readonly PartRow[] = [
     listOwner: false,
     merged: ["id", "for"],
     part: "label",
-    slot: "label",
     tagClass: "any",
   },
   {
@@ -426,7 +509,6 @@ export const partTable: readonly PartRow[] = [
     listOwner: false,
     merged: [],
     part: "root",
-    slot: "root",
     tagClass: "phrasing-container",
   },
   {
@@ -448,7 +530,6 @@ export const partTable: readonly PartRow[] = [
       "aria-describedby",
     ],
     part: "control",
-    slot: "control",
     tagClass: "text-input",
   },
   {
@@ -457,7 +538,6 @@ export const partTable: readonly PartRow[] = [
     listOwner: false,
     merged: [],
     part: "root",
-    slot: "root",
     tagClass: "flow-container",
   },
   {
@@ -466,7 +546,6 @@ export const partTable: readonly PartRow[] = [
     listOwner: false,
     merged: ["id"],
     part: "prompt",
-    slot: "prompt",
     tagClass: "prompt",
   },
   {
@@ -484,10 +563,38 @@ export const partTable: readonly PartRow[] = [
       "aria-describedby",
     ],
     part: "control",
-    slot: "control",
     tagClass: "textarea",
   },
 ];
+
+/**
+ * Derive a part's `data-slot` marker (operator ruling, rule `0e767b8d`): a Root carries its
+ * component's name, and every other part `<component>-<part>`, the part key in kebab case.
+ *
+ * Every marker the emitter writes and every check reads comes from here through the part table, so
+ * no code spells one by hand.
+ *
+ * @param interaction The component: an interaction, or `item` for the host chrome.
+ * @param part The part.
+ * @returns The marker: `choice-interaction`, `choice-interaction-indicator`, `item-status-heading`.
+ */
+const slotFor = (interaction: InteractionKey, part: PartKey): string =>
+  part === "root"
+    ? interaction
+    : `${interaction}-${part.replaceAll(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`)}`;
+
+/**
+ * The part table of spec §4.3, one row per part, in the spec's order, each with its derived marker.
+ *
+ * The Notice, the StatusHeading and the Choice Root and Prompt hold their context-free defaults: a
+ * phrasing `span`, `h1`, and the `labelledby` markup with no legend. {@link rowFor} gives the row
+ * for a placement.
+ */
+export const partTable: readonly PartRow[] = rows.map((row) => ({
+  ...row,
+  legendOwner: false,
+  slot: slotFor(row.interaction, row.part),
+}));
 
 /**
  * The key of a part in the lookups: the interaction and the part, which neither key's spelling can
@@ -511,6 +618,27 @@ if (rowIndex.size !== partTable.length) {
 }
 
 /**
+ * The part each `data-slot` marker names.
+ */
+const slotIndex: ReadonlyMap<string, PartName> = new Map(
+  partTable.map((row) => [row.slot, { interaction: row.interaction, part: row.part }]),
+);
+
+if (slotIndex.size !== partTable.length) {
+  throw new Error("Two rows of the part table derive the same data-slot marker.");
+}
+
+/**
+ * Find the part a `data-slot` marker names, so a reader of an emitted tree asks the part table
+ * rather than comparing marker strings.
+ *
+ * @param slot A `data-slot` attribute's value.
+ * @returns The interaction and the part, or none when no row carries the marker.
+ */
+export const partForSlot = (slot: string): Option.Option<PartName> =>
+  Option.fromUndefinedOr(slotIndex.get(slot));
+
+/**
  * The part keys of each interaction, in the table's order, for checking overrides and naming the
  * keys an unknown one should have been.
  */
@@ -523,12 +651,17 @@ const knownParts: ReadonlyMap<string, readonly string[]> = new Map(
 
 /**
  * Give the row of a part as placed: the table's row, with the Notice's element and class set by its
- * position and the StatusHeading's element by the heading level.
+ * position, the StatusHeading's element by the heading level, and the Choice Root's and Prompt's
+ * rows by the Prompt's markup.
+ *
+ * Under the `legend` markup the Prompt is a `legend` that stays one under a swap, and the Root, a
+ * `fieldset`, owns it as its first child and names no Prompt id. Under `labelledby` the rows are
+ * the table's: the Prompt keeps the `id` the Root's `aria-labelledby` names.
  *
  * @param interaction The interaction that owns the part.
  * @param part The part.
- * @param context Where the part is placed: the Notice's position, phrasing by default, and the
- *   StatusHeading's level, 1 by default.
+ * @param context Where the part is placed: the Notice's position, phrasing by default; the
+ *   StatusHeading's level, 1 by default; and the Choice Prompt's markup, `labelledby` by default.
  * @returns The part's row.
  * @throws {RangeError} When the heading level is not an integer from 1 to 6, a defect of the
  *   caller, which receives a validated configuration.
@@ -545,6 +678,16 @@ export const rowFor = <I extends InteractionKey>(
 
   if (row.interaction === "item" && row.part === "notice" && context.position === "flow") {
     return { ...row, element: "div", tagClass: "flow-container" };
+  }
+
+  if (row.interaction === "choice-interaction" && context.promptMarkup === "legend") {
+    if (row.part === "root") {
+      return { ...row, legendOwner: true, merged: [] };
+    }
+
+    if (row.part === "prompt") {
+      return { ...row, element: "legend", merged: [], tagClass: "legend" };
+    }
   }
 
   if (row.interaction === "item" && row.part === "statusHeading") {

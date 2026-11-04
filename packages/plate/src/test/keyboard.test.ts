@@ -2,12 +2,13 @@ import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
+import { rowFor } from "#plate/emit/parts.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 
 /**
  * The Status region the item chrome places before the Form: focusable by script only.
  */
-const status = h("div", { "data-slot": "status", tabindex: "-1" });
+const status = h("div", { "data-slot": rowFor("item", "status").slot, tabindex: "-1" });
 
 /**
  * Build the Submit button.
@@ -16,7 +17,9 @@ const status = h("div", { "data-slot": "status", tabindex: "-1" });
  * @returns The Submit part.
  */
 const submitButton = (attrs: Attributes = {}): Element =>
-  h("button", { "data-slot": "submit", type: "submit", ...attrs }, [text("Submit")]);
+  h("button", { "data-slot": rowFor("item", "submit").slot, type: "submit", ...attrs }, [
+    text("Submit"),
+  ]);
 
 /**
  * Build an item around some controls: the Status region, then a Form holding the controls and the
@@ -27,9 +30,9 @@ const submitButton = (attrs: Attributes = {}): Element =>
  * @returns The item's root.
  */
 const item = (controls: readonly Node[], submit: Element = submitButton()): Element =>
-  h("div", { "data-slot": "item", lang: "en" }, [
+  h("div", { "data-slot": rowFor("item", "root").slot, lang: "en" }, [
     status,
-    h("form", { "data-slot": "form", method: "post" }, [...controls, submit]),
+    h("form", { "data-slot": rowFor("item", "form").slot, method: "post" }, [...controls, submit]),
   ]);
 
 /**
@@ -44,13 +47,13 @@ const option = (type: "checkbox" | "radio", value: string, attrs: Attributes = {
   h("input", { name: "q1-RESPONSE", type, value, ...attrs });
 
 /**
- * Build a Choice group Root holding its inputs.
+ * Build a Choice group Root holding its inputs: a native `fieldset`, with no role.
  *
  * @param inputs The radios or checkboxes.
  * @returns The interaction Root.
  */
 const group = (inputs: readonly Element[]): Element =>
-  h("fieldset", { "data-slot": "root", role: "group" }, inputs);
+  h("fieldset", { "data-slot": rowFor("choice-interaction", "root").slot }, inputs);
 
 describe("tabOrder", () => {
   it("gives one stop per radio group, at its checked radio, and skips tabindex -1 and disabled controls", () => {

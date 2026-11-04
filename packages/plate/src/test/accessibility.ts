@@ -1,4 +1,7 @@
+import { Option } from "effect";
 import type { Element } from "#plate/emit/node.ts";
+import { partForSlot, promptMarkupFor } from "#plate/emit/parts.ts";
+import type { InteractionKey, PartName, PartOf } from "#plate/emit/parts.ts";
 
 /**
  * The checks `checkTree` runs, in the order it reports their violations.
@@ -100,12 +103,42 @@ const attribute = (element: Element, name: string): string | undefined => {
 };
 
 /**
- * Read an element's `data-slot` marker, the part it is (spec §4.3).
+ * Read the part an element is, from its `data-slot` marker through the part table (spec §4.3).
  *
  * @param element The element to read.
- * @returns The part's marker, or `undefined` for an element that is no part.
+ * @returns The interaction and the part, or none for an element that is no part.
  */
-const slotOf = (element: Element): string | undefined => attribute(element, "data-slot");
+const partOf = (element: Element): Option.Option<PartName> => {
+  const slot = attribute(element, "data-slot");
+
+  return slot === undefined ? Option.none() : partForSlot(slot);
+};
+
+/**
+ * Tell whether an element is one part of one interaction or of the item chrome.
+ *
+ * @param element The element to read.
+ * @param interaction The part's owner.
+ * @param part The part.
+ * @returns Whether the element's marker names that part.
+ */
+const isPart = <I extends InteractionKey>(
+  element: Element,
+  interaction: I,
+  part: PartOf<I>,
+): boolean =>
+  Option.exists(partOf(element), (name) => name.interaction === interaction && name.part === part);
+
+/**
+ * Read the interaction whose Root an element is.
+ *
+ * @param element The element to read.
+ * @returns The interaction, or none for the item Root and for every element that is no Root.
+ */
+const interactionRooted = (element: Element): Option.Option<InteractionKey> =>
+  Option.flatMap(partOf(element), ({ interaction, part }) =>
+    part === "root" && interaction !== "item" ? Option.some(interaction) : Option.none(),
+  );
 
 /**
  * Collapse runs of ASCII whitespace to one space and trim the ends.
@@ -239,13 +272,14 @@ const visitsOf = (tree: Element): readonly Visit[] => {
 const parentOf = (visit: Visit): Element | undefined => visit.ancestors.at(-1);
 
 /**
- * Find the interaction Root a visit sits in: its nearest ancestor marked `data-slot="root"`.
+ * Find the interaction Root a visit sits in: its nearest ancestor whose marker names an
+ * interaction's Root.
  *
  * @param visit The visit to place.
  * @returns The Root, or `undefined` outside every interaction.
  */
 const rootOf = (visit: Visit): Element | undefined =>
-  visit.ancestors.findLast((ancestor) => slotOf(ancestor) === "root");
+  visit.ancestors.findLast((ancestor) => Option.isSome(interactionRooted(ancestor)));
 
 /**
  * List the visits below an element, in document order.
@@ -308,6 +342,15 @@ const textBelow = (node: Element): string =>
 export const textOf = (element: Element): string => collapse(textBelow(element));
 
 /**
+ * Split an IDREFS attribute, such as `aria-labelledby`, into its ids.
+ *
+ * @param value The attribute's value, if present.
+ * @returns The ids in order, none for an absent attribute.
+ */
+const idRefs = (value: string | undefined): readonly string[] =>
+  (value ?? "").split(/[\t\n\f\r ]+/u).filter((id) => id !== "");
+
+/**
  * Compute the accessible name of a form control or a group Root from explicit references only.
  *
  * The first non-empty source wins: the text of the elements `aria-labelledby` names, in its order;
@@ -320,14 +363,11 @@ export const textOf = (element: Element): string => collapse(textBelow(element))
  */
 export const nameOf = (element: Element, tree: Element): string => {
   const elements = visitsOf(tree).map((visit) => visit.element);
-  const labelledBy = (attribute(element, "aria-labelledby") ?? "")
-    .split(/[\t\n\f\r ]+/u)
-    .filter((id) => id !== "")
-    .flatMap((id) => {
-      const target = elements.find((candidate) => attribute(candidate, "id") === id);
+  const labelledBy = idRefs(attribute(element, "aria-labelledby")).flatMap((id) => {
+    const target = elements.find((candidate) => attribute(candidate, "id") === id);
 
-      return target === undefined ? [] : [textOf(target)];
-    });
+    return target === undefined ? [] : [textOf(target)];
+  });
   const id = attribute(element, "id");
   const sources = [
     () => labelledBy.join(" "),
@@ -371,6 +411,47 @@ export const isFocusable = (element: Element, tree: Element): boolean => {
 };
 
 /**
+ * Decide whether a Choice Root and its Prompt take one of the two markups the operator ruled
+ * (rule `efed9867`), and nothing else.
+ *
+ * Both keep the Root a native `fieldset` with no `role`. In the `legend` markup the Prompt is a
+ * `legend` of phrasing content, the Root's first element child, and the Root carries no
+ * `aria-labelledby`. In the `labelledby` markup the Prompt is no `legend`, holds content a legend
+ * may not, and has an `id`, which the Root's `aria-labelledby` names alone, so the Root's name is
+ * the Prompt's text. The content decides which markup is due, through the part table's
+ * {@link promptMarkupFor}.
+ *
+ * @param root The Choice Root.
+ * @param prompt The Prompt the Root owns.
+ * @param tree The tree both sit in.
+ * @returns Whether the pair takes the markup its Prompt's content calls for.
+ */
+const promptNamesGroup = (root: Element, prompt: Element, tree: Element): boolean => {
+  if (root.tag !== "fieldset" || attribute(root, "role") !== undefined) {
+    return false;
+  }
+
+  const labelledBy = idRefs(attribute(root, "aria-labelledby"));
+  if (promptMarkupFor(prompt.children) === "legend") {
+    return (
+      prompt.tag === "legend" &&
+      labelledBy.length === 0 &&
+      root.children.find((child) => child.kind === "element") === prompt
+    );
+  }
+
+  const id = attribute(prompt, "id");
+
+  return (
+    prompt.tag !== "legend" &&
+    id !== undefined &&
+    labelledBy.length === 1 &&
+    labelledBy[0] === id &&
+    nameOf(root, tree) === textOf(prompt)
+  );
+};
+
+/**
  * Find each element that breaks one check, in document order.
  *
  * @param scope The tree and options `checkTree` was given.
@@ -388,7 +469,10 @@ const rules = {
       .filter(
         (visit, index) =>
           index > 0 ||
-          !(isFocusableUnder(visit.element, parentOf(visit)) || slotOf(visit.element) === "status"),
+          !(
+            isFocusableUnder(visit.element, parentOf(visit)) ||
+            isPart(visit.element, "item", "status")
+          ),
       ),
   "control-name": ({ tree, visits }) =>
     visits.filter((visit) => isFormControl(visit.element) && nameOf(visit.element, tree) === ""),
@@ -434,10 +518,10 @@ const rules = {
     ),
   "label-name": ({ tree, visits }) =>
     visits
-      .filter((visit) => slotOf(visit.element) === "choice")
+      .filter((visit) => isPart(visit.element, "choice-interaction", "choice"))
       .flatMap((row) => {
         const inside = below(visits, row.element);
-        const label = inside.find((visit) => slotOf(visit.element) === "label");
+        const label = inside.find((visit) => isPart(visit.element, "choice-interaction", "label"));
         if (label === undefined) {
           return [];
         }
@@ -446,7 +530,8 @@ const rules = {
 
         return inside.filter(
           (visit) =>
-            slotOf(visit.element) === "control" && nameOf(visit.element, tree) !== expected,
+            isPart(visit.element, "choice-interaction", "control") &&
+            nameOf(visit.element, tree) !== expected,
         );
       }),
   lang: ({ tree, visits }) =>
@@ -462,27 +547,29 @@ const rules = {
       );
     }),
   "prompt-name": ({ tree, visits }) =>
-    visits
-      .filter((visit) => slotOf(visit.element) === "root")
-      .flatMap((root) => {
-        const owned = below(visits, root.element).filter((visit) => rootOf(visit) === root.element);
-        const prompt = owned.find((visit) => slotOf(visit.element) === "prompt");
-        if (prompt === undefined) {
-          return [];
-        }
+    visits.flatMap((root) => {
+      const interaction = interactionRooted(root.element);
+      if (Option.isNone(interaction)) {
+        return [];
+      }
 
-        const expected = textOf(prompt.element);
-        if (attribute(root.element, "role") === "group" || root.element.tag === "fieldset") {
-          return nameOf(root.element, tree) === expected ? [] : [root];
-        }
+      const owned = below(visits, root.element).filter((visit) => rootOf(visit) === root.element);
+      const prompt = owned.find((visit) => isPart(visit.element, interaction.value, "prompt"));
+      if (prompt === undefined) {
+        return [];
+      }
 
-        const control = owned.find((visit) => slotOf(visit.element) === "control");
-        if (control === undefined) {
-          return [root];
-        }
+      if (interaction.value === "choice-interaction") {
+        return promptNamesGroup(root.element, prompt.element, tree) ? [] : [root];
+      }
 
-        return nameOf(control.element, tree) === expected ? [] : [control];
-      }),
+      const control = owned.find((visit) => isPart(visit.element, interaction.value, "control"));
+      if (control === undefined) {
+        return [root];
+      }
+
+      return nameOf(control.element, tree) === textOf(prompt.element) ? [] : [control];
+    }),
   "radio-group": ({ visits }) => {
     const radios = visits.filter(
       (visit) => visit.element.tag === "input" && inputType(visit.element) === "radio",
@@ -518,13 +605,13 @@ const rules = {
   "submit-order": ({ visits }) =>
     visits.filter(
       (visit, index) =>
-        slotOf(visit.element) === "submit" &&
-        (!visit.ancestors.some((ancestor) => slotOf(ancestor) === "form") ||
+        isPart(visit.element, "item", "submit") &&
+        (!visit.ancestors.some((ancestor) => isPart(ancestor, "item", "form")) ||
           visits.slice(index + 1).some((later) => isFormControl(later.element))),
     ),
   "tabindex-minus-one": ({ visits }) =>
     visits.filter(
-      (visit) => (tabindexOf(visit.element) ?? 0) < 0 && slotOf(visit.element) !== "status",
+      (visit) => (tabindexOf(visit.element) ?? 0) < 0 && !isPart(visit.element, "item", "status"),
     ),
   "tabindex-positive": ({ visits }) =>
     visits.filter((visit) => (tabindexOf(visit.element) ?? 0) > 0),
@@ -534,9 +621,11 @@ const rules = {
  * Check an emitted tree against the static accessibility rules every emitting slice calls.
  *
  * The rules are {@link checks}'s, reported in that order and, within one check, in document order.
- * Parts are found by their `data-slot` markers (spec §4.3): `item`, `form`, `status`, `submit`,
- * and an interaction's `root`, `prompt`, `choice`, `control` and `label`. A Root with no Prompt has
- * no name requirement (Q9).
+ * Parts are found by their `data-slot` markers, read through the part table's `partForSlot` (spec
+ * §4.3): the item's Form, Status and Submit, and an interaction's Root, Prompt, Choice, Control and
+ * Label. A Choice Root's Prompt must take one of the two ruled markups, a `legend` first in the
+ * `fieldset` or a `qti-prompt` the `fieldset` names through `aria-labelledby`. A Root with no
+ * Prompt has no name requirement (Q9).
  *
  * @param tree The tree's root, which must carry `lang`.
  * @param options How the tree sits in its page.

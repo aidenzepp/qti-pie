@@ -6,12 +6,24 @@ import { rowFor } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 
 /**
+ * The Choice parts' markers, read from the part table as an emitter reads them.
+ */
+const slots = {
+  choice: rowFor("choice-interaction", "choice").slot,
+  choices: rowFor("choice-interaction", "choices").slot,
+  control: rowFor("choice-interaction", "control").slot,
+  label: rowFor("choice-interaction", "label").slot,
+  prompt: rowFor("choice-interaction", "prompt").slot,
+  root: rowFor("choice-interaction", "root").slot,
+};
+
+/**
  * The Choice Control's attributes, as a connect function computes them.
  */
 const controlProps: Attributes = {
   "aria-labelledby": "i1-RESPONSE-label-0",
   class: "a",
-  "data-slot": "control",
+  "data-slot": slots.control,
   id: "i1-RESPONSE-control-0",
   name: "RESPONSE",
   type: "radio",
@@ -26,17 +38,17 @@ const control = h("input", controlProps);
 /**
  * A Choice's Label root, handed to a Choice part function.
  */
-const label = h("label", { "data-slot": "label", for: "i1-RESPONSE-control-0" }, [text("Red")]);
+const label = h("label", { "data-slot": slots.label, for: "i1-RESPONSE-control-0" }, [text("Red")]);
 
 /**
  * The Choice row's attributes.
  */
-const choiceProps: Attributes = { "data-slot": "choice" };
+const choiceProps: Attributes = { "data-slot": slots.choice };
 
 /**
  * The Choices row's attributes.
  */
-const choicesProps: Attributes = { "data-slot": "choices" };
+const choicesProps: Attributes = { "data-slot": slots.choices };
 
 /**
  * Construct a Choice root that a Choice replacement made a `div`.
@@ -45,7 +57,7 @@ const choicesProps: Attributes = { "data-slot": "choices" };
  * @returns A `div` Choice root holding a text node.
  */
 const divChoice = (value: string): Element =>
-  h("div", { "data-choice": value, "data-slot": "choice" }, [text(value)]);
+  h("div", { "data-choice": value, "data-slot": slots.choice }, [text(value)]);
 
 /**
  * Construct a replacement that returns a fixed element regardless of what it is handed, for the
@@ -232,7 +244,7 @@ describe("applyPart, the list joint rule", () => {
       const error = yield* Effect.flip(
         applyPart(rowFor("choice-interaction", "choices"), choicesProps, [
           divChoice("A"),
-          h("li", { "data-slot": "choice" }),
+          h("li", { "data-slot": slots.choice }),
         ]),
       );
       assert.strictEqual(error._tag, "PartSwapRefused");
@@ -252,7 +264,7 @@ describe("applyPart, the list joint rule", () => {
       );
       assert.strictEqual(result.tag, "div");
       assert.strictEqual(result.attrs["role"], "list");
-      assert.strictEqual(result.attrs["data-slot"], "choices");
+      assert.strictEqual(result.attrs["data-slot"], slots.choices);
       assert.strictEqual(result.children.length, 2);
       for (const [index, child] of result.children.entries()) {
         assert.strictEqual(child.kind === "element" ? child.tag : undefined, "div");
@@ -285,7 +297,10 @@ describe("applyPart, the list joint rule", () => {
 
   it.effect("leaves li Choice roots under a list replacement as they are", () =>
     Effect.gen(function* listKept() {
-      const children = [h("li", { "data-slot": "choice" }), h("li", { "data-slot": "choice" })];
+      const children = [
+        h("li", { "data-slot": slots.choice }),
+        h("li", { "data-slot": slots.choice }),
+      ];
       const result = yield* applyPart(
         rowFor("choice-interaction", "choices"),
         choicesProps,
@@ -296,6 +311,90 @@ describe("applyPart, the list joint rule", () => {
       assert.isFalse(Object.hasOwn(result.attrs, "role"));
       assert.strictEqual(result.children[0], children[0]);
       assert.strictEqual(result.children[1], children[1]);
+    }),
+  );
+});
+
+describe("applyPart, the Choice Prompt's two markups", () => {
+  /**
+   * A legend Prompt as the emitter hands it to the Root.
+   */
+  const legend = h("legend", { "data-slot": slots.prompt }, [text("Pick a colour.")]);
+
+  /**
+   * The Choices list as the emitter hands it to the Root.
+   */
+  const list = h("ul", choicesProps, [h("li", choiceProps, [control, label])]);
+
+  it.effect("keeps a swapped legend Prompt a legend, refusing a span as root-not-allowed", () =>
+    Effect.gen(function* legendPrompt() {
+      const row = rowFor("choice-interaction", "prompt", { promptMarkup: "legend" });
+      const swapped = yield* applyPart(row, { "data-slot": slots.prompt }, [], as("legend"));
+      assert.strictEqual(swapped.tag, "legend");
+
+      const error = yield* Effect.flip(
+        applyPart(row, { "data-slot": slots.prompt }, [], as("span")),
+      );
+      assert.strictEqual(error.cause, "root-not-allowed");
+      assert.strictEqual(error.part, "prompt");
+    }),
+  );
+
+  it.effect("keeps the id the Root names on a swapped labelledby Prompt", () =>
+    Effect.gen(function* labelledPrompt() {
+      const row = rowFor("choice-interaction", "prompt", { promptMarkup: "labelledby" });
+      const props = { "data-slot": slots.prompt, id: "i1-RESPONSE-prompt" };
+      const result = yield* applyPart(row, props, [], returning(h("div", { id: "theirs" })));
+      assert.strictEqual(result.tag, "div");
+      assert.strictEqual(result.attrs["id"], "i1-RESPONSE-prompt");
+    }),
+  );
+
+  it.effect("accepts a Root swap that keeps the legend first and wraps the Choices", () =>
+    Effect.gen(function* legendKept() {
+      const row = rowFor("choice-interaction", "root", { promptMarkup: "legend" });
+      const result = yield* applyPart(
+        row,
+        { "data-slot": slots.root },
+        [legend, list],
+        (props, [prompt, ...rest]) =>
+          h("fieldset", props, [
+            ...(prompt === undefined ? [] : [prompt]),
+            h("div", { class: "grid" }, rest),
+          ]),
+      );
+      assert.strictEqual(result.tag, "fieldset");
+      assert.strictEqual(result.children[0], legend);
+    }),
+  );
+
+  it.effect("refuses a Root swap that wraps the legend Prompt as legend-first", () =>
+    Effect.gen(function* legendWrapped() {
+      const row = rowFor("choice-interaction", "root", { promptMarkup: "legend" });
+      const error = yield* Effect.flip(
+        applyPart(row, { "data-slot": slots.root }, [legend, list], (props, children) =>
+          h("fieldset", props, [h("div", { class: "frame" }, children)]),
+        ),
+      );
+      assert.strictEqual(error._tag, "PartSwapRefused");
+      assert.strictEqual(error.cause, "legend-first");
+      assert.strictEqual(error.interaction, "choice-interaction");
+      assert.strictEqual(error.part, "root");
+    }),
+  );
+
+  it.effect("refuses a div for the Choice Root as root-not-allowed", () =>
+    Effect.gen(function* rootStaysFieldset() {
+      const error = yield* Effect.flip(
+        applyPart(
+          rowFor("choice-interaction", "root"),
+          { "data-slot": slots.root },
+          [list],
+          as("div"),
+        ),
+      );
+      assert.strictEqual(error.cause, "root-not-allowed");
+      assert.strictEqual(error.part, "root");
     }),
   );
 });

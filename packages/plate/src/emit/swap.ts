@@ -5,8 +5,8 @@ import { allows, lists } from "#plate/emit/parts.ts";
 import type { PartRow, TagClass } from "#plate/emit/parts.ts";
 
 /**
- * The ways a replacement part function can break the swap invariant, one per refusal of I2, I3 and
- * the list joint rule.
+ * The ways a replacement part function can break the swap invariant, one per refusal of I2, I3, the
+ * list joint rule and the legend joint rule.
  *
  * @see {@link PartSwapRefused}
  */
@@ -16,6 +16,7 @@ export const swapCauses = [
   "child-duplicated",
   "child-reordered",
   "list-item",
+  "legend-first",
 ] as const;
 
 /**
@@ -32,6 +33,8 @@ const remedies = {
   "child-missing":
     "Place every node the part function receives below an element of the replacement's own, in the order given; wrap them, never drop them.",
   "child-reordered": "Keep the nodes the part function receives in the order given.",
+  "legend-first":
+    "Place the legend Prompt as the <fieldset>'s first element child, unwrapped; wrap only the nodes after it.",
   "list-item": "Swap Choices too, or return an <li> from the Choice replacement.",
   "root-not-allowed": "Return an element the part may become as the replacement's root.",
 } satisfies { readonly [C in SwapCause]: string };
@@ -84,10 +87,12 @@ const mayBecome = {
   button: "a <button>",
   "choice-item": "an <li>, or a flow container such as <div> under a Choices that is not a list",
   "choice-list": "a <ul>, an <ol> or a flow container such as <div>",
+  fieldset: "a <fieldset>, which groups the choices natively",
   "flow-container":
     "a flow container such as <div>, <section> or <span>, or a custom element, and never a control, link or list",
   form: "a <form>",
   heading: "a heading, <h1> to <h6>",
+  legend: "a <legend>, which names its <fieldset> natively",
   li: "an <li>",
   list: "a <ul>, <ol> or <menu>",
   "native-input": 'an <input>, whose "type" the interaction writes',
@@ -233,6 +238,31 @@ const checkChildren = (root: Element, children: readonly Node[]): Breach | undef
 };
 
 /**
+ * Check the legend joint rule on a replacement's root: the legend Prompt the emitter handed first
+ * is the root's first element child, where a `legend` names its `fieldset`.
+ *
+ * I3 has already kept the root a `fieldset` and the Prompt a `legend`, and I2 has placed every
+ * handed node; this rule adds that the legend sits directly under the root, before any other
+ * element.
+ *
+ * @param root The replacement's root.
+ * @param children The nodes the emitter handed over, the legend Prompt first.
+ * @returns The breach naming the legend and the returned root, or undefined when the legend leads.
+ * @see https://html.spec.whatwg.org/multipage/form-elements.html#the-legend-element
+ */
+const checkLegendFirst = (root: Element, children: readonly Node[]): Breach | undefined => {
+  const [legend] = children;
+  const first = root.children.find((child) => child.kind === "element");
+
+  return legend === undefined || first === legend
+    ? undefined
+    : {
+        cause: "legend-first",
+        detail: `${childAt(children, 0)}, the legend Prompt, is not the first element child of the returned ${describeNode(root)}`,
+      };
+};
+
+/**
  * Split a `class` value into its tokens, at ASCII whitespace as HTML does.
  *
  * @param value The attribute's value, if present.
@@ -336,7 +366,8 @@ const refuse = (row: PartRow, breach: Breach): PartSwapRefused =>
   new PartSwapRefused({ ...breach, interaction: row.interaction, part: row.part });
 
 /**
- * Construct a swapped part's root: the replacement's, checked against I3 and I2, with I1 applied.
+ * Construct a swapped part's root: the replacement's, checked against I3, I2 and, for a legend
+ * owner, the legend joint rule, with I1 applied.
  *
  * @param row The part's row.
  * @param props The attributes the part's connect function computed.
@@ -351,7 +382,10 @@ const swapIn = Effect.fnUntraced(function* swapIn(
   replacement: PartFunction<Attributes>,
 ): Effect.fn.Return<Element, PartSwapRefused> {
   const root = replacement(props, children);
-  const breach = checkRoot(row, root) ?? checkChildren(root, children);
+  const breach =
+    checkRoot(row, root) ??
+    checkChildren(root, children) ??
+    (row.legendOwner ? checkLegendFirst(root, children) : undefined);
   if (breach !== undefined) {
     return yield* refuse(row, breach);
   }
@@ -366,8 +400,10 @@ const swapIn = Effect.fnUntraced(function* swapIn(
  * Without a replacement the part takes the fast path: its default element, holding `props` and
  * `children` by identity, with no walk. With one, the replacement's root must be an element of the
  * row's tag class (I3) and hold every handed child once, in order (I2); `props` are then written
- * over its attributes (I1). A list owner (Choices) also applies the list joint rule on either path.
- * Every breach is a {@link PartSwapRefused} (I4).
+ * over its attributes (I1). A legend owner (the Choice Root under the `legend` markup) must keep
+ * the legend Prompt its first element child; the fast path holds it as handed. A list owner
+ * (Choices) also applies the list joint rule on either path. Every breach is a
+ * {@link PartSwapRefused} (I4).
  *
  * @param row The part's row, as `rowFor` gives it for the placement.
  * @param props The attributes the part's connect function computed, written over a replacement's.
