@@ -621,6 +621,26 @@ export const ownAttributes = {
     ],
   ],
   "qti-assessment-section-ref": [identifierOf(R.SectionRef), ["href", arm(R.SectionRef, "href")]],
+  "qti-assessment-stimulus": [
+    ["identifier", column(R.DocumentIdentifier, "value", "document")],
+    ["title", column(R.DocumentTitle, "value", "document")],
+    [
+      "tool-name",
+      first(column(R.ItemToolBoth, "toolName", "tree"), column(R.ItemToolName, "toolName", "tree")),
+    ],
+    [
+      "tool-version",
+      first(
+        column(R.ItemToolBoth, "toolVersion", "tree"),
+        column(R.ItemToolVersion, "toolVersion", "tree"),
+      ),
+    ],
+  ],
+  "qti-assessment-stimulus-ref": [
+    identifierOf(R.ItemStimulusRef),
+    ["href", arm(R.ItemStimulusRef, "href")],
+    ["title", optional(R.ItemStimulusRefTitle)],
+  ],
   "qti-assessment-test": [
     ["identifier", column(R.DocumentIdentifier, "value", "document")],
     ["title", column(R.DocumentTitle, "value", "document")],
@@ -1025,6 +1045,10 @@ export const ownAttributes = {
     ["use", arm(R.RubricBlock, "use")],
     ["view", arm(R.RubricBlock, "view")],
   ],
+  "qti-rubric-block.test": [
+    ["use", optional(R.TestRubricBlockUse)],
+    ["view", arm(R.TestRubricBlock, "view")],
+  ],
   "qti-select-point-interaction": [
     responseIdentifierOf(R.SelectPointInteraction),
     [
@@ -1105,6 +1129,13 @@ export const ownAttributes = {
     R.RubricTemplateInline,
     R.DeclaredRubricTemplateInlineShowHide,
   ),
+  "qti-test-feedback": [
+    ["access", arm(R.TestFeedback, "access")],
+    identifierOf(R.TestFeedback),
+    ["outcome-identifier", arm(R.TestFeedback, "outcomeIdentifier")],
+    ["show-hide", arm(R.TestFeedback, "showHide")],
+    ["title", optional(R.TestFeedbackTitle)],
+  ],
   "qti-test-part": [
     identifierOf(R.TestPart),
     ["navigation-mode", arm(R.TestPart, "navigationMode")],
