@@ -140,7 +140,9 @@ const readInteger = (text: string, base: number): Option.Option<number> => {
 /**
  * Read one posted string as a value of a base type.
  *
- * Empty text is no value. A number is trimmed first, so blank text is no value too.
+ * Empty text is no value. A number is trimmed first, so blank text is no value too. A float is the
+ * value model's reading of the text; it is non-finite only for `INF`, `-INF` and `NaN`, which a
+ * posted form refuses.
  *
  * @param baseType The binding's base type.
  * @param text The posted string.
@@ -183,9 +185,12 @@ const readPosted = (
  * Decode the entries a form posted as a value of one binding.
  *
  * Only the entries named for the binding are read. No entry, or one empty entry, is NULL. A
- * number is trimmed, then read as an integer in `base` or as a finite decimal with an optional
- * exponent; `INF` and `NaN` are refused. An identifier must be an NCName. A string has CRLF and
- * a lone CR turned into LF, as a textarea's value has, so a value holds LF line breaks only.
+ * number is trimmed, then read as an integer in `base` or as a decimal with an optional exponent.
+ * A posted float follows the value model's lexical rules, as content does, so a decimal beyond the
+ * largest double reads as the largest finite double of its sign; only `INF`, `-INF` and `NaN`,
+ * which the value model reads as non-finite, are refused. An identifier must be an NCName. A
+ * string has CRLF and a lone CR turned into LF, as a textarea's value has, so a value holds LF
+ * line breaks only.
  *
  * @param entries The posted entries.
  * @param binding The response's binding.
