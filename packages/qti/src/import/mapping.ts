@@ -9,9 +9,13 @@
  * it from its mapping or table; a key, a target and a table's default value are held by the arm of
  * that base type, in the lexical form its lexical space gives them. A declaration with no base type
  * (a record) has no mapping or table row, and the missing arm is the commit's refusal.
+ *
+ * A value attribute is read exactly: outer whitespace around it refuses the document (decision
+ * 157).
  */
 import { judgedLater } from "#qti/import/judged.ts";
-import type { ImportRefused } from "#qti/import/refusal.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
+import type { Rule } from "#qti/import/refusal.ts";
 import { Effect, Option } from "effect";
 import { attributeReader, coordsRows, markers } from "#qti/import/interactions.ts";
 import type { DeclaredVariable, NodeRef } from "#qti/import/interactions.ts";
@@ -42,30 +46,62 @@ const lexicalOf = (element: Element, name: string): Option.Option<string> =>
 
 /**
  * The whitespace class of the lexical space of a base type: a string or a file is an
- * `xs:normalizedString`, and every other base type is collapsed like a token.
+ * `xs:normalizedString`, and every other base type is collapsed like a token. A value attribute
+ * is refused when padded, so collapse reaches only an internal run, as in the pair `"A  B"`.
  */
 const spaceOf = (baseType: BaseTypeHandle): WhiteSpace =>
   baseType === "string" || baseType === "file" ? "replace" : "collapse";
 
 /**
- * Read one attribute as a value of `baseType`: its lexical form processed by the class of the base
- * type's lexical space, with an `AttributeLexical` row where processing changed it.
+ * Refuse the attribute `name` of `element` where it is written with whitespace before or after its
+ * value. A value attribute is read exactly: no tool reformats it, so padding is a mistake in the
+ * source and not formatting (decision 157).
+ *
+ * @param where - What the attribute is, for the refusal's detail: the attribute and its element.
+ * @returns Nothing; `ImportRefused` under `rule` for a padded value.
  */
-const valueOf = (
+const exactOf = Effect.fn("import.exactOf")(function* exactOf(
+  element: Element,
+  name: string,
+  where: string,
+  rule: Rule,
+): Effect.fn.Return<void, ImportRefused> {
+  const lexical = lexicalOf(element, name);
+  if (Option.isSome(lexical) && /^[ \t\n\r]|[ \t\n\r]$/u.test(lexical.value)) {
+    yield* new ImportRefused({
+      detail: `${where} is ${JSON.stringify(lexical.value)}, which has whitespace before or after the value. An attribute value is read exactly as written, so remove the spaces, tabs or line ends around it.`,
+      rule,
+    });
+  }
+});
+
+/**
+ * Read one attribute as a value of `baseType`. A string is an `xs:normalizedString`, its lexical
+ * form processed by the replace class with an `AttributeLexical` row where processing changed it;
+ * every other base type is read exactly, so outer whitespace refuses it under `rule`, and only an
+ * internal run of spaces is collapsed.
+ */
+const valueOf = Effect.fn("import.valueOf")(function* valueOf(
   rows: Rows,
   element: Element,
   node: NodeRef,
   name: AttributeNameHandle,
   baseType: BaseTypeHandle,
-): { rows: Rows; value: Option.Option<string> } =>
-  Option.match(lexicalOf(element, name), {
-    onNone: () => ({ rows, value: Option.none() }),
+  rule: Rule,
+): Effect.fn.Return<{ rows: Rows; value: Option.Option<string> }, ImportRefused> {
+  if (baseType !== "string") {
+    yield* exactOf(element, name, `the ${name} attribute of a ${baseType} ${node.kind}`, rule);
+  }
+
+  return Option.match(lexicalOf(element, name), {
+    onNone: () => ({ rows, value: Option.none<string>() }),
     onSome: (lexical) => {
       const typed = typedAttribute(rows, node.id, node.kind, name, lexical, spaceOf(baseType));
 
       return { rows: typed.rows, value: Option.some(typed.value) };
     },
   });
+});
 
 /**
  * A typed arm writer: the row of one value in the arm of its base type. The boolean arm narrows
@@ -364,18 +400,37 @@ interface Pass {
 /**
  * The rows of one `qti-mapping`: the mapping, its bounds where written, and its default value.
  */
-const mappingElement = (
+const mappingElement = Effect.fn("import.mappingElement")(function* mappingElement(
   pass: Pass,
   rows: Rows,
   element: Element,
   node: NodeRef,
   owner: DeclaredVariable,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
   if (Option.isNone(owner.baseType)) {
     return rows;
   }
 
   const baseType = owner.baseType.value;
+  yield* exactOf(
+    element,
+    "lower-bound",
+    "the lower-bound attribute of qti-mapping",
+    "attribute-lexical",
+  );
+  yield* exactOf(
+    element,
+    "upper-bound",
+    "the upper-bound attribute of qti-mapping",
+    "attribute-lexical",
+  );
+  yield* exactOf(
+    element,
+    "default-value",
+    "the default-value attribute of qti-mapping",
+    "attribute-lexical",
+  );
+
   const attributes = attributeReader(rows, element, node);
   const lower = attributes.read("lower-bound");
   const upper = attributes.read("upper-bound");
@@ -408,7 +463,7 @@ const mappingElement = (
     node.id,
     attributes.written(),
   );
-};
+});
 
 /**
  * The rows of one `qti-map-entry`: the entry at its position, its key in the arm of its mapping's
@@ -426,6 +481,13 @@ const mapEntryElement = Effect.fn("import.mapEntryElement")(function* mapEntryEl
     return rows;
   }
 
+  yield* exactOf(
+    element,
+    "mapped-value",
+    "the mapped-value attribute of qti-map-entry",
+    "attribute-lexical",
+  );
+
   const attributes = attributeReader(rows, element, node);
   const mappedValue = attributes.read("mapped-value");
   const caseSensitive = yield* closedOf(
@@ -434,7 +496,14 @@ const mapEntryElement = Effect.fn("import.mapEntryElement")(function* mapEntryEl
     "attribute-lexical",
     "the case-sensitive attribute of qti-map-entry",
   );
-  const key = valueOf(attributes.rows(), element, node, "map-key", holder.baseType);
+  const key = yield* valueOf(
+    attributes.rows(),
+    element,
+    node,
+    "map-key",
+    holder.baseType,
+    "map-key-lexical",
+  );
   let built = Rows.add(key.rows, mapping.MapEntry, [
     {
       baseType: holder.baseType,
@@ -462,13 +531,32 @@ const mapEntryElement = Effect.fn("import.mapEntryElement")(function* mapEntryEl
  * The rows of one `qti-area-mapping`: the area mapping, its bounds where written, and its default
  * value.
  */
-const areaMappingElement = (
+const areaMappingElement = Effect.fn("import.areaMappingElement")(function* areaMappingElement(
   pass: Pass,
   rows: Rows,
   element: Element,
   node: NodeRef,
   declaration: string,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
+  yield* exactOf(
+    element,
+    "lower-bound",
+    "the lower-bound attribute of qti-area-mapping",
+    "attribute-lexical",
+  );
+  yield* exactOf(
+    element,
+    "upper-bound",
+    "the upper-bound attribute of qti-area-mapping",
+    "attribute-lexical",
+  );
+  yield* exactOf(
+    element,
+    "default-value",
+    "the default-value attribute of qti-area-mapping",
+    "attribute-lexical",
+  );
+
   const attributes = attributeReader(rows, element, node);
   const lower = attributes.read("lower-bound");
   const upper = attributes.read("upper-bound");
@@ -499,7 +587,7 @@ const areaMappingElement = (
     node.id,
     attributes.written(),
   );
-};
+});
 
 /**
  * The rows of one `qti-area-map-entry`: the entry at its position and its coordinates.
@@ -513,7 +601,7 @@ const areaMapEntryElement = Effect.fn("import.areaMapEntryElement")(function* ar
   element: Element,
   node: NodeRef,
   areaMapping: string,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ItemRefusal | ImportRefused> {
   const shapeText = lexicalOf(element, "shape");
   const shape = Option.flatMapNullishOr(shapeText, (known) =>
     Shape.handles.find((handle) => handle === known),
@@ -524,6 +612,13 @@ const areaMapEntryElement = Effect.fn("import.areaMapEntryElement")(function* ar
       rule: "typed-copy",
     });
   }
+
+  yield* exactOf(
+    element,
+    "mapped-value",
+    "the mapped-value attribute of qti-area-map-entry",
+    "attribute-lexical",
+  );
 
   const attributes = attributeReader(rows, element, node);
   const mappedValue = attributes.read("mapped-value");
@@ -566,7 +661,14 @@ const tableElement = Effect.fn("import.tableElement")(function* tableElement(
   const withTable = match
     ? Rows.add(rows, mapping.MatchTable, [fact])
     : Rows.add(rows, mapping.InterpolationTable, [fact]);
-  const defaultValue = valueOf(withTable, element, node, "default-value", baseType);
+  const defaultValue = yield* valueOf(
+    withTable,
+    element,
+    node,
+    "default-value",
+    baseType,
+    "attribute-lexical",
+  );
   if (Option.isNone(defaultValue.value)) {
     return defaultValue.rows;
   }
@@ -609,9 +711,23 @@ const tableEntryElement = Effect.fn("import.tableEntryElement")(function* tableE
     return rows;
   }
 
+  yield* exactOf(
+    element,
+    "source-value",
+    `the source-value attribute of ${node.kind}`,
+    "attribute-lexical",
+  );
+
   const attributes = attributeReader(rows, element, node);
   const source = Option.getOrElse(attributes.read("source-value"), () => "");
-  const target = valueOf(attributes.rows(), element, node, "target-value", holder.baseType);
+  const target = yield* valueOf(
+    attributes.rows(),
+    element,
+    node,
+    "target-value",
+    holder.baseType,
+    "attribute-lexical",
+  );
   const position = pass.positions.get(node.id) ?? 0n;
   const fact = {
     baseType: holder.baseType,
@@ -693,11 +809,11 @@ export const mappingRows = Effect.fn("import.mappingRows")(function* mappingRows
     const owner = owners.get(above.value.id);
     const parentId = above.value.id;
     if (node.kind === "qti-mapping" && owner !== undefined) {
-      built = mappingElement(pass, built, element, node, owner);
+      built = yield* mappingElement(pass, built, element, node, owner);
     } else if (node.kind === "qti-map-entry") {
       built = yield* mapEntryElement(pass, built, element, node, parentId);
     } else if (node.kind === "qti-area-mapping" && owner !== undefined) {
-      built = areaMappingElement(pass, built, element, node, owner.id);
+      built = yield* areaMappingElement(pass, built, element, node, owner.id);
     } else if (node.kind === "qti-area-map-entry") {
       built = yield* areaMapEntryElement(pass, built, element, node, parentId);
     } else if (

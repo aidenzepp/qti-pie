@@ -38,9 +38,9 @@ const {
   InterpolationTableDefaultValueFloat,
   InterpolationTableEntryBoolean,
   InterpolationTableEntryFloat,
-  MapEntryBoolean,
+  MapEntryDirectedPair,
   MapEntryIdentifier,
-  MapEntryInteger,
+  MapEntryString,
   MatchTableDefaultValueBoolean,
   MatchTableDefaultValueFloat,
   MatchTableEntryBoolean,
@@ -249,20 +249,46 @@ describe("mappingRows on a mapping", () => {
     }),
   );
 
+  it.effect("refuses a padded integer map-key under map-key-lexical", () =>
+    Effect.gen(function* paddedKey() {
+      const failure = yield* Effect.flip(
+        mapped(
+          `<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer"><qti-mapping><qti-map-entry map-key=" 12 " mapped-value="1"/></qti-mapping></qti-response-declaration>`,
+        ),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "map-key-lexical");
+    }),
+  );
+
   it.effect("stores a key after the class of its base type's lexical space", () =>
     Effect.gen(function* keyClass() {
       const { built, nodes } = yield* mapped(
-        `<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer"><qti-mapping><qti-map-entry map-key=" 12 " mapped-value="1"/></qti-mapping></qti-response-declaration>`,
+        `<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="directedPair"><qti-mapping><qti-map-entry map-key="A  B" mapped-value="1"/></qti-mapping></qti-response-declaration>`,
       );
       const entry = idOf(nodes, "qti-map-entry");
 
-      assert.deepStrictEqual<unknown>(Rows.of(built, MapEntryInteger), [
-        { id: entry, mapKey: "12" },
+      assert.deepStrictEqual<unknown>(Rows.of(built, MapEntryDirectedPair), [
+        { id: entry, mapKey: "A B" },
       ]);
       assert.deepStrictEqual(
         Rows.of(built, AttributeLexical).map((row) => [row.node, row.attribute, row.value]),
-        [[entry, "map-key", " 12 "]],
+        [[entry, "map-key", "A  B"]],
       );
+    }),
+  );
+
+  it.effect("keeps the whitespace of a string map-key as part of the value", () =>
+    Effect.gen(function* stringKey() {
+      const { built, nodes } = yield* mapped(
+        `<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="string"><qti-mapping><qti-map-entry map-key=" a " mapped-value="1"/></qti-mapping></qti-response-declaration>`,
+      );
+      const entry = idOf(nodes, "qti-map-entry");
+
+      assert.deepStrictEqual<unknown>(Rows.of(built, MapEntryString), [
+        { id: entry, mapKey: " a " },
+      ]);
     }),
   );
 
@@ -501,18 +527,16 @@ describe("mappingRows on a boolean value", () => {
     }),
   );
 
-  it.effect("admits a padded boolean attribute, which collapses to its handle", () =>
+  it.effect("refuses a padded boolean map-key under map-key-lexical", () =>
     Effect.gen(function* padded() {
-      const { built, nodes } = yield* mapped(
-        boolean('<qti-mapping><qti-map-entry map-key=" true " mapped-value="1"/></qti-mapping>'),
+      const failure = yield* Effect.flip(
+        mapped(
+          boolean('<qti-mapping><qti-map-entry map-key=" true " mapped-value="1"/></qti-mapping>'),
+        ),
       );
-      const entry = idOf(nodes, "qti-map-entry");
 
-      assert.deepStrictEqual(Rows.of(built, MapEntryBoolean), [{ id: entry, mapKey: "true" }]);
-      assert.deepStrictEqual(
-        Rows.of(built, AttributeLexical).map((row) => [row.node, row.attribute, row.value]),
-        [[entry, "map-key", " true "]],
-      );
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "map-key-lexical");
     }),
   );
 
@@ -589,6 +613,130 @@ describe("mappingRows on a boolean attribute of an entry", () => {
         Rows.of(bounded.built, InterpolationTableEntry).map((row) => row.includeBoundary),
         ["false"],
       );
+    }),
+  );
+});
+
+/**
+ * A declaration of the given base type, its kind and cardinality following its body's element.
+ */
+const typed = (baseType: string, body: string, kind = "response") =>
+  `<qti-${kind}-declaration identifier="RESPONSE" cardinality="single" base-type="${baseType}">${body}</qti-${kind}-declaration>`;
+
+describe("mappingRows on a padded value attribute", () => {
+  const padded: readonly (readonly [string, string, string])[] = [
+    [
+      "a boolean map key",
+      typed(
+        "boolean",
+        '<qti-mapping><qti-map-entry map-key=" true" mapped-value="1"/></qti-mapping>',
+      ),
+      "map-key-lexical",
+    ],
+    [
+      "an integer map key",
+      typed("integer", '<qti-mapping><qti-map-entry map-key="1 " mapped-value="1"/></qti-mapping>'),
+      "map-key-lexical",
+    ],
+    [
+      "a boolean match table default",
+      typed("boolean", '<qti-match-table default-value=" true"/>', "outcome"),
+      "attribute-lexical",
+    ],
+    [
+      "an integer interpolation table default",
+      typed("integer", '<qti-interpolation-table default-value="1 "/>', "outcome"),
+      "attribute-lexical",
+    ],
+    [
+      "a boolean match table target",
+      typed(
+        "boolean",
+        '<qti-match-table><qti-match-table-entry source-value="1" target-value=" true"/></qti-match-table>',
+        "outcome",
+      ),
+      "attribute-lexical",
+    ],
+    [
+      "an integer interpolation table target",
+      typed(
+        "integer",
+        '<qti-interpolation-table><qti-interpolation-table-entry source-value="1" target-value="1 "/></qti-interpolation-table>',
+        "outcome",
+      ),
+      "attribute-lexical",
+    ],
+    [
+      "a mapped value of a qti-map-entry",
+      typed("integer", '<qti-mapping><qti-map-entry map-key="1" mapped-value=" 1"/></qti-mapping>'),
+      "attribute-lexical",
+    ],
+    [
+      "a mapped value of a qti-area-map-entry",
+      typed(
+        "point",
+        '<qti-area-mapping><qti-area-map-entry shape="rect" coords="0,0,1,1" mapped-value="1 "/></qti-area-mapping>',
+      ),
+      "attribute-lexical",
+    ],
+    [
+      "a qti-mapping lower bound",
+      typed("integer", '<qti-mapping lower-bound=" 0"/>'),
+      "attribute-lexical",
+    ],
+    [
+      "a qti-mapping upper bound",
+      typed("integer", '<qti-mapping upper-bound="3 "/>'),
+      "attribute-lexical",
+    ],
+    [
+      "a qti-mapping default value",
+      typed("integer", '<qti-mapping default-value=" 0"/>'),
+      "attribute-lexical",
+    ],
+    [
+      "a qti-area-mapping lower bound",
+      typed("point", '<qti-area-mapping lower-bound=" 0"/>'),
+      "attribute-lexical",
+    ],
+    [
+      "a qti-area-mapping upper bound",
+      typed("point", '<qti-area-mapping upper-bound="3 "/>'),
+      "attribute-lexical",
+    ],
+    [
+      "a qti-area-mapping default value",
+      typed("point", '<qti-area-mapping default-value=" 0"/>'),
+      "attribute-lexical",
+    ],
+    [
+      "a match table source value",
+      typed(
+        "integer",
+        '<qti-match-table><qti-match-table-entry source-value=" 1" target-value="1"/></qti-match-table>',
+        "outcome",
+      ),
+      "attribute-lexical",
+    ],
+    [
+      "an interpolation table source value",
+      typed(
+        "integer",
+        '<qti-interpolation-table><qti-interpolation-table-entry source-value="1.5 " target-value="1"/></qti-interpolation-table>',
+        "outcome",
+      ),
+      "attribute-lexical",
+    ],
+  ];
+
+  it.effect("refuses outer whitespace around a value under the attribute's rule", () =>
+    Effect.gen(function* refusesPadding() {
+      for (const [name, declaration, rule] of padded) {
+        const failure = yield* Effect.flip(mapped(declaration));
+
+        assert.instanceOf(failure, ImportRefused, name);
+        assert.strictEqual(failure.rule, rule, name);
+      }
     }),
   );
 });
