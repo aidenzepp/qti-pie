@@ -176,8 +176,6 @@ describe.skipIf(!hasLease)(
 
               if (manifestId === undefined || documentId === undefined) {
                 assert.fail(`the ${name} package has two trees`);
-
-                return;
               }
 
               assert.strictEqual(manifestId, packageId);
