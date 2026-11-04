@@ -409,9 +409,7 @@ export const AttributeSpelling = relation(
 );
 
 /**
- * A text node holding at least one character that is not whitespace. The relation is named
- * `TextNode` because a table named after the builtin type `text` would shadow that type in
- * grizzle's drift replay (campaign decision 28).
+ * A text node holding at least one character that is not whitespace.
  */
 export const TextNode = relation(
   "TextNode",
@@ -497,11 +495,6 @@ export const relations = {
  * the edge's tree with the kinds and ancestries it names, every edge's kind pair admitted by its
  * version, a tree rooted at a node of ancestry `root`, and every attribute side row owned by a
  * node. The statements that read `AncestryStep` live in `ancestry.ts`.
- *
- * The row checks name the `manifest` handle as a literal: `TreeKind.handle("manifest")` is a term
- * typed exactly `"manifest"`, and a comparison's operand must carry the whole roster's type of the
- * `closedId` field it meets, so the handle term is refused there (TS2345) while the literal adopts
- * the field's type.
  */
 export const rules = [
   key(TreeRoot, ["node"]),

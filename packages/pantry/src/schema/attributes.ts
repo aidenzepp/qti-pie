@@ -1022,9 +1022,7 @@ export const relations = {
 export const arms = {};
 
 /**
- * The statements over this module's relations and the leaf relations it reads. The row checks
- * name handles as literals: a handle term is refused against a `closedId` field of the whole
- * roster (TS2345), while a literal adopts the field's type.
+ * The statements over this module's relations and the leaf relations it reads.
  */
 export const rules = [
   contained(on(AttributeLexical, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
