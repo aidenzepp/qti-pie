@@ -1,4 +1,5 @@
 import path from "node:path";
+import type { Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option } from "effect";
@@ -48,7 +49,7 @@ const built = (version: TreeInput["version"], fragment: string) =>
     return { nodes: tree.nodes, rows: yield* htmlRows(doc.root, tree.nodes, tree.rows) };
   });
 
-const idOf = (nodes: NodeIndex, kind: string): string =>
+const idOf = (nodes: NodeIndex, kind: string): Uuid =>
   Option.getOrThrow(
     Option.fromNullishOr([...nodes.values()].find((found) => found.kind === kind)?.id),
   );
@@ -168,6 +169,7 @@ describe("htmlRows defaults", () => {
       );
       const params = Rows.of(rows, media.relations.Param);
       const [, second] = params;
+      const secondId = Option.getOrThrow(Option.fromNullishOr(second?.id));
 
       assert.deepStrictEqual(
         params.map((row) => [row.name, row.value, row.valuetype]),
@@ -177,10 +179,10 @@ describe("htmlRows defaults", () => {
         ],
       );
       assert.deepStrictEqual(Rows.of(rows, media.relations.DeclaredValuetype), [
-        { node: second?.id ?? "" },
+        { node: secondId },
       ]);
       assert.deepStrictEqual(Rows.of(rows, media.relations.ParamType), [
-        { node: second?.id ?? "", value: ContentMediaType("text/plain") },
+        { node: secondId, value: ContentMediaType("text/plain") },
       ]);
       assert.strictEqual(Rows.of(rows, media.relations.Object).length, 1);
       assert.isDefined(idOf(nodes, "object"));
@@ -398,7 +400,12 @@ describe("htmlRows over the inventory", () => {
       const refusal = yield* Effect.flip(
         htmlRows(
           doc.root,
-          new Map([[doc.root, { ancestry: "root", id: "x", kind: "span" }]]),
+          new Map([
+            [
+              doc.root,
+              { ancestry: "root", id: "33333333-3333-4333-8333-333333333333", kind: "span" },
+            ],
+          ]),
           Rows.empty(),
         ),
       );

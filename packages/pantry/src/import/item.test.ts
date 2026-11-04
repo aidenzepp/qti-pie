@@ -3,7 +3,7 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option, Predicate } from "effect";
-import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
+import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { inject } from "vitest";
 import { itemGuards, ItemGuardRefusal } from "#pantry/import/guards/item.ts";
 import { documentLangRows, itemRows, standardTemplate } from "#pantry/import/item.ts";
@@ -93,7 +93,7 @@ import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
-const packageId = "22222222-2222-4222-8222-222222222222";
+const packageId: Uuid = "22222222-2222-4222-8222-222222222222";
 
 /**
  * Read `choice.xml` of a materialized fixture directory, after replacing every occurrence of
@@ -1092,7 +1092,7 @@ const languagesOf = (body: string, rootAttributes: string, resourceLomHasGeneral
     return documentLangRows(
       Rows.empty(),
       { packageId, resource: "choice", resourceLomHasGeneral },
-      "doc",
+      "33333333-3333-4333-8333-333333333333",
       withParents(doc.root, Option.none()),
     );
   });
@@ -1114,7 +1114,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts root ro
         );
         for (const row of Rows.of(rows, DocumentLang)) {
           assert.deepStrictEqual(row, {
-            document: "doc",
+            document: "33333333-3333-4333-8333-333333333333",
             lomGeneral: "yes",
             package: packageId,
             resource: "choice",

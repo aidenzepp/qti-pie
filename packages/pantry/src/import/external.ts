@@ -7,7 +7,7 @@
  * curriculum standards sets it holds come from the builders the manifest module exports. The
  * record is outside the object identifier and title rows of an item resource.
  */
-import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
+import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
 import { csmSetRows, lomSubtreeRows } from "#pantry/import/manifest.ts";
 import { elementChildren, qmdLeafRows } from "#pantry/import/leaf.ts";
@@ -26,7 +26,7 @@ import type { XmlDocument } from "@qti-pie/crust/tree.ts";
  * resource that names it and that resource's type, and the schema version of the package.
  */
 export interface ExternalInput {
-  readonly package: string;
+  readonly package: Uuid;
   readonly path: string;
   readonly resource: string;
   readonly resourceType: string;

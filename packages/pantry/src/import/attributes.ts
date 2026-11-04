@@ -8,7 +8,7 @@
  * carries are the kind's own builders'; this pass reads them to check the registry and writes
  * nothing for them.
  */
-import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
+import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { closedOf, Rows, typedAttribute, UnmodeledVocabulary } from "#pantry/import/tree.ts";
@@ -224,11 +224,11 @@ const emit = <R extends AnyRelation>(written: Written, relation: R, fact: Fact<R
  */
 interface Subject {
   readonly attribute: Fact<typeof family.NodeClass>["attribute"];
-  readonly documentId: string;
+  readonly documentId: Uuid;
   readonly kind: NodeKindHandle;
-  readonly node: string;
+  readonly node: Uuid;
   readonly rootKind: Fact<typeof Tree>["root"];
-  readonly tree: string;
+  readonly tree: Uuid;
   readonly value: string;
 }
 
@@ -351,7 +351,7 @@ const writeIdrefs = (
 const writeElement = (
   written: Written,
   element: Element,
-  node: { readonly id: string; readonly kind: NodeKindHandle },
+  node: { readonly id: Uuid; readonly kind: NodeKindHandle },
   context: Pick<Subject, "documentId" | "rootKind" | "tree">,
 ): Effect.Effect<void, ImportRefused> =>
   Effect.gen(function* writeElementRows() {
@@ -410,7 +410,7 @@ const writeElement = (
 export const attributeRows = Effect.fn("import.attributeRows")(function* attributeRows(
   tree: Element,
   nodes: NodeIndex,
-  documentId: string,
+  documentId: Uuid,
   rows: Rows,
 ): Effect.fn.Return<Rows, ImportRefused | UnmodeledVocabulary> {
   const elements = indexedElements(tree, nodes);

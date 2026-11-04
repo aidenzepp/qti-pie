@@ -13,6 +13,7 @@
 import { judgedLater } from "#pantry/import/judged.ts";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { Effect, Option } from "effect";
+import type { Uuid } from "@bjornpagen/grizzle";
 import { attributeRows } from "#pantry/import/attributes.ts";
 import { contentRows } from "#pantry/import/content.ts";
 import { htmlRows } from "#pantry/import/html.ts";
@@ -135,7 +136,7 @@ import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
  */
 interface NodeEntry {
   readonly ancestry: AncestryHandle;
-  readonly id: string;
+  readonly id: Uuid;
   readonly kind: NodeKindHandle;
 }
 
@@ -155,7 +156,7 @@ export type StandardTemplateHandle = (typeof StandardTemplate.handles)[number];
  */
 export interface ItemInput {
   readonly doc: XmlDocument;
-  readonly packageId: string;
+  readonly packageId: Uuid;
   readonly path: string;
   readonly resource: string;
   /**
@@ -184,7 +185,7 @@ const lexicalOf = (element: Element, name: string): Option.Option<string> =>
 const attributeOf = (
   rows: Rows,
   element: Element,
-  node: { readonly id: string; readonly kind: NodeKindHandle },
+  node: { readonly id: Uuid; readonly kind: NodeKindHandle },
   name: AttributeNameHandle,
   whiteSpace: WhiteSpace,
 ): { rows: Rows; value: Option.Option<string> } =>
@@ -228,7 +229,7 @@ const distinctLanguages = (
 export const documentLangRows = (
   rows: Rows,
   input: Pick<ItemInput, "packageId" | "resource" | "resourceLomHasGeneral">,
-  documentId: string,
+  documentId: Uuid,
   walked: readonly (readonly [Element, Option.Option<Element>])[],
 ): Rows =>
   Rows.add(
@@ -247,7 +248,7 @@ export const documentLangRows = (
  * The tool row of an item root and the arm that holds the strings it wrote, as read; none when it
  * wrote neither `tool-name` nor `tool-version`.
  */
-const toolRows = (rows: Rows, root: Element, tree: string): Rows => {
+const toolRows = (rows: Rows, root: Element, tree: Uuid): Rows => {
   const name = lexicalOf(root, "tool-name");
   const version = lexicalOf(root, "tool-version");
   if (Option.isSome(name) && Option.isSome(version)) {
@@ -315,7 +316,7 @@ const textOf = (element: Element): string =>
 interface Declared {
   readonly baseType: Option.Option<BaseTypeHandle>;
   readonly cardinality: Option.Option<CardinalityHandle>;
-  readonly id: string;
+  readonly id: Uuid;
   readonly shape: ShapeHandle;
 }
 
@@ -338,7 +339,7 @@ const declarationRows = Effect.fn("import.item.declarationRows")(function* decla
   rows: Rows,
   element: Element,
   node: NodeEntry,
-  documentId: string,
+  documentId: Uuid,
 ): Effect.fn.Return<DeclarationRows, ImportRefused> {
   const attributes = reader(rows, element, node);
   const text = Option.getOrElse(attributes.read("identifier", "collapse"), () => "");
@@ -484,7 +485,7 @@ const valueSetRows = (rows: Rows, element: Element, node: NodeEntry, owner: Decl
  */
 const valueArmRows: Record<
   Exclude<BaseTypeHandle, "boolean">,
-  (rows: Rows, id: string, text: string) => Rows
+  (rows: Rows, id: Uuid, text: string) => Rows
 > = {
   directedPair: (rows, id, text) =>
     Rows.add(rows, values.relations.DeclaredValueDirectedPair, [{ id, value: judgedLater(text) }]),
@@ -520,7 +521,7 @@ const valueArmRows: Record<
  */
 const booleanValueRow = Effect.fn("import.booleanValueRow")(function* booleanValueRow(
   rows: Rows,
-  id: string,
+  id: Uuid,
   text: string,
 ): Effect.fn.Return<Rows, ImportRefused> {
   const value = yield* closedOf(
@@ -542,7 +543,7 @@ const valueRows = Effect.fn("import.valueRows")(function* valueRows(
   rows: Rows,
   element: Element,
   node: NodeEntry,
-  set: { readonly id: string; readonly owner: Declared },
+  set: { readonly id: Uuid; readonly owner: Declared },
   position: bigint,
 ): Effect.fn.Return<Rows, ImportRefused> {
   const attributes = reader(rows, element, node);
@@ -593,7 +594,7 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
     rows: Rows,
     element: Element,
     node: NodeEntry,
-    item: { readonly adaptive: XsBooleanHandle; readonly documentId: string },
+    item: { readonly adaptive: XsBooleanHandle; readonly documentId: Uuid },
     declarations: ReadonlyMap<string, Declared>,
   ): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
     const { adaptive, documentId } = item;
@@ -716,7 +717,7 @@ const choiceRows = Effect.fn("import.choiceRows")(function* choiceRows(
   rows: Rows,
   element: Element,
   node: NodeEntry,
-  interaction: string,
+  interaction: Uuid,
 ): Effect.fn.Return<Rows, ImportRefused> {
   const attributes = reader(rows, element, node);
   const identifier = Option.getOrElse(attributes.read("identifier", "collapse"), () => "");
@@ -794,7 +795,7 @@ export const standardTemplate = (uri: string): Option.Option<StandardTemplateHan
  * The rows of the item's `qti-response-processing`: the node, its item, its template attributes
  * and the published template the `template` URI names.
  */
-const processingRows = (rows: Rows, element: Element, node: NodeEntry, item: string): Rows => {
+const processingRows = (rows: Rows, element: Element, node: NodeEntry, item: Uuid): Rows => {
   const attributes = reader(rows, element, node);
   const template = attributes.read("template", "collapse");
   const location = attributes.read("template-location", "collapse");
@@ -829,10 +830,10 @@ const processingRows = (rows: Rows, element: Element, node: NodeEntry, item: str
  */
 interface SemanticInput {
   readonly adaptive: XsBooleanHandle;
-  readonly documentId: string;
+  readonly documentId: Uuid;
   readonly nodes: NodeIndex;
   readonly positions: ReadonlyMap<string, bigint>;
-  readonly rootId: string;
+  readonly rootId: Uuid;
 }
 
 /**
@@ -877,7 +878,7 @@ export const semanticRows = Effect.fn("import.semanticRows")(function* semanticR
     }
   }
 
-  const setOwners = new Map<Element, { id: string; owner: Declared }>();
+  const setOwners = new Map<Element, { id: Uuid; owner: Declared }>();
   for (const [element, parent] of walked) {
     const node = nodes.get(element);
     const parentNode = Option.flatMapNullishOr(parent, (above) => nodes.get(above));
@@ -945,7 +946,7 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
   input: ItemInput,
   rows: Rows,
 ): Effect.fn.Return<
-  { rows: Rows; nodes: NodeIndex; documentId: string },
+  { rows: Rows; nodes: NodeIndex; documentId: Uuid },
   ImportRefused | UnmodeledVocabulary | ItemRefusal | ProcessingRefused
 > {
   const { doc, packageId, version } = input;
