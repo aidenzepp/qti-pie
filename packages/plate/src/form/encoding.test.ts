@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Duration, Effect, Option, Result } from "effect";
-import { decode, encode, entryName, partition } from "#plate/form/encoding.ts";
+import { checkInstance, decode, encode, entryName, partition } from "#plate/form/encoding.ts";
 import type { Binding, Entry, Malformed } from "#plate/form/encoding.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
@@ -320,7 +320,54 @@ describe("encode and decode", () => {
   );
 });
 
+describe("checkInstance", () => {
+  it("refuses an empty token first", () => {
+    assert.deepStrictEqual(checkInstance(""), Option.some("non-empty"));
+  });
+
+  it("refuses a character outside ASCII letters, digits, _, ., : and -", () => {
+    for (const token of ["a b", "«r1»", "q1/2", "é"]) {
+      assert.deepStrictEqual(checkInstance(token), Option.some("characters"), token);
+    }
+  });
+
+  it("refuses a trailing - and a --, which would let a chrome id meet an authored id", () => {
+    for (const token of ["ab-", "a--b", "-", "--"]) {
+      assert.deepStrictEqual(checkInstance(token), Option.some("id-boundary"), token);
+    }
+  });
+
+  it("admits React's useId forms, a lowercase UUID and a plain token", () => {
+    for (const token of ["_r_1_", ":r1:", "q1", "a.b", instance, crypto.randomUUID()]) {
+      assert.deepStrictEqual(checkInstance(token), Option.none(), token);
+    }
+  });
+});
+
 describe("partition", () => {
+  it("takes an entry as this instance's for any valid token, by the <instance>. prefix", () => {
+    const own: Entry = ["q1.RESPONSE", "A"];
+    assert.deepStrictEqual(partition([own], "q1").own, [own]);
+
+    const react: Entry = ["_r_1_.RESPONSE", "A"];
+    assert.deepStrictEqual(partition([react], "_r_1_").own, [react]);
+  });
+
+  it("takes a longer token's entry as a host field, not as this instance's", () => {
+    const longer: Entry = ["q10.RESPONSE", "A"];
+    assert.deepStrictEqual(partition([longer], "q1"), { foreign: [], host: [longer], own: [] });
+  });
+
+  it("takes another UUID's entry as foreign, and a name with no dot as a host field", () => {
+    const foreign: Entry = [entryName(otherInstance, "RESPONSE"), "B"];
+    const bare: Entry = ["RESPONSE", "C"];
+    assert.deepStrictEqual(partition([foreign, bare], "q1"), {
+      foreign: [foreign],
+      host: [bare],
+      own: [],
+    });
+  });
+
   it("detects a foreign key and sets a host field apart", () => {
     const own: Entry = [entryName(instance, "RESPONSE"), "choiceA"];
     const foreign: Entry = [entryName(otherInstance, "RESPONSE"), "choiceB"];

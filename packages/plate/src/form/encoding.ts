@@ -96,11 +96,62 @@ export class Malformed extends Data.TaggedError("Malformed")<{
 }
 
 /**
+ * The requirements an instance token meets, in the order {@link checkInstance} checks them.
+ *
+ * - `non-empty`: it holds at least one character.
+ * - `characters`: every character is an ASCII letter, a digit, `_`, `.`, `:` or `-`, which an `id`,
+ *   an IDREFS list and a form entry name all take, and none of which is whitespace.
+ * - `id-boundary`: it does not end in `-` and holds no `--`. The renderer's ids are
+ *   `<instance>-<segment>-…` (`scopedId`) and an authored id is `<instance>--<id>` (`authoredId`),
+ *   so a token that broke this would let one instance's part id equal another's authored id: `ab-`
+ *   with `status` and `ab` with an authored `status` both give `ab--status`.
+ */
+export const instanceRequirements = ["non-empty", "characters", "id-boundary"] as const;
+
+/**
+ * A requirement an instance token meets: one of {@link instanceRequirements}.
+ */
+export type InstanceRequirement = (typeof instanceRequirements)[number];
+
+/**
+ * The characters an instance token is made of: ASCII letters, digits, `_`, `.`, `:` and `-`.
+ */
+const tokenCharacters = /^[\w.:-]*$/u;
+
+/**
+ * Whether a token meets each requirement, one check per requirement.
+ */
+const meets: Readonly<Record<InstanceRequirement, (token: string) => boolean>> = {
+  characters: (token) => tokenCharacters.test(token),
+  "id-boundary": (token) => !token.endsWith("-") && !token.includes("--"),
+  "non-empty": (token) => token !== "",
+};
+
+/**
+ * Check an instance token: an opaque token, unique per page, that scopes an item instance's ids
+ * and entry names.
+ *
+ * A lowercase UUID passes, as do React's `useId()` forms `_r_1_` (React 19.2 and later) and `:r1:`
+ * (React 18 and 19.0); React 19.1's `«r1»` does not, so its caller passes a token of their own.
+ *
+ * @example
+ *   checkInstance("_r_1_"); // Option.none()
+ *   checkInstance("ab-"); // Option.some("id-boundary")
+ *
+ * @param token The token an author passes as the instance.
+ * @returns The first of {@link instanceRequirements} the token breaks, or none when it meets them
+ *   all.
+ */
+export const checkInstance = (token: string): Option.Option<InstanceRequirement> =>
+  Array.findFirst(instanceRequirements, (requirement) => !meets[requirement](token));
+
+/**
  * Name the form entry a response posts under in one item instance.
  *
  * The OD-2 placeholder: changing the wire name is this one edit.
  *
- * @param instance The item instance key, a lowercase UUID.
+ * @param instance The item instance token, one {@link checkInstance} passes, such as a lowercase
+ *   UUID.
  * @param response The response declaration's identifier.
  * @returns `<instance>.<response>`.
  */
@@ -321,28 +372,32 @@ export interface Partition {
 }
 
 /**
- * An entry name an item instance gives: a UUID, a dot, then the rest of the name.
+ * An entry name another item instance gives when its token is the UUID `render` draws: a UUID, a
+ * dot, then the rest of the name.
  */
-const instanceName =
-  /^(?<key>[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12})\./u;
+const drawnInstanceName =
+  /^[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12}\./u;
 
 /**
  * Split posted entries into this instance's, other instances', and the host's.
  *
+ * Only a drawn token has a shape, so a UUID is the one other instance this can recognise; another
+ * instance with a token of its own posts what reads as host fields here.
+ *
  * @param entries The posted entries, in order.
- * @param instance This item instance's key.
- * @returns The entries in posted order, by owner: a name `<uuid>.<anything>` is this instance's
- *   when the UUID is `instance` and a foreign instance's otherwise; every other name is a host
- *   field.
+ * @param instance This item instance's token, any that {@link checkInstance} passes.
+ * @returns The entries in posted order, by owner: a name beginning `<instance>.` is this
+ *   instance's; else a name `<uuid>.<anything>` is a foreign instance's; every other name is a
+ *   host field.
  */
 export const partition = (entries: readonly Entry[], instance: string): Partition => {
+  const prefix = `${instance}.`;
   const owner = ([name]: Entry): keyof Partition => {
-    const key = instanceName.exec(name)?.groups?.["key"];
-    if (key === undefined) {
-      return "host";
+    if (name.startsWith(prefix)) {
+      return "own";
     }
 
-    return key === instance ? "own" : "foreign";
+    return drawnInstanceName.test(name) ? "foreign" : "host";
   };
 
   return {
