@@ -9,7 +9,7 @@ release will: built `dist/`, real dependency versions, the `grizzle` binary and 
 | `bjornpagen-grizzle-1.0.0-beta.0.tgz`        | `@bjornpagen/grizzle`        | `packages/grizzle` at `65203c443fa969cc47c539666a998436595f42fe` |
 | `bjornpagen-grizzle-engine-1.0.0-beta.0.tgz` | `@bjornpagen/grizzle-engine` | `packages/engine` at the same commit                             |
 
-`@gr8des/qti` depends on the grizzle tarball by path. The grizzle tarball depends on the engine by version, so
+`@qti-pie/pantry` depends on the grizzle tarball by path. The grizzle tarball depends on the engine by version, so
 `pnpm-workspace.yaml` overrides that version to the engine tarball. Both list `effect` as a peer, so the workspace keeps
 one copy of Effect.
 
@@ -26,5 +26,5 @@ Update the commit in the table above.
 
 ## When grizzle is published
 
-Replace the `file:` dependency in `packages/qti/package.json` with the published version, remove the engine override
+Replace the `file:` dependency in `packages/pantry/package.json` with the published version, remove the engine override
 from `pnpm-workspace.yaml`, and delete this directory. Imports do not change.
