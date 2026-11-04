@@ -370,6 +370,41 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
     }),
   );
 
+  suite.effect(
+    "a test resource's LOM general yields one LomObjectIdentifier and one LomObjectTitle",
+    () =>
+      Effect.gen(function* testLom() {
+        const { rows } = yield* importManifest(inject("fixtures").simple, [
+          'type="imsqti_item_xmlv3p0"',
+          'type="imsqti_test_xmlv3p0"',
+        ]);
+
+        const identifier = only(Rows.of(rows, LomObjectIdentifier));
+        assert.strictEqual(identifier.collapsed, "choice");
+        assert.strictEqual(identifier.resource, "choice");
+        assert.strictEqual(identifier.type, "imsqti_test_xmlv3p0");
+
+        const title = only(Rows.of(rows, LomObjectTitle));
+        assert.strictEqual(title.collapsed, "Unattended Luggage");
+        assert.strictEqual(title.lom, identifier.lom);
+        assert.strictEqual(title.type, "imsqti_test_xmlv3p0");
+      }),
+  );
+
+  suite.effect.each(["imsqti_section_xmlv3p0", "imsqti_stimulus_xmlv3p0"])(
+    "a %s resource's LOM general yields no LomObjectIdentifier or LomObjectTitle",
+    (type) =>
+      Effect.gen(function* otherLom() {
+        const { rows } = yield* importManifest(inject("fixtures").simple, [
+          'type="imsqti_item_xmlv3p0"',
+          `type="${type}"`,
+        ]);
+
+        assert.deepStrictEqual(Rows.of(rows, LomObjectIdentifier), []);
+        assert.deepStrictEqual(Rows.of(rows, LomObjectTitle), []);
+      }),
+  );
+
   suite.effect("simple yields two LomFormat rows under each technical", () =>
     Effect.gen(function* simpleFormats() {
       const { rows } = yield* importManifest(inject("fixtures").simple);
