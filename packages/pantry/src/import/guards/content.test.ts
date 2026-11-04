@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import { ContentGuardRefusal, contentGuards } from "#pantry/import/guards/content.ts";
 import { ItemGuardRefusal, itemGuards } from "#pantry/import/guards/item.ts";
 import { itemRows } from "#pantry/import/item.ts";
+import { testRows } from "#pantry/import/test.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import {
   ChoiceIdentifier,
@@ -88,6 +89,75 @@ const refusal = (rule: ContentGuardRefusal["rule"], version: SchemaVersionHandle
 
     return failure;
   });
+
+/**
+ * Run the content guards over the rows of a test document whose part is `part`, failing with
+ * their refusal.
+ */
+const guardedTest = (part: string) =>
+  Effect.gen(function* guardedTestDocument() {
+    const text = `<qti-assessment-test xmlns="${itemNamespace}" identifier="T" title="A test">${part}</qti-assessment-test>`;
+    const doc = yield* readXml(new TextEncoder().encode(text));
+    const built = yield* testRows(
+      {
+        doc,
+        packageId,
+        path: "test.xml",
+        resource: "test",
+        resourceLomHasGeneral: false,
+        resourceType: "imsqti_test_xmlv3p0",
+        version: "3.0.1",
+      },
+      Rows.empty(),
+    );
+
+    return yield* contentGuards(built.rows);
+  });
+
+const partOf = (children: string) =>
+  `<qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual">${children}</qti-test-part>`;
+
+const sectionOf = (children: string) =>
+  `<qti-assessment-section identifier="S" title="S" visible="true">${children}</qti-assessment-section>`;
+
+const sessionControl = `<qti-item-session-control max-attempts="1"/>`;
+
+const adaptive = `<qti-adaptive-selection><qti-adaptive-engine-ref identifier="E" href="e.xml"/></qti-adaptive-selection>`;
+
+const itemRef = `<qti-assessment-item-ref identifier="I" href="i.xml"/>`;
+
+const orderingRefusal = (part: string) =>
+  Effect.gen(function* orderingRefusalOfTest() {
+    const failure = yield* Effect.flip(guardedTest(part));
+
+    assert.instanceOf(failure, ContentGuardRefusal);
+    assert.strictEqual(failure.rule, "ordering");
+  });
+
+describe("contentGuards ordering of the test kinds", () => {
+  it.effect("refuses a part whose item session control follows a section", () =>
+    Effect.gen(function* partOrder() {
+      yield* orderingRefusal(partOf(`${sectionOf(itemRef)}${sessionControl}`));
+      yield* guardedTest(partOf(`${sessionControl}${sectionOf(itemRef)}`));
+    }),
+  );
+
+  it.effect("refuses a section holding an adaptive selection and a selection", () =>
+    Effect.gen(function* adaptiveAndSelection() {
+      yield* orderingRefusal(partOf(sectionOf(`${adaptive}<qti-selection select="1"/>${itemRef}`)));
+      yield* guardedTest(partOf(sectionOf(`${adaptive}${itemRef}`)));
+      yield* guardedTest(partOf(sectionOf(`<qti-selection select="1"/>${itemRef}`)));
+    }),
+  );
+
+  it.effect("refuses a section whose ordering precedes its selection", () =>
+    Effect.gen(function* selectionOrder() {
+      yield* orderingRefusal(
+        partOf(sectionOf(`<qti-ordering shuffle="true"/><qti-selection select="1"/>${itemRef}`)),
+      );
+    }),
+  );
+});
 
 const cell = "<tr><td>a</td></tr>";
 
@@ -555,6 +625,29 @@ describe("contentGuards on a test root", () => {
       const rows = yield* rowsOf("3.0.1", `<p xml:lang="fr">a</p>`);
       yield* contentGuards(asTest(rows));
       yield* refusalOfRows("lang-set-copy", asTest(edited(rows, DocumentLang, () => [])), "fr");
+    }),
+  );
+});
+
+/**
+ * `rows` with each item body read as a stimulus body.
+ */
+const asStimulus = (rows: Rows): Rows =>
+  edited(rows, Node, (facts) =>
+    facts.map((fact) =>
+      fact.kind === "qti-item-body" ? { ...fact, kind: "qti-stimulus-body" as const } : fact,
+    ),
+  );
+
+describe("itemGuards body-empty on a stimulus body", () => {
+  it.effect("refuses a qti-stimulus-body with no element child", () =>
+    Effect.gen(function* emptyStimulusBody() {
+      yield* itemGuards(asStimulus(yield* rowsOf("3.0.1", `<p>a</p>`)));
+
+      const failure = yield* Effect.flip(itemGuards(asStimulus(yield* rowsOf("3.0.1", ""))));
+
+      assert.instanceOf(failure, ItemGuardRefusal);
+      assert.strictEqual(failure.rule, "body-empty");
     }),
   );
 });
