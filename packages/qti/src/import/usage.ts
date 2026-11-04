@@ -16,8 +16,9 @@ import {
   treeRows,
   typedAttribute,
   UnmodeledVocabulary,
+  valueText,
 } from "#qti/import/tree.ts";
-import type { ImportRefused } from "#qti/import/refusal.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
 import {
   GlossaryUri,
@@ -232,6 +233,22 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
 
     return Option.some(processed.value);
   };
+  const exact = (
+    element: Element,
+    name: AttributeNameHandle,
+  ): Effect.Effect<Option.Option<string>, ImportRefused> => {
+    const lexical = written(element, name);
+    if (Option.isSome(lexical) && /^[ \t\n\r]|[ \t\n\r]$/u.test(lexical.value)) {
+      return Effect.fail(
+        new ImportRefused({
+          detail: `the ${name} attribute of ud:${element.local} is ${JSON.stringify(lexical.value)}, which has whitespace before or after the value; an attribute value is read exactly as written, so remove the spaces, tabs or line ends around it.`,
+          rule: "usage-lexical",
+        }),
+      );
+    }
+
+    return Effect.succeed(read(element, name, "collapse"));
+  };
   const optional = <R extends AnyRelation>(
     relation: R,
     element: Element,
@@ -305,18 +322,19 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
       (known) => Option.isSome(lexical) && known === lexical.value,
     );
     if (baseType !== undefined) {
+      const typed = valueText(baseType, replace(content));
       add(ud.UsageValueBaseType, [{ baseType, id: node.id }]);
-      add(ud.UsageTypedValue, [{ baseType, id: node.id, value: judgedLater(replace(content)) }]);
+      add(ud.UsageTypedValue, [{ baseType, id: node.id, value: judgedLater(typed) }]);
       if (baseType === "boolean") {
         const literal = yield* closedOf(
           BooleanLiteral.handles,
-          replace(content),
+          typed,
           "usage-typed-value",
           'a boolean ud:value with baseType="boolean"',
         );
         add(ud.relations.UsageTypedValueBoolean, [{ id: node.id, value: literal }]);
       } else {
-        built = typedArmRows[baseType](built, node.id, replace(content));
+        built = typedArmRows[baseType](built, node.id, typed);
       }
     }
   });
@@ -330,7 +348,9 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
       return;
     }
 
-    const defaultValue = read(element, "defaultValue", "collapse");
+    const defaultValue = yield* exact(element, "defaultValue");
+    const lowerBound = yield* exact(element, "lowerBound");
+    const upperBound = yield* exact(element, "upperBound");
     add(ud.UsageMapping, [
       {
         defaultValue: UsageMappingScore(Option.getOrElse(defaultValue, () => "0")),
@@ -342,14 +362,17 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
       add(ud.DeclaredDefaultValue, [{ node: node.id }]);
     }
 
-    optional(ud.UsageMappingLowerBound, element, "lowerBound", "collapse", (id, value) => ({
-      node: id,
-      value: UsageMappingScore(value),
-    }));
-    optional(ud.UsageMappingUpperBound, element, "upperBound", "collapse", (id, value) => ({
-      node: id,
-      value: UsageMappingScore(value),
-    }));
+    if (Option.isSome(lowerBound)) {
+      add(ud.UsageMappingLowerBound, [
+        { node: node.id, value: UsageMappingScore(lowerBound.value) },
+      ]);
+    }
+
+    if (Option.isSome(upperBound)) {
+      add(ud.UsageMappingUpperBound, [
+        { node: node.id, value: UsageMappingScore(upperBound.value) },
+      ]);
+    }
 
     for (const entry of elementChildren(element)) {
       const entryNode = nodes.get(entry);
@@ -357,13 +380,12 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
         continue;
       }
 
+      const mappedValue = yield* exact(entry, "mappedValue");
       add(ud.UsageMapEntry, [
         {
           id: entryNode.id,
           mapKey: judgedLater(Option.getOrElse(read(entry, "mapKey", "replace"), () => "")),
-          mappedValue: UsageMappingScore(
-            Option.getOrElse(read(entry, "mappedValue", "collapse"), () => ""),
-          ),
+          mappedValue: UsageMappingScore(Option.getOrElse(mappedValue, () => "")),
           mapping: node.id,
           position: positionOf(entryNode.id),
         },

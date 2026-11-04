@@ -87,6 +87,16 @@ const refusal = (rows: Rows) =>
     return failure;
   });
 
+/**
+ * An edit that writes `name="value"` on the document's first `mapping` element.
+ */
+const onMapping = (name: string, value: string) => (text: string) =>
+  text.replace(/<mapping\b[^>]*>/u, (tag) =>
+    tag
+      .replace(new RegExp(`\\s${name}="[^"]*"`, "u"), "")
+      .replace("<mapping", `<mapping ${name}="${value}"`),
+  );
+
 const firstOf = <T>(list: readonly T[]): T => Option.getOrThrow(Option.fromNullishOr(list[0]));
 
 layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (suite) => {
@@ -511,6 +521,74 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
         Rows.of(rows, ud.relations.UsageTypedValueBoolean).map((row) => row.value),
         ["true"],
       );
+    }),
+  );
+
+  suite.effect("a typed value's element text is read trimmed, a string's is kept", () =>
+    Effect.gen(function* paddedTyped() {
+      const { rows } = yield* rowsOf("usage3", (text) =>
+        text.replace("<value>0.87</value>", '<value baseType="boolean"> true </value>'),
+      );
+      const stringRows = (yield* rowsOf("usage3", (text) =>
+        text.replace("<value>0.87</value>", '<value baseType="string"> a </value>'),
+      )).rows;
+
+      assert.deepStrictEqual(
+        Rows.of(rows, ud.relations.UsageTypedValueBoolean).map((row) => row.value),
+        ["true"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(stringRows, ud.relations.UsageTypedValueString).map((row) => row.value),
+        [" a "],
+      );
+      yield* usageGuards(rows);
+      yield* usageGuards(stringRows);
+    }),
+  );
+
+  suite.effect("a padded float is written trimmed beside its untrimmed UsageValue", () =>
+    Effect.gen(function* paddedFloat() {
+      const { rows } = yield* rowsOf("usage3-float-padded");
+      const value = firstOf(Rows.of(rows, ud.UsageValue));
+      const arm = firstOf(Rows.of(rows, ud.relations.UsageTypedValueFloat));
+      const edited = changed(rows, ud.relations.UsageTypedValueFloat, (list) =>
+        list.map((row) =>
+          row.id === arm.id ? { ...row, value: judgedLater<typeof row.value>(" 0.87 ") } : row,
+        ),
+      );
+
+      assert.strictEqual(arm.value, "0.87");
+      assert.strictEqual(firstOf(Rows.of(rows, ud.UsageTypedValue)).value, "0.87");
+      assert.strictEqual(value.value, " 0.87 ");
+      assert.strictEqual(value.collapsed, "0.87");
+      yield* usageGuards(rows);
+      assert.strictEqual((yield* refusal(edited)).rule, "typed-copy");
+    }),
+  );
+
+  suite.effect("an outer-padded ud:mapping or ud:mapEntry score attribute is usage-lexical", () =>
+    Effect.gen(function* paddedScores() {
+      const edits = [
+        (text: string) => text.replace('mappedValue="412.5267"', 'mappedValue=" 412.5267"'),
+        onMapping("defaultValue", " 0"),
+        onMapping("lowerBound", "1 "),
+        onMapping("upperBound", "&#9;1"),
+      ];
+
+      for (const edit of edits) {
+        const failure = yield* Effect.flip(rowsOf("usage3", edit));
+
+        assert.instanceOf(failure, ImportRefused);
+        assert.strictEqual(failure.rule, "usage-lexical");
+      }
+    }),
+  );
+
+  suite.effect("usage3-padded's tab inside a mapKey is still admitted", () =>
+    Effect.gen(function* tabbedKey() {
+      const { rows } = yield* rowsOf("usage3-padded");
+
+      assert.isTrue(Rows.of(rows, ud.UsageMapEntry).some((row) => row.mapKey === "a b"));
     }),
   );
 
