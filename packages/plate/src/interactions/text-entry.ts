@@ -10,7 +10,8 @@
  * submits the author's form by implicit submission.
  *
  * {@link validateTextEntry} checks a value the caller decoded. Only tier (a) applies: a posted text
- * that is not a number of the bound base type.
+ * that is not a number of the bound base type, or a file or a second entry, which a native text
+ * input never posts.
  *
  * @module
  */
@@ -24,7 +25,7 @@ import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
 import { message } from "#plate/messages.ts";
-import type { Locale } from "#plate/messages.ts";
+import type { Locale, MessageKey } from "#plate/messages.ts";
 import type { TextEntryInteraction } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { EmitState, Payload, TextEntryPayload, ValidationMessage } from "#plate/payload.ts";
@@ -218,6 +219,20 @@ export const renderTextEntry = (
   });
 
 /**
+ * The message a string Text Entry gives for each reason its entry did not decode.
+ *
+ * `decode` keeps a string as posted, so for one it fails only as `file` (a file was posted) or
+ * `single-many` (the entry was posted twice), each with its own message. `number` and `identifier`,
+ * which only a {@link Malformed} built by hand carries here, get the general `notAccepted`.
+ */
+const stringRefusals = {
+  file: "malformedFile",
+  identifier: "notAccepted",
+  number: "notAccepted",
+  "single-many": "malformedSingleMany",
+} as const satisfies Readonly<Record<Malformed["reason"], MessageKey>>;
+
+/**
  * Check a Text Entry's response, which the caller decoded.
  *
  * The caller decodes the posted entry with `decode`, under the entry name its form gave the
@@ -225,7 +240,10 @@ export const renderTextEntry = (
  * the value, or the {@link Malformed} `decode` gave. The entry name so stays the caller's, while
  * the message and the author's override stay here.
  *
- * - A {@link Malformed} input: `malformedNumber`, or the author's `data-patternmask-message`.
+ * - A {@link Malformed} input of an `integer` or `float` binding: `malformedNumber`, or the author's
+ *   `data-patternmask-message` when set.
+ * - A {@link Malformed} input of a `string` binding: the message of its reason, `malformedFile` for a
+ *   file and `malformedSingleMany` for a second entry.
  * - A decoded value: nothing more to check. `pattern-mask` never reaches here, as the item marks it
  *   unsupported.
  *
@@ -238,14 +256,16 @@ export const validateTextEntry = (
   interaction: TextEntryInteraction,
   input: Value | Malformed,
   configuration: Configuration,
-): readonly ValidationMessage[] =>
-  input instanceof Malformed
-    ? [
-        {
-          response: interaction.response,
-          text: Option.getOrElse(interaction.patternMaskMessage, () =>
-            message(configuration.locale, "malformedNumber"),
-          ),
-        },
-      ]
-    : [];
+): readonly ValidationMessage[] => {
+  if (!(input instanceof Malformed)) {
+    return [];
+  }
+
+  const { locale } = configuration;
+  const words =
+    interaction.baseType === "string"
+      ? message(locale, stringRefusals[input.reason])
+      : Option.getOrElse(interaction.patternMaskMessage, () => message(locale, "malformedNumber"));
+
+  return [{ response: interaction.response, text: words }];
+};
