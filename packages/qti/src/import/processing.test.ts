@@ -9,7 +9,7 @@ import { itemRows } from "#qti/import/item.ts";
 import { documentRows, readRows } from "#qti/import/package.ts";
 import { ProcessingRefused, processingRows } from "#qti/import/processing.ts";
 import type { ProcessingInput } from "#qti/import/processing.ts";
-import { ruleOfError } from "#qti/import/refusal.ts";
+import { ImportRefused, ruleOfError } from "#qti/import/refusal.ts";
 import { rptemplateRows } from "#qti/import/rptemplate.ts";
 import { Rows, treeRows } from "#qti/import/tree.ts";
 import type { NodeIndex } from "#qti/import/tree.ts";
@@ -17,11 +17,22 @@ import type { Language } from "#qti/processing/ast.ts";
 import { emptyEnvironment, environmentOf, withDeclarations } from "#qti/processing/env.ts";
 import type { DeclarationEntry, Environment, Mode } from "#qti/processing/env.ts";
 import { corpusPackage, materializeProcessing } from "#qti/processing/fixtures.ts";
+import {
+  CustomOperatorClassName,
+  CustomOperatorDefinitionUri,
+  ExpressionCoords,
+  ExpressionIntegerOrVariable,
+  ManifestIdentifier,
+  PackagePath,
+  RecordFieldIdentifier,
+  VariableReference,
+  XIncludeUri,
+} from "#qti/schema/contracts.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import * as expression from "#qti/schema/expression.ts";
 import * as attributed from "#qti/schema/expression-attributes.ts";
 import { expressionKinds } from "#qti/schema/kinds/asi.ts";
-import { AttributeLexical, Edge, TextNode } from "#qti/schema/node.ts";
+import { AttributeLexical, AttributeSpelling, Edge, TextNode } from "#qti/schema/node.ts";
 import type { NodeKindHandle, RootKindHandle } from "#qti/schema/node.ts";
 import * as processing from "#qti/schema/processing.ts";
 import * as ruleSchema from "#qti/schema/rule.ts";
@@ -150,6 +161,15 @@ const prepareBody = (body: string, options: Parameters<typeof prepare>[1], attri
 
     return yield* prepare(yield* readXml(new TextEncoder().encode(text)), options);
   });
+
+/**
+ * A `qti-equal-rounded` whose `figures` is the text given, prepared for the writer.
+ */
+const equalRoundedOver = (figures: string) =>
+  prepareBody(
+    `<qti-set-outcome-value identifier="SCORE"><qti-equal-rounded rounding-mode="decimalPlaces" figures="${figures}"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value></qti-equal-rounded></qti-set-outcome-value>`,
+    { language: "response", mode: "test", rootKind: "item" },
+  );
 
 const itemOptions = { language: "response", mode: "item", rootKind: "item" } as const;
 
@@ -492,17 +512,18 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       assert.deepStrictEqual(
         rounded.find((row) => row.id === byReference),
         {
-          figures: "COUNT",
           figuresKind: "ref",
           figuresValue: 0n,
           id: byReference,
           roundingMode: "decimalPlaces",
         },
       );
+      assert.deepStrictEqual(of(built, attributed.EqualRoundedFiguresRef), [
+        { identifier: VariableReference("COUNT"), node: byReference },
+      ]);
       assert.deepStrictEqual(
         rounded.find((row) => row.id === byNumber),
         {
-          figures: "3",
           figuresKind: "literal",
           figuresValue: 3n,
           id: byNumber,
@@ -512,12 +533,14 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       assert.deepStrictEqual(of(built, attributed.DeclaredRoundingMode), [{ node: byReference }]);
 
       const integer = idAt(prepared, "qti-random-integer");
-      assert.deepStrictEqual(of(built, attributed.RandomInteger), [{ id: integer, max: "10" }]);
+      assert.deepStrictEqual(of(built, attributed.RandomInteger), [
+        { id: integer, max: ExpressionIntegerOrVariable("10") },
+      ]);
       assert.deepStrictEqual(of(built, attributed.RandomIntegerMin), [
-        { node: integer, value: "0" },
+        { node: integer, value: ExpressionIntegerOrVariable("0") },
       ]);
       assert.deepStrictEqual(of(built, attributed.RandomIntegerStep), [
-        { node: integer, value: "2" },
+        { node: integer, value: ExpressionIntegerOrVariable("2") },
       ]);
 
       const float = idAt(prepared, "qti-random-float");
@@ -525,7 +548,13 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       assert.deepStrictEqual(of(built, attributed.RandomFloatMin), [{ node: float, value: "0" }]);
 
       const anyN = idAt(prepared, "qti-any-n");
-      assert.deepStrictEqual(of(built, attributed.AnyN), [{ id: anyN, max: "COUNT", min: "1" }]);
+      assert.deepStrictEqual(of(built, attributed.AnyN), [
+        {
+          id: anyN,
+          max: ExpressionIntegerOrVariable("COUNT"),
+          min: ExpressionIntegerOrVariable("1"),
+        },
+      ]);
     }),
   );
 
@@ -535,7 +564,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       const built = yield* processed(prepared);
       const id = (kind: string, index = 0) => idAt(prepared, kind, index);
       assert.deepStrictEqual(of(built, attributed.Inside), [
-        { coords: "0,0,10,10", id: id("qti-inside"), shape: "rect" },
+        { coords: ExpressionCoords("0,0,10,10"), id: id("qti-inside"), shape: "rect" },
       ]);
       assert.deepStrictEqual(of(built, attributed.StringMatch), [
         { caseSensitive: "true", id: id("qti-string-match"), substring: "false" },
@@ -569,7 +598,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       ]);
       assert.deepStrictEqual(of(built, attributed.RoundTo), [
         {
-          figures: "2",
           figuresKind: "literal",
           figuresValue: 2n,
           id: id("qti-round-to"),
@@ -577,24 +605,26 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
         },
       ]);
       assert.deepStrictEqual(of(built, attributed.Index), [
-        { id: id("qti-index"), n: "1", nKind: "literal", nValue: 1n },
+        { id: id("qti-index"), nKind: "literal", nValue: 1n },
       ]);
       assert.deepStrictEqual(of(built, attributed.Repeat), [
         {
           id: id("qti-repeat"),
-          numberRepeats: "2",
           numberRepeatsKind: "literal",
           numberRepeatsValue: 2n,
         },
       ]);
       assert.deepStrictEqual(of(built, attributed.FieldValue), [
-        { fieldIdentifier: "level", id: id("qti-field-value") },
+        { fieldIdentifier: RecordFieldIdentifier("level"), id: id("qti-field-value") },
       ]);
       assert.deepStrictEqual(of(built, attributed.CustomOperatorClass), [
-        { node: id("qti-custom-operator"), value: "com.example.Operator" },
+        { node: id("qti-custom-operator"), value: CustomOperatorClassName("com.example.Operator") },
       ]);
       assert.deepStrictEqual(of(built, attributed.CustomOperatorDefinition), [
-        { node: id("qti-custom-operator"), value: "https://example.org/operators/custom" },
+        {
+          node: id("qti-custom-operator"),
+          value: CustomOperatorDefinitionUri("https://example.org/operators/custom"),
+        },
       ]);
       assert.deepStrictEqual(of(built, AttributeLexical), []);
     }),
@@ -717,7 +747,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       ]);
       assert.deepStrictEqual(of(built, attributed.EqualRounded), [
         {
-          figures: "3",
           figuresKind: "literal",
           figuresValue: 3n,
           id: id("qti-equal-rounded"),
@@ -730,24 +759,189 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
     }),
   );
 
-  suite.effect("keeps a padded reference in a mixed union as a literal the pattern refuses", () =>
+  suite.effect("keeps a plus-signed figures as its number, its spelling and no reference", () =>
+    Effect.gen(function* plusSigned() {
+      const prepared = yield* equalRoundedOver("+3");
+      const built = yield* processed(prepared);
+      const node = idAt(prepared, "qti-equal-rounded");
+      assert.deepStrictEqual(of(built, attributed.EqualRounded), [
+        { figuresKind: "literal", figuresValue: 3n, id: node, roundingMode: "decimalPlaces" },
+      ]);
+      assert.deepStrictEqual(of(built, attributed.EqualRoundedFiguresRef), []);
+      assert.deepStrictEqual(
+        of(built, AttributeSpelling).map((row) => [row.node, row.attribute, row.value]),
+        [[node, "figures", "+3"]],
+      );
+    }),
+  );
+
+  suite.effect("keeps a figures that names a variable as one reference row and the number 0", () =>
+    Effect.gen(function* digits() {
+      const prepared = yield* equalRoundedOver("digits");
+      const built = yield* processed(prepared);
+      const node = idAt(prepared, "qti-equal-rounded");
+      assert.deepStrictEqual(of(built, attributed.EqualRounded), [
+        { figuresKind: "ref", figuresValue: 0n, id: node, roundingMode: "decimalPlaces" },
+      ]);
+      assert.deepStrictEqual(of(built, attributed.EqualRoundedFiguresRef), [
+        { identifier: VariableReference("digits"), node },
+      ]);
+      assert.deepStrictEqual(of(built, AttributeSpelling), []);
+    }),
+  );
+
+  suite.effect("refuses a figures that is neither an integer nor a variable before any row", () =>
+    Effect.gen(function* notAnInteger() {
+      const prepared = yield* equalRoundedOver("3x");
+      const failure = yield* Effect.flip(processed(prepared));
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "attribute-lexical");
+    }),
+  );
+
+  suite.effect("refuses a qti-index n and a qti-repeat number-repeats that is no integer", () =>
+    Effect.gen(function* notAnIntegerCount() {
+      for (const body of [
+        `<qti-index n="2.5"><qti-variable identifier="RESPONSE"/></qti-index>`,
+        `<qti-repeat number-repeats="2.5"><qti-base-value base-type="integer">1</qti-base-value></qti-repeat>`,
+      ]) {
+        const prepared = yield* prepareBody(
+          `<qti-set-outcome-value identifier="SCORE">${body}</qti-set-outcome-value>`,
+          { language: "response", mode: "test", rootKind: "item" },
+        );
+        const failure = yield* Effect.flip(processed(prepared));
+        assert.instanceOf(failure, ImportRefused);
+        assert.strictEqual(failure.rule, "P6");
+      }
+    }),
+  );
+
+  suite.effect("refuses a padded reference in a mixed union as a literal that is no integer", () =>
     Effect.gen(function* paddedReference() {
       const prepared = yield* prepareBody(
         `<qti-set-outcome-value identifier="SCORE"><qti-equal-rounded rounding-mode="decimalPlaces" figures=" COUNT "><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value></qti-equal-rounded></qti-set-outcome-value>`,
         { language: "response", mode: "test", rootKind: "item" },
       );
-      const built = yield* processed(prepared);
-      assert.deepStrictEqual(of(built, attributed.EqualRounded), [
-        {
-          figures: " COUNT ",
-          figuresKind: "literal",
-          figuresValue: 0n,
-          id: idAt(prepared, "qti-equal-rounded"),
-          roundingMode: "decimalPlaces",
-        },
-      ]);
-      assert.deepStrictEqual(of(built, AttributeLexical), []);
+      const failure = yield* Effect.flip(processed(prepared));
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "attribute-lexical");
     }),
+  );
+
+  suite.effect(
+    "refuses a closed attribute outside its roster under P6 before any row is written",
+    () =>
+      Effect.gen(function* outsideRoster() {
+        const floats =
+          '<qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value>';
+        const cases: readonly (readonly [string, string])[] = [
+          [
+            "tolerance-mode approximate",
+            `<qti-equal tolerance-mode="approximate">${floats}</qti-equal>`,
+          ],
+          [
+            "equal-rounded rounding-mode",
+            `<qti-equal-rounded rounding-mode="places" figures="2">${floats}</qti-equal-rounded>`,
+          ],
+          [
+            "round-to rounding-mode",
+            '<qti-round-to rounding-mode="places" figures="2"><qti-base-value base-type="float">1.5</qti-base-value></qti-round-to>',
+          ],
+          [
+            "inside shape",
+            '<qti-inside shape="square" coords="0,0,5,5"><qti-base-value base-type="point">1 1</qti-base-value></qti-inside>',
+          ],
+          ["math-constant name", '<qti-math-constant name="tau"/>'],
+          [
+            "math-operator name",
+            '<qti-math-operator name="sign"><qti-base-value base-type="float">1</qti-base-value></qti-math-operator>',
+          ],
+          [
+            "stats-operator name",
+            '<qti-stats-operator name="median"><qti-variable identifier="LIST"/></qti-stats-operator>',
+          ],
+          [
+            "test-variables base-type with padding",
+            '<qti-sum><qti-test-variables variable-identifier="SCORE" base-type=" integer "/></qti-sum>',
+          ],
+        ];
+        for (const [name, operator] of cases) {
+          const prepared = yield* prepareBody(
+            `<qti-set-outcome-value identifier="SCORE">${operator}</qti-set-outcome-value>`,
+            { language: "outcome", mode: "test", rootKind: "test" },
+          );
+          const failure = yield* Effect.flip(processed(prepared));
+          assert.instanceOf(failure, ImportRefused, name);
+          assert.strictEqual(failure.rule, "P6", name);
+        }
+      }),
+  );
+
+  suite.effect("refuses an xs:boolean attribute outside its roster under attribute-lexical", () =>
+    Effect.gen(function* outsideBoolean() {
+      const floats =
+        '<qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value>';
+      const strings =
+        '<qti-base-value base-type="string">a</qti-base-value><qti-base-value base-type="string">b</qti-base-value>';
+      const cases: readonly (readonly [string, string])[] = [
+        [
+          "include-lower-bound",
+          `<qti-equal tolerance-mode="exact" include-lower-bound="yes">${floats}</qti-equal>`,
+        ],
+        [
+          "include-upper-bound",
+          `<qti-equal tolerance-mode="exact" include-upper-bound="no">${floats}</qti-equal>`,
+        ],
+        [
+          "string-match case-sensitive",
+          `<qti-string-match case-sensitive="yes">${strings}</qti-string-match>`,
+        ],
+        [
+          "string-match substring",
+          `<qti-string-match case-sensitive="true" substring="maybe">${strings}</qti-string-match>`,
+        ],
+        [
+          "substring case-sensitive",
+          `<qti-substring case-sensitive="yes">${strings}</qti-substring>`,
+        ],
+      ];
+      for (const [name, operator] of cases) {
+        const prepared = yield* prepareBody(
+          `<qti-set-outcome-value identifier="SCORE">${operator}</qti-set-outcome-value>`,
+          { language: "outcome", mode: "test", rootKind: "test" },
+        );
+        const failure = yield* Effect.flip(processed(prepared));
+        assert.instanceOf(failure, ImportRefused, name);
+        assert.strictEqual(failure.rule, "attribute-lexical", name);
+      }
+    }),
+  );
+
+  suite.effect("refuses an xi:include parse outside xml and text under P6", () =>
+    Effect.gen(function* outsideParse() {
+      const prepared = yield* prepareBody(
+        '<xi:include href="shared-rules.xml" parse="binary"/>',
+        itemOptions,
+        ' xmlns:xi="http://www.w3.org/2001/XInclude"',
+      );
+      const failure = yield* Effect.flip(processed(prepared));
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "P6");
+    }),
+  );
+
+  suite.effect(
+    "refuses a tolerance-mode that is padded, as the importer case the lease case was",
+    () =>
+      Effect.gen(function* paddedMode() {
+        const prepared = yield* prepareBody(
+          '<qti-set-outcome-value identifier="SCORE"><qti-equal tolerance-mode=" exact"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value></qti-equal></qti-set-outcome-value>',
+          { language: "outcome", mode: "test", rootKind: "test" },
+        );
+        const failure = yield* Effect.flip(processed(prepared));
+        assert.instanceOf(failure, ImportRefused);
+        assert.strictEqual(failure.rule, "P6");
+      }),
   );
 
   suite.effect("refuses a missing identifier naming P5 before any row", () =>
@@ -901,7 +1095,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
 
       const testVariables = idAt(prepared, "qti-test-variables");
       assert.deepStrictEqual(of(built, attributed.TestVariables), [
-        { id: testVariables, variableIdentifier: "SCORE" },
+        { id: testVariables, variableIdentifier: VariableReference("SCORE") },
       ]);
       assert.deepStrictEqual(of(built, attributed.TestVariablesBaseType), [
         { node: testVariables, value: "float" },
@@ -1070,7 +1264,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       const fallback = idAt(prepared, "fallback");
       assert.deepStrictEqual(of(built, ruleSchema.XInclude), [{ id: include }]);
       assert.deepStrictEqual(of(built, ruleSchema.XIncludeHref), [
-        { node: include, value: "shared-rules.xml" },
+        { node: include, value: XIncludeUri("shared-rules.xml") },
       ]);
       assert.deepStrictEqual(of(built, ruleSchema.XIncludeParse), [
         { node: include, value: "xml" },
@@ -1098,7 +1292,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       const built = yield* processed(prepared);
       const include = idAt(prepared, "include");
       assert.deepStrictEqual(of(built, ruleSchema.XIncludeHref), [
-        { node: include, value: "rules.xml" },
+        { node: include, value: XIncludeUri("rules.xml") },
       ]);
       assert.deepStrictEqual(of(built, ruleSchema.XIncludeParse), [
         { node: include, value: "text" },
@@ -1357,17 +1551,29 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/guards/processi
         ),
         "P32",
       );
+    }),
+  );
 
-      const padded = yield* prepareFixture("guards", "padded-processing", itemOptions);
-      const paddedRows = yield* processed(padded);
-      const rounded = of(paddedRows, attributed.EqualRounded);
-      assert.isAbove(rounded.length, 0);
+  suite.effect("P32 refuses an identifier literal that keeps its padding", () =>
+    Effect.gen(function* untrimmedLiteral() {
+      const prepared = yield* prepareBody(
+        '<qti-set-outcome-value identifier="completionStatus"><qti-base-value base-type="identifier"> completed </qti-base-value></qti-set-outcome-value>',
+        itemOptions,
+      );
+      const built = yield* processed(prepared);
+      const literals = of(built, processing.relations.LiteralIdentifier);
+      assert.deepStrictEqual(
+        literals.map((row) => row.value),
+        ["completed"],
+      );
       assert.strictEqual(
         yield* guardRefusal(
           withRows(
-            paddedRows,
-            attributed.EqualRounded,
-            rounded.map((row) => ({ ...row, figuresValue: row.figuresValue + 1n })),
+            built,
+            processing.relations.LiteralIdentifier,
+            // SAFETY: the brand only marks the column's type; the guard under test reads the text.
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+            literals.map((row) => ({ ...row, value: " completed " as typeof row.value })),
           ),
         ),
         "P32",
@@ -1415,8 +1621,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/rptemplate.ts",
       assert.deepStrictEqual(documents[0], {
         id: built.documentId,
         package: packageId,
-        path: "rptemplates/CC2_match.xml",
-        resource: "CC2_match",
+        path: PackagePath("rptemplates/CC2_match.xml"),
+        resource: ManifestIdentifier("CC2_match"),
         resourceType: "imsqti_rptemplate_xmlv3p0",
         root: "rptemplate",
         version: "3.0.0",
@@ -1537,6 +1743,100 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts read
 
         assert.isAbove(read.rows.size, 0);
       }
+    }),
+  );
+
+  suite.effect("reads the padded-literal package with its identifier trimmed", () =>
+    Effect.gen(function* paddedLiteral() {
+      const read = yield* readRows(yield* materializeProcessing("padded-literal"));
+
+      const values = Rows.of(read.rows, processing.relations.LiteralIdentifier).map((row) =>
+        String(row.value),
+      );
+
+      assert.include(values, "ChoiceA");
+      for (const value of values) {
+        assert.strictEqual(value, value.trim());
+      }
+    }),
+  );
+
+  suite.effect("refuses a boolean qti-base-value outside true and false under P7", () =>
+    Effect.gen(function* outsideLiteral() {
+      for (const spelling of ["yes", "1", "TRUE"]) {
+        const prepared = yield* prepareBody(
+          `<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="boolean">${spelling}</qti-base-value></qti-set-outcome-value>`,
+          { language: "outcome", mode: "test", rootKind: "test" },
+        );
+        const failure = yield* Effect.flip(processed(prepared));
+
+        assert.instanceOf(failure, ImportRefused, spelling);
+        assert.strictEqual(failure.rule, "P7", spelling);
+      }
+    }),
+  );
+
+  suite.effect("writes a boolean qti-base-value of true or false in its arm", () =>
+    Effect.gen(function* insideLiteral() {
+      const prepared = yield* prepareBody(
+        '<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="boolean">false</qti-base-value></qti-set-outcome-value>',
+        { language: "outcome", mode: "test", rootKind: "test" },
+      );
+      const built = yield* processed(prepared);
+
+      assert.deepStrictEqual(
+        of(built, processing.relations.LiteralBoolean).map((row) => row.value),
+        ["false"],
+      );
+    }),
+  );
+
+  suite.effect("reads a padded boolean qti-base-value as its handle", () =>
+    Effect.gen(function* paddedBoolean() {
+      const prepared = yield* prepareBody(
+        '<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="boolean"> true </qti-base-value></qti-set-outcome-value>',
+        { language: "outcome", mode: "test", rootKind: "test" },
+      );
+      const built = yield* processed(prepared);
+
+      assert.deepStrictEqual(
+        of(built, processing.relations.LiteralBoolean).map((row) => row.value),
+        ["true"],
+      );
+    }),
+  );
+
+  suite.effect("reads a padded identifier qti-base-value trimmed and a string one as written", () =>
+    Effect.gen(function* paddedLiterals() {
+      const identifiers = [
+        [" completed ", "completed"],
+        ["\n    ChoiceA\n  ", "ChoiceA"],
+      ];
+      for (const [written, read] of identifiers) {
+        const prepared = yield* prepareBody(
+          `<qti-set-outcome-value identifier="completionStatus"><qti-base-value base-type="identifier">${written}</qti-base-value></qti-set-outcome-value>`,
+          itemOptions,
+        );
+        const built = yield* processed(prepared);
+
+        assert.deepStrictEqual(
+          of(built, processing.relations.LiteralIdentifier).map((row) => String(row.value)),
+          [read],
+        );
+      }
+
+      const prepared = yield* prepareBody(
+        '<qti-set-outcome-value identifier="SCORE"><qti-string-match case-sensitive="true"><qti-base-value base-type="string"> a </qti-base-value><qti-base-value base-type="string">a</qti-base-value></qti-string-match></qti-set-outcome-value>',
+        { language: "outcome", mode: "test", rootKind: "test" },
+      );
+      const built = yield* processed(prepared);
+
+      assert.deepStrictEqual(
+        of(built, processing.relations.LiteralString)
+          .map((row) => row.value)
+          .toSorted(),
+        [" a ", "a"],
+      );
     }),
   );
 });

@@ -3,9 +3,9 @@
  * attribute the source wrote marked by a row of its own, and the optional values a choice
  * interaction or choice may carry.
  *
- * A lexical column keeps an attribute as read; the typed `maxChoicesN` and `minChoicesN` are copies
- * the importer writes, defaulting to 1 and 0. Whether a marker row exists says whether the source
- * wrote the attribute, so an export omits what the source omitted.
+ * The typed `maxChoicesN` and `minChoicesN` hold the integer the attribute writes, defaulting to 1
+ * and 0; a spelling that differs from it is an `AttributeSpelling` row. Whether a marker row exists
+ * says whether the source wrote the attribute, so an export omits what the source omitted.
  *
  * A simple choice's owner is carried by `Edge.(child, parent)` and by `Admission`, because a
  * `qti-simple-choice` is also valid under `qti-order-interaction` in a later phase; a containment
@@ -41,9 +41,11 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
+import { Orientation, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as item from "#qti/schema/item.ts";
 import * as node from "#qti/schema/node.ts";
+import { ChoiceIdentifier, VariableReference } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { fbFlagged } from "#qti/schema/seed/ancestry.ts";
 
@@ -51,16 +53,6 @@ import { fbFlagged } from "#qti/schema/seed/ancestry.ts";
  * The `Ancestry` handles that sit inside feedback: `fbFlagged`, typed as handles of the roster.
  */
 const feedbackAncestries = node.Ancestry.handles.filter((handle) => fbFlagged.includes(handle));
-
-/**
- * An `xs:boolean` attribute's lexical form.
- */
-const xsBoolean = str.regex(patterns.xsBoolean);
-
-/**
- * An `xs:nonNegativeInteger` attribute's lexical form.
- */
-const xsNonNegativeInteger = str.regex(patterns.xsNonNegativeInteger);
 
 /**
  * An `xs:normalizedString` attribute's value, as the typed column holds it after replacement.
@@ -73,33 +65,21 @@ const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNor
 const ncName = str.regex(patterns.ncName);
 
 /**
- * A choice interaction's `orientation`: `vertical` or `horizontal`.
- */
-const orientation = str.regex(patterns.orientation);
-
-/**
- * A choice's `show-hide`: `show` or `hide`.
- */
-const showHide = str.regex(patterns.showHide);
-
-/**
  * A `qti-choice-interaction`.
  *
- * `maxChoices` and `minChoices` are the attributes as written; `maxChoicesN` and `minChoicesN` are
- * their integer values.
+ * `maxChoicesN` and `minChoicesN` are the integer values of `max-choices` and `min-choices`; a
+ * spelling the package writes non-canonically is kept in an `AttributeSpelling` row.
  */
 export const ChoiceInteraction = relation(
   "ChoiceInteraction",
   {
     id: uuid,
-    maxChoices: xsNonNegativeInteger,
     maxChoicesN: pg.bigint,
-    minChoices: xsNonNegativeInteger,
     minChoicesN: pg.bigint,
-    orientation,
+    orientation: closedId(Orientation),
     responseIdentifier: ncName,
     rootKind: closedId(node.RootKind),
-    shuffle: xsBoolean,
+    shuffle: closedId(XsBoolean),
   },
   ["id"],
 );
@@ -110,11 +90,11 @@ export const ChoiceInteraction = relation(
 export const SimpleChoice = relation(
   "SimpleChoice",
   {
-    fixed: xsBoolean,
+    fixed: closedId(XsBoolean),
     id: uuid,
-    identifier: ncName,
+    identifier: ChoiceIdentifier,
     interaction: uuid,
-    showHide,
+    showHide: closedId(ShowHide),
   },
   ["id"],
 );
@@ -172,7 +152,7 @@ export const ChoiceInteractionMaxSelectionsMessage = relation(
  */
 export const SimpleChoiceTemplateIdentifier = relation(
   "SimpleChoiceTemplateIdentifier",
-  { node: uuid, value: ncName },
+  { node: uuid, value: VariableReference },
   ["node"],
 );
 
@@ -197,7 +177,7 @@ export const BindingFit = relation(
 export const InteractionBinding = relation(
   "InteractionBinding",
   {
-    adaptive: xsBoolean,
+    adaptive: closedId(XsBoolean),
     ancestry: closedId(node.Ancestry),
     document: uuid,
     interactionKind: closedId(node.NodeKind),

@@ -87,8 +87,9 @@ const variantNames = [
 ] as const;
 
 /**
- * The fixtures phase 1 itself defines: `simple`, its seven variants and the eleven hand-broken
- * packages. Later phases append names to `fixtureNames`, so these are checked as a subset.
+ * The fixtures phase 1 itself defines: `simple`, its seven variants and the eleven hand-edited
+ * packages (two of them admitted). Later phases append names to `fixtureNames`, so these are
+ * checked as a subset.
  */
 const phaseOneNames = [
   "simple",

@@ -8,12 +8,14 @@ import { inject } from "vitest";
 import { itemRows } from "#qti/import/item.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { readXml } from "#qti/xml/read.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as interaction from "#qti/schema/interaction.ts";
 import * as item from "#qti/schema/item.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { fbFlagged } from "#qti/schema/seed/ancestry.ts";
 import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
@@ -104,6 +106,15 @@ describe("interaction", () => {
     );
   });
 
+  it("holds the choice bounds as integers only, with no lexical column beside them", () => {
+    const fields = Object.keys(interaction.ChoiceInteraction.fields);
+
+    assert.include(fields, "maxChoicesN");
+    assert.include(fields, "minChoicesN");
+    assert.notInclude(fields, "maxChoices");
+    assert.notInclude(fields, "minChoices");
+  });
+
   it("adds exactly the choice and binding relations", () => {
     assert.deepStrictEqual(Object.keys(interaction.relations).toSorted(), added);
   });
@@ -185,13 +196,21 @@ describe("interaction", () => {
     }
   });
 
-  it("types the selection messages as xsNormalizedString and the orientation by its pattern", () => {
-    const { ChoiceInteraction, ChoiceInteractionMinSelectionsMessage } = interaction.relations;
+  it("types the selection messages as xsNormalizedString", () => {
+    const { ChoiceInteractionMinSelectionsMessage } = interaction.relations;
     assert.strictEqual(
       ChoiceInteractionMinSelectionsMessage.fields.value.pattern.source,
       patterns.xsNormalizedString,
     );
-    assert.strictEqual(ChoiceInteraction.fields.orientation.pattern.source, patterns.orientation);
+  });
+
+  it("types the choice and binding attributes as closedId of their rosters", () => {
+    const { ChoiceInteraction, InteractionBinding, SimpleChoice } = interaction.relations;
+    assert.strictEqual(ChoiceInteraction.fields.orientation.roster, rosters.Orientation);
+    assert.strictEqual(ChoiceInteraction.fields.shuffle.roster, rosters.XsBoolean);
+    assert.strictEqual(SimpleChoice.fields.fixed.roster, rosters.XsBoolean);
+    assert.strictEqual(SimpleChoice.fields.showHide.roster, rosters.ShowHide);
+    assert.strictEqual(InteractionBinding.fields.adaptive.roster, rosters.XsBoolean);
   });
 
   it("keys each arm by its NodeKind handle and by id", () => {
@@ -459,4 +478,22 @@ layer(NodeServices.layer, { excludeTestServices: true })("the importer's copies"
       assert.strictEqual(binding?.adaptive, "false");
     }),
   );
+});
+
+describe("contracts (interaction)", () => {
+  it("types SimpleChoiceTemplateIdentifier.value VariableReference", () => {
+    assert.strictEqual(
+      interaction.SimpleChoiceTemplateIdentifier.fields.value.name,
+      contracts.VariableReference.name,
+    );
+  });
+});
+
+describe("contracts (interaction)", () => {
+  it("types SimpleChoice.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(
+      interaction.SimpleChoice.fields.identifier.name,
+      contracts.ChoiceIdentifier.name,
+    );
+  });
 });

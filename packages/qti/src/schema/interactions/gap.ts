@@ -4,10 +4,9 @@
  * carry. The attributes and children are the inventory entries of the same names.
  *
  * Each interaction carries the typed bounds `maxAssociationsN` and `minAssociationsN` as NOT NULL
- * columns, 1 and 0 where the source omits the attribute, beside the optional lexical
- * `max-associations` and `min-associations` relations and the markers that say the source wrote
- * them. A gap text or gap image carries `matchMax` as written and the typed `matchMaxN` and
- * `matchMinN`.
+ * columns, 1 and 0 where the source omits the attribute, beside the markers that say the source
+ * wrote them; a non-canonical spelling of either is an `AttributeSpelling` row. A gap text or gap
+ * image carries the typed `matchMaxN` and `matchMinN` the same way.
  *
  * A `qti-gap` sits in the text of a gap-match interaction at any depth, so its `interaction` is the
  * owner copy the importer writes and no containment into `Edge` can hold for it. A gap text or gap
@@ -32,20 +31,12 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
+import { ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { matchBoundsCheck } from "#qti/schema/choices.ts";
 import { GapMatchBinding, InteractionBinding } from "#qti/schema/interaction.ts";
 import { Edge, Node, RootKind } from "#qti/schema/node.ts";
+import { ChoiceIdentifier, ContainerWidth } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-
-/**
- * An `xs:boolean` attribute's lexical form.
- */
-const xsBoolean = str.regex(patterns.xsBoolean);
-
-/**
- * An `xs:nonNegativeInteger` attribute's lexical form.
- */
-const xsNonNegativeInteger = str.regex(patterns.xsNonNegativeInteger);
 
 /**
  * An `xs:string` attribute's value, whitespace preserved.
@@ -63,11 +54,6 @@ const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNor
 const ncName = str.regex(patterns.ncName);
 
 /**
- * A choice's `show-hide`: `show` or `hide`.
- */
-const showHide = str.regex(patterns.showHide);
-
-/**
  * A `qti-gap-match-interaction`.
  */
 export const GapMatchInteraction = relation(
@@ -78,7 +64,7 @@ export const GapMatchInteraction = relation(
     minAssociationsN: pg.bigint,
     responseIdentifier: ncName,
     rootKind: closedId(RootKind),
-    shuffle: xsBoolean,
+    shuffle: closedId(XsBoolean),
   },
   ["id"],
 );
@@ -105,25 +91,30 @@ export const GraphicGapMatchInteraction = relation(
  */
 export const Gap = relation(
   "Gap",
-  { id: uuid, identifier: ncName, interaction: uuid, required: xsBoolean, showHide },
+  {
+    id: uuid,
+    identifier: ChoiceIdentifier,
+    interaction: uuid,
+    required: closedId(XsBoolean),
+    showHide: closedId(ShowHide),
+  },
   ["id"],
 );
 
 /**
- * A `qti-gap-text`, by its identifier within the interaction that owns it. `matchMax` is the
- * attribute as written and `matchMaxN` and `matchMinN` the integer values the match bounds are
- * checked on. `showHide` is `show` where the source omits it.
+ * A `qti-gap-text`, by its identifier within the interaction that owns it. `matchMaxN` and
+ * `matchMinN` are the integer values the match bounds are checked on. `showHide` is `show` where
+ * the source omits it.
  */
 export const GapText = relation(
   "GapText",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ChoiceIdentifier,
     interaction: uuid,
-    matchMax: xsNonNegativeInteger,
     matchMaxN: pg.bigint,
     matchMinN: pg.bigint,
-    showHide,
+    showHide: closedId(ShowHide),
   },
   ["id"],
 );
@@ -135,12 +126,11 @@ export const GapImg = relation(
   "GapImg",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ChoiceIdentifier,
     interaction: uuid,
-    matchMax: xsNonNegativeInteger,
     matchMaxN: pg.bigint,
     matchMinN: pg.bigint,
-    showHide,
+    showHide: closedId(ShowHide),
   },
   ["id"],
 );
@@ -153,8 +143,7 @@ export const DeclaredGapMatchShuffle = relation("DeclaredGapMatchShuffle", { nod
 ]);
 
 /**
- * The source wrote `max-associations` on this gap-match interaction. Its `min-associations` has no
- * default, so the optional relation alone says whether the source wrote it.
+ * The source wrote `max-associations` on this gap-match interaction.
  */
 export const DeclaredGapMatchMaxAssociations = relation(
   "DeclaredGapMatchMaxAssociations",
@@ -163,8 +152,7 @@ export const DeclaredGapMatchMaxAssociations = relation(
 );
 
 /**
- * The source wrote `max-associations` on this graphic gap-match interaction. Its `min-associations`
- * has no default, so the optional relation alone says whether the source wrote it.
+ * The source wrote `max-associations` on this graphic gap-match interaction.
  */
 export const DeclaredGraphicGapMatchMaxAssociations = relation(
   "DeclaredGraphicGapMatchMaxAssociations",
@@ -195,22 +183,11 @@ export const DeclaredGapTextShowHide = relation("DeclaredGapTextShowHide", { nod
 export const DeclaredGapImgShowHide = relation("DeclaredGapImgShowHide", { node: uuid }, ["node"]);
 
 /**
- * A gap-match interaction's `max-associations` as written, when it has one.
+ * The source wrote `min-associations` on this gap-match interaction.
  */
-export const GapMatchMaxAssociations = relation(
-  "GapMatchMaxAssociations",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
-
-/**
- * A gap-match interaction's `min-associations` as written, when it has one.
- */
-export const GapMatchMinAssociations = relation(
-  "GapMatchMinAssociations",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
+export const GapMatchMinAssociations = relation("GapMatchMinAssociations", { node: uuid }, [
+  "node",
+]);
 
 /**
  * A gap-match interaction's `data-min-selections-message`, when it has one.
@@ -235,25 +212,16 @@ export const GapMatchMaxSelectionsMessage = relation(
  */
 export const GapMatchChoicesContainerWidth = relation(
   "GapMatchChoicesContainerWidth",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid, value: ContainerWidth },
   ["node"],
 );
 
 /**
- * A graphic gap-match interaction's `max-associations` as written, when it has one.
- */
-export const GraphicGapMatchMaxAssociations = relation(
-  "GraphicGapMatchMaxAssociations",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
-
-/**
- * A graphic gap-match interaction's `min-associations` as written, when it has one.
+ * The source wrote `min-associations` on this graphic gap-match interaction.
  */
 export const GraphicGapMatchMinAssociations = relation(
   "GraphicGapMatchMinAssociations",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid },
   ["node"],
 );
 
@@ -280,27 +248,19 @@ export const GraphicGapMatchMaxSelectionsMessage = relation(
  */
 export const GraphicGapMatchChoicesContainerWidth = relation(
   "GraphicGapMatchChoicesContainerWidth",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid, value: ContainerWidth },
   ["node"],
 );
 
 /**
- * A gap text's `match-min` as written, when it has one.
+ * The source wrote `match-min` on this gap text.
  */
-export const GapTextMatchMin = relation(
-  "GapTextMatchMin",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
+export const GapTextMatchMin = relation("GapTextMatchMin", { node: uuid }, ["node"]);
 
 /**
- * A gap image's `match-min` as written, when it has one.
+ * The source wrote `match-min` on this gap image.
  */
-export const GapImgMatchMin = relation(
-  "GapImgMatchMin",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
+export const GapImgMatchMin = relation("GapImgMatchMin", { node: uuid }, ["node"]);
 
 /**
  * A gap image's `object-label`, when it has one.
@@ -354,7 +314,6 @@ export const relations = {
   GapImgTop,
   GapMatchChoicesContainerWidth,
   GapMatchInteraction,
-  GapMatchMaxAssociations,
   GapMatchMaxSelectionsMessage,
   GapMatchMinAssociations,
   GapMatchMinSelectionsMessage,
@@ -362,7 +321,6 @@ export const relations = {
   GapTextMatchMin,
   GraphicGapMatchChoicesContainerWidth,
   GraphicGapMatchInteraction,
-  GraphicGapMatchMaxAssociations,
   GraphicGapMatchMaxSelectionsMessage,
   GraphicGapMatchMinAssociations,
   GraphicGapMatchMinSelectionsMessage,
@@ -407,7 +365,6 @@ export const rules = [
   matchBoundsCheck("GapImgBounds", GapImg),
   contained(on(DeclaredGapMatchShuffle, "node"), on(GapMatchInteraction, "id")),
   contained(on(DeclaredGapMatchMaxAssociations, "node"), on(GapMatchInteraction, "id")),
-  contained(on(GapMatchMaxAssociations, "node"), on(GapMatchInteraction, "id")),
   contained(on(GapMatchMinAssociations, "node"), on(GapMatchInteraction, "id")),
   contained(on(GapMatchMinSelectionsMessage, "node"), on(GapMatchInteraction, "id")),
   contained(on(GapMatchMaxSelectionsMessage, "node"), on(GapMatchInteraction, "id")),
@@ -416,7 +373,6 @@ export const rules = [
     on(DeclaredGraphicGapMatchMaxAssociations, "node"),
     on(GraphicGapMatchInteraction, "id"),
   ),
-  contained(on(GraphicGapMatchMaxAssociations, "node"), on(GraphicGapMatchInteraction, "id")),
   contained(on(GraphicGapMatchMinAssociations, "node"), on(GraphicGapMatchInteraction, "id")),
   contained(on(GraphicGapMatchMinSelectionsMessage, "node"), on(GraphicGapMatchInteraction, "id")),
   contained(on(GraphicGapMatchMaxSelectionsMessage, "node"), on(GraphicGapMatchInteraction, "id")),

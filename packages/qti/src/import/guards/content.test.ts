@@ -4,19 +4,23 @@ import { Effect } from "effect";
 import { ContentGuardRefusal, contentGuards } from "#qti/import/guards/content.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { Rows } from "#qti/import/tree.ts";
+import {
+  ChoiceIdentifier,
+  CitationUri,
+  ClassList,
+  HyperlinkUri,
+  ManifestIdentifier,
+} from "#qti/schema/contracts.ts";
 import { AttributeIdref, HeadersTarget, NodeClass, NodeLabel } from "#qti/schema/attributes.ts";
 import { A, BlockquoteCite } from "#qti/schema/html/text.ts";
-import { ChoiceInteraction } from "#qti/schema/interaction.ts";
-import {
-  AssociableHotspot,
-  AssociableHotspotMatchMin,
-} from "#qti/schema/interactions/associate.ts";
-import { Gap } from "#qti/schema/interactions/gap.ts";
-import { HottextInteraction, HottextOwner } from "#qti/schema/interactions/hot.ts";
+import { AssociableHotspot } from "#qti/schema/interactions/associate.ts";
+import { Gap, GapText } from "#qti/schema/interactions/gap.ts";
+import { HottextOwner } from "#qti/schema/interactions/hot.ts";
 import { OrderInteraction } from "#qti/schema/interactions/order.ts";
+import { MediaInteraction } from "#qti/schema/interactions/other.ts";
 import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
 import { ResourceLom } from "#qti/schema/metadata.ts";
-import { AttributeLexical, Node } from "#qti/schema/node.ts";
+import { AttributeLexical, AttributeSpelling, Node } from "#qti/schema/node.ts";
 import type { SchemaVersionHandle } from "#qti/schema/node.ts";
 import { PrintedVariableVarRef } from "#qti/schema/template.ts";
 import { readXml } from "#qti/xml/read.ts";
@@ -273,67 +277,55 @@ const gapMatchOf = (identifier: string) =>
   gapMatch(`${gapText}<p>a <qti-gap identifier="${identifier}"/></p>`);
 
 describe("contentGuards typed-copy", () => {
-  it.effect("refuses a maxChoicesN that differs from max-choices", () =>
-    Effect.gen(function* maxChoicesCopy() {
-      const body = choiceInteraction(choices);
-      const rows = yield* rowsOf("3.0.1", body);
-      yield* contentGuards(rows);
-      yield* refusalOfRows(
-        "typed-copy",
-        edited(rows, ChoiceInteraction, (facts) =>
-          facts.map((fact) => ({ ...fact, maxChoicesN: 2n })),
-        ),
-        "maxChoicesN",
-      );
-    }),
-  );
-
-  it.effect("refuses a typed count that differs from its optional lexical row or default", () =>
-    Effect.gen(function* optionalCount() {
-      const written = yield* rowsOf(
-        "3.0.1",
-        `<qti-hottext-interaction response-identifier="PAIRS" max-choices="3">${hottext("H")}</qti-hottext-interaction>`,
-      );
-      yield* contentGuards(written);
-      yield* refusalOfRows(
-        "typed-copy",
-        edited(written, HottextInteraction, (facts) =>
-          facts.map((fact) => ({ ...fact, maxChoicesN: 2n })),
-        ),
-        "maxChoicesN",
-      );
-
-      const omitted = yield* rowsOf("3.0.1", hottextInteraction(hottext("H")));
-      yield* refusalOfRows(
-        "typed-copy",
-        edited(omitted, HottextInteraction, (facts) =>
-          facts.map((fact) => ({ ...fact, minChoicesN: 4n })),
-        ),
-        "minChoicesN",
-      );
-    }),
-  );
-
-  it.effect("refuses an associable hotspot's match-min that differs from its typed count", () =>
-    Effect.gen(function* hotspotMatchMin() {
+  it.effect("refuses a media interaction's plays spelling that differs from its typed count", () =>
+    Effect.gen(function* mediaPlays() {
       const rows = yield* rowsOf(
         "3.0.1",
-        `<qti-graphic-associate-interaction response-identifier="PAIRS"><img src="a.png" alt="a"/><qti-associable-hotspot identifier="H1" shape="rect" coords="0,0,5,5" match-max="1" match-min="1"/><qti-associable-hotspot identifier="H2" shape="rect" coords="6,6,9,9" match-max="1"/></qti-graphic-associate-interaction>`,
+        `<qti-media-interaction response-identifier="RESPONSE" autostart="false" min-plays="+1">${media}</qti-media-interaction>`,
       );
       yield* contentGuards(rows);
       yield* refusalOfRows(
         "typed-copy",
-        edited(rows, AssociableHotspotMatchMin, (facts) =>
-          facts.map((fact) => ({ ...fact, value: "2" })),
+        edited(rows, MediaInteraction, (facts) =>
+          facts.map((fact) => ({ ...fact, minPlaysN: 4n })),
         ),
-        "matchMinN",
+        "does not parse to the typed value",
       );
+    }),
+  );
+
+  it.effect(
+    "refuses an associable hotspot's match-min spelling that differs from its typed count",
+    () =>
+      Effect.gen(function* hotspotMatchMin() {
+        const rows = yield* rowsOf(
+          "3.0.1",
+          `<qti-graphic-associate-interaction response-identifier="PAIRS"><img src="a.png" alt="a"/><qti-associable-hotspot identifier="H1" shape="rect" coords="0,0,5,5" match-max="1" match-min="03"/><qti-associable-hotspot identifier="H2" shape="rect" coords="6,6,9,9" match-max="1"/></qti-graphic-associate-interaction>`,
+        );
+        yield* contentGuards(rows);
+        yield* refusalOfRows(
+          "typed-copy",
+          edited(rows, AssociableHotspot, (facts) =>
+            facts.map((fact) => ({ ...fact, matchMinN: 1n })),
+          ),
+          "does not parse to the typed value",
+        );
+      }),
+  );
+
+  it.effect("refuses a gap text's match-max spelling that differs from its typed count", () =>
+    Effect.gen(function* gapTextMatchMax() {
+      const rows = yield* rowsOf(
+        "3.0.1",
+        gapMatch(
+          `<qti-gap-text identifier="G1" match-max="+2">a</qti-gap-text><p>a <qti-gap identifier="X"/></p>`,
+        ),
+      );
+      yield* contentGuards(rows);
       yield* refusalOfRows(
         "typed-copy",
-        edited(rows, AssociableHotspot, (facts) =>
-          facts.map((fact) => ({ ...fact, matchMinN: 1n })),
-        ),
-        "matchMinN",
+        edited(rows, GapText, (facts) => facts.map((fact) => ({ ...fact, matchMaxN: 3n }))),
+        "does not parse to the typed value",
       );
     }),
   );
@@ -383,13 +375,50 @@ describe("contentGuards typed-copy", () => {
     }),
   );
 
+  it.effect("refuses a spelling that does not parse to the typed value beside it", () =>
+    Effect.gen(function* spellingOther() {
+      const rows = yield* rowsOf("3.0.1", choiceInteraction(choices));
+      yield* contentGuards(rows);
+      yield* refusalOfRows(
+        "typed-copy",
+        Rows.add(rows, AttributeSpelling, [
+          {
+            attribute: "max-choices",
+            kind: "qti-choice-interaction",
+            node: nodeId(rows, "qti-choice-interaction"),
+            value: "+6",
+          },
+        ]),
+        "does not parse to the typed value",
+      );
+    }),
+  );
+
+  it.effect("admits a spelling that parses to the typed value, beside its lexical row", () =>
+    Effect.gen(function* spellingAndLexical() {
+      const rows = yield* rowsOf("3.0.1", choiceInteraction(choices));
+      const node = nodeId(rows, "qti-choice-interaction");
+      yield* contentGuards(
+        Rows.add(
+          Rows.add(rows, AttributeSpelling, [
+            { attribute: "max-choices", kind: "qti-choice-interaction", node, value: "+1" },
+          ]),
+          AttributeLexical,
+          [{ attribute: "max-choices", kind: "qti-choice-interaction", node, value: " +1 " }],
+        ),
+      );
+    }),
+  );
+
   it.effect("refuses an AttributeLexical row that processes to a different value", () =>
     Effect.gen(function* lexicalOtherValue() {
       const rows = yield* rowsOf("3.0.1", `<p class=" a  b ">a</p>`);
       yield* contentGuards(rows);
       yield* refusalOfRows(
         "typed-copy",
-        edited(rows, NodeClass, (facts) => facts.map((fact) => ({ ...fact, value: "a c" }))),
+        edited(rows, NodeClass, (facts) =>
+          facts.map((fact) => ({ ...fact, value: ClassList("a c") })),
+        ),
         "processes to",
       );
     }),
@@ -407,7 +436,7 @@ describe("contentGuards typed-copy", () => {
       yield* contentGuards(rows);
       yield* refusalOfRows(
         "typed-copy",
-        edited(rows, A, (facts) => facts.map((fact) => ({ ...fact, href: "v" }))),
+        edited(rows, A, (facts) => facts.map((fact) => ({ ...fact, href: HyperlinkUri("v") }))),
         "processes to",
       );
     }),
@@ -421,7 +450,9 @@ describe("contentGuards typed-copy", () => {
         yield* contentGuards(rows);
         yield* refusalOfRows(
           "typed-copy",
-          edited(rows, BlockquoteCite, (facts) => facts.map((fact) => ({ ...fact, value: "d" }))),
+          edited(rows, BlockquoteCite, (facts) =>
+            facts.map((fact) => ({ ...fact, value: CitationUri("d") })),
+          ),
           "processes to",
         );
       }),
@@ -518,7 +549,11 @@ describe("contentGuards lang-set-copy", () => {
       yield* refusalOfRows(
         "lang-set-copy",
         Rows.add(rows, ResourceLomGeneral, [
-          { lom: "33333333-3333-4333-8333-333333333333", package: packageId, resource: "hand" },
+          {
+            lom: "33333333-3333-4333-8333-333333333333",
+            package: packageId,
+            resource: ManifestIdentifier("hand"),
+          },
         ]),
         "lomGeneral",
       );
@@ -532,13 +567,19 @@ describe("contentGuards lang-set-copy", () => {
         const rows = yield* rowsOf("3.0.1", `<p>a</p>`);
         const lom = "33333333-3333-4333-8333-333333333333";
         const withLom = Rows.add(rows, ResourceLom, [
-          { lom, metadata: lom, package: packageId, resource: "hand", type: "imsqti_item_xmlv3p0" },
+          {
+            lom,
+            metadata: lom,
+            package: packageId,
+            resource: ManifestIdentifier("hand"),
+            type: "imsqti_item_xmlv3p0",
+          },
         ]);
         yield* contentGuards(withLom);
         yield* refusalOfRows(
           "lang-set-copy",
           Rows.add(withLom, ResourceLomLanguageSet, [
-            { lom, package: packageId, resource: "hand", value: "en" },
+            { lom, package: packageId, resource: ManifestIdentifier("hand"), value: "en" },
           ]),
           "ResourceLomLanguageSet",
         );
@@ -590,7 +631,7 @@ describe("contentGuards owner-copy", () => {
         "owner-copy",
         Rows.add(rows, HottextOwner, [
           {
-            identifier: "H",
+            identifier: ChoiceIdentifier("H"),
             interaction: nodeId(rows, "qti-choice-interaction"),
             node: nodeId(rows, "qti-hottext"),
           },

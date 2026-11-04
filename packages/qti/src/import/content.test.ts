@@ -4,7 +4,14 @@ import { Effect, Exit, Option, Predicate } from "effect";
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { contentRows } from "#qti/import/content.ts";
 import type { DeclaredVariable } from "#qti/import/interactions.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows, treeRows } from "#qti/import/tree.ts";
+import {
+  PrintedVariableIntegerOrVariable,
+  RecordFieldIdentifier,
+  ShowHideIdentifier,
+  StylesheetUri,
+} from "#qti/schema/contracts.ts";
 import {
   ContextDeclarationArm,
   Declaration,
@@ -205,7 +212,7 @@ describe("contentRows", () => {
           document: documentId,
           identifier: "VAR",
           kind: "outcome",
-          node: idOf(bases.get("VAR")),
+          node: idOf(bases.get(PrintedVariableIntegerOrVariable("VAR"))),
         });
         assert.strictEqual(Rows.of(rows, PrintedVariableRef).length, 2);
       }),
@@ -272,10 +279,10 @@ describe("contentRows", () => {
         { node: idOf(written), value: "%.2f" },
       ]);
       assert.deepStrictEqual(Rows.of(full.rows, PrintedVariableIndex), [
-        { node: idOf(written), value: "VAR" },
+        { node: idOf(written), value: PrintedVariableIntegerOrVariable("VAR") },
       ]);
       assert.deepStrictEqual(Rows.of(full.rows, PrintedVariableField), [
-        { node: idOf(written), value: "x" },
+        { node: idOf(written), value: RecordFieldIdentifier("x") },
       ]);
       assert.deepStrictEqual(
         Rows.of(full.rows, PrintedVariableVarRef).map((ref) => [ref.attribute, ref.identifier]),
@@ -324,15 +331,15 @@ describe("contentRows", () => {
       const blocks = new Map(Rows.of(rows, FeedbackBlock).map((row) => [row.identifier, row]));
       const inlines = new Map(Rows.of(rows, FeedbackInline).map((row) => [row.identifier, row]));
 
-      assert.strictEqual(blocks.get("a")?.showHide, "show");
-      assert.strictEqual(blocks.get("b")?.showHide, "hide");
-      assert.strictEqual(inlines.get("c")?.showHide, "show");
-      assert.strictEqual(inlines.get("d")?.showHide, "hide");
+      assert.strictEqual(blocks.get(ShowHideIdentifier("a"))?.showHide, "show");
+      assert.strictEqual(blocks.get(ShowHideIdentifier("b"))?.showHide, "hide");
+      assert.strictEqual(inlines.get(ShowHideIdentifier("c"))?.showHide, "show");
+      assert.strictEqual(inlines.get(ShowHideIdentifier("d"))?.showHide, "hide");
       assert.deepStrictEqual(Rows.of(rows, DeclaredFeedbackBlockShowHide), [
-        { node: idOf(blocks.get("b")) },
+        { node: idOf(blocks.get(ShowHideIdentifier("b"))) },
       ]);
       assert.deepStrictEqual(Rows.of(rows, DeclaredFeedbackInlineShowHide), [
-        { node: idOf(inlines.get("d")) },
+        { node: idOf(inlines.get(ShowHideIdentifier("d"))) },
       ]);
       assert.strictEqual(Rows.of(rows, FeedbackOutcomeRef).length, 4);
     }),
@@ -368,12 +375,12 @@ describe("contentRows", () => {
       const blocks = new Map(Rows.of(rows, TemplateBlock).map((row) => [row.identifier, row]));
       const [inline] = Rows.of(rows, TemplateInline);
 
-      assert.strictEqual(blocks.get("b1")?.showHide, "hide");
-      assert.strictEqual(blocks.get("b2")?.showHide, "show");
-      assert.strictEqual(blocks.get("b1")?.templateIdentifier, "T");
+      assert.strictEqual(blocks.get(ShowHideIdentifier("b1"))?.showHide, "hide");
+      assert.strictEqual(blocks.get(ShowHideIdentifier("b2"))?.showHide, "show");
+      assert.strictEqual(blocks.get(ShowHideIdentifier("b1"))?.templateIdentifier, "T");
       assert.strictEqual(inline?.showHide, "show");
       assert.deepStrictEqual(Rows.of(rows, DeclaredTemplateBlockShowHide), [
-        { node: idOf(blocks.get("b1")) },
+        { node: idOf(blocks.get(ShowHideIdentifier("b1"))) },
       ]);
 
       const refs = new Map(Rows.of(rows, TemplateContentRef).map((ref) => [ref.node, ref]));
@@ -386,7 +393,10 @@ describe("contentRows", () => {
         identifier: "U",
         node: idOf(inline),
       });
-      assert.strictEqual(refs.get(blocks.get("b2")?.id ?? "")?.cardinality, "single");
+      assert.strictEqual(
+        refs.get(blocks.get(ShowHideIdentifier("b2"))?.id ?? "")?.cardinality,
+        "single",
+      );
     }),
   );
 
@@ -469,7 +479,7 @@ describe("contentRows", () => {
             [idOf(set), "integer"],
           ],
         );
-        assert.deepStrictEqual(
+        assert.deepStrictEqual<unknown>(
           stored.map((row) => valueOf.get(row.id)),
           ["3", "4"],
         );
@@ -539,12 +549,12 @@ describe("contentRows", () => {
         [...sheets.keys()].toSorted((a, b) => a.localeCompare(b)),
         ["a.css", "b.css"],
       );
-      assert.strictEqual(sheets.get("a.css")?.type, "text/css");
+      assert.strictEqual(sheets.get(StylesheetUri("a.css"))?.type, "text/css");
       assert.deepStrictEqual(Rows.of(rows, StylesheetMedia), [
-        { node: idOf(sheets.get("a.css")), value: "screen" },
+        { node: idOf(sheets.get(StylesheetUri("a.css"))), value: "screen" },
       ]);
       assert.deepStrictEqual(Rows.of(rows, StylesheetTitle), [
-        { node: idOf(sheets.get("a.css")), value: "Main" },
+        { node: idOf(sheets.get(StylesheetUri("a.css"))), value: "Main" },
       ]);
       assert.strictEqual(Rows.of(rows, CatalogInfo).length, 1);
       assert.strictEqual(Rows.of(rows, CompanionMaterialsInfo).length, 1);
@@ -610,13 +620,13 @@ describe("contentRows", () => {
       assert.deepStrictEqual(identifiers(TemplateInline), ["ti"]);
       assert.deepStrictEqual(identifiers(RubricTemplateInline), ["ri"]);
       assert.deepStrictEqual(Rows.of(rows, DeclaredTemplateFeedbackBlockShowHide), [
-        { node: idByIdentifier.get("ft") ?? "" },
+        { node: idByIdentifier.get(ShowHideIdentifier("ft")) ?? "" },
       ]);
       assert.deepStrictEqual(Rows.of(rows, DeclaredRubricTemplateBlockShowHide), [
-        { node: idByIdentifier.get("rb") ?? "" },
+        { node: idByIdentifier.get(ShowHideIdentifier("rb")) ?? "" },
       ]);
       assert.deepStrictEqual(Rows.of(rows, DeclaredRubricTemplateInlineShowHide), [
-        { node: idByIdentifier.get("ri") ?? "" },
+        { node: idByIdentifier.get(ShowHideIdentifier("ri")) ?? "" },
       ]);
       // None: the fixture's `qti-feedback-block` `fa`, its only plain feedback block, writes no `show-hide`.
       assert.deepStrictEqual(Rows.of(rows, DeclaredFeedbackBlockShowHide), []);
@@ -659,6 +669,180 @@ describe("contentRows", () => {
           );
         }
       }
+    }),
+  );
+
+  it.effect("a boolean default value outside true and false is refused under value-lexical", () =>
+    Effect.gen(function* run() {
+      const failure = yield* Effect.flip(
+        built({
+          head: `<qti-template-declaration identifier="T" cardinality="single" base-type="boolean"><qti-default-value><qti-value>yes</qti-value></qti-default-value></qti-template-declaration>`,
+        }),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "value-lexical");
+    }),
+  );
+
+  it.effect("a padded boolean or integer default value is written trimmed", () =>
+    Effect.gen(function* run() {
+      const { rows } = yield* built({
+        head: `<qti-template-declaration identifier="T" cardinality="single" base-type="boolean"><qti-default-value><qti-value> true </qti-value></qti-default-value></qti-template-declaration><qti-template-declaration identifier="N" cardinality="single" base-type="integer"><qti-default-value><qti-value> 5 </qti-value></qti-default-value></qti-template-declaration>`,
+      });
+
+      assert.deepStrictEqual(
+        Rows.of(rows, values.relations.DeclaredValueBoolean).map((row) => row.value),
+        ["true"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, values.relations.DeclaredValueInteger).map((row) => row.value),
+        ["5"],
+      );
+    }),
+  );
+
+  it.effect("a boolean default value of true or false is written in its arm", () =>
+    Effect.gen(function* run() {
+      const { rows } = yield* built({
+        head: `<qti-template-declaration identifier="T" cardinality="multiple" base-type="boolean"><qti-default-value><qti-value>true</qti-value><qti-value>false</qti-value></qti-default-value></qti-template-declaration>`,
+      });
+
+      assert.deepStrictEqual(
+        Rows.of(rows, values.relations.DeclaredValueBoolean).map((row) => row.value),
+        ["true", "false"],
+      );
+    }),
+  );
+});
+
+const feedback = (attribute: string) =>
+  `<qti-feedback-block outcome-identifier="FEEDBACK" identifier="a"${attribute}><p>x</p></qti-feedback-block>`;
+
+describe("contentRows on a closed attribute outside its roster", () => {
+  const refused: readonly (readonly [string, Item])[] = [
+    ["show-hide of a feedback block", { body: feedback(' show-hide="visible"') }],
+    [
+      "show-hide of a template feedback block",
+      {
+        body: `<qti-template-block template-identifier="T" identifier="b"><qti-content-body>${feedback(' show-hide="visible"')}</qti-content-body></qti-template-block>`,
+        head: sixKindsHead,
+      },
+    ],
+    [
+      "show-hide of a feedback inline",
+      {
+        body: `<p><qti-feedback-inline outcome-identifier="FEEDBACK" identifier="c" show-hide="visible">z</qti-feedback-inline></p>`,
+      },
+    ],
+    [
+      "show-hide of a modal feedback",
+      {
+        tail: `<qti-modal-feedback outcome-identifier="FEEDBACK" show-hide="visible" identifier="m"><qti-content-body><p>x</p></qti-content-body></qti-modal-feedback>`,
+      },
+    ],
+    [
+      "show-hide of a template block",
+      {
+        body: `<qti-template-block template-identifier="T" identifier="b" show-hide="visible"><qti-content-body><p>x</p></qti-content-body></qti-template-block>`,
+        head: sixKindsHead,
+      },
+    ],
+    [
+      "show-hide of a template inline",
+      {
+        body: `<p><qti-template-inline template-identifier="T" identifier="i" show-hide="visible">x</qti-template-inline></p>`,
+        head: sixKindsHead,
+      },
+    ],
+    [
+      "math-variable of a template declaration",
+      {
+        head: `<qti-template-declaration identifier="T" cardinality="single" base-type="integer" math-variable="yes"/>`,
+      },
+    ],
+    [
+      "param-variable of a template declaration",
+      {
+        head: `<qti-template-declaration identifier="T" cardinality="single" base-type="integer" param-variable="yes"/>`,
+      },
+    ],
+    [
+      "power-form of a printed variable",
+      { body: `<p><qti-printed-variable identifier="SCORE" power-form="yes"/></p>` },
+    ],
+  ];
+
+  for (const [name, item] of refused) {
+    it.effect(`refuses the ${name} under attribute-lexical before the write`, () =>
+      Effect.gen(function* run() {
+        const failure = yield* Effect.flip(built(item));
+
+        assert.instanceOf(failure, ImportRefused);
+        assert.strictEqual(failure.rule, "attribute-lexical");
+      }),
+    );
+  }
+
+  it.effect("refuses a padded show-hide, which is an xs:string and does not collapse", () =>
+    Effect.gen(function* run() {
+      const failure = yield* Effect.flip(built({ body: feedback(' show-hide=" hide "') }));
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "attribute-lexical");
+    }),
+  );
+
+  it.effect("refuses a padded show-hide of a template block under attribute-lexical", () =>
+    Effect.gen(function* run() {
+      const failure = yield* Effect.flip(
+        built({
+          body: `<qti-template-block template-identifier="T" identifier="b" show-hide=" hide "><qti-content-body><p>x</p></qti-content-body></qti-template-block>`,
+          head: sixKindsHead,
+        }),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "attribute-lexical");
+    }),
+  );
+
+  it.effect("refuses a modal feedback with no show-hide under required-attribute", () =>
+    Effect.gen(function* run() {
+      const failure = yield* Effect.flip(
+        built({
+          tail: `<qti-modal-feedback outcome-identifier="FEEDBACK" identifier="m"><qti-content-body><p>x</p></qti-content-body></qti-modal-feedback>`,
+        }),
+      );
+
+      assert.instanceOf(failure, ItemRefusal);
+      assert.strictEqual(failure.rule, "required-attribute");
+    }),
+  );
+
+  it.effect("admits the xs:boolean spellings 1, true and 0, padded, written as their handles", () =>
+    Effect.gen(function* run() {
+      const feedbackItem = yield* built({ body: feedback(' show-hide="hide"') });
+      const declared = yield* built({
+        body: `<p><qti-printed-variable identifier="SCORE" power-form=" 0 "/></p>`,
+        head: `<qti-template-declaration identifier="T" cardinality="single" base-type="integer" math-variable="1" param-variable=" true "/>`,
+      });
+
+      assert.deepStrictEqual(
+        Rows.of(feedbackItem.rows, FeedbackBlock).map((row) => row.showHide),
+        ["hide"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(declared.rows, TemplateDeclarationArm).map((row) => [
+          row.mathVariable,
+          row.paramVariable,
+        ]),
+        [["1", "true"]],
+      );
+      assert.deepStrictEqual(
+        Rows.of(declared.rows, PrintedVariable).map((row) => row.powerForm),
+        ["0"],
+      );
     }),
   );
 });

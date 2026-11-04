@@ -10,6 +10,7 @@ import * as metadata from "#qti/schema/metadata.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 
 /**
  * A containment of `lang.rules`, as the engine records it.
@@ -251,5 +252,17 @@ describe("lang", () => {
       assert.strictEqual(containedCount, 5 + 1 + 1 + 2);
       assert.strictEqual(lang.rules.filter((rule) => rule.kind !== "contained").length, 2);
     });
+  });
+});
+
+describe("manifest contracts (lang)", () => {
+  it("types every resource column ManifestIdentifier", () => {
+    for (const column of [
+      lang.DocumentLang.fields.resource,
+      lang.ResourceLomLanguageSet.fields.resource,
+      lang.ResourceLomGeneral.fields.resource,
+    ]) {
+      assert.strictEqual(column.name, contracts.ManifestIdentifier.name);
+    }
   });
 });

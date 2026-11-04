@@ -5,9 +5,11 @@ import { manifestGuards } from "#qti/import/guards/manifest.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
 import { kindOf, Rows } from "#qti/import/tree.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import type { Entry } from "#qti/package/read.ts";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
+import { FileMediaType, LomVocabularyValue, PackagePath } from "#qti/schema/contracts.ts";
 import * as cpx from "#qti/schema/kinds/cpx.ts";
 import * as drd from "#qti/schema/kinds/drd.ts";
 import { Document } from "#qti/schema/document.ts";
@@ -146,9 +148,9 @@ const builtOf = (dir: string) =>
             {
               byteLength: BigInt(bytes.length),
               content: Buffer.from(bytes).toString("base64"),
-              mimeType: "application/octet-stream",
+              mimeType: FileMediaType("application/octet-stream"),
               package: built.packageId,
-              path: document.path,
+              path: PackagePath(document.path),
             },
           ]);
         } else {
@@ -156,7 +158,7 @@ const builtOf = (dir: string) =>
             {
               id: crypto.randomUUID(),
               package: built.packageId,
-              path: document.path,
+              path: PackagePath(document.path),
               resource: document.resource,
               resourceType: document.type,
               root,
@@ -650,7 +652,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
         ["meta/choice.xml"],
       );
 
-      const contents = new Set(Rows.of(rows, FileContent).map((row) => row.path));
+      const contents = new Set<string>(Rows.of(rows, FileContent).map((row) => row.path));
       assert.isFalse(contents.has("meta/choice.xml"));
       assert.isTrue(contents.has("images/sign.png"));
       for (const document of documents) {
@@ -695,7 +697,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
         ["choice.xml"],
       );
 
-      const contents = new Set(Rows.of(rows, FileContent).map((row) => row.path));
+      const contents = new Set<string>(Rows.of(rows, FileContent).map((row) => row.path));
       assert.isTrue(contents.has("fragments/rtest01-fragment.xml"));
       assert.isTrue(contents.has("meta/other.xml"));
       for (const document of documents) {
@@ -741,7 +743,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
     Effect.gen(function* textCopies() {
       const simple = yield* builtOf(yield* materialize("simple"));
       const unfolded = mapRows(simple.rows, LomValue, (row) =>
-        row.collapsed === undefined ? row : { ...row, collapsed: `${row.collapsed}!` },
+        row.collapsed === undefined
+          ? row
+          : { ...row, collapsed: LomVocabularyValue(`${row.collapsed}!`) },
       );
       assert.strictEqual((yield* verdictOf(unfolded, simple.entries)).rule, "text-copy");
 
@@ -831,9 +835,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
         {
           byteLength: 0n,
           content: "",
-          mimeType: "application/octet-stream",
+          mimeType: FileMediaType("application/octet-stream"),
           package: packageId,
-          path: path ?? "",
+          path: PackagePath(path ?? ""),
         },
       ]);
       const doubled = yield* verdictOf(both, entries);
@@ -864,5 +868,20 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
           assert.strictEqual(verdict.rule, "pass", `${name}: ${verdict.detail}`);
         }
       }),
+  );
+
+  suite.effect("refuses a drd:atInteroperable of maybe as attribute-lexical before the write", () =>
+    Effect.gen(function* strayInteroperable() {
+      const dir = yield* materialize("variant-padded");
+      const entries = yield* listPackage(dir);
+      const text = new TextDecoder().decode(yield* readEntry(dir, "imsmanifest.xml"));
+      assert.isTrue(text.includes(" true "));
+
+      const doc = yield* readXml(new TextEncoder().encode(text.replace(" true ", "maybe")));
+      const failure = yield* Effect.flip(manifestRows(dir, entries, doc, Rows.empty()));
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "attribute-lexical");
+    }),
   );
 });

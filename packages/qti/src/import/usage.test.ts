@@ -3,10 +3,18 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { usageGuards } from "#qti/import/guards/usage.ts";
+import { judgedLater } from "#qti/import/judged.ts";
 import { NotQti3 } from "#qti/import/manifest.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { Rows, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { usageRows } from "#qti/import/usage.ts";
+import {
+  ManifestIdentifier,
+  PackagePath,
+  UsageMappingScore,
+  UsageValueToken,
+} from "#qti/schema/contracts.ts";
 import { AttributeLexical, Edge, Tree, TreeRoot } from "#qti/schema/node.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import * as ud from "#qti/schema/usage.ts";
@@ -79,7 +87,27 @@ const refusal = (rows: Rows) =>
     return failure;
   });
 
+/**
+ * An edit that writes `name="value"` on the document's first `mapping` element.
+ */
+const onMapping = (name: string, value: string) => (text: string) =>
+  text.replace(/<mapping\b[^>]*>/u, (tag) =>
+    tag
+      .replace(new RegExp(`\\s${name}="[^"]*"`, "u"), "")
+      .replace("<mapping", `<mapping ${name}="${value}"`),
+  );
+
 const firstOf = <T>(list: readonly T[]): T => Option.getOrThrow(Option.fromNullishOr(list[0]));
+
+/**
+ * The schema's containment: every `UsageTypedValue(id, value)` has a `UsageValue(id, value)`.
+ */
+const assertContained = (rows: Rows): void => {
+  const values = Rows.of(rows, ud.UsageValue);
+  for (const typed of Rows.of(rows, ud.UsageTypedValue)) {
+    assert.isTrue(values.some((row) => row.id === typed.id && row.value === typed.value));
+  }
+};
 
 layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (suite) => {
   suite.effect("usage3 yields the counts of the example", () =>
@@ -119,8 +147,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
         {
           id: tree.id,
           package: packageId,
-          path: "example.xml",
-          resource: "USAGE-TOTAL-TEST-106391",
+          path: PackagePath("example.xml"),
+          resource: ManifestIdentifier("USAGE-TOTAL-TEST-106391"),
           resourceType: "qtiusagedata/xml",
           root: "usagedata",
           version: "3.0.0",
@@ -358,7 +386,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
       const { rows } = yield* rowsOf("usage3-padded");
       const padded = firstOf(Rows.of(rows, ud.UsageValue).filter((row) => row.value === " 0.87 "));
       const edited = changed(rows, ud.UsageValue, (values) =>
-        values.map((row) => (row.id === padded.id ? { ...row, collapsed: padded.value } : row)),
+        values.map((row) =>
+          row.id === padded.id ? { ...row, collapsed: UsageValueToken(padded.value) } : row,
+        ),
       );
 
       assert.strictEqual((yield* refusal(edited)).rule, "text-copy");
@@ -384,7 +414,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
       yield* usageGuards(padded);
 
       const edited = changed(padded, ud.UsageMapping, (list) =>
-        list.map((row) => (row.id === written.id ? { ...row, defaultValue: "1" } : row)),
+        list.map((row) =>
+          row.id === written.id ? { ...row, defaultValue: UsageMappingScore("1") } : row,
+        ),
       );
       const failure = yield* refusal(edited);
 
@@ -401,7 +433,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
         list.filter((row) => row.node !== mapping.id),
       );
       const edited = changed(stripped, ud.UsageMapping, (list) =>
-        list.map((row) => (row.id === mapping.id ? { ...row, defaultValue: "1" } : row)),
+        list.map((row) =>
+          row.id === mapping.id ? { ...row, defaultValue: UsageMappingScore("1") } : row,
+        ),
       );
 
       assert.strictEqual((yield* refusal(edited)).rule, "typed-copy");
@@ -417,7 +451,11 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
       );
       const arm = firstOf(Rows.of(rows, ud.relations.UsageTypedValueFloat));
       const armEdited = changed(rows, ud.relations.UsageTypedValueFloat, (list) =>
-        list.map((row) => (row.id === arm.id ? { ...row, value: `${row.value}1` } : row)),
+        list.map((row) =>
+          row.id === arm.id
+            ? { ...row, value: judgedLater<typeof row.value>(`${row.value}1`) }
+            : row,
+        ),
       );
 
       assert.strictEqual((yield* refusal(edited)).rule, "typed-copy");
@@ -467,6 +505,142 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
 
         assert.strictEqual((yield* refusal(edited)).rule, "typed-copy");
       }
+    }),
+  );
+
+  suite.effect("a typed boolean value outside true and false is refused usage-typed-value", () =>
+    Effect.gen(function* typedBoolean() {
+      const failure = yield* Effect.flip(
+        rowsOf("usage3", (text) =>
+          text.replace("<value>0.87</value>", '<value baseType="boolean">yes</value>'),
+        ),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "usage-typed-value");
+    }),
+  );
+
+  suite.effect("a typed boolean value of true is written in its arm", () =>
+    Effect.gen(function* typedTrue() {
+      const { rows } = yield* rowsOf("usage3", (text) =>
+        text.replace("<value>0.87</value>", '<value baseType="boolean">true</value>'),
+      );
+
+      assert.deepStrictEqual(
+        Rows.of(rows, ud.relations.UsageTypedValueBoolean).map((row) => row.value),
+        ["true"],
+      );
+    }),
+  );
+
+  suite.effect("a typed value's element text is read trimmed, a string's is kept", () =>
+    Effect.gen(function* paddedTyped() {
+      const { rows } = yield* rowsOf("usage3", (text) =>
+        text.replace("<value>0.87</value>", '<value baseType="boolean"> true </value>'),
+      );
+      const stringRows = (yield* rowsOf("usage3", (text) =>
+        text.replace("<value>0.87</value>", '<value baseType="string"> a </value>'),
+      )).rows;
+
+      assert.deepStrictEqual(
+        Rows.of(rows, ud.relations.UsageTypedValueBoolean).map((row) => row.value),
+        ["true"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(stringRows, ud.relations.UsageTypedValueString).map((row) => row.value),
+        [" a "],
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, ud.UsageTypedValue).map((row) => row.value),
+        [" true "],
+      );
+      assertContained(rows);
+      assertContained(stringRows);
+      yield* usageGuards(rows);
+      yield* usageGuards(stringRows);
+    }),
+  );
+
+  suite.effect(
+    "a padded float's arm holds it trimmed; its UsageTypedValue copies its UsageValue",
+    () =>
+      Effect.gen(function* paddedFloat() {
+        const { rows } = yield* rowsOf("usage3-float-padded");
+        const value = firstOf(Rows.of(rows, ud.UsageValue));
+        const typed = firstOf(Rows.of(rows, ud.UsageTypedValue));
+        const arm = firstOf(Rows.of(rows, ud.relations.UsageTypedValueFloat));
+        const armEdited = changed(rows, ud.relations.UsageTypedValueFloat, (list) =>
+          list.map((row) =>
+            row.id === arm.id ? { ...row, value: judgedLater<typeof row.value>(" 0.87 ") } : row,
+          ),
+        );
+        const typedEdited = changed(rows, ud.UsageTypedValue, (list) =>
+          list.map((row) =>
+            row.id === typed.id ? { ...row, value: judgedLater<typeof row.value>("0.87") } : row,
+          ),
+        );
+
+        assert.strictEqual(arm.value, "0.87");
+        assert.strictEqual(typed.value, " 0.87 ");
+        assert.strictEqual(value.value, " 0.87 ");
+        assert.strictEqual(value.collapsed, "0.87");
+        assertContained(rows);
+        yield* usageGuards(rows);
+        assert.strictEqual((yield* refusal(armEdited)).rule, "typed-copy");
+        assert.strictEqual((yield* refusal(typedEdited)).rule, "typed-copy");
+      }),
+  );
+
+  suite.effect("an outer-padded ud:mapping or ud:mapEntry score attribute is usage-lexical", () =>
+    Effect.gen(function* paddedScores() {
+      const edits = [
+        (text: string) => text.replace('mappedValue="412.5267"', 'mappedValue=" 412.5267"'),
+        onMapping("defaultValue", " 0"),
+        onMapping("lowerBound", "1 "),
+        onMapping("upperBound", "&#9;1"),
+      ];
+
+      for (const edit of edits) {
+        const failure = yield* Effect.flip(rowsOf("usage3", edit));
+
+        assert.instanceOf(failure, ImportRefused);
+        assert.strictEqual(failure.rule, "usage-lexical");
+      }
+    }),
+  );
+
+  suite.effect("usage3-padded's tab inside a mapKey is still admitted", () =>
+    Effect.gen(function* tabbedKey() {
+      const { rows } = yield* rowsOf("usage3-padded");
+
+      assert.isTrue(Rows.of(rows, ud.UsageMapEntry).some((row) => row.mapKey === "a b"));
+    }),
+  );
+
+  suite.effect("a caseSensitive outside xs:boolean is refused attribute-lexical", () =>
+    Effect.gen(function* strayCaseSensitive() {
+      const failure = yield* Effect.flip(
+        rowsOf("usage3", (text) =>
+          text.replace('<mapEntry mapKey="d1"', '<mapEntry caseSensitive="maybe" mapKey="d1"'),
+        ),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "attribute-lexical");
+    }),
+  );
+
+  suite.effect("a padded caseSensitive collapses to its handle", () =>
+    Effect.gen(function* paddedCaseSensitive() {
+      const { rows } = yield* rowsOf("usage3", (text) =>
+        text.replace('<mapEntry mapKey="d1"', '<mapEntry caseSensitive=" true " mapKey="d1"'),
+      );
+
+      assert.deepStrictEqual(
+        Rows.of(rows, ud.UsageMapEntryCaseSensitive).map((row) => row.value),
+        ["true"],
+      );
     }),
   );
 });

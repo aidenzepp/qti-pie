@@ -9,14 +9,19 @@
  * it from its mapping or table; a key, a target and a table's default value are held by the arm of
  * that base type, in the lexical form its lexical space gives them. A declaration with no base type
  * (a record) has no mapping or table row, and the missing arm is the commit's refusal.
+ *
+ * A value attribute is read exactly: outer whitespace around it refuses the document (decision
+ * 157).
  */
 import { judgedLater } from "#qti/import/judged.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
+import type { Rule } from "#qti/import/refusal.ts";
 import { Effect, Option } from "effect";
 import { attributeReader, coordsRows, markers } from "#qti/import/interactions.ts";
 import type { DeclaredVariable, NodeRef } from "#qti/import/interactions.ts";
-import { ItemRefusal, Rows, typedAttribute, withParents } from "#qti/import/tree.ts";
+import { closedOf, ItemRefusal, Rows, typedAttribute, withParents } from "#qti/import/tree.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
-import { Shape } from "#qti/schema/content/rosters.ts";
+import { BooleanLiteral, Shape, XsBoolean } from "#qti/schema/content/rosters.ts";
 import type { BaseType } from "#qti/schema/declaration.ts";
 import * as mapping from "#qti/schema/mapping.ts";
 import { Edge } from "#qti/schema/node.ts";
@@ -41,39 +46,107 @@ const lexicalOf = (element: Element, name: string): Option.Option<string> =>
 
 /**
  * The whitespace class of the lexical space of a base type: a string or a file is an
- * `xs:normalizedString`, and every other base type is collapsed like a token.
+ * `xs:normalizedString`, and every other base type is collapsed like a token. A value attribute
+ * is refused when padded, so collapse reaches only an internal run, as in the pair `"A  B"`.
  */
 const spaceOf = (baseType: BaseTypeHandle): WhiteSpace =>
   baseType === "string" || baseType === "file" ? "replace" : "collapse";
 
 /**
- * Read one attribute as a value of `baseType`: its lexical form processed by the class of the base
- * type's lexical space, with an `AttributeLexical` row where processing changed it.
+ * Refuse the attribute `name` of `element` where it is written with whitespace before or after its
+ * value. A value attribute is read exactly: no tool reformats it, so padding is a mistake in the
+ * source and not formatting (decision 157).
+ *
+ * @param where - What the attribute is, for the refusal's detail: the attribute and its element.
+ * @returns Nothing; `ImportRefused` under `rule` for a padded value.
  */
-const valueOf = (
+const exactOf = Effect.fn("import.exactOf")(function* exactOf(
+  element: Element,
+  name: string,
+  where: string,
+  rule: Rule,
+): Effect.fn.Return<void, ImportRefused> {
+  const lexical = lexicalOf(element, name);
+  if (Option.isSome(lexical) && /^[ \t\n\r]|[ \t\n\r]$/u.test(lexical.value)) {
+    yield* new ImportRefused({
+      detail: `${where} is ${JSON.stringify(lexical.value)}, which has whitespace before or after the value. An attribute value is read exactly as written, so remove the spaces, tabs or line ends around it.`,
+      rule,
+    });
+  }
+});
+
+/**
+ * Read one attribute as a value of `baseType`. A string is an `xs:normalizedString`, its lexical
+ * form processed by the replace class with an `AttributeLexical` row where processing changed it;
+ * every other base type is read exactly, so outer whitespace refuses it under `rule`, and only an
+ * internal run of spaces is collapsed.
+ */
+const valueOf = Effect.fn("import.valueOf")(function* valueOf(
   rows: Rows,
   element: Element,
   node: NodeRef,
   name: AttributeNameHandle,
   baseType: BaseTypeHandle,
-): { rows: Rows; value: Option.Option<string> } =>
-  Option.match(lexicalOf(element, name), {
-    onNone: () => ({ rows, value: Option.none() }),
+  rule: Rule,
+): Effect.fn.Return<{ rows: Rows; value: Option.Option<string> }, ImportRefused> {
+  if (baseType !== "string") {
+    yield* exactOf(
+      element,
+      name,
+      `the ${name} attribute of ${/^[aeiou]/u.test(baseType) ? "an" : "a"} ${baseType} ${node.kind}`,
+      rule,
+    );
+  }
+
+  return Option.match(lexicalOf(element, name), {
+    onNone: () => ({ rows, value: Option.none<string>() }),
     onSome: (lexical) => {
       const typed = typedAttribute(rows, node.id, node.kind, name, lexical, spaceOf(baseType));
 
       return { rows: typed.rows, value: Option.some(typed.value) };
     },
   });
+});
 
 /**
- * A typed arm writer: the row of one value in the arm of its base type.
+ * A typed arm writer: the row of one value in the arm of its base type. The boolean arm narrows
+ * its text to `BooleanLiteral` first, so it is effectful and the others are not.
  */
-type ArmWriter = Record<BaseTypeHandle, (rows: Rows, id: string, text: string) => Rows>;
+type ArmWriter = Record<
+  Exclude<BaseTypeHandle, "boolean">,
+  (rows: Rows, id: string, text: string) => Rows
+> & {
+  readonly boolean: (rows: Rows, id: string, text: string) => Effect.Effect<Rows, ImportRefused>;
+};
+
+/**
+ * Write the row of one value in the arm of `baseType` of `writer`.
+ *
+ * @returns The rows with the arm added; `ImportRefused` for a boolean outside `BooleanLiteral`.
+ */
+const armRows = (
+  writer: ArmWriter,
+  baseType: BaseTypeHandle,
+  rows: Rows,
+  id: string,
+  text: string,
+): Effect.Effect<Rows, ImportRefused> =>
+  baseType === "boolean"
+    ? writer.boolean(rows, id, text)
+    : Effect.succeed(writer[baseType](rows, id, text));
 
 const mapKeyArms: ArmWriter = {
   boolean: (rows, id, text) =>
-    Rows.add(rows, mapping.relations.MapEntryBoolean, [{ id, mapKey: judgedLater(text) }]),
+    closedOf(
+      BooleanLiteral.handles,
+      text,
+      "map-key-lexical",
+      "the map-key attribute of a boolean qti-map-entry",
+    ).pipe(
+      Effect.map((literal) =>
+        Rows.add(rows, mapping.relations.MapEntryBoolean, [{ id, mapKey: literal }]),
+      ),
+    ),
   directedPair: (rows, id, text) =>
     Rows.add(rows, mapping.relations.MapEntryDirectedPair, [{ id, mapKey: judgedLater(text) }]),
   duration: (rows, id, text) =>
@@ -98,9 +171,16 @@ const mapKeyArms: ArmWriter = {
 
 const matchTargetArms: ArmWriter = {
   boolean: (rows, id, text) =>
-    Rows.add(rows, mapping.relations.MatchTableEntryBoolean, [
-      { id, targetValue: judgedLater(text) },
-    ]),
+    closedOf(
+      BooleanLiteral.handles,
+      text,
+      "attribute-lexical",
+      "the target-value attribute of a boolean qti-match-table-entry",
+    ).pipe(
+      Effect.map((literal) =>
+        Rows.add(rows, mapping.relations.MatchTableEntryBoolean, [{ id, targetValue: literal }]),
+      ),
+    ),
   directedPair: (rows, id, text) =>
     Rows.add(rows, mapping.relations.MatchTableEntryDirectedPair, [
       { id, targetValue: judgedLater(text) },
@@ -139,9 +219,18 @@ const matchTargetArms: ArmWriter = {
 
 const interpolationTargetArms: ArmWriter = {
   boolean: (rows, id, text) =>
-    Rows.add(rows, mapping.relations.InterpolationTableEntryBoolean, [
-      { id, targetValue: judgedLater(text) },
-    ]),
+    closedOf(
+      BooleanLiteral.handles,
+      text,
+      "attribute-lexical",
+      "the target-value attribute of a boolean qti-interpolation-table-entry",
+    ).pipe(
+      Effect.map((literal) =>
+        Rows.add(rows, mapping.relations.InterpolationTableEntryBoolean, [
+          { id, targetValue: literal },
+        ]),
+      ),
+    ),
   directedPair: (rows, id, text) =>
     Rows.add(rows, mapping.relations.InterpolationTableEntryDirectedPair, [
       { id, targetValue: judgedLater(text) },
@@ -186,9 +275,16 @@ const interpolationTargetArms: ArmWriter = {
 
 const matchDefaultArms: ArmWriter = {
   boolean: (rows, node, text) =>
-    Rows.add(rows, mapping.relations.MatchTableDefaultValueBoolean, [
-      { node, value: judgedLater(text) },
-    ]),
+    closedOf(
+      BooleanLiteral.handles,
+      text,
+      "attribute-lexical",
+      "the default-value attribute of a boolean qti-match-table",
+    ).pipe(
+      Effect.map((literal) =>
+        Rows.add(rows, mapping.relations.MatchTableDefaultValueBoolean, [{ node, value: literal }]),
+      ),
+    ),
   directedPair: (rows, node, text) =>
     Rows.add(rows, mapping.relations.MatchTableDefaultValueDirectedPair, [
       { node, value: judgedLater(text) },
@@ -233,9 +329,18 @@ const matchDefaultArms: ArmWriter = {
 
 const interpolationDefaultArms: ArmWriter = {
   boolean: (rows, node, text) =>
-    Rows.add(rows, mapping.relations.InterpolationTableDefaultValueBoolean, [
-      { node, value: judgedLater(text) },
-    ]),
+    closedOf(
+      BooleanLiteral.handles,
+      text,
+      "attribute-lexical",
+      "the default-value attribute of a boolean qti-interpolation-table",
+    ).pipe(
+      Effect.map((literal) =>
+        Rows.add(rows, mapping.relations.InterpolationTableDefaultValueBoolean, [
+          { node, value: literal },
+        ]),
+      ),
+    ),
   directedPair: (rows, node, text) =>
     Rows.add(rows, mapping.relations.InterpolationTableDefaultValueDirectedPair, [
       { node, value: judgedLater(text) },
@@ -300,18 +405,37 @@ interface Pass {
 /**
  * The rows of one `qti-mapping`: the mapping, its bounds where written, and its default value.
  */
-const mappingElement = (
+const mappingElement = Effect.fn("import.mappingElement")(function* mappingElement(
   pass: Pass,
   rows: Rows,
   element: Element,
   node: NodeRef,
   owner: DeclaredVariable,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
   if (Option.isNone(owner.baseType)) {
     return rows;
   }
 
   const baseType = owner.baseType.value;
+  yield* exactOf(
+    element,
+    "lower-bound",
+    "the lower-bound attribute of qti-mapping",
+    "attribute-lexical",
+  );
+  yield* exactOf(
+    element,
+    "upper-bound",
+    "the upper-bound attribute of qti-mapping",
+    "attribute-lexical",
+  );
+  yield* exactOf(
+    element,
+    "default-value",
+    "the default-value attribute of qti-mapping",
+    "attribute-lexical",
+  );
+
   const attributes = attributeReader(rows, element, node);
   const lower = attributes.read("lower-bound");
   const upper = attributes.read("upper-bound");
@@ -321,7 +445,7 @@ const mappingElement = (
     {
       baseType,
       declaration: owner.id,
-      defaultValue: Option.getOrElse(defaultValue, () => "0"),
+      defaultValue: judgedLater(Option.getOrElse(defaultValue, () => "0")),
       document: pass.documentId,
       id: node.id,
     },
@@ -329,13 +453,13 @@ const mappingElement = (
   built = Rows.add(
     built,
     mapping.MappingLowerBound,
-    written(lower, (own) => ({ node: node.id, value: own })),
+    written(lower, (own) => ({ node: node.id, value: judgedLater(own) })),
   );
 
   built = Rows.add(
     built,
     mapping.MappingUpperBound,
-    written(upper, (own) => ({ node: node.id, value: own })),
+    written(upper, (own) => ({ node: node.id, value: judgedLater(own) })),
   );
 
   return markers(
@@ -344,43 +468,61 @@ const mappingElement = (
     node.id,
     attributes.written(),
   );
-};
+});
 
 /**
  * The rows of one `qti-map-entry`: the entry at its position, its key in the arm of its mapping's
  * base type, and the marker of a written `case-sensitive`.
  */
-const mapEntryElement = (
+const mapEntryElement = Effect.fn("import.mapEntryElement")(function* mapEntryElement(
   pass: Pass,
   rows: Rows,
   element: Element,
   node: NodeRef,
   holderId: string,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
   const holder = pass.holders.get(holderId);
   if (holder === undefined) {
     return rows;
   }
 
+  yield* exactOf(
+    element,
+    "mapped-value",
+    "the mapped-value attribute of qti-map-entry",
+    "attribute-lexical",
+  );
+
   const attributes = attributeReader(rows, element, node);
   const mappedValue = attributes.read("mapped-value");
-  const caseSensitive = attributes.read("case-sensitive");
-  const key = valueOf(attributes.rows(), element, node, "map-key", holder.baseType);
+  const caseSensitive = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(attributes.read("case-sensitive"), () => "false"),
+    "attribute-lexical",
+    "the case-sensitive attribute of qti-map-entry",
+  );
+  const key = yield* valueOf(
+    attributes.rows(),
+    element,
+    node,
+    "map-key",
+    holder.baseType,
+    "map-key-lexical",
+  );
   let built = Rows.add(key.rows, mapping.MapEntry, [
     {
       baseType: holder.baseType,
-      caseSensitive: judgedLater(Option.getOrElse(caseSensitive, () => "false")),
+      caseSensitive,
       declaration: holder.declaration,
       id: node.id,
-      mappedValue: Option.getOrElse(mappedValue, () => ""),
+      mappedValue: judgedLater(Option.getOrElse(mappedValue, () => "")),
       mapping: holderId,
       position: pass.positions.get(node.id) ?? 0n,
     },
   ]);
-  built = Option.match(key.value, {
-    onNone: () => built,
-    onSome: (text) => mapKeyArms[holder.baseType](built, node.id, text),
-  });
+  if (Option.isSome(key.value)) {
+    built = yield* armRows(mapKeyArms, holder.baseType, built, node.id, key.value.value);
+  }
 
   return markers(
     built,
@@ -388,19 +530,38 @@ const mapEntryElement = (
     node.id,
     attributes.written(),
   );
-};
+});
 
 /**
  * The rows of one `qti-area-mapping`: the area mapping, its bounds where written, and its default
  * value.
  */
-const areaMappingElement = (
+const areaMappingElement = Effect.fn("import.areaMappingElement")(function* areaMappingElement(
   pass: Pass,
   rows: Rows,
   element: Element,
   node: NodeRef,
   declaration: string,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
+  yield* exactOf(
+    element,
+    "lower-bound",
+    "the lower-bound attribute of qti-area-mapping",
+    "attribute-lexical",
+  );
+  yield* exactOf(
+    element,
+    "upper-bound",
+    "the upper-bound attribute of qti-area-mapping",
+    "attribute-lexical",
+  );
+  yield* exactOf(
+    element,
+    "default-value",
+    "the default-value attribute of qti-area-mapping",
+    "attribute-lexical",
+  );
+
   const attributes = attributeReader(rows, element, node);
   const lower = attributes.read("lower-bound");
   const upper = attributes.read("upper-bound");
@@ -408,7 +569,7 @@ const areaMappingElement = (
   let built = Rows.add(attributes.rows(), mapping.AreaMapping, [
     {
       declaration,
-      defaultValue: Option.getOrElse(defaultValue, () => "0"),
+      defaultValue: judgedLater(Option.getOrElse(defaultValue, () => "0")),
       document: pass.documentId,
       id: node.id,
     },
@@ -416,13 +577,13 @@ const areaMappingElement = (
   built = Rows.add(
     built,
     mapping.AreaMappingLowerBound,
-    written(lower, (own) => ({ node: node.id, value: own })),
+    written(lower, (own) => ({ node: node.id, value: judgedLater(own) })),
   );
 
   built = Rows.add(
     built,
     mapping.AreaMappingUpperBound,
-    written(upper, (own) => ({ node: node.id, value: own })),
+    written(upper, (own) => ({ node: node.id, value: judgedLater(own) })),
   );
 
   return markers(
@@ -431,7 +592,7 @@ const areaMappingElement = (
     node.id,
     attributes.written(),
   );
-};
+});
 
 /**
  * The rows of one `qti-area-map-entry`: the entry at its position and its coordinates.
@@ -445,7 +606,7 @@ const areaMapEntryElement = Effect.fn("import.areaMapEntryElement")(function* ar
   element: Element,
   node: NodeRef,
   areaMapping: string,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ItemRefusal | ImportRefused> {
   const shapeText = lexicalOf(element, "shape");
   const shape = Option.flatMapNullishOr(shapeText, (known) =>
     Shape.handles.find((handle) => handle === known),
@@ -457,13 +618,20 @@ const areaMapEntryElement = Effect.fn("import.areaMapEntryElement")(function* ar
     });
   }
 
+  yield* exactOf(
+    element,
+    "mapped-value",
+    "the mapped-value attribute of qti-area-map-entry",
+    "attribute-lexical",
+  );
+
   const attributes = attributeReader(rows, element, node);
   const mappedValue = attributes.read("mapped-value");
   const built = Rows.add(attributes.rows(), mapping.AreaMapEntry, [
     {
       areaMapping,
       id: node.id,
-      mappedValue: Option.getOrElse(mappedValue, () => ""),
+      mappedValue: judgedLater(Option.getOrElse(mappedValue, () => "")),
       position: pass.positions.get(node.id) ?? 0n,
       shape: shape.value,
     },
@@ -479,13 +647,13 @@ const areaMapEntryElement = Effect.fn("import.areaMapEntryElement")(function* ar
  * The rows of one `qti-match-table` or `qti-interpolation-table`: the table, and its default value
  * in the arm of its base type where written.
  */
-const tableElement = (
+const tableElement = Effect.fn("import.tableElement")(function* tableElement(
   pass: Pass,
   rows: Rows,
   element: Element,
   node: NodeRef,
   owner: DeclaredVariable,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
   if (Option.isNone(owner.baseType)) {
     return rows;
   }
@@ -498,7 +666,14 @@ const tableElement = (
   const withTable = match
     ? Rows.add(rows, mapping.MatchTable, [fact])
     : Rows.add(rows, mapping.InterpolationTable, [fact]);
-  const defaultValue = valueOf(withTable, element, node, "default-value", baseType);
+  const defaultValue = yield* valueOf(
+    withTable,
+    element,
+    node,
+    "default-value",
+    baseType,
+    "attribute-lexical",
+  );
   if (Option.isNone(defaultValue.value)) {
     return defaultValue.rows;
   }
@@ -506,69 +681,92 @@ const tableElement = (
   const text = defaultValue.value.value;
 
   return match
-    ? matchDefaultArms[baseType](
+    ? yield* armRows(
+        matchDefaultArms,
+        baseType,
         Rows.add(defaultValue.rows, mapping.MatchTableDefaultValue, [{ baseType, node: node.id }]),
         node.id,
         text,
       )
-    : interpolationDefaultArms[baseType](
+    : yield* armRows(
+        interpolationDefaultArms,
+        baseType,
         Rows.add(defaultValue.rows, mapping.InterpolationTableDefaultValue, [
           { baseType, node: node.id },
         ]),
         node.id,
         text,
       );
-};
+});
 
 /**
  * The rows of one `qti-match-table-entry` or `qti-interpolation-table-entry`: the entry at its
  * position, its target in the arm of its table's base type, and, for an interpolation entry, its
  * `include-boundary` and the marker of a written one.
  */
-const tableEntryElement = (
+const tableEntryElement = Effect.fn("import.tableEntryElement")(function* tableEntryElement(
   pass: Pass,
   rows: Rows,
   element: Element,
   node: NodeRef,
   tableId: string,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
   const holder = pass.holders.get(tableId);
   if (holder === undefined) {
     return rows;
   }
 
+  yield* exactOf(
+    element,
+    "source-value",
+    `the source-value attribute of ${node.kind}`,
+    "attribute-lexical",
+  );
+
   const attributes = attributeReader(rows, element, node);
   const source = Option.getOrElse(attributes.read("source-value"), () => "");
-  const target = valueOf(attributes.rows(), element, node, "target-value", holder.baseType);
+  const target = yield* valueOf(
+    attributes.rows(),
+    element,
+    node,
+    "target-value",
+    holder.baseType,
+    "attribute-lexical",
+  );
   const position = pass.positions.get(node.id) ?? 0n;
   const fact = {
     baseType: holder.baseType,
     declaration: holder.declaration,
     id: node.id,
     position,
-    sourceValue: source,
     table: tableId,
   };
   if (node.kind === "qti-match-table-entry") {
-    const built = Rows.add(target.rows, mapping.MatchTableEntry, [fact]);
+    const built = Rows.add(target.rows, mapping.MatchTableEntry, [
+      { ...fact, sourceValue: judgedLater(source) },
+    ]);
 
-    return Option.match(target.value, {
-      onNone: () => built,
-      onSome: (text) => matchTargetArms[holder.baseType](built, node.id, text),
-    });
+    return Option.isNone(target.value)
+      ? built
+      : yield* armRows(matchTargetArms, holder.baseType, built, node.id, target.value.value);
   }
 
-  const includeBoundary = attributes.read("include-boundary");
+  const includeBoundary = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(attributes.read("include-boundary"), () => "true"),
+    "attribute-lexical",
+    "the include-boundary attribute of qti-interpolation-table-entry",
+  );
   const built = Rows.add(target.rows, mapping.InterpolationTableEntry, [
     {
       ...fact,
-      includeBoundary: judgedLater(Option.getOrElse(includeBoundary, () => "true")),
+      includeBoundary,
+      sourceValue: judgedLater(source),
     },
   ]);
-  const withTarget = Option.match(target.value, {
-    onNone: () => built,
-    onSome: (text) => interpolationTargetArms[holder.baseType](built, node.id, text),
-  });
+  const withTarget = Option.isNone(target.value)
+    ? built
+    : yield* armRows(interpolationTargetArms, holder.baseType, built, node.id, target.value.value);
 
   return markers(
     withTarget,
@@ -576,7 +774,7 @@ const tableEntryElement = (
     node.id,
     attributes.written(),
   );
-};
+});
 
 /**
  * The rows of every mapping, area mapping, match table and interpolation table of an item, with
@@ -598,7 +796,7 @@ export const mappingRows = Effect.fn("import.mappingRows")(function* mappingRows
   documentId: string,
   declarations: ReadonlyMap<string, DeclaredVariable>,
   rows: Rows,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ItemRefusal | ImportRefused> {
   const pass: Pass = {
     documentId,
     holders: new Map(),
@@ -616,23 +814,23 @@ export const mappingRows = Effect.fn("import.mappingRows")(function* mappingRows
     const owner = owners.get(above.value.id);
     const parentId = above.value.id;
     if (node.kind === "qti-mapping" && owner !== undefined) {
-      built = mappingElement(pass, built, element, node, owner);
+      built = yield* mappingElement(pass, built, element, node, owner);
     } else if (node.kind === "qti-map-entry") {
-      built = mapEntryElement(pass, built, element, node, parentId);
+      built = yield* mapEntryElement(pass, built, element, node, parentId);
     } else if (node.kind === "qti-area-mapping" && owner !== undefined) {
-      built = areaMappingElement(pass, built, element, node, owner.id);
+      built = yield* areaMappingElement(pass, built, element, node, owner.id);
     } else if (node.kind === "qti-area-map-entry") {
       built = yield* areaMapEntryElement(pass, built, element, node, parentId);
     } else if (
       (node.kind === "qti-match-table" || node.kind === "qti-interpolation-table") &&
       owner !== undefined
     ) {
-      built = tableElement(pass, built, element, node, owner);
+      built = yield* tableElement(pass, built, element, node, owner);
     } else if (
       node.kind === "qti-match-table-entry" ||
       node.kind === "qti-interpolation-table-entry"
     ) {
-      built = tableEntryElement(pass, built, element, node, parentId);
+      built = yield* tableEntryElement(pass, built, element, node, parentId);
     }
   }
 

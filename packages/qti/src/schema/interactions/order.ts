@@ -4,10 +4,11 @@
  * names.
  *
  * Both arms carry the typed bounds `maxChoicesN` and `minChoicesN` as NOT NULL columns, 0 where the
- * source omits the attribute, beside the optional lexical `max-choices` and `min-choices`
- * relations. A capacity's `ref` must name a field of its target, so the typed copy is a column of
- * the arm and not only the optional relation `OrderMaxChoicesN`. The importer writes the optional
- * typed copies when the attribute is present, and `maxBound` is `bounded` when `max-choices` is
+ * source omits the attribute. `OrderMaxChoicesN` and its three siblings are markers that the source
+ * wrote the attribute: each holds the arm's own bound and is contained through `(node, value)` into
+ * the arm's matching column, so it cannot disagree with it; a minimum is at least 1, by the checks
+ * `OrderMinChoicesPositive` and `GraphicOrderMinChoicesPositive`. A non-canonical spelling of
+ * either attribute is an `AttributeSpelling` row. `maxBound` is `bounded` when `max-choices` is
  * present and non-zero, else `unlimited`.
  *
  * The capacity of the graphic arm over `HotspotChoice.interaction` is declared in
@@ -30,25 +31,11 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import { Bound } from "#qti/schema/content/rosters.ts";
+import { Bound, Orientation, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { InteractionBinding, SimpleChoice } from "#qti/schema/interaction.ts";
 import { Node, RootKind } from "#qti/schema/node.ts";
+import { ContainerWidth } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-
-/**
- * An `xs:boolean` attribute's lexical form.
- */
-const xsBoolean = str.regex(patterns.xsBoolean);
-
-/**
- * An `xs:nonNegativeInteger` attribute's lexical form.
- */
-const xsNonNegativeInteger = str.regex(patterns.xsNonNegativeInteger);
-
-/**
- * An `xs:positiveInteger` attribute's lexical form.
- */
-const positiveInteger = str.regex(patterns.positiveInteger);
 
 /**
  * An `xs:normalizedString` attribute's value, as the typed column holds it after replacement.
@@ -59,11 +46,6 @@ const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNor
  * An identifier: an `xs:NCName`.
  */
 const ncName = str.regex(patterns.ncName);
-
-/**
- * An `orientation`: `vertical` or `horizontal`.
- */
-const orientation = str.regex(patterns.orientation);
 
 /**
  * A `qti-order-interaction`. `maxBound` says whether `max-choices` bounds the order.
@@ -77,7 +59,7 @@ export const OrderInteraction = relation(
     minChoicesN: pg.bigint,
     responseIdentifier: ncName,
     rootKind: closedId(RootKind),
-    shuffle: xsBoolean,
+    shuffle: closedId(XsBoolean),
   },
   ["id"],
 );
@@ -106,35 +88,21 @@ export const GraphicOrderInteraction = relation(
 /**
  * An order interaction's `orientation`, when it has one.
  */
-export const OrderOrientation = relation("OrderOrientation", { node: uuid, value: orientation }, [
-  "node",
-]);
-
-/**
- * An order interaction's `min-choices` as written, when it has one: at least 1.
- */
-export const OrderMinChoices = relation("OrderMinChoices", { node: uuid, value: positiveInteger }, [
-  "node",
-]);
-
-/**
- * An order interaction's `max-choices` as written, when it has one.
- */
-export const OrderMaxChoices = relation(
-  "OrderMaxChoices",
-  { node: uuid, value: xsNonNegativeInteger },
+export const OrderOrientation = relation(
+  "OrderOrientation",
+  { node: uuid, value: closedId(Orientation) },
   ["node"],
 );
 
 /**
- * The integer value of `OrderMinChoices`, written when the attribute is present.
+ * An order interaction's `min-choices` value, written when the attribute is present: at least 1.
  */
 export const OrderMinChoicesN = relation("OrderMinChoicesN", { node: uuid, value: pg.bigint }, [
   "node",
 ]);
 
 /**
- * The integer value of `OrderMaxChoices`, written when the attribute is present.
+ * An order interaction's `max-choices` value, written when the attribute is present.
  */
 export const OrderMaxChoicesN = relation("OrderMaxChoicesN", { node: uuid, value: pg.bigint }, [
   "node",
@@ -163,30 +131,13 @@ export const OrderMaxSelectionsMessage = relation(
  */
 export const OrderChoicesContainerWidth = relation(
   "OrderChoicesContainerWidth",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid, value: ContainerWidth },
   ["node"],
 );
 
 /**
- * A graphic order interaction's `min-choices` as written, when it has one: at least 1.
- */
-export const GraphicOrderMinChoices = relation(
-  "GraphicOrderMinChoices",
-  { node: uuid, value: positiveInteger },
-  ["node"],
-);
-
-/**
- * A graphic order interaction's `max-choices` as written, when it has one.
- */
-export const GraphicOrderMaxChoices = relation(
-  "GraphicOrderMaxChoices",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
-
-/**
- * The integer value of `GraphicOrderMinChoices`, written when the attribute is present.
+ * A graphic order interaction's `min-choices` value, written when the attribute is present: at
+ * least 1.
  */
 export const GraphicOrderMinChoicesN = relation(
   "GraphicOrderMinChoicesN",
@@ -195,7 +146,7 @@ export const GraphicOrderMinChoicesN = relation(
 );
 
 /**
- * The integer value of `GraphicOrderMaxChoices`, written when the attribute is present.
+ * A graphic order interaction's `max-choices` value, written when the attribute is present.
  */
 export const GraphicOrderMaxChoicesN = relation(
   "GraphicOrderMaxChoicesN",
@@ -218,16 +169,12 @@ export const arms = {
 export const relations = {
   DeclaredOrderShuffle,
   GraphicOrderInteraction,
-  GraphicOrderMaxChoices,
   GraphicOrderMaxChoicesN,
-  GraphicOrderMinChoices,
   GraphicOrderMinChoicesN,
   OrderChoicesContainerWidth,
   OrderInteraction,
-  OrderMaxChoices,
   OrderMaxChoicesN,
   OrderMaxSelectionsMessage,
-  OrderMinChoices,
   OrderMinChoicesN,
   OrderMinSelectionsMessage,
   OrderOrientation,
@@ -267,15 +214,19 @@ export const rules = [
   }),
   contained(on(DeclaredOrderShuffle, "node"), on(OrderInteraction, "id")),
   contained(on(OrderOrientation, "node"), on(OrderInteraction, "id")),
-  contained(on(OrderMinChoices, "node"), on(OrderInteraction, "id")),
-  contained(on(OrderMaxChoices, "node"), on(OrderInteraction, "id")),
-  contained(on(OrderMinChoicesN, "node"), on(OrderInteraction, "id")),
-  contained(on(OrderMaxChoicesN, "node"), on(OrderInteraction, "id")),
+  contained(on(OrderMinChoicesN, "node", "value"), on(OrderInteraction, "id", "minChoicesN")),
+  contained(on(OrderMaxChoicesN, "node", "value"), on(OrderInteraction, "id", "maxChoicesN")),
   contained(on(OrderMinSelectionsMessage, "node"), on(OrderInteraction, "id")),
   contained(on(OrderMaxSelectionsMessage, "node"), on(OrderInteraction, "id")),
   contained(on(OrderChoicesContainerWidth, "node"), on(OrderInteraction, "id")),
-  contained(on(GraphicOrderMinChoices, "node"), on(GraphicOrderInteraction, "id")),
-  contained(on(GraphicOrderMaxChoices, "node"), on(GraphicOrderInteraction, "id")),
-  contained(on(GraphicOrderMinChoicesN, "node"), on(GraphicOrderInteraction, "id")),
-  contained(on(GraphicOrderMaxChoicesN, "node"), on(GraphicOrderInteraction, "id")),
+  contained(
+    on(GraphicOrderMinChoicesN, "node", "value"),
+    on(GraphicOrderInteraction, "id", "minChoicesN"),
+  ),
+  contained(
+    on(GraphicOrderMaxChoicesN, "node", "value"),
+    on(GraphicOrderInteraction, "id", "maxChoicesN"),
+  ),
+  check("OrderMinChoicesPositive", OrderMinChoicesN, (r) => r.ge(r.value, 1n)),
+  check("GraphicOrderMinChoicesPositive", GraphicOrderMinChoicesN, (r) => r.ge(r.value, 1n)),
 ] as const;

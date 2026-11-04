@@ -15,6 +15,7 @@
  */
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the XSD attribute `qti-inside` names and the `shape` pattern of the patterns module; it is the region kind, not a structure. */
 import {
+  capacity,
   check,
   closed,
   closedId,
@@ -25,40 +26,34 @@ import {
   select,
   str,
   uuid,
+  within,
 } from "@bjornpagen/grizzle";
+import {
+  MathConstantName,
+  MathOperatorName,
+  RoundingMode,
+  Shape,
+  StatsOperatorName,
+  ToleranceMode,
+  XsBoolean,
+} from "#qti/schema/content/rosters.ts";
+import { BaseType } from "#qti/schema/declaration.ts";
 import * as node from "#qti/schema/node.ts";
+import {
+  CustomOperatorClassName,
+  CustomOperatorDefinitionUri,
+  ExpressionCoords,
+  ExpressionIntegerOrVariable,
+  RecordFieldIdentifier,
+  VariableReference,
+  WeightReference,
+} from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import * as processing from "#qti/schema/processing.ts";
 
-const ncName = str.regex(patterns.ncName);
-
-const anyUri = str.regex(patterns.anyUri);
-
-const baseType = str.regex(patterns.baseType);
-
-const coords = str.regex(patterns.coords);
-
 const floatOrVariableRef = str.regex(patterns.floatOrVariableRef);
 
-const intOrIdentifier = str.regex(patterns.intOrIdentifier);
-
-const integerOrVariableRef = str.regex(patterns.integerOrVariableRef);
-
-const mathConstantName = str.regex(patterns.mathConstantName);
-
-const mathOperatorName = str.regex(patterns.mathOperatorName);
-
-const roundingMode = str.regex(patterns.roundingMode);
-
-const shape = str.regex(patterns.shape);
-
-const statsOperatorName = str.regex(patterns.statsOperatorName);
-
 const toleranceList = str.regex(patterns.toleranceList);
-
-const toleranceMode = str.regex(patterns.toleranceMode);
-
-const xsBoolean = str.regex(patterns.xsBoolean);
 
 const xsString = str.regex(patterns.xsString, patterns.xsStringFlags);
 
@@ -73,27 +68,37 @@ export const Variable = relation("Variable", { id: uuid }, ["id"]);
  */
 export const VariableWeightIdentifier = relation(
   "VariableWeightIdentifier",
-  { node: uuid, rootKind: closedId(node.RootKind), value: ncName },
+  { node: uuid, rootKind: closedId(node.RootKind), value: WeightReference },
   ["node"],
 );
 
 /**
  * The `qti-math-constant` expression and the constant it names.
  */
-export const MathConstant = relation("MathConstant", { id: uuid, name: mathConstantName }, ["id"]);
+export const MathConstant = relation(
+  "MathConstant",
+  { id: uuid, name: closedId(MathConstantName) },
+  ["id"],
+);
 
 /**
  * The `qti-math-operator` expression and the function it names; its operands are `Operand` rows.
  */
-export const MathOperator = relation("MathOperator", { id: uuid, name: mathOperatorName }, ["id"]);
+export const MathOperator = relation(
+  "MathOperator",
+  { id: uuid, name: closedId(MathOperatorName) },
+  ["id"],
+);
 
 /**
  * The `qti-stats-operator` expression and the statistic it names; its operand is an `Operand`
  * row.
  */
-export const StatsOperator = relation("StatsOperator", { id: uuid, name: statsOperatorName }, [
-  "id",
-]);
+export const StatsOperator = relation(
+  "StatsOperator",
+  { id: uuid, name: closedId(StatsOperatorName) },
+  ["id"],
+);
 
 /**
  * The `qti-any-n` operator with its two required bounds, each an integer or a variable name as
@@ -101,23 +106,25 @@ export const StatsOperator = relation("StatsOperator", { id: uuid, name: statsOp
  */
 export const AnyN = relation(
   "AnyN",
-  { id: uuid, max: integerOrVariableRef, min: integerOrVariableRef },
+  { id: uuid, max: ExpressionIntegerOrVariable, min: ExpressionIntegerOrVariable },
   ["id"],
 );
 
 /**
  * The `qti-random-integer` expression and its required upper bound.
  */
-export const RandomInteger = relation("RandomInteger", { id: uuid, max: integerOrVariableRef }, [
-  "id",
-]);
+export const RandomInteger = relation(
+  "RandomInteger",
+  { id: uuid, max: ExpressionIntegerOrVariable },
+  ["id"],
+);
 
 /**
  * The `min` of a `qti-random-integer` whose source wrote it.
  */
 export const RandomIntegerMin = relation(
   "RandomIntegerMin",
-  { node: uuid, value: integerOrVariableRef },
+  { node: uuid, value: ExpressionIntegerOrVariable },
   ["node"],
 );
 
@@ -126,7 +133,7 @@ export const RandomIntegerMin = relation(
  */
 export const RandomIntegerStep = relation(
   "RandomIntegerStep",
-  { node: uuid, value: integerOrVariableRef },
+  { node: uuid, value: ExpressionIntegerOrVariable },
   ["node"],
 );
 
@@ -147,12 +154,20 @@ export const RandomFloatMin = relation(
 /**
  * The `qti-field-value` operator and the record field it reads.
  */
-export const FieldValue = relation("FieldValue", { fieldIdentifier: ncName, id: uuid }, ["id"]);
+export const FieldValue = relation(
+  "FieldValue",
+  { fieldIdentifier: RecordFieldIdentifier, id: uuid },
+  ["id"],
+);
 
 /**
  * The `qti-inside` operator: the region, as a shape and its coordinates.
  */
-export const Inside = relation("Inside", { coords, id: uuid, shape }, ["id"]);
+export const Inside = relation(
+  "Inside",
+  { coords: ExpressionCoords, id: uuid, shape: closedId(Shape) },
+  ["id"],
+);
 
 /**
  * The `qti-pattern-match` operator and its pattern, a string or a braced reference as read.
@@ -162,7 +177,9 @@ export const PatternMatch = relation("PatternMatch", { id: uuid, pattern: xsStri
 /**
  * The `qti-substring` operator and its required `case-sensitive`.
  */
-export const Substring = relation("Substring", { caseSensitive: xsBoolean, id: uuid }, ["id"]);
+export const Substring = relation("Substring", { caseSensitive: closedId(XsBoolean), id: uuid }, [
+  "id",
+]);
 
 /**
  * The `qti-string-match` operator: `case-sensitive` is required, and `substring` is carried as read
@@ -170,7 +187,7 @@ export const Substring = relation("Substring", { caseSensitive: xsBoolean, id: u
  */
 export const StringMatch = relation(
   "StringMatch",
-  { caseSensitive: xsBoolean, id: uuid, substring: xsBoolean },
+  { caseSensitive: closedId(XsBoolean), id: uuid, substring: closedId(XsBoolean) },
   ["id"],
 );
 
@@ -187,32 +204,36 @@ export const CustomOperator = relation("CustomOperator", { id: uuid }, ["id"]);
 /**
  * The `class` of a `qti-custom-operator` whose source wrote it.
  */
-export const CustomOperatorClass = relation("CustomOperatorClass", { node: uuid, value: ncName }, [
-  "node",
-]);
+export const CustomOperatorClass = relation(
+  "CustomOperatorClass",
+  { node: uuid, value: CustomOperatorClassName },
+  ["node"],
+);
 
 /**
  * The `definition` of a `qti-custom-operator` whose source wrote it.
  */
 export const CustomOperatorDefinition = relation(
   "CustomOperatorDefinition",
-  { node: uuid, value: anyUri },
+  { node: uuid, value: CustomOperatorDefinitionUri },
   ["node"],
 );
 
 /**
  * The `qti-test-variables` expression and the outcome it totals.
  */
-export const TestVariables = relation("TestVariables", { id: uuid, variableIdentifier: ncName }, [
-  "id",
-]);
+export const TestVariables = relation(
+  "TestVariables",
+  { id: uuid, variableIdentifier: VariableReference },
+  ["id"],
+);
 
 /**
  * The `base-type` of a `qti-test-variables` whose source wrote it.
  */
 export const TestVariablesBaseType = relation(
   "TestVariablesBaseType",
-  { node: uuid, value: baseType },
+  { node: uuid, value: closedId(BaseType) },
   ["node"],
 );
 
@@ -222,7 +243,7 @@ export const TestVariablesBaseType = relation(
  */
 export const ExpressionWeightIdentifier = relation(
   "ExpressionWeightIdentifier",
-  { node: uuid, value: ncName },
+  { node: uuid, value: WeightReference },
   ["node"],
 );
 
@@ -241,9 +262,9 @@ export const Equal = relation(
   "Equal",
   {
     id: uuid,
-    includeLowerBound: xsBoolean,
-    includeUpperBound: xsBoolean,
-    toleranceMode,
+    includeLowerBound: closedId(XsBoolean),
+    includeUpperBound: closedId(XsBoolean),
+    toleranceMode: closedId(ToleranceMode),
   },
   ["id"],
 );
@@ -272,22 +293,21 @@ export const DeclaredIncludeUpperBound = relation("DeclaredIncludeUpperBound", {
  */
 export const EqualTolerance = relation(
   "EqualTolerance",
-  { node: uuid, toleranceMode, value: toleranceList },
+  { node: uuid, toleranceMode: closedId(ToleranceMode), value: toleranceList },
   ["node"],
 );
 
 /**
- * The `qti-equal-rounded` operator: `figures` as read, whether it was a number or a variable name,
- * and the number where it was one.
+ * The `qti-equal-rounded` operator: whether `figures` was a number or a variable name, and the
+ * number where it was one; the variable name is the `EqualRoundedFiguresRef` row.
  */
 export const EqualRounded = relation(
   "EqualRounded",
   {
-    figures: integerOrVariableRef,
     figuresKind: closedId(RefOrLiteral),
     figuresValue: pg.bigint,
     id: uuid,
-    roundingMode,
+    roundingMode: closedId(RoundingMode),
   },
   ["id"],
 );
@@ -303,38 +323,70 @@ export const DeclaredRoundingMode = relation("DeclaredRoundingMode", { node: uui
 export const RoundTo = relation(
   "RoundTo",
   {
-    figures: integerOrVariableRef,
     figuresKind: closedId(RefOrLiteral),
     figuresValue: pg.bigint,
     id: uuid,
-    roundingMode,
+    roundingMode: closedId(RoundingMode),
   },
   ["id"],
 );
 
 /**
- * The `qti-index` operator: `n` as read, whether it was a number or a variable name, and the number
- * where it was one.
+ * The `qti-index` operator: whether `n` was a number or a variable name, and the number where it
+ * was one; the variable name is the `IndexNRef` row.
  */
 export const Index = relation(
   "Index",
-  { id: uuid, n: intOrIdentifier, nKind: closedId(RefOrLiteral), nValue: pg.bigint },
+  { id: uuid, nKind: closedId(RefOrLiteral), nValue: pg.bigint },
   ["id"],
 );
 
 /**
- * The `qti-repeat` operator: `number-repeats` as read, whether it was a number or a variable name,
- * and the number where it was one.
+ * The `qti-repeat` operator: whether `number-repeats` was a number or a variable name, and the
+ * number where it was one; the variable name is the `RepeatNumberRepeatsRef` row.
  */
 export const Repeat = relation(
   "Repeat",
   {
     id: uuid,
-    numberRepeats: intOrIdentifier,
     numberRepeatsKind: closedId(RefOrLiteral),
     numberRepeatsValue: pg.bigint,
   },
   ["id"],
+);
+
+/**
+ * The variable `figures` names on a `qti-equal-rounded` whose `figuresKind` is `ref`.
+ */
+export const EqualRoundedFiguresRef = relation(
+  "EqualRoundedFiguresRef",
+  { identifier: VariableReference, node: uuid },
+  ["node"],
+);
+
+/**
+ * The variable `figures` names on a `qti-round-to` whose `figuresKind` is `ref`.
+ */
+export const RoundToFiguresRef = relation(
+  "RoundToFiguresRef",
+  { identifier: VariableReference, node: uuid },
+  ["node"],
+);
+
+/**
+ * The variable `n` names on a `qti-index` whose `nKind` is `ref`.
+ */
+export const IndexNRef = relation("IndexNRef", { identifier: VariableReference, node: uuid }, [
+  "node",
+]);
+
+/**
+ * The variable `number-repeats` names on a `qti-repeat` whose `numberRepeatsKind` is `ref`.
+ */
+export const RepeatNumberRepeatsRef = relation(
+  "RepeatNumberRepeatsRef",
+  { identifier: VariableReference, node: uuid },
+  ["node"],
 );
 
 /**
@@ -343,7 +395,7 @@ export const Repeat = relation(
  */
 export const OutcomeMinMax = relation(
   "OutcomeMinMax",
-  { id: uuid, kind: closedId(node.NodeKind), outcomeIdentifier: ncName },
+  { id: uuid, kind: closedId(node.NodeKind), outcomeIdentifier: VariableReference },
   ["id"],
 );
 
@@ -399,10 +451,12 @@ export const relations = {
   DeclaredToleranceMode,
   Equal,
   EqualRounded,
+  EqualRoundedFiguresRef,
   EqualTolerance,
   ExpressionWeightIdentifier,
   FieldValue,
   Index,
+  IndexNRef,
   Inside,
   MathConstant,
   MathOperator,
@@ -417,7 +471,9 @@ export const relations = {
   RandomIntegerStep,
   RefOrLiteral,
   Repeat,
+  RepeatNumberRepeatsRef,
   RoundTo,
+  RoundToFiguresRef,
   StatsOperator,
   StringMatch,
   Substring,
@@ -496,6 +552,42 @@ export const rules = [
         r.le(r.numberRepeatsValue, 2_147_483_647n),
       ),
     ),
+  ),
+  contained(
+    on(EqualRoundedFiguresRef, "node"),
+    on(select(EqualRounded, { figuresKind: "ref" }), "id"),
+  ),
+  capacity(on(select(EqualRounded, { figuresKind: "ref" }), "id"), {
+    from: on(EqualRoundedFiguresRef, "node"),
+    within: within(1n, 1n),
+  }),
+  check("EqualRoundedFiguresRefZero", EqualRounded, (e) =>
+    e.or(e.eq(e.figuresKind, "literal"), e.eq(e.figuresValue, 0n)),
+  ),
+  contained(on(RoundToFiguresRef, "node"), on(select(RoundTo, { figuresKind: "ref" }), "id")),
+  capacity(on(select(RoundTo, { figuresKind: "ref" }), "id"), {
+    from: on(RoundToFiguresRef, "node"),
+    within: within(1n, 1n),
+  }),
+  check("RoundToFiguresRefZero", RoundTo, (r) =>
+    r.or(r.eq(r.figuresKind, "literal"), r.eq(r.figuresValue, 0n)),
+  ),
+  contained(on(IndexNRef, "node"), on(select(Index, { nKind: "ref" }), "id")),
+  capacity(on(select(Index, { nKind: "ref" }), "id"), {
+    from: on(IndexNRef, "node"),
+    within: within(1n, 1n),
+  }),
+  check("IndexNRefZero", Index, (i) => i.or(i.eq(i.nKind, "literal"), i.eq(i.nValue, 0n))),
+  contained(
+    on(RepeatNumberRepeatsRef, "node"),
+    on(select(Repeat, { numberRepeatsKind: "ref" }), "id"),
+  ),
+  capacity(on(select(Repeat, { numberRepeatsKind: "ref" }), "id"), {
+    from: on(RepeatNumberRepeatsRef, "node"),
+    within: within(1n, 1n),
+  }),
+  check("RepeatNumberRepeatsRefZero", Repeat, (r) =>
+    r.or(r.eq(r.numberRepeatsKind, "literal"), r.eq(r.numberRepeatsValue, 0n)),
   ),
   contained(on(OutcomeMinMax, "id", "kind"), on(node.Node, "id", "kind")),
   check("OutcomeMinMaxKind", OutcomeMinMax, (o) =>

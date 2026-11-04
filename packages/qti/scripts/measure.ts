@@ -9,13 +9,10 @@
  * grizzle exposes no size of a compiled program, so the script reads what each compilation's budget
  * meter was charged, and a prefix whose compilation is refused prints the refusal's own figure.
  */
-import { createRequire } from "node:module";
-import nodePath from "node:path";
-import { pathToFileURL } from "node:url";
 import { ChangeSet, Db } from "@bjornpagen/grizzle";
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { NodeFileSystem, NodeRuntime } from "@effect/platform-node";
-import { Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path } from "effect";
 import snapshot from "#migrations/qti/snapshot.json" with { type: "json" };
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { documentIdsOf, nodeQueries, treeOf } from "#qti/export/queries.ts";
@@ -25,6 +22,8 @@ import { Qti } from "#qti/schema/qti.ts";
 import { Package } from "#qti/schema/package.ts";
 import { Author } from "#qti/schema/roles.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
+import { BUDGETS, SQL_BYTES_CEILING, measure, watchMeters } from "#qti/test/meter.ts";
+import type { Budget, Measured } from "#qti/test/meter.ts";
 
 /**
  * The compiler's fixed ceilings (`docs/research/d8105349.md` section 22).
@@ -32,7 +31,7 @@ import { AuthorApp } from "#qti/schema/logins.ts";
 const CEILING = {
   bindParameters: 65_535,
   fields: 10_000,
-  sqlBytes: 1_048_576,
+  sqlBytes: SQL_BYTES_CEILING,
   variants: 64,
 } as const;
 
@@ -87,13 +86,6 @@ const alarm = (name: string, measured: number, ceiling: number): readonly string
 const programsMode = process.argv.includes("--programs");
 
 /**
- * The budgets a compilation is metered against, in the order grizzle's meter reports them.
- */
-const BUDGETS = ["nodes", "fields", "sqlBytes", "params", "variants"] as const;
-
-type Budget = (typeof BUDGETS)[number];
-
-/**
  * The ceiling of each budget, by the name grizzle's meter gives it.
  */
 const LIMIT: Readonly<Record<Budget, number>> = {
@@ -103,61 +95,6 @@ const LIMIT: Readonly<Record<Budget, number>> = {
   sqlBytes: CEILING.sqlBytes,
   variants: CEILING.variants,
 };
-
-/**
- * What one budget meter reports: for each budget, what the compilation was charged and its limit.
- */
-const MeterUsage = Schema.Record(
-  Schema.String,
-  Schema.Struct({ limit: Schema.Number, used: Schema.Number }),
-);
-
-type MeterUsageOf = typeof MeterUsage.Type;
-
-/**
- * A budget meter of grizzle's engine, which the compiler charges and which reports its usage.
- */
-interface Meter {
-  readonly usage: () => MeterUsageOf;
-}
-
-/**
- * What a charge answers: whether the meter took it.
- */
-interface Charged {
-  readonly ok: boolean;
-}
-
-type Charging = (this: Meter, ...args: unknown[]) => Charged;
-
-/**
- * The two methods of a meter that charge it.
- */
-interface MeterPrototype {
-  charge: Charging;
-  chargeSql: Charging;
-}
-
-/**
- * The engine file that holds the meter class.
- */
-interface EngineBudget {
-  readonly BudgetMeter: { readonly prototype: MeterPrototype };
-}
-
-const isEngineBudget = (value: unknown): value is EngineBudget =>
-  Predicate.hasProperty(value, "BudgetMeter") &&
-  Predicate.hasProperty(value.BudgetMeter, "prototype") &&
-  Predicate.hasProperty(value.BudgetMeter.prototype, "charge") &&
-  Predicate.hasProperty(value.BudgetMeter.prototype, "chargeSql");
-
-/**
- * What a compilation was charged on its own meter, and the refusal when it failed.
- */
-interface Measured {
-  readonly charged: Readonly<Record<Budget, number>>;
-  readonly refusal: string | undefined;
-}
 
 /**
  * One `ChangeSet` with a member for each of the relations the author writes from `from` up to but
@@ -210,78 +147,6 @@ const MILESTONE_ARMS = [
   ["M4", 0],
   ["M5", 0],
 ] as const;
-
-/**
- * Wrap the budget meter of grizzle's engine so every meter a compilation makes is kept.
- *
- * Grizzle exposes no size of a compiled program, so the script reads the meter the compiler
- * charges. The class is imported from the engine's own file, which is the instance the compiler
- * uses, and its two charging methods remember the meter they ran on.
- */
-const watchMeters = Effect.gen(function* watchesMeters() {
-  const grizzle = createRequire(import.meta.url).resolve("@bjornpagen/grizzle");
-  const engine = createRequire(grizzle).resolve("@bjornpagen/grizzle-engine");
-  const budget: unknown = yield* Effect.promise(
-    () => import(pathToFileURL(nodePath.join(nodePath.dirname(engine), "core", "budget.js")).href),
-  );
-  if (!isEngineBudget(budget)) {
-    return yield* Effect.die(new Error("grizzle's engine exports no BudgetMeter to watch"));
-  }
-
-  const meters = new Set<Meter>();
-  const { prototype } = budget.BudgetMeter;
-  for (const method of ["charge", "chargeSql"] as const) {
-    const original = prototype[method];
-    prototype[method] = function charged(this: Meter, ...args: unknown[]) {
-      meters.add(this);
-
-      return original.apply(this, args);
-    };
-  }
-
-  return meters;
-});
-
-/**
- * Compile `program` and report what its compilation was charged.
- */
-const measure = (
-  compile: (program: Program) => Effect.Effect<void, unknown>,
-  meters: Set<Meter>,
-  program: Program,
-): Effect.Effect<Measured> =>
-  Effect.gen(function* measures() {
-    meters.clear();
-
-    const result = yield* Effect.result(compile(program));
-    const charged: Record<Budget, number> = {
-      fields: 0,
-      nodes: 0,
-      params: 0,
-      sqlBytes: 0,
-      variants: 0,
-    };
-    for (const meter of meters) {
-      const usage = meter.usage();
-      // The compilation's own meter holds the compiler's SQL ceiling; the artifacts' lowering
-      // meters have no limit on SQL.
-      if (usage["sqlBytes"]?.limit === CEILING.sqlBytes) {
-        for (const budget of BUDGETS) {
-          charged[budget] = Math.max(charged[budget], usage[budget]?.used ?? 0);
-        }
-      }
-    }
-    if (result._tag === "Success") {
-      return { charged, refusal: undefined };
-    }
-
-    return {
-      charged,
-      refusal: Predicate.hasProperty(result.failure, "message")
-        ? String(result.failure.message)
-        : String(result.failure),
-    };
-  });
 
 /**
  * One measured program as a line: its name, whether it compiled, and what each budget was charged

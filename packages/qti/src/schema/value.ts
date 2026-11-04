@@ -7,6 +7,7 @@
  * the two elements this module owns.
  */
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `DeclarationShape` and the `shape` field are the contract the declaration and processing modules name; the shape here is the typed-or-record choice, not a structure. */
+import type { FieldBase, Relation } from "@bjornpagen/grizzle";
 import {
   alternatives,
   capacity,
@@ -25,7 +26,11 @@ import {
 } from "@bjornpagen/grizzle";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as node from "#qti/schema/node.ts";
+import { RecordFieldIdentifier } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
+import type { ValueContext } from "#qti/schema/value-contexts.ts";
+import { lexicalOf } from "#qti/schema/value-contexts.ts";
+import { valueArmContracts } from "#qti/schema/value-contracts.ts";
 
 /**
  * Which element a value set is written as.
@@ -90,37 +95,112 @@ export const CorrectResponseArm = relation("CorrectResponseArm", { id: uuid }, [
  */
 export const DefaultValueArm = relation("DefaultValueArm", { id: uuid }, ["id"]);
 
+const armContracts = valueArmContracts();
+
 /**
- * The eleven `qti-value` arms of a base type, named `<prefix><BaseType>`. Each holds the value,
- * the concatenation of the element's text children with each tab, line feed and carriage return
- * replaced by a space, which the base type's lexical pattern judges. The prefix lets another
- * parent reuse the arms without a name collision.
+ * The eleven field types of each context: the lexical forms of `value-contexts.ts`, with the
+ * context's own contract for each of the eight base types that has one. Each context is spread
+ * on its own, so a caller sees that context's contracts and not the union of every context's.
  */
-export const valueArms = (prefix: string) => {
-  const arm = <const Name extends string, Value extends ReturnType<typeof str.regex>>(
-    name: Name,
-    value: Value,
-  ) => relation(`${prefix}${name}`, { id: uuid, value }, ["id"]);
-  const normalized = str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags);
-  const double = str.regex(patterns.xsDouble);
-  const pair = str.regex(patterns.pair);
+const fieldsByContext = {
+  Declared: { ...lexicalOf("Declared"), ...armContracts.Declared },
+  InterpolationDefault: {
+    ...lexicalOf("InterpolationDefault"),
+    ...armContracts.InterpolationDefault,
+  },
+  InterpolationTarget: { ...lexicalOf("InterpolationTarget"), ...armContracts.InterpolationTarget },
+  Literal: { ...lexicalOf("Literal"), ...armContracts.Literal },
+  MapKey: { ...lexicalOf("MapKey"), ...armContracts.MapKey },
+  MatchDefault: { ...lexicalOf("MatchDefault"), ...armContracts.MatchDefault },
+  MatchTarget: { ...lexicalOf("MatchTarget"), ...armContracts.MatchTarget },
+  Usage: { ...lexicalOf("Usage"), ...armContracts.Usage },
+} satisfies { readonly [Context in ValueContext]: ElevenFields };
+
+/**
+ * The field type of each of the eleven base types in a context: the context's contract for each
+ * of the eight base types that have one, and the lexical form of `value-contexts.ts` for the
+ * boolean, the file and the string.
+ */
+export const fieldsOf = <const Context extends ValueContext>(
+  context: Context,
+): (typeof fieldsByContext)[Context] => fieldsByContext[context];
+
+/**
+ * The eleven field types of a context, as the arm relations read them.
+ */
+interface ElevenFields {
+  readonly boolean: FieldBase;
+  readonly directedPair: FieldBase;
+  readonly duration: FieldBase;
+  readonly file: FieldBase;
+  readonly float: FieldBase;
+  readonly identifier: FieldBase;
+  readonly integer: FieldBase;
+  readonly pair: FieldBase;
+  readonly point: FieldBase;
+  readonly string: FieldBase;
+  readonly uri: FieldBase;
+}
+
+/**
+ * The eleven arm relations of a prefix over a context's eleven field types, each arm holding its
+ * base type's field. `valueArms` states the type each context's arms have.
+ */
+const armsOf = (prefix: string, fields: ElevenFields) => {
+  const arm = <const Name extends string, Value extends FieldBase>(name: Name, value: Value) =>
+    relation(`${prefix}${name}`, { id: uuid, value }, ["id"]);
 
   return {
-    boolean: arm("Boolean", str.regex(patterns.booleanLiteral)),
-    directedPair: arm("DirectedPair", pair),
-    duration: arm("Duration", double),
-    file: arm("File", normalized),
-    float: arm("Float", double),
-    identifier: arm("Identifier", str.regex(patterns.ncName)),
-    integer: arm("Integer", str.regex(patterns.xsInteger)),
-    pair: arm("Pair", pair),
-    point: arm("Point", str.regex(patterns.point)),
-    string: arm("String", normalized),
-    uri: arm("Uri", str.regex(patterns.anyUri)),
+    boolean: arm("Boolean", fields.boolean),
+    directedPair: arm("DirectedPair", fields.directedPair),
+    duration: arm("Duration", fields.duration),
+    file: arm("File", fields.file),
+    float: arm("Float", fields.float),
+    identifier: arm("Identifier", fields.identifier),
+    integer: arm("Integer", fields.integer),
+    pair: arm("Pair", fields.pair),
+    point: arm("Point", fields.point),
+    string: arm("String", fields.string),
+    uri: arm("Uri", fields.uri),
   };
 };
 
-const declaredValueArms = valueArms("DeclaredValue");
+/**
+ * One arm relation of a prefix: the relation `<prefix><Name>` holding the value of one base type.
+ */
+type ArmRelation<Prefix extends string, Name extends string, Value> = Relation<
+  `${Prefix}${Name}`,
+  { readonly id: typeof uuid; readonly value: Value },
+  readonly ["id"]
+>;
+
+/**
+ * The eleven arm relations `valueArms` returns for a prefix and a context, each over the field
+ * type the context holds for its base type.
+ */
+type ArmsOf<Prefix extends string, Context extends ValueContext> = {
+  readonly [Name in keyof (typeof fieldsByContext)[Context] as Name]: ArmRelation<
+    Prefix,
+    Capitalize<Name & string>,
+    (typeof fieldsByContext)[Context][Name]
+  >;
+};
+
+/**
+ * The eleven `qti-value` arms of a base type in a context, named `<prefix><BaseType>`. Each holds
+ * the value, the concatenation of the element's text children with each tab, line feed and
+ * carriage return replaced by a space, which the context's field type for the base type judges.
+ * The prefix lets another parent reuse the arms without a name collision.
+ */
+export const valueArms = <const Prefix extends string, const Context extends ValueContext>(
+  prefix: Prefix,
+  context: Context,
+): ArmsOf<Prefix, Context> =>
+  // SAFETY: `armsOf` builds each arm from the field `fieldsByContext` holds for `context` and its base type, under `${prefix}${Name}`; `ArmsOf` states those same names and fields, which a generic call cannot carry through the context lookup.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+  armsOf(prefix, fieldsOf(context)) as ArmsOf<Prefix, Context>;
+
+const declaredValueArms = valueArms("DeclaredValue", "Declared");
 
 /**
  * One `qti-value` of a value set, at its position. A typed value has the base type of its set;
@@ -143,7 +223,7 @@ export const DeclaredValue = relation(
  */
 export const RecordField = relation(
   "RecordField",
-  { fieldIdentifier: str.regex(patterns.ncName), id: uuid },
+  { fieldIdentifier: RecordFieldIdentifier, id: uuid },
   ["id"],
 );
 

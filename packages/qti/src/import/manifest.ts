@@ -13,16 +13,29 @@ import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { attributeRows } from "#qti/import/attributes.ts";
-import { collapse, replace, Rows, treeRows, typedAttribute } from "#qti/import/tree.ts";
+import { closedOf, collapse, replace, Rows, treeRows, typedAttribute } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { classed, contentOf, elementChildren, qmdLeafRows } from "#qti/import/leaf.ts";
 import { recordFile, recordTypes, soleFileTypes } from "#qti/import/record.ts";
 import type { ExternalRefusal } from "#qti/import/record.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
 import { readEntry } from "#qti/package/read.ts";
 import type { Entry, PackageReadError } from "#qti/package/read.ts";
 import type { ZipRefusal } from "#qti/package/zip.ts";
+import {
+  CaseItemUri,
+  FileMediaType,
+  LangStringLanguage,
+  LomToken,
+  LomVocabularySource,
+  LomVocabularyValue,
+  ManifestIdentifier,
+  PackagePath,
+  ResourceEntryHref,
+} from "#qti/schema/contracts.ts";
 import * as csm from "#qti/schema/csm.ts";
 import { ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
+import { CpSchema, XsBoolean } from "#qti/schema/content/rosters.ts";
 import * as md from "#qti/schema/metadata.ts";
 import { Edge } from "#qti/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
@@ -134,10 +147,21 @@ const drdLeaves = {
 const isDrdLeaf = (kind: string): kind is keyof typeof drdLeaves => kind in drdLeaves;
 
 /**
+ * An `xs:ID` of the manifest as its contract brands it: the value a writer holds once the source's
+ * text has been collapsed, before the column's pattern judges it at commit.
+ */
+export type ManifestIdentifierText = ReturnType<typeof ManifestIdentifier>;
+
+/**
+ * A path inside the package as its contract brands it.
+ */
+export type PackagePathText = ReturnType<typeof PackagePath>;
+
+/**
  * The resource-level facts the record of an item resource is bound to.
  */
 interface LomResource {
-  readonly identifier: string;
+  readonly identifier: ManifestIdentifierText;
   readonly node: string;
   readonly type: string;
 }
@@ -183,8 +207,8 @@ interface LomContext {
  * One document a resource of a QTI type names by `href`.
  */
 export interface ManifestDocument {
-  readonly path: string;
-  readonly resource: string;
+  readonly path: PackagePathText;
+  readonly resource: ManifestIdentifierText;
   readonly resourceId: string;
   readonly type: string;
 }
@@ -250,8 +274,8 @@ const attributeOf = (element: Element, local: string): Option.Option<string> =>
 const soleFileDocument = (
   resource: Element,
   type: string,
-  fileHrefs: readonly string[],
-): string | undefined => {
+  fileHrefs: readonly PackagePathText[],
+): PackagePathText | undefined => {
   const [only, ...rest] = fileHrefs;
   const named = type === "qtiusagedata/xml" || soleFileTypes.has(type);
 
@@ -365,7 +389,7 @@ export const lomSubtreeRows = (
     "lom:catalog": (c) => {
       add(md.LomIdentifierCatalog, [
         {
-          collapsed: c.collapsed,
+          collapsed: LomToken(c.collapsed),
           id: c.id,
           identifier: c.parent,
           lom: c.lom,
@@ -398,7 +422,7 @@ export const lomSubtreeRows = (
     },
     "lom:dateTime": (c) => {
       add(md.LomDateTime, [
-        { collapsed: c.collapsed, date: c.parent, id: c.id, lom: c.lom, value: c.value },
+        { collapsed: LomToken(c.collapsed), date: c.parent, id: c.id, lom: c.lom, value: c.value },
       ]);
     },
     "lom:description": (c) => {
@@ -412,7 +436,13 @@ export const lomSubtreeRows = (
     },
     "lom:duration.string": (c) => {
       add(md.LomDurationString, [
-        { collapsed: c.collapsed, duration: c.parent, id: c.id, lom: c.lom, value: c.value },
+        {
+          collapsed: LomToken(c.collapsed),
+          duration: c.parent,
+          id: c.id,
+          lom: c.lom,
+          value: c.value,
+        },
       ]);
     },
     "lom:educational": (c) => {
@@ -421,7 +451,7 @@ export const lomSubtreeRows = (
     "lom:entity": (c) => {
       add(md.LomEntity, [
         {
-          collapsed: c.collapsed,
+          collapsed: LomToken(c.collapsed),
           contribute: c.parent,
           id: c.id,
           lom: c.lom,
@@ -456,7 +486,7 @@ export const lomSubtreeRows = (
     "lom:format": (c) => {
       add(md.LomFormat, [
         {
-          collapsed: c.collapsed,
+          collapsed: LomToken(c.collapsed),
           id: c.id,
           lom: c.lom,
           position: c.position,
@@ -470,7 +500,7 @@ export const lomSubtreeRows = (
       c.findings.hasGeneral = true;
     },
     "lom:id": (c) => {
-      add(md.LomId, [{ collapsed: c.collapsed, id: c.id, value: c.value }]);
+      add(md.LomId, [{ collapsed: LomToken(c.collapsed), id: c.id, value: c.value }]);
     },
     "lom:identifier": (c) => {
       add(md.LomIdentifier, [
@@ -520,7 +550,7 @@ export const lomSubtreeRows = (
     "lom:location": (c) => {
       add(md.LomLocation, [
         {
-          collapsed: c.collapsed,
+          collapsed: LomToken(c.collapsed),
           id: c.id,
           lom: c.lom,
           position: c.position,
@@ -531,7 +561,13 @@ export const lomSubtreeRows = (
     },
     "lom:maximumVersion": (c) => {
       add(md.LomMaximumVersion, [
-        { collapsed: c.collapsed, id: c.id, lom: c.lom, orComposite: c.parent, value: c.value },
+        {
+          collapsed: LomToken(c.collapsed),
+          id: c.id,
+          lom: c.lom,
+          orComposite: c.parent,
+          value: c.value,
+        },
       ]);
     },
     "lom:metaMetadata": (c) => {
@@ -540,7 +576,7 @@ export const lomSubtreeRows = (
     "lom:metadataschema": (c) => {
       add(md.LomMetadataschema, [
         {
-          collapsed: c.collapsed,
+          collapsed: LomToken(c.collapsed),
           id: c.id,
           lom: c.lom,
           metaMetadata: c.parent,
@@ -551,7 +587,13 @@ export const lomSubtreeRows = (
     },
     "lom:minimumVersion": (c) => {
       add(md.LomMinimumVersion, [
-        { collapsed: c.collapsed, id: c.id, lom: c.lom, orComposite: c.parent, value: c.value },
+        {
+          collapsed: LomToken(c.collapsed),
+          id: c.id,
+          lom: c.lom,
+          orComposite: c.parent,
+          value: c.value,
+        },
       ]);
     },
     "lom:name": (c) => {
@@ -588,11 +630,19 @@ export const lomSubtreeRows = (
     },
     "lom:size": (c) => {
       add(md.LomSize, [
-        { collapsed: c.collapsed, id: c.id, lom: c.lom, technical: c.parent, value: c.value },
+        {
+          collapsed: LomToken(c.collapsed),
+          id: c.id,
+          lom: c.lom,
+          technical: c.parent,
+          value: c.value,
+        },
       ]);
     },
     "lom:source": (c) => {
-      add(md.LomSource, [{ collapsed: c.collapsed, id: c.id, value: c.value }]);
+      add(md.LomSource, [
+        { collapsed: LomVocabularySource(c.collapsed), id: c.id, value: c.value },
+      ]);
     },
     "lom:source.langString": (c) => {
       add(md.LomSourceLangString, [{ id: c.id, lom: c.lom }]);
@@ -620,7 +670,7 @@ export const lomSubtreeRows = (
 
       if (Option.isSome(attributeOf(c.element, "language"))) {
         add(md.LomStringLanguage, [
-          { node: c.id, value: typed(c.element, "language", "preserve") },
+          { node: c.id, value: LangStringLanguage(typed(c.element, "language", "preserve")) },
         ]);
       }
     },
@@ -651,7 +701,12 @@ export const lomSubtreeRows = (
     },
     "lom:value": (c) => {
       add(md.LomValue, [
-        { collapsed: c.collapsed, id: c.id, parentKind: c.parentKind, value: c.value },
+        {
+          collapsed: LomVocabularyValue(c.collapsed),
+          id: c.id,
+          parentKind: c.parentKind,
+          value: c.value,
+        },
       ]);
     },
     "lom:version": (c) => {
@@ -746,7 +801,9 @@ export const csmSetRows = (rows: Rows, nodes: NodeIndex, set: Element, host: str
       } else if (node.kind === "csmd:GUID") {
         add(csm.CsmGuid, [{ id: node.id, labelledGuid, value: replace(content) }]);
       } else if (node.kind === "csmd:caseItemURI") {
-        add(csm.CsmCaseItemUri, [{ id: node.id, labelledGuid, value: collapse(content) }]);
+        add(csm.CsmCaseItemUri, [
+          { id: node.id, labelledGuid, value: CaseItemUri(collapse(content)) },
+        ]);
       }
     }
   };
@@ -832,6 +889,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     version: SchemaVersionHandle;
   },
   | ExternalRefusal
+  | ImportRefused
   | NotQti3
   | PackageReadError
   | PlatformError.PlatformError
@@ -1090,7 +1148,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     }
   };
 
-  const metadataRows = (metadataElement: Element): void => {
+  const metadataRows = Effect.fn("import.manifest.metadataRows")(function* metadataRows(
+    metadataElement: Element,
+  ): Effect.fn.Return<void, ImportRefused> {
     const metadataId = kindIs(metadataElement, "cp:metadata.manifest");
     if (metadataId === undefined) {
       return;
@@ -1100,7 +1160,13 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     for (const leaf of childrenNamed(metadataElement, "schema")) {
       const id = kindIs(leaf, "cp:schema");
       if (id !== undefined) {
-        add(ManifestSchema, [{ id, metadata: metadataId, value: textOf(leaf) }]);
+        const schema = yield* closedOf(
+          CpSchema.handles,
+          textOf(leaf),
+          "value-lexical",
+          "the cp:schema of the manifest",
+        );
+        add(ManifestSchema, [{ id, metadata: metadataId, value: schema }]);
       }
     }
 
@@ -1108,28 +1174,30 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       const id = kindIs(leaf, "cp:schemaversion");
       const value = textOf(leaf);
       if (id !== undefined && isSchemaVersion(value)) {
-        add(ManifestSchemaVersion, [{ id, metadata: metadataId, value }]);
+        add(ManifestSchemaVersion, [
+          { id, metadata: metadataId, package: packageId, version: value },
+        ]);
       }
     }
 
     metadataChildren(metadataElement, { id: metadataId, kind: "cp:metadata.manifest" }, null);
-  };
+  });
 
   /**
    * Write the rows of one `cpx:variant` of a resource: the variant and its `ManifestId`, its
    * metadata, the access-for-all resource under it and one arm row per DRD leaf.
    */
-  const variantRows = (
+  const variantRows = Effect.fn("import.manifest.variantRows")(function* variantRows(
     variant: Element,
     id: string,
-    resource: { readonly identifier: string; readonly node: string },
-  ): void => {
-    const identifier = typed(variant, "identifier", "collapse");
+    resource: { readonly identifier: ManifestIdentifierText; readonly node: string },
+  ): Effect.fn.Return<void, ImportRefused> {
+    const identifier = ManifestIdentifier(typed(variant, "identifier", "collapse"));
     add(Variant, [
       {
         id,
         identifier,
-        identifierref: typed(variant, "identifierref", "collapse"),
+        identifierref: ManifestIdentifier(typed(variant, "identifierref", "collapse")),
         package: packageId,
         resource: resource.node,
         resourceIdentifier: resource.identifier,
@@ -1157,6 +1225,19 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
           if (found !== undefined && isDrdLeaf(found.kind)) {
             const spec = drdLeaves[found.kind];
             const value = classed(contentOf(leaf), spec.class);
+            if (found.kind === "drd:atInteroperable") {
+              const interoperable = yield* closedOf(
+                XsBoolean.handles,
+                value,
+                "attribute-lexical",
+                "the drd:atInteroperable of a variant",
+              );
+              add(DrdAtInteroperable, [
+                { id: found.id, owner: descriptionId, value: interoperable },
+              ]);
+              continue;
+            }
+
             // SAFETY: the leaf's column pattern judges the value at commit, which is the importer's refusal for it.
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
             add(spec.arm, [{ id: found.id, owner: descriptionId, value }] as never);
@@ -1164,22 +1245,24 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
         }
       }
     }
-  };
+  });
 
   const hrefless: {
-    readonly files: readonly string[];
-    readonly identifier: string;
+    readonly files: readonly PackagePathText[];
+    readonly identifier: ManifestIdentifierText;
     readonly resourceId: string;
     readonly type: string;
   }[] = [];
 
-  const resourceRows = (resource: Element): void => {
+  const resourceRows = Effect.fn("import.manifest.resourceRows")(function* resourceRows(
+    resource: Element,
+  ): Effect.fn.Return<void, ImportRefused> {
     const node = nodes.get(resource);
     if (node === undefined) {
       return;
     }
 
-    const identifier = typed(resource, "identifier", "collapse");
+    const identifier = ManifestIdentifier(typed(resource, "identifier", "collapse"));
     const type = typed(resource, "type", "preserve");
     add(Resource, [{ id: node.id, identifier, package: packageId, type, version }]);
     add(ManifestId, [{ holder: "resource", id: identifier, package: packageId }]);
@@ -1187,9 +1270,14 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
 
     if (Option.isSome(attributeOf(resource, "href"))) {
       const href = typed(resource, "href", "collapse");
-      add(ResourceHref, [{ href, package: packageId, resource: node.id }]);
+      add(ResourceHref, [{ href: ResourceEntryHref(href), package: packageId, resource: node.id }]);
       if (qtiDocumentType.test(type) || recordTypes.has(type)) {
-        documents.push({ path: href, resource: identifier, resourceId: node.id, type });
+        documents.push({
+          path: PackagePath(href),
+          resource: identifier,
+          resourceId: node.id,
+          type,
+        });
       }
     }
 
@@ -1205,14 +1293,14 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       }
     }
 
-    const fileHrefs: string[] = [];
+    const fileHrefs: PackagePathText[] = [];
     for (const file of childrenNamed(resource, "file")) {
       const id = kindIs(file, "cp:file");
       const position = id === undefined ? undefined : positions.get(id);
       if (id !== undefined && position !== undefined) {
         fileMetadataRows(file, id);
 
-        const href = typed(file, "href", "collapse");
+        const href = PackagePath(typed(file, "href", "collapse"));
         fileHrefs.push(href);
         add(File, [
           {
@@ -1243,7 +1331,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
             id,
             package: packageId,
             resource: identifier,
-            target: typed(dependency, "identifierref", "collapse"),
+            target: ManifestIdentifier(typed(dependency, "identifierref", "collapse")),
           },
         ]);
       }
@@ -1252,19 +1340,19 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     for (const child of elementChildren(resource)) {
       const variant = nodes.get(child);
       if (variant?.kind === "cpx:variant") {
-        variantRows(child, variant.id, { identifier, node: node.id });
+        yield* variantRows(child, variant.id, { identifier, node: node.id });
       }
     }
-  };
+  });
 
-  const manifestIdentifier = typed(root, "identifier", "collapse");
+  const manifestIdentifier = ManifestIdentifier(typed(root, "identifier", "collapse"));
   add(Package, [{ id: packageId, identifier: manifestIdentifier, schemaversion: version }]);
   add(ManifestId, [{ holder: "manifest", id: manifestIdentifier, package: packageId }]);
   add(ManifestIdOfManifest, [{ id: manifestIdentifier, package: packageId }]);
   add(Manifest, [{ id: packageId }]);
 
   for (const metadataElement of childrenNamed(root, "metadata")) {
-    metadataRows(metadataElement);
+    yield* metadataRows(metadataElement);
   }
 
   for (const organizations of childrenNamed(root, "organizations")) {
@@ -1281,23 +1369,23 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     }
 
     for (const resource of childrenNamed(resources, "resource")) {
-      resourceRows(resource);
+      yield* resourceRows(resource);
     }
   }
 
   for (const [element, found] of nodes) {
     if (found.kind === "qmd:qtiMetadata") {
-      built = qmdLeafRows(built, nodes, element, found.id);
+      built = yield* qmdLeafRows(built, nodes, element, found.id);
     }
   }
 
   add(
     PackageEntry,
-    entries.map(({ kind, path }) => ({ kind, package: packageId, path })),
+    entries.map(({ kind, path }) => ({ kind, package: packageId, path: PackagePath(path) })),
   );
 
   for (const record of hrefless) {
-    const path = yield* recordFile({ files: record.files, href: Option.none() });
+    const path = PackagePath(yield* recordFile({ files: record.files, href: Option.none() }));
     documents.push({
       path,
       resource: record.identifier,
@@ -1306,7 +1394,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
     });
   }
 
-  const claimed = new Set(documents.map((document) => document.path));
+  const claimed = new Set<string>(documents.map((document) => document.path));
   const unclaimed = entries.filter((entry) => entry.kind === "file" && !claimed.has(entry.path));
   const contents = yield* Effect.forEach(
     unclaimed,
@@ -1315,9 +1403,9 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
         Effect.map((bytes) => ({
           byteLength: BigInt(bytes.length),
           content: Buffer.from(bytes).toString("base64"),
-          mimeType: mimeTypeOf(entry.path),
+          mimeType: FileMediaType(mimeTypeOf(entry.path)),
           package: packageId,
-          path: entry.path,
+          path: PackagePath(entry.path),
         })),
       ),
     { concurrency: 4 },

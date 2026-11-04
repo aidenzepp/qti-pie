@@ -1,0 +1,66 @@
+{
+	"decisions": {
+		"candidates": [],
+		"choices": [],
+		"confirms": [],
+		"losses": [
+			{
+				"carriers": [],
+				"file": "03-publish.sql",
+				"loses": {
+					"field": "\"figures\"",
+					"kind": "field",
+					"relation": "\"qti\".\"round_to\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"round_to\" DROP COLUMN \"figures\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "03-publish.sql",
+				"loses": {
+					"field": "\"number_repeats\"",
+					"kind": "field",
+					"relation": "\"qti\".\"repeat\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"repeat\" DROP COLUMN \"number_repeats\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "03-publish.sql",
+				"loses": {
+					"field": "\"n\"",
+					"kind": "field",
+					"relation": "\"qti\".\"index\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"index\" DROP COLUMN \"n\"",
+				"within": {
+					"kind": "top"
+				}
+			},
+			{
+				"carriers": [],
+				"file": "03-publish.sql",
+				"loses": {
+					"field": "\"figures\"",
+					"kind": "field",
+					"relation": "\"qti\".\"equal_rounded\""
+				},
+				"statement": "ALTER TABLE \"qti\".\"equal_rounded\" DROP COLUMN \"figures\"",
+				"within": {
+					"kind": "top"
+				}
+			}
+		]
+	},
+	"kind": "drafted",
+	"schema": "qti",
+	"schemaName": "Qti",
+	"source": "c3b1413f4779b8ca5c1f563117c8ba7e4c957f8d2648c096e95835d5c4c0fe7f",
+	"target": "caf91d7b8ff64c3cb15d8955ff4d0ac0a05e1de7aee913b7af4951e066fd6878"
+}

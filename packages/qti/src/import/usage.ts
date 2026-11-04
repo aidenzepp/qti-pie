@@ -8,6 +8,7 @@ import { Effect, Option } from "effect";
 import { contentOf, elementChildren } from "#qti/import/leaf.ts";
 import { NotQti3 } from "#qti/import/manifest.ts";
 import {
+  closedOf,
   collapse,
   kindOf,
   replace,
@@ -15,8 +16,24 @@ import {
   treeRows,
   typedAttribute,
   UnmodeledVocabulary,
+  valueText,
 } from "#qti/import/tree.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
+import {
+  GlossaryUri,
+  ManifestIdentifier,
+  PackagePath,
+  StatisticContextUri,
+  StatisticMeasure,
+  StatisticName,
+  UsageCaseCount,
+  UsageFieldIdentifier,
+  UsageMappingScore,
+  UsagePartIdentifier,
+  UsageValueToken,
+} from "#qti/schema/contracts.ts";
+import { BooleanLiteral, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { BaseType } from "#qti/schema/declaration.ts";
 import { Document } from "#qti/schema/document.ts";
 import { Edge } from "#qti/schema/node.ts";
@@ -54,11 +71,13 @@ const judgedLater = <T extends string>(value: string): T =>
   value as T;
 
 /**
- * The row of a typed `ud:value` in the arm of its base type.
+ * The row of a typed `ud:value` in the arm of each base type but boolean, which `valueRows`
+ * narrows to its roster first.
  */
-const typedArmRows: Record<BaseTypeHandle, (rows: Rows, id: string, text: string) => Rows> = {
-  boolean: (rows, id, text) =>
-    Rows.add(rows, ud.relations.UsageTypedValueBoolean, [{ id, value: judgedLater(text) }]),
+const typedArmRows: Record<
+  Exclude<BaseTypeHandle, "boolean">,
+  (rows: Rows, id: string, text: string) => Rows
+> = {
   directedPair: (rows, id, text) =>
     Rows.add(rows, ud.relations.UsageTypedValueDirectedPair, [{ id, value: judgedLater(text) }]),
   duration: (rows, id, text) =>
@@ -137,9 +156,10 @@ const firstOutsideRoster = (root: Element): Option.Option<UnmodeledVocabulary> =
  *
  * Every attribute is processed under its class through the tree module's `typedAttribute`, which
  * keeps the lexical form where processing changed it. The document has no identifier and no title
- * row. A statistic's `UsageValue` holds the text content after `replace`, and `UsageTypedValue`
- * with its arm row exists where `baseType` is written; the arm's pattern judges that text at
- * commit.
+ * row. A statistic's `UsageValue` holds the text content after `replace`. Where `baseType` is
+ * written, `UsageTypedValue` copies that same text (the schema's containment in `UsageValue`) and
+ * its arm row holds `valueText`'s reading of it, trimmed for every base type but `string`, which
+ * the arm's pattern judges at commit.
  *
  * @param doc - The decoded document.
  * @param input - Where its package lists it.
@@ -153,7 +173,10 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
   doc: XmlDocument,
   input: UsageInput,
   rows: Rows,
-): Effect.fn.Return<{ rows: Rows; nodes: NodeIndex }, NotQti3 | UnmodeledVocabulary> {
+): Effect.fn.Return<
+  { rows: Rows; nodes: NodeIndex },
+  ImportRefused | NotQti3 | UnmodeledVocabulary
+> {
   const { root } = doc;
   if (root.namespace !== usageNamespace || root.local !== "usageData") {
     return yield* new NotQti3({
@@ -184,8 +207,8 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     {
       id: documentId,
       package: input.package,
-      path: input.path,
-      resource: input.resource,
+      path: PackagePath(input.path),
+      resource: ManifestIdentifier(input.resource),
       resourceType: input.resourceType,
       root: "usagedata",
       version: input.version,
@@ -210,6 +233,22 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     built = processed.rows;
 
     return Option.some(processed.value);
+  };
+  const exact = (
+    element: Element,
+    name: AttributeNameHandle,
+  ): Effect.Effect<Option.Option<string>, ImportRefused> => {
+    const lexical = written(element, name);
+    if (Option.isSome(lexical) && /^[ \t\n\r]|[ \t\n\r]$/u.test(lexical.value)) {
+      return Effect.fail(
+        new ImportRefused({
+          detail: `the ${name} attribute of ud:${element.local} is ${JSON.stringify(lexical.value)}, which has whitespace before or after the value; an attribute value is read exactly as written, so remove the spaces, tabs or line ends around it.`,
+          rule: "usage-lexical",
+        }),
+      );
+    }
+
+    return Effect.succeed(read(element, name, "collapse"));
   };
   const optional = <R extends AnyRelation>(
     relation: R,
@@ -244,7 +283,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     ]);
     optional(ud.TargetObjectPartIdentifier, element, "partIdentifier", "collapse", (id, value) => ({
       node: id,
-      value: judgedLater(value),
+      value: UsagePartIdentifier(value),
     }));
 
     const objectType = read(element, "objectType", "preserve");
@@ -256,7 +295,10 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     }
   };
 
-  const valueRows = (element: Element, statistic: string): void => {
+  const valueRows = Effect.fn("import.usage.valueRows")(function* valueRows(
+    element: Element,
+    statistic: string,
+  ): Effect.fn.Return<void, ImportRefused> {
     const node = nodes.get(element);
     if (node === undefined) {
       return;
@@ -265,7 +307,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     const content = contentOf(element);
     add(ud.UsageValue, [
       {
-        collapsed: judgedLater(collapse(content)),
+        collapsed: UsageValueToken(collapse(content)),
         id: node.id,
         statistic,
         value: judgedLater(replace(content)),
@@ -273,7 +315,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     ]);
     optional(ud.UsageValueFieldIdentifier, element, "fieldIdentifier", "collapse", (id, value) => ({
       id,
-      value: judgedLater(value),
+      value: UsageFieldIdentifier(value),
     }));
 
     const lexical = read(element, "baseType", "preserve");
@@ -281,22 +323,38 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
       (known) => Option.isSome(lexical) && known === lexical.value,
     );
     if (baseType !== undefined) {
+      const typed = valueText(baseType, replace(content));
       add(ud.UsageValueBaseType, [{ baseType, id: node.id }]);
       add(ud.UsageTypedValue, [{ baseType, id: node.id, value: judgedLater(replace(content)) }]);
-      built = typedArmRows[baseType](built, node.id, replace(content));
+      if (baseType === "boolean") {
+        const literal = yield* closedOf(
+          BooleanLiteral.handles,
+          typed,
+          "usage-typed-value",
+          'a boolean ud:value with baseType="boolean"',
+        );
+        add(ud.relations.UsageTypedValueBoolean, [{ id: node.id, value: literal }]);
+      } else {
+        built = typedArmRows[baseType](built, node.id, typed);
+      }
     }
-  };
+  });
 
-  const mappingRows = (element: Element, statistic: string): void => {
+  const mappingRows = Effect.fn("import.usage.mappingRows")(function* mappingRows(
+    element: Element,
+    statistic: string,
+  ): Effect.fn.Return<void, ImportRefused> {
     const node = nodes.get(element);
     if (node === undefined) {
       return;
     }
 
-    const defaultValue = read(element, "defaultValue", "collapse");
+    const defaultValue = yield* exact(element, "defaultValue");
+    const lowerBound = yield* exact(element, "lowerBound");
+    const upperBound = yield* exact(element, "upperBound");
     add(ud.UsageMapping, [
       {
-        defaultValue: judgedLater(Option.getOrElse(defaultValue, () => "0")),
+        defaultValue: UsageMappingScore(Option.getOrElse(defaultValue, () => "0")),
         id: node.id,
         statistic,
       },
@@ -305,14 +363,17 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
       add(ud.DeclaredDefaultValue, [{ node: node.id }]);
     }
 
-    optional(ud.UsageMappingLowerBound, element, "lowerBound", "collapse", (id, value) => ({
-      node: id,
-      value: judgedLater(value),
-    }));
-    optional(ud.UsageMappingUpperBound, element, "upperBound", "collapse", (id, value) => ({
-      node: id,
-      value: judgedLater(value),
-    }));
+    if (Option.isSome(lowerBound)) {
+      add(ud.UsageMappingLowerBound, [
+        { node: node.id, value: UsageMappingScore(lowerBound.value) },
+      ]);
+    }
+
+    if (Option.isSome(upperBound)) {
+      add(ud.UsageMappingUpperBound, [
+        { node: node.id, value: UsageMappingScore(upperBound.value) },
+      ]);
+    }
 
     for (const entry of elementChildren(element)) {
       const entryNode = nodes.get(entry);
@@ -320,25 +381,34 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
         continue;
       }
 
+      const mappedValue = yield* exact(entry, "mappedValue");
       add(ud.UsageMapEntry, [
         {
           id: entryNode.id,
           mapKey: judgedLater(Option.getOrElse(read(entry, "mapKey", "replace"), () => "")),
-          mappedValue: judgedLater(
-            Option.getOrElse(read(entry, "mappedValue", "collapse"), () => ""),
-          ),
+          mappedValue: UsageMappingScore(Option.getOrElse(mappedValue, () => "")),
           mapping: node.id,
           position: positionOf(entryNode.id),
         },
       ]);
-      optional(ud.UsageMapEntryCaseSensitive, entry, "caseSensitive", "collapse", (id, value) => ({
-        node: id,
-        value: judgedLater(value),
-      }));
-    }
-  };
 
-  const statisticRows = (element: Element, usageData: string): void => {
+      const caseSensitive = read(entry, "caseSensitive", "collapse");
+      if (Option.isSome(caseSensitive)) {
+        const closed = yield* closedOf(
+          XsBoolean.handles,
+          caseSensitive.value,
+          "attribute-lexical",
+          "the caseSensitive attribute of ud:mapEntry",
+        );
+        add(ud.UsageMapEntryCaseSensitive, [{ node: entryNode.id, value: closed }]);
+      }
+    }
+  });
+
+  const statisticRows = Effect.fn("import.usage.statisticRows")(function* statisticRows(
+    element: Element,
+    usageData: string,
+  ): Effect.fn.Return<void, ImportRefused> {
     const node = nodes.get(element);
     if (node === undefined) {
       return;
@@ -347,10 +417,12 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     const kind = node.kind === "ud:ordinaryStatistic" ? "ordinary" : "categorized";
     add(ud.Statistic, [
       {
-        context: judgedLater(Option.getOrElse(read(element, "context", "collapse"), () => "")),
+        context: StatisticContextUri(
+          Option.getOrElse(read(element, "context", "collapse"), () => ""),
+        ),
         id: node.id,
         kind,
-        name: judgedLater(Option.getOrElse(read(element, "name", "collapse"), () => "")),
+        name: StatisticName(Option.getOrElse(read(element, "name", "collapse"), () => "")),
         position: positionOf(node.id),
         usageData,
       },
@@ -363,19 +435,19 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
 
     optional(ud.StatisticGlossary, element, "glossary", "collapse", (id, value) => ({
       node: id,
-      value: judgedLater(value),
+      value: GlossaryUri(value),
     }));
     optional(ud.StatisticCaseCount, element, "caseCount", "collapse", (id, value) => ({
       node: id,
-      value: judgedLater(value),
+      value: UsageCaseCount(judgedLater(value)),
     }));
     optional(ud.StatisticStdError, element, "stdError", "collapse", (id, value) => ({
       node: id,
-      value: judgedLater(value),
+      value: StatisticMeasure(value),
     }));
     optional(ud.StatisticStdDeviation, element, "stdDeviation", "collapse", (id, value) => ({
       node: id,
-      value: judgedLater(value),
+      value: StatisticMeasure(value),
     }));
     optional(ud.StatisticLastUpdated, element, "lastUpdated", "collapse", (id, value) => ({
       node: id,
@@ -389,22 +461,22 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
       if (kindHere === "ud:targetObject") {
         targetObjectRows(child, node.id);
       } else if (kindHere === "ud:value") {
-        valueRows(child, node.id);
+        yield* valueRows(child, node.id);
       } else if (kindHere === "ud:mapping") {
-        mappingRows(child, node.id);
+        yield* mappingRows(child, node.id);
       }
     }
-  };
+  });
 
   add(ud.UsageData, [{ document: documentId, id: documentId }]);
   optional(ud.UsageDataGlossary, root, "glossary", "collapse", (id, value) => ({
     node: id,
-    value: judgedLater(value),
+    value: GlossaryUri(value),
   }));
   for (const child of elementChildren(root)) {
     const kind = Option.getOrUndefined(kindOf(child, Option.some("ud:usageData")));
     if (kind === "ud:ordinaryStatistic" || kind === "ud:categorizedStatistic") {
-      statisticRows(child, documentId);
+      yield* statisticRows(child, documentId);
     }
   }
 

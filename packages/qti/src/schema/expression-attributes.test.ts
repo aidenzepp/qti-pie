@@ -1,7 +1,10 @@
 import { schema } from "@bjornpagen/grizzle";
+import type { AnyRelation } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
 import { inspect } from "node:util";
+import * as contracts from "#qti/schema/contracts.ts";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as expression from "#qti/schema/expression.ts";
@@ -121,6 +124,34 @@ const tableA = [
 ];
 
 /**
+ * The four reference arms of a number-or-variable attribute: each is keyed by the node it names,
+ * carries the variable's `identifier` and belongs to the parent whose kind column says `ref`.
+ */
+const refArms = {
+  EqualRoundedFiguresRef: ["EqualRounded", "figuresKind", "figuresValue"],
+  IndexNRef: ["Index", "nKind", "nValue"],
+  RepeatNumberRepeatsRef: ["Repeat", "numberRepeatsKind", "numberRepeatsValue"],
+  RoundToFiguresRef: ["RoundTo", "figuresKind", "figuresValue"],
+} as const;
+
+/**
+ * Whether a containment or capacity side selects `relation` where `kindField` is `ref`.
+ */
+const selectionOn = (
+  side: { readonly source: object },
+  relation: AnyRelation | undefined,
+  kindField: string,
+): boolean => {
+  const selection =
+    "relation" in side.source && "bindings" in side.source ? side.source : undefined;
+
+  return (
+    selection?.relation === relation &&
+    JSON.stringify(selection?.bindings) === JSON.stringify({ [kindField]: "ref" })
+  );
+};
+
+/**
  * The markers and optional values `Equal` and `EqualRounded` own, and the relation that is not an
  * arm: `EqualTolerance` and `OutcomeMinMax` and the roster the typed copies name.
  */
@@ -228,10 +259,15 @@ describe("expression-attributes", () => {
     }
   });
 
-  it("adds exactly the 21 arms, the optional relations and the three others", () => {
+  it("adds exactly the 21 arms, the optional relations, the four reference arms and the three others", () => {
     assert.deepStrictEqual(
       Object.keys(expressionAttributes.relations).toSorted(),
-      [...Object.values(armNames), ...Object.keys(optional), ...others].toSorted(),
+      [
+        ...Object.values(armNames),
+        ...Object.keys(optional),
+        ...Object.keys(refArms),
+        ...others,
+      ].toSorted(),
     );
   });
 
@@ -258,26 +294,19 @@ describe("expression-attributes", () => {
     ]);
     assert.deepStrictEqual(fields("EqualTolerance"), ["node", "toleranceMode", "value"]);
     assert.deepStrictEqual(fields("EqualRounded"), [
-      "figures",
       "figuresKind",
       "figuresValue",
       "id",
       "roundingMode",
     ]);
     assert.deepStrictEqual(fields("RoundTo"), [
-      "figures",
       "figuresKind",
       "figuresValue",
       "id",
       "roundingMode",
     ]);
-    assert.deepStrictEqual(fields("Index"), ["id", "n", "nKind", "nValue"]);
-    assert.deepStrictEqual(fields("Repeat"), [
-      "id",
-      "numberRepeats",
-      "numberRepeatsKind",
-      "numberRepeatsValue",
-    ]);
+    assert.deepStrictEqual(fields("Index"), ["id", "nKind", "nValue"]);
+    assert.deepStrictEqual(fields("Repeat"), ["id", "numberRepeatsKind", "numberRepeatsValue"]);
     assert.deepStrictEqual(fields("OutcomeMinMax"), ["id", "kind", "outcomeIdentifier"]);
     assert.deepStrictEqual(fields("OutcomeMinimumArm"), ["id"]);
     assert.deepStrictEqual(fields("OutcomeMaximumArm"), ["id"]);
@@ -358,6 +387,50 @@ describe("expression-attributes", () => {
     }
   });
 
+  it("types the closed attributes as closedId of their rosters", () => {
+    const { relations } = expressionAttributes;
+    assert.strictEqual(relations.Substring.fields.caseSensitive.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.StringMatch.fields.caseSensitive.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.StringMatch.fields.substring.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.Equal.fields.includeLowerBound.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.Equal.fields.includeUpperBound.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.Equal.fields.toleranceMode.roster, rosters.ToleranceMode);
+    assert.strictEqual(relations.EqualTolerance.fields.toleranceMode.roster, rosters.ToleranceMode);
+    assert.strictEqual(relations.EqualRounded.fields.roundingMode.roster, rosters.RoundingMode);
+    assert.strictEqual(relations.RoundTo.fields.roundingMode.roster, rosters.RoundingMode);
+    assert.strictEqual(relations.TestVariablesBaseType.fields.value.roster, declaration.BaseType);
+    assert.strictEqual(relations.Inside.fields.shape.roster, rosters.Shape);
+    assert.strictEqual(relations.MathConstant.fields.name.roster, rosters.MathConstantName);
+    assert.strictEqual(relations.MathOperator.fields.name.roster, rosters.MathOperatorName);
+    assert.strictEqual(relations.StatsOperator.fields.name.roster, rosters.StatsOperatorName);
+  });
+
+  it("states the toleranceMode containments and roundingMode checks over handles of their rosters", () => {
+    const selected = expressionAttributes.rules.flatMap((rule) => {
+      const selection = rule.kind === "contained" ? selectionOf(rule.left) : undefined;
+
+      return selection === undefined ? [] : [selection.bindings];
+    });
+    assert.deepStrictEqual(selected, [
+      { toleranceMode: "absolute" },
+      { toleranceMode: "relative" },
+    ]);
+    assert.includeMembers([...rosters.ToleranceMode.handles], ["absolute", "relative"]);
+
+    for (const name of ["EqualRounded", "RoundTo"] as const) {
+      const rule = expressionAttributes.rules.find(
+        (found) => found.kind === "check" && found.relation === relationsByName.get(name),
+      );
+      const text = inspect(rule && "desc" in rule ? rule.desc : undefined, {
+        depth: null,
+        maxStringLength: 100_000,
+      });
+      for (const handle of rosters.RoundingMode.handles) {
+        assert.include(text, handle, name);
+      }
+    }
+  });
+
   it("holds the P10, P11 and range checks on their relations and no mirrors", () => {
     const checks = expressionAttributes.rules.filter((rule) => rule.kind === "check");
     const onRelation = (name: string) =>
@@ -370,9 +443,11 @@ describe("expression-attributes", () => {
         maxStringLength: 100_000,
       });
     };
-    for (const name of ["EqualRounded", "RoundTo", "Index", "Repeat", "VariableWeightIdentifier"]) {
-      assert.strictEqual(onRelation(name).length, 1, name);
+    for (const name of ["EqualRounded", "RoundTo", "Index", "Repeat"]) {
+      assert.strictEqual(onRelation(name).length, 2, name);
     }
+
+    assert.strictEqual(onRelation("VariableWeightIdentifier").length, 1);
     for (const rule of checks) {
       assert.isTrue(
         [...relationsByName.values()].some((relation) => relation === rule.relation),
@@ -419,8 +494,179 @@ describe("expression-attributes", () => {
 
   it("builds a schema over the leaves without refusal", () => {
     const built = probe();
-    for (const name of [...Object.values(armNames), ...Object.keys(optional), ...others]) {
+    for (const name of [
+      ...Object.values(armNames),
+      ...Object.keys(optional),
+      ...Object.keys(refArms),
+      ...others,
+    ]) {
       assert.include(Object.keys(built.relations), name);
     }
+  });
+
+  it("states each reference arm by form: containment, capacity of one and zero beside it", () => {
+    let statements = 0;
+    for (const [name, [parentName, kindField, valueField]] of Object.entries(refArms)) {
+      const reference = relationsByName.get(name);
+      const parent = relationsByName.get(parentName);
+      assert.deepStrictEqual(Object.keys(reference?.fields ?? {}), ["identifier", "node"], name);
+      assert.deepStrictEqual([...(reference?.primaryKey ?? [])], ["node"], name);
+
+      const contained = expressionAttributes.rules.filter(
+        (rule) =>
+          rule.kind === "contained" &&
+          rule.left.source === reference &&
+          selectionOn(rule.right, parent, kindField),
+      );
+      assert.strictEqual(contained.length, 1, name);
+      for (const rule of contained) {
+        if (rule.kind === "contained") {
+          assert.deepStrictEqual([...rule.left.fields], ["node"], name);
+          assert.deepStrictEqual([...rule.right.fields], ["id"], name);
+        }
+      }
+
+      const capacities = expressionAttributes.rules.filter(
+        (rule) =>
+          rule.kind === "capacity" &&
+          rule.from.source === reference &&
+          selectionOn(rule.target, parent, kindField),
+      );
+      assert.strictEqual(capacities.length, 1, name);
+      for (const rule of capacities) {
+        const within = inspect(Predicate.hasProperty(rule, "desc") ? rule.desc : undefined, {
+          depth: null,
+        });
+        assert.match(within, /low: 1n/u, name);
+        assert.match(within, /high: 1n/u, name);
+      }
+
+      const zero = expressionAttributes.rules.filter(
+        (rule) => rule.kind === "check" && rule.name === `${name}Zero`,
+      );
+      assert.strictEqual(zero.length, 1, name);
+      for (const rule of zero) {
+        if (rule.kind === "check") {
+          assert.strictEqual(rule.relation, parent, name);
+
+          const text = inspect(Predicate.hasProperty(rule, "desc") ? rule.desc : undefined, {
+            depth: null,
+            maxStringLength: 100_000,
+          });
+          for (const needle of [kindField, valueField, "literal", "0n"]) {
+            assert.include(text, needle, name);
+          }
+        }
+      }
+
+      statements += contained.length + capacities.length + zero.length;
+    }
+
+    assert.strictEqual(statements, 12);
+  });
+});
+
+describe("contracts (expression-attributes)", () => {
+  it("types VariableWeightIdentifier.value WeightReference", () => {
+    assert.strictEqual(
+      expressionAttributes.VariableWeightIdentifier.fields.value.name,
+      contracts.WeightReference.name,
+    );
+  });
+  it("types ExpressionWeightIdentifier.value WeightReference", () => {
+    assert.strictEqual(
+      expressionAttributes.ExpressionWeightIdentifier.fields.value.name,
+      contracts.WeightReference.name,
+    );
+  });
+  it("types AnyN.max ExpressionIntegerOrVariable", () => {
+    assert.strictEqual(
+      expressionAttributes.AnyN.fields.max.name,
+      contracts.ExpressionIntegerOrVariable.name,
+    );
+  });
+  it("types AnyN.min ExpressionIntegerOrVariable", () => {
+    assert.strictEqual(
+      expressionAttributes.AnyN.fields.min.name,
+      contracts.ExpressionIntegerOrVariable.name,
+    );
+  });
+  it("types RandomInteger.max ExpressionIntegerOrVariable", () => {
+    assert.strictEqual(
+      expressionAttributes.RandomInteger.fields.max.name,
+      contracts.ExpressionIntegerOrVariable.name,
+    );
+  });
+  it("types RandomIntegerMin.value ExpressionIntegerOrVariable", () => {
+    assert.strictEqual(
+      expressionAttributes.RandomIntegerMin.fields.value.name,
+      contracts.ExpressionIntegerOrVariable.name,
+    );
+  });
+  it("types RandomIntegerStep.value ExpressionIntegerOrVariable", () => {
+    assert.strictEqual(
+      expressionAttributes.RandomIntegerStep.fields.value.name,
+      contracts.ExpressionIntegerOrVariable.name,
+    );
+  });
+  it("types FieldValue.fieldIdentifier RecordFieldIdentifier", () => {
+    assert.strictEqual(
+      expressionAttributes.FieldValue.fields.fieldIdentifier.name,
+      contracts.RecordFieldIdentifier.name,
+    );
+  });
+  it("types Inside.coords ExpressionCoords", () => {
+    assert.strictEqual(
+      expressionAttributes.Inside.fields.coords.name,
+      contracts.ExpressionCoords.name,
+    );
+  });
+  it("types CustomOperatorClass.value CustomOperatorClassName", () => {
+    assert.strictEqual(
+      expressionAttributes.CustomOperatorClass.fields.value.name,
+      contracts.CustomOperatorClassName.name,
+    );
+  });
+  it("types CustomOperatorDefinition.value CustomOperatorDefinitionUri", () => {
+    assert.strictEqual(
+      expressionAttributes.CustomOperatorDefinition.fields.value.name,
+      contracts.CustomOperatorDefinitionUri.name,
+    );
+  });
+  it("types TestVariables.variableIdentifier VariableReference", () => {
+    assert.strictEqual(
+      expressionAttributes.TestVariables.fields.variableIdentifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types EqualRoundedFiguresRef.identifier VariableReference", () => {
+    assert.strictEqual(
+      expressionAttributes.EqualRoundedFiguresRef.fields.identifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types RoundToFiguresRef.identifier VariableReference", () => {
+    assert.strictEqual(
+      expressionAttributes.RoundToFiguresRef.fields.identifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types IndexNRef.identifier VariableReference", () => {
+    assert.strictEqual(
+      expressionAttributes.IndexNRef.fields.identifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types RepeatNumberRepeatsRef.identifier VariableReference", () => {
+    assert.strictEqual(
+      expressionAttributes.RepeatNumberRepeatsRef.fields.identifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types OutcomeMinMax.outcomeIdentifier VariableReference", () => {
+    assert.strictEqual(
+      expressionAttributes.OutcomeMinMax.fields.outcomeIdentifier.name,
+      contracts.VariableReference.name,
+    );
   });
 });

@@ -3,6 +3,7 @@ import { Effect, Option } from "effect";
 import { attributeRows } from "#qti/import/attributes.ts";
 import { kindOf, Rows, treeRows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
+import { ClassList, ContentLanguage, IdReference, XmlBaseUri } from "#qti/schema/contracts.ts";
 import * as attributes from "#qti/schema/attributes.ts";
 import { DocumentId, HtmlId, ItemBodyId, PrintedVariableId } from "#qti/schema/document.ts";
 import { AttributeLexical, Tree } from "#qti/schema/node.ts";
@@ -99,7 +100,12 @@ const refusalOf = (xml: string, root: RootKindHandle) =>
   Effect.gen(function* refused() {
     const { nodes, root: tree, rows } = yield* indexed(xml, root);
 
-    return yield* Effect.flip(attributeRows(tree, nodes, documentId, rows));
+    const found = yield* Effect.flip(attributeRows(tree, nodes, documentId, rows));
+    if (found._tag !== "UnmodeledVocabulary") {
+      return assert.fail(`expected an unmodeled vocabulary, got ${found._tag}`);
+    }
+
+    return found;
   });
 
 describe("attributeRows on the family, ARIA and id attributes", () => {
@@ -120,10 +126,10 @@ describe("attributeRows on the family, ARIA and id attributes", () => {
         { document: documentId, holder: "htmlId", id: "p1" },
       ]);
       assert.deepStrictEqual(Rows.of(rows, attributes.NodeClass), [
-        { attribute: "class", kind: "p", node: pId, value: "a b" },
+        { attribute: "class", kind: "p", node: pId, value: ClassList("a b") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, attributes.NodeLang), [
-        { attribute: "lang", kind: "p", node: pId, value: "en" },
+        { attribute: "lang", kind: "p", node: pId, value: ContentLanguage("en") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, attributes.AriaDescribedby), [
         { attribute: "aria-describedby", kind: "p", node: pId, value: "p1 x1" },
@@ -157,7 +163,7 @@ describe("attributeRows on the family, ARIA and id attributes", () => {
       const pId = idOf(nodes, "p");
 
       assert.deepStrictEqual(Rows.of(rows, attributes.NodeClass), [
-        { attribute: "class", kind: "p", node: pId, value: "a b" },
+        { attribute: "class", kind: "p", node: pId, value: ClassList("a b") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, AttributeLexical), [
         { attribute: "class", kind: "p", node: pId, value: " a  b " },
@@ -244,7 +250,7 @@ describe("attributeRows on the family, ARIA and id attributes", () => {
           document: documentId,
           kind: "p",
           node: pId,
-          value: "c1",
+          value: IdReference("c1"),
         },
       ]);
       assert.deepStrictEqual(Rows.of(rows, attributes.AttributeIdref), [
@@ -427,7 +433,7 @@ describe("attributeRows on a tree of either root", () => {
       const pId = idOf(nodes, "p");
 
       assert.deepStrictEqual(Rows.of(built, attributes.NodeXmlBase), [
-        { attribute: "xml:base", kind: "p", node: pId, value: "a/" },
+        { attribute: "xml:base", kind: "p", node: pId, value: XmlBaseUri("a/") },
       ]);
       assert.deepStrictEqual(
         Rows.of(built, attributes.NodeXmlLang).map((row) => [row.value, row.rootKind]),
@@ -486,6 +492,77 @@ describe("attributeRows refusals", () => {
       );
 
       assert.strictEqual(found.name, "data-foo");
+    }),
+  );
+});
+
+/**
+ * The `ImportRefused` a document's walk and attribute pass answers, which fails the test when it
+ * is admitted or refused otherwise.
+ */
+const refusedBy = (xml: string) =>
+  Effect.gen(function* refusedWalk() {
+    const refused = yield* Effect.flip(walked(xml));
+    if (refused._tag !== "ImportRefused") {
+      return assert.fail(`expected an import refusal, got ${refused._tag}`);
+    }
+
+    return refused;
+  });
+
+describe("attributeRows on the closed attribute families and ARIA", () => {
+  it.effect("refuses an aria-live outside its roster as attribute-lexical", () =>
+    Effect.gen(function* liveLoud() {
+      const refused = yield* refusedBy(item('<p aria-live="loud">x</p>'));
+
+      assert.strictEqual(refused.rule, "attribute-lexical");
+    }),
+  );
+
+  it.effect("refuses each other closed family value outside its roster as attribute-lexical", () =>
+    Effect.gen(function* closedFamilies() {
+      for (const attribute of [
+        'dir="up"',
+        'data-qti-suppress-tts="some"',
+        'role="widget"',
+        'role="cell"',
+        'aria-hidden="yes"',
+        'aria-orientation="diagonal"',
+        'aria-autocomplete="always"',
+        'aria-checked="maybe"',
+        'aria-pressed="maybe"',
+        'aria-expanded="mixed"',
+        'aria-selected="mixed"',
+        'aria-invalid="bad"',
+        'aria-sort="up"',
+        'aria-current="now"',
+      ]) {
+        const refused = yield* refusedBy(item(`<p ${attribute}>x</p>`));
+
+        assert.strictEqual(refused.rule, "attribute-lexical", attribute);
+      }
+    }),
+  );
+
+  it.effect("writes a value of every closed roster by its handle", () =>
+    Effect.gen(function* closedValues() {
+      const { nodes, rows } = yield* walked(
+        item('<p aria-live="polite" aria-hidden="1" aria-checked="mixed" dir="ltr">x</p>'),
+      );
+      const pId = idOf(nodes, "p");
+
+      assert.deepStrictEqual(Rows.of(rows, attributes.AriaLive), [
+        { attribute: "aria-live", kind: "p", node: pId, value: "polite" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, attributes.AriaHidden), [
+        { attribute: "aria-hidden", kind: "p", node: pId, value: "1" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, attributes.AriaChecked), [
+        { attribute: "aria-checked", kind: "p", node: pId, value: "mixed" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, attributes.NodeDir), [
+        { attribute: "dir", kind: "p", node: pId, value: "ltr" },
+      ]);
     }),
   );
 });

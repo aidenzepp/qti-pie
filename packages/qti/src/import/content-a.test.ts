@@ -35,16 +35,10 @@ import {
 import {
   AssociableHotspot,
   AssociateInteraction,
-  AssociateMaxAssociations,
-  AssociateMinAssociations,
   DeclaredAssociateMaxAssociations,
   DeclaredAssociateMinAssociations,
   GraphicAssociateInteraction,
-  GraphicAssociateMaxAssociations,
-  GraphicAssociateMinAssociations,
   MatchInteraction,
-  MatchMaxAssociations,
-  MatchMinAssociations,
   SimpleAssociableChoice,
   SimpleAssociableChoiceMatchMin,
   SimpleMatchSet,
@@ -52,23 +46,12 @@ import {
 import {
   Gap,
   GapMatchInteraction,
-  GapMatchMaxAssociations,
-  GapMatchMinAssociations,
   GraphicGapMatchInteraction,
-  GraphicGapMatchMaxAssociations,
-  GraphicGapMatchMinAssociations,
 } from "#qti/schema/interactions/gap.ts";
-import {
-  Hottext,
-  HottextOwner,
-  SelectPointInteraction,
-  SelectPointMaxChoices,
-} from "#qti/schema/interactions/hot.ts";
+import { Hottext, HottextOwner, SelectPointInteraction } from "#qti/schema/interactions/hot.ts";
 import {
   OrderInteraction,
-  OrderMaxChoices,
   OrderMaxChoicesN,
-  OrderMinChoices,
   OrderMinChoicesN,
 } from "#qti/schema/interactions/order.ts";
 import { MediaInteraction, MediaMaxPlays, MediaMinPlays } from "#qti/schema/interactions/other.ts";
@@ -87,7 +70,6 @@ import {
   TemplateInline,
 } from "#qti/schema/template.ts";
 import { Edge, Node } from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
 import { Coords, CoordsDefault, CoordsRect } from "#qti/schema/shapes.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
@@ -230,7 +212,7 @@ interface Within {
 type Law =
   | { readonly fields: readonly string[]; readonly kind: "key"; readonly relation: string }
   | { readonly kind: "check"; readonly name: string; readonly relation: string }
-  | { readonly flags: "su" | "u"; readonly kind: "pattern"; readonly source: string }
+  | { readonly contract: string; readonly kind: "contract" }
   | { readonly from: Side; readonly kind: "contained"; readonly to: Side }
   | {
       readonly from: Side;
@@ -260,7 +242,7 @@ const checkLaw = (relation: AnyRelation, name: string): Law => ({
   relation: relation.name,
 });
 
-const patternLaw = (source: string): Law => ({ flags: "u", kind: "pattern", source });
+const contractLaw = (contract: string): Law => ({ contract, kind: "contract" });
 
 const capacityLaw = (target: Side, from: Side, within: Within): Law => ({
   from,
@@ -451,21 +433,14 @@ const retypeResponse = (
 };
 
 /**
- * Give an association-bearing interaction `max-associations` 1 and `min-associations` 2, in its
- * typed columns and in the lexical rows beside them.
+ * Give an association-bearing interaction `max-associations` 1 and `min-associations` 2 in its
+ * typed columns.
  */
-const invertAssociations = (
-  draft: Draft,
-  arm: AnyRelation,
-  lexical: { readonly max: AnyRelation; readonly min: AnyRelation },
-): void => {
+const invertAssociations = (draft: Draft, arm: AnyRelation): void => {
   const row = find(draft, arm);
-  const id = text(row, "id");
 
   row["maxAssociationsN"] = 1n;
   row["minAssociationsN"] = 2n;
-  setValue(draft, lexical.max, id, "1");
-  setValue(draft, lexical.min, id, "2");
 };
 
 /**
@@ -512,7 +487,6 @@ const negatives: readonly Negative[] = [
       const id = text(point, "id");
       point["maxChoicesN"] = 0n;
       where(draft, TypedBinding, "node", id)["maxCount"] = 0n;
-      setValue(draft, SelectPointMaxChoices, id, "0");
     },
     fixture: "cut-select-point",
     laws: [checkLaw(TypedBinding, "BindingMax")],
@@ -569,8 +543,6 @@ const negatives: readonly Negative[] = [
       order["maxBound"] = "bounded";
       order["maxChoicesN"] = 2n;
       order["minChoicesN"] = 3n;
-      setValue(draft, OrderMaxChoices, id, "2");
-      setValue(draft, OrderMinChoices, id, "3");
       setValue(draft, OrderMaxChoicesN, id, 2n);
       setValue(draft, OrderMinChoicesN, id, 3n);
     },
@@ -586,8 +558,6 @@ const negatives: readonly Negative[] = [
       find(draft, AssociateInteraction)["maxAssociationsN"] = 1n;
       find(draft, AssociateInteraction)["minAssociationsN"] = 2n;
       where(draft, TypedBinding, "node", id)["maxCount"] = 1n;
-      setValue(draft, AssociateMaxAssociations, id, "1");
-      setValue(draft, AssociateMinAssociations, id, "2");
       mark(draft, DeclaredAssociateMaxAssociations, id);
       mark(draft, DeclaredAssociateMinAssociations, id);
     },
@@ -603,8 +573,8 @@ const negatives: readonly Negative[] = [
 
       media["maxPlaysN"] = 1n;
       media["minPlaysN"] = 2n;
-      setValue(draft, MediaMaxPlays, id, "1");
-      setValue(draft, MediaMinPlays, id, "2");
+      mark(draft, MediaMaxPlays, id);
+      mark(draft, MediaMinPlays, id);
     },
     fixture: "cut-media",
     laws: [checkLaw(MediaInteraction, "MediaPlays")],
@@ -617,24 +587,12 @@ const negatives: readonly Negative[] = [
 
       choice["matchMaxN"] = 1n;
       choice["matchMinN"] = 2n;
-      setValue(draft, SimpleAssociableChoiceMatchMin, text(choice, "id"), "2");
+      mark(draft, SimpleAssociableChoiceMatchMin, text(choice, "id"));
     },
     fixture: "cut-associate",
     laws: [checkLaw(SimpleAssociableChoice, "SimpleAssociableChoiceBounds")],
     name: "a simple associable choice with match-max 1 and match-min 2 is refused by its bounds check",
     rule: "choice-bounds",
-  },
-  {
-    alter: (draft) => {
-      const id = text(find(draft, OrderInteraction), "id");
-
-      setValue(draft, OrderMinChoices, id, "0");
-      setValue(draft, OrderMinChoicesN, id, 0n);
-    },
-    fixture: "cut-order",
-    laws: [patternLaw(patterns.positiveInteger)],
-    name: "an order interaction with min-choices 0 is refused by the positiveInteger pattern",
-    rule: "attribute-lexical",
   },
   {
     alter: (draft) => {
@@ -645,7 +603,6 @@ const negatives: readonly Negative[] = [
       removeSubtree(draft, text(last ?? {}, "id"));
       order["maxBound"] = "bounded";
       order["maxChoicesN"] = 3n;
-      setValue(draft, OrderMaxChoices, id, "3");
       setValue(draft, OrderMaxChoicesN, id, 3n);
     },
     fixture: "cut-order",
@@ -669,7 +626,6 @@ const negatives: readonly Negative[] = [
       // The bound is `bounded` and `maxChoicesN` keeps the fixture's value, so the maximum's capacity holds: a maximum of 3 over two choices would fire it too, and only the minimum's is to be broken.
       order["maxBound"] = "bounded";
       order["minChoicesN"] = 3n;
-      setValue(draft, OrderMinChoices, id, "3");
       setValue(draft, OrderMinChoicesN, id, 3n);
     },
     fixture: "cut-order",
@@ -817,8 +773,8 @@ const negatives: readonly Negative[] = [
       where(draft, CoordsRect, "node", id)["value"] = "11,122,64";
     },
     fixture: "cut-graphic-gap-match",
-    laws: [patternLaw(patterns.coordsRect)],
-    name: "a rect with three coordinate tokens is refused by the coordsRect pattern",
+    laws: [contractLaw("RectCoords")],
+    name: "a rect with three coordinate tokens is refused by the RectCoords contract",
     rule: "attribute-lexical",
   },
   {
@@ -834,10 +790,7 @@ const negatives: readonly Negative[] = [
   },
   {
     alter: (draft) => {
-      invertAssociations(draft, MatchInteraction, {
-        max: MatchMaxAssociations,
-        min: MatchMinAssociations,
-      });
+      invertAssociations(draft, MatchInteraction);
     },
     fixture: "cut-match",
     laws: [checkLaw(MatchInteraction, "MatchBounds")],
@@ -846,10 +799,7 @@ const negatives: readonly Negative[] = [
   },
   {
     alter: (draft) => {
-      invertAssociations(draft, GraphicAssociateInteraction, {
-        max: GraphicAssociateMaxAssociations,
-        min: GraphicAssociateMinAssociations,
-      });
+      invertAssociations(draft, GraphicAssociateInteraction);
     },
     fixture: "cut-graphic-associate",
     laws: [checkLaw(GraphicAssociateInteraction, "GraphicAssociateBounds")],
@@ -858,10 +808,7 @@ const negatives: readonly Negative[] = [
   },
   {
     alter: (draft) => {
-      invertAssociations(draft, GapMatchInteraction, {
-        max: GapMatchMaxAssociations,
-        min: GapMatchMinAssociations,
-      });
+      invertAssociations(draft, GapMatchInteraction);
     },
     fixture: "cut-gap-match",
     laws: [checkLaw(GapMatchInteraction, "GapMatchBounds")],
@@ -870,10 +817,7 @@ const negatives: readonly Negative[] = [
   },
   {
     alter: (draft) => {
-      invertAssociations(draft, GraphicGapMatchInteraction, {
-        max: GraphicGapMatchMaxAssociations,
-        min: GraphicGapMatchMinAssociations,
-      });
+      invertAssociations(draft, GraphicGapMatchInteraction);
     },
     fixture: "cut-graphic-gap-match",
     laws: [checkLaw(GraphicGapMatchInteraction, "GraphicGapMatchBounds")],

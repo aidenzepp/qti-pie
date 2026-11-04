@@ -26,14 +26,12 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
+import { XIncludeParseValue } from "#qti/schema/content/rosters.ts";
 import * as item from "#qti/schema/item.ts";
 import * as node from "#qti/schema/node.ts";
+import { XIncludeUri } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import * as processing from "#qti/schema/processing.ts";
-
-const anyUri = str.regex(patterns.anyUri);
-
-const xincludeParse = str.regex(patterns.xincludeParse);
 
 const xsString = str.regex(patterns.xsString, patterns.xsStringFlags);
 
@@ -207,14 +205,16 @@ export const RuleOperand = relation(
 /**
  * The `href` of an `xi:include` whose source wrote it.
  */
-export const XIncludeHref = relation("XIncludeHref", { node: uuid, value: anyUri }, ["node"]);
+export const XIncludeHref = relation("XIncludeHref", { node: uuid, value: XIncludeUri }, ["node"]);
 
 /**
  * The `parse` of an `xi:include` whose source wrote it.
  */
-export const XIncludeParse = relation("XIncludeParse", { node: uuid, value: xincludeParse }, [
-  "node",
-]);
+export const XIncludeParse = relation(
+  "XIncludeParse",
+  { node: uuid, value: closedId(XIncludeParseValue) },
+  ["node"],
+);
 
 /**
  * The `xpointer` of an `xi:include` whose source wrote it, as read.
