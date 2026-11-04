@@ -39,10 +39,9 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    every non-string base type: `" completed "` is the identifier `completed` and `" true "` is `true`. For base type
    string, whitespace is part of the value and is kept. A round trip still reproduces the source spelling byte for
    byte. An attribute value is not reformatted by tools, so `" true"` is not `"true"`: outer whitespace around a typed
-   value in an attribute makes it invalid, and the document is refused. The attributes this covers are those whose value
-   takes its type from a QTI base type while the XSD types them as strings, and they are exactly these: `map-key` of a
-   map entry and `mapped-value` of a map entry and of an area map entry; a mapping's and an area mapping's
-   `lower-bound`, `upper-bound` and `default-value`; a match table's and an interpolation table's `default-value`, and
+   value in an attribute makes it invalid, and the document is refused. The attributes this covers are those
+   that carry a typed QTI value, and they are exactly these: `map-key` of a map entry and `mapped-value` of a map entry
+   and of an area map entry; a mapping's and an area mapping's `lower-bound`, `upper-bound` and `default-value`; a match table's and an interpolation table's `default-value`, and
    their entries' `target-value`; an interpolation table entry's `source-value`; and the value attributes of the
    usage-data mapping (`ud:mapping`'s `defaultValue`, `lowerBound` and `upperBound`, and its `ud:mapEntry` entries'
    `mappedValue`). Where the value is of base type string, as for a `map-key` or `target-value` of a string variable,
@@ -265,3 +264,15 @@ against it. A reading that is not an information-model-over-XSD case says which 
     largest finite float becomes the largest finite float of its sign. This is not a case of documents
     in conflict: the sources agree that the type is unbounded and say nothing of overflow, and this reading forbids
     a package to add a bound, so reading 1 holds without an exception. (2026-11-04.)
+46. **A count attribute holds a signed 64-bit integer.** The count attributes (`max-choices`, `min-choices`,
+    `max-associations`, `min-associations`, `match-max`, `match-min`, `max-plays` and `min-plays` on the interactions
+    and choices that carry them, the order interactions' `min-choices` among them) and `figures` on `qti-round-to` and
+    `qti-equal-rounded` are typed by the XSD as integers with no largest value (`xs:nonNegativeInteger`, and
+    `xs:integer` for `figures`). A package holds each of them to the signed 64-bit range, -9223372036854775808 to
+    9223372036854775807, read exactly, and refuses a count beyond it with its rule and its location. XML Schema permits
+    this: a processor may set a limit on the number of digits it supports if it documents that limit, and must support
+    at least 18 (XML Schema Part 2, section 3.2.3), and this reading is that documentation. Values are not counts: a
+    value of base type integer stays unbounded and exact (reading 45). An attribute the XSD types `xs:int`, such as
+    `base`, `colspan` or `qti-index`'s `n`, keeps `xs:int`'s range. This is not a case of documents in conflict: the
+    XSD leaves the counts unbounded and XML Schema lets a processor document a limit, so reading 1 holds without an
+    exception. (2026-11-04.)
