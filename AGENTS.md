@@ -136,6 +136,15 @@ Read environment-backed settings with Effect `Config`, with constraints and defa
 Tests use `@effect/vitest` (`it.effect`, `layer`) and sit beside the code they test. A test that needs the database
 uses the local cluster through a login's `DbLayer`, never a mock.
 
+The corpus verdict file, `packages/pantry/verdicts/<corpus tarball basename>.tsv` (today `qti-examples-0a92fbb.tsv`),
+records what the importer did with each 1EdTech example zip. It is TSV with LF line ends and the columns `file`,
+`verdict` (`accepted` or `refused`) and `rule` (the refusal rule, empty when accepted), sorted by `file`, one row per
+corpus zip keyed by its tarball member. It holds no 1EdTech content, only member paths, verdicts and rule names. To
+regenerate it, run the corpus witness under a lease (`GR8DES_CORPUS=1 GR8DES_PG_DATABASE=<database> pnpm
+--fail-if-no-match --filter @qti-pie/pantry run test src/cli.corpus.db.test.ts`), then run the `cp` its failure message
+prints to adopt `packages/pantry/work/verdicts/<name>.tsv`. A stale file fails that corpus run; a renamed rule or a
+corpus zip without a row fails `src/test/verdicts.committed.test.ts`, which needs no lease.
+
 ## Planning and building with shipyard
 
 Work runs through [shipyard](https://github.com/ianzepp/shipyard)'s skills: `goal-forge`, `goal-check`, `campaign`,
