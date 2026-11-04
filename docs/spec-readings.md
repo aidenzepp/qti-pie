@@ -315,8 +315,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     reference at a dot, so this reading fills the gap and keeps every unambiguous reference valid, as reading 1
     requires. (2026-11-04.)
 49. **QTI and foreign elements beneath MathML and in card content are admitted wherever the schema admits them.**
-    Inside `m:annotation-xml` this is reading 30: QTI elements are admitted, a known declaration is modelled as QTI, and
-    a nested root stays foreign content under reading 6. In card content (`qti-html-content` of a `qti-card` or
+    Inside `m:annotation-xml` this is reading 30. In card content (`qti-html-content` of a `qti-card` or
     `qti-card-entry`) the same basis applies: an element is accepted wherever the schema admits it and no normative text
     bans it, and refused only where the schema or a normative rule refuses it. In the XSD, card content has no wildcard
     of its own: `HTMLContentDType` lists only HTML, MathML and SSML elements (`imsqti_asiv3p0p1_v1p0.xsd` lines
