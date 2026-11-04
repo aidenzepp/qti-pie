@@ -546,6 +546,22 @@ describe("buildItem", () => {
       }),
   );
 
+  it.effect("[Q-2] reads a Choice's aria-label and aria-labelledby, none when absent", () =>
+    Effect.gen(function* choiceNames() {
+      const named = choiceIn(
+        (yield* buildItem(
+          choiceItem([attr("aria-label", "Pick a city"), attr("aria-labelledby", "intro")]),
+        )).body,
+      );
+      const unnamed = choiceIn((yield* buildItem(choiceItem([]))).body);
+
+      assert.deepStrictEqual(named.ariaLabel, Option.some("Pick a city"));
+      assert.deepStrictEqual(named.ariaLabelledby, Option.some("intro"));
+      assert.deepStrictEqual(unnamed.ariaLabel, Option.none());
+      assert.deepStrictEqual(unnamed.ariaLabelledby, Option.none());
+    }),
+  );
+
   it.effect("[Q-20] builds a Text Entry with its attributes and base 10 by default", () =>
     Effect.gen(function* buildsTextEntry() {
       const built = yield* buildItem(

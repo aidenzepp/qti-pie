@@ -17,7 +17,7 @@
  */
 import { Effect, Option, pipe } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { emitNodes } from "#plate/emit/body.ts";
+import { authoredId, emitNodes } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { promptMarkupFor, rowFor, scopedId } from "#plate/emit/parts.ts";
@@ -46,6 +46,11 @@ const owner = "choice-interaction";
  * A Choice part.
  */
 type ChoicePart = PartOf<typeof owner>;
+
+/**
+ * The ASCII whitespace that separates the ids of an IDREFS value.
+ */
+const idSeparator = /[\t\n\f\r ]+/u;
 
 /**
  * The row of every Choice part as placed, the Root's and the Prompt's set by the Prompt's markup.
@@ -102,6 +107,31 @@ const nestedInteraction: RenderInteraction = (nested) =>
   );
 
 /**
+ * Give the author's names for a Choice's group: `aria-label` as written, and each id of
+ * `aria-labelledby` scoped by the instance through {@link authoredId}, joined by one space.
+ *
+ * @param interaction The Choice.
+ * @param instance The item instance key, which scopes the author's ids.
+ * @returns The attributes the author gave, none when they gave neither.
+ */
+const authorsName = (interaction: ChoicePayload, instance: string): Attributes => ({
+  ...Option.match(interaction.ariaLabel, {
+    onNone: () => ({}),
+    onSome: (label) => ({ "aria-label": label }),
+  }),
+  ...Option.match(interaction.ariaLabelledby, {
+    onNone: () => ({}),
+    onSome: (ids) => ({
+      "aria-labelledby": ids
+        .split(idSeparator)
+        .filter((id) => id !== "")
+        .map((id) => authoredId(instance, id))
+        .join(" "),
+    }),
+  }),
+});
+
+/**
  * Give the row of every Choice part for a Prompt markup.
  *
  * @param markup The Prompt's markup, none when the Choice has no Prompt.
@@ -128,8 +158,12 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
  * Compute every attribute of every part of one Choice: the connect function.
  *
  * - Root: the marker, the state (`data-mode`, and `data-disabled` when the author disabled every
- *   control), the author's `class`, `data-orientation`, and `aria-labelledby` → the Prompt's id
- *   under the `labelledby` markup. It carries no `role`: a native `fieldset` is the group.
+ *   control), the author's `class`, `data-orientation`, and the group's name, in the text controls'
+ *   order of precedence: with a Prompt, the Prompt names it (a `legend` natively, or
+ *   `aria-labelledby` → the Prompt's id under the `labelledby` markup) and the author's
+ *   `aria-label` and `aria-labelledby` are not written; with none, the author's `aria-label`, and
+ *   `aria-labelledby` with each id scoped by the instance; with neither, the group stays unnamed.
+ *   It carries no `role`: a native `fieldset` is the group.
  * - Prompt: the marker, and its id under the `labelledby` markup; a `legend` names its group natively
  *   and needs none.
  * - Control: a radio when one choice can be posted (`max-choices` 1, or a single response), else a
@@ -190,6 +224,7 @@ const connect = (
     prompt: { "data-slot": rows.prompt.slot, ...when(labelledby, { id: promptId }) },
     root: {
       ...when(labelledby, { "aria-labelledby": promptId }),
+      ...when(Option.isNone(markup), authorsName(interaction, instance)),
       ...when(interaction.class !== "", { class: interaction.class }),
       ...when(payload.finished, { "data-disabled": true }),
       "data-mode": payload.mode,

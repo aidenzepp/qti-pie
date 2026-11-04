@@ -142,6 +142,15 @@ export interface SimpleChoice {
  * cardinality. Its choices stay in document order whatever `shuffle` says.
  */
 export interface ChoiceInteraction {
+  /**
+   * The author's `aria-label`, which names the group when there is no Prompt.
+   */
+  readonly ariaLabel: Option.Option<string>;
+  /**
+   * The author's `aria-labelledby`, an IDREFS value as written, which names the group when there is
+   * no Prompt.
+   */
+  readonly ariaLabelledby: Option.Option<string>;
   readonly cardinality: "multiple" | "single";
   readonly choices: readonly SimpleChoice[];
   /**
@@ -1276,6 +1285,8 @@ const choiceInteraction = (
     );
 
     return {
+      ariaLabel: valueOf(interaction, "aria-label"),
+      ariaLabelledby: valueOf(interaction, "aria-labelledby"),
       cardinality,
       choices,
       class: Option.getOrElse(valueOf(interaction, "class"), () => ""),

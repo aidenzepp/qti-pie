@@ -37,6 +37,8 @@ const words = (value: string): BodyNode => ({ kind: "text", text: value });
  * `aria-labelledby`, which `nameOf` reads.
  */
 const colours: ChoiceInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
     { content: [words("Red")], identifier: "A" },

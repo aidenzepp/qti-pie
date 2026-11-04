@@ -223,6 +223,8 @@ const textEntry: TextEntryPayload = {
  * A single Choice bound to `RESPONSE`, with no Prompt and no message.
  */
 const choice: ChoicePayload = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
   autofocus: false,
   cardinality: "single",
   choices: [{ content: [txt("Red")], identifier: "A" }],

@@ -46,6 +46,8 @@ const words = (value: string): BodyNode => ({ kind: "text", text: value });
  * A single Choice of three colours with a phrasing Prompt, which takes the `legend` markup.
  */
 const colours: ChoiceInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
     { content: [words("Red")], identifier: "A" },
@@ -325,6 +327,65 @@ describe("renderChoice", () => {
       assert.lengthOf(partsIn(root, "control"), 3);
       assert.deepStrictEqual(checkTree(page(root, built), { baseLevel: 2 }), []);
     }),
+  );
+
+  it.effect("[Q-2] names a Choice with no Prompt by the author's aria-label", () =>
+    Effect.gen(function* namesByAriaLabel() {
+      const built = payloadOf({
+        ...colours,
+        ariaLabel: Option.some("Pick a city"),
+        prompt: Option.none(),
+      });
+      const root = yield* render(built);
+
+      assert.strictEqual(root.attrs["aria-label"], "Pick a city");
+      assert.isUndefined(root.attrs["aria-labelledby"]);
+      assert.strictEqual(nameOf(root, page(root, built)), "Pick a city");
+    }),
+  );
+
+  it.effect(
+    "[Q-2] names a Choice with no Prompt by the author's aria-labelledby, each id scoped by the instance",
+    () =>
+      Effect.gen(function* namesByAriaLabelledby() {
+        const root = yield* render(
+          payloadOf({
+            ...colours,
+            ariaLabelledby: Option.some("intro note"),
+            prompt: Option.none(),
+          }),
+        );
+
+        assert.strictEqual(
+          root.attrs["aria-labelledby"],
+          `${authoredId(instance, "intro")} ${authoredId(instance, "note")}`,
+        );
+        assert.isUndefined(root.attrs["aria-label"]);
+      }),
+  );
+
+  it.effect(
+    "[Q-2] names a Choice by its Prompt, not the author's attributes, when it has one",
+    () =>
+      Effect.gen(function* promptWins() {
+        const legendRoot = yield* render(
+          payloadOf({ ...colours, ariaLabel: Option.some("Pick a city") }),
+        );
+
+        assert.strictEqual(childAt(legendRoot, 0).tag, "legend");
+        assert.isUndefined(legendRoot.attrs["aria-label"]);
+        assert.isUndefined(legendRoot.attrs["aria-labelledby"]);
+
+        const labelledRoot = yield* render(
+          payloadOf({ ...paragraphPrompt, ariaLabelledby: Option.some("intro") }),
+        );
+        const [prompt] = partsIn(labelledRoot, "prompt");
+
+        assert.strictEqual(prompt?.tag, "qti-prompt");
+        assert.isDefined(prompt?.attrs["id"]);
+        assert.strictEqual(labelledRoot.attrs["aria-labelledby"], prompt?.attrs["id"]);
+        assert.isUndefined(labelledRoot.attrs["aria-label"]);
+      }),
   );
 
   it.effect(
