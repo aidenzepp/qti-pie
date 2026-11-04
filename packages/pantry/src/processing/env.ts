@@ -35,16 +35,18 @@ export interface DeclarationEntry {
 }
 
 /**
- * What a test knows of one item reference: the declarations of the item it resolves to, and its
- * mapping targets typed as the variables they map from.
+ * What a test knows of one item reference: the declarations of the item it resolves to, its
+ * mapping targets typed as the variables they map from, and whether the item is time dependent.
  *
  * A mapping target is "treated as if [it were] declared with the name target-identifier"
  * (INFO#Derived_VariableMapping), so `mappings` is keyed by target identifier and holds the type
- * of the source it maps.
+ * of the source it maps. `timeDependent` is the item root's `time-dependent`, which decides whether
+ * the item's `duration` may be read (INFO#IV_Response).
  */
 export interface ItemRefScope {
   readonly declarations: ReadonlyMap<string, DeclarationEntry>;
   readonly mappings: ReadonlyMap<string, EffectiveType>;
+  readonly timeDependent: boolean;
 }
 
 /**
@@ -65,7 +67,8 @@ export type ReachEntry =
  * In `test` mode it can also hold `reach`, every identifier of the test's structure that a
  * prefixed name may begin with, and `holder`, the item reference a template default sits in. A
  * section document is checked once for each test that includes it, with that test's `reach`. Both
- * are empty in every other environment.
+ * are empty in every other environment. `timeDependent` is the item root's `time-dependent` in an
+ * item's environment and `false` in every other.
  */
 export interface Environment {
   readonly builtIns: ReadonlyMap<string, EffectiveType>;
@@ -73,6 +76,7 @@ export interface Environment {
   readonly holder: ItemRefScope | undefined;
   readonly mode: Mode;
   readonly reach: ReadonlyMap<string, ReachEntry>;
+  readonly timeDependent: boolean;
 }
 
 /**
@@ -207,7 +211,14 @@ export const environmentOf = (doc: XmlDocument, mode: Mode): Environment => {
     });
   }
 
-  return { builtIns: builtInsOf(mode), declarations, holder: undefined, mode, reach: new Map() };
+  return {
+    builtIns: builtInsOf(mode),
+    declarations,
+    holder: undefined,
+    mode,
+    reach: new Map(),
+    timeDependent: flag(doc.root, "time-dependent"),
+  };
 };
 
 /**
@@ -225,6 +236,7 @@ export const emptyEnvironment = (mode: Mode): Environment => ({
   holder: undefined,
   mode,
   reach: new Map(),
+  timeDependent: false,
 });
 
 /**
