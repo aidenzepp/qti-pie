@@ -1,6 +1,6 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import type { AnyRelation } from "@bjornpagen/grizzle";
+import type { AnyRelation, Uuid } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
 import { describe } from "vitest";
@@ -74,7 +74,7 @@ const importFixture = (name: FixtureName) =>
  *
  * @returns The rendered canonical text, for the assertions that name what it holds.
  */
-const assertRenders = (rows: Rows, treeId: string, file: string) =>
+const assertRenders = (rows: Rows, treeId: Uuid, file: string) =>
   Effect.gen(function* rendersLikeTheOracle() {
     const expected = textOf(yield* xmllintC14n(file));
     const rendered = textOf(canonicalize(renderTree(rows, treeId)));
@@ -172,7 +172,13 @@ describe.skipIf(!hasLease)(
                 `the ${name} package holds a manifest tree and an item tree`,
               );
 
-              const [manifestId = "", documentId = ""] = trees;
+              const [manifestId, documentId] = trees;
+
+              if (manifestId === undefined || documentId === undefined) {
+                assert.fail(`the ${name} package has two trees`);
+
+                return;
+              }
 
               assert.strictEqual(manifestId, packageId);
 

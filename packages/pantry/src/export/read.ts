@@ -7,7 +7,7 @@
  * into the `Rows` the importer builds, which `renderTree` renders.
  */
 import { Db } from "@bjornpagen/grizzle";
-import type { AnyRelation, DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle";
+import type { AnyRelation, DbLayer, OpenError, ReadError, Uuid } from "@bjornpagen/grizzle";
 import { Array as Arr, Effect, Option } from "effect";
 import { fieldNamesOf, nodeQueries, nodeRuns, treeAttachments } from "#pantry/export/queries.ts";
 import type { Attachment } from "#pantry/export/queries.ts";
@@ -64,8 +64,8 @@ const runOf = (db: LooseDb, name: string, treeId: string) =>
  * The ids of a package's trees: the manifest's, which is the package id, then every document's.
  */
 export const treesOf = Effect.fn("export.treesOf")(function* treesOf(
-  packageId: string,
-): Effect.fn.Return<readonly string[], OpenError | ReadError, DbLayer<typeof Author>> {
+  packageId: Uuid,
+): Effect.fn.Return<readonly Uuid[], OpenError | ReadError, DbLayer<typeof Author>> {
   const db = yield* Db.open(AuthorApp.roles.author, {});
   const documents = yield* (yield* db.workload.documentIdsOf.execute({ package: packageId }))
     .collect;

@@ -16,6 +16,7 @@
  * families, `id`, `role` and ARIA. The order the source wrote them in is not stored, and it need
  * not be: canonical XML sorts attributes, so canonical equality holds whatever this order is.
  */
+import type { Uuid } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import type { Rows as RowSet } from "#pantry/import/tree.ts";
 import { Rows } from "#pantry/import/tree.ts";
@@ -130,7 +131,7 @@ const missing = (what: string, id: string): never => {
  * @returns The document: its charset, declaration, doctype, prolog, root element and epilog. Throws
  *   when the rows lack the tree's `Tree` row, its root, or a row an edge or a node names.
  */
-export const renderTree = (rows: RowSet, treeId: string): XmlDocument => {
+export const renderTree = (rows: RowSet, treeId: Uuid): XmlDocument => {
   const tree = Rows.of(rows, Tree).find((row) => row.id === treeId) ?? missing("Tree row", treeId);
   const rootId = Rows.of(rows, TreeRoot).find((row) => row.tree === treeId)?.node;
   const nodes = by(Rows.of(rows, Node), (row) => row.id);
@@ -151,12 +152,12 @@ export const renderTree = (rows: RowSet, treeId: string): XmlDocument => {
   const index = indexOf(rows);
   const readersOf = readersFor(index);
 
-  const referencesOf = (id: string, qname: string): Attribute["references"] =>
+  const referencesOf = (id: Uuid, qname: string): Attribute["references"] =>
     (references.get(`${id}\n${qname}`) ?? [])
       .toSorted((left, right) => Number(left.offset - right.offset))
       .map((row) => ({ name: row.name, offset: Number(row.offset) }));
 
-  const stored = (id: string, kind: string): ReadonlyMap<string, string> => {
+  const stored = (id: Uuid, kind: string): ReadonlyMap<string, string> => {
     const values = new Map<string, string>();
     for (const [name, read] of readersOf(kind)) {
       const value = read(id);
@@ -176,7 +177,7 @@ export const renderTree = (rows: RowSet, treeId: string): XmlDocument => {
     return values;
   };
 
-  const attributesOf = (id: string, kind: string): readonly Attribute[] => [
+  const attributesOf = (id: Uuid, kind: string): readonly Attribute[] => [
     ...(declarations.get(id) ?? [])
       .toSorted((left, right) => Number(left.position - right.position))
       .map((row): Attribute => {
@@ -213,7 +214,7 @@ export const renderTree = (rows: RowSet, treeId: string): XmlDocument => {
     ),
   ];
 
-  const render = (id: string): Child => {
+  const render = (id: Uuid): Child => {
     const node = nodes.get(id) ?? missing("Node row", id);
     if (node.kind === "text") {
       return {
