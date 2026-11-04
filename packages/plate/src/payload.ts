@@ -12,7 +12,8 @@
  * @module
  * @see {@link Item} for the model it reads.
  */
-import { Array as Arr, Brand, Option } from "effect";
+import { Array as Arr, Option } from "effect";
+import type { Brand } from "effect";
 import { scopedId } from "#plate/emit/parts.ts";
 import type { Resolved } from "#plate/emit/parts.ts";
 import { entryName } from "#plate/form/encoding.ts";
@@ -305,9 +306,10 @@ export interface ResponseBinding {
  * The fields of an item the page may know, which {@link redactItem} copies by name.
  *
  * `responses` lists the response bindings in document order, and `notices` the features the body
- * shows as notices.
+ * shows as notices. Exported for the codec of {@link Redacted}'s JSON form, whose Schema's type it
+ * is; `src/index.ts` does not export it.
  */
-interface RedactedFields {
+export interface RedactedFields {
   readonly body: readonly BodyNode[];
   /**
    * The document's location as the host named it.
@@ -327,16 +329,27 @@ interface RedactedFields {
  * An item with every part the page may not know removed: the only item {@link payload} takes.
  *
  * The brand exists only in the type, so a full {@link Item}, or any object built by hand, does not
- * type-check where a `Redacted` is expected; {@link redactItem} is its only constructor, and the
- * value it returns holds exactly the fields of {@link RedactedFields}.
+ * type-check where a `Redacted` is expected. {@link redactItem} makes one from an item, and the
+ * codec's `decodeRedacted` from its checked JSON form, each through {@link brandRedacted}; the value
+ * either returns holds exactly the fields of {@link RedactedFields}.
  */
 export type Redacted = Brand.Branded<RedactedFields, "Redacted">;
 
 /**
- * The brand's constructor, kept to this module so that {@link redactItem} is the only way to make
- * a {@link Redacted}.
+ * Brand redacted fields as a {@link Redacted}: a cast, so that no run-time import of effect's
+ * `Brand` reaches the browser (the OD-6 ruling, rule `e2bd87f2`).
+ *
+ * Only {@link redactItem}'s allowlisted copy and the codec's `decodeRedacted`, after its Schema has
+ * checked every field, call it; `src/index.ts` does not export it. Any other caller would make a
+ * `Redacted` the allowlist never saw.
+ *
+ * @param fields The fields the allowlist copied, or the codec checked.
+ * @returns The same object, typed as a `Redacted`.
  */
-const brand = Brand.nominal<Redacted>();
+export const brandRedacted = (fields: RedactedFields): Redacted =>
+  // SAFETY: `fields` comes from redactItem's allowlisted copy or decodeRedacted's checked decode, the only two callers; the brand is type-only, so the cast adds no run-time field.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The SAFETY note above: the brand exists only in the type, and these two callers are the allowlist's only ways in.
+  fields as Redacted;
 
 /**
  * An interaction of the item model.
@@ -621,8 +634,8 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
 };
 
 /**
- * Copy the parts of an item the page may know: the allowlist, and the only constructor of
- * {@link Redacted}.
+ * Copy the parts of an item the page may know: the allowlist, and the only way to make a
+ * {@link Redacted} from an item.
  *
  * It copies, each by name, the document location, the identifier, the title, `lang`, the body,
  * each response's binding and the features shown as notices. It copies no outcome declaration,
@@ -632,7 +645,7 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
  * @returns The redacted item.
  */
 export const redactItem = (item: Item): Redacted =>
-  brand({
+  brandRedacted({
     body: item.body,
     document: item.document,
     identifier: item.identifier,
