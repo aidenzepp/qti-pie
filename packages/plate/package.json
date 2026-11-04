@@ -6,6 +6,7 @@
     "#plate/*": "./src/*"
   },
   "dependencies": {
+    "@qti-pie/crust": "workspace:*",
     "effect": "4.0.7"
   },
   "devDependencies": {
