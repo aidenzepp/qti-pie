@@ -276,7 +276,7 @@ const copyNames = [
 ] as const;
 
 /**
- * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-broken
+ * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-edited
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
  * `end-attempt`, phase 2's hand-written positive, the 19 cut items of {@link cutNames}, the 40
@@ -2109,8 +2109,8 @@ const overUsage = (name: string, ...edits: readonly Edit[]): FixtureSpec => ({
  * - `padded-text` is valid QTI whose manifest `collapse` leaf carries spaces and whose item gains a
  *   `replace` leaf holding a tab and a line feed.
  *
- * The ten hand-broken packages each break one rule of the import guards and are otherwise
- * `simple`:
+ * The eleven hand-edited packages are otherwise `simple`. Nine break one rule of the import
+ * guards; `padded-identifier-value` and `comment-in-element` are admitted and round-trip:
  *
  * - `undeclared-response` points the interaction at `RESP`, which no declaration names.
  * - `choice-in-prompt` moves the first choice inside the prompt.
