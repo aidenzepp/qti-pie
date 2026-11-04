@@ -66,14 +66,10 @@ describe("the browser modules", () => {
   });
 
   it("throw no bare Error, and the browser closure calls no getOrThrow (rule d772ad5c point 2)", () => {
-    const checked = nonTest.filter(
-      (path) => !path.startsWith("src/ledger/") && !path.startsWith("src/test/"),
-    );
-
     assert.deepStrictEqual(
       [
         ...linesMatching(
-          checked,
+          nonTest,
           /new (?:Error|RangeError|TypeError)\(|\bextends (?:Error|RangeError|TypeError)\b/u,
         ),
         ...linesMatching(closure, /getOrThrow/u),
