@@ -61,13 +61,19 @@ export const kinds = [
 ] as const;
 
 /**
- * The attribute names these kinds introduce, empty until their headings fill their registry rows.
+ * The attribute names these kinds introduce that their landed headings have filled.
  *
  * A name is declared with the first registry row that carries it. Each heading slice (p5-16 to
  * p5-19) inserts the new names its kinds carry when it fills their rows, in alphabetical order;
  * p5-19 completes the 21.
  */
-export const attributes = [] as const;
+export const attributes = [
+  "category",
+  "keep-together",
+  "navigation-mode",
+  "submission-mode",
+  "visible",
+] as const;
 
 /**
  * The registry row of each test kind, with no attributes yet.
@@ -92,19 +98,19 @@ export const registry: Readonly<Record<(typeof kinds)[number], RegistryRow>> = {
     parent: Option.none(),
   },
   "qti-assessment-item-ref": {
-    attributes: [],
+    attributes: ["identifier", "required", "fixed", "class", "href", "category"],
     local: "qti-assessment-item-ref",
     namespace,
     parent: Option.none(),
   },
   "qti-assessment-section": {
-    attributes: [],
+    attributes: ["identifier", "required", "fixed", "title", "class", "visible", "keep-together"],
     local: "qti-assessment-section",
     namespace,
     parent: Option.none(),
   },
   "qti-assessment-section-ref": {
-    attributes: [],
+    attributes: ["identifier", "class", "href"],
     local: "qti-assessment-section-ref",
     namespace,
     parent: Option.none(),
@@ -122,7 +128,7 @@ export const registry: Readonly<Record<(typeof kinds)[number], RegistryRow>> = {
     parent: Option.none(),
   },
   "qti-assessment-test": {
-    attributes: [],
+    attributes: ["identifier", "title", "class", "tool-name", "tool-version"],
     local: "qti-assessment-test",
     namespace,
     parent: Option.none(),
@@ -200,7 +206,7 @@ export const registry: Readonly<Record<(typeof kinds)[number], RegistryRow>> = {
     parent: Option.none(),
   },
   "qti-test-part": {
-    attributes: [],
+    attributes: ["identifier", "title", "class", "navigation-mode", "submission-mode"],
     local: "qti-test-part",
     namespace,
     parent: Option.none(),

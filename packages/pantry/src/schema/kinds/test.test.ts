@@ -75,22 +75,38 @@ const names = [
 
 /**
  * The names the landed heading slices declare in `test.attributes`, alphabetical and a subset of
- * `names`. None yet. p5-16 inserts `category`, `keep-together`, `navigation-mode`,
- * `submission-mode` and `visible`; p5-17 the twelve of its kinds; p5-18 `source-identifier`,
- * `target` and `target-identifier`; p5-19 `access`, so `declared` equals `names`.
+ * `names`: p5-16's `category`, `keep-together`, `navigation-mode`, `submission-mode` and
+ * `visible`. p5-17 inserts the twelve of its kinds; p5-18 `source-identifier`, `target` and
+ * `target-identifier`; p5-19 `access`, so `declared` equals `names`.
  */
-const declared: readonly string[] = [];
+const declared: readonly string[] = [
+  "category",
+  "keep-together",
+  "navigation-mode",
+  "submission-mode",
+  "visible",
+];
 
 /**
- * The handles whose heading slice has not filled their registry row: all 26 now. p5-16 removes
- * `qti-assessment-test`, `qti-test-part`, `qti-assessment-section`, `qti-assessment-section-ref`
- * and `qti-assessment-item-ref`; p5-17 `qti-selection`, `qti-ordering`, `qti-adaptive-selection`,
+ * The handles whose heading slice has not filled their registry row: the 21 the later headings
+ * fill. p5-17 removes `qti-selection`, `qti-ordering`, `qti-adaptive-selection`,
  * `qti-adaptive-engine-ref`, `qti-adaptive-settings-ref`, `qti-usagedata-ref`, `qti-metadata-ref`,
  * `qti-item-session-control` and `qti-time-limits`; p5-18 `qti-pre-condition`,
  * `qti-branch-rule`, `qti-variable-mapping`, `qti-weight` and `qti-template-default`; p5-19 the
  * rest, and deletes the list with its branch.
  */
-const awaiting: ReadonlySet<string> = new Set(handles);
+const awaiting: ReadonlySet<string> = new Set(
+  handles.filter(
+    (handle) =>
+      ![
+        "qti-assessment-test",
+        "qti-test-part",
+        "qti-assessment-section",
+        "qti-assessment-section-ref",
+        "qti-assessment-item-ref",
+      ].includes(handle),
+  ),
+);
 
 const mixed = ["text", "ws", "comment", "pi", "entityRef"];
 

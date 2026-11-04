@@ -594,6 +594,40 @@ export const ownAttributes = {
     ["adaptive", marked(R.DeclaredAdaptive, arm(R.AssessmentItem, "adaptive"))],
     ["time-dependent", arm(R.AssessmentItem, "timeDependent")],
   ],
+  "qti-assessment-item-ref": [
+    identifierOf(R.ItemRef),
+    ["href", arm(R.ItemRef, "href")],
+    ["required", marked(R.DeclaredItemRefRequired, arm(R.ItemRef, "required"))],
+    ["fixed", marked(R.DeclaredItemRefFixed, arm(R.ItemRef, "fixed"))],
+    ["category", optional(R.ItemRefCategory)],
+  ],
+  "qti-assessment-section": [
+    identifierOf(R.AssessmentSection),
+    ["title", arm(R.AssessmentSection, "title")],
+    ["visible", arm(R.AssessmentSection, "visible")],
+    ["required", marked(R.DeclaredSectionRequired, arm(R.AssessmentSection, "required"))],
+    ["fixed", marked(R.DeclaredSectionFixed, arm(R.AssessmentSection, "fixed"))],
+    [
+      "keep-together",
+      marked(R.DeclaredSectionKeepTogether, arm(R.AssessmentSection, "keepTogether")),
+    ],
+  ],
+  "qti-assessment-section-ref": [identifierOf(R.SectionRef), ["href", arm(R.SectionRef, "href")]],
+  "qti-assessment-test": [
+    ["identifier", column(R.DocumentIdentifier, "value", "document")],
+    ["title", column(R.DocumentTitle, "value", "document")],
+    [
+      "tool-name",
+      first(column(R.ItemToolBoth, "toolName", "tree"), column(R.ItemToolName, "toolName", "tree")),
+    ],
+    [
+      "tool-version",
+      first(
+        column(R.ItemToolBoth, "toolVersion", "tree"),
+        column(R.ItemToolVersion, "toolVersion", "tree"),
+      ),
+    ],
+  ],
   "qti-associable-hotspot": [
     identifierOf(R.AssociableHotspot),
     ["template-identifier", choiceTemplate],
@@ -1035,6 +1069,12 @@ export const ownAttributes = {
     R.RubricTemplateInline,
     R.DeclaredRubricTemplateInlineShowHide,
   ),
+  "qti-test-part": [
+    identifierOf(R.TestPart),
+    ["navigation-mode", arm(R.TestPart, "navigationMode")],
+    ["submission-mode", arm(R.TestPart, "submissionMode")],
+    ["title", optional(R.TestPartTitle)],
+  ],
   "qti-test-variables": [
     ["variable-identifier", arm(R.TestVariables, "variableIdentifier")],
     ["base-type", optional(R.TestVariablesBaseType)],
