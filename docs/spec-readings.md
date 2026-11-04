@@ -276,3 +276,27 @@ against it. A reading that is not an information-model-over-XSD case says which 
     `base`, `colspan` or `qti-index`'s `n`, keeps `xs:int`'s range. This is not a case of documents in conflict: the
     XSD leaves the counts unbounded and XML Schema lets a processor document a limit, so reading 1 holds without an
     exception. (2026-11-04.)
+47. **`xsi:type`, `xsi:nil` and `xsi:noNamespaceSchemaLocation` are accepted as XML Schema judges them, stored and
+    exported byte for byte.** A document may carry the schema-instance attributes wherever XML Schema allows them, and
+    it is valid QTI when it carries them validly. `xsi:type` is valid only when it names the declared type or a type
+    derived from it. `xsi:nil` is valid only on an element that is nillable. Where QTI admits wildcard content, the
+    wildcard's processing mode is the XSD's: under `skip` the content is not assessed, and under `lax` it is assessed
+    only where a declaration is found. Each attribute is stored with its spelling and exported byte for byte. This
+    follows reading 1: these attributes are valid wherever XML Schema allows them, so a document that carries them
+    validly is valid QTI, and refusing it would refuse valid content. `xsi:schemaLocation` is already accepted. The
+    sources are XML Schema Part 1 (W3C Recommendation, 28 October 2004): section 2.6 and its subsections 2.6.1
+    (`xsi:type`), 2.6.2 (`xsi:nil`) and 2.6.3 (`xsi:schemaLocation` and `xsi:noNamespaceSchemaLocation`) define the
+    attributes; section 3.3.4 (Element Locally Valid (Element)) holds the `xsi:nil` rule (clause 3, which needs
+    `{nillable}`) and the `xsi:type` rule (clause 4, which needs a type derived from the declared one); section 3.10.1
+    (the Wildcard Schema Component, `{process contents}`) and section 3.10.4 (Item Valid (Wildcard)) define `skip` and
+    `lax`. This is not a case of documents in conflict: QTI's XSD is itself an XML Schema, so the XML Schema
+    Recommendation decides what is valid in it. (2026-11-04.)
+48. **A dotted reference is accepted when exactly one reading names a real item ref and its variable.** Reading 37
+    lets an identifier contain `.`, so a prefixed reference such as `ITEMREF.VAR` can be split at more than one dot.
+    Take a test whose item refs include `a` and `a.b`: `a.b.SCORE` could be item ref `a.b` with variable `SCORE`, or
+    item ref `a` with variable `b.SCORE`. When only one of those readings names a real item ref and a variable that
+    item has, that reading is meant, and the reference is accepted. When both resolve, QTI itself leaves the case
+    ambiguous, and the document is refused with a refusal that names both readings. This binds the renderer the same
+    way as the qti package, so the two never read the same file differently. This is not a case of documents in
+    conflict: the specification reserves `.` for prefixing and says nothing of splitting a reference at a dot, so this
+    reading fills the gap and keeps every unambiguous reference valid, as reading 1 requires. (2026-11-04.)
