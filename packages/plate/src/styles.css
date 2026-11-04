@@ -35,8 +35,8 @@
   padding: 0;
 }
 
-/* The Prompt, a legend or its own element. */
-:where([data-slot="choice-interaction-prompt"]) {
+/* The Prompt, a legend or its own element; Extended Text's Prompt takes the same look. */
+:where([data-slot="choice-interaction-prompt"], [data-slot="extended-text-interaction-prompt"]) {
   display: block;
   margin-block-end: 0.75rem;
   font-weight: 500;
@@ -162,6 +162,125 @@
     [data-slot="choice-interaction-indicator"]
 ) {
   background-clip: content-box;
+}
+
+/* The Text Entry Root: inline, in the run of the item's text. */
+:where([data-slot="text-entry-interaction"]) {
+  display: inline-block;
+}
+
+/* The Extended Text Root: a block. */
+:where([data-slot="extended-text-interaction"]) {
+  display: block;
+}
+
+/*
+ * The text Controls: the host's font, and the card's surface and text, so a dark host theme reads
+ * (a browser draws its own light field otherwise, under text the Control would inherit).
+ */
+:where(
+  input[data-slot="text-entry-interaction-control"],
+  textarea[data-slot="extended-text-interaction-control"]
+) {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--input, oklch(0.922 0 0));
+  border-radius: calc(var(--radius, 0.625rem) * 0.8);
+  font: inherit;
+  background-color: var(--card, oklch(1 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+/* The Extended Text Control: the full width of its Root. */
+:where([data-slot="extended-text-interaction-control"]) {
+  display: block;
+  box-sizing: border-box;
+  inline-size: 100%;
+}
+
+/*
+ * Placeholder text on the Control's card surface; at full opacity, since a browser may dim it
+ * below the contrast the colour was chosen for.
+ */
+:where(
+  [data-slot="text-entry-interaction-control"],
+  [data-slot="extended-text-interaction-control"]
+)::placeholder {
+  color: var(--muted-foreground, oklch(0.556 0 0));
+  opacity: 1;
+}
+
+/* A text Control holding a refused answer. */
+:where(
+  [data-slot="text-entry-interaction-control"][aria-invalid="true"],
+  [data-slot="extended-text-interaction-control"][aria-invalid="true"]
+) {
+  border-color: var(--destructive, oklch(0.577 0.245 27.325));
+}
+
+/* A disabled text Control. */
+:where(
+  [data-slot="text-entry-interaction-control"]:disabled,
+  [data-slot="extended-text-interaction-control"]:disabled
+) {
+  opacity: 0.5;
+}
+
+/* Focus on a text Control: the same ring as a Choice row's. */
+:where(
+  [data-slot="text-entry-interaction-control"]:focus-visible,
+  [data-slot="extended-text-interaction-control"]:focus-visible
+) {
+  outline-width: 3px;
+  outline-offset: 0;
+  outline-style: solid;
+  outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
+}
+
+/*
+ * The Status region, the results box: a card. An author places it where they like, so it is styled
+ * on its own markers only and looks the same anywhere.
+ */
+:where([data-slot="item-status"]) {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border, oklch(0.922 0 0));
+  border-radius: var(--radius, 0.625rem);
+  background-color: var(--card, oklch(1 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+/*
+ * The Status region holding Messages, which it does only when an answer was refused: the refused
+ * look keys on the region itself, never on an ancestor or a state attribute.
+ */
+:where([data-slot="item-status"]:has([data-slot="item-message"])) {
+  border-color: var(--destructive, oklch(0.577 0.245 27.325));
+}
+
+/* The Status heading, at whatever level: the region's own size, set apart by weight. */
+:where([data-slot="item-status-heading"]) {
+  margin-block-start: 0;
+  margin-block-end: 0.5rem;
+  font-size: inherit;
+  font-weight: 600;
+}
+
+/* The Messages: no bullets, and space between them. */
+:where([data-slot="item-messages"]) {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A Message, a refused answer's reason. */
+:where([data-slot="item-message"]) {
+  color: var(--destructive, oklch(0.577 0.245 27.325));
+}
+
+/* The Notice: subdued text on whatever surface it sits on, with no background of its own. */
+:where([data-slot="item-notice"]) {
+  color: var(--muted-foreground, oklch(0.556 0 0));
 }
 
 /*
