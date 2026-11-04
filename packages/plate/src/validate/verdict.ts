@@ -20,6 +20,7 @@ import {
   qtiNamespace,
   ssmlNamespace,
   walk,
+  xincludeNamespace,
   xmlNamespace,
   xmlnsNamespace,
   xsiNamespace,
@@ -42,12 +43,13 @@ import type { ElementTable, Tables } from "#plate/validate/xsd.ts";
 
 /**
  * Why a valid document is left unchecked: it holds MathML (reading 2) or SSML (reading 3), whose
- * validity phase 1 cannot judge, an entity reference the reader kept unexpanded, or a root that is
- * not `qti-assessment-item`. `path` is the element or attribute at issue.
+ * validity phase 1 cannot judge, an XInclude `include`, whose inclusion phase 1 neither performs
+ * nor judges, an entity reference the reader kept unexpanded, or a root that is not
+ * `qti-assessment-item`. `path` is the element or attribute at issue.
  */
 export interface UncheckedReason {
   readonly path: string;
-  readonly reason: "entity" | "mathml" | "root" | "ssml";
+  readonly reason: "entity" | "mathml" | "root" | "ssml" | "xinclude";
 }
 
 /**
@@ -525,9 +527,9 @@ const complete = (built: Item, secured: Secured): Item => {
 
 /**
  * Collect every reason phase 1 cannot judge a document: a root other than `qti-assessment-item`,
- * then in document order each MathML or SSML element whose parent is outside its namespace, each
- * attribute whose value holds an unexpanded entity reference, and each element with one among its
- * children.
+ * then in document order each MathML, SSML or XInclude element whose parent is outside its
+ * namespace, each attribute whose value holds an unexpanded entity reference, and each element
+ * with one among its children.
  *
  * @param source A document whose root is in QTI's namespace.
  * @returns The reasons, empty when phase 1 can judge all of it.
@@ -548,6 +550,10 @@ const uncheckedReasons = (source: SourceDocument): readonly UncheckedReason[] =>
 
     if (island(ssmlNamespace)) {
       reasons.push({ path, reason: "ssml" });
+    }
+
+    if (island(xincludeNamespace)) {
+      reasons.push({ path, reason: "xinclude" });
     }
 
     for (const attribute of element.attributes) {
@@ -586,8 +592,8 @@ const notQtiRoot = (source: SourceDocument): Refusal =>
  * 1. A root outside QTI's namespace is `refused`, with `not-qti-root` alone.
  * 2. The structural validator's refusals and the prose rules', together and in that order, with no
  *    short-circuit: any one makes the document `refused`, with all of them.
- * 3. A document holding MathML, SSML, an unexpanded entity reference, or a root other than
- *    `qti-assessment-item` is `unchecked`, with every reason. It is never rendered.
+ * 3. A document holding MathML, SSML, an XInclude `include`, an unexpanded entity reference, or a root
+ *    other than `qti-assessment-item` is `unchecked`, with every reason. It is never rendered.
  * 4. Otherwise each attribute only a wildcard admitted is removed and marked `attribute:<name>` (E3),
  *    and each URL attribute goes through `url.ts`: a kept value is written in its parsed form, and
  *    a dropped one goes, with its notice beside its element.
