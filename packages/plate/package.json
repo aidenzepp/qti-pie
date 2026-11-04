@@ -2,8 +2,12 @@
   "name": "@qti-pie/plate",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "imports": {
     "#plate/*": "./src/*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
   },
   "scripts": {
     "test": "mkdir -p work/.vp-tmp && TMPDIR=\"$PWD/work/.vp-tmp\" NODE_OPTIONS=\"$NODE_OPTIONS --disable-proto=delete --disable-sigusr1\" vp test run"

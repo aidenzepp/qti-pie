@@ -232,6 +232,20 @@ describe("decodeRecord", () => {
     }),
   );
 
+  it.effect(
+    'refuses attempt "refused", which no function writes: InvalidRecord at stage decode',
+    () =>
+      Effect.gen(function* refusesRefused() {
+        const stored = yield* Effect.fromResult(encodeRecord(fresh(item, "i1")));
+        const result = decodeRecord({ ...stored, attempt: "refused" });
+        assert.isTrue(Result.isResult(result));
+
+        const error = yield* Effect.flip(Effect.fromResult(result));
+        assert.strictEqual(error._tag, "InvalidRecord");
+        assert.strictEqual(error.stage, "decode");
+      }),
+  );
+
   it.effect("refuses a negative numAttempts and a response that is not a value", () =>
     Effect.gen(function* refusesMalformed() {
       const stored = yield* Effect.fromResult(encodeRecord(fresh(item, "i1")));
@@ -245,5 +259,33 @@ describe("decodeRecord", () => {
       assert.strictEqual(negative._tag, "InvalidRecord");
       assert.strictEqual(malformed._tag, "InvalidRecord");
     }),
+  );
+});
+
+describe("encodeRecord", () => {
+  it.effect(
+    "refuses an integer outcome holding the number 1.5: InvalidRecord at stage encode",
+    () =>
+      Effect.gen(function* refusesInexactOutcome() {
+        const inexact = {
+          baseType: "integer",
+          cardinality: "single",
+          values: [{ baseType: "integer", value: 1.5 }],
+        } as const;
+        const record: ItemRecord = {
+          ...fresh(item, "i1"),
+          outcomes: {
+            ...fresh(item, "i1").outcomes,
+            // @ts-expect-error -- an integer holds a bigint; the number 1.5 is what encode must refuse.
+            COUNT: inexact,
+          },
+        };
+        const result = encodeRecord(record);
+        assert.isTrue(Result.isResult(result));
+
+        const error = yield* Effect.flip(Effect.fromResult(result));
+        assert.strictEqual(error._tag, "InvalidRecord");
+        assert.strictEqual(error.stage, "encode");
+      }),
   );
 });
