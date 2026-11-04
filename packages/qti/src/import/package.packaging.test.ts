@@ -37,6 +37,7 @@ const positives = [
   "usage3",
   "usage3-typed",
   "usage3-padded",
+  "usage3-float-padded",
   "outcome",
   "lti301",
   "lti300",
@@ -97,7 +98,6 @@ const negatives = [
  */
 const contractNegatives = [
   ["usage3-integer-float", "UsageIntegerValue", "usage-typed-value"],
-  ["usage3-float-padded", "UsageFloatValue", "usage-typed-value"],
   ["usage3-bad-name", "StatisticName", "usage-lexical"],
 ] as const satisfies readonly (readonly [FixtureName, string, Rule])[];
 

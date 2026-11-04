@@ -226,7 +226,8 @@ const guardNames = [
 
 /**
  * The packages M3 derives: the two round-trip packages, the template-item package, one package per
- * broken and guard document and the two padded-lexical packages the importer refuses.
+ * broken and guard document, the padded reference the importer refuses and the padded literal it
+ * admits.
  */
 export const processingFixtureNames = [
   "processing-item",
@@ -295,9 +296,11 @@ const simpleItemName: ProcessingEdit = {
  *   written to a new integer response `TOTAL` instead.
  * - `rptemplates`: `simple` plus the five template documents of the corpus under `rptemplates/`, each
  *   listed as an `imsqti_rptemplate_xmlv3p0` resource.
- * - `padded-reference`: `response.xml` with `figures=" COUNT "` on a `qti-equal-rounded`.
+ * - `padded-reference`: `response.xml` with `figures=" COUNT "` on a `qti-equal-rounded`, refused
+ *   under `attribute-lexical` (decision 123).
  * - `padded-literal`: `response.xml` with an identifier `qti-base-value` written on its own line
- *   between indentation, as the corpus's six are.
+ *   between indentation, as the corpus's six are; admitted with its literal trimmed (decision
+ *   157).
  * - Every other name: `simple` with `choice.xml` replaced by the document of that name.
  *
  * @param name - One of {@link processingFixtureNames}.
