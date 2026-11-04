@@ -20,10 +20,12 @@ import type {
   Item,
   Rule,
   TextEntryInteraction,
+  UnsupportedFeature,
 } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { float } from "#plate/test/fixtures.ts";
+import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 
 /**
  * The path of the item root, which every path in these tests starts with.
@@ -349,6 +351,58 @@ const childrenOf = (node: BodyNode | undefined): readonly BodyNode[] => {
   assert.strictEqual(node?.kind, "element");
 
   return node?.kind === "element" ? node.children : [];
+};
+
+/**
+ * The template declarations the growth check builds first, before it builds {@link growthFactor}
+ * times as many.
+ */
+const fewerDeclarations = 1000;
+
+/**
+ * The growth check and its control build 8,000 declarations three times and 1,000 declarations 24
+ * times. A quadratic record took about 4 s of that, which nears vitest's default of 5 s, and a
+ * failing check should report its ratio, not a timeout.
+ */
+const growthTimeoutMs = 60_000;
+
+/**
+ * An item with `count` template declarations and an empty body. The model does not read a template
+ * declaration, so each is one unsupported feature at its own path.
+ *
+ * @param count How many declarations the item holds.
+ * @returns The document at `items/test.xml`.
+ */
+const templated = (count: number): SourceDocument =>
+  item({
+    body: [],
+    declarations: Array.from({ length: count }, (_, index) =>
+      el("qti-template-declaration", [
+        attr("base-type", "integer"),
+        attr("cardinality", "single"),
+        attr("identifier", `T${index}`),
+      ]),
+    ),
+  });
+
+/**
+ * The growth check's control, a deliberately quadratic dedupe: the scan `buildItem` made before it
+ * kept each feature's paths in a set, which compares each entry with every entry kept so far.
+ *
+ * @param entries The features, in document order.
+ * @returns The features once per feature and path, in document order.
+ */
+const dedupeQuadratically = (
+  entries: readonly UnsupportedFeature[],
+): readonly UnsupportedFeature[] => {
+  const kept: UnsupportedFeature[] = [];
+  for (const entry of entries) {
+    if (!kept.some((held) => held.feature === entry.feature && held.path === entry.path)) {
+      kept.push(entry);
+    }
+  }
+
+  return kept;
 };
 
 describe("buildItem", () => {
@@ -1530,5 +1584,56 @@ describe("buildItem", () => {
         assert.isBelow(Duration.toMillis(elapsed), 200, `${name}: ${Duration.format(elapsed)}`);
       }
     }),
+  );
+
+  it.effect(
+    "[I-0] records 8,000 unsupported declarations, 8 times as many in under 32 times the time",
+    () =>
+      Effect.gen(function* recordsInConstantTime() {
+        const fewer = templated(fewerDeclarations);
+        const more = templated(fewerDeclarations * growthFactor);
+        const built = yield* buildItem(more);
+        assert.strictEqual(built.unsupported.length, fewerDeclarations * growthFactor);
+
+        const growth = yield* growthRatio(
+          () => {
+            Effect.runSync(buildItem(fewer));
+          },
+          () => {
+            Effect.runSync(buildItem(more));
+          },
+        );
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the declarations took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
+
+  it.effect(
+    "control: a quadratic dedupe of the same features fails the growth check",
+    () =>
+      Effect.gen(function* quadraticControl() {
+        const fewer = (yield* buildItem(templated(fewerDeclarations))).unsupported;
+        const more = (yield* buildItem(templated(fewerDeclarations * growthFactor))).unsupported;
+        assert.deepStrictEqual(dedupeQuadratically([...fewer, ...fewer]), fewer);
+
+        const growth = yield* growthRatio(
+          () => {
+            dedupeQuadratically(fewer);
+          },
+          () => {
+            dedupeQuadratically(more);
+          },
+        );
+        assert.isAtLeast(
+          growth,
+          growthLimit,
+          `8 times the features took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
   );
 });

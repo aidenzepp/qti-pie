@@ -324,6 +324,11 @@ interface Build {
    * so no element sits at two places in one document.
    */
   readonly paths: ReadonlyMap<SourceElement, string>;
+  /**
+   * The paths each feature in `unsupported` was recorded at, keyed by the feature, so
+   * {@link record} finds a repeat without scanning the features recorded so far.
+   */
+  readonly recorded: Map<string, Set<string>>;
   readonly unsupported: UnsupportedFeature[];
 }
 
@@ -481,15 +486,16 @@ const pathOf = (build: Build, element: SourceElement): string => {
 };
 
 /**
- * Record an unsupported feature, once per feature and path.
+ * Record an unsupported feature, once per feature and path, in constant time.
  *
  * @param build The build that collects it.
  * @param entry The feature, its path and how it is shown.
  */
 const record = (build: Build, entry: UnsupportedFeature): void => {
-  if (
-    !build.unsupported.some((held) => held.feature === entry.feature && held.path === entry.path)
-  ) {
+  const paths = build.recorded.get(entry.feature) ?? new Set<string>();
+  if (!paths.has(entry.path)) {
+    paths.add(entry.path);
+    build.recorded.set(entry.feature, paths);
     build.unsupported.push(entry);
   }
 };
@@ -1932,7 +1938,12 @@ const pathsOf = (document: SourceDocument): ReadonlyMap<SourceElement, string> =
  */
 export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> =>
   Effect.gen(function* readItem() {
-    const build: Build = { document: source, paths: pathsOf(source), unsupported: [] };
+    const build: Build = {
+      document: source,
+      paths: pathsOf(source),
+      recorded: new Map(),
+      unsupported: [],
+    };
     const { root } = source;
     markElement(build, root, false);
 
