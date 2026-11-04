@@ -611,6 +611,39 @@ const required = (
   Effect.map(requiredAttribute(build, element, name), (attribute) => attribute.value);
 
 /**
+ * Read an identifier as its XSD type reads it.
+ *
+ * Every identifier the item reads is an `xs:NCName`, or an `xs:ID` or `xs:IDREF` derived from it:
+ * the root's, a declaration's and a choice's `identifier`, an interaction's `response-identifier`,
+ * and the `identifier` of `qti-variable`, `qti-correct`, `qti-map-response` and
+ * `qti-set-outcome-value`. Their whitespace facet is `collapse`, and an NCName holds no inner
+ * whitespace, so collapsing is removing the outer XML whitespace. Reading 7 keeps an attribute's
+ * outer whitespace only for the base-typed attributes the XSD types as strings, which no
+ * identifier is, so `" RESPONSE "` names `RESPONSE`, and refusing it would refuse valid content
+ * (reading 1). The validators read these attributes the same way (`identifierOf` in
+ * `src/validate/rules.ts`).
+ *
+ * @param written The attribute's value as written.
+ * @returns The identifier it names.
+ */
+const identifierOf = (written: string): string => trimXmlSpace(written);
+
+/**
+ * Read an identifier attribute the element must carry, as `identifierOf` reads it.
+ *
+ * @param build The build.
+ * @param element The element.
+ * @param name The attribute's name.
+ * @returns The identifier, or the refusal `missing-attribute`.
+ */
+const identifierAttribute = (
+  build: Build,
+  element: SourceElement,
+  name: string,
+): Effect.Effect<string, Refusal> =>
+  Effect.map(requiredAttribute(build, element, name), (attribute) => identifierOf(attribute.value));
+
+/**
  * Read an attribute whose value is one of a closed list, such as `cardinality`.
  *
  * @param build The build.
@@ -850,7 +883,7 @@ const floatAttribute = (
 
 /**
  * Find the response declaration an element binds through `response-identifier`; the last one when
- * two share the identifier.
+ * two share the identifier. Both sides are compared as `identifierOf` reads them.
  *
  * @param build The build.
  * @param element An interaction.
@@ -858,10 +891,12 @@ const floatAttribute = (
  *   identifier.
  */
 const boundDeclaration = (build: Build, element: SourceElement): Option.Option<SourceElement> =>
-  Option.flatMap(valueOf(element, "response-identifier"), (response) =>
+  Option.flatMap(Option.map(valueOf(element, "response-identifier"), identifierOf), (response) =>
     Arr.findLast(
       childrenNamed(build.document.root, "qti-response-declaration"),
-      (declaration) => Option.getOrUndefined(valueOf(declaration, "identifier")) === response,
+      (declaration) =>
+        Option.getOrUndefined(Option.map(valueOf(declaration, "identifier"), identifierOf)) ===
+        response,
     ),
   );
 
@@ -1026,7 +1061,7 @@ const declared = (
   declaration: SourceElement,
 ): Effect.Effect<Option.Option<Declared>, Refusal> =>
   Effect.gen(function* readDeclared() {
-    const identifier = yield* required(build, declaration, "identifier");
+    const identifier = yield* identifierAttribute(build, declaration, "identifier");
     yield* requiredAttribute(build, declaration, "cardinality");
 
     const cardinality = yield* enumerated(build, declaration, "cardinality", cardinalities);
@@ -1250,7 +1285,7 @@ const textFields = (
       path: pathOf(build, interaction),
       patternMaskMessage: valueOf(interaction, "data-patternmask-message"),
       placeholder: valueOf(interaction, "placeholder-text"),
-      response: yield* required(build, interaction, "response-identifier"),
+      response: yield* identifierAttribute(build, interaction, "response-identifier"),
     };
   });
 
@@ -1278,7 +1313,7 @@ const choiceInteraction = (
         Effect.gen(function* simpleChoice() {
           markElement(build, choice, true);
 
-          const identifier = yield* required(build, choice, "identifier");
+          const identifier = yield* identifierAttribute(build, choice, "identifier");
 
           return { content: yield* bodyNodes(build, choice), identifier };
         }),
@@ -1300,7 +1335,7 @@ const choiceInteraction = (
       orientation: valueOf(interaction, "orientation"),
       path: pathOf(build, interaction),
       prompt,
-      response: yield* required(build, interaction, "response-identifier"),
+      response: yield* identifierAttribute(build, interaction, "response-identifier"),
       shuffle,
     };
   });
@@ -1326,7 +1361,7 @@ const interactionNode = (
     if (Option.isNone(declaration)) {
       return yield* Effect.fail(
         refusal(build, "undeclared-response", attributePath(path, response), {
-          response: response.value,
+          response: identifierOf(response.value),
         }),
       );
     }
@@ -1473,7 +1508,7 @@ const expression = (
       case "qti-variable":
       case "qti-correct":
       case "qti-map-response": {
-        const identifier = yield* required(build, element, "identifier");
+        const identifier = yield* identifierAttribute(build, element, "identifier");
         const kinds = {
           "qti-correct": "correct",
           "qti-map-response": "map-response",
@@ -1601,7 +1636,7 @@ const rule = (build: Build, element: SourceElement): Effect.Effect<Option.Option
   Effect.gen(function* readRule() {
     const parts = elementsOf(element);
     if (isQti(element, "qti-set-outcome-value")) {
-      const identifier = yield* required(build, element, "identifier");
+      const identifier = yield* identifierAttribute(build, element, "identifier");
       const [operand, ...extra] = parts;
       if (operand === undefined || extra.length > 0) {
         return yield* unread(build, element);
@@ -1907,7 +1942,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
     const { root } = source;
     markElement(build, root, false);
 
-    const identifier = yield* required(build, root, "identifier");
+    const identifier = yield* identifierAttribute(build, root, "identifier");
     const title = yield* required(build, root, "title");
     const responses = new Map<string, ResponseDeclaration>();
     const outcomes = new Map<string, OutcomeDeclaration>();
