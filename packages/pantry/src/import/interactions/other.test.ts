@@ -1,6 +1,4 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the column the declaration and binding rows name; it is no structure. */
-import { createHash } from "node:crypto";
-import type { Uuid } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option } from "effect";
 import {
@@ -41,17 +39,8 @@ import {
 } from "#pantry/schema/interactions/other.ts";
 import { AttributeLexical, AttributeSpelling } from "#pantry/schema/node.ts";
 import type { NodeKindHandle } from "#pantry/schema/node.ts";
+import { uuidOf } from "#pantry/test/fixtures.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
-
-/**
- * A well-formed UUID derived from a readable label, so a fixture names its nodes and declarations
- * and the rows still carry the `Uuid` the schema asks for.
- */
-const uuidOf = (label: string): Uuid => {
-  const hex = createHash("sha1").update(label).digest("hex");
-
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
-};
 
 const documentId = "11111111-1111-4111-8111-111111111111";
 

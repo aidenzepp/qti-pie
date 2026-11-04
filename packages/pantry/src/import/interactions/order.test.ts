@@ -1,6 +1,4 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the typed-or-record column of a declared variable the context holds, not a structure. */
-import { createHash } from "node:crypto";
-import type { Uuid } from "@bjornpagen/grizzle";
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
@@ -46,19 +44,9 @@ import {
   OrderOrientation,
 } from "#pantry/schema/interactions/order.ts";
 import { AttributeLexical, AttributeSpelling, NodeKind } from "#pantry/schema/node.ts";
-import { materialize } from "#pantry/test/fixtures.ts";
+import { materialize, uuidOf } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
-
-/**
- * A well-formed UUID derived from a readable label, so a fixture names its nodes and declarations
- * and the rows still carry the `Uuid` the schema asks for.
- */
-const uuidOf = (label: string): Uuid => {
-  const hex = createHash("sha1").update(label).digest("hex");
-
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
-};
 
 const documentId = "11111111-1111-4111-8111-111111111111";
 
