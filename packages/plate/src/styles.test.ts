@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Context, Effect, Layer, Option } from "effect";
-import { partForSlot, rowFor } from "#plate/emit/parts.ts";
+import { partForSlot, partTable, rowFor } from "#plate/emit/parts.ts";
 import { browserSupport } from "#plate/ledger/browser-support.ts";
 import { checkFloor, readWebFeatures } from "#plate/test/baseline.ts";
 import type { FloorViolation, WebFeatures } from "#plate/test/baseline.ts";
@@ -10,14 +10,24 @@ import type { Compound, Sheet, StyleRule } from "#plate/test/css.ts";
 import { contrastRatio, parseOklch, tokens } from "#plate/test/tokens.ts";
 
 /**
- * The Choice markers the stylesheet's rules are read against, from the part table.
+ * The markers the stylesheet's rules are read against, from the part table: the Choice parts, the
+ * text Controls and the results box.
  */
 const marker = {
   choice: rowFor("choice-interaction", "choice").slot,
   control: rowFor("choice-interaction", "control").slot,
+  extendedTextControl: rowFor("extended-text-interaction", "control").slot,
   indicator: rowFor("choice-interaction", "indicator").slot,
+  message: rowFor("item", "message").slot,
   prompt: rowFor("choice-interaction", "prompt").slot,
+  status: rowFor("item", "status").slot,
+  textEntryControl: rowFor("text-entry-interaction", "control").slot,
 };
+
+/**
+ * The text Controls: Text Entry's `input` and Extended Text's `textarea`.
+ */
+const textControls: readonly string[] = [marker.textEntryControl, marker.extendedTextControl];
 
 /**
  * The line that opens the base section, the QTI vocabulary classes.
@@ -392,6 +402,90 @@ const weightedSelectors = (sheet: Sheet): readonly string[] =>
     );
 
 /**
+ * Find the part markers no selector names, at any depth.
+ *
+ * @param sheet The scanned sheet.
+ * @returns Each marker of the part table that no compound of any selector holds.
+ */
+const unstyledMarkers = (sheet: Sheet): readonly string[] =>
+  partTable
+    .map((row) => row.slot)
+    .filter(
+      (slot) =>
+        !sheet.rules.some((rule) => holdsAnywhere(rule, (compound) => holdsSlot(compound, slot))),
+    );
+
+/**
+ * Find the Controls no rule gives a surface and a text colour: of the rules reaching each, none
+ * declares both `background-color` and `color` as a `var()` of a token.
+ *
+ * @param sheet The scanned sheet.
+ * @param slots The Controls' markers.
+ * @returns Each marker left without its own colours.
+ */
+const uncolouredControls = (sheet: Sheet, slots: readonly string[]): readonly string[] =>
+  slots.filter(
+    (slot) =>
+      !sheet.rules.some(
+        (rule) =>
+          reaches(rule, slot) &&
+          Option.isSome(tokenFallback(rule, "background-color")) &&
+          Option.isSome(tokenFallback(rule, "color")),
+      ),
+  );
+
+/**
+ * Find the Controls no `:focus-visible` rule reaches: no subject compound holds both the Control's
+ * marker and `:focus-visible`.
+ *
+ * @param sheet The scanned sheet.
+ * @param slots The Controls' markers.
+ * @returns Each marker left without a focus rule.
+ */
+const unfocusedControls = (sheet: Sheet, slots: readonly string[]): readonly string[] =>
+  slots.filter(
+    (slot) =>
+      !sheet.rules.some((rule) =>
+        rule.selectors.some((selector) =>
+          subjectCompounds(selector).some(
+            (compound) => holdsSlot(compound, slot) && holdsPseudoClass(compound, "focus-visible"),
+          ),
+        ),
+      ),
+  );
+
+/**
+ * Find the rules that give the Status region the refused look, `--destructive`, without keying it
+ * on the region holding Messages: a subject compound holds the Status marker but no `:has()` whose
+ * argument holds the Message marker.
+ *
+ * @param sheet The scanned sheet.
+ * @returns Each offending rule's selectors, joined by commas.
+ */
+const strayRefusedLooks = (sheet: Sheet): readonly string[] =>
+  sheet.rules
+    .filter((rule) =>
+      rule.declarations.some((declaration) =>
+        varReferences(declaration.value).some((reference) => reference.name === "--destructive"),
+      ),
+    )
+    .filter((rule) =>
+      rule.selectors.some((selector) =>
+        subjectCompounds(selector).some(
+          (compound) =>
+            holdsSlot(compound, marker.status) &&
+            !compound.pseudoClasses
+              .filter((pseudoClass) => pseudoClass.name === "has")
+              .flatMap((pseudoClass) => pseudoClass.selectors)
+              .some((argument) =>
+                compoundsDeep(argument).some((inner) => holdsSlot(inner, marker.message)),
+              ),
+        ),
+      ),
+    )
+    .map((rule) => rule.selectors.join(", "));
+
+/**
  * The stylesheet as the tests read it: its text, its scan and the floor's data, each read once.
  */
 class Stylesheet extends Context.Service<
@@ -585,6 +679,40 @@ layer(Stylesheet.layer)("styles.css", (test) => {
       );
     }),
   );
+
+  test.effect(
+    "[Q-20] [Q-5] gives each text Control a surface and text colour from the tokens",
+    () =>
+      Effect.gen(function* controlColours() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.deepStrictEqual(uncolouredControls(sheet, textControls), []);
+      }),
+  );
+
+  test.effect("[Q-20] [Q-5] shows focus on each text Control", () =>
+    Effect.gen(function* controlFocus() {
+      const { sheet } = yield* Stylesheet;
+
+      assert.deepStrictEqual(unfocusedControls(sheet, textControls), []);
+    }),
+  );
+
+  test.effect("names every part marker of the part table in some selector", () =>
+    Effect.gen(function* markers() {
+      const { sheet } = yield* Stylesheet;
+
+      assert.deepStrictEqual(unstyledMarkers(sheet), []);
+    }),
+  );
+
+  test.effect("gives the Status region the refused look only when it holds Messages", () =>
+    Effect.gen(function* refused() {
+      const { sheet } = yield* Stylesheet;
+
+      assert.deepStrictEqual(strayRefusedLooks(sheet), []);
+    }),
+  );
 });
 
 describe("styles.css predicates, on negative controls", () => {
@@ -605,6 +733,17 @@ describe("styles.css predicates, on negative controls", () => {
       );
 
       assert.deepStrictEqual(lowContrastRules(sheet), [selector]);
+    }),
+  );
+
+  it.effect("a refused look on the Status region alone is reported, and on its :has() is not", () =>
+    Effect.gen(function* refusedLook() {
+      const bare = `:where([data-slot="${marker.status}"])`;
+      const keyed = `:where([data-slot="${marker.status}"]:has([data-slot="${marker.message}"]))`;
+      const border = "border-color: var(--destructive, oklch(0.577 0.245 27.325));";
+      const sheet = yield* scanSheet(`${bare} {\n  ${border}\n}\n\n${keyed} {\n  ${border}\n}\n`);
+
+      assert.deepStrictEqual(strayRefusedLooks(sheet), [bare]);
     }),
   );
 });
