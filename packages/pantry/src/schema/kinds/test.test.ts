@@ -76,24 +76,35 @@ const names = [
 /**
  * The names the landed heading slices declare in `test.attributes`, alphabetical and a subset of
  * `names`: p5-16's `category`, `keep-together`, `navigation-mode`, `submission-mode` and
- * `visible`. p5-17 inserts the twelve of its kinds; p5-18 `source-identifier`, `target` and
- * `target-identifier`; p5-19 `access`, so `declared` equals `names`.
+ * `visible`, and p5-17's `allow-comment`, `allow-late-submission`, `allow-review`,
+ * `allow-skipping`, `max-attempts`, `max-time`, `min-time`, `select`, `show-feedback`,
+ * `show-solution`, `validate-responses` and `with-replacement`. p5-18 inserts `source-identifier`,
+ * `target` and `target-identifier`; p5-19 `access`, so `declared` equals `names`.
  */
 const declared: readonly string[] = [
+  "allow-comment",
+  "allow-late-submission",
+  "allow-review",
+  "allow-skipping",
   "category",
   "keep-together",
+  "max-attempts",
+  "max-time",
+  "min-time",
   "navigation-mode",
+  "select",
+  "show-feedback",
+  "show-solution",
   "submission-mode",
+  "validate-responses",
   "visible",
+  "with-replacement",
 ];
 
 /**
- * The handles whose heading slice has not filled their registry row: the 21 the later headings
- * fill. p5-17 removes `qti-selection`, `qti-ordering`, `qti-adaptive-selection`,
- * `qti-adaptive-engine-ref`, `qti-adaptive-settings-ref`, `qti-usagedata-ref`, `qti-metadata-ref`,
- * `qti-item-session-control` and `qti-time-limits`; p5-18 `qti-pre-condition`,
- * `qti-branch-rule`, `qti-variable-mapping`, `qti-weight` and `qti-template-default`; p5-19 the
- * rest, and deletes the list with its branch.
+ * The handles whose heading slice has not filled their registry row: the 12 the later headings
+ * fill. p5-18 removes `qti-pre-condition`, `qti-branch-rule`, `qti-variable-mapping`,
+ * `qti-weight` and `qti-template-default`; p5-19 the rest, and deletes the list with its branch.
  */
 const awaiting: ReadonlySet<string> = new Set(
   handles.filter(
@@ -104,6 +115,15 @@ const awaiting: ReadonlySet<string> = new Set(
         "qti-assessment-section",
         "qti-assessment-section-ref",
         "qti-assessment-item-ref",
+        "qti-selection",
+        "qti-ordering",
+        "qti-adaptive-selection",
+        "qti-adaptive-engine-ref",
+        "qti-adaptive-settings-ref",
+        "qti-usagedata-ref",
+        "qti-metadata-ref",
+        "qti-item-session-control",
+        "qti-time-limits",
       ].includes(handle),
   ),
 );

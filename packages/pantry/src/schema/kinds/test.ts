@@ -68,11 +68,23 @@ export const kinds = [
  * p5-19 completes the 21.
  */
 export const attributes = [
+  "allow-comment",
+  "allow-late-submission",
+  "allow-review",
+  "allow-skipping",
   "category",
   "keep-together",
+  "max-attempts",
+  "max-time",
+  "min-time",
   "navigation-mode",
+  "select",
+  "show-feedback",
+  "show-solution",
   "submission-mode",
+  "validate-responses",
   "visible",
+  "with-replacement",
 ] as const;
 
 /**
@@ -80,7 +92,7 @@ export const attributes = [
  */
 export const registry: Readonly<Record<(typeof kinds)[number], RegistryRow>> = {
   "qti-adaptive-engine-ref": {
-    attributes: [],
+    attributes: ["identifier", "href"],
     local: "qti-adaptive-engine-ref",
     namespace,
     parent: Option.none(),
@@ -92,7 +104,7 @@ export const registry: Readonly<Record<(typeof kinds)[number], RegistryRow>> = {
     parent: Option.none(),
   },
   "qti-adaptive-settings-ref": {
-    attributes: [],
+    attributes: ["identifier", "href"],
     local: "qti-adaptive-settings-ref",
     namespace,
     parent: Option.none(),
@@ -152,19 +164,27 @@ export const registry: Readonly<Record<(typeof kinds)[number], RegistryRow>> = {
     parent: Option.some("qti-rubric-block.test"),
   },
   "qti-item-session-control": {
-    attributes: [],
+    attributes: [
+      "max-attempts",
+      "show-feedback",
+      "allow-review",
+      "show-solution",
+      "allow-comment",
+      "allow-skipping",
+      "validate-responses",
+    ],
     local: "qti-item-session-control",
     namespace,
     parent: Option.none(),
   },
   "qti-metadata-ref": {
-    attributes: [],
+    attributes: ["identifier", "href"],
     local: "qti-metadata-ref",
     namespace,
     parent: Option.none(),
   },
   "qti-ordering": {
-    attributes: [],
+    attributes: ["shuffle"],
     local: "qti-ordering",
     namespace,
     parent: Option.none(),
@@ -182,7 +202,7 @@ export const registry: Readonly<Record<(typeof kinds)[number], RegistryRow>> = {
     parent: Option.some("qti-assessment-test"),
   },
   "qti-selection": {
-    attributes: [],
+    attributes: ["select", "with-replacement"],
     local: "qti-selection",
     namespace,
     parent: Option.none(),
@@ -212,13 +232,13 @@ export const registry: Readonly<Record<(typeof kinds)[number], RegistryRow>> = {
     parent: Option.none(),
   },
   "qti-time-limits": {
-    attributes: [],
+    attributes: ["min-time", "max-time", "allow-late-submission"],
     local: "qti-time-limits",
     namespace,
     parent: Option.none(),
   },
   "qti-usagedata-ref": {
-    attributes: [],
+    attributes: ["identifier", "href"],
     local: "qti-usagedata-ref",
     namespace,
     parent: Option.none(),
