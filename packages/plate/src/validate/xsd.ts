@@ -1,8 +1,8 @@
 /**
  * The QTI XSD as tables: for every element the XSD declares, the attributes it admits with their
- * types and its attribute wildcard, plus the children, element wildcard and text that `p1-08b`
- * fills. {@link generateTables} builds them from the XSD's source view; structural validation reads
- * them and never the XSD itself.
+ * types and its attribute wildcard, the children it admits, its element wildcard and whether it
+ * holds text. {@link generateTables} builds them from the XSD's source view; structural validation
+ * reads them and never the XSD itself.
  */
 import { Effect, Option, Schema } from "effect";
 import type { SourceChild, SourceDocument, SourceElement } from "#plate/document/source.ts";
@@ -317,11 +317,15 @@ interface QName {
 }
 
 /**
- * The attributes a type admits by name, keyed by {@link clarkName}, and its attribute wildcard.
+ * What a type admits: its attributes by name and its children, each keyed by {@link clarkName}, its
+ * attribute and element wildcards, and whether it holds text.
  */
-interface AttributeSet {
+interface TypeTable {
   readonly anyAttribute: Option.Option<Wildcard>;
+  readonly anyElement: Option.Option<Wildcard>;
   readonly attributes: ReadonlyMap<string, AttributeTable>;
+  readonly children: ReadonlyMap<string, ChildName>;
+  readonly text: boolean;
 }
 
 /**
@@ -334,9 +338,18 @@ interface Declarations {
 }
 
 /**
- * What one table generation reads and remembers: the schema's target namespace and attribute form,
- * each XSD element's namespace scope, the top-level definitions by name, and the named types it has
- * mapped or is mapping.
+ * The children and element wildcards one content model holds, model groups flattened and group
+ * references expanded, in document order.
+ */
+interface Particles {
+  readonly children: readonly ChildName[];
+  readonly wildcards: readonly Wildcard[];
+}
+
+/**
+ * What one table generation reads and remembers: the schema's target namespace and its attribute
+ * and element forms, each XSD element's namespace scope, the top-level definitions by name, and the
+ * named types it has mapped or is mapping.
  *
  * The caches and `pending` belong to one call of {@link generateTables}, so the generation stays
  * pure over its source view.
@@ -344,14 +357,17 @@ interface Declarations {
 interface Context {
   readonly attributeGroups: ReadonlyMap<string, SourceElement>;
   readonly attributes: ReadonlyMap<string, SourceElement>;
-  readonly complexCache: Map<string, AttributeSet>;
+  readonly complexCache: Map<string, TypeTable>;
   readonly complexTypes: ReadonlyMap<string, SourceElement>;
+  readonly elements: ReadonlyMap<string, SourceElement>;
+  readonly groups: ReadonlyMap<string, SourceElement>;
   /**
    * The names of the types being mapped, so a type that derives from itself fails rather than
    * looping.
    */
   readonly pending: Set<string>;
   readonly qualifiedAttributes: boolean;
+  readonly qualifiedElements: boolean;
   readonly scopes: ReadonlyMap<SourceElement, Scope>;
   readonly simpleCache: Map<string, AttributeType>;
   readonly simpleTypes: ReadonlyMap<string, SourceElement>;
@@ -359,17 +375,26 @@ interface Context {
 }
 
 /**
- * A type that admits no attributes: a simple type's, or a built-in simple type's.
+ * The table of a simple type, or of a built-in simple type: text, and no attributes or children.
  */
-const noAttributes: AttributeSet = { anyAttribute: Option.none(), attributes: new Map() };
+const simpleTypeTable: TypeTable = {
+  anyAttribute: Option.none(),
+  anyElement: Option.none(),
+  attributes: new Map(),
+  children: new Map(),
+  text: true,
+};
 
 /**
- * The attributes of `xs:anyType`, the type of an element declared without one: none by name, and
- * any attribute through its lax wildcard.
+ * The table of `xs:anyType`, the type of an element declared without one: mixed content, and no
+ * attributes or children by name but any of either through its lax wildcards.
  */
-const anyTypeAttributes: AttributeSet = {
+const anyTypeTable: TypeTable = {
   anyAttribute: Option.some({ namespace: "##any", process: "lax" }),
+  anyElement: Option.some({ namespace: "##any", process: "lax" }),
   attributes: new Map(),
+  children: new Map(),
+  text: true,
 };
 
 /**
@@ -405,6 +430,18 @@ const sortedUnique = (values: readonly string[]): readonly string[] =>
  * @returns The name as one string.
  */
 const clarkName = (name: QName): string => `{${name.namespace}}${name.local}`;
+
+/**
+ * Compare two names by namespace, then local name, the order of the tables' attributes and
+ * children.
+ *
+ * @param left The first name.
+ * @param right The second name.
+ * @returns A negative number, zero or a positive number as `left` sorts before, with or after
+ *   `right`.
+ */
+const compareNames = (left: QName, right: QName): number =>
+  compareText(left.namespace, right.namespace) || compareText(left.local, right.local);
 
 /**
  * Keep the element children in the XML Schema namespace.
@@ -935,6 +972,61 @@ const completeWildcard = (
 };
 
 /**
+ * The processing a wildcard asks for, from the strictest to the laxest.
+ */
+const processOrder: readonly Wildcard["process"][] = ["strict", "lax", "skip"];
+
+/**
+ * Join two optional wildcards into one that admits what either admits, with the laxer processing:
+ * two declarations of one element name, an extension and its base, or two `xs:any` of one content
+ * model.
+ *
+ * @param target The schema's target namespace.
+ * @param left One wildcard, or `undefined`.
+ * @param right The other, or `undefined`.
+ * @returns The joined wildcard, none when neither is given.
+ */
+const unionWildcards = Effect.fnUntraced(function* unionWildcards(
+  target: string,
+  left: Wildcard | undefined,
+  right: Wildcard | undefined,
+): Effect.fn.Return<Option.Option<Wildcard>, TableGenerationError> {
+  if (left === undefined || right === undefined) {
+    return Option.fromNullishOr(left ?? right);
+  }
+
+  const namespace = yield* unionNamespaces(target, left.namespace, right.namespace);
+  const process =
+    processOrder.indexOf(left.process) >= processOrder.indexOf(right.process)
+      ? left.process
+      : right.process;
+
+  return Option.some({ namespace, process });
+});
+
+/**
+ * Join the element wildcards one content model gathers.
+ *
+ * Each `xs:any` is a particle of its own, so an element any of them matches is admitted: the
+ * tables take their union, as {@link unionWildcards} joins two.
+ *
+ * @param target The schema's target namespace.
+ * @param wildcards The gathered wildcards.
+ * @returns The content model's wildcard, none when it gathered none.
+ */
+const joinWildcards = Effect.fnUntraced(function* joinWildcards(
+  target: string,
+  wildcards: readonly Wildcard[],
+): Effect.fn.Return<Option.Option<Wildcard>, TableGenerationError> {
+  let joined = Option.none<Wildcard>();
+  for (const wildcard of wildcards) {
+    joined = yield* unionWildcards(target, Option.getOrUndefined(joined), wildcard);
+  }
+
+  return joined;
+});
+
+/**
  * Report that an attribute declaration has no `fixed` value, which the tables cannot record.
  *
  * @param declaration The `xs:attribute` element.
@@ -1095,24 +1187,175 @@ const applyDeclarations = (
 };
 
 /**
- * Report the attributes of the type a name resolves to: a named complex type, a named simple type
- * or an XML Schema built-in.
+ * Name the child an `xs:element` particle admits.
+ *
+ * A reference into the target namespace names a global element, which must be declared. A
+ * reference into an imported namespace, such as `m3:math`, is the child by namespace and local
+ * name, and the imported schema is never read. A local declaration is in no namespace unless its
+ * `form`, or the schema's `elementFormDefault`, is `qualified`; its own table comes from its own
+ * declaration, so its content is not walked here.
+ *
+ * @param context The generation's context.
+ * @param declaration The `xs:element` particle.
+ * @returns The child's name, or {@link TableGenerationError} naming what could not be mapped.
+ */
+const childName = Effect.fnUntraced(function* childName(
+  context: Context,
+  declaration: SourceElement,
+): Effect.fn.Return<ChildName, TableGenerationError> {
+  const ref = valueOf(declaration, "ref");
+  if (ref !== undefined) {
+    const name = yield* resolveQName(context, declaration, ref);
+    if (name.namespace === context.target && !context.elements.has(name.local)) {
+      return yield* failure("xs:element", `no global element ${ref} is declared`);
+    }
+
+    return { local: name.local, namespace: name.namespace };
+  }
+
+  const local = valueOf(declaration, "name");
+  if (local === undefined) {
+    return yield* failure("xs:element", "a declaration has neither a name nor a ref");
+  }
+
+  const form = valueOf(declaration, "form") ?? (context.qualifiedElements ? "qualified" : "");
+
+  return { local, namespace: form === "qualified" ? context.target : "" };
+});
+
+/**
+ * The model groups a content model nests, whose particles flatten into it.
+ */
+const modelGroups: ReadonlySet<string> = new Set(["all", "choice", "sequence"]);
+
+/**
+ * Gather a content model's children and element wildcards, flattening `sequence`, `choice` and
+ * `all` and expanding `xs:group` references, nested ones included.
+ *
+ * Order and counts are dropped: the tables keep which children an element admits, never a content
+ * model automaton. Constructs that are not particles, such as attribute declarations, are skipped.
+ *
+ * @param context The generation's context.
+ * @param holder A complex type, a derivation, a model group or a group definition.
+ * @param groups The groups being expanded, so a group that refers to itself fails.
+ * @returns The children and wildcards in document order.
+ */
+const gatherParticles = Effect.fnUntraced(function* gatherParticles(
+  context: Context,
+  holder: SourceElement,
+  groups: ReadonlySet<string>,
+): Effect.fn.Return<Particles, TableGenerationError> {
+  const children: ChildName[] = [];
+  const wildcards: Wildcard[] = [];
+  for (const child of xsdChildren(holder)) {
+    if (child.local === "element") {
+      children.push(yield* childName(context, child));
+    } else if (child.local === "any") {
+      wildcards.push(yield* wildcardOf(context, child));
+    } else if (modelGroups.has(child.local)) {
+      const nested = yield* gatherParticles(context, child, groups);
+      children.push(...nested.children);
+      wildcards.push(...nested.wildcards);
+    } else if (child.local === "group") {
+      const ref = valueOf(child, "ref");
+      if (ref === undefined) {
+        return yield* failure("xs:group", "a reference has no ref");
+      }
+
+      const name = yield* resolveQName(context, child, ref);
+      const group = name.namespace === context.target ? context.groups.get(name.local) : undefined;
+      if (group === undefined) {
+        return yield* failure("xs:group", `no group ${ref} is declared`);
+      }
+
+      if (groups.has(name.local)) {
+        return yield* failure("xs:group", `${ref} refers to itself`);
+      }
+
+      const nested = yield* gatherParticles(context, group, new Set([...groups, name.local]));
+      children.push(...nested.children);
+      wildcards.push(...nested.wildcards);
+    }
+  }
+
+  return { children, wildcards };
+});
+
+/**
+ * Key children by {@link clarkName}, so a child named twice is admitted once.
+ *
+ * @param children The children.
+ * @returns Each distinct child, keyed by its name.
+ */
+const childMap = (children: Iterable<ChildName>): ReadonlyMap<string, ChildName> =>
+  new Map([...children].map((child) => [clarkName(child), child]));
+
+/**
+ * Report whether a complex type's content is mixed, so its element holds text.
+ *
+ * As XSD reads them, its `complexContent`'s `mixed` decides when it has one, otherwise the type's
+ * own, and neither means element-only. The value is an `xs:boolean`.
+ *
+ * @param type The `xs:complexType` element.
+ * @param content Its `xs:complexContent`, when it has one.
+ * @returns Whether its content is mixed.
+ */
+const isMixed = (type: SourceElement, content?: SourceElement): boolean => {
+  const mixed =
+    (content === undefined ? undefined : valueOf(content, "mixed")) ?? valueOf(type, "mixed");
+  const value = mixed?.trim();
+
+  return value === "true" || value === "1";
+};
+
+/**
+ * The attribute wildcard of a derived type: a restriction's own, and an extension's base's joined
+ * with its own and taking its own processing, as XSD defines both.
+ *
+ * @param target The schema's target namespace.
+ * @param restricting Whether the derivation is a restriction.
+ * @param base The base type's attribute wildcard.
+ * @param own The derivation's own attribute wildcard.
+ * @returns The derived type's attribute wildcard.
+ */
+const derivedAttributeWildcard = (
+  target: string,
+  restricting: boolean,
+  base: Option.Option<Wildcard>,
+  own: Option.Option<Wildcard>,
+): Effect.Effect<Option.Option<Wildcard>, TableGenerationError> => {
+  if (restricting || Option.isNone(base)) {
+    return Effect.succeed(own);
+  }
+
+  if (Option.isNone(own)) {
+    return Effect.succeed(base);
+  }
+
+  return unionNamespaces(target, base.value.namespace, own.value.namespace).pipe(
+    Effect.map((namespace) => Option.some({ namespace, process: own.value.process })),
+  );
+};
+
+/**
+ * Report the table of the type a name resolves to: a named complex type, a named simple type or an
+ * XML Schema built-in.
  *
  * @param context The generation's context.
  * @param name The type's resolved name.
- * @returns Its attributes, or {@link TableGenerationError} when no such type exists.
+ * @returns Its table, or {@link TableGenerationError} when no such type exists.
  */
-const typeAttributes = Effect.fnUntraced(function* typeAttributes(
+const typeTable = Effect.fnUntraced(function* typeTable(
   context: Context,
   name: QName,
-): Effect.fn.Return<AttributeSet, TableGenerationError> {
+): Effect.fn.Return<TypeTable, TableGenerationError> {
   if (name.namespace === xsdNamespace) {
     if (name.local === "anyType") {
-      return anyTypeAttributes;
+      return anyTypeTable;
     }
 
     if (builtins.has(name.local)) {
-      return noAttributes;
+      return simpleTypeTable;
     }
 
     return yield* failure("type", `xs:${name.local} is not a built-in the tables record`);
@@ -1122,7 +1365,7 @@ const typeAttributes = Effect.fnUntraced(function* typeAttributes(
     name.namespace === context.target ? context.complexTypes.get(name.local) : undefined;
   if (complex === undefined) {
     if (name.namespace === context.target && context.simpleTypes.has(name.local)) {
-      return noAttributes;
+      return simpleTypeTable;
     }
 
     return yield* failure("type", `no type ${clarkName(name)} is declared`);
@@ -1139,37 +1382,43 @@ const typeAttributes = Effect.fnUntraced(function* typeAttributes(
 
   context.pending.add(name.local);
 
-  // oxlint-disable-next-line eslint/no-use-before-define -- `typeAttributes` and `complexAttributes` are mutually recursive, as a complex type derives from another; the call runs only after both are defined.
-  const attributes = yield* complexAttributes(context, complex);
+  // oxlint-disable-next-line eslint/no-use-before-define -- `typeTable` and `complexTable` are mutually recursive, as a complex type derives from another; the call runs only after both are defined.
+  const table = yield* complexTable(context, complex);
   context.pending.delete(name.local);
-  context.complexCache.set(name.local, attributes);
+  context.complexCache.set(name.local, table);
 
-  return attributes;
+  return table;
 });
 
 /**
- * Report the attributes a complex type admits.
+ * Report the table of a complex type.
  *
- * Without `complexContent` or `simpleContent`, they are its own. An extension inherits its base's
- * attributes and adds its own, and its wildcard is the union of its base's and its own. A
- * restriction inherits its base's attributes and applies its own declarations, and its wildcard is
- * its own alone, as XSD defines both.
+ * Without `complexContent` or `simpleContent`, its attributes and children are its own. An
+ * extension inherits its base's attributes and children and adds its own, and each of its
+ * wildcards is the union of its base's and its own. A restriction inherits its base's attributes
+ * and applies its own declarations, its attribute wildcard is its own alone, and its children and
+ * element wildcard are its own alone, as XSD defines them. It holds text when its content is mixed
+ * or simple, never by inheritance.
  *
  * @param context The generation's context.
  * @param type The `xs:complexType` element.
- * @returns Its attributes, or {@link TableGenerationError} naming what could not be mapped.
+ * @returns Its table, or {@link TableGenerationError} naming what could not be mapped.
  */
-const complexAttributes = Effect.fnUntraced(function* complexAttributes(
+const complexTable = Effect.fnUntraced(function* complexTable(
   context: Context,
   type: SourceElement,
-): Effect.fn.Return<AttributeSet, TableGenerationError> {
+): Effect.fn.Return<TypeTable, TableGenerationError> {
   const content = childNamed(type, "complexContent") ?? childNamed(type, "simpleContent");
   if (content === undefined) {
     const own = yield* gather(context, type, new Set());
+    const particles = yield* gatherParticles(context, type, new Set());
 
     return {
       anyAttribute: yield* completeWildcard(own.wildcards),
+      anyElement: yield* joinWildcards(context.target, particles.wildcards),
       attributes: applyDeclarations(new Map(), own.attributes, false),
+      children: childMap(particles.children),
+      text: isMixed(type),
     };
   }
 
@@ -1183,54 +1432,57 @@ const complexAttributes = Effect.fnUntraced(function* complexAttributes(
     return yield* failure(`xs:${derivation.local}`, "it has no base");
   }
 
-  const base = yield* typeAttributes(context, yield* resolveQName(context, derivation, baseName));
+  const base = yield* typeTable(context, yield* resolveQName(context, derivation, baseName));
   const own = yield* gather(context, derivation, new Set());
-  const ownWildcard = yield* completeWildcard(own.wildcards);
+  const particles = yield* gatherParticles(context, derivation, new Set());
+  const ownElements = yield* joinWildcards(context.target, particles.wildcards);
   const restricting = derivation.local === "restriction";
-  const attributes = applyDeclarations(base.attributes, own.attributes, restricting);
-  if (restricting || Option.isNone(base.anyAttribute)) {
-    return { anyAttribute: ownWildcard, attributes };
-  }
-
-  if (Option.isNone(ownWildcard)) {
-    return { anyAttribute: base.anyAttribute, attributes };
-  }
-
-  const namespace = yield* unionNamespaces(
-    context.target,
-    base.anyAttribute.value.namespace,
-    ownWildcard.value.namespace,
-  );
 
   return {
-    anyAttribute: Option.some({ namespace, process: ownWildcard.value.process }),
-    attributes,
+    anyAttribute: yield* derivedAttributeWildcard(
+      context.target,
+      restricting,
+      base.anyAttribute,
+      yield* completeWildcard(own.wildcards),
+    ),
+    anyElement: restricting
+      ? ownElements
+      : yield* unionWildcards(
+          context.target,
+          Option.getOrUndefined(base.anyElement),
+          Option.getOrUndefined(ownElements),
+        ),
+    attributes: applyDeclarations(base.attributes, own.attributes, restricting),
+    children: restricting
+      ? childMap(particles.children)
+      : childMap([...base.children.values(), ...particles.children]),
+    text: content.local === "simpleContent" || isMixed(type, content),
   };
 });
 
 /**
- * Report the attributes an element declaration admits, from its `type`, its inline type, or, with
- * neither, `xs:anyType`'s.
+ * Report the table of an element declaration's type: its `type`, its inline type, or, with
+ * neither, `xs:anyType`.
  *
  * @param context The generation's context.
  * @param element The `xs:element` element.
- * @returns Its attributes, or {@link TableGenerationError} naming what could not be mapped.
+ * @returns Its type's table, or {@link TableGenerationError} naming what could not be mapped.
  */
-const elementAttributes = Effect.fnUntraced(function* elementAttributes(
+const declarationTable = Effect.fnUntraced(function* declarationTable(
   context: Context,
   element: SourceElement,
-): Effect.fn.Return<AttributeSet, TableGenerationError> {
+): Effect.fn.Return<TypeTable, TableGenerationError> {
   const typeName = valueOf(element, "type");
   if (typeName !== undefined) {
-    return yield* typeAttributes(context, yield* resolveQName(context, element, typeName));
+    return yield* typeTable(context, yield* resolveQName(context, element, typeName));
   }
 
   const complex = childNamed(element, "complexType");
   if (complex !== undefined) {
-    return yield* complexAttributes(context, complex);
+    return yield* complexTable(context, complex);
   }
 
-  return childNamed(element, "simpleType") === undefined ? anyTypeAttributes : noAttributes;
+  return childNamed(element, "simpleType") === undefined ? anyTypeTable : simpleTypeTable;
 });
 
 /**
@@ -1240,10 +1492,16 @@ const elementAttributes = Effect.fnUntraced(function* elementAttributes(
  * @returns The tables in order.
  */
 const sortAttributes = (attributes: Iterable<AttributeTable>): readonly AttributeTable[] =>
-  [...attributes].toSorted(
-    (left, right) =>
-      compareText(left.namespace, right.namespace) || compareText(left.local, right.local),
-  );
+  [...attributes].toSorted(compareNames);
+
+/**
+ * Sort children by namespace, then local name.
+ *
+ * @param children The children.
+ * @returns The children in order.
+ */
+const sortChildren = (children: Iterable<ChildName>): readonly ChildName[] =>
+  [...children].toSorted(compareNames);
 
 /**
  * Add the wildcards an element table has to it, each as a key only when present.
@@ -1273,16 +1531,20 @@ const withWildcards = (
 };
 
 /**
- * Build an element's table from its type's attributes, before children are filled.
+ * Build an element's table from its type's table.
  *
- * @param attributes The attributes of the element's type.
- * @returns The table, with no children and no text.
+ * @param type The table of the element's type.
+ * @returns The element table, attributes and children sorted.
  */
-const elementTable = (attributes: AttributeSet): ElementTable =>
+const elementTable = (type: TypeTable): ElementTable =>
   withWildcards(
-    { attributes: sortAttributes(attributes.attributes.values()), children: [], text: false },
-    attributes.anyAttribute,
-    Option.none(),
+    {
+      attributes: sortAttributes(type.attributes.values()),
+      children: sortChildren(type.children.values()),
+      text: type.text,
+    },
+    type.anyAttribute,
+    type.anyElement,
   );
 
 /**
@@ -1367,38 +1629,6 @@ const unionAttribute = (left: AttributeTable, right: AttributeTable): AttributeT
   );
 
 /**
- * The processing a wildcard asks for, from the strictest to the laxest.
- */
-const processOrder: readonly Wildcard["process"][] = ["strict", "lax", "skip"];
-
-/**
- * Join two optional wildcards of one element name into one that admits what either admits, with
- * the laxer processing.
- *
- * @param target The schema's target namespace.
- * @param left One wildcard, or `undefined`.
- * @param right The other, or `undefined`.
- * @returns The joined wildcard, none when neither is given.
- */
-const unionWildcards = Effect.fnUntraced(function* unionWildcards(
-  target: string,
-  left: Wildcard | undefined,
-  right: Wildcard | undefined,
-): Effect.fn.Return<Option.Option<Wildcard>, TableGenerationError> {
-  if (left === undefined || right === undefined) {
-    return Option.fromNullishOr(left ?? right);
-  }
-
-  const namespace = yield* unionNamespaces(target, left.namespace, right.namespace);
-  const process =
-    processOrder.indexOf(left.process) >= processOrder.indexOf(right.process)
-      ? left.process
-      : right.process;
-
-  return Option.some({ namespace, process });
-});
-
-/**
  * Join the tables of two declarations of one element name, so nothing either type admits is
  * refused.
  *
@@ -1426,19 +1656,14 @@ const unionTables = Effect.fnUntraced(function* unionTables(
     ...right.attributes.filter((table) => !leftNames.has(clarkName(table))).map(asOptional),
   ];
 
-  const children = new Map(
-    [...left.children, ...right.children].map((child) => [clarkName(child), child]),
-  );
+  const children = childMap([...left.children, ...right.children]);
   const anyAttribute = yield* unionWildcards(target, left.anyAttribute, right.anyAttribute);
   const anyElement = yield* unionWildcards(target, left.anyElement, right.anyElement);
 
   return withWildcards(
     {
       attributes: sortAttributes(attributes),
-      children: [...children.values()].toSorted(
-        (one, other) =>
-          compareText(one.namespace, other.namespace) || compareText(one.local, other.local),
-      ),
+      children: sortChildren(children.values()),
       text: left.text || right.text,
     },
     anyAttribute,
@@ -1452,12 +1677,14 @@ const unionTables = Effect.fnUntraced(function* unionTables(
  * Every `xs:element` with a `name`, global or local, gets the table of its type, and a name
  * declared with more than one type gets the union of their tables. Attribute group references
  * expand, extensions and restrictions inherit, and every simple type maps to an
- * {@link AttributeType}. The XSD is recorded as written; readings that set part of it aside are
- * applied over the tables by structural validation. Imported schemas are never read.
+ * {@link AttributeType}. Content models flatten into the children an element admits, through
+ * group references, with no order or counts. The XSD is recorded as written; readings that set
+ * part of it aside are applied over the tables by structural validation. Imported schemas are
+ * never read: an element referenced from one is a child by name only.
  *
  * @param xsd The XSD, whose root is `xs:schema`.
- * @returns The tables, elements sorted by name and attributes by namespace then local name, or
- *   {@link TableGenerationError} naming the first construct with no table form.
+ * @returns The tables, elements sorted by name, attributes and children by namespace then local
+ *   name, or {@link TableGenerationError} naming the first construct with no table form.
  */
 export const generateTables = Effect.fn("generateTables")(function* generateTables(
   xsd: SourceDocument,
@@ -1476,8 +1703,11 @@ export const generateTables = Effect.fn("generateTables")(function* generateTabl
     attributes: definitions(root, "attribute"),
     complexCache: new Map(),
     complexTypes: definitions(root, "complexType"),
+    elements: definitions(root, "element"),
+    groups: definitions(root, "group"),
     pending: new Set(),
     qualifiedAttributes: valueOf(root, "attributeFormDefault") === "qualified",
+    qualifiedElements: valueOf(root, "elementFormDefault") === "qualified",
     scopes,
     simpleCache: new Map(),
     simpleTypes: definitions(root, "simpleType"),
@@ -1486,7 +1716,7 @@ export const generateTables = Effect.fn("generateTables")(function* generateTabl
 
   const tables = new Map<string, ElementTable>();
   for (const [name, element] of declarations) {
-    const table = elementTable(yield* elementAttributes(context, element));
+    const table = elementTable(yield* declarationTable(context, element));
     const seen = tables.get(name);
     tables.set(name, seen === undefined ? table : yield* unionTables(context.target, seen, table));
   }

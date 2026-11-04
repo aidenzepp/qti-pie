@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import type {
   SourceAttribute,
   SourceChild,
@@ -10,13 +10,15 @@ import {
   attr,
   doc,
   el,
+  mathmlNamespace,
   qtiNamespace,
+  xincludeNamespace,
   xmlNamespace,
   xmlnsNamespace,
   xsdNamespace,
 } from "#plate/document/source.ts";
-import type { AttributeType, ElementTable } from "#plate/validate/xsd.ts";
-import { generateTables, patternEquivalents } from "#plate/validate/xsd.ts";
+import type { AttributeType, ChildName, ElementTable } from "#plate/validate/xsd.ts";
+import { generateTables, patternEquivalents, Tables } from "#plate/validate/xsd.ts";
 
 /**
  * Construct an element in the XML Schema namespace, as an XSD fragment holds it.
@@ -33,8 +35,8 @@ const xs = (
 ): SourceElement => el(local, attributes, children, xsdNamespace);
 
 /**
- * Wrap definitions in an `xs:schema` whose target and default namespace is QTI's and which binds
- * `xs`, as the QTI XSD's root does.
+ * Wrap definitions in an `xs:schema` whose target and default namespace is QTI's, whose local
+ * elements are qualified, and which binds `xs`, `m3` and `xi`, as the QTI XSD's root does.
  *
  * @param definitions The schema's top-level definitions.
  * @returns The fragment as a source document.
@@ -47,7 +49,10 @@ const schema = (...definitions: readonly SourceElement[]): SourceDocument =>
       [
         attr("xmlns", qtiNamespace, xmlnsNamespace),
         attr("xs", xsdNamespace, xmlnsNamespace),
+        attr("m3", mathmlNamespace, xmlnsNamespace),
+        attr("xi", xincludeNamespace, xmlnsNamespace),
         attr("targetNamespace", qtiNamespace),
+        attr("elementFormDefault", "qualified"),
       ],
       definitions,
     ),
@@ -89,6 +94,42 @@ const complexType = (name: string, ...children: readonly SourceElement[]): Sourc
  */
 const element = (name: string, type: string): SourceElement =>
   xs("element", [attr("name", name), attr("type", type)]);
+
+/**
+ * Construct an `xs:element` reference to a global element.
+ *
+ * @param ref The element's QName, such as `img` or `m3:math`.
+ * @returns The element reference.
+ */
+const elementRef = (ref: string): SourceElement => xs("element", [attr("ref", ref)]);
+
+/**
+ * Construct a model group, `xs:sequence`, `xs:choice` or `xs:all`, of the given particles.
+ *
+ * @param local The group's construct.
+ * @param particles Its particles.
+ * @returns The model group.
+ */
+const model = (
+  local: "all" | "choice" | "sequence",
+  ...particles: readonly SourceElement[]
+): SourceElement => xs(local, [], particles);
+
+/**
+ * Construct an `xs:group` reference.
+ *
+ * @param ref The group's name.
+ * @returns The group reference.
+ */
+const groupRef = (ref: string): SourceElement => xs("group", [attr("ref", ref)]);
+
+/**
+ * Name a child in the QTI namespace.
+ *
+ * @param local The child's local name.
+ * @returns The child's name.
+ */
+const qti = (local: string): ChildName => ({ local, namespace: qtiNamespace });
 
 /**
  * Generate the tables of a fragment and take one element's table.
@@ -559,6 +600,231 @@ describe("generateTables", () => {
           [xmlNamespace, "base"],
         ],
       );
+    }),
+  );
+  it.effect("an extension inherits its base's children and adds its own", () =>
+    Effect.gen(function* childExtension() {
+      const table = yield* tableOf(
+        schema(
+          complexType("EmptyDType"),
+          complexType(
+            "BaseDType",
+            model("sequence", elementRef("img"), element("caption", "EmptyDType")),
+          ),
+          complexType(
+            "FigureDType",
+            xs(
+              "complexContent",
+              [],
+              [
+                xs(
+                  "extension",
+                  [attr("base", "BaseDType")],
+                  [model("sequence", element("note", "EmptyDType"))],
+                ),
+              ],
+            ),
+          ),
+          element("img", "EmptyDType"),
+          element("figure", "FigureDType"),
+        ),
+        "figure",
+      );
+
+      assert.deepStrictEqual(table.children, [qti("caption"), qti("img"), qti("note")]);
+    }),
+  );
+
+  it.effect("a restriction's children are its own, not its base's", () =>
+    Effect.gen(function* childRestriction() {
+      const table = yield* tableOf(
+        schema(
+          complexType("EmptyDType"),
+          complexType(
+            "BaseDType",
+            model("choice", element("p", "EmptyDType"), element("div", "EmptyDType")),
+          ),
+          complexType(
+            "NarrowDType",
+            xs(
+              "complexContent",
+              [],
+              [
+                xs(
+                  "restriction",
+                  [attr("base", "BaseDType")],
+                  [model("choice", element("p", "EmptyDType"))],
+                ),
+              ],
+            ),
+          ),
+          element("narrow", "NarrowDType"),
+        ),
+        "narrow",
+      );
+
+      assert.deepStrictEqual(table.children, [qti("p")]);
+    }),
+  );
+
+  it.effect("a group reference expands, and sequence, choice and all flatten", () =>
+    Effect.gen(function* flatten() {
+      const table = yield* tableOf(
+        schema(
+          complexType("EmptyDType"),
+          xs(
+            "group",
+            [attr("name", "inline.Group")],
+            [model("choice", element("strong", "EmptyDType"), element("em", "EmptyDType"))],
+          ),
+          xs(
+            "group",
+            [attr("name", "meta.Group")],
+            [model("all", element("footer", "EmptyDType"))],
+          ),
+          complexType(
+            "BlockDType",
+            model(
+              "sequence",
+              element("title", "EmptyDType"),
+              model("choice", element("p", "EmptyDType"), groupRef("inline.Group")),
+              groupRef("meta.Group"),
+            ),
+          ),
+          element("block", "BlockDType"),
+        ),
+        "block",
+      );
+
+      assert.deepStrictEqual(table.children, [
+        qti("em"),
+        qti("footer"),
+        qti("p"),
+        qti("strong"),
+        qti("title"),
+      ]);
+    }),
+  );
+
+  it.effect('xs:any namespace="##other" processContents="lax" is recorded', () =>
+    Effect.gen(function* anyElement() {
+      const table = yield* tableOf(
+        schema(
+          xs(
+            "group",
+            [attr("name", "grpLax.any")],
+            [
+              model(
+                "sequence",
+                xs("any", [
+                  attr("namespace", "##other"),
+                  attr("processContents", "lax"),
+                  attr("minOccurs", "0"),
+                  attr("maxOccurs", "unbounded"),
+                ]),
+              ),
+            ],
+          ),
+          complexType("ExtensionDType", model("sequence", groupRef("grpLax.any"))),
+          element("qti-custom", "ExtensionDType"),
+        ),
+        "qti-custom",
+      );
+
+      assert.deepStrictEqual(table, {
+        anyElement: { namespace: "##other", process: "lax" },
+        attributes: [],
+        children: [],
+        text: false,
+      });
+    }),
+  );
+
+  it.effect('ref="m3:math" gives a MathML-namespace child, and MathML is never walked', () =>
+    Effect.gen(function* mathRef() {
+      const tables = yield* generateTables(
+        schema(
+          complexType("FlowDType", model("choice", elementRef("m3:math"))),
+          element("div", "FlowDType"),
+        ),
+      );
+
+      assert.deepStrictEqual(tables.elements["div"]?.children, [
+        { local: "math", namespace: mathmlNamespace },
+      ]);
+      assert.deepStrictEqual(Object.keys(tables.elements), ["div"]);
+    }),
+  );
+
+  it.effect("mixed and simpleContent give text, and an element-only type does not", () =>
+    Effect.gen(function* text() {
+      const tables = yield* generateTables(
+        schema(
+          complexType("EmptyDType"),
+          xs(
+            "complexType",
+            [attr("name", "SpanDType"), attr("mixed", "true")],
+            [model("sequence", element("b", "EmptyDType"))],
+          ),
+          complexType(
+            "ValueDType",
+            xs(
+              "simpleContent",
+              [],
+              [
+                xs(
+                  "extension",
+                  [attr("base", "xs:string")],
+                  [attribute({ name: "base-type", type: "xs:string" })],
+                ),
+              ],
+            ),
+          ),
+          complexType("ListDType", model("sequence", element("li", "EmptyDType"))),
+          element("span", "SpanDType"),
+          element("value", "ValueDType"),
+          element("code", "xs:string"),
+          element("ul", "ListDType"),
+        ),
+      );
+
+      assert.deepStrictEqual(
+        Object.fromEntries(
+          ["span", "value", "code", "ul", "li"].map((name) => [name, tables.elements[name]?.text]),
+        ),
+        { code: true, li: false, span: true, ul: false, value: true },
+      );
+    }),
+  );
+
+  it.effect("the tables encode and decode through their Schema, children sorted", () =>
+    Effect.gen(function* roundTrip() {
+      const tables = yield* generateTables(
+        schema(
+          complexType("EmptyDType"),
+          complexType(
+            "MixDType",
+            model(
+              "choice",
+              elementRef("xi:include"),
+              element("zeta", "EmptyDType"),
+              elementRef("m3:math"),
+              element("alpha", "EmptyDType"),
+            ),
+          ),
+          element("mix", "MixDType"),
+        ),
+      );
+
+      const json = JSON.stringify(yield* Schema.encodeEffect(Tables)(tables));
+      const decoded = yield* Schema.decodeUnknownEffect(Tables)(JSON.parse(json));
+      assert.deepStrictEqual(decoded, tables);
+      assert.deepStrictEqual(decoded.elements["mix"]?.children, [
+        qti("alpha"),
+        qti("zeta"),
+        { local: "math", namespace: mathmlNamespace },
+        { local: "include", namespace: xincludeNamespace },
+      ]);
     }),
   );
 });
