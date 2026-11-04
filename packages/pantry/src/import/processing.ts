@@ -23,9 +23,10 @@ import type {
   RuleOrExpressionKind,
 } from "#pantry/processing/ast.ts";
 import { checkProcessing } from "#pantry/processing/check.ts";
-import type { PId } from "#pantry/processing/check.ts";
+import type { CheckResult, PId } from "#pantry/processing/check.ts";
 import type { Environment, Mode } from "#pantry/processing/env.ts";
 import { literalOrRef, parseProcessing } from "#pantry/processing/parse.ts";
+import type { PrefixedForm } from "#pantry/processing/prefixed.ts";
 import {
   BooleanLiteral,
   MathConstantName,
@@ -180,15 +181,51 @@ const placeOf = (position: Position): string =>
   position.path.length === 0 ? "the root" : position.path.join("/");
 
 /**
+ * What a test's reach calls the identifier a reading names, for a refusal's detail.
+ */
+const namesOf = (prefix: string, env: Environment): string => {
+  const kind = env.reach.get(prefix)?.kind;
+
+  return kind === "item-ref" ? "item reference" : (kind ?? "identifier");
+};
+
+/**
+ * Say each reading of an ambiguous prefixed name: what its prefix names, the prefix, the instance
+ * as written when there is one, and the variable.
+ */
+const readingsOf = (readings: readonly PrefixedForm[], env: Environment): string =>
+  readings
+    .map((reading) => {
+      const instance =
+        reading.instance === undefined ? "" : `, instance ${reading.instance.spelling}`;
+
+      return `the ${namesOf(reading.prefix, env)} ${reading.prefix}${instance} with the variable ${reading.variable}`;
+    })
+    .join("; or ");
+
+/**
  * The detail of a checker refusal: the element, its place and the rule's reason.
  *
- * @param rule - The rule the checker named.
- * @param kind - The refused element's kind.
- * @param position - Where the element stands.
+ * A prefixed name that two or more readings resolve says each reading and what to rename, so that
+ * one reading alone names a variable.
+ *
+ * @param refusal - The checker's refusal: the rule, the refused element's kind, where it stands and
+ *   the readings that resolved.
+ * @param env - The environment the tree was checked in, whose reach names each reading's prefix.
  * @returns The sentence that names the element and what to change.
  */
-const detailOf = (rule: PId, kind: string, position: Position): string =>
-  `${kind} at ${placeOf(position)} is refused: ${guidance[rule]}`;
+const detailOf = (
+  refusal: Extract<CheckResult, { readonly _tag: "refused" }>,
+  env: Environment,
+): string => {
+  const { kind, position, readings, rule } = refusal;
+  const where = `${kind} at ${placeOf(position)} is refused: `;
+  if (rule === "prefixed-ref" && readings.length > 1) {
+    return `${where}its prefixed variable name reads as ${readingsOf(readings, env)}, and the test names more than one of them. Rename the item reference, part, section or variable so that one reading alone names a variable.`;
+  }
+
+  return `${where}${guidance[rule]}`;
+};
 
 /**
  * An expression as the row builder and the required-attribute scan read it: the untyped AST's
@@ -1461,7 +1498,7 @@ export const processingRows = Effect.fn("import.processingRows")(function* proce
   const checked = checkProcessing(ast, input.env);
   if (checked._tag === "refused") {
     return yield* new ProcessingRefused({
-      detail: detailOf(checked.rule, checked.kind, checked.position),
+      detail: detailOf(checked, input.env),
       rule: checked.rule,
     });
   }
