@@ -1,9 +1,12 @@
 # Agent instructions
 
-gr8des is a pnpm workspace. `packages/qti` implements IMS QTI 3.0 on [grizzle](vendor/README.md), and exists first to
-put grizzle through a large, real data model. Read [docs/qti-intent.md](docs/qti-intent.md) before planning or changing
-the QTI model. Everything runs locally; there is no deploy target. The shared repository is
-[aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (private), the remote `origin`.
+qti-pie (the first local checkout is still the folder `gr8des`) is a pnpm workspace. `packages/qti` implements IMS QTI
+3.0 on [grizzle](vendor/README.md), and exists first to put grizzle through a large, real data model. Read
+[docs/qti-intent.md](docs/qti-intent.md) before planning or changing the QTI model. `packages/renderer` is planned: it
+renders QTI 3.0, and its intent and rules arrive with its own goal; the qti package's intent (a grizzle test vehicle,
+delivery out of scope) does not bind it. Both packages read the specifications the same way:
+[docs/spec-readings.md](docs/spec-readings.md). Everything runs locally; there is no deploy target. The shared repository
+is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (private), the remote `origin`.
 
 ## Toolchain
 
@@ -27,7 +30,15 @@ pnpm test    # each package's tests, one package at a time
 
 The QTI package runs on grizzle's development cluster: PostgreSQL 19rc1 with grizzle's patches, on `localhost:5433`,
 verify-full TLS only. Build and start it from the grizzle clone (`pnpm pg:build`, `pnpm pg:init`, `pnpm pg:doctor`;
-`pnpm pg start` after a reboot). From `packages/qti`:
+`pnpm pg start` after a reboot).
+
+There are two servers of that build, both verify-full TLS only. Server A is grizzle's development cluster on
+`localhost:5433`, with its state in `~/.local/var/grizzle/pg19rc1`. Server B is grizzle's second cluster on
+`localhost:5435`, with its state in `~/.local/var/grizzle/pg19rc1-coverage`; `pnpm pg:init --coverage` in the grizzle
+clone creates it and `pnpm pg --coverage start` starts it. Its plpgsql_check profiler is off and `log_min_error_statement`
+is `panic`, both set in its generated `postgresql.conf`. `scripts/db.sh` and `src/db/layer.ts` read the server from the
+environment: a seat on server B exports `GRIZZLE_PG_STATE=$HOME/.local/var/grizzle/pg19rc1-coverage` and
+`GR8DES_PG_PORT=5435` beside `GR8DES_PG_DATABASE`, and with nothing exported they use server A. From `packages/qti`:
 
 ```sh
 scripts/db.sh create    # database gr8des_qti from grizzle_template, owned by grizzle_dev
@@ -36,7 +47,9 @@ scripts/db.sh reset     # drop the database and this package's roles, then creat
 ```
 
 Login passwords live outside the repo in `~/.local/var/gr8des/<database>/<role>.password`. PostgreSQL roles are
-cluster-wide, so a grizzle schema name is one installation per cluster: never reuse a name grizzle's own tests use.
+cluster-wide, so a grizzle schema name is one installation per cluster: each server holds at most one installation of
+the Qti schema at a time, a database name is never reused across the two servers, and no schema name is one grizzle's
+own tests use.
 
 ## grizzle
 
@@ -155,12 +168,14 @@ This is the workflow `factory` records in its ledger; it meets shipyard's five r
   freeze, run `pnpm check` and the affected package's full test suite. These checks belong to the merge seat, never to a
   hand. The Mind accepts the merge task; that feature-branch tip is the slice's ref. The Mind does not run git itself.
 - **Integration.** A feature, or a `gate/<name>` fix, reaches `main` through a pull request on `origin`, on a merge
-  task. The merge seat first merges it into `main` locally and runs the integration checks (`pnpm check`,
+  task. Two checkouts push to `origin`, so the merge seat first fetches `origin` and fast-forwards local `main` to
+  `origin/main`. It then merges the branch into `main` locally and runs the integration checks (`pnpm check`,
   `grizzle check`, the full suite under a lease). Only on green does it push the branch, open the pull request as
   `aidenzepp` (`GH_TOKEN="$(gh auth token --user aidenzepp)"` on that command only, `gh pr create --base main`), merge
   it with `gh pr merge --merge` (a merge commit, never squash or rebase), and fast-forward local `main`. A failed check
-  leaves no pull request. Slices still merge into their feature branch locally and are never pushed.
-- **Remote.** Push only `main`, `qti/<feature>/main` and `gate/<name>`. Never force-push, and never rewrite a pushed
+  leaves no pull request. If `origin/main` moves after the checks ran, fetch, merge again and re-run the checks before
+  merging the pull request. Slices still merge into their feature branch locally and are never pushed.
+- **Remote.** Push only `main`, `qti/<feature>/main`, `renderer/<feature>/main` and `gate/<name>`. Never force-push, and never rewrite a pushed
   branch: fixes go forward and are pushed again. Issues that track this project's work may be opened on `origin`.
 - **Audits** take a frozen range on the feature branch. Never rewrite accepted history, never force anything, fix
   forward. The one exception was the operator-authorized move of `snapshot.json` into Git LFS on 2026-11-03, which
@@ -199,6 +214,22 @@ subagents of the Mind's session (`harness: subagent`): the Mind files the task f
 four-line tugboat pointer and nothing else, and a hand gets its own worktree. `scripts/boot-probe` measures the
 resource budget for `vivi boot`.
 
+### Two checkouts, two Minds
+
+Two checkouts of `origin` work at once, each with its own Mind and its own vivi mailspace:
+
+| Checkout                                               | Package             | Feature branches          | Mailspace        |
+| ------------------------------------------------------ | ------------------- | ------------------------- | ---------------- |
+| `~/Documents/dev/workspaces/personal/gr8des`           | `packages/qti`      | `qti/<feature>/main`      | its own `.vivi/` |
+| `~/Documents/dev/workspaces/personal/qti-pie-renderer` | `packages/renderer` | `renderer/<feature>/main` | its own `.vivi/` |
+
+- A Mind and its seats work only in their own checkout and its worktrees. Never run `vivi` against the other checkout,
+  and never create a worktree of one checkout inside the other.
+- A checkout changes the other package's files only through a `gate/<name>` pull request the operator asked for. Files
+  both touch (`AGENTS.md`, `docs/spec-readings.md`, the root `package.json`, `pnpm-lock.yaml`, the lint and TypeScript
+  configuration) change by pull request, and a conflict is fixed forward.
+- The two Minds do not mail each other. They coordinate through the operator and through the repository.
+
 ## Shared machine resources
 
 This runs on one laptop with limited disk. Storage, databases and ports are not free, and leftovers are a defect. Every
@@ -210,7 +241,7 @@ after every step, but never leave it for someone else.
 - Parallel work uses git worktrees under `.worktrees/<slice>` in this repo, or under `.claude/worktrees/` when Claude
   Code's subagent isolation creates them. Both are ignored by git, and both count toward the limit. Never create a
   worktree anywhere else, `/tmp` included.
-- At most 10 exist at once, slice and merge worktrees together. Only one seat holds the database at a time (see below),
+- At most 10 exist at once in each checkout, slice and merge worktrees together. Only one seat holds the database at a time (see below),
   so worktrees that need no database are the ones that run in parallel.
 - A worktree is removed (`git worktree remove`, then its branch deleted) as soon as its slice is merged or abandoned. The
   orchestrator runs `git worktree prune` and confirms `git worktree list` shows only active slices at the end of every
@@ -220,19 +251,25 @@ after every step, but never leave it for someone else.
 
 **PostgreSQL.**
 
-- There is one cluster: grizzle's development cluster on `localhost:5433`. Never start another cluster, run `initdb`,
-  open another port, or use Docker.
+- There are exactly two clusters: server A on `localhost:5433` and server B on `localhost:5435`, both grizzle's patched
+  PostgreSQL 19rc1 from the same binaries (the operator's ruling of 2026-11-03). Never start a third, run `initdb`
+  outside grizzle's `scripts/pg/init.sh`, open another port, or use Docker.
 - At most one database per active worktree, named `gr8des_qti_<slice>`, created from `grizzle_template` and dropped when
   its worktree is removed. The orchestrator lists `gr8des_%` databases at the end of every phase and drops any without
-  an active worktree.
-- Roles are cluster-wide: two worktrees cannot install the same grizzle schema at the same time, because the second
-  collides on its role names. The plan must say how parallel slices that need the database avoid that (for example,
-  one database lease at a time, or schema names unique per worktree) before any of them run.
+  an active worktree; the listing and the drop run on both servers.
+- Roles are cluster-wide per server: two worktrees cannot install the same grizzle schema on one server at the same
+  time, because the second collides on its role names. So one seat at a time holds a database on each server, two seats
+  in all. The Mind names the server in every task that holds a lease and grants at most one held database per server.
+  The plan must still say how parallel slices that need the database avoid the collision (one lease per server at a
+  time) before any of them run.
 
 **Disk.**
 
-- Budget: the worktrees and `gr8des_*` databases together stay under 20 GB. The orchestrator reports their size at the end
-  of every phase (`du -sh .worktrees`, and `pg_database_size` for each `gr8des_%` database).
+- Budget: each checkout's worktrees and databases together stay under 20 GB. The renderer uses no database; its dev
+  servers and browsers take ports its own plan fixes, never 5433 or 5435, and are stopped when their slice ends.
+- Size report: each orchestrator reports its checkout's size at the end
+  of every phase (`du -sh .worktrees`, and `pg_database_size` for each `gr8des_%` database on both servers, plus `du -sh` of server B's data directory,
+  `~/.local/var/grizzle/pg19rc1-coverage`).
 - Downloaded inputs, such as specifications, schema files and 1EdTech's QTI example packages, are fetched once into
   `~/.cache/gr8des/`, never into the repository or once per worktree.
 - Scratch files go in the worktree's `work/` folder and leave with the worktree. Never use `/tmp` for repositories,

@@ -1,158 +1,104 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
-
-import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Cause, Console, Effect, FileSystem, Path, Schema } from "effect";
-import { Argument, CliError, Command, Flag } from "effect/cli";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { comparePackage, renderReport } from "#qti/export/compare.ts";
-import { exportPackage } from "#qti/export/package.ts";
-import { importPackage } from "#qti/import/package.ts";
-
-/**
- * The path the person named is not there, or is neither a directory nor a `.zip` file.
- */
-class NotADirectory extends Schema.TaggedError<NotADirectory>()("NotADirectory", {
-  path: Schema.String,
-}) {
-  /**
-   * The path and what to do about it.
-   */
-  override get message(): string {
-    return `${this.path} is not a directory or a .zip file. Name the directory of an unzipped QTI package, or its .zip file.`;
-  }
-}
+import { Logger } from "effect";
+import { Command } from "effect/cli";
+import { kindExitCode } from "#qti/cli/errors.ts";
+import type { Kind } from "#qti/cli/errors.ts";
+import { completionsCommand } from "#qti/cli/completions.ts";
+import { exportCommand } from "#qti/cli/export.ts";
+import { importCommand } from "#qti/cli/import.ts";
+import { outputGlobalFlags } from "#qti/cli/output.ts";
+import { roundtripCommand } from "#qti/cli/roundtrip.ts";
+import { runMain } from "#qti/cli/run.ts";
+import { schemaCommand } from "#qti/cli/schema.ts";
+import { timeoutGlobalFlags, withTimeout } from "#qti/cli/timeout.ts";
+import { verbosityGlobalFlags, withVerbosity } from "#qti/cli/verbosity.ts";
 
 /**
- * A round trip whose export differs from its source in at least one entry.
+ * What each exit code means, in the order the help prints them. Codes 0 and 130 have no kind.
  */
-class RoundtripDiffers extends Schema.TaggedError<RoundtripDiffers>()("RoundtripDiffers", {
-  differing: Schema.Number,
-  exportDir: Schema.String,
-}) {
-  /**
-   * How many entries differ and where the export is, for comparing by hand.
-   */
-  override get message(): string {
-    return `${this.differing} entries differ between the package and its export in ${this.exportDir}.`;
-  }
-}
+const exitCodeMeanings: readonly { readonly code: number; readonly meaning: string }[] = [
+  { code: 0, meaning: "success" },
+  { code: 1, meaning: "refused, or the work failed" },
+  { code: 2, meaning: "the command line is wrong" },
+  { code: 70, meaning: "a defect in qti" },
+  { code: 74, meaning: "reading the package or writing the output failed" },
+  { code: 78, meaning: "the local set-up is missing or unreadable" },
+  { code: 130, meaning: "interrupted" },
+];
 
 /**
- * Refuse a path that is neither a directory nor a `.zip` file, before anything opens the database.
- *
- * @param source - The path the person named.
+ * The kinds that end with `code`, from {@link kindExitCode}, so the table cannot drift from it.
  */
-const requirePackage = Effect.fn("cli.requirePackage")(function* requirePackage(source: string) {
-  const fs = yield* FileSystem.FileSystem;
-
-  yield* fs.stat(source).pipe(
-    Effect.filterOrFail(
-      (info) => info.type === "Directory" || (info.type === "File" && source.endsWith(".zip")),
-      () => new NotADirectory({ path: source }),
-    ),
-    Effect.mapError(() => new NotADirectory({ path: source })),
-    Effect.asVoid,
-  );
-});
+const kindsOf = (code: number): readonly Kind[] =>
+  Object.keys(kindExitCode)
+    .filter((kind): kind is Kind => Object.hasOwn(kindExitCode, kind))
+    .filter((kind) => kindExitCode[kind] === code)
+    .toSorted();
 
 /**
- * The flag that makes an export a zip file instead of a directory.
+ * The root's long description: what qti does, what it writes, how it ends and where it reads.
  */
-const zipFlag = Flag.Boolean("zip").pipe(
-  Flag.withDefault(false),
-  Flag.withDescription("Write the export as a .zip file, adding .zip to the path when it lacks it"),
-);
+const description = [
+  "Import QTI packages into the database and export them back.",
+  "",
+  "  import and roundtrip write the database; export and roundtrip write files. Nothing else is",
+  "  written. Every input is a path, a directory or a .zip file; none is read from standard input.",
+  "",
+  "  Exit codes:",
+  ...exitCodeMeanings.map(({ code, meaning }) => {
+    const kinds = kindsOf(code);
 
-/**
- * Import the package in `dir`, a directory or a `.zip` file, then print its id.
- *
- * `importPackage` reads through `listPackage`, which reads a zip as it reads a directory.
- */
-const importCommand = Command.make(
-  "import",
-  { dir: Argument.String("dir") },
-  Effect.fn("cli.import")(function* importHandler({ dir }) {
-    yield* requirePackage(dir);
-    yield* Console.log(yield* importPackage(dir).pipe(Effect.provide(AuthorAppLayer)));
+    return `    ${String(code).padEnd(4)}${meaning}${kinds.length === 0 ? "" : ` (${kinds.join(", ")})`}`;
   }),
-).pipe(
-  Command.withDescription(
-    "Import the package in <dir>, a directory or a .zip file, and print its package id",
-  ),
-);
+].join("\n");
 
 /**
- * Write the imported package `packageId` to `dir`, or to a zip file under `--zip`.
+ * The root command, annotated so that `completions`, which reads it, does not make `cli`'s own
+ * type circular.
  */
-const exportCommand = Command.make(
-  "export",
-  { dir: Argument.String("dir"), packageId: Argument.String("package-id"), zip: zipFlag },
-  Effect.fn("cli.export")(function* exportHandler({ dir, packageId, zip }) {
-    const target = zip && !dir.endsWith(".zip") ? `${dir}.zip` : dir;
-
-    yield* exportPackage(packageId, target).pipe(Effect.provide(AuthorAppLayer));
-  }),
-).pipe(
-  Command.withDescription(
-    "Export the package <package-id> to <dir>, or to the zip file <dir>.zip under --zip",
-  ),
-);
+// oxlint-disable-next-line eslint/no-use-before-define -- The function runs after `cli` is built; the annotation breaks the type cycle.
+const rootCommand = (): Command.Command.Any => cli;
 
 /**
- * Import the package in `dir`, export it to `work/export/<name of dir>/` (`<name>.zip` under
- * `--zip`), and print the comparison.
- */
-const roundtripCommand = Command.make(
-  "roundtrip",
-  { dir: Argument.String("dir"), zip: zipFlag },
-  Effect.fn("cli.roundtrip")(function* roundtripHandler({ dir, zip }) {
-    yield* requirePackage(dir);
-
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const name = path.basename(path.resolve(dir)).replace(/\.zip$/u, "");
-    const exportDir = path.join("work", "export", zip ? `${name}.zip` : name);
-
-    yield* fs.remove(exportDir, { force: true, recursive: true });
-
-    const packageId = yield* importPackage(dir).pipe(Effect.provide(AuthorAppLayer));
-
-    yield* exportPackage(packageId, exportDir).pipe(Effect.provide(AuthorAppLayer));
-
-    const report = yield* comparePackage(dir, exportDir);
-    const differing = report.filter(({ outcome }) => outcome.kind === "differs").length;
-
-    yield* Console.log(renderReport(report));
-
-    if (differing > 0) {
-      yield* new RoundtripDiffers({ differing, exportDir });
-    }
-  }),
-).pipe(
-  Command.withDescription(
-    "Import <dir>, export it to work/export/<name> (<name>.zip under --zip), and compare the two",
-  ),
-);
-
-/**
- * The command line: `import`, `export` and `roundtrip`.
+ * The command line: `import`, `export` and `roundtrip`, each printing text, `json` or `jsonl`, then
+ * `completions` and `schema`.
  */
 export const cli = Command.make("qti").pipe(
-  Command.withDescription("Import QTI packages into the database and export them back"),
-  Command.withSubcommands([importCommand, exportCommand, roundtripCommand]),
+  Command.withDescription(description),
+  Command.withExamples([
+    { command: "qti import ./my-package", description: "Import a package into the database" },
+    {
+      command: "qti export ./out 6f1c2b7e-0d4a-4c8e-9b3a-2f5d7e1a9c40",
+      description: "Write an imported package back to files",
+    },
+    {
+      command: "qti roundtrip ./my-package",
+      description: "Import a package, export it and compare the two",
+    },
+    {
+      command: "qti --output json import ./my-package",
+      description: "Print the result as one line of JSON, for a program to read",
+    },
+  ]),
+  Command.withSubcommands([
+    importCommand,
+    exportCommand,
+    roundtripCommand,
+    completionsCommand(rootCommand),
+    schemaCommand,
+  ]),
+  // `--output`, `--json` and `--jsonl` reach every command; a handler reads the mode it prints in.
+  Command.withGlobalFlags(outputGlobalFlags),
+  // `--quiet` and `--verbose` choose the minimum log level the chosen handler runs at.
+  withVerbosity,
+  Command.withGlobalFlags(verbosityGlobalFlags),
+  // `--timeout` stops the chosen handler, verbosity included, when it outlasts the limit.
+  withTimeout,
+  Command.withGlobalFlags(timeoutGlobalFlags),
+  // Log lines are diagnostics: they go to standard error, so standard output carries only the data
+  // asked for. The root's handler runs the chosen subcommand's, so this reaches every handler.
+  Command.provideSync(Logger.LogToStderr, true),
 );
 
 if (import.meta.main) {
-  const main = cli.pipe(
-    Command.run({ version: "0.0.0" }),
-    // A refusal prints its message once; `Command.run` has already presented a usage error. A
-    // defect keeps its pretty cause, the one case a stack is wanted.
-    Effect.tapError((failure) =>
-      CliError.isCliError(failure) ? Effect.void : Console.error(failure.message),
-    ),
-    Effect.tapDefect((defect) => Console.error(Cause.pretty(Cause.die(defect)))),
-    Effect.provide(NodeServices.layer),
-  );
-
-  NodeRuntime.runMain(main, { disableErrorReporting: true });
+  runMain(cli);
 }
