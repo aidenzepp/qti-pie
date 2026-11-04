@@ -5,6 +5,7 @@
  * A `qti-gap` sits at any depth inside its gap-match's block content, so its interaction is the
  * nearest enclosing one; a gap text and a gap image are direct children and take their parent's.
  */
+import type { Uuid } from "@bjornpagen/grizzle";
 import { judgedLater } from "#pantry/import/judged.ts";
 import { Effect, Option } from "effect";
 import type { AttributeReader, InteractionContext } from "#pantry/import/interactions.ts";
@@ -392,7 +393,7 @@ const gap = Effect.fn("import.gap")(function* gap(
  * The gap interaction a gap text or a gap image belongs to: its nearest enclosing interaction,
  * when that is a gap-match or a graphic gap-match.
  */
-const gapOwner = (ctx: InteractionContext, element: Element): Option.Option<string> =>
+const gapOwner = (ctx: InteractionContext, element: Element): Option.Option<Uuid> =>
   ctx.shared.nearestInteraction(ctx.nodes, element).pipe(
     Option.filter(
       (owner) =>

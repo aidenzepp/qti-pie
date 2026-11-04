@@ -1,4 +1,6 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the column and `ShapeHandle` the roster the bindings and `Coords` rows name; neither is a structure. */
+import { createHash } from "node:crypto";
+import type { Uuid } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option } from "effect";
 import {
@@ -31,6 +33,16 @@ import {
 import { AttributeLexical } from "#pantry/schema/node.ts";
 import type { NodeKindHandle } from "#pantry/schema/node.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
+
+/**
+ * A well-formed UUID derived from a readable label, so a fixture names its nodes and declarations
+ * and the rows still carry the `Uuid` the schema asks for.
+ */
+const uuidOf = (label: string): Uuid => {
+  const hex = createHash("sha1").update(label).digest("hex");
+
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+};
 
 const documentId = "11111111-1111-4111-8111-111111111111";
 
@@ -66,14 +78,14 @@ const indexed = (entries: readonly (readonly [Element, NodeKindHandle])[]): Node
   new Map<Element, IndexedNode>(
     entries.map(([found, kind], position) => [
       found,
-      { ancestry: "root", id: `node-${position}`, kind },
+      { ancestry: "root", id: uuidOf(`node-${position}`), kind },
     ]),
   );
 
 const typedChoice: DeclaredVariable = {
   baseType: Option.some("identifier"),
   cardinality: Option.some("multiple"),
-  id: "decl-1",
+  id: uuidOf("decl-1"),
   shape: "typed",
 };
 
@@ -250,13 +262,19 @@ describe("nearestInteraction", () => {
   it("returns the hottext interaction for a hottext under its prompt", () => {
     const found = nearestInteraction(nodes, hottext);
 
-    assert.deepStrictEqual(found, Option.some({ id: "node-2", kind: "qti-hottext-interaction" }));
+    assert.deepStrictEqual(
+      found,
+      Option.some({ id: uuidOf("node-2"), kind: "qti-hottext-interaction" }),
+    );
   });
 
   it("returns the choice interaction for a hottext inside its prompt", () => {
     const found = nearestInteraction(nodes, inChoicePrompt);
 
-    assert.deepStrictEqual(found, Option.some({ id: "node-6", kind: "qti-choice-interaction" }));
+    assert.deepStrictEqual(
+      found,
+      Option.some({ id: uuidOf("node-6"), kind: "qti-choice-interaction" }),
+    );
   });
 
   it("returns None for a hottext directly under the item body", () => {
@@ -284,7 +302,7 @@ describe("nearestInteraction", () => {
 
     assert.deepStrictEqual(
       nearestInteraction(tree, inner),
-      Option.some({ id: "node-1", kind: "qti-text-entry-interaction" }),
+      Option.some({ id: uuidOf("node-1"), kind: "qti-text-entry-interaction" }),
     );
   });
 });
@@ -341,7 +359,7 @@ describe("bindingRows", () => {
         Option.some({
           baseType: Option.none(),
           cardinality: Option.none(),
-          id: "decl-2",
+          id: uuidOf("decl-2"),
           shape: "record",
         }),
         "root",
@@ -402,7 +420,7 @@ describe("gapMatchBindingRow", () => {
     const rows = gapMatchBindingRow(Rows.empty(), nodeId, {
       baseType: Option.none(),
       cardinality: Option.none(),
-      id: "decl-3",
+      id: uuidOf("decl-3"),
       shape: "record",
     });
 
@@ -417,7 +435,7 @@ describe("templateRef", () => {
       {
         baseType: Option.some("identifier"),
         cardinality: Option.some("single"),
-        id: "decl-4",
+        id: uuidOf("decl-4"),
         shape: "typed",
       },
     ],

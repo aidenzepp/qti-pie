@@ -1,4 +1,6 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the column the hotspot and `Coords` rows name; it is a geometric shape here, not a structure. */
+import { createHash } from "node:crypto";
+import type { Uuid } from "@bjornpagen/grizzle";
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
@@ -55,6 +57,16 @@ import { materialize } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
+/**
+ * A well-formed UUID derived from a readable label, so a fixture names its nodes and declarations
+ * and the rows still carry the `Uuid` the schema asks for.
+ */
+const uuidOf = (label: string): Uuid => {
+  const hex = createHash("sha1").update(label).digest("hex");
+
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+};
+
 const documentId = "11111111-1111-4111-8111-111111111111";
 
 const attribute = (local: string, value: string): Attribute => ({
@@ -89,7 +101,7 @@ const indexTree = (root: Element): NodeIndex => {
   const visit = (found: Element): void => {
     const kind = NodeKind.handles.find((handle) => handle === found.local);
     if (kind !== undefined) {
-      index.set(found, { ancestry: "root", id: `node-${index.size}`, kind });
+      index.set(found, { ancestry: "root", id: uuidOf(`node-${index.size}`), kind });
     }
 
     for (const child of found.children) {
@@ -117,7 +129,7 @@ const shared: Shared = {
 };
 
 const variable = (
-  id: string,
+  id: Uuid,
   baseType: NonNullable<DeclaredVariable["baseType"] extends Option.Option<infer B> ? B : never>,
   cardinality: "multiple" | "ordered" | "single",
 ): DeclaredVariable => ({
@@ -127,11 +139,11 @@ const variable = (
   shape: "typed",
 });
 
-const single = new Map([["RESPONSE", variable("decl-1", "identifier", "single")]]);
+const single = new Map([["RESPONSE", variable(uuidOf("decl-1"), "identifier", "single")]]);
 
-const multiple = new Map([["RESPONSE", variable("decl-1", "identifier", "multiple")]]);
+const multiple = new Map([["RESPONSE", variable(uuidOf("decl-1"), "identifier", "multiple")]]);
 
-const point = new Map([["RESPONSE", variable("decl-1", "point", "single")]]);
+const point = new Map([["RESPONSE", variable(uuidOf("decl-1"), "point", "single")]]);
 
 /**
  * The context of an item whose body holds `children`, and the node index of its tree.
@@ -152,10 +164,10 @@ const contextOf = (
   };
 };
 
-const idsOf = (ctx: InteractionContext, kind: string): string[] =>
+const idsOf = (ctx: InteractionContext, kind: string): Uuid[] =>
   [...ctx.nodes.values()].filter((found) => found.kind === kind).map((found) => found.id);
 
-const idOf = (ctx: InteractionContext, kind: string): string =>
+const idOf = (ctx: InteractionContext, kind: string): Uuid =>
   Option.getOrThrow(Option.fromNullishOr(idsOf(ctx, kind)[0]));
 
 const hotspotChoice = (identifier: string, more: Readonly<Record<string, string>> = {}): Element =>
@@ -199,7 +211,7 @@ describe("hotRows on a hotspot interaction", () => {
         ],
       );
       assert.deepStrictEqual(Rows.of(built, DeclaredHotspotChoiceShowHide), [
-        { node: choices[0]?.id ?? "" },
+        { node: choices[0]?.id ?? uuidOf("missing") },
       ]);
     }),
   );
@@ -225,20 +237,22 @@ describe("hotRows on a hotspot interaction", () => {
 
       assert.deepStrictEqual(Rows.of(built, HotspotInteraction), [
         {
-          id: "node-2",
+          id: uuidOf("node-2"),
           maxChoicesN: 2n,
           minChoicesN: 0n,
           responseIdentifier: "RESPONSE",
           rootKind: "item",
         },
       ]);
-      assert.deepStrictEqual(Rows.of(built, DeclaredHotspotMaxChoices), [{ node: "node-2" }]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredHotspotMaxChoices), [
+        { node: uuidOf("node-2") },
+      ]);
       assert.strictEqual(Rows.of(built, DeclaredHotspotMinChoices).length, 0);
       assert.deepStrictEqual(Rows.of(built, HotspotMinSelectionsMessage), [
-        { node: "node-2", value: "too few" },
+        { node: uuidOf("node-2"), value: "too few" },
       ]);
       assert.deepStrictEqual(Rows.of(built, HotspotMaxSelectionsMessage), [
-        { node: "node-2", value: "too many" },
+        { node: uuidOf("node-2"), value: "too many" },
       ]);
       assert.deepStrictEqual(
         Rows.of(built, HotspotChoice).map((row) => [
@@ -248,24 +262,26 @@ describe("hotRows on a hotspot interaction", () => {
           row.shape,
         ]),
         [
-          ["node-3", "A", "node-2", "rect"],
-          ["node-4", "B", "node-2", "circle"],
+          [uuidOf("node-3"), "A", uuidOf("node-2"), "rect"],
+          [uuidOf("node-4"), "B", uuidOf("node-2"), "circle"],
         ],
       );
       assert.deepStrictEqual(Rows.of(built, HotspotChoiceLabel), [
-        { node: "node-3", value: "north" },
+        { node: uuidOf("node-3"), value: "north" },
       ]);
       assert.deepStrictEqual(
         Rows.of(built, Coords).map((row) => [row.node, row.ownerKind, row.shape, row.value]),
         [
-          ["node-3", "qti-hotspot-choice", "rect", "0,0,10,10"],
-          ["node-4", "qti-hotspot-choice", "circle", "5,5,3"],
+          [uuidOf("node-3"), "qti-hotspot-choice", "rect", "0,0,10,10"],
+          [uuidOf("node-4"), "qti-hotspot-choice", "circle", "5,5,3"],
         ],
       );
       assert.deepStrictEqual(Rows.of(built, CoordsRect), [
-        { node: "node-3", value: RectCoords("0,0,10,10") },
+        { node: uuidOf("node-3"), value: RectCoords("0,0,10,10") },
       ]);
-      assert.deepStrictEqual(Rows.of(built, CoordsCircle), [{ node: "node-4", value: "5,5,3" }]);
+      assert.deepStrictEqual(Rows.of(built, CoordsCircle), [
+        { node: uuidOf("node-4"), value: "5,5,3" },
+      ]);
       assert.deepStrictEqual(Rows.of(built, TypedBinding), [
         {
           baseType: "identifier",
@@ -273,7 +289,7 @@ describe("hotRows on a hotspot interaction", () => {
           document: documentId,
           interactionKind: "qti-hotspot-interaction",
           maxCount: 2n,
-          node: "node-2",
+          node: uuidOf("node-2"),
           responseIdentifier: "RESPONSE",
         },
       ]);
@@ -301,7 +317,7 @@ describe("hotRows on a hotspot interaction", () => {
     Effect.gen(function* template() {
       const declarations = new Map([
         ...single,
-        ["TPL", variable("decl-2", "identifier", "single")],
+        ["TPL", variable(uuidOf("decl-2"), "identifier", "single")],
       ]);
       const ctx = contextOf(
         [
@@ -316,7 +332,7 @@ describe("hotRows on a hotspot interaction", () => {
 
       assert.deepStrictEqual(
         Rows.of(built, ChoiceTemplateRef).map((row) => [row.node, row.identifier]),
-        [["node-3", "TPL"]],
+        [[uuidOf("node-3"), "TPL"]],
       );
     }),
   );
@@ -373,7 +389,7 @@ describe("hotRows on a select-point interaction", () => {
 
       assert.deepStrictEqual(Rows.of(built, SelectPointInteraction), [
         {
-          id: "node-2",
+          id: uuidOf("node-2"),
           maxChoicesN: 0n,
           minChoicesN: 0n,
           responseIdentifier: "RESPONSE",
@@ -403,8 +419,12 @@ describe("hotRows on a select-point interaction", () => {
       const [row] = Rows.of(built, SelectPointInteraction);
       assert.strictEqual(row?.maxChoicesN, 3n);
       assert.strictEqual(row?.minChoicesN, 1n);
-      assert.deepStrictEqual(Rows.of(built, DeclaredSelectPointMaxChoices), [{ node: "node-2" }]);
-      assert.deepStrictEqual(Rows.of(built, DeclaredSelectPointMinChoices), [{ node: "node-2" }]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredSelectPointMaxChoices), [
+        { node: uuidOf("node-2") },
+      ]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredSelectPointMinChoices), [
+        { node: uuidOf("node-2") },
+      ]);
       assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 3n);
       assert.strictEqual(Rows.of(built, InteractionBinding).length, 1);
     }),
@@ -424,10 +444,10 @@ describe("hotRows on a position-object interaction", () => {
 
       const built = yield* hotRows(ctx, Rows.empty());
 
-      assert.deepStrictEqual(Rows.of(built, PositionObjectStage), [{ id: "node-2" }]);
+      assert.deepStrictEqual(Rows.of(built, PositionObjectStage), [{ id: uuidOf("node-2") }]);
       assert.deepStrictEqual(Rows.of(built, PositionObjectInteraction), [
         {
-          id: "node-3",
+          id: uuidOf("node-3"),
           maxChoicesN: 1n,
           minChoicesN: 0n,
           responseIdentifier: "RESPONSE",
@@ -435,7 +455,7 @@ describe("hotRows on a position-object interaction", () => {
         },
       ]);
       assert.deepStrictEqual(Rows.of(built, PositionObjectCenterPoint), [
-        { node: "node-3", value: "10 20" },
+        { node: uuidOf("node-3"), value: "10 20" },
       ]);
       assert.strictEqual(Rows.of(built, PositionObjectMinChoices).length, 0);
       assert.strictEqual(Rows.of(built, DeclaredPositionObjectMaxChoices).length, 0);
@@ -461,9 +481,11 @@ describe("hotRows on a position-object interaction", () => {
       const [row] = Rows.of(built, PositionObjectInteraction);
       assert.strictEqual(row?.maxChoicesN, 2n);
       assert.strictEqual(row?.minChoicesN, 1n);
-      assert.deepStrictEqual(Rows.of(built, PositionObjectMinChoices), [{ node: "node-2" }]);
+      assert.deepStrictEqual(Rows.of(built, PositionObjectMinChoices), [
+        { node: uuidOf("node-2") },
+      ]);
       assert.deepStrictEqual(Rows.of(built, DeclaredPositionObjectMaxChoices), [
-        { node: "node-2" },
+        { node: uuidOf("node-2") },
       ]);
       assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 2n);
     }),
@@ -493,7 +515,7 @@ describe("hotRows on hottexts", () => {
         ],
       );
       assert.deepStrictEqual(Rows.of(built, DeclaredHottextShowHide), [
-        { node: texts[0]?.id ?? "" },
+        { node: texts[0]?.id ?? uuidOf("missing") },
       ]);
     }),
   );
@@ -517,7 +539,7 @@ describe("hotRows on hottexts", () => {
 
       assert.deepStrictEqual(Rows.of(built, HottextInteraction), [
         {
-          id: "node-2",
+          id: uuidOf("node-2"),
           maxChoicesN: 2n,
           minChoicesN: 1n,
           responseIdentifier: "RESPONSE",
@@ -527,26 +549,30 @@ describe("hotRows on hottexts", () => {
       assert.deepStrictEqual(
         Rows.of(built, Hottext).map((row) => [row.id, row.identifier]),
         [
-          ["node-4", "P"],
-          ["node-6", "A"],
-          ["node-7", "B"],
+          [uuidOf("node-4"), "P"],
+          [uuidOf("node-6"), "A"],
+          [uuidOf("node-7"), "B"],
         ],
       );
       assert.deepStrictEqual(
         Rows.of(built, HottextOwner).map((row) => [row.node, row.identifier, row.interaction]),
         [
-          ["node-4", "P", "node-2"],
-          ["node-6", "A", "node-2"],
-          ["node-7", "B", "node-2"],
+          [uuidOf("node-4"), "P", uuidOf("node-2")],
+          [uuidOf("node-6"), "A", uuidOf("node-2")],
+          [uuidOf("node-7"), "B", uuidOf("node-2")],
         ],
       );
-      assert.deepStrictEqual(Rows.of(built, DeclaredHottextMaxChoices), [{ node: "node-2" }]);
-      assert.deepStrictEqual(Rows.of(built, DeclaredHottextMinChoices), [{ node: "node-2" }]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredHottextMaxChoices), [
+        { node: uuidOf("node-2") },
+      ]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredHottextMinChoices), [
+        { node: uuidOf("node-2") },
+      ]);
       assert.deepStrictEqual(Rows.of(built, HottextMinSelectionsMessage), [
-        { node: "node-2", value: "too few" },
+        { node: uuidOf("node-2"), value: "too few" },
       ]);
       assert.deepStrictEqual(Rows.of(built, HottextMaxSelectionsMessage), [
-        { node: "node-2", value: "too many" },
+        { node: uuidOf("node-2"), value: "too many" },
       ]);
       assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 2n);
     }),
@@ -576,7 +602,7 @@ describe("hotRows on hottexts", () => {
       const built = yield* hotRows(ctx, Rows.empty());
 
       assert.deepStrictEqual(Rows.of(built, Hottext), [
-        { id: "node-2", identifier: ChoiceIdentifier("Y"), showHide: "show" },
+        { id: uuidOf("node-2"), identifier: ChoiceIdentifier("Y"), showHide: "show" },
       ]);
       assert.strictEqual(Rows.of(built, HottextOwner).length, 0);
     }),
@@ -601,7 +627,7 @@ const sharedItem = (name: string) =>
       declarations: new Map([
         [
           "RESPONSE",
-          variable("decl-1", "identifier", name === "graphic_order" ? "ordered" : "single"),
+          variable(uuidOf("decl-1"), "identifier", name === "graphic_order" ? "ordered" : "single"),
         ],
       ]),
       documentId,
@@ -759,7 +785,7 @@ describe("hotRows on a non-canonical integer spelling", () => {
         {
           attribute: "max-choices",
           kind: "qti-hottext-interaction",
-          node: "node-2",
+          node: uuidOf("node-2"),
           value: "05",
         },
       ]);

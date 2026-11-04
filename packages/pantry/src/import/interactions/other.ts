@@ -6,6 +6,7 @@
  * count attribute bounds these kinds, and the kind's `BindingFit` rows alone say which variables
  * they accept.
  */
+import type { Uuid } from "@bjornpagen/grizzle";
 import { judgedLater } from "#pantry/import/judged.ts";
 import { requiredAttribute } from "#pantry/import/required.ts";
 import { Effect, Option } from "effect";
@@ -45,10 +46,10 @@ const sentinelCount = 1n;
  * otherwise.
  */
 const valueFact = <T extends string>(
-  node: string,
+  node: Uuid,
   value: Option.Option<string>,
   judge: (read: string) => T,
-): readonly { readonly node: string; readonly value: T }[] =>
+): readonly { readonly node: Uuid; readonly value: T }[] =>
   Option.match(value, {
     onNone: () => [],
     onSome: (own) => [{ node, value: judge(own) }],
@@ -70,11 +71,11 @@ const plain = (read: string): string => read;
  * @returns The rows; `ImportRefused` (`attribute-lexical`) for text outside the roster.
  */
 const closedFact = <const Handle extends string>(
-  node: string,
+  node: Uuid,
   value: Option.Option<string>,
   handles: readonly Handle[],
   where: string,
-): Effect.Effect<readonly { readonly node: string; readonly value: Handle }[], ImportRefused> =>
+): Effect.Effect<readonly { readonly node: Uuid; readonly value: Handle }[], ImportRefused> =>
   Option.match(value, {
     onNone: () => Effect.succeed([]),
     onSome: (own) =>

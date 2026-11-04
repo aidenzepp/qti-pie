@@ -6,6 +6,7 @@
  * count attribute bounds these kinds, and the kind's `BindingFit` rows alone say which variables
  * they accept.
  */
+import type { Uuid } from "@bjornpagen/grizzle";
 import { judgedLater } from "#pantry/import/judged.ts";
 import { Effect, Option } from "effect";
 import type { InteractionContext, MarkerRelation, NodeRef } from "#pantry/import/interactions.ts";
@@ -63,10 +64,10 @@ const sentinelCount = 1n;
  * otherwise.
  */
 const valueFact = <T extends string>(
-  node: string,
+  node: Uuid,
   value: Option.Option<string>,
   judge: (read: string) => T,
-): readonly { readonly node: string; readonly value: T }[] =>
+): readonly { readonly node: Uuid; readonly value: T }[] =>
   Option.match(value, {
     onNone: () => [],
     onSome: (own) => [{ node, value: judge(own) }],
@@ -127,8 +128,8 @@ const inlineChoiceInteractionMarkers = {
  */
 export const stringBindingRow = (
   rows: Rows,
-  node: string,
-  document: string,
+  node: Uuid,
+  document: Uuid,
   identifier: Option.Option<string>,
 ): Rows =>
   Option.match(identifier, {
