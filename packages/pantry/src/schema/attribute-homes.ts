@@ -663,6 +663,15 @@ export const ownAttributes = {
     ],
   ],
   "qti-base-value": [["base-type", arm(R.Literal, "baseType")]],
+  "qti-branch-rule": [
+    [
+      "target",
+      first(
+        column(R.BranchRuleExit, "exit", "rule"),
+        column(R.BranchRuleTarget, "identifier", "rule"),
+      ),
+    ],
+  ],
   "qti-choice-interaction": [
     responseIdentifierOf(R.ChoiceInteraction),
     ["shuffle", marked(R.DeclaredShuffle, arm(R.ChoiceInteraction, "shuffle"))],
@@ -1090,6 +1099,7 @@ export const ownAttributes = {
       marked(R.DeclaredMathVariable, arm(R.TemplateDeclarationArm, "mathVariable")),
     ],
   ],
+  "qti-template-default": [["template-identifier", arm(R.TemplateDefault, "templateIdentifier")]],
   "qti-template-inline": templating(R.TemplateInline, R.DeclaredTemplateInlineShowHide),
   "qti-template-inline.rubric": templating(
     R.RubricTemplateInline,
@@ -1137,6 +1147,14 @@ export const ownAttributes = {
   "qti-variable": [
     ["identifier", referenced],
     ["weight-identifier", optional(R.VariableWeightIdentifier)],
+  ],
+  "qti-variable-mapping": [
+    ["source-identifier", arm(R.VariableMapping, "source")],
+    ["target-identifier", arm(R.VariableMapping, "target")],
+  ],
+  "qti-weight": [
+    ["identifier", arm(R.Weight, "identifier")],
+    ["value", arm(R.Weight, "value")],
   ],
   source: [
     ["src", sourceSrc],
