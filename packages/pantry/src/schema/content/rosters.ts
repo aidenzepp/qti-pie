@@ -518,6 +518,11 @@ export const XlinkActuateValue = closed("XlinkActuateValue", [
 ]);
 
 /**
+ * The values of `xml:space` (`w3/xml.xsd`'s enumeration).
+ */
+export const XmlSpace = closed("XmlSpace", ["default", "preserve"]);
+
+/**
  * The rosters as schema members.
  */
 export const relations = {
@@ -569,6 +574,7 @@ export const relations = {
   XlinkActuateValue,
   XlinkShowValue,
   XlinkTypeValue,
+  XmlSpace,
   XsBoolean,
   YesNo,
 };
@@ -827,3 +833,8 @@ export type XlinkShowValueHandle = (typeof XlinkShowValue.handles)[number];
  * A handle of `XlinkActuateValue`.
  */
 export type XlinkActuateValueHandle = (typeof XlinkActuateValue.handles)[number];
+
+/**
+ * A handle of `XmlSpace`.
+ */
+export type XmlSpaceHandle = (typeof XmlSpace.handles)[number];
