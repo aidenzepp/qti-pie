@@ -729,7 +729,7 @@ describe("associateRows on an integer outside its space", () => {
     [
       "min-associations of a graphic associate interaction",
       element("qti-graphic-associate-interaction", {
-        "min-associations": "-0",
+        "min-associations": "-1",
         "response-identifier": "RESPONSE",
       }),
       graphicDeclarations,

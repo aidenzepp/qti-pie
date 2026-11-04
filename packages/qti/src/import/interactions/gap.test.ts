@@ -588,7 +588,7 @@ describe("gapRows on an integer outside its space", () => {
     [
       "max-associations of a graphic gap-match interaction",
       element("qti-graphic-gap-match-interaction", {
-        "max-associations": "-0",
+        "max-associations": "-1",
         "response-identifier": "RESPONSE",
       }),
     ],
