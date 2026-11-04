@@ -296,9 +296,13 @@ export const closedOf = <const Handle extends string>(
     : Effect.succeed(handle);
 };
 
+/**
+ * The lexical form of each integer space, from XSD Part 2. A non-negative integer admits a minus
+ * sign only on zero; a positive integer admits none, since its value is at least one.
+ */
 const integerForms: Readonly<Record<IntegerSpace, RegExp>> = {
   integer: /^[+-]?[0-9]+$/u,
-  nonNegativeInteger: /^\+?[0-9]+$/u,
+  nonNegativeInteger: /^(?:\+?[0-9]+|-0+)$/u,
   positiveInteger: /^\+?[0-9]+$/u,
 };
 

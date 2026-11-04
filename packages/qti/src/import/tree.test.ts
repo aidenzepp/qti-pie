@@ -826,6 +826,34 @@ it.effect("spelledInteger on a negative number in a non-negative space is refuse
   }),
 );
 
+it.effect(
+  "spelledInteger admits every signed zero in a non-negative space and keeps its spelling",
+  () =>
+    Effect.gen(function* signedZero() {
+      for (const text of ["-0", "+0", "0", "-00"]) {
+        const result = yield* spell(text, "nonNegativeInteger");
+
+        assert.strictEqual(result.value, 0n);
+        assert.deepStrictEqual(
+          Rows.of(result.rows, AttributeSpelling),
+          text === "0"
+            ? []
+            : [{ attribute: "max-choices", kind: "qti-choice-interaction", node, value: text }],
+        );
+      }
+    }),
+);
+
+it.effect("spelledInteger refuses a negative nonzero number in a non-negative space", () =>
+  Effect.gen(function* negatives() {
+    for (const text of ["-1", "-01", "-10"]) {
+      const refusal = yield* Effect.flip(spell(text, "nonNegativeInteger"));
+
+      assert.strictEqual(refusal.rule, "attribute-lexical");
+    }
+  }),
+);
+
 it.effect("spelledInteger on minus zero under integer gives zero and keeps the spelling", () =>
   Effect.gen(function* minusZero() {
     const result = yield* spell("-0", "integer");
