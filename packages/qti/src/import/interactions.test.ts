@@ -165,14 +165,14 @@ describe("maxCountDefault", () => {
 });
 
 describe("typedCopy and maxBoundOf", () => {
-  it("copies the lexical form and falls back to the default when it is absent", () => {
+  it("copies the written integer and falls back to the default when it is absent", () => {
     assert.strictEqual(typedCopy(Option.some("12"), 1n), 12n);
     assert.strictEqual(typedCopy(Option.some("+3"), 1n), 3n);
     assert.strictEqual(typedCopy(Option.some("007"), 1n), 7n);
     assert.strictEqual(typedCopy(Option.none(), 4n), 4n);
   });
 
-  it("reads a form that is no natural number as 0, which its pattern refuses at commit", () => {
+  it("reads a form that is no natural number as 0", () => {
     assert.strictEqual(typedCopy(Option.some("two"), 1n), 0n);
     assert.strictEqual(typedCopy(Option.some("-1"), 1n), 0n);
   });

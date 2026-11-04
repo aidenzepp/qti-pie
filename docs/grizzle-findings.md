@@ -68,7 +68,7 @@ Rows 51 to 57 are phase 13's (schema tightening, `qti/tighten/main`; `p13-t41`),
 
 ## Filed issues
 
-Filed: [bjornpagen/grizzle#4](https://github.com/bjornpagen/grizzle/issues/4), the drift replay (rows 6 and 7), whose draft is kept below; rows 1 to 3 were filed as #1 to #3 before this package existed. Filed: [bjornpagen/grizzle#5](https://github.com/bjornpagen/grizzle/issues/5), the alternatives law function (row 27), whose draft is kept below, revised after the step-3 check (auditor `fefcd9a3`, verdict confirmed grizzle defect) and the step-5 pass (hater `2d932da6`, `head-cxo` `9fd54596`). Filed: [bjornpagen/grizzle#7](https://github.com/bjornpagen/grizzle/issues/7), the `K.handle` row check (row 17), a documentation gap (withdrawn as a defect, then filed as one README sentence), below. Filed: [bjornpagen/grizzle#6](https://github.com/bjornpagen/grizzle/issues/6), the printer's line-count ceiling (row 31), whose draft is kept below (steps 1 to 4 of the gate, revised after the step-3 check; `main`'s line 43 carries the stale sentence "Drafted and not yet filed: row 28", which the integration fixes). Filed: [bjornpagen/grizzle#8](https://github.com/bjornpagen/grizzle/issues/8), the rename-witness crash (row 50), on 2026-11-03 as `aidenzepp` through the six-step gate (research `9cada274`, independent check by auditor `09946eae`, draft by hand `e5984d51`, hater `d94598bc`, `head-cxo` `8e88907e`), open, with no labels or assignees; its draft is kept in the main checkout's git-ignored `work/hand/e5984d51/` (`issue.md`, `title.txt`, `report.txt`) and is not repeated here. The other defect rows are `unconfirmed` and have no draft. For the drift draft, steps 3 and 5 were done before it was filed. Step 3 was an independent check (auditor task 65d7f348, report mail 2bcf260b, verdict confirmed grizzle defect). Step 5 was a cold read of the first draft (hater a6f49dce) and a merit extraction (head-cxo 5f552904); this draft applies the head's change list and adds a psql-only reproduction that was run on the local cluster in one rolled-back session. `gh repo view bjornpagen/grizzle` answered, as `aidenzepp`, that the repository is private with issues enabled and discussions disabled, and `gh issue list --repo bjornpagen/grizzle --state all` lists issues 1 to 3 only (the three rows above), with no pull request: a search of issues for `drift`, `search_path`, `shadow`, `42804`, `DriftUnchecked`, `pg_catalog`, `composite` and `Drifted` found no duplicate. Permalinks are pinned to `65203c443fa969cc47c539666a998436595f42fe` and resolve for collaborators only. One draft stands for the two confirmed defect rows that share a cause (the `Text` refusal and the `Uuid` false `Drifted`).
+Filed: [bjornpagen/grizzle#4](https://github.com/bjornpagen/grizzle/issues/4), the drift replay (rows 6 and 7), whose draft is kept below; rows 1 to 3 were filed as #1 to #3 before this package existed. Filed: [bjornpagen/grizzle#5](https://github.com/bjornpagen/grizzle/issues/5), the alternatives law function (row 27), whose draft is kept below, revised after the step-3 check (auditor `fefcd9a3`, verdict confirmed grizzle defect) and the step-5 pass (hater `2d932da6`, `head-cxo` `9fd54596`). Filed: [bjornpagen/grizzle#7](https://github.com/bjornpagen/grizzle/issues/7), the `K.handle` row check (row 17), a documentation gap (withdrawn as a defect, then filed as one README sentence), below. Filed: [bjornpagen/grizzle#6](https://github.com/bjornpagen/grizzle/issues/6), the printer's line-count ceiling (row 31), whose draft is kept below (steps 1 to 4 of the gate, revised after the step-3 check; `main`'s line 43 carries the stale sentence "Drafted and not yet filed: row 28", which the integration fixes). Filed: [bjornpagen/grizzle#8](https://github.com/bjornpagen/grizzle/issues/8), the rename-witness crash (row 50), on 2026-11-03 as `aidenzepp` through the six-step gate (research `9cada274`, independent check by auditor `09946eae`, draft by hand `e5984d51`, hater `d94598bc`, `head-cxo` `8e88907e`), open, with no labels or assignees; its draft is kept below. The other defect rows are `unconfirmed` and have no draft. For the drift draft, steps 3 and 5 were done before it was filed. Step 3 was an independent check (auditor task 65d7f348, report mail 2bcf260b, verdict confirmed grizzle defect). Step 5 was a cold read of the first draft (hater a6f49dce) and a merit extraction (head-cxo 5f552904); this draft applies the head's change list and adds a psql-only reproduction that was run on the local cluster in one rolled-back session. `gh repo view bjornpagen/grizzle` answered, as `aidenzepp`, that the repository is private with issues enabled and discussions disabled, and `gh issue list --repo bjornpagen/grizzle --state all` lists issues 1 to 3 only (the three rows above), with no pull request: a search of issues for `drift`, `search_path`, `shadow`, `42804`, `DriftUnchecked`, `pg_catalog`, `composite` and `Drifted` found no duplicate. Permalinks are pinned to `65203c443fa969cc47c539666a998436595f42fe` and resolve for collaborators only. One draft stands for the two confirmed defect rows that share a cause (the `Text` refusal and the `Uuid` false `Drifted`).
 
 Settings for the filer: repository `bjornpagen/grizzle` (private; `aidenzepp` holds write access); vendored commit `65203c4` (grizzle 1.0.0-beta.0); filed by `aidenzepp`, the operator's account, through the six-step gate; labels none; assignee none; the only action on the repository is opening this issue (rule 485ad014). The disclosure block names the Provider and Model of every seat that wrote text: one group, because the drafter and the reviser are the same model.
 
@@ -811,6 +811,188 @@ After the change, at the default stack, `ARMS=242 pnpm exec grizzle generate --n
 [#5](https://github.com/bjornpagen/grizzle/issues/5) reports this stack overflow at 123 to 128 handles with one unarmed handle and lists its cause under Not confirmed. The line counts in #5 fit the same ceiling. Computed from #5's line counts, not measured: with one unarmed handle the function has about 8.07 lines per table-by-handle cell (59,008 lines over 7,310 cells at 85 handles), against about 2.1 with every handle armed (15,578 over 7,310 there, and 120,292 over 58,806 at 242 handles here). The function therefore reaches the ceiling, the one shown above (the 120,292-line all-armed function crashes at 242 handles, and in step 4 a spread of 120,000 passes while 125,000 does not), with one unarmed handle between `ARMS=120` (about 117,000 lines, which #5 says runs) and `ARMS=123` (about 123,000 lines, which #5 says crashes).
 
 #5 itself is about the PostgreSQL compile time of the first call. Its `fixed` shape changes the law's text but keeps the all-armed line count, so it leaves this crash.
+
+---
+**AI disclosure:** Written by AI, checked by independent AI reviewers, and filed without the account holder's review.
+- **Provider:** Anthropic
+- **Model:** Sonnet 5.5
+````
+
+### Draft: the rename-witness crash (row 50)
+
+Drafted by hand `e5984d51` and filed as [bjornpagen/grizzle#8](https://github.com/bjornpagen/grizzle/issues/8). Title: check and generate: internal error when two removed relations pair with one added relation that renames a field.
+
+````text
+### Summary
+`grizzle check` and `grizzle generate` exit 1 with `grizzle: internal error` and `grizzle internal invariant: a statement of its own for candidate 0` when one added relation could be a rename of two or more removed relations, and each of those offers the same nested field rename onto it. Nothing is drafted or written, no flag or marker gets past it, and the error names no relation or field. The same schema change drafts normally when only one relation was removed.
+
+Ran `@bjornpagen/grizzle` 1.0.0-beta.0, packed from `bjornpagen/grizzle@65203c4`, with `effect` 4.0.7, Node v26.13.0, pnpm 12.16.1, macOS arm64.
+
+### Reproduction
+The package is not on npm, so both packages were installed from `pnpm pack` tarballs of `packages/grizzle` and `packages/engine` at `65203c4`; the project files are in the fold below.
+
+`schema.v1.ts` holds two relations of one shape, each keyed by `node`, each with a field named `value`:
+
+```ts
+import { pg, relation, schema, uuid } from "@bjornpagen/grizzle"
+
+export const First = relation("First", { node: uuid, value: pg.bigint }, ["node"])
+export const Second = relation("Second", { node: uuid, value: pg.bigint }, ["node"])
+
+export const Repro = schema("Repro", { First, Second }, [])
+```
+
+`schema.v2-fail.ts` removes both and adds one relation keyed by `node` whose other field is named `amount`:
+
+```ts
+import { pg, relation, schema, uuid } from "@bjornpagen/grizzle"
+
+export const Third = relation("Third", { amount: pg.bigint, node: uuid }, ["node"])
+
+export const Repro = schema("Repro", { Third }, [])
+```
+
+With `schema.v1.ts` copied to `schema.ts`, `pnpm exec grizzle generate --name init` drafts the first migration and exits 0. Then:
+
+```console
+$ cp schema.v2-fail.ts schema.ts
+$ pnpm exec grizzle check
+grizzle: internal error
+Error: grizzle internal invariant: a statement of its own for candidate 0
+    at defect (<pnpm>/engine/dist/core/invariant.js:29:48)
+    at <pnpm>/engine/dist/deploy/render/generate.js:150:10
+    at catchSignal (<pnpm>/engine/dist/core/canonical.js:147:20)
+    ...
+$ echo $?
+1
+$ pnpm exec grizzle generate --name next
+grizzle: internal error
+Error: grizzle internal invariant: a statement of its own for candidate 0
+    ...
+$ echo $?
+1
+$ ls migrations/repro
+20261103194532_init
+snapshot.json
+```
+
+Traces shortened to three frames; pnpm store paths shortened to `<pnpm>`, otherwise verbatim.
+
+<details>
+<summary>Project files: package.json, pnpm-workspace.yaml, grizzle.config.ts</summary>
+
+```sh
+(cd packages/engine && pnpm pack --pack-destination <repro>/vendor)
+(cd packages/grizzle && pnpm pack --pack-destination <repro>/vendor)
+```
+
+`package.json`:
+
+```json
+{
+  "name": "repro",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@bjornpagen/grizzle": "file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz",
+    "effect": "4.0.7"
+  }
+}
+```
+
+`pnpm-workspace.yaml` (the `@effect/platform-node-shared` pin keeps the install on `effect` 4.0.7):
+
+```yaml
+packages: []
+overrides:
+  "@bjornpagen/grizzle-engine": "file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz"
+  "@effect/platform-node-shared": "4.0.7"
+```
+
+`grizzle.config.ts`:
+
+```ts
+import { defineConfig } from "@bjornpagen/grizzle"
+import { Repro } from "./schema.ts"
+
+export default defineConfig({ schemas: [Repro], logins: [] })
+```
+
+</details>
+
+**Control.** The same `schema.v2-fail.ts` over a snapshot with one removed relation. `schema.v1-one.ts` declares `First` alone, with the same line as above. `check` reports the ungenerated change and `generate` drafts:
+
+```console
+$ pnpm exec grizzle check
+Repro: the schemas or their logins differ from snapshot.json (an ungenerated change); run grizzle generate
+$ pnpm exec grizzle generate --name next
+migrations/repro/20261103194602_next/01-structure.sql
+migrations/repro/20261103194602_next/02-publish.sql
+migrations/repro/20261103194602_next/meta.json
+migrations/repro/snapshot.json
+```
+
+In that draft, line 3 is the relation rename and line 7 is the nested field rename. The field rename names the added table, `third`:
+
+```sql
+-- ALTER TABLE "repro"."first" RENAME TO "third";
+-- -- ALTER TABLE "repro"."third" RENAME COLUMN "value" TO "amount";
+```
+
+### What changes the result
+Each row starts from a snapshot of the removed relations and applies one added relation.
+
+| Removed relations | Added relation | Result |
+| --- | --- | --- |
+| `First`, `Second`, each `{ node, value: bigint }` | `Third { amount: bigint, node }` | exit 1, internal error |
+| `First`, `Second`, each `{ node, value: bigint }` | `Third { amount: integer, node }` | exit 1, internal error (retype path) |
+| `First { node, value: bigint }` alone | `Third { amount: bigint, node }` | drafts (the Control) |
+| `First { node, value: bigint }`, `Second { node, other: bigint }` | `Third { amount: bigint, node }` | drafts |
+
+Row 2 replaces `Third` with `export const Third = relation("Third", { amount: pg.integer, node: uuid }, ["node"])`; row 4 replaces `Second` with `export const Second = relation("Second", { node: uuid, other: pg.bigint }, ["node"])`.
+
+### Cause
+Read at `65203c4`.
+
+1. Each relation candidate builds its nested field candidates (`renameCandidateColumn`, `retypeCandidateColumn`) before it pushes itself, so they are numbered first: candidate 0 is the first nested field candidate.
+   https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/deploy/diff/diff.ts#L2978-L2996
+   https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/deploy/diff/diff.ts#L3020
+2. A nested candidate's statement is `renameColumn` on the added table, from the removed field name to the added field name. It does not mention the removed relation, so the text is identical across rival relation candidates. The retype path builds the same statement.
+   https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/deploy/diff/diff.ts#L3179
+   https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/deploy/diff/diff.ts#L3231
+
+   When the removed field names differ, the two texts differ and the draft succeeds:
+
+   ```sql
+   -- ALTER TABLE "repro"."first" RENAME TO "third";
+   -- -- ALTER TABLE "repro"."third" RENAME COLUMN "value" TO "amount";
+   -- ALTER TABLE "repro"."second" RENAME TO "third";
+   -- -- ALTER TABLE "repro"."third" RENAME COLUMN "other" TO "amount";
+   ```
+3. `witnessesOf` takes a statement as a witness only when no other candidate's offer holds the same text. Every nested candidate's only statement is held by its rival's nested candidate, so none qualifies, and `witnessesOf` returns the index of the first candidate without a witness, here candidate 0.
+   https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/deploy/render/chosen.ts#L60-L64
+   https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/deploy/render/chosen.ts#L75-L78
+
+The relation candidates are fine: each owns `ALTER TABLE "<removed>" RENAME TO "<added>"`, which differs by removed name.
+
+### Expected
+The error is an internal `defect`, not a refusal, and neither the README's Limits section nor the agent guide lists this input. The comments at the throw site and in `witnessesOf` say a draft never offers a candidate without a witness of its own, and the agent guide documents field candidates nested in a relation's rename as supported:
+
+https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/deploy/render/generate.ts#L143-L151
+
+https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/engine/src/deploy/render/chosen.ts#L48-L51
+
+https://github.com/bjornpagen/grizzle/blob/65203c443fa969cc47c539666a998436595f42fe/packages/grizzle/skills/grizzle/SKILL.md#L162-L165
+
+### Not confirmed
+- What `meta.json` would hold for the two nested candidates. The draft throws before `meta.json` is written, so the identical `label` and `renames` of the colliding candidates were read in the source and not observed.
+- Whether any other nested candidate kind collides across rival relation candidates. Only the same-type and retype field paths were read and run.
+
+### Fix direction
+A possible change, untested: tie each nested field candidate to its parent relation candidate, so candidates nested under rival relation renames get distinct witnesses, labels and `renames` in `meta.json`. Rival relation candidates for one added name already cannot both be chosen.
+
+### Acceptance check
+Over the two-relation snapshot and `schema.v2-fail.ts`, `pnpm exec grizzle generate --name next` exits 0 and drafts a rename of `first` and of `second` to `third`, each with its nested field rename.
 
 ---
 **AI disclosure:** Written by AI, checked by independent AI reviewers, and filed without the account holder's review.

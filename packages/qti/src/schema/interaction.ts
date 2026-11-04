@@ -3,9 +3,9 @@
  * attribute the source wrote marked by a row of its own, and the optional values a choice
  * interaction or choice may carry.
  *
- * A lexical column keeps an attribute as read; the typed `maxChoicesN` and `minChoicesN` are copies
- * the importer writes, defaulting to 1 and 0. Whether a marker row exists says whether the source
- * wrote the attribute, so an export omits what the source omitted.
+ * The typed `maxChoicesN` and `minChoicesN` hold the integer the attribute writes, defaulting to 1
+ * and 0; a spelling that differs from it is an `AttributeSpelling` row. Whether a marker row exists
+ * says whether the source wrote the attribute, so an export omits what the source omitted.
  *
  * A simple choice's owner is carried by `Edge.(child, parent)` and by `Admission`, because a
  * `qti-simple-choice` is also valid under `qti-order-interaction` in a later phase; a containment

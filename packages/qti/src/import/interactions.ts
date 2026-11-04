@@ -185,8 +185,9 @@ export const attributeReader = (rows: Rows, element: Element, node: NodeRef): At
 };
 
 /**
- * The non-negative integer a lexical form writes. A form that is not one reads as 0: the lexical
- * column beside it carries the form and its pattern refuses it at commit.
+ * The non-negative integer a form writes. A form that is not one reads as 0: the attribute's own
+ * writer reads it through `spelledInteger` (`tree.ts`), which refuses such text before a count is
+ * taken from it.
  */
 const naturalOf = (lexical: string): bigint =>
   /^\+?[0-9]+$/u.test(lexical) ? BigInt(lexical) : 0n;
@@ -196,7 +197,7 @@ const naturalOf = (lexical: string): bigint =>
  *
  * @param lexical - The attribute as the source wrote it, `None` when it is absent.
  * @param fallback - The value the schema defaults an absent attribute to.
- * @returns The integer the lexical form writes, 0 for a form that is no natural number, and
+ * @returns The integer the form writes, 0 for a form that is no natural number, and
  *   `fallback` when the attribute is absent.
  */
 export const typedCopy = (lexical: Option.Option<string>, fallback: bigint): bigint =>
