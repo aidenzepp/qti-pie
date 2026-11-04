@@ -251,21 +251,27 @@ const toolRows = (rows: Rows, root: Element, tree: string): Rows => {
   const name = lexicalOf(root, "tool-name");
   const version = lexicalOf(root, "tool-version");
   if (Option.isSome(name) && Option.isSome(version)) {
-    return Rows.add(Rows.add(rows, ItemTool, [{ shape: "both", tree }]), ItemToolBoth, [
-      { toolName: ToolName(name.value), toolVersion: ToolVersion(version.value), tree },
-    ]);
+    return Rows.add(
+      Rows.add(rows, ItemTool, [{ root: "item", shape: "both", tree }]),
+      ItemToolBoth,
+      [{ toolName: ToolName(name.value), toolVersion: ToolVersion(version.value), tree }],
+    );
   }
 
   if (Option.isSome(name)) {
-    return Rows.add(Rows.add(rows, ItemTool, [{ shape: "nameOnly", tree }]), ItemToolName, [
-      { toolName: ToolName(name.value), tree },
-    ]);
+    return Rows.add(
+      Rows.add(rows, ItemTool, [{ root: "item", shape: "nameOnly", tree }]),
+      ItemToolName,
+      [{ toolName: ToolName(name.value), tree }],
+    );
   }
 
   return Option.isSome(version)
-    ? Rows.add(Rows.add(rows, ItemTool, [{ shape: "versionOnly", tree }]), ItemToolVersion, [
-        { toolVersion: ToolVersion(version.value), tree },
-      ])
+    ? Rows.add(
+        Rows.add(rows, ItemTool, [{ root: "item", shape: "versionOnly", tree }]),
+        ItemToolVersion,
+        [{ toolVersion: ToolVersion(version.value), tree }],
+      )
     : rows;
 };
 
@@ -1053,7 +1059,13 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
   built = Rows.add(
     built,
     AssessmentItemLabel,
-    written(label.value, (value) => ({ node: rootNode.id, tree: documentId, value, version })),
+    written(label.value, (value) => ({
+      node: rootNode.id,
+      root: "item",
+      tree: documentId,
+      value,
+      version,
+    })),
   );
   built = toolRows(built, root, documentId);
 

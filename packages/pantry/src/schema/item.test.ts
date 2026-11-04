@@ -61,6 +61,16 @@ const containments = (
   );
 
 /**
+ * The relation and the bound fields of a selection, or null when `source` is a whole relation.
+ */
+const selectionOf = (
+  source: Relation | undefined,
+): { readonly bindings: unknown; readonly relation: unknown } | null =>
+  source !== undefined && "bindings" in source
+    ? { bindings: source.bindings, relation: source.relation }
+    : null;
+
+/**
  * The source of a column's base pattern, whether the column is a bare pattern or a contract over
  * one.
  */
@@ -243,19 +253,45 @@ describe("item", () => {
 
     it("gives the root label its replace-class value, its version and the Node containment", () => {
       const label = item.relations.AssessmentItemLabel;
-      assert.deepStrictEqual(Object.keys(label.fields), ["node", "tree", "value", "version"]);
+      assert.deepStrictEqual(Object.keys(label.fields), [
+        "node",
+        "root",
+        "tree",
+        "value",
+        "version",
+      ]);
       assert.deepStrictEqual([...label.primaryKey], ["node"]);
       assert.deepStrictEqual(containments(item.rules, label), [
         [["node", "tree", "version"], node.relations.Node, ["id", "tree", "version"]],
+        [["tree", "root"], node.relations.Tree, ["id", "root"]],
       ]);
+      assert.isTrue(
+        item.rules.some((rule) => rule.kind === "check" && rule.relation === label),
+        "the label's root is checked",
+      );
     });
 
     it("keys ItemTool by tree, contains it in AssessmentItem and gives it three arms", () => {
       const tool = item.relations.ItemTool;
-      assert.deepStrictEqual(Object.keys(tool.fields), ["shape", "tree"]);
+      assert.deepStrictEqual(Object.keys(tool.fields), ["root", "shape", "tree"]);
       assert.deepStrictEqual([...tool.primaryKey], ["tree"]);
       assert.deepStrictEqual(containments(item.rules, tool), [
-        [["tree"], item.relations.AssessmentItem, ["tree"]],
+        [["tree", "root"], node.relations.Tree, ["id", "root"]],
+      ]);
+      assert.isTrue(
+        item.rules.some((rule) => rule.kind === "check" && rule.relation === tool),
+        "the tool's root is checked",
+      );
+
+      const itemTools = item.rules
+        .flatMap((rule) =>
+          rule.kind === "contained" && rule.right.source === item.relations.AssessmentItem
+            ? [[rule.left.fields, selectionOf(rule.left.source)] as const]
+            : [],
+        )
+        .filter(([, selection]) => selection !== null);
+      assert.deepStrictEqual(itemTools, [
+        [["tree"], { bindings: { root: "item" }, relation: tool }],
       ]);
 
       const alternatives = item.rules.filter((rule) => rule.kind === "alternatives");
@@ -284,6 +320,10 @@ describe("item", () => {
       assert.deepStrictEqual(rules[0]?.left.fields, ["tree"]);
       assert.deepStrictEqual(rules[0]?.right.fields, ["tree"]);
       assert.notStrictEqual(rules[0]?.left.source, label);
+      assert.deepStrictEqual(selectionOf(rules[0]?.left.source), {
+        bindings: { root: "item", version: "3.0.1" },
+        relation: label,
+      });
       assert.isTrue(
         containments(item.rules, label).every(([, target]) => target !== both),
         "the unselected label is not contained in ItemToolBoth",

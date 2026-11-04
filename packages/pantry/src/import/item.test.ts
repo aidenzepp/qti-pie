@@ -1139,7 +1139,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts root ro
     Effect.gen(function* nameOnlyTool() {
       const { documentId, rows } = yield* handWritten('tool-name="Authoring"', "");
 
-      assert.deepStrictEqual(Rows.of(rows, ItemTool), [{ shape: "nameOnly", tree: documentId }]);
+      assert.deepStrictEqual(Rows.of(rows, ItemTool), [
+        { root: "item", shape: "nameOnly", tree: documentId },
+      ]);
       assert.deepStrictEqual(Rows.of(rows, ItemToolName), [
         { toolName: ToolName("Authoring"), tree: documentId },
       ]);
@@ -1182,6 +1184,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts root ro
       assert.deepStrictEqual(Rows.of(rows, AssessmentItemLabel), [
         {
           node: onlyId(nodes, "qti-assessment-item"),
+          root: "item",
           tree: documentId,
           value: "L",
           version: "3.0.0",
