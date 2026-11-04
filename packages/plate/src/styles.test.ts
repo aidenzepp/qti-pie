@@ -8,6 +8,8 @@ import type { FloorViolation, WebFeatures } from "#plate/test/baseline.ts";
 import { compounds, scanSheet, uses, varReferences } from "#plate/test/css.ts";
 import type { Compound, Sheet, StyleRule } from "#plate/test/css.ts";
 import { contrastRatio, parseOklch, tokens } from "#plate/test/tokens.ts";
+import { styledClasses } from "#plate/vocabulary.ts";
+import type { ClassOwner } from "#plate/vocabulary.ts";
 
 /**
  * The markers the stylesheet's rules are read against, from the part table: the Choice parts, the
@@ -41,12 +43,14 @@ const themeLine = "/* == theme: shadcn manner, on the part markers == */";
 
 /**
  * The only attribute names a selector may test (spec §4.2; `data-disabled` by the Mind's ruling
- * on handle `66ece1f9`, for the disabled state).
+ * on handle `66ece1f9`, for the disabled state; `data-orientation`, the authored orientation on the
+ * Choice Root, from P2-04).
  */
 const attributeNames: ReadonlySet<string> = new Set([
   "aria-invalid",
   "data-disabled",
   "data-mode",
+  "data-orientation",
   "data-slot",
   "type",
 ]);
@@ -92,6 +96,28 @@ const minimumContrast = 4.5;
  * The condition of the rules that undo the drawn mark when forced colours drop its backgrounds.
  */
 const forcedColors = "@media (forced-colors: active)";
+
+/**
+ * The predefined counter styles the label classes name: `qti-labels-decimal`, `-lower-alpha`,
+ * `-upper-alpha` and `-cjk-ideographic` (spec §4.3).
+ */
+const counterStyles: ReadonlySet<string> = new Set([
+  "cjk-ideographic",
+  "decimal",
+  "lower-alpha",
+  "upper-alpha",
+]);
+
+/**
+ * The vocabulary class that hides the Choice's Controls from sight, never from assistive
+ * technology (`vocab.txt:4739-4785`).
+ */
+const hiddenControlClass = "qti-input-control-hidden";
+
+/**
+ * A quoted string in CSS text, double or single, with its escapes.
+ */
+const quotedStrings = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/gu;
 
 /**
  * Read a selector's compounds at any depth.
@@ -335,9 +361,7 @@ const strayNames = (sheet: Sheet): readonly string[] =>
 const combinatorSelectors = (sheet: Sheet): readonly string[] =>
   sheet.rules
     .flatMap((rule) => rule.selectors)
-    .filter((selector) =>
-      /[>+~]/u.test(selector.replaceAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/gu, "")),
-    );
+    .filter((selector) => /[>+~]/u.test(selector.replaceAll(quotedStrings, "")));
 
 /**
  * Find the rules whose text colour, a token, falls below 4.5:1 against the rule's own background
@@ -481,6 +505,156 @@ const strayRefusedLooks = (sheet: Sheet): readonly string[] =>
                 compoundsDeep(argument).some((inner) => holdsSlot(inner, marker.message)),
               ),
         ),
+      ),
+    )
+    .map((rule) => rule.selectors.join(", "));
+
+/**
+ * Read every class the sheet's selectors name, at any depth.
+ *
+ * @param sheet The scanned sheet.
+ * @returns The class names.
+ */
+const sheetClasses = (sheet: Sheet): ReadonlySet<string> =>
+  new Set(
+    sheet.rules
+      .flatMap((rule) => rule.selectors)
+      .flatMap(compoundsDeep)
+      .flatMap((compound) => compound.classes),
+  );
+
+/**
+ * Find an owner's styled vocabulary classes that no selector names, at any depth.
+ *
+ * @param sheet The scanned sheet.
+ * @param owner The classes' owner in the inventory.
+ * @returns Each styled class of the owner the sheet leaves without a rule.
+ */
+const unstyledClasses = (sheet: Sheet, owner: ClassOwner): readonly string[] => {
+  const named = sheetClasses(sheet);
+
+  return styledClasses[owner].filter((name) => !named.has(name));
+};
+
+/**
+ * Find the `qti-*` classes the sheet names that no owner's styled list holds.
+ *
+ * @param sheet The scanned sheet.
+ * @returns Each such class.
+ */
+const unownedClasses = (sheet: Sheet): readonly string[] => {
+  const styled = new Set(Object.values(styledClasses).flat());
+
+  return [...sheetClasses(sheet)].filter((name) => name.startsWith("qti-") && !styled.has(name));
+};
+
+/**
+ * Tell whether some rule tests the authored orientation for a value, at any depth.
+ *
+ * @param sheet The scanned sheet.
+ * @param orientation The value, `horizontal` or `vertical`.
+ * @returns Whether a compound holds `[data-orientation="<orientation>"]`.
+ */
+const testsOrientation = (sheet: Sheet, orientation: string): boolean =>
+  sheet.rules.some((rule) =>
+    holdsAnywhere(rule, (compound) =>
+      compound.attributes.some(
+        (test) =>
+          test.name === "data-orientation" &&
+          Option.contains(test.operator, "=") &&
+          Option.contains(test.value, orientation),
+      ),
+    ),
+  );
+
+/**
+ * Read the `counter()` calls in a value, outside its strings.
+ *
+ * @param value A declaration's value.
+ * @returns Each call's argument text, as written between its parentheses.
+ */
+const counterCalls = (value: string): readonly string[] =>
+  [...value.replaceAll(quotedStrings, "").matchAll(/\bcounter\((?<arguments>[^()]*)\)/gu)].map(
+    (match) => match.groups?.["arguments"] ?? "",
+  );
+
+/**
+ * Read the rules whose `content` generates a label with `counter()`.
+ *
+ * @param sheet The scanned sheet.
+ * @returns Each such rule.
+ */
+const counterLabelRules = (sheet: Sheet): readonly StyleRule[] =>
+  sheet.rules.filter((rule) =>
+    rule.declarations.some(
+      (declaration) =>
+        declaration.property === "content" && counterCalls(declaration.value).length > 0,
+    ),
+  );
+
+/**
+ * Find the selectors that generate a counter label anywhere but on the Choice row's `::before` or
+ * `::after`, outside the Label part, so the Control's accessible name stays the authored text.
+ *
+ * @param sheet The scanned sheet.
+ * @returns Each offending selector.
+ */
+const strayCounterLabels = (sheet: Sheet): readonly string[] =>
+  counterLabelRules(sheet)
+    .flatMap((rule) => rule.selectors)
+    .filter((selector) => {
+      const last = compounds(selector).at(-1);
+      const generated =
+        last !== undefined &&
+        last.pseudoElements.some((name) => name === "before" || name === "after");
+
+      return !(
+        generated &&
+        subjectCompounds(selector).some((compound) => holdsSlot(compound, marker.choice))
+      );
+    });
+
+/**
+ * Find the `counter()` calls whose second argument is not one of the four predefined counter
+ * styles the label classes name.
+ *
+ * @param sheet The scanned sheet.
+ * @returns Each offending call, as `counter(<arguments>)`.
+ */
+const strayCounterStyles = (sheet: Sheet): readonly string[] =>
+  sheet.rules
+    .flatMap((rule) => rule.declarations)
+    .flatMap((declaration) => counterCalls(declaration.value))
+    .filter((call) => !counterStyles.has(call.split(",")[1]?.trim() ?? ""))
+    .map((call) => `counter(${call})`);
+
+/**
+ * Read the rules that name `qti-input-control-hidden` and reach the Choice Control.
+ *
+ * @param sheet The scanned sheet.
+ * @returns Each such rule.
+ */
+const hiddenControlRules = (sheet: Sheet): readonly StyleRule[] =>
+  sheet.rules.filter(
+    (rule) =>
+      holdsAnywhere(rule, (compound) => compound.classes.includes(hiddenControlClass)) &&
+      reaches(rule, marker.control),
+  );
+
+/**
+ * Find the rules that, under `qti-input-control-hidden`, take the Choice Control out of the
+ * accessibility tree and the form: `display: none` or `visibility: hidden`.
+ *
+ * @param sheet The scanned sheet.
+ * @returns Each offending rule's selectors, joined by commas.
+ */
+const removedHiddenControls = (sheet: Sheet): readonly string[] =>
+  hiddenControlRules(sheet)
+    .filter((rule) =>
+      rule.declarations.some(
+        (declaration) =>
+          (declaration.property === "display" && declaration.value === "none") ||
+          (declaration.property === "visibility" && declaration.value === "hidden"),
       ),
     )
     .map((rule) => rule.selectors.join(", "));
@@ -712,6 +886,58 @@ layer(Stylesheet.layer)("styles.css", (test) => {
 
       assert.deepStrictEqual(strayRefusedLooks(sheet), []);
     }),
+  );
+
+  test.effect(
+    "[I-19] [Q-2] names every Choice styled class, and no qti-* class outside the inventory",
+    () =>
+      Effect.gen(function* choiceVocabulary() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.deepStrictEqual(unstyledClasses(sheet, "choice-interaction"), []);
+        assert.deepStrictEqual(unownedClasses(sheet), []);
+      }),
+  );
+
+  test.effect("[I-19] [Q-2] reads the authored data-orientation, horizontal and vertical", () =>
+    Effect.gen(function* orientation() {
+      const { sheet } = yield* Stylesheet;
+
+      assert.isTrue(testsOrientation(sheet, "horizontal"), 'data-orientation="horizontal"');
+      assert.isTrue(testsOrientation(sheet, "vertical"), 'data-orientation="vertical"');
+    }),
+  );
+
+  test.effect(
+    "[I-19] [Q-2] generates counter labels on the Choice row's ::before or ::after only",
+    () =>
+      Effect.gen(function* labelPlace() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.isNotEmpty(counterLabelRules(sheet));
+        assert.deepStrictEqual(strayCounterLabels(sheet), []);
+      }),
+  );
+
+  test.effect(
+    "[I-19] [Q-2] numbers labels only in the decimal, lower-alpha, upper-alpha and cjk-ideographic styles",
+    () =>
+      Effect.gen(function* labelStyles() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.deepStrictEqual(strayCounterStyles(sheet), []);
+      }),
+  );
+
+  test.effect(
+    "[I-19] [Q-2] keeps the Choice Control hidden from sight only under qti-input-control-hidden",
+    () =>
+      Effect.gen(function* hiddenControl() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.isNotEmpty(hiddenControlRules(sheet));
+        assert.deepStrictEqual(removedHiddenControls(sheet), []);
+      }),
   );
 });
 
