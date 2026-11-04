@@ -1,12 +1,21 @@
+import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import { Predicate } from "effect";
 import * as rosters from "#pantry/schema/content/rosters.ts";
 import { testInventory } from "#pantry/schema/content/inventory/test.ts";
 import * as contracts from "#pantry/schema/contracts.ts";
+import * as declaration from "#pantry/schema/declaration.ts";
+import * as document from "#pantry/schema/document.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as pkg from "#pantry/schema/package.ts";
+import * as structure from "#pantry/schema/test/structure.ts";
 import { ownAttributes } from "#pantry/schema/attribute-homes.ts";
+import * as feedbackModule from "#pantry/schema/feedback.ts";
 import { FeedbackOutcomeRef } from "#pantry/schema/feedback.ts";
 import * as test from "#pantry/schema/kinds/test.ts";
 import { Author } from "#pantry/schema/roles.ts";
 import { RubricBlock } from "#pantry/schema/rubric.ts";
+import * as template from "#pantry/schema/template.ts";
 import { PrintedVariableRef, PrintedVariableVarRef } from "#pantry/schema/template.ts";
 import * as content from "#pantry/schema/test/content.ts";
 
@@ -198,7 +207,238 @@ describe("the test content relations", () => {
     assert.deepStrictEqual([...test.attributes], [...test.attributes].toSorted());
   });
 
-  it("declares no statement, the laws over these rows arriving with their headings", () => {
-    assert.deepStrictEqual([...content.rules], []);
+  it("holds exactly the laws of the spec's 4.10, rows 3 and 20 to 24, and no other", () => {
+    assert.strictEqual(content.rules.length, 20);
+    assert.deepStrictEqual(
+      content.rules.map((rule) => rule.kind).toSorted(),
+      [
+        ...Array.from({ length: 2 }, () => "capacity"),
+        ...Array.from({ length: 3 }, () => "check"),
+        ...Array.from({ length: 15 }, () => "contained"),
+      ].toSorted(),
+    );
+  });
+});
+
+/**
+ * A containment side's selection of a relation, or none where the side names the relation whole.
+ */
+const selectionOf = (side: { readonly source: object }) =>
+  "relation" in side.source && "bindings" in side.source ? side.source : undefined;
+
+/**
+ * One containment of the module, as its owner, fields, target relation, selection and target
+ * fields.
+ */
+const containments = (owner: (typeof relations)[keyof typeof relations]) =>
+  content.rules
+    .filter((rule) => rule.kind === "contained")
+    .filter((rule) => rule.left.source === owner)
+    .map((rule) => ({
+      left: [...rule.left.fields],
+      right: [...rule.right.fields],
+      selection: selectionOf(rule.right)?.bindings,
+      target: selectionOf(rule.right)?.relation ?? rule.right.source,
+    }));
+
+const capacityRules = content.rules.filter((rule) => rule.kind === "capacity");
+
+type Capacity = (typeof capacityRules)[number];
+
+/**
+ * The inclusive bounds a capacity statement carries on its description, which the public statement
+ * type does not expose.
+ */
+const boundsOf = (rule: Capacity | undefined): readonly [unknown, unknown] => {
+  const within =
+    Predicate.hasProperty(rule, "desc") &&
+    Predicate.hasProperty(rule.desc, "within") &&
+    Predicate.hasProperty(rule.desc.within, "low") &&
+    Predicate.hasProperty(rule.desc.within, "high")
+      ? rule.desc.within
+      : undefined;
+
+  assert.isDefined(within, "capacity description");
+
+  return [within.low, within.high];
+};
+
+describe("the test content laws", () => {
+  it("owns a test rubric's use and a test feedback's title", () => {
+    assert.deepStrictEqual(containments(relations.TestRubricBlockUse), [
+      {
+        left: ["node"],
+        right: ["id"],
+        selection: undefined,
+        target: relations.TestRubricBlock,
+      },
+    ]);
+    assert.deepStrictEqual(containments(relations.TestFeedbackTitle), [
+      {
+        left: ["node"],
+        right: ["id"],
+        selection: undefined,
+        target: relations.TestFeedback,
+      },
+    ]);
+  });
+
+  it("gives a test rubric exactly one body and a test feedback at most one", () => {
+    const capacities = capacityRules;
+    assert.strictEqual(capacities.length, 2);
+
+    const byOwner = new Map(
+      capacities.map((rule) => [selectionOf(rule.target)?.relation ?? rule.target.source, rule]),
+    );
+    const rubric = byOwner.get(relations.TestRubricBlock);
+    const feedback = byOwner.get(relations.TestFeedback);
+    for (const [rule, childKind, parentKind] of [
+      [rubric, "qti-content-body.testRubric", "qti-rubric-block.test"],
+      [feedback, "qti-content-body.testFeedback", "qti-test-feedback"],
+    ] as const) {
+      assert.isDefined(rule);
+      assert.deepStrictEqual([...(rule?.target.fields ?? [])], ["id"]);
+      assert.strictEqual(selectionOf(rule?.from ?? { source: {} })?.relation, node.relations.Edge);
+      assert.deepStrictEqual(selectionOf(rule?.from ?? { source: {} })?.bindings, {
+        childKind,
+        parentKind,
+      });
+      assert.deepStrictEqual([...(rule?.from.fields ?? [])], ["parent"]);
+    }
+    assert.deepStrictEqual(boundsOf(rubric), [1n, 1n]);
+    assert.deepStrictEqual(boundsOf(feedback), [0n, 1n]);
+  });
+
+  it("binds a section feedback's outcome into the test's outcome declarations, typed", () => {
+    assert.deepStrictEqual(containments(relations.SectionFeedbackOutcomeRef), [
+      {
+        left: ["test", "identifier"],
+        right: ["document", "identifier"],
+        selection: { kind: "outcome" },
+        target: declaration.relations.Declaration,
+      },
+      {
+        left: ["test", "identifier", "baseType", "cardinality"],
+        right: ["document", "identifier", "baseType", "cardinality"],
+        selection: undefined,
+        target: declaration.relations.TypedDeclaration,
+      },
+      {
+        left: ["node", "document"],
+        right: ["id", "tree"],
+        selection: undefined,
+        target: node.relations.Node,
+      },
+      {
+        left: ["test", "document"],
+        right: ["test", "document"],
+        selection: undefined,
+        target: structure.relations.TestDocument,
+      },
+    ]);
+  });
+
+  it("binds a section printed variable into the test's declarations, on a printed variable", () => {
+    assert.deepStrictEqual(containments(relations.SectionPrintedVariableRef), [
+      {
+        left: ["node"],
+        right: ["id"],
+        selection: undefined,
+        target: template.relations.PrintedVariable,
+      },
+      {
+        left: ["test", "identifier", "kind"],
+        right: ["document", "identifier", "kind"],
+        selection: undefined,
+        target: declaration.relations.Declaration,
+      },
+      {
+        left: ["node", "document"],
+        right: ["id", "tree"],
+        selection: undefined,
+        target: node.relations.Node,
+      },
+      {
+        left: ["test", "document"],
+        right: ["test", "document"],
+        selection: undefined,
+        target: structure.relations.TestDocument,
+      },
+    ]);
+  });
+
+  it("binds a section printed variable's base and index into the test's typed declarations", () => {
+    assert.deepStrictEqual(containments(relations.SectionPrintedVariableVarRef), [
+      {
+        left: ["node"],
+        right: ["id"],
+        selection: undefined,
+        target: template.relations.PrintedVariable,
+      },
+      {
+        left: ["test", "identifier", "baseType", "cardinality"],
+        right: ["document", "identifier", "baseType", "cardinality"],
+        selection: undefined,
+        target: declaration.relations.TypedDeclaration,
+      },
+      {
+        left: ["test", "identifier", "kind"],
+        right: ["document", "identifier", "kind"],
+        selection: undefined,
+        target: declaration.relations.Declaration,
+      },
+      {
+        left: ["node", "document"],
+        right: ["id", "tree"],
+        selection: undefined,
+        target: node.relations.Node,
+      },
+      {
+        left: ["test", "document"],
+        right: ["test", "document"],
+        selection: undefined,
+        target: structure.relations.TestDocument,
+      },
+    ]);
+  });
+
+  it("carries one check per twin, named for its C twin's", () => {
+    assert.deepStrictEqual(
+      content.rules
+        .filter((rule) => rule.kind === "check")
+        .map((rule) => [rule.name, rule.relation]),
+      [
+        ["SectionFeedbackOutcomeRefType", relations.SectionFeedbackOutcomeRef],
+        ["SectionPrintedVariableRefKind", relations.SectionPrintedVariableRef],
+        ["SectionPrintedVariableVarRefType", relations.SectionPrintedVariableVarRef],
+      ],
+    );
+  });
+
+  it("builds in a schema with the spine, the declarations, C's bindings and the structure", () => {
+    const built = schema(
+      "QtiTestContentProbe",
+      {
+        ...node.relations,
+        ...pkg.relations,
+        ...document.relations,
+        ...declaration.relations,
+        ...feedbackModule.relations,
+        ...template.relations,
+        ...structure.relations,
+        ...relations,
+      },
+      [
+        ...node.rules,
+        ...pkg.rules,
+        ...document.rules,
+        ...declaration.rules,
+        ...feedbackModule.rules,
+        ...template.rules,
+        ...structure.rules,
+        ...content.rules,
+      ],
+    );
+    assert.include(Object.keys(built.relations), "SectionPrintedVariableVarRef");
   });
 });
