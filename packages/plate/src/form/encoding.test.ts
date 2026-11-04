@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Duration, Effect } from "effect";
+import { Duration, Effect, Option, Result } from "effect";
 import { decode, encode, entryName, partition } from "#plate/form/encoding.ts";
 import type { Binding, Entry, Malformed } from "#plate/form/encoding.ts";
 import type { Single, Value } from "#plate/model/values.ts";
@@ -64,7 +64,7 @@ const identifier = (text: string): Single => ({ baseType: "identifier", value: t
  * @returns The value the entries decode to.
  */
 const roundTrip = (bound: Binding, original: Value): Effect.Effect<Value, Malformed> =>
-  decode(encode(original, bound), bound);
+  Effect.fromResult(decode(encode(original, bound), bound));
 
 describe("entryName", () => {
   it("[Q-2] names an entry by the instance and the response", () => {
@@ -73,6 +73,23 @@ describe("entryName", () => {
 });
 
 describe("encode and decode", () => {
+  it("[Q-20] decode returns a Result: Malformed for a float that is not a number, 7n for an integer", () => {
+    const refused = decode(posted("abc"), binding("float"));
+    assert.isTrue(Result.isResult(refused));
+    assert.deepStrictEqual(
+      Option.map(Result.getFailure(refused), ({ _tag, reason }) => ({ _tag, reason })),
+      Option.some({ _tag: "Malformed", reason: "number" }),
+    );
+
+    const integer = binding("integer");
+    const seven = decode(posted("7"), integer);
+    assert.isTrue(Result.isResult(seven));
+    assert.deepStrictEqual(
+      Result.getSuccess(seven),
+      Option.some(value(integer, { baseType: "integer", value: 7n })),
+    );
+  });
+
   it.effect("[Q-2] round-trip an identifier single and multiple, in order", () =>
     Effect.gen(function* identifierRoundTrip() {
       const single = binding("identifier");
@@ -105,13 +122,13 @@ describe("encode and decode", () => {
       const multiple = binding("identifier", "multiple");
 
       assert.deepStrictEqual(encode(value(multiple), multiple), []);
-      assert.deepStrictEqual(yield* decode([], multiple), value(multiple));
+      assert.deepStrictEqual(yield* Effect.fromResult(decode([], multiple)), value(multiple));
       assert.deepStrictEqual(
-        yield* decode(posted(""), binding("identifier")),
+        yield* Effect.fromResult(decode(posted(""), binding("identifier"))),
         value(binding("identifier")),
       );
       assert.deepStrictEqual(
-        yield* decode(posted(""), binding("string")),
+        yield* Effect.fromResult(decode(posted(""), binding("string"))),
         value(binding("string")),
       );
     }),
@@ -120,7 +137,7 @@ describe("encode and decode", () => {
   it.effect("[Q-20] refuses abc, INF, -INF and NaN as a float", () =>
     Effect.gen(function* floatRefusals() {
       for (const text of ["abc", "INF", "-INF", "NaN"]) {
-        const error = yield* Effect.flip(decode(posted(text), binding("float")));
+        const error = yield* Effect.flip(Effect.fromResult(decode(posted(text), binding("float"))));
         assert.strictEqual(error._tag, "Malformed");
         assert.strictEqual(error.reason, "number");
       }
@@ -132,11 +149,11 @@ describe("encode and decode", () => {
       const float = binding("float");
 
       assert.deepStrictEqual(
-        yield* decode(posted("1E999"), float),
+        yield* Effect.fromResult(decode(posted("1E999"), float)),
         value(float, { baseType: "float", value: Number.MAX_VALUE }),
       );
       assert.deepStrictEqual(
-        yield* decode(posted("-1E999"), float),
+        yield* Effect.fromResult(decode(posted("-1E999"), float)),
         value(float, { baseType: "float", value: -Number.MAX_VALUE }),
       );
     }),
@@ -148,23 +165,25 @@ describe("encode and decode", () => {
       const float = binding("float");
 
       assert.deepStrictEqual(
-        yield* decode(posted(" 7 "), integer),
+        yield* Effect.fromResult(decode(posted(" 7 "), integer)),
         value(integer, { baseType: "integer", value: 7n }),
       );
       assert.deepStrictEqual(
-        yield* decode(posted(" 1E3 "), float),
+        yield* Effect.fromResult(decode(posted(" 1E3 "), float)),
         value(float, { baseType: "float", value: 1000 }),
       );
       assert.deepStrictEqual(
-        yield* decode(posted("101"), integer, { base: 2 }),
+        yield* Effect.fromResult(decode(posted("101"), integer, { base: 2 })),
         value(integer, { baseType: "integer", value: 5n }),
       );
       assert.deepStrictEqual(
-        yield* decode(posted("-ff"), integer, { base: 16 }),
+        yield* Effect.fromResult(decode(posted("-ff"), integer, { base: 16 })),
         value(integer, { baseType: "integer", value: -255n }),
       );
 
-      const error = yield* Effect.flip(decode(posted("102"), integer, { base: 2 }));
+      const error = yield* Effect.flip(
+        Effect.fromResult(decode(posted("102"), integer, { base: 2 })),
+      );
       assert.strictEqual(error.reason, "number");
     }),
   );
@@ -181,7 +200,7 @@ describe("encode and decode", () => {
 
       for (const [text, exact] of cases) {
         assert.deepStrictEqual(
-          yield* decode(posted(text), integer),
+          yield* Effect.fromResult(decode(posted(text), integer)),
           value(integer, { baseType: "integer", value: exact }),
         );
       }
@@ -193,13 +212,20 @@ describe("encode and decode", () => {
       const integer = binding("integer");
       const exact = value(integer, { baseType: "integer", value: 2n ** 53n + 1n });
 
-      assert.deepStrictEqual(yield* decode(posted("20000000000001"), integer, { base: 16 }), exact);
       assert.deepStrictEqual(
-        yield* decode(posted((2n ** 53n + 1n).toString(7)), integer, { base: 7 }),
+        yield* Effect.fromResult(decode(posted("20000000000001"), integer, { base: 16 })),
         exact,
       );
       assert.deepStrictEqual(
-        yield* decode(posted(`-${(10n ** 30n).toString(7)}`), integer, { base: 7 }),
+        yield* Effect.fromResult(
+          decode(posted((2n ** 53n + 1n).toString(7)), integer, { base: 7 }),
+        ),
+        exact,
+      );
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(
+          decode(posted(`-${(10n ** 30n).toString(7)}`), integer, { base: 7 }),
+        ),
         value(integer, { baseType: "integer", value: -(10n ** 30n) }),
       );
     }),
@@ -213,7 +239,7 @@ describe("encode and decode", () => {
       assert.strictEqual(spelling.length, 100_000);
 
       const [elapsed, read] = yield* Effect.timed(
-        Effect.suspend(() => decode(posted(spelling), integer, { base: 36 })),
+        Effect.suspend(() => Effect.fromResult(decode(posted(spelling), integer, { base: 36 }))),
       );
       assert.deepStrictEqual(read, value(integer, { baseType: "integer", value: exact }));
       assert.isBelow(Duration.toMillis(elapsed), 200, Duration.format(elapsed));
@@ -235,7 +261,9 @@ describe("encode and decode", () => {
       ];
 
       for (const [text, base] of cases) {
-        const error = yield* Effect.flip(decode(posted(text), integer, { base }));
+        const error = yield* Effect.flip(
+          Effect.fromResult(decode(posted(text), integer, { base })),
+        );
         assert.strictEqual(error._tag, "Malformed");
         assert.strictEqual(error.reason, "number", `${text} in base ${String(base)}`);
       }
@@ -247,11 +275,11 @@ describe("encode and decode", () => {
       const string = binding("string");
 
       assert.deepStrictEqual(
-        yield* decode(posted("a\r\nb"), string),
+        yield* Effect.fromResult(decode(posted("a\r\nb"), string)),
         value(string, { baseType: "string", value: "a\nb" }),
       );
       assert.deepStrictEqual(
-        yield* decode(posted("a\rb\n"), string),
+        yield* Effect.fromResult(decode(posted("a\rb\n"), string)),
         value(string, { baseType: "string", value: "a\nb\n" }),
       );
     }),
@@ -261,13 +289,17 @@ describe("encode and decode", () => {
     Effect.gen(function* refusals() {
       const single = binding("identifier");
 
-      const many = yield* Effect.flip(decode(posted("choiceA", "choiceB"), single));
+      const many = yield* Effect.flip(
+        Effect.fromResult(decode(posted("choiceA", "choiceB"), single)),
+      );
       assert.strictEqual(many.reason, "single-many");
 
-      const notNcName = yield* Effect.flip(decode(posted("1st"), single));
+      const notNcName = yield* Effect.flip(Effect.fromResult(decode(posted("1st"), single)));
       assert.strictEqual(notNcName.reason, "identifier");
 
-      const file = yield* Effect.flip(decode(posted(new Blob(["x"])), binding("string")));
+      const file = yield* Effect.flip(
+        Effect.fromResult(decode(posted(new Blob(["x"])), binding("string"))),
+      );
       assert.strictEqual(file.reason, "file");
     }),
   );
@@ -280,7 +312,10 @@ describe("encode and decode", () => {
         [entryName(instance, "RESPONSE"), "choiceB"],
       ];
 
-      assert.deepStrictEqual(yield* decode(entries, single), value(single, identifier("choiceB")));
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode(entries, single)),
+        value(single, identifier("choiceB")),
+      );
     }),
   );
 });

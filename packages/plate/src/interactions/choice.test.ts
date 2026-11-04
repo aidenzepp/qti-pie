@@ -274,11 +274,15 @@ const decoded = (
   entries: readonly Entry[],
   entry: string = name,
 ): Effect.Effect<Value | Malformed> =>
-  decode(entries, {
-    baseType: "identifier",
-    cardinality: interaction.cardinality,
-    name: entry,
-  }).pipe(Effect.result, Effect.map(Result.merge));
+  Effect.succeed(
+    Result.merge(
+      decode(entries, {
+        baseType: "identifier",
+        cardinality: interaction.cardinality,
+        name: entry,
+      }),
+    ),
+  );
 
 describe("renderChoice", () => {
   it.effect(

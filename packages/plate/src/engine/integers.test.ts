@@ -126,7 +126,7 @@ const w2 = integerItem(
 const scoreAfter = (source: SourceDocument, posted: string) =>
   Effect.gen(function* postAndProcess() {
     const item = yield* buildItem(source);
-    const response = yield* decode([[binding.name, posted]], binding);
+    const response = yield* Effect.fromResult(decode([[binding.name, posted]], binding));
     const rules = yield* Effect.fromOption(item.processing);
     const after = yield* Effect.fromResult(
       runRules(rules, item, {
