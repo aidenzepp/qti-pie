@@ -3,6 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { decode } from "#crust/decode.ts";
 import type { ReaderRefusal } from "#crust/errors.ts";
+import { withoutBuffer } from "#crust/test/without-buffer.ts";
 
 /**
  * The bytes of ASCII `text`.
@@ -258,6 +259,54 @@ describe("decode reads the label and the bytes", () => {
       );
 
       assert.strictEqual(decoded.label, "UTF-8");
+    }),
+  );
+});
+
+/**
+ * Decode `bytes` with `Buffer` removed, first checking the removal took.
+ */
+const decodeWithoutBuffer = (bytes: Uint8Array) =>
+  withoutBuffer(
+    Effect.gen(function* decodesWithoutBuffer() {
+      assert.isFalse("Buffer" in globalThis);
+
+      return yield* decode(bytes);
+    }),
+  );
+
+describe("decode runs without Node's Buffer", () => {
+  it.effect("a UTF-8 document with no declaration and no mark", () =>
+    Effect.gen(function* decodesPlainUtf8() {
+      const decoded = yield* decodeWithoutBuffer(bytesOf(ascii("<a/>")));
+
+      assert.strictEqual(decoded.label, "UTF-8");
+    }),
+  );
+
+  it.effect("an ISO-8859-1 document, 0x85 included", () =>
+    Effect.gen(function* decodesLatin1() {
+      const decoded = yield* decodeWithoutBuffer(declared("ISO-8859-1", [0x85, 0xe9]));
+
+      assert.include(decoded.text, "<a>\u0085é</a>");
+    }),
+  );
+
+  it.effect("a US-ASCII document", () =>
+    Effect.gen(function* decodesAscii() {
+      const decoded = yield* decodeWithoutBuffer(declared("US-ASCII", ascii("x")));
+
+      assert.include(decoded.text, "<a>x</a>");
+    }),
+  );
+
+  it.effect("an ISO-8859-1 body of a million bytes", () =>
+    Effect.gen(function* decodesLargeLatin1() {
+      const bytes = declared("ISO-8859-1", Array.from<number>({ length: 1_048_576 }).fill(0xe9));
+      const decoded = yield* decodeWithoutBuffer(bytes);
+
+      assert.strictEqual(decoded.text.length, bytes.length);
+      assert.isTrue(decoded.text.endsWith("é</a>"));
     }),
   );
 });
