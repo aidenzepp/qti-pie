@@ -133,19 +133,16 @@ const essay = (control: Attributes): Element =>
 const itemRoot: Attributes = { "data-slot": slot("item", "root"), id: "q1", lang: "en" };
 
 /**
- * Build the item chrome around a Form's children.
+ * Build the item Root around a host's form: a plain `form` with no marker, as an author composes
+ * it.
  *
- * @param children The Form's children.
+ * @param children The form's children.
  * @param root The item Root's attributes, with `lang` by default.
  * @returns The item Root.
  */
 const item = (children: readonly Node[], root: Attributes = itemRoot): Element =>
   h("qti-assessment-item", root, [
-    h(
-      "form",
-      { action: "/attempt", "data-slot": slot("item", "form"), method: "post", novalidate: true },
-      children,
-    ),
+    h("form", { action: "/attempt", method: "post", novalidate: true }, children),
   ]);
 
 /**
@@ -168,11 +165,9 @@ const status = h(
 );
 
 /**
- * The Submit button, named by its own text.
+ * The host's submit button, named by its own text and carrying no marker.
  */
-const submit = h("button", { "data-slot": slot("item", "submit"), type: "submit" }, [
-  text("Submit"),
-]);
+const submit = h("button", { type: "submit" }, [text("Submit")]);
 
 /**
  * The positive Choice: a Prompt and two rows.
@@ -298,7 +293,7 @@ describe("isFocusable", () => {
 });
 
 describe("checkTree", () => {
-  it("passes the positive tree: a Choice with a Prompt, two rows and a Submit inside a Form", () => {
+  it("passes the positive tree: a Choice with a Prompt, two rows and a submit button in a form", () => {
     assert.deepStrictEqual(checkTree(item([status, capital, submit]), { baseLevel: 2 }), []);
   });
 
@@ -482,21 +477,38 @@ describe("checkTree", () => {
     assert.deepStrictEqual(checksOf(item([status, mixed, submit])), ["radio-group"]);
   });
 
-  it("submit-order: a Submit before a control", () => {
+  it("submit-order: an unmarked submit button before a control of its form", () => {
     assert.deepStrictEqual(checkTree(item([status, submit, capital]), { baseLevel: 2 }), [
       { check: "submit-order", path: ["qti-assessment-item", "form", "button"] },
     ]);
   });
 
-  it("submit-order: a Submit outside the Form", () => {
+  it("submit-order: a button with no type before a control, which submits by default", () => {
+    const untyped = h("button", {}, [text("Submit")]);
+    assert.deepStrictEqual(checksOf(item([status, untyped, capital])), ["submit-order"]);
+  });
+
+  it("submit-order: an unmarked submit button outside any form", () => {
     const root = h("qti-assessment-item", itemRoot, [
-      h("form", { action: "/attempt", "data-slot": slot("item", "form"), method: "post" }, [
-        status,
-        capital,
-      ]),
+      h("form", { action: "/attempt", method: "post" }, [status, capital]),
       submit,
     ]);
     assert.deepStrictEqual(checksOf(root), ["submit-order"]);
+  });
+
+  it("submit-order: passes a form whose submit button is last", () => {
+    assert.deepStrictEqual(checksOf(item([status, capital, submit])), []);
+  });
+
+  it("submit-order: passes a plain button before a control, and a control in a later form", () => {
+    const plain = h("button", { type: "button" }, [text("Hint")]);
+    const root = h("qti-assessment-item", itemRoot, [
+      h("form", { action: "/attempt", method: "post" }, [status, plain, capital, submit]),
+      h("form", { action: "/search", method: "get" }, [
+        h("input", { "aria-label": "Search", name: "q" }),
+      ]),
+    ]);
+    assert.deepStrictEqual(checksOf(root), []);
   });
 
   it("hidden-control: a control under aria-hidden", () => {

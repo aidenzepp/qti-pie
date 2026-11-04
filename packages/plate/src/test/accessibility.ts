@@ -176,6 +176,21 @@ const isFormControl = (element: Element): boolean =>
   element.tag === "input" ? inputType(element) !== "hidden" : disableableTags.has(element.tag);
 
 /**
+ * Decide whether an element is a submit button: a `button` in the Submit state, which its `type`
+ * gives when it is `submit`, absent or a value HTML does not know.
+ *
+ * @param element The element to classify.
+ * @returns Whether it is a `button` whose `type` is neither `button` nor `reset`, in any ASCII
+ *   case.
+ * @see https://html.spec.whatwg.org/multipage/form-elements.html#attr-button-type
+ */
+const isSubmitButton = (element: Element): boolean => {
+  const type = attribute(element, "type")?.toLowerCase();
+
+  return element.tag === "button" && type !== "button" && type !== "reset";
+};
+
+/**
  * Parse an element's `tabindex` by HTML's rules for parsing integers.
  *
  * A value the rules cannot parse is ignored by the browser, so it reads as absent here.
@@ -603,12 +618,20 @@ const rules = {
     return radios.filter((radio) => splitByName.has(radio) || mixedInRoot.has(radio));
   },
   "submit-order": ({ visits }) =>
-    visits.filter(
-      (visit, index) =>
-        isPart(visit.element, "item", "submit") &&
-        (!visit.ancestors.some((ancestor) => isPart(ancestor, "item", "form")) ||
-          visits.slice(index + 1).some((later) => isFormControl(later.element))),
-    ),
+    visits.filter((visit, index) => {
+      if (!isSubmitButton(visit.element)) {
+        return false;
+      }
+
+      const form = visit.ancestors.findLast((ancestor) => ancestor.tag === "form");
+
+      return (
+        form === undefined ||
+        visits
+          .slice(index + 1)
+          .some((later) => later.ancestors.includes(form) && isFormControl(later.element))
+      );
+    }),
   "tabindex-minus-one": ({ visits }) =>
     visits.filter(
       (visit) => (tabindexOf(visit.element) ?? 0) < 0 && !isPart(visit.element, "item", "status"),
@@ -622,10 +645,12 @@ const rules = {
  *
  * The rules are {@link checks}'s, reported in that order and, within one check, in document order.
  * Parts are found by their `data-slot` markers, read through the part table's `partForSlot` (spec
- * §4.3): the item's Form, Status and Submit, and an interaction's Root, Prompt, Choice, Control and
- * Label. A Choice Root's Prompt must take one of the two ruled markups, a `legend` first in the
- * `fieldset` or a `qti-prompt` the `fieldset` names through `aria-labelledby`. A Root with no
- * Prompt has no name requirement (Q9).
+ * §4.3): the item's Status, and an interaction's Root, Prompt, Choice, Control and Label. The form
+ * and its submit button are the host's composition, not parts, so `submit-order` reads them from
+ * the HTML: a submit button must sit inside a `form`, after every control of that form. A Choice
+ * Root's Prompt must take one of the two ruled markups, a `legend` first in the `fieldset` or a
+ * `qti-prompt` the `fieldset` names through `aria-labelledby`. A Root with no Prompt has no name
+ * requirement (Q9).
  *
  * @param tree The tree's root, which must carry `lang`.
  * @param options How the tree sits in its page.

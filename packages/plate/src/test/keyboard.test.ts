@@ -6,33 +6,31 @@ import { rowFor } from "#plate/emit/parts.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 
 /**
- * The Status region the item chrome places before the Form: focusable by script only.
+ * The Status region the item chrome places before the host's form: focusable by script only.
  */
 const status = h("div", { "data-slot": rowFor("item", "status").slot, tabindex: "-1" });
 
 /**
- * Build the Submit button.
+ * Build the host's submit button, a plain `button` with no marker.
  *
  * @param attrs Attributes merged over the button's defaults.
- * @returns The Submit part.
+ * @returns The submit button.
  */
 const submitButton = (attrs: Attributes = {}): Element =>
-  h("button", { "data-slot": rowFor("item", "submit").slot, type: "submit", ...attrs }, [
-    text("Submit"),
-  ]);
+  h("button", { type: "submit", ...attrs }, [text("Submit")]);
 
 /**
- * Build an item around some controls: the Status region, then a Form holding the controls and the
- * Submit after them.
+ * Build an item around some controls: the Status region, then a plain `form`, as an author
+ * composes it, holding the controls and the submit button after them.
  *
- * @param controls The nodes the Form holds before its Submit.
- * @param submit The Submit, enabled by default.
+ * @param controls The nodes the form holds before its submit button.
+ * @param submit The submit button, enabled by default.
  * @returns The item's root.
  */
 const item = (controls: readonly Node[], submit: Element = submitButton()): Element =>
   h("div", { "data-slot": rowFor("item", "root").slot, lang: "en" }, [
     status,
-    h("form", { "data-slot": rowFor("item", "form").slot, method: "post" }, [...controls, submit]),
+    h("form", { method: "post" }, [...controls, submit]),
   ]);
 
 /**
@@ -127,7 +125,7 @@ describe("keyboardWalk", () => {
     );
   });
 
-  it("a text input: Enter does not submit while the Submit is disabled", () => {
+  it("a text input: Enter does not submit while the submit button is disabled", () => {
     const tree = item(
       [h("input", { name: "q1-RESPONSE", type: "text" })],
       submitButton({ disabled: true }),
