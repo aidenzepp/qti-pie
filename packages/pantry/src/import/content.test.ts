@@ -1,7 +1,8 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the declaration column the variables under test carry; the shape here is the typed-or-record choice, not a structure. */
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option, Predicate } from "effect";
-import type { AnyRelation } from "@bjornpagen/grizzle";
+import type { AnyRelation, Uuid } from "@bjornpagen/grizzle";
+import { randomUUID } from "node:crypto";
 import { contentRows } from "#pantry/import/content.ts";
 import type { DeclaredVariable } from "#pantry/import/interactions.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
@@ -78,7 +79,7 @@ const documentId = "11111111-1111-4111-8111-111111111111";
 const itemNamespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 
 const typed = (
-  id: string,
+  id: Uuid,
   baseType: "identifier" | "integer" | "float",
   cardinality: "single" | "multiple",
 ): DeclaredVariable => ({
@@ -92,9 +93,9 @@ const typed = (
  * The outcomes the tests declare: `FEEDBACK` an identifier, `VAR` an integer and `SCORE` a float.
  */
 const outcomes: ReadonlyMap<string, DeclaredVariable> = new Map([
-  ["FEEDBACK", typed("decl-feedback", "identifier", "single")],
-  ["SCORE", typed("decl-score", "float", "single")],
-  ["VAR", typed("decl-var", "integer", "single")],
+  ["FEEDBACK", typed(randomUUID(), "identifier", "single")],
+  ["SCORE", typed(randomUUID(), "float", "single")],
+  ["VAR", typed(randomUUID(), "integer", "single")],
 ]);
 
 const outcomeElements = `<qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/><qti-outcome-declaration identifier="VAR" cardinality="single" base-type="integer"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>`;
@@ -133,9 +134,15 @@ const built = (item: Item, declarations: ReadonlyMap<string, DeclaredVariable> =
   });
 
 /**
- * The id of a row found through an optional lookup, empty when the lookup found nothing.
+ * The value of an optional lookup, which the test fails on when the lookup found nothing.
  */
-const idOf = (row: { readonly id: string } | undefined): string => row?.id ?? "";
+const present = <Value>(value: Value | undefined): Value =>
+  value ?? assert.fail("the lookup found nothing");
+
+/**
+ * The id of a row found through an optional lookup, which the test fails on when it found nothing.
+ */
+const idOf = (row: { readonly id: Uuid } | undefined): Uuid => present(row).id;
 
 /**
  * One node of each feedback and template kind: `fa` a feedback block, `ft` a template feedback
@@ -386,7 +393,7 @@ describe("contentRows", () => {
       const refs = new Map(Rows.of(rows, TemplateContentRef).map((ref) => [ref.node, ref]));
 
       assert.strictEqual(refs.size, 3);
-      assert.deepStrictEqual(refs.get(inline?.id ?? ""), {
+      assert.deepStrictEqual(refs.get(idOf(inline)), {
         baseType: "identifier",
         cardinality: "multiple",
         document: documentId,
@@ -394,7 +401,7 @@ describe("contentRows", () => {
         node: idOf(inline),
       });
       assert.strictEqual(
-        refs.get(blocks.get(ShowHideIdentifier("b2"))?.id ?? "")?.cardinality,
+        refs.get(idOf(blocks.get(ShowHideIdentifier("b2"))))?.cardinality,
         "single",
       );
     }),
@@ -436,7 +443,7 @@ describe("contentRows", () => {
           Rows.of(rows, TemplateDeclarationArm)
             .map((arm) => arm.id)
             .toSorted((a, b) => a.localeCompare(b)),
-          [t?.id ?? "", record?.id ?? ""].toSorted((a, b) => a.localeCompare(b)),
+          [idOf(t), idOf(record)].toSorted((a, b) => a.localeCompare(b)),
         );
 
         const arm = Rows.of(rows, TemplateDeclarationArm).find((row) => row.id === idOf(t));
@@ -620,13 +627,13 @@ describe("contentRows", () => {
       assert.deepStrictEqual(identifiers(TemplateInline), ["ti"]);
       assert.deepStrictEqual(identifiers(RubricTemplateInline), ["ri"]);
       assert.deepStrictEqual(Rows.of(rows, DeclaredTemplateFeedbackBlockShowHide), [
-        { node: idByIdentifier.get(ShowHideIdentifier("ft")) ?? "" },
+        { node: present(idByIdentifier.get(ShowHideIdentifier("ft"))) },
       ]);
       assert.deepStrictEqual(Rows.of(rows, DeclaredRubricTemplateBlockShowHide), [
-        { node: idByIdentifier.get(ShowHideIdentifier("rb")) ?? "" },
+        { node: present(idByIdentifier.get(ShowHideIdentifier("rb"))) },
       ]);
       assert.deepStrictEqual(Rows.of(rows, DeclaredRubricTemplateInlineShowHide), [
-        { node: idByIdentifier.get(ShowHideIdentifier("ri")) ?? "" },
+        { node: present(idByIdentifier.get(ShowHideIdentifier("ri"))) },
       ]);
       // None: the fixture's `qti-feedback-block` `fa`, its only plain feedback block, writes no `show-hide`.
       assert.deepStrictEqual(Rows.of(rows, DeclaredFeedbackBlockShowHide), []);

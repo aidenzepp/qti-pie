@@ -84,7 +84,7 @@ const looseBuilder = query(Author) as unknown as LooseBuilder;
  */
 // SAFETY: `v` mints one variable per scalar field of the relation it is given, which the run-time view reads by field name.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion, anti-slop/no-chained-type-assertions -- The invariant is the SAFETY note above; the two types name the same function, so no direct assertion compiles.
-const looseVars = v as unknown as (source: AnyRelation) => Terms;
+const looseVars = v as unknown as (source: AnyRelation, name: string) => Terms;
 
 /**
  * The relations the importer writes: every stored relation but the seeded ones.
@@ -184,7 +184,7 @@ export const treeAttachments: readonly Attachment[] = written
  */
 const childOf = (attached: Attachment) => (parent: Terms) =>
   looseBuilder.rule((r) => {
-    const vars = looseVars(attached.relation);
+    const vars = looseVars(attached.relation, "relation");
     const head: Terms = Object.fromEntries(
       Object.entries(vars).filter(([field]) => field !== attached.owner),
     );
@@ -208,7 +208,7 @@ const attaching = (base: LooseQuery, attached: readonly Attachment[]): LooseQuer
  * The ids of the documents of a package, one row per document tree.
  */
 export const documentIdsOf = query(Author).rule((r) => {
-  const { id } = v(Document);
+  const { id } = v(Document, "document");
 
   return r.match(Document, { id, package: r.param("package", uuid) }).find({ id });
 });
@@ -220,15 +220,15 @@ export const documentIdsOf = query(Author).rule((r) => {
 export const subtree = query(Author).recursive("Subtree", {
   base: [
     (r) => {
-      const { node } = v(TreeRoot);
+      const { node } = v(TreeRoot, "treeRoot");
 
       return r.match(TreeRoot, { node, tree: r.param("tree", uuid) }).find({ node });
     },
   ],
   rec: [
     (r, self) => {
-      const { node } = v(self);
-      const { child } = v(Edge);
+      const { node } = v(self, "self");
+      const { child } = v(Edge, "edge");
 
       return r.match(self, { node }).match(Edge, { child, parent: node }).find({ node: child });
     },
@@ -265,8 +265,8 @@ export const nodeRuns: readonly (readonly Attachment[])[] = inRuns(
  */
 const nodesRule = query(Author).rule((r) => {
   const walk = subtree.bind({ tree: r.param("tree", uuid) });
-  const { node } = v(walk);
-  const { ancestry, kind, prefix, rootKind, tree, version } = v(Node);
+  const { node } = v(walk, "walk");
+  const { ancestry, kind, prefix, rootKind, tree, version } = v(Node, "node");
 
   return r
     .match(walk, { node })
@@ -297,7 +297,7 @@ export const nodeQueries: readonly LooseQuery[] = nodeRuns.map((run) =>
  * The query of the `Tree` row of the tree `tree`, which the fidelity rows hang on.
  */
 const treeRule = query(Author).rule((r) => {
-  const { charset, id, kind, root, version } = v(Tree);
+  const { charset, id, kind, root, version } = v(Tree, "tree");
 
   return r
     .match(Tree, { charset, id, kind, root, version })

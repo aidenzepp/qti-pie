@@ -89,14 +89,14 @@ export const exportCommand = Command.make(
     const mode = yield* outputMode;
     const target = zip && !dir.endsWith(".zip") ? `${dir}.zip` : dir;
 
-    yield* requirePackageId(packageId);
+    const id = yield* requirePackageId(packageId);
     yield* requireReplaceable(target, yes);
 
     const { AuthorAppLayer } = yield* Effect.promise(() => import("#pantry/db/layer.ts"));
 
     if (dryRun) {
       const { exportEntries } = yield* Effect.promise(() => import("#pantry/export/package.ts"));
-      const planned = yield* exportEntries(packageId).pipe(Effect.provide(AuthorAppLayer));
+      const planned = yield* exportEntries(id).pipe(Effect.provide(AuthorAppLayer));
       const entries = planned.map(({ bytes, path }) => ({ bytes: bytes.byteLength, path }));
       const action = yield* targetActionOf(target);
       const lines = entries.map(({ bytes, path }) => `  ${path} (${bytes} bytes)`);
@@ -121,7 +121,7 @@ export const exportCommand = Command.make(
     const { exportPackage } = yield* Effect.promise(() => import("#pantry/export/package.ts"));
 
     yield* replaceWith(target, (written) =>
-      exportPackage(packageId, written).pipe(Effect.provide(AuthorAppLayer)),
+      exportPackage(id, written).pipe(Effect.provide(AuthorAppLayer)),
     );
 
     if (mode === "text") {

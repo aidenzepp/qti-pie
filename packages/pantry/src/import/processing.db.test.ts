@@ -695,7 +695,13 @@ const lawOf = (law: ImportLaw): string => {
     return `alternatives ${law.relation}.${law.field}`;
   }
 
-  return law.kind === "contract" ? `contract ${law.contract}` : `pattern ${law.source}`;
+  if (law.kind === "contract") {
+    return `contract ${law.contract}`;
+  }
+
+  return law.kind === "pattern"
+    ? `pattern ${law.source}`
+    : `numericBound ${law.relation}.${law.field}`;
 };
 
 /**
