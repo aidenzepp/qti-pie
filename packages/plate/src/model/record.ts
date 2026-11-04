@@ -12,8 +12,10 @@
  * @module
  */
 import { Effect, Option, Schema } from "effect";
+import { ValueSchema } from "#plate/codec/values.ts";
 import type { Item, OutcomeDeclaration } from "#plate/model/item.ts";
-import { Value, nullOf } from "#plate/model/values.ts";
+import { nullOf } from "#plate/model/values.ts";
+import type { Value } from "#plate/model/values.ts";
 
 /**
  * One item's session as the host stores it.
@@ -32,8 +34,8 @@ export const ItemRecord = Schema.Struct({
   kind: Schema.Literal("item"),
   notices: Schema.Array(Schema.String),
   numAttempts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  outcomes: Schema.Record(Schema.String, Value),
-  responses: Schema.Record(Schema.String, Value),
+  outcomes: Schema.Record(Schema.String, ValueSchema),
+  responses: Schema.Record(Schema.String, ValueSchema),
 });
 
 /**
