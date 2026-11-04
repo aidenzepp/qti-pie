@@ -31,7 +31,6 @@ export const Configuration = Schema.Struct({
   seed: Schema.optionalKey(Schema.Finite),
   showFeedback: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
   showSolution: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
-  trust: Schema.Literal("secure").pipe(Schema.withDecodingDefaultKey(Effect.succeed("secure"))),
   validateResponses: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
 });
 
@@ -59,7 +58,6 @@ const allowedValues: Readonly<Record<Field, string>> = {
   seed: "a finite number",
   showFeedback: "true or false",
   showSolution: "true or false",
-  trust: '"secure"',
   validateResponses: "true or false",
 };
 
