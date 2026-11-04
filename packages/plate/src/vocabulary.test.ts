@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Effect, Option } from "effect";
+import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import {
   baseTypes,
   cardinalities,
@@ -19,6 +20,13 @@ import {
 const assertDistinct = (list: readonly string[]): void => {
   assert.strictEqual(new Set(list).size, list.length, `duplicates in ${list.join(", ")}`);
 };
+
+/**
+ * The spaces inside the shorter URI the growth check reads, before it reads one with
+ * {@link growthFactor} times as many: a run a backtracking trim of the outer whitespace scans from
+ * each of its positions.
+ */
+const fewerSpaces = 4000;
 
 describe("templateName", () => {
   it("[I-9b] resolves all four spellings of each built-in to its name", () => {
@@ -61,6 +69,28 @@ describe("templateName", () => {
       assert.isTrue(Option.isNone(templateName(`${prefix}match_\ncorrect`)));
     }
   });
+
+  it.effect("[I-9b] reads 8 times the spaces inside a URI in under 32 times the time", () =>
+    Effect.gen(function* readsInLinearTime() {
+      const fewer = `a${" ".repeat(fewerSpaces)}b`;
+      const more = `a${" ".repeat(fewerSpaces * growthFactor)}b`;
+      assert.isTrue(Option.isNone(templateName(more)));
+
+      const growth = yield* growthRatio(
+        () => {
+          templateName(fewer);
+        },
+        () => {
+          templateName(more);
+        },
+      );
+      assert.isBelow(
+        growth,
+        growthLimit,
+        `8 times the spaces took ${growth.toFixed(1)} times as long`,
+      );
+    }),
+  );
 });
 
 describe("the closed value sets", () => {

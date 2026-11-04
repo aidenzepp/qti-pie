@@ -1,7 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Effect, Option } from "effect";
 import { attr, doc, el, entity, text } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceElement } from "#plate/document/source.ts";
+import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import { checkRules, wildcardContentHolders } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
 
@@ -1339,4 +1340,94 @@ describe("checkRules", () => {
       assert.deepStrictEqual([...wildcardContentHolders].toSorted(), holders);
     });
   });
+});
+
+/**
+ * The spaces between the two letters of the shorter identifier the growth check reads, before it
+ * reads one with {@link growthFactor} times as many.
+ */
+const fewerSpaces = 4000;
+
+/**
+ * The growth check and its control read identifiers of 32,000 spaces three times each. A quadratic
+ * read took several seconds of that, past vitest's default of 5 s, and a failing check should
+ * report its ratio, not a timeout.
+ */
+const growthTimeoutMs = 60_000;
+
+/**
+ * Construct an identifier of two letters with a run of spaces between them, the input on which a
+ * backtracking trim tries every position of the run and scans the rest of it from each.
+ *
+ * @param spaces The spaces between the letters.
+ * @returns The identifier.
+ */
+const spacedIdentifier = (spaces: number): string => `a${" ".repeat(spaces)}b`;
+
+/**
+ * Construct an item whose response declaration and Choice both name an identifier.
+ *
+ * @param identifier The identifier.
+ * @returns The item.
+ */
+const namingItem = (identifier: string) =>
+  item([response(identifier, "single", "identifier")], [choice(identifier)]);
+
+/**
+ * The outer-whitespace pattern the rules read identifiers with before `p1-g17`: its second branch
+ * matches at every position of an inner run of whitespace and fails at the letter after it, so a
+ * trim with it takes time quadratic in the run.
+ */
+const backtrackingTrim = /^[\t\n\r ]+|[\t\n\r ]+$/gu;
+
+describe("reading an identifier", () => {
+  it.effect(
+    "[I-1] reads 8 times the spaces inside an identifier in under 32 times the time",
+    () =>
+      Effect.gen(function* readsInLinearTime() {
+        const fewer = namingItem(spacedIdentifier(fewerSpaces));
+        const more = namingItem(spacedIdentifier(fewerSpaces * growthFactor));
+        assert.deepStrictEqual(judged(more), []);
+
+        const growth = yield* growthRatio(
+          () => {
+            checkRules(fewer);
+          },
+          () => {
+            checkRules(more);
+          },
+        );
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the spaces took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
+
+  it.effect(
+    "control: a backtracking trim of the same identifiers fails the growth check",
+    () =>
+      Effect.gen(function* quadraticControl() {
+        const fewer = spacedIdentifier(fewerSpaces);
+        const more = spacedIdentifier(fewerSpaces * growthFactor);
+        assert.strictEqual(fewer.replaceAll(backtrackingTrim, ""), fewer);
+
+        const growth = yield* growthRatio(
+          () => {
+            fewer.replaceAll(backtrackingTrim, "");
+          },
+          () => {
+            more.replaceAll(backtrackingTrim, "");
+          },
+        );
+        assert.isAtLeast(
+          growth,
+          growthLimit,
+          `8 times the spaces took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
 });

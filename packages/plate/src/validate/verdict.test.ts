@@ -853,7 +853,7 @@ interface CodeSpans {
  * Remove a line's code spans by CommonMark's rule (0.31.2, §6.1): a run of n backticks opens a
  * span that the next run of exactly n backticks closes, and a run that no later run closes is
  * literal text. A span's content loses one space at each end when it begins and ends with a space
- * and is not all spaces.
+ * and is not all spaces, where a space is U+0020 alone: a tab or any other whitespace is content.
  *
  * @param markdown One line of Markdown.
  * @returns The text outside the spans, and each span's content in order.
@@ -879,7 +879,7 @@ const codeSpans = (markdown: string): CodeSpans => {
   }
 
   const content = rest.slice(0, closer.index);
-  const padded = content.startsWith(" ") && content.endsWith(" ") && content.trim() !== "";
+  const padded = content.startsWith(" ") && content.endsWith(" ") && /[^ ]/u.test(content);
   const after = codeSpans(rest.slice(closer.index + fence.length));
 
   return {
@@ -915,6 +915,16 @@ describe("describeRefusal", () => {
     assert.notInclude(outside, "![");
     assert.notInclude(outside, "](");
     assert.include(spans, escapingValue);
+  });
+
+  it("keeps a value of spaces and other whitespace whole inside its code span", () => {
+    for (const lexical of [" \t ", "  \t\t  ", " \u00A0 ", " \t", "\t ", "\t", "   "]) {
+      const { spans } = codeSpans(
+        describeRefusal(refusalOf("value-type", { baseType: "integer", lexical })),
+      );
+
+      assert.include(spans, lexical, JSON.stringify(lexical));
+    }
   });
 
   it("writes a value holding a blank line on the sentence's one line", () => {

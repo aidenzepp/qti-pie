@@ -10,6 +10,7 @@
  * @module
  */
 import { Array as Arr, Option } from "effect";
+import { trimXmlSpace } from "#plate/model/values.ts";
 
 /**
  * The eleven QTI base types, as the `base-type` attribute spells them.
@@ -344,11 +345,6 @@ export const templateNames = ["match_correct", "map_response", "map_response_poi
 export type TemplateName = (typeof templateNames)[number];
 
 /**
- * XML whitespace at either end of a value: space, tab, carriage return and line feed.
- */
-const outerXmlWhitespace = /^[\t\n\r ]+|[\t\n\r ]+$/gu;
-
-/**
  * A run of XML whitespace.
  */
 const xmlWhitespaceRun = /[\t\n\r ]+/gu;
@@ -366,7 +362,7 @@ const xmlWhitespaceRun = /[\t\n\r ]+/gu;
  *   by it, with or without `.xml`; none for any other URI, the `CC2_*` templates included.
  */
 export const templateName = (uri: string): Option.Option<TemplateName> => {
-  const collapsed = uri.replaceAll(outerXmlWhitespace, "").replaceAll(xmlWhitespaceRun, " ");
+  const collapsed = trimXmlSpace(uri).replaceAll(xmlWhitespaceRun, " ");
 
   return Arr.findFirst(templatePrefixes, (prefix) => collapsed.startsWith(prefix)).pipe(
     Option.map((prefix) => collapsed.slice(prefix.length)),
