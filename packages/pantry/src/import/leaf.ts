@@ -3,7 +3,7 @@
  * content of a leaf, a leaf's content under its whitespace class, and the rows of the leaves of a
  * `qmd:qtiMetadata`, whether the record sits in a manifest or in an external file.
  */
-import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
+import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { closedOf, collapse, replace, Rows } from "#pantry/import/tree.ts";
@@ -87,7 +87,7 @@ export const qmdLeafRows = Effect.fn("import.qmdLeafRows")(function* qmdLeafRows
   rows: Rows,
   nodes: NodeIndex,
   qmd: Element,
-  qtiMetadata: string,
+  qtiMetadata: Uuid,
 ): Effect.fn.Return<Rows, ImportRefused> {
   let built = rows;
   const add = <R extends AnyRelation>(relation: R, facts: readonly Fact<R>[]): void => {
