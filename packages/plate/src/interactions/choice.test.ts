@@ -370,6 +370,32 @@ describe("renderChoice", () => {
   );
 
   it.effect(
+    "[Q-2] writes no aria-labelledby for an authored one that names no id, and falls back as with none",
+    () =>
+      Effect.gen(function* emptyAriaLabelledby() {
+        const blank = Option.some(" \t\n ");
+        const unnamed = yield* render(
+          payloadOf({ ...colours, ariaLabelledby: blank, prompt: Option.none() }),
+        );
+
+        assert.isUndefined(unnamed.attrs["aria-labelledby"]);
+        assert.isUndefined(unnamed.attrs["aria-label"]);
+
+        const labelled = yield* render(
+          payloadOf({
+            ...colours,
+            ariaLabel: Option.some("Pick a city"),
+            ariaLabelledby: blank,
+            prompt: Option.none(),
+          }),
+        );
+
+        assert.isUndefined(labelled.attrs["aria-labelledby"]);
+        assert.strictEqual(labelled.attrs["aria-label"], "Pick a city");
+      }),
+  );
+
+  it.effect(
     "[Q-2] names a Choice by its Prompt, not the author's attributes, when it has one",
     () =>
       Effect.gen(function* promptWins() {

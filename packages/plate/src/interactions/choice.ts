@@ -109,8 +109,8 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
  *   order of precedence: with a Prompt, the Prompt names it (a `legend` natively, or
  *   `aria-labelledby` → the Prompt's id under the `labelledby` markup) and the author's
  *   `aria-label` and `aria-labelledby` are not written; with none, the author's `aria-label`, and
- *   `aria-labelledby` with each id scoped by the instance; with neither, the group stays unnamed.
- *   It carries no `role`: a native `fieldset` is the group.
+ *   `aria-labelledby` with each id scoped by the instance, written only when it names an id; with
+ *   neither, the group stays unnamed. It carries no `role`: a native `fieldset` is the group.
  * - Prompt: the marker, and its id under the `labelledby` markup; a `legend` names its group natively
  *   and needs none.
  * - Control: a radio when one choice can be posted (`max-choices` 1, or a single response), else a

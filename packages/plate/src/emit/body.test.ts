@@ -448,6 +448,22 @@ describe("emitBody", () => {
     }),
   );
 
+  it.effect("[I-8] an IDREF attribute that names no id is not written", () =>
+    Effect.gen(function* emptyReferences() {
+      const nodes = yield* emit([
+        el("div", { "aria-describedby": " \t ", "aria-labelledby": "" }),
+        el("table", {}, [
+          el("tbody", {}, [el("tr", {}, [el("td", { headers: "  \n " }, [txt("1")])])]),
+        ]),
+      ]);
+      const [owner] = elementsIn(nodes);
+      const cell = elementsIn(nodes).find((element) => element.tag === "td");
+
+      assert.deepStrictEqual(owner?.attrs, {});
+      assert.doesNotHaveAnyKeys(cell?.attrs ?? {}, ["headers"]);
+    }),
+  );
+
   it.effect("[I-8] an authored id spelled like a Control's id stays distinct from it", () =>
     Effect.gen(function* controlId() {
       const nodes = yield* emit([el("p", { id: "RESPONSE-control-0" }, [txt("Pick")]), choice]);
