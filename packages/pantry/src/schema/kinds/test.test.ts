@@ -95,15 +95,18 @@ const declared: readonly string[] = [
   "select",
   "show-feedback",
   "show-solution",
+  "source-identifier",
   "submission-mode",
+  "target",
+  "target-identifier",
   "validate-responses",
   "visible",
   "with-replacement",
 ];
 
 /**
- * The handles whose heading slice has not filled their registry row: the 12 the later headings
- * fill. p5-18 removes `qti-pre-condition`, `qti-branch-rule`, `qti-variable-mapping`,
+ * The handles whose heading slice has not filled their registry row: the 7 the later headings
+ * fill. p5-18 removed `qti-pre-condition`, `qti-branch-rule`, `qti-variable-mapping`,
  * `qti-weight` and `qti-template-default`; p5-19 the rest, and deletes the list with its branch.
  */
 const awaiting: ReadonlySet<string> = new Set(
@@ -124,6 +127,11 @@ const awaiting: ReadonlySet<string> = new Set(
         "qti-metadata-ref",
         "qti-item-session-control",
         "qti-time-limits",
+        "qti-pre-condition",
+        "qti-branch-rule",
+        "qti-variable-mapping",
+        "qti-weight",
+        "qti-template-default",
       ].includes(handle),
   ),
 );

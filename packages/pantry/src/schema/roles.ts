@@ -155,6 +155,8 @@ export const Author = role(
     BlockquoteCite: Qti.relations.BlockquoteCite,
     Br: Qti.relations.Br,
     BranchRule: Qti.relations.BranchRule,
+    BranchRuleExit: Qti.relations.BranchRuleExit,
+    BranchRuleTarget: Qti.relations.BranchRuleTarget,
     BuiltInRef: Qti.relations.BuiltInRef,
     Caption: Qti.relations.Caption,
     CatalogInfo: Qti.relations.CatalogInfo,
