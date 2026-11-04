@@ -19,7 +19,7 @@ import type {
   SourceElement,
   Visit,
 } from "#plate/document/source.ts";
-import { isModelled, parseElementText, parseLexical } from "#plate/model/values.ts";
+import { isModelled, parseElementText, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
 import type { InvalidValue, ModelledBaseType } from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
@@ -71,12 +71,6 @@ const requirements = {
 } as const satisfies Record<InteractionName, Requirement>;
 
 /**
- * The XML whitespace at either end of an attribute value: space, tab, carriage return and line
- * feed.
- */
-const outerWhitespace = /^[\t\n\r ]+|[\t\n\r ]+$/gu;
-
-/**
  * Read an identifier attribute's value as its XSD type reads it.
  *
  * Every identifier these rules compare is an `xs:NCName` or an `xs:ID` or `xs:IDREF` derived from
@@ -88,8 +82,7 @@ const outerWhitespace = /^[\t\n\r ]+|[\t\n\r ]+$/gu;
  * @param attribute The identifier attribute.
  * @returns The identifier it names.
  */
-const identifierOf = (attribute: SourceAttribute): string =>
-  attribute.value.replaceAll(outerWhitespace, "");
+const identifierOf = (attribute: SourceAttribute): string => trimXmlSpace(attribute.value);
 
 /**
  * Find an element's attribute in no namespace by its local name.
@@ -803,7 +796,7 @@ const attributeValueType = (
     }
 
     const written = attribute.value.value;
-    const lexical = baseType.value === "string" ? written : written.replaceAll(outerWhitespace, "");
+    const lexical = baseType.value === "string" ? written : trimXmlSpace(written);
 
     return valueRefusals(
       source,

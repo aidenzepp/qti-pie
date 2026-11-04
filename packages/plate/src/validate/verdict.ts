@@ -662,8 +662,9 @@ export const acceptForTest = (item: Item): Accepted =>
  * - The fence is one backtick longer than the longest run of backticks in the text, so no run inside
  *   matches it.
  * - One space pads each side when the text begins or ends with a backtick, or begins and ends with a
- *   space without being all spaces. A renderer removes one space from each side of such a span, so
- *   the text it shows is the text given.
+ *   space without being all spaces, where a space is U+0020 alone: a tab or any other whitespace is
+ *   content. A renderer removes one space from each side of such a span and of no other, so the
+ *   text it shows is the text given.
  * - Each line ending is written as a space, which is what a renderer shows for one inside a span. A
  *   blank line would end the paragraph and leave the span open, with the text after it live.
  * - Empty text, which no span holds, is written as a span of one space.
@@ -688,7 +689,7 @@ const code = (text: string): string => {
   const padded =
     line.startsWith("`") ||
     line.endsWith("`") ||
-    (line.startsWith(" ") && line.endsWith(" ") && line.trim() !== "");
+    (line.startsWith(" ") && line.endsWith(" ") && /[^ ]/u.test(line));
   const inner = padded ? ` ${line} ` : line;
 
   return `${fence}${inner}${fence}`;
