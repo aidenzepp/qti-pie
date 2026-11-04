@@ -2,6 +2,8 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
 import { ConfigProvider, Effect } from "effect";
+import { defaultTreeAdapter, parse } from "parse5";
+import type { DefaultTreeAdapterTypes } from "parse5";
 import { createHandler, documents } from "#plate/dev/page.ts";
 import type { Handler } from "#plate/dev/page.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
@@ -277,6 +279,170 @@ const instanceOf = (html: string): string =>
   new URL(actionOf(html), origin).searchParams.get("instance") ?? "";
 
 /**
+ * The stylesheets every page links in its head, in order: plate's, the playground's, the theme's.
+ */
+const sheetOrder = ["/styles.css", "/playground.css", "/theme.css"];
+
+/**
+ * An element as parse5's document parser gives it.
+ */
+type Parsed = DefaultTreeAdapterTypes.Element;
+
+/**
+ * Give the element children of a parse5 parent.
+ *
+ * @param parent The parent.
+ * @returns Its children that are elements, in order.
+ */
+const childElements = (parent: DefaultTreeAdapterTypes.ParentNode): readonly Parsed[] =>
+  parent.childNodes.filter((node): node is Parsed => defaultTreeAdapter.isElementNode(node));
+
+/**
+ * Read one attribute of a parse5 element.
+ *
+ * @param element The element.
+ * @param name The attribute's name.
+ * @returns Its value, or `undefined` when the element has none.
+ */
+const attributeOf = (element: Parsed, name: string): string | undefined =>
+  element.attrs.find((attribute) => attribute.name === name)?.value;
+
+/**
+ * Read a page as a browser reads a document, which keeps the `html` and `head` elements that
+ * `parseHtml`'s fragment reading drops.
+ *
+ * @param html The page.
+ * @returns Its `html` element; the test fails when there is none.
+ */
+const documentRoot = (html: string): Parsed => {
+  const [root] = childElements(parse(html));
+  assert.isDefined(root);
+
+  return root;
+};
+
+/**
+ * Give the targets of the stylesheets a page's head links, in order.
+ *
+ * @param html The page.
+ * @returns Each `link rel="stylesheet"`'s `href`.
+ */
+const linkedSheets = (html: string): readonly string[] => {
+  const head = childElements(documentRoot(html)).find((element) => element.tagName === "head");
+  assert.isDefined(head);
+
+  return childElements(head).flatMap((element) =>
+    element.tagName === "link" && attributeOf(element, "rel") === "stylesheet"
+      ? [attributeOf(element, "href") ?? ""]
+      : [],
+  );
+};
+
+/**
+ * Find a page's theme box: the form that posts to `/theme`.
+ *
+ * @param html The page.
+ * @returns The box; the test fails when there is none.
+ */
+const themeBoxOf = (html: string): Element =>
+  find(html, (element) => element.tag === "form" && element.attrs["action"] === "/theme");
+
+/**
+ * Find the control of a form that a field name names.
+ *
+ * @param form The form.
+ * @param name The field's name.
+ * @returns The first control with that name; the test fails when there is none.
+ */
+const fieldOf = (form: Element, name: string): Element => {
+  const found = elementsOf(form.children).find((element) => element.attrs["name"] === name);
+  assert.isDefined(found);
+
+  return found;
+};
+
+/**
+ * Assert that a control of a form has a label in that form, through its `id`.
+ *
+ * @param form The form.
+ * @param control The control.
+ */
+const assertLabelled = (form: Element, control: Element): void => {
+  const { id } = control.attrs;
+  assert.isString(id);
+  assert.isDefined(
+    elementsOf(form.children).find(
+      (element) => element.tag === "label" && element.attrs["for"] === id,
+    ),
+  );
+};
+
+/**
+ * Assert that a page ends its `main` with the theme box, outside every other form: a form that
+ * posts to `/theme` and holds a labelled `theme` textarea, a labelled `dark` checkbox, a hidden
+ * `return` field and a submit button.
+ *
+ * @param html The page.
+ * @returns The box.
+ */
+const assertThemeBox = (html: string): Element => {
+  const elements = elementsOf(parseHtml(html));
+  const main = elements.find((element) => element.tag === "main");
+  const box = main?.children.findLast((child): child is Element => child.kind === "element");
+  assert.isDefined(box);
+
+  const textarea = fieldOf(box, "theme");
+  const dark = fieldOf(box, "dark");
+
+  assert.strictEqual(box.tag, "form");
+  assert.strictEqual(box.attrs["action"], "/theme");
+  assert.strictEqual(box.attrs["method"], "post");
+  for (const form of elements.filter((element) => element.tag === "form" && element !== box)) {
+    assert.notInclude(elementsOf(form.children), box);
+  }
+  assert.strictEqual(textarea.tag, "textarea");
+  assertLabelled(box, textarea);
+  assert.strictEqual(dark.tag, "input");
+  assert.strictEqual(dark.attrs["type"], "checkbox");
+  assertLabelled(box, dark);
+  assert.strictEqual(fieldOf(box, "return").attrs["type"], "hidden");
+  assert.isDefined(
+    elementsOf(box.children).find(
+      (element) => element.tag === "button" && element.attrs["type"] === "submit",
+    ),
+  );
+
+  return box;
+};
+
+/**
+ * Give the classes of a page's `html` element.
+ *
+ * @param html The page.
+ * @returns Its `class` value split on whitespace, empty when it has none.
+ */
+const htmlClasses = (html: string): readonly string[] =>
+  (attributeOf(documentRoot(html), "class") ?? "").split(/\s+/u).filter((name) => name !== "");
+
+/**
+ * Report whether a page's theme box has its Dark checkbox checked.
+ *
+ * @param html The page.
+ * @returns Whether the `dark` control carries `checked`.
+ */
+const darkChecked = (html: string): boolean =>
+  Object.hasOwn(fieldOf(themeBoxOf(html), "dark").attrs, "checked");
+
+/**
+ * Give the path and query a page's theme box returns to.
+ *
+ * @param html The page.
+ * @returns The `return` field's value.
+ */
+const returnOf = (html: string): string | true | undefined =>
+  fieldOf(themeBoxOf(html), "return").attrs["value"];
+
+/**
  * The state a page after a submit names in its title.
  */
 type State = Extract<MessageKey, "notAccepted" | "responseRecorded" | "scored">;
@@ -347,16 +513,20 @@ describe("dev/page.ts", () => {
     }),
   );
 
-  it.effect("CAT/test.xml shows its refusal and no form", () =>
+  it.effect("CAT/test.xml shows its refusal and no item form", () =>
     Effect.gen(function* cat() {
       const { html, response } = yield* get(createHandler(), itemTarget(paths.cat));
-      const rules = elementsOf(parseHtml(html)).flatMap((element) =>
+      const elements = elementsOf(parseHtml(html));
+      const rules = elements.flatMap((element) =>
         element.attrs["data-rule"] === undefined ? [] : [element.attrs["data-rule"]],
+      );
+      const actions = elements.flatMap((element) =>
+        element.tag === "form" ? [element.attrs["action"]] : [],
       );
 
       assert.strictEqual(response.status, 200);
       assert.deepStrictEqual(rules, ["reader-refused"]);
-      assert.notInclude(html, "<form");
+      assert.isTrue(actions.every((action) => action === "/theme"));
     }),
   );
 
@@ -703,6 +873,94 @@ describe("dev/page.ts", () => {
         assert.strictEqual(response.status, 303);
         assert.strictEqual(response.headers.get("location"), "/");
       }
+    }),
+  );
+
+  it.effect(
+    "the listing and the BG007 item page link the three sheets in order and end main with the theme box, outside the item form",
+    () =>
+      Effect.gen(function* themeBox() {
+        const handle = createHandler();
+        const listed = yield* get(handle, "/");
+        const opened = yield* get(handle, itemTarget(paths.bg007));
+
+        for (const page of [listed, opened]) {
+          assert.deepStrictEqual(linkedSheets(page.html), sheetOrder);
+          assertThemeBox(page.html);
+        }
+        assert.match(actionOf(opened.html), /^\/item\?/u);
+      }),
+  );
+
+  it.effect(
+    "the 400 page of a refused theme links the three sheets and carries the box, which returns where the post would have",
+    () =>
+      Effect.gen(function* refusedBox() {
+        const target = itemTarget(paths.bg007);
+        const answered = yield* postTheme(createHandler(), [
+          ["theme", "body { color: red }"],
+          ["return", target],
+        ]);
+
+        assert.strictEqual(answered.response.status, 400);
+        assert.deepStrictEqual(linkedSheets(answered.html), sheetOrder);
+        assert.strictEqual(fieldOf(assertThemeBox(answered.html), "return").attrs["value"], target);
+      }),
+  );
+
+  it.effect(
+    "after POST /theme with dark=on the item page's html has class dark and the box's Dark is checked; with the flag off neither",
+    () =>
+      Effect.gen(function* dark() {
+        const handle = createHandler();
+        const before = yield* get(handle, itemTarget(paths.bg007));
+        yield* postTheme(handle, [
+          ["theme", acceptedTheme],
+          ["dark", "on"],
+        ]);
+
+        const on = yield* get(handle, itemTarget(paths.bg007));
+        yield* postTheme(handle, [["theme", acceptedTheme]]);
+
+        const off = yield* get(handle, itemTarget(paths.bg007));
+        assert.notInclude(htmlClasses(before.html), "dark");
+        assert.include(htmlClasses(on.html), "dark");
+        assert.isTrue(darkChecked(on.html));
+        assert.notInclude(htmlClasses(off.html), "dark");
+        assert.isFalse(darkChecked(off.html));
+      }),
+  );
+
+  it.effect("the box's return field holds the page's own path and query", () =>
+    Effect.gen(function* returnField() {
+      const handle = createHandler();
+      const listed = yield* get(handle, "/");
+      const opened = yield* get(handle, itemTarget(paths.bg007));
+      const action = actionOf(opened.html);
+      const answered = yield* post(handle, action, [
+        [entryName(instanceOf(opened.html), "RESPONSE"), "true"],
+      ]);
+      assert.strictEqual(returnOf(listed.html), "/");
+      assert.strictEqual(returnOf(opened.html), itemTarget(paths.bg007));
+      assert.strictEqual(returnOf(answered.html), action);
+    }),
+  );
+
+  it.effect("the box's textarea shows the stored theme's text, escaped", () =>
+    Effect.gen(function* escapedTheme() {
+      const handle = createHandler();
+      const stored = ':root {\n  --font-sans: "A&B", serif;\n}\n';
+      const posted = yield* postTheme(handle, [["theme", stored]]);
+      const listed = yield* get(handle, "/");
+      const textarea = fieldOf(themeBoxOf(listed.html), "theme");
+
+      assert.strictEqual(posted.response.status, 303);
+      assert.include(listed.html, "A&amp;B");
+      assert.notInclude(listed.html, "A&B");
+      assert.strictEqual(
+        textarea.children.map((child) => (child.kind === "text" ? child.text : "")).join(""),
+        stored,
+      );
     }),
   );
 });
