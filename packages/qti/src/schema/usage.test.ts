@@ -2,11 +2,13 @@ import { schema } from "@bjornpagen/grizzle";
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as ud from "#qti/schema/kinds/ud.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import * as usage from "#qti/schema/usage.ts";
 import * as value from "#qti/schema/value.ts";
@@ -123,7 +125,10 @@ describe("usage", () => {
   });
 
   it("types the statistic context as a URI and its date as a usage date", () => {
-    assert.strictEqual(usage.relations.Statistic.fields.context.pattern.source, patterns.anyUri);
+    assert.strictEqual(
+      usage.relations.Statistic.fields.context.base.pattern.source,
+      patterns.anyUri,
+    );
     assert.strictEqual(
       usage.relations.StatisticLastUpdated.fields.value.pattern.source,
       patterns.usageDate,
@@ -217,7 +222,7 @@ describe("usage", () => {
   });
 
   it("refuses a padded or trailing-junk float in the typed float arm and admits a bare one", () => {
-    const { pattern } = usage.relations.UsageTypedValueFloat.fields.value;
+    const { pattern } = usage.relations.UsageTypedValueFloat.fields.value.base;
     const float = new RegExp(pattern.source, pattern.flags);
     assert.isTrue(float.test("0.87"));
     assert.isFalse(float.test("0.87x"));
@@ -250,4 +255,67 @@ describe("usage", () => {
       );
     }
   });
+
+  it("holds caseSensitive to the XsBoolean roster", () => {
+    assert.strictEqual(
+      usage.relations.UsageMapEntryCaseSensitive.fields.value.roster,
+      rosters.XsBoolean,
+    );
+  });
+});
+
+describe("contracts (usage)", () => {
+  const names: readonly (readonly [
+    string,
+    { readonly name: string },
+    { readonly name: string },
+  ])[] = [
+    ["Statistic.name", usage.Statistic.fields.name, contracts.StatisticName],
+    ["Statistic.context", usage.Statistic.fields.context, contracts.StatisticContextUri],
+    [
+      "TargetObjectPartIdentifier.value",
+      usage.TargetObjectPartIdentifier.fields.value,
+      contracts.UsagePartIdentifier,
+    ],
+    [
+      "UsageValueFieldIdentifier.value",
+      usage.UsageValueFieldIdentifier.fields.value,
+      contracts.UsageFieldIdentifier,
+    ],
+    ["StatisticGlossary.value", usage.StatisticGlossary.fields.value, contracts.GlossaryUri],
+    ["UsageDataGlossary.value", usage.UsageDataGlossary.fields.value, contracts.GlossaryUri],
+    ["StatisticStdError.value", usage.StatisticStdError.fields.value, contracts.StatisticMeasure],
+    [
+      "StatisticStdDeviation.value",
+      usage.StatisticStdDeviation.fields.value,
+      contracts.StatisticMeasure,
+    ],
+    ["StatisticCaseCount.value", usage.StatisticCaseCount.fields.value, contracts.UsageCaseCount],
+    [
+      "UsageMapping.defaultValue",
+      usage.UsageMapping.fields.defaultValue,
+      contracts.UsageMappingScore,
+    ],
+    [
+      "UsageMappingLowerBound.value",
+      usage.UsageMappingLowerBound.fields.value,
+      contracts.UsageMappingScore,
+    ],
+    [
+      "UsageMappingUpperBound.value",
+      usage.UsageMappingUpperBound.fields.value,
+      contracts.UsageMappingScore,
+    ],
+    [
+      "UsageMapEntry.mappedValue",
+      usage.UsageMapEntry.fields.mappedValue,
+      contracts.UsageMappingScore,
+    ],
+    ["UsageValue.collapsed", usage.UsageValue.fields.collapsed, contracts.UsageValueToken],
+  ];
+  for (const [column, actual, expected] of names) {
+    it(`types ${column} ${expected.name}`, () => {
+      assert.strictEqual(actual.name, expected.name);
+    });
+  }
 });

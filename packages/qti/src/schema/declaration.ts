@@ -23,8 +23,15 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
+import type { FieldBase } from "@bjornpagen/grizzle";
+import { ExternalScored, XsBoolean } from "#qti/schema/content/rosters.ts";
 import * as document from "#qti/schema/document.ts";
 import * as node from "#qti/schema/node.ts";
+import {
+  LongInterpretationUri,
+  OutcomeScaleValue,
+  VariableReference,
+} from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
@@ -122,8 +129,8 @@ export const TemplateDeclarationArm = relation(
   "TemplateDeclarationArm",
   {
     id: uuid,
-    mathVariable: str.regex(patterns.xsBoolean),
-    paramVariable: str.regex(patterns.xsBoolean),
+    mathVariable: closedId(XsBoolean),
+    paramVariable: closedId(XsBoolean),
   },
   ["id"],
 );
@@ -152,16 +159,13 @@ export const ContextDeclarationArm = relation(
 /**
  * An optional-value relation of an outcome declaration: one row where the attribute is written.
  */
-const outcomeValue = <Name extends string>(name: Name, value: ReturnType<typeof str.regex>) =>
+const outcomeValue = <Name extends string, Value extends FieldBase>(name: Name, value: Value) =>
   relation(name, { declaration: uuid, value }, ["declaration"]);
 
 /**
  * The `view` attribute: a space-separated list of views.
  */
-export const DeclarationView = outcomeValue(
-  "DeclarationView",
-  str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags),
-);
+export const DeclarationView = outcomeValue("DeclarationView", str.regex(patterns.viewList));
 
 /**
  * The `interpretation` attribute, an `xs:string`.
@@ -176,7 +180,7 @@ export const DeclarationInterpretation = outcomeValue(
  */
 export const DeclarationLongInterpretation = outcomeValue(
   "DeclarationLongInterpretation",
-  str.regex(patterns.anyUri),
+  LongInterpretationUri,
 );
 
 /**
@@ -190,25 +194,19 @@ export const DeclarationNormalMaximum = outcomeValue(
 /**
  * The `normal-minimum` attribute.
  */
-export const DeclarationNormalMinimum = outcomeValue(
-  "DeclarationNormalMinimum",
-  str.regex(patterns.xsDouble),
-);
+export const DeclarationNormalMinimum = outcomeValue("DeclarationNormalMinimum", OutcomeScaleValue);
 
 /**
  * The `mastery-value` attribute.
  */
-export const DeclarationMasteryValue = outcomeValue(
-  "DeclarationMasteryValue",
-  str.regex(patterns.xsDouble),
-);
+export const DeclarationMasteryValue = outcomeValue("DeclarationMasteryValue", OutcomeScaleValue);
 
 /**
  * The `external-scored` attribute: `human` or `externalMachine`.
  */
 export const DeclarationExternalScored = outcomeValue(
   "DeclarationExternalScored",
-  str.regex(patterns.externalScored),
+  closedId(ExternalScored),
 );
 
 /**
@@ -216,7 +214,7 @@ export const DeclarationExternalScored = outcomeValue(
  */
 export const DeclarationVariableIdentifierRef = outcomeValue(
   "DeclarationVariableIdentifierRef",
-  ncName,
+  VariableReference,
 );
 
 /**

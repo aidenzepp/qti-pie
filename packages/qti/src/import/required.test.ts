@@ -3,7 +3,7 @@ import { Effect, Option } from "effect";
 import { ruleOfError } from "#qti/import/refusal.ts";
 import { requiredAttribute } from "#qti/import/required.ts";
 import { ItemRefusal } from "#qti/import/tree.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 const element = Effect.gen(function* oneElement() {
   const document = yield* readXml(new TextEncoder().encode(`<a href="x.html">t</a>`));

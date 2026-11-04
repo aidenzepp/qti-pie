@@ -160,6 +160,7 @@ const roundTripped = [
   "windows-1252",
   "padded-attributes",
   "padded-text",
+  "padded-identifier-value",
   "comment-in-element",
 ] as const satisfies readonly FixtureName[];
 

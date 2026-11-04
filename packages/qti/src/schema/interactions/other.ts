@@ -5,12 +5,11 @@
  * of the five is the parent of a node of this module, so no relation here is the child of one: a
  * prompt, a media object or a drawing's picture belongs to its own module.
  *
- * A media interaction's `autostart` is required, and `loop` is `false`, `max-plays` and
- * `min-plays` are 0 where the source omits them. The plays are typed columns, 0 where omitted,
- * beside the lexical optionals `MediaMaxPlays` and `MediaMinPlays`, which hold the text as
- * written. A maximum of 0 means no limit, so the minimum is at most the maximum unless the maximum
- * is 0: the shipped schematron's rule, which also rejects `max-plays="0"` with a positive
- * `min-plays`, is wrong about that and is not reproduced.
+ * A media interaction's `autostart` is required, and `loop` is `false`, `max-plays` and `min-plays`
+ * are 0 where the source omits them. The plays are typed columns, 0 where omitted; `MediaMaxPlays`
+ * and `MediaMinPlays` mark the attribute the source wrote. A maximum of 0 means no limit, so the
+ * minimum is at most the maximum unless the maximum is 0: the shipped schematron's rule, which also
+ * rejects `max-plays="0"` with a positive `min-plays`, is wrong about that and is not reproduced.
  *
  * A slider's `step` has no column: the XSD's default of 1.0 is wrong for a slider bound to a float,
  * which is continuous where the source does not declare a step, so `SliderStep` holds it when the
@@ -27,19 +26,11 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
+import { Orientation, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { InteractionBinding } from "#qti/schema/interaction.ts";
 import { Node, RootKind } from "#qti/schema/node.ts";
+import { MediaRectCoords } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-
-/**
- * An `xs:boolean` attribute's lexical form.
- */
-const xsBoolean = str.regex(patterns.xsBoolean);
-
-/**
- * An `xs:nonNegativeInteger` attribute's lexical form.
- */
-const xsNonNegativeInteger = str.regex(patterns.xsNonNegativeInteger);
 
 /**
  * An `xs:normalizedString` attribute's value, as the typed column holds it after replacement.
@@ -62,16 +53,6 @@ const nonNegativeDouble = str.regex(patterns.nonNegativeDouble);
 const positiveDouble = str.regex(patterns.positiveDouble);
 
 /**
- * An `orientation`: `vertical` or `horizontal`.
- */
-const orientation = str.regex(patterns.orientation);
-
-/**
- * The coordinates of a rectangle: four `CoordsDType` tokens.
- */
-const coordsRect = str.regex(patterns.coordsRect);
-
-/**
  * Media types separated by spaces, or the empty list.
  */
 const mimeTypeList = str.regex(patterns.mimeTypeList);
@@ -83,9 +64,9 @@ const mimeTypeList = str.regex(patterns.mimeTypeList);
 export const MediaInteraction = relation(
   "MediaInteraction",
   {
-    autostart: xsBoolean,
+    autostart: closedId(XsBoolean),
     id: uuid,
-    loop: xsBoolean,
+    loop: closedId(XsBoolean),
     maxPlaysN: pg.bigint,
     minPlaysN: pg.bigint,
     responseIdentifier: ncName,
@@ -122,7 +103,7 @@ export const SliderInteraction = relation(
     lowerBound: nonNegativeDouble,
     responseIdentifier: ncName,
     rootKind: closedId(RootKind),
-    stepLabel: xsBoolean,
+    stepLabel: closedId(XsBoolean),
     upperBound: nonNegativeDouble,
   },
   ["id"],
@@ -143,28 +124,24 @@ export const EndAttemptInteraction = relation(
 );
 
 /**
- * A media interaction's `max-plays` as written, when it has one.
+ * The source wrote `max-plays` on this media interaction; `maxPlaysN` holds its value. The marker
+ * alone says whether the source wrote it.
  */
-export const MediaMaxPlays = relation(
-  "MediaMaxPlays",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
+export const MediaMaxPlays = relation("MediaMaxPlays", { node: uuid }, ["node"]);
 
 /**
- * A media interaction's `min-plays` as written, when it has one.
+ * The source wrote `min-plays` on this media interaction; `minPlaysN` holds its value. The marker
+ * alone says whether the source wrote it.
  */
-export const MediaMinPlays = relation(
-  "MediaMinPlays",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
+export const MediaMinPlays = relation("MediaMinPlays", { node: uuid }, ["node"]);
 
 /**
  * A media interaction's `coordinates`, when it has them: always a rectangle, so the shape is not
  * recorded and the value is not a `Coords` row.
  */
-export const MediaCoords = relation("MediaCoords", { node: uuid, value: coordsRect }, ["node"]);
+export const MediaCoords = relation("MediaCoords", { node: uuid, value: MediaRectCoords }, [
+  "node",
+]);
 
 /**
  * An upload interaction's `type`, when it has one. The empty list is a value the XSD admits.
@@ -180,21 +157,25 @@ export const SliderStep = relation("SliderStep", { node: uuid, value: positiveDo
 /**
  * A slider interaction's `orientation`, when it has one.
  */
-export const SliderOrientation = relation("SliderOrientation", { node: uuid, value: orientation }, [
-  "node",
-]);
+export const SliderOrientation = relation(
+  "SliderOrientation",
+  { node: uuid, value: closedId(Orientation) },
+  ["node"],
+);
 
 /**
  * A slider interaction's `reverse`, when it has one.
  */
-export const SliderReverse = relation("SliderReverse", { node: uuid, value: xsBoolean }, ["node"]);
+export const SliderReverse = relation("SliderReverse", { node: uuid, value: closedId(XsBoolean) }, [
+  "node",
+]);
 
 /**
  * An end-attempt interaction's `count-attempt`, when it has one: the XSD gives it no default.
  */
 export const EndAttemptCountAttempt = relation(
   "EndAttemptCountAttempt",
-  { node: uuid, value: xsBoolean },
+  { node: uuid, value: closedId(XsBoolean) },
   ["node"],
 );
 

@@ -1,6 +1,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as feedback from "#qti/schema/feedback.ts";
@@ -193,6 +194,60 @@ describe("feedback", () => {
     assert.deepStrictEqual(
       checks.map((rule) => [rule.name, rule.relation]),
       [["FeedbackOutcomeRefType", FeedbackOutcomeRef]],
+    );
+  });
+});
+
+describe("contracts (feedback)", () => {
+  it("types FeedbackBlock.outcomeIdentifier VariableReference", () => {
+    assert.strictEqual(
+      feedback.FeedbackBlock.fields.outcomeIdentifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types TemplateFeedbackBlock.outcomeIdentifier VariableReference", () => {
+    assert.strictEqual(
+      feedback.TemplateFeedbackBlock.fields.outcomeIdentifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types FeedbackInline.outcomeIdentifier VariableReference", () => {
+    assert.strictEqual(
+      feedback.FeedbackInline.fields.outcomeIdentifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+  it("types ModalFeedback.outcomeIdentifier VariableReference", () => {
+    assert.strictEqual(
+      feedback.ModalFeedback.fields.outcomeIdentifier.name,
+      contracts.VariableReference.name,
+    );
+  });
+});
+
+describe("contracts (feedback)", () => {
+  it("types FeedbackBlock.identifier ShowHideIdentifier", () => {
+    assert.strictEqual(
+      feedback.FeedbackBlock.fields.identifier.name,
+      contracts.ShowHideIdentifier.name,
+    );
+  });
+  it("types TemplateFeedbackBlock.identifier ShowHideIdentifier", () => {
+    assert.strictEqual(
+      feedback.TemplateFeedbackBlock.fields.identifier.name,
+      contracts.ShowHideIdentifier.name,
+    );
+  });
+  it("types FeedbackInline.identifier ShowHideIdentifier", () => {
+    assert.strictEqual(
+      feedback.FeedbackInline.fields.identifier.name,
+      contracts.ShowHideIdentifier.name,
+    );
+  });
+  it("types ModalFeedback.identifier ShowHideIdentifier", () => {
+    assert.strictEqual(
+      feedback.ModalFeedback.fields.identifier.name,
+      contracts.ShowHideIdentifier.name,
     );
   });
 });

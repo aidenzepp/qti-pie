@@ -2,6 +2,7 @@
 import { closedId, pg, relation, schema, uuid } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as choices from "#qti/schema/choices.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
@@ -108,9 +109,9 @@ describe("choices and shapes", () => {
 
   it("refuses 1,2,3 and admits 1,2,3,4 under CoordsRect", () => {
     const { value } = shapes.relations.CoordsRect.fields;
-    assert.strictEqual(value.pattern.source, patterns.coordsRect);
-    assert.isFalse(admits(value.pattern.source, "1,2,3"));
-    assert.isTrue(admits(value.pattern.source, "1,2,3,4"));
+    assert.strictEqual(value.base.pattern.source, patterns.coordsRect);
+    assert.isFalse(admits(value.base.pattern.source, "1,2,3"));
+    assert.isTrue(admits(value.base.pattern.source, "1,2,3,4"));
   });
 
   it("refuses 1,2,3,4 and admits 1,2,3,4,5,6 under CoordsPoly", () => {
@@ -122,10 +123,10 @@ describe("choices and shapes", () => {
 
   it("types each Coords arm and the parent by its pattern", () => {
     const { Coords, CoordsCircle, CoordsDefault, CoordsEllipse } = shapes.relations;
-    assert.strictEqual(Coords.fields.value.pattern.source, patterns.coordsAny);
+    assert.strictEqual(Coords.fields.value.base.pattern.source, patterns.coordsAny);
     assert.strictEqual(CoordsCircle.fields.value.pattern.source, patterns.coordsCircle);
-    assert.strictEqual(CoordsDefault.fields.value.pattern.source, patterns.coordsAny);
-    assert.strictEqual(CoordsEllipse.fields.value.pattern.source, patterns.coordsEllipse);
+    assert.strictEqual(CoordsDefault.fields.value.base.pattern.source, patterns.coordsAny);
+    assert.strictEqual(CoordsEllipse.fields.value.base.pattern.source, patterns.coordsEllipse);
   });
 
   it("declares the Coords alternatives with five arms, keyed by node", () => {
@@ -202,7 +203,7 @@ describe("choices and shapes", () => {
 
   it("types MatchGroup.value by ncNameListOrEmpty and keys it by node", () => {
     const { MatchGroup } = choices.relations;
-    assert.strictEqual(MatchGroup.fields.value.pattern.source, patterns.ncNameListOrEmpty);
+    assert.strictEqual(MatchGroup.fields.value.base.pattern.source, patterns.ncNameListOrEmpty);
     assert.deepStrictEqual([...MatchGroup.primaryKey], ["node"]);
   });
 
@@ -269,5 +270,11 @@ describe("choices and shapes", () => {
     for (const row of recordBindingFit) {
       assert.include(node.relations.NodeKind.handles, row.interactionKind);
     }
+  });
+});
+
+describe("contracts (choices)", () => {
+  it("types MatchGroup.value MatchGroupList", () => {
+    assert.strictEqual(choices.MatchGroup.fields.value.name, contracts.MatchGroupList.name);
   });
 });

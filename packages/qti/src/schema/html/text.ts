@@ -7,12 +7,13 @@
  * one `mirrors` per handle in the composed schema, not written here.
  */
 import { contained, on, relation, str, uuid } from "@bjornpagen/grizzle";
+import { CitationUri, ContentMediaType, HyperlinkUri } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
  * An `a` element: `href` is an `xs:anyURI`, judged on the collapsed value, and required.
  */
-export const A = relation("A", { href: str.regex(patterns.anyUri), id: uuid }, ["id"]);
+export const A = relation("A", { href: HyperlinkUri, id: uuid }, ["id"]);
 
 /**
  * An `abbr` element.
@@ -242,9 +243,7 @@ export const Var = relation("Var", { id: uuid }, ["id"]);
 /**
  * An `a` element's `type`, when written.
  */
-export const AType = relation("AType", { node: uuid, value: str.regex(patterns.mimeType) }, [
-  "node",
-]);
+export const AType = relation("AType", { node: uuid, value: ContentMediaType }, ["node"]);
 
 /**
  * An `bdo` element's `title`, when written.
@@ -258,16 +257,14 @@ export const BdoTitle = relation(
 /**
  * An `blockquote` element's `cite`, when written.
  */
-export const BlockquoteCite = relation(
-  "BlockquoteCite",
-  { node: uuid, value: str.regex(patterns.anyUri) },
-  ["node"],
-);
+export const BlockquoteCite = relation("BlockquoteCite", { node: uuid, value: CitationUri }, [
+  "node",
+]);
 
 /**
  * An `q` element's `cite`, when written.
  */
-export const QCite = relation("QCite", { node: uuid, value: str.regex(patterns.anyUri) }, ["node"]);
+export const QCite = relation("QCite", { node: uuid, value: CitationUri }, ["node"]);
 
 /**
  * The arms, keyed by their `NodeKind` handles.

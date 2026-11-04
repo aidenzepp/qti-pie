@@ -43,11 +43,6 @@ export const qName = `^(?:${ncNameBody}:)?${ncNameBody}$` as const;
 export const encName = "^[A-Za-z][A-Za-z0-9._\\-]{0,63}$" as const;
 
 /**
- * `xs:boolean` lexical space: `true`, `false`, `1` or `0`.
- */
-export const xsBoolean = "^(true|false|1|0)$" as const;
-
-/**
  * `xs:nonNegativeInteger` lexical space: digits with an optional leading plus.
  */
 export const xsNonNegativeInteger = "^\\+?[0-9]+$" as const;
@@ -143,6 +138,14 @@ export const uncollapsed =
 export const uncollapsedFlags = "su" as const;
 
 /**
+ * A collapsed spelling that parses as an integer but is not its canonical rendering: a leading plus
+ * sign, a leading zero, or a negative zero. Such a spelling, and only such a one, is kept in
+ * `AttributeSpelling.value`; a canonical spelling is the typed value's own rendering and cannot be
+ * stored.
+ */
+export const nonCanonicalInteger = "^(?:\\+[0-9]+|-?0[0-9]+|-0)$" as const;
+
+/**
  * Grizzle's own wildcard, any text: the type of the LOM leaves, the generic arms and the qmd
  * replace leaves.
  */
@@ -157,11 +160,6 @@ export const wildcardFlags = "su" as const;
  * An XML declaration version, `1.` and digits, for `TreeXmlVersion`.
  */
 export const xmlVersion = "^1\\.[0-9]+$" as const;
-
-/**
- * An XML declaration standalone value, `yes` or `no`, for `TreeXmlStandalone`.
- */
-export const yesNo = "^(yes|no)$" as const;
 
 /**
  * `xs:base64Binary` lexical space: whole four-character groups with an optional padded final group.
@@ -219,39 +217,6 @@ export const lengthDType = "^[0-9]+%?$" as const;
 export const resourceType = "^[a-z0-9_/\\-]{1,80}$" as const;
 
 /**
- * The seven `schema` values the QTI 3 content-package profile enumerates
- * (`imsqtiv3p0_imscpv1p2_v1p0.xsd` lines 327 to 333, `imsqtiv3p0p1_imscpv1p2_v1p0.xsd` lines 295 to
- * 301).
- */
-export const cpSchema =
-  "^(QTI Package|QTI Test Bank|QTI Item Bank|QTI Object Bank|QTI Test|QTI Section|QTI Item)$" as const;
-
-/**
- * The `schemaversion` values of the QTI 3 CP profile: `3.0.0` and `3.0.1`.
- */
-export const schemaVersion = "^3\\.0\\.[01]$" as const;
-
-/**
- * The 22 `interactionType` values of the QTI metadata XSD (`imsqti_metadatav3p0_v1p0.xsd` lines 169
- * to 190), in XSD order. A literal alternation costs one construct per character, so this list has
- * no headroom under the engine's 512-construct budget.
- */
-export const qmdInteractionType =
-  "^(associateInteraction|choiceInteraction|customInteraction|drawingInteraction|endAttemptInteraction|extendedTextInteraction|gapMatchInteraction|graphicAssociateInteraction|graphicGapMatchInteraction|graphicOrderInteraction|hotspotInteraction|hottextInteraction|inlineChoiceInteraction|matchInteraction|mediaInteraction|orderInteraction|portableCustomInteraction|positionObjectInteraction|selectPointInteraction|sliderInteraction|textEntryInteraction|uploadInteraction)$" as const;
-
-/**
- * The three `feedbackType` values of the QTI metadata XSD (`imsqti_metadatav3p0_v1p0.xsd` lines 202
- * to 204).
- */
-export const qmdFeedbackType = "^(adaptive|nonadaptive|none)$" as const;
-
-/**
- * The three `scoringMode` values of the QTI metadata XSD (`imsqti_metadatav3p0_v1p0.xsd` lines 217
- * to 219).
- */
-export const qmdScoringMode = "^(human|externalmachine|responseprocessing)$" as const;
-
-/**
  * A tool name or version: at most 256 characters, written as 255 then an optional one, within the
  * engine's 255 repetition bound (R33).
  */
@@ -261,26 +226,6 @@ export const toolString = "^.{0,255}.?$" as const;
  * The flags of `toolString`: `s` lets `.` match line terminators.
  */
 export const toolStringFlags = "su" as const;
-
-/**
- * The lexical space of the `boolean` value arm: `true` or `false`.
- */
-export const booleanLiteral = "^(true|false)$" as const;
-
-/**
- * The `externalScored` values: `human` or `externalMachine`.
- */
-export const externalScored = "^(human|externalMachine)$" as const;
-
-/**
- * The `orientation` values: `vertical` or `horizontal`.
- */
-export const orientation = "^(vertical|horizontal)$" as const;
-
-/**
- * The `showHide` values: `show` or `hide`.
- */
-export const showHide = "^(show|hide)$" as const;
 
 /**
  * The lexical space of a `point` value: two signed integers separated by one space.
@@ -433,71 +378,6 @@ export const coordsAny =
   `^(?:${coordsToken}(?:,${coordsToken}){2}(?:,${coordsToken})?|${coordsToken}(?:,${coordsToken}){5}(?:,${coordsToken},${coordsToken})*)$` as const;
 
 /**
- * The `role` values of `ARIABaseDType` (`imsqti_asiv3p0p1_v1p0.xsd` lines 24404 to 24488, the
- * anonymous restriction of `@role`; the XSD names no `ARIARoleDType`): 74 values.
- */
-export const ariaRole =
-  "^(?:a(?:lert(?:dialog)?|pplication|rticle)|b(?:anner|utton)|c(?:heckbox|o(?:de|lumnheader|m(?:bobox|plementary)|ntentinfo))|d(?:e(?:finition|letion)|ialog|ocument)|emphasis|f(?:igure|orm)|g(?:eneric|r(?:id(?:cell)?|oup))|heading|i(?:mg|nsertion)|l(?:i(?:nk|st(?:box|item)?)|og)|m(?:a(?:in|rquee|th)|e(?:nu(?:bar|item(?:checkbox|radio)?)?|ter))|n(?:avigation|ote)|option|pr(?:esentation|ogressbar)|r(?:adio(?:group)?|egion|ow(?:group|header)?)|s(?:crollbar|e(?:arch(?:box)?|parator)|lider|pinbutton|t(?:atus|rong)|u(?:bscript|perscript)|witch)|t(?:ab(?:list|panel)?|e(?:rm|xtbox)|imer?|ool(?:bar|tip)|ree(?:grid|item)?))$" as const;
-
-/**
- * The values of `aria-live`, default `off`: lines 24496 to 24509 (`imsqti_asiv3p0p1_v1p0.xsd`).
- */
-export const ariaLive = "^(off|polite|assertive)$" as const;
-
-/**
- * The values of `aria-orientation`, default `horizontal`: lines 24510 to 24522
- * (`imsqti_asiv3p0p1_v1p0.xsd`).
- */
-export const ariaOrientation = "^(vertical|horizontal)$" as const;
-
-/**
- * The values of `aria-autocomplete`, default `none`: lines 24527 to 24541
- * (`imsqti_asiv3p0p1_v1p0.xsd`).
- */
-export const ariaAutocomplete = "^(inline|list|both|none)$" as const;
-
-/**
- * The values of `aria-checked`, default `undefined`: lines 24543 to 24557
- * (`imsqti_asiv3p0p1_v1p0.xsd`).
- */
-export const ariaChecked = "^(true|false|mixed|undefined)$" as const;
-
-/**
- * The values of `aria-expanded`, default `undefined`: lines 24559 to 24572
- * (`imsqti_asiv3p0p1_v1p0.xsd`).
- */
-export const ariaExpanded = "^(true|false|undefined)$" as const;
-
-/**
- * The values of `aria-invalid`, default `false`: lines 24574 to 24588
- * (`imsqti_asiv3p0p1_v1p0.xsd`).
- */
-export const ariaInvalid = "^(true|false|grammar|spelling)$" as const;
-
-/**
- * The values of `aria-pressed`, default `undefined`: lines 24592 to 24606
- * (`imsqti_asiv3p0p1_v1p0.xsd`).
- */
-export const ariaPressed = "^(true|false|mixed|undefined)$" as const;
-
-/**
- * The values of `aria-selected`, default `undefined`: lines 24614 to 24627
- * (`imsqti_asiv3p0p1_v1p0.xsd`).
- */
-export const ariaSelected = "^(true|false|undefined)$" as const;
-
-/**
- * The values of `aria-sort`, default `none`: lines 24629 to 24643 (`imsqti_asiv3p0p1_v1p0.xsd`).
- */
-export const ariaSort = "^(ascending|descending|none|other)$" as const;
-
-/**
- * The values of `aria-current`, default `false`: lines 24649 to 24669
- * (`imsqti_asiv3p0p1_v1p0.xsd`).
- */
-export const ariaCurrent = "^(page|step|location|date|time|true|false|undefined)$" as const;
-
-/**
  * `aria-relevant` (`imsqti_asiv3p0p1_v1p0.xsd` lines 24608 to 24612, default `additions text`): an
  * unbounded `xs:list` over `ARIARelevantListDType` (lines 23984 to 23992), so zero items are
  * admitted (campaign decision 22). Judged on the collapsed value. The item type's fifth value,
@@ -505,87 +385,6 @@ export const ariaCurrent = "^(page|step|location|date|time|true|false|undefined)
  */
 export const ariaRelevantList =
   "^(?:(?:additions|removals|text|all)(?: (?:additions|removals|text|all))*)?$" as const;
-
-/**
- * `@autoplay` of 3.0.1 (`imsqti_asiv3p0p1_v1p0.xsd` line 24978): `true`, `false` or the attribute
- * name. Version 3.0.0 types it `xs:boolean`, which is `xsBoolean`.
- */
-export const autoplayEnum = "^(true|false|autoplay)$" as const;
-
-/**
- * `@loop` of 3.0.1 (`imsqti_asiv3p0p1_v1p0.xsd` line 24995): `true`, `false` or the attribute name.
- * Version 3.0.0 types it `xs:boolean`, which is `xsBoolean`.
- */
-export const loopEnum = "^(true|false|loop)$" as const;
-
-/**
- * `@muted` of 3.0.1 (`imsqti_asiv3p0p1_v1p0.xsd` line 25011): `true`, `false` or the attribute
- * name. Version 3.0.0 types it `xs:boolean`, which is `xsBoolean`.
- */
-export const mutedEnum = "^(true|false|muted)$" as const;
-
-/**
- * `@controls` of 3.0.1 (`imsqti_asiv3p0p1_v1p0.xsd` line 25027): `true`, `false` or the attribute
- * name. Version 3.0.0 types it `xs:boolean`, which is `xsBoolean`.
- */
-export const controlsEnum = "^(true|false|controls)$" as const;
-
-/**
- * `@default` of 3.0.1 (`imsqti_asiv3p0p1_v1p0.xsd` line 33596): `true`, `false` or the attribute
- * name. Version 3.0.0 types it `xs:boolean`, which is `xsBoolean`.
- */
-export const defaultEnum = "^(true|false|default)$" as const;
-
-/**
- * The values of `@dir`, default `auto` (line 25231) in `imsqti_asiv3p0p1_v1p0.xsd`.
- */
-export const dirEnum = "^(ltr|rtl|auto)$" as const;
-
-/**
- * The values of `data-qti-suppress-tts` (line 25247) in `imsqti_asiv3p0p1_v1p0.xsd`.
- */
-export const suppressTts = "^(computer-read-aloud|screen-reader|all)$" as const;
-
-/**
- * The values of `qti-param/@valuetype`, required (line 34491) in `imsqti_asiv3p0p1_v1p0.xsd`.
- */
-export const valuetype = "^(DATA|REF)$" as const;
-
-/**
- * The values of `td/@scope` (line 32491) in `imsqti_asiv3p0p1_v1p0.xsd`.
- */
-export const scope = "^(row|col|rowgroup|colgroup)$" as const;
-
-/**
- * The values of `@align` of table cells (line 32510) in `imsqti_asiv3p0p1_v1p0.xsd`.
- */
-export const align = "^(left|center|right|justify|char)$" as const;
-
-/**
- * The values of `@valign` of table cells (line 32527) in `imsqti_asiv3p0p1_v1p0.xsd`.
- */
-export const valign = "^(bottom|middle|top|baseline)$" as const;
-
-/**
- * The values of `@preload`, default `metadata` (line 24963) in `imsqti_asiv3p0p1_v1p0.xsd`.
- */
-export const preload = "^(none|auto|metadata)$" as const;
-
-/**
- * The values of `@crossorigin` (line 24950) in `imsqti_asiv3p0p1_v1p0.xsd`.
- */
-export const crossorigin = "^(anonymous|use-credentials)$" as const;
-
-/**
- * The values of `track/@kind` (line 33578) in `imsqti_asiv3p0p1_v1p0.xsd`.
- */
-export const trackKind = "^(subtitles|captions|descriptions|chapters|metadata)$" as const;
-
-/**
- * The values of `qti-extended-text-interaction/@format`, default `plain` (line 27165) in
- * `imsqti_asiv3p0p1_v1p0.xsd`.
- */
-export const textFormat = "^(plain|preformatted|xhtml)$" as const;
 
 /**
  * A collapsed `IdentifierListDType` value: NCNames one space apart, with no leading, trailing or
@@ -628,55 +427,6 @@ export const floatOrVariableRef = `^(?:${xsDoubleBody}|${ncNameBody})$` as const
  * `xs:int` range is the typed copy's check, not this pattern's.
  */
 export const intOrIdentifier = `^(?:${ncNameBody}|[+\\-]?[0-9]+)$` as const;
-
-/**
- * The eleven `base-type` values of `TestVariablesBaseType` in `imsqti_asiv3p0p1_v1p0.xsd`, in XSD
- * order: `boolean directedPair duration file float identifier integer pair point string uri`. The
- * `whiteSpace` class is `preserve`, so a padded value is refused as the XSD refuses it. Phase 1's
- * `BaseType` roster stays the column type elsewhere.
- */
-export const baseType =
-  "^(boolean|directedPair|duration|file|float|identifier|integer|pair|point|string|uri)$" as const;
-
-/**
- * The three `tolerance-mode` values of the ASI XSD, in XSD order: `absolute exact relative`.
- */
-export const toleranceMode = "^(absolute|exact|relative)$" as const;
-
-/**
- * The two `rounding-mode` values of the ASI XSD, in XSD order: `decimalPlaces significantFigures`.
- */
-export const roundingMode = "^(decimalPlaces|significantFigures)$" as const;
-
-/**
- * The five `shape` values of the ASI XSD, in XSD order: `circle default ellipse poly rect`.
- */
-// oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the XSD attribute name of the hotspot enumeration (`circle default ellipse poly rect`), the contract the interaction and processing modules name, not a structure.
-export const shape = "^(circle|default|ellipse|poly|rect)$" as const;
-
-/**
- * The 28 `name` values of `qti-math-operator` (`MathOperatorDType`), in XSD order: `sin cos tan
- * sec csc cot asin acos atan atan2 asec acsc acot sinh cosh tanh sech csch coth log ln exp abs
- * signum floor ceil toDegrees toRadians`.
- */
-export const mathOperatorName =
-  "^(sin|cos|tan|sec|csc|cot|asin|acos|atan|atan2|asec|acsc|acot|sinh|cosh|tanh|sech|csch|coth|log|ln|exp|abs|signum|floor|ceil|toDegrees|toRadians)$" as const;
-
-/**
- * The five `name` values of `qti-stats-operator` (`StatsOperatorDType`), in XSD order: `mean
- * sampleVariance sampleSD popVariance popSD`.
- */
-export const statsOperatorName = "^(mean|sampleVariance|sampleSD|popVariance|popSD)$" as const;
-
-/**
- * The two `name` values of `qti-math-constant` (`MathConstantDType`), in XSD order: `pi e`.
- */
-export const mathConstantName = "^(pi|e)$" as const;
-
-/**
- * The two `parse` values of `xi:include` (`parseType` in `w3/XInclude.xsd`): `xml text`.
- */
-export const xincludeParse = "^(xml|text)$" as const;
 
 /**
  * The `ExtensionString.Type` half of every DRD union, as the XSD writes it

@@ -17,11 +17,10 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
-import { ToolShape } from "#qti/schema/content/rosters.ts";
+import { ToolShape, XsBoolean } from "#qti/schema/content/rosters.ts";
+import { ToolName, ToolVersion } from "#qti/schema/contracts.ts";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-
-const toolString = str.regex(patterns.toolString, patterns.toolStringFlags);
 
 /**
  * A `qti-assessment-item` root: whether it is adaptive and whether it is time dependent, and the
@@ -34,9 +33,9 @@ const toolString = str.regex(patterns.toolString, patterns.toolStringFlags);
 export const AssessmentItem = relation(
   "AssessmentItem",
   {
-    adaptive: str.regex(patterns.xsBoolean),
+    adaptive: closedId(XsBoolean),
     id: uuid,
-    timeDependent: str.regex(patterns.xsBoolean),
+    timeDependent: closedId(XsBoolean),
     tree: uuid,
   },
   ["id"],
@@ -68,23 +67,21 @@ export const ItemTool = relation("ItemTool", { shape: closedId(ToolShape), tree:
  */
 export const ItemToolBoth = relation(
   "ItemToolBoth",
-  { toolName: toolString, toolVersion: toolString, tree: uuid },
+  { toolName: ToolName, toolVersion: ToolVersion, tree: uuid },
   ["tree"],
 );
 
 /**
  * An item root that wrote `tool-name` only.
  */
-export const ItemToolName = relation("ItemToolName", { toolName: toolString, tree: uuid }, [
-  "tree",
-]);
+export const ItemToolName = relation("ItemToolName", { toolName: ToolName, tree: uuid }, ["tree"]);
 
 /**
  * An item root that wrote `tool-version` only.
  */
 export const ItemToolVersion = relation(
   "ItemToolVersion",
-  { toolVersion: toolString, tree: uuid },
+  { toolVersion: ToolVersion, tree: uuid },
   ["tree"],
 );
 

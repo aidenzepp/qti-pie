@@ -10,18 +10,18 @@
 import { judgedLater } from "#qti/import/judged.ts";
 import { Effect, Option } from "effect";
 import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
-import { ItemRefusal, Rows, withParents } from "#qti/import/tree.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
+import { closedOf, ItemRefusal, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
 import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { MatchGroup } from "#qti/schema/choices.ts";
-import { Shape } from "#qti/schema/content/rosters.ts";
+import { Shape, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import type { ShapeHandle } from "#qti/schema/content/rosters.ts";
+import { ChoiceIdentifier } from "#qti/schema/contracts.ts";
 import {
   AssociableHotspot,
   AssociableHotspotLabel,
   AssociableHotspotMatchMin,
   AssociateInteraction,
-  AssociateMaxAssociations,
-  AssociateMinAssociations,
   DeclaredAssociableHotspotShowHide,
   DeclaredAssociateMaxAssociations,
   DeclaredAssociateMinAssociations,
@@ -31,13 +31,10 @@ import {
   DeclaredMatchMinAssociations,
   DeclaredMatchShuffle,
   GraphicAssociateInteraction,
-  GraphicAssociateMaxAssociations,
   GraphicAssociateMinAssociations,
   MatchFirstColumnHeader,
   MatchInteraction,
-  MatchMaxAssociations,
   MatchMaxSelectionsMessage,
-  MatchMinAssociations,
   MatchMinSelectionsMessage,
   SimpleAssociableChoice,
   SimpleAssociableChoiceFixed,
@@ -46,7 +43,8 @@ import {
   SimpleAssociableChoiceShowHide,
   SimpleMatchSet,
 } from "#qti/schema/interactions/associate.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { AttributeNameHandle } from "#qti/schema/node.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * One fact of an optional-value relation where the attribute was written, none where it was not.
@@ -64,32 +62,108 @@ const lexicalOf = (element: Element, name: string): Option.Option<string> =>
 
 /**
  * What the three interactions read the same way: the response identifier and the two association
- * bounds, as written and as the typed columns hold them.
+ * bounds, as the typed columns hold them.
  */
 interface Associations {
-  readonly max: Option.Option<string>;
   readonly maxN: bigint;
-  readonly min: Option.Option<string>;
   readonly minN: bigint;
   readonly responseIdentifier: string;
 }
 
 /**
+ * The value of an integer attribute of `node`, and the rows with its spelling kept where the
+ * source spelled it other than the way the value is written.
+ *
+ * @param rows - The rows so far.
+ * @param node - The element that carries the attribute.
+ * @param name - The attribute's registry name.
+ * @param text - The attribute's text after its whitespace step.
+ * @returns The value and the rows; `ImportRefused` (`attribute-lexical`) for text outside the
+ *   non-negative integers.
+ */
+const spelled = (rows: Rows, node: IndexedNode, name: AttributeNameHandle, text: string) =>
+  spelledInteger(
+    rows,
+    node.id,
+    node.kind,
+    name,
+    text,
+    "nonNegativeInteger",
+    "attribute-lexical",
+    `${node.kind} ${name}`,
+  );
+
+/**
+ * The value of a required integer attribute of `node`, as {@link spelled} reads it; an absent
+ * attribute is refused as missing, not read as an empty value.
+ *
+ * @param rows - The rows so far.
+ * @param node - The element that carries the attribute.
+ * @param name - The attribute's registry name.
+ * @param text - The attribute's text after its whitespace step, when the element has one.
+ * @returns The value and the rows; `ImportRefused` (`attribute-lexical`) when the attribute is
+ *   absent or its text is outside the non-negative integers.
+ */
+const spelledRequired = (
+  rows: Rows,
+  node: IndexedNode,
+  name: AttributeNameHandle,
+  text: Option.Option<string>,
+) =>
+  Option.match(text, {
+    onNone: () =>
+      Effect.fail(
+        new ImportRefused({
+          detail: `The ${node.kind} has no ${name}, which it requires. Add a ${name} that is a whole number of zero or more.`,
+          rule: "attribute-lexical",
+        }),
+      ),
+    onSome: (own) => spelled(rows, node, name, own),
+  });
+
+/**
+ * The value of an integer attribute that may be absent: `fallback` where the source omits it, and
+ * otherwise what {@link spelled} makes of its text.
+ */
+const spelledOr = (
+  rows: Rows,
+  node: IndexedNode,
+  name: AttributeNameHandle,
+  text: Option.Option<string>,
+  fallback: bigint,
+) =>
+  Option.match(text, {
+    onNone: () => Effect.succeed({ rows, value: fallback }),
+    onSome: (own) => spelled(rows, node, name, own),
+  });
+
+/**
  * Read the response identifier and the two association bounds of an interaction; an absent
  * `max-associations` reads as 1 and an absent `min-associations` as 0.
+ *
+ * The caller reads its other attributes first: the rows returned are the reader's rows at the
+ * moment of the call, with the spelling rows added.
+ *
+ * @param attributes - The interaction's attribute reader.
+ * @param node - The interaction's node.
+ * @returns The bounds and the rows; `ImportRefused` (`attribute-lexical`) for a bound outside the
+ *   non-negative integers.
  */
-const associationsOf = (ctx: InteractionContext, attributes: AttributeReader): Associations => {
+const associationsOf = Effect.fn("import.associationsOf")(function* associationsOf(
+  attributes: AttributeReader,
+  node: IndexedNode,
+): Effect.fn.Return<{ associations: Associations; rows: Rows }, ImportRefused> {
   const max = attributes.read("max-associations");
   const min = attributes.read("min-associations");
+  const responseIdentifier = Option.getOrElse(attributes.read("response-identifier"), () => "");
+  const maximum = yield* spelledOr(attributes.rows(), node, "max-associations", max, 1n);
+  const minimum = yield* spelledOr(maximum.rows, node, "min-associations", min, 0n);
 
   return {
-    max,
-    maxN: ctx.shared.typedCopy(max, 1n),
-    min,
-    minN: ctx.shared.typedCopy(min, 0n),
-    responseIdentifier: Option.getOrElse(attributes.read("response-identifier"), () => ""),
+    associations: { maxN: maximum.value, minN: minimum.value, responseIdentifier },
+    rows: minimum.rows,
   };
-};
+});
 
 /**
  * Write an interaction's binding to the response variable it names; the count is its
@@ -105,30 +179,32 @@ const bind = (ctx: InteractionContext, rows: Rows, node: IndexedNode, associatio
     Option.fromNullishOr(ctx.declarations.get(associations.responseIdentifier)),
     node.ancestry,
     ctx.item.adaptive,
-    ctx.shared.maxCountDefault(
-      node.kind,
-      new Map(
-        Option.match(associations.max, {
-          onNone: (): [string, string][] => [],
-          onSome: (own): [string, string][] => [["max-associations", own]],
-        }),
-      ),
-    ),
+    associations.maxN,
   );
 
 /**
  * The rows of one `qti-associate-interaction` and its binding.
+ *
+ * @returns The rows; `ImportRefused` (`attribute-lexical`) for a `shuffle` outside `xs:boolean`'s
+ *   four spellings or a bound outside the non-negative integers.
  */
 const associate = Effect.fn("import.associate")(function* associate(
   ctx: InteractionContext,
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
-  const associations = associationsOf(ctx, attributes);
   const shuffle = attributes.read("shuffle");
-  let built = yield* bind(ctx, attributes.rows(), node, associations);
+  const shuffleHandle = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(shuffle, () => "false"),
+    "attribute-lexical",
+    "the shuffle attribute of qti-associate-interaction",
+  );
+  const read = yield* associationsOf(attributes, node);
+  const { associations } = read;
+  let built = yield* bind(ctx, read.rows, node, associations);
   built = Rows.add(built, AssociateInteraction, [
     {
       id: node.id,
@@ -136,19 +212,9 @@ const associate = Effect.fn("import.associate")(function* associate(
       minAssociationsN: associations.minN,
       responseIdentifier: associations.responseIdentifier,
       rootKind: "item",
-      shuffle: judgedLater(Option.getOrElse(shuffle, () => "false")),
+      shuffle: shuffleHandle,
     },
   ]);
-  built = Rows.add(
-    built,
-    AssociateMaxAssociations,
-    written(associations.max, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
-  built = Rows.add(
-    built,
-    AssociateMinAssociations,
-    written(associations.min, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
 
   return ctx.shared.markers(
     built,
@@ -164,20 +230,30 @@ const associate = Effect.fn("import.associate")(function* associate(
 
 /**
  * The rows of one `qti-match-interaction` and its binding.
+ *
+ * @returns The rows; `ImportRefused` (`attribute-lexical`) for a `shuffle` outside `xs:boolean`'s
+ *   four spellings or a bound outside the non-negative integers.
  */
 const match = Effect.fn("import.match")(function* match(
   ctx: InteractionContext,
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
-  const associations = associationsOf(ctx, attributes);
   const shuffle = attributes.read("shuffle");
   const minMessage = attributes.read("data-min-selections-message");
   const maxMessage = attributes.read("data-max-selections-message");
   const header = attributes.read("data-first-column-header");
-  let built = yield* bind(ctx, attributes.rows(), node, associations);
+  const shuffleHandle = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(shuffle, () => "false"),
+    "attribute-lexical",
+    "the shuffle attribute of qti-match-interaction",
+  );
+  const read = yield* associationsOf(attributes, node);
+  const { associations } = read;
+  let built = yield* bind(ctx, read.rows, node, associations);
   built = Rows.add(built, MatchInteraction, [
     {
       id: node.id,
@@ -185,19 +261,9 @@ const match = Effect.fn("import.match")(function* match(
       minAssociationsN: associations.minN,
       responseIdentifier: associations.responseIdentifier,
       rootKind: "item",
-      shuffle: judgedLater(Option.getOrElse(shuffle, () => "false")),
+      shuffle: shuffleHandle,
     },
   ]);
-  built = Rows.add(
-    built,
-    MatchMaxAssociations,
-    written(associations.max, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
-  built = Rows.add(
-    built,
-    MatchMinAssociations,
-    written(associations.min, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
   built = Rows.add(
     built,
     MatchMinSelectionsMessage,
@@ -228,17 +294,19 @@ const match = Effect.fn("import.match")(function* match(
 
 /**
  * The rows of one `qti-graphic-associate-interaction` and its binding. Its `min-associations` has
- * no schema default, so the optional relation alone says whether the source wrote it.
+ * default marker beside `DeclaredGraphicAssociateMaxAssociations`:
+ * `GraphicAssociateMinAssociations` says the source wrote it.
  */
 const graphicAssociate = Effect.fn("import.graphicAssociate")(function* graphicAssociate(
   ctx: InteractionContext,
   rows: Rows,
   element: Element,
   node: IndexedNode,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
-  const associations = associationsOf(ctx, attributes);
-  let built = yield* bind(ctx, attributes.rows(), node, associations);
+  const read = yield* associationsOf(attributes, node);
+  const { associations } = read;
+  let built = yield* bind(ctx, read.rows, node, associations);
   built = Rows.add(built, GraphicAssociateInteraction, [
     {
       id: node.id,
@@ -248,20 +316,13 @@ const graphicAssociate = Effect.fn("import.graphicAssociate")(function* graphicA
       rootKind: "item",
     },
   ]);
-  built = Rows.add(
-    built,
-    GraphicAssociateMaxAssociations,
-    written(associations.max, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
-  built = Rows.add(
-    built,
-    GraphicAssociateMinAssociations,
-    written(associations.min, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
 
   return ctx.shared.markers(
     built,
-    { "max-associations": DeclaredGraphicAssociateMaxAssociations },
+    {
+      "max-associations": DeclaredGraphicAssociateMaxAssociations,
+      "min-associations": GraphicAssociateMinAssociations,
+    },
     node.id,
     attributes.written(),
   );
@@ -273,7 +334,10 @@ const graphicAssociate = Effect.fn("import.graphicAssociate")(function* graphicA
  * variable it names.
  *
  * @returns The rows; `ItemRefusal` for a choice that sits in no interaction (rule `admission`), and
- *   for a `template-identifier` that names no typed variable.
+ *   for a `template-identifier` that names no typed variable; `ImportRefused`
+ *   (`attribute-lexical`) for a `match-max` that is absent, a `match-max` or `match-min` outside
+ *   the non-negative integers, a `fixed` outside `xs:boolean`'s four spellings, or a `show-hide`
+ *   outside `show` and `hide`.
  */
 const choice = Effect.fn("import.associableChoice")(function* choice(
   ctx: InteractionContext,
@@ -281,7 +345,7 @@ const choice = Effect.fn("import.associableChoice")(function* choice(
   element: Element,
   node: IndexedNode,
   parent: Option.Option<IndexedNode>,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const owner = ctx.shared.nearestInteraction(ctx.nodes, element);
   if (Option.isNone(owner)) {
     return yield* new ItemRefusal({
@@ -299,15 +363,36 @@ const choice = Effect.fn("import.associableChoice")(function* choice(
   const showHide = attributes.read("show-hide");
   const matchGroup = attributes.read("match-group");
   const template = attributes.read("template-identifier");
-  let built = attributes.rows();
+  const fixedHandle = Option.isSome(fixed)
+    ? Option.some(
+        yield* closedOf(
+          XsBoolean.handles,
+          fixed.value,
+          "attribute-lexical",
+          "the fixed attribute of qti-simple-associable-choice",
+        ),
+      )
+    : Option.none();
+  const showHideHandle = Option.isSome(showHide)
+    ? Option.some(
+        yield* closedOf(
+          ShowHide.handles,
+          showHide.value,
+          "attribute-lexical",
+          "the show-hide attribute of qti-simple-associable-choice",
+        ),
+      )
+    : Option.none();
+  const maximum = yield* spelledRequired(attributes.rows(), node, "match-max", matchMax);
+  const minimum = yield* spelledOr(maximum.rows, node, "match-min", matchMin, 0n);
+  let built = minimum.rows;
   built = Rows.add(built, SimpleAssociableChoice, [
     {
       id: node.id,
-      identifier,
+      identifier: ChoiceIdentifier(identifier),
       interaction: owner.value.id,
-      matchMax: judgedLater(Option.getOrElse(matchMax, () => "")),
-      matchMaxN: ctx.shared.typedCopy(matchMax, 0n),
-      matchMinN: ctx.shared.typedCopy(matchMin, 0n),
+      matchMaxN: maximum.value,
+      matchMinN: minimum.value,
     },
   ]);
   built = Rows.add(
@@ -321,20 +406,21 @@ const choice = Effect.fn("import.associableChoice")(function* choice(
           : [],
     }),
   );
-  built = Rows.add(
+  built = ctx.shared.markers(
     built,
-    SimpleAssociableChoiceMatchMin,
-    written(matchMin, (own) => ({ node: node.id, value: judgedLater(own) })),
+    { "match-min": SimpleAssociableChoiceMatchMin },
+    node.id,
+    attributes.written(),
   );
   built = Rows.add(
     built,
     SimpleAssociableChoiceFixed,
-    written(fixed, (own) => ({ node: node.id, value: judgedLater(own) })),
+    written(fixedHandle, (own) => ({ node: node.id, value: own })),
   );
   built = Rows.add(
     built,
     SimpleAssociableChoiceShowHide,
-    written(showHide, (own) => ({ node: node.id, value: judgedLater(own) })),
+    written(showHideHandle, (own) => ({ node: node.id, value: own })),
   );
   built = Rows.add(
     built,
@@ -365,7 +451,9 @@ const shapeOf = (text: Option.Option<string>): Option.Option<ShapeHandle> =>
  * that encloses it, its match bounds, its label when it has one, and its coordinates.
  *
  * @returns The rows; `ItemRefusal` for a hotspot with no valid `shape`, and for one with no enclosing
- *   interaction (rule `admission`).
+ *   interaction (rule `admission`); `ImportRefused` (`attribute-lexical`) for a `match-max` that is
+ *   absent, a `match-max` or `match-min` outside the non-negative integers, or a `show-hide`
+ *   outside `show` and `hide`.
  *   A hotspot with no `coords` has no `Coords` row, and the shape's capacity refuses it at commit.
  */
 const hotspot = Effect.fn("import.associableHotspot")(function* hotspot(
@@ -374,7 +462,7 @@ const hotspot = Effect.fn("import.associableHotspot")(function* hotspot(
   element: Element,
   node: IndexedNode,
   parent: Option.Option<IndexedNode>,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const owner = ctx.shared.nearestInteraction(ctx.nodes, element);
   const shape = shapeOf(lexicalOf(element, "shape"));
   if (Option.isNone(owner) || Option.isNone(parent)) {
@@ -398,23 +486,30 @@ const hotspot = Effect.fn("import.associableHotspot")(function* hotspot(
   const matchMin = attributes.read("match-min");
   const label = attributes.read("hotspot-label");
   const showHide = attributes.read("show-hide");
-  let built = attributes.rows();
+  const showHideHandle = yield* closedOf(
+    ShowHide.handles,
+    Option.getOrElse(showHide, () => "show"),
+    "attribute-lexical",
+    "the show-hide attribute of qti-associable-hotspot",
+  );
+  const maximum = yield* spelledRequired(attributes.rows(), node, "match-max", matchMax);
+  const minimum = yield* spelledOr(maximum.rows, node, "match-min", matchMin, 0n);
+  let built = minimum.rows;
   built = Rows.add(built, AssociableHotspot, [
     {
       id: node.id,
-      identifier,
+      identifier: ChoiceIdentifier(identifier),
       interaction: owner.value.id,
-      matchMax: judgedLater(Option.getOrElse(matchMax, () => "")),
-      matchMaxN: ctx.shared.typedCopy(matchMax, 0n),
-      matchMinN: ctx.shared.typedCopy(matchMin, 0n),
+      matchMaxN: maximum.value,
+      matchMinN: minimum.value,
       parentKind: parent.value.kind,
       shape: shape.value,
-      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
+      showHide: showHideHandle,
     },
   ]);
   built = ctx.shared.markers(
     built,
-    { "show-hide": DeclaredAssociableHotspotShowHide },
+    { "match-min": AssociableHotspotMatchMin, "show-hide": DeclaredAssociableHotspotShowHide },
     node.id,
     attributes.written(),
   );
@@ -422,11 +517,6 @@ const hotspot = Effect.fn("import.associableHotspot")(function* hotspot(
     built,
     AssociableHotspotLabel,
     written(label, (own) => ({ node: node.id, value: judgedLater(own) })),
-  );
-  built = Rows.add(
-    built,
-    AssociableHotspotMatchMin,
-    written(matchMin, (own) => ({ node: node.id, value: judgedLater(own) })),
   );
 
   return Option.match(lexicalOf(element, "coords"), {
@@ -445,12 +535,13 @@ const hotspot = Effect.fn("import.associableHotspot")(function* hotspot(
  * @returns The rows with every associate, match and graphic-associate interaction, simple match
  *   set, simple associable choice and associable hotspot of the item; `ItemRefusal` for an
  *   interaction whose `response-identifier` names no declaration, a choice whose
- *   `template-identifier` names no typed variable, and a hotspot with no valid shape.
+ *   `template-identifier` names no typed variable, and a hotspot with no valid shape;
+ *   `ImportRefused` for an association or match bound outside the non-negative integers.
  */
 export const associateRows = Effect.fn("import.associateRows")(function* associateRows(
   ctx: InteractionContext,
   rows: Rows,
-): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | UnmodeledVocabulary | ItemRefusal> {
   let built = rows;
   for (const [element, parentElement] of withParents(ctx.root, Option.none())) {
     const node = ctx.nodes.get(element);

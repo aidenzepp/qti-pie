@@ -24,16 +24,21 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
+import type { FieldBase } from "@bjornpagen/grizzle";
+import { CpSchema, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { Edge, Node, RootKind, SchemaVersion, Tree } from "#qti/schema/node.ts";
+import {
+  AccessMode,
+  AccessModeAdapted,
+  DrdAdaptationUri,
+  FileMediaType,
+  ManifestIdentifier,
+  PackagePath,
+  ResourceEntryHref,
+} from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 const base64 = str.regex(patterns.base64);
-
-const hrefInPackage = str.regex(patterns.hrefInPackage);
-
-const mimeType = str.regex(patterns.mimeType);
-
-const ncName = str.regex(patterns.ncName);
 
 const resourceType = str.regex(patterns.resourceType);
 
@@ -50,7 +55,7 @@ export const Package = relation(
   "Package",
   {
     id: uuid,
-    identifier: str.regex(patterns.ncName),
+    identifier: ManifestIdentifier,
     schemaversion: closedId(SchemaVersion),
   },
   ["id"],
@@ -81,18 +86,19 @@ export const Resources = relation("Resources", { id: uuid, manifest: uuid }, ["i
  */
 export const ManifestSchema = relation(
   "ManifestSchema",
-  { id: uuid, metadata: uuid, value: str.regex(patterns.cpSchema) },
+  { id: uuid, metadata: uuid, value: closedId(CpSchema) },
   ["id"],
 );
 
 /**
- * The `cp:schemaversion` text of a manifest's metadata, `3.0.0` or `3.0.1`. It is text, not a
- * `SchemaVersion` handle: a name belongs to one identity, and the copy on `Package` is guarded
- * outside the schema.
+ * The `cp:schemaversion` of a manifest's metadata, `3.0.0` or `3.0.1`. The row copies its package's
+ * `schemaversion`: `package` names the package whose manifest holds the metadata, and two
+ * containments state it, one that the metadata belongs to that package and one that the package
+ * holds this version.
  */
 export const ManifestSchemaVersion = relation(
   "ManifestSchemaVersion",
-  { id: uuid, metadata: uuid, value: str.regex(patterns.schemaVersion) },
+  { id: uuid, metadata: uuid, package: uuid, version: closedId(SchemaVersion) },
   ["id"],
 );
 
@@ -101,7 +107,7 @@ export const ManifestSchemaVersion = relation(
  */
 export const PackageEntry = relation(
   "PackageEntry",
-  { kind: closedId(EntryKind), package: uuid, path: str.regex(patterns.hrefInPackage) },
+  { kind: closedId(EntryKind), package: uuid, path: PackagePath },
   ["package", "path"],
 );
 
@@ -131,7 +137,7 @@ export const Resource = relation(
   "Resource",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ManifestIdentifier,
     package: uuid,
     type: resourceType,
     version: closedId(SchemaVersion),
@@ -144,7 +150,7 @@ export const Resource = relation(
  */
 export const ResourceHref = relation(
   "ResourceHref",
-  { href: hrefInPackage, package: uuid, resource: uuid },
+  { href: ResourceEntryHref, package: uuid, resource: uuid },
   ["resource"],
 );
 
@@ -159,7 +165,7 @@ export const ResourceMetadata = relation("ResourceMetadata", { id: uuid, resourc
  */
 export const File = relation(
   "File",
-  { href: hrefInPackage, id: uuid, package: uuid, position: pg.bigint, resource: uuid },
+  { href: PackagePath, id: uuid, package: uuid, position: pg.bigint, resource: uuid },
   ["id"],
 );
 
@@ -169,7 +175,7 @@ export const File = relation(
  */
 export const Dependency = relation(
   "Dependency",
-  { id: uuid, package: uuid, resource: ncName, target: ncName },
+  { id: uuid, package: uuid, resource: ManifestIdentifier, target: ManifestIdentifier },
   ["id"],
 );
 
@@ -181,9 +187,9 @@ export const FileContent = relation(
   {
     byteLength: pg.bigint,
     content: base64,
-    mimeType,
+    mimeType: FileMediaType,
     package: uuid,
-    path: hrefInPackage,
+    path: PackagePath,
   },
   ["package", "path"],
 );
@@ -213,7 +219,7 @@ export const fileMetadataRules = [
  */
 export const fileMetadataArms = { "cp:metadata.file": FileMetadata };
 
-const drdLeaf = <Name extends string>(name: Name, value: ReturnType<typeof str.regex>) =>
+const drdLeaf = <Name extends string, Value extends FieldBase>(name: Name, value: Value) =>
   relation(name, { id: uuid, owner: uuid, value }, ["id"]);
 
 /**
@@ -225,11 +231,11 @@ export const Variant = relation(
   "Variant",
   {
     id: uuid,
-    identifier: ncName,
-    identifierref: ncName,
+    identifier: ManifestIdentifier,
+    identifierref: ManifestIdentifier,
     package: uuid,
     resource: uuid,
-    resourceIdentifier: ncName,
+    resourceIdentifier: ManifestIdentifier,
   },
   ["id"],
 );
@@ -249,15 +255,12 @@ export const AccessForAllResource = relation("AccessForAllResource", { id: uuid,
 /**
  * The `drd:accessMode` text of a digital resource description.
  */
-export const DrdAccessMode = drdLeaf("DrdAccessMode", str.regex(patterns.drdAccessMode));
+export const DrdAccessMode = drdLeaf("DrdAccessMode", AccessMode);
 
 /**
  * The `drd:accessModeAdapted` text.
  */
-export const DrdAccessModeAdapted = drdLeaf(
-  "DrdAccessModeAdapted",
-  str.regex(patterns.drdAccessModeAdapted),
-);
+export const DrdAccessModeAdapted = drdLeaf("DrdAccessModeAdapted", AccessModeAdapted);
 
 /**
  * The `drd:adaptationDetail` text.
@@ -294,7 +297,7 @@ export const DrdApiInteroperable = drdLeaf(
 /**
  * The `drd:atInteroperable` text: an `xs:boolean`, at most once per resource description.
  */
-export const DrdAtInteroperable = drdLeaf("DrdAtInteroperable", str.regex(patterns.xsBoolean));
+export const DrdAtInteroperable = drdLeaf("DrdAtInteroperable", closedId(XsBoolean));
 
 /**
  * The `drd:controlFlexibility` text.
@@ -331,7 +334,7 @@ export const DrdEducationalLevelOfAdaptation = drdLeaf(
 /**
  * The `drd:hasAdaptation` text: an `xs:anyURI` on the collapsed value.
  */
-export const DrdHasAdaptation = drdLeaf("DrdHasAdaptation", str.regex(patterns.anyUri));
+export const DrdHasAdaptation = drdLeaf("DrdHasAdaptation", DrdAdaptationUri);
 
 /**
  * The `drd:hazard` text.
@@ -341,20 +344,17 @@ export const DrdHazard = drdLeaf("DrdHazard", str.regex(patterns.drdHazard));
 /**
  * The `drd:isAdaptationOf` text: an `xs:anyURI` on the collapsed value.
  */
-export const DrdIsAdaptationOf = drdLeaf("DrdIsAdaptationOf", str.regex(patterns.anyUri));
+export const DrdIsAdaptationOf = drdLeaf("DrdIsAdaptationOf", DrdAdaptationUri);
 
 /**
  * The `drd:isFullAdaptationOf` text: an `xs:anyURI` on the collapsed value.
  */
-export const DrdIsFullAdaptationOf = drdLeaf("DrdIsFullAdaptationOf", str.regex(patterns.anyUri));
+export const DrdIsFullAdaptationOf = drdLeaf("DrdIsFullAdaptationOf", DrdAdaptationUri);
 
 /**
  * The `drd:isPartialAdaptationOf` text: an `xs:anyURI` on the collapsed value.
  */
-export const DrdIsPartialAdaptationOf = drdLeaf(
-  "DrdIsPartialAdaptationOf",
-  str.regex(patterns.anyUri),
-);
+export const DrdIsPartialAdaptationOf = drdLeaf("DrdIsPartialAdaptationOf", DrdAdaptationUri);
 
 /**
  * The `drd:languageOfAdaptation` text: an `xs:normalizedString`.
@@ -496,7 +496,7 @@ export const ManifestIdHolder = closed("ManifestIdHolder", ["manifest", "resourc
  */
 export const ManifestId = relation(
   "ManifestId",
-  { holder: closedId(ManifestIdHolder), id: ncName, package: uuid },
+  { holder: closedId(ManifestIdHolder), id: ManifestIdentifier, package: uuid },
   ["package", "id"],
 );
 
@@ -505,7 +505,7 @@ export const ManifestId = relation(
  */
 export const ManifestIdOfManifest = relation(
   "ManifestIdOfManifest",
-  { id: ncName, package: uuid },
+  { id: ManifestIdentifier, package: uuid },
   ["package", "id"],
 );
 
@@ -514,17 +514,18 @@ export const ManifestIdOfManifest = relation(
  */
 export const ManifestIdOfResource = relation(
   "ManifestIdOfResource",
-  { id: ncName, package: uuid },
+  { id: ManifestIdentifier, package: uuid },
   ["package", "id"],
 );
 
 /**
  * The `ManifestId` of a variant: the variant's `identifier`.
  */
-export const ManifestIdOfVariant = relation("ManifestIdOfVariant", { id: ncName, package: uuid }, [
-  "package",
-  "id",
-]);
+export const ManifestIdOfVariant = relation(
+  "ManifestIdOfVariant",
+  { id: ManifestIdentifier, package: uuid },
+  ["package", "id"],
+);
 
 /**
  * The statements of the manifest-wide `xs:ID` space. Each id belongs to a package, and the
@@ -632,6 +633,11 @@ export const rules = [
   }),
   key(ManifestSchemaVersion, ["metadata"]),
   contained(on(ManifestSchemaVersion, "metadata"), on(ManifestMetadata, "id")),
+  contained(
+    on(ManifestSchemaVersion, "metadata", "package"),
+    on(ManifestMetadata, "id", "manifest"),
+  ),
+  contained(on(ManifestSchemaVersion, "package", "version"), on(Package, "id", "schemaversion")),
   contained(on(ManifestSchemaVersion, "id", "metadata"), on(Edge, "child", "parent")),
   capacity(on(ManifestMetadata, "id"), {
     from: on(ManifestSchemaVersion, "metadata"),

@@ -20,15 +20,15 @@ import * as drd from "#qti/schema/kinds/drd.ts";
 import * as lom from "#qti/schema/kinds/lom.ts";
 import * as ud from "#qti/schema/kinds/ud.ts";
 import { ResourceLomGeneral } from "#qti/schema/lang.ts";
-import { Node } from "#qti/schema/node.ts";
+import { AttributeLexical, AttributeSpelling, Node } from "#qti/schema/node.ts";
 import { registries } from "#qti/schema/seed/admission.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
 import { fixtureNames, materialize, materializeCorpus } from "#qti/test/fixtures.ts";
 import { cutItemRenderTestTimeoutMs, settings } from "#qti/test/settings.ts";
-import { canonicalize } from "#qti/xml/canonical.ts";
+import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { xmllintC14n } from "#qti/xml/oracle.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * The text of a canonical form, so a failed comparison prints the two documents and not two byte
@@ -192,11 +192,11 @@ const synthetic = `<?xml version="1.0" encoding="UTF-8"?>
   <qti-response-declaration identifier="OTHER" cardinality="ordered" base-type="identifier"/>
   <qti-response-declaration identifier="THIRD" cardinality="ordered" base-type="identifier"/>
   <qti-item-body class=" a   b " id="body">
-    <table summary="s"><tbody><tr><td headers="" colspan="2">a</td><td headers=" h1   h2 " aria-labelledby=" x  y " role="cell">b</td></tr></tbody></table>
+    <table summary="s"><tbody><tr><td headers="" colspan="2">a</td><td headers=" h1   h2 " aria-labelledby=" x  y " role="gridcell">b</td></tr></tbody></table>
     <qti-order-interaction response-identifier="RESPONSE" shuffle="true"><qti-simple-choice identifier="A" fixed="true">a</qti-simple-choice><qti-simple-choice identifier="B">b</qti-simple-choice></qti-order-interaction>
     <qti-order-interaction response-identifier="OTHER"><qti-simple-choice identifier="C">c</qti-simple-choice></qti-order-interaction>
     <qti-order-interaction response-identifier="THIRD" shuffle="false"><qti-simple-choice identifier="D">d</qti-simple-choice></qti-order-interaction>
-    <picture><source srcset="a.svg" type="image/svg"/><img src="a.png" alt=""/></picture>
+    <p><picture><source srcset="a.svg" type="image/svg"/><img src="a.png" alt=""/></picture></p>
   </qti-item-body>
 </qti-assessment-item>`;
 
@@ -221,14 +221,25 @@ const sixKindsItem = `<?xml version="1.0" encoding="UTF-8"?>
 </qti-assessment-item>`;
 
 /**
- * An item with a graphic associate interaction whose first hotspot writes `match-min` and whose
- * second omits it.
+ * An item with a choice interaction that writes `max-choices="5"`.
+ */
+const spelledChoiceItem = `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="choice" title="Choice" adaptive="false" time-dependent="false">
+  <qti-response-declaration identifier="RESPONSE" cardinality="multiple" base-type="identifier"/>
+  <qti-item-body>
+    <qti-choice-interaction response-identifier="RESPONSE" max-choices="5"><qti-simple-choice identifier="A">a</qti-simple-choice></qti-choice-interaction>
+  </qti-item-body>
+</qti-assessment-item>`;
+
+/**
+ * An item with a graphic associate interaction whose first hotspot writes `match-min="03"` and
+ * whose second writes `match-max="+2"` and omits `match-min`.
  */
 const hotspotItem = `<?xml version="1.0" encoding="UTF-8"?>
 <qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="hotspot" title="Hotspot" adaptive="false" time-dependent="false">
   <qti-response-declaration identifier="RESPONSE" cardinality="multiple" base-type="directedPair"/>
   <qti-item-body>
-    <qti-graphic-associate-interaction response-identifier="RESPONSE"><img src="a.png" alt="a"/><qti-associable-hotspot identifier="H1" shape="rect" coords="0,0,5,5" match-max="1" match-min="1"/><qti-associable-hotspot identifier="H2" shape="rect" coords="6,6,9,9" match-max="1"/></qti-graphic-associate-interaction>
+    <qti-graphic-associate-interaction response-identifier="RESPONSE"><img src="a.png" alt="a"/><qti-associable-hotspot identifier="H1" shape="rect" coords="0,0,5,5" match-max="1" match-min="03"/><qti-associable-hotspot identifier="H2" shape="rect" coords="6,6,9,9" match-max="+2"/></qti-graphic-associate-interaction>
   </qti-item-body>
 </qti-assessment-item>`;
 
@@ -359,7 +370,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         }),
     );
 
-    it.effect("an associable hotspot's written match-min is kept", () =>
+    it.effect("an associable hotspot's written match-min and match-max spellings are kept", () =>
       Effect.gen(function* hotspotMatchMin() {
         const doc = yield* readXml(new TextEncoder().encode(hotspotItem));
         const input: ItemInput = {
@@ -376,7 +387,43 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
         assert.strictEqual(rendered, textOf(canonicalize(doc)));
         assert.strictEqual(rendered.split('match-min="').length - 1, 1);
-        assert.include(rendered, 'match-min="1"');
+        assert.include(rendered, 'match-min="03"');
+        assert.include(rendered, 'match-max="+2"');
+      }),
+    );
+
+    it.effect("a spelling row renders in place of the typed value, and a lexical row over it", () =>
+      Effect.gen(function* spelledAttribute() {
+        const doc = yield* readXml(new TextEncoder().encode(spelledChoiceItem));
+        const { documentId, rows } = yield* itemRows(
+          {
+            doc,
+            packageId: crypto.randomUUID(),
+            path: "choice.xml",
+            resource: "choice",
+            resourceLomHasGeneral: false,
+            resourceType: "imsqti_item_xmlv3p0",
+            version: "3.0.1",
+          },
+          Rows.empty(),
+        );
+        const node = Rows.of(rows, Node).find((row) => row.kind === "qti-choice-interaction")?.id;
+        assert.isDefined(node);
+
+        const attribute = "max-choices";
+        const kind = "qti-choice-interaction";
+        const canonical = textOf(canonicalize(renderTree(rows, documentId)));
+        assert.include(canonical, 'max-choices="5"');
+
+        const spelled = Rows.add(rows, AttributeSpelling, [{ attribute, kind, node, value: "+5" }]);
+        const spelledOut = textOf(canonicalize(renderTree(spelled, documentId)));
+        assert.include(spelledOut, 'max-choices="+5"');
+        assert.notInclude(spelledOut, 'max-choices="5"');
+
+        const both = Rows.add(spelled, AttributeLexical, [
+          { attribute, kind, node, value: " +5 " },
+        ]);
+        assert.include(textOf(canonicalize(renderTree(both, documentId))), 'max-choices=" +5 "');
       }),
     );
 
@@ -797,7 +844,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       }),
     );
 
-    for (const name of ["usage3", "usage3-padded"] as const) {
+    for (const name of ["usage3", "usage3-padded", "usage3-float-padded"] as const) {
       it.effect(`${name}: example.xml renders to the oracle's canonical bytes`, () =>
         Effect.gen(function* usageRenders() {
           const { expected, id, rows } = yield* usageOf(name);

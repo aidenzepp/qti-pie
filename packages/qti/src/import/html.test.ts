@@ -5,8 +5,17 @@ import { Effect, Exit, FileSystem, Option } from "effect";
 import { renderTree } from "#qti/export/render.ts";
 import { htmlRows } from "#qti/import/html.ts";
 import { itemRows } from "#qti/import/item.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows, treeRows, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { NodeIndex, TreeInput } from "#qti/import/tree.ts";
+import {
+  CitationUri,
+  ContentMediaType,
+  EmbedSourceUri,
+  HyperlinkUri,
+  TableSpan,
+  TrackLanguage,
+} from "#qti/schema/contracts.ts";
 import { Img, P } from "#qti/schema/html.ts";
 import * as media from "#qti/schema/html/media.ts";
 import * as structure from "#qti/schema/html/structure.ts";
@@ -14,8 +23,8 @@ import * as text from "#qti/schema/html/text.ts";
 import { AttributeLexical } from "#qti/schema/node.ts";
 import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
 import { materialize } from "#qti/test/fixtures.ts";
-import { canonicalize } from "#qti/xml/canonical.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { canonicalize } from "@qti-pie/crust/canonical.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";
 
@@ -64,7 +73,7 @@ describe("htmlRows on a 3.0.1 video", () => {
         { id: sourceId, parentKind: "video", src: "a.mp4" },
       ]);
       assert.deepStrictEqual(Rows.of(rows, media.relations.SourceType), [
-        { node: sourceId, value: "video/mp4" },
+        { node: sourceId, value: ContentMediaType("video/mp4") },
       ]);
     }),
   );
@@ -143,7 +152,7 @@ describe("htmlRows defaults", () => {
         { node: writtenId },
       ]);
       assert.deepStrictEqual(Rows.of(written.rows, media.relations.TrackSrclang), [
-        { node: writtenId, value: "en" },
+        { node: writtenId, value: TrackLanguage("en") },
       ]);
       assert.deepStrictEqual(Rows.of(written.rows, media.relations.TrackDefault), [
         { node: writtenId, value: "default", version: "3.0.1" },
@@ -171,7 +180,7 @@ describe("htmlRows defaults", () => {
         { node: second?.id ?? "" },
       ]);
       assert.deepStrictEqual(Rows.of(rows, media.relations.ParamType), [
-        { node: second?.id ?? "", value: "text/plain" },
+        { node: second?.id ?? "", value: ContentMediaType("text/plain") },
       ]);
       assert.strictEqual(Rows.of(rows, media.relations.Object).length, 1);
       assert.isDefined(idOf(nodes, "object"));
@@ -216,18 +225,22 @@ describe("htmlRows on the text and structure elements", () => {
 
       assert.strictEqual(Rows.of(rows, text.Div).length, 1);
       assert.strictEqual(Rows.of(rows, text.Span).length, 1);
-      assert.deepStrictEqual(Rows.of(rows, text.A), [{ href: "x.html", id: idOf(nodes, "a") }]);
+      assert.deepStrictEqual(Rows.of(rows, text.A), [
+        { href: HyperlinkUri("x.html"), id: idOf(nodes, "a") },
+      ]);
       assert.deepStrictEqual(
         Rows.of(rows, AttributeLexical).map((row) => [row.node, row.attribute, row.value]),
         [[idOf(nodes, "a"), "href", " x.html "]],
       );
       assert.deepStrictEqual(Rows.of(rows, text.AType), [
-        { node: idOf(nodes, "a"), value: "text/html" },
+        { node: idOf(nodes, "a"), value: ContentMediaType("text/html") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, text.BlockquoteCite), [
-        { node: idOf(nodes, "blockquote"), value: "c" },
+        { node: idOf(nodes, "blockquote"), value: CitationUri("c") },
       ]);
-      assert.deepStrictEqual(Rows.of(rows, text.QCite), [{ node: idOf(nodes, "q"), value: "d" }]);
+      assert.deepStrictEqual(Rows.of(rows, text.QCite), [
+        { node: idOf(nodes, "q"), value: CitationUri("d") },
+      ]);
       assert.deepStrictEqual(Rows.of(rows, text.BdoTitle), [
         { node: idOf(nodes, "bdo"), value: "t" },
       ]);
@@ -242,15 +255,19 @@ describe("htmlRows on the text and structure elements", () => {
       );
       const cell = idOf(nodes, "td");
 
-      assert.deepStrictEqual(Rows.of(rows, structure.TdColspan), [{ node: cell, value: "2" }]);
-      assert.deepStrictEqual(Rows.of(rows, structure.TdRowspan), [{ node: cell, value: "3" }]);
+      assert.deepStrictEqual(Rows.of(rows, structure.TdColspan), [
+        { node: cell, value: TableSpan("2") },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, structure.TdRowspan), [
+        { node: cell, value: TableSpan("3") },
+      ]);
       assert.deepStrictEqual(Rows.of(rows, structure.TdScope), [{ node: cell, value: "row" }]);
       assert.deepStrictEqual(Rows.of(rows, structure.TdAlign), [{ node: cell, value: "left" }]);
       assert.deepStrictEqual(Rows.of(rows, structure.TdValign), [{ node: cell, value: "top" }]);
       assert.deepStrictEqual(Rows.of(rows, structure.TdAbbr), [{ node: cell, value: "a" }]);
       assert.deepStrictEqual(Rows.of(rows, structure.TdAxis), [{ node: cell, value: "x" }]);
       assert.deepStrictEqual(Rows.of(rows, structure.ThColspan), [
-        { node: idOf(nodes, "th"), value: "1" },
+        { node: idOf(nodes, "th"), value: TableSpan("1") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, structure.TableSummary), [
         { node: idOf(nodes, "table"), value: "s" },
@@ -306,7 +323,9 @@ describe("htmlRows refuses an absent required attribute", () => {
     Effect.gen(function* empty() {
       const { nodes, rows } = yield* built("3.0.1", '<div><a href="">go</a></div>');
 
-      assert.deepStrictEqual(Rows.of(rows, text.A), [{ href: "", id: idOf(nodes, "a") }]);
+      assert.deepStrictEqual(Rows.of(rows, text.A), [
+        { href: HyperlinkUri(""), id: idOf(nodes, "a") },
+      ]);
     }),
   );
 });
@@ -355,8 +374,14 @@ describe("htmlRows over the inventory", () => {
               )
               .map((found) => ` ${found.name}="x"`)
               .join("");
+            // A closed attribute reads "x" and refuses it under `attribute-lexical`: it has a home.
             const exit = yield* Effect.exit(
-              built("3.0.1", `<${kind} ${tested.name}="x"${alongside}/>`),
+              built("3.0.1", `<${kind} ${tested.name}="x"${alongside}/>`).pipe(
+                Effect.catchIf(
+                  (refusal) => refusal instanceof ImportRefused,
+                  () => Effect.void,
+                ),
+              ),
             );
 
             assert.isTrue(Exit.isSuccess(exit), `${kind}/@${tested.name} has no home in htmlRows`);
@@ -397,7 +422,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("htmlRows on sharedMedi
       const objectId = idOf(tree.nodes, "object");
 
       assert.deepStrictEqual(Rows.of(rows, media.relations.Object), [
-        { data: "ukair.png", id: objectId, type: "image/png" },
+        { data: EmbedSourceUri("ukair.png"), id: objectId, type: ContentMediaType("image/png") },
       ]);
       assert.deepStrictEqual(Rows.of(rows, media.relations.ObjectWidth), [
         { node: objectId, value: "206" },
@@ -430,6 +455,68 @@ layer(NodeServices.layer, { excludeTestServices: true })("a padded href", (suite
 
       assert.strictEqual(rendered, new TextDecoder().decode(canonicalize(doc)));
       assert.include(rendered, 'href=" x.html "');
+    }),
+  );
+});
+
+describe("htmlRows refuses a closed attribute outside its roster", () => {
+  const negatives: readonly (readonly [string, TreeInput["version"], string])[] = [
+    ["track kind", "3.0.1", '<video><track kind="lyrics" src="a.vtt"/></video>'],
+    ["video autoplay", "3.0.1", '<video autoplay="on"/>'],
+    ["audio loop", "3.0.0", '<audio loop="yes"/>'],
+    ["track default", "3.0.1", '<video><track default="on" src="a.vtt"/></video>'],
+    ["audio crossorigin", "3.0.1", '<audio crossorigin="any"/>'],
+    ["video preload", "3.0.1", '<video preload="all"/>'],
+    [
+      "param valuetype",
+      "3.0.1",
+      '<object data="a.png" type="image/png"><param name="a" value="1" valuetype="FILE"/></object>',
+    ],
+    ["details open", "3.0.1", '<details open="open"><summary>s</summary></details>'],
+    ["td scope", "3.0.1", '<table><tbody><tr><td scope="cell">x</td></tr></tbody></table>'],
+    ["th align", "3.0.1", '<table><tbody><tr><th align="start">x</th></tr></tbody></table>'],
+    ["td valign", "3.0.1", '<table><tbody><tr><td valign="center">x</td></tr></tbody></table>'],
+  ];
+
+  for (const [label, version, fragment] of negatives) {
+    it.effect(`refuses ${label} under attribute-lexical`, () =>
+      Effect.gen(function* outside() {
+        const refusal = yield* Effect.flip(built(version, fragment));
+
+        assert.instanceOf(refusal, ImportRefused);
+        assert.strictEqual(
+          refusal instanceof ImportRefused ? refusal.rule : "",
+          "attribute-lexical",
+        );
+      }),
+    );
+  }
+
+  it.effect("admits a collapsed 3.0.0 boolean and each written closed value", () =>
+    Effect.gen(function* inside() {
+      const { nodes, rows } = yield* built(
+        "3.0.1",
+        '<video autoplay="autoplay" preload="auto" crossorigin="anonymous"><track kind="captions" src="a.vtt" default="default"/></video>',
+      );
+      const videoId = idOf(nodes, "video");
+
+      assert.deepStrictEqual(Rows.of(rows, media.relations.VideoAutoplay), [
+        { node: videoId, value: "autoplay", version: "3.0.1" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, media.relations.VideoPreload), [
+        { node: videoId, value: "auto" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, media.relations.VideoCrossorigin), [
+        { node: videoId, value: "anonymous" },
+      ]);
+      assert.deepStrictEqual(
+        Rows.of(rows, media.relations.Track).map((row) => row.kind),
+        ["captions"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, media.relations.TrackDefault).map((row) => row.value),
+        ["default"],
+      );
     }),
   );
 });

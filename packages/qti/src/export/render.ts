@@ -6,7 +6,10 @@
  * name the kind's registry gives it. A typed copy of a value is never read: an element's text is
  * its text children, the `<attribute>N` columns and the owner and version copies are never
  * rendered, and an attribute whose node has an `AttributeLexical` row is written with that row's
- * value, because the typed column holds the collapsed or replaced form.
+ * value, because the typed column holds the collapsed or replaced form. Where the node has an
+ * `AttributeSpelling` row instead, the attribute is written with the spelling, because the typed
+ * integer holds only the value; with both, the lexical row wins (spec 4.6: lexical, else spelling,
+ * else the canonical rendering).
  *
  * Attributes are placed in the order the module reads them: namespace declarations,
  * `xsi:schemaLocation`, the kind's own attributes in the order of `ownAttributes`, then the
@@ -21,6 +24,7 @@ import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
 import {
   AttributeEntityReference,
   AttributeLexical,
+  AttributeSpelling,
   Comment as CommentRow,
   Edge,
   EntityReference,
@@ -39,7 +43,7 @@ import {
   vocabularies,
   Ws,
 } from "#qti/schema/node.ts";
-import type { Attribute, Child, Misc, XmlDocument } from "#qti/xml/tree.ts";
+import type { Attribute, Child, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
@@ -139,6 +143,7 @@ export const renderTree = (rows: RowSet, treeId: string): XmlDocument => {
   const declarations = Map.groupBy(Rows.of(rows, NamespaceDeclaration), (row) => row.node);
   const schemaLocations = by(Rows.of(rows, SchemaLocation), (row) => row.node);
   const lexical = Map.groupBy(Rows.of(rows, AttributeLexical), (row) => row.node);
+  const spelling = Map.groupBy(Rows.of(rows, AttributeSpelling), (row) => row.node);
   const references = Map.groupBy(
     Rows.of(rows, AttributeEntityReference),
     (row) => `${row.node}\n${row.attribute}`,
@@ -158,6 +163,10 @@ export const renderTree = (rows: RowSet, treeId: string): XmlDocument => {
       if (value !== undefined) {
         values.set(name, value);
       }
+    }
+
+    for (const row of spelling.get(id) ?? []) {
+      values.set(row.attribute, row.value);
     }
 
     for (const row of lexical.get(id) ?? []) {

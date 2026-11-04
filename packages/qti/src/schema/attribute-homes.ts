@@ -87,6 +87,18 @@ const textOf = (fact: Columns | undefined, field: string): string | undefined =>
 };
 
 /**
+ * The canonical rendering of an integer spelling: what `String` makes of the integer the
+ * spelling parses to. An `AttributeSpelling` row is consistent with the typed value it sits
+ * beside exactly when this equals the reader's text; text that is not an integer spelling has
+ * none.
+ *
+ * @param spelling - A stored spelling, such as `+5`, `05` or `-0`.
+ * @returns The canonical text of its value, or `undefined` when it is not an integer.
+ */
+export const spelledText = (spelling: string): string | undefined =>
+  /^[+-]?[0-9]+$/u.test(spelling) ? String(BigInt(spelling)) : undefined;
+
+/**
  * The value of the column `field` in the row of `relation` whose column `key` is the node's id:
  * written whenever that row exists, which is always for an arm's required column and only where
  * the source wrote the attribute for an optional-value relation.
@@ -116,6 +128,35 @@ const column = (relation: AnyRelation, field: string, key: string): Source => {
  * The column `field` of an arm, whose rows are keyed by `id`.
  */
 const arm = (relation: AnyRelation, field: string): Source => column(relation, field, "id");
+
+/**
+ * An attribute that is a number or a variable name: the number of `valueField` where `kindField`
+ * says `literal`, and the `identifier` of the arm's `reference` row where it says `ref`.
+ *
+ * @param relation - The arm that holds the kind and the number, keyed by `id`.
+ * @param kindField - The column that says whether the source wrote a number or a variable name.
+ * @param valueField - The column that holds the number.
+ * @param reference - The relation of one `node` and `identifier` that holds the variable name.
+ * @returns The source of the attribute.
+ */
+const literalOrRef = (
+  relation: AnyRelation,
+  kindField: string,
+  valueField: string,
+  reference: AnyRelation,
+): Source => {
+  const literal = arm(relation, valueField);
+  const kind = arm(relation, kindField);
+  const named = column(reference, "identifier", "node");
+
+  return (index) => {
+    const readLiteral = literal(index);
+    const readKind = kind(index);
+    const readNamed = named(index);
+
+    return (id) => (readKind(id) === "ref" ? readNamed(id) : readLiteral(id));
+  };
+};
 
 /**
  * The `value` of an optional-value relation, whose rows are keyed by `node` and exist only where
@@ -560,8 +601,8 @@ export const ownAttributes = {
     ["shape", arm(R.AssociableHotspot, "shape")],
     ["coords", optional(R.Coords)],
     ["hotspot-label", optional(R.AssociableHotspotLabel)],
-    ["match-max", arm(R.AssociableHotspot, "matchMax")],
-    ["match-min", optional(R.AssociableHotspotMatchMin)],
+    ["match-max", arm(R.AssociableHotspot, "matchMaxN")],
+    ["match-min", marked(R.AssociableHotspotMatchMin, arm(R.AssociableHotspot, "matchMinN"))],
     [
       "show-hide",
       marked(R.DeclaredAssociableHotspotShowHide, arm(R.AssociableHotspot, "showHide")),
@@ -570,15 +611,21 @@ export const ownAttributes = {
   "qti-associate-interaction": [
     responseIdentifierOf(R.AssociateInteraction),
     ["shuffle", marked(R.DeclaredAssociateShuffle, arm(R.AssociateInteraction, "shuffle"))],
-    ["max-associations", optional(R.AssociateMaxAssociations)],
-    ["min-associations", optional(R.AssociateMinAssociations)],
+    [
+      "max-associations",
+      marked(R.DeclaredAssociateMaxAssociations, arm(R.AssociateInteraction, "maxAssociationsN")),
+    ],
+    [
+      "min-associations",
+      marked(R.DeclaredAssociateMinAssociations, arm(R.AssociateInteraction, "minAssociationsN")),
+    ],
   ],
   "qti-base-value": [["base-type", arm(R.Literal, "baseType")]],
   "qti-choice-interaction": [
     responseIdentifierOf(R.ChoiceInteraction),
     ["shuffle", marked(R.DeclaredShuffle, arm(R.ChoiceInteraction, "shuffle"))],
-    ["max-choices", marked(R.DeclaredMaxChoices, arm(R.ChoiceInteraction, "maxChoices"))],
-    ["min-choices", marked(R.DeclaredMinChoices, arm(R.ChoiceInteraction, "minChoices"))],
+    ["max-choices", marked(R.DeclaredMaxChoices, arm(R.ChoiceInteraction, "maxChoicesN"))],
+    ["min-choices", marked(R.DeclaredMinChoices, arm(R.ChoiceInteraction, "minChoicesN"))],
     ["orientation", marked(R.DeclaredOrientation, arm(R.ChoiceInteraction, "orientation"))],
     ["data-min-selections-message", optional(R.ChoiceInteractionMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.ChoiceInteractionMaxSelectionsMessage)],
@@ -608,7 +655,10 @@ export const ownAttributes = {
   ],
   "qti-equal-rounded": [
     ["rounding-mode", marked(R.DeclaredRoundingMode, arm(R.EqualRounded, "roundingMode"))],
-    ["figures", arm(R.EqualRounded, "figures")],
+    [
+      "figures",
+      literalOrRef(R.EqualRounded, "figuresKind", "figuresValue", R.EqualRoundedFiguresRef),
+    ],
   ],
   "qti-extended-text-interaction": [
     responseIdentifierOf(R.ExtendedTextInteraction),
@@ -644,8 +694,8 @@ export const ownAttributes = {
     identifierOf(R.GapImg),
     ["template-identifier", choiceTemplate],
     ["match-group", optional(R.MatchGroup)],
-    ["match-max", arm(R.GapImg, "matchMax")],
-    ["match-min", optional(R.GapImgMatchMin)],
+    ["match-max", arm(R.GapImg, "matchMaxN")],
+    ["match-min", marked(R.GapImgMatchMin, arm(R.GapImg, "matchMinN"))],
     ["object-label", optional(R.GapImgObjectLabel)],
     ["top", optional(R.GapImgTop)],
     ["left", optional(R.GapImgLeft)],
@@ -654,8 +704,14 @@ export const ownAttributes = {
   "qti-gap-match-interaction": [
     responseIdentifierOf(R.GapMatchInteraction),
     ["shuffle", marked(R.DeclaredGapMatchShuffle, arm(R.GapMatchInteraction, "shuffle"))],
-    ["min-associations", optional(R.GapMatchMinAssociations)],
-    ["max-associations", optional(R.GapMatchMaxAssociations)],
+    [
+      "min-associations",
+      marked(R.GapMatchMinAssociations, arm(R.GapMatchInteraction, "minAssociationsN")),
+    ],
+    [
+      "max-associations",
+      marked(R.DeclaredGapMatchMaxAssociations, arm(R.GapMatchInteraction, "maxAssociationsN")),
+    ],
     ["data-min-selections-message", optional(R.GapMatchMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.GapMatchMaxSelectionsMessage)],
     ["data-choices-container-width", optional(R.GapMatchChoicesContainerWidth)],
@@ -664,27 +720,51 @@ export const ownAttributes = {
     identifierOf(R.GapText),
     ["template-identifier", choiceTemplate],
     ["match-group", optional(R.MatchGroup)],
-    ["match-max", arm(R.GapText, "matchMax")],
-    ["match-min", optional(R.GapTextMatchMin)],
+    ["match-max", arm(R.GapText, "matchMaxN")],
+    ["match-min", marked(R.GapTextMatchMin, arm(R.GapText, "matchMinN"))],
     ["show-hide", marked(R.DeclaredGapTextShowHide, arm(R.GapText, "showHide"))],
   ],
   "qti-graphic-associate-interaction": [
     responseIdentifierOf(R.GraphicAssociateInteraction),
-    ["min-associations", optional(R.GraphicAssociateMinAssociations)],
-    ["max-associations", optional(R.GraphicAssociateMaxAssociations)],
+    [
+      "min-associations",
+      marked(
+        R.GraphicAssociateMinAssociations,
+        arm(R.GraphicAssociateInteraction, "minAssociationsN"),
+      ),
+    ],
+    [
+      "max-associations",
+      marked(
+        R.DeclaredGraphicAssociateMaxAssociations,
+        arm(R.GraphicAssociateInteraction, "maxAssociationsN"),
+      ),
+    ],
   ],
   "qti-graphic-gap-match-interaction": [
     responseIdentifierOf(R.GraphicGapMatchInteraction),
-    ["min-associations", optional(R.GraphicGapMatchMinAssociations)],
-    ["max-associations", optional(R.GraphicGapMatchMaxAssociations)],
+    [
+      "min-associations",
+      marked(
+        R.GraphicGapMatchMinAssociations,
+        arm(R.GraphicGapMatchInteraction, "minAssociationsN"),
+      ),
+    ],
+    [
+      "max-associations",
+      marked(
+        R.DeclaredGraphicGapMatchMaxAssociations,
+        arm(R.GraphicGapMatchInteraction, "maxAssociationsN"),
+      ),
+    ],
     ["data-min-selections-message", optional(R.GraphicGapMatchMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.GraphicGapMatchMaxSelectionsMessage)],
     ["data-choices-container-width", optional(R.GraphicGapMatchChoicesContainerWidth)],
   ],
   "qti-graphic-order-interaction": [
     responseIdentifierOf(R.GraphicOrderInteraction),
-    ["min-choices", optional(R.GraphicOrderMinChoices)],
-    ["max-choices", optional(R.GraphicOrderMaxChoices)],
+    ["min-choices", optional(R.GraphicOrderMinChoicesN)],
+    ["max-choices", optional(R.GraphicOrderMaxChoicesN)],
   ],
   "qti-hotspot-choice": [
     identifierOf(R.HotspotChoice),
@@ -696,8 +776,8 @@ export const ownAttributes = {
   ],
   "qti-hotspot-interaction": [
     responseIdentifierOf(R.HotspotInteraction),
-    ["min-choices", optional(R.HotspotMinChoices)],
-    ["max-choices", optional(R.HotspotMaxChoices)],
+    ["min-choices", marked(R.DeclaredHotspotMinChoices, arm(R.HotspotInteraction, "minChoicesN"))],
+    ["max-choices", marked(R.DeclaredHotspotMaxChoices, arm(R.HotspotInteraction, "maxChoicesN"))],
     ["data-min-selections-message", optional(R.HotspotMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.HotspotMaxSelectionsMessage)],
   ],
@@ -708,12 +788,12 @@ export const ownAttributes = {
   ],
   "qti-hottext-interaction": [
     responseIdentifierOf(R.HottextInteraction),
-    ["max-choices", optional(R.HottextMaxChoices)],
-    ["min-choices", optional(R.HottextMinChoices)],
+    ["max-choices", marked(R.DeclaredHottextMaxChoices, arm(R.HottextInteraction, "maxChoicesN"))],
+    ["min-choices", marked(R.DeclaredHottextMinChoices, arm(R.HottextInteraction, "minChoicesN"))],
     ["data-min-selections-message", optional(R.HottextMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.HottextMaxSelectionsMessage)],
   ],
-  "qti-index": [["n", arm(R.Index, "n")]],
+  "qti-index": [["n", literalOrRef(R.Index, "nKind", "nValue", R.IndexNRef)]],
   "qti-inline-choice": [
     identifierOf(R.InlineChoice),
     ["fixed", marked(R.DeclaredInlineChoiceFixed, arm(R.InlineChoice, "fixed"))],
@@ -765,8 +845,14 @@ export const ownAttributes = {
   "qti-match-interaction": [
     responseIdentifierOf(R.MatchInteraction),
     ["shuffle", marked(R.DeclaredMatchShuffle, arm(R.MatchInteraction, "shuffle"))],
-    ["max-associations", optional(R.MatchMaxAssociations)],
-    ["min-associations", optional(R.MatchMinAssociations)],
+    [
+      "max-associations",
+      marked(R.DeclaredMatchMaxAssociations, arm(R.MatchInteraction, "maxAssociationsN")),
+    ],
+    [
+      "min-associations",
+      marked(R.DeclaredMatchMinAssociations, arm(R.MatchInteraction, "minAssociationsN")),
+    ],
     ["data-min-selections-message", optional(R.MatchMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.MatchMaxSelectionsMessage)],
     ["data-first-column-header", optional(R.MatchFirstColumnHeader)],
@@ -781,8 +867,8 @@ export const ownAttributes = {
   "qti-media-interaction": [
     responseIdentifierOf(R.MediaInteraction),
     ["autostart", arm(R.MediaInteraction, "autostart")],
-    ["min-plays", optional(R.MediaMinPlays)],
-    ["max-plays", optional(R.MediaMaxPlays)],
+    ["min-plays", marked(R.MediaMinPlays, arm(R.MediaInteraction, "minPlaysN"))],
+    ["max-plays", marked(R.MediaMaxPlays, arm(R.MediaInteraction, "maxPlaysN"))],
     ["loop", marked(R.DeclaredMediaLoop, arm(R.MediaInteraction, "loop"))],
     ["coords", optional(R.MediaCoords)],
   ],
@@ -800,8 +886,8 @@ export const ownAttributes = {
   "qti-order-interaction": [
     responseIdentifierOf(R.OrderInteraction),
     ["shuffle", marked(R.DeclaredOrderShuffle, arm(R.OrderInteraction, "shuffle"))],
-    ["min-choices", optional(R.OrderMinChoices)],
-    ["max-choices", optional(R.OrderMaxChoices)],
+    ["min-choices", optional(R.OrderMinChoicesN)],
+    ["max-choices", optional(R.OrderMaxChoicesN)],
     ["orientation", optional(R.OrderOrientation)],
     ["data-min-selections-message", optional(R.OrderMinSelectionsMessage)],
     ["data-max-selections-message", optional(R.OrderMaxSelectionsMessage)],
@@ -824,8 +910,14 @@ export const ownAttributes = {
   "qti-position-object-interaction": [
     responseIdentifierOf(R.PositionObjectInteraction),
     ["center-point", optional(R.PositionObjectCenterPoint)],
-    ["min-choices", optional(R.PositionObjectMinChoices)],
-    ["max-choices", optional(R.PositionObjectMaxChoices)],
+    [
+      "min-choices",
+      marked(R.PositionObjectMinChoices, arm(R.PositionObjectInteraction, "minChoicesN")),
+    ],
+    [
+      "max-choices",
+      marked(R.DeclaredPositionObjectMaxChoices, arm(R.PositionObjectInteraction, "maxChoicesN")),
+    ],
   ],
   "qti-printed-variable": [
     identifierOf(R.PrintedVariable),
@@ -849,7 +941,12 @@ export const ownAttributes = {
     ["max", arm(R.RandomInteger, "max")],
     ["step", optional(R.RandomIntegerStep)],
   ],
-  "qti-repeat": [["number-repeats", arm(R.Repeat, "numberRepeats")]],
+  "qti-repeat": [
+    [
+      "number-repeats",
+      literalOrRef(R.Repeat, "numberRepeatsKind", "numberRepeatsValue", R.RepeatNumberRepeatsRef),
+    ],
+  ],
   "qti-response-declaration": declared,
   "qti-response-processing": [
     ["template", column(R.ResponseProcessingTemplate, "uri", "node")],
@@ -857,7 +954,7 @@ export const ownAttributes = {
   ],
   "qti-round-to": [
     ["rounding-mode", arm(R.RoundTo, "roundingMode")],
-    ["figures", arm(R.RoundTo, "figures")],
+    ["figures", literalOrRef(R.RoundTo, "figuresKind", "figuresValue", R.RoundToFiguresRef)],
   ],
   "qti-rubric-block": [
     ["use", arm(R.RubricBlock, "use")],
@@ -865,8 +962,14 @@ export const ownAttributes = {
   ],
   "qti-select-point-interaction": [
     responseIdentifierOf(R.SelectPointInteraction),
-    ["min-choices", optional(R.SelectPointMinChoices)],
-    ["max-choices", optional(R.SelectPointMaxChoices)],
+    [
+      "min-choices",
+      marked(R.DeclaredSelectPointMinChoices, arm(R.SelectPointInteraction, "minChoicesN")),
+    ],
+    [
+      "max-choices",
+      marked(R.DeclaredSelectPointMaxChoices, arm(R.SelectPointInteraction, "maxChoicesN")),
+    ],
   ],
   "qti-set-correct-response": referring,
   "qti-set-default-value": referring,
@@ -878,8 +981,11 @@ export const ownAttributes = {
     ["template-identifier", choiceTemplate],
     ["show-hide", optional(R.SimpleAssociableChoiceShowHide)],
     ["match-group", optional(R.MatchGroup)],
-    ["match-max", arm(R.SimpleAssociableChoice, "matchMax")],
-    ["match-min", optional(R.SimpleAssociableChoiceMatchMin)],
+    ["match-max", arm(R.SimpleAssociableChoice, "matchMaxN")],
+    [
+      "match-min",
+      marked(R.SimpleAssociableChoiceMatchMin, arm(R.SimpleAssociableChoice, "matchMinN")),
+    ],
   ],
   "qti-simple-choice": [
     identifierOf(R.SimpleChoice),

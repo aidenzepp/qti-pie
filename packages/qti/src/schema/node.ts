@@ -23,6 +23,7 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
+import { YesNo } from "#qti/schema/content/rosters.ts";
 import * as asi from "#qti/schema/kinds/asi.ts";
 import * as cp from "#qti/schema/kinds/cp.ts";
 import * as cpx from "#qti/schema/kinds/cpx.ts";
@@ -35,6 +36,7 @@ import * as lom from "#qti/schema/kinds/lom.ts";
 import * as qmd from "#qti/schema/kinds/qmd.ts";
 import * as ud from "#qti/schema/kinds/ud.ts";
 import * as xi from "#qti/schema/kinds/xi.ts";
+import { NamespacePrefix, NamespaceUri, PiTarget, XmlEntityName } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { ancestryHandles } from "#qti/schema/seed/ancestry.ts";
 
@@ -255,7 +257,7 @@ export const TreeXmlEncoding = relation("TreeXmlEncoding", { tree: uuid, value: 
  */
 export const TreeXmlStandalone = relation(
   "TreeXmlStandalone",
-  { tree: uuid, value: str.regex(patterns.yesNo) },
+  { tree: uuid, value: closedId(YesNo) },
   ["tree"],
 );
 
@@ -335,7 +337,7 @@ export const NamespaceDeclaration = relation(
     node: uuid,
     position: pg.bigint,
     prefix: str.regex(patterns.ncNameOrEmpty),
-    uri: str.regex(patterns.anyUri),
+    uri: NamespaceUri,
   },
   ["node", "position"],
 );
@@ -347,7 +349,7 @@ export const SchemaLocation = relation(
   "SchemaLocation",
   {
     node: uuid,
-    prefix: str.regex(patterns.ncName),
+    prefix: NamespacePrefix,
     value: str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags),
   },
   ["node"],
@@ -361,7 +363,7 @@ export const AttributeEntityReference = relation(
   "AttributeEntityReference",
   {
     attribute: str.regex(patterns.qName),
-    name: str.regex(patterns.ncName),
+    name: XmlEntityName,
     node: uuid,
     offset: pg.bigint,
   },
@@ -379,6 +381,24 @@ export const AttributeLexical = relation(
     kind: closedId(NodeKind),
     node: uuid,
     value: str.regex(patterns.uncollapsed, patterns.uncollapsedFlags),
+  },
+  ["node", "attribute"],
+);
+
+/**
+ * The spelling of an integer attribute whose collapsed text parses to its typed value but is not
+ * that value's canonical rendering (`+5`, `05`, `-0`), kept for the round trip. A row exists only
+ * when the spelling differs from the canonical rendering, which the pattern states: a canonical
+ * spelling cannot be stored. That the spelling parses to the typed value it sits beside is a guard,
+ * not a statement.
+ */
+export const AttributeSpelling = relation(
+  "AttributeSpelling",
+  {
+    attribute: closedId(AttributeName),
+    kind: closedId(NodeKind),
+    node: uuid,
+    value: str.regex(patterns.nonCanonicalInteger),
   },
   ["node", "attribute"],
 );
@@ -407,18 +427,14 @@ export const Comment = relation("Comment", { id: uuid, text: wildcard }, ["id"])
 /**
  * A processing instruction inside the root element.
  */
-export const Pi = relation("Pi", { data: wildcard, id: uuid, target: str.regex(patterns.ncName) }, [
-  "id",
-]);
+export const Pi = relation("Pi", { data: wildcard, id: uuid, target: PiTarget }, ["id"]);
 
 /**
  * A general entity reference the reader kept unexpanded.
  */
-export const EntityReference = relation(
-  "EntityReference",
-  { id: uuid, name: str.regex(patterns.ncName) },
-  ["id"],
-);
+export const EntityReference = relation("EntityReference", { id: uuid, name: XmlEntityName }, [
+  "id",
+]);
 
 /**
  * The generic kinds' arms, keyed by their `NodeKind` handles.
@@ -443,6 +459,7 @@ export const relations = {
   AttributeEntityReference,
   AttributeLexical,
   AttributeName,
+  AttributeSpelling,
   Comment,
   Edge,
   EntityReference,
@@ -511,6 +528,7 @@ export const rules = [
   contained(on(SchemaLocation, "node"), on(Node, "id")),
   contained(on(AttributeEntityReference, "node"), on(Node, "id")),
   contained(on(AttributeLexical, "node", "kind"), on(Node, "id", "kind")),
+  contained(on(AttributeSpelling, "node", "kind"), on(Node, "id", "kind")),
   check("ManifestTreeHasManifestRoot", Tree, (row) =>
     row.or(row.ne(row.kind, "manifest"), row.eq(row.root, "manifest")),
   ),

@@ -8,6 +8,7 @@
  * them.
  */
 import { contained, on, relation, str, uuid } from "@bjornpagen/grizzle";
+import { ContentMediaType, StylesheetUri } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -25,7 +26,7 @@ export const RubricBlock = relation(
  */
 export const Stylesheet = relation(
   "Stylesheet",
-  { href: str.regex(patterns.anyUri), id: uuid, type: str.regex(patterns.mimeType) },
+  { href: StylesheetUri, id: uuid, type: ContentMediaType },
   ["id"],
 );
 

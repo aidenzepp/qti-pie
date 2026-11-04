@@ -2,6 +2,7 @@
 import { closedId, schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as choices from "#qti/schema/choices.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
@@ -338,18 +339,42 @@ describe("interactions/hot", () => {
     assert.match("-3 4", new RegExp(patterns.integerList, "u"));
   });
 
+  it("holds the choice bounds as integers only, with no lexical relation beside them", () => {
+    for (const name of [
+      "HottextMaxChoices",
+      "HottextMinChoices",
+      "HotspotMaxChoices",
+      "HotspotMinChoices",
+      "SelectPointMaxChoices",
+      "SelectPointMinChoices",
+      "PositionObjectMaxChoices",
+    ]) {
+      assert.notInclude(Object.keys(relations), name);
+    }
+
+    assert.deepStrictEqual(Object.keys(relations.PositionObjectMinChoices.fields), ["node"]);
+
+    for (const arm of [
+      relations.HottextInteraction,
+      relations.HotspotInteraction,
+      relations.SelectPointInteraction,
+      relations.PositionObjectInteraction,
+    ]) {
+      const fields = Object.keys(arm.fields);
+
+      assert.include(fields, "maxChoicesN", arm.name);
+      assert.include(fields, "minChoicesN", arm.name);
+    }
+  });
+
   it("contains every marker and optional value into the arm it belongs to", () => {
     const owners = [
       [relations.DeclaredHottextMaxChoices, relations.HottextInteraction],
       [relations.DeclaredHottextMinChoices, relations.HottextInteraction],
-      [relations.HottextMaxChoices, relations.HottextInteraction],
-      [relations.HottextMinChoices, relations.HottextInteraction],
       [relations.HottextMinSelectionsMessage, relations.HottextInteraction],
       [relations.HottextMaxSelectionsMessage, relations.HottextInteraction],
       [relations.DeclaredHotspotMaxChoices, relations.HotspotInteraction],
       [relations.DeclaredHotspotMinChoices, relations.HotspotInteraction],
-      [relations.HotspotMaxChoices, relations.HotspotInteraction],
-      [relations.HotspotMinChoices, relations.HotspotInteraction],
       [relations.HotspotMinSelectionsMessage, relations.HotspotInteraction],
       [relations.HotspotMaxSelectionsMessage, relations.HotspotInteraction],
       [relations.HotspotChoiceLabel, relations.HotspotChoice],
@@ -357,10 +382,7 @@ describe("interactions/hot", () => {
       [relations.DeclaredHotspotChoiceShowHide, relations.HotspotChoice],
       [relations.DeclaredSelectPointMaxChoices, relations.SelectPointInteraction],
       [relations.DeclaredSelectPointMinChoices, relations.SelectPointInteraction],
-      [relations.SelectPointMaxChoices, relations.SelectPointInteraction],
-      [relations.SelectPointMinChoices, relations.SelectPointInteraction],
       [relations.DeclaredPositionObjectMaxChoices, relations.PositionObjectInteraction],
-      [relations.PositionObjectMaxChoices, relations.PositionObjectInteraction],
       [relations.PositionObjectMinChoices, relations.PositionObjectInteraction],
       [relations.PositionObjectCenterPoint, relations.PositionObjectInteraction],
     ] as const;
@@ -372,5 +394,36 @@ describe("interactions/hot", () => {
       assert.deepStrictEqual(owned[0]?.left, ["node"]);
       assert.deepStrictEqual(owned[0]?.right, ["id"]);
     }
+  });
+
+  it("types its boolean, show-hide, orientation and format columns as closedId of their rosters", () => {
+    assert.strictEqual(relations.Hottext.fields.showHide.roster, rosters.ShowHide);
+    assert.strictEqual(relations.HotspotChoice.fields.showHide.roster, rosters.ShowHide);
+  });
+});
+
+describe("contracts (interactions/hot)", () => {
+  it("types Hottext.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(hot.Hottext.fields.identifier.name, contracts.ChoiceIdentifier.name);
+  });
+  it("types HottextOwner.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(hot.HottextOwner.fields.identifier.name, contracts.ChoiceIdentifier.name);
+  });
+  it("types HotspotChoice.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(hot.HotspotChoice.fields.identifier.name, contracts.ChoiceIdentifier.name);
+  });
+  it("types Hottext.identifier and HottextOwner.identifier alike, so the pair is one containment component", () => {
+    assert.strictEqual(hot.Hottext.fields.identifier.name, hot.HottextOwner.fields.identifier.name);
+  });
+});
+
+describe("contracts (shapes)", () => {
+  it("types Coords.value and CoordsDefault.value ShapeCoords", () => {
+    assert.strictEqual(shapes.Coords.fields.value.name, contracts.ShapeCoords.name);
+    assert.strictEqual(shapes.CoordsDefault.fields.value.name, contracts.ShapeCoords.name);
+  });
+  it("types CoordsEllipse.value and CoordsRect.value RectCoords", () => {
+    assert.strictEqual(shapes.CoordsEllipse.fields.value.name, contracts.RectCoords.name);
+    assert.strictEqual(shapes.CoordsRect.fields.value.name, contracts.RectCoords.name);
   });
 });

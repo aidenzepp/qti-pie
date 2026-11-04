@@ -11,12 +11,14 @@ import {
   kinds as qmdKinds,
   registry as qmdRegistry,
 } from "#qti/schema/kinds/qmd.ts";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import * as document from "#qti/schema/document.ts";
 import * as metadata from "#qti/schema/metadata.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { admission as seedAdmission } from "#qti/schema/seed/admission.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 
 /**
  * The schema over node's, package's, document's and this module's relations and rules.
@@ -339,5 +341,78 @@ describe("metadata", () => {
       assert.isTrue(admits(lomAdmission, host, "pi"), `(${host}, pi)`);
     }
     assert.isTrue(admits(lomAdmission, "lom:string", "text"));
+  });
+
+  it("holds the four qmd booleans and three vocabularies to their rosters", () => {
+    const { relations } = metadata;
+    const closed: readonly (readonly [{ readonly roster: unknown }, unknown])[] = [
+      [relations.QmdItemTemplate.fields.value, rosters.XsBoolean],
+      [relations.QmdTimeDependent.fields.value, rosters.XsBoolean],
+      [relations.QmdComposite.fields.value, rosters.XsBoolean],
+      [relations.QmdSolutionAvailable.fields.value, rosters.XsBoolean],
+      [relations.QmdInteractionType.fields.value, rosters.QmdInteractionTypeValue],
+      [relations.QmdFeedbackType.fields.value, rosters.QmdFeedbackTypeValue],
+      [relations.QmdScoringMode.fields.value, rosters.QmdScoringModeValue],
+    ];
+
+    assert.strictEqual(closed.length, 7);
+    for (const [field, roster] of closed) {
+      assert.strictEqual(field.roster, roster);
+    }
+  });
+});
+
+describe("manifest contracts (metadata)", () => {
+  it("types every resource column ManifestIdentifier", () => {
+    for (const column of [
+      metadata.ResourceLom.fields.resource,
+      metadata.ExternalLom.fields.resource,
+      metadata.ResourceLomIdentified.fields.resource,
+      metadata.LomObjectIdentifier.fields.resource,
+      metadata.ResourceLomTitled.fields.resource,
+      metadata.LomObjectTitle.fields.resource,
+      metadata.QtiMetadata.fields.resource,
+      metadata.QtiMetadataInMetadata.fields.resource,
+      metadata.QtiMetadataInResourceLom.fields.resource,
+      metadata.QtiMetadataInExternalLom.fields.resource,
+    ]) {
+      assert.strictEqual(column.name, contracts.ManifestIdentifier.name);
+    }
+  });
+});
+
+describe("contracts (lom)", () => {
+  it("types the eleven collapsed LOM tokens LomToken", () => {
+    for (const relation of [
+      metadata.LomIdentifierCatalog,
+      metadata.LomEntity,
+      metadata.LomDateTime,
+      metadata.LomMetadataschema,
+      metadata.LomFormat,
+      metadata.LomSize,
+      metadata.LomLocation,
+      metadata.LomMinimumVersion,
+      metadata.LomMaximumVersion,
+      metadata.LomDurationString,
+      metadata.LomId,
+    ]) {
+      assert.strictEqual(relation.fields.collapsed.name, contracts.LomToken.name);
+    }
+  });
+  it("types the vocabulary source, value and language", () => {
+    assert.strictEqual(
+      metadata.LomSource.fields.collapsed.name,
+      contracts.LomVocabularySource.name,
+    );
+    assert.strictEqual(metadata.LomValue.fields.collapsed.name, contracts.LomVocabularyValue.name);
+    assert.strictEqual(
+      metadata.LomStringLanguage.fields.value.name,
+      contracts.LangStringLanguage.name,
+    );
+  });
+  it("types the three QMD tool leaves", () => {
+    assert.strictEqual(metadata.QmdToolName.fields.value.name, contracts.ToolName.name);
+    assert.strictEqual(metadata.QmdToolVendor.fields.value.name, contracts.ToolVendor.name);
+    assert.strictEqual(metadata.QmdToolVersion.fields.value.name, contracts.ToolVersion.name);
   });
 });

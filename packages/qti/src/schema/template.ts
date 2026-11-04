@@ -19,7 +19,7 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
-import { ShowHide } from "#qti/schema/content/rosters.ts";
+import { ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
 import {
   BaseType,
   Declaration,
@@ -28,15 +28,17 @@ import {
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
 import { Node } from "#qti/schema/node.ts";
+import {
+  PrintedVariableIntegerOrVariable,
+  RecordFieldIdentifier,
+  ShowHideIdentifier,
+  VariableReference,
+} from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
 
 const xsString = str.regex(patterns.xsString, patterns.xsStringFlags);
-
-const xsBoolean = str.regex(patterns.xsBoolean);
-
-const integerOrVariableString = str.regex(patterns.integerOrVariableString);
 
 /**
  * The attributes of a printed variable that may name a variable instead of an integer.
@@ -52,9 +54,9 @@ export const TemplateBlock = relation(
   "TemplateBlock",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ShowHideIdentifier,
     showHide: closedId(ShowHide),
-    templateIdentifier: ncName,
+    templateIdentifier: VariableReference,
   },
   ["id"],
 );
@@ -76,9 +78,9 @@ export const RubricTemplateBlock = relation(
   "RubricTemplateBlock",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ShowHideIdentifier,
     showHide: closedId(ShowHide),
-    templateIdentifier: ncName,
+    templateIdentifier: VariableReference,
   },
   ["id"],
 );
@@ -100,9 +102,9 @@ export const TemplateInline = relation(
   "TemplateInline",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ShowHideIdentifier,
     showHide: closedId(ShowHide),
-    templateIdentifier: ncName,
+    templateIdentifier: VariableReference,
   },
   ["id"],
 );
@@ -124,9 +126,9 @@ export const RubricTemplateInline = relation(
   "RubricTemplateInline",
   {
     id: uuid,
-    identifier: ncName,
+    identifier: ShowHideIdentifier,
     showHide: closedId(ShowHide),
-    templateIdentifier: ncName,
+    templateIdentifier: VariableReference,
   },
   ["id"],
 );
@@ -167,12 +169,12 @@ export const TemplateContentRef = relation(
 export const PrintedVariable = relation(
   "PrintedVariable",
   {
-    base: integerOrVariableString,
+    base: PrintedVariableIntegerOrVariable,
     delimiter: xsString,
     id: uuid,
-    identifier: ncName,
+    identifier: VariableReference,
     mappingIndicator: xsString,
-    powerForm: xsBoolean,
+    powerForm: closedId(XsBoolean),
   },
   ["id"],
 );
@@ -225,7 +227,7 @@ export const PrintedVariableFormat = relation(
  */
 export const PrintedVariableIndex = relation(
   "PrintedVariableIndex",
-  { node: uuid, value: integerOrVariableString },
+  { node: uuid, value: PrintedVariableIntegerOrVariable },
   ["node"],
 );
 
@@ -234,7 +236,7 @@ export const PrintedVariableIndex = relation(
  */
 export const PrintedVariableField = relation(
   "PrintedVariableField",
-  { node: uuid, value: ncName },
+  { node: uuid, value: RecordFieldIdentifier },
   ["node"],
 );
 
