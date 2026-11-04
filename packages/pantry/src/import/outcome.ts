@@ -4,6 +4,7 @@
  * declaration to the document and to the identifier both carry.
  */
 import { Effect, Option } from "effect";
+import type { Uuid } from "@bjornpagen/grizzle";
 import { semanticRows } from "#pantry/import/item.ts";
 import type { ItemInput } from "#pantry/import/item.ts";
 import { kindOf, Rows, treeRows, UnmodeledVocabulary, withParents } from "#pantry/import/tree.ts";
@@ -37,7 +38,7 @@ export const outcomeRows = Effect.fn("import.outcomeRows")(function* outcomeRows
   input: ItemInput,
   rows: Rows,
 ): Effect.fn.Return<
-  { rows: Rows; nodes: NodeIndex; documentId: string },
+  { rows: Rows; nodes: NodeIndex; documentId: Uuid },
   ImportRefused | ItemRefusal | UnmodeledVocabulary
 > {
   const { doc, packageId, version } = input;
