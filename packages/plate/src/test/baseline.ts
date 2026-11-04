@@ -207,7 +207,7 @@ export interface FloorViolation {
  * Where the data puts one compatibility key: the feature that lists it and the key's own baseline.
  */
 interface Listing {
-  readonly baseline: "high" | "low" | false;
+  readonly baseline: typeof Baseline.Type;
   readonly feature: string;
 }
 
