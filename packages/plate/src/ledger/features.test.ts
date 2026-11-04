@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Option, Result } from "effect";
 import {
   confPath,
   exclusions,
@@ -71,5 +71,16 @@ describe("ledger/features.ts", () => {
     for (const row of features) {
       assert.match(row.id, /^[QITSAPM]-[0-9]+[a-z]?$/u);
     }
+  });
+
+  it("throws ConformanceHeadingMissing, naming the heading, for a text that is not conf.txt", () => {
+    const thrown = Result.getFailure(
+      Result.try(() => generateFeatures("# Not the conformance text\n")),
+    );
+    assert.isTrue(Option.isSome(thrown));
+
+    const defect = Option.getOrThrow(thrown);
+    assert.propertyVal(defect, "_tag", "ConformanceHeadingMissing");
+    assert.propertyVal(defect, "heading", "### 3.1 1EdTech Levels Certification Requirements");
   });
 });

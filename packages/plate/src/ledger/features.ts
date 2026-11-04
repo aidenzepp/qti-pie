@@ -16,7 +16,7 @@
  *
  * @module
  */
-import { Array as Arr, Config, Order, Schema } from "effect";
+import { Array as Arr, Config, Data, Order, Schema } from "effect";
 import committed from "#plate/ledger/features.generated.json" with { type: "json" };
 
 /**
@@ -86,6 +86,25 @@ const levelsHeading = "### 3.1 1EdTech Levels Certification Requirements";
 const elevatedHeading = "### 3.3 Elevated Accessibility Conformance Requirements";
 
 /**
+ * The conformance text lacks a heading the generator reads, a defect of the generator's input that
+ * no caller can recover from.
+ *
+ * It means the text is not the 1EdTech QTI 3.0 Conformance and Certification text the generator was
+ * written for, or that text's heading changed. `scripts/features.ts` lets it end the run. It is
+ * thrown, never returned.
+ */
+export class ConformanceHeadingMissing extends Data.TaggedError("ConformanceHeadingMissing")<{
+  readonly heading: string;
+}> {
+  /**
+   * The missing heading, and what to change.
+   */
+  override get message(): string {
+    return `The conformance text has no line "${this.heading}". Point the generator at the 1EdTech QTI 3.0 Conformance and Certification text, or update the heading in src/ledger/features.ts.`;
+  }
+}
+
+/**
  * The level of a Markdown heading line: the number of `#` it opens with, or 0 for any other line.
  *
  * @param line A line of the text.
@@ -100,16 +119,14 @@ const headingLevel = (line: string): number =>
  * @param lines The text's lines.
  * @param heading The whole heading line.
  * @returns The lines after the heading, sub-headings included.
- * @throws {Error} When the text has no such heading, which means it is not the conformance text
- *   the generator was written for.
+ * @throws {ConformanceHeadingMissing} When the text has no such heading, which means it is not the
+ *   conformance text the generator was written for.
  */
 const section = (lines: readonly string[], heading: string): readonly string[] => {
   const start = lines.indexOf(heading);
 
   if (start === -1) {
-    throw new Error(
-      `The conformance text has no line "${heading}". Point the generator at the 1EdTech QTI 3.0 Conformance and Certification text, or update the heading in src/ledger/features.ts.`,
-    );
+    throw new ConformanceHeadingMissing({ heading });
   }
 
   const level = headingLevel(heading);
@@ -198,7 +215,8 @@ const idParts = (id: string): readonly [string, number, string] => {
  *
  * @param conf The conformance text, `conf.txt`.
  * @returns One row for each Appendix A ID, sorted by family letter, number and suffix letter.
- * @throws {Error} When a heading is missing or a row does not decode as a {@link Feature}.
+ * @throws {ConformanceHeadingMissing} When the text lacks a heading the generator reads.
+ * @throws {Schema.SchemaError} When a row does not decode as a {@link Feature}.
  */
 export const generateFeatures = (conf: string): readonly Feature[] => {
   const lines = conf.split(/\r?\n/u);
