@@ -1,6 +1,7 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the column the area map entry and `Coords` rows name; it is a geometric shape here, not a structure. */
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option } from "effect";
+import type { Uuid } from "@bjornpagen/grizzle";
 import type { DeclaredVariable } from "#pantry/import/interactions.ts";
 import { mappingRows } from "#pantry/import/mapping.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
@@ -134,12 +135,12 @@ const imported = (declarations: string) =>
 const declarationOf = (
   variables: ReadonlyMap<string, DeclaredVariable>,
   identifier: string,
-): string => Option.getOrThrow(Option.fromNullishOr(variables.get(identifier)?.id));
+): Uuid => Option.getOrThrow(Option.fromNullishOr(variables.get(identifier)?.id));
 
-const idsOf = (nodes: NodeIndex, kind: string): string[] =>
+const idsOf = (nodes: NodeIndex, kind: string): Uuid[] =>
   [...nodes.values()].filter((found) => found.kind === kind).map((found) => found.id);
 
-const pairOf = (nodes: NodeIndex, kind: string): readonly [string, string] => {
+const pairOf = (nodes: NodeIndex, kind: string): readonly [Uuid, Uuid] => {
   const [first, second] = idsOf(nodes, kind);
 
   return [
@@ -148,7 +149,7 @@ const pairOf = (nodes: NodeIndex, kind: string): readonly [string, string] => {
   ];
 };
 
-const idOf = (nodes: NodeIndex, kind: string): string =>
+const idOf = (nodes: NodeIndex, kind: string): Uuid =>
   Option.getOrThrow(
     Option.fromNullishOr([...nodes.values()].find((found) => found.kind === kind)?.id),
   );

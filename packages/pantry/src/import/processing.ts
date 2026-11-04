@@ -11,6 +11,7 @@
  * `treeRows` already wrote under the same {@link NodeIndex}.
  */
 import { Effect, Option, Schema } from "effect";
+import type { Uuid } from "@bjornpagen/grizzle";
 import type { ImportRefused, Rule } from "#pantry/import/refusal.ts";
 import { closedOf, Rows, spelledInteger, typedAttribute, valueText } from "#pantry/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary, WhiteSpace } from "#pantry/import/tree.ts";
@@ -94,14 +95,14 @@ export class ProcessingRefused extends Schema.TaggedError<ProcessingRefused>()(
  * the tree whose nodes the rows hang from; an item's document and tree share one id.
  */
 export interface ProcessingInput {
-  readonly document: string;
+  readonly document: Uuid;
   readonly env: Environment;
   readonly language: Language;
   readonly mode: Mode;
   readonly nodes: NodeIndex;
   readonly root: Element;
   readonly rootKind: RootKindHandle;
-  readonly tree: string;
+  readonly tree: Uuid;
   readonly version: SchemaVersionHandle;
 }
 
@@ -109,7 +110,7 @@ export interface ProcessingInput {
  * One node of a tree: its id and its kind.
  */
 interface NodeEntry {
-  readonly id: string;
+  readonly id: Uuid;
   readonly kind: NodeKindHandle;
 }
 
@@ -568,7 +569,7 @@ type BaseTypeHandle = (typeof BaseType.handles)[number];
  */
 const literalArmRows: Record<
   Exclude<BaseTypeHandle, "boolean">,
-  (rows: Rows, id: string, text: string) => Rows
+  (rows: Rows, id: Uuid, text: string) => Rows
 > = {
   directedPair: (rows, id, text) =>
     Rows.add(rows, processing.relations.LiteralDirectedPair, [{ id, value: judgedLater(text) }]),
@@ -614,7 +615,7 @@ const filtersOf = (attributes: Reader) => {
   const include = attributes.read("include-category");
   const exclude = attributes.read("exclude-category");
 
-  return (rows: Rows, id: string): Rows => {
+  return (rows: Rows, id: Uuid): Rows => {
     const withSection = Rows.add(
       rows,
       expression.ExpressionSectionIdentifier,
@@ -642,7 +643,7 @@ const filtersOf = (attributes: Reader) => {
  * @param weight - The attribute's processed value, none when not written.
  * @returns The rows with the weight added where written.
  */
-const weightOf = (rows: Rows, id: string, weight: Option.Option<string>): Rows =>
+const weightOf = (rows: Rows, id: Uuid, weight: Option.Option<string>): Rows =>
   Rows.add(
     rows,
     attributed.ExpressionWeightIdentifier,

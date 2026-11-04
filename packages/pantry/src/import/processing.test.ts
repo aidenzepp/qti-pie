@@ -3,7 +3,7 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
-import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
+import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { ProcessingGuardRefusal, processingGuards } from "#pantry/import/guards/processing.ts";
 import { itemRows } from "#pantry/import/item.ts";
 import { documentRows, readRows } from "#pantry/import/package.ts";
@@ -203,7 +203,7 @@ const of = <R extends AnyRelation>(rows: Rows, relation: R): readonly Fact<R>[] 
 /**
  * The ids of the rows of a relation keyed by `id`, sorted.
  */
-const idsOfRows = (rows: readonly { readonly id: string }[]) => rows.map((r) => r.id).toSorted();
+const idsOfRows = (rows: readonly { readonly id: Uuid }[]) => rows.map((r) => r.id).toSorted();
 
 /**
  * The ids of the elements of the processing root whose local name is one of `kinds`, sorted.
@@ -219,7 +219,7 @@ const idsOfKinds = (prepared: Prepared, kinds: readonly string[]) =>
 /**
  * The id of the `index`th element of a kind under the processing root, in document order.
  */
-const idAt = (prepared: Prepared, kind: string, index = 0): string => {
+const idAt = (prepared: Prepared, kind: string, index = 0): Uuid => {
   const element = elementsOf(prepared.input.root).filter((e) => e.local === kind)[index];
 
   return (
@@ -312,7 +312,7 @@ const templateHolders = [
 /**
  * The node id of an element.
  */
-const nodeIdOf = (prepared: Prepared, element: Element): string =>
+const nodeIdOf = (prepared: Prepared, element: Element): Uuid =>
   prepared.nodes.get(element)?.id ?? assert.fail(`${element.local} has no node`);
 
 /**
@@ -325,7 +325,7 @@ const elementOf = (prepared: Prepared, kind: string): Element =>
 /**
  * The node id of the element an element hangs under.
  */
-const conditionIdOf = (prepared: Prepared, element: Element): string => {
+const conditionIdOf = (prepared: Prepared, element: Element): Uuid => {
   const parent = elementsOf(prepared.input.root).find((candidate) =>
     candidate.children.includes(element),
   );
