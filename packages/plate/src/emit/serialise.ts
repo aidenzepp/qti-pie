@@ -1,3 +1,4 @@
+import { Data } from "effect";
 import type { Element, Node } from "#plate/emit/node.ts";
 
 /**
@@ -20,26 +21,25 @@ export interface Sink {
  * has no end tag to close them.
  *
  * The tree is built by code, never by content, so this is a defect in the code that built it and no
- * caller recovers: it is thrown, not returned.
+ * caller recovers: it is thrown, not returned. It cannot occur on a checked item: the XSD's HTML
+ * subset gives a void element no content, so check refuses one with children, and the content
+ * emitter's second line (`htmlSubset` in `#plate/emit/body.ts`) drops what that subset does not
+ * hold before the serialiser sees it. A host's replacement part is host code, not a checked item,
+ * and can still reach it: I1 to I4 check the replacement's root element and the children handed to
+ * it, not the root's own attributes or the rest of the replacement's subtree, so a replacement that
+ * adds a `br` holding text below its root reaches it.
  */
-// oxlint-disable-next-line unicorn/custom-error-definition -- The phase-1 slice list fixes this name for every emitter slice; an `Error` suffix would rename a shared interface.
-export class VoidElementChildren extends Error {
+export class VoidElementChildren extends Data.TaggedError("VoidElementChildren")<{
   /**
    * The void element's tag.
    */
   readonly tag: string;
-
+}> {
   /**
-   * Construct the defect for the void element `tag`.
-   *
-   * @param tag The void element's tag.
+   * The defect and what to change in the code that built the tree, in one line.
    */
-  constructor(tag: string) {
-    super(
-      `<${tag}> is a void element and cannot hold children: build it with no children, or put them in a non-void element.`,
-    );
-    this.name = "VoidElementChildren";
-    this.tag = tag;
+  override get message(): string {
+    return `<${this.tag}> is a void element and cannot hold children: build it with no children, or put them in a non-void element.`;
   }
 }
 
@@ -47,26 +47,22 @@ export class VoidElementChildren extends Error {
  * The defect of an element whose tag is not a lower-case name, which the serialiser cannot write
  * without the tag ending early or reading as another element.
  *
- * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown.
+ * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown,
+ * not returned. It cannot occur on a checked item, because the second line emits only the XSD's
+ * lower-case element names. A host's replacement part, which is host code and no checked item, can
+ * still reach it with an element I1 to I4 do not check, below its root.
  */
-// oxlint-disable-next-line unicorn/custom-error-definition -- Named in the family of `VoidElementChildren`, whose name the phase-1 slice list fixes, so the serialiser's defects read alike.
-export class MalformedTagName extends Error {
+export class MalformedTagName extends Data.TaggedError("MalformedTagName")<{
   /**
    * The tag as the tree spells it.
    */
   readonly tag: string;
-
+}> {
   /**
-   * Construct the defect for the tag `tag`.
-   *
-   * @param tag The tag as the tree spells it.
+   * The defect and what to change in the code that built the tree, in one line.
    */
-  constructor(tag: string) {
-    super(
-      `Tag ${JSON.stringify(tag)} is not an element name the serialiser writes: give the element a lower-case name that starts with a letter and holds only a to z, 0 to 9 and "-".`,
-    );
-    this.name = "MalformedTagName";
-    this.tag = tag;
+  override get message(): string {
+    return `Tag ${JSON.stringify(this.tag)} is not an element name the serialiser writes: give the element a lower-case name that starts with a letter and holds only a to z, 0 to 9 and "-".`;
   }
 }
 
@@ -74,10 +70,13 @@ export class MalformedTagName extends Error {
  * The defect of an attribute whose name is empty or holds a character that would end the name or
  * the tag early, so the written attribute would read back as other attributes or other markup.
  *
- * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown.
+ * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown,
+ * not returned. It cannot occur on a checked item, because the second line emits only the
+ * attributes the XSD declares by name. A host's replacement part, which is host code and no checked
+ * item, can still reach it on its root's own attributes or below its root, which I1 to I4 do not
+ * check.
  */
-// oxlint-disable-next-line unicorn/custom-error-definition -- Named in the family of `VoidElementChildren`, whose name the phase-1 slice list fixes, so the serialiser's defects read alike.
-export class MalformedAttributeName extends Error {
+export class MalformedAttributeName extends Data.TaggedError("MalformedAttributeName")<{
   /**
    * The attribute name as the tree spells it.
    */
@@ -87,20 +86,12 @@ export class MalformedAttributeName extends Error {
    * The tag of the element that carries the attribute.
    */
   readonly tag: string;
-
+}> {
   /**
-   * Construct the defect for the attribute `attribute` on the element `tag`.
-   *
-   * @param tag The tag of the element that carries the attribute.
-   * @param attribute The attribute name as the tree spells it.
+   * The defect and what to change in the code that built the tree, in one line.
    */
-  constructor(tag: string, attribute: string) {
-    super(
-      `Attribute name ${JSON.stringify(attribute)} on <${tag}> cannot be written as HTML: give the attribute a non-empty name with no whitespace, quote, apostrophe, ">", "/", "=" or control character.`,
-    );
-    this.name = "MalformedAttributeName";
-    this.attribute = attribute;
-    this.tag = tag;
+  override get message(): string {
+    return `Attribute name ${JSON.stringify(this.attribute)} on <${this.tag}> cannot be written as HTML: give the attribute a non-empty name with no whitespace, quote, apostrophe, ">", "/", "=" or control character.`;
   }
 }
 
@@ -108,26 +99,23 @@ export class MalformedAttributeName extends Error {
  * The defect of a raw-text element built with children, whose content HTML reads with no character
  * reference decoded, so no escaping writes a child that reads back as itself.
  *
- * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown.
+ * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown,
+ * not returned. It cannot occur on a checked item, because the XSD's HTML subset holds no raw-text
+ * element, so the second line drops them all. A host's replacement part, which is host code and no
+ * checked item, can still reach it: one that adds a `script` child holding text below its root,
+ * which I1 to I4 do not check, reaches it.
  */
-// oxlint-disable-next-line unicorn/custom-error-definition -- Named in the family of `VoidElementChildren`, whose name the phase-1 slice list fixes, so the serialiser's defects read alike.
-export class RawTextChildren extends Error {
+export class RawTextChildren extends Data.TaggedError("RawTextChildren")<{
   /**
    * The raw-text element's tag.
    */
   readonly tag: string;
-
+}> {
   /**
-   * Construct the defect for the raw-text element `tag`.
-   *
-   * @param tag The raw-text element's tag.
+   * The defect and what to change in the code that built the tree, in one line.
    */
-  constructor(tag: string) {
-    super(
-      `<${tag}> is a raw-text element, whose content HTML reads without decoding character references, so the serialiser cannot escape it: build it with no children.`,
-    );
-    this.name = "RawTextChildren";
-    this.tag = tag;
+  override get message(): string {
+    return `<${this.tag}> is a raw-text element, whose content HTML reads without decoding character references, so the serialiser cannot escape it: build it with no children.`;
   }
 }
 
@@ -135,11 +123,14 @@ export class RawTextChildren extends Error {
  * The defect of an escapable raw-text element (`textarea`, `title`) built with an element child,
  * which HTML would read back as text rather than as an element.
  *
- * Its text children are written escaped, as anywhere else. Like {@link VoidElementChildren}, it is a
- * defect in the code that built the tree and is thrown.
+ * Its text children are written escaped, as anywhere else. Like {@link VoidElementChildren}, it is
+ * a defect in the code that built the tree and is thrown, not returned. It cannot occur on a
+ * checked item, because the XSD's HTML subset holds neither element, so the second line drops them,
+ * and the parts that build a `textarea` give it text only. A host's replacement part, which is host
+ * code and no checked item, can still reach it: one that adds `<textarea><b/></textarea>` below its
+ * root, which I1 to I4 do not check, reaches it.
  */
-// oxlint-disable-next-line unicorn/custom-error-definition -- Named in the family of `VoidElementChildren`, whose name the phase-1 slice list fixes, so the serialiser's defects read alike.
-export class EscapableRawTextElementChild extends Error {
+export class EscapableRawTextElementChild extends Data.TaggedError("EscapableRawTextElementChild")<{
   /**
    * The tag of the element child.
    */
@@ -149,20 +140,12 @@ export class EscapableRawTextElementChild extends Error {
    * The escapable raw-text element's tag.
    */
   readonly tag: string;
-
+}> {
   /**
-   * Construct the defect for the element child `child` of the escapable raw-text element `tag`.
-   *
-   * @param tag The escapable raw-text element's tag.
-   * @param child The tag of the element child.
+   * The defect and what to change in the code that built the tree, in one line.
    */
-  constructor(tag: string, child: string) {
-    super(
-      `<${tag}> holds only text, and HTML would read its child <${child}> as text: build <${tag}> with text children only.`,
-    );
-    this.name = "EscapableRawTextElementChild";
-    this.child = child;
-    this.tag = tag;
+  override get message(): string {
+    return `<${this.tag}> holds only text, and HTML would read its child <${this.child}> as text: build <${this.tag}> with text children only.`;
   }
 }
 
@@ -171,18 +154,19 @@ export class EscapableRawTextElementChild extends Error {
  * document as its text, so nothing written after it reads back as written.
  *
  * It is refused with or without children, because what follows it is out of the serialiser's sight.
- * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown.
+ * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown,
+ * not returned. It cannot occur on a checked item, because the XSD's HTML subset holds no
+ * `plaintext` element, so the second line drops it. A host's replacement part, which is host code
+ * and no checked item, can still reach it with a `plaintext` element below its root, which I1 to I4
+ * do not check.
  */
-// oxlint-disable-next-line unicorn/custom-error-definition -- Named in the family of `VoidElementChildren`, whose name the phase-1 slice list fixes, so the serialiser's defects read alike.
-export class PlaintextElement extends Error {
+export class PlaintextElement extends Data.TaggedError("PlaintextElement") {
   /**
-   * Construct the defect for a `plaintext` element.
+   * The defect and what to change in the code that built the tree, in one line.
    */
-  constructor() {
-    super(
-      "<plaintext> makes HTML read the rest of the document as its text, so the serialiser never writes it: build the text in another element, such as <pre>.",
-    );
-    this.name = "PlaintextElement";
+  // oxlint-disable-next-line eslint/class-methods-use-this -- A field would be an own property of the error; the other refusals' messages read their fields, and this one has none.
+  override get message(): string {
+    return "<plaintext> makes HTML read the rest of the document as its text, so the serialiser never writes it: build the text in another element, such as <pre>.";
   }
 }
 
@@ -191,10 +175,13 @@ export class PlaintextElement extends Error {
  * event-handler attribute and runs as script.
  *
  * No part, emitter or runtime writes one, so like {@link VoidElementChildren} it is a defect in the
- * code that built the tree and is thrown.
+ * code that built the tree and is thrown, not returned. It cannot occur on a checked item, because
+ * the second line emits only the attributes the XSD declares by name, and it declares no event
+ * handler. A host's replacement part, which is host code and no checked item, can still reach it:
+ * I1 to I4 do not check the root's own attributes, so a replacement that returns
+ * `h("div", { onclick: "x" }, children)` reaches it.
  */
-// oxlint-disable-next-line unicorn/custom-error-definition -- Named in the family of `VoidElementChildren`, whose name the phase-1 slice list fixes, so the serialiser's defects read alike.
-export class EventHandlerAttribute extends Error {
+export class EventHandlerAttribute extends Data.TaggedError("EventHandlerAttribute")<{
   /**
    * The attribute name as the tree spells it.
    */
@@ -204,20 +191,12 @@ export class EventHandlerAttribute extends Error {
    * The tag of the element that carries the attribute.
    */
   readonly tag: string;
-
+}> {
   /**
-   * Construct the defect for the event-handler attribute `attribute` on the element `tag`.
-   *
-   * @param tag The tag of the element that carries the attribute.
-   * @param attribute The attribute name as the tree spells it.
+   * The defect and what to change in the code that built the tree, in one line.
    */
-  constructor(tag: string, attribute: string) {
-    super(
-      `Attribute ${JSON.stringify(attribute)} on <${tag}> names an event handler, which the serialiser never writes: remove it, and attach behaviour with addEventListener instead.`,
-    );
-    this.name = "EventHandlerAttribute";
-    this.attribute = attribute;
-    this.tag = tag;
+  override get message(): string {
+    return `Attribute ${JSON.stringify(this.attribute)} on <${this.tag}> names an event handler, which the serialiser never writes: remove it, and attach behaviour with addEventListener instead.`;
   }
 }
 
@@ -340,7 +319,7 @@ const escapeAttribute = (value: string): string =>
  */
 const refuseUnwritable = (element: Element): void => {
   if (!writableTag.test(element.tag)) {
-    throw new MalformedTagName(element.tag);
+    throw new MalformedTagName({ tag: element.tag });
   }
 
   const malformed = Object.keys(element.attrs).find(
@@ -348,21 +327,21 @@ const refuseUnwritable = (element: Element): void => {
   );
 
   if (malformed !== undefined) {
-    throw new MalformedAttributeName(element.tag, malformed);
+    throw new MalformedAttributeName({ attribute: malformed, tag: element.tag });
   }
 
   const eventHandler = Object.keys(element.attrs).find((name) => eventHandlerName.test(name));
 
   if (eventHandler !== undefined) {
-    throw new EventHandlerAttribute(element.tag, eventHandler);
+    throw new EventHandlerAttribute({ attribute: eventHandler, tag: element.tag });
   }
 
   if (element.children.length > 0 && voidElements.has(element.tag)) {
-    throw new VoidElementChildren(element.tag);
+    throw new VoidElementChildren({ tag: element.tag });
   }
 
   if (element.children.length > 0 && rawText.has(element.tag)) {
-    throw new RawTextChildren(element.tag);
+    throw new RawTextChildren({ tag: element.tag });
   }
 
   if (element.tag === "plaintext") {
@@ -374,7 +353,7 @@ const refuseUnwritable = (element: Element): void => {
     : undefined;
 
   if (elementChild !== undefined) {
-    throw new EscapableRawTextElementChild(element.tag, elementChild.tag);
+    throw new EscapableRawTextElementChild({ child: elementChild.tag, tag: element.tag });
   }
 };
 
