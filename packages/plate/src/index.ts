@@ -73,13 +73,9 @@ export type { Options, Rendered } from "#plate/render.ts";
 
 export { InvalidInstance, redact, render, renderStatus } from "#plate/render.ts";
 
-export {
-  checkResponses,
-  InvalidResponses,
-  RecordMismatch,
-  ResponsesRefused,
-  score,
-} from "#plate/score.ts";
+export { checkResponses } from "#plate/responses.ts";
+
+export { InvalidResponses, RecordMismatch, ResponsesRefused, score } from "#plate/score.ts";
 
 export { open } from "#plate/validate/open.ts";
 

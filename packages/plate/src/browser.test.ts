@@ -13,8 +13,8 @@ const nonTest = [...modules.keys()].filter((path) => !path.endsWith(".test.ts"))
 
 /**
  * The browser modules the scan starts from: every non-test module under `src/emit/`,
- * `src/interactions/` and `src/engine/`, `src/payload.ts` (the OD-6 ruling, rule `e2bd87f2`), and
- * `src/render.ts`.
+ * `src/interactions/` and `src/engine/`, `src/payload.ts` (the OD-6 ruling, rule `e2bd87f2`),
+ * `src/render.ts` and `src/responses.ts`.
  */
 const roots = [
   ...nonTest.filter((path) =>
@@ -24,6 +24,7 @@ const roots = [
   ),
   "src/payload.ts",
   "src/render.ts",
+  "src/responses.ts",
 ];
 
 /**
