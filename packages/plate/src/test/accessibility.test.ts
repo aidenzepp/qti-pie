@@ -353,6 +353,19 @@ describe("checkTree", () => {
     ]);
   });
 
+  it("nested-label: a label inside a label, reported once for the inner label", () => {
+    const nested = h("label", {}, [h("label", {}, [text("x")])]);
+    assert.deepStrictEqual(checkTree(item([status, nested, capital, submit]), { baseLevel: 2 }), [
+      { check: "nested-label", path: ["qti-assessment-item", "form", "label", "label"] },
+    ]);
+  });
+
+  it("nested-label: a label holding a span, and two sibling labels, pass", () => {
+    const spanned = h("label", {}, [h("span", {}, [text("x")])]);
+    const siblings = h("div", {}, [h("label", {}, [text("a")]), h("label", {}, [text("b")])]);
+    assert.deepStrictEqual(checksOf(item([status, spanned, siblings, capital, submit])), []);
+  });
+
   it("prompt-name: a paragraph Prompt whose Root has no aria-labelledby to it", () => {
     assert.deepStrictEqual(
       checkTree(item([status, paragraphChoice("qti-prompt", {}), submit]), { baseLevel: 2 }),

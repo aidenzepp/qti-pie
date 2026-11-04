@@ -8,11 +8,15 @@ import type { InteractionKey, PartName, PartOf } from "#plate/emit/parts.ts";
  *
  * Each is a static rule over the emitter's node tree: the goal's two name checks, the structural
  * rules an emitted page must keep, and spec §4.8's focus rules. They read explicit references only,
- * with no accname implementation and no browser (ruling `fb4fe744` S2).
+ * with no accname implementation and no browser (ruling `fb4fe744` S2). `nested-label` refuses a
+ * `label` with a `label` among its ancestors, which HTML's content model forbids.
+ *
+ * @see https://html.spec.whatwg.org/multipage/forms.html#the-label-element
  */
 export const checks = [
   "control-name",
   "label-name",
+  "nested-label",
   "prompt-name",
   "list-item",
   "img-alt",
@@ -595,6 +599,12 @@ const rules = {
           !(listTags.has(parent.tag) || attribute(parent, "role") === "list"))
       );
     }),
+  "nested-label": ({ visits }) =>
+    visits.filter(
+      (visit) =>
+        visit.element.tag === "label" &&
+        visit.ancestors.some((ancestor) => ancestor.tag === "label"),
+    ),
   "prompt-name": ({ tree, visits }) =>
     visits.flatMap((root) => {
       const interaction = interactionRooted(root.element);
