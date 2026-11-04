@@ -176,6 +176,98 @@ const matchTable = (target: string) =>
   );
 
 /**
+ * Construct a variable declaration of any kind, such as a template or a context declaration.
+ *
+ * @param local The declaration's local name, such as `qti-template-declaration`.
+ * @param identifier Its `identifier`.
+ * @param cardinality Its `cardinality`.
+ * @param baseType Its `base-type`, none when absent.
+ * @returns The declaration.
+ */
+const declaration = (
+  local: string,
+  identifier: string,
+  cardinality: string,
+  baseType?: string,
+): SourceElement =>
+  el(local, [
+    attr("identifier", identifier),
+    attr("cardinality", cardinality),
+    ...(baseType === undefined ? [] : [attr("base-type", baseType)]),
+  ]);
+
+/**
+ * Construct a `qti-base-value`.
+ *
+ * @param baseType Its `base-type`.
+ * @param value Its text.
+ * @returns The expression.
+ */
+const baseValue = (baseType: string, value: string): SourceElement =>
+  el("qti-base-value", [attr("base-type", baseType)], [text(value)]);
+
+/**
+ * Construct an expression that reads a variable by its identifier, such as a `qti-variable`.
+ *
+ * @param identifier The identifier it names.
+ * @param local The expression's local name.
+ * @returns The expression.
+ */
+const variable = (identifier: string, local = "qti-variable"): SourceElement =>
+  el(local, [attr("identifier", identifier)]);
+
+/**
+ * Construct a `qti-is-null` of a variable.
+ *
+ * @param identifier The variable's identifier.
+ * @returns The expression.
+ */
+const isNull = (identifier: string): SourceElement => el("qti-is-null", [], [variable(identifier)]);
+
+/**
+ * Construct an inline rule that sets an outcome to an expression.
+ *
+ * @param identifier The outcome's identifier.
+ * @param expression The expression.
+ * @returns The `qti-set-outcome-value`.
+ */
+const setOutcome = (identifier: string, expression: SourceElement): SourceElement =>
+  el("qti-set-outcome-value", [attr("identifier", identifier)], [expression]);
+
+/**
+ * Construct an inline rule that looks an operand up in an outcome's table.
+ *
+ * @param identifier The outcome's identifier.
+ * @param operand The operand.
+ * @returns The `qti-lookup-outcome-value`.
+ */
+const lookup = (identifier: string, operand: SourceElement): SourceElement =>
+  el("qti-lookup-outcome-value", [attr("identifier", identifier)], [operand]);
+
+/**
+ * Construct an item whose float `SCORE` holds a lookup table with one entry, and whose inline
+ * processing looks an operand up in it.
+ *
+ * @param table The table's local name, `qti-match-table` or `qti-interpolation-table`.
+ * @param operand The lookup's operand.
+ * @returns The item.
+ */
+const lookupItem = (table: string, operand: SourceElement) =>
+  item(
+    [
+      outcome("SCORE", "float", [
+        el(
+          table,
+          [],
+          [el(`${table}-entry`, [attr("source-value", "1"), attr("target-value", "1")])],
+        ),
+      ]),
+    ],
+    [],
+    [processing(undefined, [lookup("SCORE", operand)])],
+  );
+
+/**
  * Reduce refusals to what a test asserts: the rule, the path and the detail.
  *
  * @param source The document to check.
@@ -193,6 +285,15 @@ const judged = (source: ReturnType<typeof item>) =>
       rule: refusal.rule,
     };
   });
+
+/**
+ * Check an item whose inline processing sets its float `SCORE` to an expression.
+ *
+ * @param expression The expression.
+ * @returns The refusals, reduced.
+ */
+const settingScore = (expression: SourceElement) =>
+  judged(item([outcome("SCORE")], [], [processing(undefined, [setScore(expression)])]));
 
 describe("checkRules", () => {
   describe("undeclared-response", () => {
@@ -714,6 +815,217 @@ describe("checkRules", () => {
       it('[I-1] leaves map-key=" 3" under an integer response to padded-attribute, not value-type', () => {
         assert.deepStrictEqual(
           judged(item([response("RESPONSE", "single", "integer", [mapping(" 3")])], [])),
+          [],
+        );
+      });
+    });
+  });
+
+  describe("undeclared-variable", () => {
+    const rulePath = "qti-assessment-item/qti-response-processing/qti-set-outcome-value";
+
+    it('[I-9b] refuses an inline qti-variable identifier="NOPE" at its path', () => {
+      assert.deepStrictEqual(
+        judged(item([outcome("SCORE")], [], [processing(undefined, [setScore(variable("NOPE"))])])),
+        [
+          {
+            detail: { element: "qti-variable", expected: "variable", identifier: "NOPE" },
+            path: `${rulePath}/qti-variable`,
+            rule: "undeclared-variable",
+          },
+        ],
+      );
+    });
+
+    it("[I-9b] accepts a qti-variable of the built-in duration and of a declared template variable", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE"), declaration("qti-template-declaration", "T", "single", "float")],
+            [],
+            [processing(undefined, [setScore(variable("duration")), setScore(variable("T"))])],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("[I-9b] accepts a qti-variable of the built-in QTI_CONTEXT and of a declared context variable", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              outcome("PASSED", "boolean"),
+              declaration("qti-context-declaration", "CONTEXT", "single", "string"),
+            ],
+            [],
+            [
+              processing(undefined, [
+                setOutcome("PASSED", isNull("QTI_CONTEXT")),
+                setOutcome("PASSED", isNull("CONTEXT")),
+              ]),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it('[I-9b] refuses qti-set-outcome-value identifier="NOPE" at its path', () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [processing(undefined, [setOutcome("NOPE", baseValue("float", "1"))])],
+          ),
+        ),
+        [
+          {
+            detail: { element: "qti-set-outcome-value", expected: "outcome", identifier: "NOPE" },
+            path: rulePath,
+            rule: "undeclared-variable",
+          },
+        ],
+      );
+    });
+
+    it("[I-9b] refuses a qti-correct that names an outcome, not a response", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [processing(undefined, [setScore(variable("SCORE", "qti-correct"))])],
+          ),
+        ),
+        [
+          {
+            detail: { element: "qti-correct", expected: "response", identifier: "SCORE" },
+            path: `${rulePath}/qti-correct`,
+            rule: "undeclared-variable",
+          },
+        ],
+      );
+    });
+  });
+
+  describe("expression-type", () => {
+    const rulePath = "qti-assessment-item/qti-response-processing/qti-set-outcome-value";
+
+    /**
+     * The refusal of setting the float `SCORE` from an expression of another type.
+     *
+     * @param baseType The expression's base type.
+     * @returns The refusal, reduced.
+     */
+    const scoreRefused = (baseType: string) => ({
+      detail: {
+        element: "qti-set-outcome-value",
+        expressionBaseType: baseType,
+        expressionCardinality: "single",
+        identifier: "SCORE",
+        outcomeBaseType: "float",
+        outcomeCardinality: "single",
+      },
+      path: rulePath,
+      rule: "expression-type" as const,
+    });
+
+    it('[I-9b] refuses setting a float SCORE from a qti-base-value of base-type="integer"', () => {
+      assert.deepStrictEqual(settingScore(baseValue("integer", "1")), [scoreRefused("integer")]);
+    });
+
+    it('[I-9b] accepts setting it from a qti-base-value of base-type="float"', () => {
+      assert.deepStrictEqual(settingScore(baseValue("float", "1")), []);
+    });
+
+    it("[I-9b] refuses setting it from numAttempts, an integer", () => {
+      assert.deepStrictEqual(settingScore(variable("numAttempts")), [scoreRefused("integer")]);
+    });
+
+    it("[I-9b] accepts setting it from duration, a float in an item (reading 29)", () => {
+      assert.deepStrictEqual(settingScore(variable("duration")), []);
+    });
+
+    it("[I-9b] neither types nor refuses an expression that holds a qti-sum, outside the eight", () => {
+      assert.deepStrictEqual(
+        settingScore(el("qti-sum", [], [baseValue("integer", "1"), baseValue("integer", "2")])),
+        [],
+      );
+    });
+
+    it("[I-9b] compares a record outcome by cardinality alone", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "record"), declaration("qti-outcome-declaration", "R", "record")],
+            [],
+            [
+              processing(undefined, [
+                setOutcome("R", variable("RESPONSE")),
+                setOutcome("R", baseValue("float", "1")),
+              ]),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              element: "qti-set-outcome-value",
+              expressionBaseType: "float",
+              expressionCardinality: "single",
+              identifier: "R",
+              outcomeBaseType: "",
+              outcomeCardinality: "record",
+            },
+            path: `${rulePath}[2]`,
+            rule: "expression-type",
+          },
+        ],
+      );
+    });
+
+    describe("a lookup operand (reading 28)", () => {
+      it("[I-9b] refuses a float operand under a match table, at the qti-lookup-outcome-value", () => {
+        assert.deepStrictEqual(judged(lookupItem("qti-match-table", baseValue("float", "1.5"))), [
+          {
+            detail: {
+              element: "qti-lookup-outcome-value",
+              expressionBaseType: "float",
+              expressionCardinality: "single",
+              identifier: "SCORE",
+              reading: "28",
+              table: "qti-match-table",
+            },
+            path: "qti-assessment-item/qti-response-processing/qti-lookup-outcome-value",
+            rule: "expression-type",
+          },
+        ]);
+      });
+
+      it("[I-9b] accepts an integer operand under a match table", () => {
+        assert.deepStrictEqual(
+          judged(lookupItem("qti-match-table", baseValue("integer", "1"))),
+          [],
+        );
+      });
+
+      it("[I-9b] accepts a float operand under an interpolation table", () => {
+        assert.deepStrictEqual(
+          judged(lookupItem("qti-interpolation-table", baseValue("float", "1.5"))),
+          [],
+        );
+      });
+
+      it("[I-9b] accepts an operand that holds a qti-sum, untyped", () => {
+        assert.deepStrictEqual(
+          judged(
+            lookupItem(
+              "qti-match-table",
+              el("qti-sum", [], [baseValue("float", "1"), baseValue("float", "2")]),
+            ),
+          ),
           [],
         );
       });

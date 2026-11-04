@@ -397,6 +397,11 @@ interface Context {
    */
   readonly parents: Map<SourceElement, SourceElement>;
   readonly responses: ReadonlyMap<string, SourceElement>;
+  /**
+   * Every declaration a `qti-variable` may read: response, outcome, template and context
+   * declarations alike.
+   */
+  readonly variables: ReadonlyMap<string, SourceElement>;
 }
 
 /**
@@ -849,9 +854,440 @@ const textValueType = (
   });
 
 /**
+ * The base type and cardinality of a variable or an expression, as `expression-type` compares
+ * them. `baseType` is none for a value with no base type of its own: a `record`, or a declaration
+ * that writes none.
+ */
+interface ExpressionType {
+  readonly baseType: Option.Option<BaseType>;
+  readonly cardinality: Cardinality;
+}
+
+/**
+ * Construct a `single` type of a base type.
+ *
+ * @param baseType The base type.
+ * @returns The type.
+ */
+const singleOf = (baseType: BaseType): ExpressionType => ({
+  baseType: Option.some(baseType),
+  cardinality: "single",
+});
+
+/**
+ * The built-in variables an item's response processing may read, with their types.
+ *
+ * `numAttempts`, `duration` and `completionStatus` are the item's (reading 29: in an item
+ * `duration` is a single float, seconds). `QTI_CONTEXT` is the built-in context variable, a
+ * record: "any references within an item or an assessment to the QTI_CONTEXT variable [...] must
+ * succeed" (`info-compact.txt:8456`).
+ */
+const builtIns: ReadonlyMap<string, ExpressionType> = new Map([
+  ["completionStatus", singleOf("identifier")],
+  ["duration", singleOf("float")],
+  ["numAttempts", singleOf("integer")],
+  ["QTI_CONTEXT", { baseType: Option.none(), cardinality: "record" }],
+]);
+
+/**
+ * The kind of variable an element's `identifier` must name: a response, an outcome, or any
+ * variable.
+ */
+type Expected = "outcome" | "response" | "variable";
+
+/**
+ * The elements of inline response processing whose `identifier` names a variable, and the kind
+ * each must name.
+ *
+ * "This expression looks up the value of an item variable that has been declared in a
+ * corresponding variable declaration or is one of the built-in variables" (`qti-variable`,
+ * `info-compact.txt:9286`); `qti-correct` and `qti-map-response` read a response variable
+ * (`:11418`, `:11438`); `qti-set-outcome-value` sets an outcome variable (`:11770`).
+ */
+const referencing: ReadonlyMap<string, Expected> = new Map([
+  ["qti-correct", "response"],
+  ["qti-map-response", "response"],
+  ["qti-set-outcome-value", "outcome"],
+  ["qti-variable", "variable"],
+]);
+
+/**
+ * The built-in variables each kind of reference may name.
+ *
+ * Response processing sets `completionStatus` like an outcome, and reads every built-in.
+ */
+const builtInsNamed = {
+  outcome: ["completionStatus"],
+  response: [],
+  variable: [...builtIns.keys()],
+} as const satisfies Record<Expected, readonly string[]>;
+
+/**
+ * An element's `identifier`, read as a reference to a variable of the kind the element names.
+ */
+interface Reference {
+  readonly expected: Expected;
+  readonly identifier: string;
+}
+
+/**
+ * Read the variable reference of an element that names one.
+ *
+ * @param element The element.
+ * @returns Its reference, none for an element that names no variable and for one with no
+ *   `identifier`, which is the structural validator's `missing-attribute`.
+ */
+const referenceOf = (element: SourceElement): Option.Option<Reference> => {
+  const expected = referencing.get(element.local);
+  if (element.namespace !== qtiNamespace || expected === undefined) {
+    return Option.none();
+  }
+
+  return Option.map(attributeOf(element, "identifier"), (attribute) => ({
+    expected,
+    identifier: identifierOf(attribute),
+  }));
+};
+
+/**
+ * Give the value of an attribute when it is one of a vocabulary's, as written.
+ *
+ * @param element The element.
+ * @param local The attribute's local name.
+ * @param vocabulary The values the attribute may hold.
+ * @returns The value, none when the attribute is absent or outside the vocabulary.
+ */
+const vocabularyValue = <A extends string>(
+  element: SourceElement,
+  local: string,
+  vocabulary: readonly A[],
+): Option.Option<A> =>
+  Option.flatMap(attributeOf(element, local), (attribute) =>
+    Arr.findFirst(vocabulary, (value) => value === attribute.value),
+  );
+
+/**
+ * Give the type a declaration declares.
+ *
+ * A declaration whose `cardinality` is absent or outside the vocabulary, or whose `base-type` is
+ * outside it, is the structural validator's refusal, so its type is not judged here. A declaration
+ * with no `base-type` (a `record`) has a type with no base type.
+ *
+ * @param declaration The declaration.
+ * @returns Its type, none when it is not judged.
+ */
+const declarationType = (declaration: SourceElement): Option.Option<ExpressionType> => {
+  const baseType = vocabularyValue(declaration, "base-type", baseTypes);
+  if (Option.isSome(attributeOf(declaration, "base-type")) && Option.isNone(baseType)) {
+    return Option.none();
+  }
+
+  return Option.map(vocabularyValue(declaration, "cardinality", cardinalities), (cardinality) => ({
+    baseType,
+    cardinality,
+  }));
+};
+
+/**
+ * Find the variable a reference names, and its type.
+ *
+ * A declaration of the expected kind wins over a built-in of the same name. Identifiers compare
+ * exactly, so one that holds `.` names the declaration of that exact identifier (reading 37); a
+ * prefixed reference (`ITEMREF.VAR`, reading 4) belongs to a test's processing.
+ *
+ * @param reference The reference.
+ * @param context The item's declarations.
+ * @returns The variable's type, itself none when its declaration's type is not judged; none when
+ *   no variable of the expected kind has the identifier.
+ */
+const variableType = (
+  reference: Reference,
+  context: Context,
+): Option.Option<Option.Option<ExpressionType>> => {
+  const declarations = {
+    outcome: context.outcomes,
+    response: context.responses,
+    variable: context.variables,
+  }[reference.expected];
+  const declaration = declarations.get(reference.identifier);
+  if (declaration !== undefined) {
+    return Option.some(declarationType(declaration));
+  }
+
+  const namable: readonly string[] = builtInsNamed[reference.expected];
+
+  return namable.includes(reference.identifier)
+    ? Option.some(Option.fromUndefinedOr(builtIns.get(reference.identifier)))
+    : Option.none();
+};
+
+/**
+ * Apply `undeclared-variable` to an element of inline response processing.
+ *
+ * `qti-variable` names a response, outcome, template or context declaration of the item, or a
+ * built-in variable (`info-compact.txt:9286`); `qti-correct` and `qti-map-response` name a
+ * response declaration; `qti-set-outcome-value` names an outcome declaration or
+ * `completionStatus`. Template processing is not checked here.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The item's declarations and the parents the walk has met.
+ * @returns The refusal at the element's path when it names no variable of the kind it must; none
+ *   for any other element and for one outside response processing.
+ */
+const undeclaredVariable = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] => {
+  const reference = referenceOf(visit.element);
+  if (
+    Option.isNone(reference) ||
+    !inResponseProcessing(context, visit.element) ||
+    Option.isSome(variableType(reference.value, context))
+  ) {
+    return [];
+  }
+
+  return [
+    refusal(source, "undeclared-variable", visit.path, {
+      element: visit.element.local,
+      expected: reference.value.expected,
+      identifier: reference.value.identifier,
+    }),
+  ];
+};
+
+/**
+ * Give the one expression an element holds, its only child element.
+ *
+ * @param element A `qti-set-outcome-value` or a `qti-lookup-outcome-value`.
+ * @returns Its expression, none when it holds no child element or more than one.
+ */
+const operandOf = (element: SourceElement): Option.Option<SourceElement> => {
+  const operands = element.children.flatMap((child) => (child.kind === "element" ? [child] : []));
+
+  return operands.length === 1 ? Arr.head(operands) : Option.none();
+};
+
+/**
+ * Give the type of an expression built only of the eight phase-1 elements (spec §4.12), each
+ * naming a declared or built-in variable.
+ *
+ * `qti-base-value` is a single of its `base-type`; `qti-variable` and `qti-correct` have their
+ * variable's type; `qti-map-response` is a single float; `qti-match` and `qti-is-null` are a
+ * single boolean. An expression that holds any other element is not typed: phase 1 marks that
+ * processing and never runs it (spec Q15, ruled B, where this is the one residual difference from
+ * the qti package).
+ *
+ * @param expression The expression.
+ * @param context The item's declarations.
+ * @returns Its type, none when it is not typed.
+ */
+const expressionType = (
+  expression: SourceElement,
+  context: Context,
+): Option.Option<ExpressionType> => {
+  if (expression.namespace !== qtiNamespace) {
+    return Option.none();
+  }
+
+  const variable = Option.flatMap(referenceOf(expression), (reference) =>
+    variableType(reference, context),
+  );
+  switch (expression.local) {
+    case "qti-base-value": {
+      return Option.map(vocabularyValue(expression, "base-type", baseTypes), singleOf);
+    }
+    case "qti-variable":
+    case "qti-correct": {
+      return Option.flatten(variable);
+    }
+    case "qti-map-response": {
+      return Option.as(variable, singleOf("float"));
+    }
+    case "qti-match":
+    case "qti-is-null": {
+      return expression.children.every(
+        (child) => child.kind !== "element" || Option.isSome(expressionType(child, context)),
+      )
+        ? Option.some(singleOf("boolean"))
+        : Option.none();
+    }
+    default: {
+      return Option.none();
+    }
+  }
+};
+
+/**
+ * Spell a type's base type for a refusal's detail.
+ *
+ * @param type The type.
+ * @returns Its base type, empty when it has none.
+ */
+const baseTypeText = (type: ExpressionType): string => Option.getOrElse(type.baseType, () => "");
+
+/**
+ * Apply `expression-type` to a `qti-set-outcome-value` of inline response processing.
+ *
+ * "Floating point values can not be assigned to integer variables and vice-versa"
+ * (`info-compact.txt:11770`): the expression's base type and cardinality are the outcome's. A type
+ * with no base type (a `record`) compares by cardinality alone. An outcome or an expression that
+ * is not typed is not judged.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The item's declarations and the parents the walk has met.
+ * @returns The refusal at the `qti-set-outcome-value`'s path when its expression's type is not its
+ *   outcome's; none for any other element.
+ */
+const setOutcomeType = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] => {
+  if (
+    !isQti(visit.element, (local) => local === "qti-set-outcome-value") ||
+    !inResponseProcessing(context, visit.element)
+  ) {
+    return [];
+  }
+
+  const reference = referenceOf(visit.element);
+  if (Option.isNone(reference)) {
+    return [];
+  }
+
+  const outcome = Option.flatten(variableType(reference.value, context));
+  const expression = Option.flatMap(operandOf(visit.element), (operand) =>
+    expressionType(operand, context),
+  );
+  if (Option.isNone(outcome) || Option.isNone(expression)) {
+    return [];
+  }
+
+  const agrees =
+    expression.value.cardinality === outcome.value.cardinality &&
+    (Option.isNone(expression.value.baseType) ||
+      Option.isNone(outcome.value.baseType) ||
+      expression.value.baseType.value === outcome.value.baseType.value);
+
+  return agrees
+    ? []
+    : [
+        refusal(source, "expression-type", visit.path, {
+          element: visit.element.local,
+          expressionBaseType: baseTypeText(expression.value),
+          expressionCardinality: expression.value.cardinality,
+          identifier: reference.value.identifier,
+          outcomeBaseType: baseTypeText(outcome.value),
+          outcomeCardinality: outcome.value.cardinality,
+        }),
+      ];
+};
+
+/**
+ * The base types a lookup operand may have under each lookup table (reading 28).
+ */
+const lookupOperands = {
+  "qti-interpolation-table": ["integer", "float", "duration"],
+  "qti-match-table": ["integer"],
+} as const satisfies Record<string, readonly BaseType[]>;
+
+/**
+ * The local name of a lookup table.
+ */
+type LookupTable = keyof typeof lookupOperands;
+
+/**
+ * Give the lookup table an outcome declaration holds.
+ *
+ * @param declaration The outcome declaration.
+ * @returns The table's local name, none when the declaration holds neither table.
+ */
+const lookupTableOf = (declaration: SourceElement): Option.Option<LookupTable> =>
+  Arr.findFirst(
+    declaration.children.flatMap((child) =>
+      child.kind === "element" && child.namespace === qtiNamespace ? [child.local] : [],
+    ),
+    (local): local is LookupTable => Object.hasOwn(lookupOperands, local),
+  );
+
+/**
+ * Apply `expression-type` to a `qti-lookup-outcome-value`'s operand (reading 28).
+ *
+ * The operand is a single integer, float or duration, and an integer when the outcome holds a
+ * `qti-match-table` (operator ruling `96840ced`, Q15 B: refused although phase 1 never runs a
+ * lookup). An operand phase 1 cannot type is accepted untyped, and an outcome that is undeclared
+ * or holds no lookup table is not judged here.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The item's declarations and the parents the walk has met.
+ * @returns The refusal at the `qti-lookup-outcome-value`'s path when its operand's type is not one
+ *   its table allows; none for any other element.
+ */
+const lookupOperandType = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] => {
+  const attribute = attributeOf(visit.element, "identifier");
+  if (
+    !isQti(visit.element, (local) => local === "qti-lookup-outcome-value") ||
+    Option.isNone(attribute) ||
+    !inResponseProcessing(context, visit.element)
+  ) {
+    return [];
+  }
+
+  const identifier = identifierOf(attribute.value);
+  const table = Option.flatMap(
+    Option.fromUndefinedOr(context.outcomes.get(identifier)),
+    lookupTableOf,
+  );
+  const operand = Option.flatMap(operandOf(visit.element), (expression) =>
+    expressionType(expression, context),
+  );
+  if (Option.isNone(table) || Option.isNone(operand)) {
+    return [];
+  }
+
+  const allowed: readonly BaseType[] = lookupOperands[table.value];
+  const agrees =
+    operand.value.cardinality === "single" &&
+    !Option.exists(operand.value.baseType, (baseType) => !allowed.includes(baseType));
+
+  return agrees
+    ? []
+    : [
+        refusal(source, "expression-type", visit.path, {
+          element: visit.element.local,
+          expressionBaseType: baseTypeText(operand.value),
+          expressionCardinality: operand.value.cardinality,
+          identifier,
+          reading: "28",
+          table: table.value,
+        }),
+      ];
+};
+
+/**
+ * The declarations whose variables a `qti-variable` may read. Where two share an identifier, the
+ * later kind here wins; the duplicate is `duplicate-identifier`'s refusal.
+ */
+const variableDeclarations = [
+  "qti-context-declaration",
+  "qti-template-declaration",
+  "qti-outcome-declaration",
+  "qti-response-declaration",
+] as const;
+
+/**
  * Check a document against the prose rules: `undeclared-response`, `duplicate-identifier`,
- * `binding`, `template-requirements` and `value-type`, and reading 19's `max-strings` on an
- * Extended Text bound to a container.
+ * `binding`, `template-requirements`, `value-type`, `undeclared-variable` and `expression-type`,
+ * and reading 19's `max-strings` on an Extended Text bound to a container.
  *
  * Every refusal is located at an element or attribute path and returned in document order; the
  * check never stops at the first. An empty list means no prose rule this module implements refuses
@@ -866,6 +1302,7 @@ export const checkRules = (source: SourceDocument): readonly Refusal[] => {
     outcomes: declarationsOf(source, "qti-outcome-declaration"),
     parents: new Map(),
     responses: declarationsOf(source, "qti-response-declaration"),
+    variables: new Map(variableDeclarations.flatMap((kind) => [...declarationsOf(source, kind)])),
   };
   const seen = new Map<SourceElement, Set<string>>();
   const refusals: Refusal[] = [];
@@ -881,6 +1318,9 @@ export const checkRules = (source: SourceDocument): readonly Refusal[] => {
       ...mapResponseRequirements(source, visit, context),
       ...attributeValueType(source, visit, context),
       ...textValueType(source, visit, context),
+      ...undeclaredVariable(source, visit, context),
+      ...setOutcomeType(source, visit, context),
+      ...lookupOperandType(source, visit, context),
     );
   }
 
