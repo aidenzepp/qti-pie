@@ -9,14 +9,21 @@
  * checked with `checkResponses`, scored with `score`, and answered with the page after a submit
  * that spec §4.7 sets: the Status part first, one `autofocus`, and a title that names the state.
  * Every page is built through `h` and `toHtml`, so document text is escaped, and every response
- * carries the content-security headers of rule `723e580c`. It reads the corpus through
- * `readCorpusFile` and opens no port: `scripts/serve.ts` is the listener.
+ * carries the content-security headers of rule `723e580c`. It also serves plate's stylesheet, its
+ * own sheet and the host CSS of the theme its theme box last accepted, which it keeps with a dark
+ * flag in memory until it restarts. It reads the corpus through `readCorpusFile` and opens no port:
+ * `scripts/serve.ts` is the listener.
  *
  * @module
  */
+/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown. */
+import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { ConfigProvider, Effect, Option, Result } from "effect";
+import { fileURLToPath } from "node:url";
+import { ConfigProvider, Effect, Option, Ref, Result, Schema } from "effect";
 import type { Config } from "effect";
+import { emptyTheme, parseTheme, themeCss } from "#plate/dev/theme.ts";
+import type { Theme, ThemeRefused } from "#plate/dev/theme.ts";
 import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { text } from "#plate/emit/node.ts";
@@ -116,6 +123,7 @@ const sessionLimit = 100;
 /**
  * The headers of every HTML page (`work/planning/mind/od14-decisions.md`, rule `723e580c`): no
  * script and no `'unsafe-inline'` in any directive, posts only to this origin, and no caching.
+ * The stylesheets and the theme box's redirect carry them too, a stylesheet with its own type.
  */
 const pageHeaders = {
   "cache-control": "no-store",
@@ -167,6 +175,35 @@ const assetTypes: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
+ * The type of every stylesheet the playground serves.
+ */
+const cssType = "text/css; charset=utf-8";
+
+/**
+ * The package's stylesheets the playground serves, by request path: plate's default theme and the
+ * playground's own sheet, each read from the package's source on every request.
+ */
+const sheets: ReadonlyMap<string, URL> = new Map([
+  ["/playground.css", new URL(import.meta.resolve("#plate/dev/playground.css"))],
+  ["/styles.css", new URL(import.meta.resolve("#plate/styles.css"))],
+]);
+
+/**
+ * The failure of a read of one of the package's stylesheets: the file is missing or unreadable.
+ */
+class SheetUnreadable extends Schema.TaggedError<SheetUnreadable>()("SheetUnreadable", {
+  detail: Schema.String,
+  path: Schema.String,
+}) {
+  /**
+   * The file and what to change.
+   */
+  override get message(): string {
+    return `Cannot read the stylesheet ${this.path}: ${this.detail}. Restore the file from the package's source.`;
+  }
+}
+
+/**
  * What a page after a post shows, kept so a post past the attempt limit shows it again.
  */
 interface Shown {
@@ -187,9 +224,20 @@ interface Session {
 }
 
 /**
- * A playground's state and settings: its sessions, oldest first, and its configuration input.
+ * What the theme box last stored: the accepted theme and the dark flag, `emptyTheme` and off at
+ * start.
+ */
+interface Appearance {
+  readonly dark: boolean;
+  readonly theme: Theme;
+}
+
+/**
+ * A playground's state and settings: its theme box's appearance, its sessions, oldest first, and
+ * its configuration input.
  */
 interface Playground {
+  readonly appearance: Ref.Ref<Appearance>;
   readonly configuration: Partial<Configuration>;
   readonly sessions: Map<string, Session>;
 }
@@ -729,14 +777,19 @@ const scoredPage = (
   );
 
 /**
- * Answer a failure of the corpus read: 404 for a path the corpus does not hold, and a developer
- * error's page when the corpus or its settings are missing.
+ * Answer a failure of a read: 404 for a path the corpus does not hold, and a developer error's page
+ * when the corpus, a stylesheet or the settings are missing.
  *
  * @param error The failure.
  * @returns The response.
  */
 const corpusFailure = (
-  error: Config.ConfigError | CorpusFileUnreadable | CorpusMissing | InvalidConfiguration,
+  error:
+    | Config.ConfigError
+    | CorpusFileUnreadable
+    | CorpusMissing
+    | InvalidConfiguration
+    | SheetUnreadable,
 ): Response => (error._tag === "CorpusFileUnreadable" ? notFound() : failurePage(error));
 
 /**
@@ -951,8 +1004,139 @@ const serveAsset = Effect.fn("playground.serveAsset")(function* serveAsset(
 });
 
 /**
- * Route one request: the listing, an item page, a post, or an asset; anything else is a 404, and a
- * method a route does not take is a 405.
+ * Construct a stylesheet response: the CSS with the page headers and the CSS type.
+ *
+ * @param css The stylesheet's bytes or text.
+ * @returns The 200 response.
+ */
+const cssResponse = (css: Uint8Array<ArrayBuffer> | string): Response =>
+  new Response(css, { headers: { ...pageHeaders, "content-type": cssType } });
+
+/**
+ * Serve one of the package's stylesheets, read from its file.
+ *
+ * @param file The stylesheet's file URL.
+ * @returns The response.
+ */
+const serveSheet = Effect.fn("playground.serveSheet")(function* serveSheet(
+  file: URL,
+): Effect.fn.Return<Response, SheetUnreadable> {
+  const bytes = yield* Effect.tryPromise({
+    catch: (cause) =>
+      new SheetUnreadable({
+        detail: cause instanceof Error ? cause.message : String(cause),
+        path: fileURLToPath(file),
+      }),
+    try: () => readFile(file),
+  });
+
+  return cssResponse(new Uint8Array(bytes));
+});
+
+/**
+ * Read one text field of a form post.
+ *
+ * @param form The post's fields.
+ * @param name The field's name.
+ * @returns Its first value, or none when it is absent or a file.
+ */
+const field = (form: FormData, name: string): Option.Option<string> => {
+  const value = form.get(name);
+
+  return value === null || value instanceof Blob ? Option.none() : Option.some(value);
+};
+
+/**
+ * Give the `Location` a theme box post returns to: the `return` field's path and query when it is
+ * a URL on the request's origin whose path and query stay on that origin, and `/` otherwise.
+ *
+ * The WHATWG parser reads the field against the request's URL, stripping tabs and newlines as a
+ * browser does, so no prefix check is needed: `/\t/evil.example` parses as `//evil.example`,
+ * another origin. The path and query are parsed once more because a same-origin URL can have a path
+ * that begins with `//` (`/.//evil.example`), which a browser follows to another host.
+ *
+ * @param value The `return` field, none when it is absent.
+ * @param requestUrl The post's URL.
+ * @returns The `Location`, never the field's raw value.
+ */
+const returnLocation = (value: Option.Option<string>, requestUrl: string): string => {
+  const { origin } = new URL(requestUrl);
+  const parsed = value.pipe(
+    Option.flatMap((written) =>
+      written.trim() === "" ? Option.none() : Option.fromNullOr(URL.parse(written, requestUrl)),
+    ),
+  );
+  if (Option.isNone(parsed) || parsed.value.origin !== origin) {
+    return "/";
+  }
+
+  const location = `${parsed.value.pathname}${parsed.value.search}`;
+
+  return URL.parse(location, requestUrl)?.origin === origin ? location : "/";
+};
+
+/**
+ * Construct the page of a theme the box did not accept: the refusal's message, and its cause and
+ * the part it quotes, with the stored theme unchanged.
+ *
+ * @param refusal The refusal.
+ * @returns The 400 response.
+ */
+const themeRefusedPage = (refusal: ThemeRefused): Response =>
+  htmlResponse(
+    400,
+    pageHtml("en", "Theme not accepted", [
+      h("h1", {}, [text("Theme not accepted")]),
+      h("p", {}, [text(refusal.message)]),
+      h("p", { "data-cause": refusal.cause }, [
+        text("Refused part: "),
+        h("code", {}, [text(refusal.detail)]),
+      ]),
+      h("p", {}, [text("The stored theme is unchanged.")]),
+      home,
+    ]),
+  );
+
+/**
+ * Take a theme box post: read its `theme`, `dark` and `return` fields, store an accepted theme and
+ * the dark flag, and answer 303 to the return location; a refused theme answers 400 and stores
+ * nothing.
+ *
+ * @param playground The playground.
+ * @param request The post.
+ * @returns The response.
+ */
+const postTheme = Effect.fn("playground.postTheme")(function* postTheme(
+  playground: Playground,
+  request: Request,
+): Effect.fn.Return<Response> {
+  const form = yield* Effect.result(
+    // oxlint-disable-next-line typescript/no-deprecated -- The deprecation warns against parsing an untrusted server's multipart response; this is a post to the playground's own form, read on 127.0.0.1, and scripts/serve.ts caps its body at 1 MiB before the handler sees it.
+    Effect.tryPromise(() => request.formData()),
+  );
+  if (Result.isFailure(form)) {
+    return notePage(400, "Not a form post", "The post's body is not a form; submit the theme box.");
+  }
+
+  const fields = form.success;
+  const theme = yield* Effect.result(
+    parseTheme(Option.getOrElse(field(fields, "theme"), () => "")),
+  );
+  if (Result.isFailure(theme)) {
+    return themeRefusedPage(theme.failure);
+  }
+
+  yield* Ref.set(playground.appearance, { dark: fields.has("dark"), theme: theme.success });
+
+  return new Response(null, {
+    headers: { ...pageHeaders, location: returnLocation(field(fields, "return"), request.url) },
+    status: 303,
+  });
+});
+
+/**
+ * Route one request: the listing, an item page, a post, an asset, a stylesheet, or a theme box
+ * post; anything else is a 404, and a method a route does not take is a 405.
  *
  * @param playground The playground.
  * @param request The request.
@@ -963,7 +1147,7 @@ const route = (
   request: Request,
 ): Effect.Effect<
   Response,
-  Config.ConfigError | CorpusFileUnreadable | CorpusMissing | InvalidConfiguration
+  Config.ConfigError | CorpusFileUnreadable | CorpusMissing | InvalidConfiguration | SheetUnreadable
 > => {
   const url = new URL(request.url);
   const refusedMethod = Effect.succeed(
@@ -991,11 +1175,26 @@ const route = (
     return request.method === "GET" ? serveAsset(playground, url.pathname) : refusedMethod;
   }
 
+  const sheet = sheets.get(url.pathname);
+  if (sheet !== undefined) {
+    return request.method === "GET" ? serveSheet(sheet) : refusedMethod;
+  }
+
+  if (url.pathname === "/theme.css") {
+    return request.method === "GET"
+      ? Effect.map(Ref.get(playground.appearance), ({ theme }) => cssResponse(themeCss(theme)))
+      : refusedMethod;
+  }
+
+  if (url.pathname === "/theme") {
+    return request.method === "POST" ? postTheme(playground, request) : refusedMethod;
+  }
+
   return Effect.succeed(notFound());
 };
 
 /**
- * Construct a playground's Fetch handler, with its own sessions.
+ * Construct a playground's Fetch handler, with its own sessions, theme and dark flag.
  *
  * It runs `open`, `configure` and the corpus read with `Effect.runPromise`; `render`,
  * `renderStatus`, `decode`, `checkResponses` and `score` are plain functions. A failure the
@@ -1012,6 +1211,7 @@ const route = (
  */
 export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
   const playground: Playground = {
+    appearance: Ref.makeUnsafe<Appearance>({ dark: false, theme: emptyTheme }),
     configuration: settings.configuration ?? {},
     sessions: new Map(),
   };
