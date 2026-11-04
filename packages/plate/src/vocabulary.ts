@@ -357,3 +357,125 @@ export const templateName = (uri: string): Option.Option<TemplateName> =>
       Arr.findFirst(templateNames, (name) => rest === name || rest === `${name}.xml`),
     ),
   );
+
+/**
+ * The owners of the QTI shared vocabulary classes M1 knows (I-19): the three interactions it
+ * renders, and the item body, which carries the general utility classes.
+ */
+export type ClassOwner =
+  | "choice-interaction"
+  | "text-entry-interaction"
+  | "extended-text-interaction"
+  | "body";
+
+/**
+ * The two vertical-writing classes, which each interaction owner holds (`vocab.txt:4802-4840` for
+ * Choice, `:4961` for Text Entry, `:5171` for Extended Text).
+ */
+const writingClasses = [
+  "qti-writing-orientation-vertical-rl",
+  "qti-writing-orientation-vertical-lr",
+] as const;
+
+/**
+ * The vocabulary classes M1's stylesheet gives a presentation, by owner.
+ *
+ * The inventory is closed: a `qti-*` class outside it has no rule. It holds no alias for the
+ * corpus misspelling `qti-label-suffix-period`, and not `qti-keyword-emphasis` (M4). The rest of
+ * the vocabulary's utility classes and its layout grid are M3's.
+ */
+export const styledClasses: Readonly<Record<ClassOwner, readonly string[]>> = {
+  /**
+   * The general utility classes on the item body: `vocab.txt:441` (`qti-visually-hidden`), `:559`
+   * (`qti-underline`), `:578` (`qti-italic`), `:1010` (`qti-hidden`) and `:1061` (`qti-bordered`,
+   * `qti-well`).
+   */
+  body: [
+    "qti-hidden",
+    "qti-visually-hidden",
+    "qti-underline",
+    "qti-italic",
+    "qti-bordered",
+    "qti-well",
+  ],
+  /**
+   * Choice's labels, suffixes, orientation, stacking, hidden controls and vertical writing: the
+   * summary table, `vocab.txt:4026-4063`, and sections 1.2.1.1 to 1.2.1.9, `:4329-4840`, which add
+   * `qti-labels-cjk-ideographic` and the writing classes.
+   */
+  "choice-interaction": [
+    "qti-labels-none",
+    "qti-labels-decimal",
+    "qti-labels-lower-alpha",
+    "qti-labels-upper-alpha",
+    "qti-labels-cjk-ideographic",
+    "qti-labels-suffix-none",
+    "qti-labels-suffix-period",
+    "qti-labels-suffix-parenthesis",
+    "qti-orientation-horizontal",
+    "qti-orientation-vertical",
+    "qti-choices-stacking-1",
+    "qti-choices-stacking-2",
+    "qti-choices-stacking-3",
+    "qti-choices-stacking-4",
+    "qti-choices-stacking-5",
+    "qti-input-control-hidden",
+    ...writingClasses,
+  ],
+  /**
+   * Extended Text's heights and vertical writing: the summary table, `vocab.txt:4095-4110`, with
+   * section 1.2.3.1, `:4997`, and section 1.2.3.4, `:5171`.
+   */
+  "extended-text-interaction": [
+    "qti-height-lines-3",
+    "qti-height-lines-6",
+    "qti-height-lines-15",
+    ...writingClasses,
+  ],
+  /**
+   * Text Entry's input widths and vertical writing: the summary table, `vocab.txt:4063-4095`, with
+   * section 1.2.2.1, `:4847`, and section 1.2.2.3, `:4961`.
+   */
+  "text-entry-interaction": [
+    "qti-input-width-1",
+    "qti-input-width-2",
+    "qti-input-width-3",
+    "qti-input-width-4",
+    "qti-input-width-6",
+    "qti-input-width-10",
+    "qti-input-width-15",
+    "qti-input-width-20",
+    "qti-input-width-25",
+    "qti-input-width-30",
+    "qti-input-width-35",
+    "qti-input-width-40",
+    "qti-input-width-45",
+    "qti-input-width-50",
+    "qti-input-width-72",
+    ...writingClasses,
+  ],
+};
+
+/**
+ * The vocabulary classes whose meaning needs script, by owner: M1 recognises them and styles none
+ * of them; their runtime is M3's.
+ */
+export const behaviourClasses: Readonly<Record<ClassOwner, readonly string[]>> = {
+  /**
+   * None: the body's utility classes M1 knows are all presentational.
+   */
+  body: [],
+  /**
+   * None: Choice's vocabulary is all presentational.
+   */
+  "choice-interaction": [],
+  /**
+   * The character counters, which count the response's characters live: `vocab.txt:5082`, section
+   * 1.2.3.2.
+   */
+  "extended-text-interaction": ["qti-counter-up", "qti-counter-down"],
+  /**
+   * None: Text Entry's vocabulary is all presentational.
+   */
+  "text-entry-interaction": [],
+};

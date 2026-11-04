@@ -2,14 +2,17 @@ import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 import {
   baseTypes,
+  behaviourClasses,
   cardinalities,
   interactionNames,
   messageAttributes,
   renders,
+  styledClasses,
   templateName,
   templateNames,
   templatePrefixes,
 } from "#plate/vocabulary.ts";
+import type { ClassOwner } from "#plate/vocabulary.ts";
 
 /**
  * Assert that a list holds each of its members once.
@@ -195,5 +198,109 @@ describe("the closed value sets", () => {
 
   it("has every engine name in elements", () => {
     assert.includeMembers([...renders.elements], [...renders.engine]);
+  });
+});
+
+describe("the vocabulary class inventory", () => {
+  const owners: readonly ClassOwner[] = [
+    "choice-interaction",
+    "text-entry-interaction",
+    "extended-text-interaction",
+    "body",
+  ];
+  const interactionOwners: readonly ClassOwner[] = [
+    "choice-interaction",
+    "text-entry-interaction",
+    "extended-text-interaction",
+  ];
+  const writingClasses = [
+    "qti-writing-orientation-vertical-rl",
+    "qti-writing-orientation-vertical-lr",
+  ] as const;
+
+  it("[I-19] is closed: each owner holds a class once, every class is qti-*, styled is never behaviour", () => {
+    assert.sameMembers(Object.keys(styledClasses), [...owners]);
+    assert.sameMembers(Object.keys(behaviourClasses), [...owners]);
+    for (const owner of owners) {
+      const classes = [...styledClasses[owner], ...behaviourClasses[owner]];
+      assertDistinct(classes);
+      for (const name of classes) {
+        assert.match(name, /^qti-[a-z0-9-]+$/u, owner);
+      }
+    }
+    const styled = new Set(owners.flatMap((owner) => styledClasses[owner]));
+    const behaviour = owners.flatMap((owner) => behaviourClasses[owner]);
+    assert.deepStrictEqual(
+      behaviour.filter((name) => styled.has(name)),
+      [],
+    );
+  });
+
+  it("[I-19] gives the three interactions exactly the summary table's classes and the sections' three", () => {
+    // `vocab.txt:4026-4110`, the summary table (35 classes), then `:4325-5220`, the sections (3).
+    const summaryTable = [
+      "qti-choices-stacking-1",
+      "qti-choices-stacking-2",
+      "qti-choices-stacking-3",
+      "qti-choices-stacking-4",
+      "qti-choices-stacking-5",
+      "qti-counter-down",
+      "qti-counter-up",
+      "qti-height-lines-15",
+      "qti-height-lines-3",
+      "qti-height-lines-6",
+      "qti-input-control-hidden",
+      "qti-input-width-1",
+      "qti-input-width-10",
+      "qti-input-width-15",
+      "qti-input-width-2",
+      "qti-input-width-20",
+      "qti-input-width-25",
+      "qti-input-width-3",
+      "qti-input-width-30",
+      "qti-input-width-35",
+      "qti-input-width-4",
+      "qti-input-width-40",
+      "qti-input-width-45",
+      "qti-input-width-50",
+      "qti-input-width-6",
+      "qti-input-width-72",
+      "qti-labels-decimal",
+      "qti-labels-lower-alpha",
+      "qti-labels-none",
+      "qti-labels-suffix-none",
+      "qti-labels-suffix-parenthesis",
+      "qti-labels-suffix-period",
+      "qti-labels-upper-alpha",
+      "qti-orientation-horizontal",
+      "qti-orientation-vertical",
+    ];
+    const sections = [
+      "qti-labels-cjk-ideographic",
+      "qti-writing-orientation-vertical-lr",
+      "qti-writing-orientation-vertical-rl",
+    ];
+    const held = new Set(
+      interactionOwners.flatMap((owner) => [...styledClasses[owner], ...behaviourClasses[owner]]),
+    );
+    assert.deepStrictEqual([...held].toSorted(), [...summaryTable, ...sections].toSorted());
+    for (const owner of interactionOwners) {
+      assert.includeMembers([...styledClasses[owner]], [...writingClasses], owner);
+    }
+  });
+
+  it("[I-19] styles the six body utility classes and nothing else on the body", () => {
+    assert.sameMembers(
+      [...styledClasses.body],
+      [
+        "qti-hidden",
+        "qti-visually-hidden",
+        "qti-underline",
+        "qti-italic",
+        "qti-bordered",
+        "qti-well",
+      ],
+    );
+    assert.deepStrictEqual([...behaviourClasses.body], []);
   });
 });
