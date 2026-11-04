@@ -1,4 +1,6 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the column the declaration and binding rows name; it is no structure. */
+import { createHash } from "node:crypto";
+import type { Uuid } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option } from "effect";
 import {
@@ -61,6 +63,16 @@ import { AttributeLexical } from "#pantry/schema/node.ts";
 import type { NodeKindHandle } from "#pantry/schema/node.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
+/**
+ * A well-formed UUID derived from a readable label, so a fixture names its nodes and declarations
+ * and the rows still carry the `Uuid` the schema asks for.
+ */
+const uuidOf = (label: string): Uuid => {
+  const hex = createHash("sha1").update(label).digest("hex");
+
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+};
+
 const documentId = "11111111-1111-4111-8111-111111111111";
 
 const attribute = (local: string, value: string): Attribute => ({
@@ -94,30 +106,30 @@ const indexed = (entries: readonly (readonly [Element, NodeKindHandle])[]): Node
   new Map<Element, IndexedNode>(
     entries.map(([found, kind], position) => [
       found,
-      { ancestry: "root", id: `${kind}-${position}`, kind },
+      { ancestry: "root", id: uuidOf(`${kind}-${position}`), kind },
     ]),
   );
 
 const stringSingle: DeclaredVariable = {
   baseType: Option.some("string"),
   cardinality: Option.some("single"),
-  id: "decl-response",
+  id: uuidOf("decl-response"),
   shape: "typed",
 };
 
-const stringSecond: DeclaredVariable = { ...stringSingle, id: "decl-str" };
+const stringSecond: DeclaredVariable = { ...stringSingle, id: uuidOf("decl-str") };
 
 const identifierSingle: DeclaredVariable = {
   baseType: Option.some("identifier"),
   cardinality: Option.some("single"),
-  id: "decl-choice",
+  id: uuidOf("decl-choice"),
   shape: "typed",
 };
 
 const recordVariable: DeclaredVariable = {
   baseType: Option.none(),
   cardinality: Option.none(),
-  id: "decl-record",
+  id: uuidOf("decl-record"),
   shape: "record",
 };
 
@@ -163,7 +175,7 @@ const entry = (attributes: readonly (readonly [string, string])[]) =>
 const extended = (attributes: readonly (readonly [string, string])[]) =>
   element("qti-extended-text-interaction", attributes);
 
-const textEntryId = "qti-text-entry-interaction-2";
+const textEntryId = uuidOf("qti-text-entry-interaction-2");
 
 describe("textRows: text-entry", () => {
   it.effect("writes the arm with base 10, no marker, and a string single binding", () =>
@@ -322,7 +334,7 @@ describe("textRows: text-entry", () => {
 });
 
 describe("textRows: extended-text", () => {
-  const extendedId = "qti-extended-text-interaction-2";
+  const extendedId = uuidOf("qti-extended-text-interaction-2");
 
   it.effect("defaults base, format and min-strings, with no marker", () =>
     Effect.gen(function* check() {
@@ -465,7 +477,7 @@ describe("textRows: inline-choice", () => {
   const label = element("qti-label");
   const interaction = (attributes: readonly (readonly [string, string])[]) =>
     element("qti-inline-choice-interaction", attributes, [label, first, second]);
-  const interactionId = "qti-inline-choice-interaction-2";
+  const interactionId = uuidOf("qti-inline-choice-interaction-2");
 
   const entriesOf = (found: Element): readonly (readonly [Element, NodeKindHandle])[] => [
     [found, "qti-inline-choice-interaction"],
@@ -474,7 +486,7 @@ describe("textRows: inline-choice", () => {
     [second, "qti-inline-choice"],
   ];
 
-  const template: DeclaredVariable = { ...identifierSingle, id: "decl-template" };
+  const template: DeclaredVariable = { ...identifierSingle, id: uuidOf("decl-template") };
 
   it.effect("writes a choice's show-hide and marks the one the source wrote", () =>
     Effect.gen(function* showHide() {
@@ -508,7 +520,7 @@ describe("textRows: inline-choice", () => {
         ],
       );
       assert.deepStrictEqual(Rows.of(rows, DeclaredInlineChoiceShowHide), [
-        { node: Rows.of(rows, InlineChoice)[0]?.id ?? "" },
+        { node: Rows.of(rows, InlineChoice)[0]?.id ?? uuidOf("missing") },
       ]);
     }),
   );
@@ -562,23 +574,23 @@ describe("textRows: inline-choice", () => {
       assert.deepStrictEqual(Rows.of(rows, InlineChoice), [
         {
           fixed: "false",
-          id: "qti-inline-choice-4",
+          id: uuidOf("qti-inline-choice-4"),
           identifier: ChoiceIdentifier("A"),
           interaction: interactionId,
           showHide: "show",
         },
         {
           fixed: "true",
-          id: "qti-inline-choice-5",
+          id: uuidOf("qti-inline-choice-5"),
           identifier: ChoiceIdentifier("B"),
           interaction: interactionId,
           showHide: "show",
         },
       ]);
       assert.deepStrictEqual(Rows.of(rows, DeclaredInlineChoiceFixed), [
-        { node: "qti-inline-choice-5" },
+        { node: uuidOf("qti-inline-choice-5") },
       ]);
-      assert.deepStrictEqual(Rows.of(rows, QtiLabel), [{ id: "qti-label-3" }]);
+      assert.deepStrictEqual(Rows.of(rows, QtiLabel), [{ id: uuidOf("qti-label-3") }]);
     }),
   );
 
@@ -598,7 +610,7 @@ describe("textRows: inline-choice", () => {
           cardinality: "single",
           document: documentId,
           identifier: "TPL",
-          node: "qti-inline-choice-5",
+          node: uuidOf("qti-inline-choice-5"),
         },
       ]);
     }),
