@@ -8,8 +8,8 @@
  * `types/schema/statements.ts:155-164`). A contract name shares the relation name space (grizzle
  * `physical/ddl/domains.ts:341-366`), so no name here is the name of a relation of `Qti`.
  *
- * There are 72 contracts written out below. The 64 value-arm contracts are minted from the context
- * table of `value.ts` in `value-contracts.ts`, which this module cannot import: 136 in all.
+ * There are 77 contracts written out below. The 64 value-arm contracts are minted from the context
+ * table of `value.ts` in `value-contracts.ts`, which this module cannot import: 141 in all.
  */
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `ShapeCoords` is the contract of the coordinates of an HTML shape, a name the contracts document settles; it is not a structural description. */
 import { contract, str } from "@bjornpagen/grizzle";
@@ -561,3 +561,38 @@ export const AccessModeAdapted = contract(
   "AccessModeAdapted",
   str.regex(patterns.drdAccessModeAdapted),
 );
+
+/**
+ * The local name of a foreign element.
+ *
+ * The base is `patterns.ncName`.
+ */
+export const XmlLocalName = contract("XmlLocalName", str.regex(patterns.ncName));
+
+/**
+ * The URI an `xlink:href` locates.
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const XlinkHrefUri = contract("XlinkHrefUri", str.regex(patterns.anyUri));
+
+/**
+ * The URI an `xlink:role` names.
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const XlinkRoleUri = contract("XlinkRoleUri", str.regex(patterns.anyUri));
+
+/**
+ * The URI an `xlink:arcrole` names.
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const XlinkArcroleUri = contract("XlinkArcroleUri", str.regex(patterns.anyUri));
+
+/**
+ * The name an `xlink:label` gives a resource or locator.
+ *
+ * The base is `patterns.ncName`.
+ */
+export const XlinkLabelName = contract("XlinkLabelName", str.regex(patterns.ncName));
