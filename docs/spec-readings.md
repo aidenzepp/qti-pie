@@ -319,9 +319,10 @@ against it. A reading that is not an information-model-over-XSD case says which 
     `qti-card-entry`) the same basis applies: an element is accepted wherever the schema admits it and no normative text
     bans it, and refused only where the schema or a normative rule refuses it. In the XSD, card content has no wildcard
     of its own: `HTMLContentDType` lists only HTML, MathML and SSML elements (`imsqti_asiv3p0p1_v1p0.xsd` lines
-    28247-28330). QTI elements are admitted there only by declaration, inside text-level HTML, where `HTMLTextDType`
-    (line 28332) declares `qti-printed-variable` (line 28344) and the other inline QTI elements. A foreign or QTI
-    element placed directly in card content, or anywhere else no declaration or wildcard reaches, is refused because
-    the schema refuses it. Beneath `m:math` the only wildcard is `annotation-xml`'s, so MathML's content model refuses
+    28247-28330). QTI elements are admitted there where the HTML the schema admits there declares them: a block-level
+    `div` (`DivDType`, lines 26673-26794) declares 28, every block interaction among them, and text-level HTML
+    (`HTMLTextDType`, lines 28332-28401) declares 9, the inline ones, `qti-printed-variable` (line 28344) among them. A
+    foreign or QTI element placed directly in `qti-html-content`, or anywhere else no declaration or wildcard reaches,
+    is refused because the schema refuses it. Beneath `m:math` the only wildcard is `annotation-xml`'s, so MathML's content model refuses
     any other placement. This binds the renderer the same way as the qti package, so the two accept and refuse the same
-    file. (Corrected 2026-11-04 by decision 214, replacing the version merged earlier that day under decision 212.)
+    file. (Corrected 2026-11-04 by decision 214, replacing the version merged earlier that day under decision 212.) (Wording corrected 2026-11-04, decision 218; the rule is decision 216's.)
