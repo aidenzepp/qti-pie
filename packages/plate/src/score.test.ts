@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { encodeRecord } from "#plate/codec/record.ts";
 import type { StoredRecord } from "#plate/codec/record.ts";
-import { configure } from "#plate/configuration.ts";
+import { Configuration, configure } from "#plate/configuration.ts";
 import { Malformed } from "#plate/form/encoding.ts";
 import type { PostedBaseType } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
@@ -10,7 +10,8 @@ import type { ChoiceInteraction, Item, TextEntryInteraction } from "#plate/model
 import { fresh } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { render } from "#plate/render.ts";
-import { checkResponses, score } from "#plate/score.ts";
+import { checkResponses } from "#plate/responses.ts";
+import { score, tierA } from "#plate/score.ts";
 import { float } from "#plate/test/fixtures.ts";
 import { acceptForTest } from "#plate/validate/verdict.ts";
 
@@ -361,6 +362,13 @@ describe("score", () => {
 
   it("refuses a hand-built item in its type", () => {
     assert.isFunction(scoreUnchecked);
+  });
+
+  it("runs tier (a) under the configuration the Schema decodes from English and validateResponses off", () => {
+    assert.deepStrictEqual(
+      tierA,
+      Schema.decodeSync(Configuration)({ locale: "en", validateResponses: false }),
+    );
   });
 });
 
