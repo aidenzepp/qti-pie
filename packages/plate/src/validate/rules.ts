@@ -1343,13 +1343,18 @@ const variableDeclarations = [
  * The QTI elements whose XSD content is an element wildcard of `##any` that names no child, so that
  * every element below one is wildcard content.
  *
- * The structural walk passes over a child that only its parent's element wildcard admits, and over
- * everything below it (`admit` in `src/validate/structure.ts`). Reading 6 keeps that content as
- * foreign content: it "is not refused, and it is not read as QTI". So the prose rules pass over it
- * too, and a `qti-choice-interaction` inside a `qti-custom-interaction` binds nothing. The XSD's
- * other element wildcards are `##other`, which admit no QTI element, so passing over every element
- * outside QTI's namespace already covers what they admit. The generated tables are the source of
- * this list; a test compares the two.
+ * Phase 1 skips that content. The structural walk passes over a child that only its parent's
+ * element wildcard admits, and over everything below it (`admit` in `src/validate/structure.ts`),
+ * and the prose rules pass over it too, so a `qti-choice-interaction` inside a
+ * `qti-custom-interaction` binds nothing. The skip is an interim, not a reading. Reading 6 keeps
+ * only a nested QTI root, processing root or manifest global as foreign content, and rule
+ * `5b8ee08b` says a known QTI element inside lax wildcard content is validated as QTI, refused only
+ * where the schema or a normative rule refuses it. M1-R validates this content in both the walk
+ * and the prose rules (the ledger's lax-wildcard deferral).
+ *
+ * The XSD's other element wildcards are `##other`, which admit no QTI element, so passing over
+ * every element outside QTI's namespace already covers what they admit. The generated tables are
+ * the source of this list; a test compares the two.
  */
 export const wildcardContentHolders = ["qti-custom-interaction", "template"] as const;
 
@@ -1366,8 +1371,9 @@ const holdsWildcardContent = (element: SourceElement): boolean =>
  * Visit the elements the prose rules judge, in document order: those the structural walk enters.
  *
  * An element outside QTI's namespace is passed over with everything below it, and so is every
- * element below one of {@link wildcardContentHolders}. `walk` cannot prune, so this keeps the
- * elements it has passed over and passes over each child of one.
+ * element below one of {@link wildcardContentHolders}, phase 1's interim skip of wildcard content
+ * (see there). `walk` cannot prune, so this keeps the elements it has passed over and passes over
+ * each child of one.
  *
  * @param source The document.
  * @yields {Visit} Each element the rules judge, with the path and the parent `walk` gives it.
@@ -1457,8 +1463,10 @@ const setCorrectResponses = (
  *   what another element's rule finds: `identifier="&id;"` on a declaration would make every
  *   `qti-variable` naming that identifier look undeclared. Such a document is `unchecked` unless
  *   the structural walk refuses it.
- * - An element outside QTI's namespace, and every element below it or below one of
- *   {@link wildcardContentHolders}, is not visited (reading 6).
+ * - An element outside QTI's namespace, and every element below it, is not visited.
+ * - No element below one of {@link wildcardContentHolders} is visited. Phase 1 skips that wildcard
+ *   content in the structural walk and here alike. Rule `5b8ee08b` validates a known QTI element
+ *   there as QTI, so the skip is an interim until M1-R (the ledger's lax-wildcard deferral).
  *
  * Every refusal is located at an element or attribute path and returned in document order; the
  * check never stops at the first. An empty list means no prose rule this module implements refuses

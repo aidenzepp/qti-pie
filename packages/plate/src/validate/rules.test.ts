@@ -1288,7 +1288,10 @@ describe("checkRules", () => {
       );
     });
 
-    it("does not read a Choice inside a custom interaction as QTI (reading 6)", () => {
+    // An interim, not a reading: reading 6 covers only a nested QTI root, and rule `5b8ee08b`
+    // validates a known QTI element inside lax wildcard content as QTI. M1-R judges this Choice in
+    // the structural walk and the prose rules (the ledger's lax-wildcard deferral).
+    it("passes over a Choice inside a custom interaction: phase 1 skips wildcard content", () => {
       assert.deepStrictEqual(
         judged(
           item(
