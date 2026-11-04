@@ -9,15 +9,24 @@
  * checked with `checkResponses`, scored with `score`, and answered with the page after a submit
  * that spec §4.7 sets: the Status part first, one `autofocus`, and a title that names the state.
  * Every page is built through `h` and `toHtml`, so document text is escaped, and every response
- * carries the content-security headers of rule `723e580c`. It reads the corpus through
- * `readCorpusFile` and opens no port: `scripts/serve.ts` is the listener.
+ * carries the content-security headers of rule `723e580c`. It also serves plate's stylesheet, its
+ * own sheet and the host CSS of the theme its theme box last accepted, which it keeps with a dark
+ * flag in memory until it restarts. Every page links the three sheets, carries `class="dark"` on
+ * `html` while the flag is on, and ends with the theme box, the playground's own form beside the
+ * item's. It reads the corpus through `readCorpusFile` and opens no port: `scripts/serve.ts` is the
+ * listener.
  *
  * @module
  */
+/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown. */
+import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { ConfigProvider, Effect, Option, Result } from "effect";
+import { fileURLToPath } from "node:url";
+import { ConfigProvider, Effect, Option, Ref, Result, Schema } from "effect";
 import type { Config } from "effect";
 import { decodeStoredFloat } from "#plate/codec/values.ts";
+import { emptyTheme, parseTheme, themeCss, themeText } from "#plate/dev/theme.ts";
+import type { Theme, ThemeRefused } from "#plate/dev/theme.ts";
 import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { text } from "#plate/emit/node.ts";
@@ -117,6 +126,7 @@ const sessionLimit = 100;
 /**
  * The headers of every HTML page (`work/planning/mind/od14-decisions.md`, rule `723e580c`): no
  * script and no `'unsafe-inline'` in any directive, posts only to this origin, and no caching.
+ * The stylesheets and the theme box's redirect carry them too, a stylesheet with its own type.
  */
 const pageHeaders = {
   "cache-control": "no-store",
@@ -168,6 +178,35 @@ const assetTypes: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
+ * The type of every stylesheet the playground serves.
+ */
+const cssType = "text/css; charset=utf-8";
+
+/**
+ * The package's stylesheets the playground serves, by request path: plate's default theme and the
+ * playground's own sheet, each read from the package's source on every request.
+ */
+const sheets: ReadonlyMap<string, URL> = new Map([
+  ["/playground.css", new URL(import.meta.resolve("#plate/dev/playground.css"))],
+  ["/styles.css", new URL(import.meta.resolve("#plate/styles.css"))],
+]);
+
+/**
+ * The failure of a read of one of the package's stylesheets: the file is missing or unreadable.
+ */
+class SheetUnreadable extends Schema.TaggedError<SheetUnreadable>()("SheetUnreadable", {
+  detail: Schema.String,
+  path: Schema.String,
+}) {
+  /**
+   * The file and what to change.
+   */
+  override get message(): string {
+    return `Cannot read the stylesheet ${this.path}: ${this.detail}. Restore the file from the package's source.`;
+  }
+}
+
+/**
  * What a page after a post shows, kept so a post past the attempt limit shows it again.
  */
 interface Shown {
@@ -188,11 +227,45 @@ interface Session {
 }
 
 /**
- * A playground's state and settings: its sessions, oldest first, and its configuration input.
+ * What the theme box last stored: the accepted theme and the dark flag, `emptyTheme` and off at
+ * start.
+ */
+interface Appearance {
+  readonly dark: boolean;
+  readonly theme: Theme;
+}
+
+/**
+ * A playground's state and settings: its theme box's appearance, its sessions, oldest first, and
+ * its configuration input.
  */
 interface Playground {
+  readonly appearance: Ref.Ref<Appearance>;
   readonly configuration: Partial<Configuration>;
   readonly sessions: Map<string, Session>;
+}
+
+/**
+ * An HTML page before its chrome is added: its status, its language and title, the nodes inside
+ * `main`, the HTML of each part its markers hold, and where its theme box returns when the page's
+ * own address is not the place to go back to.
+ */
+interface Page {
+  readonly back: Option.Option<string>;
+  readonly locale: string;
+  readonly main: readonly Node[];
+  readonly parts: readonly string[];
+  readonly status: number;
+  readonly title: string;
+}
+
+/**
+ * What every page carries besides its content: the theme box's stored appearance, and the path and
+ * query the box returns to.
+ */
+interface Chrome {
+  readonly appearance: Appearance;
+  readonly back: string;
 }
 
 /**
@@ -235,47 +308,97 @@ interface Posting {
 const slot = (index: number): Element => h("plate-slot", { "data-index": String(index) });
 
 /**
- * Write a whole HTML page: the doctype, `html` in the locale, a head with the title, and `main`
- * holding the page's nodes, with each marker replaced by its part's HTML.
+ * Construct a page whose theme box returns to the page's own path and query.
  *
+ * @param status The status code.
  * @param locale The page's language.
  * @param title The page's title, as the candidate reads it.
  * @param main The nodes inside `main`.
  * @param parts The HTML of each part, in marker order.
- * @returns The page's HTML.
+ * @returns The page.
  */
-const pageHtml = (
+const page = (
+  status: number,
   locale: string,
   title: string,
   main: readonly Node[],
   parts: readonly string[] = [],
-): string => {
-  const tree = h("html", { lang: locale }, [
-    h("head", {}, [
-      h("meta", { charset: "utf-8" }),
-      h("meta", { content: "width=device-width, initial-scale=1", name: "viewport" }),
-      h("title", {}, [text(title)]),
+): Page => ({ back: Option.none(), locale, main, parts, status, title });
+
+/**
+ * The stylesheets every page links, in cascade order: plate's default theme, the playground's own
+ * sheet, then the host CSS of the stored theme.
+ */
+const sheetLinks: readonly Element[] = ["/styles.css", "/playground.css", "/theme.css"].map(
+  (href) => h("link", { href, rel: "stylesheet" }),
+);
+
+/**
+ * Construct the theme box: the playground's own form, outside the item's, that posts a pasted
+ * theme, the dark flag and the page to return to `/theme`.
+ *
+ * Its textarea shows the stored theme as `themeText` writes it, and its Dark checkbox is checked
+ * while the flag is on, so applying the box unchanged keeps the appearance.
+ *
+ * @param chrome The stored appearance and the return path.
+ * @returns The form.
+ */
+const themeBox = ({ appearance, back }: Chrome): Element =>
+  h("form", { action: "/theme", method: "post" }, [
+    h("h2", {}, [text("Theme")]),
+    h("p", {}, [
+      text(
+        "Paste a shadcn theme's :root and .dark blocks, tick Dark to use the .dark block, and apply the theme. The dev playground keeps it until the server restarts.",
+      ),
     ]),
-    h("body", {}, [h("main", {}, main)]),
+    h("label", { for: "playground-theme" }, [text("Theme blocks")]),
+    h("textarea", { id: "playground-theme", name: "theme", rows: "12", spellcheck: "false" }, [
+      text(themeText(appearance.theme)),
+    ]),
+    h("p", {}, [
+      h(
+        "input",
+        appearance.dark
+          ? { checked: true, id: "playground-dark", name: "dark", type: "checkbox" }
+          : { id: "playground-dark", name: "dark", type: "checkbox" },
+      ),
+      h("label", { for: "playground-dark" }, [text("Dark")]),
+    ]),
+    h("input", { name: "return", type: "hidden", value: back }),
+    h("button", { type: "submit" }, [text("Apply theme")]),
   ]);
 
+/**
+ * Write a whole HTML page: the doctype, `html` in the locale and with the `dark` class while the
+ * flag is on, a head with the title and the three stylesheets, and `main` holding the page's nodes
+ * and then the theme box, with each marker replaced by its part's HTML.
+ *
+ * @param shown The page.
+ * @param chrome The stored appearance and the theme box's return path.
+ * @returns The page's HTML.
+ */
+const pageHtml = (shown: Page, chrome: Chrome): string => {
+  const tree = h(
+    "html",
+    chrome.appearance.dark ? { class: "dark", lang: shown.locale } : { lang: shown.locale },
+    [
+      h("head", {}, [
+        h("meta", { charset: "utf-8" }),
+        h("meta", { content: "width=device-width, initial-scale=1", name: "viewport" }),
+        h("title", {}, [text(shown.title)]),
+        ...sheetLinks,
+      ]),
+      h("body", {}, [h("main", {}, [...shown.main, themeBox(chrome)])]),
+    ],
+  );
+
   let html = toHtml(tree);
-  for (const [index, part] of parts.entries()) {
+  for (const [index, part] of shown.parts.entries()) {
     html = html.replace(toHtml(slot(index)), () => part);
   }
 
   return `<!doctype html>${html}`;
 };
-
-/**
- * Construct an HTML response with the page headers.
- *
- * @param status The status code.
- * @param html The page.
- * @returns The response.
- */
-const htmlResponse = (status: number, html: string): Response =>
-  new Response(html, { headers: pageHeaders, status });
 
 /**
  * The link back to the listing, on every page but the listing.
@@ -288,18 +411,17 @@ const home: Element = h("p", {}, [h("a", { href: "/" }, [text("All documents")])
  * @param status The status code.
  * @param title The page's title and heading.
  * @param said What the page says, a developer error's message included.
- * @returns The response.
+ * @returns The page.
  */
-const notePage = (status: number, title: string, said: string): Response =>
-  htmlResponse(
-    status,
-    pageHtml("en", title, [h("h1", {}, [text(title)]), h("p", {}, [text(said)]), home]),
-  );
+const notePage = (status: number, title: string, said: string): Page =>
+  page(status, "en", title, [h("h1", {}, [text(title)]), h("p", {}, [text(said)]), home]);
 
 /**
- * The 404 every refused path answers with, a traversal included.
+ * Construct the 404 page every refused path answers with, a traversal included.
+ *
+ * @returns The 404 page.
  */
-const notFound = (): Response =>
+const notFound = (): Page =>
   notePage(404, "Not found", "No document, asset or open item is at this address.");
 
 /**
@@ -307,9 +429,9 @@ const notFound = (): Response =>
  * caused, reported with its message.
  *
  * @param error The failure.
- * @returns The 500 response.
+ * @returns The 500 page.
  */
-const failurePage = (error: { readonly message: string }): Response =>
+const failurePage = (error: { readonly message: string }): Page =>
   notePage(500, "Playground error", error.message);
 
 /**
@@ -427,30 +549,27 @@ const remember = (playground: Playground, instance: string, session: Session): v
 /**
  * Construct the listing page: the four documents, each a link to its item page.
  *
- * @returns The response.
+ * @returns The page.
  */
-const listing = (): Response =>
-  htmlResponse(
-    200,
-    pageHtml("en", "plate dev playground", [
-      h("h1", {}, [text("plate dev playground")]),
-      h("p", {}, [
-        text(
-          "Open a document, answer it with the keyboard or the mouse, and submit the form. The server scores the answer; no script runs.",
-        ),
-      ]),
-      h(
-        "ul",
-        {},
-        documents.map((entry) =>
-          h("li", {}, [
-            h("a", { href: itemTarget(entry.path) }, [text(entry.label)]),
-            text(`: ${entry.shows} (${entry.path})`),
-          ]),
-        ),
+const listing = (): Page =>
+  page(200, "en", "plate dev playground", [
+    h("h1", {}, [text("plate dev playground")]),
+    h("p", {}, [
+      text(
+        "Open a document, answer it with the keyboard or the mouse, and submit the form. The server scores the answer; no script runs.",
       ),
     ]),
-  );
+    h(
+      "ul",
+      {},
+      documents.map((entry) =>
+        h("li", {}, [
+          h("a", { href: itemTarget(entry.path) }, [text(entry.label)]),
+          text(`: ${entry.shows} (${entry.path})`),
+        ]),
+      ),
+    ),
+  ]);
 
 /**
  * Construct the page of a document `open` did not accept: each refusal or each reason it is
@@ -459,32 +578,29 @@ const listing = (): Response =>
  * @param corpusPath The document's corpus path.
  * @param state `Refused` or `Unchecked`, which leads the title.
  * @param lines Each refusal's rule and sentence, or each reason and the path it concerns.
- * @returns The response.
+ * @returns The page.
  */
 const verdictPage = (
   corpusPath: string,
   state: "Refused" | "Unchecked",
   lines: readonly (readonly [attribute: Readonly<Record<string, string>>, said: string])[],
-): Response =>
-  htmlResponse(
-    200,
-    pageHtml("en", `${state}: ${corpusPath}`, [
-      h("h1", {}, [text(corpusPath)]),
-      h("p", {}, [
-        text(
-          state === "Refused"
-            ? "open refused this document:"
-            : "open cannot check all of this document, so it is not rendered:",
-        ),
-      ]),
-      h(
-        "ul",
-        {},
-        lines.map(([attribute, said]) => h("li", attribute, [text(said)])),
+): Page =>
+  page(200, "en", `${state}: ${corpusPath}`, [
+    h("h1", {}, [text(corpusPath)]),
+    h("p", {}, [
+      text(
+        state === "Refused"
+          ? "open refused this document:"
+          : "open cannot check all of this document, so it is not rendered:",
       ),
-      home,
     ]),
-  );
+    h(
+      "ul",
+      {},
+      lines.map(([attribute, said]) => h("li", attribute, [text(said)])),
+    ),
+    home,
+  ]);
 
 /**
  * Compose an item page: the item's title, then the item region, holding the Status part when the
@@ -497,14 +613,14 @@ const verdictPage = (
  * @param session The item's corpus path and instance token.
  * @param configuration The configuration.
  * @param view What the page shows besides the item.
- * @returns The response, or a developer error's page when a render fails.
+ * @returns The page, or a developer error's page when a render fails.
  */
 const itemPage = (
   accepted: Accepted,
   session: { readonly instance: string; readonly path: string },
   configuration: Configuration,
   view: ItemView,
-): Response => {
+): Page => {
   const { locale } = configuration;
   const redacted = redact(accepted);
   const title = redacted.title.trim();
@@ -537,7 +653,8 @@ const itemPage = (
         [slot(status.length), submit],
       );
 
-      return pageHtml(
+      return page(
+        200,
         locale,
         message(locale, "title", { state: message(locale, view.state), title }),
         [
@@ -550,7 +667,7 @@ const itemPage = (
     }),
     {
       onFailure: failurePage,
-      onSuccess: (html) => htmlResponse(200, html),
+      onSuccess: (composed) => composed,
     },
   );
 };
@@ -684,14 +801,14 @@ const scoreText = (
  * @param configuration The configuration.
  * @param messages The validation messages.
  * @param posted The strings the post sent, by response.
- * @returns The response.
+ * @returns The page.
  */
 const refusedPage = (
   target: { readonly instance: string; readonly session: Session },
   configuration: Configuration,
   messages: readonly ValidationMessage[],
   posted: Readonly<Record<string, readonly string[]>>,
-): Response =>
+): Page =>
   itemPage(
     target.session.accepted,
     { instance: target.instance, path: target.session.path },
@@ -711,13 +828,13 @@ const refusedPage = (
  * @param target The item's instance and session, after the attempt.
  * @param configuration The configuration, which gives `maxAttempts` (0 means unlimited).
  * @param shown What the page shows.
- * @returns The response.
+ * @returns The page.
  */
 const scoredPage = (
   target: { readonly instance: string; readonly session: Session },
   configuration: Configuration,
   shown: Shown,
-): Response =>
+): Page =>
   itemPage(
     target.session.accepted,
     { instance: target.instance, path: target.session.path },
@@ -732,28 +849,34 @@ const scoredPage = (
   );
 
 /**
- * Answer a failure of the corpus read: 404 for a path the corpus does not hold, and a developer
- * error's page when the corpus or its settings are missing.
+ * Construct the page a route's failure answers with: the 404 page for a path the corpus does not
+ * hold, and a developer error's page when the corpus or a stylesheet is missing or the settings are
+ * missing or invalid.
  *
  * @param error The failure.
- * @returns The response.
+ * @returns The page.
  */
-const corpusFailure = (
-  error: Config.ConfigError | CorpusFileUnreadable | CorpusMissing | InvalidConfiguration,
-): Response => (error._tag === "CorpusFileUnreadable" ? notFound() : failurePage(error));
+const routeFailure = (
+  error:
+    | Config.ConfigError
+    | CorpusFileUnreadable
+    | CorpusMissing
+    | InvalidConfiguration
+    | SheetUnreadable,
+): Page => (error._tag === "CorpusFileUnreadable" ? notFound() : failurePage(error));
 
 /**
  * Open a document and answer with its item page, or with its refusals or unchecked reasons.
  *
  * @param playground The playground.
  * @param corpusPath The document's corpus path, as the request named it.
- * @returns The response.
+ * @returns The page.
  */
 const openItem = Effect.fn("playground.openItem")(function* openItem(
   playground: Playground,
   corpusPath: string,
 ): Effect.fn.Return<
-  Response,
+  Page,
   Config.ConfigError | CorpusFileUnreadable | CorpusMissing | InvalidConfiguration
 > {
   const relative = joinedSegments(corpusPath.split("/"));
@@ -818,13 +941,13 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
  * @param playground The playground.
  * @param request The post.
  * @param target The corpus path and instance token the form's action names.
- * @returns The response.
+ * @returns The page.
  */
 const submit = Effect.fn("playground.submit")(function* submit(
   playground: Playground,
   request: Request,
   target: { readonly instance: string; readonly path: string },
-): Effect.fn.Return<Response, InvalidConfiguration> {
+): Effect.fn.Return<Page, InvalidConfiguration> {
   const session = playground.sessions.get(target.instance);
   if (session === undefined || session.path !== target.path) {
     return notePage(
@@ -926,12 +1049,12 @@ const submit = Effect.fn("playground.submit")(function* submit(
  *
  * @param playground The playground.
  * @param pathname The request path, still percent-encoded.
- * @returns The response.
+ * @returns The asset's response, or the 404 page.
  */
 const serveAsset = Effect.fn("playground.serveAsset")(function* serveAsset(
   playground: Playground,
   pathname: string,
-): Effect.fn.Return<Response, Config.ConfigError | CorpusFileUnreadable | CorpusMissing> {
+): Effect.fn.Return<Page | Response, Config.ConfigError | CorpusFileUnreadable | CorpusMissing> {
   const relative = assetPath(pathname);
   const type = relative.pipe(
     Option.flatMap((corpusPath) =>
@@ -954,19 +1077,149 @@ const serveAsset = Effect.fn("playground.serveAsset")(function* serveAsset(
 });
 
 /**
- * Route one request: the listing, an item page, a post, or an asset; anything else is a 404, and a
- * method a route does not take is a 405.
+ * Construct a stylesheet response: the CSS with the page headers and the CSS type.
+ *
+ * @param css The stylesheet's bytes or text.
+ * @returns The 200 response.
+ */
+const cssResponse = (css: Uint8Array<ArrayBuffer> | string): Response =>
+  new Response(css, { headers: { ...pageHeaders, "content-type": cssType } });
+
+/**
+ * Serve one of the package's stylesheets, read from its file.
+ *
+ * @param file The stylesheet's file URL.
+ * @returns The response.
+ */
+const serveSheet = Effect.fn("playground.serveSheet")(function* serveSheet(
+  file: URL,
+): Effect.fn.Return<Response, SheetUnreadable> {
+  const bytes = yield* Effect.tryPromise({
+    catch: (cause) =>
+      new SheetUnreadable({
+        detail: cause instanceof Error ? cause.message : String(cause),
+        path: fileURLToPath(file),
+      }),
+    try: () => readFile(file),
+  });
+
+  return cssResponse(new Uint8Array(bytes));
+});
+
+/**
+ * Read one text field of a form post.
+ *
+ * @param form The post's fields.
+ * @param name The field's name.
+ * @returns Its first value, or none when it is absent or a file.
+ */
+const field = (form: FormData, name: string): Option.Option<string> => {
+  const value = form.get(name);
+
+  return value === null || value instanceof Blob ? Option.none() : Option.some(value);
+};
+
+/**
+ * Give the `Location` a theme box post returns to: the `return` field's path and query when it is
+ * a URL on the request's origin whose path and query stay on that origin, and `/` otherwise.
+ *
+ * The WHATWG parser reads the field against the request's URL, stripping tabs and newlines as a
+ * browser does, so no prefix check is needed: `/\t/evil.example` parses as `//evil.example`,
+ * another origin. The path and query are parsed once more because a same-origin URL can have a path
+ * that begins with `//` (`/.//evil.example`), which a browser follows to another host.
+ *
+ * @param value The `return` field, none when it is absent.
+ * @param requestUrl The post's URL.
+ * @returns The `Location`, never the field's raw value.
+ */
+const returnLocation = (value: Option.Option<string>, requestUrl: string): string => {
+  const { origin } = new URL(requestUrl);
+  const parsed = value.pipe(
+    Option.flatMap((written) =>
+      written.trim() === "" ? Option.none() : Option.fromNullOr(URL.parse(written, requestUrl)),
+    ),
+  );
+  if (Option.isNone(parsed) || parsed.value.origin !== origin) {
+    return "/";
+  }
+
+  const location = `${parsed.value.pathname}${parsed.value.search}`;
+
+  return URL.parse(location, requestUrl)?.origin === origin ? location : "/";
+};
+
+/**
+ * Construct the page of a theme the box did not accept: the refusal's message, and its cause and
+ * the part it quotes, with the stored theme unchanged. Its own box returns where the refused post
+ * would have, since `/theme` is no page to go back to.
+ *
+ * @param refusal The refusal.
+ * @param back The return location of the refused post.
+ * @returns The 400 page.
+ */
+const themeRefusedPage = (refusal: ThemeRefused, back: string): Page => ({
+  ...page(400, "en", "Theme not accepted", [
+    h("h1", {}, [text("Theme not accepted")]),
+    h("p", {}, [text(refusal.message)]),
+    h("p", { "data-cause": refusal.cause }, [
+      text("Refused part: "),
+      h("code", {}, [text(refusal.detail)]),
+    ]),
+    h("p", {}, [text("The stored theme is unchanged.")]),
+    home,
+  ]),
+  back: Option.some(back),
+});
+
+/**
+ * Take a theme box post: read its `theme`, `dark` and `return` fields, store an accepted theme and
+ * the dark flag, and answer 303 to the return location; a refused theme answers 400 and stores
+ * nothing.
+ *
+ * @param playground The playground.
+ * @param request The post.
+ * @returns The redirect, or the page of a refused theme or a body that is not a form.
+ */
+const postTheme = Effect.fn("playground.postTheme")(function* postTheme(
+  playground: Playground,
+  request: Request,
+): Effect.fn.Return<Page | Response> {
+  const form = yield* Effect.result(
+    // oxlint-disable-next-line typescript/no-deprecated -- The deprecation warns against parsing an untrusted server's multipart response; this is a post to the playground's own form, read on 127.0.0.1, and scripts/serve.ts caps its body at 1 MiB before the handler sees it.
+    Effect.tryPromise(() => request.formData()),
+  );
+  if (Result.isFailure(form)) {
+    return notePage(400, "Not a form post", "The post's body is not a form; submit the theme box.");
+  }
+
+  const fields = form.success;
+  const location = returnLocation(field(fields, "return"), request.url);
+  const theme = yield* Effect.result(
+    parseTheme(Option.getOrElse(field(fields, "theme"), () => "")),
+  );
+  if (Result.isFailure(theme)) {
+    return themeRefusedPage(theme.failure, location);
+  }
+
+  yield* Ref.set(playground.appearance, { dark: fields.has("dark"), theme: theme.success });
+
+  return new Response(null, { headers: { ...pageHeaders, location }, status: 303 });
+});
+
+/**
+ * Route one request: the listing, an item page, a post, an asset, a stylesheet, or a theme box
+ * post; anything else is a 404, and a method a route does not take is a 405.
  *
  * @param playground The playground.
  * @param request The request.
- * @returns The response.
+ * @returns The response, or the page to answer with.
  */
 const route = (
   playground: Playground,
   request: Request,
 ): Effect.Effect<
-  Response,
-  Config.ConfigError | CorpusFileUnreadable | CorpusMissing | InvalidConfiguration
+  Page | Response,
+  Config.ConfigError | CorpusFileUnreadable | CorpusMissing | InvalidConfiguration | SheetUnreadable
 > => {
   const url = new URL(request.url);
   const refusedMethod = Effect.succeed(
@@ -994,11 +1247,68 @@ const route = (
     return request.method === "GET" ? serveAsset(playground, url.pathname) : refusedMethod;
   }
 
+  const sheet = sheets.get(url.pathname);
+  if (sheet !== undefined) {
+    return request.method === "GET" ? serveSheet(sheet) : refusedMethod;
+  }
+
+  if (url.pathname === "/theme.css") {
+    return request.method === "GET"
+      ? Effect.map(Ref.get(playground.appearance), ({ theme }) => cssResponse(themeCss(theme)))
+      : refusedMethod;
+  }
+
+  if (url.pathname === "/theme") {
+    return request.method === "POST" ? postTheme(playground, request) : refusedMethod;
+  }
+
   return Effect.succeed(notFound());
 };
 
 /**
- * Construct a playground's Fetch handler, with its own sessions.
+ * Give the path and query a page's theme box returns to by default: the request's own, except at
+ * `/theme`, which has no page to go back to, so the listing.
+ *
+ * @param request The request the page answers.
+ * @returns The path and query.
+ */
+const ownTarget = (request: Request): string => {
+  const url = new URL(request.url);
+
+  return url.pathname === "/theme" ? "/" : `${url.pathname}${url.search}`;
+};
+
+/**
+ * Answer with a route's outcome: a response as it is, or a page written with its chrome, the
+ * stored appearance read now and the theme box returning to the page's own path and query unless
+ * the page names another, with the page headers.
+ *
+ * @param playground The playground.
+ * @param request The request.
+ * @param outcome The route's response or page.
+ * @returns The response.
+ */
+const answer = (
+  playground: Playground,
+  request: Request,
+  outcome: Page | Response,
+): Effect.Effect<Response> =>
+  outcome instanceof Response
+    ? Effect.succeed(outcome)
+    : Effect.map(
+        Ref.get(playground.appearance),
+        (appearance) =>
+          new Response(
+            pageHtml(outcome, {
+              appearance,
+              back: Option.getOrElse(outcome.back, () => ownTarget(request)),
+            }),
+            { headers: pageHeaders, status: outcome.status },
+          ),
+      );
+
+/**
+ * Construct a playground's Fetch handler, with its own sessions, theme and dark flag.
  *
  * It runs `open`, `configure` and the corpus read with `Effect.runPromise`; `render`,
  * `renderStatus`, `decode`, `checkResponses` and `score` are plain functions. A failure the
@@ -1015,6 +1325,7 @@ const route = (
  */
 export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
   const playground: Playground = {
+    appearance: Ref.makeUnsafe<Appearance>({ dark: false, theme: emptyTheme }),
     configuration: settings.configuration ?? {},
     sessions: new Map(),
   };
@@ -1026,9 +1337,12 @@ export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
   return (request) =>
     Effect.runPromise(
       provided(route(playground, request)).pipe(
-        Effect.match({ onFailure: corpusFailure, onSuccess: (response) => response }),
+        Effect.match({ onFailure: routeFailure, onSuccess: (outcome) => outcome }),
+        Effect.flatMap((outcome) => answer(playground, request, outcome)),
         Effect.catchDefect((defect) =>
-          Effect.succeed(
+          answer(
+            playground,
+            request,
             failurePage({ message: defect instanceof Error ? defect.message : String(defect) }),
           ),
         ),

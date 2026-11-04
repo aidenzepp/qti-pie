@@ -1,0 +1,31 @@
+/*
+ * The dev playground's own sheet. The playground is an example host: it owns its native form and
+ * its buttons, so it styles them here, minimally, as any host would. It keys on its own elements,
+ * never on a part marker; reads only the shadcn/ui tokens plate's sheet reads, each with its
+ * fallback; and declares no custom property. The rest of the playground's chrome is unstyled.
+ */
+
+/* The form stacks the item above its button, with space between them. */
+form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+/* Each button draws in the primary pair: 17.16:1 at the fallbacks, 14.22:1 under shadcn's .dark. */
+button {
+  font: inherit;
+  background-color: var(--primary, oklch(0.205 0 0));
+  color: var(--primary-foreground, oklch(0.985 0 0));
+  border: none;
+  border-radius: calc(var(--radius, 0.625rem) * 0.8);
+  padding: 0.5rem 1rem;
+}
+
+button:focus-visible {
+  outline-width: 3px;
+  outline-offset: 0;
+  outline-style: solid;
+  outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
+}
