@@ -1695,6 +1695,139 @@ const processingOf = (
 };
 
 /**
+ * Give each identifier a rule tree names that the engine does not hold, once, in the order the tree
+ * first names it.
+ *
+ * The evaluator holds only the item's modelled responses and outcomes (`Variables` in
+ * `#plate/engine/evaluate.ts`) and throws `UnknownIdentifierError` for any other identifier a rule
+ * names, so `buildItem` runs no tree this walk finds a name in, and those defects stay unreachable.
+ * A `qti-variable` reads a response or an outcome, `qti-correct` and `qti-map-response` read a
+ * response, and `qti-set-outcome-value` sets an outcome. The names it finds are valid content,
+ * never refused (reading 1): a response the model does not hold (base type `point`, `duration` or
+ * `file`, cardinality `record`, or no base type), a template variable, an outcome the model does
+ * not hold, and the built-in variables `numAttempts`, `duration` and `completionStatus`, which
+ * phase 1 holds no value for. Reading 29 makes an item's `duration` a single float, so it is a
+ * valid name in an item's rules. An identifier nothing declares is refused before the model is
+ * built; the walk finds it too.
+ *
+ * @param tree The rule tree.
+ * @param responses The responses the model holds.
+ * @param outcomes The outcomes the model holds.
+ * @returns The identifiers the engine does not hold, none when it can run the tree.
+ */
+const unheldIdentifiers = (
+  tree: readonly Rule[],
+  responses: ReadonlyMap<string, ResponseDeclaration>,
+  outcomes: ReadonlyMap<string, OutcomeDeclaration>,
+): readonly string[] => {
+  const unheld = new Set<string>();
+  const read = (operand: Expression): void => {
+    switch (operand.kind) {
+      case "variable": {
+        if (!responses.has(operand.identifier) && !outcomes.has(operand.identifier)) {
+          unheld.add(operand.identifier);
+        }
+
+        break;
+      }
+      case "correct":
+      case "map-response": {
+        if (!responses.has(operand.identifier)) {
+          unheld.add(operand.identifier);
+        }
+
+        break;
+      }
+      case "is-null": {
+        read(operand.operand);
+        break;
+      }
+      case "match": {
+        for (const each of operand.operands) {
+          read(each);
+        }
+        break;
+      }
+      case "base-value": {
+        break;
+      }
+      default: {
+        operand satisfies never;
+      }
+    }
+  };
+  const run = (sequence: readonly Rule[]): void => {
+    for (const each of sequence) {
+      if (each.kind === "set-outcome") {
+        if (!outcomes.has(each.identifier)) {
+          unheld.add(each.identifier);
+        }
+
+        read(each.expression);
+      } else {
+        for (const { then, when } of each.branches) {
+          read(when);
+          run(then);
+        }
+        if (Option.isSome(each.otherwise)) {
+          run(each.otherwise.value);
+        }
+      }
+    }
+  };
+  run(tree);
+
+  return [...unheld];
+};
+
+/**
+ * A response processing read into a rule tree, with where its marks go.
+ */
+interface ReadProcessing {
+  /**
+   * The number of marks recorded when the processing element was read, so the marks it gains later
+   * keep document order.
+   */
+  readonly at: number;
+  /**
+   * The `qti-response-processing` element's path.
+   */
+  readonly path: string;
+  readonly tree: readonly Rule[];
+}
+
+/**
+ * Keep a rule tree the engine can run. Each identifier {@link unheldIdentifiers} finds is the mark
+ * `variable:<identifier>` at the processing element's path, placed among the marks in document
+ * order, and the tree is then none.
+ *
+ * @param build The build.
+ * @param read The processing as read.
+ * @param responses The responses the model holds.
+ * @param outcomes The outcomes the model holds.
+ * @returns The tree, or none when it names an identifier the engine does not hold.
+ */
+const runnable = (
+  build: Build,
+  read: ReadProcessing,
+  responses: ReadonlyMap<string, ResponseDeclaration>,
+  outcomes: ReadonlyMap<string, OutcomeDeclaration>,
+): Option.Option<readonly Rule[]> => {
+  const unheld = unheldIdentifiers(read.tree, responses, outcomes);
+  build.unsupported.splice(
+    read.at,
+    0,
+    ...unheld.map((identifier): UnsupportedFeature => ({
+      feature: `variable:${identifier}`,
+      path: read.path,
+      shown: "mark",
+    })),
+  );
+
+  return unheld.length === 0 ? Option.some(read.tree) : Option.none();
+};
+
+/**
  * Index every element of a document by its path.
  *
  * @param document The document.
@@ -1711,7 +1844,9 @@ const pathsOf = (document: SourceDocument): ReadonlyMap<SourceElement, string> =
  * other `qti-*` element in the body becomes a notice, its subtree dropped. Each `renders` mark adds
  * an unsupported feature, and so does each `qti-*` element outside the body that the model does
  * not read. Response processing is a rule tree: a built-in template resolves to the tree its text
- * gives, and inline rules become their tree when every element is in the engine.
+ * gives, and inline rules become their tree when every element is in the engine. The tree is kept
+ * only when the engine holds every identifier it names; each one it does not is the mark
+ * `variable:<identifier>` at the processing element's path, and the processing is then none.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The item, or the refusal `value-type` at the first typed value outside its lexical
@@ -1729,7 +1864,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
     const responses = new Map<string, ResponseDeclaration>();
     const outcomes = new Map<string, OutcomeDeclaration>();
     const body: BodyNode[] = [];
-    let processing: Option.Option<readonly Rule[]> = Option.none();
+    let processing: Option.Option<ReadProcessing> = Option.none();
 
     for (const part of elementsOf(root).filter((child) => isQti(child))) {
       if (part.local === "qti-item-body") {
@@ -1737,7 +1872,11 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
         body.push(...(yield* bodyNodes(build, part)));
       } else if (part.local === "qti-response-processing") {
         markElement(build, part, false);
-        processing = yield* processingOf(build, part);
+
+        const parsed = yield* processingOf(build, part);
+        processing = parsed.pipe(
+          Option.map((tree) => ({ at: build.unsupported.length, path: pathOf(build, part), tree })),
+        );
       } else if (part.local === "qti-response-declaration") {
         markElement(build, part, false);
         markUnreadWithin(build, part);
@@ -1768,7 +1907,9 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       identifier,
       lang: valueOf(root, "xml:lang"),
       outcomes,
-      processing,
+      processing: processing.pipe(
+        Option.flatMap((read) => runnable(build, read, responses, outcomes)),
+      ),
       responses,
       title,
       unsupported: build.unsupported,
