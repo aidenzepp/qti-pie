@@ -93,8 +93,9 @@ export class NestedInteractionDefect extends Data.TaggedError("NestedInteraction
 }
 
 /**
- * The render function for content where QTI's schema admits no interaction, a Prompt's or a
- * choice's: meeting one is a defect, since only a hand-built item can hold one.
+ * Give the render function for content where QTI's schema admits no interaction, a Prompt's or a
+ * choice's: meeting one is a defect, since only a payload that never came from `redact` can hold
+ * one.
  *
  * @param within Where the content sits.
  * @returns A render function that throws {@link NestedInteractionDefect}, naming the interaction

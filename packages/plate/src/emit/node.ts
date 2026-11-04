@@ -85,7 +85,7 @@ export const text = (value: string): Text => ({ kind: "text", text: value });
  *   // an input carrying `checked` exactly when `checked` is true
  *
  * @param condition Whether the attributes apply.
- * @param attributes The attributes.
+ * @param attributes The attributes the element carries when `condition` holds.
  * @returns `attributes`, or none when `condition` is false.
  */
 export const when = (condition: boolean, attributes: Attributes): Attributes =>
