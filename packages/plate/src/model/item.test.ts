@@ -354,15 +354,15 @@ const childrenOf = (node: BodyNode | undefined): readonly BodyNode[] => {
 };
 
 /**
- * The template declarations the growth check builds first, before it builds {@link growthFactor}
- * times as many.
+ * The declarations each growth check builds first, before it builds {@link growthFactor} times as
+ * many.
  */
 const fewerDeclarations = 1000;
 
 /**
- * The growth check and its control build 8,000 declarations three times and 1,000 declarations 24
- * times. A quadratic record took about 4 s of that, which nears vitest's default of 5 s, and a
- * failing check should report its ratio, not a timeout.
+ * Each growth check and its control build 8,000 declarations three times and 1,000 declarations 24
+ * times. A quadratic record took about 4 s of that, and a quadratic binding about 20 s, beyond
+ * vitest's default of 5 s, and a failing check should report its ratio, not a timeout.
  */
 const growthTimeoutMs = 60_000;
 
@@ -404,6 +404,68 @@ const dedupeQuadratically = (
 
   return kept;
 };
+
+/**
+ * An item with `count` string response declarations and, in one paragraph, `count` Text Entry
+ * interactions, each bound to its own declaration.
+ *
+ * @param count How many declarations and interactions the item holds.
+ * @returns The document at `items/test.xml`.
+ */
+const textEntries = (count: number): SourceDocument =>
+  item({
+    body: [
+      el(
+        "p",
+        [],
+        Array.from({ length: count }, (_, index) =>
+          el("qti-text-entry-interaction", [attr("response-identifier", `R${index}`)]),
+        ),
+      ),
+    ],
+    declarations: Array.from({ length: count }, (_, index) =>
+      declaration("qti-response-declaration", `R${index}`, "string", "single"),
+    ),
+  });
+
+/**
+ * Keep an element's element children, as the quadratic binding reads them.
+ *
+ * @param element The element.
+ * @returns Its element children, in document order.
+ */
+const elementsIn = (element: SourceElement): readonly SourceElement[] =>
+  element.children.filter((child): child is SourceElement => child.kind === "element");
+
+/**
+ * Read an attribute's value as written, as the quadratic binding reads it.
+ *
+ * @param element The element.
+ * @param name The attribute's local name.
+ * @returns The value, or `undefined` when the element does not carry it.
+ */
+const valueIn = (element: SourceElement, name: string): string | undefined =>
+  element.attributes.find((attribute) => attribute.local === name)?.value;
+
+/**
+ * The growth check's control, a deliberately quadratic binding: the scan `buildItem` made before it
+ * kept a map of declarations, which reads every child of the root once per interaction.
+ *
+ * @param source An item from {@link textEntries}.
+ * @returns Each interaction's declaration, the last one with its identifier, in document order.
+ */
+const bindQuadratically = (source: SourceDocument): readonly (SourceElement | undefined)[] =>
+  elementsIn(source.root)
+    .filter((part) => part.local === "qti-item-body")
+    .flatMap(elementsIn)
+    .flatMap(elementsIn)
+    .map((interaction) =>
+      elementsIn(source.root).findLast(
+        (part) =>
+          part.local === "qti-response-declaration" &&
+          valueIn(part, "identifier") === valueIn(interaction, "response-identifier"),
+      ),
+    );
 
 describe("buildItem", () => {
   it.effect(
@@ -1607,6 +1669,62 @@ describe("buildItem", () => {
           growth,
           growthLimit,
           `8 times the declarations took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
+
+  it.effect(
+    "[I-0] binds 8,000 Text Entries to 8,000 declarations, 8 times as many in under 32 times the time",
+    () =>
+      Effect.gen(function* bindsInConstantTime() {
+        const fewer = textEntries(fewerDeclarations);
+        const more = textEntries(fewerDeclarations * growthFactor);
+        const built = yield* buildItem(more);
+        const entries = childrenOf(built.body[0]);
+        assert.strictEqual(entries.length, fewerDeclarations * growthFactor);
+        assert.isTrue(entries.every((node) => node.kind === "text-entry"));
+        assert.deepStrictEqual(built.unsupported, []);
+
+        const growth = yield* growthRatio(
+          () => {
+            Effect.runSync(buildItem(fewer));
+          },
+          () => {
+            Effect.runSync(buildItem(more));
+          },
+        );
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the interactions took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
+
+  it.effect(
+    "control: a quadratic binding of the same interactions fails the growth check",
+    () =>
+      Effect.gen(function* quadraticBindingControl() {
+        const fewer = textEntries(fewerDeclarations);
+        const more = textEntries(fewerDeclarations * growthFactor);
+        const bound = bindQuadratically(fewer);
+        assert.strictEqual(bound.length, fewerDeclarations);
+        assert.isTrue(bound.every((found) => found !== undefined));
+
+        const growth = yield* growthRatio(
+          () => {
+            bindQuadratically(fewer);
+          },
+          () => {
+            bindQuadratically(more);
+          },
+        );
+        assert.isAtLeast(
+          growth,
+          growthLimit,
+          `8 times the interactions took ${growth.toFixed(1)} times as long`,
         );
       }),
     growthTimeoutMs,

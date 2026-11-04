@@ -318,6 +318,12 @@ export interface Item {
  * features found so far, in document order.
  */
 interface Build {
+  /**
+   * The root's response declarations, keyed by their identifier as `identifierOf` reads it; the
+   * last one when two share an identifier. Built once, so binding an interaction does not rescan
+   * the root.
+   */
+  readonly declarations: ReadonlyMap<string, SourceElement>;
   readonly document: SourceDocument;
   /**
    * Each element's path, keyed by the element itself. A reader builds a fresh object per element,
@@ -891,12 +897,7 @@ const floatAttribute = (
  */
 const boundDeclaration = (build: Build, element: SourceElement): Option.Option<SourceElement> =>
   Option.flatMap(Option.map(valueOf(element, "response-identifier"), identifierOf), (response) =>
-    Arr.findLast(
-      childrenNamed(build.document.root, "qti-response-declaration"),
-      (declaration) =>
-        Option.getOrUndefined(Option.map(valueOf(declaration, "identifier"), identifierOf)) ===
-        response,
-    ),
+    Option.fromUndefinedOr(build.declarations.get(response)),
   );
 
 /**
@@ -1930,6 +1931,24 @@ const pathsOf = (document: SourceDocument): ReadonlyMap<SourceElement, string> =
   new Map(Array.from(walk(document), (visit) => [visit.element, visit.path]));
 
 /**
+ * Key a document's response declarations by their identifier, as {@link Build}'s `declarations`
+ * holds them: a later declaration replaces an earlier one with the same identifier, and one without
+ * an identifier binds nothing.
+ *
+ * @param document The document.
+ * @returns Each response declaration, keyed by its identifier as `identifierOf` reads it.
+ */
+const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceElement> =>
+  new Map(
+    childrenNamed(document.root, "qti-response-declaration").flatMap((declaration) =>
+      Option.match(valueOf(declaration, "identifier"), {
+        onNone: () => [],
+        onSome: (identifier) => [[identifierOf(identifier), declaration] as const],
+      }),
+    ),
+  );
+
+/**
  * Build the item model of a valid `qti-assessment-item`.
  *
  * The body keeps text and HTML elements as written. Choice, Text Entry and Extended Text become
@@ -1953,6 +1972,7 @@ const pathsOf = (document: SourceDocument): ReadonlyMap<SourceElement, string> =
 export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> =>
   Effect.gen(function* readItem() {
     const build: Build = {
+      declarations: declarationsOf(source),
       document: source,
       paths: pathsOf(source),
       recorded: new Map(),
