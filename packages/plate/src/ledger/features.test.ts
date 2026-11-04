@@ -73,14 +73,14 @@ describe("ledger/features.ts", () => {
     }
   });
 
-  it("throws ConformanceHeadingMissing, naming the heading, for a text that is not conf.txt", () => {
+  it("throws ConformanceHeadingDefect, naming the heading, for a text that is not conf.txt", () => {
     const thrown = Result.getFailure(
       Result.try(() => generateFeatures("# Not the conformance text\n")),
     );
     assert.isTrue(Option.isSome(thrown));
 
     const defect = Option.getOrThrow(thrown);
-    assert.propertyVal(defect, "_tag", "ConformanceHeadingMissing");
+    assert.propertyVal(defect, "_tag", "ConformanceHeadingDefect");
     assert.propertyVal(defect, "heading", "### 3.1 1EdTech Levels Certification Requirements");
   });
 });

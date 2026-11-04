@@ -93,7 +93,7 @@ const elevatedHeading = "### 3.3 Elevated Accessibility Conformance Requirements
  * written for, or that text's heading changed. `scripts/features.ts` lets it end the run. It is
  * thrown, never returned.
  */
-export class ConformanceHeadingMissing extends Data.TaggedError("ConformanceHeadingMissing")<{
+export class ConformanceHeadingDefect extends Data.TaggedError("ConformanceHeadingDefect")<{
   readonly heading: string;
 }> {
   /**
@@ -119,14 +119,14 @@ const headingLevel = (line: string): number =>
  * @param lines The text's lines.
  * @param heading The whole heading line.
  * @returns The lines after the heading, sub-headings included.
- * @throws {ConformanceHeadingMissing} When the text has no such heading, which means it is not the
+ * @throws {ConformanceHeadingDefect} When the text has no such heading, which means it is not the
  *   conformance text the generator was written for.
  */
 const section = (lines: readonly string[], heading: string): readonly string[] => {
   const start = lines.indexOf(heading);
 
   if (start === -1) {
-    throw new ConformanceHeadingMissing({ heading });
+    throw new ConformanceHeadingDefect({ heading });
   }
 
   const level = headingLevel(heading);
@@ -215,7 +215,7 @@ const idParts = (id: string): readonly [string, number, string] => {
  *
  * @param conf The conformance text, `conf.txt`.
  * @returns One row for each Appendix A ID, sorted by family letter, number and suffix letter.
- * @throws {ConformanceHeadingMissing} When the text lacks a heading the generator reads.
+ * @throws {ConformanceHeadingDefect} When the text lacks a heading the generator reads.
  * @throws {Schema.SchemaError} When a row does not decode as a {@link Feature}.
  */
 export const generateFeatures = (conf: string): readonly Feature[] => {
