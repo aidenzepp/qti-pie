@@ -700,15 +700,6 @@ const textOf = (element: SourceElement): string =>
   element.children.flatMap((child) => (child.kind === "text" ? [child.text] : [])).join("");
 
 /**
- * Give the failure of a value parse, if it failed.
- *
- * @param parsed The parse.
- * @returns The `InvalidValue`, none when the text is in the base type's lexical space.
- */
-const invalid = <A>(parsed: Result.Result<A, InvalidValue>): Option.Option<InvalidValue> =>
-  Result.getFailure(parsed);
-
-/**
  * Construct the `value-type` refusals of a parse.
  *
  * @param source The document.
@@ -722,7 +713,7 @@ const valueRefusals = <A>(
   parsed: Result.Result<A, InvalidValue>,
 ): readonly Refusal[] =>
   Option.toArray(
-    Option.map(invalid(parsed), (failure) =>
+    Option.map(Result.getFailure(parsed), (failure) =>
       refusal(source, "value-type", path, {
         baseType: failure.baseType,
         lexical: failure.lexical,

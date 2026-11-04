@@ -6,6 +6,8 @@
  * verdict and the reader adapter all produce {@link Refusal}, and no other module defines one, so a
  * caller and a test see one roster, {@link refusalRules}, whichever stage refused. The wording that
  * turns a refusal into a sentence belongs to the verdict.
+ *
+ * @module
  */
 import { Schema } from "effect";
 
@@ -13,11 +15,13 @@ import { Schema } from "effect";
  * Every rule a {@link Refusal} may name, each exactly once.
  *
  * The first eight are the structural validator's (the XSD's elements, attributes and text, and the
- * readings' placements and child counts), the next eight the prose rules' (responses, identifiers,
- * bindings, templates, value types, variables, expression types and the count range), then the
- * verdict's `not-qti-root`, and last the reader adapter's `not-well-formed`, located by line and
- * column, and `reader-refused`, located at the whole document with the shared reader's own rule in
- * {@link Refusal.readerRule}. Adding a rule here is the only way a stage gains a new refusal.
+ * readings' placements and child counts), the next seven the prose rules' (responses, identifiers,
+ * bindings, templates, value types, variables and expression types), then `count-range`, which the
+ * structural validator gives for reading 46's count attributes and the item model for the
+ * `max-choices` and `min-choices` it reads, then the verdict's `not-qti-root`, and last the reader
+ * adapter's `not-well-formed`, located by line and column, and `reader-refused`, located at the
+ * whole document with the shared reader's own rule in {@link Refusal.readerRule}. Adding a rule
+ * here is the only way a stage gains a new refusal.
  */
 export const refusalRules = [
   "unknown-element",

@@ -85,8 +85,8 @@ export const outsidePackageFeature = "url-outside-package";
 /**
  * The feature key of a value the URL parser refuses, such as `http://[`, and of a blank value
  * (empty, or only spaces and control characters the parser strips), which would request the
- * item's directory. The XSD's `xs:anyURI` and
- * `URLDType` admit both, so they are dropped, never refused.
+ * item's directory. The XSD's `xs:anyURI` and `URLDType` admit both, so they are dropped, never
+ * refused.
  */
 export const invalidUrlFeature = "url-invalid";
 
