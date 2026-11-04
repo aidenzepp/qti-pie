@@ -90,7 +90,12 @@ const valueOf = Effect.fn("import.valueOf")(function* valueOf(
   rule: Rule,
 ): Effect.fn.Return<{ rows: Rows; value: Option.Option<string> }, ImportRefused> {
   if (baseType !== "string") {
-    yield* exactOf(element, name, `the ${name} attribute of a ${baseType} ${node.kind}`, rule);
+    yield* exactOf(
+      element,
+      name,
+      `the ${name} attribute of ${/^[aeiou]/u.test(baseType) ? "an" : "a"} ${baseType} ${node.kind}`,
+      rule,
+    );
   }
 
   return Option.match(lexicalOf(element, name), {

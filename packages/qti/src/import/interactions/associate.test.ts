@@ -676,6 +676,14 @@ const importRuleOf = (exit: Exit.Exit<Rows, unknown>): string => {
   return Option.isSome(failure) && failure.value instanceof ImportRefused ? failure.value.rule : "";
 };
 
+const importDetailOf = (exit: Exit.Exit<Rows, unknown>): string => {
+  const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
+
+  return Option.isSome(failure) && failure.value instanceof ImportRefused
+    ? failure.value.detail
+    : "";
+};
+
 const hotspotOf = (more: Readonly<Record<string, string>>): Element =>
   element("qti-graphic-associate-interaction", { "response-identifier": "RESPONSE" }, [
     element("img", { alt: "map", src: "map.png" }),
@@ -924,4 +932,41 @@ describe("associateRows on a flag outside its roster", () => {
       );
     }),
   );
+});
+
+describe("associateRows on a missing match-max", () => {
+  const missing: readonly (readonly [string, Element, typeof associateDeclarations])[] = [
+    [
+      "a simple associable choice",
+      element("qti-associate-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-simple-associable-choice", { identifier: "A" }),
+      ]),
+      associateDeclarations,
+    ],
+    [
+      "an associable hotspot",
+      element("qti-graphic-associate-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-associable-hotspot", {
+          coords: "10,10,5",
+          identifier: "H1",
+          shape: "circle",
+        }),
+      ]),
+      graphicDeclarations,
+    ],
+  ];
+
+  for (const [name, tree, declarations] of missing) {
+    it.effect(`tells ${name} with no match-max from an empty one`, () =>
+      Effect.gen(function* outside() {
+        const exit = yield* Effect.exit(
+          associateRows(contextOf([tree], declarations), Rows.empty()),
+        );
+
+        assert.strictEqual(importRuleOf(exit), "attribute-lexical");
+        assert.include(importDetailOf(exit), "has no match-max");
+        assert.notInclude(importDetailOf(exit), '""');
+      }),
+    );
+  }
 });

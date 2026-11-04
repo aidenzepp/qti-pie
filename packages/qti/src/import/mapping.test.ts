@@ -259,6 +259,7 @@ describe("mappingRows on a mapping", () => {
 
       assert.instanceOf(failure, ImportRefused);
       assert.strictEqual(failure.rule, "map-key-lexical");
+      assert.include(failure.detail, "of an integer qti-map-entry");
     }),
   );
 

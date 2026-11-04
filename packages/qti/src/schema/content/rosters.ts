@@ -130,7 +130,7 @@ export const BooleanLiteral = closed("BooleanLiteral", ["true", "false"]);
 
 /**
  * The `externalScored` values of an outcome declaration (`imsqti_asiv3p0p1_v1p0.xsd` lines 30147
- * to 30148), in XSD order.
+ * to 30148). The XSD lists `externalMachine` before `human`; the roster lists `human` first.
  */
 export const ExternalScored = closed("ExternalScored", ["human", "externalMachine"]);
 
@@ -374,8 +374,9 @@ export const SuppressTtsMode = closed("SuppressTtsMode", [
 export const ParamValuetype = closed("ParamValuetype", ["DATA", "REF"]);
 
 /**
- * The `scope` values of `td` and `th` (`imsqti_asiv3p0p1_v1p0.xsd` lines 32499 to 32502), in XSD
- * order.
+ * The `scope` values of `td` and `th` (`imsqti_asiv3p0p1_v1p0.xsd` lines 32499 to 32502). The XSD
+ * lists `col`, `colgroup`, `row`, `rowgroup`; the roster lists `row`, `col`, `rowgroup`,
+ * `colgroup`.
  */
 export const CellScope = closed("CellScope", ["row", "col", "rowgroup", "colgroup"]);
 

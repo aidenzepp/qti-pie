@@ -8,7 +8,7 @@
 import { judgedLater } from "#qti/import/judged.ts";
 import { Effect, Option } from "effect";
 import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
-import type { ImportRefused } from "#qti/import/refusal.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { closedOf, ItemRefusal, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
 import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import { MatchGroup } from "#qti/schema/choices.ts";
@@ -82,6 +82,34 @@ const spelled = (rows: Rows, node: IndexedNode, name: AttributeNameHandle, text:
     "attribute-lexical",
     `${node.kind} ${name}`,
   );
+
+/**
+ * The value of a required integer attribute of `node`, as {@link spelled} reads it; an absent
+ * attribute is refused as missing, not read as an empty value.
+ *
+ * @param rows - The rows so far.
+ * @param node - The element that carries the attribute.
+ * @param name - The attribute's registry name.
+ * @param text - The attribute's text after its whitespace step, when the element has one.
+ * @returns The value and the rows; `ImportRefused` (`attribute-lexical`) when the attribute is
+ *   absent or its text is outside the non-negative integers.
+ */
+const spelledRequired = (
+  rows: Rows,
+  node: IndexedNode,
+  name: AttributeNameHandle,
+  text: Option.Option<string>,
+) =>
+  Option.match(text, {
+    onNone: () =>
+      Effect.fail(
+        new ImportRefused({
+          detail: `The ${node.kind} has no ${name}, which it requires. Add a ${name} that is a whole number of zero or more.`,
+          rule: "attribute-lexical",
+        }),
+      ),
+    onSome: (own) => spelled(rows, node, name, own),
+  });
 
 /**
  * The value of an integer attribute that may be absent: `fallback` where the source omits it, and
@@ -409,12 +437,7 @@ const gapText = Effect.fn("import.gapText")(function* gapText(
     "attribute-lexical",
     "the show-hide attribute of qti-gap-text",
   );
-  const maximum = yield* spelled(
-    attributes.rows(),
-    node,
-    "match-max",
-    Option.getOrElse(matchMax, () => ""),
-  );
+  const maximum = yield* spelledRequired(attributes.rows(), node, "match-max", matchMax);
   const minimum = yield* spelledOr(maximum.rows, node, "match-min", matchMin, 0n);
   let built = Rows.add(minimum.rows, GapText, [
     {
@@ -474,12 +497,7 @@ const gapImg = Effect.fn("import.gapImg")(function* gapImg(
     "attribute-lexical",
     "the show-hide attribute of qti-gap-img",
   );
-  const maximum = yield* spelled(
-    attributes.rows(),
-    node,
-    "match-max",
-    Option.getOrElse(matchMax, () => ""),
-  );
+  const maximum = yield* spelledRequired(attributes.rows(), node, "match-max", matchMax);
   const minimum = yield* spelledOr(maximum.rows, node, "match-min", matchMin, 0n);
   let built = Rows.add(minimum.rows, GapImg, [
     {

@@ -561,6 +561,14 @@ const importRuleOf = (exit: Exit.Exit<Rows, unknown>): string => {
   return Option.isSome(failure) && failure.value instanceof ImportRefused ? failure.value.rule : "";
 };
 
+const importDetailOf = (exit: Exit.Exit<Rows, unknown>): string => {
+  const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
+
+  return Option.isSome(failure) && failure.value instanceof ImportRefused
+    ? failure.value.detail
+    : "";
+};
+
 describe("gapRows on an integer outside its space", () => {
   const refused: readonly (readonly [string, Element])[] = [
     [
@@ -793,4 +801,33 @@ describe("gapRows on a flag outside its roster", () => {
       );
     }),
   );
+});
+
+describe("gapRows on a missing match-max", () => {
+  const missing: readonly (readonly [string, Element])[] = [
+    [
+      "a gap text",
+      element("qti-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-gap-text", { identifier: "A" }),
+      ]),
+    ],
+    [
+      "a gap image",
+      element("qti-graphic-gap-match-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-gap-img", { identifier: "I1" }),
+      ]),
+    ],
+  ];
+
+  for (const [name, tree] of missing) {
+    it.effect(`tells ${name} with no match-max from an empty one`, () =>
+      Effect.gen(function* outside() {
+        const exit = yield* Effect.exit(gapRows(contextOf([tree], pairs), Rows.empty()));
+
+        assert.strictEqual(importRuleOf(exit), "attribute-lexical");
+        assert.include(importDetailOf(exit), "has no match-max");
+        assert.notInclude(importDetailOf(exit), '""');
+      }),
+    );
+  }
 });
