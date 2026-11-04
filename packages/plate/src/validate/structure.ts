@@ -1275,7 +1275,9 @@ export const checkStructure = (source: SourceDocument, tables: Tables): readonly
       refusals.push(refuse(source, "unknown-element", path, detail));
     } else if (admission.kind === "check") {
       checked.set(element, admission.table);
-      refusals.push(...checkElement(source, element, path, admission.table, parents));
+      for (const refusal of checkElement(source, element, path, admission.table, parents)) {
+        refusals.push(refusal);
+      }
     }
   }
 
