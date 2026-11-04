@@ -12,7 +12,7 @@
  */
 import { Effect, Option, Schema } from "effect";
 import type { ImportRefused, Rule } from "#qti/import/refusal.ts";
-import { closedOf, Rows, spelledInteger, typedAttribute } from "#qti/import/tree.ts";
+import { closedOf, Rows, spelledInteger, typedAttribute, valueText } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary, WhiteSpace } from "#qti/import/tree.ts";
 import type {
   AttributeValue,
@@ -828,7 +828,10 @@ const countedArmBuilders: Readonly<
       return built;
     }
 
-    const text = Option.getOrElse(node.text, () => "");
+    const text = valueText(
+      baseType,
+      Option.getOrElse(node.text, () => ""),
+    );
     const withLiteral = Rows.add(built, processing.Literal, [{ baseType, id: entry.id }]);
 
     return baseType === "boolean"
