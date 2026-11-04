@@ -525,6 +525,7 @@ describe("attributeRows on the closed attribute families and ARIA", () => {
         'dir="up"',
         'data-qti-suppress-tts="some"',
         'role="widget"',
+        'role="cell"',
         'aria-hidden="yes"',
         'aria-orientation="diagonal"',
         'aria-autocomplete="always"',

@@ -192,7 +192,7 @@ const synthetic = `<?xml version="1.0" encoding="UTF-8"?>
   <qti-response-declaration identifier="OTHER" cardinality="ordered" base-type="identifier"/>
   <qti-response-declaration identifier="THIRD" cardinality="ordered" base-type="identifier"/>
   <qti-item-body class=" a   b " id="body">
-    <table summary="s"><tbody><tr><td headers="" colspan="2">a</td><td headers=" h1   h2 " aria-labelledby=" x  y " role="cell">b</td></tr></tbody></table>
+    <table summary="s"><tbody><tr><td headers="" colspan="2">a</td><td headers=" h1   h2 " aria-labelledby=" x  y " role="gridcell">b</td></tr></tbody></table>
     <qti-order-interaction response-identifier="RESPONSE" shuffle="true"><qti-simple-choice identifier="A" fixed="true">a</qti-simple-choice><qti-simple-choice identifier="B">b</qti-simple-choice></qti-order-interaction>
     <qti-order-interaction response-identifier="OTHER"><qti-simple-choice identifier="C">c</qti-simple-choice></qti-order-interaction>
     <qti-order-interaction response-identifier="THIRD" shuffle="false"><qti-simple-choice identifier="D">d</qti-simple-choice></qti-order-interaction>
