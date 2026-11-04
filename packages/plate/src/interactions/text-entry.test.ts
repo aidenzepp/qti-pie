@@ -159,7 +159,7 @@ const payloadOf = (
 /**
  * The emit state of every render here, with no part overrides.
  */
-const emitState: Effect.Effect<EmitState> = resolveOverrides().pipe(
+const emitState: Effect.Effect<EmitState> = Effect.fromResult(resolveOverrides()).pipe(
   Effect.orDie,
   Effect.map((parts): EmitState => ({
     assetBase: "",
@@ -181,10 +181,12 @@ const page = (built: Payload): Effect.Effect<Element> =>
   Effect.gen(function* renderPage() {
     const state = yield* emitState;
     const body = yield* Effect.orDie(
-      emitBody(built, state, (interaction) =>
-        interaction.kind === "text-entry"
-          ? renderTextEntry(interaction, built, state)
-          : Effect.die(new Error(`This test renders Text Entries only, not ${interaction.kind}.`)),
+      Effect.fromResult(
+        emitBody(built, state, (interaction) =>
+          interaction.kind === "text-entry"
+            ? renderTextEntry(interaction, built, state)
+            : assert.fail(`This test renders Text Entries only, not ${interaction.kind}.`),
+        ),
       ),
     );
 

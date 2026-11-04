@@ -175,7 +175,7 @@ const extendedTextIn = (built: Payload, index = 0): ExtendedTextPayload => {
 /**
  * The emit state of every render here, with no part overrides.
  */
-const emitState: Effect.Effect<EmitState> = resolveOverrides().pipe(
+const emitState: Effect.Effect<EmitState> = Effect.fromResult(resolveOverrides()).pipe(
   Effect.orDie,
   Effect.map((parts): EmitState => ({
     assetBase: "",
@@ -195,7 +195,9 @@ const emitState: Effect.Effect<EmitState> = resolveOverrides().pipe(
 const render = (built: Payload, index = 0): Effect.Effect<Element> =>
   emitState.pipe(
     Effect.flatMap((state) =>
-      Effect.orDie(renderExtendedText(extendedTextIn(built, index), built, state)),
+      Effect.orDie(
+        Effect.fromResult(renderExtendedText(extendedTextIn(built, index), built, state)),
+      ),
     ),
   );
 
@@ -652,14 +654,16 @@ describe("an Extended Text the renderer does not support", () => {
               return renderExtendedText(interaction, built, state);
             }
             case "text-entry": {
-              return Effect.die(new Error("This item holds no Text Entry."));
+              return assert.fail("This item holds no Text Entry.");
             }
             default: {
               return interaction satisfies never;
             }
           }
         };
-        const nodes = yield* Effect.orDie(emitBody(built, state, renderInteraction));
+        const nodes = yield* Effect.orDie(
+          Effect.fromResult(emitBody(built, state, renderInteraction)),
+        );
         const tree = page(nodes, built);
 
         assert.lengthOf(

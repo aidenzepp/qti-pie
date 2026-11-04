@@ -15,9 +15,9 @@
  *
  * @module
  */
-import { Effect, Option, pipe } from "effect";
+import { Option, Result, pipe } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { authoredId, emitNodes } from "#plate/emit/body.ts";
+import { NestedInteractionDefect, authoredId, emitNodes } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { promptMarkupFor, rowFor, scopedId } from "#plate/emit/parts.ts";
@@ -97,14 +97,15 @@ const when = (condition: boolean, attributes: Attributes): Attributes =>
  * there: a defect, since only a hand-built item can hold one.
  *
  * @param nested The interaction's payload.
- * @returns Never; it dies with an error that names the interaction.
+ * @returns Never; it throws {@link NestedInteractionDefect}, which names the interaction.
  */
-const nestedInteraction: RenderInteraction = (nested) =>
-  Effect.die(
-    new Error(
-      `A ${nested.kind} interaction for the response ${JSON.stringify(nested.response)} sits inside a Choice's Prompt or choice content, where QTI's schema admits no interaction; move it out to the item body, or render an item that check accepted.`,
-    ),
-  );
+const nestedInteraction: RenderInteraction = (nested) => {
+  throw new NestedInteractionDefect({
+    kind: nested.kind,
+    response: nested.response,
+    within: "choice-interaction",
+  });
+};
 
 /**
  * Give the author's names for a Choice's group: `aria-label` as written, and each id of
@@ -251,62 +252,74 @@ const connect = (
  * @param payload The payload of the whole render, which gives the instance and `finished`.
  * @param state The locale, the heading level and the resolved part overrides.
  * @returns The Choice Root, or {@link PartSwapRefused} when a replacement breaks the swap
- *   invariant. It dies when the content holds an interaction, which QTI admits nowhere there.
+ *   invariant. It throws {@link NestedInteractionDefect} when the content holds an interaction,
+ *   which QTI admits nowhere there.
  */
-export const renderChoice = Effect.fnUntraced(function* renderChoice(
+export const renderChoice = (
   interaction: ChoicePayload,
   payload: Payload,
   state: EmitState,
-): Effect.fn.Return<Element, PartSwapRefused> {
+): Result.Result<Element, PartSwapRefused> => {
   const emitContent = (
     nodes: readonly PayloadNode[],
-  ): Effect.Effect<readonly Node[], PartSwapRefused> =>
+  ): Result.Result<readonly Node[], PartSwapRefused> =>
     emitNodes(nodes, payload, state, nestedInteraction);
   const replacement = (part: ChoicePart) =>
     Option.getOrUndefined(state.parts.replacementFor(owner, part));
-  const promptContent = yield* Effect.transposeOption(
-    interaction.prompt.pipe(Option.map(emitContent)),
-  );
-  const markup = promptContent.pipe(Option.map(promptMarkupFor));
-  const rows = rowsFor(markup);
-  const props = connect(interaction, payload, rows, markup);
 
-  const choices = yield* pipe(
-    props.items,
-    Effect.forEach((item) =>
-      Effect.gen(function* choiceItem() {
-        const nodes = yield* emitContent(item.content);
-        const indicator = yield* Effect.fromResult(
-          applyPart(rows.indicator, item.indicator, [], replacement("indicator")),
-        );
-        const label = yield* Effect.fromResult(
-          applyPart(rows.label, item.label, [indicator, ...nodes], replacement("label")),
-        );
-        const control = yield* Effect.fromResult(
-          applyPart(rows.control, item.control, [], replacement("control")),
-        );
+  return Result.gen(function* choiceRoot() {
+    const promptContent = yield* Result.transposeOption(
+      interaction.prompt.pipe(Option.map(emitContent)),
+    );
+    const markup = promptContent.pipe(Option.map(promptMarkupFor));
+    const rows = rowsFor(markup);
+    const props = connect(interaction, payload, rows, markup);
 
-        return yield* Effect.fromResult(
-          applyPart(rows.choice, item.choice, [control, label], replacement("choice")),
-        );
-      }),
-    ),
-  );
-  const list = yield* Effect.fromResult(
-    applyPart(rows.choices, props.choices, choices, replacement("choices")),
-  );
-  const prompt = yield* Effect.transposeOption(
-    promptContent.pipe(
-      Option.map((content) =>
-        Effect.fromResult(applyPart(rows.prompt, props.prompt, content, replacement("prompt"))),
+    const choices = yield* pipe(
+      props.items.map((item) =>
+        Result.gen(function* choiceItem() {
+          const nodes = yield* emitContent(item.content);
+          const indicator = yield* applyPart(
+            rows.indicator,
+            item.indicator,
+            [],
+            replacement("indicator"),
+          );
+          const label = yield* applyPart(
+            rows.label,
+            item.label,
+            [indicator, ...nodes],
+            replacement("label"),
+          );
+          const control = yield* applyPart(rows.control, item.control, [], replacement("control"));
+
+          return yield* applyPart(
+            rows.choice,
+            item.choice,
+            [control, label],
+            replacement("choice"),
+          );
+        }),
       ),
-    ),
-  );
+      Result.all,
+    );
+    const list = yield* applyPart(rows.choices, props.choices, choices, replacement("choices"));
+    const prompt = yield* Result.transposeOption(
+      promptContent.pipe(
+        Option.map((content) =>
+          applyPart(rows.prompt, props.prompt, content, replacement("prompt")),
+        ),
+      ),
+    );
 
-  return yield* Effect.fromResult(
-    applyPart(rows.root, props.root, [...Option.toArray(prompt), list], replacement("root")),
-  );
-});
+    return yield* applyPart(
+      rows.root,
+      props.root,
+      [...Option.toArray(prompt), list],
+      replacement("root"),
+    );
+  });
+};
 
 /**
  * Check a Choice's response, which the caller decoded, in two tiers.

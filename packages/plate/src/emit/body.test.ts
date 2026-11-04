@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Option, Result } from "effect";
 import { emitBody, htmlSubset } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import { h, text } from "#plate/emit/node.ts";
@@ -94,7 +94,7 @@ const stateAt = (
   assetBase = "",
   overrides: PartOverrides = {},
 ): Effect.Effect<EmitState> =>
-  Effect.map(Effect.orDie(resolveOverrides(overrides)), (parts) => ({
+  Effect.map(Effect.orDie(Effect.fromResult(resolveOverrides(overrides))), (parts) => ({
     assetBase,
     headingLevel,
     locale: "en",
@@ -106,7 +106,7 @@ const stateAt = (
  * `input` with the id its connect function writes.
  */
 const stub: RenderInteraction = (interaction) =>
-  Effect.succeed(
+  Result.succeed(
     interaction.kind === "choice"
       ? h("input", {
           "aria-label": "Red",
@@ -128,7 +128,9 @@ const emit = (
   body: readonly PayloadNode[],
   headingLevel = 2,
 ): Effect.Effect<readonly Node[], unknown> =>
-  Effect.flatMap(stateAt(headingLevel), (state) => emitBody(payloadOf(body), state, stub));
+  Effect.flatMap(stateAt(headingLevel), (state) =>
+    Effect.fromResult(emitBody(payloadOf(body), state, stub)),
+  );
 
 /**
  * Emit a body at heading level 2 with package paths rebased onto an asset base.
@@ -141,7 +143,9 @@ const emitAt = (
   body: readonly PayloadNode[],
   assetBase: string,
 ): Effect.Effect<readonly Node[], unknown> =>
-  Effect.flatMap(stateAt(2, assetBase), (state) => emitBody(payloadOf(body), state, stub));
+  Effect.flatMap(stateAt(2, assetBase), (state) =>
+    Effect.fromResult(emitBody(payloadOf(body), state, stub)),
+  );
 
 /**
  * The Notice part as it renders by default: the note naming the feature, a `span` at a phrasing
@@ -258,6 +262,19 @@ const row = (cell: string): ElementPayload => el("tr", {}, [el("td", {}, [txt(ce
 const emittedRow = (cell: string): Element => h("tr", {}, [h("td", {}, [text(cell)])]);
 
 describe("emitBody", () => {
+  it("returns a Result, a plain function callable with no Effect runtime", () => {
+    const state: EmitState = {
+      assetBase: "",
+      headingLevel: 2,
+      locale: "en",
+      parts: Result.getOrThrow(resolveOverrides()),
+    };
+    const emitted = emitBody(payloadOf([el("p", {}, [txt("Kept")])]), state, stub);
+    assert.isTrue(Result.isResult(emitted));
+    assert.isTrue(Result.isSuccess(emitted));
+    assert.deepStrictEqual(Result.getOrThrow(emitted), [h("p", {}, [text("Kept")])]);
+  });
+
   it.effect(
     "[I-7] [I-8] [A-1] a BG011-shaped body round-trips and passes the accessibility checks",
     () =>
@@ -542,7 +559,9 @@ describe("emitBody", () => {
         // The replacement writes no props of its own; applyPart writes the Notice's over it (I1).
         item: { notice: (_props, children) => h("strong", { class: "notice" }, children) },
       });
-      const nodes = yield* emitBody(payloadOf([notice("qti-hotspot-interaction")]), state, stub);
+      const nodes = yield* Effect.fromResult(
+        emitBody(payloadOf([notice("qti-hotspot-interaction")]), state, stub),
+      );
 
       assert.deepStrictEqual(nodes, [
         h("strong", { class: "notice", "data-slot": rowFor("item", "notice").slot, role: "note" }, [
@@ -867,7 +886,7 @@ describe("emitBody, the XSD's HTML subset", () => {
           ],
         };
         const state = yield* stateAt(2);
-        const root = yield* renderChoice(marked, payloadOf([marked]), state);
+        const root = yield* Effect.fromResult(renderChoice(marked, payloadOf([marked]), state));
         const slotted = elementsIn([root]).filter(({ attrs }) => attrs["data-slot"] === marker);
         const content = elementsIn([root]).find(
           ({ children, tag }) => tag === "span" && children[0]?.kind === "text",

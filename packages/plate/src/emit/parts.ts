@@ -1,4 +1,4 @@
-import { Data, Effect, Option, Schema } from "effect";
+import { Data, Option, Result } from "effect";
 import type { Attributes, Element, Node, PartFunction } from "#plate/emit/node.ts";
 
 /**
@@ -785,13 +785,13 @@ export interface Resolved {
 /**
  * A part override keyed by an interaction or a part the part table does not have.
  *
- * `part` is none when the interaction itself is unknown.
+ * `part` is none when the interaction itself is unknown. It is returned through a `Result`, never
+ * thrown.
  */
-// oxlint-disable-next-line unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown.
-export class UnknownPart extends Schema.TaggedError<UnknownPart>()("UnknownPart", {
-  interaction: Schema.String,
-  part: Schema.Option(Schema.String),
-}) {
+export class UnknownPart extends Data.TaggedError("UnknownPart")<{
+  readonly interaction: string;
+  readonly part: Option.Option<string>;
+}> {
   /**
    * The unknown key and the keys allowed at its level.
    */
@@ -809,29 +809,29 @@ export class UnknownPart extends Schema.TaggedError<UnknownPart>()("UnknownPart"
  * Check part overrides against the part table, failing on the first unknown interaction or part.
  *
  * @param overrides The replacement part functions, none by default.
- * @returns The overrides, resolvable by interaction and part.
+ * @returns The overrides, resolvable by interaction and part, or the first {@link UnknownPart}.
  */
-export const resolveOverrides = Effect.fnUntraced(function* resolveOverrides(
+export const resolveOverrides = (
   overrides: PartOverrides = {},
-): Effect.fn.Return<Resolved, UnknownPart> {
+): Result.Result<Resolved, UnknownPart> => {
   const replacements = new Map<string, PartFunction<Attributes>>();
   for (const [interaction, parts] of Object.entries(overrides)) {
     const known = knownParts.get(interaction);
     if (known === undefined) {
-      return yield* new UnknownPart({ interaction, part: Option.none() });
+      return Result.fail(new UnknownPart({ interaction, part: Option.none() }));
     }
 
     for (const [part, replacement] of Object.entries(parts)) {
       if (!known.includes(part)) {
-        return yield* new UnknownPart({ interaction, part: Option.some(part) });
+        return Result.fail(new UnknownPart({ interaction, part: Option.some(part) }));
       }
 
       replacements.set(rowKey(interaction, part), replacement);
     }
   }
 
-  return {
+  return Result.succeed({
     replacementFor: (interaction, part) =>
       Option.fromUndefinedOr(replacements.get(rowKey(interaction, part))),
-  };
-});
+  });
+};

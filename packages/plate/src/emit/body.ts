@@ -24,7 +24,7 @@
  * @module
  * @see {@link Payload} for what the walk reads.
  */
-import { Effect, Option } from "effect";
+import { Data, Option, Result } from "effect";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { headings, positionUnder, rowFor, scopedId } from "#plate/emit/parts.ts";
@@ -54,7 +54,43 @@ import type {
  */
 export type RenderInteraction = (
   interaction: InteractionPayload,
-) => Effect.Effect<Element, PartSwapRefused>;
+) => Result.Result<Element, PartSwapRefused>;
+
+/**
+ * Where a nested interaction was met: inside a Choice's Prompt or choice content, or inside an
+ * Extended Text's Prompt.
+ */
+type NestedWithin = "choice-interaction" | "extended-text-interaction";
+
+/**
+ * The content each {@link NestedWithin} names, as the message says it.
+ */
+const nestedPlaces: Readonly<Record<NestedWithin, string>> = {
+  "choice-interaction": "a Choice's Prompt or choice content",
+  "extended-text-interaction": "an Extended Text's Prompt",
+};
+
+/**
+ * An interaction met inside a Prompt or a choice's content, a defect that no checked item can
+ * cause.
+ *
+ * It cannot occur through the library: QTI's schema admits no interaction inside a Prompt or a
+ * choice's content, `check` refuses one, and `redact` copies only what `check` accepted. Only a
+ * payload built by hand, or a `Redacted` decoded from JSON that never came from `redact`, can hold
+ * one. It is thrown, never returned.
+ */
+export class NestedInteractionDefect extends Data.TaggedError("NestedInteractionDefect")<{
+  readonly kind: InteractionPayload["kind"];
+  readonly response: string;
+  readonly within: NestedWithin;
+}> {
+  /**
+   * The nested interaction, where it sits, and what to change.
+   */
+  override get message(): string {
+    return `A ${this.kind} interaction for the response ${JSON.stringify(this.response)} sits inside ${nestedPlaces[this.within]}, where QTI's schema admits no interaction; move it out to the item body, or render an item that check accepted.`;
+  }
+}
 
 /**
  * The attributes the XSD declares as references to ids (`xs:IDREF`, `xs:IDREFS`, and `headers`, a
@@ -549,16 +585,14 @@ const withBodies = (children: readonly Node[]): readonly Node[] => {
  * @returns The Notice, a `span` at a phrasing position and a `div` at a flow position by default,
  *   or the refusal of its replacement.
  */
-const noticeOf = (notice: NoticePayload, walk: Walk): Effect.Effect<Element, PartSwapRefused> => {
+const noticeOf = (notice: NoticePayload, walk: Walk): Result.Result<Element, PartSwapRefused> => {
   const row = rowFor("item", "notice", { position: walk.position });
 
-  return Effect.fromResult(
-    applyPart(
-      row,
-      { "data-slot": row.slot, role: "note" },
-      [text(message(walk.locale, "notice", { feature: notice.feature }))],
-      Option.getOrUndefined(walk.parts.replacementFor("item", "notice")),
-    ),
+  return applyPart(
+    row,
+    { "data-slot": row.slot, role: "note" },
+    [text(message(walk.locale, "notice", { feature: notice.feature }))],
+    Option.getOrUndefined(walk.parts.replacementFor("item", "notice")),
   );
 };
 
@@ -586,10 +620,10 @@ const below = (walk: Walk, tag: string): Walk => ({
 const nodesOf = (
   nodes: readonly PayloadNode[],
   walk: Walk,
-): Effect.Effect<readonly Node[], PartSwapRefused> =>
-  Effect.map(
+): Result.Result<readonly Node[], PartSwapRefused> =>
+  Result.map(
     // oxlint-disable-next-line eslint/no-use-before-define -- `nodesOf` and `nodeOf` are mutually recursive, as elements nest; the call runs only after both are defined.
-    Effect.all(nodes.map((node) => nodeOf(node, walk))),
+    Result.all(nodes.map((node) => nodeOf(node, walk))),
     (emitted) => emitted.flat(),
   );
 
@@ -605,8 +639,8 @@ const elementOf = (
   element: ElementPayload,
   declared: ReadonlySet<string>,
   walk: Walk,
-): Effect.Effect<Element, PartSwapRefused> =>
-  Effect.map(nodesOf(element.children, below(walk, element.tag)), (children) =>
+): Result.Result<Element, PartSwapRefused> =>
+  Result.map(nodesOf(element.children, below(walk, element.tag)), (children) =>
     h(
       tagFor(element.tag, walk.headingLevel),
       attributesFor(element, declared, walk),
@@ -622,30 +656,30 @@ const elementOf = (
  * @returns The node as it renders, none when the second line drops it (an element outside
  *   {@link htmlSubset}, or a node of no kind the payload defines), or the refusal of a part swap.
  */
-const nodeOf = (node: PayloadNode, walk: Walk): Effect.Effect<readonly Node[], PartSwapRefused> => {
+const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], PartSwapRefused> => {
   switch (node.kind) {
     case "element": {
       return Option.match(Option.fromUndefinedOr(htmlSubset.get(node.tag)), {
-        onNone: () => Effect.succeed([]),
-        onSome: (declared) => Effect.map(elementOf(node, declared, walk), (element) => [element]),
+        onNone: () => Result.succeed([]),
+        onSome: (declared) => Result.map(elementOf(node, declared, walk), (element) => [element]),
       });
     }
     case "text": {
-      return Effect.succeed([text(node.text)]);
+      return Result.succeed([text(node.text)]);
     }
     case "notice": {
-      return Effect.map(noticeOf(node, walk), (notice) => [notice]);
+      return Result.map(noticeOf(node, walk), (notice) => [notice]);
     }
     case "choice":
     case "extended-text":
     case "text-entry": {
-      return Effect.map(walk.renderInteraction(node), (root) => [root]);
+      return Result.map(walk.renderInteraction(node), (root) => [root]);
     }
     default: {
       // Only a payload that lost its type on the way here holds another kind.
       node satisfies never;
 
-      return Effect.succeed([]);
+      return Result.succeed([]);
     }
   }
 };
@@ -695,7 +729,7 @@ export const emitNodes = (
   payload: Payload,
   state: EmitState,
   renderInteraction: RenderInteraction,
-): Effect.Effect<readonly Node[], PartSwapRefused> =>
+): Result.Result<readonly Node[], PartSwapRefused> =>
   nodesOf(nodes, walkOf(payload, state, renderInteraction, "phrasing"));
 
 /**
@@ -713,7 +747,7 @@ export const emitBody = (
   payload: Payload,
   state: EmitState,
   renderInteraction: RenderInteraction,
-): Effect.Effect<readonly Node[], PartSwapRefused> =>
+): Result.Result<readonly Node[], PartSwapRefused> =>
   nodesOf(
     payload.body,
     walkOf(payload, state, renderInteraction, positionUnder(rowFor("item", "root").element, false)),
