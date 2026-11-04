@@ -39,15 +39,14 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    every non-string base type: `" completed "` is the identifier `completed` and `" true "` is `true`. For base type
    string, whitespace is part of the value and is kept. A round trip still reproduces the source spelling byte for
    byte. An attribute value is not reformatted by tools, so `" true"` is not `"true"`: outer whitespace around a typed
-   value in an attribute makes it invalid, and the document is refused. The attributes this covers are those whose value
-   takes its type from a QTI base type while the XSD types them as strings, and they are exactly these: `map-key` of a
-   map entry and `mapped-value` of a map entry and of an area map entry; a mapping's and an area mapping's
-   `lower-bound`, `upper-bound` and `default-value`; a match table's and an interpolation table's `default-value`, and
+   value in an attribute makes it invalid, and the document is refused. The attributes this covers are those
+   that carry a typed QTI value, and they are exactly these: `map-key` of a map entry and `mapped-value` of a map entry
+   and of an area map entry; a mapping's and an area mapping's `lower-bound`, `upper-bound` and `default-value`; a match table's and an interpolation table's `default-value`, and
    their entries' `target-value`; an interpolation table entry's `source-value`; and the value attributes of the
    usage-data mapping (`ud:mapping`'s `defaultValue`, `lowerBound` and `upperBound`, and its `ud:mapEntry` entries'
    `mappedValue`). Where the value is of base type string, as for a `map-key` or `target-value` of a string variable,
    its whitespace is part of the value and is kept, as above. An attribute the XSD itself types, such
-   as `normal-maximum` as `xs:double` or `max-choices` as `xs:int`, is read as the XSD reads it, outer whitespace
+   as `normal-maximum` as `xs:double` or `max-choices` as `xs:nonNegativeInteger`, is read as the XSD reads it, outer whitespace
    collapsed, under reading 1. Free-text attributes such as `title` or `label` keep their text as written, spaces
    included. The split is a ruling because QTI's schema types the text of `qti-value` as `xs:normalizedString` and of
    `qti-base-value` as `xs:string`, never as the value's base type, and its information model lists each base type's
@@ -180,10 +179,22 @@ against it. A reading that is not an information-model-over-XSD case says which 
     an item, base-type duration in a test, part or section. The example is not followed. This is not an
     information-model-over-XSD case: the XSD does not type the variable, and the conflict is between the information
     model and an example in the results reporting specification. (2026-11-04.)
-30. **A printed variable is not admitted inside `m:math`.** The information model says it is impossible to embed objects
-    such as printed variables within a math object. The implementation guide says otherwise, and the XSD admits QTI
-    content inside MathML only through the lax wildcard of `annotation-xml`. This follows the information model and sets
-    aside the guide and the wildcard, so no `qti-` element is admitted anywhere beneath MathML. (2026-11-04.)
+30. **QTI elements are admitted inside `m:annotation-xml`, and nowhere else beneath MathML.** `annotation-xml` is
+    MathML's carrier for other XML vocabularies, and the XSD gives it a single lax wildcard (`mathml3-common.xsd`
+    lines 42-44, `xs:any processContents="lax"`), so a QTI element there is valid. The implementation guide says so
+    too: "At present, QTI's qti-printed-variable can be used within MathML and HTML." (`impl.txt` line 1045). Lax
+    processing recognises only an element with a global declaration, and `qti-printed-variable` has none, so written
+    directly inside `annotation-xml` it is accepted and kept as foreign content, while inside a `div` or `p` in the
+    annotation it is read as a printed variable. An author who wants it interpreted wraps it in a `div` or `p`. A nested
+    QTI root, processing root or manifest global stays foreign content, as reading 6 says. Outside
+    `annotation-xml`, a `qti-` element beneath MathML is refused, because MathML's own content model does not admit it
+    there. That is a MathML validity refusal (reading 2), not a rule of this reading. The information model's sentence,
+    "Although it is impossible to embed objects such as printed variable ... within a math object" (`info.txt` line
+    8670), is not a prohibition. It describes why the section that follows offers the math-variable technique, and it
+    states no rule that conflicts with the wildcard or the guide, so there is nothing for the information model to
+    outrank. The rule is: if the standard does not ban it, do not refuse it. (Corrected 2026-11-04 by decision 214,
+    replacing the earlier reading, which refused every `qti-` element beneath MathML.)
+    (Refined 2026-11-04 by decision 217.)
 31. **A card holds at least one of an HTML content node or file hrefs, and may hold both.** The implementation guide
     says a card holds a single `qti-html-content`, or any number of `qti-file-href` nodes, and that it must contain at
     least some content. The XSD admits both together and neither. One of the guide's own examples has both. This follows
@@ -249,3 +260,69 @@ against it. A reading that is not an information-model-over-XSD case says which 
     rendered and `audio`, `break`, `emphasis`, `mark`, `phoneme`, `prosody`, `say-as` and `sub`. The XSD's `tokenType`
     also admits `voice`. This follows the SSML Recommendation, which defines the language, and sets aside the XSD, which
     is looser than it. (2026-11-04.)
+45. **An integer has no largest or smallest value.** QTI's integer base type is "the same as the set of values
+    defined by the integer primitiveType", and the information model's data types define Integer as "derived from
+    the 'decimal' data-type i.e. no decimal places", beside Int, "with a numeric value from -2147483648 to
+    2147483647". Neither the information model nor the XSD bounds the integer base type. So every integer written as
+    a value of base type integer, in `qti-value`, in `qti-base-value` or in a typed-value attribute of reading 7 such
+    as `map-key`, is accepted and kept exactly, however many digits it has: `9007199254740993` and
+    `9007199254740992` are two values, and so are `1000000000000000000000000000000` and
+    `1000000000000000000000000000001`. A package never refuses an integer for its size, never rounds one to a float
+    and never stores one as an infinity, and it compares and computes integer results exactly. This reading is
+    about values. A count attribute such as `max-choices` is not a value of the integer base type: a shared reading of
+    its own holds counts to the signed 64-bit range, read exactly, and refuses a count beyond it with its rule and
+    location. An attribute the XSD types `xs:int`, such as `base`, keeps `xs:int`'s range. Where
+    QTI's types make a result a float, an integer operand becomes the nearest float, and an integer beyond the
+    largest finite float becomes the largest finite float of its sign. This is not a case of documents
+    in conflict: the sources agree that the type is unbounded and say nothing of overflow, and this reading forbids
+    a package to add a bound, so reading 1 holds without an exception. (2026-11-04.)
+46. **A count attribute holds a signed 64-bit integer.** The count attributes (`max-choices`, `min-choices`,
+    `max-associations`, `min-associations`, `match-max`, `match-min`, `max-plays` and `min-plays` on the interactions
+    and choices that carry them, the order interactions' `min-choices` among them) and `figures` on `qti-round-to` and
+    `qti-equal-rounded` are typed by the XSD as integers with no largest value (`xs:nonNegativeInteger`, and
+    `xs:integer` for `figures`). A package holds each of them to the signed 64-bit range, -9223372036854775808 to
+    9223372036854775807, read exactly, and refuses a count beyond it with its rule and its location. XML Schema permits
+    this: a processor may set a limit on the number of digits it supports if it documents that limit, and must support
+    at least 18 (XML Schema Part 2, section 3.2.3), and this reading is that documentation. Values are not counts: a
+    value of base type integer stays unbounded and exact (reading 45). An attribute the XSD types `xs:int`, such as
+    `base`, `colspan` or `qti-index`'s `n`, keeps `xs:int`'s range. This is not a case of documents in conflict: the
+    XSD leaves the counts unbounded and XML Schema lets a processor document a limit, so reading 1 holds without an
+    exception. (2026-11-04.)
+47. **`xsi:type`, `xsi:nil` and `xsi:noNamespaceSchemaLocation` are accepted as XML Schema judges them, stored and
+    exported byte for byte.** A document may carry the schema-instance attributes wherever XML Schema allows them, and
+    it is valid QTI when it carries them validly. `xsi:type` is valid only when it names the declared type or a type
+    derived from it. `xsi:nil` is valid only on an element that is nillable. Where QTI admits wildcard content, the
+    wildcard's processing mode is the XSD's: under `skip` the content is not assessed, and under `lax` it is assessed
+    only where a declaration is found. Each attribute is stored with its spelling and exported byte for byte. This
+    follows reading 1: these attributes are valid wherever XML Schema allows them, so a document that carries them
+    validly is valid QTI, and refusing it would refuse valid content. `xsi:schemaLocation` is already accepted. The
+    sources are XML Schema Part 1 (W3C Recommendation, 28 October 2004): section 2.6 and its subsections 2.6.1
+    (`xsi:type`), 2.6.2 (`xsi:nil`) and 2.6.3 (`xsi:schemaLocation` and `xsi:noNamespaceSchemaLocation`) define the
+    attributes; section 3.3.4 (Element Locally Valid (Element)) holds the `xsi:nil` rule (clause 3, which needs
+    `{nillable}`) and the `xsi:type` rule (clause 4, which needs a type derived from the declared one); section 3.10.1
+    (the Wildcard Schema Component, `{process contents}`) and section 3.10.4 (Item Valid (Wildcard)) define `skip` and
+    `lax`. This is not a case of documents in conflict: QTI's XSD is itself an XML Schema, so the XML Schema
+    Recommendation decides what is valid in it. (2026-11-04.)
+48. **A dotted reference is accepted when exactly one reading names a real item ref, test part or section and its
+    variable.** Reading 37 lets an identifier contain `.`, so a prefixed reference such as `ITEMREF.VAR` can be split at
+    more than one dot. Take a test whose item refs include `a` and `a.b`: `a.b.SCORE` could be item ref `a.b` with
+    variable `SCORE`, or item ref `a` with variable `b.SCORE`. When only one of those readings names a real item ref and
+    a variable that item has, that reading is meant, and the reference is accepted. The same holds when a reading's
+    prefix names a test part or a section, as in a section's `duration`: every reading that resolves counts. When both
+    resolve, QTI itself leaves the case ambiguous, and the document is refused with a refusal that names both readings.
+    This binds the renderer the same way as the qti package, so the two never read the same file differently. This is
+    not a case of documents in conflict: the specification reserves `.` for prefixing and says nothing of splitting a
+    reference at a dot, so this reading fills the gap and keeps every unambiguous reference valid, as reading 1
+    requires. (2026-11-04.)
+49. **QTI and foreign elements beneath MathML and in card content are admitted wherever the schema admits them.**
+    Inside `m:annotation-xml` this is reading 30. In card content (`qti-html-content` of a `qti-card` or
+    `qti-card-entry`) the same basis applies: an element is accepted wherever the schema admits it and no normative text
+    bans it, and refused only where the schema or a normative rule refuses it. In the XSD, card content has no wildcard
+    of its own: `HTMLContentDType` lists only HTML, MathML and SSML elements (`imsqti_asiv3p0p1_v1p0.xsd` lines
+    28247-28330). QTI elements are admitted there where the HTML the schema admits there declares them: a block-level
+    `div` (`DivDType`, lines 26673-26794) declares 28, every block interaction among them, and text-level HTML
+    (`HTMLTextDType`, lines 28332-28401) declares 9, the inline ones, `qti-printed-variable` (line 28344) among them. A
+    foreign or QTI element placed directly in `qti-html-content`, or anywhere else no declaration or wildcard reaches,
+    is refused because the schema refuses it. Beneath `m:math` the only wildcard is `annotation-xml`'s, so MathML's content model refuses
+    any other placement. This binds the renderer the same way as the qti package, so the two accept and refuse the same
+    file. (Corrected 2026-11-04 by decision 214, replacing the version merged earlier that day under decision 212.) (Wording corrected 2026-11-04, decision 218; the rule is decision 216's.)
