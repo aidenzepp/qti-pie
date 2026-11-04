@@ -9,7 +9,7 @@
 import { createRequire } from "node:module";
 import nodePath from "node:path";
 import { pathToFileURL } from "node:url";
-import { Effect, Predicate, Schema } from "effect";
+import { Effect, Predicate } from "effect";
 
 /**
  * The compiler's SQL ceiling in bytes (`docs/research/d8105349.md` section 22): the limit of a
@@ -25,20 +25,12 @@ export const BUDGETS = ["nodes", "fields", "sqlBytes", "params", "variants"] as 
 export type Budget = (typeof BUDGETS)[number];
 
 /**
- * What one budget meter reports: for each budget, what the compilation was charged and its limit.
- */
-export const MeterUsage = Schema.Record(
-  Schema.String,
-  Schema.Struct({ limit: Schema.Number, used: Schema.Number }),
-);
-
-type MeterUsageOf = typeof MeterUsage.Type;
-
-/**
- * A budget meter of grizzle's engine, which the compiler charges and which reports its usage.
+ * A budget meter of grizzle's engine, which the compiler charges and which answers what each
+ * budget allows and how much of it has been charged.
  */
 export interface Meter {
-  readonly usage: () => MeterUsageOf;
+  readonly limit: (budget: Budget) => number;
+  readonly used: (budget: Budget) => number;
 }
 
 /**
@@ -149,12 +141,11 @@ export const measure = <Program>(
       variants: 0,
     };
     for (const meter of meters) {
-      const usage = meter.usage();
       // The compilation's own meter holds the compiler's SQL ceiling; the artifacts' lowering
       // meters have no limit on SQL.
-      if (usage["sqlBytes"]?.limit === SQL_BYTES_CEILING) {
+      if (meter.limit("sqlBytes") === SQL_BYTES_CEILING) {
         for (const budget of BUDGETS) {
-          charged[budget] = Math.max(charged[budget], usage[budget]?.used ?? 0);
+          charged[budget] = Math.max(charged[budget], meter.used(budget));
         }
       }
     }
