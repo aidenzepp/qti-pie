@@ -24,6 +24,7 @@ import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity
 import { recordBindingFit } from "#qti/schema/seed/record-binding-fit.ts";
 import { resourceTypes } from "#qti/schema/seed/resource-types.ts";
 import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
+import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**
  * The relations the migration seeds, which no role writes: the list is `roles.ts`'s.
@@ -307,23 +308,27 @@ describe("qti", () => {
     assert.deepStrictEqual([...Author.write].toSorted(), writable);
   });
 
-  it("prints one table per seeded relation and as many seed tuples as each seed module has rows", () => {
-    const sql = execFileSync("node", ["scripts/seed-sql.ts"], {
-      encoding: "utf-8",
-      maxBuffer: SEED_BUFFER,
-    });
-    const [header = ""] = sql.split("\n", 1);
-    assert.strictEqual(
-      header.slice(header.indexOf("; ") + 2).split(", ").length,
-      seededNames.length,
-    );
-    assert.strictEqual(tuples(sql, "admission"), admission.length);
-    assert.strictEqual(tuples(sql, "binding_fit"), bindingFit.length);
-    assert.strictEqual(tuples(sql, "resource_type_of"), resourceTypes.length);
-    assert.strictEqual(tuples(sql, "root_of_type"), rootOfType.length);
-    assert.strictEqual(tuples(sql, "operator_arity"), operatorArity.length);
-    assert.strictEqual(tuples(sql, "operator_arity_max"), operatorArityMax.length);
-  });
+  it(
+    "prints one table per seeded relation and as many seed tuples as each seed module has rows",
+    () => {
+      const sql = execFileSync("node", ["scripts/seed-sql.ts"], {
+        encoding: "utf-8",
+        maxBuffer: SEED_BUFFER,
+      });
+      const [header = ""] = sql.split("\n", 1);
+      assert.strictEqual(
+        header.slice(header.indexOf("; ") + 2).split(", ").length,
+        seededNames.length,
+      );
+      assert.strictEqual(tuples(sql, "admission"), admission.length);
+      assert.strictEqual(tuples(sql, "binding_fit"), bindingFit.length);
+      assert.strictEqual(tuples(sql, "resource_type_of"), resourceTypes.length);
+      assert.strictEqual(tuples(sql, "root_of_type"), rootOfType.length);
+      assert.strictEqual(tuples(sql, "operator_arity"), operatorArity.length);
+      assert.strictEqual(tuples(sql, "operator_arity_max"), operatorArityMax.length);
+    },
+    cliProcessTestTimeoutMs,
+  );
 
   it("keeps each arity seed distinct by kind and over NodeKind handles", () => {
     for (const kinds of [
@@ -335,75 +340,87 @@ describe("qti", () => {
     }
   });
 
-  it("prints as many tuples as each of the four content seed tables has rows, 1,000 to a statement, and only the named ones", () => {
-    const lines = printed([
-      "--only",
-      "AttributeAdmission,AncestryStep,MappableBaseType,RecordBindingFit",
-    ]);
-    const expected = [
-      ["attribute_admission", attributeAdmission.length],
-      ["ancestry_step", ancestryStep.length],
-      ["mappable_base_type", 9],
-      ["record_binding_fit", 2],
-    ] as const;
-    assert.strictEqual(mappableBaseType.length, 9);
-    assert.strictEqual(recordBindingFit.length, 2);
-    for (const [table, rows] of expected) {
-      const statements = linesOf(lines, table);
-      assert.strictEqual(rowsOf(lines, table).length, rows);
-      assert.strictEqual(statements.length, Math.ceil(rows / 1000));
-      for (const statement of statements) {
-        assert.isAtMost(tuples(statement, table), 1000);
-      }
-    }
-    assert.strictEqual(linesOf(lines, "admission").length, 0);
-    assert.strictEqual(
-      lines.length,
-      expected.reduce((total, [, rows]) => total + Math.ceil(rows / 1000), 0),
-    );
-  });
-
-  it("omits the rows of a subtracted file, whether it holds them batched or one to a statement", () => {
-    const all = rowsOf(printed(["--only", "Admission"]), "admission");
-    assert.strictEqual(all.length, admission.length);
-
-    const ten = all.slice(0, 10);
-    const file = nodePath.join(scratch, "batched.sql");
-    writeFileSync(file, `-- a comment\n${batched(ten)}\n`);
-
-    const single = nodePath.join(scratch, "single.sql");
-    writeFileSync(single, `${ten.join("\n")}\n`);
-
-    for (const target of [file, single]) {
-      const rest = rowsOf(printed(["--only", "Admission", "--minus", target]), "admission");
-      assert.strictEqual(rest.length, admission.length - 10);
-      assert.deepStrictEqual(rest, all.slice(10));
-    }
-  });
-
-  it("subtracts every 01-seed.sql beneath a directory, and every repeated path", () => {
-    const all = rowsOf(printed(["--only", "Admission"]), "admission");
-    const folder = nodePath.join(scratch, "tree", "20260101000000_seed");
-    mkdirSync(folder, { recursive: true });
-    writeFileSync(nodePath.join(folder, "01-seed.sql"), `${batched(all.slice(0, 3))}\n`);
-    writeFileSync(nodePath.join(folder, "02-other.sql"), `${batched(all.slice(3, 6))}\n`);
-
-    const second = nodePath.join(scratch, "second.sql");
-    writeFileSync(second, `${batched(all.slice(6, 8))}\n`);
-
-    const rest = rowsOf(
-      printed([
+  it(
+    "prints as many tuples as each of the four content seed tables has rows, 1,000 to a statement, and only the named ones",
+    () => {
+      const lines = printed([
         "--only",
-        "Admission",
-        "--minus",
-        nodePath.join(scratch, "tree"),
-        "--minus",
-        second,
-      ]),
-      "admission",
-    );
-    assert.deepStrictEqual(rest, [...all.slice(3, 6), ...all.slice(8)]);
-  });
+        "AttributeAdmission,AncestryStep,MappableBaseType,RecordBindingFit",
+      ]);
+      const expected = [
+        ["attribute_admission", attributeAdmission.length],
+        ["ancestry_step", ancestryStep.length],
+        ["mappable_base_type", 9],
+        ["record_binding_fit", 2],
+      ] as const;
+      assert.strictEqual(mappableBaseType.length, 9);
+      assert.strictEqual(recordBindingFit.length, 2);
+      for (const [table, rows] of expected) {
+        const statements = linesOf(lines, table);
+        assert.strictEqual(rowsOf(lines, table).length, rows);
+        assert.strictEqual(statements.length, Math.ceil(rows / 1000));
+        for (const statement of statements) {
+          assert.isAtMost(tuples(statement, table), 1000);
+        }
+      }
+      assert.strictEqual(linesOf(lines, "admission").length, 0);
+      assert.strictEqual(
+        lines.length,
+        expected.reduce((total, [, rows]) => total + Math.ceil(rows / 1000), 0),
+      );
+    },
+    cliProcessTestTimeoutMs,
+  );
+
+  it(
+    "omits the rows of a subtracted file, whether it holds them batched or one to a statement",
+    () => {
+      const all = rowsOf(printed(["--only", "Admission"]), "admission");
+      assert.strictEqual(all.length, admission.length);
+
+      const ten = all.slice(0, 10);
+      const file = nodePath.join(scratch, "batched.sql");
+      writeFileSync(file, `-- a comment\n${batched(ten)}\n`);
+
+      const single = nodePath.join(scratch, "single.sql");
+      writeFileSync(single, `${ten.join("\n")}\n`);
+
+      for (const target of [file, single]) {
+        const rest = rowsOf(printed(["--only", "Admission", "--minus", target]), "admission");
+        assert.strictEqual(rest.length, admission.length - 10);
+        assert.deepStrictEqual(rest, all.slice(10));
+      }
+    },
+    cliProcessTestTimeoutMs,
+  );
+
+  it(
+    "subtracts every 01-seed.sql beneath a directory, and every repeated path",
+    () => {
+      const all = rowsOf(printed(["--only", "Admission"]), "admission");
+      const folder = nodePath.join(scratch, "tree", "20260101000000_seed");
+      mkdirSync(folder, { recursive: true });
+      writeFileSync(nodePath.join(folder, "01-seed.sql"), `${batched(all.slice(0, 3))}\n`);
+      writeFileSync(nodePath.join(folder, "02-other.sql"), `${batched(all.slice(3, 6))}\n`);
+
+      const second = nodePath.join(scratch, "second.sql");
+      writeFileSync(second, `${batched(all.slice(6, 8))}\n`);
+
+      const rest = rowsOf(
+        printed([
+          "--only",
+          "Admission",
+          "--minus",
+          nodePath.join(scratch, "tree"),
+          "--minus",
+          second,
+        ]),
+        "admission",
+      );
+      assert.deepStrictEqual(rest, [...all.slice(3, 6), ...all.slice(8)]);
+    },
+    cliProcessTestTimeoutMs,
+  );
 
   it("seeds the attribute admission and the ancestry steps from the composed registries", () => {
     assert.isTrue(has("lom:string", "xml:lang"));
