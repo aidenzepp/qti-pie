@@ -56,7 +56,7 @@ const city: TextEntryInteraction = {
   base: 10,
   baseType: "string",
   class: "short-answer",
-  expectedLength: Option.some(12),
+  expectedLength: Option.some(12n),
   kind: "text-entry",
   path: `${paragraphPath}/qti-text-entry-interaction`,
   patternMaskMessage: Option.none(),
@@ -412,7 +412,7 @@ describe("renderTextEntry", () => {
         const tree = yield* page(payloadOf([city]));
         const root = onlyPart(tree, "root");
         const control = onlyPart(tree, "control");
-        const plain = yield* page(payloadOf([{ ...length, expectedLength: Option.some(0) }]));
+        const plain = yield* page(payloadOf([{ ...length, expectedLength: Option.some(0n) }]));
 
         assert.strictEqual(root.tag, "qti-text-entry-interaction");
         assert.strictEqual(root.attrs["class"], "short-answer");

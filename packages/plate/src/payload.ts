@@ -174,8 +174,8 @@ export interface ChoicePayload extends ValidationPayload {
    */
   readonly formName: string;
   readonly kind: "choice";
-  readonly maxChoices: number;
-  readonly minChoices: number;
+  readonly maxChoices: bigint;
+  readonly minChoices: bigint;
   readonly orientation: Option.Option<string>;
   readonly prompt: Option.Option<readonly PayloadNode[]>;
   /**
@@ -237,7 +237,7 @@ export interface TextControlPayload extends ValidationPayload {
  * A Text Entry as the page may know it (Q-20).
  */
 export interface TextEntryPayload extends TextControlPayload {
-  readonly expectedLength: Option.Option<number>;
+  readonly expectedLength: Option.Option<bigint>;
   readonly kind: "text-entry";
 }
 
@@ -246,7 +246,7 @@ export interface TextEntryPayload extends TextControlPayload {
  * `format` and a Prompt.
  */
 export interface ExtendedTextPayload extends TextControlPayload {
-  readonly expectedLines: Option.Option<number>;
+  readonly expectedLines: Option.Option<bigint>;
   readonly format: "plain" | "preformatted";
   readonly kind: "extended-text";
   readonly prompt: Option.Option<readonly PayloadNode[]>;

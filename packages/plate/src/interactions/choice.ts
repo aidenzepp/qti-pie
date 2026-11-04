@@ -157,7 +157,7 @@ const connect = (
   const promptId = scopedId(instance, interaction.response, "prompt");
   const labelledby = Option.contains(markup, "labelledby");
   const type =
-    interaction.maxChoices === 1 || interaction.cardinality === "single" ? "radio" : "checkbox";
+    interaction.maxChoices === 1n || interaction.cardinality === "single" ? "radio" : "checkbox";
 
   return {
     choices: { "data-slot": rows.choices.slot },
@@ -306,19 +306,19 @@ export const validateChoice = (
     response: interaction.response,
     text: words,
   });
-  const count = (n: number): string => new Intl.NumberFormat(locale).format(n);
-  const tooMany = (n: number) =>
+  const count = (n: bigint): string => new Intl.NumberFormat(locale).format(n);
+  const tooMany = (n: bigint) =>
     say(
       Option.getOrElse(interaction.messages.max, () => message(locale, "atMost", { n: count(n) })),
     );
-  const tooFew = (n: number) =>
+  const tooFew = (n: bigint) =>
     say(
       Option.getOrElse(interaction.messages.min, () => message(locale, "atLeast", { n: count(n) })),
     );
   const unknown = say(message(locale, "unknownChoice"));
 
   if (input instanceof Malformed) {
-    return [input.reason === "single-many" ? tooMany(1) : unknown];
+    return [input.reason === "single-many" ? tooMany(1n) : unknown];
   }
 
   const presented = new Set(interaction.choices.map((choice) => choice.identifier));
@@ -328,10 +328,10 @@ export const validateChoice = (
 
   return [
     ...(stray || repeated ? [unknown] : []),
-    ...(interaction.maxChoices > 0 && chosen.length > interaction.maxChoices
+    ...(interaction.maxChoices > 0n && BigInt(chosen.length) > interaction.maxChoices
       ? [tooMany(interaction.maxChoices)]
       : []),
-    ...(configuration.validateResponses && chosen.length < interaction.minChoices
+    ...(configuration.validateResponses && BigInt(chosen.length) < interaction.minChoices
       ? [tooFew(interaction.minChoices)]
       : []),
   ];

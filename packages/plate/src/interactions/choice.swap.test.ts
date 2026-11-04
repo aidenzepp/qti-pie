@@ -45,9 +45,9 @@ const colours: ChoiceInteraction = {
   ],
   class: "",
   kind: "choice",
-  maxChoices: 1,
+  maxChoices: 1n,
   messages: { max: Option.none(), min: Option.none() },
-  minChoices: 0,
+  minChoices: 0n,
   orientation: Option.none(),
   path: "qti-assessment-item/qti-item-body/qti-choice-interaction",
   prompt: Option.some([

@@ -186,7 +186,7 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
         onSome: (placeholder) => ({ placeholder }),
       }),
       ...interaction.expectedLines.pipe(
-        Option.filter((lines) => lines > 0),
+        Option.filter((lines) => lines > 0n),
         Option.match({
           onNone: () => ({}),
           onSome: (lines) => ({ rows: String(lines) }),
