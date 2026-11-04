@@ -41,6 +41,26 @@ describe("templateName", () => {
     assert.isTrue(Option.isNone(templateName("match_correct")));
     assert.isTrue(Option.isNone(templateName("")));
   });
+
+  it("[I-9b] resolves a built-in padded with XML whitespace to its name, as xs:anyURI collapses it", () => {
+    for (const name of templateNames) {
+      for (const prefix of templatePrefixes) {
+        for (const padding of [" ", "\n\t"]) {
+          assert.deepStrictEqual(
+            templateName(`${padding}${prefix}${name}${padding}`),
+            Option.some(name),
+          );
+        }
+      }
+    }
+  });
+
+  it("[I-9b] resolves a URI with whitespace inside its name to none", () => {
+    for (const prefix of templatePrefixes) {
+      assert.isTrue(Option.isNone(templateName(`${prefix}match_ correct`)));
+      assert.isTrue(Option.isNone(templateName(`${prefix}match_\ncorrect`)));
+    }
+  });
 });
 
 describe("the closed value sets", () => {

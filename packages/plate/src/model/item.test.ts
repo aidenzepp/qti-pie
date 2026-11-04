@@ -8,6 +8,7 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
+import { runAttempt } from "#plate/engine/attempt.ts";
 import { validateChoice } from "#plate/interactions/choice.ts";
 import { message } from "#plate/messages.ts";
 import { buildItem } from "#plate/model/item.ts";
@@ -20,6 +21,7 @@ import type {
   Rule,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
+import { fresh } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { float } from "#plate/test/fixtures.ts";
 
@@ -1189,6 +1191,51 @@ describe("buildItem", () => {
       assert.deepStrictEqual(built.processing, Option.some(matchCorrect));
       assert.deepStrictEqual(built.unsupported, []);
     }),
+  );
+
+  it.effect(
+    "[I-9b] runs a template URI padded with XML whitespace as the built-in it names, with no mark",
+    () =>
+      Effect.gen(function* runsPaddedTemplate() {
+        const built = yield* buildItem(
+          item({
+            after: [
+              el("qti-response-processing", [
+                attr(
+                  "template",
+                  " \n\thttps://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct\n ",
+                ),
+              ]),
+            ],
+            body: [
+              el(
+                "qti-choice-interaction",
+                [attr("max-choices", "1"), attr("response-identifier", "RESPONSE")],
+                [choice("A", "Ant"), choice("B", "Bee")],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "identifier", "single", [
+                values("qti-correct-response", "A"),
+              ]),
+              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+            ],
+          }),
+        );
+        const after = yield* Effect.fromResult(
+          runAttempt(built, fresh(built, "i"), {
+            RESPONSE: {
+              baseType: "identifier",
+              cardinality: "single",
+              values: [{ baseType: "identifier", value: "A" }],
+            },
+          }),
+        );
+
+        assert.deepStrictEqual(built.processing, Option.some(matchCorrect));
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.deepStrictEqual(after.outcomes["SCORE"], float(1));
+      }),
   );
 
   it.effect('[I-1] [Q-2] binds response-identifier=" RESPONSE " to the declaration RESPONSE', () =>
