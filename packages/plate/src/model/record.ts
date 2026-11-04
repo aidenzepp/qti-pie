@@ -15,13 +15,14 @@ import type { Value } from "#plate/model/values.ts";
 /**
  * One item's session as the renderer holds it, each integer an exact `bigint`.
  *
- * `item` is the item's identifier and `document` its location. `attempt` says how the last submit
- * ended: `none` before any, `refused` when its responses failed validation, `submitted` when they
- * were processed. `responses` and `outcomes` hold every modelled variable by identifier, NULL
- * included. `notices` names the unsupported features the item shows as notices.
+ * `item` is the item's identifier and `document` its location. `attempt` is `none` before any
+ * attempt and `submitted` once `score` has processed one. A refused post is no state of the record:
+ * `score` returns no record for it, and a host that counts refused posts keeps that count itself.
+ * `responses` and `outcomes` hold every modelled variable by identifier, NULL included. `notices`
+ * names the unsupported features the item shows as notices.
  */
 export interface ItemRecord {
-  readonly attempt: "none" | "refused" | "submitted";
+  readonly attempt: "none" | "submitted";
   readonly document: string;
   readonly instance: string;
   readonly item: string;
