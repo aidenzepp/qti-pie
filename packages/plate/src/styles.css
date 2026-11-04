@@ -336,6 +336,178 @@
   text-orientation: upright;
 }
 
+/*
+ * Text Entry's input widths (vocab.txt:4847): qti-input-width-N makes the Control at least N
+ * characters wide.
+ */
+.qti-input-width-1:where([data-slot="text-entry-interaction"])
+  :where([data-slot="text-entry-interaction-control"]) {
+  min-inline-size: 1ch;
+}
+
+.qti-input-width-2:where([data-slot="text-entry-interaction"])
+  :where([data-slot="text-entry-interaction-control"]) {
+  min-inline-size: 2ch;
+}
+
+.qti-input-width-3:where([data-slot="text-entry-interaction"])
+  :where([data-slot="text-entry-interaction-control"]) {
+  min-inline-size: 3ch;
+}
+
+.qti-input-width-4:where([data-slot="text-entry-interaction"])
+  :where([data-slot="text-entry-interaction-control"]) {
+  min-inline-size: 4ch;
+}
+
+.qti-input-width-6:where([data-slot="text-entry-interaction"])
+  :where([data-slot="text-entry-interaction-control"]) {
+  min-inline-size: 6ch;
+}
+
+.qti-input-width-10:where([data-slot="text-entry-interaction"])
+  :where([data-slot="text-entry-interaction-control"]) {
+  min-inline-size: 10ch;
+}
+
+.qti-input-width-15:where([data-slot="text-entry-interaction"])
+  :where([data-slot="text-entry-interaction-control"]) {
+  min-inline-size: 15ch;
+}
+
+.qti-input-width-20:where([data-slot="text-entry-interaction"])
+  :where([data-slot="text-entry-interaction-control"]) {
+  min-inline-size: 20ch;
+}
+
+.qti-input-width-25:where([data-slot="text-entry-interaction"])
+  :where([data-slot="text-entry-interaction-control"]) {
+  min-inline-size: 25ch;
+}
+
+.qti-input-width-30:where([data-slot="text-entry-interaction"])
+  :where([data-slot="text-entry-interaction-control"]) {
+  min-inline-size: 30ch;
+}
+
+.qti-input-width-35:where([data-slot="text-entry-interaction"])
+  :where([data-slot="text-entry-interaction-control"]) {
+  min-inline-size: 35ch;
+}
+
+.qti-input-width-40:where([data-slot="text-entry-interaction"])
+  :where([data-slot="text-entry-interaction-control"]) {
+  min-inline-size: 40ch;
+}
+
+.qti-input-width-45:where([data-slot="text-entry-interaction"])
+  :where([data-slot="text-entry-interaction-control"]) {
+  min-inline-size: 45ch;
+}
+
+.qti-input-width-50:where([data-slot="text-entry-interaction"])
+  :where([data-slot="text-entry-interaction-control"]) {
+  min-inline-size: 50ch;
+}
+
+.qti-input-width-72:where([data-slot="text-entry-interaction"])
+  :where([data-slot="text-entry-interaction-control"]) {
+  min-inline-size: 72ch;
+}
+
+/*
+ * Extended Text's heights (vocab.txt:4997): qti-height-lines-N makes the Control about N lines
+ * tall, in its own line height. Its width is its Root's already.
+ */
+.qti-height-lines-3:where([data-slot="extended-text-interaction"])
+  :where([data-slot="extended-text-interaction-control"]) {
+  block-size: 3lh;
+}
+
+.qti-height-lines-6:where([data-slot="extended-text-interaction"])
+  :where([data-slot="extended-text-interaction-control"]) {
+  block-size: 6lh;
+}
+
+.qti-height-lines-15:where([data-slot="extended-text-interaction"])
+  :where([data-slot="extended-text-interaction-control"]) {
+  block-size: 15lh;
+}
+
+/*
+ * Vertical writing for the text interactions (vocab.txt:4961, :5171): the Root, and so its
+ * Control, is set in vertical lines, right to left (vertical-rl) or left to right (vertical-lr).
+ */
+.qti-writing-orientation-vertical-rl:where([data-slot="text-entry-interaction"]),
+.qti-writing-orientation-vertical-rl:where([data-slot="extended-text-interaction"]) {
+  writing-mode: vertical-rl;
+}
+
+.qti-writing-orientation-vertical-lr:where([data-slot="text-entry-interaction"]),
+.qti-writing-orientation-vertical-lr:where([data-slot="extended-text-interaction"]) {
+  writing-mode: vertical-lr;
+}
+
+/*
+ * The body's utility classes (vocab.txt:441, :559, :578, :1010, :1061), on any element of the item
+ * body: each class alone, so it counts once.
+ */
+
+/* qti-hidden: neither seen nor read by assistive technology. */
+.qti-hidden {
+  display: none;
+}
+
+/*
+ * qti-visually-hidden: hidden from sight only, as the Choice Control is, so assistive technology
+ * still reads it; never by clip, which is below the floor.
+ */
+.qti-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.qti-underline {
+  text-decoration-line: underline;
+}
+
+.qti-italic {
+  font-style: italic;
+}
+
+.qti-bordered {
+  border: 1px solid var(--border, oklch(0.922 0 0));
+}
+
+/*
+ * qti-well: set apart on the muted surface. It sets no text colour, so its text keeps the host's,
+ * 18.15:1 on --muted at the fallbacks, where --muted-foreground would be 4.34:1 (vocab.txt:1070
+ * asks the well to keep WCAG AA text contrast).
+ */
+.qti-well {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border, oklch(0.922 0 0));
+  border-radius: var(--radius, 0.625rem);
+  background-color: var(--muted, oklch(0.97 0 0));
+}
+
+/*
+ * The item Root's containment (OD-14 (a)), the base section's one rule that is not a vocabulary
+ * class. Author content is laid out and painted inside the Root, fixed and absolute content
+ * included, so an authored host utility class such as "fixed inset-0 z-50" cannot cover the host
+ * page; content wider than the Root scrolls inside it; and the padding, the focus ring's 3px width
+ * plus its 0 offset, keeps every focus ring inside it unclipped.
+ */
+:where([data-slot="item"]) {
+  contain: layout paint;
+  overflow: auto;
+  padding: 3px;
+}
+
 /* == theme: shadcn manner, on the part markers == */
 
 /* The item Root: a block. The page's surface, text colour and font are the host's. */
