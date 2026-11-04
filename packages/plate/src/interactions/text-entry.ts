@@ -176,7 +176,7 @@ const connect = (interaction: TextEntryPayload, payload: Payload, locale: Locale
     name: interaction.formName,
     ...whenSome(interaction.placeholder, (placeholder) => ({ placeholder })),
     ...whenSome(
-      interaction.expectedLength.pipe(Option.filter((expected) => expected > 0)),
+      interaction.expectedLength.pipe(Option.filter((expected) => expected > 0n)),
       (expected) => ({ size: String(expected) }),
     ),
     type: "text",

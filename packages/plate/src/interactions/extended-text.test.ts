@@ -56,7 +56,7 @@ const essay: ExtendedTextInteraction = {
   baseType: "string",
   class: "qti-height-lines-6",
   expectedLength: Option.none(),
-  expectedLines: Option.some(5),
+  expectedLines: Option.some(5n),
   format: "plain",
   kind: "extended-text",
   path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",

@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { entryName } from "#plate/form/encoding.ts";
 import type {
   BodyNode,
@@ -91,9 +91,9 @@ const choice: ChoiceInteraction = {
   ],
   class: "stacked",
   kind: "choice",
-  maxChoices: 1,
+  maxChoices: 1n,
   messages: { max: Option.none(), min: Option.none() },
-  minChoices: 0,
+  minChoices: 0n,
   orientation: Option.none(),
   path: "qti-assessment-item/qti-item-body/qti-choice-interaction",
   prompt: Option.some([text("Which city is the capital of France?")]),
@@ -106,7 +106,7 @@ const choice: ChoiceInteraction = {
  */
 const essay: ExtendedTextInteraction = {
   ...textEntry("ESSAY"),
-  expectedLines: Option.some(3),
+  expectedLines: Option.some(3n),
   format: "plain",
   kind: "extended-text",
   path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
@@ -340,16 +340,21 @@ const payloadOfItem = (): Payload =>
 
 /**
  * Write a value as JSON, with every `Map` and `Set` written as its entries, so nothing it holds is
- * hidden from a search of the text.
+ * hidden from a search of the text, and every bigint, such as a count, as its decimal digits, which
+ * plain `JSON.stringify` refuses to write.
  *
  * @param value The value.
  * @returns Its JSON text.
  */
 const json = (value: Item | Payload | Redacted): string =>
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- `JSON.stringify` hands its replacer every value the payload holds, of any type; the replacer only looks for a `Map` or a `Set` to write out.
-  JSON.stringify(value, (_key, field: unknown) =>
-    field instanceof Map || field instanceof Set ? [...field] : field,
-  );
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- `JSON.stringify` hands its replacer every value the payload holds, of any type; the replacer only looks for a bigint, a `Map` or a `Set` to write out.
+  JSON.stringify(value, (_key, field: unknown) => {
+    if (Predicate.isBigInt(field)) {
+      return String(field);
+    }
+
+    return field instanceof Map || field instanceof Set ? [...field] : field;
+  });
 
 /**
  * Collect the interaction payloads of a body in document order, inside elements included.
@@ -529,7 +534,7 @@ describe("payload", () => {
       Option.some([{ kind: "text", text: "Which city is the capital of France?" }]),
     );
     assert.strictEqual(capital.cardinality, "single");
-    assert.strictEqual(capital.maxChoices, 1);
+    assert.strictEqual(capital.maxChoices, 1n);
     assert.strictEqual(capital.class, "stacked");
     assert.deepStrictEqual(capital.restore, []);
   });
