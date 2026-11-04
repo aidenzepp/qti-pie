@@ -136,6 +136,7 @@ layer(TestLayer)("xml/canonical.ts", (it) => {
     );
   }
 
+  // These four files are copies of crust's `src/fixtures/dtd/`: no package reads another package's files.
   for (const file of ["markup", "attr-ws", "attlist-nmtokens", "quote"]) {
     it.effect(`fixtures/dtd/${file}.xml canonicalizes to the oracle's bytes`, () =>
       Effect.gen(function* dtdFixture() {
