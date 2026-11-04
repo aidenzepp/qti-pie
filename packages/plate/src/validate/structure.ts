@@ -27,7 +27,7 @@ import {
   xsiNamespace,
 } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
-import { isNcName } from "#plate/model/values.ts";
+import { decimalLexical, doubleLexical, integerLexical, isNcName } from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { patternEquivalents } from "#plate/validate/xsd.ts";
@@ -168,29 +168,6 @@ const whitespaced = (name: BuiltinName, value: string): string => {
 
   return name === "normalizedString" ? value.replaceAll(/[\t\n\r]/gu, " ") : collapse(value);
 };
-
-/**
- * The lexical space of `xs:integer`: an optional sign and ASCII digits, as many as written.
- *
- * @see https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/#integer
- */
-const integerLexical = /^[+-]?[0-9]+$/u;
-
-/**
- * The lexical space of `xs:decimal`: an optional sign and digits with at most one decimal point,
- * at least one digit in all.
- *
- * @see https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/#decimal
- */
-const decimalLexical = /^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/u;
-
-/**
- * The lexical space of `xs:double` in XML Schema 1.0: a decimal with an optional exponent, `INF`,
- * `-INF` or `NaN`.
- *
- * @see https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/#double
- */
-const doubleLexical = /^(?:[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|-?INF|NaN)$/u;
 
 /**
  * The least value of `xs:int`, -2^31.

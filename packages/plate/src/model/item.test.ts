@@ -21,6 +21,7 @@ import type {
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
+import { float } from "#plate/test/fixtures.ts";
 
 /**
  * The path of the item root, which every path in these tests starts with.
@@ -200,18 +201,6 @@ const bg007 = (processing: SourceElement): SourceDocument =>
       ],
     ),
   );
-
-/**
- * A single float value.
- *
- * @param value The number.
- * @returns The value holding it.
- */
-const float = (value: number): Value => ({
-  baseType: "float",
-  cardinality: "single",
-  values: [{ baseType: "float", value }],
-});
 
 /**
  * Set `SCORE` to a float.

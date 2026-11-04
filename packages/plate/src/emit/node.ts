@@ -76,3 +76,17 @@ export const h = (tag: string, props: Attributes, children: readonly Node[] = []
  * @returns The text node holding `value`.
  */
 export const text = (value: string): Text => ({ kind: "text", text: value });
+
+/**
+ * Give attributes only when a condition holds, so a part's attributes read as one object literal.
+ *
+ * @example
+ *   h("input", { type: "radio", ...when(checked, { checked: true }) });
+ *   // an input carrying `checked` exactly when `checked` is true
+ *
+ * @param condition Whether the attributes apply.
+ * @param attributes The attributes.
+ * @returns `attributes`, or none when `condition` is false.
+ */
+export const when = (condition: boolean, attributes: Attributes): Attributes =>
+  condition ? attributes : {};

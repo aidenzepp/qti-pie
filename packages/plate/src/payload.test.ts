@@ -481,7 +481,7 @@ describe("payload", () => {
     }
   });
 
-  it("[Q-2] takes only a redacted item, never an Item", () => {
+  it("refuses a full item in its type", () => {
     assert.isFunction(payloadOfItem);
   });
 

@@ -54,9 +54,11 @@ const controlRemedy = (interaction: string): string =>
     : "To restyle the control use the marker; to replace its behaviour wait for the browser runtime (M3).";
 
 /**
- * A part's replacement that broke the swap invariant, refused at `open`.
+ * A part's replacement that broke the swap invariant, refused when the part is emitted: `render` or
+ * `renderStatus` returns it.
  *
- * It runs on every emit, not only in development, because a replacement is host code that ships.
+ * The check runs on every emit, not only in development, because a replacement is host code that
+ * ships.
  * `detail` names the returned element or the child at fault; the message adds what to change. It is
  * returned through a `Result`, never thrown.
  */

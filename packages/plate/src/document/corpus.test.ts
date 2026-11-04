@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
@@ -5,9 +6,16 @@ import { ConfigProvider, Effect } from "effect";
 import { corpusRoot, readCorpusFile } from "#plate/document/corpus.ts";
 
 /**
- * The scratch folder this file owns, under the package's git-ignored `work/`.
+ * The scratch folder this run owns, under the package's git-ignored `work/`. Its name is new for
+ * each run, so two runs at once never share or remove each other's files.
  */
-const scratch = path.resolve(import.meta.dirname, "..", "..", "work", "corpus-test");
+const scratch = path.resolve(
+  import.meta.dirname,
+  "..",
+  "..",
+  "work",
+  `corpus-test-${randomUUID()}`,
+);
 
 /**
  * The corpus root the tests create, holding `a.xml`.
@@ -36,7 +44,6 @@ const withEnvironment =
     effect.pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(values))));
 
 beforeAll(() => {
-  rmSync(scratch, { force: true, recursive: true });
   mkdirSync(presentRoot, { recursive: true });
   writeFileSync(path.join(presentRoot, "a.xml"), inside);
   // A real file beside the root, so the escape test proves a refusal by path, not by absence.
@@ -71,6 +78,25 @@ describe("document/corpus.ts", () => {
         assert.strictEqual(error.root, missingRoot);
       }
     }),
+  );
+
+  it.effect(
+    "the extraction command's find line ends in an escaped semicolon, as a shell needs",
+    () =>
+      Effect.gen(function* findLine() {
+        const error = yield* Effect.flip(
+          readCorpusFile("x.xml").pipe(withEnvironment({ PLATE_CORPUS_DIR: missingRoot })),
+        );
+
+        assert.strictEqual(error._tag, "CorpusMissing");
+
+        if (error._tag === "CorpusMissing") {
+          const find = error.command.split("\n").find((line) => line.startsWith("find "));
+
+          assert.isDefined(find);
+          assert.isTrue(find?.endsWith(" \\;"), find);
+        }
+      }),
   );
 
   it.effect("a file under the root comes back as its bytes", () =>

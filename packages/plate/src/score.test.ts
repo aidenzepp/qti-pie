@@ -4,12 +4,14 @@ import { encodeRecord } from "#plate/codec/record.ts";
 import type { StoredRecord } from "#plate/codec/record.ts";
 import { configure } from "#plate/configuration.ts";
 import { Malformed } from "#plate/form/encoding.ts";
+import type { PostedBaseType } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
 import type { ChoiceInteraction, Item, TextEntryInteraction } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { render } from "#plate/render.ts";
 import { checkResponses, score } from "#plate/score.ts";
+import { float } from "#plate/test/fixtures.ts";
 import { acceptForTest } from "#plate/validate/verdict.ts";
 
 /**
@@ -23,18 +25,6 @@ const identifiers = (cardinality: Value["cardinality"], ...chosen: readonly stri
   baseType: "identifier",
   cardinality,
   values: chosen.map((value) => ({ baseType: "identifier", value })),
-});
-
-/**
- * Construct a single float value.
- *
- * @param value The number.
- * @returns The value holding it.
- */
-const float = (value: number): Value => ({
-  baseType: "float",
-  cardinality: "single",
-  values: [{ baseType: "float", value }],
 });
 
 /**
@@ -431,7 +421,7 @@ describe("the public surface", () => {
     }),
   );
 
-  it.effect("exports exactly the pure functions, the native-form helpers and the errors", () =>
+  it.effect("exports exactly the author's functions, the native-form helpers and the errors", () =>
     Effect.gen(function* surfaceNames() {
       const surface = yield* Effect.promise(() => import("#plate/index.ts"));
 
@@ -458,6 +448,7 @@ describe("the public surface", () => {
         "encodeRedacted",
         "entryName",
         "h",
+        "isPosted",
         "open",
         "partition",
         "redact",
@@ -465,6 +456,15 @@ describe("the public surface", () => {
         "renderStatus",
         "score",
       ]);
+    }),
+  );
+
+  it.effect("exports isPosted, which narrows a declaration's base type to PostedBaseType", () =>
+    Effect.gen(function* narrowsBaseType() {
+      const surface = yield* Effect.promise(() => import("#plate/index.ts"));
+      const posted: readonly PostedBaseType[] = ["float", "point"].filter(surface.isPosted);
+
+      assert.deepStrictEqual(posted, ["float"]);
     }),
   );
 
