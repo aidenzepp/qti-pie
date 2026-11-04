@@ -967,8 +967,8 @@ const readCompound = (text: string): Compound => {
 /**
  * Read a selector's compounds.
  *
- * It does not descend: a caller reads the selectors of a `:where`, `:is`, `:not` or `:has` by
- * calling `compounds` on each entry of that pseudo-class's `selectors`.
+ * It does not descend into the selectors a `:where`, `:is`, `:not` or `:has` holds;
+ * {@link compoundsDeep} does.
  *
  * @param selector One selector, normalised or not.
  * @returns One compound per compound selector, left to right, the combinators (white space, `>`,

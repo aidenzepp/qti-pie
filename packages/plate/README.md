@@ -44,9 +44,8 @@ Drawn UUIDs and React's `useId()` never collide.
 Start from `redact`: the server keeps the full item `open` accepted, with its correct responses,
 mappings and processing; the browser gets only the HTML `render` makes from `redact`'s item; and
 the server scores the post with `score`. plate does not enforce this split, so a host that sends
-the item itself to the browser sends what redaction removed.
-A host that sends the redacted item itself to a browser sends `encodeRedacted`'s JSON form and
-reads it there with `decodeRedacted`.
+the item itself to the browser sends what redaction removed. A host that sends the redacted item
+itself to a browser sends `encodeRedacted`'s JSON form and reads it there with `decodeRedacted`.
 
 - `open` runs in Node today: the shared reader `@qti-pie/crust` decodes through Node's `Buffer`, so
   `open` throws in a browser.

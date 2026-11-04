@@ -798,7 +798,7 @@ const scoreText = (
  * @param configuration The configuration.
  * @param messages The validation messages.
  * @param posted The strings the post sent, by response.
- * @returns The response.
+ * @returns The page.
  */
 const refusedPage = (
   target: { readonly instance: string; readonly session: Session },
@@ -825,7 +825,7 @@ const refusedPage = (
  * @param target The item's instance and session, after the attempt.
  * @param configuration The configuration, which gives `maxAttempts` (0 means unlimited).
  * @param shown What the page shows.
- * @returns The response.
+ * @returns The page.
  */
 const scoredPage = (
   target: { readonly instance: string; readonly session: Session },
@@ -846,13 +846,14 @@ const scoredPage = (
   );
 
 /**
- * Answer a failure of a read: 404 for a path the corpus does not hold, and a developer error's page
- * when the corpus, a stylesheet or the settings are missing.
+ * Construct the page a route's failure answers with: the 404 page for a path the corpus does not
+ * hold, and a developer error's page when the corpus or a stylesheet is missing or the settings are
+ * missing or invalid.
  *
  * @param error The failure.
- * @returns The response.
+ * @returns The page.
  */
-const corpusFailure = (
+const routeFailure = (
   error:
     | Config.ConfigError
     | CorpusFileUnreadable
@@ -866,7 +867,7 @@ const corpusFailure = (
  *
  * @param playground The playground.
  * @param corpusPath The document's corpus path, as the request named it.
- * @returns The response.
+ * @returns The page.
  */
 const openItem = Effect.fn("playground.openItem")(function* openItem(
   playground: Playground,
@@ -937,7 +938,7 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
  * @param playground The playground.
  * @param request The post.
  * @param target The corpus path and instance token the form's action names.
- * @returns The response.
+ * @returns The page.
  */
 const submit = Effect.fn("playground.submit")(function* submit(
   playground: Playground,
@@ -1045,7 +1046,7 @@ const submit = Effect.fn("playground.submit")(function* submit(
  *
  * @param playground The playground.
  * @param pathname The request path, still percent-encoded.
- * @returns The response.
+ * @returns The asset's response, or the 404 page.
  */
 const serveAsset = Effect.fn("playground.serveAsset")(function* serveAsset(
   playground: Playground,
@@ -1333,7 +1334,7 @@ export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
   return (request) =>
     Effect.runPromise(
       provided(route(playground, request)).pipe(
-        Effect.match({ onFailure: corpusFailure, onSuccess: (outcome) => outcome }),
+        Effect.match({ onFailure: routeFailure, onSuccess: (outcome) => outcome }),
         Effect.flatMap((outcome) => answer(playground, request, outcome)),
         Effect.catchDefect((defect) =>
           answer(
