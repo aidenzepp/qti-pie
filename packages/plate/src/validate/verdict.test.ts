@@ -7,6 +7,7 @@ import {
   entity,
   mathmlNamespace,
   text,
+  xincludeNamespace,
   xmlNamespace,
   xmlnsNamespace,
   xsiNamespace,
@@ -130,6 +131,53 @@ const choiceInteraction = (attributes: readonly SourceAttribute[] = []): SourceE
       el("qti-simple-choice", [attr("identifier", "B")], [text("No")]),
     ],
   );
+
+/**
+ * 1EdTech's `match_correct` response-processing template (`rptemplates/match_correct.xml`), the
+ * root of its own document.
+ */
+const matchCorrect = el(
+  "qti-response-processing",
+  [],
+  [
+    el(
+      "qti-response-condition",
+      [],
+      [
+        el(
+          "qti-response-if",
+          [],
+          [
+            el(
+              "qti-match",
+              [],
+              [
+                el("qti-variable", [attr("identifier", "RESPONSE")]),
+                el("qti-correct", [attr("identifier", "RESPONSE")]),
+              ],
+            ),
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "SCORE")],
+              [el("qti-base-value", [attr("base-type", "float")], [text("1")])],
+            ),
+          ],
+        ),
+        el(
+          "qti-response-else",
+          [],
+          [
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "SCORE")],
+              [el("qti-base-value", [attr("base-type", "float")], [text("0")])],
+            ),
+          ],
+        ),
+      ],
+    ),
+  ],
+);
 
 /**
  * Check a document against the committed tables.
@@ -281,6 +329,75 @@ describe("check", () => {
         { path: `${bodyPath}/p/{${mathmlNamespace}}math`, reason: "mathml" },
       ]);
     }
+  });
+
+  it("leaves an XInclude child unchecked, with no accepted document", () => {
+    const include = el(
+      "include",
+      [attr("href", "x.xml"), attr("parse", "bogus")],
+      [el("div", [], [])],
+      xincludeNamespace,
+    );
+    const verdict = verdictOf(item([body([el("p", [], [include])])]));
+
+    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.isFalse("accepted" in verdict);
+    if (verdict.verdict === "unchecked") {
+      assert.deepStrictEqual(verdict.reasons, [
+        { path: `${bodyPath}/p/{${xincludeNamespace}}include`, reason: "xinclude" },
+      ]);
+    }
+  });
+
+  it("leaves 1EdTech's match_correct template, a processing root, unchecked", () => {
+    const verdict = verdictOf(doc("match_correct.xml", matchCorrect));
+
+    assert.strictEqual(verdict.verdict, "unchecked");
+    if (verdict.verdict === "unchecked") {
+      assert.deepStrictEqual(verdict.reasons, [
+        { path: "qti-response-processing", reason: "root" },
+      ]);
+    }
+  });
+
+  it("leaves an entity reference in a correct response's value unchecked, not refused", () => {
+    const verdict = verdictOf(
+      item([
+        response("identifier", "single", [
+          el("qti-correct-response", [], [el("qti-value", [], [entity("choiceA")])]),
+        ]),
+        body([el("p", [], [text("Hello")])]),
+      ]),
+    );
+
+    assert.strictEqual(verdict.verdict, "unchecked");
+    if (verdict.verdict === "unchecked") {
+      assert.deepStrictEqual(verdict.reasons, [
+        {
+          path: `${root}/qti-response-declaration/qti-correct-response/qti-value`,
+          reason: "entity",
+        },
+      ]);
+    }
+  });
+
+  it("accepts a Choice inside a custom interaction as foreign content, unsupported (reading 6)", () => {
+    const vendor = el(
+      "qti-choice-interaction",
+      [attr("response-identifier", "VENDOR")],
+      [
+        el("qti-simple-choice", [attr("identifier", "A")], [text("Yes")]),
+        el("qti-simple-choice", [attr("identifier", "B")], [text("No")]),
+      ],
+    );
+    const verdict = verdictOf(
+      item([
+        response("identifier", "single"),
+        body([el("qti-custom-interaction", [attr("response-identifier", "RESPONSE")], [vendor])]),
+      ]),
+    );
+
+    assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
   });
 
   it("leaves an entity reference unchecked, in text and in an attribute value", () => {
