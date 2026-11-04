@@ -1,6 +1,14 @@
 import { assert, describe, it } from "@effect/vitest";
 import { h, text } from "#plate/emit/node.ts";
-import { serialise, toHtml, VoidElementChildren } from "#plate/emit/serialise.ts";
+import {
+  EscapableRawTextElementChild,
+  MalformedAttributeName,
+  MalformedTagName,
+  RawTextChildren,
+  serialise,
+  toHtml,
+  VoidElementChildren,
+} from "#plate/emit/serialise.ts";
 
 describe("toHtml", () => {
   it("escapes &, < and > in text", () => {
@@ -14,6 +22,53 @@ describe("toHtml", () => {
     );
   });
 
+  it("escapes < and > in an attribute value", () => {
+    assert.strictEqual(toHtml(h("abbr", { title: "a<b>c" })), '<abbr title="a&lt;b&gt;c"></abbr>');
+  });
+
+  it("writes attribute names that hold hyphens, colons and upper case as they read", () => {
+    assert.strictEqual(
+      toHtml(h("svg", { "aria-hidden": "true", viewBox: "0 0 1 1", "xlink:href": "#a" })),
+      '<svg aria-hidden="true" viewBox="0 0 1 1" xlink:href="#a"></svg>',
+    );
+  });
+
+  it("throws MalformedTagName for a tag that is not a lower-case letter then letters, digits and hyphens", () => {
+    for (const tag of ["", "Div", "1p", "-p", "p q", "p>", "p/", "x:y", "img src=x"]) {
+      assert.throws(() => {
+        toHtml(h(tag, {}));
+      }, MalformedTagName);
+      assert.throws(() => {
+        toHtml(h("div", {}, [h(tag, {})]));
+      }, MalformedTagName);
+    }
+  });
+
+  it("throws MalformedAttributeName for an empty name or one holding whitespace, a quote, >, /, = or a control", () => {
+    const names = [
+      "",
+      "a b",
+      "a\tb",
+      "a\nb",
+      'a"',
+      "a'",
+      "a>",
+      "a/",
+      "a=b",
+      "a\u0000",
+      "a\u007F",
+      "a\u0085",
+    ];
+    for (const name of names) {
+      assert.throws(() => {
+        toHtml(h("p", { [name]: "x" }));
+      }, MalformedAttributeName);
+      assert.throws(() => {
+        toHtml(h("input", { [name]: true }));
+      }, MalformedAttributeName);
+    }
+  });
+
   it("writes a true attribute as its bare name, in key order, and gives a void element no end tag", () => {
     assert.strictEqual(
       toHtml(h("input", { checked: true, type: "radio" })),
@@ -25,6 +80,45 @@ describe("toHtml", () => {
     assert.throws(() => {
       toHtml(h("br", {}, [text("x")]));
     }, VoidElementChildren);
+  });
+
+  it("throws RawTextChildren for any child, text or element, of a raw-text element", () => {
+    const tags = [
+      "iframe",
+      "noembed",
+      "noframes",
+      "noscript",
+      "plaintext",
+      "script",
+      "style",
+      "xmp",
+    ];
+    for (const tag of tags) {
+      for (const child of [text("x"), text(""), h("b", {})]) {
+        assert.throws(() => {
+          toHtml(h(tag, {}, [child]));
+        }, RawTextChildren);
+      }
+    }
+  });
+
+  it("writes a raw-text element with no children as its start and end tags", () => {
+    assert.strictEqual(toHtml(h("script", { src: "a.js" })), '<script src="a.js"></script>');
+  });
+
+  it("throws EscapableRawTextElementChild for an element under textarea or title", () => {
+    for (const tag of ["textarea", "title"]) {
+      assert.throws(() => {
+        toHtml(h(tag, {}, [text("a"), h("b", {}, [text("x")])]));
+      }, EscapableRawTextElementChild);
+    }
+  });
+
+  it("escapes a title's text", () => {
+    assert.strictEqual(
+      toHtml(h("title", {}, [text("a </title> & b")])),
+      "<title>a &lt;/title&gt; &amp; b</title>",
+    );
   });
 
   it("concatenates a nested tree's tags with no whitespace between them", () => {
