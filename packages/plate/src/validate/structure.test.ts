@@ -15,6 +15,7 @@ import {
 import type { SourceAttribute, SourceChild, SourceDocument } from "#plate/document/source.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
 import { checkStructure } from "#plate/validate/structure.ts";
+import { tables as generatedTables } from "#plate/validate/tables.ts";
 import type {
   AttributeTable,
   AttributeType,
@@ -134,15 +135,37 @@ const double = builtin("double");
 const baseType = oneOf("identifier", "integer", "float", "string");
 
 /**
- * A small slice of the QTI tables, hand-built: an item, its declarations with their mappings and
- * tables, and a body with an HTML paragraph, three interactions and the PCI module list.
+ * The type of a count the XSD leaves unbounded.
+ */
+const nonNegative = builtin("nonNegativeInteger");
+
+/**
+ * The type of `figures` on `qti-round-to` and `qti-equal-rounded`: an integer, or an NCName naming
+ * a template variable (XSD:27126-27134).
+ */
+const figuresType: AttributeType = {
+  kind: "union",
+  members: [
+    builtin("integer"),
+    { base: "string", kind: "pattern", pattern: String.raw`[\i-[:]][\c-[:]]*` },
+  ],
+};
+
+/**
+ * A small slice of the QTI tables, hand-built: an item, its declarations with their mappings,
+ * tables and values, its processing, a catalog, and a body with an HTML paragraph and image,
+ * interactions and the PCI module list.
  */
 const tables: Tables = {
   elements: {
+    img: element({
+      anyAttribute: anyLax,
+      attributes: [optional("aria-keyshorts", builtin("string"))],
+    }),
     p: element({
       anyAttribute: anyLax,
       attributes: [optional("id", ncName)],
-      children: qti("qti-text-entry-interaction"),
+      children: qti("qti-gap", "qti-text-entry-interaction"),
       text: true,
     }),
     "qti-assessment-item": element({
@@ -153,15 +176,50 @@ const tables: Tables = {
         optional("time-dependent", builtin("boolean")),
         optional("title", builtin("normalizedString")),
       ],
-      children: qti("qti-item-body", "qti-outcome-declaration", "qti-response-declaration"),
+      children: qti(
+        "qti-catalog-info",
+        "qti-item-body",
+        "qti-outcome-declaration",
+        "qti-response-declaration",
+        "qti-response-processing",
+        "qti-template-processing",
+      ),
     }),
+    "qti-base-value": element({ attributes: [required("base-type", baseType)], text: true }),
+    "qti-card": element({ children: qti("qti-card-entry", "qti-file-href", "qti-html-content") }),
+    "qti-card-entry": element({ children: qti("qti-file-href", "qti-html-content") }),
+    "qti-catalog": element({ attributes: [required("id", ncName)], children: qti("qti-card") }),
+    "qti-catalog-info": element({ children: qti("qti-catalog") }),
     "qti-choice-interaction": element({
       attributes: [
-        optional("max-choices", builtin("nonNegativeInteger")),
+        optional("max-choices", nonNegative),
+        optional("min-choices", nonNegative),
         required("response-identifier", ncName),
       ],
       children: qti("qti-simple-choice"),
     }),
+    "qti-correct-response": element({ children: qti("qti-value") }),
+    "qti-default-value": element({ children: qti("qti-value") }),
+    "qti-extended-text-interaction": element({
+      attributes: [optional("max-strings", nonNegative), required("response-identifier", ncName)],
+    }),
+    "qti-file-href": element({ text: true }),
+    "qti-gap": element({ attributes: [required("identifier", ncName)] }),
+    "qti-gap-match-interaction": element({
+      attributes: [required("response-identifier", ncName)],
+      children: qti("p", "qti-gap-text"),
+    }),
+    "qti-gap-text": element({
+      attributes: [required("identifier", ncName), required("match-max", nonNegative)],
+      children: qti("qti-gap"),
+      text: true,
+    }),
+    "qti-graphic-gap-match-interaction": element({
+      attributes: [required("response-identifier", ncName)],
+      children: qti("qti-gap-text"),
+    }),
+    "qti-html-content": element({ anyElement: anyLax, text: true }),
+    "qti-interaction-markup": element({ anyElement: anyLax, text: true }),
     "qti-interaction-modules": element({
       attributes: [
         optional("primary-configuration", builtin("anyURI")),
@@ -172,9 +230,15 @@ const tables: Tables = {
       children: [
         { local: "math", namespace: mathmlNamespace },
         ...qti(
+          "img",
           "p",
           "qti-choice-interaction",
+          "qti-extended-text-interaction",
+          "qti-gap-match-interaction",
+          "qti-graphic-gap-match-interaction",
           "qti-interaction-modules",
+          "qti-media-interaction",
+          "qti-order-interaction",
           "qti-portable-custom-interaction",
           "qti-slider-interaction",
           "qti-undefined",
@@ -205,27 +269,48 @@ const tables: Tables = {
         required("target-value", builtin("string")),
       ],
     }),
+    "qti-media-interaction": element({
+      attributes: [optional("max-plays", nonNegative), required("response-identifier", ncName)],
+    }),
+    "qti-number-correct": element({ attributes: [optional("section-identifier", ncName)] }),
+    "qti-order-interaction": element({
+      attributes: [optional("min-choices", nonNegative), required("response-identifier", ncName)],
+      children: qti("qti-simple-choice"),
+    }),
     "qti-outcome-declaration": element({
       attributes: [
         optional("base-type", baseType),
         required("cardinality", oneOf("single", "multiple", "ordered", "record")),
         required("identifier", ncName),
         optional("normal-maximum", builtin("double", "0.0")),
+        optional("view", { item: oneOf("author", "candidate", "scorer"), kind: "list" }),
       ],
-      children: qti("qti-match-table"),
+      children: qti("qti-default-value", "qti-match-table"),
     }),
+    "qti-outcome-processing": element({ children: qti("qti-set-outcome-value") }),
     "qti-portable-custom-interaction": element({
       anyAttribute: otherLax,
       anyElement: otherLax,
       attributes: [required("response-identifier", ncName)],
+      children: qti("qti-interaction-markup"),
     }),
+    "qti-repeat": element({ children: qti("qti-base-value", "qti-repeat") }),
     "qti-response-declaration": element({
       attributes: [
         optional("base-type", baseType),
         required("cardinality", oneOf("single", "multiple", "ordered", "record")),
         required("identifier", ncName),
       ],
-      children: qti("qti-mapping"),
+      children: qti("qti-correct-response", "qti-default-value", "qti-mapping"),
+    }),
+    "qti-response-processing": element({ children: qti("qti-set-outcome-value") }),
+    "qti-round-to": element({
+      attributes: [required("figures", figuresType)],
+      children: qti("qti-base-value"),
+    }),
+    "qti-set-outcome-value": element({
+      attributes: [required("identifier", ncName)],
+      children: qti("qti-number-correct", "qti-repeat", "qti-round-to"),
     }),
     "qti-simple-choice": element({ attributes: [required("identifier", ncName)], text: true }),
     "qti-slider-interaction": element({
@@ -235,9 +320,19 @@ const tables: Tables = {
         required("upper-bound", double),
       ],
     }),
-    "qti-text-entry-interaction": element({
-      attributes: [required("response-identifier", ncName)],
+    "qti-template-condition": element({ children: qti("qti-template-if") }),
+    "qti-template-constraint": element({ children: qti("qti-base-value") }),
+    "qti-template-if": element({ children: qti("qti-template-constraint") }),
+    "qti-template-processing": element({
+      children: qti("qti-template-condition", "qti-template-constraint"),
     }),
+    "qti-text-entry-interaction": element({
+      attributes: [
+        optional("expected-length", nonNegative),
+        required("response-identifier", ncName),
+      ],
+    }),
+    "qti-value": element({ text: true }),
   },
 };
 
@@ -333,6 +428,161 @@ const refusedValues = (type: AttributeType, values: readonly string[]): readonly
         elements: { probe: element({ attributes: [optional("value", type)] }) },
       }).length > 0,
   );
+
+/**
+ * Check a document against {@link tables} and keep the first refusal.
+ *
+ * @param source The document.
+ * @param against The tables to check it against.
+ * @returns The first refusal, if any.
+ */
+const first = (source: SourceDocument, against: Tables = tables) =>
+  checkStructure(source, against)[0];
+
+/**
+ * Construct an outcome declaration of base type float with one more attribute.
+ *
+ * @param attribute The attribute under test.
+ * @param children The declaration's children.
+ * @returns The declaration.
+ */
+const outcome = (attribute: SourceAttribute, children: readonly SourceChild[] = []) =>
+  el(
+    "qti-outcome-declaration",
+    [
+      attr("identifier", "SCORE"),
+      attr("cardinality", "single"),
+      attr("base-type", "float"),
+      attribute,
+    ],
+    children,
+  );
+
+/**
+ * Construct a `qti-value` holding a value.
+ *
+ * @param written The value's text.
+ * @returns The element.
+ */
+const value = (written: string) => el("qti-value", [], [text(written)]);
+
+/**
+ * Construct an item whose response processing sets one outcome from the given expression.
+ *
+ * @param expression The expression.
+ * @returns The item as a source document.
+ */
+const processed = (expression: SourceChild): SourceDocument =>
+  item([
+    el(
+      "qti-response-processing",
+      [],
+      [el("qti-set-outcome-value", [attr("identifier", "SCORE")], [expression])],
+    ),
+  ]);
+
+/**
+ * The path of the expression {@link processed} sets.
+ */
+const setOutcome = "qti-assessment-item/qti-response-processing/qti-set-outcome-value";
+
+/**
+ * Construct an item whose catalog holds one card.
+ *
+ * @param children The card's children.
+ * @returns The item as a source document.
+ */
+const carded = (...children: readonly SourceChild[]): SourceDocument =>
+  item([
+    el(
+      "qti-catalog-info",
+      [],
+      [el("qti-catalog", [attr("id", "glossary")], [el("qti-card", [], children)])],
+    ),
+  ]);
+
+/**
+ * The path of the card {@link carded} builds.
+ */
+const card = "qti-assessment-item/qti-catalog-info/qti-catalog/qti-card";
+
+/**
+ * Construct an item whose body holds one PCI with the given children.
+ *
+ * @param children The PCI's children.
+ * @returns The item as a source document.
+ */
+const customInteraction = (...children: readonly SourceChild[]): SourceDocument =>
+  body(el("qti-portable-custom-interaction", [attr("response-identifier", "RESPONSE")], children));
+
+/**
+ * Construct an item with one identifier response declaration whose correct response holds the
+ * given values.
+ *
+ * @param cardinality The declaration's cardinality.
+ * @param values The correct response's children.
+ * @returns The item as a source document.
+ */
+const corrected = (cardinality: string, ...values: readonly SourceChild[]): SourceDocument =>
+  item([
+    el(
+      "qti-response-declaration",
+      [
+        attr("identifier", "RESPONSE"),
+        attr("cardinality", cardinality),
+        attr("base-type", "identifier"),
+      ],
+      [el("qti-correct-response", [], values)],
+    ),
+  ]);
+
+/**
+ * Construct an item with one single float outcome declaration whose default value holds the given
+ * values.
+ *
+ * @param values The default value's children.
+ * @returns The item as a source document.
+ */
+const defaulted = (...values: readonly SourceChild[]): SourceDocument =>
+  item([outcome(attr("normal-maximum", "1"), [el("qti-default-value", [], values)])]);
+
+/**
+ * Construct an item whose body holds one choice interaction with the given `max-choices`.
+ *
+ * @param count The `max-choices` value.
+ * @returns The item as a source document.
+ */
+const choosing = (count: string): SourceDocument =>
+  body(
+    el("qti-choice-interaction", [
+      attr("response-identifier", "RESPONSE"),
+      attr("max-choices", count),
+    ]),
+  );
+
+/**
+ * Construct an item whose response processing rounds to the given `figures`.
+ *
+ * @param figures The `figures` value.
+ * @returns The item as a source document.
+ */
+const rounded = (figures: string): SourceDocument =>
+  processed(el("qti-round-to", [attr("figures", figures)]));
+
+/**
+ * The detail reading 46 gives a `count-range` refusal.
+ *
+ * @param attribute The attribute's name.
+ * @param lexical The value refused.
+ * @returns The detail.
+ */
+const rangeDetail = (attribute: string, lexical: string) => ({
+  attribute,
+  greatest: "9223372036854775807",
+  least: "-9223372036854775808",
+  lexical,
+  reading: "46",
+});
 
 describe("checkStructure", () => {
   describe("the six rules", () => {
@@ -687,6 +937,7 @@ describe("checkStructure", () => {
             attr("data-module", "fractions"),
           ],
           [
+            el("qti-interaction-markup"),
             el(
               "markup",
               [attr("anything", "goes")],
@@ -947,6 +1198,421 @@ describe("checkStructure", () => {
         refusedValues(builtin("double", "0.0"), ["0", "-0", "0.5", "INF", "-1", "-INF", "NaN"]),
         ["-1", "-INF", "NaN"],
       );
+    });
+  });
+
+  describe("readings 16, 17 and 18: the narrowed attributes", () => {
+    it("[I-2] refuses normal-maximum 0, 0.0, -0 and 0e0 as attribute-type, and admits 1 (reading 16)", () => {
+      const path = "qti-assessment-item/qti-outcome-declaration/@normal-maximum";
+
+      for (const zero of ["0", "0.0", "-0", "0e0"]) {
+        const source = item([outcome(attr("normal-maximum", zero))]);
+
+        assert.deepStrictEqual(found(source), [["attribute-type", at(path)]]);
+        assert.strictEqual(first(source)?.detail["reading"], "16");
+      }
+      assert.deepStrictEqual(found(item([outcome(attr("normal-maximum", "1"))])), []);
+    });
+
+    it('[I-2] refuses view="" on an outcome declaration as attribute-type, and admits view="candidate" (reading 17)', () => {
+      const source = item([outcome(attr("view", ""))]);
+
+      assert.deepStrictEqual(found(source), [
+        ["attribute-type", at("qti-assessment-item/qti-outcome-declaration/@view")],
+      ]);
+      assert.strictEqual(first(source)?.detail["reading"], "17");
+      assert.deepStrictEqual(found(item([outcome(attr("view", "candidate"))])), []);
+    });
+
+    it('[I-8] refuses min-choices="0" on an order interaction as attribute-type, and admits it on a choice interaction (reading 18)', () => {
+      const order = body(
+        el("qti-order-interaction", [
+          attr("response-identifier", "RESPONSE"),
+          attr("min-choices", "0"),
+        ]),
+      );
+      const choice = body(
+        el("qti-choice-interaction", [
+          attr("response-identifier", "RESPONSE"),
+          attr("min-choices", "0"),
+        ]),
+      );
+
+      assert.deepStrictEqual(found(order), [
+        [
+          "attribute-type",
+          at("qti-assessment-item/qti-item-body/qti-order-interaction/@min-choices"),
+        ],
+      ]);
+      assert.strictEqual(first(order)?.detail["reading"], "18");
+      assert.deepStrictEqual(found(choice), []);
+    });
+  });
+
+  describe("reading 8: a match table entry's target-value", () => {
+    it("[I-2] does not check target-value against the base-type names the XSD enumerates", () => {
+      const enumerated: Tables = {
+        elements: {
+          ...tables.elements,
+          "qti-match-table-entry": element({
+            attributes: [
+              required("source-value", builtin("int")),
+              required("target-value", {
+                base: "string",
+                kind: "enumeration",
+                values: ["boolean", "float", "identifier", "integer", "string"],
+              }),
+            ],
+          }),
+        },
+      };
+
+      assert.deepStrictEqual(found(item([matched("float", "0.5")]), enumerated), []);
+    });
+  });
+
+  describe("reading 13: data-* names", () => {
+    it("[I-8] refuses data-Foo on a p with an ##any wildcard as unknown-attribute, suggesting data-foo", () => {
+      const source = body(el("p", [attr("data-Foo", "1")]));
+
+      assert.deepStrictEqual(found(source), [
+        ["unknown-attribute", at("qti-assessment-item/qti-item-body/p/@data-Foo")],
+      ]);
+      assert.deepStrictEqual(first(source)?.suggestion, Option.some("data-foo"));
+      assert.deepStrictEqual(first(source)?.detail, {
+        attribute: "data-Foo",
+        element: "p",
+        reading: "13",
+      });
+      assert.deepStrictEqual(found(body(el("p", [attr("data-foo", "1")]))), []);
+    });
+
+    it("[I-8] suggests nothing for a data-* name that lower case does not repair", () => {
+      for (const name of ["data-", "data-É"]) {
+        const source = body(el("p", [attr(name, "1")]));
+
+        assert.strictEqual(first(source)?.rule, "unknown-attribute");
+        assert.deepStrictEqual(first(source)?.suggestion, Option.none());
+      }
+    });
+  });
+
+  describe("readings 22, 23 and 38: placements", () => {
+    it("[I-2] refuses a qti-template-constraint inside qti-template-if as misplaced-element, and still walks it (reading 22)", () => {
+      const constraint =
+        "qti-assessment-item/qti-template-processing/qti-template-condition/qti-template-if/qti-template-constraint";
+      const source = item([
+        el(
+          "qti-template-processing",
+          [],
+          [
+            el(
+              "qti-template-condition",
+              [],
+              [
+                el(
+                  "qti-template-if",
+                  [],
+                  [el("qti-template-constraint", [], [el("qti-base-value")])],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ]);
+
+      assert.deepStrictEqual(found(source), [
+        ["misplaced-element", at(constraint)],
+        ["missing-attribute", at(`${constraint}/qti-base-value`)],
+      ]);
+      assert.strictEqual(first(source)?.detail["reading"], "22");
+      assert.deepStrictEqual(
+        found(item([el("qti-template-processing", [], [el("qti-template-constraint")])])),
+        [],
+      );
+    });
+
+    it("[I-9b] refuses a qti-number-correct in an item's response processing as misplaced-element (reading 23)", () => {
+      const source = processed(el("qti-number-correct"));
+
+      assert.deepStrictEqual(found(source), [
+        ["misplaced-element", at(`${setOutcome}/qti-number-correct`)],
+      ]);
+      assert.strictEqual(first(source)?.detail["reading"], "23");
+    });
+
+    it("admits a qti-number-correct inside qti-outcome-processing (reading 23)", () => {
+      const source = doc(
+        location,
+        el(
+          "qti-outcome-processing",
+          [],
+          [el("qti-set-outcome-value", [attr("identifier", "SCORE")], [el("qti-number-correct")])],
+        ),
+      );
+
+      assert.deepStrictEqual(found(source), []);
+    });
+
+    it("[I-8] refuses a qti-gap outside a qti-gap-match-interaction as misplaced-element (reading 38)", () => {
+      const gap = el("qti-gap", [attr("identifier", "G1")]);
+      const loose = body(el("p", [], [gap]));
+      const graphic = body(
+        el(
+          "qti-graphic-gap-match-interaction",
+          [attr("response-identifier", "RESPONSE")],
+          [el("qti-gap-text", [attr("identifier", "T1"), attr("match-max", "1")], [gap])],
+        ),
+      );
+      const matching = body(
+        el(
+          "qti-gap-match-interaction",
+          [attr("response-identifier", "RESPONSE")],
+          [el("p", [], [gap])],
+        ),
+      );
+
+      assert.deepStrictEqual(found(loose), [
+        ["misplaced-element", at("qti-assessment-item/qti-item-body/p/qti-gap")],
+      ]);
+      assert.strictEqual(first(loose)?.detail["reading"], "38");
+      assert.deepStrictEqual(found(graphic), [
+        [
+          "misplaced-element",
+          at(
+            "qti-assessment-item/qti-item-body/qti-graphic-gap-match-interaction/qti-gap-text/qti-gap",
+          ),
+        ],
+      ]);
+      assert.deepStrictEqual(found(matching), []);
+    });
+  });
+
+  describe("reading 10: both ARIA spellings", () => {
+    it("[A-1] admits aria-keyshorts and aria-keyshortcuts on an img", () => {
+      const source = body(
+        el("img", [attr("aria-keyshorts", "Alt+K"), attr("aria-keyshortcuts", "Alt+K")]),
+      );
+
+      assert.deepStrictEqual(found(source), []);
+    });
+  });
+
+  describe("readings 20, 21 and 31, and single cardinality: child counts", () => {
+    it("[Q-31] refuses a PCI with no qti-interaction-markup, or two, as child-count (reading 20)", () => {
+      const path = "qti-assessment-item/qti-item-body/qti-portable-custom-interaction";
+      const none = customInteraction();
+
+      assert.deepStrictEqual(found(none), [["child-count", at(path)]]);
+      assert.deepStrictEqual(first(none)?.detail, {
+        child: "qti-interaction-markup",
+        element: "qti-portable-custom-interaction",
+        required: "exactly one",
+        source: "reading 20",
+      });
+      assert.deepStrictEqual(
+        found(customInteraction(el("qti-interaction-markup"), el("qti-interaction-markup"))),
+        [["child-count", at(path)]],
+      );
+      assert.deepStrictEqual(
+        found(customInteraction(text("\n  "), el("qti-interaction-markup"))),
+        [],
+      );
+    });
+
+    it("refuses an empty qti-repeat as child-count, counting no text, and admits one with an operand (reading 21)", () => {
+      const empty = processed(el("qti-repeat", [], [text("\n  ")]));
+
+      assert.deepStrictEqual(found(empty), [["child-count", at(`${setOutcome}/qti-repeat`)]]);
+      assert.deepStrictEqual(first(empty)?.detail, {
+        child: "operand",
+        element: "qti-repeat",
+        required: "at least one",
+        source: "reading 21",
+      });
+      assert.deepStrictEqual(
+        found(
+          processed(
+            el(
+              "qti-repeat",
+              [],
+              [el("qti-base-value", [attr("base-type", "integer")], [text("1")])],
+            ),
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("refuses a card or a card entry with no content as child-count (reading 31)", () => {
+      const empty = carded();
+      const emptyEntry = carded(el("qti-card-entry"));
+
+      assert.deepStrictEqual(found(empty), [["child-count", at(card)]]);
+      assert.deepStrictEqual(first(empty)?.detail, {
+        child: "qti-html-content or qti-file-href or qti-card-entry",
+        element: "qti-card",
+        required: "at least one",
+        source: "reading 31",
+      });
+      assert.deepStrictEqual(found(emptyEntry), [["child-count", at(`${card}/qti-card-entry`)]]);
+      assert.deepStrictEqual(first(emptyEntry)?.detail, {
+        child: "qti-html-content or qti-file-href",
+        element: "qti-card-entry",
+        required: "at least one",
+        source: "reading 31",
+      });
+      assert.deepStrictEqual(found(carded(el("qti-html-content", [], [text("A word.")]))), []);
+      assert.deepStrictEqual(
+        found(
+          carded(
+            el("qti-card-entry", [], [el("qti-file-href", [], [text("a.mp3")])]),
+            el("qti-card-entry", [], [el("qti-file-href", [], [text("b.mp3")])]),
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("[I-1] refuses two values in a single response's qti-correct-response as child-count", () => {
+      const two = corrected("single", value("A"), value("B"));
+
+      assert.deepStrictEqual(found(two), [
+        ["child-count", at("qti-assessment-item/qti-response-declaration/qti-correct-response")],
+      ]);
+      assert.deepStrictEqual(first(two)?.detail, {
+        child: "qti-value",
+        element: "qti-correct-response",
+        required: "exactly one",
+        source: "info.txt:73049",
+      });
+      assert.deepStrictEqual(found(corrected("single", value("A"))), []);
+      assert.deepStrictEqual(found(corrected("multiple", value("A"), value("B"))), []);
+    });
+
+    it("[I-2] refuses two values in a single outcome's qti-default-value as child-count", () => {
+      assert.deepStrictEqual(found(defaulted(value("0"), value("1"))), [
+        ["child-count", at("qti-assessment-item/qti-outcome-declaration/qti-default-value")],
+      ]);
+      assert.deepStrictEqual(found(defaulted(value("0"))), []);
+    });
+  });
+
+  describe("reading 46: the count attributes", () => {
+    it("[Q-2] refuses max-choices above 2^63 - 1 as count-range, and admits 2^63 - 1", () => {
+      const over = choosing("9223372036854775808");
+
+      assert.deepStrictEqual(found(over), [
+        [
+          "count-range",
+          at("qti-assessment-item/qti-item-body/qti-choice-interaction/@max-choices"),
+        ],
+      ]);
+      assert.deepStrictEqual(
+        first(over)?.detail,
+        rangeDetail("max-choices", "9223372036854775808"),
+      );
+      assert.deepStrictEqual(found(choosing("9223372036854775807")), []);
+    });
+
+    it("[I-8] refuses max-plays above 2^63 - 1 as count-range", () => {
+      const source = body(
+        el("qti-media-interaction", [
+          attr("response-identifier", "RESPONSE"),
+          attr("max-plays", "9223372036854775808"),
+        ]),
+      );
+
+      assert.deepStrictEqual(found(source), [
+        ["count-range", at("qti-assessment-item/qti-item-body/qti-media-interaction/@max-plays")],
+      ]);
+      assert.deepStrictEqual(
+        first(source)?.detail,
+        rangeDetail("max-plays", "9223372036854775808"),
+      );
+    });
+
+    it("refuses figures below -2^63 as count-range, and admits both bounds and the variable form", () => {
+      const under = rounded("-9223372036854775809");
+
+      assert.deepStrictEqual(found(under), [
+        ["count-range", at(`${setOutcome}/qti-round-to/@figures`)],
+      ]);
+      assert.deepStrictEqual(first(under)?.detail, rangeDetail("figures", "-9223372036854775809"));
+      for (const figures of ["9223372036854775807", "-9223372036854775808", "digits"]) {
+        assert.deepStrictEqual(found(rounded(figures)), []);
+      }
+    });
+
+    it("[Q-20] [Q-5] never refuses expected-length or max-strings for size", () => {
+      const source = body(
+        el(
+          "p",
+          [],
+          [
+            el("qti-text-entry-interaction", [
+              attr("response-identifier", "RESPONSE"),
+              attr("expected-length", "9223372036854775808"),
+            ]),
+          ],
+        ),
+        el("qti-extended-text-interaction", [
+          attr("response-identifier", "ESSAY"),
+          attr("max-strings", "9223372036854775808"),
+        ]),
+      );
+
+      assert.deepStrictEqual(found(source), []);
+    });
+
+    it("refuses every declaration of a reading-46 count in the generated tables above 2^63 - 1", () => {
+      const counts = new Set([
+        "max-choices",
+        "min-choices",
+        "max-associations",
+        "min-associations",
+        "match-max",
+        "match-min",
+        "max-plays",
+        "min-plays",
+        "figures",
+      ]);
+      const declared = Object.entries(generatedTables.elements).flatMap(([name, table]) =>
+        table.attributes
+          .filter((declaration) => declaration.namespace === "" && counts.has(declaration.local))
+          .map((declaration) => [name, declaration.local] as const),
+      );
+
+      // The 37 lines `grep -nE 'name="(max-choices|…|figures)"'` prints over the XSD of 0.1.
+      assert.strictEqual(declared.length, 37);
+      for (const [name, local] of declared) {
+        const ranged = found(
+          doc(location, el(name, [attr(local, "9223372036854775808")])),
+          generatedTables,
+        ).filter(([rule]) => rule === "count-range");
+
+        assert.deepStrictEqual(ranged, [["count-range", at(`${name}/@${local}`)]]);
+      }
+    });
+  });
+
+  describe("the XSD instance attributes", () => {
+    it("[I-0] admits xsi:noNamespaceSchemaLocation on the root and on a body p", () => {
+      const source = item(
+        [
+          el(
+            "qti-item-body",
+            [],
+            [el("p", [attr("noNamespaceSchemaLocation", "local.xsd", xsiNamespace)])],
+          ),
+        ],
+        [
+          attr("noNamespaceSchemaLocation", "imsqti_asiv3p0p1_v1p0.xsd", xsiNamespace),
+          attr("identifier", "item"),
+        ],
+      );
+
+      assert.deepStrictEqual(found(source), []);
     });
   });
 });

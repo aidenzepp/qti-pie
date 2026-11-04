@@ -4,12 +4,16 @@
  *
  * {@link checkStructure} walks the document once from its root, into every QTI-namespace element
  * the tables admit, and returns every refusal it finds in document order, never stopping at the
- * first, so the verdict can collect them beside the prose rules'. It never refuses what the XSD
- * admits (reading 1): namespace declarations, `xsi:schemaLocation`, whitespace between elements,
- * entity references and whatever a wildcard matches all pass. An element a wildcard admits, and an
- * element in another namespace such as MathML, is kept and not walked. Order and counts of
- * children are not checked; the readings that narrow or move what the XSD admits are applied over
- * these rules, not by them.
+ * first, so the verdict can collect them beside the prose rules'. Apart from the readings below, it
+ * never refuses what the XSD admits (reading 1): namespace declarations, `xsi:schemaLocation` and
+ * `xsi:noNamespaceSchemaLocation`, whitespace between elements, entity references and whatever a
+ * wildcard matches all pass. An element a wildcard admits, and an element in another namespace such
+ * as MathML, is kept and not walked.
+ *
+ * Over the XSD's rules it applies the shared readings that set the XSD aside where the walk can see
+ * them, each a row of {@link readingRows}: attributes narrowed or retyped, `data-*` names,
+ * placements, child counts and the range of the count attributes. The XSD's own order and counts of
+ * children are not checked.
  *
  * @module
  */
@@ -285,6 +289,350 @@ const meetsBound = (name: BuiltinName, value: string, bound: string): boolean =>
 };
 
 /**
+ * A reading that narrows an attribute: on the named elements, or on every element whose table
+ * declares it, a value the XSD's own type admits must also satisfy `holds`, which reads the value
+ * collapsed, or it is `attribute-type` with `expected` as the values the reading admits.
+ */
+interface NarrowedAttribute {
+  readonly attribute: string;
+  readonly elements: "declaring" | readonly string[];
+  readonly expected: string;
+  readonly holds: (lexical: string) => boolean;
+  readonly kind: "narrowed-attribute";
+  readonly reading: string;
+}
+
+/**
+ * A reading that retypes an attribute on one element: the XSD's type no longer applies, so its
+ * `attribute-type` check is skipped here, and a prose rule reads the value instead.
+ */
+interface RetypedAttribute {
+  readonly attribute: string;
+  readonly element: string;
+  readonly kind: "retyped-attribute";
+  readonly reading: string;
+}
+
+/**
+ * A reading that refuses attribute names a wildcard would admit: a name in no namespace that starts
+ * with `prefix` and does not match `pattern` is `unknown-attribute`.
+ */
+interface AttributeName {
+  readonly kind: "attribute-name";
+  readonly pattern: RegExp;
+  readonly prefix: string;
+  readonly reading: string;
+}
+
+/**
+ * A reading that places elements the XSD admits more widely: each of `elements` must have
+ * `container` as its parent, or as an ancestor, or it is `misplaced-element`. `requires` says where
+ * it must sit, for the wording.
+ */
+interface Placement {
+  readonly container: string;
+  readonly elements: readonly string[];
+  readonly kind: "placement";
+  readonly reading: string;
+  readonly requires: string;
+  readonly within: "ancestor" | "parent";
+}
+
+/**
+ * A child count the XSD does not hold: when `applies` accepts the parent of one of `elements`, the
+ * number of its child elements that `counted` names (`any` for every child element, else QTI local
+ * names) must not be one `refuses` rejects, or it is `child-count`. `child` and `required` name the
+ * children and the count for the wording, and `source` is the reading or the specification line
+ * that sets it.
+ */
+interface ChildCount {
+  readonly applies: (parent: Option.Option<SourceElement>) => boolean;
+  readonly child: string;
+  readonly counted: "any" | readonly string[];
+  readonly elements: readonly string[];
+  readonly kind: "child-count";
+  readonly refuses: (count: number) => boolean;
+  readonly required: "at least one" | "exactly one";
+  readonly source: string;
+}
+
+/**
+ * A range the XSD leaves unbounded: each of `attributes`, in no namespace, on an element whose
+ * table declares it, whose value the XSD's own type admits and that is an integer after collapse,
+ * must lie from `least` to `greatest`, compared exactly, or it is `count-range`. A value that is
+ * not an integer, such as `figures`' variable form, is not compared.
+ */
+interface CountRange {
+  readonly attributes: readonly string[];
+  readonly greatest: bigint;
+  readonly kind: "count-range";
+  readonly least: bigint;
+  readonly reading: string;
+}
+
+/**
+ * One reading applied over the XSD's rules.
+ */
+type ReadingRow =
+  | AttributeName
+  | ChildCount
+  | CountRange
+  | NarrowedAttribute
+  | Placement
+  | RetypedAttribute;
+
+/**
+ * Accept every parent, for a child count that holds wherever its element sits.
+ *
+ * @returns Always true.
+ */
+const anywhere = (): boolean => true;
+
+/**
+ * The declarations whose `qti-default-value` and `qti-correct-response` hold their values.
+ */
+const declarations: ReadonlySet<string> = new Set([
+  "qti-outcome-declaration",
+  "qti-response-declaration",
+  "qti-template-declaration",
+]);
+
+/**
+ * Report whether a parent is a declaration whose `cardinality` is `single`, compared exactly as
+ * written: the XSD types it as an enumeration of `xs:string`, with no whitespace facet.
+ *
+ * @param parent The parent of a value container.
+ * @returns Whether its values are one value.
+ */
+const isSingleDeclaration = (parent: Option.Option<SourceElement>): boolean =>
+  Option.exists(
+    parent,
+    (declaration) =>
+      declaration.namespace === qtiNamespace &&
+      declarations.has(declaration.local) &&
+      declaration.attributes.some(
+        (attribute) =>
+          attribute.namespace === "" &&
+          attribute.local === "cardinality" &&
+          attribute.value === "single",
+      ),
+  );
+
+/**
+ * The shared readings this module applies over the XSD's rules, one row each (spec §4.13).
+ *
+ * Every refusal a row gives carries the row's reading in its detail, as `reading`, which the
+ * verdict's wording cites; a `child-count` refusal carries `source`, a reading or a specification
+ * line, instead.
+ */
+const readingRows: readonly ReadingRow[] = [
+  // Reading 8 (spec-readings.md:65): a match table entry's `target-value` is a value of the
+  // enclosing outcome's base type, not one of the base-type names the XSD enumerates. The prose
+  // rules' `value-type` reads it; its padding stays reading 7's.
+  {
+    attribute: "target-value",
+    element: "qti-match-table-entry",
+    kind: "retyped-attribute",
+    reading: "8",
+  },
+  // Reading 13 (spec-readings.md:96): a `data-*` name is `data-[a-z0-9_.-]+`, in no namespace,
+  // even where an attribute wildcard would admit any name.
+  { kind: "attribute-name", pattern: /^data-[a-z0-9_.-]+$/u, prefix: "data-", reading: "13" },
+  // Reading 16 (spec-readings.md:116): `normal-maximum` is greater than 0, where the XSD's
+  // `NonNegativeDoubleDType` admits 0. It compares the number, so `0`, `0.0`, `-0` and `0e0` all fail.
+  {
+    attribute: "normal-maximum",
+    elements: ["qti-outcome-declaration"],
+    expected: "a double greater than 0",
+    holds: (lexical) => doubleLexical.test(lexical) && readDouble(lexical) > 0,
+    kind: "narrowed-attribute",
+    reading: "16",
+  },
+  // Reading 17 (spec-readings.md:120): a `view` list holds at least one view, where the XSD's list
+  // admits none.
+  {
+    attribute: "view",
+    elements: "declaring",
+    expected: "a list of at least one view",
+    holds: (lexical) => lexical !== "",
+    kind: "narrowed-attribute",
+    reading: "17",
+  },
+  // Reading 18 (spec-readings.md:123): an order or graphic-order interaction's `min-choices` is at
+  // least 1, where the XSD admits 0. `max-choices="0"` means unlimited, and no count is compared.
+  {
+    attribute: "min-choices",
+    elements: ["qti-graphic-order-interaction", "qti-order-interaction"],
+    expected: "an integer at least 1",
+    holds: (lexical) => integerLexical.test(lexical) && BigInt(lexical) >= 1n,
+    kind: "narrowed-attribute",
+    reading: "18",
+  },
+  // Reading 20 (spec-readings.md:132): a PCI holds exactly one `qti-interaction-markup`, which may
+  // be empty.
+  {
+    applies: anywhere,
+    child: "qti-interaction-markup",
+    counted: ["qti-interaction-markup"],
+    elements: ["qti-portable-custom-interaction"],
+    kind: "child-count",
+    refuses: (count) => count !== 1,
+    required: "exactly one",
+    source: "reading 20",
+  },
+  // Reading 21 (spec-readings.md:137): a `qti-repeat` holds at least one operand, any child
+  // element.
+  {
+    applies: anywhere,
+    child: "operand",
+    counted: "any",
+    elements: ["qti-repeat"],
+    kind: "child-count",
+    refuses: (count) => count === 0,
+    required: "at least one",
+    source: "reading 21",
+  },
+  // Reading 22 (spec-readings.md:141): a `qti-template-constraint` is a direct child of
+  // `qti-template-processing`, where the XSD also admits it in the template conditions' branches.
+  {
+    container: "qti-template-processing",
+    elements: ["qti-template-constraint"],
+    kind: "placement",
+    reading: "22",
+    requires: "a direct child of qti-template-processing",
+    within: "parent",
+  },
+  // Reading 23 (spec-readings.md:145): the eight outcome-only expressions sit inside outcome
+  // processing, so in an item, which holds none, every one is misplaced.
+  {
+    container: "qti-outcome-processing",
+    elements: [
+      "qti-number-correct",
+      "qti-number-incorrect",
+      "qti-number-presented",
+      "qti-number-responded",
+      "qti-number-selected",
+      "qti-outcome-maximum",
+      "qti-outcome-minimum",
+      "qti-test-variables",
+    ],
+    kind: "placement",
+    reading: "23",
+    requires: "inside qti-outcome-processing",
+    within: "ancestor",
+  },
+  // Reading 31 (spec-readings.md:187; `CardDType`, XSD:26089-26104): a card holds at least one of
+  // an HTML content node, file hrefs or card entries.
+  {
+    applies: anywhere,
+    child: "qti-html-content or qti-file-href or qti-card-entry",
+    counted: ["qti-card-entry", "qti-file-href", "qti-html-content"],
+    elements: ["qti-card"],
+    kind: "child-count",
+    refuses: (count) => count === 0,
+    required: "at least one",
+    source: "reading 31",
+  },
+  // Reading 31 again: each card entry holds at least one of an HTML content node or file hrefs.
+  {
+    applies: anywhere,
+    child: "qti-html-content or qti-file-href",
+    counted: ["qti-file-href", "qti-html-content"],
+    elements: ["qti-card-entry"],
+    kind: "child-count",
+    refuses: (count) => count === 0,
+    required: "at least one",
+    source: "reading 31",
+  },
+  // Reading 38 (spec-readings.md:222): a `qti-gap` sits inside a gap-match interaction, which also
+  // refuses one in a graphic gap-match interaction's gap text. Where the reading is silent
+  // (hottext, a gap text holding gaps), nothing is refused.
+  {
+    container: "qti-gap-match-interaction",
+    elements: ["qti-gap"],
+    kind: "placement",
+    reading: "38",
+    requires: "inside a qti-gap-match-interaction",
+    within: "ancestor",
+  },
+  // Reading 46 (spec-readings.md:267): a count attribute holds a signed 64-bit integer, read
+  // exactly: the eight interaction counts, `xs:nonNegativeInteger` in the XSD, and `figures` on
+  // `qti-round-to` and `qti-equal-rounded`, an `xs:integer` or a template variable's name.
+  {
+    attributes: [
+      "figures",
+      "match-max",
+      "match-min",
+      "max-associations",
+      "max-choices",
+      "max-plays",
+      "min-associations",
+      "min-choices",
+      "min-plays",
+    ],
+    greatest: 9_223_372_036_854_775_807n,
+    kind: "count-range",
+    least: -9_223_372_036_854_775_808n,
+    reading: "46",
+  },
+  // Single cardinality is "a single value" (info.txt:73049, the information model's
+  // `CardinalityEnum`), so the default or correct value of a single declaration holds one
+  // `qti-value`, where the XSD admits one or more. Only more than one is refused here: none is the
+  // XSD's own minimum, which the walk leaves unchecked as it leaves every XSD count.
+  {
+    applies: isSingleDeclaration,
+    child: "qti-value",
+    counted: ["qti-value"],
+    elements: ["qti-correct-response", "qti-default-value"],
+    kind: "child-count",
+    refuses: (count) => count > 1,
+    required: "exactly one",
+    source: "info.txt:73049",
+  },
+];
+
+/**
+ * Keep the rows of {@link readingRows} of one kind.
+ *
+ * @param kind The rows' kind.
+ * @returns Those rows, in the table's order.
+ */
+const rowsOf = <K extends ReadingRow["kind"]>(
+  kind: K,
+): readonly Extract<ReadingRow, { kind: K }>[] =>
+  readingRows.filter((row): row is Extract<ReadingRow, { kind: K }> => row.kind === kind);
+
+/**
+ * The rows that narrow an attribute.
+ */
+const narrowedAttributes = rowsOf("narrowed-attribute");
+
+/**
+ * The rows that retype an attribute.
+ */
+const retypedAttributes = rowsOf("retyped-attribute");
+
+/**
+ * The rows that refuse attribute names.
+ */
+const attributeNames = rowsOf("attribute-name");
+
+/**
+ * The rows that place elements.
+ */
+const placements = rowsOf("placement");
+
+/**
+ * The rows that count children.
+ */
+const childCounts = rowsOf("child-count");
+
+/**
+ * The rows that bound counts.
+ */
+const countRanges = rowsOf("count-range");
+
+/**
  * Report whether an attribute's type admits a value.
  *
  * A built-in, an enumeration and a pattern apply their built-in's whitespace first. A list
@@ -413,14 +761,16 @@ const attributeName = (attribute: Pick<SourceAttribute, "local" | "namespace">):
 
 /**
  * Report whether an attribute is one the XSD admits on every element without declaring it: a
- * namespace declaration, which the shared reader returns as an attribute, or `xsi:schemaLocation`.
+ * namespace declaration, which the shared reader returns as an attribute, `xsi:schemaLocation` or
+ * `xsi:noNamespaceSchemaLocation`.
  *
  * @param attribute The attribute.
  * @returns Whether it is always allowed.
  */
 const isAllowance = (attribute: SourceAttribute): boolean =>
   attribute.namespace === xmlnsNamespace ||
-  (attribute.namespace === xsiNamespace && attribute.local === "schemaLocation");
+  (attribute.namespace === xsiNamespace &&
+    (attribute.local === "schemaLocation" || attribute.local === "noNamespaceSchemaLocation"));
 
 /**
  * Look up an element's table, only among the tables' own keys.
@@ -526,16 +876,36 @@ const refuse = (
   });
 
 /**
- * Check one attribute the element's table does not declare: allowed when the element's attribute
- * wildcard matches its namespace, and otherwise `unknown-attribute`, with the misspelling table's
- * suggestion when a row matches.
+ * Find the {@link readingRows} row that refuses an attribute's name, if any.
+ *
+ * @param attribute The attribute.
+ * @returns The row whose prefix the name starts with and whose pattern it does not match.
+ */
+const misnamed = (attribute: SourceAttribute): Option.Option<AttributeName> =>
+  Option.fromUndefinedOr(
+    attributeNames.find(
+      (row) =>
+        attribute.namespace === "" &&
+        attribute.local.startsWith(row.prefix) &&
+        !row.pattern.test(attribute.local),
+    ),
+  );
+
+/**
+ * Check one attribute the element's table does not declare.
+ *
+ * When the element's attribute wildcard matches its namespace it is allowed, unless a reading
+ * refuses its name: then it is `unknown-attribute`, suggesting the name in lower case when that
+ * name passes. Otherwise it is `unknown-attribute`, with the misspelling table's suggestion when a
+ * row matches.
  *
  * @param source The document.
  * @param element The attribute's element.
  * @param path The element's path.
  * @param table The element's table.
  * @param attribute The undeclared attribute.
- * @returns The refusal, or none when the wildcard admits the attribute.
+ * @returns The refusal, or none when the wildcard admits the attribute and no reading refuses
+ *   its name.
  */
 const checkUndeclared = (
   source: SourceDocument,
@@ -544,11 +914,19 @@ const checkUndeclared = (
   table: ElementTable,
   attribute: SourceAttribute,
 ): Option.Option<Refusal> => {
+  const detail = { attribute: attributeName(attribute), element: elementName(element) };
   if (table.anyAttribute !== undefined && wildcardAdmits(table.anyAttribute, attribute.namespace)) {
-    return Option.none();
+    return Option.map(misnamed(attribute), (row) =>
+      refuse(
+        source,
+        "unknown-attribute",
+        attributePath(path, attribute),
+        { ...detail, reading: row.reading },
+        Option.liftPredicate(attribute.local.toLowerCase(), (lower) => row.pattern.test(lower)),
+      ),
+    );
   }
 
-  const detail = { attribute: attributeName(attribute), element: elementName(element) };
   const row = misspellings.find(
     (candidate) =>
       element.namespace === qtiNamespace &&
@@ -571,20 +949,194 @@ const checkUndeclared = (
 };
 
 /**
+ * Check a declared attribute's value: against the XSD's type, unless a reading retypes it, and then
+ * against the readings that narrow it and the count ranges.
+ *
+ * @param source The document.
+ * @param element The attribute's element.
+ * @param path The element's path.
+ * @param type The attribute's type, as its declaration gives it.
+ * @param attribute The attribute, whose value holds no unexpanded entity reference.
+ * @returns Its `attribute-type` and `count-range` refusals.
+ */
+const checkValue = (
+  source: SourceDocument,
+  element: SourceElement,
+  path: string,
+  type: AttributeType,
+  attribute: SourceAttribute,
+): readonly Refusal[] => {
+  const name = attributeName(attribute);
+  const local = attribute.namespace === "" && element.namespace === qtiNamespace;
+  const retyped = retypedAttributes.some(
+    (row) => local && row.element === element.local && row.attribute === attribute.local,
+  );
+  if (retyped) {
+    return [];
+  }
+
+  const at = attributePath(path, attribute);
+  const detail = { attribute: name, element: elementName(element), value: attribute.value };
+  if (!admits(type, attribute.value)) {
+    return [refuse(source, "attribute-type", at, { ...detail, expected: describeType(type) })];
+  }
+
+  const lexical = collapse(attribute.value);
+  const narrowed = narrowedAttributes
+    .filter(
+      (row) =>
+        local &&
+        row.attribute === attribute.local &&
+        (row.elements === "declaring" || row.elements.includes(element.local)) &&
+        !row.holds(lexical),
+    )
+    .map((row) =>
+      refuse(source, "attribute-type", at, {
+        ...detail,
+        expected: row.expected,
+        reading: row.reading,
+      }),
+    );
+  const ranged = countRanges
+    .filter(
+      (row) =>
+        attribute.namespace === "" &&
+        row.attributes.includes(attribute.local) &&
+        integerLexical.test(lexical) &&
+        (BigInt(lexical) < row.least || BigInt(lexical) > row.greatest),
+    )
+    .map((row) =>
+      refuse(source, "count-range", at, {
+        attribute: name,
+        greatest: row.greatest.toString(),
+        least: row.least.toString(),
+        lexical,
+        reading: row.reading,
+      }),
+    );
+
+  return [...narrowed, ...ranged];
+};
+
+/**
+ * Report whether an element sits where a placement row requires.
+ *
+ * @param row The placement.
+ * @param element The element, one of the row's.
+ * @param parents Each walked element's parent.
+ * @returns Whether its parent, or one of its ancestors, is the row's container.
+ */
+const isPlaced = (
+  row: Placement,
+  element: SourceElement,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+): boolean => {
+  if (row.within === "ancestor") {
+    return Option.isSome(enclosing(element, row.container, parents));
+  }
+
+  const parent = parents.get(element);
+
+  return parent?.namespace === qtiNamespace && parent.local === row.container;
+};
+
+/**
+ * Count the child elements of an element that a child-count row names; text is not a child.
+ *
+ * @param row The child count.
+ * @param element The element.
+ * @returns How many of its child elements the row counts.
+ */
+const countChildren = (row: ChildCount, element: SourceElement): number =>
+  element.children.filter(
+    (child) =>
+      child.kind === "element" &&
+      (row.counted === "any" ||
+        (child.namespace === qtiNamespace && row.counted.includes(child.local))),
+  ).length;
+
+/**
+ * Check one element against the placement rows that name it.
+ *
+ * @param source The document.
+ * @param element The element.
+ * @param path The element's path.
+ * @param parents Each walked element's parent.
+ * @returns Its `misplaced-element` refusals.
+ */
+const checkPlacement = (
+  source: SourceDocument,
+  element: SourceElement,
+  path: string,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+): readonly Refusal[] =>
+  placements
+    .filter(
+      (row) =>
+        element.namespace === qtiNamespace &&
+        row.elements.includes(element.local) &&
+        !isPlaced(row, element, parents),
+    )
+    .map((row) =>
+      refuse(source, "misplaced-element", path, {
+        element: elementName(element),
+        reading: row.reading,
+        requires: row.requires,
+      }),
+    );
+
+/**
+ * Check one element against the child-count rows that name it.
+ *
+ * @param source The document.
+ * @param element The element.
+ * @param path The element's path.
+ * @param parents Each walked element's parent.
+ * @returns Its `child-count` refusals.
+ */
+const checkChildCounts = (
+  source: SourceDocument,
+  element: SourceElement,
+  path: string,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+): readonly Refusal[] => {
+  const parent = Option.fromUndefinedOr(parents.get(element));
+
+  return childCounts
+    .filter(
+      (row) =>
+        element.namespace === qtiNamespace &&
+        row.elements.includes(element.local) &&
+        row.applies(parent) &&
+        row.refuses(countChildren(row, element)),
+    )
+    .map((row) =>
+      refuse(source, "child-count", path, {
+        child: row.child,
+        element: elementName(element),
+        required: row.required,
+        source: row.source,
+      }),
+    );
+};
+
+/**
  * Check the attributes and the text of one element the walk admitted.
  *
  * A required attribute that is absent is `missing-attribute` at the element. A declared attribute
- * is checked for `attribute-type` and `padded-attribute`, unless its value holds an unexpanded
- * entity reference, whose value is unknown. An undeclared one goes to {@link checkUndeclared}.
- * Non-whitespace text in an element whose table admits none is `text-not-allowed`.
+ * goes to {@link checkValue} and is checked for `padded-attribute`, unless its value holds an
+ * unexpanded entity reference, whose value is unknown. An undeclared one goes to
+ * {@link checkUndeclared}. Non-whitespace text in an element whose table admits none is
+ * `text-not-allowed`. The placement and child-count rows go to {@link checkPlacement} and
+ * {@link checkChildCounts}.
  *
  * @param source The document.
  * @param element The element.
  * @param path The element's path.
  * @param table The element's table.
  * @param parents Each walked element's parent, for the declaration a padded value reads.
- * @returns The element's refusals: missing attributes, then each attribute's in document order,
- *   then its text.
+ * @returns The element's refusals: its placement, missing attributes, then each attribute's in
+ *   document order, then its text, then its child counts.
  */
 const checkElement = (
   source: SourceDocument,
@@ -593,7 +1145,7 @@ const checkElement = (
   table: ElementTable,
   parents: ReadonlyMap<SourceElement, SourceElement>,
 ): readonly Refusal[] => {
-  const refusals: Refusal[] = [];
+  const refusals: Refusal[] = [...checkPlacement(source, element, path, parents)];
   const name = elementName(element);
   const declared = table.attributes.filter((declaration) => declaration.use !== "prohibited");
 
@@ -630,21 +1182,14 @@ const checkElement = (
       continue;
     }
 
-    const detail = { attribute: attributeName(attribute), element: name, value: attribute.value };
-    if (!admits(declaration.type, attribute.value)) {
-      refusals.push(
-        refuse(source, "attribute-type", attributePath(path, attribute), {
-          ...detail,
-          expected: describeType(declaration.type),
-        }),
-      );
-    }
-
+    refusals.push(...checkValue(source, element, path, declaration.type, attribute));
     if (isPadded(element, attribute, parents)) {
       refusals.push(
         refuse(source, "padded-attribute", attributePath(path, attribute), {
-          ...detail,
+          attribute: attributeName(attribute),
+          element: name,
           reading: "7",
+          value: attribute.value,
         }),
       );
     }
@@ -657,7 +1202,7 @@ const checkElement = (
     refusals.push(refuse(source, "text-not-allowed", path, { element: name }));
   }
 
-  return refusals;
+  return [...refusals, ...checkChildCounts(source, element, path, parents)];
 };
 
 /**
@@ -725,9 +1270,10 @@ const admit = (
  *
  * The walk starts at the root and enters every QTI-namespace element the tables admit. It refuses
  * `unknown-element`, `unknown-attribute`, `missing-attribute`, `attribute-type`,
- * `padded-attribute` and `text-not-allowed`, each at the path of the element or attribute at fault,
- * and does not enter an element it refuses. A document whose root is outside the QTI namespace
- * yields nothing here: that is the verdict's `not-qti-root`.
+ * `padded-attribute` and `text-not-allowed`, and the readings' `misplaced-element`, `child-count`
+ * and `count-range`, each at the path of the element or attribute at fault. It does not enter an
+ * element it refuses as unknown, and does enter a misplaced one. A document whose root is outside
+ * the QTI namespace yields nothing here: that is the verdict's `not-qti-root`.
  *
  * @param source The document, as the reader adapter built it.
  * @param tables The tables generated from the QTI XSD.
