@@ -1,12 +1,22 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
-import { emitItem } from "#plate/emit/item.ts";
+import { Effect, Option } from "effect";
+import { emitItem, emitStatus } from "#plate/emit/item.ts";
+import type { StatusInput } from "#plate/emit/item.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { resolveOverrides, rowFor, scopedId } from "#plate/emit/parts.ts";
 import type { PartOverrides } from "#plate/emit/parts.ts";
-import type { EmitState, Payload } from "#plate/payload.ts";
-import { checkTree } from "#plate/test/accessibility.ts";
+import { message } from "#plate/messages.ts";
+import type { Item, TextEntryInteraction } from "#plate/model/item.ts";
+import { identifyMessages, payload, redactItem } from "#plate/payload.ts";
+import type {
+  EmitState,
+  InteractionPayload,
+  Payload,
+  PayloadNode,
+  ValidationMessage,
+} from "#plate/payload.ts";
+import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
 
 /**
@@ -153,5 +163,301 @@ describe("emitItem", () => {
         assert.isTrue(roundTrips(root));
       }
     }),
+  );
+});
+
+/**
+ * The messages of a refused post: two for `CITY` around one for `RIVER`, so each response counts
+ * its own messages.
+ */
+const refusals: readonly ValidationMessage[] = [
+  { response: "CITY", text: "Enter a city." },
+  { response: "RIVER", text: "Name a river." },
+  { response: "CITY", text: "Use letters only." },
+];
+
+/**
+ * The Status inputs of the three after-submit states: a score, a refused post's messages, and a
+ * response recorded with no processing.
+ */
+const scored: StatusInput = { heading: "scored", instance, score: "1" };
+
+const notAccepted: StatusInput = { heading: "notAccepted", instance, messages: refusals };
+
+const recorded: StatusInput = { heading: "responseRecorded", instance };
+
+const statuses: readonly StatusInput[] = [scored, notAccepted, recorded];
+
+/**
+ * Give an element child of a part, which the test expects to be there.
+ *
+ * @param parent The part.
+ * @param index The child's position.
+ * @returns The child.
+ * @throws {Error} When the child is missing or a text node, a failure of the emitter under test.
+ */
+const elementAt = (parent: Element, index: number): Element => {
+  const child = parent.children[index];
+  if (child?.kind !== "element") {
+    throw new Error(`Expected an element at child ${index} of a ${parent.tag}.`);
+  }
+
+  return child;
+};
+
+/**
+ * Collect the elements of a subtree that carry an attribute, its root included.
+ *
+ * @param node The subtree's root.
+ * @param name The attribute.
+ * @returns Every element at or below `node` that carries `name`.
+ */
+const carrying = (node: Node, name: string): readonly Element[] =>
+  node.kind === "text"
+    ? []
+    : [
+        ...(node.attrs[name] === undefined ? [] : [node]),
+        ...node.children.flatMap((child) => carrying(child, name)),
+      ];
+
+/**
+ * Construct an unnamed Text Entry bound to a single string response.
+ *
+ * @param response The response it binds.
+ * @returns The interaction.
+ */
+const textEntry = (response: string): TextEntryInteraction => ({
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  base: 10,
+  baseType: "string",
+  class: "",
+  expectedLength: Option.none(),
+  kind: "text-entry",
+  path: `qti-assessment-item/qti-item-body/p/qti-text-entry-interaction[${response}]`,
+  patternMaskMessage: Option.none(),
+  placeholder: Option.none(),
+  response,
+});
+
+/**
+ * A hand-built item whose one paragraph holds a Text Entry for `CITY` and one for `RIVER`.
+ */
+const rivers: Item = {
+  body: [
+    {
+      attributes: [],
+      children: [textEntry("CITY"), { kind: "text", text: " on the " }, textEntry("RIVER")],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p",
+      tag: "p",
+    },
+  ],
+  document: "items/rivers.xml",
+  identifier: "rivers",
+  lang: Option.none(),
+  outcomes: new Map(),
+  processing: Option.none(),
+  responses: new Map(
+    ["CITY", "RIVER"].map((identifier) => [
+      identifier,
+      {
+        baseType: "string",
+        cardinality: "single",
+        correct: Option.none(),
+        defaultValue: Option.none(),
+        identifier,
+        mapping: Option.none(),
+      },
+    ]),
+  ),
+  title: "Rivers",
+  unsupported: [],
+};
+
+/**
+ * Collect the interaction payloads of payload nodes in document order.
+ *
+ * @param nodes The payload's body nodes.
+ * @returns Every interaction at or below them.
+ */
+const interactionsIn = (nodes: readonly PayloadNode[]): readonly InteractionPayload[] =>
+  nodes.flatMap((node) => {
+    switch (node.kind) {
+      case "element": {
+        return interactionsIn(node.children);
+      }
+      case "notice":
+      case "text": {
+        return [];
+      }
+      case "choice":
+      case "extended-text":
+      case "text-entry": {
+        return [node];
+      }
+      default: {
+        return node satisfies never;
+      }
+    }
+  });
+
+describe("emitStatus", () => {
+  it.effect(
+    "[I-0] the region's heading is at the base level, reads the state's text, and names it",
+    () =>
+      Effect.gen(function* statusHeading() {
+        const state = yield* stateWith();
+        for (const input of statuses) {
+          const status = yield* emitStatus(input, state);
+          const heading = elementAt(status, 0);
+          const headingRow = rowFor("item", "statusHeading", { headingLevel: state.headingLevel });
+          assert.strictEqual(status.tag, rowFor("item", "status").element);
+          assert.strictEqual(status.attrs["data-slot"], rowFor("item", "status").slot);
+          assert.strictEqual(status.attrs["id"], scopedId(instance, "status"));
+          assert.strictEqual(status.attrs["role"], "status");
+          assert.strictEqual(status.attrs["tabindex"], "-1");
+          assert.strictEqual(heading.tag, "h2");
+          assert.strictEqual(heading.tag, headingRow.element);
+          assert.strictEqual(heading.attrs["data-slot"], headingRow.slot);
+          assert.strictEqual(status.attrs["aria-labelledby"], heading.attrs["id"]);
+          assert.strictEqual(textOf(heading), message("en", input.heading));
+          assert.strictEqual(nameOf(status, status), message("en", input.heading));
+        }
+      }),
+  );
+
+  it.effect("[I-0] autofocus is on the Status region exactly when the input asks for it", () =>
+    Effect.gen(function* statusAutofocus() {
+      const state = yield* stateWith();
+      for (const input of statuses) {
+        const absent = yield* emitStatus(input, state);
+        const declined = yield* emitStatus({ ...input, autofocus: false }, state);
+        const asked = yield* emitStatus({ ...input, autofocus: true }, state);
+        assert.deepStrictEqual(carrying(absent, "autofocus"), []);
+        assert.deepStrictEqual(carrying(declined, "autofocus"), []);
+        assert.deepStrictEqual(carrying(asked, "autofocus"), [asked]);
+        assert.strictEqual(asked.attrs["autofocus"], true);
+      }
+    }),
+  );
+
+  it.effect(
+    "[I-0] a scored input shows the score, a refused one a Message per message, a recorded one its text",
+    () =>
+      Effect.gen(function* statusDetail() {
+        const state = yield* stateWith();
+
+        const score = yield* emitStatus(scored, state);
+        assert.strictEqual(score.children.length, 2);
+        assert.strictEqual(textOf(elementAt(score, 1)), message("en", "score", { score: "1" }));
+
+        const refused = yield* emitStatus(notAccepted, state);
+        const list = elementAt(refused, 1);
+        assert.strictEqual(refused.children.length, 2);
+        assert.strictEqual(list.tag, rowFor("item", "messages").element);
+        assert.strictEqual(list.attrs["data-slot"], rowFor("item", "messages").slot);
+        assert.deepStrictEqual(
+          list.children.map((_, index) => {
+            const item = elementAt(list, index);
+
+            return [item.tag, item.attrs["data-slot"], textOf(item)];
+          }),
+          refusals.map((entry) => [
+            rowFor("item", "message").element,
+            rowFor("item", "message").slot,
+            entry.text,
+          ]),
+        );
+
+        const response = yield* emitStatus(recorded, state);
+        assert.strictEqual(response.children.length, 2);
+        assert.strictEqual(textOf(elementAt(response, 1)), message("en", "responseRecorded"));
+
+        const both = yield* emitStatus({ ...scored, messages: refusals }, state);
+        assert.strictEqual(both.children.length, 2);
+        assert.strictEqual(textOf(elementAt(both, 1)), message("en", "score", { score: "1" }));
+      }),
+  );
+
+  it.effect(
+    "[I-0] each Message id is the one identifyMessages gives, which the payload writes into its Control's messageIds",
+    () =>
+      Effect.gen(function* statusMessageIds() {
+        const state = yield* stateWith();
+        const list = elementAt(yield* emitStatus(notAccepted, state), 1);
+        const ids = list.children.map((_, index) => String(elementAt(list, index).attrs["id"]));
+        assert.deepStrictEqual(
+          ids,
+          identifyMessages(instance, refusals).map((entry) => entry.id),
+        );
+
+        const built = payload(redactItem(rivers), {
+          finished: false,
+          instance,
+          locale: "en",
+          messages: refusals,
+          names: new Map(),
+          posted: Option.none(),
+          values: new Map(),
+        });
+        const controls = interactionsIn(built.body);
+        assert.deepStrictEqual(
+          controls.map((control) => control.response),
+          ["CITY", "RIVER"],
+        );
+        for (const control of controls) {
+          assert.deepStrictEqual(
+            control.messageIds,
+            ids.filter((_, index) => refusals[index]?.response === control.response),
+          );
+        }
+      }),
+  );
+
+  it.effect("[I-0] the region holds no form and no button", () =>
+    Effect.gen(function* statusChrome() {
+      const state = yield* stateWith();
+      for (const input of statuses) {
+        const status = yield* emitStatus({ ...input, autofocus: true }, state);
+        assert.notInclude(tagsIn(status), "form");
+        assert.notInclude(tagsIn(status), "button");
+      }
+    }),
+  );
+
+  it.effect(
+    "[I-0] a Status swapped to a div keeps its id, role, aria-labelledby and tabindex (I1)",
+    () =>
+      Effect.gen(function* swappedStatus() {
+        const state = yield* stateWith({ item: { status: hostPart("div") } });
+        const status = yield* emitStatus({ ...scored, autofocus: true }, state);
+        assert.strictEqual(status.tag, "div");
+        assert.strictEqual(status.attrs["class"], "host");
+        assert.strictEqual(status.attrs["id"], scopedId(instance, "status"));
+        assert.strictEqual(status.attrs["role"], "status");
+        assert.strictEqual(status.attrs["tabindex"], "-1");
+        assert.strictEqual(status.attrs["autofocus"], true);
+        assert.strictEqual(status.attrs["aria-labelledby"], elementAt(status, 0).attrs["id"]);
+      }),
+  );
+
+  it.effect(
+    "[I-0] each region round-trips, and passes checkTree at base level 2 placed first in the Root",
+    () =>
+      Effect.gen(function* checkedStatus() {
+        const state = yield* stateWith();
+        for (const input of statuses) {
+          for (const status of [
+            yield* emitStatus(input, state),
+            yield* emitStatus({ ...input, autofocus: true }, state),
+          ]) {
+            const root = yield* emitItem(payloadOf(false), state, [status, ...body()]);
+            assert.deepStrictEqual(checkTree(root, { baseLevel: 2 }), []);
+            assert.isTrue(roundTrips(status));
+            assert.isTrue(roundTrips(root));
+          }
+        }
+      }),
   );
 });
