@@ -61,6 +61,7 @@ const response: ResponseDeclaration = {
   baseType: "identifier",
   cardinality: "single",
   correct: Option.some(identifierValue("true")),
+  defaultValue: Option.none(),
   identifier: "RESPONSE",
   mapping: Option.none(),
 };
