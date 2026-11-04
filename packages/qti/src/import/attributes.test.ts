@@ -8,8 +8,8 @@ import * as attributes from "#qti/schema/attributes.ts";
 import { DocumentId, HtmlId, ItemBodyId, PrintedVariableId } from "#qti/schema/document.ts";
 import { AttributeLexical, Tree } from "#qti/schema/node.ts";
 import type { NodeKindHandle, RootKindHandle } from "#qti/schema/node.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";
 

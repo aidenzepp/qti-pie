@@ -2,9 +2,9 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
 import { materializeCorpus } from "#qti/test/fixtures.ts";
-import { canonicalize } from "#qti/xml/canonical.ts";
+import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { OracleLayer, xmllintC14n } from "#qti/xml/oracle.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
  * Whether the operator asked for the corpus run: it reads 28 packages and spawns `xmllint` once

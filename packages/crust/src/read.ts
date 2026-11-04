@@ -1,11 +1,11 @@
 import { Effect, Option } from "effect";
 import { SaxesParser } from "saxes";
 import type { SaxesAttributeNS } from "saxes";
-import { decode } from "#qti/xml/decode.ts";
-import type { Decoded } from "#qti/xml/decode.ts";
-import { NAME_CHAR, NAME_START, lexProlog, substitute } from "#qti/xml/dtd.ts";
-import type { AttlistEntry, Prolog, Substituted } from "#qti/xml/dtd.ts";
-import { ReaderRefusal, WellFormednessError } from "#qti/xml/errors.ts";
+import { decode } from "#crust/decode.ts";
+import type { Decoded } from "#crust/decode.ts";
+import { NAME_CHAR, NAME_START, lexProlog, substitute } from "#crust/dtd.ts";
+import type { AttlistEntry, Prolog, Substituted } from "#crust/dtd.ts";
+import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
 import type {
   Attribute,
   AttributeReference,
@@ -14,7 +14,7 @@ import type {
   EntityRef,
   Misc,
   XmlDocument,
-} from "#qti/xml/tree.ts";
+} from "#crust/tree.ts";
 
 /**
  * An element whose start tag has been read and whose end tag has not.

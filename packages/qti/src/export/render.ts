@@ -43,7 +43,7 @@ import {
   vocabularies,
   Ws,
 } from "#qti/schema/node.ts";
-import type { Attribute, Child, Misc, XmlDocument } from "#qti/xml/tree.ts";
+import type { Attribute, Child, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 

@@ -16,7 +16,7 @@ import type {
 import * as asi from "#qti/schema/kinds/asi.ts";
 import * as xi from "#qti/schema/kinds/xi.ts";
 import { ncName, xsDouble, xsInteger } from "#qti/schema/patterns.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * The braced reference of `qti-pattern-match`'s `pattern`: an NCName between braces, as the

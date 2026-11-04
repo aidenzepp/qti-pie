@@ -123,7 +123,7 @@ import {
   StandardTemplateReference,
 } from "#qti/schema/processing.ts";
 import * as values from "#qti/schema/value.ts";
-import type { Element, XmlDocument } from "#qti/xml/tree.ts";
+import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
  * One node of a tree: its id, its kind and the ancestry it sits in.

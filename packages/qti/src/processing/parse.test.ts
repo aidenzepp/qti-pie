@@ -16,8 +16,8 @@ import {
   parseProcessing,
   patternOrRef,
 } from "#qti/processing/parse.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * The four committed trees, relative to `packages/qti`, where the tests run.

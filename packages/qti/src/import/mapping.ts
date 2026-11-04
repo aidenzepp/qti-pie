@@ -26,7 +26,7 @@ import type { BaseType } from "#qti/schema/declaration.ts";
 import * as mapping from "#qti/schema/mapping.ts";
 import { Edge } from "#qti/schema/node.ts";
 import type { AttributeNameHandle } from "#qti/schema/node.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 type BaseTypeHandle = (typeof BaseType.handles)[number];
 

@@ -7,7 +7,7 @@ import { itemRows } from "#qti/import/item.ts";
 import { Rows } from "#qti/import/tree.ts";
 import * as attributed from "#qti/schema/expression-attributes.ts";
 import { AttributeLexical } from "#qti/schema/node.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
  * The committed processing fixture whose attributes are padded, relative to `packages/qti`, where

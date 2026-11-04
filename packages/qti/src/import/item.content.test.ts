@@ -4,7 +4,7 @@ import { itemRows } from "#qti/import/item.ts";
 import { ruleOfError } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import { Img } from "#qti/schema/html.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
  * Run `itemRows` over an inline 3.0.1 item whose body is one paragraph holding `img`.

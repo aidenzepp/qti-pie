@@ -10,7 +10,7 @@ import { documentLangRows, itemRows, standardTemplate } from "#qti/import/item.t
 import { manifestRows } from "#qti/import/manifest.ts";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import { renderTree } from "#qti/export/render.ts";
-import { canonicalize } from "#qti/xml/canonical.ts";
+import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { ItemRefusal, Rows, UnmodeledVocabulary, withParents } from "#qti/import/tree.ts";
 import type { NodeIndex } from "#qti/import/tree.ts";
 import {
@@ -91,7 +91,7 @@ import * as value from "#qti/schema/value.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
 import { materialize } from "#qti/test/fixtures.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 const packageId = "22222222-2222-4222-8222-222222222222";
 

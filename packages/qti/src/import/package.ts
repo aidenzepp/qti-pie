@@ -27,8 +27,8 @@ import type { RootKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
 import { Package } from "#qti/schema/package.ts";
 import { Author } from "#qti/schema/roles.ts";
 import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { XmlDocument } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
  * The longest the retries of one database call run, in total.

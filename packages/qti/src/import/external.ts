@@ -19,7 +19,7 @@ import { Document } from "#qti/schema/document.ts";
 import * as md from "#qti/schema/metadata.ts";
 import { Edge } from "#qti/schema/node.ts";
 import type { SchemaVersionHandle } from "#qti/schema/node.ts";
-import type { XmlDocument } from "#qti/xml/tree.ts";
+import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
  * What the caller knows about an external metadata record: the package that lists it, where, the

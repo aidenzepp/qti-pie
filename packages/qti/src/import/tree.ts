@@ -54,8 +54,8 @@ import { NamespacePrefix, NamespaceUri, PiTarget, XmlEntityName } from "#qti/sch
 import * as patterns from "#qti/schema/patterns.ts";
 import { FLAGS, handleOf, KindEnters } from "#qti/schema/seed/ancestry.ts";
 import type { Flag } from "#qti/schema/seed/ancestry.ts";
-import { exportCharset } from "#qti/xml/charset.ts";
-import type { Child, Element, Misc, XmlDocument } from "#qti/xml/tree.ts";
+import { exportCharset } from "@qti-pie/crust/charset.ts";
+import type { Child, Element, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 type BaseTypeHandle = (typeof BaseType.handles)[number];
 

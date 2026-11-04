@@ -3,7 +3,7 @@
  */
 import { Effect, Option } from "effect";
 import { ItemRefusal } from "#qti/import/tree.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * The value of an attribute the schema requires.
