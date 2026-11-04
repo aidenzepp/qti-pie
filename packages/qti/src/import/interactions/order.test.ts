@@ -45,8 +45,8 @@ import {
 } from "#qti/schema/interactions/order.ts";
 import { AttributeLexical, AttributeSpelling, NodeKind } from "#qti/schema/node.ts";
 import { materialize } from "#qti/test/fixtures.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Attribute, Element } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";
 

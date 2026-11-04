@@ -16,9 +16,9 @@ import { AuthorApp } from "#qti/schema/logins.ts";
 import { TreeExportCharset } from "#qti/schema/node.ts";
 import { FileContent, Package } from "#qti/schema/package.ts";
 import { Author } from "#qti/schema/roles.ts";
-import { encode } from "#qti/xml/encode.ts";
-import type { EncodeError } from "#qti/xml/errors.ts";
-import type { XmlDocument } from "#qti/xml/tree.ts";
+import { encode } from "@qti-pie/crust/encode.ts";
+import type { EncodeError } from "@qti-pie/crust/errors.ts";
+import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
  * The entry a package's manifest tree is written under.

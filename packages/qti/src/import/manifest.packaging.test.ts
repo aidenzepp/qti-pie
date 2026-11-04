@@ -63,8 +63,8 @@ import {
   VariantMetadata,
 } from "#qti/schema/package.ts";
 import { materialize } from "#qti/test/fixtures.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Element, XmlDocument } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
  * Every element of the subtree rooted at `element`, in document order, with its parent.

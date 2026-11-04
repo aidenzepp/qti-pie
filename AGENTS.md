@@ -4,8 +4,9 @@ qti-pie (the first local checkout is still the folder `gr8des`) is a pnpm worksp
 3.0 on [grizzle](vendor/README.md), and exists first to put grizzle through a large, real data model. Read
 [docs/qti-intent.md](docs/qti-intent.md) before planning or changing the QTI model. `packages/renderer` is planned: it
 renders QTI 3.0, and its intent and rules arrive with its own goal; the qti package's intent (a grizzle test vehicle,
-delivery out of scope) does not bind it. Both packages read the specifications the same way:
-[docs/spec-readings.md](docs/spec-readings.md). Everything runs locally; there is no deploy target. The shared repository
+delivery out of scope) does not bind it. `packages/crust` (`@qti-pie/crust`) is the shared XML reader and writer, bytes
+to an XML tree and back; its dependencies stay `effect` and `saxes`, so grizzle stays out of anything that depends on
+it. The packages read the specifications the same way: [docs/spec-readings.md](docs/spec-readings.md). Everything runs locally; there is no deploy target. The shared repository
 is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (private), the remote `origin`.
 
 ## Toolchain
@@ -117,8 +118,17 @@ Use the skills in `.agents/skills/`:
 Use Effect error channels; built-in try/catch is prohibited by lint. Generator functions passed to `Effect.gen` are
 named (`func-names`).
 
-Import a package's own source through its `#<package>/*` alias from `package.json` `imports` (`#qti/*`, and
-`#migrations/*` for committed snapshots). Relative source imports are refused by lint.
+Import shape, for every package: it exposes its public parts through an `"exports"` map in `package.json` pointing at
+TypeScript source (no build step), consumers depend with `"workspace:*"`, and it imports its own files through its own
+`#<package>/*` alias from `package.json` `imports` (`#qti/*` in the qti package, `#crust/*` in crust, and `#migrations/*`
+for committed snapshots), never relative paths. Nothing outside a package reaches a file its `"exports"` map does not
+list. The checks that enforce it:
+
+- The resolver (`tsc` in `pnpm check`, and Node at run time) refuses a subpath an `"exports"` map does not list, and
+  another package's alias.
+- pnpm refuses an undeclared workspace dependency.
+- Lint refuses relative, absolute and `file:` specifiers, and crust importing itself by name.
+- crust's `src/package.test.ts` pins its dependencies.
 
 Read environment-backed settings with Effect `Config`, with constraints and defaults in Config or Schema. Test with
 `ConfigProvider.fromUnknown` rather than mutating the host environment.

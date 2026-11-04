@@ -47,7 +47,7 @@ import {
 import { InteractionBinding, TypedBinding } from "#qti/schema/interaction.ts";
 import { AttributeLexical, AttributeSpelling, NodeKind } from "#qti/schema/node.ts";
 import { Coords, CoordsCircle } from "#qti/schema/shapes.ts";
-import type { Attribute, Element } from "#qti/xml/tree.ts";
+import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";
 

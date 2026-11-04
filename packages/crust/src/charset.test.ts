@@ -1,8 +1,8 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The tests spell the XML label (`UTF-8`, `US-ASCII`) and encoder-class (`utf8`) data this module's table is keyed by. */
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { classify, exportCharset, threshold } from "#qti/xml/charset.ts";
-import type { Attribute, Child, Element, Misc, XmlDocument } from "#qti/xml/tree.ts";
+import { classify, exportCharset, threshold } from "#crust/charset.ts";
+import type { Attribute, Child, Element, Misc, XmlDocument } from "#crust/tree.ts";
 
 /**
  * Builds an attribute in no namespace, whose name and value are the two arguments.

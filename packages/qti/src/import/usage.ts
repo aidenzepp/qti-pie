@@ -39,7 +39,7 @@ import { Document } from "#qti/schema/document.ts";
 import { Edge } from "#qti/schema/node.ts";
 import type { AttributeNameHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
 import * as ud from "#qti/schema/usage.ts";
-import type { Element, XmlDocument } from "#qti/xml/tree.ts";
+import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 type BaseTypeHandle = (typeof BaseType.handles)[number];
 

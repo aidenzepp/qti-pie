@@ -4,8 +4,8 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { readXml } from "#qti/xml/read.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 import {
   FIXTURES_VERSION,
   examplesTarball,

@@ -1,9 +1,9 @@
 import { Effect } from "effect";
-import type { EncoderClass } from "#qti/xml/charset.ts";
-import { classify } from "#qti/xml/charset.ts";
-import { EncodeError } from "#qti/xml/errors.ts";
-import type { XmlDocument } from "#qti/xml/tree.ts";
-import { writeXml } from "#qti/xml/write.ts";
+import type { EncoderClass } from "#crust/charset.ts";
+import { classify } from "#crust/charset.ts";
+import { EncodeError } from "#crust/errors.ts";
+import type { XmlDocument } from "#crust/tree.ts";
+import { writeXml } from "#crust/write.ts";
 
 /**
  * The one writer of each encoder class, so a class added to `EncoderClass` is a type error here

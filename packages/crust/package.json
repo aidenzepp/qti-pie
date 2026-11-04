@@ -1,0 +1,29 @@
+{
+  "name": "@qti-pie/crust",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#crust/*": "./src/*"
+  },
+  "exports": {
+    "./canonical.ts": "./src/canonical.ts",
+    "./charset.ts": "./src/charset.ts",
+    "./encode.ts": "./src/encode.ts",
+    "./errors.ts": "./src/errors.ts",
+    "./read.ts": "./src/read.ts",
+    "./tree.ts": "./src/tree.ts",
+    "./write.ts": "./src/write.ts"
+  },
+  "scripts": {
+    "test": "mkdir -p work/.vp-tmp && TMPDIR=\"$PWD/work/.vp-tmp\" NODE_OPTIONS=\"$NODE_OPTIONS --disable-proto=delete --disable-sigusr1\" vp test run"
+  },
+  "dependencies": {
+    "effect": "4.0.7",
+    "saxes": "6.0.0"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "4.0.7",
+    "@effect/vitest": "4.0.7",
+    "vitest": "5.0.1"
+  }
+}

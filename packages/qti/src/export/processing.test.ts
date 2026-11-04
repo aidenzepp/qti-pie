@@ -12,11 +12,11 @@ import { emptyEnvironment, environmentOf, withDeclarations } from "#qti/processi
 import type { DeclarationEntry, Environment, Mode } from "#qti/processing/env.ts";
 import { templateDocuments } from "#qti/processing/fixtures.ts";
 import type { RootKindHandle } from "#qti/schema/node.ts";
-import { canonicalize } from "#qti/xml/canonical.ts";
+import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { xmllintC14n } from "#qti/xml/oracle.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Attribute, Element, XmlDocument } from "#qti/xml/tree.ts";
-import { writeXml } from "#qti/xml/write.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Attribute, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { writeXml } from "@qti-pie/crust/write.ts";
 
 /**
  * What every test here runs on: the file system the scratch files need and the process spawner

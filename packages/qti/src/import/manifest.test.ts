@@ -44,7 +44,7 @@ import {
 } from "#qti/schema/package.ts";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { materialize, materializePackage } from "#qti/test/fixtures.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
  * A leaf row reduced to the fields every qmd leaf shares, its value read as text.

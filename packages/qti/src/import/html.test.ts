@@ -23,8 +23,8 @@ import * as text from "#qti/schema/html/text.ts";
 import { AttributeLexical } from "#qti/schema/node.ts";
 import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
 import { materialize } from "#qti/test/fixtures.ts";
-import { canonicalize } from "#qti/xml/canonical.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { canonicalize } from "@qti-pie/crust/canonical.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";
 

@@ -25,10 +25,10 @@ import { registries } from "#qti/schema/seed/admission.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
 import { fixtureNames, materialize, materializeCorpus } from "#qti/test/fixtures.ts";
 import { cutItemRenderTestTimeoutMs, settings } from "#qti/test/settings.ts";
-import { canonicalize } from "#qti/xml/canonical.ts";
+import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { xmllintC14n } from "#qti/xml/oracle.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * The text of a canonical form, so a failed comparison prints the two documents and not two byte

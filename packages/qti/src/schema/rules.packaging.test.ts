@@ -114,7 +114,7 @@ import {
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
 import { fixtureRowsLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
  * A row as a test edits it: every field of the schema is text or a bigint.

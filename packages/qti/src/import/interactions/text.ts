@@ -51,7 +51,7 @@ import {
   TextEntryPlaceholderText,
 } from "#qti/schema/interactions/text.ts";
 import type { AncestryHandle } from "#qti/schema/node.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * The `maxCount` the text interactions' typed bindings hold.

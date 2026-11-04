@@ -2,12 +2,12 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option } from "effect";
 import { materialize } from "#qti/test/fixtures.ts";
-import { canonicalize } from "#qti/xml/canonical.ts";
-import { EncodeError } from "#qti/xml/errors.ts";
+import { canonicalize } from "@qti-pie/crust/canonical.ts";
+import { EncodeError } from "@qti-pie/crust/errors.ts";
 import { OracleLayer, xmllintC14n } from "#qti/xml/oracle.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Attribute, Child, Element, XmlDocument } from "#qti/xml/tree.ts";
-import { writeXml } from "#qti/xml/write.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Attribute, Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { writeXml } from "@qti-pie/crust/write.ts";
 
 /**
  * What every test here runs on: the process spawner `xmllintC14n` needs and the file system and
