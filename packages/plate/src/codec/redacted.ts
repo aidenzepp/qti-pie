@@ -270,8 +270,8 @@ const redactedRemedies: Readonly<Record<RedactedStage, (issue: string) => string
  */
 export class InvalidRedacted extends Data.TaggedError("InvalidRedacted")<{
   /**
-   * What the Schema found wrong, with the path to it, or how deep the input nests past
-   * {@link maximumDepth}.
+   * What the Schema found wrong, with the path to it, how deep the input nests past
+   * {@link maximumDepth}, or what reading the input threw.
    */
   readonly issue: string;
   /**
@@ -320,6 +320,10 @@ const maximumDepth = 1024;
  * with a list of pending values rather than by recursion, so the measure cannot overflow the stack
  * it guards, and stopping at the first value past the bound, so a cycle ends it too.
  *
+ * It follows own enumerable properties, the only ones plain JSON data has. The Schema reads
+ * inherited and non-enumerable ones too, so a live object can hide a deep field from this measure;
+ * {@link decodeRedacted} refuses whatever such a field makes the Schema throw.
+ *
  * @param input The value as the host handed it over.
  * @returns Whether some array or object in it sits more than `maximumDepth` levels down.
  */
@@ -345,17 +349,14 @@ const nestsTooDeep = (input: unknown): boolean => {
 };
 
 /**
- * Check the JSON form of a redacted item and make the {@link Redacted} `render` takes.
+ * Measure the input's depth, then check it against {@link RedactedSchema}; either may throw on a
+ * live object, which {@link decodeRedacted} refuses.
  *
- * @param input The JSON form as the host handed it over: the {@link RedactedJson}
- *   {@link encodeRedacted} wrote, after any JSON round trip. A count written as a JSON number is
- *   refused, and so is input that nests arrays and objects more than {@link maximumDepth} levels
- *   deep, which no item the reader accepts reaches.
- * @returns The redacted item, branded only after every field passed {@link RedactedSchema}, or
- *   {@link InvalidRedacted} at stage `decode` naming what does not fit.
+ * @param input The JSON form as the host handed it over.
+ * @returns The redacted item, or {@link InvalidRedacted} at stage `decode`.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The JSON form arrives from the host as any value, and this is the check that parses it.
-export const decodeRedacted = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
+const decodeJson = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
   nestsTooDeep(input)
     ? Result.fail(
         new InvalidRedacted({
@@ -368,3 +369,30 @@ export const decodeRedacted = (input: unknown): Result.Result<Redacted, InvalidR
           new InvalidRedacted({ issue: schemaError.message, stage: "decode" }),
         onSuccess: (fields: RedactedFields) => brandRedacted(fields),
       });
+
+/**
+ * Check the JSON form of a redacted item and make the {@link Redacted} `render` takes. It never
+ * throws, whatever it is handed.
+ *
+ * @param input The JSON form as the host handed it over: the {@link RedactedJson}
+ *   {@link encodeRedacted} wrote, after any JSON round trip. A count written as a JSON number is
+ *   refused, and so is input that nests arrays and objects more than {@link maximumDepth} levels
+ *   deep, which no item the reader accepts reaches. So is a live object that throws when read,
+ *   such as one hiding a deep field in its prototype or a non-enumerable property, or holding a
+ *   getter that throws; plain JSON data never does.
+ * @returns The redacted item, branded only after every field passed {@link RedactedSchema}, or
+ *   {@link InvalidRedacted} at stage `decode` naming what does not fit.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- The JSON form arrives from the host as any value, and this is the check that parses it.
+export const decodeRedacted = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
+  Result.flatMap(
+    Result.try({
+      catch: (thrown) =>
+        new InvalidRedacted({
+          issue: `reading it threw ${Predicate.isError(thrown) ? `${thrown.name}: ${thrown.message}` : "a value that is not an Error"}, which plain JSON data never does`,
+          stage: "decode",
+        }),
+      try: () => decodeJson(input),
+    }),
+    (decoded) => decoded,
+  );

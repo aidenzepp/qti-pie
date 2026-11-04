@@ -460,6 +460,51 @@ describe("decodeRedacted on a deeply nested body", () => {
   );
 });
 
+describe("decodeRedacted on a live object", () => {
+  it.effect(
+    "refuses an object whose fields, a body nested 10,000 spans among them, it inherits: InvalidRedacted at stage decode, not a throw",
+    () =>
+      Effect.gen(function* refusesInheritedBody() {
+        const error = yield* failureOf(decodeRedacted(Object.create(nestedSpans(10_000))));
+
+        assert.strictEqual(error._tag, "InvalidRedacted");
+        assert.strictEqual(error.stage, "decode");
+      }),
+  );
+
+  it.effect(
+    "refuses an object whose body, nested 10,000 spans, is not enumerable: InvalidRedacted at stage decode, not a throw",
+    () =>
+      Effect.gen(function* refusesHiddenBody() {
+        const { body, ...fields } = nestedSpans(10_000);
+        const hidden = Object.defineProperty(fields, "body", { enumerable: false, value: body });
+        const error = yield* failureOf(decodeRedacted(hidden));
+
+        assert.strictEqual(error._tag, "InvalidRedacted");
+        assert.strictEqual(error.stage, "decode");
+      }),
+  );
+
+  it.effect(
+    "refuses an object whose body is a getter that throws: InvalidRedacted at stage decode, not a throw",
+    () =>
+      Effect.gen(function* refusesThrowingGetter() {
+        const { body: _body, ...fields } = nestedSpans(1);
+        const throwing = Object.defineProperty(fields, "body", {
+          enumerable: true,
+          get: (): never => {
+            throw new TypeError("the host's getter");
+          },
+        });
+        const error = yield* failureOf(decodeRedacted(throwing));
+
+        assert.strictEqual(error._tag, "InvalidRedacted");
+        assert.strictEqual(error.stage, "decode");
+        assert.include(error.issue, "the host's getter");
+      }),
+  );
+});
+
 describe("encodeRedacted", () => {
   it.effect("refuses a count built by hand as the number 2: InvalidRedacted at stage encode", () =>
     Effect.gen(function* refusesInexactCount() {
