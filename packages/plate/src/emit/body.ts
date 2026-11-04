@@ -14,6 +14,13 @@
  * classifies a value again only to write it, rebasing a package path onto the asset base and
  * scoping a same-document `#id` as the id it names.
  *
+ * The walk does not trust the payload it reads: `render` may run in a browser on a `Redacted` that
+ * crossed the network as JSON and lost its type. So it emits only the XSD's HTML subset,
+ * {@link htmlSubset}: an element the XSD does not declare is dropped with its subtree, an attribute
+ * the XSD does not declare on its element is dropped, and a node of no kind the payload defines is
+ * dropped. Names match exactly, so `A` or `HREF` is not `a` or `href`. Valid content loses
+ * nothing, since `check` refuses or strips everything outside the subset first.
+ *
  * @module
  * @see {@link Payload} for what the walk reads.
  */
@@ -68,9 +75,248 @@ const idReferences: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * An event-handler attribute's name, which the serialiser refuses.
+ * The attributes the XSD declares by name on every HTML element of the item body but `param` and
+ * `template`: ARIA's states and properties, the global attributes, and QTI's
+ * `data-catalog-idref` and `data-qti-suppress-tts`.
  */
-const eventHandler = /^on/iu;
+const globalAttributes: readonly string[] = [
+  "aria-activedescendant",
+  "aria-atomic",
+  "aria-autocomplete",
+  "aria-busy",
+  "aria-checked",
+  "aria-colcount",
+  "aria-colindex",
+  "aria-colspan",
+  "aria-controls",
+  "aria-current",
+  "aria-describedby",
+  "aria-details",
+  "aria-disabled",
+  "aria-errormessage",
+  "aria-expanded",
+  "aria-flowto",
+  "aria-haspopup",
+  "aria-hidden",
+  "aria-invalid",
+  "aria-label",
+  "aria-labelledby",
+  "aria-level",
+  "aria-live",
+  "aria-modal",
+  "aria-multiline",
+  "aria-multiselectable",
+  "aria-orientation",
+  "aria-owns",
+  "aria-placeholder",
+  "aria-posinset",
+  "aria-pressed",
+  "aria-readonly",
+  "aria-relevant",
+  "aria-required",
+  "aria-roledescription",
+  "aria-rowcount",
+  "aria-rowindex",
+  "aria-rowspan",
+  "aria-selected",
+  "aria-setsize",
+  "aria-sort",
+  "aria-valuemax",
+  "aria-valuemin",
+  "aria-valuenow",
+  "aria-valuetext",
+  "class",
+  "data-catalog-idref",
+  "data-qti-suppress-tts",
+  "dir",
+  "id",
+  "label",
+  "lang",
+  "role",
+  "xml:lang",
+];
+
+/**
+ * ARIA's name for the keyboard shortcuts attribute, which every element but the empty ones
+ * declares.
+ */
+const keyShortcuts = "aria-keyshortcuts";
+
+/**
+ * The XSD's misspelling of {@link keyShortcuts}, which it declares on the empty elements in its
+ * place. Reading 10 accepts both spellings there, and the walk writes either as ARIA's, so screen
+ * readers announce it (operator ruling `96840ced`).
+ */
+const keyShortcutsMisspelt = "aria-keyshorts";
+
+/**
+ * The attributes of the XSD's sectioning, grouping, ruby and table elements.
+ */
+const structural: readonly string[] = [...globalAttributes, keyShortcuts];
+
+/**
+ * The attributes of the XSD's text-level and block elements, which add SSML and `xml:base`.
+ */
+const textual: readonly string[] = [...structural, "data-ssml", "xml:base"];
+
+/**
+ * The attributes of the XSD's empty elements, with the misspelt shortcuts attribute.
+ */
+const empty: readonly string[] = [...globalAttributes, keyShortcutsMisspelt];
+
+/**
+ * The attributes of `audio`, which `video` extends.
+ */
+const media: readonly string[] = [
+  ...structural,
+  "autoplay",
+  "controls",
+  "crossorigin",
+  "loop",
+  "mediagroup",
+  "muted",
+  "preload",
+  "src",
+];
+
+/**
+ * The attributes of a table cell, `td` or `th`.
+ */
+const cell: readonly string[] = [
+  ...structural,
+  "abbr",
+  "align",
+  "axis",
+  "colspan",
+  "headers",
+  "rowspan",
+  "scope",
+  "valign",
+];
+
+/**
+ * The elements whose attributes are {@link textual}.
+ */
+const textualTags: readonly string[] = [
+  "abbr",
+  "acronym",
+  "address",
+  "b",
+  "big",
+  "cite",
+  "code",
+  "dd",
+  "dfn",
+  "div",
+  "dl",
+  "dt",
+  "em",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "i",
+  "kbd",
+  "ol",
+  "p",
+  "pre",
+  "samp",
+  "small",
+  "span",
+  "strong",
+  "sub",
+  "sup",
+  "tt",
+  "ul",
+  "var",
+];
+
+/**
+ * The elements whose attributes are {@link structural}.
+ */
+const structuralTags: readonly string[] = [
+  "article",
+  "aside",
+  "bdi",
+  "caption",
+  "figcaption",
+  "figure",
+  "footer",
+  "header",
+  "label",
+  "li",
+  "nav",
+  "picture",
+  "rb",
+  "rp",
+  "rt",
+  "rtc",
+  "ruby",
+  "section",
+  "summary",
+  "tbody",
+  "tfoot",
+  "thead",
+  "tr",
+];
+
+/**
+ * The rows of {@link htmlSubset}: each element with the attributes the XSD declares on it.
+ */
+const subsetRows: readonly (readonly [tag: string, attributes: readonly string[]])[] = [
+  ...textualTags.map((tag) => [tag, textual] as const),
+  ...structuralTags.map((tag) => [tag, structural] as const),
+  ["a", [...textual, "href", "type"]],
+  ["audio", media],
+  ["bdo", [...structural, "title"]],
+  ["blockquote", [...textual, "cite"]],
+  ["br", [...empty, "xml:base"]],
+  ["col", [...empty, "span", "xml:base"]],
+  ["colgroup", [...structural, "span"]],
+  ["details", [...structural, "open"]],
+  ["hr", [...empty, "xml:base"]],
+  ["img", [...empty, "alt", "height", "longdesc", "src", "width", "xml:base"]],
+  ["object", [...textual, "data", "height", "type", "width"]],
+  ["param", ["name", "type", "value", "valuetype"]],
+  ["q", [...textual, "cite"]],
+  ["source", [...empty, "media", "sizes", "src", "srcset", "type"]],
+  ["table", [...textual, "summary"]],
+  ["td", cell],
+  ["template", []],
+  ["th", cell],
+  ["track", [...empty, "default", "kind", "src", "srclang"]],
+  ["video", [...media, "height", "poster", "width"]],
+];
+
+/**
+ * The XSD's HTML subset, the content emitter's second line: each element the XSD declares whose
+ * name does not begin with `qti-`, mapped to the attributes the XSD declares on it by name, the
+ * attribute wildcard excluded. The walk emits nothing else.
+ *
+ * Transcribed by hand from the cached XSD, and kept small so a browser render does not carry the
+ * generated tables. Every name is lower case, as the XSD writes it. `xml:lang` and `xml:base` are
+ * named as the model names attributes in the XML namespace. The tables' test pins this map to the
+ * tables generated from the same XSD.
+ *
+ * @see ~/.cache/gr8des/qti3/xsd/imsqti_asiv3p0p1_v1p0.xsd (sha256 `bd82f6df…`), its 76 elements
+ *   from `a` to `video`
+ */
+export const htmlSubset: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+  subsetRows.map(([tag, attributes]) => [tag, new Set(attributes)]),
+);
+
+/**
+ * Tell whether the second line admits an attribute on an element: the XSD declares it there by
+ * name, or it is ARIA's shortcuts attribute on an element that declares the misspelling.
+ *
+ * @param declared The attributes the XSD declares on the element.
+ * @param name The attribute's name as the payload holds it.
+ * @returns Whether the attribute is emitted.
+ */
+const admits = (declared: ReadonlySet<string>, name: string): boolean =>
+  declared.has(name) || (name === keyShortcuts && declared.has(keyShortcutsMisspelt));
 
 /**
  * The whitespace that separates the ids of a list.
@@ -177,8 +423,8 @@ const urlFor = (context: UrlContext, value: string, walk: Walk): Option.Option<s
  * @param tag The authored element's local name, which says whether the attribute is a URL.
  * @param walk What the walk carries.
  * @returns The attribute's name and value as emitted, or nothing when it is dropped: `xml:lang` as
- *   `lang`, an `id` and each id an IDREF attribute names through {@link authoredId}, a URL through
- *   {@link urlFor}, and any other value as written.
+ *   `lang`, `aria-keyshorts` as `aria-keyshortcuts`, an `id` and each id an IDREF attribute names
+ *   through {@link authoredId}, a URL through {@link urlFor}, and any other value as written.
  */
 const attributeFor = (
   { name, value }: AttributePayload,
@@ -187,6 +433,10 @@ const attributeFor = (
 ): readonly (readonly [string, string])[] => {
   if (name === "xml:lang") {
     return [["lang", value]];
+  }
+
+  if (name === keyShortcutsMisspelt) {
+    return [[keyShortcuts, value]];
   }
 
   if (name === "id") {
@@ -212,20 +462,31 @@ const attributeFor = (
 /**
  * Give an authored element's attributes as they render.
  *
- * An event-handler attribute is dropped, which the serialiser would refuse; `check` already
+ * Only the attributes the second line admits are emitted, so an event handler, `style`, an
+ * authored `data-slot` or `data-mode`, and any other undeclared name is dropped; `check` already
  * removes and marks every attribute only the XSD's wildcard admits, so this drop is the emitter's
- * own guard. When the author wrote both `lang` and `xml:lang`, `xml:lang` wins, as it does in HTML.
+ * own guard. When the author wrote both `lang` and `xml:lang`, `xml:lang` wins, as it does in HTML,
+ * and when they wrote both shortcut spellings, ARIA's wins.
  *
  * @param element The element as the model kept it.
+ * @param declared The attributes the XSD declares on the element, from {@link htmlSubset}.
  * @param walk What the walk carries.
  * @returns The attributes to emit.
  */
-const attributesFor = ({ attributes, tag }: ElementPayload, walk: Walk): Attributes => {
-  const hasXmlLang = attributes.some(({ name }) => name === "xml:lang");
+const attributesFor = (
+  { attributes, tag }: ElementPayload,
+  declared: ReadonlySet<string>,
+  walk: Walk,
+): Attributes => {
+  const admitted = attributes.filter(({ name }) => admits(declared, name));
+  const names = new Set(admitted.map(({ name }) => name));
+  const shadowed = (name: string): boolean =>
+    (name === "lang" && names.has("xml:lang")) ||
+    (name === keyShortcutsMisspelt && names.has(keyShortcuts));
 
   return Object.fromEntries(
-    attributes
-      .filter(({ name }) => !eventHandler.test(name) && !(hasXmlLang && name === "lang"))
+    admitted
+      .filter(({ name }) => !shadowed(name))
       .flatMap((attribute) => attributeFor(attribute, tag, walk)),
   );
 };
@@ -317,27 +578,36 @@ const below = (walk: Walk, tag: string): Walk => ({
  *
  * @param nodes The payload nodes.
  * @param walk What the walk carries.
- * @returns The emitted nodes, or the first refusal of a part swap.
+ * @returns The emitted nodes, without those the second line drops, or the first refusal of a part
+ *   swap.
  */
 const nodesOf = (
   nodes: readonly PayloadNode[],
   walk: Walk,
 ): Effect.Effect<readonly Node[], PartSwapRefused> =>
-  // oxlint-disable-next-line eslint/no-use-before-define -- `nodesOf` and `nodeOf` are mutually recursive, as elements nest; the call runs only after both are defined.
-  Effect.all(nodes.map((node) => nodeOf(node, walk)));
+  Effect.map(
+    // oxlint-disable-next-line eslint/no-use-before-define -- `nodesOf` and `nodeOf` are mutually recursive, as elements nest; the call runs only after both are defined.
+    Effect.all(nodes.map((node) => nodeOf(node, walk))),
+    (emitted) => emitted.flat(),
+  );
 
 /**
  * Emit an authored HTML element and its subtree.
  *
  * @param element The element's payload.
+ * @param declared The attributes the XSD declares on the element, from {@link htmlSubset}.
  * @param walk What the walk carries.
  * @returns The element as it renders, or the first refusal of a part swap.
  */
-const elementOf = (element: ElementPayload, walk: Walk): Effect.Effect<Element, PartSwapRefused> =>
+const elementOf = (
+  element: ElementPayload,
+  declared: ReadonlySet<string>,
+  walk: Walk,
+): Effect.Effect<Element, PartSwapRefused> =>
   Effect.map(nodesOf(element.children, below(walk, element.tag)), (children) =>
     h(
       tagFor(element.tag, walk.headingLevel),
-      attributesFor(element, walk),
+      attributesFor(element, declared, walk),
       element.tag === "table" ? withBodies(children) : children,
     ),
   );
@@ -347,26 +617,33 @@ const elementOf = (element: ElementPayload, walk: Walk): Effect.Effect<Element, 
  *
  * @param node The payload node.
  * @param walk What the walk carries.
- * @returns The node as it renders, or the refusal of a part swap.
+ * @returns The node as it renders, none when the second line drops it (an element outside
+ *   {@link htmlSubset}, or a node of no kind the payload defines), or the refusal of a part swap.
  */
-const nodeOf = (node: PayloadNode, walk: Walk): Effect.Effect<Node, PartSwapRefused> => {
+const nodeOf = (node: PayloadNode, walk: Walk): Effect.Effect<readonly Node[], PartSwapRefused> => {
   switch (node.kind) {
     case "element": {
-      return elementOf(node, walk);
+      return Option.match(Option.fromUndefinedOr(htmlSubset.get(node.tag)), {
+        onNone: () => Effect.succeed([]),
+        onSome: (declared) => Effect.map(elementOf(node, declared, walk), (element) => [element]),
+      });
     }
     case "text": {
-      return Effect.succeed(text(node.text));
+      return Effect.succeed([text(node.text)]);
     }
     case "notice": {
-      return noticeOf(node, walk);
+      return Effect.map(noticeOf(node, walk), (notice) => [notice]);
     }
     case "choice":
     case "extended-text":
     case "text-entry": {
-      return walk.renderInteraction(node);
+      return Effect.map(walk.renderInteraction(node), (root) => [root]);
     }
     default: {
-      return node satisfies never;
+      // Only a payload that lost its type on the way here holds another kind.
+      node satisfies never;
+
+      return Effect.succeed([]);
     }
   }
 };
