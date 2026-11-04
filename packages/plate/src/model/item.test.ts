@@ -205,6 +205,42 @@ const bg007 = (processing: SourceElement): SourceDocument =>
   );
 
 /**
+ * A float `RESPONSE` whose correct response is 1.5, a float `SCORE` with no default, and
+ * `match_correct`.
+ *
+ * @param templating What follows the declarations, such as a `qti-template-processing`; nothing
+ *   by default.
+ * @returns The document at `items/test.xml`.
+ */
+const floatMatchCorrect = (templating: readonly SourceElement[] = []): SourceDocument =>
+  item({
+    after: [template("match_correct")],
+    body: [],
+    declarations: [
+      declaration("qti-response-declaration", "RESPONSE", "float", "single", [
+        values("qti-correct-response", "1.5"),
+      ]),
+      declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+      ...templating,
+    ],
+  });
+
+/**
+ * A `qti-template-processing` that sets `RESPONSE`'s correct response to the float 2.5.
+ */
+const setsCorrectResponse: SourceElement = el(
+  "qti-template-processing",
+  [],
+  [
+    el(
+      "qti-set-correct-response",
+      [attr("identifier", "RESPONSE")],
+      [el("qti-base-value", [attr("base-type", "float")], [text("2.5")])],
+    ),
+  ],
+);
+
+/**
  * Set `SCORE` to a float.
  *
  * @param value The number.
@@ -1191,6 +1227,58 @@ describe("buildItem", () => {
       assert.deepStrictEqual(built.processing, Option.some(matchCorrect));
       assert.deepStrictEqual(built.unsupported, []);
     }),
+  );
+
+  it.effect(
+    "[I-9b] runs no processing for an item with template processing, and marks qti-template-processing",
+    () =>
+      Effect.gen(function* templatedRunsNone() {
+        const built = yield* buildItem(floatMatchCorrect([setsCorrectResponse]));
+
+        assert.deepStrictEqual(built.processing, Option.none());
+        assert.deepStrictEqual(built.unsupported, [
+          {
+            feature: "qti-template-processing",
+            path: `${root}/qti-template-processing`,
+            shown: "mark",
+          },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-9b] gives equal outcomes for the correct value and another on an item with template processing",
+    () =>
+      Effect.gen(function* templatedScoresNone() {
+        const built = yield* buildItem(floatMatchCorrect([setsCorrectResponse]));
+        const correct = yield* Effect.fromResult(
+          runAttempt(built, fresh(built, "i"), { RESPONSE: float(1.5) }),
+        );
+        const other = yield* Effect.fromResult(
+          runAttempt(built, fresh(built, "i"), { RESPONSE: float(2.5) }),
+        );
+
+        assert.deepStrictEqual(correct.outcomes, other.outcomes);
+      }),
+  );
+
+  it.effect(
+    "[I-9b] keeps match_correct for the same item without template processing, and scores 1",
+    () =>
+      Effect.gen(function* untemplatedRuns() {
+        const built = yield* buildItem(floatMatchCorrect());
+        const correct = yield* Effect.fromResult(
+          runAttempt(built, fresh(built, "i"), { RESPONSE: float(1.5) }),
+        );
+        const other = yield* Effect.fromResult(
+          runAttempt(built, fresh(built, "i"), { RESPONSE: float(2.5) }),
+        );
+
+        assert.deepStrictEqual(built.processing, Option.some(matchCorrect));
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.deepStrictEqual(correct.outcomes["SCORE"], float(1));
+        assert.deepStrictEqual(other.outcomes["SCORE"], float(0));
+      }),
   );
 
   it.effect(
