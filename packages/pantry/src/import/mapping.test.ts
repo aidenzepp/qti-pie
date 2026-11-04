@@ -1,11 +1,11 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the column the area map entry and `Coords` rows name; it is a geometric shape here, not a structure. */
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option } from "effect";
-import type { DeclaredVariable } from "#qti/import/interactions.ts";
-import { mappingRows } from "#qti/import/mapping.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { Rows, treeRows } from "#qti/import/tree.ts";
-import type { NodeIndex } from "#qti/import/tree.ts";
+import type { DeclaredVariable } from "#pantry/import/interactions.ts";
+import { mappingRows } from "#pantry/import/mapping.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { Rows, treeRows } from "#pantry/import/tree.ts";
+import type { NodeIndex } from "#pantry/import/tree.ts";
 import {
   AreaMapEntry,
   AreaMapping,
@@ -26,10 +26,10 @@ import {
   MatchTableDefaultValue,
   MatchTableEntry,
   relations,
-} from "#qti/schema/mapping.ts";
-import { RectCoords } from "#qti/schema/contracts.ts";
-import { AttributeLexical, Edge } from "#qti/schema/node.ts";
-import { Coords, CoordsRect } from "#qti/schema/shapes.ts";
+} from "#pantry/schema/mapping.ts";
+import { RectCoords } from "#pantry/schema/contracts.ts";
+import { AttributeLexical, Edge } from "#pantry/schema/node.ts";
+import { Coords, CoordsRect } from "#pantry/schema/shapes.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 

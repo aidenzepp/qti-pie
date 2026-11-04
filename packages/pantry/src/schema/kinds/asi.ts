@@ -35,18 +35,18 @@
  * - Rows are deduplicated on `(version, parent, child)`, so a derived row an M0 row already states is
  *   kept once, in M0's position.
  *
- * Roster, registry and attribute derivation (run from `packages/qti` as `pnpm exec node derive.ts`;
- * it prints the counts below, and the literals of the two kinds files are its output):
+ * Roster, registry and attribute derivation (run from `packages/pantry` as `pnpm exec node
+ * derive.ts`; it prints the counts below, and the literals of the two kinds files are its output):
  *
  * ```ts
- * import { asiInventory } from "#qti/schema/content/inventory/asi.ts";
- * import { htmlInventory } from "#qti/schema/content/inventory/html.ts";
- * import * as asi from "#qti/schema/kinds/asi.ts"; // the phase-1 tuples, before the append
- * import * as cp from "#qti/schema/kinds/cp.ts";
- * import * as generic from "#qti/schema/kinds/generic.ts";
- * import * as html from "#qti/schema/kinds/html.ts";
- * import * as lom from "#qti/schema/kinds/lom.ts";
- * import * as qmd from "#qti/schema/kinds/qmd.ts";
+ * import { asiInventory } from "#pantry/schema/content/inventory/asi.ts";
+ * import { htmlInventory } from "#pantry/schema/content/inventory/html.ts";
+ * import * as asi from "#pantry/schema/kinds/asi.ts"; // the phase-1 tuples, before the append
+ * import * as cp from "#pantry/schema/kinds/cp.ts";
+ * import * as generic from "#pantry/schema/kinds/generic.ts";
+ * import * as html from "#pantry/schema/kinds/html.ts";
+ * import * as lom from "#pantry/schema/kinds/lom.ts";
+ * import * as qmd from "#pantry/schema/kinds/qmd.ts";
  *
  * // The dotted kinds' parent qualifier: the one host whose content model names the type.
  * const hostOf = {
@@ -95,10 +95,14 @@
  */
 import { Option } from "effect";
 
-import { asiInventory } from "#qti/schema/content/inventory/asi.ts";
-import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
-import type { InventoryEntry } from "#qti/schema/content/xsd-inventory.ts";
-import type { AdmissionRow, RegistryRow, SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
+import { asiInventory } from "#pantry/schema/content/inventory/asi.ts";
+import { entryOf } from "#pantry/schema/content/xsd-inventory.ts";
+import type { InventoryEntry } from "#pantry/schema/content/xsd-inventory.ts";
+import type {
+  AdmissionRow,
+  RegistryRow,
+  SchemaVersionHandle,
+} from "#pantry/schema/kinds/generic.ts";
 
 const namespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 

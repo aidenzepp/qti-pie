@@ -22,12 +22,16 @@ import {
   select,
   uuid,
 } from "@bjornpagen/grizzle";
-import { Shape, XsBoolean } from "#qti/schema/content/rosters.ts";
-import { InterpolationSourceValue, MappingScore, MatchSourceValue } from "#qti/schema/contracts.ts";
-import { BaseType, Declaration, TypedDeclaration } from "#qti/schema/declaration.ts";
-import { Edge } from "#qti/schema/node.ts";
-import { coordsBinding, shapeCapacities } from "#qti/schema/shapes.ts";
-import { fieldsOf } from "#qti/schema/value.ts";
+import { Shape, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import {
+  InterpolationSourceValue,
+  MappingScore,
+  MatchSourceValue,
+} from "#pantry/schema/contracts.ts";
+import { BaseType, Declaration, TypedDeclaration } from "#pantry/schema/declaration.ts";
+import { Edge } from "#pantry/schema/node.ts";
+import { coordsBinding, shapeCapacities } from "#pantry/schema/shapes.ts";
+import { fieldsOf } from "#pantry/schema/value.ts";
 
 /**
  * The base types a mapping or a map entry may be of: every base type but `file` and `duration`.

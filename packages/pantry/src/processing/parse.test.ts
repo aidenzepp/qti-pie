@@ -2,25 +2,25 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
-import { UnmodeledVocabulary } from "#qti/import/tree.ts";
+import { UnmodeledVocabulary } from "#pantry/import/tree.ts";
 import type {
   ExpressionNode,
   IncludeNode,
   Language,
   ProcessingAst,
   RuleNode,
-} from "#qti/processing/ast.ts";
+} from "#pantry/processing/ast.ts";
 import {
   encVariableString,
   literalOrRef,
   parseProcessing,
   patternOrRef,
-} from "#qti/processing/parse.ts";
+} from "#pantry/processing/parse.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
- * The four committed trees, relative to `packages/qti`, where the tests run.
+ * The four committed trees, relative to `packages/pantry`, where the tests run.
  */
 const validDirectory = "src/processing/fixtures/valid";
 

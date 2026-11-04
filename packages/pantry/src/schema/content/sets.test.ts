@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
 
-import * as rosters from "#qti/schema/content/rosters.ts";
-import { HBLOCK, HFLOW, HINL, PHR, hostAdditions, setOf } from "#qti/schema/content/sets.ts";
+import * as rosters from "#pantry/schema/content/rosters.ts";
+import { HBLOCK, HFLOW, HINL, PHR, hostAdditions, setOf } from "#pantry/schema/content/sets.ts";
 
 const names = (set: readonly string[]) => new Set(set);
 

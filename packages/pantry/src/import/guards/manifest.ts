@@ -6,13 +6,13 @@
  */
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { Effect, Option, Predicate, Schema } from "effect";
-import { collapse, replace, Rows } from "#qti/import/tree.ts";
-import type { WhiteSpace } from "#qti/import/tree.ts";
-import type { Entry } from "#qti/package/read.ts";
-import { Document } from "#qti/schema/document.ts";
-import * as drd from "#qti/schema/kinds/drd.ts";
-import * as csm from "#qti/schema/csm.ts";
-import * as md from "#qti/schema/metadata.ts";
+import { collapse, replace, Rows } from "#pantry/import/tree.ts";
+import type { WhiteSpace } from "#pantry/import/tree.ts";
+import type { Entry } from "#pantry/package/read.ts";
+import { Document } from "#pantry/schema/document.ts";
+import * as drd from "#pantry/schema/kinds/drd.ts";
+import * as csm from "#pantry/schema/csm.ts";
+import * as md from "#pantry/schema/metadata.ts";
 import {
   AttributeLexical,
   Edge,
@@ -21,8 +21,8 @@ import {
   TextNode,
   vocabularies,
   Ws,
-} from "#qti/schema/node.ts";
-import type { RootKindHandle } from "#qti/schema/node.ts";
+} from "#pantry/schema/node.ts";
+import type { RootKindHandle } from "#pantry/schema/node.ts";
 import {
   Dependency,
   DrdEducationalLevelOfAdaptation,
@@ -37,8 +37,8 @@ import {
   ResourceHref,
   Variant,
   variantDrdRelations,
-} from "#qti/schema/package.ts";
-import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
+} from "#pantry/schema/package.ts";
+import { rootOfType } from "#pantry/schema/seed/root-of-type.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 /**

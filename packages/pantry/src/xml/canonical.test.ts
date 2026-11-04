@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Layer } from "effect";
-import { materialize } from "#qti/test/fixtures.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
-import { OracleError, OracleLayer, xmllintC14n } from "#qti/xml/oracle.ts";
+import { OracleError, OracleLayer, xmllintC14n } from "#pantry/xml/oracle.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 /**

@@ -22,12 +22,12 @@ import {
   kindHelp,
   NotADirectory,
   RoundtripDiffers,
-} from "#qti/cli/errors.ts";
-import type { Kind } from "#qti/cli/errors.ts";
-import { exitCodeOf } from "#qti/cli/run.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { captureCli, spawnCli } from "#qti/test/cli.ts";
-import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
+} from "#pantry/cli/errors.ts";
+import type { Kind } from "#pantry/cli/errors.ts";
+import { exitCodeOf } from "#pantry/cli/run.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { captureCli, spawnCli } from "#pantry/test/cli.ts";
+import { cliProcessTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * Grizzle's nine public errors, each with the tag its class declares. The tag is read from the

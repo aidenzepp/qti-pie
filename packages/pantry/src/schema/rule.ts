@@ -26,12 +26,12 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
-import { XIncludeParseValue } from "#qti/schema/content/rosters.ts";
-import * as item from "#qti/schema/item.ts";
-import * as node from "#qti/schema/node.ts";
-import { XIncludeUri } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import * as processing from "#qti/schema/processing.ts";
+import { XIncludeParseValue } from "#pantry/schema/content/rosters.ts";
+import * as item from "#pantry/schema/item.ts";
+import * as node from "#pantry/schema/node.ts";
+import { XIncludeUri } from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import * as processing from "#pantry/schema/processing.ts";
 
 const xsString = str.regex(patterns.xsString, patterns.xsStringFlags);
 

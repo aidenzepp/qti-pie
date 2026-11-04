@@ -6,31 +6,31 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Context, Effect, Layer, Predicate } from "effect";
 import { describe, inject, test } from "vitest";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { itemRows } from "#qti/import/item.ts";
-import { manifestRows } from "#qti/import/manifest.ts";
-import { changeSetOf, retrySchedule } from "#qti/import/package.ts";
-import { isMappedLaw, ruleOfLaw } from "#qti/import/refusal.ts";
-import type { Rule } from "#qti/import/refusal.ts";
-import { Rows } from "#qti/import/tree.ts";
-import { listPackage, readEntry } from "#qti/package/read.ts";
-import { ResourceLomGeneral } from "#qti/schema/lang.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { itemRows } from "#pantry/import/item.ts";
+import { manifestRows } from "#pantry/import/manifest.ts";
+import { changeSetOf, retrySchedule } from "#pantry/import/package.ts";
+import { isMappedLaw, ruleOfLaw } from "#pantry/import/refusal.ts";
+import type { Rule } from "#pantry/import/refusal.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { listPackage, readEntry } from "#pantry/package/read.ts";
+import { ResourceLomGeneral } from "#pantry/schema/lang.ts";
 import {
   OutcomeDeclarationArm,
   RecordDeclaration,
   Declaration,
   TypedDeclaration,
-} from "#qti/schema/declaration.ts";
-import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
+} from "#pantry/schema/declaration.ts";
+import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/document.ts";
 import {
   BindingFit,
   ChoiceInteraction,
   InteractionBinding,
   SimpleChoice,
   TypedBinding,
-} from "#qti/schema/interaction.ts";
-import { AssessmentItem, ItemBody, Prompt } from "#qti/schema/item.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
+} from "#pantry/schema/interaction.ts";
+import { AssessmentItem, ItemBody, Prompt } from "#pantry/schema/item.ts";
+import { AuthorApp } from "#pantry/schema/logins.ts";
 import {
   LomGeneral,
   LomIdentifierEntry,
@@ -43,10 +43,10 @@ import {
   ResourceLomIdentified,
   ResourceLomTitled,
   rules as metadataRules,
-} from "#qti/schema/metadata.ts";
-import { Admission, AttributeLexical, Edge, Node, Tree } from "#qti/schema/node.ts";
-import { AncestryStep } from "#qti/schema/ancestry.ts";
-import { ancestryStepRows, KindEnters } from "#qti/schema/seed/ancestry.ts";
+} from "#pantry/schema/metadata.ts";
+import { Admission, AttributeLexical, Edge, Node, Tree } from "#pantry/schema/node.ts";
+import { AncestryStep } from "#pantry/schema/ancestry.ts";
+import { ancestryStepRows, KindEnters } from "#pantry/schema/seed/ancestry.ts";
 import {
   Dependency,
   File,
@@ -56,22 +56,22 @@ import {
   Resource,
   ResourceTypeOf,
   RootOfType,
-} from "#qti/schema/package.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+} from "#pantry/schema/package.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 import {
   ResponseProcessing,
   ResponseProcessingItem,
   ResponseProcessingTemplate,
-} from "#qti/schema/processing.ts";
+} from "#pantry/schema/processing.ts";
 import {
   DeclaredValue,
   DefaultValueArm,
   TypedValueSet,
   ValueSet,
   relations as valueRelations,
-} from "#qti/schema/value.ts";
+} from "#pantry/schema/value.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * A row as a test edits it: every field of the schema is text or a bigint.

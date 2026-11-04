@@ -4,15 +4,15 @@ import { assert, beforeAll, layer } from "@effect/vitest";
 import { Cause, Console, Duration, Effect, Exit, FileSystem, Logger } from "effect";
 import { Command } from "effect/cli";
 import { inject } from "vitest";
-import { exitCodeOf } from "#qti/cli/run.ts";
-import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#qti/test/settings.ts";
+import { exitCodeOf } from "#pantry/cli/run.ts";
+import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
 import {
   CommandTimedOut,
   timeoutGlobalFlags,
   timeoutSetting,
   withTimeout,
-} from "#qti/cli/timeout.ts";
-import { captureCli, preloadEngine } from "#qti/test/cli.ts";
+} from "#pantry/cli/timeout.ts";
+import { captureCli, preloadEngine } from "#pantry/test/cli.ts";
 
 const fixtures = inject("fixtures");
 

@@ -17,10 +17,10 @@
  * not be: canonical XML sorts attributes, so canonical equality holds whatever this order is.
  */
 import { Option } from "effect";
-import type { Rows as RowSet } from "#qti/import/tree.ts";
-import { Rows } from "#qti/import/tree.ts";
-import { by, indexOf, readersFor } from "#qti/schema/attribute-homes.ts";
-import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
+import type { Rows as RowSet } from "#pantry/import/tree.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { by, indexOf, readersFor } from "#pantry/schema/attribute-homes.ts";
+import type { RegistryRow } from "#pantry/schema/kinds/generic.ts";
 import {
   AttributeEntityReference,
   AttributeLexical,
@@ -42,7 +42,7 @@ import {
   TreeXmlVersion,
   vocabularies,
   Ws,
-} from "#qti/schema/node.ts";
+} from "#pantry/schema/node.ts";
 import type { Attribute, Child, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";

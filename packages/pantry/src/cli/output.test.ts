@@ -2,8 +2,8 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Cause, Console, Effect, Exit } from "effect";
 import { CliError, Command } from "effect/cli";
-import { outputGlobalFlags, outputMode } from "#qti/cli/output.ts";
-import { captureCli } from "#qti/test/cli.ts";
+import { outputGlobalFlags, outputMode } from "#pantry/cli/output.ts";
+import { captureCli } from "#pantry/test/cli.ts";
 
 /**
  * A command that registers the output settings and prints the mode they resolve to.

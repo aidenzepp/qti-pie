@@ -25,8 +25,8 @@ import {
   within,
 } from "@bjornpagen/grizzle";
 import type { FieldBase } from "@bjornpagen/grizzle";
-import { CpSchema, XsBoolean } from "#qti/schema/content/rosters.ts";
-import { Edge, Node, RootKind, SchemaVersion, Tree } from "#qti/schema/node.ts";
+import { CpSchema, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import { Edge, Node, RootKind, SchemaVersion, Tree } from "#pantry/schema/node.ts";
 import {
   AccessMode,
   AccessModeAdapted,
@@ -35,8 +35,8 @@ import {
   ManifestIdentifier,
   PackagePath,
   ResourceEntryHref,
-} from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+} from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 const base64 = str.regex(patterns.base64);
 

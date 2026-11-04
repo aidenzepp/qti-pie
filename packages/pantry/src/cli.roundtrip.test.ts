@@ -3,8 +3,8 @@ import { assert, layer } from "@effect/vitest";
 import { Cause, Console, Effect, Exit, Stdio } from "effect";
 import { Command } from "effect/cli";
 import { describe, inject } from "vitest";
-import { cli } from "#qti/cli.ts";
-import { hasLease } from "#qti/test/settings.ts";
+import { cli } from "#pantry/cli.ts";
+import { hasLease } from "#pantry/test/settings.ts";
 
 const fixtures = inject("fixtures");
 

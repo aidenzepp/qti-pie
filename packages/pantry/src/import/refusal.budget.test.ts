@@ -2,7 +2,7 @@ import { CompileError, ExecutionFailure } from "@bjornpagen/grizzle";
 import type { CompileBound } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
-import { ImportRefused, budgetRefusalOf } from "#qti/import/refusal.ts";
+import { ImportRefused, budgetRefusalOf } from "#pantry/import/refusal.ts";
 
 /**
  * Grizzle exports no constructor for an `ExecutionFailure`, and the schema of its `reason` accepts

@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
-import * as asi from "#qti/schema/kinds/asi.ts";
-import * as node from "#qti/schema/node.ts";
-import { admissionByVersion } from "#qti/schema/seed/admission.ts";
+import * as asi from "#pantry/schema/kinds/asi.ts";
+import * as node from "#pantry/schema/node.ts";
+import { admissionByVersion } from "#pantry/schema/seed/admission.ts";
 
 /**
  * The 64 expression handles of the spec's 3.3 table A.

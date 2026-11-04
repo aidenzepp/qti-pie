@@ -36,10 +36,10 @@ import {
   ParamValuetype,
   TrackDefaultValue,
   TrackKind,
-} from "#qti/schema/content/rosters.ts";
-import * as node from "#qti/schema/node.ts";
-import { ContentMediaType, EmbedSourceUri, TrackLanguage } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+} from "#pantry/schema/content/rosters.ts";
+import * as node from "#pantry/schema/node.ts";
+import { ContentMediaType, EmbedSourceUri, TrackLanguage } from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * An `xs:string` attribute's value, whitespace preserved.

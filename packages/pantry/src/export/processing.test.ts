@@ -2,18 +2,18 @@ import path from "node:path";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
-import { renderTree } from "#qti/export/render.ts";
-import { itemRows } from "#qti/import/item.ts";
-import { processingRows } from "#qti/import/processing.ts";
-import { rptemplateRows } from "#qti/import/rptemplate.ts";
-import { Rows, treeRows } from "#qti/import/tree.ts";
-import type { Language } from "#qti/processing/ast.ts";
-import { emptyEnvironment, environmentOf, withDeclarations } from "#qti/processing/env.ts";
-import type { DeclarationEntry, Environment, Mode } from "#qti/processing/env.ts";
-import { templateDocuments } from "#qti/processing/fixtures.ts";
-import type { RootKindHandle } from "#qti/schema/node.ts";
+import { renderTree } from "#pantry/export/render.ts";
+import { itemRows } from "#pantry/import/item.ts";
+import { processingRows } from "#pantry/import/processing.ts";
+import { rptemplateRows } from "#pantry/import/rptemplate.ts";
+import { Rows, treeRows } from "#pantry/import/tree.ts";
+import type { Language } from "#pantry/processing/ast.ts";
+import { emptyEnvironment, environmentOf, withDeclarations } from "#pantry/processing/env.ts";
+import type { DeclarationEntry, Environment, Mode } from "#pantry/processing/env.ts";
+import { templateDocuments } from "#pantry/processing/fixtures.ts";
+import type { RootKindHandle } from "#pantry/schema/node.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
-import { xmllintC14n } from "#qti/xml/oracle.ts";
+import { xmllintC14n } from "#pantry/xml/oracle.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Attribute, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 import { writeXml } from "@qti-pie/crust/write.ts";
@@ -32,7 +32,7 @@ const TestLayer = NodeChildProcessSpawner.layer.pipe(
 const workDirectory = path.resolve(import.meta.dirname, "../../work");
 
 /**
- * The committed processing fixtures, relative to `packages/qti`, where the tests run.
+ * The committed processing fixtures, relative to `packages/pantry`, where the tests run.
  */
 const fixtures = "src/processing/fixtures";
 

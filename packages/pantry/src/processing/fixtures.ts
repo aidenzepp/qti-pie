@@ -5,8 +5,8 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Config, Console, Effect, FileSystem, Match, Schema } from "effect";
 import type { PlatformError } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
-import { materialize, materializeCorpus } from "#qti/test/fixtures.ts";
-import type { ExamplesError } from "#qti/test/fixtures.ts";
+import { materialize, materializeCorpus } from "#pantry/test/fixtures.ts";
+import type { ExamplesError } from "#pantry/test/fixtures.ts";
 
 /**
  * The corpus packages the processing tests read, by the zip's file name without `.zip`.

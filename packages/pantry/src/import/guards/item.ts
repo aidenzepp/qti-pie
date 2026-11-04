@@ -6,10 +6,10 @@
  */
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { Effect, Option, Predicate, Schema } from "effect";
-import { standardTemplate } from "#qti/import/item.ts";
-import { collapse, replace, Rows, valueText } from "#qti/import/tree.ts";
-import type { WhiteSpace } from "#qti/import/tree.ts";
-import { spelledText } from "#qti/schema/attribute-homes.ts";
+import { standardTemplate } from "#pantry/import/item.ts";
+import { collapse, replace, Rows, valueText } from "#pantry/import/tree.ts";
+import type { WhiteSpace } from "#pantry/import/tree.ts";
+import { spelledText } from "#pantry/schema/attribute-homes.ts";
 import {
   Declaration,
   DeclarationLongInterpretation,
@@ -18,11 +18,11 @@ import {
   DeclarationNormalMinimum,
   DeclarationVariableIdentifierRef,
   DeclarationView,
-} from "#qti/schema/declaration.ts";
-import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
-import * as expression from "#qti/schema/expression.ts";
-import * as attributed from "#qti/schema/expression-attributes.ts";
-import { Img, ImgLongdesc } from "#qti/schema/html.ts";
+} from "#pantry/schema/declaration.ts";
+import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/document.ts";
+import * as expression from "#pantry/schema/expression.ts";
+import * as attributed from "#pantry/schema/expression-attributes.ts";
+import { Img, ImgLongdesc } from "#pantry/schema/html.ts";
 import {
   ChoiceInteraction,
   ChoiceInteractionMaxSelectionsMessage,
@@ -30,8 +30,8 @@ import {
   SimpleChoice,
   SimpleChoiceTemplateIdentifier,
   TypedBinding,
-} from "#qti/schema/interaction.ts";
-import { AssessmentItem } from "#qti/schema/item.ts";
+} from "#pantry/schema/interaction.ts";
+import { AssessmentItem } from "#pantry/schema/item.ts";
 import {
   AttributeLexical,
   AttributeSpelling,
@@ -41,7 +41,7 @@ import {
   TextNode,
   vocabularies,
   Ws,
-} from "#qti/schema/node.ts";
+} from "#pantry/schema/node.ts";
 import {
   BuiltInRef,
   DeclaredRef,
@@ -49,9 +49,9 @@ import {
   ResponseProcessingTemplateLocation,
   StandardTemplateReference,
   TemplateParameterRef,
-} from "#qti/schema/processing.ts";
-import { XIncludeHref, XIncludeParse } from "#qti/schema/rule.ts";
-import * as values from "#qti/schema/value.ts";
+} from "#pantry/schema/processing.ts";
+import { XIncludeHref, XIncludeParse } from "#pantry/schema/rule.ts";
+import * as values from "#pantry/schema/value.ts";
 
 /**
  * An item guard refused the rows.

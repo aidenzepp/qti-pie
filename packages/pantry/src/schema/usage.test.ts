@@ -2,16 +2,16 @@ import { schema } from "@bjornpagen/grizzle";
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
-import * as rosters from "#qti/schema/content/rosters.ts";
-import * as declaration from "#qti/schema/declaration.ts";
-import * as document from "#qti/schema/document.ts";
-import * as ud from "#qti/schema/kinds/ud.ts";
-import * as node from "#qti/schema/node.ts";
-import * as pkg from "#qti/schema/package.ts";
-import * as contracts from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import * as usage from "#qti/schema/usage.ts";
-import * as value from "#qti/schema/value.ts";
+import * as rosters from "#pantry/schema/content/rosters.ts";
+import * as declaration from "#pantry/schema/declaration.ts";
+import * as document from "#pantry/schema/document.ts";
+import * as ud from "#pantry/schema/kinds/ud.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as pkg from "#pantry/schema/package.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import * as usage from "#pantry/schema/usage.ts";
+import * as value from "#pantry/schema/value.ts";
 
 /**
  * The schema over the modules the usage relations bind and the module itself.

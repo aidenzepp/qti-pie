@@ -11,13 +11,13 @@
  * the printed variables read them, then resolves every reference against the variables of all four
  * kinds.
  */
-import { judgedLater } from "#qti/import/judged.ts";
+import { judgedLater } from "#pantry/import/judged.ts";
 import type { Relation, uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
-import type { ImportRefused } from "#qti/import/refusal.ts";
-import { attributeReader, markers } from "#qti/import/interactions.ts";
-import { requiredAttribute } from "#qti/import/required.ts";
-import type { DeclaredVariable, NodeRef } from "#qti/import/interactions.ts";
+import type { ImportRefused } from "#pantry/import/refusal.ts";
+import { attributeReader, markers } from "#pantry/import/interactions.ts";
+import { requiredAttribute } from "#pantry/import/required.ts";
+import type { DeclaredVariable, NodeRef } from "#pantry/import/interactions.ts";
 import {
   closedOf,
   collapse,
@@ -27,8 +27,8 @@ import {
   typedAttribute,
   valueText,
   withParents,
-} from "#qti/import/tree.ts";
-import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
+} from "#pantry/import/tree.ts";
+import type { NodeIndex, UnmodeledVocabulary } from "#pantry/import/tree.ts";
 import {
   BaseType,
   ContextDeclarationArm,
@@ -39,14 +39,14 @@ import {
   TemplateDeclarationArm,
   TypedCardinality,
   TypedDeclaration,
-} from "#qti/schema/declaration.ts";
+} from "#pantry/schema/declaration.ts";
 import {
   RecordFieldIdentifier,
   ShowHideIdentifier,
   VariableReference,
-} from "#qti/schema/contracts.ts";
-import type { DeclarationKind, DeclarationShape } from "#qti/schema/declaration.ts";
-import { ContextDeclarationId, DocumentId } from "#qti/schema/document.ts";
+} from "#pantry/schema/contracts.ts";
+import type { DeclarationKind, DeclarationShape } from "#pantry/schema/declaration.ts";
+import { ContextDeclarationId, DocumentId } from "#pantry/schema/document.ts";
 import {
   ContentBodyFeedback,
   ContentBodyModal,
@@ -62,11 +62,11 @@ import {
   ModalFeedback,
   ModalFeedbackTitle,
   TemplateFeedbackBlock,
-} from "#qti/schema/feedback.ts";
-import { Edge, Node } from "#qti/schema/node.ts";
-import type { AttributeNameHandle, NodeKindHandle } from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import { BooleanLiteral, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
+} from "#pantry/schema/feedback.ts";
+import { Edge, Node } from "#pantry/schema/node.ts";
+import type { AttributeNameHandle, NodeKindHandle } from "#pantry/schema/node.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import { BooleanLiteral, ShowHide, XsBoolean } from "#pantry/schema/content/rosters.ts";
 import {
   CatalogInfo,
   CompanionMaterialsInfo,
@@ -74,7 +74,7 @@ import {
   Stylesheet,
   StylesheetMedia,
   StylesheetTitle,
-} from "#qti/schema/rubric.ts";
+} from "#pantry/schema/rubric.ts";
 import {
   DeclaredPrintedVariableBase,
   DeclaredPrintedVariableDelimiter,
@@ -95,8 +95,8 @@ import {
   TemplateBlock,
   TemplateContentRef,
   TemplateInline,
-} from "#qti/schema/template.ts";
-import * as values from "#qti/schema/value.ts";
+} from "#pantry/schema/template.ts";
+import * as values from "#pantry/schema/value.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 type BaseTypeHandle = (typeof BaseType.handles)[number];

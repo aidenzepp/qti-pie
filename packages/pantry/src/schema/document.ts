@@ -20,11 +20,18 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import { AttributeName, Node, NodeKind, RootKind, SchemaVersion, Tree } from "#qti/schema/node.ts";
-import type { RootKindHandle } from "#qti/schema/node.ts";
-import { Package, PackageEntry, Resource, RootOfType } from "#qti/schema/package.ts";
-import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import {
+  AttributeName,
+  Node,
+  NodeKind,
+  RootKind,
+  SchemaVersion,
+  Tree,
+} from "#pantry/schema/node.ts";
+import type { RootKindHandle } from "#pantry/schema/node.ts";
+import { Package, PackageEntry, Resource, RootOfType } from "#pantry/schema/package.ts";
+import { ManifestIdentifier, PackagePath } from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
 

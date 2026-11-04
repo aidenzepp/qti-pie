@@ -211,7 +211,7 @@
  *     print("  InventoryAttribute,")
  *     print("  InventoryChild,")
  *     print("  InventoryLeaf,")
- *     print("} from \"#qti/schema/content/xsd-inventory.ts\";")
+ *     print("} from \"#pantry/schema/content/xsd-inventory.ts\";")
  *     print()
  *     for l in [
  *         "/**",
@@ -276,9 +276,9 @@
  */
 import { Option } from "effect";
 
-import { asiInventory } from "#qti/schema/content/inventory/asi.ts";
-import { htmlInventory } from "#qti/schema/content/inventory/html.ts";
-import { processingInventory } from "#qti/schema/content/inventory/processing.ts";
+import { asiInventory } from "#pantry/schema/content/inventory/asi.ts";
+import { htmlInventory } from "#pantry/schema/content/inventory/html.ts";
+import { processingInventory } from "#pantry/schema/content/inventory/processing.ts";
 
 /**
  * One attribute an XSD type declares, through its attribute groups and its extension bases.

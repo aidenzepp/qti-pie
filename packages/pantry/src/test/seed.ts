@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 const SEED_BUFFER = 256 * 1024 * 1024;
 
 /**
- * Print the seed with `scripts/seed-sql.ts` and return its output. Run from `packages/qti`.
+ * Print the seed with `scripts/seed-sql.ts` and return its output. Run from `packages/pantry`.
  *
  * @param args - The script's arguments, such as `--only` and `--minus`; empty prints the full seed.
  * @returns The SQL the script printed, in a buffer large enough to hold the full seed.

@@ -8,8 +8,8 @@
  * module.
  */
 import { contained, on, relation, uuid } from "@bjornpagen/grizzle";
-import { CategoryList, SectionReference } from "#qti/schema/contracts.ts";
-import * as processing from "#qti/schema/processing.ts";
+import { CategoryList, SectionReference } from "#pantry/schema/contracts.ts";
+import * as processing from "#pantry/schema/processing.ts";
 
 /**
  * The `qti-and` operator; its operands are `Operand` rows.

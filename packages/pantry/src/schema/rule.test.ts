@@ -2,14 +2,14 @@
 import { schema } from "@bjornpagen/grizzle";
 import type { Statement } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import * as contracts from "#qti/schema/contracts.ts";
-import * as rosters from "#qti/schema/content/rosters.ts";
-import * as declaration from "#qti/schema/declaration.ts";
-import * as item from "#qti/schema/item.ts";
-import * as xi from "#qti/schema/kinds/xi.ts";
-import * as node from "#qti/schema/node.ts";
-import * as processing from "#qti/schema/processing.ts";
-import * as rule from "#qti/schema/rule.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
+import * as rosters from "#pantry/schema/content/rosters.ts";
+import * as declaration from "#pantry/schema/declaration.ts";
+import * as item from "#pantry/schema/item.ts";
+import * as xi from "#pantry/schema/kinds/xi.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as processing from "#pantry/schema/processing.ts";
+import * as rule from "#pantry/schema/rule.ts";
 
 /**
  * The probe schema: the node, item, declaration and processing relations this module's rules

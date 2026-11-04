@@ -3,7 +3,7 @@
  * importer wrote for each attached, and the `Tree` row with the fidelity rows around it.
  *
  * They live apart from `read.ts` so that the author application's workload
- * (`#qti/schema/logins.ts`) can name them without importing the module that opens a database
+ * (`#pantry/schema/logins.ts`) can name them without importing the module that opens a database
  * through that login.
  *
  * One rule places every stored relation: the first field of its primary key holds the id of the
@@ -15,10 +15,10 @@
 import { arm, query, uuid, v } from "@bjornpagen/grizzle";
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { Predicate } from "effect";
-import { Document } from "#qti/schema/document.ts";
-import { Edge, Node, Tree, TreeRoot } from "#qti/schema/node.ts";
-import { nodeArms as nodeArmsOfKind } from "#qti/schema/qti.ts";
-import { Author } from "#qti/schema/roles.ts";
+import { Document } from "#pantry/schema/document.ts";
+import { Edge, Node, Tree, TreeRoot } from "#pantry/schema/node.ts";
+import { nodeArms as nodeArmsOfKind } from "#pantry/schema/qti.ts";
+import { Author } from "#pantry/schema/roles.ts";
 
 /**
  * A variable or term of a rule, which the run-time view only passes from one call to the next.

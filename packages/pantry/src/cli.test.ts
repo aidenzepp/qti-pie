@@ -4,8 +4,8 @@ import { assert, layer } from "@effect/vitest";
 import { Cause, Console, Effect, Exit, Stdio, Stream } from "effect";
 import { Command } from "effect/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { cli } from "#qti/cli.ts";
-import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
+import { cli } from "#pantry/cli.ts";
+import { cliProcessTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * Run the command on `args` with the console captured, in place of writing to the terminal.

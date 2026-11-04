@@ -1,16 +1,16 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
-import * as attributes from "#qti/schema/attributes.ts";
-import * as rosters from "#qti/schema/content/rosters.ts";
-import * as document from "#qti/schema/document.ts";
-import * as item from "#qti/schema/item.ts";
-import * as lang from "#qti/schema/lang.ts";
-import * as metadata from "#qti/schema/metadata.ts";
-import * as node from "#qti/schema/node.ts";
-import * as pkg from "#qti/schema/package.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import * as contracts from "#qti/schema/contracts.ts";
+import * as attributes from "#pantry/schema/attributes.ts";
+import * as rosters from "#pantry/schema/content/rosters.ts";
+import * as document from "#pantry/schema/document.ts";
+import * as item from "#pantry/schema/item.ts";
+import * as lang from "#pantry/schema/lang.ts";
+import * as metadata from "#pantry/schema/metadata.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as pkg from "#pantry/schema/package.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
 
 /**
  * A containment of `lang.rules`, as the engine records it.

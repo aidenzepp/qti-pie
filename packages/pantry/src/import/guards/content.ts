@@ -11,12 +11,12 @@
  */
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
-import { collapse, replace, Rows } from "#qti/import/tree.ts";
-import type { WhiteSpace } from "#qti/import/tree.ts";
-import { IdrefAttribute } from "#qti/schema/content/rosters.ts";
-import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
-import { spelledText, typedValues } from "#qti/schema/attribute-homes.ts";
-import * as shared from "#qti/schema/attributes.ts";
+import { collapse, replace, Rows } from "#pantry/import/tree.ts";
+import type { WhiteSpace } from "#pantry/import/tree.ts";
+import { IdrefAttribute } from "#pantry/schema/content/rosters.ts";
+import { entryOf } from "#pantry/schema/content/xsd-inventory.ts";
+import { spelledText, typedValues } from "#pantry/schema/attribute-homes.ts";
+import * as shared from "#pantry/schema/attributes.ts";
 import {
   AriaLabel,
   AriaValuemax,
@@ -26,14 +26,14 @@ import {
   NodeLabel,
   NodeLang,
   NodeXmlLang,
-} from "#qti/schema/attributes.ts";
+} from "#pantry/schema/attributes.ts";
 import {
   DeclarationMasteryValue,
   DeclarationNormalMaximum,
   DeclarationNormalMinimum,
-} from "#qti/schema/declaration.ts";
-import { Document, HtmlId } from "#qti/schema/document.ts";
-import { AType } from "#qti/schema/html/text.ts";
+} from "#pantry/schema/declaration.ts";
+import { Document, HtmlId } from "#pantry/schema/document.ts";
+import { AType } from "#pantry/schema/html/text.ts";
 import {
   AudioSrc,
   ObjectElement,
@@ -44,14 +44,19 @@ import {
   Track,
   VideoPoster,
   VideoSrc,
-} from "#qti/schema/html/media.ts";
-import { TypedBinding } from "#qti/schema/interaction.ts";
+} from "#pantry/schema/html/media.ts";
+import { TypedBinding } from "#pantry/schema/interaction.ts";
 import {
   AssociateInteraction,
   GraphicAssociateInteraction,
   MatchInteraction,
-} from "#qti/schema/interactions/associate.ts";
-import { Gap, GapImgLeft, GapImgTop, GapMatchInteraction } from "#qti/schema/interactions/gap.ts";
+} from "#pantry/schema/interactions/associate.ts";
+import {
+  Gap,
+  GapImgLeft,
+  GapImgTop,
+  GapMatchInteraction,
+} from "#pantry/schema/interactions/gap.ts";
 import {
   Hottext,
   HottextInteraction,
@@ -60,18 +65,18 @@ import {
   HotspotInteraction,
   PositionObjectInteraction,
   SelectPointInteraction,
-} from "#qti/schema/interactions/hot.ts";
-import { GraphicOrderInteraction, OrderInteraction } from "#qti/schema/interactions/order.ts";
-import { MediaCoords } from "#qti/schema/interactions/other.ts";
+} from "#pantry/schema/interactions/hot.ts";
+import { GraphicOrderInteraction, OrderInteraction } from "#pantry/schema/interactions/order.ts";
+import { MediaCoords } from "#pantry/schema/interactions/other.ts";
 import {
   ExtendedTextInteraction,
   ExtendedTextMaxStrings,
   StringBinding,
   TextEntryInteraction,
-} from "#qti/schema/interactions/text.ts";
-import { AssessmentItemLabel } from "#qti/schema/item.ts";
-import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
-import { LomLanguage, ResourceLom } from "#qti/schema/metadata.ts";
+} from "#pantry/schema/interactions/text.ts";
+import { AssessmentItemLabel } from "#pantry/schema/item.ts";
+import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#pantry/schema/lang.ts";
+import { LomLanguage, ResourceLom } from "#pantry/schema/metadata.ts";
 import {
   AttributeLexical,
   AttributeSpelling,
@@ -81,9 +86,9 @@ import {
   TextNode,
   vocabularies,
   Ws,
-} from "#qti/schema/node.ts";
-import type { SchemaVersionHandle } from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+} from "#pantry/schema/node.ts";
+import type { SchemaVersionHandle } from "#pantry/schema/node.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 import {
   Coords,
   CoordsCircle,
@@ -91,12 +96,12 @@ import {
   CoordsEllipse,
   CoordsPoly,
   CoordsRect,
-} from "#qti/schema/shapes.ts";
+} from "#pantry/schema/shapes.ts";
 import {
   PrintedVariable,
   PrintedVariableIndex,
   PrintedVariableVarRef,
-} from "#qti/schema/template.ts";
+} from "#pantry/schema/template.ts";
 
 /**
  * A content guard refused the rows.

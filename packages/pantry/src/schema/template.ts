@@ -19,22 +19,22 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
-import { ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
+import { ShowHide, XsBoolean } from "#pantry/schema/content/rosters.ts";
 import {
   BaseType,
   Declaration,
   DeclarationKind,
   TypedCardinality,
   TypedDeclaration,
-} from "#qti/schema/declaration.ts";
-import { Node } from "#qti/schema/node.ts";
+} from "#pantry/schema/declaration.ts";
+import { Node } from "#pantry/schema/node.ts";
 import {
   PrintedVariableIntegerOrVariable,
   RecordFieldIdentifier,
   ShowHideIdentifier,
   VariableReference,
-} from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+} from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
 
@@ -306,7 +306,7 @@ export const relations = {
  * one kind, so an arm listed under two handles admits no row.
  *
  * Their containments into `Node` are not written here: one `mirrors` per handle in the composed
- * schema (`#qti/schema/qti.ts`) binds them.
+ * schema (`#pantry/schema/qti.ts`) binds them.
  */
 export const arms = {
   "qti-printed-variable": PrintedVariable,

@@ -3,7 +3,7 @@ import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 
 /**
- * The `src` folder, where `#qti/<x>` resolves to `src/<x>`.
+ * The `src` folder, where `#pantry/<x>` resolves to `src/<x>`.
  */
 const sourceRoot = path.resolve(import.meta.dirname, "..");
 
@@ -12,10 +12,10 @@ const sourceRoot = path.resolve(import.meta.dirname, "..");
  * `--help` does not pay for the database, the importer, the exporter or grizzle (spec D7).
  */
 const forbidden = [
-  "#qti/db/",
-  "#qti/import/",
-  "#qti/export/",
-  "#qti/schema/",
+  "#pantry/db/",
+  "#pantry/import/",
+  "#pantry/export/",
+  "#pantry/schema/",
   "@bjornpagen/grizzle",
 ];
 
@@ -54,7 +54,7 @@ export const staticImports = (source: string): readonly StaticImport[] => {
 };
 
 /**
- * The modules a module reaches through static `#qti/` imports, and the first import that names a
+ * The modules a module reaches through static `#pantry/` imports, and the first import that names a
  * forbidden module.
  *
  * @param entry - The absolute path of the module to start from.
@@ -81,8 +81,8 @@ export const forbiddenImports = (
     for (const { specifier, text } of staticImports(read(file))) {
       if (forbidden.some((prefix) => specifier.startsWith(prefix))) {
         offences.push(`${path.relative(sourceRoot, file)}: ${text.replaceAll(/\s+/gu, " ")}`);
-      } else if (specifier.startsWith("#qti/")) {
-        pending.push(path.join(sourceRoot, specifier.slice("#qti/".length)));
+      } else if (specifier.startsWith("#pantry/")) {
+        pending.push(path.join(sourceRoot, specifier.slice("#pantry/".length)));
       }
     }
   }
@@ -92,46 +92,48 @@ export const forbiddenImports = (
 
 describe("staticImports", () => {
   it("counts a multi-line named import", () => {
-    const found = staticImports('import {\n  a,\n  b,\n} from "#qti/db/layer.ts";\nconst c = 1;\n');
+    const found = staticImports(
+      'import {\n  a,\n  b,\n} from "#pantry/db/layer.ts";\nconst c = 1;\n',
+    );
 
     assert.deepStrictEqual(
       found.map(({ specifier }) => specifier),
-      ["#qti/db/layer.ts"],
+      ["#pantry/db/layer.ts"],
     );
   });
 
   it("counts a bare side-effect import", () => {
-    const found = staticImports('import "#qti/export/package.ts";\n');
+    const found = staticImports('import "#pantry/export/package.ts";\n');
 
     assert.deepStrictEqual(
       found.map(({ specifier }) => specifier),
-      ["#qti/export/package.ts"],
+      ["#pantry/export/package.ts"],
     );
   });
 
   it("counts a re-export from a module", () => {
-    const found = staticImports('export { a } from "#qti/import/package.ts";\n');
+    const found = staticImports('export { a } from "#pantry/import/package.ts";\n');
 
     assert.strictEqual(found.length, 1);
   });
 
   it("does not count a multi-line import type", () => {
     const found = staticImports(
-      'import type {\n  A,\n  B,\n} from "#qti/db/layer.ts";\nexport type { C } from "#qti/db/layer.ts";\n',
+      'import type {\n  A,\n  B,\n} from "#pantry/db/layer.ts";\nexport type { C } from "#pantry/db/layer.ts";\n',
     );
 
     assert.deepStrictEqual(found, []);
   });
 
   it("counts a mixed import with an inline type", () => {
-    const found = staticImports('import { type A, b } from "#qti/db/layer.ts";\n');
+    const found = staticImports('import { type A, b } from "#pantry/db/layer.ts";\n');
 
     assert.strictEqual(found.length, 1);
   });
 
   it("does not count a dynamic import", () => {
     const found = staticImports(
-      'const load = () => import("#qti/db/layer.ts");\nawait Effect.promise(() => import("#qti/export/package.ts"));\n',
+      'const load = () => import("#pantry/db/layer.ts");\nawait Effect.promise(() => import("#pantry/export/package.ts"));\n',
     );
 
     assert.deepStrictEqual(found, []);
@@ -139,7 +141,7 @@ describe("staticImports", () => {
 
   it("does not count an import written inside a comment", () => {
     const found = staticImports(
-      '/* import { a } from "#qti/db/layer.ts"; */\n// import "#qti/db/layer.ts";\n',
+      '/* import { a } from "#pantry/db/layer.ts"; */\n// import "#pantry/db/layer.ts";\n',
     );
 
     assert.deepStrictEqual(found, []);
@@ -149,7 +151,7 @@ describe("staticImports", () => {
 describe("forbiddenImports", () => {
   it("follows static imports and names the module and the import", () => {
     const files = {
-      [path.join(sourceRoot, "a.ts")]: 'import { b } from "#qti/b.ts";\n',
+      [path.join(sourceRoot, "a.ts")]: 'import { b } from "#pantry/b.ts";\n',
       [path.join(sourceRoot, "b.ts")]: 'import {\n  x,\n} from "@bjornpagen/grizzle";\n',
     };
     const offences = forbiddenImports(

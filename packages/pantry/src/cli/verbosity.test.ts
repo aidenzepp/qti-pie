@@ -2,9 +2,9 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Cause, Console, Effect, Exit, Logger } from "effect";
 import { CliError, Command } from "effect/cli";
-import { exitCodeOf } from "#qti/cli/run.ts";
-import { verbosityGlobalFlags, withVerbosity } from "#qti/cli/verbosity.ts";
-import { captureCli } from "#qti/test/cli.ts";
+import { exitCodeOf } from "#pantry/cli/run.ts";
+import { verbosityGlobalFlags, withVerbosity } from "#pantry/cli/verbosity.ts";
+import { captureCli } from "#pantry/test/cli.ts";
 
 /**
  * A command that logs at three levels and prints one data line, wired as the root is: the two

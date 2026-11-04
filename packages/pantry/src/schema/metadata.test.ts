@@ -5,20 +5,20 @@ import {
   admission as lomAdmission,
   kinds as lomKinds,
   registry as lomRegistry,
-} from "#qti/schema/kinds/lom.ts";
+} from "#pantry/schema/kinds/lom.ts";
 import {
   admission as qmdAdmission,
   kinds as qmdKinds,
   registry as qmdRegistry,
-} from "#qti/schema/kinds/qmd.ts";
-import * as rosters from "#qti/schema/content/rosters.ts";
-import * as document from "#qti/schema/document.ts";
-import * as metadata from "#qti/schema/metadata.ts";
-import * as node from "#qti/schema/node.ts";
-import * as pkg from "#qti/schema/package.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import { admission as seedAdmission } from "#qti/schema/seed/admission.ts";
-import * as contracts from "#qti/schema/contracts.ts";
+} from "#pantry/schema/kinds/qmd.ts";
+import * as rosters from "#pantry/schema/content/rosters.ts";
+import * as document from "#pantry/schema/document.ts";
+import * as metadata from "#pantry/schema/metadata.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as pkg from "#pantry/schema/package.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import { admission as seedAdmission } from "#pantry/schema/seed/admission.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
 
 /**
  * The schema over node's, package's, document's and this module's relations and rules.

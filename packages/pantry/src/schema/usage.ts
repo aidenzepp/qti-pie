@@ -22,10 +22,10 @@ import {
   within,
 } from "@bjornpagen/grizzle";
 import type { AnyRelation, FieldBase } from "@bjornpagen/grizzle";
-import { XsBoolean } from "#qti/schema/content/rosters.ts";
-import { Document } from "#qti/schema/document.ts";
-import type * as ud from "#qti/schema/kinds/ud.ts";
-import { BaseType } from "#qti/schema/declaration.ts";
+import { XsBoolean } from "#pantry/schema/content/rosters.ts";
+import { Document } from "#pantry/schema/document.ts";
+import type * as ud from "#pantry/schema/kinds/ud.ts";
+import { BaseType } from "#pantry/schema/declaration.ts";
 import {
   GlossaryUri,
   StatisticContextUri,
@@ -36,10 +36,10 @@ import {
   UsageMappingScore,
   UsagePartIdentifier,
   UsageValueToken,
-} from "#qti/schema/contracts.ts";
-import { Edge, TreeRoot } from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import { valueArms } from "#qti/schema/value.ts";
+} from "#pantry/schema/contracts.ts";
+import { Edge, TreeRoot } from "#pantry/schema/node.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import { valueArms } from "#pantry/schema/value.ts";
 
 const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags);
 

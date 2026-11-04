@@ -1,14 +1,14 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
-import * as rosters from "#qti/schema/content/rosters.ts";
-import { admission, kinds as cpKinds } from "#qti/schema/kinds/cp.ts";
-import * as node from "#qti/schema/node.ts";
-import { RootKind } from "#qti/schema/node.ts";
-import * as pkg from "#qti/schema/package.ts";
-import { resourceTypes } from "#qti/schema/seed/resource-types.ts";
-import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
-import * as contracts from "#qti/schema/contracts.ts";
+import * as rosters from "#pantry/schema/content/rosters.ts";
+import { admission, kinds as cpKinds } from "#pantry/schema/kinds/cp.ts";
+import * as node from "#pantry/schema/node.ts";
+import { RootKind } from "#pantry/schema/node.ts";
+import * as pkg from "#pantry/schema/package.ts";
+import { resourceTypes } from "#pantry/schema/seed/resource-types.ts";
+import { rootOfType } from "#pantry/schema/seed/root-of-type.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
 
 const versions = ["3.0.0", "3.0.1"] as const;
 

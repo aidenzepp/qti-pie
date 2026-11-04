@@ -1,13 +1,13 @@
 import { closed, schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
-import * as contracts from "#qti/schema/contracts.ts";
-import * as attributes from "#qti/schema/attributes.ts";
-import * as rosters from "#qti/schema/content/rosters.ts";
-import * as generic from "#qti/schema/kinds/generic.ts";
-import * as node from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import type { AttributeNameHandle, NodeKindHandle } from "#qti/schema/node.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
+import * as attributes from "#pantry/schema/attributes.ts";
+import * as rosters from "#pantry/schema/content/rosters.ts";
+import * as generic from "#pantry/schema/kinds/generic.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import type { AttributeNameHandle, NodeKindHandle } from "#pantry/schema/node.ts";
 
 /**
  * Whether every member of `A` is a member of `B`; the tuple wrapper stops distribution over a

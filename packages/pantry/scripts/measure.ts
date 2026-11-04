@@ -1,7 +1,7 @@
 /**
  * Prints what the composed schema costs: fields, SQL bytes and what `grizzle generate` exposes, as
  * `key: value` lines, each beside the fixed compiler ceiling it is measured against. Run with `node
- * scripts/measure.ts` from `packages/qti`; it reads the committed migrations and writes nothing.
+ * scripts/measure.ts` from `packages/pantry`; it reads the committed migrations and writes nothing.
  *
  * With `--programs` it also compiles the author application's programs, which needs the lease
  * database `GR8DES_PG_DATABASE` names: each export query of the workload, and the import as one
@@ -14,16 +14,16 @@ import type { AnyRelation } from "@bjornpagen/grizzle";
 import { NodeFileSystem, NodeRuntime } from "@effect/platform-node";
 import { Effect, FileSystem, Layer, Path } from "effect";
 import snapshot from "#migrations/qti/snapshot.json" with { type: "json" };
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { documentIdsOf, nodeQueries, treeOf } from "#qti/export/queries.ts";
-import type { LooseQuery } from "#qti/export/queries.ts";
-import { NodeKind } from "#qti/schema/node.ts";
-import { Qti } from "#qti/schema/qti.ts";
-import { Package } from "#qti/schema/package.ts";
-import { Author } from "#qti/schema/roles.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
-import { BUDGETS, SQL_BYTES_CEILING, measure, watchMeters } from "#qti/test/meter.ts";
-import type { Budget, Measured } from "#qti/test/meter.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { documentIdsOf, nodeQueries, treeOf } from "#pantry/export/queries.ts";
+import type { LooseQuery } from "#pantry/export/queries.ts";
+import { NodeKind } from "#pantry/schema/node.ts";
+import { Qti } from "#pantry/schema/qti.ts";
+import { Package } from "#pantry/schema/package.ts";
+import { Author } from "#pantry/schema/roles.ts";
+import { AuthorApp } from "#pantry/schema/logins.ts";
+import { BUDGETS, SQL_BYTES_CEILING, measure, watchMeters } from "#pantry/test/meter.ts";
+import type { Budget, Measured } from "#pantry/test/meter.ts";
 
 /**
  * The compiler's fixed ceilings (`docs/research/d8105349.md` section 22).

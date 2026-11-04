@@ -18,7 +18,7 @@ export type ScratchEnv = Readonly<{
 /**
  * The scratch environment under `root`: `state` and `home` folders there.
  *
- * @param root - The folder one test file owns, under `packages/qti/work`.
+ * @param root - The folder one test file owns, under `packages/pantry/work`.
  */
 export const scratchEnv = (root: string): ScratchEnv => ({
   GRIZZLE_PG_STATE: path.join(root, "state"),

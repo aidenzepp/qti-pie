@@ -1,9 +1,9 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { itemRows } from "#qti/import/item.ts";
-import { ruleOfError } from "#qti/import/refusal.ts";
-import { ItemRefusal, Rows } from "#qti/import/tree.ts";
-import { Img } from "#qti/schema/html.ts";
+import { itemRows } from "#pantry/import/item.ts";
+import { ruleOfError } from "#pantry/import/refusal.ts";
+import { ItemRefusal, Rows } from "#pantry/import/tree.ts";
+import { Img } from "#pantry/schema/html.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 /**

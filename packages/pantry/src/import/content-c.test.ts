@@ -7,14 +7,14 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Context, Effect, FileSystem, Layer, Predicate } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { comparePackage, renderReport } from "#qti/export/compare.ts";
-import { exportPackage } from "#qti/export/package.ts";
-import { changeSetOf, importPackage, readRows, retrySchedule } from "#qti/import/package.ts";
-import { ImportRefused, isMappedLaw, ruleOfLaw } from "#qti/import/refusal.ts";
-import type { ImportLaw, Rule } from "#qti/import/refusal.ts";
-import { Rows } from "#qti/import/tree.ts";
-import { NodeLabel, NodeXmlLang } from "#qti/schema/attributes.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { comparePackage, renderReport } from "#pantry/export/compare.ts";
+import { exportPackage } from "#pantry/export/package.ts";
+import { changeSetOf, importPackage, readRows, retrySchedule } from "#pantry/import/package.ts";
+import { ImportRefused, isMappedLaw, ruleOfLaw } from "#pantry/import/refusal.ts";
+import type { ImportLaw, Rule } from "#pantry/import/refusal.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { NodeLabel, NodeXmlLang } from "#pantry/schema/attributes.ts";
 import {
   ContextDeclarationArm,
   Declaration,
@@ -23,12 +23,12 @@ import {
   ResponseDeclarationArm,
   ResponseDeclarationId,
   TypedDeclaration,
-} from "#qti/schema/declaration.ts";
-import { ContextDeclarationId, DocumentId, DocumentIdentifier } from "#qti/schema/document.ts";
-import { AssessmentItemLabel, ItemTool, ItemToolBoth, ItemToolName } from "#qti/schema/item.ts";
-import { InteractionBinding } from "#qti/schema/interaction.ts";
-import { FeedbackBlock } from "#qti/schema/feedback.ts";
-import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
+} from "#pantry/schema/declaration.ts";
+import { ContextDeclarationId, DocumentId, DocumentIdentifier } from "#pantry/schema/document.ts";
+import { AssessmentItemLabel, ItemTool, ItemToolBoth, ItemToolName } from "#pantry/schema/item.ts";
+import { InteractionBinding } from "#pantry/schema/interaction.ts";
+import { FeedbackBlock } from "#pantry/schema/feedback.ts";
+import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#pantry/schema/lang.ts";
 import {
   AreaMapping,
   MapEntry,
@@ -36,15 +36,15 @@ import {
   Mapping,
   MatchTable,
   relations as mappingRelations,
-} from "#qti/schema/mapping.ts";
-import { Lom, LomGeneral, LomLanguage, LomMetaMetadata } from "#qti/schema/metadata.ts";
-import { Edge, Node } from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
-import { materialize } from "#qti/test/fixtures.ts";
-import type { FixtureName } from "#qti/test/fixtures.ts";
-import { rowsOf } from "#qti/test/rows.ts";
-import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+} from "#pantry/schema/mapping.ts";
+import { Lom, LomGeneral, LomLanguage, LomMetaMetadata } from "#pantry/schema/metadata.ts";
+import { Edge, Node } from "#pantry/schema/node.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import { AuthorApp } from "#pantry/schema/logins.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
+import type { FixtureName } from "#pantry/test/fixtures.ts";
+import { rowsOf } from "#pantry/test/rows.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The directory every export is written under: the package's gitignored `work/`.

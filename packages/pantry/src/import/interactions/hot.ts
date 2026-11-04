@@ -7,15 +7,15 @@
  * A `qti-hottext` and a `qti-hotspot-choice` are written wherever they sit. A hottext's owner row
  * exists exactly when its nearest enclosing interaction is a hottext interaction.
  */
-import { judgedLater } from "#qti/import/judged.ts";
+import { judgedLater } from "#pantry/import/judged.ts";
 import { Effect, Option } from "effect";
-import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
-import type { ImportRefused } from "#qti/import/refusal.ts";
-import { closedOf, ItemRefusal, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
-import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
-import { Shape, ShowHide } from "#qti/schema/content/rosters.ts";
-import type { ShapeHandle } from "#qti/schema/content/rosters.ts";
-import { ChoiceIdentifier } from "#qti/schema/contracts.ts";
+import type { AttributeReader, InteractionContext } from "#pantry/import/interactions.ts";
+import type { ImportRefused } from "#pantry/import/refusal.ts";
+import { closedOf, ItemRefusal, Rows, spelledInteger, withParents } from "#pantry/import/tree.ts";
+import type { IndexedNode, UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import { Shape, ShowHide } from "#pantry/schema/content/rosters.ts";
+import type { ShapeHandle } from "#pantry/schema/content/rosters.ts";
+import { ChoiceIdentifier } from "#pantry/schema/contracts.ts";
 import {
   DeclaredHotspotChoiceShowHide,
   DeclaredHotspotMaxChoices,
@@ -41,8 +41,8 @@ import {
   PositionObjectMinChoices,
   PositionObjectStage,
   SelectPointInteraction,
-} from "#qti/schema/interactions/hot.ts";
-import type { AttributeNameHandle } from "#qti/schema/node.ts";
+} from "#pantry/schema/interactions/hot.ts";
+import type { AttributeNameHandle } from "#pantry/schema/node.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**

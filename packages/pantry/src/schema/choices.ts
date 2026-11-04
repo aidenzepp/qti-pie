@@ -13,10 +13,10 @@ import {
   Declaration,
   TypedCardinality,
   TypedDeclaration,
-} from "#qti/schema/declaration.ts";
-import { Node } from "#qti/schema/node.ts";
-import { MatchGroupList } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+} from "#pantry/schema/declaration.ts";
+import { Node } from "#pantry/schema/node.ts";
+import { MatchGroupList } from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
 

@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
-import { databaseNotChecked, dryRunFlag, requirePackage } from "#qti/cli/args.ts";
-import { emitSuccess, outputMode } from "#qti/cli/output.ts";
+import { databaseNotChecked, dryRunFlag, requirePackage } from "#pantry/cli/args.ts";
+import { emitSuccess, outputMode } from "#pantry/cli/output.ts";
 
 /**
  * What `import` returns under `--output json` when it stored a package: its id.
@@ -45,7 +45,7 @@ export const importCommand = Command.make(
     yield* requirePackage(dir);
 
     if (dryRun) {
-      const { previewPackage } = yield* Effect.promise(() => import("#qti/import/preview.ts"));
+      const { previewPackage } = yield* Effect.promise(() => import("#pantry/import/preview.ts"));
       const { relations, rows } = yield* previewPackage(dir);
 
       yield* emitSuccess(mode, {
@@ -59,8 +59,8 @@ export const importCommand = Command.make(
       return;
     }
 
-    const { AuthorAppLayer } = yield* Effect.promise(() => import("#qti/db/layer.ts"));
-    const { importPackage } = yield* Effect.promise(() => import("#qti/import/package.ts"));
+    const { AuthorAppLayer } = yield* Effect.promise(() => import("#pantry/db/layer.ts"));
+    const { importPackage } = yield* Effect.promise(() => import("#pantry/import/package.ts"));
 
     const packageId = yield* importPackage(dir).pipe(Effect.provide(AuthorAppLayer));
 

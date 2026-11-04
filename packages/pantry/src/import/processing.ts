@@ -11,9 +11,9 @@
  * `treeRows` already wrote under the same {@link NodeIndex}.
  */
 import { Effect, Option, Schema } from "effect";
-import type { ImportRefused, Rule } from "#qti/import/refusal.ts";
-import { closedOf, Rows, spelledInteger, typedAttribute, valueText } from "#qti/import/tree.ts";
-import type { NodeIndex, UnmodeledVocabulary, WhiteSpace } from "#qti/import/tree.ts";
+import type { ImportRefused, Rule } from "#pantry/import/refusal.ts";
+import { closedOf, Rows, spelledInteger, typedAttribute, valueText } from "#pantry/import/tree.ts";
+import type { NodeIndex, UnmodeledVocabulary, WhiteSpace } from "#pantry/import/tree.ts";
 import type {
   AttributeValue,
   IncludeNode,
@@ -21,11 +21,11 @@ import type {
   LiteralOrRef,
   Position,
   RuleOrExpressionKind,
-} from "#qti/processing/ast.ts";
-import { checkProcessing } from "#qti/processing/check.ts";
-import type { PId } from "#qti/processing/check.ts";
-import type { Environment, Mode } from "#qti/processing/env.ts";
-import { literalOrRef, parseProcessing } from "#qti/processing/parse.ts";
+} from "#pantry/processing/ast.ts";
+import { checkProcessing } from "#pantry/processing/check.ts";
+import type { PId } from "#pantry/processing/check.ts";
+import type { Environment, Mode } from "#pantry/processing/env.ts";
+import { literalOrRef, parseProcessing } from "#pantry/processing/parse.ts";
 import {
   BooleanLiteral,
   MathConstantName,
@@ -36,21 +36,21 @@ import {
   ToleranceMode,
   XIncludeParseValue,
   XsBoolean,
-} from "#qti/schema/content/rosters.ts";
-import { XIncludeUri } from "#qti/schema/contracts.ts";
-import { BaseType } from "#qti/schema/declaration.ts";
-import * as expression from "#qti/schema/expression.ts";
-import * as attributed from "#qti/schema/expression-attributes.ts";
-import { Edge } from "#qti/schema/node.ts";
+} from "#pantry/schema/content/rosters.ts";
+import { XIncludeUri } from "#pantry/schema/contracts.ts";
+import { BaseType } from "#pantry/schema/declaration.ts";
+import * as expression from "#pantry/schema/expression.ts";
+import * as attributed from "#pantry/schema/expression-attributes.ts";
+import { Edge } from "#pantry/schema/node.ts";
 import type {
   AttributeNameHandle,
   NodeKindHandle,
   RootKindHandle,
   SchemaVersionHandle,
-} from "#qti/schema/node.ts";
-import * as processing from "#qti/schema/processing.ts";
-import * as ruleSchema from "#qti/schema/rule.ts";
-import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
+} from "#pantry/schema/node.ts";
+import * as processing from "#pantry/schema/processing.ts";
+import * as ruleSchema from "#pantry/schema/rule.ts";
+import { operatorArity, operatorArityMax } from "#pantry/schema/seed/operator-arity.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**

@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import * as valueContexts from "#qti/schema/value-contexts.ts";
+import * as valueContexts from "#pantry/schema/value-contexts.ts";
 
 /**
  * The eleven base types a context holds a lexical form for.

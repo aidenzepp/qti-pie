@@ -23,22 +23,27 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
-import { YesNo } from "#qti/schema/content/rosters.ts";
-import * as asi from "#qti/schema/kinds/asi.ts";
-import * as cp from "#qti/schema/kinds/cp.ts";
-import * as cpx from "#qti/schema/kinds/cpx.ts";
-import * as csmd from "#qti/schema/kinds/csmd.ts";
-import * as drd from "#qti/schema/kinds/drd.ts";
-import * as generic from "#qti/schema/kinds/generic.ts";
-import type { SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
-import * as html from "#qti/schema/kinds/html.ts";
-import * as lom from "#qti/schema/kinds/lom.ts";
-import * as qmd from "#qti/schema/kinds/qmd.ts";
-import * as ud from "#qti/schema/kinds/ud.ts";
-import * as xi from "#qti/schema/kinds/xi.ts";
-import { NamespacePrefix, NamespaceUri, PiTarget, XmlEntityName } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import { ancestryHandles } from "#qti/schema/seed/ancestry.ts";
+import { YesNo } from "#pantry/schema/content/rosters.ts";
+import * as asi from "#pantry/schema/kinds/asi.ts";
+import * as cp from "#pantry/schema/kinds/cp.ts";
+import * as cpx from "#pantry/schema/kinds/cpx.ts";
+import * as csmd from "#pantry/schema/kinds/csmd.ts";
+import * as drd from "#pantry/schema/kinds/drd.ts";
+import * as generic from "#pantry/schema/kinds/generic.ts";
+import type { SchemaVersionHandle } from "#pantry/schema/kinds/generic.ts";
+import * as html from "#pantry/schema/kinds/html.ts";
+import * as lom from "#pantry/schema/kinds/lom.ts";
+import * as qmd from "#pantry/schema/kinds/qmd.ts";
+import * as ud from "#pantry/schema/kinds/ud.ts";
+import * as xi from "#pantry/schema/kinds/xi.ts";
+import {
+  NamespacePrefix,
+  NamespaceUri,
+  PiTarget,
+  XmlEntityName,
+} from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import { ancestryHandles } from "#pantry/schema/seed/ancestry.ts";
 
 /**
  * The kinds files `NodeKind` and `AttributeName` compose, in composition order.
@@ -167,7 +172,7 @@ export const AttributeName = closed("AttributeName", [
  */
 export const Ancestry = closed("Ancestry", ancestryHandles);
 
-export type { SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
+export type { SchemaVersionHandle } from "#pantry/schema/kinds/generic.ts";
 
 /**
  * A handle of `RootKind`.
@@ -440,7 +445,7 @@ export const EntityReference = relation("EntityReference", { id: uuid, name: Xml
  * The generic kinds' arms, keyed by their `NodeKind` handles.
  *
  * Their containments into `Node` are not written here: one `mirrors` per handle in the composed
- * schema (`#qti/schema/qti.ts`) binds them.
+ * schema (`#pantry/schema/qti.ts`) binds them.
  */
 export const arms = {
   comment: Comment,

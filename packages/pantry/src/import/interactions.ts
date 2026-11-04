@@ -9,28 +9,28 @@
  */
 import type { Relation, uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
-import { associateRows } from "#qti/import/interactions/associate.ts";
-import { gapRows } from "#qti/import/interactions/gap.ts";
-import { hotRows } from "#qti/import/interactions/hot.ts";
-import { orderRows } from "#qti/import/interactions/order.ts";
-import { otherRows } from "#qti/import/interactions/other.ts";
-import { textRows } from "#qti/import/interactions/text.ts";
-import type { ImportRefused } from "#qti/import/refusal.ts";
-import { ItemRefusal, replace, Rows, typedAttribute } from "#qti/import/tree.ts";
-import type { NodeIndex, UnmodeledVocabulary, WhiteSpace } from "#qti/import/tree.ts";
-import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
-import type { BoundHandle, ShapeHandle, XsBooleanHandle } from "#qti/schema/content/rosters.ts";
-import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
-import { RectCoords, ShapeCoords } from "#qti/schema/contracts.ts";
-import type { BaseType, DeclarationShape, TypedCardinality } from "#qti/schema/declaration.ts";
+import { associateRows } from "#pantry/import/interactions/associate.ts";
+import { gapRows } from "#pantry/import/interactions/gap.ts";
+import { hotRows } from "#pantry/import/interactions/hot.ts";
+import { orderRows } from "#pantry/import/interactions/order.ts";
+import { otherRows } from "#pantry/import/interactions/other.ts";
+import { textRows } from "#pantry/import/interactions/text.ts";
+import type { ImportRefused } from "#pantry/import/refusal.ts";
+import { ItemRefusal, replace, Rows, typedAttribute } from "#pantry/import/tree.ts";
+import type { NodeIndex, UnmodeledVocabulary, WhiteSpace } from "#pantry/import/tree.ts";
+import { ChoiceTemplateRef } from "#pantry/schema/choices.ts";
+import type { BoundHandle, ShapeHandle, XsBooleanHandle } from "#pantry/schema/content/rosters.ts";
+import { entryOf } from "#pantry/schema/content/xsd-inventory.ts";
+import { RectCoords, ShapeCoords } from "#pantry/schema/contracts.ts";
+import type { BaseType, DeclarationShape, TypedCardinality } from "#pantry/schema/declaration.ts";
 import {
   GapMatchBinding,
   InteractionBinding,
   RecordBinding,
   TypedBinding,
-} from "#qti/schema/interaction.ts";
-import { NodeKind } from "#qti/schema/node.ts";
-import type { AncestryHandle, AttributeNameHandle, NodeKindHandle } from "#qti/schema/node.ts";
+} from "#pantry/schema/interaction.ts";
+import { NodeKind } from "#pantry/schema/node.ts";
+import type { AncestryHandle, AttributeNameHandle, NodeKindHandle } from "#pantry/schema/node.ts";
 import {
   Coords,
   CoordsCircle,
@@ -38,7 +38,7 @@ import {
   CoordsEllipse,
   CoordsPoly,
   CoordsRect,
-} from "#qti/schema/shapes.ts";
+} from "#pantry/schema/shapes.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**

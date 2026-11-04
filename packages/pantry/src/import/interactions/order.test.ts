@@ -3,7 +3,7 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option } from "effect";
-import { ChoiceIdentifier, ContainerWidth, VariableReference } from "#qti/schema/contracts.ts";
+import { ChoiceIdentifier, ContainerWidth, VariableReference } from "#pantry/schema/contracts.ts";
 import {
   attributeReader,
   bindingRows,
@@ -15,13 +15,13 @@ import {
   nearestInteraction,
   templateRef,
   typedCopy,
-} from "#qti/import/interactions.ts";
-import type { DeclaredVariable, InteractionContext, Shared } from "#qti/import/interactions.ts";
-import { orderRows } from "#qti/import/interactions/order.ts";
-import { itemRows } from "#qti/import/item.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { ItemRefusal, Rows } from "#qti/import/tree.ts";
-import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
+} from "#pantry/import/interactions.ts";
+import type { DeclaredVariable, InteractionContext, Shared } from "#pantry/import/interactions.ts";
+import { orderRows } from "#pantry/import/interactions/order.ts";
+import { itemRows } from "#pantry/import/item.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { ItemRefusal, Rows } from "#pantry/import/tree.ts";
+import type { IndexedNode, NodeIndex } from "#pantry/import/tree.ts";
 import {
   DeclaredFixed,
   DeclaredShowHide,
@@ -29,7 +29,7 @@ import {
   SimpleChoice,
   SimpleChoiceTemplateIdentifier,
   TypedBinding,
-} from "#qti/schema/interaction.ts";
+} from "#pantry/schema/interaction.ts";
 import {
   DeclaredOrderShuffle,
   GraphicOrderInteraction,
@@ -42,9 +42,9 @@ import {
   OrderMinChoicesN,
   OrderMinSelectionsMessage,
   OrderOrientation,
-} from "#qti/schema/interactions/order.ts";
-import { AttributeLexical, AttributeSpelling, NodeKind } from "#qti/schema/node.ts";
-import { materialize } from "#qti/test/fixtures.ts";
+} from "#pantry/schema/interactions/order.ts";
+import { AttributeLexical, AttributeSpelling, NodeKind } from "#pantry/schema/node.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 

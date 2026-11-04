@@ -1,8 +1,8 @@
 /* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import { Effect, FileSystem, Schema } from "effect";
 import type { PlatformError } from "effect";
-import { readZip } from "#qti/package/zip.ts";
-import type { ZipRefusal } from "#qti/package/zip.ts";
+import { readZip } from "#pantry/package/zip.ts";
+import type { ZipRefusal } from "#pantry/package/zip.ts";
 
 /**
  * The file name that marks a directory as a QTI package, looked for at the directory's root only.

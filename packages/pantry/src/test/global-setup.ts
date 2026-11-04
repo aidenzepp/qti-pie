@@ -1,8 +1,8 @@
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import type { TestProject } from "vitest/node";
-import { materialize, materializePackage } from "#qti/test/fixtures.ts";
-import type { RefusedPackage } from "#qti/test/fixtures.ts";
+import { materialize, materializePackage } from "#pantry/test/fixtures.ts";
+import type { RefusedPackage } from "#pantry/test/fixtures.ts";
 
 /**
  * The fixtures every test run materializes once, before the first test file opens: `simple` and the

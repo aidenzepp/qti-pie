@@ -3,10 +3,10 @@ import path from "node:path";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
-import { listPackage, PackageReadError, readEntry } from "#qti/package/read.ts";
-import { readZip, writeZip, ZipRefusal } from "#qti/package/zip.ts";
-import { materialize, materializeCorpus, materializeZip } from "#qti/test/fixtures.ts";
-import type { ZipName } from "#qti/test/fixtures.ts";
+import { listPackage, PackageReadError, readEntry } from "#pantry/package/read.ts";
+import { readZip, writeZip, ZipRefusal } from "#pantry/package/zip.ts";
+import { materialize, materializeCorpus, materializeZip } from "#pantry/test/fixtures.ts";
+import type { ZipName } from "#pantry/test/fixtures.ts";
 
 /**
  * What every test here runs on: the file system `readZip` needs, and the process spawner and path

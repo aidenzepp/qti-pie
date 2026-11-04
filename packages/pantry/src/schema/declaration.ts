@@ -24,15 +24,15 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { FieldBase } from "@bjornpagen/grizzle";
-import { ExternalScored, XsBoolean } from "#qti/schema/content/rosters.ts";
-import * as document from "#qti/schema/document.ts";
-import * as node from "#qti/schema/node.ts";
+import { ExternalScored, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import * as document from "#pantry/schema/document.ts";
+import * as node from "#pantry/schema/node.ts";
 import {
   LongInterpretationUri,
   OutcomeScaleValue,
   VariableReference,
-} from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+} from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
 

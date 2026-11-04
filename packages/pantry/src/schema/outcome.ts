@@ -6,10 +6,10 @@
  * itself cannot, because `declaration.ts` imports it.
  */
 import { contained, mirrors, on, relation, select, str, uuid } from "@bjornpagen/grizzle";
-import { Declaration, OutcomeDeclarationArm } from "#qti/schema/declaration.ts";
-import { Document, DocumentIdentifier } from "#qti/schema/document.ts";
-import { TreeRoot } from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import { Declaration, OutcomeDeclarationArm } from "#pantry/schema/declaration.ts";
+import { Document, DocumentIdentifier } from "#pantry/schema/document.ts";
+import { TreeRoot } from "#pantry/schema/node.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
 

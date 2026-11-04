@@ -3,10 +3,10 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Exit, Schema } from "effect";
-import { captureCli, spawnCli } from "#qti/test/cli.ts";
+import { captureCli, spawnCli } from "#pantry/test/cli.ts";
 
 /**
- * The package folder, `packages/qti`, where `schema/` and `scripts/` are.
+ * The package folder, `packages/pantry`, where `schema/` and `scripts/` are.
  */
 const packageRoot = path.resolve(import.meta.dirname, "..", "..");
 

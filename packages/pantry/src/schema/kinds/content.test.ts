@@ -1,21 +1,25 @@
 import { assert, describe, it } from "@effect/vitest";
 
-import { hostAdditions } from "#qti/schema/content/sets.ts";
-import { entryOf, inventory } from "#qti/schema/content/xsd-inventory.ts";
-import * as asi from "#qti/schema/kinds/asi.ts";
-import * as cp from "#qti/schema/kinds/cp.ts";
-import * as cpx from "#qti/schema/kinds/cpx.ts";
-import * as csmd from "#qti/schema/kinds/csmd.ts";
-import * as drd from "#qti/schema/kinds/drd.ts";
-import * as generic from "#qti/schema/kinds/generic.ts";
-import type { AdmissionRow, RegistryRow, SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
-import * as html from "#qti/schema/kinds/html.ts";
-import * as lom from "#qti/schema/kinds/lom.ts";
-import * as qmd from "#qti/schema/kinds/qmd.ts";
-import * as ud from "#qti/schema/kinds/ud.ts";
-import * as xi from "#qti/schema/kinds/xi.ts";
-import { AttributeName, NodeKind } from "#qti/schema/node.ts";
-import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
+import { hostAdditions } from "#pantry/schema/content/sets.ts";
+import { entryOf, inventory } from "#pantry/schema/content/xsd-inventory.ts";
+import * as asi from "#pantry/schema/kinds/asi.ts";
+import * as cp from "#pantry/schema/kinds/cp.ts";
+import * as cpx from "#pantry/schema/kinds/cpx.ts";
+import * as csmd from "#pantry/schema/kinds/csmd.ts";
+import * as drd from "#pantry/schema/kinds/drd.ts";
+import * as generic from "#pantry/schema/kinds/generic.ts";
+import type {
+  AdmissionRow,
+  RegistryRow,
+  SchemaVersionHandle,
+} from "#pantry/schema/kinds/generic.ts";
+import * as html from "#pantry/schema/kinds/html.ts";
+import * as lom from "#pantry/schema/kinds/lom.ts";
+import * as qmd from "#pantry/schema/kinds/qmd.ts";
+import * as ud from "#pantry/schema/kinds/ud.ts";
+import * as xi from "#pantry/schema/kinds/xi.ts";
+import { AttributeName, NodeKind } from "#pantry/schema/node.ts";
+import { bindingFit } from "#pantry/schema/seed/binding-fit.ts";
 
 const asiAdmission = asi.admission;
 

@@ -1,11 +1,12 @@
 {
-  "name": "@gr8des/qti",
+  "name": "@qti-pie/pantry",
   "private": true,
   "type": "module",
   "imports": {
-    "#qti/*": "./src/*",
+    "#pantry/*": "./src/*",
     "#migrations/*": "./migrations/*"
   },
+  "exports": {},
   "scripts": {
     "db": "scripts/db.sh",
     "grizzle": "grizzle",

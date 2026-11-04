@@ -2,22 +2,22 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
-import type { Language, ProcessingAst } from "#qti/processing/ast.ts";
-import { checkProcessing } from "#qti/processing/check.ts";
+import type { Language, ProcessingAst } from "#pantry/processing/ast.ts";
+import { checkProcessing } from "#pantry/processing/check.ts";
 import type {
   TypedAst,
   TypedExpression,
   TypedRuleNode,
   Unresolved,
-} from "#qti/processing/check.ts";
-import { emptyEnvironment, environmentOf, withDeclarations } from "#qti/processing/env.ts";
-import type { DeclarationEntry, Environment } from "#qti/processing/env.ts";
-import { corpusPackage, templateDocuments } from "#qti/processing/fixtures.ts";
-import { parseProcessing } from "#qti/processing/parse.ts";
-import { numerical, resultType, resultTypes, unify } from "#qti/processing/types.ts";
-import type { EffectiveType } from "#qti/processing/types.ts";
-import { expressionKinds } from "#qti/schema/kinds/asi.ts";
-import type { NodeKindHandle } from "#qti/schema/node.ts";
+} from "#pantry/processing/check.ts";
+import { emptyEnvironment, environmentOf, withDeclarations } from "#pantry/processing/env.ts";
+import type { DeclarationEntry, Environment } from "#pantry/processing/env.ts";
+import { corpusPackage, templateDocuments } from "#pantry/processing/fixtures.ts";
+import { parseProcessing } from "#pantry/processing/parse.ts";
+import { numerical, resultType, resultTypes, unify } from "#pantry/processing/types.ts";
+import type { EffectiveType } from "#pantry/processing/types.ts";
+import { expressionKinds } from "#pantry/schema/kinds/asi.ts";
+import type { NodeKindHandle } from "#pantry/schema/node.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
@@ -219,7 +219,7 @@ describe("the lattice", () => {
 });
 
 /**
- * The committed trees, relative to `packages/qti`, where the tests run.
+ * The committed trees, relative to `packages/pantry`, where the tests run.
  */
 const validDirectory = "src/processing/fixtures/valid";
 

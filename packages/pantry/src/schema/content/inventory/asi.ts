@@ -34,7 +34,7 @@ import type {
   InventoryAttribute,
   InventoryChild,
   InventoryLeaf,
-} from "#qti/schema/content/xsd-inventory.ts";
+} from "#pantry/schema/content/xsd-inventory.ts";
 
 /**
  * Build an attribute row from its declaration.

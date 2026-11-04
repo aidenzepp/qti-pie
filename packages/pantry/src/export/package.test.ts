@@ -9,15 +9,15 @@ import { assert, beforeAll, layer } from "@effect/vitest";
 import { Console, Effect, Exit, FileSystem, Layer, Stdio } from "effect";
 import { Command } from "effect/cli";
 import { describe } from "vitest";
-import { cli } from "#qti/cli.ts";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { comparePackage, renderReport } from "#qti/export/compare.ts";
-import type { Report } from "#qti/export/compare.ts";
-import { exportPackage } from "#qti/export/package.ts";
-import { importPackage } from "#qti/import/package.ts";
-import { materialize } from "#qti/test/fixtures.ts";
-import type { FixtureName } from "#qti/test/fixtures.ts";
-import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+import { cli } from "#pantry/cli.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { comparePackage, renderReport } from "#pantry/export/compare.ts";
+import type { Report } from "#pantry/export/compare.ts";
+import { exportPackage } from "#pantry/export/package.ts";
+import { importPackage } from "#pantry/import/package.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
+import type { FixtureName } from "#pantry/test/fixtures.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * What every test here runs on: the file system the comparison and the fixture materializer need,

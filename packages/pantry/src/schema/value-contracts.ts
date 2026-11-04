@@ -7,8 +7,8 @@
  * table of `value-contexts.ts`; `contracts.ts` imports only `patterns`. `value.ts` applies them.
  */
 import { contract } from "@bjornpagen/grizzle";
-import type { ValueContext } from "#qti/schema/value-contexts.ts";
-import { lexicalOf } from "#qti/schema/value-contexts.ts";
+import type { ValueContext } from "#pantry/schema/value-contexts.ts";
+import { lexicalOf } from "#pantry/schema/value-contexts.ts";
 
 /**
  * The base types a value arm holds a contract for, as the keys of one context's contracts.

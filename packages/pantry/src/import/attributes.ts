@@ -10,9 +10,9 @@
  */
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
-import type { ImportRefused } from "#qti/import/refusal.ts";
-import { closedOf, Rows, typedAttribute, UnmodeledVocabulary } from "#qti/import/tree.ts";
-import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
+import type { ImportRefused } from "#pantry/import/refusal.ts";
+import { closedOf, Rows, typedAttribute, UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import type { NodeIndex, WhiteSpace } from "#pantry/import/tree.ts";
 import {
   AriaAutocompleteValue,
   AriaCurrentValue,
@@ -27,15 +27,15 @@ import {
   SuppressTtsMode,
   TextDirection,
   XsBoolean,
-} from "#qti/schema/content/rosters.ts";
-import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
-import * as family from "#qti/schema/attributes.ts";
-import { ClassList, ContentLanguage, IdReference, XmlBaseUri } from "#qti/schema/contracts.ts";
-import { DocumentId, HtmlId, ItemBodyId, PrintedVariableId } from "#qti/schema/document.ts";
-import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
-import { AttributeLexical, AttributeName, Tree } from "#qti/schema/node.ts";
-import type { NodeKindHandle } from "#qti/schema/node.ts";
-import { registries } from "#qti/schema/seed/admission.ts";
+} from "#pantry/schema/content/rosters.ts";
+import { entryOf } from "#pantry/schema/content/xsd-inventory.ts";
+import * as family from "#pantry/schema/attributes.ts";
+import { ClassList, ContentLanguage, IdReference, XmlBaseUri } from "#pantry/schema/contracts.ts";
+import { DocumentId, HtmlId, ItemBodyId, PrintedVariableId } from "#pantry/schema/document.ts";
+import type { RegistryRow } from "#pantry/schema/kinds/generic.ts";
+import { AttributeLexical, AttributeName, Tree } from "#pantry/schema/node.ts";
+import type { NodeKindHandle } from "#pantry/schema/node.ts";
+import { registries } from "#pantry/schema/seed/admission.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";

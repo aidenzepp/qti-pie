@@ -4,19 +4,19 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
-import { ProcessingGuardRefusal, processingGuards } from "#qti/import/guards/processing.ts";
-import { itemRows } from "#qti/import/item.ts";
-import { documentRows, readRows } from "#qti/import/package.ts";
-import { ProcessingRefused, processingRows } from "#qti/import/processing.ts";
-import type { ProcessingInput } from "#qti/import/processing.ts";
-import { ImportRefused, ruleOfError } from "#qti/import/refusal.ts";
-import { rptemplateRows } from "#qti/import/rptemplate.ts";
-import { Rows, treeRows } from "#qti/import/tree.ts";
-import type { NodeIndex } from "#qti/import/tree.ts";
-import type { Language } from "#qti/processing/ast.ts";
-import { emptyEnvironment, environmentOf, withDeclarations } from "#qti/processing/env.ts";
-import type { DeclarationEntry, Environment, Mode } from "#qti/processing/env.ts";
-import { corpusPackage, materializeProcessing } from "#qti/processing/fixtures.ts";
+import { ProcessingGuardRefusal, processingGuards } from "#pantry/import/guards/processing.ts";
+import { itemRows } from "#pantry/import/item.ts";
+import { documentRows, readRows } from "#pantry/import/package.ts";
+import { ProcessingRefused, processingRows } from "#pantry/import/processing.ts";
+import type { ProcessingInput } from "#pantry/import/processing.ts";
+import { ImportRefused, ruleOfError } from "#pantry/import/refusal.ts";
+import { rptemplateRows } from "#pantry/import/rptemplate.ts";
+import { Rows, treeRows } from "#pantry/import/tree.ts";
+import type { NodeIndex } from "#pantry/import/tree.ts";
+import type { Language } from "#pantry/processing/ast.ts";
+import { emptyEnvironment, environmentOf, withDeclarations } from "#pantry/processing/env.ts";
+import type { DeclarationEntry, Environment, Mode } from "#pantry/processing/env.ts";
+import { corpusPackage, materializeProcessing } from "#pantry/processing/fixtures.ts";
 import {
   CustomOperatorClassName,
   CustomOperatorDefinitionUri,
@@ -27,21 +27,21 @@ import {
   RecordFieldIdentifier,
   VariableReference,
   XIncludeUri,
-} from "#qti/schema/contracts.ts";
-import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
-import * as expression from "#qti/schema/expression.ts";
-import * as attributed from "#qti/schema/expression-attributes.ts";
-import { expressionKinds } from "#qti/schema/kinds/asi.ts";
-import { AttributeLexical, AttributeSpelling, Edge, TextNode } from "#qti/schema/node.ts";
-import type { NodeKindHandle, RootKindHandle } from "#qti/schema/node.ts";
-import * as processing from "#qti/schema/processing.ts";
-import * as ruleSchema from "#qti/schema/rule.ts";
-import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
+} from "#pantry/schema/contracts.ts";
+import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/document.ts";
+import * as expression from "#pantry/schema/expression.ts";
+import * as attributed from "#pantry/schema/expression-attributes.ts";
+import { expressionKinds } from "#pantry/schema/kinds/asi.ts";
+import { AttributeLexical, AttributeSpelling, Edge, TextNode } from "#pantry/schema/node.ts";
+import type { NodeKindHandle, RootKindHandle } from "#pantry/schema/node.ts";
+import * as processing from "#pantry/schema/processing.ts";
+import * as ruleSchema from "#pantry/schema/rule.ts";
+import { operatorArity, operatorArityMax } from "#pantry/schema/seed/operator-arity.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
- * The committed processing fixtures, relative to `packages/qti`, where the tests run.
+ * The committed processing fixtures, relative to `packages/pantry`, where the tests run.
  */
 const fixtures = "src/processing/fixtures";
 

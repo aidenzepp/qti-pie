@@ -1,10 +1,10 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option } from "effect";
-import { materialize } from "#qti/test/fixtures.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { EncodeError } from "@qti-pie/crust/errors.ts";
-import { OracleLayer, xmllintC14n } from "#qti/xml/oracle.ts";
+import { OracleLayer, xmllintC14n } from "#pantry/xml/oracle.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Attribute, Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 import { writeXml } from "@qti-pie/crust/write.ts";

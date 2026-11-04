@@ -19,10 +19,10 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import { CellAlign, CellScope, CellValign, XsBoolean } from "#qti/schema/content/rosters.ts";
-import * as node from "#qti/schema/node.ts";
-import { TableSpan } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import { CellAlign, CellScope, CellValign, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import * as node from "#pantry/schema/node.ts";
+import { TableSpan } from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * A `br` element.

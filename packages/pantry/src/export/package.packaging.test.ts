@@ -3,15 +3,15 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { comparePackage, renderReport } from "#qti/export/compare.ts";
-import type { Report } from "#qti/export/compare.ts";
-import { exportPackage } from "#qti/export/package.ts";
-import { importPackage } from "#qti/import/package.ts";
-import { listPackage, readEntry } from "#qti/package/read.ts";
-import { materialize, materializeZip } from "#qti/test/fixtures.ts";
-import type { FixtureName } from "#qti/test/fixtures.ts";
-import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { comparePackage, renderReport } from "#pantry/export/compare.ts";
+import type { Report } from "#pantry/export/compare.ts";
+import { exportPackage } from "#pantry/export/package.ts";
+import { importPackage } from "#pantry/import/package.ts";
+import { listPackage, readEntry } from "#pantry/package/read.ts";
+import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
+import type { FixtureName } from "#pantry/test/fixtures.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The directory every export is made under: the package's gitignored `work/`.

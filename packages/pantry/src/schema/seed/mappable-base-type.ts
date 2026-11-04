@@ -1,7 +1,7 @@
 /**
  * The base types a mapping may be of.
  */
-import type { BaseType } from "#qti/schema/declaration.ts";
+import type { BaseType } from "#pantry/schema/declaration.ts";
 
 /**
  * A base type of a mapping.

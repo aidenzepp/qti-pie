@@ -4,7 +4,12 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, it, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option } from "effect";
 import { inject } from "vitest";
-import { XmlBaseUri, NamespacePrefix, NamespaceUri, XmlEntityName } from "#qti/schema/contracts.ts";
+import {
+  XmlBaseUri,
+  NamespacePrefix,
+  NamespaceUri,
+  XmlEntityName,
+} from "#pantry/schema/contracts.ts";
 import {
   AttributeEntityReference,
   AttributeLexical,
@@ -26,12 +31,12 @@ import {
   TreeXmlStandalone,
   TreeXmlVersion,
   Ws,
-} from "#qti/schema/node.ts";
-import { NodeXmlBase, NodeXmlLang } from "#qti/schema/attributes.ts";
-import { attributeRows } from "#qti/import/attributes.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { materialize } from "#qti/test/fixtures.ts";
-import { GuardRefusal, treeGuards } from "#qti/import/guards/tree.ts";
+} from "#pantry/schema/node.ts";
+import { NodeXmlBase, NodeXmlLang } from "#pantry/schema/attributes.ts";
+import { attributeRows } from "#pantry/import/attributes.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
+import { GuardRefusal, treeGuards } from "#pantry/import/guards/tree.ts";
 import {
   closedOf,
   collapse,
@@ -44,8 +49,8 @@ import {
   typedAttribute,
   UnmodeledVocabulary,
   valueText,
-} from "#qti/import/tree.ts";
-import type { NodeIndex, TreeInput } from "#qti/import/tree.ts";
+} from "#pantry/import/tree.ts";
+import type { NodeIndex, TreeInput } from "#pantry/import/tree.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 

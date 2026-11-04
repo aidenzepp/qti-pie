@@ -4,7 +4,7 @@
  *
  * `identifier` and `title` are not here: they are the `DocumentIdentifier` and `DocumentTitle` rows
  * of the document. The arms' containments into `Node` are not written here either:
- * one `mirrors` per handle in the composed schema (`#qti/schema/qti.ts`) binds them.
+ * one `mirrors` per handle in the composed schema (`#pantry/schema/qti.ts`) binds them.
  */
 import {
   alternatives,
@@ -17,10 +17,10 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
-import { ToolShape, XsBoolean } from "#qti/schema/content/rosters.ts";
-import { ToolName, ToolVersion } from "#qti/schema/contracts.ts";
-import * as node from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import { ToolShape, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import { ToolName, ToolVersion } from "#pantry/schema/contracts.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * A `qti-assessment-item` root: whether it is adaptive and whether it is time dependent, and the

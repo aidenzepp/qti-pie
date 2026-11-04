@@ -7,17 +7,17 @@ import type {
   Position,
   ProcessingAst,
   RuleNode,
-} from "#qti/processing/ast.ts";
-import type { DeclarationEntry, Environment } from "#qti/processing/env.ts";
-import { literalOrRef, patternOrRef } from "#qti/processing/parse.ts";
-import { resultType } from "#qti/processing/types.ts";
+} from "#pantry/processing/ast.ts";
+import type { DeclarationEntry, Environment } from "#pantry/processing/env.ts";
+import { literalOrRef, patternOrRef } from "#pantry/processing/parse.ts";
+import { resultType } from "#pantry/processing/types.ts";
 import type {
   BaseTypeOrAny,
   Cardinality,
   EffectiveType,
   ResultAttributes,
-} from "#qti/processing/types.ts";
-import { BaseType } from "#qti/schema/declaration.ts";
+} from "#pantry/processing/types.ts";
+import { BaseType } from "#pantry/schema/declaration.ts";
 
 /**
  * An expression with the type the checker assigned it, and its operands typed in turn.

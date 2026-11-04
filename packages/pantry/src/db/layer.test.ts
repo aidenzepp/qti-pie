@@ -3,14 +3,14 @@ import { assert, layer } from "@effect/vitest";
 import { Effect } from "effect";
 import { readFileSync } from "node:fs";
 import { describe, it as plainIt } from "vitest";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { Author } from "#qti/schema/roles.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
-import { AncestryStep } from "#qti/schema/ancestry.ts";
-import { AttributeAdmission } from "#qti/schema/attributes.ts";
-import { Admission } from "#qti/schema/node.ts";
-import { admission, ancestryStep, attributeAdmission } from "#qti/schema/seed/admission.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#qti/test/settings.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { Author } from "#pantry/schema/roles.ts";
+import { AuthorApp } from "#pantry/schema/logins.ts";
+import { AncestryStep } from "#pantry/schema/ancestry.ts";
+import { AttributeAdmission } from "#pantry/schema/attributes.ts";
+import { Admission } from "#pantry/schema/node.ts";
+import { admission, ancestryStep, attributeAdmission } from "#pantry/schema/seed/admission.ts";
+import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 const admissionCount = query(Author).rule((r) => {
   const { child, parent, version } = v(Admission);

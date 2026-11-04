@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import * as rosters from "#qti/schema/content/rosters.ts";
+import * as rosters from "#pantry/schema/content/rosters.ts";
 
 /**
  * A roster of this slice and the literal list of its handles in XSD order.

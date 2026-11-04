@@ -13,7 +13,7 @@
  */
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `ShapeCoords` is the contract of the coordinates of an HTML shape, a name the contracts document settles; it is not a structural description. */
 import { contract, str } from "@bjornpagen/grizzle";
-import * as patterns from "#qti/schema/patterns.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * An XML entity reference's name (`&name;`).

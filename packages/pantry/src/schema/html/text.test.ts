@@ -1,11 +1,11 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
-import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
-import * as contracts from "#qti/schema/contracts.ts";
-import * as node from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import * as text from "#qti/schema/html/text.ts";
+import { entryOf } from "#pantry/schema/content/xsd-inventory.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import * as text from "#pantry/schema/html/text.ts";
 
 /**
  * The 46 handles of spec 4.8's V04 column.

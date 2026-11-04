@@ -8,8 +8,8 @@
  * them.
  */
 import { contained, on, relation, str, uuid } from "@bjornpagen/grizzle";
-import { ContentMediaType, StylesheetUri } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import { ContentMediaType, StylesheetUri } from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * A `qti-rubric-block`: its required `use` (`instructions`, `scoring`, `navigation` or an `ext:`

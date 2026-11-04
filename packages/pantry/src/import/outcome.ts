@@ -4,16 +4,16 @@
  * declaration to the document and to the identifier both carry.
  */
 import { Effect, Option } from "effect";
-import { semanticRows } from "#qti/import/item.ts";
-import type { ItemInput } from "#qti/import/item.ts";
-import { kindOf, Rows, treeRows, UnmodeledVocabulary, withParents } from "#qti/import/tree.ts";
-import type { ImportRefused } from "#qti/import/refusal.ts";
-import type { ItemRefusal, NodeIndex } from "#qti/import/tree.ts";
-import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
-import { Declaration } from "#qti/schema/declaration.ts";
-import { Document, DocumentIdentifier } from "#qti/schema/document.ts";
-import { Edge } from "#qti/schema/node.ts";
-import { OutcomeDocument } from "#qti/schema/outcome.ts";
+import { semanticRows } from "#pantry/import/item.ts";
+import type { ItemInput } from "#pantry/import/item.ts";
+import { kindOf, Rows, treeRows, UnmodeledVocabulary, withParents } from "#pantry/import/tree.ts";
+import type { ImportRefused } from "#pantry/import/refusal.ts";
+import type { ItemRefusal, NodeIndex } from "#pantry/import/tree.ts";
+import { ManifestIdentifier, PackagePath } from "#pantry/schema/contracts.ts";
+import { Declaration } from "#pantry/schema/declaration.ts";
+import { Document, DocumentIdentifier } from "#pantry/schema/document.ts";
+import { Edge } from "#pantry/schema/node.ts";
+import { OutcomeDocument } from "#pantry/schema/outcome.ts";
 
 /**
  * Write the rows of an outcome document: its tree, its `Document` row with the identifier row, the

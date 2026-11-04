@@ -4,20 +4,20 @@
  * A `qti-hotspot-choice` of a graphic order interaction is written by the hot builder, whatever its
  * parent. A `qti-simple-choice` is written here when its parent is an order interaction.
  */
-import { judgedLater } from "#qti/import/judged.ts";
+import { judgedLater } from "#pantry/import/judged.ts";
 import { Effect, Option } from "effect";
-import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
-import type { ImportRefused } from "#qti/import/refusal.ts";
-import { closedOf, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
-import { Orientation, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
-import { ChoiceIdentifier } from "#qti/schema/contracts.ts";
-import type { IndexedNode, ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
+import type { AttributeReader, InteractionContext } from "#pantry/import/interactions.ts";
+import type { ImportRefused } from "#pantry/import/refusal.ts";
+import { closedOf, Rows, spelledInteger, withParents } from "#pantry/import/tree.ts";
+import { Orientation, ShowHide, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import { ChoiceIdentifier } from "#pantry/schema/contracts.ts";
+import type { IndexedNode, ItemRefusal, UnmodeledVocabulary } from "#pantry/import/tree.ts";
 import {
   DeclaredFixed,
   DeclaredShowHide,
   SimpleChoice,
   SimpleChoiceTemplateIdentifier,
-} from "#qti/schema/interaction.ts";
+} from "#pantry/schema/interaction.ts";
 import {
   DeclaredOrderShuffle,
   GraphicOrderInteraction,
@@ -30,8 +30,8 @@ import {
   OrderMinChoicesN,
   OrderMinSelectionsMessage,
   OrderOrientation,
-} from "#qti/schema/interactions/order.ts";
-import type { AttributeNameHandle } from "#qti/schema/node.ts";
+} from "#pantry/schema/interactions/order.ts";
+import type { AttributeNameHandle } from "#pantry/schema/node.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**

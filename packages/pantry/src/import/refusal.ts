@@ -10,19 +10,19 @@
  */
 import type { ApplyError } from "@bjornpagen/grizzle";
 import { Match, Option, Schema } from "effect";
-import type { ContentGuardRefusal } from "#qti/import/guards/content.ts";
-import type { ItemGuardRefusal } from "#qti/import/guards/item.ts";
-import type { ManifestGuardRefusal } from "#qti/import/guards/manifest.ts";
-import type { ProcessingGuardRefusal } from "#qti/import/guards/processing.ts";
-import type { GuardRefusal } from "#qti/import/guards/tree.ts";
-import type { UsageGuardRefusal } from "#qti/import/guards/usage.ts";
-import type { NotQti3 } from "#qti/import/manifest.ts";
-import type { ProcessingRefused } from "#qti/import/processing.ts";
-import type { ExternalRefusal } from "#qti/import/record.ts";
-import type { ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
-import type { PackageReadError } from "#qti/package/read.ts";
-import type { ZipRefusal } from "#qti/package/zip.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import type { ContentGuardRefusal } from "#pantry/import/guards/content.ts";
+import type { ItemGuardRefusal } from "#pantry/import/guards/item.ts";
+import type { ManifestGuardRefusal } from "#pantry/import/guards/manifest.ts";
+import type { ProcessingGuardRefusal } from "#pantry/import/guards/processing.ts";
+import type { GuardRefusal } from "#pantry/import/guards/tree.ts";
+import type { UsageGuardRefusal } from "#pantry/import/guards/usage.ts";
+import type { NotQti3 } from "#pantry/import/manifest.ts";
+import type { ProcessingRefused } from "#pantry/import/processing.ts";
+import type { ExternalRefusal } from "#pantry/import/record.ts";
+import type { ItemRefusal, UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import type { PackageReadError } from "#pantry/package/read.ts";
+import type { ZipRefusal } from "#pantry/package/zip.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 
 /**

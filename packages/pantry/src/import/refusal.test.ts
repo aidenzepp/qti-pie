@@ -5,12 +5,12 @@ import {
   patternRuleSources,
   ruleOfError,
   ruleOfLaw,
-} from "#qti/import/refusal.ts";
-import type { ImportLaw } from "#qti/import/refusal.ts";
-import * as contracts from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import * as valueContracts from "#qti/schema/value-contracts.ts";
-import * as valueContexts from "#qti/schema/value-contexts.ts";
+} from "#pantry/import/refusal.ts";
+import type { ImportLaw } from "#pantry/import/refusal.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import * as valueContracts from "#pantry/schema/value-contracts.ts";
+import * as valueContexts from "#pantry/schema/value-contexts.ts";
 
 it("sends a contract no row names to value-lexical, unmapped", () => {
   const law: ImportLaw = { contract: "NoSuchContract", kind: "contract" };

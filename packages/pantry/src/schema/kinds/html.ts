@@ -13,9 +13,13 @@
  */
 import { Option } from "effect";
 
-import { htmlInventory } from "#qti/schema/content/inventory/html.ts";
-import { admissionOf, dedupe } from "#qti/schema/kinds/asi.ts";
-import type { AdmissionRow, RegistryRow, SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
+import { htmlInventory } from "#pantry/schema/content/inventory/html.ts";
+import { admissionOf, dedupe } from "#pantry/schema/kinds/asi.ts";
+import type {
+  AdmissionRow,
+  RegistryRow,
+  SchemaVersionHandle,
+} from "#pantry/schema/kinds/generic.ts";
 
 const namespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 

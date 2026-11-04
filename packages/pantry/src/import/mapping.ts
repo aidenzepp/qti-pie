@@ -13,19 +13,19 @@
  * A value attribute is read exactly: outer whitespace around it refuses the document (decision
  * 157).
  */
-import { judgedLater } from "#qti/import/judged.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import type { Rule } from "#qti/import/refusal.ts";
+import { judgedLater } from "#pantry/import/judged.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import type { Rule } from "#pantry/import/refusal.ts";
 import { Effect, Option } from "effect";
-import { attributeReader, coordsRows, markers } from "#qti/import/interactions.ts";
-import type { DeclaredVariable, NodeRef } from "#qti/import/interactions.ts";
-import { closedOf, ItemRefusal, Rows, typedAttribute, withParents } from "#qti/import/tree.ts";
-import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
-import { BooleanLiteral, Shape, XsBoolean } from "#qti/schema/content/rosters.ts";
-import type { BaseType } from "#qti/schema/declaration.ts";
-import * as mapping from "#qti/schema/mapping.ts";
-import { Edge } from "#qti/schema/node.ts";
-import type { AttributeNameHandle } from "#qti/schema/node.ts";
+import { attributeReader, coordsRows, markers } from "#pantry/import/interactions.ts";
+import type { DeclaredVariable, NodeRef } from "#pantry/import/interactions.ts";
+import { closedOf, ItemRefusal, Rows, typedAttribute, withParents } from "#pantry/import/tree.ts";
+import type { NodeIndex, WhiteSpace } from "#pantry/import/tree.ts";
+import { BooleanLiteral, Shape, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import type { BaseType } from "#pantry/schema/declaration.ts";
+import * as mapping from "#pantry/schema/mapping.ts";
+import { Edge } from "#pantry/schema/node.ts";
+import type { AttributeNameHandle } from "#pantry/schema/node.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 type BaseTypeHandle = (typeof BaseType.handles)[number];

@@ -9,10 +9,10 @@ import {
   wouldReplace,
   yesFlag,
   zipFlag,
-} from "#qti/cli/args.ts";
-import { RoundtripDiffers } from "#qti/cli/errors.ts";
-import { emitSuccess, outputMode } from "#qti/cli/output.ts";
-import type { Outcome } from "#qti/export/compare.ts";
+} from "#pantry/cli/args.ts";
+import { RoundtripDiffers } from "#pantry/cli/errors.ts";
+import { emitSuccess, outputMode } from "#pantry/cli/output.ts";
+import type { Outcome } from "#pantry/export/compare.ts";
 
 /**
  * The kinds of an entry's outcome, a literal list checked against the exporter's `Outcome`: a kind
@@ -106,7 +106,7 @@ export const roundtripCommand = Command.make(
     yield* requireReplaceable(exportDir, yes);
 
     if (dryRun) {
-      const { previewPackage } = yield* Effect.promise(() => import("#qti/import/preview.ts"));
+      const { previewPackage } = yield* Effect.promise(() => import("#pantry/import/preview.ts"));
       const { relations, rows } = yield* previewPackage(dir);
       const action = (yield* wouldReplace(exportDir)) ? "replace" : "create";
 
@@ -129,12 +129,12 @@ export const roundtripCommand = Command.make(
       return;
     }
 
-    const { AuthorAppLayer } = yield* Effect.promise(() => import("#qti/db/layer.ts"));
+    const { AuthorAppLayer } = yield* Effect.promise(() => import("#pantry/db/layer.ts"));
     const { comparePackage, renderReport } = yield* Effect.promise(
-      () => import("#qti/export/compare.ts"),
+      () => import("#pantry/export/compare.ts"),
     );
-    const { exportPackage } = yield* Effect.promise(() => import("#qti/export/package.ts"));
-    const { importPackage } = yield* Effect.promise(() => import("#qti/import/package.ts"));
+    const { exportPackage } = yield* Effect.promise(() => import("#pantry/export/package.ts"));
+    const { importPackage } = yield* Effect.promise(() => import("#pantry/import/package.ts"));
     const packageId = yield* importPackage(dir).pipe(Effect.provide(AuthorAppLayer));
 
     yield* replaceWith(exportDir, (written) =>

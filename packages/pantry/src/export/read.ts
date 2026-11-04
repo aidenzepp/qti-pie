@@ -1,20 +1,20 @@
 /**
  * The read half of export: one tree's rows back out of the database.
  *
- * `#qti/export/queries.ts` builds the queries: one recursive walk of a tree's edges joined to each
- * node's own row, with everything the importer wrote for the node attached to it, and the `Tree`
- * row with the fidelity rows around it. {@link readTree} runs them and reassembles their rows into
- * the `Rows` the importer builds, which `renderTree` renders.
+ * `#pantry/export/queries.ts` builds the queries: one recursive walk of a tree's edges joined to
+ * each node's own row, with everything the importer wrote for the node attached to it, and the
+ * `Tree` row with the fidelity rows around it. {@link readTree} runs them and reassembles their rows
+ * into the `Rows` the importer builds, which `renderTree` renders.
  */
 import { Db } from "@bjornpagen/grizzle";
 import type { AnyRelation, DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle";
 import { Array as Arr, Effect, Option } from "effect";
-import { fieldNamesOf, nodeQueries, nodeRuns, treeAttachments } from "#qti/export/queries.ts";
-import type { Attachment } from "#qti/export/queries.ts";
-import type { Rows } from "#qti/import/tree.ts";
-import { AuthorApp, nodeQueryName } from "#qti/schema/logins.ts";
-import { Node, Tree } from "#qti/schema/node.ts";
-import type { Author } from "#qti/schema/roles.ts";
+import { fieldNamesOf, nodeQueries, nodeRuns, treeAttachments } from "#pantry/export/queries.ts";
+import type { Attachment } from "#pantry/export/queries.ts";
+import type { Rows } from "#pantry/import/tree.ts";
+import { AuthorApp, nodeQueryName } from "#pantry/schema/logins.ts";
+import { Node, Tree } from "#pantry/schema/node.ts";
+import type { Author } from "#pantry/schema/roles.ts";
 
 /**
  * A value a decoded row holds: a column, or the rows an attachment delivers, as an optional row
@@ -51,7 +51,7 @@ interface LooseDb {
 
 /**
  * The rows the workload program `name` delivers for the tree `treeId`. A name the workload does not
- * hold is a defect of this module, which names only the programs `#qti/schema/logins.ts` builds.
+ * hold is a defect of this module, which names only the programs `#pantry/schema/logins.ts` builds.
  */
 const runOf = (db: LooseDb, name: string, treeId: string) =>
   Effect.gen(function* programRows() {

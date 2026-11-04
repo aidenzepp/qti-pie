@@ -3,8 +3,8 @@ import path from "node:path";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
-import { listPackage, PackageReadError, readEntry } from "#qti/package/read.ts";
-import { materialize } from "#qti/test/fixtures.ts";
+import { listPackage, PackageReadError, readEntry } from "#pantry/package/read.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
 
 /**
  * What every test here runs on: the file system `listPackage`, `readEntry` and the fixture

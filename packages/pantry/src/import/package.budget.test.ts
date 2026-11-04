@@ -3,15 +3,15 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, it as plain, layer } from "@effect/vitest";
 import { Console, Effect, Layer } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { changeSetOf, readRows } from "#qti/import/package.ts";
-import type { ProcessingFixtureName } from "#qti/processing/fixtures.ts";
-import { processingFixtureNames, materializeProcessing } from "#qti/processing/fixtures.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
-import { Package } from "#qti/schema/package.ts";
-import { fixtureNames, materialize, materializeCorpus } from "#qti/test/fixtures.ts";
-import { SQL_BYTES_CEILING, measure, watchMeters } from "#qti/test/meter.ts";
-import { hasLease, leaseTestTimeoutMs, settings } from "#qti/test/settings.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { changeSetOf, readRows } from "#pantry/import/package.ts";
+import type { ProcessingFixtureName } from "#pantry/processing/fixtures.ts";
+import { processingFixtureNames, materializeProcessing } from "#pantry/processing/fixtures.ts";
+import { AuthorApp } from "#pantry/schema/logins.ts";
+import { Package } from "#pantry/schema/package.ts";
+import { fixtureNames, materialize, materializeCorpus } from "#pantry/test/fixtures.ts";
+import { SQL_BYTES_CEILING, measure, watchMeters } from "#pantry/test/meter.ts";
+import { hasLease, leaseTestTimeoutMs, settings } from "#pantry/test/settings.ts";
 
 /**
  * The per-package program gate: the import of one package compiles to a program of at most this

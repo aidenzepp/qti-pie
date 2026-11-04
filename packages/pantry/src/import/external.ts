@@ -9,16 +9,16 @@
  */
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
-import { csmSetRows, lomSubtreeRows } from "#qti/import/manifest.ts";
-import { elementChildren, qmdLeafRows } from "#qti/import/leaf.ts";
-import type { ImportRefused } from "#qti/import/refusal.ts";
-import { Rows, treeRows } from "#qti/import/tree.ts";
-import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
-import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
-import { Document } from "#qti/schema/document.ts";
-import * as md from "#qti/schema/metadata.ts";
-import { Edge } from "#qti/schema/node.ts";
-import type { SchemaVersionHandle } from "#qti/schema/node.ts";
+import { csmSetRows, lomSubtreeRows } from "#pantry/import/manifest.ts";
+import { elementChildren, qmdLeafRows } from "#pantry/import/leaf.ts";
+import type { ImportRefused } from "#pantry/import/refusal.ts";
+import { Rows, treeRows } from "#pantry/import/tree.ts";
+import type { NodeIndex, UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import { ManifestIdentifier, PackagePath } from "#pantry/schema/contracts.ts";
+import { Document } from "#pantry/schema/document.ts";
+import * as md from "#pantry/schema/metadata.ts";
+import { Edge } from "#pantry/schema/node.ts";
+import type { SchemaVersionHandle } from "#pantry/schema/node.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**

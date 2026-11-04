@@ -4,8 +4,8 @@
  */
 import { Option } from "effect";
 
-import type { AdmissionRow, RegistryRow } from "#qti/schema/kinds/generic.ts";
-import type { SchemaVersionHandle } from "#qti/schema/node.ts";
+import type { AdmissionRow, RegistryRow } from "#pantry/schema/kinds/generic.ts";
+import type { SchemaVersionHandle } from "#pantry/schema/node.ts";
 
 const namespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
 

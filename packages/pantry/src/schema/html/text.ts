@@ -7,8 +7,8 @@
  * one `mirrors` per handle in the composed schema, not written here.
  */
 import { contained, on, relation, str, uuid } from "@bjornpagen/grizzle";
-import { CitationUri, ContentMediaType, HyperlinkUri } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import { CitationUri, ContentMediaType, HyperlinkUri } from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * An `a` element: `href` is an `xs:anyURI`, judged on the collapsed value, and required.

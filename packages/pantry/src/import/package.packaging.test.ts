@@ -4,17 +4,17 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option, Ref, Schema } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { importPackage } from "#qti/import/package.ts";
-import type { Rule } from "#qti/import/refusal.ts";
-import { Document } from "#qti/schema/document.ts";
-import { FileContent, Package } from "#qti/schema/package.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
-import { AttributeLexical, Node, NodeKind } from "#qti/schema/node.ts";
-import { Author } from "#qti/schema/roles.ts";
-import { materialize, materializePackage, materializeZip } from "#qti/test/fixtures.ts";
-import type { FixtureName } from "#qti/test/fixtures.ts";
-import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { importPackage } from "#pantry/import/package.ts";
+import type { Rule } from "#pantry/import/refusal.ts";
+import { Document } from "#pantry/schema/document.ts";
+import { FileContent, Package } from "#pantry/schema/package.ts";
+import { AuthorApp } from "#pantry/schema/logins.ts";
+import { AttributeLexical, Node, NodeKind } from "#pantry/schema/node.ts";
+import { Author } from "#pantry/schema/roles.ts";
+import { materialize, materializePackage, materializeZip } from "#pantry/test/fixtures.ts";
+import type { FixtureName } from "#pantry/test/fixtures.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 

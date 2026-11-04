@@ -12,14 +12,14 @@ import {
   nearestInteraction,
   templateRef,
   typedCopy,
-} from "#qti/import/interactions.ts";
-import type { DeclaredVariable, InteractionContext } from "#qti/import/interactions.ts";
-import { otherRows } from "#qti/import/interactions/other.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { ItemRefusal, Rows } from "#qti/import/tree.ts";
-import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
-import { MediaRectCoords } from "#qti/schema/contracts.ts";
-import { InteractionBinding, TypedBinding } from "#qti/schema/interaction.ts";
+} from "#pantry/import/interactions.ts";
+import type { DeclaredVariable, InteractionContext } from "#pantry/import/interactions.ts";
+import { otherRows } from "#pantry/import/interactions/other.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { ItemRefusal, Rows } from "#pantry/import/tree.ts";
+import type { IndexedNode, NodeIndex } from "#pantry/import/tree.ts";
+import { MediaRectCoords } from "#pantry/schema/contracts.ts";
+import { InteractionBinding, TypedBinding } from "#pantry/schema/interaction.ts";
 import {
   DeclaredMediaLoop,
   DeclaredSliderStepLabel,
@@ -36,9 +36,9 @@ import {
   SliderStep,
   UploadInteraction,
   UploadType,
-} from "#qti/schema/interactions/other.ts";
-import { AttributeLexical, AttributeSpelling } from "#qti/schema/node.ts";
-import type { NodeKindHandle } from "#qti/schema/node.ts";
+} from "#pantry/schema/interactions/other.ts";
+import { AttributeLexical, AttributeSpelling } from "#pantry/schema/node.ts";
+import type { NodeKindHandle } from "#pantry/schema/node.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";

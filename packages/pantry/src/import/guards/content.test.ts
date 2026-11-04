@@ -1,28 +1,28 @@
 import { assert, describe, it } from "@effect/vitest";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
-import { ContentGuardRefusal, contentGuards } from "#qti/import/guards/content.ts";
-import { itemRows } from "#qti/import/item.ts";
-import { Rows } from "#qti/import/tree.ts";
+import { ContentGuardRefusal, contentGuards } from "#pantry/import/guards/content.ts";
+import { itemRows } from "#pantry/import/item.ts";
+import { Rows } from "#pantry/import/tree.ts";
 import {
   ChoiceIdentifier,
   CitationUri,
   ClassList,
   HyperlinkUri,
   ManifestIdentifier,
-} from "#qti/schema/contracts.ts";
-import { AttributeIdref, HeadersTarget, NodeClass, NodeLabel } from "#qti/schema/attributes.ts";
-import { A, BlockquoteCite } from "#qti/schema/html/text.ts";
-import { AssociableHotspot } from "#qti/schema/interactions/associate.ts";
-import { Gap, GapText } from "#qti/schema/interactions/gap.ts";
-import { HottextOwner } from "#qti/schema/interactions/hot.ts";
-import { OrderInteraction } from "#qti/schema/interactions/order.ts";
-import { MediaInteraction } from "#qti/schema/interactions/other.ts";
-import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
-import { ResourceLom } from "#qti/schema/metadata.ts";
-import { AttributeLexical, AttributeSpelling, Node } from "#qti/schema/node.ts";
-import type { SchemaVersionHandle } from "#qti/schema/node.ts";
-import { PrintedVariableVarRef } from "#qti/schema/template.ts";
+} from "#pantry/schema/contracts.ts";
+import { AttributeIdref, HeadersTarget, NodeClass, NodeLabel } from "#pantry/schema/attributes.ts";
+import { A, BlockquoteCite } from "#pantry/schema/html/text.ts";
+import { AssociableHotspot } from "#pantry/schema/interactions/associate.ts";
+import { Gap, GapText } from "#pantry/schema/interactions/gap.ts";
+import { HottextOwner } from "#pantry/schema/interactions/hot.ts";
+import { OrderInteraction } from "#pantry/schema/interactions/order.ts";
+import { MediaInteraction } from "#pantry/schema/interactions/other.ts";
+import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#pantry/schema/lang.ts";
+import { ResourceLom } from "#pantry/schema/metadata.ts";
+import { AttributeLexical, AttributeSpelling, Node } from "#pantry/schema/node.ts";
+import type { SchemaVersionHandle } from "#pantry/schema/node.ts";
+import { PrintedVariableVarRef } from "#pantry/schema/template.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 const itemNamespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";

@@ -2,15 +2,15 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
-import { BadPackageId, replaceWith, TargetNotEmpty } from "#qti/cli/args.ts";
-import { describeFailure } from "#qti/cli/errors.ts";
-import { exitCodeOf } from "#qti/cli/run.ts";
-import { captureCli, preloadEngine } from "#qti/test/cli.ts";
-import { makeScratch, scratchEnv } from "#qti/test/scratch.ts";
-import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#qti/test/settings.ts";
+import { BadPackageId, replaceWith, TargetNotEmpty } from "#pantry/cli/args.ts";
+import { describeFailure } from "#pantry/cli/errors.ts";
+import { exitCodeOf } from "#pantry/cli/run.ts";
+import { captureCli, preloadEngine } from "#pantry/test/cli.ts";
+import { makeScratch, scratchEnv } from "#pantry/test/scratch.ts";
+import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
- * The folder every case here works under, `packages/qti/work/cli-export`. No other test file
+ * The folder every case here works under, `packages/pantry/work/cli-export`. No other test file
  * writes there.
  */
 const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-export");

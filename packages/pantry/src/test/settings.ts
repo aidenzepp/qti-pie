@@ -83,10 +83,10 @@ export const cliProcessTestTimeoutMs = 10_000;
 /**
  * The timeout, in milliseconds, for the hook that loads the engine once per CLI test file.
  *
- * Since `p14-u2a` the command handlers import the engine (`#qti/db/layer.ts` and the import and
+ * Since `p14-u2a` the command handlers import the engine (`#pantry/db/layer.ts` and the import and
  * export modules) when they run, about 5.3 s alone, and vitest's 10 s `hookTimeout` is not enough
  * beside the parallel CLI set: 13 concurrent loads took 15.5 to 15.8 s at load averages of 9 to 26.
- * Measured on 2026-11-03 at `fd586ee`, from `packages/qti`: thirteen concurrent runs (vitest's
+ * Measured on 2026-11-03 at `fd586ee`, from `packages/pantry`: thirteen concurrent runs (vitest's
  * default worker count on 14 CPUs, `availableParallelism() - 1`) of one process that imports the
  * six modules `preloadEngine` imports took 12412, 12548, 12579, 12583, 12583, 12606, 12607, 12619,
  * 12559, 12673, 12703, 12741 and 12644 ms, a maximum of 12741 ms, at a one-minute load average of
@@ -117,7 +117,7 @@ export const cutItemRenderTestTimeoutMs = 10_000;
  * that spawns it more than once takes this times its number of spawns.
  *
  * Each spawn loads the whole Qti schema, which the CLI start `cliProcessTestTimeoutMs` measures
- * does not. Measured on 2026-11-03 at `a776f20`, from `packages/qti`, with the printed seed read
+ * does not. Measured on 2026-11-03 at `a776f20`, from `packages/pantry`, with the printed seed read
  * to its end: three serial spawns alone took 642, 635 and 673 ms at a one-minute load average of
  * 20.4 before and after, and three runs of 13 concurrent spawns (vitest's default worker count on
  * 14 CPUs, `availableParallelism() - 1`) took 1640 to 1740 ms (maximum 1740 ms), 1399 to 1461 ms

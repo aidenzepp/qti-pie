@@ -10,17 +10,17 @@
  * `processingRows` over the {@link NodeIndex} this module's tree rows built, once the declaration
  * and body rows are in.
  */
-import { judgedLater } from "#qti/import/judged.ts";
-import type { ImportRefused } from "#qti/import/refusal.ts";
+import { judgedLater } from "#pantry/import/judged.ts";
+import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { Effect, Option } from "effect";
-import { attributeRows } from "#qti/import/attributes.ts";
-import { contentRows } from "#qti/import/content.ts";
-import { htmlRows } from "#qti/import/html.ts";
-import { interactionRows } from "#qti/import/interactions.ts";
-import { mappingRows } from "#qti/import/mapping.ts";
-import { processingRows as processingTreeRows } from "#qti/import/processing.ts";
-import type { ProcessingRefused } from "#qti/import/processing.ts";
-import { requiredAttribute } from "#qti/import/required.ts";
+import { attributeRows } from "#pantry/import/attributes.ts";
+import { contentRows } from "#pantry/import/content.ts";
+import { htmlRows } from "#pantry/import/html.ts";
+import { interactionRows } from "#pantry/import/interactions.ts";
+import { mappingRows } from "#pantry/import/mapping.ts";
+import { processingRows as processingTreeRows } from "#pantry/import/processing.ts";
+import type { ProcessingRefused } from "#pantry/import/processing.ts";
+import { requiredAttribute } from "#pantry/import/required.ts";
 import {
   closedOf,
   collapse,
@@ -34,9 +34,9 @@ import {
   UnmodeledVocabulary,
   valueText,
   withParents,
-} from "#qti/import/tree.ts";
-import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
-import { environmentOf } from "#qti/processing/env.ts";
+} from "#pantry/import/tree.ts";
+import type { NodeIndex, WhiteSpace } from "#pantry/import/tree.ts";
+import { environmentOf } from "#pantry/processing/env.ts";
 import {
   BaseType,
   Declaration,
@@ -54,7 +54,7 @@ import {
   ResponseDeclarationId,
   TypedCardinality,
   TypedDeclaration,
-} from "#qti/schema/declaration.ts";
+} from "#pantry/schema/declaration.ts";
 import {
   ChoiceIdentifier,
   EmbedSourceUri,
@@ -67,18 +67,23 @@ import {
   ToolName,
   ToolVersion,
   VariableReference,
-} from "#qti/schema/contracts.ts";
-import type { DeclarationShape } from "#qti/schema/declaration.ts";
+} from "#pantry/schema/contracts.ts";
+import type { DeclarationShape } from "#pantry/schema/declaration.ts";
 import {
   BooleanLiteral,
   ExternalScored,
   Orientation,
   ShowHide,
   XsBoolean,
-} from "#qti/schema/content/rosters.ts";
-import type { XsBooleanHandle } from "#qti/schema/content/rosters.ts";
-import { Document, DocumentId, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
-import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#qti/schema/html.ts";
+} from "#pantry/schema/content/rosters.ts";
+import type { XsBooleanHandle } from "#pantry/schema/content/rosters.ts";
+import {
+  Document,
+  DocumentId,
+  DocumentIdentifier,
+  DocumentTitle,
+} from "#pantry/schema/document.ts";
+import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#pantry/schema/html.ts";
 import {
   ChoiceInteraction,
   ChoiceInteractionMaxSelectionsMessage,
@@ -94,7 +99,7 @@ import {
   SimpleChoice,
   SimpleChoiceTemplateIdentifier,
   TypedBinding,
-} from "#qti/schema/interaction.ts";
+} from "#pantry/schema/interaction.ts";
 import {
   AssessmentItem,
   AssessmentItemLabel,
@@ -105,15 +110,15 @@ import {
   ItemToolName,
   ItemToolVersion,
   Prompt,
-} from "#qti/schema/item.ts";
-import { DocumentLang } from "#qti/schema/lang.ts";
-import { Edge } from "#qti/schema/node.ts";
+} from "#pantry/schema/item.ts";
+import { DocumentLang } from "#pantry/schema/lang.ts";
+import { Edge } from "#pantry/schema/node.ts";
 import type {
   AncestryHandle,
   AttributeNameHandle,
   NodeKindHandle,
   SchemaVersionHandle,
-} from "#qti/schema/node.ts";
+} from "#pantry/schema/node.ts";
 import {
   ResponseProcessing,
   ResponseProcessingItem,
@@ -121,8 +126,8 @@ import {
   ResponseProcessingTemplateLocation,
   StandardTemplate,
   StandardTemplateReference,
-} from "#qti/schema/processing.ts";
-import * as values from "#qti/schema/value.ts";
+} from "#pantry/schema/processing.ts";
+import * as values from "#pantry/schema/value.ts";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**

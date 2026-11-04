@@ -1,10 +1,10 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect } from "effect";
-import { readRows } from "#qti/import/package.ts";
-import { Rows } from "#qti/import/tree.ts";
-import { UsageData } from "#qti/schema/usage.ts";
-import { materialize, materializePackage } from "#qti/test/fixtures.ts";
+import { readRows } from "#pantry/import/package.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { UsageData } from "#pantry/schema/usage.ts";
+import { materialize, materializePackage } from "#pantry/test/fixtures.ts";
 
 layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts readRows", (suite) => {
   suite.effect("refuses a usage-data file whose root is not QTI 3 as not QTI 3", () =>

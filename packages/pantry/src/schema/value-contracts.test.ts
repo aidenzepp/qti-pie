@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
-import * as valueContexts from "#qti/schema/value-contexts.ts";
-import * as valueContracts from "#qti/schema/value-contracts.ts";
+import * as valueContexts from "#pantry/schema/value-contexts.ts";
+import * as valueContracts from "#pantry/schema/value-contracts.ts";
 
 /**
  * A contract as the tests read it: its name.

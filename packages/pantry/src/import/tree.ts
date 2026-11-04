@@ -12,12 +12,12 @@
  */
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import type { Rule } from "#qti/import/refusal.ts";
-import type { BaseType } from "#qti/schema/declaration.ts";
-import { YesNo } from "#qti/schema/content/rosters.ts";
-import type { YesNoHandle } from "#qti/schema/content/rosters.ts";
-import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import type { Rule } from "#pantry/import/refusal.ts";
+import type { BaseType } from "#pantry/schema/declaration.ts";
+import { YesNo } from "#pantry/schema/content/rosters.ts";
+import type { YesNoHandle } from "#pantry/schema/content/rosters.ts";
+import type { RegistryRow } from "#pantry/schema/kinds/generic.ts";
 import {
   Ancestry,
   AttributeEntityReference,
@@ -42,18 +42,23 @@ import {
   TreeXmlVersion,
   vocabularies,
   Ws,
-} from "#qti/schema/node.ts";
+} from "#pantry/schema/node.ts";
 import type {
   AncestryHandle,
   AttributeNameHandle,
   NodeKindHandle,
   RootKindHandle,
   SchemaVersionHandle,
-} from "#qti/schema/node.ts";
-import { NamespacePrefix, NamespaceUri, PiTarget, XmlEntityName } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import { FLAGS, handleOf, KindEnters } from "#qti/schema/seed/ancestry.ts";
-import type { Flag } from "#qti/schema/seed/ancestry.ts";
+} from "#pantry/schema/node.ts";
+import {
+  NamespacePrefix,
+  NamespaceUri,
+  PiTarget,
+  XmlEntityName,
+} from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import { FLAGS, handleOf, KindEnters } from "#pantry/schema/seed/ancestry.ts";
+import type { Flag } from "#pantry/schema/seed/ancestry.ts";
 import { exportCharset } from "@qti-pie/crust/charset.ts";
 import type { Child, Element, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
 

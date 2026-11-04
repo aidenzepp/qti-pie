@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
-import { isMappedLaw, ruleOfLaw } from "#qti/import/refusal.ts";
-import type { ImportLaw } from "#qti/import/refusal.ts";
+import { isMappedLaw, ruleOfLaw } from "#pantry/import/refusal.ts";
+import type { ImportLaw } from "#pantry/import/refusal.ts";
 
 const contained = (
   from: string,

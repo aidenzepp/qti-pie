@@ -3,21 +3,25 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import * as asi from "#qti/schema/kinds/asi.ts";
-import * as xi from "#qti/schema/kinds/xi.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
-import { AttributeAdmission } from "#qti/schema/attributes.ts";
-import { Admission } from "#qti/schema/node.ts";
-import type { AttributeNameHandle } from "#qti/schema/node.ts";
-import { OperatorArity, OperatorArityMax, OperatorArityUnbounded } from "#qti/schema/processing.ts";
-import { Author } from "#qti/schema/roles.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import * as asi from "#pantry/schema/kinds/asi.ts";
+import * as xi from "#pantry/schema/kinds/xi.ts";
+import { AuthorApp } from "#pantry/schema/logins.ts";
+import { AttributeAdmission } from "#pantry/schema/attributes.ts";
+import { Admission } from "#pantry/schema/node.ts";
+import type { AttributeNameHandle } from "#pantry/schema/node.ts";
+import {
+  OperatorArity,
+  OperatorArityMax,
+  OperatorArityUnbounded,
+} from "#pantry/schema/processing.ts";
+import { Author } from "#pantry/schema/roles.ts";
 import {
   operatorArity,
   operatorArityMax,
   operatorArityUnbounded,
-} from "#qti/schema/seed/operator-arity.ts";
-import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+} from "#pantry/schema/seed/operator-arity.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The 20 expression kinds outside `NumericLogic1toManyDType`'s choice, so the 44 others are the

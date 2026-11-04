@@ -6,13 +6,13 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Context, Effect, FileSystem, Layer, Predicate } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { comparePackage, renderReport } from "#qti/export/compare.ts";
-import { exportPackage } from "#qti/export/package.ts";
-import { changeSetOf, importPackage, readRows, retrySchedule } from "#qti/import/package.ts";
-import { ImportRefused, isMappedLaw, ruleOfLaw } from "#qti/import/refusal.ts";
-import type { ImportLaw, Rule } from "#qti/import/refusal.ts";
-import { Rows } from "#qti/import/tree.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { comparePackage, renderReport } from "#pantry/export/compare.ts";
+import { exportPackage } from "#pantry/export/package.ts";
+import { changeSetOf, importPackage, readRows, retrySchedule } from "#pantry/import/package.ts";
+import { ImportRefused, isMappedLaw, ruleOfLaw } from "#pantry/import/refusal.ts";
+import type { ImportLaw, Rule } from "#pantry/import/refusal.ts";
+import { Rows } from "#pantry/import/tree.ts";
 import {
   AriaLevel,
   AriaRole,
@@ -23,17 +23,17 @@ import {
   NodeDir,
   NodeLabel,
   NodeLang,
-} from "#qti/schema/attributes.ts";
-import { DocumentId, HtmlId } from "#qti/schema/document.ts";
+} from "#pantry/schema/attributes.ts";
+import { DocumentId, HtmlId } from "#pantry/schema/document.ts";
 import {
   ContentBodyModal,
   FeedbackBlock,
   FeedbackInline,
   FeedbackOutcomeRef,
   ModalFeedback,
-} from "#qti/schema/feedback.ts";
-import { Img } from "#qti/schema/html.ts";
-import { Bdo, Div, H1, Summary } from "#qti/schema/html/text.ts";
+} from "#pantry/schema/feedback.ts";
+import { Img } from "#pantry/schema/html.ts";
+import { Bdo, Div, H1, Summary } from "#pantry/schema/html/text.ts";
 import {
   Picture,
   Source,
@@ -41,7 +41,7 @@ import {
   Track,
   Video,
   VideoControls,
-} from "#qti/schema/html/media.ts";
+} from "#pantry/schema/html/media.ts";
 import {
   Caption,
   Col,
@@ -49,27 +49,27 @@ import {
   ColgroupSpan,
   Details,
   Table,
-} from "#qti/schema/html/structure.ts";
-import { InteractionBinding } from "#qti/schema/interaction.ts";
-import { Gap } from "#qti/schema/interactions/gap.ts";
-import { Hottext, HottextOwner } from "#qti/schema/interactions/hot.ts";
-import { TextEntryInteraction } from "#qti/schema/interactions/text.ts";
-import { TypedDeclaration } from "#qti/schema/declaration.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
-import { AttributeLexical, Edge, Node } from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import { RubricBlock } from "#qti/schema/rubric.ts";
+} from "#pantry/schema/html/structure.ts";
+import { InteractionBinding } from "#pantry/schema/interaction.ts";
+import { Gap } from "#pantry/schema/interactions/gap.ts";
+import { Hottext, HottextOwner } from "#pantry/schema/interactions/hot.ts";
+import { TextEntryInteraction } from "#pantry/schema/interactions/text.ts";
+import { TypedDeclaration } from "#pantry/schema/declaration.ts";
+import { AuthorApp } from "#pantry/schema/logins.ts";
+import { AttributeLexical, Edge, Node } from "#pantry/schema/node.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import { RubricBlock } from "#pantry/schema/rubric.ts";
 import {
   PrintedVariable,
   PrintedVariableFormat,
   PrintedVariableRef,
   PrintedVariableVarRef,
   TemplateContentRef,
-} from "#qti/schema/template.ts";
-import { materialize } from "#qti/test/fixtures.ts";
-import type { FixtureName } from "#qti/test/fixtures.ts";
-import { rowsOf } from "#qti/test/rows.ts";
-import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+} from "#pantry/schema/template.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
+import type { FixtureName } from "#pantry/test/fixtures.ts";
+import { rowsOf } from "#pantry/test/rows.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The directory every export is written under: the package's gitignored `work/`.

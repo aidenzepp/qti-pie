@@ -1,10 +1,10 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Schema } from "effect";
-import * as contracts from "#qti/schema/contracts.ts";
-import * as media from "#qti/schema/html/media.ts";
-import * as html from "#qti/schema/html.ts";
-import * as node from "#qti/schema/node.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
+import * as media from "#pantry/schema/html/media.ts";
+import * as html from "#pantry/schema/html.ts";
+import * as node from "#pantry/schema/node.ts";
 
 /**
  * The seven handles of spec 4.8's V06 column.

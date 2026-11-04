@@ -121,7 +121,7 @@
  * qti-custom-operator      min=0 max=*
  * ```
  */
-import type { NodeKindHandle } from "#qti/schema/node.ts";
+import type { NodeKindHandle } from "#pantry/schema/node.ts";
 
 /**
  * The fewest child expressions each expression kind admits, in the order of the output above.

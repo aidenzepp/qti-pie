@@ -2,21 +2,21 @@
  * What the kinds files seed, composed once: the admission rows, the attribute admission rows and
  * the ancestry steps.
  */
-import * as asi from "#qti/schema/kinds/asi.ts";
-import * as cp from "#qti/schema/kinds/cp.ts";
-import * as cpx from "#qti/schema/kinds/cpx.ts";
-import * as csmd from "#qti/schema/kinds/csmd.ts";
-import * as drd from "#qti/schema/kinds/drd.ts";
-import * as generic from "#qti/schema/kinds/generic.ts";
-import type { AdmissionRow, SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
-import * as html from "#qti/schema/kinds/html.ts";
-import * as lom from "#qti/schema/kinds/lom.ts";
-import * as qmd from "#qti/schema/kinds/qmd.ts";
-import * as ud from "#qti/schema/kinds/ud.ts";
-import * as xi from "#qti/schema/kinds/xi.ts";
-import { NodeKind, SchemaVersion } from "#qti/schema/node.ts";
-import { KindEnters, ancestryStepRows } from "#qti/schema/seed/ancestry.ts";
-import { attributeAdmissionRows } from "#qti/schema/seed/attribute-admission.ts";
+import * as asi from "#pantry/schema/kinds/asi.ts";
+import * as cp from "#pantry/schema/kinds/cp.ts";
+import * as cpx from "#pantry/schema/kinds/cpx.ts";
+import * as csmd from "#pantry/schema/kinds/csmd.ts";
+import * as drd from "#pantry/schema/kinds/drd.ts";
+import * as generic from "#pantry/schema/kinds/generic.ts";
+import type { AdmissionRow, SchemaVersionHandle } from "#pantry/schema/kinds/generic.ts";
+import * as html from "#pantry/schema/kinds/html.ts";
+import * as lom from "#pantry/schema/kinds/lom.ts";
+import * as qmd from "#pantry/schema/kinds/qmd.ts";
+import * as ud from "#pantry/schema/kinds/ud.ts";
+import * as xi from "#pantry/schema/kinds/xi.ts";
+import { NodeKind, SchemaVersion } from "#pantry/schema/node.ts";
+import { KindEnters, ancestryStepRows } from "#pantry/schema/seed/ancestry.ts";
+import { attributeAdmissionRows } from "#pantry/schema/seed/attribute-admission.ts";
 
 /**
  * The registry of every kinds file, in composition order. A later phase's kinds file joins this

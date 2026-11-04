@@ -5,21 +5,21 @@ import { Effect, FileSystem, Predicate } from "effect";
 import path from "node:path";
 import { inspect } from "node:util";
 import { inject } from "vitest";
-import { itemRows } from "#qti/import/item.ts";
-import { Rows } from "#qti/import/tree.ts";
+import { itemRows } from "#pantry/import/item.ts";
+import { Rows } from "#pantry/import/tree.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
-import * as contracts from "#qti/schema/contracts.ts";
-import * as declaration from "#qti/schema/declaration.ts";
-import * as document from "#qti/schema/document.ts";
-import * as interaction from "#qti/schema/interaction.ts";
-import * as item from "#qti/schema/item.ts";
-import * as node from "#qti/schema/node.ts";
-import * as pkg from "#qti/schema/package.ts";
-import * as rosters from "#qti/schema/content/rosters.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import { fbFlagged } from "#qti/schema/seed/ancestry.ts";
-import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
-import { recordBindingFit } from "#qti/schema/seed/record-binding-fit.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
+import * as declaration from "#pantry/schema/declaration.ts";
+import * as document from "#pantry/schema/document.ts";
+import * as interaction from "#pantry/schema/interaction.ts";
+import * as item from "#pantry/schema/item.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as pkg from "#pantry/schema/package.ts";
+import * as rosters from "#pantry/schema/content/rosters.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import { fbFlagged } from "#pantry/schema/seed/ancestry.ts";
+import { bindingFit } from "#pantry/schema/seed/binding-fit.ts";
+import { recordBindingFit } from "#pantry/schema/seed/record-binding-fit.ts";
 
 /**
  * The probe schema: the node module's relations and rules with this module's.

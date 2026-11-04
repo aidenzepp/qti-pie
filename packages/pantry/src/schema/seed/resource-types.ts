@@ -1,7 +1,7 @@
 /**
  * The resource type vocabulary of a QTI content package, one row per (version, type).
  */
-import type { SchemaVersionHandle } from "#qti/schema/node.ts";
+import type { SchemaVersionHandle } from "#pantry/schema/node.ts";
 
 const commonTypes = [
   "imsqti_test_xmlv3p0",

@@ -14,14 +14,14 @@ import {
   nearestInteraction,
   templateRef,
   typedCopy,
-} from "#qti/import/interactions.ts";
-import type { DeclaredVariable, InteractionContext, Shared } from "#qti/import/interactions.ts";
-import { hotRows } from "#qti/import/interactions/hot.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { ItemRefusal, Rows, treeRows } from "#qti/import/tree.ts";
-import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
-import { ChoiceIdentifier, RectCoords } from "#qti/schema/contracts.ts";
-import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
+} from "#pantry/import/interactions.ts";
+import type { DeclaredVariable, InteractionContext, Shared } from "#pantry/import/interactions.ts";
+import { hotRows } from "#pantry/import/interactions/hot.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { ItemRefusal, Rows, treeRows } from "#pantry/import/tree.ts";
+import type { IndexedNode, NodeIndex } from "#pantry/import/tree.ts";
+import { ChoiceIdentifier, RectCoords } from "#pantry/schema/contracts.ts";
+import { ChoiceTemplateRef } from "#pantry/schema/choices.ts";
 import {
   DeclaredHotspotChoiceShowHide,
   DeclaredHotspotMaxChoices,
@@ -47,11 +47,11 @@ import {
   PositionObjectMinChoices,
   PositionObjectStage,
   SelectPointInteraction,
-} from "#qti/schema/interactions/hot.ts";
-import { InteractionBinding, TypedBinding } from "#qti/schema/interaction.ts";
-import { AttributeSpelling, NodeKind } from "#qti/schema/node.ts";
-import { Coords, CoordsCircle, CoordsRect } from "#qti/schema/shapes.ts";
-import { materialize } from "#qti/test/fixtures.ts";
+} from "#pantry/schema/interactions/hot.ts";
+import { InteractionBinding, TypedBinding } from "#pantry/schema/interaction.ts";
+import { AttributeSpelling, NodeKind } from "#pantry/schema/node.ts";
+import { Coords, CoordsCircle, CoordsRect } from "#pantry/schema/shapes.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 

@@ -2,13 +2,13 @@ import path from "node:path";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
-import { comparePackage } from "#qti/export/compare.ts";
-import type { Report } from "#qti/export/compare.ts";
-import { manifestRows } from "#qti/import/manifest.ts";
-import { Rows } from "#qti/import/tree.ts";
-import { listPackage, readEntry } from "#qti/package/read.ts";
-import { materialize } from "#qti/test/fixtures.ts";
-import type { FixtureName } from "#qti/test/fixtures.ts";
+import { comparePackage } from "#pantry/export/compare.ts";
+import type { Report } from "#pantry/export/compare.ts";
+import { manifestRows } from "#pantry/import/manifest.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { listPackage, readEntry } from "#pantry/package/read.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
+import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 /**

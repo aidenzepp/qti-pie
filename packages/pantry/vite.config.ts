@@ -3,8 +3,8 @@ import { defineConfig } from "vite-plus";
 
 /**
  * Test files that open the leased database: named `*.db.test.ts` or `*.packaging.test.ts`, or gated
- * on `hasLease` from `#qti/test/settings.ts`. Read from the tree, so a new file joins by its name
- * or its gate and no list needs keeping.
+ * on `hasLease` from `#pantry/test/settings.ts`. Read from the tree, so a new file joins by its
+ * name or its gate and no list needs keeping.
  */
 const databaseFiles = globSync("src/**/*.test.ts", { cwd: import.meta.dirname })
   .filter(

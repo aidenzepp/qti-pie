@@ -36,9 +36,9 @@ import {
   StatsOperatorName,
   ToleranceMode,
   XsBoolean,
-} from "#qti/schema/content/rosters.ts";
-import { BaseType } from "#qti/schema/declaration.ts";
-import * as node from "#qti/schema/node.ts";
+} from "#pantry/schema/content/rosters.ts";
+import { BaseType } from "#pantry/schema/declaration.ts";
+import * as node from "#pantry/schema/node.ts";
 import {
   CustomOperatorClassName,
   CustomOperatorDefinitionUri,
@@ -47,9 +47,9 @@ import {
   RecordFieldIdentifier,
   VariableReference,
   WeightReference,
-} from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import * as processing from "#qti/schema/processing.ts";
+} from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import * as processing from "#pantry/schema/processing.ts";
 
 const floatOrVariableRef = str.regex(patterns.floatOrVariableRef);
 

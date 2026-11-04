@@ -6,8 +6,8 @@
  * the composed schema, not written here.
  */
 import { contained, on, relation, str, uuid } from "@bjornpagen/grizzle";
-import { EmbedSourceUri, LongDescriptionUri } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import { EmbedSourceUri, LongDescriptionUri } from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * A `p` element.

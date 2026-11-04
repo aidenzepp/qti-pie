@@ -5,16 +5,16 @@
  */
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
-import type { ImportRefused } from "#qti/import/refusal.ts";
-import { closedOf, collapse, replace, Rows } from "#qti/import/tree.ts";
-import type { NodeIndex } from "#qti/import/tree.ts";
+import type { ImportRefused } from "#pantry/import/refusal.ts";
+import { closedOf, collapse, replace, Rows } from "#pantry/import/tree.ts";
+import type { NodeIndex } from "#pantry/import/tree.ts";
 import {
   QmdFeedbackTypeValue,
   QmdInteractionTypeValue,
   QmdScoringModeValue,
   XsBoolean,
-} from "#qti/schema/content/rosters.ts";
-import * as md from "#qti/schema/metadata.ts";
+} from "#pantry/schema/content/rosters.ts";
+import * as md from "#pantry/schema/metadata.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**

@@ -1,7 +1,7 @@
 /**
  * Prints the seed tables as SQL, one INSERT statement per 1000 rows, one statement per line,
  * against the installed names grizzle derives. Run with `node scripts/seed-sql.ts` from
- * `packages/qti`; it touches no database.
+ * `packages/pantry`; it touches no database.
  *
  * - `--only <Table,...>` prints only the named tables, by their declared names.
  * - `--minus <path>`, repeatable, omits every row the named file holds, or, for a directory, every
@@ -12,20 +12,20 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import nodePath from "node:path";
 import { parseArgs } from "node:util";
-import type { AdmissionRow } from "#qti/schema/kinds/generic.ts";
-import { AttributeName, Ancestry, NodeKind } from "#qti/schema/node.ts";
-import { admission, ancestryStep, attributeAdmission } from "#qti/schema/seed/admission.ts";
-import { mappableBaseType } from "#qti/schema/seed/mappable-base-type.ts";
-import { recordBindingFit } from "#qti/schema/seed/record-binding-fit.ts";
-import type { BindingFitRow } from "#qti/schema/seed/binding-fit.ts";
-import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
+import type { AdmissionRow } from "#pantry/schema/kinds/generic.ts";
+import { AttributeName, Ancestry, NodeKind } from "#pantry/schema/node.ts";
+import { admission, ancestryStep, attributeAdmission } from "#pantry/schema/seed/admission.ts";
+import { mappableBaseType } from "#pantry/schema/seed/mappable-base-type.ts";
+import { recordBindingFit } from "#pantry/schema/seed/record-binding-fit.ts";
+import type { BindingFitRow } from "#pantry/schema/seed/binding-fit.ts";
+import { bindingFit } from "#pantry/schema/seed/binding-fit.ts";
 import {
   operatorArity,
   operatorArityMax,
   operatorArityUnbounded,
-} from "#qti/schema/seed/operator-arity.ts";
-import { resourceTypes } from "#qti/schema/seed/resource-types.ts";
-import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
+} from "#pantry/schema/seed/operator-arity.ts";
+import { resourceTypes } from "#pantry/schema/seed/resource-types.ts";
+import { rootOfType } from "#pantry/schema/seed/root-of-type.ts";
 
 const SCHEMA = "qti";
 

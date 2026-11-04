@@ -3,7 +3,7 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option } from "effect";
-import { materialize } from "#qti/test/fixtures.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
 import { exportCharset } from "@qti-pie/crust/charset.ts";
 import { encode } from "@qti-pie/crust/encode.ts";
 import { EncodeError } from "@qti-pie/crust/errors.ts";

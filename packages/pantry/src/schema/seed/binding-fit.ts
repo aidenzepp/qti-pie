@@ -1,8 +1,8 @@
 /**
  * Which base type and cardinality an interaction kind can bind to.
  */
-import type { BaseType, TypedCardinality } from "#qti/schema/declaration.ts";
-import type { NodeKindHandle } from "#qti/schema/node.ts";
+import type { BaseType, TypedCardinality } from "#pantry/schema/declaration.ts";
+import type { NodeKindHandle } from "#pantry/schema/node.ts";
 
 /**
  * A pairing an interaction kind accepts: the base type and cardinality of the variable it binds.

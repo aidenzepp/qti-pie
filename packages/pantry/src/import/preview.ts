@@ -4,8 +4,8 @@
  */
 import { Effect } from "effect";
 import type { PlatformError } from "effect";
-import { readRows } from "#qti/import/package.ts";
-import { ruleOfError } from "#qti/import/refusal.ts";
+import { readRows } from "#pantry/import/package.ts";
+import { ruleOfError } from "#pantry/import/refusal.ts";
 
 /**
  * Whether `error` is one the guards or the reader raised, as opposed to the platform's.
