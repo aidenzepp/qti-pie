@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Duration, Effect, Option } from "effect";
 import { attr, doc, el, text, xmlNamespace } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
@@ -254,6 +254,47 @@ const matchCorrect: readonly Rule[] = [
     otherwise: Option.some([scoreRule(0)]),
   },
 ];
+
+/**
+ * An item whose body is one `qti-choice-interaction` bound to a single identifier response.
+ *
+ * @param attributes The interaction's attributes beside `response-identifier`.
+ * @returns The document at `items/test.xml`.
+ */
+const choiceItem = (attributes: readonly SourceAttribute[]): SourceDocument =>
+  item({
+    body: [
+      el(
+        "qti-choice-interaction",
+        [...attributes, attr("response-identifier", "RESPONSE")],
+        [choice("A", "Ant"), choice("B", "Bee")],
+      ),
+    ],
+    declarations: [declaration("qti-response-declaration", "RESPONSE", "identifier", "single")],
+  });
+
+/**
+ * An item whose body is one `qti-text-entry-interaction` bound to a single integer response.
+ *
+ * @param attributes The interaction's attributes beside `response-identifier`.
+ * @returns The document at `items/test.xml`.
+ */
+const textEntryItem = (attributes: readonly SourceAttribute[]): SourceDocument =>
+  item({
+    body: [
+      el(
+        "p",
+        [],
+        [
+          el("qti-text-entry-interaction", [
+            ...attributes,
+            attr("response-identifier", "RESPONSE"),
+          ]),
+        ],
+      ),
+    ],
+    declarations: [declaration("qti-response-declaration", "RESPONSE", "integer", "single")],
+  });
 
 /**
  * Find the one Choice model among body nodes.
@@ -886,6 +927,77 @@ describe("buildItem", () => {
         kind: "path",
         path: `${root}/qti-outcome-declaration/qti-default-value/qti-value`,
       });
+    }),
+  );
+
+  it.effect('[Q-2] refuses max-choices="-1" as value-type, outside xs:nonNegativeInteger', () =>
+    Effect.gen(function* refusesNegativeCount() {
+      const refusal = yield* Effect.flip(buildItem(choiceItem([attr("max-choices", "-1")])));
+
+      assert.strictEqual(refusal._tag, "Refusal");
+      assert.strictEqual(refusal.rule, "value-type");
+      assert.deepStrictEqual(refusal.location, {
+        kind: "path",
+        path: `${body}/qti-choice-interaction/@max-choices`,
+      });
+    }),
+  );
+
+  it.effect('[Q-20] refuses base="2147483648" as value-type, outside xs:int', () =>
+    Effect.gen(function* refusesWideBase() {
+      const refusal = yield* Effect.flip(buildItem(textEntryItem([attr("base", "2147483648")])));
+
+      assert.strictEqual(refusal._tag, "Refusal");
+      assert.strictEqual(refusal.rule, "value-type");
+      assert.deepStrictEqual(refusal.location, {
+        kind: "path",
+        path: `${body}/p/qti-text-entry-interaction/@base`,
+      });
+    }),
+  );
+
+  it.effect('[Q-20] reads base="-2147483648", the least xs:int', () =>
+    Effect.gen(function* readsLeastBase() {
+      const built = yield* buildItem(textEntryItem([attr("base", "-2147483648")]));
+      const [entry] = childrenOf(built.body[0]);
+
+      assert.strictEqual(entry?.kind === "text-entry" ? entry.base : undefined, -2_147_483_648);
+    }),
+  );
+
+  it.effect("[Q-2] clamps a count of 10^30 to 2^53-1 and reads -0 as 0", () =>
+    Effect.gen(function* clampsCounts() {
+      const built = yield* buildItem(
+        choiceItem([
+          attr("max-choices", "1000000000000000000000000000000"),
+          attr("min-choices", "-0"),
+        ]),
+      );
+      const interaction = choiceIn(built.body);
+
+      assert.strictEqual(interaction.maxChoices, Number.MAX_SAFE_INTEGER);
+      assert.strictEqual(interaction.minChoices, 0);
+    }),
+  );
+
+  it.live("trims a 50,000-character inner whitespace run in an attribute in linear time", () =>
+    Effect.gen(function* linearAttributeTrim() {
+      const run = " \t\n\r".repeat(12_500);
+      const cases = [
+        ["max-choices", `1${run}1`],
+        ["shuffle", `true${run}false`],
+      ] as const;
+      for (const [name, written] of cases) {
+        const [elapsed, refusal] = yield* Effect.timed(
+          Effect.flip(Effect.suspend(() => buildItem(choiceItem([attr(name, written)])))),
+        );
+        assert.strictEqual(refusal.rule, "value-type", name);
+        assert.deepStrictEqual(refusal.location, {
+          kind: "path",
+          path: `${body}/qti-choice-interaction/@${name}`,
+        });
+        assert.isBelow(Duration.toMillis(elapsed), 200, `${name}: ${Duration.format(elapsed)}`);
+      }
     }),
   );
 });
