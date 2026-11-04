@@ -1,18 +1,21 @@
 /**
- * The payload: the allowlist of what the emitter may know about an item and its session.
+ * The payload: the allowlist of what the emitter may know about an item and one render of it.
  *
- * {@link payload} is the only input the emitter receives. It copies each field it names out of the
- * item model and the record, one by one, and never spreads a model object, so a field the model
- * gains reaches the page only when this file names it. Nothing here holds a correct response, a
- * mapping, a processing rule, the seed, a template value or feedback content: what the page
- * cannot be given, it cannot leak.
+ * Two copies stand between the item model and the page. {@link redactItem} copies the parts of an
+ * item the page may know into a {@link Redacted}, and {@link payload} copies a `Redacted` and the
+ * author's {@link View} into the {@link Payload}, the only input the emitter receives. Each copies
+ * every field it names one by one and never spreads a model object, so a field the model gains
+ * reaches the page only when this file names it. Nothing here holds a correct response, a mapping,
+ * a response or outcome default, a processing rule, the seed, a template value or feedback
+ * content: what the page cannot be given, it cannot leak.
  *
  * @module
  * @see {@link Item} for the model it reads.
  */
-import { Array as Arr, Option } from "effect";
+import { Array as Arr, Brand, Option } from "effect";
 import { scopedId } from "#plate/emit/parts.ts";
 import type { Resolved } from "#plate/emit/parts.ts";
+import { entryName } from "#plate/form/encoding.ts";
 import type { Locale } from "#plate/messages.ts";
 import type {
   BodyNode,
@@ -21,9 +24,8 @@ import type {
   Item,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
-import type { ItemRecord } from "#plate/model/record.ts";
 import { format } from "#plate/model/values.ts";
-import type { Single, Value } from "#plate/model/values.ts";
+import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
 
 /**
  * A message response validation gives one response, in the locale's text or the author's.
@@ -46,30 +48,44 @@ export interface Validation {
 }
 
 /**
- * How one render was asked for: the state of the attempt it follows and what that submit left.
+ * The author's inputs to one render: the instance, the values to show, the entry names, and the
+ * messages of a post the author refused.
  *
- * `posted` holds the raw strings posted for each response, keyed by response identifier, and is
- * read only after a refused submit, so the candidate sees what they typed. `messages` are the
- * refused submit's validation messages. `locale` is the configuration's, the language of an item
- * that names none.
+ * The library decides no flow, so every field is the author's: each map is keyed by response
+ * identifier, and a response it omits takes the default the field names. `messages` decides how
+ * the controls are filled: when it is not empty, each control shows its `posted` strings, so the
+ * candidate sees what they typed, and the first interaction with a message takes `autofocus`;
+ * when it is empty, each control shows its value in `values` and `posted` is not read. `locale` is
+ * the language of an item that names none.
  */
 export interface View {
-  readonly attempt: "none" | "refused" | "submitted";
   /**
-   * Whether `max-attempts` is reached, so every control is disabled.
+   * Whether the author disabled every control.
    */
   readonly finished: boolean;
+  /**
+   * The item instance key, which scopes every id and each default entry name.
+   */
+  readonly instance: string;
   readonly locale: Locale;
   readonly messages: readonly ValidationMessage[];
+  /**
+   * The name each response's controls post under, `entryName(instance, response)` when absent.
+   */
+  readonly names: ReadonlyMap<string, string>;
   readonly posted: Option.Option<ReadonlyMap<string, readonly string[]>>;
+  /**
+   * The value each response's controls show, such as its `defaultValue` or a value the author's
+   * flow recorded; NULL when absent.
+   */
+  readonly values: ReadonlyMap<string, Value>;
 }
 
 /**
- * What the emitter needs beyond the payload: the locale, the base heading level, the form's
- * `action`, the base package-relative URLs resolve against, and the resolved part overrides.
+ * What the emitter needs beyond the payload: the locale, the base heading level, the base
+ * package-relative URLs resolve against, and the resolved part overrides.
  */
 export interface EmitState {
-  readonly action: string;
   readonly assetBase: string;
   readonly headingLevel: number;
   readonly locale: Locale;
@@ -126,11 +142,11 @@ export interface NoticePayload {
 }
 
 /**
- * What every interaction payload says about the last submit's validation of its response.
+ * What every interaction payload says about the view's messages for its response.
  *
  * `invalid` holds when its response has a message, and `messageIds` names those messages in order.
- * `autofocus` holds on the first interaction in document order with a message, after a refused
- * submit only; its connect function writes `autofocus` on that interaction's first Control.
+ * `autofocus` holds on the first interaction in document order with a message; its connect
+ * function writes `autofocus` on that interaction's first Control.
  */
 export interface ValidationPayload {
   readonly autofocus: boolean;
@@ -152,6 +168,11 @@ export interface ChoicePayload extends ValidationPayload {
    * The author's `class` value, empty when absent.
    */
   readonly class: string;
+  /**
+   * The name its Controls post under: the view's name for the response, else
+   * `entryName(instance, response)`.
+   */
+  readonly formName: string;
   readonly kind: "choice";
   readonly maxChoices: number;
   readonly minChoices: number;
@@ -179,7 +200,7 @@ export interface TextName {
 
 /**
  * What a Text Entry and an Extended Text share: the binding, the integer `base`, the placeholder,
- * the name and the text to restore.
+ * the entry name, the accessible name and the text to restore.
  */
 export interface TextControlPayload extends ValidationPayload {
   readonly base: number;
@@ -188,6 +209,14 @@ export interface TextControlPayload extends ValidationPayload {
    * The author's `class` value, empty when absent.
    */
   readonly class: string;
+  /**
+   * The name its Control posts under: the view's name for the response, else
+   * `entryName(instance, response)`.
+   */
+  readonly formName: string;
+  /**
+   * How the Control is named for assistive technology, not the entry name.
+   */
   readonly name: TextName;
   /**
    * `placeholder-text`.
@@ -198,7 +227,7 @@ export interface TextControlPayload extends ValidationPayload {
    */
   readonly response: string;
   /**
-   * The text the control shows: the string posted after a refused submit, else the recorded
+   * The text the control shows: the string posted when the view has messages, else the view's
    * value written in its lexical form, an integer in `base`; empty for NULL.
    */
   readonly restore: string;
@@ -236,13 +265,10 @@ export type PayloadNode = ElementPayload | InteractionPayload | NoticePayload | 
 /**
  * Everything the emitter may know about one render of an item.
  *
- * `lang` is the item's `xml:lang`, else the view's locale. `score` is `SCORE` written in its
- * lexical form, set when `SCORE` is declared, the attempt was submitted and response processing
- * ran. `recorded` holds for a submitted attempt of an item with no response processing.
- * `notices` names the unsupported features the body shows as notices.
+ * `lang` is the item's `xml:lang`, else the view's locale. `finished` is the view's: the author
+ * disabled every control. `notices` names the unsupported features the body shows as notices.
  */
 export interface Payload {
-  readonly attempt: View["attempt"];
   readonly body: readonly PayloadNode[];
   readonly finished: boolean;
   /**
@@ -253,10 +279,55 @@ export interface Payload {
   readonly messages: readonly MessagePayload[];
   readonly mode: "answering";
   readonly notices: readonly string[];
-  readonly recorded: boolean;
-  readonly score: Option.Option<string>;
   readonly title: string;
 }
+
+/**
+ * A response's binding as the page may know it: its identifier, base type and cardinality, with no
+ * correct response, mapping or default.
+ */
+export interface ResponseBinding {
+  readonly baseType: ModelledBaseType;
+  readonly cardinality: Value["cardinality"];
+  readonly identifier: string;
+}
+
+/**
+ * The fields of an item the page may know, which {@link redactItem} copies by name.
+ *
+ * `responses` lists the response bindings in document order, and `notices` the features the body
+ * shows as notices.
+ */
+interface RedactedFields {
+  readonly body: readonly BodyNode[];
+  /**
+   * The document's location as the host named it.
+   */
+  readonly document: string;
+  readonly identifier: string;
+  /**
+   * The root's `xml:lang`.
+   */
+  readonly lang: Option.Option<string>;
+  readonly notices: readonly string[];
+  readonly responses: readonly ResponseBinding[];
+  readonly title: string;
+}
+
+/**
+ * An item with every part the page may not know removed: the only item {@link payload} takes.
+ *
+ * The brand exists only in the type, so a full {@link Item}, or any object built by hand, does not
+ * type-check where a `Redacted` is expected; {@link redactItem} is its only constructor, and the
+ * value it returns holds exactly the fields of {@link RedactedFields}.
+ */
+export type Redacted = Brand.Branded<RedactedFields, "Redacted">;
+
+/**
+ * The brand's constructor, kept to this module so that {@link redactItem} is the only way to make
+ * a {@link Redacted}.
+ */
+const brand = Brand.nominal<Redacted>();
 
 /**
  * An interaction of the item model.
@@ -271,16 +342,18 @@ interface Build {
    * The interaction whose first Control takes `autofocus`, if any.
    */
   readonly autofocus: Option.Option<Interaction>;
+  readonly instance: string;
   readonly messages: readonly MessagePayload[];
+  readonly names: View["names"];
   /**
-   * The posted strings to restore, set only after a refused submit.
+   * The posted strings to restore, set only when the view has messages.
    */
   readonly posted: Option.Option<ReadonlyMap<string, readonly string[]>>;
-  readonly responses: ItemRecord["responses"];
   /**
    * The text controls with no authored name and no Prompt, in document order.
    */
   readonly unnamed: readonly Interaction[];
+  readonly values: View["values"];
 }
 
 /**
@@ -331,13 +404,14 @@ const isUnnamed = (interaction: Interaction): boolean =>
   (interaction.kind === "text-entry" || Option.isNone(interaction.prompt));
 
 /**
- * Give each validation message its id.
+ * Give each validation message the id its Message part carries, so a Control's
+ * `aria-describedby` and the Status part's Message agree.
  *
  * @param instance The item instance key.
  * @param messages The messages, in the order validation gave them.
  * @returns The messages with ids, `n` counting each response's messages from 0.
  */
-const identify = (
+export const identifyMessages = (
   instance: string,
   messages: readonly ValidationMessage[],
 ): readonly MessagePayload[] =>
@@ -353,17 +427,27 @@ const identify = (
   }));
 
 /**
- * Give the recorded values of a response.
+ * Give the values the view shows for a response.
  *
  * @param build The build.
  * @param response The response identifier.
- * @returns Its values, none when it is NULL or the record lacks it.
+ * @returns Its values, none when it is NULL or the view gives none.
  */
-const recorded = (build: Build, response: string): readonly Single[] =>
-  build.responses[response]?.values ?? [];
+const shown = (build: Build, response: string): readonly Single[] =>
+  build.values.get(response)?.values ?? [];
 
 /**
- * Write a recorded value as the text a text control shows.
+ * Give the name a response's controls post under.
+ *
+ * @param build The build.
+ * @param response The response identifier.
+ * @returns The view's name for it, else `entryName(instance, response)`.
+ */
+const formNameOf = (build: Build, response: string): string =>
+  build.names.get(response) ?? entryName(build.instance, response);
+
+/**
+ * Write a value as the text a text control shows.
  *
  * An integer is written in the control's `base`, the base its posted text is read in, so a
  * restored value posts back unchanged. A base outside 2 to 36, which no posted text can be read in,
@@ -413,8 +497,8 @@ const copyNodes = (nodes: readonly BodyNode[], build: Build): readonly PayloadNo
  *
  * @param interaction The Choice.
  * @param build The build.
- * @returns Its payload; `restore` holds the posted identifiers after a refused submit, else the
- *   recorded ones.
+ * @returns Its payload; `restore` holds the posted identifiers when the view has messages, else
+ *   the view's value.
  */
 const choicePayload = (interaction: ChoiceInteraction, build: Build): ChoicePayload => ({
   ...validationOf(interaction, build),
@@ -424,6 +508,7 @@ const choicePayload = (interaction: ChoiceInteraction, build: Build): ChoicePayl
     identifier: choice.identifier,
   })),
   class: interaction.class,
+  formName: formNameOf(build, interaction.response),
   kind: "choice",
   maxChoices: interaction.maxChoices,
   minChoices: interaction.minChoices,
@@ -431,7 +516,7 @@ const choicePayload = (interaction: ChoiceInteraction, build: Build): ChoicePayl
   prompt: interaction.prompt.pipe(Option.map((prompt) => copyNodes(prompt, build))),
   response: interaction.response,
   restore: Option.match(build.posted, {
-    onNone: () => recorded(build, interaction.response).map(format),
+    onNone: () => shown(build, interaction.response).map(format),
     onSome: (posted) => posted.get(interaction.response) ?? [],
   }),
 });
@@ -454,6 +539,7 @@ const textControlPayload = (
     base: interaction.base,
     baseType: interaction.baseType,
     class: interaction.class,
+    formName: formNameOf(build, interaction.response),
     name: {
       ariaLabel: interaction.ariaLabel,
       ariaLabelledby: interaction.ariaLabelledby,
@@ -466,7 +552,7 @@ const textControlPayload = (
     response: interaction.response,
     restore: Option.match(build.posted, {
       onNone: () =>
-        Option.match(Arr.head(recorded(build, interaction.response)), {
+        Option.match(Arr.head(shown(build, interaction.response)), {
           onNone: () => "",
           onSome: (single) => writeIn(single, interaction.base),
         }),
@@ -524,58 +610,63 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
 };
 
 /**
- * Give the score to show: `SCORE` in its lexical form, when it is declared, the attempt was
- * submitted and response processing ran.
+ * Copy the parts of an item the page may know: the allowlist, and the only constructor of
+ * {@link Redacted}.
+ *
+ * It copies, each by name, the document location, the identifier, the title, `lang`, the body,
+ * each response's binding and the features shown as notices. It copies no outcome declaration,
+ * correct response, mapping, response default or processing rule, and no field it does not name.
  *
  * @param item The item.
- * @param record The session record.
- * @param view The view.
- * @returns The score, its values separated by a space; none otherwise.
+ * @returns The redacted item.
  */
-const scoreOf = (item: Item, record: ItemRecord, view: View): Option.Option<string> =>
-  view.attempt === "submitted" && Option.isSome(item.processing) && item.outcomes.has("SCORE")
-    ? Option.map(Option.fromUndefinedOr(record.outcomes["SCORE"]), (score) =>
-        score.values.map(format).join(" "),
-      )
-    : Option.none();
+export const redactItem = (item: Item): Redacted =>
+  brand({
+    body: item.body,
+    document: item.document,
+    identifier: item.identifier,
+    lang: item.lang,
+    notices: item.unsupported.flatMap((entry) => (entry.shown === "notice" ? [entry.feature] : [])),
+    responses: Array.from(item.responses.values(), ({ baseType, cardinality, identifier }) => ({
+      baseType,
+      cardinality,
+      identifier,
+    })),
+    title: item.title,
+  });
 
 /**
- * Compute the payload of one render: the allowlist of what the emitter may know about the item
- * and its session.
+ * Compute the payload of one render: the allowlist of what the emitter may know about a redacted
+ * item and the author's inputs.
  *
- * @param item The item.
- * @param record The session record, which gives the instance key and the recorded responses.
- * @param view How the render was asked for.
- * @returns The payload. It holds no correct response, mapping, processing rule, seed, template
- *   value or feedback content, in any state.
+ * @param redacted The item, through {@link redactItem}.
+ * @param view The author's inputs: the instance, values, names, messages and posted strings.
+ * @returns The payload. It holds no correct response, mapping, default, processing rule, seed,
+ *   template value or feedback content, whatever the view.
  */
-export const payload = (item: Item, record: ItemRecord, view: View): Payload => {
-  const messages = identify(record.instance, view.messages);
-  const interactions = interactionsIn(item.body);
+export const payload = (redacted: Redacted, view: View): Payload => {
+  const messages = identifyMessages(view.instance, view.messages);
+  const interactions = interactionsIn(redacted.body);
   const build: Build = {
-    autofocus:
-      view.attempt === "refused"
-        ? Arr.findFirst(interactions, (interaction) =>
-            messages.some((entry) => entry.response === interaction.response),
-          )
-        : Option.none(),
+    autofocus: Arr.findFirst(interactions, (interaction) =>
+      messages.some((entry) => entry.response === interaction.response),
+    ),
+    instance: view.instance,
     messages,
-    posted: view.attempt === "refused" ? view.posted : Option.none(),
-    responses: record.responses,
+    names: view.names,
+    posted: messages.length > 0 ? view.posted : Option.none(),
     unnamed: interactions.filter(isUnnamed),
+    values: view.values,
   };
 
   return {
-    attempt: view.attempt,
-    body: copyNodes(item.body, build),
+    body: copyNodes(redacted.body, build),
     finished: view.finished,
-    instance: record.instance,
-    lang: Option.getOrElse(item.lang, () => view.locale),
+    instance: view.instance,
+    lang: Option.getOrElse(redacted.lang, () => view.locale),
     messages,
     mode: "answering",
-    notices: item.unsupported.flatMap((entry) => (entry.shown === "notice" ? [entry.feature] : [])),
-    recorded: view.attempt === "submitted" && Option.isNone(item.processing),
-    score: scoreOf(item, record, view),
-    title: item.title,
+    notices: redacted.notices,
+    title: redacted.title,
   };
 };

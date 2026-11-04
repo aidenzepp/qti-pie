@@ -6,6 +6,7 @@ import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { resolveOverrides, rowFor, scopedId } from "#plate/emit/parts.ts";
 import { toHtml } from "#plate/emit/serialise.ts";
+import { entryName } from "#plate/form/encoding.ts";
 import { message } from "#plate/messages.ts";
 import type {
   ChoicePayload,
@@ -52,13 +53,12 @@ const el = (
 const txt = (value: string): TextPayload => ({ kind: "text", text: value });
 
 /**
- * Build a payload around a body, in the state before any submit.
+ * Build a payload around a body, with no messages and every control enabled.
  *
  * @param body The body's payload nodes.
  * @returns The payload.
  */
 const payloadOf = (body: readonly PayloadNode[]): Payload => ({
-  attempt: "none",
   body,
   finished: false,
   instance,
@@ -66,8 +66,6 @@ const payloadOf = (body: readonly PayloadNode[]): Payload => ({
   messages: [],
   mode: "answering",
   notices: [],
-  recorded: false,
-  score: Option.none(),
   title: "Item",
 });
 
@@ -79,7 +77,6 @@ const payloadOf = (body: readonly PayloadNode[]): Payload => ({
  */
 const stateAt = (headingLevel: number): Effect.Effect<EmitState> =>
   Effect.map(Effect.orDie(resolveOverrides()), (parts) => ({
-    action: "/submit",
     assetBase: "",
     headingLevel,
     locale: "en",
@@ -146,7 +143,7 @@ const idsIn = (nodes: readonly Node[]): readonly string[] =>
 const rootOf = (nodes: readonly Node[]): Element => h("div", { lang: "en" }, nodes);
 
 /**
- * A Text Entry bound to `RESPONSE`, unnamed, before any submit.
+ * A Text Entry bound to `RESPONSE`, unnamed, with no message.
  */
 const textEntry: TextEntryPayload = {
   autofocus: false,
@@ -154,6 +151,7 @@ const textEntry: TextEntryPayload = {
   baseType: "string",
   class: "",
   expectedLength: Option.none(),
+  formName: entryName(instance, "RESPONSE"),
   invalid: false,
   kind: "text-entry",
   messageIds: [],
@@ -168,13 +166,14 @@ const textEntry: TextEntryPayload = {
 };
 
 /**
- * A single Choice bound to `RESPONSE`, with no Prompt, before any submit.
+ * A single Choice bound to `RESPONSE`, with no Prompt and no message.
  */
 const choice: ChoicePayload = {
   autofocus: false,
   cardinality: "single",
   choices: [{ content: [txt("Red")], identifier: "A" }],
   class: "",
+  formName: entryName(instance, "RESPONSE"),
   invalid: false,
   kind: "choice",
   maxChoices: 1,

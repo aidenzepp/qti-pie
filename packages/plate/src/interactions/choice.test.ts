@@ -11,9 +11,7 @@ import type { Entry } from "#plate/form/encoding.ts";
 import { renderChoice, validateChoice } from "#plate/interactions/choice.ts";
 import { message } from "#plate/messages.ts";
 import type { BodyNode, ChoiceInteraction, Item } from "#plate/model/item.ts";
-import { fresh } from "#plate/model/record.ts";
-import type { ItemRecord } from "#plate/model/record.ts";
-import { payload } from "#plate/payload.ts";
+import { payload, redactItem } from "#plate/payload.ts";
 import type { ChoicePayload, EmitState, Payload, View } from "#plate/payload.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
@@ -123,29 +121,27 @@ const itemOf = (interaction: ChoiceInteraction): Item => ({
 });
 
 /**
- * The view of a first `open`.
+ * The view of a first render: no messages, nothing posted, no values and no author's names.
  */
 const answering: View = {
-  attempt: "none",
   finished: false,
+  instance,
   locale: "en",
   messages: [],
+  names: new Map(),
   posted: Option.none(),
+  values: new Map(),
 };
 
 /**
  * Compute the payload of an item holding one Choice.
  *
  * @param interaction The Choice.
- * @param view How the render was asked for, a first `open` by default.
- * @param record The session record, a fresh one by default.
- * @returns The payload.
+ * @param view How the render was asked for, a first render by default.
+ * @returns The payload of the redacted item.
  */
-const payloadOf = (
-  interaction: ChoiceInteraction,
-  view: View = answering,
-  record: ItemRecord = fresh(itemOf(interaction), instance),
-): Payload => payload(itemOf(interaction), record, view);
+const payloadOf = (interaction: ChoiceInteraction, view: View = answering): Payload =>
+  payload(redactItem(itemOf(interaction)), view);
 
 /**
  * Give the Choice payload a payload's body starts with.
@@ -165,7 +161,6 @@ const choiceIn = (built: Payload): ChoicePayload => {
 const emitState: Effect.Effect<EmitState> = resolveOverrides().pipe(
   Effect.orDie,
   Effect.map((parts): EmitState => ({
-    action: "/submit",
     assetBase: "",
     headingLevel: 2,
     locale: "en",
@@ -332,7 +327,7 @@ describe("renderChoice", () => {
           assert.strictEqual(root.attrs["class"], "swatches");
           assert.strictEqual(root.attrs["data-orientation"], "horizontal");
           assert.strictEqual(root.attrs["data-mode"], "answering");
-          assert.strictEqual(root.attrs["data-attempt"], "none");
+          assert.isUndefined(root.attrs["data-attempt"]);
           assert.isUndefined(root.attrs["data-finished"]);
         }
       }),
@@ -407,6 +402,28 @@ describe("renderChoice", () => {
       }),
   );
 
+  it.effect("[Q-2] names every Control by the payload's form name, the author's when given", () =>
+    Effect.gen(function* namesControls() {
+      const authored = payloadOf(colours, { ...answering, names: new Map([[response, "colour"]]) });
+      const root = yield* render(authored);
+      const plain = yield* render(payloadOf(colours));
+
+      assert.strictEqual(choiceIn(authored).formName, "colour");
+      assert.deepStrictEqual(
+        partsIn(root, "control").map((control) => control.attrs["name"]),
+        ["colour", "colour", "colour"],
+      );
+      assert.deepStrictEqual(
+        partsIn(plain, "control").map((control) => control.attrs["name"]),
+        [name, name, name],
+      );
+      assert.deepStrictEqual(
+        keyboardWalk(page(root, authored), ["Tab", "ArrowDown", "Tab", "Enter"]),
+        Option.some([["colour", "B"]]),
+      );
+    }),
+  );
+
   it.effect("[Q-2] a radio walk (Tab, ArrowDown, Tab, Enter) posts the second choice", () =>
     Effect.gen(function* radioWalk() {
       const built = payloadOf(colours);
@@ -469,16 +486,14 @@ describe("renderChoice", () => {
   );
 
   it.effect(
-    "[Q-2] after a refused submit, restores the posted choices, marks every Control invalid and described, and autofocuses the first",
+    "[Q-2] with messages, restores the posted choices, marks every Control invalid and described, and autofocuses the first",
     () =>
       Effect.gen(function* afterRefused() {
         const configuration = yield* configure({});
         const entries = posting("A", "B", "C");
         const validation = validateChoice(pairs, entries, configuration, instance);
         const built = payloadOf(pairs, {
-          attempt: "refused",
-          finished: false,
-          locale: "en",
+          ...answering,
           messages: validation.messages,
           posted: Option.some(new Map([[response, ["A", "B", "C"]]])),
         });
@@ -488,7 +503,7 @@ describe("renderChoice", () => {
         const describedBy = built.messages.map((entry) => entry.id).join(" ");
 
         assert.isNotEmpty(built.messages);
-        assert.strictEqual(root.attrs["data-attempt"], "refused");
+        assert.isUndefined(root.attrs["data-attempt"]);
         for (const control of controls) {
           assert.strictEqual(control.attrs["checked"], true);
           assert.strictEqual(control.attrs["aria-invalid"], "true");
@@ -503,30 +518,27 @@ describe("renderChoice", () => {
       }),
   );
 
-  it.effect("[Q-2] after finishing, disables every Control and restores the recorded choice", () =>
+  it.effect("[Q-2] when finished, disables every Control and restores the view's value", () =>
     Effect.gen(function* afterFinishing() {
-      const record: ItemRecord = {
-        ...fresh(itemOf(colours), instance),
-        attempt: "submitted",
-        numAttempts: 1,
-        responses: {
-          [response]: {
-            baseType: "identifier",
-            cardinality: "single",
-            values: [{ baseType: "identifier", value: "B" }],
-          },
-        },
-      };
-      const built = payloadOf(
-        colours,
-        { attempt: "submitted", finished: true, locale: "en", messages: [], posted: Option.none() },
-        record,
-      );
+      const built = payloadOf(colours, {
+        ...answering,
+        finished: true,
+        values: new Map([
+          [
+            response,
+            {
+              baseType: "identifier",
+              cardinality: "single",
+              values: [{ baseType: "identifier", value: "B" }],
+            },
+          ],
+        ]),
+      });
       const root = yield* render(built);
       const controls = partsIn(root, "control");
 
       assert.strictEqual(root.attrs["data-finished"], true);
-      assert.strictEqual(root.attrs["data-attempt"], "submitted");
+      assert.isUndefined(root.attrs["data-attempt"]);
       assert.deepStrictEqual(
         controls.map((control) => control.attrs["disabled"]),
         [true, true, true],

@@ -123,8 +123,7 @@ const when = (condition: boolean, attributes: Attributes): Attributes =>
   condition ? attributes : {};
 
 /**
- * Map a Choice to the form entries its Controls post: the control-to-entry mapping that names the
- * Controls and decodes what they post.
+ * Map a Choice to the form entries {@link validateChoice} decodes.
  *
  * @param interaction The Choice's response identifier and cardinality.
  * @param instance The item instance key.
@@ -290,21 +289,22 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
 /**
  * Compute every attribute of every part of one Choice: the connect function.
  *
- * - Root: the marker, the session state (`data-mode`, `data-attempt`, `data-finished`), the author's
- *   `class`, `data-orientation`, and `aria-labelledby` → the Prompt's id under the `labelledby`
- *   markup. It carries no `role`: a native `fieldset` is the group.
+ * - Root: the marker, the state (`data-mode`, and `data-finished` when the author disabled every
+ *   control), the author's `class`, `data-orientation`, and `aria-labelledby` → the Prompt's id
+ *   under the `labelledby` markup. It carries no `role`: a native `fieldset` is the group.
  * - Prompt: the marker, and its id under the `labelledby` markup; a `legend` names its group natively
  *   and needs none.
  * - Control: a radio when one choice can be posted (`max-choices` 1, or a single response), else a
- *   checkbox; its id, name and value; `checked` from the restore; `disabled` when finished;
- *   `aria-labelledby` → its Label; `aria-invalid` and `aria-describedby` → the message ids when the
- *   response is invalid; and `autofocus` on the first Control when the payload says.
+ *   checkbox; its id, the payload's `formName` and its value; `checked` from the restore;
+ *   `disabled` when finished; `aria-labelledby` → its Label; `aria-invalid` and `aria-describedby`
+ *   → the message ids when the response is invalid; and `autofocus` on the first Control when the
+ *   payload says.
  * - Indicator: `aria-hidden="true"`. Label: its id, and `for` → its Control.
  *
  * Every id is `scopedId(instance, response, part, index)`.
  *
  * @param interaction The Choice.
- * @param payload The payload, which gives the instance and the session state.
+ * @param payload The payload, which gives the instance and `finished`.
  * @param rows The rows of the Choice's parts as placed.
  * @param markup The Prompt's markup, none when there is no Prompt.
  * @returns The attributes of every part.
@@ -320,7 +320,6 @@ const connect = (
   const labelledby = Option.contains(markup, "labelledby");
   const type =
     interaction.maxChoices === 1 || interaction.cardinality === "single" ? "radio" : "checkbox";
-  const { name } = bindingOf(interaction, instance);
 
   return {
     choices: { "data-slot": rows.choices.slot },
@@ -342,7 +341,7 @@ const connect = (
           "data-slot": rows.control.slot,
           ...when(payload.finished, { disabled: true }),
           id: controlId,
-          name,
+          name: interaction.formName,
           type,
           value: choice.identifier,
         },
@@ -354,7 +353,6 @@ const connect = (
     root: {
       ...when(labelledby, { "aria-labelledby": promptId }),
       ...when(interaction.class !== "", { class: interaction.class }),
-      "data-attempt": payload.attempt,
       ...when(payload.finished, { "data-finished": true }),
       "data-mode": payload.mode,
       ...Option.match(interaction.orientation, {
@@ -376,7 +374,7 @@ const connect = (
  * through `applyPart` with its replacement from `state.parts`, so every swap holds I1 to I4.
  *
  * @param interaction The Choice's payload.
- * @param payload The payload of the whole render, which gives the instance and the session state.
+ * @param payload The payload of the whole render, which gives the instance and `finished`.
  * @param state The locale and the resolved part overrides.
  * @returns The Choice Root, or {@link PartSwapRefused} when a replacement breaks the swap
  *   invariant.
