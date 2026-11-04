@@ -15,6 +15,327 @@
 
 /* == base: QTI vocabulary classes == */
 
+/*
+ * Choice labels (vocab.txt:4329-4503). A label class numbers the rows in its predefined counter
+ * style. The label is generated on the row, outside the Label part, so each Control's accessible
+ * name stays the authored text. With no label class, no label shows.
+ */
+.qti-labels-decimal:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choices"]),
+.qti-labels-lower-alpha:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choices"]),
+.qti-labels-upper-alpha:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choices"]),
+.qti-labels-cjk-ideographic:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choices"]) {
+  counter-reset: qti-choice-label;
+}
+
+/* A labelled row counts itself, and sets its label on one line beside the Label part. */
+.qti-labels-decimal:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"]),
+.qti-labels-lower-alpha:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"]),
+.qti-labels-upper-alpha:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"]),
+.qti-labels-cjk-ideographic:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"]) {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  counter-increment: qti-choice-label;
+}
+
+/* The Label part takes the rest of a labelled row, so the whole line stays its target. */
+.qti-labels-decimal:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-label"]),
+.qti-labels-lower-alpha:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-label"]),
+.qti-labels-upper-alpha:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-label"]),
+.qti-labels-cjk-ideographic:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-label"]) {
+  flex-grow: 1;
+}
+
+/*
+ * Each label class's label: its counter style, then the suffix, which is a period with no suffix
+ * class or with qti-labels-suffix-period, ")" with qti-labels-suffix-parenthesis and nothing with
+ * qti-labels-suffix-none. The suffix class sits inside :where(), so each rule counts one class.
+ */
+
+/* qti-labels-decimal: 1, 2, 3. */
+.qti-labels-decimal:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before,
+.qti-labels-decimal:where(.qti-labels-suffix-period[data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before {
+  content: counter(qti-choice-label, decimal) ".";
+}
+
+.qti-labels-decimal:where(.qti-labels-suffix-parenthesis[data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before {
+  content: counter(qti-choice-label, decimal) ")";
+}
+
+.qti-labels-decimal:where(.qti-labels-suffix-none[data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before {
+  content: counter(qti-choice-label, decimal);
+}
+
+/* qti-labels-lower-alpha: a, b, c. */
+.qti-labels-lower-alpha:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before,
+.qti-labels-lower-alpha:where(.qti-labels-suffix-period[data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before {
+  content: counter(qti-choice-label, lower-alpha) ".";
+}
+
+.qti-labels-lower-alpha:where(.qti-labels-suffix-parenthesis[data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before {
+  content: counter(qti-choice-label, lower-alpha) ")";
+}
+
+.qti-labels-lower-alpha:where(.qti-labels-suffix-none[data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before {
+  content: counter(qti-choice-label, lower-alpha);
+}
+
+/* qti-labels-upper-alpha: A, B, C. */
+.qti-labels-upper-alpha:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before,
+.qti-labels-upper-alpha:where(.qti-labels-suffix-period[data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before {
+  content: counter(qti-choice-label, upper-alpha) ".";
+}
+
+.qti-labels-upper-alpha:where(.qti-labels-suffix-parenthesis[data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before {
+  content: counter(qti-choice-label, upper-alpha) ")";
+}
+
+.qti-labels-upper-alpha:where(.qti-labels-suffix-none[data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before {
+  content: counter(qti-choice-label, upper-alpha);
+}
+
+/* qti-labels-cjk-ideographic: 一, 二, 三. */
+.qti-labels-cjk-ideographic:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before,
+.qti-labels-cjk-ideographic:where(.qti-labels-suffix-period[data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before {
+  content: counter(qti-choice-label, cjk-ideographic) ".";
+}
+
+.qti-labels-cjk-ideographic:where(.qti-labels-suffix-parenthesis[data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before {
+  content: counter(qti-choice-label, cjk-ideographic) ")";
+}
+
+.qti-labels-cjk-ideographic:where(.qti-labels-suffix-none[data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before {
+  content: counter(qti-choice-label, cjk-ideographic);
+}
+
+/* qti-labels-none: no label, whatever other label class the Root holds. */
+.qti-labels-none:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before {
+  content: none;
+}
+
+/*
+ * Choice orientation (vocab.txt:4504-4549): vertical shows one column; horizontal shows one row of
+ * at most five, wrapping after five, row by row. The authored data-orientation behaves as the
+ * matching class; it sits inside :where(), so a class on the same Root wins. The columns are grid
+ * tracks sized by their content, so they need no fr unit and follow any gap the host sets.
+ */
+.qti-orientation-vertical:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choices"]),
+:where(
+  [data-slot="choice-interaction"][data-orientation="vertical"]
+    [data-slot="choice-interaction-choices"]
+) {
+  display: grid;
+  grid-template-columns: none;
+}
+
+.qti-orientation-horizontal:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choices"]),
+:where(
+  [data-slot="choice-interaction"][data-orientation="horizontal"]
+    [data-slot="choice-interaction-choices"]
+) {
+  display: grid;
+  grid-template-columns: auto auto auto auto auto;
+}
+
+/*
+ * Choice stacking (vocab.txt:4550-4738): qti-choices-stacking-N shows N columns. With horizontal
+ * orientation or none, the choices run row by row ("Z"), as grid tracks.
+ */
+.qti-choices-stacking-1:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choices"]) {
+  display: grid;
+  grid-template-columns: auto;
+}
+
+.qti-choices-stacking-2:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choices"]) {
+  display: grid;
+  grid-template-columns: auto auto;
+}
+
+.qti-choices-stacking-3:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choices"]) {
+  display: grid;
+  grid-template-columns: auto auto auto;
+}
+
+.qti-choices-stacking-4:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choices"]) {
+  display: grid;
+  grid-template-columns: auto auto auto auto;
+}
+
+.qti-choices-stacking-5:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choices"]) {
+  display: grid;
+  grid-template-columns: auto auto auto auto auto;
+}
+
+/*
+ * With vertical orientation, by class or by data-orientation, the choices run column by column
+ * ("Reverse N"): N balanced columns of a multi-column layout. A horizontal class on the Root
+ * outranks a vertical data-orientation.
+ */
+.qti-choices-stacking-1:where([data-slot="choice-interaction"]):where(
+    .qti-orientation-vertical,
+    [data-orientation="vertical"]:not(.qti-orientation-horizontal)
+  )
+  :where([data-slot="choice-interaction-choices"]) {
+  display: block;
+  column-count: 1;
+}
+
+.qti-choices-stacking-2:where([data-slot="choice-interaction"]):where(
+    .qti-orientation-vertical,
+    [data-orientation="vertical"]:not(.qti-orientation-horizontal)
+  )
+  :where([data-slot="choice-interaction-choices"]) {
+  display: block;
+  column-count: 2;
+}
+
+.qti-choices-stacking-3:where([data-slot="choice-interaction"]):where(
+    .qti-orientation-vertical,
+    [data-orientation="vertical"]:not(.qti-orientation-horizontal)
+  )
+  :where([data-slot="choice-interaction-choices"]) {
+  display: block;
+  column-count: 3;
+}
+
+.qti-choices-stacking-4:where([data-slot="choice-interaction"]):where(
+    .qti-orientation-vertical,
+    [data-orientation="vertical"]:not(.qti-orientation-horizontal)
+  )
+  :where([data-slot="choice-interaction-choices"]) {
+  display: block;
+  column-count: 4;
+}
+
+.qti-choices-stacking-5:where([data-slot="choice-interaction"]):where(
+    .qti-orientation-vertical,
+    [data-orientation="vertical"]:not(.qti-orientation-horizontal)
+  )
+  :where([data-slot="choice-interaction-choices"]) {
+  display: block;
+  column-count: 5;
+}
+
+/* A row in a "Reverse N" column: kept whole, and spaced as the grid's gap spaces it elsewhere. */
+.qti-choices-stacking-1:where([data-slot="choice-interaction"]):where(
+    .qti-orientation-vertical,
+    [data-orientation="vertical"]:not(.qti-orientation-horizontal)
+  )
+  :where([data-slot="choice-interaction-choice"]),
+.qti-choices-stacking-2:where([data-slot="choice-interaction"]):where(
+    .qti-orientation-vertical,
+    [data-orientation="vertical"]:not(.qti-orientation-horizontal)
+  )
+  :where([data-slot="choice-interaction-choice"]),
+.qti-choices-stacking-3:where([data-slot="choice-interaction"]):where(
+    .qti-orientation-vertical,
+    [data-orientation="vertical"]:not(.qti-orientation-horizontal)
+  )
+  :where([data-slot="choice-interaction-choice"]),
+.qti-choices-stacking-4:where([data-slot="choice-interaction"]):where(
+    .qti-orientation-vertical,
+    [data-orientation="vertical"]:not(.qti-orientation-horizontal)
+  )
+  :where([data-slot="choice-interaction-choice"]),
+.qti-choices-stacking-5:where([data-slot="choice-interaction"]):where(
+    .qti-orientation-vertical,
+    [data-orientation="vertical"]:not(.qti-orientation-horizontal)
+  )
+  :where([data-slot="choice-interaction-choice"]) {
+  break-inside: avoid;
+  margin-block-end: 0.5rem;
+}
+
+/*
+ * Hidden controls (vocab.txt:4739-4785): the Indicator hides too, and the Control stays hidden
+ * from sight only, so it stays focusable, named and in the form. This rule outranks the theme's
+ * forced-colours rule, so the Control stays hidden there as well.
+ */
+.qti-input-control-hidden:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-control"]) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.qti-input-control-hidden:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-indicator"]) {
+  display: none;
+}
+
+/*
+ * With no control to show it, a selected row shows its selection by a wider border, which forced
+ * colours keep (they recolour a border, and drop a background, but keep its width); the padding
+ * gives the theme's row padding back the width, so the row does not move. Focus already shows as
+ * the row's outline, which forced colours keep too.
+ */
+.qti-input-control-hidden:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choice"]:has([data-slot="choice-interaction-control"]:checked)
+  ) {
+  border-width: 3px;
+  padding: calc(0.5rem - 2px) calc(0.75rem - 2px);
+}
+
+/*
+ * Vertical writing for Choice (vocab.txt:4802-4840): the Root is set in vertical lines, so its
+ * choices flow right to left (vertical-rl) or left to right (vertical-lr), and the generated
+ * labels stand upright.
+ */
+.qti-writing-orientation-vertical-rl:where([data-slot="choice-interaction"]) {
+  writing-mode: vertical-rl;
+}
+
+.qti-writing-orientation-vertical-lr:where([data-slot="choice-interaction"]) {
+  writing-mode: vertical-lr;
+}
+
+.qti-writing-orientation-vertical-rl:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before,
+.qti-writing-orientation-vertical-lr:where([data-slot="choice-interaction"])
+  :where([data-slot="choice-interaction-choice"])::before {
+  text-orientation: upright;
+}
+
 /* == theme: shadcn manner, on the part markers == */
 
 /* The item Root: a block. The page's surface, text colour and font are the host's. */
