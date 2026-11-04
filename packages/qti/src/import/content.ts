@@ -25,6 +25,7 @@ import {
   replace,
   Rows,
   typedAttribute,
+  valueText,
   withParents,
 } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
@@ -203,7 +204,7 @@ const valueRows = Effect.fn("import.content.valueRows")(function* valueRows(
       valueSet: set.id,
     },
   ]);
-  const text = replace(textOf(element));
+  const text = valueText(baseType.value, replace(textOf(element)));
   const { id } = node;
   const arms: Record<Exclude<BaseTypeHandle, "boolean">, () => Rows> = {
     directedPair: () =>

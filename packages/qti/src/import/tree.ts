@@ -14,6 +14,7 @@ import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import { ImportRefused } from "#qti/import/refusal.ts";
 import type { Rule } from "#qti/import/refusal.ts";
+import type { BaseType } from "#qti/schema/declaration.ts";
 import { YesNo } from "#qti/schema/content/rosters.ts";
 import type { YesNoHandle } from "#qti/schema/content/rosters.ts";
 import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
@@ -55,6 +56,8 @@ import { FLAGS, handleOf, KindEnters } from "#qti/schema/seed/ancestry.ts";
 import type { Flag } from "#qti/schema/seed/ancestry.ts";
 import { exportCharset } from "#qti/xml/charset.ts";
 import type { Child, Element, Misc, XmlDocument } from "#qti/xml/tree.ts";
+
+type BaseTypeHandle = (typeof BaseType.handles)[number];
 
 /**
  * The rows an import has built so far, by relation.
@@ -199,6 +202,25 @@ export const replace = (s: string): string => s.replaceAll(/[\t\n\r]/gu, " ");
  */
 export const collapse = (s: string): string =>
   replace(s).replaceAll(/ +/gu, " ").replaceAll(/^ | $/gu, "");
+
+/**
+ * The value a typed `qti-value` holds for the element text `text` of base type `baseType`.
+ *
+ * Decision 157, item 1: for a typed value written as element content, outer whitespace is
+ * formatting, not meaning, so every base type but `string` is read with its leading and trailing
+ * space, tab, line feed and carriage return removed; internal whitespace is untouched. A `string`
+ * keeps its whitespace. `file` is trimmed, since only `string` is exempt.
+ *
+ * The source spelling stays in the document tree's own text rows (`TextNode`, `Ws` and
+ * `EntityReference` children of the value node), which export renders, so a round trip reproduces
+ * the padded spelling byte for byte.
+ *
+ * @param baseType - The value's base type.
+ * @param text - The `replace`d text of the value node.
+ * @returns The text the value's arm row holds.
+ */
+export const valueText = (baseType: BaseTypeHandle, text: string): string =>
+  baseType === "string" ? text : text.replaceAll(/^[ \t\n\r]+|[ \t\n\r]+$/gu, "");
 
 /**
  * The value a typed column holds for `lexical` under `whiteSpace`.

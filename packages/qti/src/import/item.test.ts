@@ -1443,7 +1443,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts composi
     "a boolean qti-value outside true and false is refused value-lexical before the write",
     () =>
       Effect.gen(function* refusedBoolean() {
-        for (const spelling of ["yes", "1", "TRUE", " true"]) {
+        for (const spelling of ["yes", "1", "TRUE"]) {
           const doc = yield* readChoice(inject("fixtures").simple, (text) =>
             text
               .replace('base-type="float"', 'base-type="boolean"')
@@ -1459,6 +1459,76 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts composi
           );
         }
       }),
+  );
+
+  suite.effect("a padded boolean qti-value reads as its handle and renders as written", () =>
+    Effect.gen(function* paddedBoolean() {
+      for (const [spelling, handle] of [
+        [" true ", "true"],
+        ["\n    false\n  ", "false"],
+      ] as const) {
+        const edit = (text: string) =>
+          text
+            .replace('base-type="float"', 'base-type="boolean"')
+            .replace("<qti-value>0</qti-value>", `<qti-value>${spelling}</qti-value>`);
+        const doc = yield* readChoice(inject("fixtures").simple, edit);
+        const { documentId, rows } = yield* itemOf(doc);
+
+        assert.deepStrictEqual(
+          Rows.of(rows, value.relations.DeclaredValueBoolean).map((row) => row.value),
+          [handle],
+        );
+        yield* guarded(inject("fixtures").simple, { edit });
+
+        const rendered = new TextDecoder().decode(canonicalize(renderTree(rows, documentId)));
+        assert.include(rendered, `<qti-value>${spelling}</qti-value>`);
+      }
+    }),
+  );
+
+  suite.effect("a padded identifier qti-value reads trimmed and renders as written", () =>
+    Effect.gen(function* paddedIdentifier() {
+      const directory = yield* materialize("padded-identifier-value");
+      const doc = yield* readChoice(directory);
+      const { documentId, rows } = yield* itemOf(doc);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, value.relations.DeclaredValueIdentifier).map((row) => row.value),
+        ["ChoiceA"],
+      );
+      yield* guarded(directory);
+      assert.include(
+        new TextDecoder().decode(canonicalize(renderTree(rows, documentId))),
+        "> ChoiceA <",
+      );
+    }),
+  );
+
+  suite.effect("a string qti-value keeps its outer whitespace", () =>
+    Effect.gen(function* paddedString() {
+      const doc = yield* readChoice(inject("fixtures").simple, (text) =>
+        text
+          .replace('base-type="float"', 'base-type="string"')
+          .replace("<qti-value>0</qti-value>", "<qti-value> a </qti-value>"),
+      );
+      const { rows } = yield* itemOf(doc);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, value.relations.DeclaredValueString).map((row) => row.value),
+        [" a "],
+      );
+    }),
+  );
+
+  suite.effect("text-copy refuses an identifier value that keeps its children's padding", () =>
+    Effect.gen(function* paddedCopy() {
+      yield* refusal("text-copy", yield* materialize("padded-identifier-value"), {
+        alter: (rows) =>
+          mapRows(rows, value.relations.DeclaredValueIdentifier, (row) =>
+            patched(row, { value: " ChoiceA " }),
+          ),
+      });
+    }),
   );
 
   suite.effect("a boolean qti-value of true or false is written in its arm", () =>

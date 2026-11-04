@@ -7,7 +7,7 @@
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { Effect, Option, Predicate, Schema } from "effect";
 import { standardTemplate } from "#qti/import/item.ts";
-import { collapse, replace, Rows } from "#qti/import/tree.ts";
+import { collapse, replace, Rows, valueText } from "#qti/import/tree.ts";
 import type { WhiteSpace } from "#qti/import/tree.ts";
 import { spelledText } from "#qti/schema/attribute-homes.ts";
 import {
@@ -167,10 +167,15 @@ const contentOf = (index: Index, id: string): string =>
   (index.children.get(id) ?? []).map((edge) => index.pieces.get(edge.child) ?? "").join("");
 
 /**
- * `text-copy`: every `qti-value` arm row holds the `replace`d text of its node, which is the class
- * of `qti-value` for every base type (spec 3.11).
+ * `text-copy`: every `qti-value` arm row holds the `replace`d text of its node with outer
+ * whitespace removed for every base type but string (spec 3.11, decision 157). An arm row with no
+ * `DeclaredValue` row is compared with the untrimmed text; the `DeclaredValue` containment refuses
+ * it at commit.
  */
 const textCopy = (rows: Rows, index: Index): Finding => {
+  const baseTypes = new Map(
+    Rows.of(rows, values.DeclaredValue).map((row) => [row.id, row.baseType] as const),
+  );
   for (const relation of valueArms) {
     for (const row of rows.get(relation) ?? []) {
       if (!isArmRow(row)) {
@@ -181,7 +186,9 @@ const textCopy = (rows: Rows, index: Index): Finding => {
         return refuse("text-copy", `${relation.name} row ${row.id} names no node.`);
       }
 
-      const expected = replace(contentOf(index, row.id));
+      const baseType = baseTypes.get(row.id);
+      const replaced = replace(contentOf(index, row.id));
+      const expected = baseType === undefined ? replaced : valueText(baseType, replaced);
       if (row.value !== expected) {
         return refuse(
           "text-copy",

@@ -685,6 +685,23 @@ describe("contentRows", () => {
     }),
   );
 
+  it.effect("a padded boolean or integer default value is written trimmed", () =>
+    Effect.gen(function* run() {
+      const { rows } = yield* built({
+        head: `<qti-template-declaration identifier="T" cardinality="single" base-type="boolean"><qti-default-value><qti-value> true </qti-value></qti-default-value></qti-template-declaration><qti-template-declaration identifier="N" cardinality="single" base-type="integer"><qti-default-value><qti-value> 5 </qti-value></qti-default-value></qti-template-declaration>`,
+      });
+
+      assert.deepStrictEqual(
+        Rows.of(rows, values.relations.DeclaredValueBoolean).map((row) => row.value),
+        ["true"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, values.relations.DeclaredValueInteger).map((row) => row.value),
+        ["5"],
+      );
+    }),
+  );
+
   it.effect("a boolean default value of true or false is written in its arm", () =>
     Effect.gen(function* run() {
       const { rows } = yield* built({
