@@ -18,7 +18,7 @@ import { otherRows } from "#pantry/import/interactions/other.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { ItemRefusal, Rows } from "#pantry/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#pantry/import/tree.ts";
-import { MediaRectCoords } from "#pantry/schema/contracts.ts";
+import { MediaRectCoords, SliderBound } from "#pantry/schema/contracts.ts";
 import { InteractionBinding, TypedBinding } from "#pantry/schema/interaction.ts";
 import {
   DeclaredMediaLoop,
@@ -390,11 +390,11 @@ describe("otherRows: slider", () => {
       assert.deepStrictEqual(Rows.of(rows, SliderInteraction), [
         {
           id,
-          lowerBound: "0",
+          lowerBound: SliderBound("0"),
           responseIdentifier: "RESPONSE",
           rootKind: "item",
           stepLabel: "false",
-          upperBound: "10",
+          upperBound: SliderBound("10"),
         },
       ]);
       assert.strictEqual(Rows.of(rows, SliderStep).length, 0);
