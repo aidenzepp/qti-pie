@@ -86,7 +86,7 @@ const remedies = {
   "too-large": `is more than the ${sizeLimit} bytes (32 KiB) the box reads. Paste only the \`:root\` and \`.dark\` blocks of custom properties`,
   unbalanced:
     "is never matched. Close every brace, quote and comment the theme opens, and open every brace it closes",
-  value: `marks a value the box refuses. Give each custom property a value that is not empty, has at most ${valueLimit} characters, and holds none of \`;\`, \`{\`, \`}\`, \`<\`, \`>\`, \`\\\`, \`/*\`, \`@\` or \`!important\`, and no \`url()\`, \`src()\`, \`image()\` or \`image-set()\` call`,
+  value: `marks a value the box refuses. Give each custom property a value that is not empty, has at most ${valueLimit} characters, and holds none of \`;\`, \`{\`, \`}\`, \`<\`, \`>\`, \`\\\`, \`/*\`, \`@\` or \`!important\`, no \`url()\`, \`src()\`, \`image()\` or \`image-set()\` call, and no quoted string that crosses a line`,
 } satisfies Record<RefusalCause, string>;
 
 /**
@@ -94,7 +94,8 @@ const remedies = {
  *
  * `detail` quotes only the offending part, at most 80 characters, never the paste: the size in
  * bytes, the selector or at-rule name, the property name, the forbidden token (or the property
- * name when the value is empty or too long), or the unmatched character.
+ * name when the value is empty, too long or holds a string that crosses a line), or the unmatched
+ * character.
  */
 export class ThemeRefused extends Schema.TaggedError<ThemeRefused>()("ThemeRefused", {
   cause: Schema.Literals(refusalCauses),
@@ -215,6 +216,44 @@ const nextToken = (text: string, position: number): number => {
   }
 
   return position + (character === "\\" ? 2 : 1);
+};
+
+/**
+ * A line break, which ends a CSS string: LF, CR or form feed, each of which CSS Syntax 3's input
+ * preprocessing reads as LF.
+ */
+const lineBreak = /[\n\r\f]/u;
+
+/**
+ * An escape inside a string: a backslash and the character after it, with CR LF taken as the one
+ * line break preprocessing makes of it.
+ */
+const escaped = /\\(?:\r\n|[\s\S])/gu;
+
+/**
+ * Decide whether a value holds a string that crosses a line: a string with a line break that no
+ * backslash escapes. CSS Syntax 3 ("consume a string token") ends a string at such a break and
+ * makes it a bad string, so the declaration is invalid; an escaped line break continues the string
+ * and does not cross a line.
+ *
+ * @param value A value, its strings closed.
+ * @returns Whether a string in `value` crosses a line.
+ */
+const crossesLine = (value: string): boolean => {
+  let position = 0;
+  while (position < value.length) {
+    const end = nextToken(value, position);
+    if (
+      isQuote(value.charAt(position)) &&
+      lineBreak.test(value.slice(position, end).replaceAll(escaped, ""))
+    ) {
+      return true;
+    }
+
+    position = end;
+  }
+
+  return false;
 };
 
 /**
@@ -412,11 +451,12 @@ const readNames = (
 };
 
 /**
- * Check one value: not empty, at most 512 characters, and holding no forbidden token.
+ * Check one value: not empty, at most 512 characters, holding no forbidden token, and holding no
+ * string that crosses a line.
  *
  * @param declaration The declaration whose value to check.
  * @returns Nothing, or the refusal quoting the earliest forbidden token, or the property's name when
- *   the value is empty or too long.
+ *   the value is empty, too long or holds a string that crosses a line.
  */
 const checkValue = ([name, value]: ThemeDeclaration): Result.Result<void, ThemeRefused> => {
   if (!valueLength.test(value)) {
@@ -424,8 +464,11 @@ const checkValue = ([name, value]: ThemeDeclaration): Result.Result<void, ThemeR
   }
 
   const token = forbiddenToken.exec(value);
+  if (token !== null) {
+    return refuse("value", token[0]);
+  }
 
-  return token === null ? Result.void : refuse("value", token[0]);
+  return crossesLine(value) ? refuse("value", name) : Result.void;
 };
 
 /**

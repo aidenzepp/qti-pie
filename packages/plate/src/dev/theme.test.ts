@@ -179,6 +179,15 @@ describe("parseTheme", () => {
     ["a comment opener inside quotes", ':root { --x: "/*" }', "value", "/*"],
     ["an empty value", ":root { --x: ; }", "value", "--x"],
     ["a value over 512 characters", `:root { --x: ${"a".repeat(513)} }`, "value", "--x"],
+    [
+      "a quoted string across a line feed",
+      ':root {\n  --x: "a\nb";\n  --next: red;\n}\n',
+      "value",
+      "--x",
+    ],
+    ["a quoted string across a carriage return", ":root { --x: 'a\rb' }", "value", "--x"],
+    ["a quoted string across a form feed", ':root { --x: "a\fb" }', "value", "--x"],
+    ["an escaped line feed inside quotes", ':root { --x: "a\\\nb" }', "value", "\\"],
     ["an extra closing brace", ":root { --x: 1 } }", "unbalanced", "}"],
     ["an unclosed block", ":root { --x: 1", "unbalanced", "{"],
     ["an unterminated string", ':root { --x: "a }', "unbalanced", '"'],
@@ -196,6 +205,15 @@ describe("parseTheme", () => {
       }),
     );
   }
+
+  it.effect("keeps a line break outside quotes, which CSS reads as white space", () =>
+    Effect.gen(function* lineBreakOutsideQuotes() {
+      const theme = yield* parseTheme(':root {\n  --font-sans: "Inter",\n    sans-serif;\n}\n');
+
+      assert.deepStrictEqual(theme.light, [["--font-sans", '"Inter",\n    sans-serif']]);
+      assert.deepStrictEqual(yield* parseTheme(themeText(theme)), theme);
+    }),
+  );
 
   it.effect("refuses 33 KiB of declarations as too-large", () =>
     Effect.gen(function* tooLarge() {
