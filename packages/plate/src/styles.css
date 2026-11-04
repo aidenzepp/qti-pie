@@ -1,5 +1,7 @@
 /*
- * plate's stylesheet, linked by a host page.
+ * plate's stylesheet, linked by a host page: plate's default theme for hosts that are not React.
+ * It is not the shadcn look, but it reads shadcn's token names, so a host's shadcn theme carries
+ * over.
  *
  * Tokens: it reads thirteen shadcn/ui tokens and no others, each as var(--token, <fallback>), the
  * fallback shadcn's default neutral light value: --primary, --primary-foreground, --accent,
@@ -508,7 +510,7 @@
   padding: 3px;
 }
 
-/* == theme: shadcn manner, on the part markers == */
+/* == theme: plate's default theme, on the part markers == */
 
 /* The item Root: a block. The page's surface, text colour and font are the host's. */
 :where([data-slot="item"]) {

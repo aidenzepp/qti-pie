@@ -6,7 +6,7 @@ import { partForSlot, partTable, rowFor } from "#plate/emit/parts.ts";
 import { browserSupport } from "#plate/ledger/browser-support.ts";
 import { checkFloor, readWebFeatures } from "#plate/test/baseline.ts";
 import type { FloorViolation, WebFeatures } from "#plate/test/baseline.ts";
-import { compounds, scanSheet, uses, varReferences } from "#plate/test/css.ts";
+import { compounds, compoundsDeep, scanSheet, uses, varReferences } from "#plate/test/css.ts";
 import type { Compound, Sheet, StyleRule } from "#plate/test/css.ts";
 import { contrastRatio, parseOklch, tokens } from "#plate/test/tokens.ts";
 import { behaviourClasses, styledClasses } from "#plate/vocabulary.ts";
@@ -41,7 +41,7 @@ const baseLine = "/* == base: QTI vocabulary classes == */";
 /**
  * The line that opens the theme section, the look on the part markers.
  */
-const themeLine = "/* == theme: shadcn manner, on the part markers == */";
+const themeLine = "/* == theme: plate's default theme, on the part markers == */";
 
 /**
  * The only attribute names a selector may test (spec §4.2; `data-disabled` by the Mind's ruling
@@ -77,11 +77,6 @@ const pseudoClassNames: ReadonlySet<string> = new Set([
   "not",
   "where",
 ]);
-
-/**
- * The pseudo-classes whose argument is a selector list.
- */
-const selectorPseudoClasses: ReadonlySet<string> = new Set(["has", "is", "not", "where"]);
 
 /**
  * The surface a rule's text sits on when the rule sets no background: shadcn's default
@@ -120,21 +115,6 @@ const hiddenControlClass = "qti-input-control-hidden";
  * A quoted string in CSS text, double or single, with its escapes.
  */
 const quotedStrings = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/gu;
-
-/**
- * Read a selector's compounds at any depth.
- *
- * @param selector One selector.
- * @returns Its top-level compounds, each followed by the compounds of the selectors of its
- *   `:where`, `:is`, `:not` and `:has`, recursively.
- */
-const compoundsDeep = (selector: string): readonly Compound[] =>
-  compounds(selector).flatMap((compound) => [
-    compound,
-    ...compound.pseudoClasses
-      .filter((pseudoClass) => selectorPseudoClasses.has(pseudoClass.name))
-      .flatMap((pseudoClass) => pseudoClass.selectors.flatMap(compoundsDeep)),
-  ]);
 
 /**
  * Read a selector's subject compounds: its last compound and, when that compound holds `:where()`

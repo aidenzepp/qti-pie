@@ -17,7 +17,7 @@ exports these names and no others:
 
 - The functions: `open`, `redact`, `render`, `renderStatus`, `score`, `checkResponses` and
   `configure`.
-- The form helpers: `encode`, `decode`, `entryName`, `partition` and `checkInstance`.
+- The form helpers: `encode`, `decode`, `entryName`, `partition`, `checkInstance` and `isPosted`.
 - The redacted item's JSON codec: `encodeRedacted` and `decodeRedacted`.
 - The part constructor `h`.
 - The errors: `InvalidConfiguration`, `InvalidInstance`, `InvalidRecord`, `InvalidRedacted`,
@@ -25,8 +25,8 @@ exports these names and no others:
   `ResponsesRefused`, `UnknownIdentifierError`, `UnknownPart` and `UnmappedResponseError`.
 - The types: `Accepted`, `Attributes`, `Binding`, `Configuration`, `DecodeOptions`, `Element`,
   `EngineFailure`, `Entry`, `InstanceRequirement`, `Node`, `Options`, `PartFunction`,
-  `PartOverrides`, `Partition`, `Redacted`, `RedactedJson`, `Rendered`, `StatusInput`,
-  `StoredRecord`, `Text`, `ValidationMessage`, `Value` and `Verdict`.
+  `PartOverrides`, `Partition`, `PostedBaseType`, `Redacted`, `RedactedJson`, `Rendered`,
+  `StatusInput`, `StoredRecord`, `Text`, `ValidationMessage`, `Value` and `Verdict`.
 
 plate reads QTI XML through `@qti-pie/crust` and never depends on `pantry`.
 

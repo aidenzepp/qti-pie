@@ -57,18 +57,19 @@ const elementsOf = (trees: readonly Node[]): readonly Element[] =>
   trees.flatMap((node) => (node.kind === "element" ? [node, ...elementsOf(node.children)] : []));
 
 /**
- * Read a selector's compounds at any depth.
+ * Read a selector's compounds at any depth outside `:not`: unlike `compoundsDeep` in
+ * `#plate/test/css.ts`, it skips `:not`'s selectors, which may name what no element has.
  *
  * @param selector One selector.
  * @returns Its top-level compounds, each followed by the compounds of the selectors of its
  *   `:where`, `:is` and `:has`, recursively; never those of `:not`.
  */
-const compoundsDeep = (selector: string): readonly Compound[] =>
+const compoundsOutsideNot = (selector: string): readonly Compound[] =>
   compounds(selector).flatMap((compound) => [
     compound,
     ...compound.pseudoClasses
       .filter((pseudoClass) => descended.has(pseudoClass.name))
-      .flatMap((pseudoClass) => pseudoClass.selectors.flatMap(compoundsDeep)),
+      .flatMap((pseudoClass) => pseudoClass.selectors.flatMap(compoundsOutsideNot)),
   ]);
 
 /**
@@ -161,7 +162,7 @@ const has = (element: Element, compound: Compound): boolean => {
 const matchable = (sheet: Sheet): readonly SheetCompound[] =>
   sheet.rules.flatMap((rule) =>
     rule.selectors.flatMap((selector) =>
-      compoundsDeep(selector)
+      compoundsOutsideNot(selector)
         .filter(namesSomething)
         .map((compound) => ({ compound, selector })),
     ),
