@@ -1,6 +1,6 @@
 import { Option } from "effect";
 import type { Element } from "#plate/emit/node.ts";
-import { partForSlot, promptMarkupFor } from "#plate/emit/parts.ts";
+import { partForSlot, promptMarkupFor, splitIdrefs } from "#plate/emit/parts.ts";
 import type { InteractionKey, PartName, PartOf } from "#plate/emit/parts.ts";
 
 /**
@@ -90,13 +90,43 @@ const labelableTags: ReadonlySet<string> = new Set([
 const disableableTags: ReadonlySet<string> = new Set(["button", "input", "select", "textarea"]);
 
 /**
+ * The `input` types HTML defines; any other value is the Text state.
+ *
+ * @see https://html.spec.whatwg.org/multipage/input.html#attr-input-type
+ */
+const inputTypes: ReadonlySet<string> = new Set([
+  "button",
+  "checkbox",
+  "color",
+  "date",
+  "datetime-local",
+  "email",
+  "file",
+  "hidden",
+  "image",
+  "month",
+  "number",
+  "password",
+  "radio",
+  "range",
+  "reset",
+  "search",
+  "submit",
+  "tel",
+  "text",
+  "time",
+  "url",
+  "week",
+]);
+
+/**
  * Read an attribute as a string, a boolean attribute present reading as the empty string.
  *
  * @param element The element to read.
  * @param name The attribute's name.
  * @returns The attribute's value, or `undefined` when the element does not carry it.
  */
-const attribute = (element: Element, name: string): string | undefined => {
+export const attribute = (element: Element, name: string): string | undefined => {
   const value = element.attrs[name];
 
   return value === true ? "" : value;
@@ -157,13 +187,18 @@ const collapse = (value: string): string => value.replaceAll(/[\t\n\f\r ]+/gu, "
 const isAriaHidden = (element: Element): boolean => attribute(element, "aria-hidden") === "true";
 
 /**
- * Read an element's `input` type, ASCII lower-cased, `text` when absent.
+ * Read an `input` element's type keyword, ASCII lower-cased; a missing or unknown type is `text`,
+ * the Text state HTML gives it.
  *
  * @param element An `input` element.
  * @returns The type keyword.
+ * @see https://html.spec.whatwg.org/multipage/input.html#attr-input-type
  */
-const inputType = (element: Element): string =>
-  (attribute(element, "type") ?? "text").toLowerCase();
+export const inputType = (element: Element): string => {
+  const type = (attribute(element, "type") ?? "text").toLowerCase();
+
+  return inputTypes.has(type) ? type : "text";
+};
 
 /**
  * Decide whether an element is a form control a person operates: an `input` that is not hidden, a
@@ -199,7 +234,7 @@ const isSubmitButton = (element: Element): boolean => {
  * @returns The parsed index, or `undefined` when it has none or it does not parse.
  * @see https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#rules-for-parsing-integers
  */
-const tabindexOf = (element: Element): number | undefined => {
+export const tabindexOf = (element: Element): number | undefined => {
   const digits = /^[\t\n\f\r ]*(?<digits>[+-]?\d+)/u.exec(attribute(element, "tabindex") ?? "")
     ?.groups?.["digits"];
 
@@ -362,8 +397,7 @@ export const textOf = (element: Element): string => collapse(textBelow(element))
  * @param value The attribute's value, if present.
  * @returns The ids in order, none for an absent attribute.
  */
-const idRefs = (value: string | undefined): readonly string[] =>
-  (value ?? "").split(/[\t\n\f\r ]+/u).filter((id) => id !== "");
+const idRefs = (value: string | undefined): readonly string[] => splitIdrefs(value ?? "");
 
 /**
  * Compute the accessible name of a form control or a group Root from explicit references only.

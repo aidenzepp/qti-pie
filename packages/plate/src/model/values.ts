@@ -76,10 +76,13 @@ const isXmlSpace = (character: string): boolean =>
  * Remove outer XML whitespace from text, stepping in from each end once, so the time is linear in
  * the length of the text.
  *
+ * Element text sheds it before {@link parseElementText} reads a value, and an XSD-typed attribute
+ * value before its lexical check.
+ *
  * @param text The text as written.
  * @returns The text without its leading and trailing XML whitespace.
  */
-const trimXmlSpace = (text: string): string => {
+export const trimXmlSpace = (text: string): string => {
   let start = 0;
   let end = text.length;
   while (start < end && isXmlSpace(text.charAt(start))) {
@@ -100,23 +103,34 @@ const trimXmlSpace = (text: string): string => {
 const pairLexical = /^(?<source>[^\t\n\r ]+)[\t\n\r ]+(?<destination>[^\t\n\r ]+)$/u;
 
 /**
- * The lexical space of a QTI integer: an optional sign and decimal digits, as many as written.
+ * The lexical space of a QTI integer, and of `xs:integer`: an optional sign and ASCII digits, as
+ * many as written.
  *
  * QTI 3.0 states no range for its integer base type (the integer primitive type is "derived from
  * the decimal data-type"), so the value model holds every integer exactly, as a `bigint`
  * (operator reading A).
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#AppA1
+ * @see https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/#integer
  */
-const integerLexical = /^[+-]?[0-9]+$/u;
+export const integerLexical = /^[+-]?[0-9]+$/u;
 
 /**
- * The lexical space of xs:double (XML Schema 1.0), which a QTI float uses: a decimal with an
+ * The lexical space of `xs:decimal`: an optional sign and digits with at most one decimal point,
+ * at least one digit in all.
+ *
+ * @see https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/#decimal
+ */
+export const decimalLexical = /^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/u;
+
+/**
+ * The lexical space of `xs:double` (XML Schema 1.0), which a QTI float uses: a decimal with an
  * optional exponent, `INF`, `-INF` or `NaN`.
  *
  * @see https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/#double
  */
-const doubleLexical = /^(?:[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|-?INF|NaN)$/u;
+export const doubleLexical =
+  /^(?:[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|-?INF|NaN)$/u;
 
 /**
  * One QTI value, tagged by its base type: a string for `identifier`, `string` and `uri`; a

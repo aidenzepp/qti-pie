@@ -40,15 +40,6 @@ export interface ValidationMessage {
 }
 
 /**
- * What an interaction's response validation makes of its posted entries: the decoded value, and a
- * message for each problem, none when the value is accepted.
- */
-export interface Validation {
-  readonly messages: readonly ValidationMessage[];
-  readonly value: Value;
-}
-
-/**
  * The author's inputs to one render: the instance, the values to show, the entry names, and the
  * messages of a post the author refused.
  *

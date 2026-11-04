@@ -17,14 +17,15 @@
  */
 import { Option, Result, pipe } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { NestedInteractionDefect, authoredId, emitNodes } from "#plate/emit/body.ts";
-import type { RenderInteraction } from "#plate/emit/body.ts";
+import { emitNodes, nestedInteraction } from "#plate/emit/body.ts";
+import { when } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { promptMarkupFor, rowFor, scopedId } from "#plate/emit/parts.ts";
 import type { PartOf, PartRow, PromptMarkup, RowContext } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
+import { authorsName } from "#plate/interactions/name.ts";
 import { message } from "#plate/messages.ts";
 import type { ChoiceInteraction } from "#plate/model/item.ts";
 import { format } from "#plate/model/values.ts";
@@ -46,11 +47,6 @@ const owner = "choice-interaction";
  * A Choice part.
  */
 type ChoicePart = PartOf<typeof owner>;
-
-/**
- * The ASCII whitespace that separates the ids of an IDREFS value.
- */
-const idSeparator = /[\t\n\f\r ]+/u;
 
 /**
  * The row of every Choice part as placed, the Root's and the Prompt's set by the Prompt's markup.
@@ -81,56 +77,6 @@ interface Connected {
   readonly prompt: Attributes;
   readonly root: Attributes;
 }
-
-/**
- * Give attributes only when a condition holds, so a part's props read as one object literal.
- *
- * @param condition Whether the attributes apply.
- * @param attributes The attributes.
- * @returns `attributes`, or none when `condition` is false.
- */
-const when = (condition: boolean, attributes: Attributes): Attributes =>
-  condition ? attributes : {};
-
-/**
- * Render an interaction met in a Prompt's or a choice's content, which QTI's schema admits nowhere
- * there: a defect, since only a hand-built item can hold one.
- *
- * @param nested The interaction's payload.
- * @returns Never; it throws {@link NestedInteractionDefect}, which names the interaction.
- */
-const nestedInteraction: RenderInteraction = (nested) => {
-  throw new NestedInteractionDefect({
-    kind: nested.kind,
-    response: nested.response,
-    within: "choice-interaction",
-  });
-};
-
-/**
- * Give the author's names for a Choice's group: `aria-label` as written, and each id of
- * `aria-labelledby` scoped by the instance through {@link authoredId}, joined by one space.
- *
- * @param interaction The Choice.
- * @param instance The item instance key, which scopes the author's ids.
- * @returns The attributes the author gave, none when they gave neither.
- */
-const authorsName = (interaction: ChoicePayload, instance: string): Attributes => ({
-  ...Option.match(interaction.ariaLabel, {
-    onNone: () => ({}),
-    onSome: (label) => ({ "aria-label": label }),
-  }),
-  ...Option.match(interaction.ariaLabelledby, {
-    onNone: () => ({}),
-    onSome: (ids) => ({
-      "aria-labelledby": ids
-        .split(idSeparator)
-        .filter((id) => id !== "")
-        .map((id) => authoredId(instance, id))
-        .join(" "),
-    }),
-  }),
-});
 
 /**
  * Give the row of every Choice part for a Prompt markup.
@@ -252,7 +198,7 @@ const connect = (
  * @param payload The payload of the whole render, which gives the instance and `finished`.
  * @param state The locale, the heading level and the resolved part overrides.
  * @returns The Choice Root, or {@link PartSwapRefused} when a replacement breaks the swap
- *   invariant. It throws {@link NestedInteractionDefect} when the content holds an interaction,
+ *   invariant. It throws `NestedInteractionDefect` when the content holds an interaction,
  *   which QTI admits nowhere there.
  */
 export const renderChoice = (
@@ -263,7 +209,7 @@ export const renderChoice = (
   const emitContent = (
     nodes: readonly PayloadNode[],
   ): Result.Result<readonly Node[], PartSwapRefused> =>
-    emitNodes(nodes, payload, state, nestedInteraction);
+    emitNodes(nodes, payload, state, nestedInteraction(owner));
   const replacement = (part: ChoicePart) =>
     Option.getOrUndefined(state.parts.replacementFor(owner, part));
 

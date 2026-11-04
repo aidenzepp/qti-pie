@@ -4,7 +4,8 @@
  *
  * {@link runAttempt} is pure. It sets the responses, counts the attempt, resets the outcomes and
  * runs the item's rules with the evaluator, and returns the evaluator's failure rather than throw
- * it. The session decides whether an attempt may run; this module only runs it.
+ * it. The author's flow decides whether an attempt may run (rule `a9d04969`); this module only
+ * runs it.
  *
  * @module
  */

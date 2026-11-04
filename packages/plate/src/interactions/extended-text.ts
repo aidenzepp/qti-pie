@@ -18,15 +18,15 @@
  */
 import { Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { NestedInteractionDefect, authoredId, emitNodes } from "#plate/emit/body.ts";
-import type { RenderInteraction } from "#plate/emit/body.ts";
-import { text } from "#plate/emit/node.ts";
+import { emitNodes, nestedInteraction } from "#plate/emit/body.ts";
+import { text, when } from "#plate/emit/node.ts";
 import type { Attributes, Element } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
+import { textControlName } from "#plate/interactions/name.ts";
 import { message } from "#plate/messages.ts";
 import type { Locale, MessageKey } from "#plate/messages.ts";
 import type { ExtendedTextInteraction } from "#plate/model/item.ts";
@@ -53,45 +53,14 @@ interface Connected {
 }
 
 /**
- * The whitespace that separates the ids of an IDREFS value, as the body splits them.
- */
-const separator = /[\t\n\f\r ]+/u;
-
-/**
  * A line break the HTML parser turns into a line feed: CRLF, or a lone CR.
  */
 const lineBreak = /\r\n?/gu;
 
 /**
- * Give attributes only when a condition holds, so a part's props read as one object literal.
- *
- * @param condition Whether the attributes apply.
- * @param attributes The attributes.
- * @returns `attributes`, or none when `condition` is false.
- */
-const when = (condition: boolean, attributes: Attributes): Attributes =>
-  condition ? attributes : {};
-
-/**
- * Render an interaction met in an Extended Text's Prompt, which QTI's schema admits nowhere there:
- * a defect, since only a hand-built item can hold one.
- *
- * @param nested The interaction's payload.
- * @returns Never; it throws {@link NestedInteractionDefect}, which names the interaction.
- */
-const nestedInteraction: RenderInteraction = (nested) => {
-  throw new NestedInteractionDefect({
-    kind: nested.kind,
-    response: nested.response,
-    within: "extended-text-interaction",
-  });
-};
-
-/**
- * Compute how the Control is named (§4.8, Q10): the Prompt when there is one; else the author's
- * `aria-label` and `aria-labelledby`, each referenced id scoped as the body scopes the author's
- * ids; else the locale's "Answer", or "Answer n of N" when the item has several unnamed text
- * controls.
+ * Compute how the Control is named (§4.8, Q10): the Prompt when there is one; else as any text
+ * control is named ({@link textControlName}): the author's `aria-label` and `aria-labelledby`,
+ * else the locale's "Answer", or "Answer n of N" when the item has several unnamed text controls.
  *
  * @param interaction The Extended Text.
  * @param instance The item instance key.
@@ -104,44 +73,11 @@ const nameAttributes = (
   instance: string,
   locale: Locale,
   promptId: Option.Option<string>,
-): Attributes => {
-  if (Option.isSome(promptId)) {
-    return { "aria-labelledby": promptId.value };
-  }
-
-  const { ariaLabel, ariaLabelledby, unnamed } = interaction.name;
-  if (Option.isSome(ariaLabel) || Option.isSome(ariaLabelledby)) {
-    return {
-      ...Option.match(ariaLabel, {
-        onNone: () => ({}),
-        onSome: (label) => ({ "aria-label": label }),
-      }),
-      ...Option.match(ariaLabelledby, {
-        onNone: () => ({}),
-        onSome: (ids) => ({
-          "aria-labelledby": ids
-            .split(separator)
-            .filter((id) => id !== "")
-            .map((id) => authoredId(instance, id))
-            .join(" "),
-        }),
-      }),
-    };
-  }
-
-  const count = (n: number): string => new Intl.NumberFormat(locale).format(n);
-
-  return {
-    "aria-label": unnamed.pipe(
-      Option.filter((position) => position.count > 1),
-      Option.match({
-        onNone: () => message(locale, "answer"),
-        onSome: (position) =>
-          message(locale, "answerOf", { count: count(position.count), n: count(position.n) }),
-      }),
-    ),
-  };
-};
+): Attributes =>
+  Option.match(promptId, {
+    onNone: () => textControlName(interaction.name, instance, locale),
+    onSome: (id) => ({ "aria-labelledby": id }),
+  });
 
 /**
  * Compute every attribute of every part of one Extended Text: the connect function.
@@ -219,7 +155,7 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
  * @param payload The payload of the whole render, which gives the instance and `finished`.
  * @param state The locale, the heading level and the resolved part overrides.
  * @returns The Extended Text Root, or {@link PartSwapRefused} when a replacement breaks the swap
- *   invariant. It throws {@link NestedInteractionDefect} when the Prompt holds an interaction,
+ *   invariant. It throws `NestedInteractionDefect` when the Prompt holds an interaction,
  *   which QTI admits nowhere there.
  */
 export const renderExtendedText = (
@@ -236,7 +172,7 @@ export const renderExtendedText = (
     const prompt = yield* Result.transposeOption(
       interaction.prompt.pipe(
         Option.map((content) =>
-          Result.flatMap(emitNodes(content, payload, state, nestedInteraction), (nodes) =>
+          Result.flatMap(emitNodes(content, payload, state, nestedInteraction(owner)), (nodes) =>
             applyPart(rowFor(owner, "prompt"), props.prompt, nodes, replacement("prompt")),
           ),
         ),

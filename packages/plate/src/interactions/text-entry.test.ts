@@ -1,10 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
-import { authoredId, emitBody } from "#plate/emit/body.ts";
+import { emitBody } from "#plate/emit/body.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
-import { partForSlot, resolveOverrides, rowFor } from "#plate/emit/parts.ts";
+import { authoredId, partForSlot, resolveOverrides, rowFor } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
 import { Malformed, decode, entryName } from "#plate/form/encoding.ts";
 import type { Entry } from "#plate/form/encoding.ts";

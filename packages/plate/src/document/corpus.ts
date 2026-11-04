@@ -23,7 +23,7 @@ const corpusDirectory = "qti-examples-0a92fbbb6d2e620a1f7fad19977be4c418246bc0";
 const extractionCommand = [
   "D=~/.cache/gr8des/qti3-examples",
   'tar -xzf "$D/qti-examples-0a92fbb.tar.gz" -C "$D"',
-  `find "$D/${corpusDirectory}" -name '*.zip' -exec sh -c 'unzip -q -n "$1" -d "$1.d"' _ {} ;`,
+  `find "$D/${corpusDirectory}" -name '*.zip' -exec sh -c 'unzip -q -n "$1" -d "$1.d"' _ {} \\;`,
 ].join("\n");
 
 /**

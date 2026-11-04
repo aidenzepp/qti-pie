@@ -27,7 +27,7 @@
 import { Data, Option, Result } from "effect";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
-import { headings, positionUnder, rowFor, scopedId } from "#plate/emit/parts.ts";
+import { authoredId, authoredIdrefs, headings, positionUnder, rowFor } from "#plate/emit/parts.ts";
 import type { Position, Resolved } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
@@ -60,7 +60,7 @@ export type RenderInteraction = (
  * Where a nested interaction was met: inside a Choice's Prompt or choice content, or inside an
  * Extended Text's Prompt.
  */
-type NestedWithin = "choice-interaction" | "extended-text-interaction";
+export type NestedWithin = "choice-interaction" | "extended-text-interaction";
 
 /**
  * The content each {@link NestedWithin} names, as the message says it.
@@ -91,6 +91,20 @@ export class NestedInteractionDefect extends Data.TaggedError("NestedInteraction
     return `A ${this.kind} interaction for the response ${JSON.stringify(this.response)} sits inside ${nestedPlaces[this.within]}, where QTI's schema admits no interaction; move it out to the item body, or render an item that check accepted.`;
   }
 }
+
+/**
+ * The render function for content where QTI's schema admits no interaction, a Prompt's or a
+ * choice's: meeting one is a defect, since only a hand-built item can hold one.
+ *
+ * @param within Where the content sits.
+ * @returns A render function that throws {@link NestedInteractionDefect}, naming the interaction
+ *   and `within`, for any interaction it is handed.
+ */
+export const nestedInteraction =
+  (within: NestedWithin): RenderInteraction =>
+  (nested) => {
+    throw new NestedInteractionDefect({ kind: nested.kind, response: nested.response, within });
+  };
 
 /**
  * The attributes the XSD declares as references to ids (`xs:IDREF`, `xs:IDREFS`, and `headers`, a
@@ -355,11 +369,6 @@ const admits = (declared: ReadonlySet<string>, name: string): boolean =>
   declared.has(name) || (name === keyShortcuts && declared.has(keyShortcutsMisspelt));
 
 /**
- * The whitespace that separates the ids of a list.
- */
-const separator = /[\t\n\f\r ]+/u;
-
-/**
  * Text that holds whitespace only, which the HTML parser keeps in place between table rows.
  */
 const blank = /^[\t\n\f\r ]*$/u;
@@ -385,23 +394,6 @@ interface Walk {
   readonly position: Position;
   readonly renderInteraction: RenderInteraction;
 }
-
-/**
- * Scope an id the author wrote by the item instance, so it meets no other instance's ids and none
- * of the ids the renderer writes for its own parts.
- *
- * The renderer's ids are `<instance>-<segment>-…`, where the first segment is a response
- * identifier or a part name and so starts with a letter or an underscore. The empty segment here
- * gives `<instance>--<id>`: the double hyphen is a prefix no renderer id has, so an authored
- * `RESPONSE-control-0`, `item` or `status` stays distinct from the Control, Root and Status ids.
- * The `id` attribute, every IDREF attribute and every same-document `#id` fragment use this one
- * helper, so a reference still finds its target.
- *
- * @param instance The item instance key.
- * @param id The id as the author wrote it.
- * @returns `<instance>--<id>`.
- */
-export const authoredId = (instance: string, id: string): string => scopedId(instance, "", id);
 
 /**
  * Give the tag an authored element renders as: a heading shifted so `h1` sits at the heading level,
@@ -480,9 +472,7 @@ const attributeFor = (
   }
 
   if (idReferences.has(name)) {
-    const ids = value.split(separator).filter((id) => id !== "");
-
-    return [[name, ids.map((id) => authoredId(walk.instance, id)).join(" ")]];
+    return [[name, authoredIdrefs(walk.instance, value)]];
   }
 
   return Option.match(urlContextOf(tag, name), {

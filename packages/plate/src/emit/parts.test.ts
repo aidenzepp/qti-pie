@@ -1,9 +1,12 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option, Result } from "effect";
+import { Effect, Option, Result } from "effect";
+import { configure } from "#plate/configuration.ts";
 import { h, text } from "#plate/emit/node.ts";
-import type { Attributes, Node } from "#plate/emit/node.ts";
+import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import {
   allows,
+  authoredId,
+  authoredIdrefs,
   controls,
   isFlowContainer,
   isPhrasingContainer,
@@ -16,7 +19,19 @@ import {
   resolveOverrides,
   rowFor,
   scopedId,
+  splitIdrefs,
 } from "#plate/emit/parts.ts";
+import type { PartRow } from "#plate/emit/parts.ts";
+import type {
+  BodyNode,
+  ChoiceInteraction,
+  ExtendedTextInteraction,
+  Item,
+  TextEntryInteraction,
+} from "#plate/model/item.ts";
+import { redactItem } from "#plate/payload.ts";
+import { render, renderStatus } from "#plate/render.ts";
+import { parseHtml } from "#plate/test/round-trip.ts";
 
 /**
  * The spec's part table (§4.3), one entry per row: interaction, part, `data-slot` marker and
@@ -126,6 +141,7 @@ describe("partTable", () => {
       "aria-labelledby",
       "aria-invalid",
       "aria-describedby",
+      "autofocus",
     ]);
   });
 });
@@ -164,7 +180,7 @@ describe("rowFor", () => {
     assert.strictEqual(prompt.slot, "choice-interaction-prompt");
     assert.strictEqual(root.element, "fieldset");
     assert.isTrue(root.legendOwner);
-    assert.deepStrictEqual(root.merged, []);
+    assert.deepStrictEqual(root.merged, ["class", "data-orientation"]);
   });
 
   it("keeps the Choice Prompt its own element, named by the Root, under the labelledby markup", () => {
@@ -175,7 +191,12 @@ describe("rowFor", () => {
       assert.deepStrictEqual(prompt.merged, ["id"]);
       assert.strictEqual(root.element, "fieldset");
       assert.isFalse(root.legendOwner);
-      assert.deepStrictEqual(root.merged, ["aria-labelledby"]);
+      assert.deepStrictEqual(root.merged, [
+        "aria-labelledby",
+        "aria-label",
+        "class",
+        "data-orientation",
+      ]);
     }
   });
 
@@ -312,6 +333,28 @@ describe("scopedId", () => {
   });
 });
 
+describe("authoredId", () => {
+  it("scopes an authored id behind a double hyphen, a prefix no renderer id has", () => {
+    assert.strictEqual(authoredId("i1", "RESPONSE-control-0"), "i1--RESPONSE-control-0");
+    assert.notStrictEqual(authoredId("i1", "item"), scopedId("i1", "item"));
+  });
+});
+
+describe("splitIdrefs and authoredIdrefs", () => {
+  it("split an IDREFS value at ASCII whitespace, dropping empty ids", () => {
+    assert.deepStrictEqual(splitIdrefs(" intro\tnote\n\fhint\r "), ["intro", "note", "hint"]);
+    assert.deepStrictEqual(splitIdrefs(""), []);
+  });
+
+  it("keep a no-break space inside an id, since only ASCII whitespace separates them", () => {
+    assert.deepStrictEqual(splitIdrefs("a\u00A0b c"), ["a\u00A0b", "c"]);
+  });
+
+  it("scope every authored id of the value and join them by one space", () => {
+    assert.strictEqual(authoredIdrefs("i1", "intro   note"), "i1--intro i1--note");
+  });
+});
+
 describe("resolveOverrides", () => {
   it("resolves a replacement for a known part", () => {
     const resolved = Result.getOrThrow(resolveOverrides({ "choice-interaction": { indicator } }));
@@ -346,4 +389,283 @@ describe("resolveOverrides", () => {
     assert.strictEqual(error.interaction, "choice-interaction");
     assert.strictEqual(Option.getOrUndefined(error.part), "badge");
   });
+});
+
+/**
+ * The item instance every render of the merged-column test uses.
+ */
+const instance = "merged-0";
+
+/**
+ * The attributes a part carries that its row's `merged` column leaves out: the `data-slot` marker
+ * and the Root state of spec §4.4.
+ */
+const markerAndState: ReadonlySet<string> = new Set(["data-disabled", "data-mode", "data-slot"]);
+
+/**
+ * Construct a text node of the body.
+ *
+ * @param value The text.
+ * @returns The node.
+ */
+const words = (value: string): BodyNode => ({ kind: "text", text: value });
+
+/**
+ * A Choice with every optional attribute its connect function reads, and a phrasing Prompt, which
+ * takes the `legend` markup.
+ */
+const legendChoice: ChoiceInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  cardinality: "single",
+  choices: [
+    { content: [words("Red")], identifier: "A" },
+    { content: [words("Blue")], identifier: "B" },
+  ],
+  class: "swatches",
+  kind: "choice",
+  maxChoices: 1n,
+  messages: { max: Option.none(), min: Option.none() },
+  minChoices: 0n,
+  orientation: Option.some("horizontal"),
+  path: "qti-assessment-item/qti-item-body/qti-choice-interaction",
+  prompt: Option.some([words("Pick a colour.")]),
+  response: "RESPONSE",
+  shuffle: false,
+};
+
+/**
+ * The Choice with a Prompt of flow content, a `p`, which takes the `labelledby` markup.
+ */
+const labelledChoice: ChoiceInteraction = {
+  ...legendChoice,
+  prompt: Option.some([
+    {
+      attributes: [],
+      children: [words("Pick a colour.")],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/qti-choice-interaction/qti-prompt/p",
+      tag: "p",
+    },
+  ]),
+};
+
+/**
+ * The Choice with no Prompt, named by the author's `aria-label` and `aria-labelledby`.
+ */
+const authorNamedChoice: ChoiceInteraction = {
+  ...legendChoice,
+  ariaLabel: Option.some("Colours"),
+  ariaLabelledby: Option.some("intro"),
+  prompt: Option.none(),
+};
+
+/**
+ * A Text Entry with every optional attribute its connect function reads: an integer in base 10
+ * (`inputmode`), an expected length (`size`), a placeholder and the author's two names.
+ */
+const textEntry: TextEntryInteraction = {
+  ariaLabel: Option.some("Year"),
+  ariaLabelledby: Option.some("intro"),
+  base: 10,
+  baseType: "integer",
+  class: "short-answer",
+  expectedLength: Option.some(4n),
+  kind: "text-entry",
+  path: "qti-assessment-item/qti-item-body/p/qti-text-entry-interaction",
+  patternMaskMessage: Option.none(),
+  placeholder: Option.some("A year"),
+  response: "RESPONSE",
+};
+
+/**
+ * An Extended Text with every optional attribute its connect function reads and a Prompt, which
+ * names its Control.
+ */
+const promptedEssay: ExtendedTextInteraction = {
+  ...textEntry,
+  baseType: "string",
+  class: "qti-height-lines-6",
+  expectedLines: Option.some(5n),
+  format: "preformatted",
+  kind: "extended-text",
+  path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
+  prompt: Option.some([words("Describe your day.")]),
+};
+
+/**
+ * The Extended Text with no Prompt, named by the author's `aria-label` and `aria-labelledby`.
+ */
+const authorNamedEssay: ExtendedTextInteraction = { ...promptedEssay, prompt: Option.none() };
+
+/**
+ * Construct an item whose body holds one interaction, bound to a response of its base type and
+ * cardinality, and a Notice for an unsupported part.
+ *
+ * @param interaction The interaction.
+ * @returns The item.
+ */
+const itemOf = (
+  interaction: ChoiceInteraction | ExtendedTextInteraction | TextEntryInteraction,
+): Item => ({
+  body: [
+    interaction.kind === "text-entry"
+      ? {
+          attributes: [],
+          children: [
+            words("The year was "),
+            interaction,
+            {
+              feature: "qti-inline-choice-interaction",
+              kind: "unsupported",
+              path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction",
+            },
+          ],
+          kind: "element",
+          path: "qti-assessment-item/qti-item-body/p",
+          tag: "p",
+        }
+      : interaction,
+    {
+      feature: "qti-hotspot-interaction",
+      kind: "unsupported",
+      path: "qti-assessment-item/qti-item-body/qti-hotspot-interaction",
+    },
+  ],
+  document: "items/merged.xml",
+  identifier: "merged",
+  lang: Option.none(),
+  outcomes: new Map(),
+  processing: Option.none(),
+  responses: new Map([
+    [
+      interaction.response,
+      {
+        baseType: interaction.kind === "choice" ? "identifier" : interaction.baseType,
+        cardinality: interaction.kind === "choice" ? interaction.cardinality : "single",
+        correct: Option.none(),
+        defaultValue: Option.none(),
+        identifier: interaction.response,
+        mapping: Option.none(),
+      },
+    ],
+  ]),
+  title: "Merged",
+  unsupported: [],
+});
+
+/**
+ * List an element and every element below it, in document order.
+ *
+ * @param nodes The nodes to walk.
+ * @returns The elements.
+ */
+const elementsOf = (nodes: readonly Node[]): readonly Element[] =>
+  nodes.flatMap((node) => (node.kind === "element" ? [node, ...elementsOf(node.children)] : []));
+
+/**
+ * Read the row a rendered part was placed by, from its marker and its placement: a Notice `div`
+ * stands at a flow position, and the Choice Root and Prompt take the `legend` markup when the
+ * Prompt is a `legend`, the Root's first child.
+ *
+ * @param element A rendered part.
+ * @param slot The part's `data-slot` marker.
+ * @returns The part's row as placed.
+ */
+const placedRow = (element: Element, slot: string): PartRow => {
+  const { interaction, part } = Option.getOrThrow(partForSlot(slot));
+  const [first] = element.children;
+  const legend =
+    interaction === "choice-interaction" &&
+    (part === "prompt"
+      ? element.tag === "legend"
+      : first?.kind === "element" && first.tag === "legend");
+
+  return rowFor(interaction, part, {
+    position: part === "notice" && element.tag === "div" ? "flow" : "phrasing",
+    promptMarkup: legend ? "legend" : "labelledby",
+  });
+};
+
+/**
+ * Name a row as placed, telling apart the rows one marker has: the Notice's `span` and `div`, and
+ * the Choice Root and Prompt under each markup.
+ *
+ * @param row The row.
+ * @returns Its marker, its element and whether it owns a legend.
+ */
+const rowKey = (row: PartRow): string =>
+  `${row.slot} ${row.element}${row.legendOwner ? " legend-owner" : ""}`;
+
+describe("the merged column", () => {
+  it.effect(
+    "records, for every row, exactly the attributes its connect function computes beyond the marker and the Root state",
+    () =>
+      Effect.gen(function* mergedColumn() {
+        const configuration = yield* configure({});
+        const items = [
+          { interaction: legendChoice, posted: ["A"] },
+          { interaction: labelledChoice, posted: ["A"] },
+          { interaction: authorNamedChoice, posted: ["A"] },
+          { interaction: textEntry, posted: ["1066"] },
+          { interaction: promptedEssay, posted: ["A day."] },
+          { interaction: authorNamedEssay, posted: ["A day."] },
+        ];
+        const rendered = [
+          ...items.map(({ interaction, posted }) =>
+            render(redactItem(itemOf(interaction)), configuration, {
+              disabled: true,
+              instance,
+              messages: [{ response: interaction.response, text: "Check this answer." }],
+              posted: { [interaction.response]: posted },
+            }),
+          ),
+          renderStatus(
+            {
+              autofocus: true,
+              heading: "notAccepted",
+              instance,
+              messages: [{ response: "RESPONSE", text: "Check this answer." }],
+            },
+            configuration,
+          ),
+        ];
+        const observed = new Map<string, Set<string>>();
+
+        for (const result of rendered) {
+          const { html } = yield* Effect.fromResult(result);
+          for (const element of elementsOf(parseHtml(html))) {
+            const slot = element.attrs["data-slot"];
+            if (slot !== undefined && slot !== true) {
+              const key = rowKey(placedRow(element, slot));
+              const names = observed.get(key) ?? new Set<string>();
+              for (const name of Object.keys(element.attrs)) {
+                if (!markerAndState.has(name)) {
+                  names.add(name);
+                }
+              }
+
+              observed.set(key, names);
+            }
+          }
+        }
+
+        const rows = [
+          ...partTable,
+          rowFor("item", "notice", { position: "flow" }),
+          rowFor("choice-interaction", "prompt", { promptMarkup: "legend" }),
+          rowFor("choice-interaction", "root", { promptMarkup: "legend" }),
+        ];
+        for (const row of rows) {
+          const names = observed.get(rowKey(row));
+
+          assert.isDefined(names, `${rowKey(row)} was never rendered`);
+          assert.deepStrictEqual(
+            [...(names ?? [])].toSorted(),
+            [...row.merged].toSorted(),
+            rowKey(row),
+          );
+        }
+      }),
+  );
 });
