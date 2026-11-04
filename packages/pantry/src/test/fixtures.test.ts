@@ -13,6 +13,7 @@ import {
   materializeCorpus,
   materializePackage,
   materializeSpec,
+  negativeNames,
   specOf,
   transformHash,
 } from "#pantry/test/fixtures.ts";
@@ -230,6 +231,158 @@ const positiveVersions: readonly (readonly [FixtureName, "3.0.0" | "3.0.1"])[] =
  * The namespace of every QTI document of either version.
  */
 const qtiNamespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
+
+/**
+ * The 63 negative fixtures of phase 5, as a literal: the spec's 4.15 last column, less the corpus
+ * packages and `stimulus-300-data` (phase 8's), plus `prefixed-ambiguous` (decision 189).
+ */
+const expectedNegativeNames = [
+  "branch-backward",
+  "branch-exit-misspelled",
+  "branch-into-ref",
+  "branch-part-to-item",
+  "branch-replacement-target",
+  "branch-unknown-target",
+  "duration-of-item-ref",
+  "feedback-outcome-float",
+  "feedback-template",
+  "include-text",
+  "include-xpointer",
+  "instance-spelling-canonical",
+  "item-duration-in-item",
+  "item-duration-not-timed",
+  "item-in-section",
+  "item-prefixed",
+  "item-ref-missing",
+  "item-ref-to-stimulus",
+  "mapping-target-twice",
+  "mapping-undeclared",
+  "navigation-misspelled",
+  "part-no-section",
+  "part-order",
+  "precondition-number-correct",
+  "prefixed-ambiguous",
+  "prefixed-undeclared-variable",
+  "prefixed-unknown-ref",
+  "rubric-empty-view",
+  "rubric-in-rubric",
+  "rubric-interaction",
+  "rubric-no-body",
+  "rubric-printed-undeclared",
+  "section-adaptive-and-selection",
+  "section-empty",
+  "section-feedback-undeclared",
+  "section-identifier-unknown",
+  "section-prefixed-unresolved",
+  "section-printed-undeclared",
+  "section-ref-cycle",
+  "section-ref-identifier-clash",
+  "section-ref-to-item",
+  "section-two-isc",
+  "section-unprefixed-undeclared",
+  "section-variable-in-test",
+  "select-not-integer",
+  "select-over",
+  "select-under-required",
+  "stimulus-300-attributes",
+  "stimulus-300-include",
+  "stimulus-body-empty",
+  "stimulus-missing-image",
+  "stimulus-ref-duplicate",
+  "stimulus-ref-to-item",
+  "stimulus-typed-test",
+  "template-default-type",
+  "template-default-undeclared",
+  "test-declares-duration",
+  "test-duplicate-identifier",
+  "test-identifier-mismatch",
+  "test-lang-no-lom",
+  "test-no-part",
+  "test-title-mismatch",
+  "test-undeclared-variable",
+] as const;
+
+/**
+ * For each non-direct negative that adds text, a file of its package and the text its breach put
+ * there.
+ */
+const negativeBreaches: readonly (readonly [FixtureName, string, string])[] = [
+  ["branch-backward", "rtest13.xml", 'target="item034"'],
+  ["branch-exit-misspelled", "rtest13.xml", 'target="EXIT_TESTS"'],
+  ["branch-into-ref", "rtest01.xml", 'target="shared"'],
+  ["branch-part-to-item", "rtest13.xml", 'target="item653"'],
+  ["branch-replacement-target", "rtest12.xml", 'target="item063"'],
+  ["branch-unknown-target", "rtest13.xml", 'target="NOPE"'],
+  ["feedback-outcome-float", "assessment.xml", 'identifier="PROGRESS"'],
+  ["feedback-template", "assessment.xml", "<qti-template-inline"],
+  ["include-text", "rtest01.xml", 'parse="text"'],
+  ["include-xpointer", "rtest01.xml", 'xpointer="element(/1)"'],
+  ["item-in-section", "rtest13.xml", '<qti-assessment-item identifier="inline"'],
+  ["item-ref-missing", "rtest13.xml", 'href="missing.xml"'],
+  ["item-ref-to-stimulus", "stimulus-test.xml", 'href="passages/unbelievableNight.xml"'],
+  ["mapping-target-twice", "rtest26.xml", 'source-identifier="NOTB" target-identifier="SCORE"'],
+  ["mapping-undeclared", "rtest26.xml", 'source-identifier="NOPE"'],
+  ["navigation-misspelled", "rtest13.xml", 'navigation-mode="Linear"'],
+  ["part-no-section", "rtest13.xml", 'identifier="RTEST-13-B" navigation-mode="linear"'],
+  ["precondition-number-correct", "rtest13.xml", "<qti-number-correct/>"],
+  ["prefixed-ambiguous", "rtest26.xml", 'source-identifier="K.SCORE"'],
+  ["prefixed-undeclared-variable", "rtest26.xml", '<qti-variable identifier="I.NOPE"/>'],
+  ["prefixed-unknown-ref", "rtest26.xml", '<qti-variable identifier="NOPE.SCORE"/>'],
+  ["rubric-empty-view", "assessment.xml", 'view=""'],
+  ["rubric-in-rubric", "assessment.xml", "<p>Nested</p>"],
+  ["rubric-interaction", "assessment.xml", "<qti-text-entry-interaction"],
+  ["rubric-printed-undeclared", "assessment.xml", '<qti-printed-variable identifier="NOPE"/>'],
+  ["section-adaptive-and-selection", "adaptive-test.xml", '<qti-selection select="1"/>'],
+  ["section-empty", "rtest13.xml", 'identifier="bare"'],
+  ["section-identifier-unknown", "rtest26.xml", 'section-identifier="NOPE"'],
+  ["section-prefixed-unresolved", "test-b.xml", 'identifier="RENAMED"'],
+  ["section-ref-cycle", "sections/shared.xml", 'href="shared.xml"'],
+  [
+    "section-ref-identifier-clash",
+    "sections/shared.xml",
+    '<qti-assessment-item-ref identifier="ITEMREF"',
+  ],
+  ["section-ref-to-item", "rtest01.xml", 'href="items/i2.xml"'],
+  ["section-two-isc", "rtest13.xml", 'max-attempts="3"'],
+  ["select-not-integer", "rtest12.xml", 'select="2.5"'],
+  ["select-over", "rtest12.xml", 'select="9"'],
+  [
+    "select-under-required",
+    "rtest12.xml",
+    'identifier="item434" href="item434.xml" required="true"',
+  ],
+  ["stimulus-300-attributes", "passages/unbelievableNight.xml", '<qti-stimulus-body class="x">'],
+  ["stimulus-300-include", "passages/unbelievableNight.xml", "<xi:include"],
+  [
+    "stimulus-body-empty",
+    "passages/unbelievableNight.xml",
+    "<qti-stimulus-body> </qti-stimulus-body>",
+  ],
+  ["stimulus-ref-to-item", "exemplar06.xml", 'href="exemplar04.xml"'],
+  ["stimulus-typed-test", "imsmanifest.xml", 'identifier="Stimulus1" type="imsqti_test_xmlv3p0"'],
+  ["template-default-type", "template-default-test.xml", 'base-type="string">fast'],
+  ["template-default-undeclared", "template-default-test.xml", 'template-identifier="NOPE"'],
+  ["test-declares-duration", "rtest13.xml", 'identifier="duration"'],
+  ["test-duplicate-identifier", "rtest13.xml", 'identifier="sectionA" href="item160.xml"'],
+  ["test-identifier-mismatch", "imsmanifest.xml", "<imsmd:entry>OTHER-TEST</imsmd:entry>"],
+  ["test-title-mismatch", "imsmanifest.xml", "Another Test</imsmd:string>"],
+  ["test-undeclared-variable", "rtest13.xml", '<qti-variable identifier="NOPE"/>'],
+];
+
+/**
+ * For each negative that removes text, a file of its package and the text its breach took out.
+ */
+const negativeRemovals: readonly (readonly [FixtureName, string, string])[] = [
+  ["rubric-no-body", "assessment.xml", "<p>Test instructions</p>"],
+  ["section-feedback-undeclared", "test-b.xml", 'identifier="FLAG"'],
+  ["section-printed-undeclared", "test-b.xml", 'identifier="COUNT"'],
+  ["section-unprefixed-undeclared", "test-b.xml", 'identifier="SCORE"'],
+  [
+    "test-lang-no-lom",
+    "imsmanifest.xml",
+    "<imsmd:general>\n                        <imsmd:language>",
+  ],
+];
 
 /**
  * The paths a manifest lists as `file`s, each once.
@@ -858,5 +1011,153 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           assert.include(second, '<qti-assessment-item-ref identifier="I2"');
         }),
       ),
+  );
+
+  it.effect("the 63 negative names are the spec's list, each in the fixture table", () =>
+    Effect.sync(() => {
+      assert.deepStrictEqual([...negativeNames], [...expectedNegativeNames]);
+      assert.strictEqual(new Set(negativeNames).size, 63);
+      assert.includeMembers([...fixtureNames], [...negativeNames]);
+
+      for (const name of negativeNames) {
+        assert.notInclude(
+          positiveVersions.map(([positive]) => positive),
+          name,
+        );
+      }
+    }),
+  );
+
+  it.effect("only the four direct negatives carry a positive's edits unchanged", () =>
+    Effect.sync(() => {
+      const unchanged = negativeNames.filter((name) =>
+        positiveVersions.some(
+          ([positive]) =>
+            JSON.stringify(specOf(positive).edits) === JSON.stringify(specOf(name).edits) &&
+            specOf(positive).member === specOf(name).member,
+        ),
+      );
+
+      assert.deepStrictEqual(
+        [...unchanged],
+        [
+          "duration-of-item-ref",
+          "instance-spelling-canonical",
+          "item-prefixed",
+          "section-variable-in-test",
+        ],
+      );
+    }),
+  );
+
+  it.effect(
+    "each negative fixture materializes, lists every packaged file and holds QTI documents that parse",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* negativeFixtures() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const name of negativeNames) {
+            const dir = yield* materialize(name);
+            const files = yield* filesOf(dir);
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+
+            assert.deepStrictEqual(
+              files.filter((file) => file !== "imsmanifest.xml"),
+              listedFilesOf(manifest),
+              name,
+            );
+
+            for (const file of files) {
+              const isDocument =
+                file.endsWith(".xml") &&
+                file !== "imsmanifest.xml" &&
+                !file.startsWith("adaptive/");
+
+              if (isDocument) {
+                const document = yield* readXml(yield* fs.readFile(`${dir}/${file}`));
+
+                assert.strictEqual(document.root.namespace, qtiNamespace, `${name}/${file}`);
+              }
+            }
+          }
+        }),
+      ),
+    180_000,
+  );
+
+  it.effect(
+    "each negative holds its breach in the file the spec's edit names",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* breachesPresent() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const [name, file, needle] of negativeBreaches) {
+            const dir = yield* materialize(name);
+
+            assert.include(yield* fs.readFileString(`${dir}/${file}`), needle, `${name}: ${file}`);
+          }
+
+          for (const [name, file, needle] of negativeRemovals) {
+            const dir = yield* materialize(name);
+
+            assert.notInclude(
+              yield* fs.readFileString(`${dir}/${file}`),
+              needle,
+              `${name}: ${file}`,
+            );
+          }
+
+          const twice = yield* fs.readFileString(
+            `${yield* materialize("stimulus-ref-duplicate")}/exemplar06.xml`,
+          );
+          const part = yield* fs.readFileString(`${yield* materialize("part-order")}/rtest13.xml`);
+          const images = yield* filesOf(yield* materialize("stimulus-missing-image"));
+          const noPart = yield* fs.readFileString(
+            `${yield* materialize("test-no-part")}/rtest13.xml`,
+          );
+
+          assert.strictEqual(
+            twice.split('<qti-assessment-stimulus-ref identifier="Stimulus1"').length,
+            3,
+          );
+          assert.isAbove(
+            part.indexOf('<qti-item-session-control show-feedback="true"'),
+            part.indexOf('<qti-assessment-section identifier="sectionA"'),
+          );
+          assert.notInclude(images, "passages/images/apip_VE_IP_05_croc.png");
+          assert.notInclude(images, "passages/images/apip_VE_IP_05_flamingos.png");
+          assert.notInclude(noPart, "<qti-test-part");
+        }),
+      ),
+    180_000,
+  );
+
+  it.effect(
+    "test-mapping's hand-written stubs: J untimed and naming duration, I untimed",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* handStubs() {
+          const fs = yield* FileSystem.FileSystem;
+          const inItem = yield* fs.readFileString(
+            `${yield* materialize("item-duration-in-item")}/itemJ.xml`,
+          );
+          const notTimed = yield* fs.readFileString(
+            `${yield* materialize("item-duration-not-timed")}/itemI.xml`,
+          );
+          const ambiguous = yield* fs.readFileString(
+            `${yield* materialize("prefixed-ambiguous")}/itemJ.xml`,
+          );
+
+          assert.include(inItem, 'time-dependent="false"');
+          assert.include(inItem, '<qti-variable identifier="duration"/>');
+          assert.include(notTimed, 'time-dependent="false"');
+          assert.notInclude(notTimed, '<qti-variable identifier="duration"/>');
+          assert.include(ambiguous, 'identifier="K.SCORE" cardinality="single" base-type="float"');
+          assert.include(ambiguous, 'identifier="SCORE" cardinality="single" base-type="float"');
+        }),
+      ),
+    60_000,
   );
 });

@@ -332,13 +332,88 @@ const testNames = [
 ] as const;
 
 /**
+ * The names of phase 5's 63 negative fixtures: each a data-only edit set over one of
+ * {@link testNames}, a refusal of one rule of the spec's 4.15, bin 1 by the database and bin 2 by
+ * the importer. `item-prefixed`, `instance-spelling-canonical`, `section-variable-in-test` and
+ * `duration-of-item-ref` are "(direct)" only: their spec is the positive's own, and the leased
+ * suite alters the positive's rows by hand, because the importer cannot write their breach.
+ * `prefixed-ambiguous` is decision 189's: a dotted reference with two resolving readings.
+ */
+export const negativeNames = [
+  "branch-backward",
+  "branch-exit-misspelled",
+  "branch-into-ref",
+  "branch-part-to-item",
+  "branch-replacement-target",
+  "branch-unknown-target",
+  "duration-of-item-ref",
+  "feedback-outcome-float",
+  "feedback-template",
+  "include-text",
+  "include-xpointer",
+  "instance-spelling-canonical",
+  "item-duration-in-item",
+  "item-duration-not-timed",
+  "item-in-section",
+  "item-prefixed",
+  "item-ref-missing",
+  "item-ref-to-stimulus",
+  "mapping-target-twice",
+  "mapping-undeclared",
+  "navigation-misspelled",
+  "part-no-section",
+  "part-order",
+  "precondition-number-correct",
+  "prefixed-ambiguous",
+  "prefixed-undeclared-variable",
+  "prefixed-unknown-ref",
+  "rubric-empty-view",
+  "rubric-in-rubric",
+  "rubric-interaction",
+  "rubric-no-body",
+  "rubric-printed-undeclared",
+  "section-adaptive-and-selection",
+  "section-empty",
+  "section-feedback-undeclared",
+  "section-identifier-unknown",
+  "section-prefixed-unresolved",
+  "section-printed-undeclared",
+  "section-ref-cycle",
+  "section-ref-identifier-clash",
+  "section-ref-to-item",
+  "section-two-isc",
+  "section-unprefixed-undeclared",
+  "section-variable-in-test",
+  "select-not-integer",
+  "select-over",
+  "select-under-required",
+  "stimulus-300-attributes",
+  "stimulus-300-include",
+  "stimulus-body-empty",
+  "stimulus-missing-image",
+  "stimulus-ref-duplicate",
+  "stimulus-ref-to-item",
+  "stimulus-typed-test",
+  "template-default-type",
+  "template-default-undeclared",
+  "test-declares-duration",
+  "test-duplicate-identifier",
+  "test-identifier-mismatch",
+  "test-lang-no-lom",
+  "test-no-part",
+  "test-title-mismatch",
+  "test-undeclared-variable",
+] as const;
+
+/**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-edited
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
  * `end-attempt`, phase 2's hand-written positive, the 19 cut items of {@link cutNames}, the 40
  * hand-written HTML positives of {@link htmlElements}, the 14 XML copies of {@link copyNames}, and
  * the packaging phase's metadata and content cuts with their negatives, and the 11 positive
- * fixtures of phase 5's tests, sections and stimuli ({@link testNames}).
+ * fixtures of phase 5's tests, sections and stimuli ({@link testNames}), and its 63 negatives
+ * ({@link negativeNames}).
  */
 export const fixtureNames = [
   "simple",
@@ -367,6 +442,7 @@ export const fixtureNames = [
   ...htmlElements.map((element) => `html-${element}` as const),
   ...copyNames,
   ...testNames,
+  ...negativeNames,
   "lomrest",
   "lomrest-two-titles",
   "lomrest-two-purposes",
@@ -3169,6 +3245,687 @@ const testSpecs: Record<(typeof testNames)[number], FixtureSpec> = {
 };
 
 /**
+ * The spec of a negative: the positive `base` with `edits` after its own, under the negative's
+ * name.
+ *
+ * The edits of a spec apply by kind (file edits, then text edits, then the cut), each kind in list
+ * order, so the extra edits of a negative see the positive's result.
+ *
+ * @param name - The negative's name.
+ * @param base - The positive it edits.
+ * @param edits - The edits that make the breach; none for a "(direct)" negative, whose spec is the
+ *   positive's own under the negative's name.
+ * @returns The spec, whose directory is named by the hash of exactly these values like any other.
+ */
+const negativeOver = (
+  name: (typeof negativeNames)[number],
+  base: (typeof testNames)[number],
+  edits: readonly Edit[] = [],
+): FixtureSpec => {
+  const positive = testSpecs[base];
+
+  return { edits: [...positive.edits, ...edits], member: positive.member, name };
+};
+
+/**
+ * The spec of a negative over a loose test whose stub items are written by hand.
+ *
+ * A {@link LooseTestEdit} generates each stub from what the test names, so it declares every
+ * variable the test names and writes a stub for every `href`, which no breach of a missing item or
+ * an undeclared variable survives. This keeps the positive's text edits, writes the given stubs,
+ * and cuts the test and what it reaches instead.
+ *
+ * @param name - The negative's name.
+ * @param base - The loose positive it edits.
+ * @param stubs - Each stub's `href` and text.
+ * @param edits - The edits that make the breach.
+ * @returns The spec.
+ */
+const negativeByHand = (
+  name: (typeof negativeNames)[number],
+  base: "test-linear" | "test-mapping",
+  stubs: readonly (readonly [string, string])[],
+  edits: readonly Edit[],
+): FixtureSpec => {
+  const positive = testSpecs[base];
+  const directory = `${testsDirectory}/`;
+
+  return {
+    edits: [
+      ...positive.edits.filter((edit) => edit._tag !== "looseTest"),
+      ...stubs.map(([href, text]) => addText(href, text)),
+      ...edits,
+      {
+        _tag: "cutTest",
+        schemaversion: "3.0.0",
+        test: positive.member.slice(directory.length),
+      },
+    ],
+    member: positive.member,
+    name,
+  };
+};
+
+/**
+ * The response processing of a stub that names its own `duration`, as a time-dependent item's
+ * does.
+ */
+const durationProcessing = [
+  "<qti-response-processing>",
+  "    <qti-response-condition>",
+  "      <qti-response-if>",
+  '        <qti-gt><qti-variable identifier="duration"/><qti-base-value base-type="float">0</qti-base-value></qti-gt>',
+  '        <qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value>',
+  "      </qti-response-if>",
+  "    </qti-response-condition>",
+  "  </qti-response-processing>",
+].join("\n");
+
+/**
+ * A hand-written stub whose response processing names `duration`.
+ *
+ * @param identifier - The item's identifier and title.
+ * @param outcomes - Each further outcome's identifier and base type, declared single.
+ * @param timed - Whether the item declares `time-dependent="true"`.
+ * @returns The item's text.
+ */
+const durationStub = (
+  identifier: string,
+  outcomes: readonly (readonly [string, string])[],
+  timed: boolean,
+): string =>
+  stubItem(identifier, outcomes)
+    .replace('time-dependent="false"', `time-dependent="${timed}"`)
+    .replace(/<qti-response-processing [^>]*\/>/u, durationProcessing);
+
+/**
+ * The stubs of `test-linear`, written by hand: each declares only `RESPONSE` and `SCORE`.
+ */
+const linearStubs: readonly (readonly [string, string])[] = [
+  ["item034.xml", stubItem("item034")],
+  ["item160.xml", stubItem("item160")],
+  ["item063.xml", stubItem("item063")],
+  ["item347.xml", stubItem("item347")],
+  ["item653.xml", stubItem("item653")],
+  ["item656.xml", stubItem("item656")],
+  ["switch.xml", stubItem("switch")],
+  ["a1.xml", stubItem("A1")],
+];
+
+/**
+ * The stubs of `test-mapping`, written by hand as its generated ones are: `item034` declares the
+ * mapping's source `NOTA`, `I` is time-dependent and declares `A.B`, and `J` declares nothing more
+ * (the spec's `time-dependent` and declarations of the positive).
+ *
+ * @param overrides - Stub texts that replace the positive's, by `href`.
+ * @returns Each stub's `href` and text.
+ */
+const mappingStubs = (
+  overrides: Readonly<Record<string, string>> = {},
+): readonly (readonly [string, string])[] =>
+  (
+    [
+      ["item034.xml", stubItem("item034", [["NOTA", "float"]])],
+      ["item160.xml", stubItem("item160")],
+      ["item063.xml", stubItem("item063")],
+      ["itemI.xml", durationStub("I", [["A.B", "float"]], true)],
+      ["itemJ.xml", stubItem("J")],
+      ["item434.xml", stubItem("item434")],
+      ["item065.xml", stubItem("item065")],
+      ["item365.xml", stubItem("item365")],
+    ] as const
+  ).map(([href, text]) => [href, overrides[href] ?? text]);
+
+/**
+ * `test-content`'s one test rubric content body, which most of its negatives edit.
+ */
+const testRubricBody = "<qti-content-body><p>Test instructions</p></qti-content-body>";
+
+/**
+ * The test resource's LOM `general`, as `test-content` writes it: a `language` alone.
+ */
+const testResourceGeneral =
+  "<imsmd:general>\n                        <imsmd:language>en</imsmd:language>\n                    </imsmd:general>";
+
+/**
+ * `test-linear`'s test without any part: its test outcome and time limits are kept.
+ */
+const noPartTest: string = testDocument("RTEST-13", [
+  '    <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
+  '    <qti-time-limits max-time="3600" min-time="600" allow-late-submission="true"/>',
+]);
+
+/**
+ * `stimulus-shared`'s stimulus document with its body emptied to whitespace.
+ */
+const emptyStimulus: string = [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<qti-assessment-stimulus xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_stimulusv3p0_v1p0.xsd" identifier="Stimulus1" title="Common Stimulus" xml:lang="eng">',
+  '  <qti-stylesheet href="stylesheets/unbelievable_night.css" type="text/css"/>',
+  "  <qti-stimulus-body> </qti-stimulus-body>",
+  "</qti-assessment-stimulus>",
+  "",
+].join("\n");
+
+/**
+ * The test `item-ref-to-stimulus` adds to `stimulus-shared`: one item ref whose `href` names the
+ * stimulus document.
+ */
+const stimulusRefTest: string = testDocument("STIMULUS-TEST", [
+  '  <qti-test-part identifier="PART" navigation-mode="linear" submission-mode="individual">',
+  '    <qti-assessment-section identifier="SECTION" title="Section" visible="true">',
+  '      <qti-assessment-item-ref identifier="ITEM" href="passages/unbelievableNight.xml"/>',
+  "    </qti-assessment-section>",
+  "  </qti-test-part>",
+]);
+
+/**
+ * The fragment `stimulus-300-include` includes in a 3.0.0 body, as `stimulus-301` does in its 3.0.1
+ * one.
+ */
+const stimulusFragment =
+  '<p xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">an included paragraph</p>\n';
+
+/**
+ * A branch rule on `test-section-ref`'s first item ref, to a target.
+ *
+ * @param target - The rule's `target`.
+ * @returns The item ref with the rule inside it.
+ */
+const branchingItemRef = (target: string): string =>
+  [
+    '<qti-assessment-item-ref identifier="ITEMREF" href="items/a1.xml">',
+    `                <qti-branch-rule target="${target}">${greaterThan("SCORE", "float", "0")}</qti-branch-rule>`,
+    "            </qti-assessment-item-ref>",
+  ].join("\n");
+
+/**
+ * The specs of {@link negativeNames}, in the order of the spec's 4.15 rows within each positive.
+ */
+const negativeSpecs: Record<(typeof negativeNames)[number], FixtureSpec> = {
+  "branch-backward": negativeOver("branch-backward", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      '<qti-branch-rule target="item656">',
+      '<qti-branch-rule target="item034">',
+    ),
+  ]),
+  "branch-exit-misspelled": negativeOver("branch-exit-misspelled", "test-linear", [
+    replaceIn("rtest13.xml", 'target="EXIT_TEST"', 'target="EXIT_TESTS"'),
+  ]),
+  "branch-into-ref": negativeOver("branch-into-ref", "test-section-ref", [
+    replaceIn(
+      "rtest01.xml",
+      '<qti-assessment-item-ref identifier="ITEMREF" href="items/a1.xml"/>',
+      branchingItemRef("shared"),
+    ),
+  ]),
+  "branch-part-to-item": negativeOver("branch-part-to-item", "test-linear", [
+    replaceIn("rtest13.xml", 'target="EXIT_TEST"', 'target="item653"'),
+  ]),
+  "branch-replacement-target": negativeOver("branch-replacement-target", "test-selection", [
+    replaceIn(
+      "rtest12.xml",
+      '<qti-assessment-item-ref identifier="item034" href="item034.xml" required="true"/>',
+      [
+        '<qti-assessment-item-ref identifier="item034" href="item034.xml" required="true">',
+        `                <qti-branch-rule target="item063">${greaterThan("item034.SCORE", "float", "0")}</qti-branch-rule>`,
+        "            </qti-assessment-item-ref>",
+      ].join("\n"),
+    ),
+  ]),
+  "branch-unknown-target": negativeOver("branch-unknown-target", "test-linear", [
+    replaceIn("rtest13.xml", 'target="EXIT_TEST"', 'target="NOPE"'),
+  ]),
+  "duration-of-item-ref": negativeOver("duration-of-item-ref", "test-mapping"),
+  "feedback-outcome-float": negativeOver("feedback-outcome-float", "test-content", [
+    replaceIn(
+      "assessment.xml",
+      'outcome-identifier="TEST_FEEDBACK" access="during"',
+      'outcome-identifier="PROGRESS" access="during"',
+    ),
+    replaceIn(
+      "assessment.xml",
+      '<qti-outcome-declaration base-type="identifier" cardinality="single" identifier="s1FB"/>',
+      [
+        '<qti-outcome-declaration base-type="identifier" cardinality="single" identifier="s1FB"/>',
+        '    <qti-outcome-declaration base-type="float" cardinality="single" identifier="PROGRESS"/>',
+      ].join("\r\n"),
+    ),
+  ]),
+  "feedback-template": negativeOver("feedback-template", "test-content", [
+    replaceIn(
+      "assessment.xml",
+      "<div>You have reached the end of the test.</div>",
+      [
+        "<div>You have reached the end of the test.</div>",
+        '            <div><qti-template-inline template-identifier="T" identifier="x" show-hide="show">x</qti-template-inline></div>',
+      ].join("\r\n"),
+    ),
+  ]),
+  "include-text": negativeOver("include-text", "test-include", [
+    replaceIn(
+      "rtest01.xml",
+      '<xi:include href="rtest01-ref.xml" parse="xml"/>',
+      '<xi:include href="rtest01-ref.xml" parse="text"/>',
+    ),
+  ]),
+  "include-xpointer": negativeOver("include-xpointer", "test-include", [
+    replaceIn(
+      "rtest01.xml",
+      '<xi:include href="rtest01-ref.xml" parse="xml"/>',
+      '<xi:include href="rtest01-ref.xml" parse="xml" xpointer="element(/1)"/>',
+    ),
+  ]),
+  "instance-spelling-canonical": negativeOver("instance-spelling-canonical", "test-mapping"),
+  "item-duration-in-item": negativeByHand(
+    "item-duration-in-item",
+    "test-mapping",
+    mappingStubs({ "itemJ.xml": durationStub("J", [], false) }),
+    [],
+  ),
+  "item-duration-not-timed": negativeByHand(
+    "item-duration-not-timed",
+    "test-mapping",
+    mappingStubs({ "itemI.xml": stubItem("I", [["A.B", "float"]]) }),
+    [],
+  ),
+  "item-in-section": negativeOver("item-in-section", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      '<qti-assessment-section identifier="main" title="Main Section" visible="false">',
+      [
+        '<qti-assessment-section identifier="main" title="Main Section" visible="false">',
+        '            <qti-assessment-item identifier="inline" title="inline" adaptive="false" time-dependent="false">',
+        "                <qti-item-body><p>inline</p></qti-item-body>",
+        "            </qti-assessment-item>",
+      ].join("\n"),
+    ),
+  ]),
+  "item-prefixed": negativeOver("item-prefixed", "test-mapping"),
+  "item-ref-missing": negativeByHand("item-ref-missing", "test-linear", linearStubs, [
+    replaceIn("rtest13.xml", 'href="item656.xml"', 'href="missing.xml"'),
+  ]),
+  "item-ref-to-stimulus": negativeOver("item-ref-to-stimulus", "stimulus-shared", [
+    addText("stimulus-test.xml", stimulusRefTest),
+    replaceIn(
+      "imsmanifest.xml",
+      "</resources>",
+      [
+        '        <resource identifier="StimulusTest" type="imsqti_test_xmlv3p0" href="stimulus-test.xml">',
+        '            <file href="stimulus-test.xml"/>',
+        "        </resource>",
+        "    </resources>",
+      ].join("\n"),
+    ),
+  ]),
+  "mapping-target-twice": negativeOver("mapping-target-twice", "test-mapping", [
+    replaceIn(
+      "rtest26.xml",
+      '<qti-variable-mapping source-identifier="NOTA" target-identifier="SCORE"/>',
+      [
+        '<qti-variable-mapping source-identifier="NOTA" target-identifier="SCORE"/>',
+        '                <qti-variable-mapping source-identifier="NOTB" target-identifier="SCORE"/>',
+      ].join("\n"),
+    ),
+  ]),
+  "mapping-undeclared": negativeByHand("mapping-undeclared", "test-mapping", mappingStubs(), [
+    replaceIn("rtest26.xml", 'source-identifier="NOTA"', 'source-identifier="NOPE"'),
+  ]),
+  "navigation-misspelled": negativeOver("navigation-misspelled", "test-linear", [
+    replaceIn("rtest13.xml", 'navigation-mode="linear"', 'navigation-mode="Linear"'),
+  ]),
+  "part-no-section": negativeOver("part-no-section", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      "    </qti-test-part>",
+      [
+        "    </qti-test-part>",
+        '    <qti-test-part identifier="RTEST-13-B" navigation-mode="linear" submission-mode="individual"/>',
+      ].join("\n"),
+    ),
+  ]),
+  "part-order": negativeOver("part-order", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      '<qti-item-session-control show-feedback="true" max-attempts="1" show-solution="false"/>',
+      "",
+    ),
+    replaceIn(
+      "rtest13.xml",
+      '<qti-assessment-section identifier="sectionB" title="Section B" visible="true">',
+      [
+        '<qti-item-session-control show-feedback="true" max-attempts="1" show-solution="false"/>',
+        '        <qti-assessment-section identifier="sectionB" title="Section B" visible="true">',
+      ].join("\n"),
+    ),
+  ]),
+  "precondition-number-correct": negativeOver("precondition-number-correct", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      '<qti-assessment-section identifier="sectionB" title="Section B" visible="true">',
+      [
+        '<qti-assessment-section identifier="sectionB" title="Section B" visible="true">',
+        '            <qti-pre-condition><qti-gt><qti-number-correct/><qti-base-value base-type="integer">0</qti-base-value></qti-gt></qti-pre-condition>',
+      ].join("\n"),
+    ),
+  ]),
+  "prefixed-ambiguous": negativeOver("prefixed-ambiguous", "test-mapping", [
+    replaceIn(
+      "rtest26.xml",
+      '<qti-assessment-item-ref identifier="J" href="itemJ.xml"/>',
+      [
+        '<qti-assessment-item-ref identifier="J" href="itemJ.xml">',
+        '                <qti-variable-mapping source-identifier="K.SCORE" target-identifier="KSCORE"/>',
+        "            </qti-assessment-item-ref>",
+      ].join("\n"),
+    ),
+  ]),
+  "prefixed-undeclared-variable": negativeByHand(
+    "prefixed-undeclared-variable",
+    "test-mapping",
+    mappingStubs(),
+    [
+      replaceIn(
+        "rtest26.xml",
+        '<qti-variable identifier="item160.SCORE"/>',
+        '<qti-variable identifier="I.NOPE"/>',
+      ),
+    ],
+  ),
+  "prefixed-unknown-ref": negativeOver("prefixed-unknown-ref", "test-mapping", [
+    replaceIn(
+      "rtest26.xml",
+      '<qti-variable identifier="item160.SCORE"/>',
+      '<qti-variable identifier="NOPE.SCORE"/>',
+    ),
+  ]),
+  "rubric-empty-view": negativeOver("rubric-empty-view", "test-content", [
+    replaceIn(
+      "assessment.xml",
+      '<qti-rubric-block view="candidate" use="instructions">\r\n        <qti-content-body><p>Test instructions</p>',
+      '<qti-rubric-block view="" use="instructions">\r\n        <qti-content-body><p>Test instructions</p>',
+    ),
+  ]),
+  "rubric-in-rubric": negativeOver("rubric-in-rubric", "test-content", [
+    replaceIn(
+      "assessment.xml",
+      testRubricBody,
+      '<qti-content-body><p>Test instructions</p><qti-rubric-block view="candidate"><qti-content-body><p>Nested</p></qti-content-body></qti-rubric-block></qti-content-body>',
+    ),
+  ]),
+  "rubric-interaction": negativeOver("rubric-interaction", "test-content", [
+    replaceIn(
+      "assessment.xml",
+      testRubricBody,
+      '<qti-content-body><p>Test instructions <qti-text-entry-interaction response-identifier="RESPONSE"/></p></qti-content-body>',
+    ),
+  ]),
+  "rubric-no-body": negativeOver("rubric-no-body", "test-content", [
+    replaceIn("assessment.xml", testRubricBody, ""),
+  ]),
+  "rubric-printed-undeclared": negativeOver("rubric-printed-undeclared", "test-content", [
+    replaceIn(
+      "assessment.xml",
+      testRubricBody,
+      '<qti-content-body><p>Test instructions <qti-printed-variable identifier="NOPE"/></p></qti-content-body>',
+    ),
+  ]),
+  "section-adaptive-and-selection": negativeOver(
+    "section-adaptive-and-selection",
+    "test-adaptive",
+    [
+      replaceIn(
+        "adaptive-test.xml",
+        "</qti-adaptive-selection>",
+        '</qti-adaptive-selection>\n      <qti-selection select="1"/>',
+      ),
+    ],
+  ),
+  "section-empty": negativeOver("section-empty", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      "    </qti-test-part>",
+      [
+        '        <qti-assessment-section identifier="bare" title="Bare" visible="true">',
+        '            <qti-rubric-block view="candidate">',
+        "                <qti-content-body><p>Only a rubric</p></qti-content-body>",
+        "            </qti-rubric-block>",
+        "        </qti-assessment-section>",
+        "    </qti-test-part>",
+      ].join("\n"),
+    ),
+  ]),
+  "section-feedback-undeclared": negativeOver("section-feedback-undeclared", "test-section-ref", [
+    replaceIn(
+      "test-b.xml",
+      '  <qti-outcome-declaration identifier="FLAG" cardinality="single" base-type="identifier"/>\n',
+      "",
+    ),
+  ]),
+  "section-identifier-unknown": negativeOver("section-identifier-unknown", "test-mapping", [
+    replaceIn("rtest26.xml", 'section-identifier="sectionA"', 'section-identifier="NOPE"'),
+  ]),
+  "section-prefixed-unresolved": negativeOver("section-prefixed-unresolved", "test-section-ref", [
+    replaceIn(
+      "test-b.xml",
+      'identifier="ITEMREF" href="items/b1.xml"',
+      'identifier="RENAMED" href="items/b1.xml"',
+    ),
+  ]),
+  "section-printed-undeclared": negativeOver("section-printed-undeclared", "test-section-ref", [
+    replaceIn(
+      "test-b.xml",
+      '  <qti-outcome-declaration identifier="COUNT" cardinality="single" base-type="integer"/>\n',
+      "",
+    ),
+  ]),
+  "section-ref-cycle": negativeOver("section-ref-cycle", "test-section-ref", [
+    replaceIn(
+      "sections/shared.xml",
+      '<qti-assessment-item-ref identifier="shared-item" href="../items/shared.xml"/>',
+      [
+        '<qti-assessment-item-ref identifier="shared-item" href="../items/shared.xml"/>',
+        '  <qti-assessment-section-ref identifier="SELF" href="shared.xml"/>',
+      ].join("\n"),
+    ),
+  ]),
+  "section-ref-identifier-clash": negativeOver("section-ref-identifier-clash", "test-section-ref", [
+    replaceIn("sections/shared.xml", 'identifier="shared-item"', 'identifier="ITEMREF"'),
+  ]),
+  "section-ref-to-item": negativeOver("section-ref-to-item", "test-section-ref", [
+    replaceIn(
+      "rtest01.xml",
+      '<qti-assessment-section-ref identifier="S1" href="sections/shared.xml"/>',
+      '<qti-assessment-section-ref identifier="S1" href="items/i2.xml"/>',
+    ),
+  ]),
+  "section-two-isc": negativeOver("section-two-isc", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      '<qti-item-session-control max-attempts="2"/>',
+      '<qti-item-session-control max-attempts="2"/>\n            <qti-item-session-control max-attempts="3"/>',
+    ),
+  ]),
+  "section-unprefixed-undeclared": negativeOver(
+    "section-unprefixed-undeclared",
+    "test-section-ref",
+    [
+      replaceIn(
+        "test-b.xml",
+        '  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>\n',
+        "",
+      ),
+    ],
+  ),
+  "section-variable-in-test": negativeOver("section-variable-in-test", "test-section-ref"),
+  "select-not-integer": negativeOver("select-not-integer", "test-selection", [
+    replaceIn("rtest12.xml", '<qti-selection select="+2"/>', '<qti-selection select="2.5"/>'),
+  ]),
+  "select-over": negativeOver("select-over", "test-selection", [
+    replaceIn("rtest12.xml", '<qti-selection select="+2"/>', '<qti-selection select="9"/>'),
+  ]),
+  "select-under-required": negativeOver("select-under-required", "test-selection", [
+    replaceIn(
+      "rtest12.xml",
+      '<qti-assessment-item-ref identifier="item434" href="item434.xml"/>',
+      '<qti-assessment-item-ref identifier="item434" href="item434.xml" required="true"/>',
+    ),
+    replaceIn(
+      "rtest12.xml",
+      '<qti-assessment-item-ref identifier="item065" href="item065.xml"/>',
+      '<qti-assessment-item-ref identifier="item065" href="item065.xml" required="true"/>',
+    ),
+  ]),
+  "stimulus-300-attributes": negativeOver("stimulus-300-attributes", "stimulus-shared", [
+    replaceIn(
+      "passages/unbelievableNight.xml",
+      "<qti-stimulus-body>",
+      '<qti-stimulus-body class="x">',
+    ),
+  ]),
+  "stimulus-300-include": negativeOver("stimulus-300-include", "stimulus-shared", [
+    addText("passages/fragment.xml", stimulusFragment),
+    replaceIn(
+      "imsmanifest.xml",
+      '<file href="passages/stylesheets/unbelievable_night.css"/>',
+      '<file href="passages/stylesheets/unbelievable_night.css"/>\n            <file href="passages/fragment.xml"/>',
+    ),
+    replaceIn(
+      "passages/unbelievableNight.xml",
+      '<qti-assessment-stimulus \n\txmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"',
+      '<qti-assessment-stimulus xmlns:xi="http://www.w3.org/2001/XInclude" \n\txmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"',
+    ),
+    replaceIn(
+      "passages/unbelievableNight.xml",
+      "    </div> <!-- /stimulus-wrapper -->",
+      '      <xi:include href="fragment.xml" parse="xml"/>\n    </div> <!-- /stimulus-wrapper -->',
+    ),
+  ]),
+  "stimulus-body-empty": {
+    edits: [
+      ...stimulusSharedEdits.filter(
+        (edit) => !(edit._tag === "ReplaceText" && edit.file === "passages/unbelievableNight.xml"),
+      ),
+      addText("passages/unbelievableNight.xml", emptyStimulus),
+    ],
+    member: sharedStimulusMember,
+    name: "stimulus-body-empty",
+  },
+  "stimulus-missing-image": {
+    edits: stimulusSharedEdits.filter(
+      (edit) =>
+        edit._tag !== "copyFile" &&
+        !(edit._tag === "ReplaceText" && edit.file === "imsmanifest.xml"),
+    ),
+    member: sharedStimulusMember,
+    name: "stimulus-missing-image",
+  },
+  "stimulus-ref-duplicate": negativeOver("stimulus-ref-duplicate", "stimulus-shared", [
+    replaceIn(
+      "exemplar06.xml",
+      '<qti-assessment-stimulus-ref identifier="Stimulus1" href="passages/unbelievableNight.xml" title="An Unbelievable Night"/>',
+      [
+        '<qti-assessment-stimulus-ref identifier="Stimulus1" href="passages/unbelievableNight.xml" title="An Unbelievable Night"/>',
+        '  <qti-assessment-stimulus-ref identifier="Stimulus1" href="passages/unbelievableNight.xml"/>',
+      ].join("\n"),
+    ),
+  ]),
+  "stimulus-ref-to-item": negativeOver("stimulus-ref-to-item", "stimulus-shared", [
+    replaceIn(
+      "exemplar06.xml",
+      'href="passages/unbelievableNight.xml" title="An Unbelievable Night"',
+      'href="exemplar04.xml" title="An Unbelievable Night"',
+    ),
+  ]),
+  "stimulus-typed-test": negativeOver("stimulus-typed-test", "stimulus-shared", [
+    replaceIn(
+      "imsmanifest.xml",
+      'identifier="Stimulus1" type="imsqti_stimulus_xmlv3p0"',
+      'identifier="Stimulus1" type="imsqti_test_xmlv3p0"',
+    ),
+  ]),
+  "template-default-type": negativeOver("template-default-type", "test-template-default", [
+    replaceIn(
+      "template-default-test.xml",
+      '<qti-variable identifier="TRIP.SPEEDLIMIT"/>',
+      '<qti-base-value base-type="string">fast</qti-base-value>',
+    ),
+  ]),
+  "template-default-undeclared": negativeOver(
+    "template-default-undeclared",
+    "test-template-default",
+    [
+      replaceIn(
+        "template-default-test.xml",
+        'template-identifier="SPEED"',
+        'template-identifier="NOPE"',
+      ),
+    ],
+  ),
+  "test-declares-duration": negativeOver("test-declares-duration", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      '<qti-time-limits max-time="3600" min-time="600" allow-late-submission="true"/>',
+      [
+        '<qti-outcome-declaration identifier="duration" cardinality="single" base-type="duration"/>',
+        '    <qti-time-limits max-time="3600" min-time="600" allow-late-submission="true"/>',
+      ].join("\n"),
+    ),
+  ]),
+  "test-duplicate-identifier": negativeOver("test-duplicate-identifier", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      '<qti-assessment-item-ref identifier="item160" href="item160.xml">',
+      '<qti-assessment-item-ref identifier="sectionA" href="item160.xml">',
+    ),
+  ]),
+  "test-identifier-mismatch": negativeOver("test-identifier-mismatch", "test-content", [
+    replaceIn(
+      "imsmanifest.xml",
+      testResourceGeneral,
+      "<imsmd:general>\n                        <imsmd:identifier><imsmd:entry>OTHER-TEST</imsmd:entry></imsmd:identifier>\n                        <imsmd:language>en</imsmd:language>\n                    </imsmd:general>",
+    ),
+  ]),
+  "test-lang-no-lom": negativeOver("test-lang-no-lom", "test-content", [
+    replaceIn(
+      "imsmanifest.xml",
+      testResourceGeneral,
+      "<imsmd:general>\n                    </imsmd:general>",
+    ),
+  ]),
+  "test-no-part": {
+    edits: [
+      addText("rtest13.xml", noPartTest),
+      ...testSpecs["test-linear"].edits.filter(
+        (edit) => !(edit._tag === "ReplaceText" && edit.file === "rtest13.xml"),
+      ),
+    ],
+    member: testSpecs["test-linear"].member,
+    name: "test-no-part",
+  },
+  "test-title-mismatch": negativeOver("test-title-mismatch", "test-content", [
+    replaceIn(
+      "imsmanifest.xml",
+      testResourceGeneral,
+      '<imsmd:general>\n                        <imsmd:title><imsmd:string language="en">Another Test</imsmd:string></imsmd:title>\n                        <imsmd:language>en</imsmd:language>\n                    </imsmd:general>',
+    ),
+  ]),
+  "test-undeclared-variable": negativeOver("test-undeclared-variable", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      "</qti-assessment-test>",
+      [
+        "    <qti-outcome-processing>",
+        setOutcome("SCORE", '<qti-variable identifier="NOPE"/>'),
+        "    </qti-outcome-processing>",
+        "</qti-assessment-test>",
+      ].join("\n"),
+    ),
+  ]),
+};
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
  *
@@ -3218,6 +3975,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...htmlSpecs,
   ...copySpecs,
   ...testSpecs,
+  ...negativeSpecs,
   "bad-identifier-value": {
     edits: [
       replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value>Choice A</qti-value>"),
