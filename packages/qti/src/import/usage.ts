@@ -156,9 +156,10 @@ const firstOutsideRoster = (root: Element): Option.Option<UnmodeledVocabulary> =
  *
  * Every attribute is processed under its class through the tree module's `typedAttribute`, which
  * keeps the lexical form where processing changed it. The document has no identifier and no title
- * row. A statistic's `UsageValue` holds the text content after `replace`, and `UsageTypedValue`
- * with its arm row exists where `baseType` is written; the arm's pattern judges that text at
- * commit.
+ * row. A statistic's `UsageValue` holds the text content after `replace`. Where `baseType` is
+ * written, `UsageTypedValue` copies that same text (the schema's containment in `UsageValue`) and
+ * its arm row holds `valueText`'s reading of it, trimmed for every base type but `string`, which
+ * the arm's pattern judges at commit.
  *
  * @param doc - The decoded document.
  * @param input - Where its package lists it.
@@ -324,7 +325,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     if (baseType !== undefined) {
       const typed = valueText(baseType, replace(content));
       add(ud.UsageValueBaseType, [{ baseType, id: node.id }]);
-      add(ud.UsageTypedValue, [{ baseType, id: node.id, value: judgedLater(typed) }]);
+      add(ud.UsageTypedValue, [{ baseType, id: node.id, value: judgedLater(replace(content)) }]);
       if (baseType === "boolean") {
         const literal = yield* closedOf(
           BooleanLiteral.handles,

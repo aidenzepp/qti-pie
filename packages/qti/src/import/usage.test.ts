@@ -99,6 +99,16 @@ const onMapping = (name: string, value: string) => (text: string) =>
 
 const firstOf = <T>(list: readonly T[]): T => Option.getOrThrow(Option.fromNullishOr(list[0]));
 
+/**
+ * The schema's containment: every `UsageTypedValue(id, value)` has a `UsageValue(id, value)`.
+ */
+const assertContained = (rows: Rows): void => {
+  const values = Rows.of(rows, ud.UsageValue);
+  for (const typed of Rows.of(rows, ud.UsageTypedValue)) {
+    assert.isTrue(values.some((row) => row.id === typed.id && row.value === typed.value));
+  }
+};
+
 layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (suite) => {
   suite.effect("usage3 yields the counts of the example", () =>
     Effect.gen(function* usage3() {
@@ -541,29 +551,45 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/usage.ts", (sui
         Rows.of(stringRows, ud.relations.UsageTypedValueString).map((row) => row.value),
         [" a "],
       );
+      assert.deepStrictEqual(
+        Rows.of(rows, ud.UsageTypedValue).map((row) => row.value),
+        [" true "],
+      );
+      assertContained(rows);
+      assertContained(stringRows);
       yield* usageGuards(rows);
       yield* usageGuards(stringRows);
     }),
   );
 
-  suite.effect("a padded float is written trimmed beside its untrimmed UsageValue", () =>
-    Effect.gen(function* paddedFloat() {
-      const { rows } = yield* rowsOf("usage3-float-padded");
-      const value = firstOf(Rows.of(rows, ud.UsageValue));
-      const arm = firstOf(Rows.of(rows, ud.relations.UsageTypedValueFloat));
-      const edited = changed(rows, ud.relations.UsageTypedValueFloat, (list) =>
-        list.map((row) =>
-          row.id === arm.id ? { ...row, value: judgedLater<typeof row.value>(" 0.87 ") } : row,
-        ),
-      );
+  suite.effect(
+    "a padded float's arm holds it trimmed; its UsageTypedValue copies its UsageValue",
+    () =>
+      Effect.gen(function* paddedFloat() {
+        const { rows } = yield* rowsOf("usage3-float-padded");
+        const value = firstOf(Rows.of(rows, ud.UsageValue));
+        const typed = firstOf(Rows.of(rows, ud.UsageTypedValue));
+        const arm = firstOf(Rows.of(rows, ud.relations.UsageTypedValueFloat));
+        const armEdited = changed(rows, ud.relations.UsageTypedValueFloat, (list) =>
+          list.map((row) =>
+            row.id === arm.id ? { ...row, value: judgedLater<typeof row.value>(" 0.87 ") } : row,
+          ),
+        );
+        const typedEdited = changed(rows, ud.UsageTypedValue, (list) =>
+          list.map((row) =>
+            row.id === typed.id ? { ...row, value: judgedLater<typeof row.value>("0.87") } : row,
+          ),
+        );
 
-      assert.strictEqual(arm.value, "0.87");
-      assert.strictEqual(firstOf(Rows.of(rows, ud.UsageTypedValue)).value, "0.87");
-      assert.strictEqual(value.value, " 0.87 ");
-      assert.strictEqual(value.collapsed, "0.87");
-      yield* usageGuards(rows);
-      assert.strictEqual((yield* refusal(edited)).rule, "typed-copy");
-    }),
+        assert.strictEqual(arm.value, "0.87");
+        assert.strictEqual(typed.value, " 0.87 ");
+        assert.strictEqual(value.value, " 0.87 ");
+        assert.strictEqual(value.collapsed, "0.87");
+        assertContained(rows);
+        yield* usageGuards(rows);
+        assert.strictEqual((yield* refusal(armEdited)).rule, "typed-copy");
+        assert.strictEqual((yield* refusal(typedEdited)).rule, "typed-copy");
+      }),
   );
 
   suite.effect("an outer-padded ud:mapping or ud:mapEntry score attribute is usage-lexical", () =>
