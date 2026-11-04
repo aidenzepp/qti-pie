@@ -29,7 +29,6 @@ import {
 import { AssessmentItem } from "#qti/schema/item.ts";
 import { AuthorApp } from "#qti/schema/logins.ts";
 import { Edge, Node } from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
 import {
   BuiltInRef,
   DeclaredRef,
@@ -40,7 +39,6 @@ import {
   ResponseProcessingItem,
   TemplateParameterRef,
   VariableRef,
-  relations as processingRelations,
 } from "#qti/schema/processing.ts";
 import {
   ResponseConditionArm,
@@ -63,24 +61,26 @@ const exportRoot = `${import.meta.dirname}/../../work/export`;
 
 /**
  * The packages whose import is accepted and whose export compares all equal: the two round-trip
- * packages of M3 and the guard package whose four padded attributes are decision 19's witnesses.
+ * packages of M3, the guard package whose four padded attributes are decision 19's witnesses, and
+ * the padded identifier literal decision 157 reads trimmed.
  */
 const roundTripped = [
   "processing-item",
   "rptemplates",
   "padded-processing",
+  "padded-literal",
 ] as const satisfies readonly ProcessingFixtureName[];
 
 /**
  * Each package the XML path refuses, with the rule its refusal names.
  *
  * The checker's P8, P20, P21, P22 (the lookup without a table), P23, P24, P25 (the response case),
- * P27 come from `broken/`, the builder's P5 and the guard's P30 from `guards/`, and the two padded
- * packages are refused by the database (`attribute-lexical`: the pattern law on `figures`, whose
- * source is the one string that `main`'s `integerOrVariableRef` (P6) and content's
+ * P27 come from `broken/`, the builder's P5 and the guard's P30 from `guards/`, and the padded
+ * reference package is refused by the database (`attribute-lexical`: the pattern law on `figures`,
+ * whose source is the one string that `main`'s `integerOrVariableRef` (P6) and content's
  * `integerOrVariableString` both are, so the refusal names content's rule, the side the
- * forward-merge plan's F2 took for identical pairs; `value-lexical`: the identifier value arm's
- * pattern on the content as read, which a pattern law cannot tell from P7).
+ * forward-merge plan's F2 took for identical pairs). `padded-literal` is not refused: decision 157
+ * reads its identifier literal with outer whitespace removed, so it is in `roundTripped`.
  * `p29-test-variables-weight-integer` has a test root, which the reader refuses as
  * `unmodeled-vocabulary`; its XML path is M4's. Five packages hold content's vocabulary
  * (`qti-template-declaration`, `qti-context-declaration`, `qti-match-table`) that the reader
@@ -118,18 +118,17 @@ const refused: readonly (readonly [ProcessingFixtureName, Rule])[] = [
   ["missing-identifier", "P5"],
   ["else-before-if", "P30"],
   ["padded-reference", "attribute-lexical"],
-  ["padded-literal", "value-lexical"],
 ];
 
 /**
- * A pattern law as grizzle reports it: the regex and its flags, and no relation.
+ * A contract law as grizzle reports it: the contract's name, and no relation.
  */
-const PatternLaw = Schema.Struct({ kind: Schema.Literal("pattern"), source: Schema.String });
+const ContractLaw = Schema.Struct({ contract: Schema.String, kind: Schema.Literal("contract") });
 
 /**
- * Whether a refusal's law is a pattern law.
+ * Whether a refusal's law is a contract law.
  */
-const isPatternLaw = Schema.is(PatternLaw);
+const isContractLaw = Schema.is(ContractLaw);
 
 /**
  * The rows an apply added to one relation.
@@ -819,33 +818,19 @@ const negatives: readonly Negative[] = [
   {
     alter: (draft) => {
       Object.assign(
-        find(draft, processingRelations.LiteralBoolean, () => true),
-        { value: "yes" },
-      );
-    },
-    laws: [`pattern ${patterns.booleanLiteral}`],
-    name: "P7: a boolean Literal arm row with value yes is refused by the booleanLiteral pattern",
-    rule: "value-lexical",
-    spec: "P7",
-  },
-  {
-    alter: (draft) => {
-      Object.assign(
         find(draft, Inside, () => true),
         { coords: "0,0" },
       );
     },
-    laws: [`pattern ${patterns.coordsAny}`],
-    name: "P6: an Inside with coords 0,0 is refused by the coords pattern",
-    rule: "attribute-lexical",
-    spec: "P6",
+    laws: ["contract ExpressionCoords"],
+    name: "P6: an Inside with coords 0,0 is refused by the ExpressionCoords contract",
+    rule: "P6",
   },
   {
     alter: (draft) => {
       Object.assign(
         find(draft, Repeat, () => true),
         {
-          numberRepeats: "2147483648",
           numberRepeatsKind: "literal",
           numberRepeatsValue: 2_147_483_648n,
         },
@@ -862,20 +847,8 @@ const negatives: readonly Negative[] = [
         { coords: "0,0,10,10 " },
       );
     },
-    laws: [`pattern ${patterns.coordsAny}`],
+    laws: ["contract ExpressionCoords"],
     name: "P6: an Inside with coords 0,0,10,10 and a trailing space is refused (the replace witness)",
-    rule: "attribute-lexical",
-    spec: "P6",
-  },
-  {
-    alter: (draft) => {
-      Object.assign(
-        find(draft, Equal, (row) => text(row, "toleranceMode") === "exact"),
-        { toleranceMode: " exact" },
-      );
-    },
-    laws: [`pattern ${patterns.toleranceMode}`],
-    name: "P6: an Equal with toleranceMode ' exact' is refused (the preserve witness)",
     rule: "P6",
   },
   {
@@ -883,7 +856,6 @@ const negatives: readonly Negative[] = [
       Object.assign(
         find(draft, RoundTo, () => true),
         {
-          figures: "0",
           figuresKind: "literal",
           figuresValue: 0n,
           roundingMode: "significantFigures",
@@ -898,7 +870,7 @@ const negatives: readonly Negative[] = [
     alter: (draft) => {
       Object.assign(
         find(draft, Index, () => true),
-        { n: "0", nKind: "literal", nValue: 0n },
+        { nKind: "literal", nValue: 0n },
       );
     },
     laws: ["check Index.IndexPositive"],
@@ -1205,25 +1177,6 @@ describe.skipIf(!hasLease)(
                 rule,
                 String(result.failure),
               );
-
-              if (name === "padded-literal" && result.failure instanceof ImportRefused) {
-                // A pattern law carries no relation (`refusal.ts`), so the map cannot tell P7 from
-                // `value-lexical`: the law is the `LiteralIdentifier` arm's `ncName` pattern.
-                const { law } = result.failure;
-
-                assert.isTrue(
-                  isPatternLaw(law),
-                  `law is not a pattern law: ${JSON.stringify(law)}`,
-                );
-
-                if (isPatternLaw(law)) {
-                  assert.strictEqual(law.source, patterns.ncName);
-                }
-
-                yield* Effect.log(`padded-literal detail: ${result.failure.detail}`);
-
-                yield* Effect.log(`padded-literal law: ${JSON.stringify(law)}`);
-              }
             }
           }),
         );
@@ -1302,8 +1255,11 @@ describe.skipIf(!hasLease)(
               assert.strictEqual(refusal.rule, negative.rule);
               assert.strictEqual(isMappedLaw(law), negative.mapped ?? true, lawOf(law));
 
-              if (law.kind === "pattern") {
-                assert.isTrue(isPatternLaw(refusal.law), "the refusal's law is not a pattern law");
+              if (law.kind === "contract") {
+                assert.isTrue(
+                  isContractLaw(refusal.law),
+                  "the refusal's law is not a contract law",
+                );
               }
             }
           }),

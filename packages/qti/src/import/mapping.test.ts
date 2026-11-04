@@ -3,6 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option } from "effect";
 import type { DeclaredVariable } from "#qti/import/interactions.ts";
 import { mappingRows } from "#qti/import/mapping.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { Rows, treeRows } from "#qti/import/tree.ts";
 import type { NodeIndex } from "#qti/import/tree.ts";
 import {
@@ -26,17 +27,23 @@ import {
   MatchTableEntry,
   relations,
 } from "#qti/schema/mapping.ts";
+import { RectCoords } from "#qti/schema/contracts.ts";
 import { AttributeLexical, Edge } from "#qti/schema/node.ts";
 import { Coords, CoordsRect } from "#qti/schema/shapes.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 const {
+  InterpolationTableDefaultValueBoolean,
   InterpolationTableDefaultValueFloat,
+  InterpolationTableEntryBoolean,
   InterpolationTableEntryFloat,
+  MapEntryDirectedPair,
   MapEntryIdentifier,
-  MapEntryInteger,
+  MapEntryString,
+  MatchTableDefaultValueBoolean,
   MatchTableDefaultValueFloat,
+  MatchTableEntryBoolean,
   MatchTableEntryFloat,
 } = relations;
 
@@ -163,14 +170,18 @@ describe("mappingRows on a mapping", () => {
       const mapping = idOf(nodes, "qti-mapping");
       const declaration = declarationOf(variables, "RESPONSE");
 
-      assert.deepStrictEqual(Rows.of(built, Mapping), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, Mapping), [
         { baseType: "identifier", declaration, defaultValue: "0", document: treeId, id: mapping },
       ]);
-      assert.deepStrictEqual(Rows.of(built, MappingLowerBound), [{ node: mapping, value: "0" }]);
-      assert.deepStrictEqual(Rows.of(built, MappingUpperBound), [{ node: mapping, value: "3" }]);
+      assert.deepStrictEqual<unknown>(Rows.of(built, MappingLowerBound), [
+        { node: mapping, value: "0" },
+      ]);
+      assert.deepStrictEqual<unknown>(Rows.of(built, MappingUpperBound), [
+        { node: mapping, value: "3" },
+      ]);
 
       const [first, second] = pairOf(nodes, "qti-map-entry");
-      assert.deepStrictEqual(Rows.of(built, MapEntry), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, MapEntry), [
         {
           baseType: "identifier",
           caseSensitive: "false",
@@ -190,7 +201,7 @@ describe("mappingRows on a mapping", () => {
           position: 1n,
         },
       ]);
-      assert.deepStrictEqual(Rows.of(built, MapEntryIdentifier), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, MapEntryIdentifier), [
         { id: first, mapKey: "A" },
         { id: second, mapKey: "B" },
       ]);
@@ -238,18 +249,47 @@ describe("mappingRows on a mapping", () => {
     }),
   );
 
+  it.effect("refuses a padded integer map-key under map-key-lexical", () =>
+    Effect.gen(function* paddedKey() {
+      const failure = yield* Effect.flip(
+        mapped(
+          `<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer"><qti-mapping><qti-map-entry map-key=" 12 " mapped-value="1"/></qti-mapping></qti-response-declaration>`,
+        ),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "map-key-lexical");
+      assert.include(failure.detail, "of an integer qti-map-entry");
+    }),
+  );
+
   it.effect("stores a key after the class of its base type's lexical space", () =>
     Effect.gen(function* keyClass() {
       const { built, nodes } = yield* mapped(
-        `<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer"><qti-mapping><qti-map-entry map-key=" 12 " mapped-value="1"/></qti-mapping></qti-response-declaration>`,
+        `<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="directedPair"><qti-mapping><qti-map-entry map-key="A  B" mapped-value="1"/></qti-mapping></qti-response-declaration>`,
       );
       const entry = idOf(nodes, "qti-map-entry");
 
-      assert.deepStrictEqual(Rows.of(built, MapEntryInteger), [{ id: entry, mapKey: "12" }]);
+      assert.deepStrictEqual<unknown>(Rows.of(built, MapEntryDirectedPair), [
+        { id: entry, mapKey: "A B" },
+      ]);
       assert.deepStrictEqual(
         Rows.of(built, AttributeLexical).map((row) => [row.node, row.attribute, row.value]),
-        [[entry, "map-key", " 12 "]],
+        [[entry, "map-key", "A  B"]],
       );
+    }),
+  );
+
+  it.effect("keeps the whitespace of a string map-key as part of the value", () =>
+    Effect.gen(function* stringKey() {
+      const { built, nodes } = yield* mapped(
+        `<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="string"><qti-mapping><qti-map-entry map-key=" a " mapped-value="1"/></qti-mapping></qti-response-declaration>`,
+      );
+      const entry = idOf(nodes, "qti-map-entry");
+
+      assert.deepStrictEqual<unknown>(Rows.of(built, MapEntryString), [
+        { id: entry, mapKey: " a " },
+      ]);
     }),
   );
 
@@ -281,7 +321,7 @@ describe("mappingRows on an area mapping", () => {
         { node: idOf(written.nodes, "qti-area-mapping") },
       ]);
       assert.strictEqual(Rows.of(omitted.built, DeclaredAreaMappingDefaultValue).length, 0);
-      assert.deepStrictEqual(
+      assert.deepStrictEqual<unknown>(
         Rows.of(omitted.built, AreaMapping).map((row) => row.defaultValue),
         ["0"],
       );
@@ -296,18 +336,18 @@ describe("mappingRows on an area mapping", () => {
       const mapping = idOf(nodes, "qti-area-mapping");
       const declaration = declarationOf(variables, "RESPONSE");
 
-      assert.deepStrictEqual(Rows.of(built, AreaMapping), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, AreaMapping), [
         { declaration, defaultValue: "0.5", document: treeId, id: mapping },
       ]);
-      assert.deepStrictEqual(Rows.of(built, AreaMappingLowerBound), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, AreaMappingLowerBound), [
         { node: mapping, value: "0" },
       ]);
-      assert.deepStrictEqual(Rows.of(built, AreaMappingUpperBound), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, AreaMappingUpperBound), [
         { node: mapping, value: "2" },
       ]);
 
       const [first, second] = pairOf(nodes, "qti-area-map-entry");
-      assert.deepStrictEqual(Rows.of(built, AreaMapEntry), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, AreaMapEntry), [
         { areaMapping: mapping, id: first, mappedValue: "1", position: 0n, shape: "rect" },
         { areaMapping: mapping, id: second, mappedValue: "2", position: 1n, shape: "circle" },
       ]);
@@ -318,7 +358,9 @@ describe("mappingRows on an area mapping", () => {
           [second, "qti-area-map-entry", "circle", "5,5,3"],
         ],
       );
-      assert.deepStrictEqual(Rows.of(built, CoordsRect), [{ node: first, value: "0,0,10,10" }]);
+      assert.deepStrictEqual(Rows.of(built, CoordsRect), [
+        { node: first, value: RectCoords("0,0,10,10") },
+      ]);
     }),
   );
 
@@ -344,19 +386,19 @@ describe("mappingRows on a match table", () => {
       assert.deepStrictEqual(Rows.of(built, MatchTable), [
         { baseType: "float", declaration, document: treeId, id },
       ]);
-      assert.deepStrictEqual(Rows.of(built, MatchTableDefaultValue), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, MatchTableDefaultValue), [
         { baseType: "float", node: id },
       ]);
-      assert.deepStrictEqual(Rows.of(built, MatchTableDefaultValueFloat), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, MatchTableDefaultValueFloat), [
         { node: id, value: "9" },
       ]);
 
       const [first, second] = pairOf(nodes, "qti-match-table-entry");
-      assert.deepStrictEqual(Rows.of(built, MatchTableEntry), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, MatchTableEntry), [
         { baseType: "float", declaration, id: first, position: 0n, sourceValue: "1", table: id },
         { baseType: "float", declaration, id: second, position: 1n, sourceValue: "2", table: id },
       ]);
-      assert.deepStrictEqual(Rows.of(built, MatchTableEntryFloat), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, MatchTableEntryFloat), [
         { id: first, targetValue: "1.5" },
         { id: second, targetValue: "2.5" },
       ]);
@@ -386,15 +428,15 @@ describe("mappingRows on an interpolation table", () => {
       assert.deepStrictEqual(Rows.of(built, InterpolationTable), [
         { baseType: "float", declaration, document: treeId, id },
       ]);
-      assert.deepStrictEqual(Rows.of(built, InterpolationTableDefaultValue), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, InterpolationTableDefaultValue), [
         { baseType: "float", node: id },
       ]);
-      assert.deepStrictEqual(Rows.of(built, InterpolationTableDefaultValueFloat), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, InterpolationTableDefaultValueFloat), [
         { node: id, value: "0" },
       ]);
 
       const [first, second] = pairOf(nodes, "qti-interpolation-table-entry");
-      assert.deepStrictEqual(Rows.of(built, InterpolationTableEntry), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, InterpolationTableEntry), [
         {
           baseType: "float",
           declaration,
@@ -414,7 +456,7 @@ describe("mappingRows on an interpolation table", () => {
           table: id,
         },
       ]);
-      assert.deepStrictEqual(Rows.of(built, InterpolationTableEntryFloat), [
+      assert.deepStrictEqual<unknown>(Rows.of(built, InterpolationTableEntryFloat), [
         { id: first, targetValue: "1" },
         { id: second, targetValue: "0.5" },
       ]);
@@ -429,6 +471,272 @@ describe("mappingRows on an interpolation table", () => {
 
       for (const entry of Rows.of(built, InterpolationTableEntry)) {
         assert.strictEqual(entry.position, edges.get(entry.id));
+      }
+    }),
+  );
+});
+
+/**
+ * A single-cardinality boolean declaration of the given kind holding `body`.
+ */
+const boolean = (body: string, kind = "response") =>
+  `<qti-${kind}-declaration identifier="RESPONSE" cardinality="single" base-type="boolean">${body}</qti-${kind}-declaration>`;
+
+describe("mappingRows on a boolean value", () => {
+  const contexts: readonly (readonly [string, string, string])[] = [
+    [
+      "a map key",
+      boolean('<qti-mapping><qti-map-entry map-key="yes" mapped-value="1"/></qti-mapping>'),
+      "map-key-lexical",
+    ],
+    [
+      "a match table target",
+      boolean(
+        '<qti-match-table><qti-match-table-entry source-value="1" target-value="yes"/></qti-match-table>',
+        "outcome",
+      ),
+      "attribute-lexical",
+    ],
+    [
+      "an interpolation table target",
+      boolean(
+        '<qti-interpolation-table><qti-interpolation-table-entry source-value="1" target-value="yes"/></qti-interpolation-table>',
+        "outcome",
+      ),
+      "attribute-lexical",
+    ],
+    [
+      "a match table default",
+      boolean('<qti-match-table default-value="yes"/>', "outcome"),
+      "attribute-lexical",
+    ],
+    [
+      "an interpolation table default",
+      boolean('<qti-interpolation-table default-value="no"/>', "outcome"),
+      "attribute-lexical",
+    ],
+  ];
+
+  it.effect("refuses a boolean outside true and false under the context's rule", () =>
+    Effect.gen(function* outsideRoster() {
+      for (const [name, declaration, rule] of contexts) {
+        const failure = yield* Effect.flip(mapped(declaration));
+
+        assert.instanceOf(failure, ImportRefused, name);
+        assert.strictEqual(failure.rule, rule, name);
+      }
+    }),
+  );
+
+  it.effect("refuses a padded boolean map-key under map-key-lexical", () =>
+    Effect.gen(function* padded() {
+      const failure = yield* Effect.flip(
+        mapped(
+          boolean('<qti-mapping><qti-map-entry map-key=" true " mapped-value="1"/></qti-mapping>'),
+        ),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "map-key-lexical");
+    }),
+  );
+
+  it.effect("writes the boolean arms of the tables with the handles", () =>
+    Effect.gen(function* tables() {
+      const match = yield* mapped(
+        boolean(
+          '<qti-match-table default-value="false"><qti-match-table-entry source-value="1" target-value="true"/></qti-match-table>',
+          "outcome",
+        ),
+      );
+      const interpolation = yield* mapped(
+        boolean(
+          '<qti-interpolation-table default-value="true"><qti-interpolation-table-entry source-value="1" target-value="false"/></qti-interpolation-table>',
+          "outcome",
+        ),
+      );
+
+      assert.deepStrictEqual(
+        Rows.of(match.built, MatchTableDefaultValueBoolean).map((row) => row.value),
+        ["false"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(match.built, MatchTableEntryBoolean).map((row) => row.targetValue),
+        ["true"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(interpolation.built, InterpolationTableDefaultValueBoolean).map((row) => row.value),
+        ["true"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(interpolation.built, InterpolationTableEntryBoolean).map((row) => row.targetValue),
+        ["false"],
+      );
+    }),
+  );
+});
+
+const entry = (attribute: string) =>
+  identifierDeclaration(
+    `<qti-mapping><qti-map-entry map-key="A" mapped-value="1"${attribute}/></qti-mapping>`,
+  );
+
+const boundary = (attribute: string) =>
+  `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"><qti-interpolation-table default-value="0"><qti-interpolation-table-entry source-value="10"${attribute} target-value="1"/></qti-interpolation-table></qti-outcome-declaration>`;
+
+describe("mappingRows on a boolean attribute of an entry", () => {
+  it.effect(
+    "refuses case-sensitive and include-boundary outside xs:boolean as attribute-lexical",
+    () =>
+      Effect.gen(function* outsideBoolean() {
+        for (const declaration of [
+          entry(' case-sensitive="yes"'),
+          boundary(' include-boundary="yes"'),
+        ]) {
+          const failure = yield* Effect.flip(mapped(declaration));
+
+          assert.instanceOf(failure, ImportRefused, declaration);
+          assert.strictEqual(failure.rule, "attribute-lexical", declaration);
+        }
+      }),
+  );
+
+  it.effect("admits the spellings 1 and a padded false, written as their handles", () =>
+    Effect.gen(function* inside() {
+      const sensitive = yield* mapped(entry(' case-sensitive=" 1 "'));
+      const bounded = yield* mapped(boundary(' include-boundary=" false "'));
+
+      assert.deepStrictEqual(
+        Rows.of(sensitive.built, MapEntry).map((row) => row.caseSensitive),
+        ["1"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(bounded.built, InterpolationTableEntry).map((row) => row.includeBoundary),
+        ["false"],
+      );
+    }),
+  );
+});
+
+/**
+ * A declaration of the given base type, its kind and cardinality following its body's element.
+ */
+const typed = (baseType: string, body: string, kind = "response") =>
+  `<qti-${kind}-declaration identifier="RESPONSE" cardinality="single" base-type="${baseType}">${body}</qti-${kind}-declaration>`;
+
+describe("mappingRows on a padded value attribute", () => {
+  const padded: readonly (readonly [string, string, string])[] = [
+    [
+      "a boolean map key",
+      typed(
+        "boolean",
+        '<qti-mapping><qti-map-entry map-key=" true" mapped-value="1"/></qti-mapping>',
+      ),
+      "map-key-lexical",
+    ],
+    [
+      "an integer map key",
+      typed("integer", '<qti-mapping><qti-map-entry map-key="1 " mapped-value="1"/></qti-mapping>'),
+      "map-key-lexical",
+    ],
+    [
+      "a boolean match table default",
+      typed("boolean", '<qti-match-table default-value=" true"/>', "outcome"),
+      "attribute-lexical",
+    ],
+    [
+      "an integer interpolation table default",
+      typed("integer", '<qti-interpolation-table default-value="1 "/>', "outcome"),
+      "attribute-lexical",
+    ],
+    [
+      "a boolean match table target",
+      typed(
+        "boolean",
+        '<qti-match-table><qti-match-table-entry source-value="1" target-value=" true"/></qti-match-table>',
+        "outcome",
+      ),
+      "attribute-lexical",
+    ],
+    [
+      "an integer interpolation table target",
+      typed(
+        "integer",
+        '<qti-interpolation-table><qti-interpolation-table-entry source-value="1" target-value="1 "/></qti-interpolation-table>',
+        "outcome",
+      ),
+      "attribute-lexical",
+    ],
+    [
+      "a mapped value of a qti-map-entry",
+      typed("integer", '<qti-mapping><qti-map-entry map-key="1" mapped-value=" 1"/></qti-mapping>'),
+      "attribute-lexical",
+    ],
+    [
+      "a mapped value of a qti-area-map-entry",
+      typed(
+        "point",
+        '<qti-area-mapping><qti-area-map-entry shape="rect" coords="0,0,1,1" mapped-value="1 "/></qti-area-mapping>',
+      ),
+      "attribute-lexical",
+    ],
+    [
+      "a qti-mapping lower bound",
+      typed("integer", '<qti-mapping lower-bound=" 0"/>'),
+      "attribute-lexical",
+    ],
+    [
+      "a qti-mapping upper bound",
+      typed("integer", '<qti-mapping upper-bound="3 "/>'),
+      "attribute-lexical",
+    ],
+    [
+      "a qti-mapping default value",
+      typed("integer", '<qti-mapping default-value=" 0"/>'),
+      "attribute-lexical",
+    ],
+    [
+      "a qti-area-mapping lower bound",
+      typed("point", '<qti-area-mapping lower-bound=" 0"/>'),
+      "attribute-lexical",
+    ],
+    [
+      "a qti-area-mapping upper bound",
+      typed("point", '<qti-area-mapping upper-bound="3 "/>'),
+      "attribute-lexical",
+    ],
+    [
+      "a qti-area-mapping default value",
+      typed("point", '<qti-area-mapping default-value=" 0"/>'),
+      "attribute-lexical",
+    ],
+    [
+      "a match table source value",
+      typed(
+        "integer",
+        '<qti-match-table><qti-match-table-entry source-value=" 1" target-value="1"/></qti-match-table>',
+        "outcome",
+      ),
+      "attribute-lexical",
+    ],
+    [
+      "an interpolation table source value",
+      typed(
+        "integer",
+        '<qti-interpolation-table><qti-interpolation-table-entry source-value="1.5 " target-value="1"/></qti-interpolation-table>',
+        "outcome",
+      ),
+      "attribute-lexical",
+    ],
+  ];
+
+  it.effect("refuses outer whitespace around a value under the attribute's rule", () =>
+    Effect.gen(function* refusesPadding() {
+      for (const [name, declaration, rule] of padded) {
+        const failure = yield* Effect.flip(mapped(declaration));
+
+        assert.instanceOf(failure, ImportRefused, name);
+        assert.strictEqual(failure.rule, rule, name);
       }
     }),
   );

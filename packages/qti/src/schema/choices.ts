@@ -15,6 +15,7 @@ import {
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
 import { Node } from "#qti/schema/node.ts";
+import { MatchGroupList } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
@@ -41,11 +42,7 @@ export const ChoiceTemplateRef = relation(
  * The `match-group` attribute of a choice: a space-separated list of NCNames. The attribute is an
  * anonymous list with no minimum length, so the empty list is admitted.
  */
-export const MatchGroup = relation(
-  "MatchGroup",
-  { node: uuid, value: str.regex(patterns.ncNameListOrEmpty) },
-  ["node"],
-);
+export const MatchGroup = relation("MatchGroup", { node: uuid, value: MatchGroupList }, ["node"]);
 
 /**
  * The relations of this module, as schema members.

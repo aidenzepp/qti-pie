@@ -1,8 +1,8 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The tests spell the XML encoding labels (`UTF-8`, `US-ASCII`) the declarations under test carry. */
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { decode } from "#qti/xml/decode.ts";
-import type { ReaderRefusal } from "#qti/xml/errors.ts";
+import { decode } from "#crust/decode.ts";
+import type { ReaderRefusal } from "#crust/errors.ts";
 
 /**
  * The bytes of ASCII `text`.

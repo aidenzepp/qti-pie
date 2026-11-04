@@ -8,20 +8,35 @@
  * carries are the kind's own builders'; this pass reads them to check the registry and writes
  * nothing for them.
  */
-import { judgedLater } from "#qti/import/judged.ts";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
-import { Rows, typedAttribute, UnmodeledVocabulary } from "#qti/import/tree.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
+import { closedOf, Rows, typedAttribute, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
-import { IdrefAttribute } from "#qti/schema/content/rosters.ts";
+import {
+  AriaAutocompleteValue,
+  AriaCurrentValue,
+  AriaInvalidValue,
+  AriaLiveValue,
+  AriaOrientationValue,
+  AriaRoleValue,
+  AriaSortValue,
+  AriaTristate,
+  AriaTrueFalseUndefined,
+  IdrefAttribute,
+  SuppressTtsMode,
+  TextDirection,
+  XsBoolean,
+} from "#qti/schema/content/rosters.ts";
 import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
 import * as family from "#qti/schema/attributes.ts";
+import { ClassList, ContentLanguage, IdReference, XmlBaseUri } from "#qti/schema/contracts.ts";
 import { DocumentId, HtmlId, ItemBodyId, PrintedVariableId } from "#qti/schema/document.ts";
 import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
 import { AttributeLexical, AttributeName, Tree } from "#qti/schema/node.ts";
 import type { NodeKindHandle } from "#qti/schema/node.ts";
 import { registries } from "#qti/schema/seed/admission.ts";
-import type { Attribute, Element } from "#qti/xml/tree.ts";
+import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
@@ -50,6 +65,34 @@ const ariaRelations: ReadonlyMap<string, AnyRelation> = new Map(
       relation,
     ]),
 );
+
+/**
+ * The roster of each closed `aria-*` attribute and of `role`, by attribute name: the values its
+ * column holds, which `writeFamily` narrows the text to before the write.
+ */
+const ariaRosters: ReadonlyMap<string, readonly string[]> = new Map<string, readonly string[]>([
+  ["aria-atomic", XsBoolean.handles],
+  ["aria-autocomplete", AriaAutocompleteValue.handles],
+  ["aria-busy", XsBoolean.handles],
+  ["aria-checked", AriaTristate.handles],
+  ["aria-current", AriaCurrentValue.handles],
+  ["aria-disabled", XsBoolean.handles],
+  ["aria-expanded", AriaTrueFalseUndefined.handles],
+  ["aria-haspopup", XsBoolean.handles],
+  ["aria-hidden", XsBoolean.handles],
+  ["aria-invalid", AriaInvalidValue.handles],
+  ["aria-live", AriaLiveValue.handles],
+  ["aria-modal", XsBoolean.handles],
+  ["aria-multiline", XsBoolean.handles],
+  ["aria-multiselectable", XsBoolean.handles],
+  ["aria-orientation", AriaOrientationValue.handles],
+  ["aria-pressed", AriaTristate.handles],
+  ["aria-readonly", XsBoolean.handles],
+  ["aria-required", XsBoolean.handles],
+  ["aria-selected", AriaTrueFalseUndefined.handles],
+  ["aria-sort", AriaSortValue.handles],
+  ["role", AriaRoleValue.handles],
+]);
 
 /**
  * The whitespace class of the families when no inventory entry names the kind: the manifest's LOM
@@ -217,37 +260,56 @@ const writeId = (written: Written, subject: Subject): void => {
 };
 
 /**
- * Write the row of a family, `role` or `aria-*` attribute into its relation.
+ * Write the row of a family, `role` or `aria-*` attribute into its relation. A closed value is
+ * narrowed to its roster's handle first.
+ *
+ * @returns Nothing; `ImportRefused` under `attribute-lexical` for a `dir`, `data-qti-suppress-tts`,
+ *   `role` or `aria-*` value outside its roster.
  */
-const writeFamily = (written: Written, name: string, subject: Subject): void => {
-  const { attribute, documentId, kind, node, rootKind, tree, value } = subject;
-  const own = { attribute, kind, node, value };
-  const scoped = { ...own, rootKind, tree };
-  if (name === "class") {
-    emit(written, family.NodeClass, own);
-  } else if (name === "lang") {
-    emit(written, family.NodeLang, own);
-  } else if (name === "xml:lang") {
-    emit(written, family.NodeXmlLang, scoped);
-  } else if (name === "label") {
-    emit(written, family.NodeLabel, scoped);
-  } else if (name === "dir") {
-    emit(written, family.NodeDir, { ...own, value: judgedLater(value) });
-  } else if (name === "xml:base") {
-    emit(written, family.NodeXmlBase, own);
-  } else if (name === "data-qti-suppress-tts") {
-    emit(written, family.NodeSuppressTts, { ...own, value: judgedLater(value) });
-  } else if (name === "data-catalog-idref") {
-    emit(written, family.NodeCatalogIdref, { ...own, document: documentId });
-  } else if (name === "id") {
-    writeId(written, subject);
-  } else {
-    const relation = ariaRelations.get(name);
-    if (relation !== undefined) {
-      emit(written, relation, own);
+const writeFamily = (
+  written: Written,
+  name: string,
+  subject: Subject,
+): Effect.Effect<void, ImportRefused> =>
+  Effect.gen(function* writeFamilyRow() {
+    const { attribute, documentId, kind, node, rootKind, tree, value } = subject;
+    const own = { attribute, kind, node, value };
+    const scoped = { ...own, rootKind, tree };
+    const where = `the ${name} attribute of ${kind}`;
+    if (name === "class") {
+      emit(written, family.NodeClass, { ...own, value: ClassList(value) });
+    } else if (name === "lang") {
+      emit(written, family.NodeLang, { ...own, value: ContentLanguage(value) });
+    } else if (name === "xml:lang") {
+      emit(written, family.NodeXmlLang, scoped);
+    } else if (name === "label") {
+      emit(written, family.NodeLabel, scoped);
+    } else if (name === "dir") {
+      const dir = yield* closedOf(TextDirection.handles, value, "attribute-lexical", where);
+      emit(written, family.NodeDir, { ...own, value: dir });
+    } else if (name === "xml:base") {
+      emit(written, family.NodeXmlBase, { ...own, value: XmlBaseUri(value) });
+    } else if (name === "data-qti-suppress-tts") {
+      const mode = yield* closedOf(SuppressTtsMode.handles, value, "attribute-lexical", where);
+      emit(written, family.NodeSuppressTts, { ...own, value: mode });
+    } else if (name === "data-catalog-idref") {
+      emit(written, family.NodeCatalogIdref, {
+        ...own,
+        document: documentId,
+        value: IdReference(value),
+      });
+    } else if (name === "id") {
+      writeId(written, subject);
+    } else {
+      const relation = ariaRelations.get(name);
+      if (relation !== undefined) {
+        const roster = ariaRosters.get(name);
+        const narrowed =
+          roster === undefined ? value : yield* closedOf(roster, value, "attribute-lexical", where);
+        emit(written, relation, { ...own, value: narrowed });
+      }
     }
-  }
-};
+  });
 
 /**
  * Write the `AttributeIdref` row of each token of an identifier-reference attribute, the
@@ -283,47 +345,50 @@ const writeIdrefs = (
 
 /**
  * Write the rows of one element's shared attributes into `written`.
+ *
+ * @returns Nothing; `ImportRefused` for a closed value outside its roster.
  */
 const writeElement = (
   written: Written,
   element: Element,
   node: { readonly id: string; readonly kind: NodeKindHandle },
   context: Pick<Subject, "documentId" | "rootKind" | "tree">,
-): void => {
-  const { kind } = node;
-  for (const { qname: name, value: lexical } of readable(element)) {
-    const attribute = AttributeName.handles.find((known) => known === name);
-    const whiteSpace = whiteSpaceOf(kind, name);
-    const skipped =
-      attribute === undefined ||
-      Option.isNone(whiteSpace) ||
-      !isShared(name) ||
-      (name === "label" && kind === "qti-assessment-item");
-    if (!skipped) {
-      const typed = typedAttribute(
-        Rows.empty(),
-        node.id,
-        kind,
-        attribute,
-        lexical,
-        whiteSpace.value,
-      );
-      for (const fact of Rows.of(typed.rows, AttributeLexical)) {
-        emit(written, AttributeLexical, fact);
-      }
+): Effect.Effect<void, ImportRefused> =>
+  Effect.gen(function* writeElementRows() {
+    const { kind } = node;
+    for (const { qname: name, value: lexical } of readable(element)) {
+      const attribute = AttributeName.handles.find((known) => known === name);
+      const whiteSpace = whiteSpaceOf(kind, name);
+      const skipped =
+        attribute === undefined ||
+        Option.isNone(whiteSpace) ||
+        !isShared(name) ||
+        (name === "label" && kind === "qti-assessment-item");
+      if (!skipped) {
+        const typed = typedAttribute(
+          Rows.empty(),
+          node.id,
+          kind,
+          attribute,
+          lexical,
+          whiteSpace.value,
+        );
+        for (const fact of Rows.of(typed.rows, AttributeLexical)) {
+          emit(written, AttributeLexical, fact);
+        }
 
-      const subject = { ...context, attribute, kind, node: node.id, value: typed.value };
-      if (name !== "headers") {
-        writeFamily(written, name, subject);
-      }
+        const subject = { ...context, attribute, kind, node: node.id, value: typed.value };
+        if (name !== "headers") {
+          yield* writeFamily(written, name, subject);
+        }
 
-      const reference = idrefNames.find((known) => known === name);
-      if (reference !== undefined) {
-        writeIdrefs(written, reference, subject, lexical);
+        const reference = idrefNames.find((known) => known === name);
+        if (reference !== undefined) {
+          writeIdrefs(written, reference, subject, lexical);
+        }
       }
     }
-  }
-};
+  });
 
 /**
  * Write the rows of every shared attribute of a tree: the family, ARIA and identifier-reference
@@ -338,14 +403,16 @@ const writeElement = (
  * @param documentId - The id of the document the tree is, which every `id` is unique within.
  * @param rows - The rows so far.
  * @returns The rows with this tree's added; `UnmodeledVocabulary` naming the first attribute its
- *   element's registry does not hold, or that no relation here models.
+ *   element's registry does not hold, or that no relation here models; `ImportRefused` under
+ *   `attribute-lexical` for a closed value (`dir`, `data-qti-suppress-tts`, `role`, an `aria-*`)
+ *   outside its roster.
  */
 export const attributeRows = Effect.fn("import.attributeRows")(function* attributeRows(
   tree: Element,
   nodes: NodeIndex,
   documentId: string,
   rows: Rows,
-): Effect.fn.Return<Rows, UnmodeledVocabulary> {
+): Effect.fn.Return<Rows, ImportRefused | UnmodeledVocabulary> {
   const elements = indexedElements(tree, nodes);
   const refusal = firstUnmodeled(elements, nodes);
   if (Option.isSome(refusal)) {
@@ -366,7 +433,7 @@ export const attributeRows = Effect.fn("import.attributeRows")(function* attribu
   for (const element of elements) {
     const node = nodes.get(element);
     if (node !== undefined) {
-      writeElement(written, element, node, {
+      yield* writeElement(written, element, node, {
         documentId,
         rootKind: rootKind.value,
         tree: root.id,

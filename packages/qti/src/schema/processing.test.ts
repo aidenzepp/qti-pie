@@ -3,6 +3,7 @@ import { inspect } from "node:util";
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as expressionAttributes from "#qti/schema/expression-attributes.ts";
@@ -320,9 +321,9 @@ describe("processing", () => {
 
   it("types both template URIs as anyUri", () => {
     const { ResponseProcessingTemplate, ResponseProcessingTemplateLocation } = processing.relations;
-    assert.strictEqual(ResponseProcessingTemplate.fields.uri.pattern.source, patterns.anyUri);
+    assert.strictEqual(ResponseProcessingTemplate.fields.uri.base.pattern.source, patterns.anyUri);
     assert.strictEqual(
-      ResponseProcessingTemplateLocation.fields.uri.pattern.source,
+      ResponseProcessingTemplateLocation.fields.uri.base.pattern.source,
       patterns.anyUri,
     );
   });
@@ -699,6 +700,27 @@ describe("processing", () => {
           ["document", "identifier", "kind"],
         ],
       ],
+    );
+  });
+});
+
+describe("contracts (processing)", () => {
+  it("types ResponseProcessingTemplate.uri TemplateUri", () => {
+    assert.strictEqual(
+      processing.ResponseProcessingTemplate.fields.uri.name,
+      contracts.TemplateUri.name,
+    );
+  });
+  it("types ResponseProcessingTemplateLocation.uri TemplateLocationUri", () => {
+    assert.strictEqual(
+      processing.ResponseProcessingTemplateLocation.fields.uri.name,
+      contracts.TemplateLocationUri.name,
+    );
+  });
+  it("types TemplateParameterRef.identifier TemplateParameterName", () => {
+    assert.strictEqual(
+      processing.TemplateParameterRef.fields.identifier.name,
+      contracts.TemplateParameterName.name,
     );
   });
 });

@@ -4,10 +4,18 @@
  * `qmd:qtiMetadata`, whether the record sits in a manifest or in an external file.
  */
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
-import { collapse, replace, Rows } from "#qti/import/tree.ts";
+import { Effect } from "effect";
+import type { ImportRefused } from "#qti/import/refusal.ts";
+import { closedOf, collapse, replace, Rows } from "#qti/import/tree.ts";
 import type { NodeIndex } from "#qti/import/tree.ts";
+import {
+  QmdFeedbackTypeValue,
+  QmdInteractionTypeValue,
+  QmdScoringModeValue,
+  XsBoolean,
+} from "#qti/schema/content/rosters.ts";
 import * as md from "#qti/schema/metadata.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * The element children of `element`, whatever their namespace.
@@ -75,12 +83,12 @@ const isQmdLeaf = (kind: string): kind is keyof typeof qmdLeaves => kind in qmdL
  * @param qtiMetadata - Its node id.
  * @returns The rows with the leaves' added.
  */
-export const qmdLeafRows = (
+export const qmdLeafRows = Effect.fn("import.qmdLeafRows")(function* qmdLeafRows(
   rows: Rows,
   nodes: NodeIndex,
   qmd: Element,
   qtiMetadata: string,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
   let built = rows;
   const add = <R extends AnyRelation>(relation: R, facts: readonly Fact<R>[]): void => {
     built = Rows.add(built, relation, facts);
@@ -107,11 +115,41 @@ export const qmdLeafRows = (
     } else if (isQmdLeaf(found.kind)) {
       const spec = qmdLeaves[found.kind];
       const value = classed(content, spec.class);
-      // SAFETY: the leaf's column pattern judges the value at commit, which is the importer's refusal for it.
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-      add(spec.arm, [{ id: found.id, qtiMetadata, value }] as never);
+      const { id } = found;
+      const where = `the ${found.kind} of a QTI metadata record`;
+      if (found.kind === "qmd:itemTemplate") {
+        const closed = yield* closedOf(XsBoolean.handles, value, "attribute-lexical", where);
+        add(md.QmdItemTemplate, [{ id, qtiMetadata, value: closed }]);
+      } else if (found.kind === "qmd:timeDependent") {
+        const closed = yield* closedOf(XsBoolean.handles, value, "attribute-lexical", where);
+        add(md.QmdTimeDependent, [{ id, qtiMetadata, value: closed }]);
+      } else if (found.kind === "qmd:composite") {
+        const closed = yield* closedOf(XsBoolean.handles, value, "attribute-lexical", where);
+        add(md.QmdComposite, [{ id, qtiMetadata, value: closed }]);
+      } else if (found.kind === "qmd:solutionAvailable") {
+        const closed = yield* closedOf(XsBoolean.handles, value, "attribute-lexical", where);
+        add(md.QmdSolutionAvailable, [{ id, qtiMetadata, value: closed }]);
+      } else if (found.kind === "qmd:interactionType") {
+        const closed = yield* closedOf(
+          QmdInteractionTypeValue.handles,
+          value,
+          "value-lexical",
+          where,
+        );
+        add(md.QmdInteractionType, [{ id, qtiMetadata, value: closed }]);
+      } else if (found.kind === "qmd:feedbackType") {
+        const closed = yield* closedOf(QmdFeedbackTypeValue.handles, value, "value-lexical", where);
+        add(md.QmdFeedbackType, [{ id, qtiMetadata, value: closed }]);
+      } else if (found.kind === "qmd:scoringMode") {
+        const closed = yield* closedOf(QmdScoringModeValue.handles, value, "value-lexical", where);
+        add(md.QmdScoringMode, [{ id, qtiMetadata, value: closed }]);
+      } else {
+        // SAFETY: the leaf's column pattern judges the tool string at commit, which is the importer's refusal for it.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+        add(spec.arm, [{ id, qtiMetadata, value }] as never);
+      }
     }
   }
 
   return built;
-};
+});

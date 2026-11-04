@@ -1,8 +1,10 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import { Predicate } from "effect";
 
 import { inventory } from "#qti/schema/content/xsd-inventory.ts";
 import * as attributes from "#qti/schema/attributes.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as document from "#qti/schema/document.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as asi from "#qti/schema/kinds/asi.ts";
@@ -114,6 +116,91 @@ describe("attributes", () => {
     assert.include(checks, "AriaRoleNotSource");
   });
 
+  it("holds each closed family and ARIA value to its roster", () => {
+    const { relations } = attributes;
+    const closed: readonly (readonly [{ readonly roster: unknown }, unknown])[] = [
+      [relations.AriaAtomic.fields.value, rosters.XsBoolean],
+      [relations.AriaAutocomplete.fields.value, rosters.AriaAutocompleteValue],
+      [relations.AriaBusy.fields.value, rosters.XsBoolean],
+      [relations.AriaChecked.fields.value, rosters.AriaTristate],
+      [relations.AriaCurrent.fields.value, rosters.AriaCurrentValue],
+      [relations.AriaDisabled.fields.value, rosters.XsBoolean],
+      [relations.AriaExpanded.fields.value, rosters.AriaTrueFalseUndefined],
+      [relations.AriaHaspopup.fields.value, rosters.XsBoolean],
+      [relations.AriaHidden.fields.value, rosters.XsBoolean],
+      [relations.AriaInvalid.fields.value, rosters.AriaInvalidValue],
+      [relations.AriaLive.fields.value, rosters.AriaLiveValue],
+      [relations.AriaModal.fields.value, rosters.XsBoolean],
+      [relations.AriaMultiline.fields.value, rosters.XsBoolean],
+      [relations.AriaMultiselectable.fields.value, rosters.XsBoolean],
+      [relations.AriaOrientation.fields.value, rosters.AriaOrientationValue],
+      [relations.AriaPressed.fields.value, rosters.AriaTristate],
+      [relations.AriaReadonly.fields.value, rosters.XsBoolean],
+      [relations.AriaRequired.fields.value, rosters.XsBoolean],
+      [relations.AriaRole.fields.value, rosters.AriaRoleValue],
+      [relations.AriaSelected.fields.value, rosters.AriaTrueFalseUndefined],
+      [relations.AriaSort.fields.value, rosters.AriaSortValue],
+      [relations.NodeDir.fields.value, rosters.TextDirection],
+      [relations.NodeSuppressTts.fields.value, rosters.SuppressTtsMode],
+    ];
+
+    assert.strictEqual(closed.length, 23);
+    for (const [field, roster] of closed) {
+      assert.strictEqual(field.roster, roster);
+    }
+  });
+
+  it("states BdoDirNotAuto and AriaRoleH1 by form over handles", () => {
+    const predicates = new Map(
+      attributes.rules.flatMap((rule) =>
+        rule.kind === "check" &&
+        (rule.name === "BdoDirNotAuto" || rule.name === "AriaRoleH1") &&
+        Predicate.hasProperty(rule, "desc") &&
+        Predicate.hasProperty(rule.desc, "predicate")
+          ? [[rule.name, structuredClone(rule.desc.predicate)] as const]
+          : [],
+      ),
+    );
+
+    assert.deepStrictEqual(predicates.get("BdoDirNotAuto"), {
+      args: [
+        {
+          kind: "compare",
+          left: { field: "kind", kind: "field" },
+          op: "ne",
+          right: { kind: "literal", type: undefined, value: "bdo" },
+        },
+        {
+          kind: "compare",
+          left: { field: "value", kind: "field" },
+          op: "ne",
+          right: { kind: "literal", type: undefined, value: "auto" },
+        },
+      ],
+      kind: "or",
+    });
+    assert.deepStrictEqual(predicates.get("AriaRoleH1"), {
+      args: [
+        {
+          kind: "compare",
+          left: { field: "kind", kind: "field" },
+          op: "ne",
+          right: { kind: "literal", type: undefined, value: "h1" },
+        },
+        {
+          arg: { field: "value", kind: "field" },
+          kind: "in",
+          values: ["heading", "tab", "presentation"],
+        },
+      ],
+      kind: "or",
+    });
+    assert.include(rosters.TextDirection.handles, "auto");
+    for (const handle of ["heading", "tab", "presentation"]) {
+      assert.include(rosters.AriaRoleValue.handles, handle);
+    }
+  });
+
   it("admits each family and ARIA relation by its kind and attribute together", () => {
     const family = Object.entries(attributes.relations).filter(
       ([name]) => name.startsWith("Aria") || /^Node./u.test(name),
@@ -210,5 +297,62 @@ describe("attributes", () => {
     );
     assert.include(Object.keys(probe.relations), "AttributeAdmission");
     assert.include(Object.keys(probe.relations), "AttributeIdref");
+  });
+});
+
+describe("contracts (attributes)", () => {
+  it("types NodeCatalogIdref.value IdReference", () => {
+    assert.strictEqual(attributes.NodeCatalogIdref.fields.value.name, contracts.IdReference.name);
+  });
+  it("types AriaActivedescendant.value IdReference", () => {
+    assert.strictEqual(
+      attributes.AriaActivedescendant.fields.value.name,
+      contracts.IdReference.name,
+    );
+  });
+  it("types AriaDetails.value IdReference", () => {
+    assert.strictEqual(attributes.AriaDetails.fields.value.name, contracts.IdReference.name);
+  });
+  it("types AriaErrormessage.value IdReference", () => {
+    assert.strictEqual(attributes.AriaErrormessage.fields.value.name, contracts.IdReference.name);
+  });
+  it("types NodeXmlBase.value XmlBaseUri", () => {
+    assert.strictEqual(attributes.NodeXmlBase.fields.value.name, contracts.XmlBaseUri.name);
+  });
+  it("types NodeClass.value ClassList", () => {
+    assert.strictEqual(attributes.NodeClass.fields.value.name, contracts.ClassList.name);
+  });
+  it("types NodeLang.value ContentLanguage", () => {
+    assert.strictEqual(attributes.NodeLang.fields.value.name, contracts.ContentLanguage.name);
+  });
+  it("types AriaColcount.value AriaInteger", () => {
+    assert.strictEqual(attributes.AriaColcount.fields.value.name, contracts.AriaInteger.name);
+  });
+  it("types AriaColindex.value AriaInteger", () => {
+    assert.strictEqual(attributes.AriaColindex.fields.value.name, contracts.AriaInteger.name);
+  });
+  it("types AriaColspan.value AriaInteger", () => {
+    assert.strictEqual(attributes.AriaColspan.fields.value.name, contracts.AriaInteger.name);
+  });
+  it("types AriaRowcount.value AriaInteger", () => {
+    assert.strictEqual(attributes.AriaRowcount.fields.value.name, contracts.AriaInteger.name);
+  });
+  it("types AriaRowindex.value AriaInteger", () => {
+    assert.strictEqual(attributes.AriaRowindex.fields.value.name, contracts.AriaInteger.name);
+  });
+  it("types AriaRowspan.value AriaInteger", () => {
+    assert.strictEqual(attributes.AriaRowspan.fields.value.name, contracts.AriaInteger.name);
+  });
+  it("types AriaSetsize.value AriaInteger", () => {
+    assert.strictEqual(attributes.AriaSetsize.fields.value.name, contracts.AriaInteger.name);
+  });
+  it("types AriaLevel.value AriaPositiveInteger", () => {
+    assert.strictEqual(attributes.AriaLevel.fields.value.name, contracts.AriaPositiveInteger.name);
+  });
+  it("types AriaPosinset.value AriaPositiveInteger", () => {
+    assert.strictEqual(
+      attributes.AriaPosinset.fields.value.name,
+      contracts.AriaPositiveInteger.name,
+    );
   });
 });

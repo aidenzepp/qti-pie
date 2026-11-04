@@ -7,13 +7,9 @@
  * `qti-base-value` is not a relation of this module: its arm is `Literal` of the processing
  * module.
  */
-import { contained, on, relation, str, uuid } from "@bjornpagen/grizzle";
-import * as patterns from "#qti/schema/patterns.ts";
+import { contained, on, relation, uuid } from "@bjornpagen/grizzle";
+import { CategoryList, SectionReference } from "#qti/schema/contracts.ts";
 import * as processing from "#qti/schema/processing.ts";
-
-const ncName = str.regex(patterns.ncName);
-
-const identifierList = str.regex(patterns.identifierList);
 
 /**
  * The `qti-and` operator; its operands are `Operand` rows.
@@ -235,7 +231,7 @@ export const Truncate = relation("Truncate", { id: uuid }, ["id"]);
  */
 export const ExpressionExcludeCategory = relation(
   "ExpressionExcludeCategory",
-  { node: uuid, value: identifierList },
+  { node: uuid, value: CategoryList },
   ["node"],
 );
 
@@ -244,7 +240,7 @@ export const ExpressionExcludeCategory = relation(
  */
 export const ExpressionIncludeCategory = relation(
   "ExpressionIncludeCategory",
-  { node: uuid, value: identifierList },
+  { node: uuid, value: CategoryList },
   ["node"],
 );
 
@@ -253,7 +249,7 @@ export const ExpressionIncludeCategory = relation(
  */
 export const ExpressionSectionIdentifier = relation(
   "ExpressionSectionIdentifier",
-  { node: uuid, value: ncName },
+  { node: uuid, value: SectionReference },
   ["node"],
 );
 

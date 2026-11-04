@@ -18,6 +18,21 @@ const effectLogStatement = {
     'ExpressionStatement:matches([expression.type="CallExpression"], [expression.type="YieldExpression"]):has(CallExpression[callee.type="MemberExpression"][callee.object.name="Effect"][callee.property.name=/^log(Trace|Debug|Info|Warning|Error|Fatal)?$/])',
 };
 
+/**
+ * Import specifiers every package refuses: relative paths, and absolute or `file:` paths.
+ */
+const sharedImportPatterns = [
+  {
+    message: "Use the package's `#<package>/*` import alias instead of a relative source import.",
+    regex: "^\\.{1,2}/",
+  },
+  {
+    message:
+      "Use the package's `#<package>/*` import alias or a dependency's exported name instead of an absolute or `file:` path.",
+    regex: "^(?:/|file:)",
+  },
+];
+
 export default defineConfig({
   fmt: {
     ignorePatterns: [
@@ -25,7 +40,8 @@ export default defineConfig({
       ".claude/**",
       "pnpm-lock.yaml",
       "**/migrations/**",
-      "packages/plate/README.md",
+      "README.md",
+      "packages/*/README.md",
     ],
     jsdoc: { commentLineStrategy: "multiline", lineWrappingStyle: "balance" },
   },
@@ -35,20 +51,30 @@ export default defineConfig({
     jsPlugins: ["./tools/lint-plugin.mjs", "@stylistic/eslint-plugin"],
     // Keep source imports stable when files move: each package maps `#<package>/*` to its `src/` in package.json
     // `imports`, which Node resolves at run time and TypeScript resolves under nodenext.
+    // The resolver already refuses an unlisted subpath and another package's alias; lint refuses what it allows:
+    // a relative specifier, an absolute or `file:` specifier, and (in crust) the package's own name.
+    // A later override replaces the rule's options for its files, so the crust override repeats the shared patterns.
     // Node-loaded lint plugins retain relative .mjs imports.
     // https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-imports
     overrides: [
       {
         files: ["**/*.ts", "**/*.tsx"],
         rules: {
+          "no-restricted-imports": ["error", { patterns: sharedImportPatterns }],
+        },
+      },
+      {
+        files: ["packages/crust/**/*.ts"],
+        rules: {
           "no-restricted-imports": [
             "error",
             {
               patterns: [
+                ...sharedImportPatterns,
                 {
                   message:
-                    "Use the package's `#<package>/*` import alias instead of a relative source import.",
-                  regex: "^\\.{1,2}/",
+                    "Import crust's own files through the `#crust/*` alias, not through the package name.",
+                  regex: "^@qti-pie/crust(?:/|$)",
                 },
               ],
             },

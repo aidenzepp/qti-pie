@@ -5,11 +5,13 @@ import type { AnyRelation } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Context, Effect, Layer, Predicate } from "effect";
-import { describe, inject } from "vitest";
+import { describe, inject, test } from "vitest";
 import { AuthorAppLayer } from "#qti/db/layer.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
 import { changeSetOf, retrySchedule } from "#qti/import/package.ts";
+import { isMappedLaw, ruleOfLaw } from "#qti/import/refusal.ts";
+import type { Rule } from "#qti/import/refusal.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { listPackage, readEntry } from "#qti/package/read.ts";
 import { ResourceLomGeneral } from "#qti/schema/lang.ts";
@@ -68,7 +70,7 @@ import {
   ValueSet,
   relations as valueRelations,
 } from "#qti/schema/value.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**
@@ -98,6 +100,7 @@ type Law =
   | { readonly fields: readonly string[]; readonly kind: "key"; readonly relation: string }
   | { readonly fields: readonly string[]; readonly kind: "primaryKey"; readonly relation: string }
   | { readonly kind: "check"; readonly name: string; readonly relation: string }
+  | { readonly contract: string; readonly kind: "contract" }
   | { readonly flags: "su" | "u"; readonly kind: "pattern"; readonly source: string }
   | { readonly from: Side; readonly kind: "contained"; readonly to: Side }
   | { readonly from: Side; readonly kind: "mirrors"; readonly to: Side }
@@ -611,8 +614,8 @@ const negatives: readonly Negative[] = [
     alter: (draft) => {
       set(first(draft, File), "href", "../x");
     },
-    laws: [{ flags: "u", kind: "pattern", source: patterns.hrefInPackage }],
-    name: "a file with href ../x is refused by the href pattern",
+    laws: [{ contract: "PackagePath", kind: "contract" }],
+    name: "a file with href ../x is refused by the PackagePath contract",
   },
   {
     alter: (draft) => {
@@ -725,8 +728,8 @@ const negatives: readonly Negative[] = [
         value: "x".repeat(257),
       });
     },
-    laws: [{ flags: "su", kind: "pattern", source: patterns.toolString }],
-    name: "a QmdToolName of 257 characters is refused by the tool string pattern",
+    laws: [{ contract: "ToolName", kind: "contract" }],
+    name: "a QmdToolName of 257 characters is refused by the ToolName contract",
   },
   {
     alter: (draft) => {
@@ -907,7 +910,7 @@ const negatives: readonly Negative[] = [
   {
     alter: (draft) => {
       set(first(draft, TypedBinding), "maxCount", 2n);
-      Object.assign(first(draft, ChoiceInteraction), { maxChoices: "2", maxChoicesN: 2n });
+      Object.assign(first(draft, ChoiceInteraction), { maxChoicesN: 2n });
     },
     laws: [{ kind: "check", name: "BindingMax", relation: TypedBinding.name }],
     name: "a binding with maxCount 2 on a single variable is refused by BindingMax",
@@ -929,9 +932,7 @@ const negatives: readonly Negative[] = [
   {
     alter: (draft) => {
       Object.assign(first(draft, ChoiceInteraction), {
-        maxChoices: "1",
         maxChoicesN: 1n,
-        minChoices: "2",
         minChoicesN: 2n,
       });
     },
@@ -1006,10 +1007,53 @@ const negatives: readonly Negative[] = [
     alter: (draft) => {
       set(first(draft, ResponseProcessingTemplate), "uri", uri);
     },
-    laws: [{ flags: "u", kind: "pattern", source: patterns.anyUri }],
-    name: `a response processing template ${uri} is refused by the anyUri pattern`,
+    laws: [{ contract: "TemplateUri", kind: "contract" }],
+    name: `a response processing template ${uri} is refused by the TemplateUri contract`,
   })),
 ];
+
+/**
+ * Every pair of a contract and the rule the lease tables of the contract wave expect for it: the
+ * packaging, processing, schema and content tables each name a contract law and a rule. The
+ * database-free guard below holds each pair to `ruleOfLaw`, so a lease case cannot expect a rule
+ * the map does not give.
+ */
+const contractExpectations: readonly (readonly [string, Rule])[] = [
+  ["AccessMode", "drd-value"],
+  ["AccessModeAdapted", "drd-value"],
+  ["AriaPositiveInteger", "attribute-lexical"],
+  ["CaseItemUri", "uri-syntax"],
+  ["ContentLanguage", "attribute-lexical"],
+  ["DrdAdaptationUri", "uri-syntax"],
+  ["ExpressionCoords", "P6"],
+  ["GlossaryUri", "uri-syntax"],
+  ["LiteralIdentifierValue", "P7"],
+  ["MapKeyIdentifierValue", "map-key-lexical"],
+  ["PackagePath", "href-path"],
+  ["RectCoords", "attribute-lexical"],
+  ["StatisticContextUri", "uri-syntax"],
+  ["StatisticMeasure", "usage-lexical"],
+  ["StatisticName", "usage-lexical"],
+  ["TemplateUri", "uri-syntax"],
+  ["ToolName", "tool-string-length"],
+  ["UsageCaseCount", "usage-lexical"],
+  ["UsageFieldIdentifier", "usage-lexical"],
+  ["UsageFloatValue", "usage-typed-value"],
+  ["UsageIntegerValue", "usage-typed-value"],
+  ["UsageMappingScore", "usage-lexical"],
+  ["UsagePartIdentifier", "usage-lexical"],
+];
+
+describe("schema/rules.test.ts, the contract laws the lease tables expect", () => {
+  for (const [contract, rule] of contractExpectations) {
+    test(`${contract} is a mapped law of the rule ${rule}`, () => {
+      const law = { contract, kind: "contract" } as const;
+
+      assert.strictEqual(ruleOfLaw(law), rule);
+      assert.isTrue(isMappedLaw(law));
+    });
+  }
+});
 
 describe.skipIf(!hasLease)(
   "schema/rules.test.ts, on the lease",

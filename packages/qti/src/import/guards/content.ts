@@ -15,7 +15,7 @@ import { collapse, replace, Rows } from "#qti/import/tree.ts";
 import type { WhiteSpace } from "#qti/import/tree.ts";
 import { IdrefAttribute } from "#qti/schema/content/rosters.ts";
 import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
-import { typedValues } from "#qti/schema/attribute-homes.ts";
+import { spelledText, typedValues } from "#qti/schema/attribute-homes.ts";
 import * as shared from "#qti/schema/attributes.ts";
 import {
   AriaLabel,
@@ -45,72 +45,24 @@ import {
   VideoPoster,
   VideoSrc,
 } from "#qti/schema/html/media.ts";
-import { ChoiceInteraction, TypedBinding } from "#qti/schema/interaction.ts";
+import { TypedBinding } from "#qti/schema/interaction.ts";
 import {
-  AssociableHotspot,
-  AssociableHotspotMatchMin,
   AssociateInteraction,
-  AssociateMaxAssociations,
-  AssociateMinAssociations,
   GraphicAssociateInteraction,
-  GraphicAssociateMaxAssociations,
-  GraphicAssociateMinAssociations,
   MatchInteraction,
-  MatchMaxAssociations,
-  MatchMinAssociations,
-  SimpleAssociableChoice,
-  SimpleAssociableChoiceMatchMin,
 } from "#qti/schema/interactions/associate.ts";
-import {
-  Gap,
-  GapImg,
-  GapImgLeft,
-  GapImgMatchMin,
-  GapImgTop,
-  GapMatchInteraction,
-  GapMatchMaxAssociations,
-  GapMatchMinAssociations,
-  GapText,
-  GapTextMatchMin,
-  GraphicGapMatchInteraction,
-  GraphicGapMatchMaxAssociations,
-  GraphicGapMatchMinAssociations,
-} from "#qti/schema/interactions/gap.ts";
+import { Gap, GapImgLeft, GapImgTop, GapMatchInteraction } from "#qti/schema/interactions/gap.ts";
 import {
   Hottext,
   HottextInteraction,
-  HottextMaxChoices,
-  HottextMinChoices,
   HottextOwner,
   HotspotChoice,
   HotspotInteraction,
-  HotspotMaxChoices,
-  HotspotMinChoices,
   PositionObjectInteraction,
-  PositionObjectMaxChoices,
-  PositionObjectMinChoices,
   SelectPointInteraction,
-  SelectPointMaxChoices,
-  SelectPointMinChoices,
 } from "#qti/schema/interactions/hot.ts";
-import {
-  GraphicOrderInteraction,
-  GraphicOrderMaxChoices,
-  GraphicOrderMaxChoicesN,
-  GraphicOrderMinChoices,
-  GraphicOrderMinChoicesN,
-  OrderInteraction,
-  OrderMaxChoices,
-  OrderMaxChoicesN,
-  OrderMinChoices,
-  OrderMinChoicesN,
-} from "#qti/schema/interactions/order.ts";
-import {
-  MediaCoords,
-  MediaInteraction,
-  MediaMaxPlays,
-  MediaMinPlays,
-} from "#qti/schema/interactions/other.ts";
+import { GraphicOrderInteraction, OrderInteraction } from "#qti/schema/interactions/order.ts";
+import { MediaCoords } from "#qti/schema/interactions/other.ts";
 import {
   ExtendedTextInteraction,
   ExtendedTextMaxStrings,
@@ -122,6 +74,7 @@ import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/s
 import { LomLanguage, ResourceLom } from "#qti/schema/metadata.ts";
 import {
   AttributeLexical,
+  AttributeSpelling,
   Edge,
   EntityReference,
   Node,
@@ -559,305 +512,10 @@ const isNodeValue = Schema.is(NodeValue);
 const valuesOfRelation = (rows: Rows, relation: AnyRelation): ReadonlyMap<string, string> =>
   new Map((rows.get(relation) ?? []).filter(isNodeValue).map((row) => [row.node, row.value]));
 
-/**
- * The non-negative integer a lexical form writes, 0 for a form that is no natural number, as the
- * importer reads it.
- */
-const naturalOf = (lexical: string): bigint =>
-  /^\+?[0-9]+$/u.test(lexical) ? BigInt(lexical) : 0n;
-
-/**
- * One typed `<attr>N` column of a row: what it holds, the attribute as the source wrote it (none
- * when it omitted the attribute) and the value the schema defaults the omitted attribute to.
- */
-interface Count {
-  readonly actual: bigint;
-  readonly column: string;
-  readonly fallback: bigint;
-  readonly id: string;
-  readonly owner: string;
-  readonly written: string | undefined;
-}
-
 type Written = ReadonlyMap<string, string>;
 
 const written = (facts: readonly { readonly node: string; readonly value: string }[]): Written =>
   new Map(facts.map((fact) => [fact.node, fact.value]));
-
-const choiceBounds = (
-  owner: string,
-  facts: readonly {
-    readonly id: string;
-    readonly maxChoicesN: bigint;
-    readonly minChoicesN: bigint;
-  }[],
-  lexical: { readonly max: Written; readonly maxFallback: bigint; readonly min: Written },
-): readonly Count[] =>
-  facts.flatMap((fact) => [
-    {
-      actual: fact.maxChoicesN,
-      column: "maxChoicesN",
-      fallback: lexical.maxFallback,
-      id: fact.id,
-      owner,
-      written: lexical.max.get(fact.id),
-    },
-    {
-      actual: fact.minChoicesN,
-      column: "minChoicesN",
-      fallback: 0n,
-      id: fact.id,
-      owner,
-      written: lexical.min.get(fact.id),
-    },
-  ]);
-
-const associationBounds = (
-  owner: string,
-  facts: readonly {
-    readonly id: string;
-    readonly maxAssociationsN: bigint;
-    readonly minAssociationsN: bigint;
-  }[],
-  lexical: { readonly max: Written; readonly min: Written },
-): readonly Count[] =>
-  facts.flatMap((fact) => [
-    {
-      actual: fact.maxAssociationsN,
-      column: "maxAssociationsN",
-      fallback: 1n,
-      id: fact.id,
-      owner,
-      written: lexical.max.get(fact.id),
-    },
-    {
-      actual: fact.minAssociationsN,
-      column: "minAssociationsN",
-      fallback: 0n,
-      id: fact.id,
-      owner,
-      written: lexical.min.get(fact.id),
-    },
-  ]);
-
-/**
- * A choice's or hotspot's match bounds: `matchMax` is the attribute on the row, and `match-min`
- * has a relation of its own where the schema writes one.
- */
-const matchBounds = (
-  owner: string,
-  facts: readonly {
-    readonly id: string;
-    readonly matchMax: string;
-    readonly matchMaxN: bigint;
-    readonly matchMinN: bigint;
-  }[],
-  min?: Written,
-): readonly Count[] =>
-  facts.flatMap((fact) => [
-    {
-      actual: fact.matchMaxN,
-      column: "matchMaxN",
-      fallback: 0n,
-      id: fact.id,
-      owner,
-      written: fact.matchMax,
-    },
-    ...(min === undefined
-      ? []
-      : [
-          {
-            actual: fact.matchMinN,
-            column: "matchMinN",
-            fallback: 0n,
-            id: fact.id,
-            owner,
-            written: min.get(fact.id),
-          },
-        ]),
-  ]);
-
-/**
- * Every typed count of the interactions and their choices (spec 3.9, 4.5) with its source. A count
- * whose attribute has no lexical relation of its own is not here.
- */
-const countsOf = (rows: Rows): readonly Count[] => {
-  const of = (relation: AnyRelation): Written => valuesOfRelation(rows, relation);
-  const choice = Rows.of(rows, ChoiceInteraction);
-
-  return [
-    ...choiceBounds("ChoiceInteraction", choice, {
-      max: new Map(choice.map((fact) => [fact.id, fact.maxChoices])),
-      maxFallback: 1n,
-      min: new Map(choice.map((fact) => [fact.id, fact.minChoices])),
-    }),
-    ...choiceBounds("HottextInteraction", Rows.of(rows, HottextInteraction), {
-      max: of(HottextMaxChoices),
-      maxFallback: 1n,
-      min: of(HottextMinChoices),
-    }),
-    ...choiceBounds("HotspotInteraction", Rows.of(rows, HotspotInteraction), {
-      max: of(HotspotMaxChoices),
-      maxFallback: 1n,
-      min: of(HotspotMinChoices),
-    }),
-    ...choiceBounds("SelectPointInteraction", Rows.of(rows, SelectPointInteraction), {
-      max: of(SelectPointMaxChoices),
-      maxFallback: 0n,
-      min: of(SelectPointMinChoices),
-    }),
-    ...choiceBounds("PositionObjectInteraction", Rows.of(rows, PositionObjectInteraction), {
-      max: of(PositionObjectMaxChoices),
-      maxFallback: 1n,
-      min: of(PositionObjectMinChoices),
-    }),
-    ...choiceBounds("OrderInteraction", Rows.of(rows, OrderInteraction), {
-      max: of(OrderMaxChoices),
-      maxFallback: 0n,
-      min: of(OrderMinChoices),
-    }),
-    ...choiceBounds("GraphicOrderInteraction", Rows.of(rows, GraphicOrderInteraction), {
-      max: of(GraphicOrderMaxChoices),
-      maxFallback: 0n,
-      min: of(GraphicOrderMinChoices),
-    }),
-    ...associationBounds("AssociateInteraction", Rows.of(rows, AssociateInteraction), {
-      max: of(AssociateMaxAssociations),
-      min: of(AssociateMinAssociations),
-    }),
-    ...associationBounds("MatchInteraction", Rows.of(rows, MatchInteraction), {
-      max: of(MatchMaxAssociations),
-      min: of(MatchMinAssociations),
-    }),
-    ...associationBounds(
-      "GraphicAssociateInteraction",
-      Rows.of(rows, GraphicAssociateInteraction),
-      {
-        max: of(GraphicAssociateMaxAssociations),
-        min: of(GraphicAssociateMinAssociations),
-      },
-    ),
-    ...associationBounds("GapMatchInteraction", Rows.of(rows, GapMatchInteraction), {
-      max: of(GapMatchMaxAssociations),
-      min: of(GapMatchMinAssociations),
-    }),
-    ...associationBounds("GraphicGapMatchInteraction", Rows.of(rows, GraphicGapMatchInteraction), {
-      max: of(GraphicGapMatchMaxAssociations),
-      min: of(GraphicGapMatchMinAssociations),
-    }),
-    ...Rows.of(rows, MediaInteraction).flatMap((fact): readonly Count[] => [
-      {
-        actual: fact.maxPlaysN,
-        column: "maxPlaysN",
-        fallback: 0n,
-        id: fact.id,
-        owner: "MediaInteraction",
-        written: of(MediaMaxPlays).get(fact.id),
-      },
-      {
-        actual: fact.minPlaysN,
-        column: "minPlaysN",
-        fallback: 0n,
-        id: fact.id,
-        owner: "MediaInteraction",
-        written: of(MediaMinPlays).get(fact.id),
-      },
-    ]),
-    ...matchBounds(
-      "SimpleAssociableChoice",
-      Rows.of(rows, SimpleAssociableChoice),
-      of(SimpleAssociableChoiceMatchMin),
-    ),
-    ...matchBounds(
-      "AssociableHotspot",
-      Rows.of(rows, AssociableHotspot),
-      of(AssociableHotspotMatchMin),
-    ),
-    ...matchBounds("GapText", Rows.of(rows, GapText), of(GapTextMatchMin)),
-    ...matchBounds("GapImg", Rows.of(rows, GapImg), of(GapImgMatchMin)),
-  ];
-};
-
-const countCopy = (rows: Rows): Finding => {
-  const found = countsOf(rows).find(
-    (entry) =>
-      entry.actual !== (entry.written === undefined ? entry.fallback : naturalOf(entry.written)),
-  );
-  if (found === undefined) {
-    return undefined;
-  }
-
-  const expected = found.written === undefined ? found.fallback : naturalOf(found.written);
-
-  return refuse(
-    "typed-copy",
-    `${found.owner} ${found.id} holds ${found.column} ${found.actual}; ${
-      found.written === undefined
-        ? "the attribute is omitted, which reads"
-        : `${quoted(found.written)} reads`
-    } ${expected}.`,
-  );
-};
-
-/**
- * The integer each node's row holds.
- */
-const copiesOf = (
-  facts: readonly { readonly node: string; readonly value: bigint }[],
-): ReadonlyMap<string, bigint> => new Map(facts.map((fact) => [fact.node, fact.value]));
-
-/**
- * The optional typed copy of an optional count: its lexical rows beside the rows holding the
- * integer, which are written exactly when the attribute is.
- */
-const optionalCopy = (rows: Rows): Finding => {
-  const pairs: readonly {
-    readonly copies: ReadonlyMap<string, bigint>;
-    readonly lexical: Written;
-    readonly name: string;
-  }[] = [
-    {
-      copies: copiesOf(Rows.of(rows, OrderMaxChoicesN)),
-      lexical: written(Rows.of(rows, OrderMaxChoices)),
-      name: "OrderMaxChoicesN",
-    },
-    {
-      copies: copiesOf(Rows.of(rows, OrderMinChoicesN)),
-      lexical: written(Rows.of(rows, OrderMinChoices)),
-      name: "OrderMinChoicesN",
-    },
-    {
-      copies: copiesOf(Rows.of(rows, GraphicOrderMaxChoicesN)),
-      lexical: written(Rows.of(rows, GraphicOrderMaxChoices)),
-      name: "GraphicOrderMaxChoicesN",
-    },
-    {
-      copies: copiesOf(Rows.of(rows, GraphicOrderMinChoicesN)),
-      lexical: written(Rows.of(rows, GraphicOrderMinChoices)),
-      name: "GraphicOrderMinChoicesN",
-    },
-  ];
-  for (const { copies, lexical, name } of pairs) {
-    for (const [node, text] of lexical) {
-      if (copies.get(node) !== naturalOf(text)) {
-        return refuse(
-          "typed-copy",
-          `${name} ${node} holds ${copies.get(node)?.toString() ?? "no row"}; the attribute ${quoted(text)} reads ${naturalOf(text)}.`,
-        );
-      }
-    }
-
-    const stray = [...copies.keys()].find((node) => !lexical.has(node));
-    if (stray !== undefined) {
-      return refuse(
-        "typed-copy",
-        `${name} ${stray} is written for a node that wrote no attribute.`,
-      );
-    }
-  }
-
-  return undefined;
-};
 
 /**
  * `maxBound` is `bounded` exactly when `max-choices` is not 0.
@@ -1071,10 +729,12 @@ const familyValues = (rows: Rows): ReadonlyMap<string, Written> =>
   );
 
 /**
- * `typed-copy` of the lexical rows: each `AttributeLexical` row differs from the value its class
- * makes of it and, where a typed column holds the attribute, processes to that column. The column
- * is the family relation's or, for any other attribute, the one the renderer reads
- * (`typedValues`), so one table says where each attribute's typed value lives.
+ * `typed-copy` of the lexical and spelling rows: each `AttributeLexical` row differs from the
+ * value its class makes of it and, where a typed column holds the attribute, processes to that
+ * column, or to the node's `AttributeSpelling` row when it has one for the attribute; each spelling
+ * row parses to the column it sits beside. The column is the family relation's or, for any other
+ * attribute, the one the renderer reads (`typedValues`), so one table says where each attribute's
+ * typed value lives.
  *
  * An empty `headers` is carried by a lexical row of `""` because no token row can, so the form
  * does not differ there.
@@ -1082,6 +742,22 @@ const familyValues = (rows: Rows): ReadonlyMap<string, Written> =>
 const lexicalCopy = (rows: Rows): Finding => {
   const typed = familyValues(rows);
   const value = typedValues(rows);
+  const columnOf = (node: string, kind: string, attribute: string): string | undefined =>
+    typed.get(attribute)?.get(node) ?? value(node, kind, attribute);
+
+  const spellings = new Map<string, string>();
+  for (const row of Rows.of(rows, AttributeSpelling)) {
+    spellings.set(`${row.node}\n${row.attribute}`, row.value);
+
+    const column = columnOf(row.node, row.kind, row.attribute);
+    if (column !== undefined && spelledText(row.value) !== column) {
+      return refuse(
+        "typed-copy",
+        `The spelling ${quoted(row.value)} of ${row.attribute} of ${row.kind} ${row.node} does not parse to the typed value ${quoted(column)} it sits beside.`,
+      );
+    }
+  }
+
   for (const row of Rows.of(rows, AttributeLexical)) {
     const whiteSpace = classOf(row.kind, row.attribute);
     if (whiteSpace === undefined || (row.attribute === "headers" && row.value === "")) {
@@ -1097,7 +773,7 @@ const lexicalCopy = (rows: Rows): Finding => {
     }
 
     const column =
-      typed.get(row.attribute)?.get(row.node) ?? value(row.node, row.kind, row.attribute);
+      spellings.get(`${row.node}\n${row.attribute}`) ?? columnOf(row.node, row.kind, row.attribute);
     if (column !== undefined && column !== expected) {
       return refuse(
         "typed-copy",
@@ -1134,8 +810,6 @@ const emptyXmlLang = (rows: Rows): Finding => {
  * `typed-copy`: phase-1's class over this phase's columns (spec 4.11, bin 2).
  */
 const typedCopy = (rows: Rows): Finding =>
-  countCopy(rows) ??
-  optionalCopy(rows) ??
   maxBoundCopy(rows) ??
   bindingCopy(rows) ??
   replaceClass(rows) ??

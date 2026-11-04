@@ -1,6 +1,6 @@
 import { collapse } from "#qti/import/tree.ts";
 import type { BaseTypeOrAny, Cardinality, EffectiveType } from "#qti/processing/types.ts";
-import type { Element, XmlDocument } from "#qti/xml/tree.ts";
+import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
  * The mode a processing tree is checked in: an item's, a test's, or a template's, whose built-in

@@ -1,8 +1,8 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The XML 1.0 section 4.3.3 label spellings (`UTF-8`, `UTF-16`) and the closed encoder-class names (`utf8`) are this module's data, not identifiers passed to a Node encoding API. */
 import { Effect, Option } from "effect";
-import { classify } from "#qti/xml/charset.ts";
-import type { EncoderClass } from "#qti/xml/charset.ts";
-import { ReaderRefusal } from "#qti/xml/errors.ts";
+import { classify } from "#crust/charset.ts";
+import type { EncoderClass } from "#crust/charset.ts";
+import { ReaderRefusal } from "#crust/errors.ts";
 
 /**
  * A document's characters and the encoding label it was read under.

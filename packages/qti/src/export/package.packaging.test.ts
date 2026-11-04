@@ -33,6 +33,7 @@ const positives = [
   "usage3",
   "usage3-typed",
   "usage3-padded",
+  "usage3-float-padded",
   "outcome",
   "lti301",
   "lti300",

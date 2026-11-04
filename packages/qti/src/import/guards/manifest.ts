@@ -39,7 +39,7 @@ import {
   variantDrdRelations,
 } from "#qti/schema/package.ts";
 import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
  * A manifest guard refused the rows.
@@ -395,10 +395,10 @@ const replaceTabs = (rows: Rows): Finding => {
 };
 
 /**
- * `typed-copy`: a package's `schemaversion` is the text of every `cp:schemaversion` of its
- * manifest, every lexical row of a manifest node processes under its attribute's class to the
- * column it shadows and differs from it as read, and no column that holds a `replace` value holds
- * a tab, line feed or carriage return.
+ * `typed-copy`: a package's manifest holds a `cp:schemaversion` row, the text of every
+ * `cp:schemaversion` is its row's `version`, every lexical row of a manifest node processes under
+ * its attribute's class to the column it shadows and differs from it as read, and no column that
+ * holds a `replace` value holds a tab, line feed or carriage return.
  */
 const typedCopy = (rows: Rows, index: Index): Finding => {
   const metadata = Rows.of(rows, ManifestMetadata);
@@ -413,14 +413,6 @@ const typedCopy = (rows: Rows, index: Index): Finding => {
     if (held.length === 0) {
       return refuse("typed-copy", `Package ${row.id} has no ManifestSchemaVersion row.`);
     }
-
-    const stray = held.find((version) => version.value !== row.schemaversion);
-    if (stray !== undefined) {
-      return refuse(
-        "typed-copy",
-        `Package ${row.id} holds schemaversion ${row.schemaversion} beside a cp:schemaversion of ${stray.value}.`,
-      );
-    }
   }
 
   for (const [id, node] of index.nodes) {
@@ -429,10 +421,10 @@ const typedCopy = (rows: Rows, index: Index): Finding => {
         .map((edge) => index.texts.get(edge.child) ?? "")
         .join("");
       const version = versions.find((found) => found.id === id);
-      if (version?.value !== text) {
+      if (version?.version !== text) {
         return refuse(
           "typed-copy",
-          `The cp:schemaversion ${id} reads ${JSON.stringify(text)}, and ${version === undefined ? "no ManifestSchemaVersion row holds it" : `its row holds ${version.value}`}; a schemaversion is 3.0.0 or 3.0.1.`,
+          `The cp:schemaversion ${id} reads ${JSON.stringify(text)}, and ${version === undefined ? "no ManifestSchemaVersion row holds it" : `its row holds ${version.version}`}; a schemaversion is 3.0.0 or 3.0.1.`,
         );
       }
     }
@@ -523,7 +515,7 @@ const ordering = (rows: Rows): Finding => {
  * `file-listed`: every file entry of the package is the `href` of some `File`.
  */
 const fileListed = (rows: Rows, entries: readonly Entry[]): Finding => {
-  const listed = new Set(Rows.of(rows, File).map((file) => file.href));
+  const listed = new Set<string>(Rows.of(rows, File).map((file) => file.href));
   const held = [
     ...entries,
     ...Rows.of(rows, PackageEntry).map(({ kind, path }) => ({ kind, path })),
@@ -536,12 +528,18 @@ const fileListed = (rows: Rows, entries: readonly Entry[]): Finding => {
 };
 
 /**
+ * Whether two columns of different contracts hold the same text: each contract brands its own
+ * type, so a direct comparison across two of them is refused.
+ */
+const sameText = (left: string, right: string): boolean => left === right;
+
+/**
  * `href-listed`: every resource `href` is the `href` of a `File` of the same resource.
  */
 const hrefListed = (rows: Rows): Finding => {
   const files = Rows.of(rows, File);
   const missing = Rows.of(rows, ResourceHref).find(
-    (row) => !files.some((file) => file.resource === row.resource && file.href === row.href),
+    (row) => !files.some((file) => file.resource === row.resource && sameText(file.href, row.href)),
   );
 
   return missing === undefined
@@ -670,7 +668,7 @@ const rootTypeReverse = Effect.fn("manifestGuards.rootTypeReverse")(function* ro
       ),
     { concurrency: 4 },
   );
-  const bytes = new Set(Rows.of(rows, FileContent).map((entry) => entry.path));
+  const bytes = new Set<string>(Rows.of(rows, FileContent).map((entry) => entry.path));
   const roots = new Map<string, RootKindHandle>([
     ...Rows.of(rows, Document).map((row): [string, RootKindHandle] => [row.path, row.root]),
     ...stored.flatMap(([path, root]): [string, RootKindHandle][] =>

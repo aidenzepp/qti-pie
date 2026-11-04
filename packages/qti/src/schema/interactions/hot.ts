@@ -5,11 +5,11 @@
  * each may carry. The attributes and children are the inventory entries of the same names.
  *
  * Each interaction carries the typed bounds `maxChoicesN` and `minChoicesN` as NOT NULL columns,
- * beside the optional lexical `max-choices` and `min-choices` relations and the markers that say
- * the source wrote them. The defaults are the XSD's: `max-choices` is 1 and `min-choices` is 0,
+ * beside the markers that say the source wrote them; a non-canonical spelling of either is an
+ * `AttributeSpelling` row. The defaults are the XSD's: `max-choices` is 1 and `min-choices` is 0,
  * except that a select-point interaction's `max-choices` is 0 and a position-object interaction's
- * `min-choices` has no default, so its optional relation alone says whether the source wrote it and
- * its typed bound is 0 where the source omits it.
+ * `min-choices` has no default, so its marker alone says whether the source wrote it and its typed
+ * bound is 0 where the source omits it.
  *
  * A `qti-hottext` may sit outside a hottext interaction, because the XSD admits it under any inline
  * host, so the arm holds the identifier alone and no owner copy. `HottextOwner` is a row of its own
@@ -46,17 +46,13 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import { Shape } from "#qti/schema/content/rosters.ts";
+import { Shape, ShowHide } from "#qti/schema/content/rosters.ts";
 import { GraphicOrderInteraction } from "#qti/schema/interactions/order.ts";
 import { InteractionBinding } from "#qti/schema/interaction.ts";
 import { Edge, Node, RootKind } from "#qti/schema/node.ts";
+import { ChoiceIdentifier } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { coordsBinding, shapeCapacities } from "#qti/schema/shapes.ts";
-
-/**
- * An `xs:nonNegativeInteger` attribute's lexical form.
- */
-const xsNonNegativeInteger = str.regex(patterns.xsNonNegativeInteger);
 
 /**
  * An `xs:normalizedString` attribute's value, as the typed column holds it after replacement.
@@ -67,11 +63,6 @@ const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNor
  * An identifier: an `xs:NCName`.
  */
 const ncName = str.regex(patterns.ncName);
-
-/**
- * A choice's `show-hide`: `show` or `hide`.
- */
-const showHide = str.regex(patterns.showHide);
 
 /**
  * A `center-point`: a list of `xs:int` tokens, possibly empty.
@@ -98,7 +89,11 @@ export const HottextInteraction = relation(
  * A `qti-hottext`, by the identifier its owner, where it has one, keys. `showHide` is `show` where
  * the source omits it.
  */
-export const Hottext = relation("Hottext", { id: uuid, identifier: ncName, showHide }, ["id"]);
+export const Hottext = relation(
+  "Hottext",
+  { id: uuid, identifier: ChoiceIdentifier, showHide: closedId(ShowHide) },
+  ["id"],
+);
 
 /**
  * The hottext interaction that owns a hottext: one row where the nearest enclosing interaction of
@@ -106,7 +101,7 @@ export const Hottext = relation("Hottext", { id: uuid, identifier: ncName, showH
  */
 export const HottextOwner = relation(
   "HottextOwner",
-  { identifier: ncName, interaction: uuid, node: uuid },
+  { identifier: ChoiceIdentifier, interaction: uuid, node: uuid },
   ["node"],
 );
 
@@ -132,7 +127,13 @@ export const HotspotInteraction = relation(
  */
 export const HotspotChoice = relation(
   "HotspotChoice",
-  { id: uuid, identifier: ncName, interaction: uuid, shape: closedId(Shape), showHide },
+  {
+    id: uuid,
+    identifier: ChoiceIdentifier,
+    interaction: uuid,
+    shape: closedId(Shape),
+    showHide: closedId(ShowHide),
+  },
   ["id"],
 );
 
@@ -221,8 +222,7 @@ export const DeclaredSelectPointMinChoices = relation(
 );
 
 /**
- * The source wrote `max-choices` on this position-object interaction. Its `min-choices` has no
- * default, so the optional relation alone says whether the source wrote it.
+ * The source wrote `max-choices` on this position-object interaction.
  */
 export const DeclaredPositionObjectMaxChoices = relation(
   "DeclaredPositionObjectMaxChoices",
@@ -231,76 +231,12 @@ export const DeclaredPositionObjectMaxChoices = relation(
 );
 
 /**
- * A hottext interaction's `max-choices` as written, when it has one.
+ * The source wrote `min-choices` on this position-object interaction. It has no default, so this
+ * row alone says whether the source wrote it.
  */
-export const HottextMaxChoices = relation(
-  "HottextMaxChoices",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
-
-/**
- * A hottext interaction's `min-choices` as written, when it has one.
- */
-export const HottextMinChoices = relation(
-  "HottextMinChoices",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
-
-/**
- * A hotspot interaction's `max-choices` as written, when it has one.
- */
-export const HotspotMaxChoices = relation(
-  "HotspotMaxChoices",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
-
-/**
- * A hotspot interaction's `min-choices` as written, when it has one.
- */
-export const HotspotMinChoices = relation(
-  "HotspotMinChoices",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
-
-/**
- * A select-point interaction's `max-choices` as written, when it has one.
- */
-export const SelectPointMaxChoices = relation(
-  "SelectPointMaxChoices",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
-
-/**
- * A select-point interaction's `min-choices` as written, when it has one.
- */
-export const SelectPointMinChoices = relation(
-  "SelectPointMinChoices",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
-
-/**
- * A position-object interaction's `max-choices` as written, when it has one.
- */
-export const PositionObjectMaxChoices = relation(
-  "PositionObjectMaxChoices",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
-
-/**
- * A position-object interaction's `min-choices` as written, when it has one.
- */
-export const PositionObjectMinChoices = relation(
-  "PositionObjectMinChoices",
-  { node: uuid, value: xsNonNegativeInteger },
-  ["node"],
-);
+export const PositionObjectMinChoices = relation("PositionObjectMinChoices", { node: uuid }, [
+  "node",
+]);
 
 /**
  * A hottext interaction's `data-min-selections-message`, when it has one.
@@ -402,25 +338,18 @@ export const relations = {
   HotspotChoice,
   HotspotChoiceLabel,
   HotspotInteraction,
-  HotspotMaxChoices,
   HotspotMaxSelectionsMessage,
-  HotspotMinChoices,
   HotspotMinSelectionsMessage,
   Hottext,
   HottextInteraction,
-  HottextMaxChoices,
   HottextMaxSelectionsMessage,
-  HottextMinChoices,
   HottextMinSelectionsMessage,
   HottextOwner,
   PositionObjectCenterPoint,
   PositionObjectInteraction,
-  PositionObjectMaxChoices,
   PositionObjectMinChoices,
   PositionObjectStage,
   SelectPointInteraction,
-  SelectPointMaxChoices,
-  SelectPointMinChoices,
 };
 
 /**
@@ -482,14 +411,10 @@ export const rules = [
   ),
   contained(on(DeclaredHottextMaxChoices, "node"), on(HottextInteraction, "id")),
   contained(on(DeclaredHottextMinChoices, "node"), on(HottextInteraction, "id")),
-  contained(on(HottextMaxChoices, "node"), on(HottextInteraction, "id")),
-  contained(on(HottextMinChoices, "node"), on(HottextInteraction, "id")),
   contained(on(HottextMinSelectionsMessage, "node"), on(HottextInteraction, "id")),
   contained(on(HottextMaxSelectionsMessage, "node"), on(HottextInteraction, "id")),
   contained(on(DeclaredHotspotMaxChoices, "node"), on(HotspotInteraction, "id")),
   contained(on(DeclaredHotspotMinChoices, "node"), on(HotspotInteraction, "id")),
-  contained(on(HotspotMaxChoices, "node"), on(HotspotInteraction, "id")),
-  contained(on(HotspotMinChoices, "node"), on(HotspotInteraction, "id")),
   contained(on(HotspotMinSelectionsMessage, "node"), on(HotspotInteraction, "id")),
   contained(on(HotspotMaxSelectionsMessage, "node"), on(HotspotInteraction, "id")),
   contained(on(HotspotChoiceLabel, "node"), on(HotspotChoice, "id")),
@@ -497,10 +422,7 @@ export const rules = [
   contained(on(DeclaredHottextShowHide, "node"), on(Hottext, "id")),
   contained(on(DeclaredSelectPointMaxChoices, "node"), on(SelectPointInteraction, "id")),
   contained(on(DeclaredSelectPointMinChoices, "node"), on(SelectPointInteraction, "id")),
-  contained(on(SelectPointMaxChoices, "node"), on(SelectPointInteraction, "id")),
-  contained(on(SelectPointMinChoices, "node"), on(SelectPointInteraction, "id")),
   contained(on(DeclaredPositionObjectMaxChoices, "node"), on(PositionObjectInteraction, "id")),
-  contained(on(PositionObjectMaxChoices, "node"), on(PositionObjectInteraction, "id")),
   contained(on(PositionObjectMinChoices, "node"), on(PositionObjectInteraction, "id")),
   contained(on(PositionObjectCenterPoint, "node"), on(PositionObjectInteraction, "id")),
 ] as const;

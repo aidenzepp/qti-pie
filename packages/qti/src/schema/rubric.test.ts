@@ -1,6 +1,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import * as node from "#qti/schema/node.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import * as rubric from "#qti/schema/rubric.ts";
 
@@ -76,8 +77,8 @@ describe("rubric", () => {
   it("gives Stylesheet its href and type, and its two optional values their own rows", () => {
     const { Stylesheet, StylesheetMedia, StylesheetTitle } = rubric.relations;
     assert.deepStrictEqual(Object.keys(Stylesheet.fields), ["href", "id", "type"]);
-    assert.strictEqual(Stylesheet.fields.href.pattern.source, patterns.anyUri);
-    assert.strictEqual(Stylesheet.fields.type.pattern.source, patterns.mimeType);
+    assert.strictEqual(Stylesheet.fields.href.base.pattern.source, patterns.anyUri);
+    assert.strictEqual(Stylesheet.fields.type.base.pattern.source, patterns.mimeType);
     for (const [relation, source, flags] of [
       [StylesheetMedia, patterns.xsString, patterns.xsStringFlags],
       [StylesheetTitle, patterns.xsNormalizedString, patterns.xsNormalizedStringFlags],
@@ -97,5 +98,14 @@ describe("rubric", () => {
       [rubric.relations.StylesheetMedia, rubric.relations.Stylesheet, ["id"]],
       [rubric.relations.StylesheetTitle, rubric.relations.Stylesheet, ["id"]],
     ]);
+  });
+});
+
+describe("contracts (rubric)", () => {
+  it("types Stylesheet.href StylesheetUri", () => {
+    assert.strictEqual(rubric.Stylesheet.fields.href.name, contracts.StylesheetUri.name);
+  });
+  it("types Stylesheet.type ContentMediaType", () => {
+    assert.strictEqual(rubric.Stylesheet.fields.type.name, contracts.ContentMediaType.name);
   });
 });

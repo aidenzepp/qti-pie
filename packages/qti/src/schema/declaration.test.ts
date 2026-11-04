@@ -7,7 +7,8 @@ import { Effect, FileSystem, Predicate } from "effect";
 import { inject } from "vitest";
 import { itemRows } from "#qti/import/item.ts";
 import { Rows } from "#qti/import/tree.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as node from "#qti/schema/node.ts";
@@ -410,6 +411,15 @@ describe("declaration", () => {
     assert.strictEqual(describeField(value), describeField(str.regex(patterns.positiveDouble)));
     assert.notStrictEqual(describeField(value), describeField(str.regex(patterns.xsDouble)));
   });
+
+  it("types DeclarationView.value as the view list", () => {
+    const { value } = declaration.relations.DeclarationView.fields;
+    assert.strictEqual(describeField(value), describeField(str.regex(patterns.viewList)));
+    assert.notStrictEqual(
+      describeField(value),
+      describeField(str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags)),
+    );
+  });
 });
 
 layer(NodeServices.layer, { excludeTestServices: true })("declaration importer", (suite) => {
@@ -441,4 +451,31 @@ layer(NodeServices.layer, { excludeTestServices: true })("declaration importer",
       );
     }),
   );
+});
+
+describe("contracts (declaration)", () => {
+  it("types DeclarationLongInterpretation.value LongInterpretationUri", () => {
+    assert.strictEqual(
+      declaration.DeclarationLongInterpretation.fields.value.name,
+      contracts.LongInterpretationUri.name,
+    );
+  });
+  it("types DeclarationNormalMinimum.value OutcomeScaleValue", () => {
+    assert.strictEqual(
+      declaration.DeclarationNormalMinimum.fields.value.name,
+      contracts.OutcomeScaleValue.name,
+    );
+  });
+  it("types DeclarationMasteryValue.value OutcomeScaleValue", () => {
+    assert.strictEqual(
+      declaration.DeclarationMasteryValue.fields.value.name,
+      contracts.OutcomeScaleValue.name,
+    );
+  });
+  it("types DeclarationVariableIdentifierRef.value VariableReference", () => {
+    assert.strictEqual(
+      declaration.DeclarationVariableIdentifierRef.fields.value.name,
+      contracts.VariableReference.name,
+    );
+  });
 });

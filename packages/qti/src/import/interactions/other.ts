@@ -10,8 +10,11 @@ import { judgedLater } from "#qti/import/judged.ts";
 import { requiredAttribute } from "#qti/import/required.ts";
 import { Effect, Option } from "effect";
 import type { InteractionContext, MarkerRelation, NodeRef } from "#qti/import/interactions.ts";
-import { Rows, typedAttribute } from "#qti/import/tree.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
+import { closedOf, Rows, spelledInteger, typedAttribute } from "#qti/import/tree.ts";
 import type { ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
+import { Orientation, XsBoolean } from "#qti/schema/content/rosters.ts";
+import { MediaRectCoords } from "#qti/schema/contracts.ts";
 import {
   DeclaredMediaLoop,
   DeclaredSliderStepLabel,
@@ -30,7 +33,7 @@ import {
   UploadType,
 } from "#qti/schema/interactions/other.ts";
 import type { AncestryHandle } from "#qti/schema/node.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * The `maxCount` the other interactions' typed bindings hold.
@@ -57,19 +60,28 @@ const valueFact = <T extends string>(
 const plain = (read: string): string => read;
 
 /**
- * A count as an `xs:nonNegativeInteger` column holds it.
+ * The rows of an optional value's relation over a closed roster: one row, its value narrowed to a
+ * handle, when the source wrote the attribute, none otherwise.
+ *
+ * @param node - The node the value belongs to.
+ * @param value - The attribute's text, when the source wrote it.
+ * @param handles - The roster's handles.
+ * @param where - The element and attribute, in a short phrase, for the refusal's detail.
+ * @returns The rows; `ImportRefused` (`attribute-lexical`) for text outside the roster.
  */
-const natural = (read: string): `${number}` | `+${number}` => judgedLater(read);
-
-/**
- * A flag as an `xs:boolean` column holds it.
- */
-const flag = (read: string): "0" | "1" | "false" | "true" => judgedLater(read);
-
-/**
- * An orientation as its column holds it.
- */
-const direction = (read: string): "horizontal" | "vertical" => judgedLater(read);
+const closedFact = <const Handle extends string>(
+  node: string,
+  value: Option.Option<string>,
+  handles: readonly Handle[],
+  where: string,
+): Effect.Effect<readonly { readonly node: string; readonly value: Handle }[], ImportRefused> =>
+  Option.match(value, {
+    onNone: () => Effect.succeed([]),
+    onSome: (own) =>
+      Effect.map(closedOf(handles, own, "attribute-lexical", where), (handle) => [
+        { node, value: handle },
+      ]),
+  });
 
 type MarkerSet = Readonly<Record<string, MarkerRelation>>;
 
@@ -97,20 +109,48 @@ const bound = (
   );
 
 /**
- * The plays of a media interaction as its typed column holds them: 0 where the source omits them.
+ * The plays of a media interaction as its typed column holds them: 0 where the source omits them,
+ * and otherwise the value of the attribute, with its spelling kept where the source spelled it
+ * other than the way the value is written.
  */
-const playsOf = (ctx: InteractionContext, lexical: Option.Option<string>): bigint =>
-  ctx.shared.typedCopy(lexical, 0n);
+const playsOf = (
+  rows: Rows,
+  node: Owned,
+  name: "max-plays" | "min-plays",
+  text: Option.Option<string>,
+) =>
+  Option.match(text, {
+    onNone: () => Effect.succeed({ rows, value: 0n }),
+    onSome: (own) =>
+      spelledInteger(
+        rows,
+        node.id,
+        node.kind,
+        name,
+        own,
+        "nonNegativeInteger",
+        "attribute-lexical",
+        `${node.kind} ${name}`,
+      ),
+  });
 
 /**
  * The rows of one `qti-media-interaction`.
+ *
+ * @param ctx - The tree, its node index, the document and the shared writers.
+ * @param rows - The rows so far.
+ * @param element - The interaction's element.
+ * @param node - The interaction's node.
+ * @returns The rows with the arm, its markers and its binding; `ImportRefused`
+ *   (`attribute-lexical`) for a `max-plays` or `min-plays` outside the non-negative integers, or an
+ *   `autostart` or `loop` outside `xs:boolean`'s four spellings.
  */
 const mediaRows = Effect.fn("import.mediaRows")(function* mediaRows(
   ctx: InteractionContext,
   rows: Rows,
   element: Element,
   node: Owned,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
   const responseIdentifier = Option.getOrElse(attributes.read("response-identifier"), () => "");
   const autostart = yield* requiredAttribute(element, "autostart", attributes.read("autostart"));
@@ -118,28 +158,45 @@ const mediaRows = Effect.fn("import.mediaRows")(function* mediaRows(
   const maxPlays = attributes.read("max-plays");
   const minPlays = attributes.read("min-plays");
   const coords = attributes.read("coords");
+  const autostartHandle = yield* closedOf(
+    XsBoolean.handles,
+    autostart,
+    "attribute-lexical",
+    "the autostart attribute of qti-media-interaction",
+  );
+  const loopHandle = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(loop, () => "false"),
+    "attribute-lexical",
+    "the loop attribute of qti-media-interaction",
+  );
 
-  let built = attributes.rows();
+  const maximum = yield* playsOf(attributes.rows(), node, "max-plays", maxPlays);
+  const minimum = yield* playsOf(maximum.rows, node, "min-plays", minPlays);
+
+  let built = minimum.rows;
   built = Rows.add(built, MediaInteraction, [
     {
-      autostart: judgedLater(autostart),
+      autostart: autostartHandle,
       id: node.id,
-      loop: judgedLater(Option.getOrElse(loop, () => "false")),
-      maxPlaysN: playsOf(ctx, maxPlays),
-      minPlaysN: playsOf(ctx, minPlays),
+      loop: loopHandle,
+      maxPlaysN: maximum.value,
+      minPlaysN: minimum.value,
       responseIdentifier,
       rootKind: "item",
     },
   ]);
   built = ctx.shared.markers(
     built,
-    { loop: DeclaredMediaLoop } satisfies MarkerSet,
+    {
+      loop: DeclaredMediaLoop,
+      "max-plays": MediaMaxPlays,
+      "min-plays": MediaMinPlays,
+    } satisfies MarkerSet,
     node.id,
     attributes.written(),
   );
-  built = Rows.add(built, MediaMaxPlays, valueFact(node.id, maxPlays, natural));
-  built = Rows.add(built, MediaMinPlays, valueFact(node.id, minPlays, natural));
-  built = Rows.add(built, MediaCoords, valueFact(node.id, coords, plain));
+  built = Rows.add(built, MediaCoords, valueFact(node.id, coords, MediaRectCoords));
 
   return yield* bound(ctx, built, node, responseIdentifier);
 });
@@ -189,13 +246,16 @@ const drawingRows = Effect.fn("import.drawingRows")(function* drawingRows(
 /**
  * The rows of one `qti-slider-interaction`. `SliderStep` is written only where the source declares
  * a `step`: no default is written.
+ *
+ * @returns The rows; `ImportRefused` (`attribute-lexical`) for a `step-label` or `reverse` outside
+ *   `xs:boolean`'s four spellings, or an `orientation` outside `vertical` and `horizontal`.
  */
 const sliderRows = Effect.fn("import.sliderRows")(function* sliderRows(
   ctx: InteractionContext,
   rows: Rows,
   element: Element,
   node: Owned,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
   const responseIdentifier = Option.getOrElse(attributes.read("response-identifier"), () => "");
   const lowerBound = yield* requiredAttribute(
@@ -212,6 +272,24 @@ const sliderRows = Effect.fn("import.sliderRows")(function* sliderRows(
   const stepLabel = attributes.read("step-label");
   const orientation = attributes.read("orientation");
   const reverse = attributes.read("reverse");
+  const stepLabelHandle = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(stepLabel, () => "false"),
+    "attribute-lexical",
+    "the step-label attribute of qti-slider-interaction",
+  );
+  const orientationRows = yield* closedFact(
+    node.id,
+    orientation,
+    Orientation.handles,
+    "the orientation attribute of qti-slider-interaction",
+  );
+  const reverseRows = yield* closedFact(
+    node.id,
+    reverse,
+    XsBoolean.handles,
+    "the reverse attribute of qti-slider-interaction",
+  );
 
   let built = attributes.rows();
   built = Rows.add(built, SliderInteraction, [
@@ -220,7 +298,7 @@ const sliderRows = Effect.fn("import.sliderRows")(function* sliderRows(
       lowerBound: judgedLater(lowerBound),
       responseIdentifier,
       rootKind: "item",
-      stepLabel: judgedLater(Option.getOrElse(stepLabel, () => "false")),
+      stepLabel: stepLabelHandle,
       upperBound: judgedLater(upperBound),
     },
   ]);
@@ -231,25 +309,34 @@ const sliderRows = Effect.fn("import.sliderRows")(function* sliderRows(
     attributes.written(),
   );
   built = Rows.add(built, SliderStep, valueFact(node.id, step, plain));
-  built = Rows.add(built, SliderOrientation, valueFact(node.id, orientation, direction));
-  built = Rows.add(built, SliderReverse, valueFact(node.id, reverse, flag));
+  built = Rows.add(built, SliderOrientation, orientationRows);
+  built = Rows.add(built, SliderReverse, reverseRows);
 
   return yield* bound(ctx, built, node, responseIdentifier);
 });
 
 /**
  * The rows of one `qti-end-attempt-interaction`. Its `title` is stored after `replace`.
+ *
+ * @returns The rows; `ImportRefused` (`attribute-lexical`) for a `count-attempt` outside
+ *   `xs:boolean`'s four spellings.
  */
 const endAttemptRows = Effect.fn("import.endAttemptRows")(function* endAttemptRows(
   ctx: InteractionContext,
   rows: Rows,
   element: Element,
   node: Owned,
-): Effect.fn.Return<Rows, ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   const attributes = ctx.shared.attributes(rows, element, node);
   const responseIdentifier = Option.getOrElse(attributes.read("response-identifier"), () => "");
   const title = yield* requiredAttribute(element, "title", attributes.read("title"));
   const countAttempt = attributes.read("count-attempt");
+  const countAttemptRows = yield* closedFact(
+    node.id,
+    countAttempt,
+    XsBoolean.handles,
+    "the count-attempt attribute of qti-end-attempt-interaction",
+  );
 
   let built = attributes.rows();
   const typed = typedAttribute(built, node.id, node.kind, "title", title, "replace");
@@ -258,7 +345,7 @@ const endAttemptRows = Effect.fn("import.endAttemptRows")(function* endAttemptRo
   built = Rows.add(built, EndAttemptInteraction, [
     { id: node.id, responseIdentifier, rootKind: "item", title: typed.value },
   ]);
-  built = Rows.add(built, EndAttemptCountAttempt, valueFact(node.id, countAttempt, flag));
+  built = Rows.add(built, EndAttemptCountAttempt, countAttemptRows);
 
   return yield* bound(ctx, built, node, responseIdentifier);
 });
@@ -270,12 +357,13 @@ const endAttemptRows = Effect.fn("import.endAttemptRows")(function* endAttemptRo
  * @param rows - The rows so far.
  * @returns The rows with each media, upload, drawing, slider and end-attempt interaction's arm,
  *   optional values, markers and binding; `ItemRefusal` for a `response-identifier` no declaration
- *   of the item names.
+ *   of the item names; `ImportRefused` (`attribute-lexical`) for a `max-plays` or `min-plays`
+ *   outside the non-negative integers, or a flag or orientation outside its roster.
  */
 export const otherRows = Effect.fn("import.otherRows")(function* otherRows(
   ctx: InteractionContext,
   rows: Rows,
-): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | UnmodeledVocabulary | ItemRefusal> {
   let built = rows;
   for (const [element, indexed] of ctx.nodes) {
     const node = { ancestry: indexed.ancestry, id: indexed.id, kind: indexed.kind };

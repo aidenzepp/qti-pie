@@ -11,13 +11,15 @@ import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
 import { csmSetRows, lomSubtreeRows } from "#qti/import/manifest.ts";
 import { elementChildren, qmdLeafRows } from "#qti/import/leaf.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
 import { Rows, treeRows } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
+import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
 import { Document } from "#qti/schema/document.ts";
 import * as md from "#qti/schema/metadata.ts";
 import { Edge } from "#qti/schema/node.ts";
 import type { SchemaVersionHandle } from "#qti/schema/node.ts";
-import type { XmlDocument } from "#qti/xml/tree.ts";
+import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
  * What the caller knows about an external metadata record: the package that lists it, where, the
@@ -48,8 +50,9 @@ export const externalRows = Effect.fn("import.externalRows")(function* externalR
   doc: XmlDocument,
   input: ExternalInput,
   rows: Rows,
-): Effect.fn.Return<{ rows: Rows; nodes: NodeIndex }, UnmodeledVocabulary> {
+): Effect.fn.Return<{ rows: Rows; nodes: NodeIndex }, ImportRefused | UnmodeledVocabulary> {
   const documentId = crypto.randomUUID();
+  const resource = ManifestIdentifier(input.resource);
   const tree = yield* treeRows(
     doc,
     {
@@ -67,8 +70,8 @@ export const externalRows = Effect.fn("import.externalRows")(function* externalR
     {
       id: documentId,
       package: input.package,
-      path: input.path,
-      resource: input.resource,
+      path: PackagePath(input.path),
+      resource,
       resourceType: input.resourceType,
       root: "externalLom",
       version: input.version,
@@ -85,9 +88,7 @@ export const externalRows = Effect.fn("import.externalRows")(function* externalR
   }
 
   add(md.Lom, [{ id: lom.id, owner: "external", package: input.package }]);
-  add(md.ExternalLom, [
-    { document: documentId, lom: lom.id, package: input.package, resource: input.resource },
-  ]);
+  add(md.ExternalLom, [{ document: documentId, lom: lom.id, package: input.package, resource }]);
   built = lomSubtreeRows(
     built,
     { nodes, positions },
@@ -115,13 +116,11 @@ export const externalRows = Effect.fn("import.externalRows")(function* externalR
   for (const child of elementChildren(root)) {
     const node = nodes.get(child);
     if (node?.kind === "qmd:qtiMetadata") {
-      add(md.QtiMetadata, [
-        { host: "externalLom", id: node.id, package: input.package, resource: input.resource },
-      ]);
+      add(md.QtiMetadata, [{ host: "externalLom", id: node.id, package: input.package, resource }]);
       add(md.QtiMetadataInExternalLom, [
-        { id: node.id, lom: lom.id, package: input.package, resource: input.resource },
+        { id: node.id, lom: lom.id, package: input.package, resource },
       ]);
-      built = qmdLeafRows(built, nodes, child, node.id);
+      built = yield* qmdLeafRows(built, nodes, child, node.id);
     } else if (node?.kind === "csmd:curriculumStandardsMetadataSet") {
       built = csmSetRows(built, nodes, child, lom.id);
     }

@@ -284,8 +284,10 @@ const nodesOfTree = nodesRule as unknown as LooseQuery;
 /**
  * The queries of the tree `tree`: each walks every node of the tree, delivers its `Node` row, and
  * attaches one run of the node's attachments: its `Edge`, the row of the arm its kind names and
- * every relation it owns. The reads are separate statements, so a tree written while it is read
- * may be read in two states.
+ * every relation it owns. The reads are separate statements, yet they read one state: the store is
+ * append-only (no stored relation is `mutable`, no code path deletes or puts), and a package is
+ * written in one `db.apply`, so a tree `documentIdsOf` finds is committed whole. Revisit only if
+ * the import is ever written in several applies.
  */
 export const nodeQueries: readonly LooseQuery[] = nodeRuns.map((run) =>
   attaching(nodesOfTree, run),

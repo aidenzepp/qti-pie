@@ -6,6 +6,7 @@ import * as csm from "#qti/schema/csm.ts";
 import * as csmd from "#qti/schema/kinds/csmd.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -145,7 +146,10 @@ describe("csm", () => {
   });
 
   it("types the case item URI as a URI", () => {
-    assert.strictEqual(csm.relations.CsmCaseItemUri.fields.value.pattern.source, patterns.anyUri);
+    assert.strictEqual(
+      csm.relations.CsmCaseItemUri.fields.value.base.pattern.source,
+      patterns.anyUri,
+    );
   });
 
   it("keys each leaf by its labelled GUID and each attribute by its node", () => {
@@ -165,5 +169,11 @@ describe("csm", () => {
 
   it("names a node arm for each of the seven kinds, all of them csmd kinds", () => {
     assert.deepStrictEqual(Object.keys(csm.arms).toSorted(), [...csmd.kinds].toSorted());
+  });
+});
+
+describe("contracts (csm)", () => {
+  it("types CsmCaseItemUri.value CaseItemUri", () => {
+    assert.strictEqual(csm.CsmCaseItemUri.fields.value.name, contracts.CaseItemUri.name);
   });
 });

@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { lexProlog, substitute } from "#qti/xml/dtd.ts";
-import type { AttlistEntry } from "#qti/xml/dtd.ts";
-import { ReaderRefusal, WellFormednessError } from "#qti/xml/errors.ts";
+import { lexProlog, substitute } from "#crust/dtd.ts";
+import type { AttlistEntry } from "#crust/dtd.ts";
+import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
 
 /**
  * Lex `text` and return its general-entity table as `[name, replacement]` pairs in declaration

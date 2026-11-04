@@ -7,7 +7,9 @@ import { Effect, Option } from "effect";
 import { semanticRows } from "#qti/import/item.ts";
 import type { ItemInput } from "#qti/import/item.ts";
 import { kindOf, Rows, treeRows, UnmodeledVocabulary, withParents } from "#qti/import/tree.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
 import type { ItemRefusal, NodeIndex } from "#qti/import/tree.ts";
+import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
 import { Declaration } from "#qti/schema/declaration.ts";
 import { Document, DocumentIdentifier } from "#qti/schema/document.ts";
 import { Edge } from "#qti/schema/node.ts";
@@ -28,14 +30,15 @@ import { OutcomeDocument } from "#qti/schema/outcome.ts";
  *   which is the tree's and the root declaration's; `UnmodeledVocabulary` for a root that is not
  *   `qti-outcome-declaration` in the ASI namespace, naming it, and for any element or attribute the
  *   registries do not model, a `qti-match-table` or `qti-interpolation-table` child among them;
- *   `ItemRefusal` as the item builder raises it for a binding no declaration answers.
+ *   `ItemRefusal` as the item builder raises it for a binding no declaration answers;
+ *   `ImportRefused` as the item builder raises it for an attribute outside its lexical space.
  */
 export const outcomeRows = Effect.fn("import.outcomeRows")(function* outcomeRows(
   input: ItemInput,
   rows: Rows,
 ): Effect.fn.Return<
   { rows: Rows; nodes: NodeIndex; documentId: string },
-  UnmodeledVocabulary | ItemRefusal
+  ImportRefused | ItemRefusal | UnmodeledVocabulary
 > {
   const { doc, packageId, version } = input;
   const { root } = doc;
@@ -60,8 +63,8 @@ export const outcomeRows = Effect.fn("import.outcomeRows")(function* outcomeRows
       {
         id: documentId,
         package: packageId,
-        path: input.path,
-        resource: input.resource,
+        path: PackagePath(input.path),
+        resource: ManifestIdentifier(input.resource),
         resourceType: input.resourceType,
         root: "outcomes",
         version,
@@ -82,7 +85,7 @@ export const outcomeRows = Effect.fn("import.outcomeRows")(function* outcomeRows
     {
       document: documentId,
       package: packageId,
-      resource: input.resource,
+      resource: ManifestIdentifier(input.resource),
       root: "outcomes",
       value: identifier,
     },

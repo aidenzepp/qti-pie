@@ -11,12 +11,13 @@ import {
   ResponseDeclarationArm,
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
+import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import { OutcomeDocument } from "#qti/schema/outcome.ts";
 import { Edge, Node, TreeRoot } from "#qti/schema/node.ts";
 import * as value from "#qti/schema/value.ts";
 import { materialize } from "#qti/test/fixtures.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
  * The one row of a list that must hold exactly one.
@@ -72,8 +73,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/outcome.ts", (s
           {
             id: documentId,
             package: packageId,
-            path: "testoutcome01.xml",
-            resource: "Outcome_01",
+            path: PackagePath("testoutcome01.xml"),
+            resource: ManifestIdentifier("Outcome_01"),
             resourceType: "imsqti_outcomes_xmlv3p0",
             root: "outcomes",
             version: "3.0.0",
@@ -109,7 +110,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/outcome.ts", (s
           {
             document: documentId,
             package: packageId,
-            resource: "Outcome_01",
+            resource: ManifestIdentifier("Outcome_01"),
             root: "outcomes",
             value: "SCORE",
           },
@@ -149,7 +150,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/outcome.ts", (s
         shape: "typed",
         valueSet: set.id,
       });
-      assert.deepStrictEqual(Rows.of(rows, value.relations.DeclaredValueFloat), [
+      assert.deepStrictEqual<unknown>(Rows.of(rows, value.relations.DeclaredValueFloat), [
         { id: declared.id, value: "0.0" },
       ]);
     }),

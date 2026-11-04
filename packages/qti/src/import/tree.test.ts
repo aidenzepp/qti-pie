@@ -4,9 +4,11 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, it, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option } from "effect";
 import { inject } from "vitest";
+import { XmlBaseUri, NamespacePrefix, NamespaceUri, XmlEntityName } from "#qti/schema/contracts.ts";
 import {
   AttributeEntityReference,
   AttributeLexical,
+  AttributeSpelling,
   Comment,
   Edge,
   EntityReference,
@@ -27,20 +29,25 @@ import {
 } from "#qti/schema/node.ts";
 import { NodeXmlBase, NodeXmlLang } from "#qti/schema/attributes.ts";
 import { attributeRows } from "#qti/import/attributes.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import { GuardRefusal, treeGuards } from "#qti/import/guards/tree.ts";
 import {
+  closedOf,
   collapse,
+  integerOf,
   kindOf,
   replace,
   Rows,
+  spelledInteger,
   treeRows,
   typedAttribute,
   UnmodeledVocabulary,
+  valueText,
 } from "#qti/import/tree.ts";
 import type { NodeIndex, TreeInput } from "#qti/import/tree.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 const treeId = "11111111-1111-4111-8111-111111111111";
 
@@ -105,6 +112,44 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
       assert.deepStrictEqual(Rows.of(rows, TreeXmlStandalone), []);
       assert.deepStrictEqual(Rows.of(rows, TreeDoctype), []);
       assert.deepStrictEqual(Rows.of(rows, TreeExportCharset), []);
+    }),
+  );
+
+  suite.effect("a standalone of yes or no is a TreeXmlStandalone handle", () =>
+    Effect.gen(function* standaloneRows() {
+      const doc = yield* readChoice(inject("fixtures").simple);
+      const { declaration } = doc;
+      assert.isTrue(Option.isSome(declaration));
+
+      for (const standalone of ["yes", "no"] as const) {
+        const declared = declaration.pipe(
+          Option.map((found) => ({ ...found, standalone: Option.some(standalone) })),
+        );
+        const { rows } = yield* treeRows(
+          { ...doc, declaration: declared },
+          itemInput(doc.charset),
+          Rows.empty(),
+        );
+
+        assert.deepStrictEqual(Rows.of(rows, TreeXmlStandalone), [
+          { tree: treeId, value: standalone },
+        ]);
+      }
+    }),
+  );
+
+  suite.effect("a standalone outside yes and no is refused value-lexical before any row", () =>
+    Effect.gen(function* standaloneRefused() {
+      const doc = yield* readChoice(inject("fixtures").simple);
+      const declared = doc.declaration.pipe(
+        Option.map((found) => ({ ...found, standalone: Option.some("maybe") })),
+      );
+      const failure = yield* Effect.flip(
+        treeRows({ ...doc, declaration: declared }, itemInput(doc.charset), Rows.empty()),
+      );
+
+      assert.instanceOf(failure, ImportRefused);
+      assert.strictEqual(failure.rule, "value-lexical");
     }),
   );
 
@@ -202,18 +247,18 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
       assert.strictEqual(root.kind, "qti-assessment-item");
       assert.isFalse(edges.some((edge) => edge.child === root.id));
       assert.deepStrictEqual(Rows.of(rows, NamespaceDeclaration), [
-        { node: root.id, position: 0n, prefix: "", uri: doc.root.namespace },
+        { node: root.id, position: 0n, prefix: "", uri: NamespaceUri(doc.root.namespace) },
         {
           node: root.id,
           position: 1n,
           prefix: "xsi",
-          uri: "http://www.w3.org/2001/XMLSchema-instance",
+          uri: NamespaceUri("http://www.w3.org/2001/XMLSchema-instance"),
         },
       ]);
       assert.deepStrictEqual(Rows.of(rows, SchemaLocation), [
         {
           node: root.id,
-          prefix: "xsi",
+          prefix: NamespacePrefix("xsi"),
           value:
             "http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd",
         },
@@ -270,7 +315,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
 
       assert.strictEqual(refNodes.length, 1);
       assert.deepStrictEqual(Rows.of(rows, EntityReference), [
-        { id: refNode.id, name: "undeclared" },
+        { id: refNode.id, name: XmlEntityName("undeclared") },
       ]);
       assert.deepStrictEqual(
         Rows.of(rows, Edge)
@@ -280,7 +325,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
       );
       // `NEVER LEAVE LUGGAGE &undeclared;`: the `&` is at zero-based index 20.
       assert.deepStrictEqual(Rows.of(rows, AttributeEntityReference), [
-        { attribute: "alt", name: "undeclared", node: img.id, offset: 20n },
+        { attribute: "alt", name: XmlEntityName("undeclared"), node: img.id, offset: 20n },
       ]);
     }),
   );
@@ -354,7 +399,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
       const paragraph = idOf(nodes, "p");
 
       assert.deepStrictEqual(Rows.of(built, NodeXmlBase), [
-        { attribute: "xml:base", kind: "p", node: paragraph, value: "a/" },
+        { attribute: "xml:base", kind: "p", node: paragraph, value: XmlBaseUri("a/") },
       ]);
     }),
   );
@@ -587,6 +632,30 @@ it("collapse replaces, trims and joins runs of spaces", () => {
   assert.strictEqual(collapse(" \ta \n\r b\t "), "a b");
 });
 
+it("valueText removes outer whitespace from every base type but string", () => {
+  for (const baseType of [
+    "boolean",
+    "identifier",
+    "integer",
+    "float",
+    "pair",
+    "point",
+    "uri",
+    "duration",
+    "directedPair",
+    "file",
+  ] as const) {
+    assert.strictEqual(valueText(baseType, " x "), "x", baseType);
+    assert.strictEqual(valueText(baseType, "\n  x\r\n\t"), "x", baseType);
+    assert.strictEqual(valueText(baseType, " A  B "), "A  B", baseType);
+    assert.strictEqual(valueText(baseType, "   "), "", baseType);
+  }
+});
+
+it("valueText keeps the whitespace of a string", () => {
+  assert.strictEqual(valueText("string", " a "), " a ");
+});
+
 const node = "22222222-2222-4222-8222-222222222222";
 
 it("typedAttribute on a padded collapse value returns it collapsed with one AttributeLexical row", () => {
@@ -663,6 +732,139 @@ it("typedAttribute on a preserve value is returned unchanged with no row", () =>
   assert.deepStrictEqual(Rows.of(result.rows, AttributeLexical), []);
 });
 
+const spell = (processed: string, space: "integer" | "nonNegativeInteger") =>
+  spelledInteger(
+    Rows.empty(),
+    node,
+    "qti-choice-interaction",
+    "max-choices",
+    processed,
+    space,
+    "attribute-lexical",
+    "qti-choice-interaction max-choices",
+  );
+
+it.effect(
+  "spelledInteger on a plus-signed integer keeps the spelling in one AttributeSpelling row",
+  () =>
+    Effect.gen(function* plusSigned() {
+      const result = yield* spell("+5", "nonNegativeInteger");
+
+      assert.strictEqual(result.value, 5n);
+      assert.deepStrictEqual(Rows.of(result.rows, AttributeSpelling), [
+        { attribute: "max-choices", kind: "qti-choice-interaction", node, value: "+5" },
+      ]);
+    }),
+);
+
+it.effect("spelledInteger on a canonical integer appends no row", () =>
+  Effect.gen(function* canonical() {
+    const result = yield* spell("5", "nonNegativeInteger");
+
+    assert.strictEqual(result.value, 5n);
+    assert.deepStrictEqual(Rows.of(result.rows, AttributeSpelling), []);
+  }),
+);
+
+it.effect("spelledInteger on a zero-padded integer keeps the spelling", () =>
+  Effect.gen(function* padded() {
+    const result = yield* spell("05", "nonNegativeInteger");
+
+    assert.strictEqual(result.value, 5n);
+    assert.deepStrictEqual(Rows.of(result.rows, AttributeSpelling), [
+      { attribute: "max-choices", kind: "qti-choice-interaction", node, value: "05" },
+    ]);
+  }),
+);
+
+it.effect(
+  "spelledInteger after typedAttribute keeps the padded text and the collapsed spelling",
+  () =>
+    Effect.gen(function* afterTyped() {
+      const typed = typedAttribute(
+        Rows.empty(),
+        node,
+        "qti-choice-interaction",
+        "max-choices",
+        " +5 ",
+        "collapse",
+      );
+      const result = yield* spelledInteger(
+        typed.rows,
+        node,
+        "qti-choice-interaction",
+        "max-choices",
+        typed.value,
+        "nonNegativeInteger",
+        "attribute-lexical",
+        "qti-choice-interaction max-choices",
+      );
+
+      assert.strictEqual(result.value, 5n);
+      assert.deepStrictEqual(Rows.of(result.rows, AttributeLexical), [
+        { attribute: "max-choices", kind: "qti-choice-interaction", node, value: " +5 " },
+      ]);
+      assert.deepStrictEqual(Rows.of(result.rows, AttributeSpelling), [
+        { attribute: "max-choices", kind: "qti-choice-interaction", node, value: "+5" },
+      ]);
+    }),
+);
+
+it.effect("spelledInteger on a negative number in a non-negative space is refused", () =>
+  Effect.gen(function* refused() {
+    const exit = yield* Effect.exit(spell("-1", "nonNegativeInteger"));
+
+    assert.isTrue(Exit.isFailure(exit));
+    assert.strictEqual(
+      Exit.isFailure(exit) ? Option.getOrThrow(Exit.findErrorOption(exit))._tag : "",
+      "ImportRefused",
+    );
+    assert.strictEqual(
+      Exit.isFailure(exit) ? Option.getOrThrow(Exit.findErrorOption(exit)).rule : "",
+      "attribute-lexical",
+    );
+  }),
+);
+
+it.effect(
+  "spelledInteger admits every signed zero in a non-negative space and keeps its spelling",
+  () =>
+    Effect.gen(function* signedZero() {
+      for (const text of ["-0", "+0", "0", "-00"]) {
+        const result = yield* spell(text, "nonNegativeInteger");
+
+        assert.strictEqual(result.value, 0n);
+        assert.deepStrictEqual(
+          Rows.of(result.rows, AttributeSpelling),
+          text === "0"
+            ? []
+            : [{ attribute: "max-choices", kind: "qti-choice-interaction", node, value: text }],
+        );
+      }
+    }),
+);
+
+it.effect("spelledInteger refuses a negative nonzero number in a non-negative space", () =>
+  Effect.gen(function* negatives() {
+    for (const text of ["-1", "-01", "-10"]) {
+      const refusal = yield* Effect.flip(spell(text, "nonNegativeInteger"));
+
+      assert.strictEqual(refusal.rule, "attribute-lexical");
+    }
+  }),
+);
+
+it.effect("spelledInteger on minus zero under integer gives zero and keeps the spelling", () =>
+  Effect.gen(function* minusZero() {
+    const result = yield* spell("-0", "integer");
+
+    assert.strictEqual(result.value, 0n);
+    assert.deepStrictEqual(Rows.of(result.rows, AttributeSpelling), [
+      { attribute: "max-choices", kind: "qti-choice-interaction", node, value: "-0" },
+    ]);
+  }),
+);
+
 /**
  * An attribute-free, childless element in `namespace`.
  */
@@ -700,3 +902,140 @@ it("kindOf resolves a dotted handle by the parent's kind", () => {
     Option.some("lom:duration.string"),
   );
 });
+
+const spaces = ["integer", "nonNegativeInteger", "positiveInteger"] as const;
+
+const refusedRule = <Value>(effect: Effect.Effect<Value, { readonly rule: string }>) =>
+  Effect.map(Effect.flip(effect), (refusal) => refusal.rule);
+
+it.effect("integerOf refuses text outside every space under the rule it was given", () =>
+  Effect.gen(function* refusesOutside() {
+    for (const space of spaces) {
+      for (const text of ["abc", "", "1.5", " 1", "0x10"]) {
+        assert.strictEqual(
+          yield* refusedRule(integerOf(text, space, "attribute-lexical", "the a attribute of b")),
+          "attribute-lexical",
+        );
+      }
+    }
+  }),
+);
+
+it.effect("integerOf passes the rule it is given through unchanged", () =>
+  Effect.gen(function* passesRule() {
+    assert.strictEqual(
+      yield* refusedRule(integerOf("abc", "integer", "P7", "the a attribute of b")),
+      "P7",
+    );
+  }),
+);
+
+it.effect("integerOf reads a nonNegativeInteger", () =>
+  Effect.gen(function* readsNonNegative() {
+    const refused = yield* refusedRule(
+      integerOf("-1", "nonNegativeInteger", "attribute-lexical", "the a attribute of b"),
+    );
+    assert.strictEqual(refused, "attribute-lexical");
+    assert.strictEqual(
+      yield* integerOf("+5", "nonNegativeInteger", "attribute-lexical", "the a attribute of b"),
+      5n,
+    );
+    assert.strictEqual(
+      yield* integerOf("05", "nonNegativeInteger", "attribute-lexical", "the a attribute of b"),
+      5n,
+    );
+    assert.strictEqual(
+      yield* integerOf("0", "nonNegativeInteger", "attribute-lexical", "the a attribute of b"),
+      0n,
+    );
+  }),
+);
+
+it.effect("integerOf reads a positiveInteger", () =>
+  Effect.gen(function* readsPositive() {
+    const refused = yield* refusedRule(
+      integerOf("0", "positiveInteger", "attribute-lexical", "the a attribute of b"),
+    );
+    assert.strictEqual(refused, "attribute-lexical");
+    assert.strictEqual(
+      yield* integerOf("1", "positiveInteger", "attribute-lexical", "the a attribute of b"),
+      1n,
+    );
+  }),
+);
+
+it.effect("integerOf reads an integer, signs included", () =>
+  Effect.gen(function* readsInteger() {
+    assert.strictEqual(
+      yield* integerOf("-0", "integer", "attribute-lexical", "the a attribute of b"),
+      0n,
+    );
+    assert.strictEqual(
+      yield* integerOf("-3", "integer", "attribute-lexical", "the a attribute of b"),
+      -3n,
+    );
+    assert.strictEqual(
+      yield* integerOf("+3", "integer", "attribute-lexical", "the a attribute of b"),
+      3n,
+    );
+  }),
+);
+
+it.effect("integerOf refuses a value outside the signed 64-bit range", () =>
+  Effect.gen(function* refusesRange() {
+    for (const space of spaces) {
+      assert.strictEqual(
+        yield* refusedRule(
+          integerOf("9223372036854775808", space, "attribute-lexical", "the a attribute of b"),
+        ),
+        "attribute-lexical",
+      );
+    }
+    assert.strictEqual(
+      yield* refusedRule(
+        integerOf("-9223372036854775809", "integer", "attribute-lexical", "the a attribute of b"),
+      ),
+      "attribute-lexical",
+    );
+    assert.strictEqual(
+      yield* integerOf(
+        "9223372036854775807",
+        "integer",
+        "attribute-lexical",
+        "the a attribute of b",
+      ),
+      9_223_372_036_854_775_807n,
+    );
+    assert.strictEqual(
+      yield* integerOf(
+        "-9223372036854775808",
+        "integer",
+        "attribute-lexical",
+        "the a attribute of b",
+      ),
+      -9_223_372_036_854_775_808n,
+    );
+  }),
+);
+
+it.effect("closedOf returns a member's handle and refuses anything else", () =>
+  Effect.gen(function* closes() {
+    const roster = ["exact", "case-insensitive"] as const;
+    assert.strictEqual(
+      yield* closedOf(roster, "case-insensitive", "attribute-lexical", "the a attribute of b"),
+      "case-insensitive",
+    );
+    assert.strictEqual(
+      yield* refusedRule(closedOf(roster, "other", "attribute-lexical", "the a attribute of b")),
+      "attribute-lexical",
+    );
+    assert.strictEqual(
+      yield* refusedRule(closedOf(roster, " exact", "P7", "the a attribute of b")),
+      "P7",
+    );
+    assert.strictEqual(
+      yield* refusedRule(closedOf(roster, "", "attribute-lexical", "the a attribute of b")),
+      "attribute-lexical",
+    );
+  }),
+);

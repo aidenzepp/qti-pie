@@ -4,8 +4,8 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { readXml } from "#qti/xml/read.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 import {
   FIXTURES_VERSION,
   examplesTarball,
@@ -329,7 +329,6 @@ const usageCuts: readonly ContentCut[] = [
     name: "usage3",
     negatives: [
       "usage3-integer-float",
-      "usage3-float-padded",
       "usage3-no-target",
       "usage3-two-values",
       "usage3-ordinary-mapping",
@@ -343,6 +342,7 @@ const usageCuts: readonly ContentCut[] = [
   },
   { member: usageMember, name: "usage3-typed", negatives: [], resources: 1 },
   { member: usageMember, name: "usage3-padded", negatives: [], resources: 1 },
+  { member: usageMember, name: "usage3-float-padded", negatives: [], resources: 1 },
 ];
 
 /**

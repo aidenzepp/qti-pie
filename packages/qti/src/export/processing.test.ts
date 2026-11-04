@@ -12,11 +12,11 @@ import { emptyEnvironment, environmentOf, withDeclarations } from "#qti/processi
 import type { DeclarationEntry, Environment, Mode } from "#qti/processing/env.ts";
 import { templateDocuments } from "#qti/processing/fixtures.ts";
 import type { RootKindHandle } from "#qti/schema/node.ts";
-import { canonicalize } from "#qti/xml/canonical.ts";
+import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { xmllintC14n } from "#qti/xml/oracle.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Attribute, Element, XmlDocument } from "#qti/xml/tree.ts";
-import { writeXml } from "#qti/xml/write.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Attribute, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { writeXml } from "@qti-pie/crust/write.ts";
 
 /**
  * What every test here runs on: the file system the scratch files need and the process spawner
@@ -97,7 +97,10 @@ const detached = (doc: XmlDocument, element: Element): XmlDocument => {
   };
 };
 
-const outcomeOf = (identifier: string, baseType: "boolean" | "float" | "integer") => {
+const outcomeOf = (
+  identifier: string,
+  baseType: "boolean" | "float" | "identifier" | "integer",
+) => {
   const entry: DeclarationEntry = {
     areaMapping: false,
     identifier,
@@ -233,6 +236,42 @@ layer(TestLayer, { excludeTestServices: true })("renderTree on processing docume
       ]) {
         assert.include(forms.rendered, lexical);
       }
+    }),
+  );
+
+  suite.effect("renders a plus-signed figures and a figures naming a variable as written", () =>
+    Effect.gen(function* figuresForms() {
+      for (const figures of ["+3", "COUNT"]) {
+        const doc = yield* readXml(
+          new TextEncoder().encode(
+            `<qti-outcome-processing xmlns="${asiNamespace}"><qti-set-outcome-value identifier="PASSED"><qti-equal-rounded rounding-mode="decimalPlaces" figures="${figures}"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value></qti-equal-rounded></qti-set-outcome-value></qti-outcome-processing>`,
+          ),
+        );
+        const forms = yield* roundTrip(doc, "qti-outcome-processing", outcomeSetting);
+
+        assert.strictEqual(forms.rendered, forms.read);
+        assert.include(forms.rendered, `figures="${figures}"`);
+      }
+    }),
+  );
+
+  suite.effect("renders a padded identifier qti-base-value as written", () =>
+    Effect.gen(function* paddedIdentifier() {
+      const doc = yield* readXml(
+        new TextEncoder().encode(
+          `<qti-response-processing xmlns="${asiNamespace}"><qti-set-outcome-value identifier="S"><qti-base-value base-type="identifier"> completed </qti-base-value></qti-set-outcome-value></qti-response-processing>`,
+        ),
+      );
+      const forms = yield* roundTrip(doc, "qti-response-processing", {
+        env: withDeclarations(emptyEnvironment("item"), [outcomeOf("S", "identifier")]),
+        language: "response",
+        mode: "item",
+        rootKind: "item",
+      });
+
+      assert.strictEqual(forms.rendered, forms.read);
+      assert.strictEqual(forms.rendered, forms.oracle);
+      assert.include(forms.rendered, "> completed <");
     }),
   );
 

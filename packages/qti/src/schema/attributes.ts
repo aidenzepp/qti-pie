@@ -10,51 +10,51 @@
  *
  * The 48 ARIA relations (`role` and 47 `aria-*` attributes, `aria-keyshorts` the 48th) are one
  * relation per attribute, `Aria<Name>`, each kind-copied and admitted like the base families. Their
- * value patterns, by relation:
+ * value patterns or closed rosters, by relation:
  * AriaActivedescendant: `patterns.ncName`
- * AriaAtomic: `patterns.xsBoolean`
- * AriaAutocomplete: `patterns.ariaAutocomplete`
- * AriaBusy: `patterns.xsBoolean`
- * AriaChecked: `patterns.ariaChecked`
+ * AriaAtomic: `XsBoolean`, a closed roster
+ * AriaAutocomplete: `AriaAutocompleteValue`, a closed roster
+ * AriaBusy: `XsBoolean`, a closed roster
+ * AriaChecked: `AriaTristate`, a closed roster
  * AriaColcount: `patterns.xsInteger`
  * AriaColindex: `patterns.xsInteger`
  * AriaColspan: `patterns.xsInteger`
  * AriaControls: `patterns.ncNameList`
- * AriaCurrent: `patterns.ariaCurrent`
+ * AriaCurrent: `AriaCurrentValue`, a closed roster
  * AriaDescribedby: `patterns.ncNameList`
  * AriaDetails: `patterns.ncName`
- * AriaDisabled: `patterns.xsBoolean`
+ * AriaDisabled: `XsBoolean`, a closed roster
  * AriaErrormessage: `patterns.ncName`
- * AriaExpanded: `patterns.ariaExpanded`
+ * AriaExpanded: `AriaTrueFalseUndefined`, a closed roster
  * AriaFlowto: `patterns.ncNameList`
- * AriaHaspopup: `patterns.xsBoolean`
- * AriaHidden: `patterns.xsBoolean`
- * AriaInvalid: `patterns.ariaInvalid`
+ * AriaHaspopup: `XsBoolean`, a closed roster
+ * AriaHidden: `XsBoolean`, a closed roster
+ * AriaInvalid: `AriaInvalidValue`, a closed roster
  * AriaKeyshortcuts: `patterns.xsString`
  * AriaKeyshorts: `patterns.xsString`
  * AriaLabel: `patterns.xsNormalizedString`
  * AriaLabelledby: `patterns.ncNameList`
  * AriaLevel: `patterns.positiveInteger`
- * AriaLive: `patterns.ariaLive`
- * AriaModal: `patterns.xsBoolean`
- * AriaMultiline: `patterns.xsBoolean`
- * AriaMultiselectable: `patterns.xsBoolean`
- * AriaOrientation: `patterns.ariaOrientation`
+ * AriaLive: `AriaLiveValue`, a closed roster
+ * AriaModal: `XsBoolean`, a closed roster
+ * AriaMultiline: `XsBoolean`, a closed roster
+ * AriaMultiselectable: `XsBoolean`, a closed roster
+ * AriaOrientation: `AriaOrientationValue`, a closed roster
  * AriaOwns: `patterns.ncNameList`
  * AriaPlaceholder: `patterns.xsString`
  * AriaPosinset: `patterns.positiveInteger`
- * AriaPressed: `patterns.ariaPressed`
- * AriaReadonly: `patterns.xsBoolean`
+ * AriaPressed: `AriaTristate`, a closed roster
+ * AriaReadonly: `XsBoolean`, a closed roster
  * AriaRelevant: `patterns.ariaRelevantList`
- * AriaRequired: `patterns.xsBoolean`
- * AriaRole: `patterns.ariaRole`
+ * AriaRequired: `XsBoolean`, a closed roster
+ * AriaRole: `AriaRoleValue`, a closed roster
  * AriaRoledescription: `patterns.xsString`
  * AriaRowcount: `patterns.xsInteger`
  * AriaRowindex: `patterns.xsInteger`
  * AriaRowspan: `patterns.xsInteger`
- * AriaSelected: `patterns.ariaSelected`
+ * AriaSelected: `AriaTrueFalseUndefined`, a closed roster
  * AriaSetsize: `patterns.xsInteger`
- * AriaSort: `patterns.ariaSort`
+ * AriaSort: `AriaSortValue`, a closed roster
  * AriaValuemax: `patterns.xsDecimal`
  * AriaValuemin: `patterns.xsDecimal`
  * AriaValuenow: `patterns.xsDecimal`
@@ -83,9 +83,38 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import { IdrefAttribute } from "#qti/schema/content/rosters.ts";
+import {
+  AriaAutocompleteValue,
+  AriaCurrentValue,
+  AriaInvalidValue,
+  AriaLiveValue,
+  AriaOrientationValue,
+  AriaRoleValue,
+  AriaSortValue,
+  AriaTristate,
+  AriaTrueFalseUndefined,
+  IdrefAttribute,
+  SuppressTtsMode,
+  TextDirection,
+  XsBoolean,
+} from "#qti/schema/content/rosters.ts";
 import { DocumentId, HtmlId } from "#qti/schema/document.ts";
-import { AttributeLexical, AttributeName, Node, NodeKind, RootKind } from "#qti/schema/node.ts";
+import {
+  AttributeLexical,
+  AttributeName,
+  AttributeSpelling,
+  Node,
+  NodeKind,
+  RootKind,
+} from "#qti/schema/node.ts";
+import {
+  AriaInteger,
+  AriaPositiveInteger,
+  ClassList,
+  ContentLanguage,
+  IdReference,
+  XmlBaseUri,
+} from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -106,7 +135,7 @@ export const NodeClass = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.classList),
+    value: ClassList,
   },
   ["node"],
 );
@@ -120,7 +149,7 @@ export const NodeLang = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.bcp47),
+    value: ContentLanguage,
   },
   ["node"],
 );
@@ -167,7 +196,7 @@ export const NodeDir = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.dirEnum),
+    value: closedId(TextDirection),
   },
   ["node"],
 );
@@ -181,7 +210,7 @@ export const NodeXmlBase = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.anyUri),
+    value: XmlBaseUri,
   },
   ["node"],
 );
@@ -195,7 +224,7 @@ export const NodeSuppressTts = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.suppressTts),
+    value: closedId(SuppressTtsMode),
   },
   ["node"],
 );
@@ -211,7 +240,7 @@ export const NodeCatalogIdref = relation(
     document: uuid,
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ncName),
+    value: IdReference,
   },
   ["node"],
 );
@@ -259,13 +288,13 @@ export const AriaActivedescendant = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ncName),
+    value: IdReference,
   },
   ["node"],
 );
 
 /**
- * The `aria-atomic` of a node, by `patterns.xsBoolean`.
+ * The `aria-atomic` of a node, by the `XsBoolean` roster.
  */
 export const AriaAtomic = relation(
   "AriaAtomic",
@@ -273,13 +302,13 @@ export const AriaAtomic = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsBoolean),
+    value: closedId(XsBoolean),
   },
   ["node"],
 );
 
 /**
- * The `aria-autocomplete` of a node, by `patterns.ariaAutocomplete`.
+ * The `aria-autocomplete` of a node, by the `AriaAutocompleteValue` roster.
  */
 export const AriaAutocomplete = relation(
   "AriaAutocomplete",
@@ -287,13 +316,13 @@ export const AriaAutocomplete = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ariaAutocomplete),
+    value: closedId(AriaAutocompleteValue),
   },
   ["node"],
 );
 
 /**
- * The `aria-busy` of a node, by `patterns.xsBoolean`.
+ * The `aria-busy` of a node, by the `XsBoolean` roster.
  */
 export const AriaBusy = relation(
   "AriaBusy",
@@ -301,13 +330,13 @@ export const AriaBusy = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsBoolean),
+    value: closedId(XsBoolean),
   },
   ["node"],
 );
 
 /**
- * The `aria-checked` of a node, by `patterns.ariaChecked`.
+ * The `aria-checked` of a node, by the `AriaTristate` roster.
  */
 export const AriaChecked = relation(
   "AriaChecked",
@@ -315,7 +344,7 @@ export const AriaChecked = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ariaChecked),
+    value: closedId(AriaTristate),
   },
   ["node"],
 );
@@ -329,7 +358,7 @@ export const AriaColcount = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsInteger),
+    value: AriaInteger,
   },
   ["node"],
 );
@@ -343,7 +372,7 @@ export const AriaColindex = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsInteger),
+    value: AriaInteger,
   },
   ["node"],
 );
@@ -357,7 +386,7 @@ export const AriaColspan = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsInteger),
+    value: AriaInteger,
   },
   ["node"],
 );
@@ -377,7 +406,7 @@ export const AriaControls = relation(
 );
 
 /**
- * The `aria-current` of a node, by `patterns.ariaCurrent`.
+ * The `aria-current` of a node, by the `AriaCurrentValue` roster.
  */
 export const AriaCurrent = relation(
   "AriaCurrent",
@@ -385,7 +414,7 @@ export const AriaCurrent = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ariaCurrent),
+    value: closedId(AriaCurrentValue),
   },
   ["node"],
 );
@@ -413,13 +442,13 @@ export const AriaDetails = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ncName),
+    value: IdReference,
   },
   ["node"],
 );
 
 /**
- * The `aria-disabled` of a node, by `patterns.xsBoolean`.
+ * The `aria-disabled` of a node, by the `XsBoolean` roster.
  */
 export const AriaDisabled = relation(
   "AriaDisabled",
@@ -427,7 +456,7 @@ export const AriaDisabled = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsBoolean),
+    value: closedId(XsBoolean),
   },
   ["node"],
 );
@@ -441,13 +470,13 @@ export const AriaErrormessage = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ncName),
+    value: IdReference,
   },
   ["node"],
 );
 
 /**
- * The `aria-expanded` of a node, by `patterns.ariaExpanded`.
+ * The `aria-expanded` of a node, by the `AriaTrueFalseUndefined` roster.
  */
 export const AriaExpanded = relation(
   "AriaExpanded",
@@ -455,7 +484,7 @@ export const AriaExpanded = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ariaExpanded),
+    value: closedId(AriaTrueFalseUndefined),
   },
   ["node"],
 );
@@ -475,7 +504,7 @@ export const AriaFlowto = relation(
 );
 
 /**
- * The `aria-haspopup` of a node, by `patterns.xsBoolean`.
+ * The `aria-haspopup` of a node, by the `XsBoolean` roster.
  */
 export const AriaHaspopup = relation(
   "AriaHaspopup",
@@ -483,13 +512,13 @@ export const AriaHaspopup = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsBoolean),
+    value: closedId(XsBoolean),
   },
   ["node"],
 );
 
 /**
- * The `aria-hidden` of a node, by `patterns.xsBoolean`.
+ * The `aria-hidden` of a node, by the `XsBoolean` roster.
  */
 export const AriaHidden = relation(
   "AriaHidden",
@@ -497,13 +526,13 @@ export const AriaHidden = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsBoolean),
+    value: closedId(XsBoolean),
   },
   ["node"],
 );
 
 /**
- * The `aria-invalid` of a node, by `patterns.ariaInvalid`.
+ * The `aria-invalid` of a node, by the `AriaInvalidValue` roster.
  */
 export const AriaInvalid = relation(
   "AriaInvalid",
@@ -511,7 +540,7 @@ export const AriaInvalid = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ariaInvalid),
+    value: closedId(AriaInvalidValue),
   },
   ["node"],
 );
@@ -581,13 +610,13 @@ export const AriaLevel = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.positiveInteger),
+    value: AriaPositiveInteger,
   },
   ["node"],
 );
 
 /**
- * The `aria-live` of a node, by `patterns.ariaLive`.
+ * The `aria-live` of a node, by the `AriaLiveValue` roster.
  */
 export const AriaLive = relation(
   "AriaLive",
@@ -595,13 +624,13 @@ export const AriaLive = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ariaLive),
+    value: closedId(AriaLiveValue),
   },
   ["node"],
 );
 
 /**
- * The `aria-modal` of a node, by `patterns.xsBoolean`.
+ * The `aria-modal` of a node, by the `XsBoolean` roster.
  */
 export const AriaModal = relation(
   "AriaModal",
@@ -609,13 +638,13 @@ export const AriaModal = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsBoolean),
+    value: closedId(XsBoolean),
   },
   ["node"],
 );
 
 /**
- * The `aria-multiline` of a node, by `patterns.xsBoolean`.
+ * The `aria-multiline` of a node, by the `XsBoolean` roster.
  */
 export const AriaMultiline = relation(
   "AriaMultiline",
@@ -623,13 +652,13 @@ export const AriaMultiline = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsBoolean),
+    value: closedId(XsBoolean),
   },
   ["node"],
 );
 
 /**
- * The `aria-multiselectable` of a node, by `patterns.xsBoolean`.
+ * The `aria-multiselectable` of a node, by the `XsBoolean` roster.
  */
 export const AriaMultiselectable = relation(
   "AriaMultiselectable",
@@ -637,13 +666,13 @@ export const AriaMultiselectable = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsBoolean),
+    value: closedId(XsBoolean),
   },
   ["node"],
 );
 
 /**
- * The `aria-orientation` of a node, by `patterns.ariaOrientation`.
+ * The `aria-orientation` of a node, by the `AriaOrientationValue` roster.
  */
 export const AriaOrientation = relation(
   "AriaOrientation",
@@ -651,7 +680,7 @@ export const AriaOrientation = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ariaOrientation),
+    value: closedId(AriaOrientationValue),
   },
   ["node"],
 );
@@ -693,13 +722,13 @@ export const AriaPosinset = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.positiveInteger),
+    value: AriaPositiveInteger,
   },
   ["node"],
 );
 
 /**
- * The `aria-pressed` of a node, by `patterns.ariaPressed`.
+ * The `aria-pressed` of a node, by the `AriaTristate` roster.
  */
 export const AriaPressed = relation(
   "AriaPressed",
@@ -707,13 +736,13 @@ export const AriaPressed = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ariaPressed),
+    value: closedId(AriaTristate),
   },
   ["node"],
 );
 
 /**
- * The `aria-readonly` of a node, by `patterns.xsBoolean`.
+ * The `aria-readonly` of a node, by the `XsBoolean` roster.
  */
 export const AriaReadonly = relation(
   "AriaReadonly",
@@ -721,7 +750,7 @@ export const AriaReadonly = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsBoolean),
+    value: closedId(XsBoolean),
   },
   ["node"],
 );
@@ -741,7 +770,7 @@ export const AriaRelevant = relation(
 );
 
 /**
- * The `aria-required` of a node, by `patterns.xsBoolean`.
+ * The `aria-required` of a node, by the `XsBoolean` roster.
  */
 export const AriaRequired = relation(
   "AriaRequired",
@@ -749,13 +778,13 @@ export const AriaRequired = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsBoolean),
+    value: closedId(XsBoolean),
   },
   ["node"],
 );
 
 /**
- * The `role` of a node, by `patterns.ariaRole`.
+ * The `role` of a node, by the `AriaRoleValue` roster.
  */
 export const AriaRole = relation(
   "AriaRole",
@@ -763,7 +792,7 @@ export const AriaRole = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ariaRole),
+    value: closedId(AriaRoleValue),
   },
   ["node"],
 );
@@ -791,7 +820,7 @@ export const AriaRowcount = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsInteger),
+    value: AriaInteger,
   },
   ["node"],
 );
@@ -805,7 +834,7 @@ export const AriaRowindex = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsInteger),
+    value: AriaInteger,
   },
   ["node"],
 );
@@ -819,13 +848,13 @@ export const AriaRowspan = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsInteger),
+    value: AriaInteger,
   },
   ["node"],
 );
 
 /**
- * The `aria-selected` of a node, by `patterns.ariaSelected`.
+ * The `aria-selected` of a node, by the `AriaTrueFalseUndefined` roster.
  */
 export const AriaSelected = relation(
   "AriaSelected",
@@ -833,7 +862,7 @@ export const AriaSelected = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ariaSelected),
+    value: closedId(AriaTrueFalseUndefined),
   },
   ["node"],
 );
@@ -847,13 +876,13 @@ export const AriaSetsize = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.xsInteger),
+    value: AriaInteger,
   },
   ["node"],
 );
 
 /**
- * The `aria-sort` of a node, by `patterns.ariaSort`.
+ * The `aria-sort` of a node, by the `AriaSortValue` roster.
  */
 export const AriaSort = relation(
   "AriaSort",
@@ -861,7 +890,7 @@ export const AriaSort = relation(
     attribute: closedId(AttributeName),
     kind: closedId(NodeKind),
     node: uuid,
-    value: str.regex(patterns.ariaSort),
+    value: closedId(AriaSortValue),
   },
   ["node"],
 );
@@ -999,6 +1028,10 @@ export const arms = {};
  */
 export const rules = [
   contained(on(AttributeLexical, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  contained(
+    on(AttributeSpelling, "kind", "attribute"),
+    on(AttributeAdmission, "kind", "attribute"),
+  ),
   contained(on(HtmlId, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
   check("HtmlIdAttribute", HtmlId, (row) => row.eq(row.attribute, "id")),
   contained(on(NodeClass, "node", "kind"), on(Node, "id", "kind")),

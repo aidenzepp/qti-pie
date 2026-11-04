@@ -40,7 +40,7 @@ export const leaseTestTimeoutMs = 60_000;
  * The hook decodes the 120 MB migrations snapshot and compiles the login, and with no
  * `timeout` option it falls to vitest's 10 s `hookTimeout`, which the parallel leased full suite
  * exceeded under load averages of 8 to 15 on 14 CPUs (merges `8b3f2a65`, `1a3d4f4c`, `998fe309`
- * and `655ddd9f`). Measured on 2026-11-02 at `0f151af` with the snapshot at 120,065,687 bytes
+ * and `655ddd9f`). Measured on 2026-11-02 at `ae520e6` with the snapshot at 120,065,687 bytes
  * and no database: five quiet builds had a median of 7.35 s, and six concurrent builds, one per
  * test file that builds the layer, had a maximum of 9.29 s at load averages of 4 to 6, each
  * process peaking near 1.5 GB resident. The budget is the larger of twice that maximum
@@ -57,7 +57,7 @@ export const authorLayerHookTimeoutMs = 20_000;
  * `rowsOfPackage` (`rules.packaging.test.ts`) or its own fixture set (`content-a.test.ts`), and
  * with no `timeout` option it fell to vitest's 10 s `hookTimeout`, which both files exceeded: the
  * first alone on a lease, the second under the leased full suite. Measured on 2026-11-03 at
- * `68964ce` on a lease: five quiet runs per file had a median of 9.43 s for
+ * `922fe9b` on a lease: five quiet runs per file had a median of 9.43 s for
  * `rules.packaging.test.ts` and 9.26 s for `content-a.test.ts`, and six concurrent runs per file
  * had a maximum of 10.50 s (`content-a.test.ts`; 10.28 s for the other) at load averages of 9 to 11.
  * The budget is the larger of twice that maximum (21 s) and 20 s, the floor being twice the
@@ -71,7 +71,7 @@ export const fixtureRowsLayerHookTimeoutMs = 21_000;
  * Such a test pays Node's start and the module graph of `cli.ts`, not the snapshot, and vitest's
  * 5 s default was exceeded by the parallel leased full suite under load averages of 8 to 15 on 14
  * CPUs (merges `8b3f2a65`, `1a3d4f4c`, `998fe309` and `655ddd9f`). Measured on 2026-11-02 at
- * `0f151af`: fifteen quiet spawns had a median of 3.8 s, and spawns beside six concurrent
+ * `ae520e6`: fifteen quiet spawns had a median of 3.8 s, and spawns beside six concurrent
  * layer builds had a maximum of 4.5 s at load averages of 4 to 6. The budget is the larger of
  * twice that maximum (9 s) and 10 s, the floor being twice the default.
  * A test file whose handlers load the engine loads it first in a `beforeAll` under
@@ -103,7 +103,7 @@ export const engineLoadHookTimeoutMs = 26_000;
  * `global-setup.ts` materializes only `simple` and four packages, so this test cuts and writes
  * the 19 items itself, and vitest's 5 s default was exceeded under load (a fresh tree timed out at
  * 5033 ms at a load average of 20.6; that figure is censored by the timeout, so the true time was
- * longer). Measured on 2026-11-02 at `8a2decc`, with no `cut-*` directory in the fixtures root:
+ * longer). Measured on 2026-11-02 at `d2ee380`, with no `cut-*` directory in the fixtures root:
  * three cold runs alone took 2902, 2821 and 2699 ms at load averages of 8.75, 8.37 and 8.53, and
  * six concurrent cold runs, each with its own fixtures root, took 3265, 3279, 3289, 3289, 3343 and
  * 3249 ms at a load average of 8.1. The budget is the larger of twice the maximum (3343 ms, so
@@ -111,3 +111,19 @@ export const engineLoadHookTimeoutMs = 26_000;
  * Raise it only on a new measurement recorded here, never to make a run pass.
  */
 export const cutItemRenderTestTimeoutMs = 10_000;
+
+/**
+ * The timeout, in milliseconds, for each spawn of `scripts/seed-sql.ts` that a test makes; a test
+ * that spawns it more than once takes this times its number of spawns.
+ *
+ * Each spawn loads the whole Qti schema, which the CLI start `cliProcessTestTimeoutMs` measures
+ * does not. Measured on 2026-11-03 at `a776f20`, from `packages/qti`, with the printed seed read
+ * to its end: three serial spawns alone took 642, 635 and 673 ms at a one-minute load average of
+ * 20.4 before and after, and three runs of 13 concurrent spawns (vitest's default worker count on
+ * 14 CPUs, `availableParallelism() - 1`) took 1640 to 1740 ms (maximum 1740 ms), 1399 to 1461 ms
+ * and 1498 to 1596 ms, at load averages of 20.4, 20.4 and 20.1 before and 20.4, 20.1 and 20.1
+ * after. The budget is the larger of twice the concurrent maximum (3.5 s) and 10 s, the floor being
+ * twice the default, rounded up to the next second. Raise it only on a new measurement recorded
+ * here, never to make a run pass.
+ */
+export const seedSqlProcessTestTimeoutMs = 10_000;

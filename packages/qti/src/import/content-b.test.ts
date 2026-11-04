@@ -229,6 +229,7 @@ type Law =
       readonly within: { readonly high: bigint | "*"; readonly low: bigint };
     }
   | { readonly flags: "su" | "u"; readonly kind: "pattern"; readonly source: string }
+  | { readonly contract: string; readonly kind: "contract" }
   | { readonly from: Side; readonly kind: "contained"; readonly to: Side };
 
 const side = (
@@ -246,6 +247,8 @@ const checkLaw = (relation: AnyRelation, name: string): Law => ({
 });
 
 const patternLaw = (source: string): Law => ({ flags: "u", kind: "pattern", source });
+
+const contractLaw = (contract: string): Law => ({ contract, kind: "contract" });
 
 const capacityLaw = (target: Side, from: Side, low: bigint, high: bigint | "*"): Law => ({
   from,
@@ -660,8 +663,8 @@ const negatives: readonly Negative[] = [
       });
     },
     fixture: "cut-choice",
-    law: patternLaw(patterns.positiveInteger),
-    name: "an aria-level of 0 is refused by the positiveInteger pattern",
+    law: contractLaw("AriaPositiveInteger"),
+    name: "an aria-level of 0 is refused by the AriaPositiveInteger contract",
     rule: "attribute-lexical",
   },
   {
@@ -683,8 +686,8 @@ const negatives: readonly Negative[] = [
       });
     },
     fixture: "cut-choice",
-    law: patternLaw(patterns.bcp47),
-    name: "a lang of en--x is refused by the bcp47 pattern",
+    law: contractLaw("ContentLanguage"),
+    name: "a lang of en--x is refused by the ContentLanguage contract",
     rule: "attribute-lexical",
   },
   {

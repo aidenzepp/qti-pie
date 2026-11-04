@@ -7,7 +7,6 @@
  * The family builders of `interactions/*.ts` read the elements of one item and write the arm rows
  * of the interaction kinds they own; each takes an {@link InteractionContext} and the rows so far.
  */
-import { judgedLater } from "#qti/import/judged.ts";
 import type { Relation, uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import { associateRows } from "#qti/import/interactions/associate.ts";
@@ -16,11 +15,13 @@ import { hotRows } from "#qti/import/interactions/hot.ts";
 import { orderRows } from "#qti/import/interactions/order.ts";
 import { otherRows } from "#qti/import/interactions/other.ts";
 import { textRows } from "#qti/import/interactions/text.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, replace, Rows, typedAttribute } from "#qti/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary, WhiteSpace } from "#qti/import/tree.ts";
 import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
-import type { BoundHandle, ShapeHandle } from "#qti/schema/content/rosters.ts";
+import type { BoundHandle, ShapeHandle, XsBooleanHandle } from "#qti/schema/content/rosters.ts";
 import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
+import { RectCoords, ShapeCoords } from "#qti/schema/contracts.ts";
 import type { BaseType, DeclarationShape, TypedCardinality } from "#qti/schema/declaration.ts";
 import {
   GapMatchBinding,
@@ -38,7 +39,7 @@ import {
   CoordsPoly,
   CoordsRect,
 } from "#qti/schema/shapes.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * The variable a declaration names, as the bindings of an interaction copy it.
@@ -51,11 +52,11 @@ export interface DeclaredVariable {
 }
 
 /**
- * What the builders need to know about the item beside its tree: the effective `adaptive` lexical
+ * What the builders need to know about the item beside its tree: the effective `adaptive` value
  * of its `qti-assessment-item`, which every binding copies.
  */
 export interface ItemFacts {
-  readonly adaptive: string;
+  readonly adaptive: XsBooleanHandle;
 }
 
 /**
@@ -184,8 +185,9 @@ export const attributeReader = (rows: Rows, element: Element, node: NodeRef): At
 };
 
 /**
- * The non-negative integer a lexical form writes. A form that is not one reads as 0: the lexical
- * column beside it carries the form and its pattern refuses it at commit.
+ * The non-negative integer a form writes. A form that is not one reads as 0: the attribute's own
+ * writer reads it through `spelledInteger` (`tree.ts`), which refuses such text before a count is
+ * taken from it.
  */
 const naturalOf = (lexical: string): bigint =>
   /^\+?[0-9]+$/u.test(lexical) ? BigInt(lexical) : 0n;
@@ -195,7 +197,7 @@ const naturalOf = (lexical: string): bigint =>
  *
  * @param lexical - The attribute as the source wrote it, `None` when it is absent.
  * @param fallback - The value the schema defaults an absent attribute to.
- * @returns The integer the lexical form writes, 0 for a form that is no natural number, and
+ * @returns The integer the form writes, 0 for a form that is no natural number, and
  *   `fallback` when the attribute is absent.
  */
 export const typedCopy = (lexical: Option.Option<string>, fallback: bigint): bigint =>
@@ -302,23 +304,26 @@ export const coordsRows = (
 ): Rows => {
   const value = replace(lexical);
   const lexicalRows = typedAttribute(rows, node, ownerKind, "coords", lexical, "replace").rows;
-  const withCoords = Rows.add(lexicalRows, Coords, [{ node, ownerKind, shape, value }]);
+  const withCoords = Rows.add(lexicalRows, Coords, [
+    { node, ownerKind, shape, value: ShapeCoords(value) },
+  ]);
   const fact = [{ node, value }];
+  const rect = [{ node, value: RectCoords(value) }];
   switch (shape) {
     case "circle": {
       return Rows.add(withCoords, CoordsCircle, fact);
     }
     case "default": {
-      return Rows.add(withCoords, CoordsDefault, fact);
+      return Rows.add(withCoords, CoordsDefault, [{ node, value: ShapeCoords(value) }]);
     }
     case "ellipse": {
-      return Rows.add(withCoords, CoordsEllipse, fact);
+      return Rows.add(withCoords, CoordsEllipse, rect);
     }
     case "poly": {
       return Rows.add(withCoords, CoordsPoly, fact);
     }
     case "rect": {
-      return Rows.add(withCoords, CoordsRect, fact);
+      return Rows.add(withCoords, CoordsRect, rect);
     }
     default: {
       return shape satisfies never;
@@ -398,7 +403,7 @@ export const nearestInteraction = (nodes: NodeIndex, node: Element): Option.Opti
  * @param responseIdentifier - The interaction's `response-identifier`.
  * @param declaration - The variable the identifier names, `None` when no declaration names it.
  * @param ancestry - The ancestry the interaction's node sits in.
- * @param adaptive - The item's effective `adaptive` lexical form.
+ * @param adaptive - The item's effective `adaptive` value.
  * @param maxCount - The count the typed binding holds, from {@link maxCountDefault}.
  * @returns The rows with the `InteractionBinding` and its `TypedBinding` or `RecordBinding`;
  *   `ItemRefusal` for a `response-identifier` that no declaration of the document names, since no
@@ -412,7 +417,7 @@ export const bindingRows = Effect.fn("import.bindingRows")(function* bindingRows
   responseIdentifier: string,
   declaration: Option.Option<DeclaredVariable>,
   ancestry: AncestryHandle,
-  adaptive: string,
+  adaptive: XsBooleanHandle,
   maxCount: bigint,
 ): Effect.fn.Return<Rows, ItemRefusal> {
   if (Option.isNone(declaration)) {
@@ -425,7 +430,7 @@ export const bindingRows = Effect.fn("import.bindingRows")(function* bindingRows
   const declared = declaration.value;
   const built = Rows.add(rows, InteractionBinding, [
     {
-      adaptive: judgedLater(adaptive),
+      adaptive,
       ancestry,
       document,
       interactionKind: kind,
@@ -539,7 +544,8 @@ const shared: Shared = {
  * @param item - What the builders need to know about the item.
  * @param rows - The rows so far.
  * @returns The rows with every interaction's arm, binding, owner copy and attribute rows;
- *   `UnmodeledVocabulary` and `ItemRefusal` as the builders raise them.
+ *   `UnmodeledVocabulary` and `ItemRefusal` as the builders raise them, and `ImportRefused` as the
+ *   family builders raise it.
  */
 export const interactionRows = Effect.fn("import.interactionRows")(function* interactionRows(
   root: Element,
@@ -548,7 +554,7 @@ export const interactionRows = Effect.fn("import.interactionRows")(function* int
   declarations: ReadonlyMap<string, DeclaredVariable>,
   item: ItemFacts,
   rows: Rows,
-): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal | UnmodeledVocabulary> {
   const ctx: InteractionContext = { declarations, documentId, item, nodes, root, shared };
   let built = rows;
   built = yield* orderRows(ctx, built);

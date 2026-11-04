@@ -7,8 +7,9 @@
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { Effect, Option, Predicate, Schema } from "effect";
 import { standardTemplate } from "#qti/import/item.ts";
-import { collapse, replace, Rows } from "#qti/import/tree.ts";
+import { collapse, replace, Rows, valueText } from "#qti/import/tree.ts";
 import type { WhiteSpace } from "#qti/import/tree.ts";
+import { spelledText } from "#qti/schema/attribute-homes.ts";
 import {
   Declaration,
   DeclarationLongInterpretation,
@@ -33,6 +34,7 @@ import {
 import { AssessmentItem } from "#qti/schema/item.ts";
 import {
   AttributeLexical,
+  AttributeSpelling,
   Edge,
   EntityReference,
   Node,
@@ -165,10 +167,15 @@ const contentOf = (index: Index, id: string): string =>
   (index.children.get(id) ?? []).map((edge) => index.pieces.get(edge.child) ?? "").join("");
 
 /**
- * `text-copy`: every `qti-value` arm row holds the `replace`d text of its node, which is the class
- * of `qti-value` for every base type (spec 3.11).
+ * `text-copy`: every `qti-value` arm row holds the `replace`d text of its node with outer
+ * whitespace removed for every base type but string (spec 3.11, decision 157). An arm row with no
+ * `DeclaredValue` row is compared with the untrimmed text; the `DeclaredValue` containment refuses
+ * it at commit.
  */
 const textCopy = (rows: Rows, index: Index): Finding => {
+  const baseTypes = new Map(
+    Rows.of(rows, values.DeclaredValue).map((row) => [row.id, row.baseType] as const),
+  );
   for (const relation of valueArms) {
     for (const row of rows.get(relation) ?? []) {
       if (!isArmRow(row)) {
@@ -179,7 +186,9 @@ const textCopy = (rows: Rows, index: Index): Finding => {
         return refuse("text-copy", `${relation.name} row ${row.id} names no node.`);
       }
 
-      const expected = replace(contentOf(index, row.id));
+      const baseType = baseTypes.get(row.id);
+      const replaced = replace(contentOf(index, row.id));
+      const expected = baseType === undefined ? replaced : valueText(baseType, replaced);
       if (row.value !== expected) {
         return refuse(
           "text-copy",
@@ -291,7 +300,9 @@ const filteredKinds: readonly string[] = [
  * The shadows of the collapse-class attributes of processing expressions and rules (spec 4.3
  * "Attribute storage"): the importer writes a lexical row for one whose value as read differs from
  * its collapse, and each entry names the typed column it shadows. For a mixed union (`figures`,
- * `min`, `max`, `step`) the importer writes a lexical row only for a collapsed literal.
+ * `min`, `max`, `step`) the importer writes a lexical row only for a collapsed literal. A
+ * number-or-variable attribute that has a typed copy (`figures`, `n`, `number-repeats`) is read as
+ * the copy's number for a literal and as the `*Ref` row's identifier for a reference.
  */
 const processingShadows: readonly (readonly [string, Shadow])[] = [
   ...collapsedBy(referringKinds, "identifier", referenceOf),
@@ -384,32 +395,42 @@ const processingShadows: readonly (readonly [string, Shadow])[] = [
     (rows, node) =>
       Rows.of(rows, attributed.Substring).find((row) => row.id === node)?.caseSensitive,
   ),
-  ...collapsedBy(
-    ["qti-equal-rounded"],
-    "figures",
-    (rows, node) => Rows.of(rows, attributed.EqualRounded).find((row) => row.id === node)?.figures,
-  ),
-  ...collapsedBy(
-    ["qti-round-to"],
-    "figures",
-    (rows, node) => Rows.of(rows, attributed.RoundTo).find((row) => row.id === node)?.figures,
-  ),
+  ...collapsedBy(["qti-equal-rounded"], "figures", (rows, node) => {
+    const held = Rows.of(rows, attributed.EqualRounded).find((row) => row.id === node);
+
+    return held?.figuresKind === "ref"
+      ? Rows.of(rows, attributed.EqualRoundedFiguresRef).find((row) => row.node === node)
+          ?.identifier
+      : held?.figuresValue.toString();
+  }),
+  ...collapsedBy(["qti-round-to"], "figures", (rows, node) => {
+    const held = Rows.of(rows, attributed.RoundTo).find((row) => row.id === node);
+
+    return held?.figuresKind === "ref"
+      ? Rows.of(rows, attributed.RoundToFiguresRef).find((row) => row.node === node)?.identifier
+      : held?.figuresValue.toString();
+  }),
   ...collapsedBy(
     ["qti-field-value"],
     "field-identifier",
     (rows, node) =>
       Rows.of(rows, attributed.FieldValue).find((row) => row.id === node)?.fieldIdentifier,
   ),
-  ...collapsedBy(
-    ["qti-index"],
-    "n",
-    (rows, node) => Rows.of(rows, attributed.Index).find((row) => row.id === node)?.n,
-  ),
-  ...collapsedBy(
-    ["qti-repeat"],
-    "number-repeats",
-    (rows, node) => Rows.of(rows, attributed.Repeat).find((row) => row.id === node)?.numberRepeats,
-  ),
+  ...collapsedBy(["qti-index"], "n", (rows, node) => {
+    const held = Rows.of(rows, attributed.Index).find((row) => row.id === node);
+
+    return held?.nKind === "ref"
+      ? Rows.of(rows, attributed.IndexNRef).find((row) => row.node === node)?.identifier
+      : held?.nValue.toString();
+  }),
+  ...collapsedBy(["qti-repeat"], "number-repeats", (rows, node) => {
+    const held = Rows.of(rows, attributed.Repeat).find((row) => row.id === node);
+
+    return held?.numberRepeatsKind === "ref"
+      ? Rows.of(rows, attributed.RepeatNumberRepeatsRef).find((row) => row.node === node)
+          ?.identifier
+      : held?.numberRepeatsValue.toString();
+  }),
   ...collapsedBy(
     ["qti-any-n"],
     "min",
@@ -587,11 +608,17 @@ const shadows: ReadonlyMap<string, Shadow> = new Map<string, Shadow>([
   ],
   [
     "qti-choice-interaction/max-choices",
-    { column: (rows, node) => interaction(rows, node)?.maxChoices, whiteSpace: "collapse" },
+    {
+      column: (rows, node) => interaction(rows, node)?.maxChoicesN?.toString(),
+      whiteSpace: "collapse",
+    },
   ],
   [
     "qti-choice-interaction/min-choices",
-    { column: (rows, node) => interaction(rows, node)?.minChoices, whiteSpace: "collapse" },
+    {
+      column: (rows, node) => interaction(rows, node)?.minChoicesN?.toString(),
+      whiteSpace: "collapse",
+    },
   ],
   [
     "qti-choice-interaction/orientation",
@@ -661,40 +688,17 @@ const shadows: ReadonlyMap<string, Shadow> = new Map<string, Shadow>([
 export const shadowedAttributes: ReadonlySet<string> = new Set(shadows.keys());
 
 /**
- * The lexical form of a non-negative integer as the importer reads it: an unparseable form reads
- * 0, and the lexical column beside it refuses the form at commit.
- */
-const naturalOf = (lexical: string): bigint =>
-  /^\+?[0-9]+$/u.test(lexical) ? BigInt(lexical) : 0n;
-
-/**
  * A column that holds no tab, line feed or carriage return, as the `replace` class guarantees.
  */
 const hasReplaceable = (text: string): boolean => replace(text) !== text;
 
 /**
- * `typed-copy` of the interaction: each count equals the parse of its lexical column, and each
- * choice binding's `maxCount` equals its choice interaction's `maxChoicesN`. The other kinds'
- * binding counts are the content guards' (`bindingCopy`).
+ * `typed-copy` of the interaction: each choice binding's `maxCount` equals its choice
+ * interaction's `maxChoicesN`. The other kinds' binding counts are the content guards'
+ * (`bindingCopy`).
  */
 const interactionCopy = (rows: Rows): Finding => {
   const interactions = Rows.of(rows, ChoiceInteraction);
-  for (const row of interactions) {
-    if (row.maxChoicesN !== naturalOf(row.maxChoices)) {
-      return refuse(
-        "typed-copy",
-        `ChoiceInteraction ${row.id} holds maxChoicesN ${row.maxChoicesN} beside maxChoices ${quoted(row.maxChoices)}.`,
-      );
-    }
-
-    if (row.minChoicesN !== naturalOf(row.minChoices)) {
-      return refuse(
-        "typed-copy",
-        `ChoiceInteraction ${row.id} holds minChoicesN ${row.minChoicesN} beside minChoices ${quoted(row.minChoices)}.`,
-      );
-    }
-  }
-
   for (const binding of Rows.of(rows, TypedBinding)) {
     if (binding.interactionKind !== "qti-choice-interaction") {
       continue;
@@ -713,11 +717,32 @@ const interactionCopy = (rows: Rows): Finding => {
 };
 
 /**
- * `typed-copy` of the lexical rows: each row of an item node names an attribute its kind's
- * registry carries. Where `shadows` holds the attribute, the row shadows that typed column, differs
- * from it as read, and processes to it; any other attribute's row is left to the content guards.
+ * `typed-copy` of the lexical and spelling rows: each row of an item node names an attribute its
+ * kind's registry carries. Where `shadows` holds the attribute, a spelling row parses to the typed
+ * value it sits beside, and a lexical row shadows that value, differs from it as read, and
+ * processes to it. Where the node also has a spelling row, the lexical row's processed value is
+ * the spelling and not the typed column's text (`" 05 "` processes to `"05"`, the column holds
+ * `"5"`). Any other attribute's row is left to the content guards.
  */
 const lexicalCopy = (rows: Rows, index: Index): Finding => {
+  const spellings = new Map<string, string>();
+  for (const row of Rows.of(rows, AttributeSpelling)) {
+    const node = index.nodes.get(row.node);
+    if (node === undefined || !index.itemTrees.has(node.tree)) {
+      continue;
+    }
+
+    spellings.set(`${row.node}\n${row.attribute}`, row.value);
+
+    const typed = shadows.get(`${row.kind}/${row.attribute}`)?.column(rows, row.node);
+    if (typed !== undefined && spelledText(row.value) !== typed) {
+      return refuse(
+        "typed-copy",
+        `The spelling ${quoted(row.value)} of ${row.attribute} of ${row.kind} ${row.node} does not parse to the typed value ${quoted(typed)} it sits beside.`,
+      );
+    }
+  }
+
   for (const row of Rows.of(rows, AttributeLexical)) {
     const node = index.nodes.get(row.node);
     if (node === undefined || !index.itemTrees.has(node.tree)) {
@@ -744,18 +769,19 @@ const lexicalCopy = (rows: Rows, index: Index): Finding => {
       );
     }
 
+    const held = spellings.get(`${row.node}\n${row.attribute}`) ?? typed;
     const expected = processed(row.value, shadow.whiteSpace);
-    if (expected !== typed) {
+    if (expected !== held) {
       return refuse(
         "typed-copy",
-        `The lexical ${row.attribute} ${quoted(row.value)} of ${row.kind} ${row.node} processes to ${quoted(expected)}, and its column holds ${quoted(typed)}.`,
+        `The lexical ${row.attribute} ${quoted(row.value)} of ${row.kind} ${row.node} processes to ${quoted(expected)}, and its column holds ${quoted(held)}.`,
       );
     }
 
-    if (row.value === typed) {
+    if (row.value === held) {
       return refuse(
         "typed-copy",
-        `The lexical ${row.attribute} of ${row.kind} ${row.node} equals its column ${quoted(typed)}; a lexical row exists only where processing changed the value.`,
+        `The lexical ${row.attribute} of ${row.kind} ${row.node} equals its column ${quoted(held)}; a lexical row exists only where processing changed the value.`,
       );
     }
   }
