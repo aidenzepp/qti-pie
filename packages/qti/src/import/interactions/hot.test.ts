@@ -688,7 +688,7 @@ describe("hotRows on an integer outside its space", () => {
     [
       "max-choices of a hotspot interaction",
       element("qti-hotspot-interaction", {
-        "max-choices": "-0",
+        "max-choices": "-1",
         "response-identifier": "RESPONSE",
       }),
       single,

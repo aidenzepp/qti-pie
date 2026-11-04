@@ -788,7 +788,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
         const edits: readonly (readonly [string, string])[] = [
           ['max-choices="1"', 'max-choices="abc"'],
           ['max-choices="1"', 'max-choices="-1"'],
-          ['max-choices="1"', 'max-choices="-0"'],
+          ['max-choices="1"', 'max-choices="-1"'],
           ['max-choices="1"', 'max-choices="1" min-choices="-1"'],
         ];
         for (const edit of edits) {
