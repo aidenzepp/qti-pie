@@ -398,6 +398,10 @@ interface Context {
   readonly parents: Map<SourceElement, SourceElement>;
   readonly responses: ReadonlyMap<string, SourceElement>;
   /**
+   * The responses whose correct response the item's template processing sets, by identifier.
+   */
+  readonly setCorrectResponses: ReadonlySet<string>;
+  /**
    * Every declaration a `qti-variable` may read: response, outcome, template and context
    * declarations alike.
    */
@@ -444,6 +448,9 @@ const responseHolding = (child: string, baseType: Option.Option<BaseType>): Need
  * What each standard template needs declared (research `ea422814` §5.1): a `RESPONSE` and a float
  * `SCORE`, where `match_correct`'s `RESPONSE` has a correct response, `map_response`'s a
  * `qti-mapping`, and `map_response_point`'s is a `point` with a `qti-area-mapping`.
+ *
+ * A `qti-correct-response` child is the one need template processing can meet instead: it may set
+ * the correct response, but not a mapping or an area mapping ({@link templateRequirements}).
  */
 const templateNeeds = {
   map_response: [responseHolding("qti-mapping", Option.none()), floatScore],
@@ -505,9 +512,18 @@ const neededDetail = (element: string, needed: Needed) => ({
  * reference are supplied then the internal rules take precedence" (the information model), so a
  * template beside inline rules never runs and is not judged either; the inline rules are.
  *
+ * The correct response `match_correct` needs may also be set by template processing: "The response
+ * variable to have its correct value set" is a template rule, `qti-set-correct-response` (the
+ * information model, `info-compact.txt:11917`). Phase 1 does not run template processing, and the
+ * item model then runs no response processing, but the item is valid, so it is not refused
+ * (reading 1). So a `RESPONSE` with no `qti-correct-response` child meets the need when
+ * {@link setCorrectResponses} finds one set. No template rule sets a mapping or an area mapping,
+ * so those needs are met only by the declaration's child.
+ *
  * @param source The document.
  * @param visit The element's visit.
- * @param context The item's declarations.
+ * @param context The item's declarations, and the responses whose correct response template
+ *   processing sets.
  * @returns One refusal at the processing element's path per declaration the template needs and
  *   lacks; none for any other element.
  */
@@ -532,8 +548,12 @@ const templateRequirements = (
     const declarations =
       needed.declaration === "qti-response-declaration" ? context.responses : context.outcomes;
     const declaration = declarations.get(needed.identifier);
+    const setByTemplate =
+      Option.exists(needed.child, (child) => child === "qti-correct-response") &&
+      context.setCorrectResponses.has(needed.identifier);
+    const remaining: Needed = setByTemplate ? { ...needed, child: Option.none() } : needed;
 
-    return declaration !== undefined && provides(declaration, needed)
+    return declaration !== undefined && provides(declaration, remaining)
       ? []
       : [
           refusal(source, "template-requirements", visit.path, {
@@ -1396,6 +1416,48 @@ const holdsUnexpanded = (element: SourceElement): boolean =>
   (!holdsWildcardContent(element) && element.children.some((child) => child.kind === "entity"));
 
 /**
+ * Collect the responses whose correct response the item's template processing sets.
+ *
+ * Each `qti-set-correct-response` counts wherever it sits in the root's `qti-template-processing`,
+ * among its rules or in a `qti-template-condition`'s branch, because phase 1 does not run template
+ * processing and so cannot tell which branch would set it. Only the elements the rules judge count,
+ * as everywhere in these rules.
+ *
+ * @param source The document.
+ * @param visits The elements the rules judge, in document order, so each parent comes before its
+ *   children.
+ * @returns The identifier each such `qti-set-correct-response` names, read as {@link identifierOf}
+ *   reads it.
+ */
+const setCorrectResponses = (
+  source: SourceDocument,
+  visits: readonly Visit[],
+): ReadonlySet<string> => {
+  const inTemplateProcessing = new Set<SourceElement>();
+  const responses = new Set<string>();
+  for (const visit of visits) {
+    const entered = Option.exists(visit.parent, (parent) =>
+      parent === source.root
+        ? isQti(visit.element, (local) => local === "qti-template-processing")
+        : inTemplateProcessing.has(parent),
+    );
+    if (entered) {
+      inTemplateProcessing.add(visit.element);
+
+      const identifier = attributeOf(visit.element, "identifier");
+      if (
+        isQti(visit.element, (local) => local === "qti-set-correct-response") &&
+        Option.isSome(identifier)
+      ) {
+        responses.add(identifierOf(identifier.value));
+      }
+    }
+  }
+
+  return responses;
+};
+
+/**
  * Check a document against the prose rules: `undeclared-response`, `duplicate-identifier`,
  * `binding`, `template-requirements`, `value-type`, `undeclared-variable` and `expression-type`,
  * and reading 19's `max-strings` on an Extended Text bound to a container. `template-requirements`
@@ -1436,6 +1498,7 @@ export const checkRules = (source: SourceDocument): readonly Refusal[] => {
     outcomes: declarationsOf(source, "qti-outcome-declaration"),
     parents: new Map(),
     responses: declarationsOf(source, "qti-response-declaration"),
+    setCorrectResponses: setCorrectResponses(source, visits),
     variables: new Map(variableDeclarations.flatMap((kind) => [...declarationsOf(source, kind)])),
   };
   const seen = new Map<SourceElement, Set<string>>();
