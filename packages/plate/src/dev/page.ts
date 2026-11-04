@@ -17,6 +17,7 @@
 import path from "node:path";
 import { ConfigProvider, Effect, Option, Result } from "effect";
 import type { Config } from "effect";
+import { decodeStoredFloat } from "#plate/codec/values.ts";
 import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { text } from "#plate/emit/node.ts";
@@ -652,7 +653,9 @@ const scoreText = (
 
   switch (single.baseType) {
     case "float": {
-      return Option.some(new Intl.NumberFormat(locale).format(single.value));
+      return Option.map(decodeStoredFloat(single.value), (number) =>
+        new Intl.NumberFormat(locale).format(number),
+      );
     }
     case "integer": {
       return Option.some(new Intl.NumberFormat(locale).format(BigInt(single.value)));

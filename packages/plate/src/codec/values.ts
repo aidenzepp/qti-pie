@@ -7,7 +7,7 @@
  *
  * @module
  */
-import { Option, Schema } from "effect";
+import { Array as Arr, Option, Schema, SchemaTransformation } from "effect";
 import { isNcName, modelledBaseTypes, modelledCardinalities } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
@@ -21,17 +21,68 @@ const IdentifierText = Schema.String.check(
 );
 
 /**
+ * The names the stored form writes for the floats a JSON number cannot carry: xs:double's names for
+ * the infinities and NaN, as `formatFloat` writes them, and `-0`, because `JSON.stringify` writes
+ * negative zero as `0`.
+ */
+const FloatNames = Schema.Literals(["INF", "-INF", "NaN", "-0"]);
+
+/**
+ * Whether a stored float is one of {@link FloatNames} rather than a number.
+ */
+const isFloatName = Schema.is(FloatNames);
+
+/**
+ * The float each of {@link FloatNames} names.
+ */
+const namedFloats: Readonly<Record<typeof FloatNames.Type, number>> = {
+  "-0": -0,
+  "-INF": Number.NEGATIVE_INFINITY,
+  INF: Number.POSITIVE_INFINITY,
+  NaN: Number.NaN,
+};
+
+/**
+ * A float as a Schema whose encoded form survives JSON text: a finite number other than negative
+ * zero stays a number, and the infinities, NaN and negative zero are written by name. The decode
+ * reads the four names back and refuses any other string, so a stored value has one spelling.
+ */
+const FloatFromJson = Schema.Union([Schema.Finite, FloatNames]).pipe(
+  Schema.decodeTo(
+    Schema.Number,
+    SchemaTransformation.transform({
+      decode: (stored) => (isFloatName(stored) ? namedFloats[stored] : stored),
+      encode: (number) =>
+        Option.getOrElse(
+          Arr.findFirst(FloatNames.literals, (name) => Object.is(namedFloats[name], number)),
+          () => number,
+        ),
+    }),
+  ),
+);
+
+/**
+ * Read a float out of a stored record, so a host that shows one never depends on the stored
+ * spelling: a number as written, or the infinity, NaN or negative zero its name stands for.
+ *
+ * @param stored The float's `value` in the stored record.
+ * @returns The float, or none when the stored value is not one this codec writes.
+ */
+export const decodeStoredFloat = Schema.decodeOption(FloatFromJson);
+
+/**
  * The Schema of one QTI value, tagged by its base type; its type is {@link Single}.
  *
  * An integer is exact at any size. Its encoded form is its decimal digits, which `parseLexical`
  * reads to the same value, so a value decoded from a record is one the parser could have read. A
- * float is an xs:double.
+ * float is an xs:double. Its encoded form is a JSON number when it is finite and not negative zero,
+ * and otherwise `"INF"`, `"-INF"`, `"NaN"` or `"-0"`, so `JSON.stringify` keeps every float.
  */
 export const SingleSchema = Schema.Union([
   Schema.Struct({ baseType: Schema.Literal("identifier"), value: IdentifierText }),
   Schema.Struct({ baseType: Schema.Literal("boolean"), value: Schema.Boolean }),
   Schema.Struct({ baseType: Schema.Literal("integer"), value: Schema.BigIntFromString }),
-  Schema.Struct({ baseType: Schema.Literal("float"), value: Schema.Number }),
+  Schema.Struct({ baseType: Schema.Literal("float"), value: FloatFromJson }),
   Schema.Struct({ baseType: Schema.Literal("string"), value: Schema.String }),
   Schema.Struct({
     baseType: Schema.Literal("pair"),
