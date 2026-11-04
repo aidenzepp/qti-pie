@@ -393,7 +393,7 @@ const responseRules = (
 interface Context {
   readonly outcomes: ReadonlyMap<string, SourceElement>;
   /**
-   * Each element the walk has reached, but the root, with its parent.
+   * Each element the rules have judged so far, but the root, with its parent.
    */
   readonly parents: Map<SourceElement, SourceElement>;
   readonly responses: ReadonlyMap<string, SourceElement>;
@@ -1336,21 +1336,102 @@ const variableDeclarations = [
 ] as const;
 
 /**
+ * The QTI elements whose XSD content is an element wildcard of `##any` that names no child, so that
+ * every element below one is wildcard content.
+ *
+ * The structural walk passes over a child that only its parent's element wildcard admits, and over
+ * everything below it (`admit` in `src/validate/structure.ts`). Reading 6 keeps that content as
+ * foreign content: it "is not refused, and it is not read as QTI". So the prose rules pass over it
+ * too, and a `qti-choice-interaction` inside a `qti-custom-interaction` binds nothing. The XSD's
+ * other element wildcards are `##other`, which admit no QTI element, so passing over every element
+ * outside QTI's namespace already covers what they admit. The generated tables are the source of
+ * this list; a test compares the two.
+ */
+export const wildcardContentHolders = ["qti-custom-interaction", "template"] as const;
+
+/**
+ * Report whether an element's children are wildcard content, one of {@link wildcardContentHolders}.
+ *
+ * @param element The element.
+ * @returns Whether it is a QTI element whose every child is wildcard content.
+ */
+const holdsWildcardContent = (element: SourceElement): boolean =>
+  isQti(element, (local) => wildcardContentHolders.some((holder) => holder === local));
+
+/**
+ * Visit the elements the prose rules judge, in document order: those the structural walk enters.
+ *
+ * An element outside QTI's namespace is passed over with everything below it, and so is every
+ * element below one of {@link wildcardContentHolders}. `walk` cannot prune, so this keeps the
+ * elements it has passed over and passes over each child of one.
+ *
+ * @param source The document.
+ * @yields {Visit} Each element the rules judge, with the path and the parent `walk` gives it.
+ */
+const judgedVisits = function* judgedVisits(
+  source: SourceDocument,
+): Generator<Visit, void, undefined> {
+  const passed = new Set<SourceElement>();
+  for (const visit of walk(source)) {
+    const passOver =
+      visit.element.namespace !== qtiNamespace ||
+      Option.exists(visit.parent, (parent) => passed.has(parent) || holdsWildcardContent(parent));
+    if (passOver) {
+      passed.add(visit.element);
+    } else {
+      yield visit;
+    }
+  }
+};
+
+/**
+ * Report whether a judged element holds an unexpanded entity reference where a rule may read it:
+ * in an attribute's value, or among its children unless they are wildcard content.
+ *
+ * @param element The element.
+ * @returns Whether its attributes or its read children hold a reference whose value is unknown.
+ */
+const holdsUnexpanded = (element: SourceElement): boolean =>
+  element.attributes.some((attribute) => attribute.references.length > 0) ||
+  (!holdsWildcardContent(element) && element.children.some((child) => child.kind === "entity"));
+
+/**
  * Check a document against the prose rules: `undeclared-response`, `duplicate-identifier`,
  * `binding`, `template-requirements`, `value-type`, `undeclared-variable` and `expression-type`,
  * and reading 19's `max-strings` on an Extended Text bound to a container. `template-requirements`
  * judges the declarations a standard template, an inline `qti-map-response` and a
  * `qti-lookup-outcome-value` need.
  *
+ * The rules judge only what the structural walk judges, and only an item they can read whole:
+ *
+ * - A root other than a QTI `qti-assessment-item` gives no refusal. Every rule reads an item's
+ *   declarations, and phase 1 leaves any other root `unchecked` (spec §4.5).
+ * - A document whose judged elements hold an unexpanded entity reference anywhere gives no refusal.
+ *   The rules read identifiers across elements, so one reference whose value is unknown changes
+ *   what another element's rule finds: `identifier="&id;"` on a declaration would make every
+ *   `qti-variable` naming that identifier look undeclared. Such a document is `unchecked` unless
+ *   the structural walk refuses it.
+ * - An element outside QTI's namespace, and every element below it or below one of
+ *   {@link wildcardContentHolders}, is not visited (reading 6).
+ *
  * Every refusal is located at an element or attribute path and returned in document order; the
  * check never stops at the first. An empty list means no prose rule this module implements refuses
  * the document, not that the document is valid: the structural validator judges the XSD's rules.
  *
  * @param source The document to check.
- * @returns The refusals, empty when every rule holds.
+ * @returns The refusals, empty when every rule holds or the document is one the rules do not judge.
  * @see {@link Refusal} for what each refusal carries.
  */
 export const checkRules = (source: SourceDocument): readonly Refusal[] => {
+  if (!isQti(source.root, (local) => local === "qti-assessment-item")) {
+    return [];
+  }
+
+  const visits = [...judgedVisits(source)];
+  if (visits.some((visit) => holdsUnexpanded(visit.element))) {
+    return [];
+  }
+
   const context: Context = {
     outcomes: declarationsOf(source, "qti-outcome-declaration"),
     parents: new Map(),
@@ -1359,7 +1440,7 @@ export const checkRules = (source: SourceDocument): readonly Refusal[] => {
   };
   const seen = new Map<SourceElement, Set<string>>();
   const refusals: Refusal[] = [];
-  for (const visit of walk(source)) {
+  for (const visit of visits) {
     if (Option.isSome(visit.parent)) {
       context.parents.set(visit.element, visit.parent.value);
     }
