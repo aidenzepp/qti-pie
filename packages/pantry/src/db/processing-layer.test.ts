@@ -101,31 +101,31 @@ const attributeNames: readonly AttributeNameHandle[] = [
 ];
 
 const admissionRows = query(Author).rule((r) => {
-  const { child, parent, version } = v(Admission);
+  const { child, parent, version } = v(Admission, "admission");
 
   return r.match(Admission, { child, parent, version }).find({ child, parent, version });
 });
 
 const arityRows = query(Author).rule((r) => {
-  const { kind, min } = v(OperatorArity);
+  const { kind, min } = v(OperatorArity, "operatorArity");
 
   return r.match(OperatorArity, { kind, min }).find({ kind, min });
 });
 
 const arityMaxRows = query(Author).rule((r) => {
-  const { kind, max } = v(OperatorArityMax);
+  const { kind, max } = v(OperatorArityMax, "operatorArityMax");
 
   return r.match(OperatorArityMax, { kind, max }).find({ kind, max });
 });
 
 const arityUnboundedRows = query(Author).rule((r) => {
-  const { kind } = v(OperatorArityUnbounded);
+  const { kind } = v(OperatorArityUnbounded, "operatorArityUnbounded");
 
   return r.match(OperatorArityUnbounded, { kind }).find({ kind });
 });
 
 const attributeAdmissionRows = query(Author).rule((r) => {
-  const { attribute } = v(AttributeAdmission);
+  const { attribute } = v(AttributeAdmission, "attributeAdmission");
 
   return r.match(AttributeAdmission, { attribute }).find({ attribute });
 });
