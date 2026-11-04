@@ -18,7 +18,7 @@ export { configure, InvalidConfiguration } from "#plate/configuration.ts";
 
 export type { StatusInput } from "#plate/emit/item.ts";
 
-export type { Element, Node } from "#plate/emit/node.ts";
+export type { Attributes, Element, Node, PartFunction, Text } from "#plate/emit/node.ts";
 
 export { h } from "#plate/emit/node.ts";
 
@@ -36,7 +36,13 @@ export {
   UnmappedResponseError,
 } from "#plate/engine/evaluate.ts";
 
-export type { Entry, InstanceRequirement } from "#plate/form/encoding.ts";
+export type {
+  Binding,
+  DecodeOptions,
+  Entry,
+  InstanceRequirement,
+  Partition,
+} from "#plate/form/encoding.ts";
 
 export {
   checkInstance,
@@ -62,5 +68,7 @@ export {
   ResponsesRefused,
   score,
 } from "#plate/score.ts";
+
+export { open } from "#plate/validate/open.ts";
 
 export type { Accepted, Verdict } from "#plate/validate/verdict.ts";
