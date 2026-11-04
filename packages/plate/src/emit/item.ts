@@ -25,7 +25,7 @@ import type { EmitState, Payload, ValidationMessage } from "#plate/payload.ts";
  * Add a boolean attribute to a part's attributes when its condition holds.
  *
  * @param attrs The part's other attributes.
- * @param name The boolean attribute, such as `data-finished`.
+ * @param name The boolean attribute, such as `data-disabled`.
  * @param present Whether the part carries it.
  * @returns `attrs` with `name` present, or `attrs` unchanged.
  */
@@ -64,7 +64,7 @@ const itemPart = (
  * Emit the item Root around an emitted body.
  *
  * The Root (`qti-assessment-item`) carries `lang`, its scoped `id`, `data-mode`, and
- * `data-finished` when the author disabled every control. It holds the body's nodes by identity,
+ * `data-disabled` when the author disabled every control. It holds the body's nodes by identity,
  * in order, and nothing else: no form, no submit control, no attempt state.
  *
  * @example
@@ -90,7 +90,7 @@ export const emitItem = (
         id: scopedId(payload.instance, "item"),
         lang: payload.lang,
       },
-      "data-finished",
+      "data-disabled",
       payload.finished,
     ),
     body,

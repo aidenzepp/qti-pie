@@ -350,7 +350,7 @@ describe("renderChoice", () => {
           assert.strictEqual(root.attrs["data-orientation"], "horizontal");
           assert.strictEqual(root.attrs["data-mode"], "answering");
           assert.isUndefined(root.attrs["data-attempt"]);
-          assert.isUndefined(root.attrs["data-finished"]);
+          assert.isUndefined(root.attrs["data-disabled"]);
         }
       }),
   );
@@ -559,8 +559,8 @@ describe("renderChoice", () => {
       const root = yield* render(built);
       const controls = partsIn(root, "control");
 
-      assert.strictEqual(root.attrs["data-finished"], true);
-      assert.isUndefined(root.attrs["data-attempt"]);
+      assert.strictEqual(root.attrs["data-disabled"], true);
+      assert.doesNotHaveAnyKeys(root.attrs, ["data-attempt", "data-finished"]);
       assert.deepStrictEqual(
         controls.map((control) => control.attrs["disabled"]),
         [true, true, true],

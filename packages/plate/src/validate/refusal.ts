@@ -12,8 +12,9 @@ import { Schema } from "effect";
 /**
  * Every rule a {@link Refusal} may name, each exactly once.
  *
- * The first six are the structural validator's (the XSD's elements, attributes and text), the next
- * five the prose rules' (responses, identifiers, bindings, templates and value types), then the
+ * The first eight are the structural validator's (the XSD's elements, attributes and text, and the
+ * readings' placements and child counts), the next eight the prose rules' (responses, identifiers,
+ * bindings, templates, value types, variables, expression types and the count range), then the
  * verdict's `not-qti-root`, and last the reader adapter's `not-well-formed`, located by line and
  * column, and `reader-refused`, located at the whole document with the shared reader's own rule in
  * {@link Refusal.readerRule}. Adding a rule here is the only way a stage gains a new refusal.
@@ -25,11 +26,16 @@ export const refusalRules = [
   "attribute-type",
   "padded-attribute",
   "text-not-allowed",
+  "misplaced-element",
+  "child-count",
   "undeclared-response",
   "duplicate-identifier",
   "binding",
   "template-requirements",
   "value-type",
+  "undeclared-variable",
+  "expression-type",
+  "count-range",
   "not-qti-root",
   "not-well-formed",
   "reader-refused",

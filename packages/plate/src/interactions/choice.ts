@@ -127,7 +127,7 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
 /**
  * Compute every attribute of every part of one Choice: the connect function.
  *
- * - Root: the marker, the state (`data-mode`, and `data-finished` when the author disabled every
+ * - Root: the marker, the state (`data-mode`, and `data-disabled` when the author disabled every
  *   control), the author's `class`, `data-orientation`, and `aria-labelledby` → the Prompt's id
  *   under the `labelledby` markup. It carries no `role`: a native `fieldset` is the group.
  * - Prompt: the marker, and its id under the `labelledby` markup; a `legend` names its group natively
@@ -191,7 +191,7 @@ const connect = (
     root: {
       ...when(labelledby, { "aria-labelledby": promptId }),
       ...when(interaction.class !== "", { class: interaction.class }),
-      ...when(payload.finished, { "data-finished": true }),
+      ...when(payload.finished, { "data-disabled": true }),
       "data-mode": payload.mode,
       ...Option.match(interaction.orientation, {
         onNone: () => ({}),
