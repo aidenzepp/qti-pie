@@ -455,6 +455,7 @@ describe("the public surface", () => {
         "encode",
         "entryName",
         "h",
+        "open",
         "partition",
         "redact",
         "render",
