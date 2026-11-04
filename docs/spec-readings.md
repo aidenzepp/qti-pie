@@ -182,9 +182,11 @@ against it. A reading that is not an information-model-over-XSD case says which 
 30. **QTI elements are admitted inside `m:annotation-xml`, and nowhere else beneath MathML.** `annotation-xml` is
     MathML's carrier for other XML vocabularies, and the XSD gives it a single lax wildcard (`mathml3-common.xsd`
     lines 42-44, `xs:any processContents="lax"`), so a QTI element there is valid. The implementation guide says so
-    too: "At present, QTI's qti-printed-variable can be used within MathML and HTML." (`impl.txt` line 1045). Under lax
-    processing a QTI element whose declaration is known, `qti-printed-variable` and the rest, is validated and modelled
-    as QTI. A nested QTI root, processing root or manifest global stays foreign content, as reading 6 says. Outside
+    too: "At present, QTI's qti-printed-variable can be used within MathML and HTML." (`impl.txt` line 1045). Lax
+    processing recognises only an element with a global declaration, and `qti-printed-variable` has none, so written
+    directly inside `annotation-xml` it is accepted and kept as foreign content, while inside a `div` or `p` in the
+    annotation it is read as a printed variable. An author who wants it interpreted wraps it in a `div` or `p`. A nested
+    QTI root, processing root or manifest global stays foreign content, as reading 6 says. Outside
     `annotation-xml`, a `qti-` element beneath MathML is refused, because MathML's own content model does not admit it
     there. That is a MathML validity refusal (reading 2), not a rule of this reading. The information model's sentence,
     "Although it is impossible to embed objects such as printed variable ... within a math object" (`info.txt` line
@@ -192,6 +194,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     states no rule that conflicts with the wildcard or the guide, so there is nothing for the information model to
     outrank. The rule is: if the standard does not ban it, do not refuse it. (Corrected 2026-11-04 by decision 214,
     replacing the earlier reading, which refused every `qti-` element beneath MathML.)
+    (Refined 2026-11-04 by decision 217.)
 31. **A card holds at least one of an HTML content node or file hrefs, and may hold both.** The implementation guide
     says a card holds a single `qti-html-content`, or any number of `qti-file-href` nodes, and that it must contain at
     least some content. The XSD admits both together and neither. One of the guide's own examples has both. This follows
@@ -312,8 +315,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     reference at a dot, so this reading fills the gap and keeps every unambiguous reference valid, as reading 1
     requires. (2026-11-04.)
 49. **QTI and foreign elements beneath MathML and in card content are admitted wherever the schema admits them.**
-    Inside `m:annotation-xml` this is reading 30: QTI elements are admitted, a known declaration is modelled as QTI, and
-    a nested root stays foreign content under reading 6. In card content (`qti-html-content` of a `qti-card` or
+    Inside `m:annotation-xml` this is reading 30. In card content (`qti-html-content` of a `qti-card` or
     `qti-card-entry`) the same basis applies: an element is accepted wherever the schema admits it and no normative text
     bans it, and refused only where the schema or a normative rule refuses it. In the XSD, card content has no wildcard
     of its own: `HTMLContentDType` lists only HTML, MathML and SSML elements (`imsqti_asiv3p0p1_v1p0.xsd` lines
