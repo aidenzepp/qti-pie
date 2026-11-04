@@ -33,12 +33,14 @@ operator ruling. A new reading lands here by pull request, and a package that ne
 
 ## Typed values
 
-7. **A typed value is read exactly as written.** Outer whitespace around a value of any non-string base type (boolean,
-   integer, float, identifier, point, pair, directedPair, duration, uri and the rest) makes the value invalid, and the
-   document is refused. This holds in element content (`qti-value`, `qti-base-value` and the like) and in an attribute
-   (`map-key`, `mapped-value`, default and target values and the like) alike: element and attribute give the same
-   answer. For base type string, whitespace is part of the value and is kept. QTI's schema types the text of
-   `qti-value` as `xs:normalizedString` and of `qti-base-value` as `xs:string`, never as the value's base type, and its
-   information model lists each base type's values without saying how written text maps to them. The specification is
-   silent, and the operator rules the strict reading. A few of 1EdTech's own example files, with padded values such as
-   `" completed "` and `" THREETRIES "`, are refused under this reading. (2026-11-04.)
+7. **A typed value in element text is trimmed; in an attribute it is exact.** A typed value written as element content
+   (`qti-value`, `qti-base-value` and the like) has its outer whitespace read as formatting, not meaning, because
+   authoring tools and pretty-printers indent and wrap element content. It is read with outer whitespace removed for
+   every non-string base type: `" completed "` is the identifier `completed` and `" true "` is `true`. For base type
+   string, whitespace is part of the value and is kept. A round trip still reproduces the source spelling byte for
+   byte. An attribute value is not reformatted by tools, so `" true"` is not `"true"`: outer whitespace around a typed
+   value in an attribute (`map-key`, `mapped-value`, default and target values and the like) makes it invalid, and the
+   document is refused. The split is a ruling because QTI's schema types the text of `qti-value` as
+   `xs:normalizedString` and of `qti-base-value` as `xs:string`, never as the value's base type, and its information
+   model lists each base type's values without saying how written text maps to them. The specification is silent, and
+   the operator rules this reading. (2026-11-04.)
