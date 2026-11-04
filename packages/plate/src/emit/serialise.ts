@@ -387,7 +387,7 @@ const startsWithLineFeed = (children: readonly Node[]): boolean => {
 };
 
 /**
- * Write a node of the output tree to `sink` as HTML, in more than one chunk.
+ * Write a node of the output tree to `sink` as HTML, chunk by chunk, in document order.
  *
  * The same tree always gives the same bytes: no whitespace is added, every non-void element (`svg`,
  * `math` and their descendants included) gets an explicit end tag and nothing is self-closed. Text

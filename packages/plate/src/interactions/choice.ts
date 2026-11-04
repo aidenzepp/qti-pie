@@ -8,7 +8,7 @@
  * the embedder's replacement when there is one (ruling `fb4fe744` S1, S2). The Controls are native
  * radios or checkboxes, so the browser's own keyboard map applies (§4.8): the radios form one
  * native group by their shared `name`. The Prompt and each choice's content go through the body's
- * {@link emitNodes}, so they get the body's id scoping, heading shift and placeholders.
+ * {@link emitNodes}, so they get the body's id scoping, heading shift, URLs and Notices.
  *
  * {@link validateChoice} checks a value the caller decoded, in two tiers: tier (a) always, tier (b)
  * only under `validateResponses` (D5).
@@ -123,7 +123,7 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
  * Every id is `scopedId(instance, response, part, index)`.
  *
  * @param interaction The Choice.
- * @param payload The payload, which gives the instance and `finished`.
+ * @param payload The payload, which gives the instance, the mode and `finished`.
  * @param rows The rows of the Choice's parts as placed.
  * @param markup The Prompt's markup, none when there is no Prompt.
  * @returns The attributes of every part.
@@ -233,8 +233,9 @@ const labelAsSpan = (node: Node): Node => {
  * @param payload The payload of the whole render, which gives the instance and `finished`.
  * @param state The locale, the heading level and the resolved part overrides.
  * @returns The Choice Root, or {@link PartSwapRefused} when a replacement breaks the swap
- *   invariant. It throws `NestedInteractionDefect` when the content holds an interaction,
- *   which QTI admits nowhere there.
+ *   invariant.
+ * @throws {NestedInteractionDefect} When the Prompt or a choice's content holds an interaction,
+ *   which QTI admits nowhere there ({@link nestedInteraction}).
  */
 export const renderChoice = (
   interaction: ChoicePayload,
@@ -307,7 +308,7 @@ export const renderChoice = (
  *
  * The caller decodes the posted entries with `decode`, under the entry name its form gave the
  * Controls and the Choice's binding (identifiers of its cardinality), and passes the value, or the
- * {@link Malformed} `decode` gave. The entry name so stays the caller's, while the messages and the
+ * {@link Malformed} `decode` gave. So the entry name stays the caller's, while the messages and the
  * author's overrides stay here.
  *
  * - A {@link Malformed} input: `atMost` 1 when a single response was posted more than once, else

@@ -58,9 +58,8 @@ const controlRemedy = (interaction: string): string =>
  * `renderStatus` returns it.
  *
  * The check runs on every emit, not only in development, because a replacement is host code that
- * ships.
- * `detail` names the returned element or the child at fault; the message adds what to change. It is
- * returned through a `Result`, never thrown.
+ * ships. `detail` names the returned element or the child at fault; the message adds what to
+ * change. It is returned through a `Result`, never thrown.
  */
 export class PartSwapRefused extends Data.TaggedError("PartSwapRefused")<{
   readonly cause: SwapCause;

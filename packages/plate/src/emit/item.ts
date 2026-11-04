@@ -11,7 +11,7 @@
  * @module
  */
 import { Option, Result } from "effect";
-import { h, text } from "#plate/emit/node.ts";
+import { h, text, when } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import type { PartOf, RowContext } from "#plate/emit/parts.ts";
@@ -20,17 +20,6 @@ import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { message } from "#plate/messages.ts";
 import { identifyMessages } from "#plate/payload.ts";
 import type { EmitState, Payload, ValidationMessage } from "#plate/payload.ts";
-
-/**
- * Add a boolean attribute to a part's attributes when its condition holds.
- *
- * @param attrs The part's other attributes.
- * @param name The boolean attribute, such as `data-disabled`.
- * @param present Whether the part carries it.
- * @returns `attrs` with `name` present, or `attrs` unchanged.
- */
-const withFlag = (attrs: Attributes, name: string, present: boolean): Attributes =>
-  present ? { ...attrs, [name]: true } : attrs;
 
 /**
  * Build one item part through its row and the embedder's replacement, if any, with its
@@ -84,15 +73,12 @@ export const emitItem = (
   itemPart(
     state,
     "root",
-    withFlag(
-      {
-        "data-mode": payload.mode,
-        id: scopedId(payload.instance, "item"),
-        lang: payload.lang,
-      },
-      "data-disabled",
-      payload.finished,
-    ),
+    {
+      "data-mode": payload.mode,
+      id: scopedId(payload.instance, "item"),
+      lang: payload.lang,
+      ...when(payload.finished, { "data-disabled": true }),
+    },
     body,
   );
 
@@ -193,16 +179,13 @@ export const emitStatus = (
     return yield* itemPart(
       state,
       "status",
-      withFlag(
-        {
-          "aria-labelledby": headingId,
-          id: scopedId(input.instance, "status"),
-          role: "status",
-          tabindex: "-1",
-        },
-        "autofocus",
-        input.autofocus === true,
-      ),
+      {
+        "aria-labelledby": headingId,
+        id: scopedId(input.instance, "status"),
+        role: "status",
+        tabindex: "-1",
+        ...when(input.autofocus === true, { autofocus: true }),
+      },
       [heading, ...detail],
     );
   });

@@ -8,7 +8,7 @@
  * and `applyPart` places each one, through the embedder's replacement when there is one (ruling
  * `fb4fe744` S1, S2). The browser's own textarea keys apply (§4.8): Enter adds a line and Tab
  * leaves. The Prompt's content goes through the body's {@link emitNodes}, so it gets the body's id
- * scoping, heading shift and placeholders.
+ * scoping, heading shift, URLs and Notices.
  *
  * {@link validateExtendedText} checks a value the caller decoded. Phase 1 has tier (a) only: a
  * number binding refuses text that is not a number, and every binding refuses a file or a second
@@ -22,7 +22,7 @@ import { emitNodes, nestedInteraction } from "#plate/emit/body.ts";
 import { text, when } from "#plate/emit/node.ts";
 import type { Attributes, Element } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
-import type { PartOf } from "#plate/emit/parts.ts";
+import type { PartOf, PartRow } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
@@ -44,6 +44,11 @@ const owner = "extended-text-interaction";
 type ExtendedTextPart = PartOf<typeof owner>;
 
 /**
+ * The row of every Extended Text part.
+ */
+type Rows = { readonly [P in ExtendedTextPart]: PartRow };
+
+/**
  * The attributes of every part of one Extended Text, computed once by {@link connect}.
  */
 interface Connected {
@@ -51,6 +56,15 @@ interface Connected {
   readonly prompt: Attributes;
   readonly root: Attributes;
 }
+
+/**
+ * The rows of the Extended Text parts, which no placement changes.
+ */
+const rows: Rows = {
+  control: rowFor(owner, "control"),
+  prompt: rowFor(owner, "prompt"),
+  root: rowFor(owner, "root"),
+};
 
 /**
  * A line break the HTML parser turns into a line feed: CRLF, or a lone CR.
@@ -115,7 +129,7 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
         "aria-invalid": "true",
       }),
       ...when(interaction.autofocus, { autofocus: true }),
-      "data-slot": rowFor(owner, "control").slot,
+      "data-slot": rows.control.slot,
       ...when(payload.finished, { disabled: true }),
       id: scopedId(instance, interaction.response, "control"),
       name: interaction.formName,
@@ -131,13 +145,13 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
         }),
       ),
     },
-    prompt: { "data-slot": rowFor(owner, "prompt").slot, id: promptId },
+    prompt: { "data-slot": rows.prompt.slot, id: promptId },
     root: {
       ...when(interaction.class !== "", { class: interaction.class }),
       ...when(payload.finished, { "data-disabled": true }),
       ...when(interaction.format === "preformatted", { "data-format": "preformatted" }),
       "data-mode": payload.mode,
-      "data-slot": rowFor(owner, "root").slot,
+      "data-slot": rows.root.slot,
     },
   };
 };
@@ -155,8 +169,9 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
  * @param payload The payload of the whole render, which gives the instance and `finished`.
  * @param state The locale, the heading level and the resolved part overrides.
  * @returns The Extended Text Root, or {@link PartSwapRefused} when a replacement breaks the swap
- *   invariant. It throws `NestedInteractionDefect` when the Prompt holds an interaction,
- *   which QTI admits nowhere there.
+ *   invariant.
+ * @throws {NestedInteractionDefect} When the Prompt holds an interaction, which QTI admits nowhere
+ *   there ({@link nestedInteraction}).
  */
 export const renderExtendedText = (
   interaction: ExtendedTextPayload,
@@ -173,20 +188,20 @@ export const renderExtendedText = (
       interaction.prompt.pipe(
         Option.map((content) =>
           Result.flatMap(emitNodes(content, payload, state, nestedInteraction(owner)), (nodes) =>
-            applyPart(rowFor(owner, "prompt"), props.prompt, nodes, replacement("prompt")),
+            applyPart(rows.prompt, props.prompt, nodes, replacement("prompt")),
           ),
         ),
       ),
     );
     const control = yield* applyPart(
-      rowFor(owner, "control"),
+      rows.control,
       props.control,
       restore === "" ? [] : [text(restore)],
       replacement("control"),
     );
 
     return yield* applyPart(
-      rowFor(owner, "root"),
+      rows.root,
       props.root,
       [...Option.toArray(prompt), control],
       replacement("root"),

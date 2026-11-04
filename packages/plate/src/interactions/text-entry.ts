@@ -101,8 +101,8 @@ const inputModeOf = (interaction: TextEntryPayload): Attributes => {
  *   `autofocus` when the payload says.
  *
  * @param interaction The Text Entry.
- * @param payload The payload, which gives the instance and `finished`.
- * @param locale The locale of the renderer's text.
+ * @param payload The payload, which gives the instance, the mode and `finished`.
+ * @param locale The locale of the renderer's own text.
  * @returns The attributes of both parts.
  */
 const connect = (interaction: TextEntryPayload, payload: Payload, locale: Locale): Connected => ({
@@ -180,7 +180,7 @@ const stringRefusals = {
  *
  * The caller decodes the posted entry with `decode`, under the entry name its form gave the
  * Control, the Text Entry's binding (a single value of its base type) and its `base`, and passes
- * the value, or the {@link Malformed} `decode` gave. The entry name so stays the caller's, while
+ * the value, or the {@link Malformed} `decode` gave. So the entry name stays the caller's, while
  * the message and the author's override stay here.
  *
  * - A {@link Malformed} input of an `integer` or `float` binding: `malformedNumber`, or the author's
