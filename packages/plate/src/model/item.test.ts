@@ -746,11 +746,75 @@ describe("buildItem", () => {
           Option.some<Value>({
             baseType: "integer",
             cardinality: "single",
-            values: [{ baseType: "integer", value: 7 }],
+            values: [{ baseType: "integer", value: 7n }],
           }),
         );
         assert.deepStrictEqual(built.responses.get("WITHOUT")?.defaultValue, Option.none());
       }),
+  );
+
+  it.effect("[I-1] reads an integer correct response beyond 2^53 exactly", () =>
+    Effect.gen(function* readsExactCorrect() {
+      const built = yield* buildItem(
+        item({
+          body: [],
+          declarations: [
+            declaration("qti-response-declaration", "RESPONSE", "integer", "single", [
+              values("qti-correct-response", "9007199254740993"),
+            ]),
+          ],
+        }),
+      );
+
+      assert.deepStrictEqual(
+        built.responses.get("RESPONSE")?.correct,
+        Option.some<Value>({
+          baseType: "integer",
+          cardinality: "single",
+          values: [{ baseType: "integer", value: 2n ** 53n + 1n }],
+        }),
+      );
+    }),
+  );
+
+  it.effect("[I-1] reads an integer map-key of 31 digits exactly", () =>
+    Effect.gen(function* readsExactMapKey() {
+      const built = yield* buildItem(
+        item({
+          body: [],
+          declarations: [
+            declaration("qti-response-declaration", "RESPONSE", "integer", "single", [
+              el(
+                "qti-mapping",
+                [],
+                [
+                  el("qti-map-entry", [
+                    attr("map-key", "-1000000000000000000000000000000"),
+                    attr("mapped-value", "1"),
+                  ]),
+                ],
+              ),
+            ]),
+          ],
+        }),
+      );
+
+      assert.deepStrictEqual(
+        built.responses.get("RESPONSE")?.mapping,
+        Option.some({
+          defaultValue: 0,
+          entries: [
+            {
+              caseSensitive: false,
+              key: { baseType: "integer", value: -(10n ** 30n) },
+              value: 1,
+            },
+          ],
+          lowerBound: Option.none(),
+          upperBound: Option.none(),
+        }),
+      );
+    }),
   );
 
   it.effect(

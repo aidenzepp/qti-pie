@@ -102,21 +102,15 @@ const trimXmlSpace = (text: string): string => {
 const pairLexical = /^(?<source>[^\t\n\r ]+)[\t\n\r ]+(?<destination>[^\t\n\r ]+)$/u;
 
 /**
- * The lexical space of a QTI integer: an optional sign and decimal digits.
- */
-const integerLexical = /^[+-]?[0-9]+$/u;
-
-/**
- * The bounds of an integer value: -(2^53 - 1) and 2^53 - 1, the whole numbers a 64-bit float holds
- * exactly.
+ * The lexical space of a QTI integer: an optional sign and decimal digits, as many as written.
  *
  * QTI 3.0 states no range for its integer base type (the integer primitive type is "derived from
- * the decimal data-type"; open point 9.9 of research `ea422814`), so these are the value model's
- * limit, not QTI's: an integer outside them is refused, never rounded or stored as an infinity.
+ * the decimal data-type"), so the value model holds every integer exactly, as a `bigint`
+ * (operator reading A).
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#AppA1
  */
-const integerBounds = `from ${String(Number.MIN_SAFE_INTEGER)} to ${String(Number.MAX_SAFE_INTEGER)}`;
+const integerLexical = /^[+-]?[0-9]+$/u;
 
 /**
  * The lexical space of xs:double (XML Schema 1.0), which a QTI float uses: a decimal with an
@@ -136,30 +130,19 @@ const IdentifierText = Schema.String.check(
 );
 
 /**
- * An integer as a Schema: a whole number within the bounds {@link parseLexical} reads, so a value
- * decoded from a record is one the parser could have read.
- */
-const ExactInteger = Schema.Number.check(
-  Schema.makeFilter((number: number) =>
-    Number.isSafeInteger(number)
-      ? undefined
-      : `an integer must be a whole number ${integerBounds}; drop the fraction or bring it within that range`,
-  ),
-);
-
-/**
- * One QTI value, tagged by its base type: a string for `identifier`, `string` and `uri`; a number
- * for `integer` and `float`; a boolean for `boolean`; and two identifiers for `pair` and
- * `directedPair`, the source first.
+ * One QTI value, tagged by its base type: a string for `identifier`, `string` and `uri`; a
+ * `bigint` for `integer`; a number for `float`; a boolean for `boolean`; and two identifiers for
+ * `pair` and `directedPair`, the source first.
  *
- * Numbers are 64-bit floats: an integer is a whole number from -(2^53 - 1) to 2^53 - 1, which a
- * 64-bit float holds exactly, and a float is an xs:double.
+ * An integer is exact at any size. Its encoded form is its decimal digits, which
+ * {@link parseLexical} reads to the same value, so a value decoded from a record is one the parser
+ * could have read. A float is an xs:double.
  */
 // oxlint-disable-next-line eslint/no-redeclare -- `Single` is a Schema and the type it decodes under one name, as section 0.5 of the phase-1 slice list names it, so `Single` reads as one thing in values and in signatures.
 export const Single = Schema.Union([
   Schema.Struct({ baseType: Schema.Literal("identifier"), value: IdentifierText }),
   Schema.Struct({ baseType: Schema.Literal("boolean"), value: Schema.Boolean }),
-  Schema.Struct({ baseType: Schema.Literal("integer"), value: ExactInteger }),
+  Schema.Struct({ baseType: Schema.Literal("integer"), value: Schema.BigIntFromString }),
   Schema.Struct({ baseType: Schema.Literal("float"), value: Schema.Number }),
   Schema.Struct({ baseType: Schema.Literal("string"), value: Schema.String }),
   Schema.Struct({
@@ -267,7 +250,7 @@ const expected = {
   directedPair: "two NCNames separated by whitespace, such as A B",
   float: "a decimal or exponent number such as 2.5 or 1E3, or INF, -INF or NaN",
   identifier: "an NCName: a letter or _ first, then letters, digits, -, _ or .",
-  integer: `decimal digits with an optional sign, such as -12, ${integerBounds}`,
+  integer: "decimal digits with an optional sign, such as -12",
   pair: "two NCNames separated by whitespace, such as A B",
   string: "any text",
   uri: "any text",
@@ -329,20 +312,18 @@ const readDouble = (lexical: string): number => {
 };
 
 /**
- * Read a QTI integer lexical form as a number.
+ * Read a QTI integer lexical form as the exact integer it names, at any size.
+ *
+ * `BigInt` reads only text {@link integerLexical} has admitted, which it always accepts, so it
+ * never throws.
  *
  * @param lexical The lexical form.
- * @returns The integer it names, or none when the text is not an integer or names one outside
- *   the bounds a number holds exactly.
+ * @returns The integer it names, or none when the text is not an integer.
  */
-const readInteger = (lexical: string): Option.Option<Single> => {
-  const number = Number(lexical);
-
-  return valueIf(integerLexical.test(lexical) && Number.isSafeInteger(number), {
-    baseType: "integer",
-    value: number,
-  });
-};
+const readInteger = (lexical: string): Option.Option<Single> =>
+  integerLexical.test(lexical)
+    ? Option.some({ baseType: "integer", value: BigInt(lexical) })
+    : Option.none();
 
 /**
  * Read the lexical form of a pair or directed pair.
@@ -453,8 +434,8 @@ const formatFloat = (number: number): string => {
 /**
  * Write a value in its base type's lexical form.
  *
- * An integer is within the bounds a number holds exactly, so `String` writes its exact decimal
- * digits, never an exponent, and writes negative zero as `0`.
+ * `String` writes the exact decimal digits of an integer of any size, never an exponent: no `+`,
+ * no leading zeros, and `0` for a written `-0`.
  *
  * @param single The value to write.
  * @returns The lexical form, which {@link parseLexical} reads back to the same value; a pair is its
@@ -486,7 +467,8 @@ export const format = (single: Single): string => {
  * @param left One value.
  * @param right The other value.
  * @returns Whether they share a base type and are equal: a `pair` in either order, a
- *   `directedPair` in order, numbers by value and strings by code point.
+ *   `directedPair` in order, integers and floats by value (`===` compares two bigints by value)
+ *   and strings by code point.
  */
 const sameSingle = (left: Single, right: Single): boolean => {
   if (left.baseType === "pair" && right.baseType === "pair") {

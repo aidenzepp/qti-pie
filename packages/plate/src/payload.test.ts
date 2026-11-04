@@ -522,7 +522,7 @@ describe("payload", () => {
     const record: ItemRecord = {
       ...fresh(hexItem, instance),
       attempt: "submitted",
-      responses: { HEX: one({ baseType: "integer", value: 255 }) },
+      responses: { HEX: one({ baseType: "integer", value: 255n }) },
     };
 
     assert.strictEqual(textFor(payload(hexItem, record, submitted), "HEX").restore, "ff");
