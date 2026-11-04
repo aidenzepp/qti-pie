@@ -7,7 +7,7 @@
  * compare each `AttributeLexical` row with the column it names, so no second copy of the fact
  * exists.
  */
-import type { AnyRelation } from "@bjornpagen/grizzle";
+import type { AnyRelation, Uuid } from "@bjornpagen/grizzle";
 import { Predicate } from "effect";
 import type { Rows as RowSet } from "#pantry/import/tree.ts";
 import * as family from "#pantry/schema/attributes.ts";
@@ -57,7 +57,7 @@ export interface Index {
 /**
  * The value an attribute has on the node `id`, none when the rows say the source did not write it.
  */
-export type Reader = (id: string) => string | undefined;
+export type Reader = (id: Uuid) => string | undefined;
 
 /**
  * Where one attribute's value lives: given the rows' index, the reader of that value.
@@ -1266,7 +1266,7 @@ export const readersFor = (
  */
 export const typedValues = (
   rows: RowSet,
-): ((node: string, kind: string, attribute: string) => string | undefined) => {
+): ((node: Uuid, kind: string, attribute: string) => string | undefined) => {
   const readersOf = readersFor(indexOf(rows));
 
   return (node, kind, attribute) =>
