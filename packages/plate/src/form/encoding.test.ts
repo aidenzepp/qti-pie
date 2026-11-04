@@ -91,7 +91,7 @@ describe("encode and decode", () => {
   it.effect("[Q-20] round-trip a string, an integer and a float single", () =>
     Effect.gen(function* textRoundTrip() {
       const string = value(binding("string"), { baseType: "string", value: " a b " });
-      const integer = value(binding("integer"), { baseType: "integer", value: -12 });
+      const integer = value(binding("integer"), { baseType: "integer", value: -12n });
       const float = value(binding("float"), { baseType: "float", value: 2.5 });
 
       assert.deepStrictEqual(yield* roundTrip(binding("string"), string), string);
@@ -149,7 +149,7 @@ describe("encode and decode", () => {
 
       assert.deepStrictEqual(
         yield* decode(posted(" 7 "), integer),
-        value(integer, { baseType: "integer", value: 7 }),
+        value(integer, { baseType: "integer", value: 7n }),
       );
       assert.deepStrictEqual(
         yield* decode(posted(" 1E3 "), float),
@@ -157,11 +157,11 @@ describe("encode and decode", () => {
       );
       assert.deepStrictEqual(
         yield* decode(posted("101"), integer, { base: 2 }),
-        value(integer, { baseType: "integer", value: 5 }),
+        value(integer, { baseType: "integer", value: 5n }),
       );
       assert.deepStrictEqual(
         yield* decode(posted("-ff"), integer, { base: 16 }),
-        value(integer, { baseType: "integer", value: -255 }),
+        value(integer, { baseType: "integer", value: -255n }),
       );
 
       const error = yield* Effect.flip(decode(posted("102"), integer, { base: 2 }));

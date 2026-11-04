@@ -177,7 +177,7 @@ describe("parseLexical", () => {
       });
       assert.strictEqual(format({ baseType: "float", value: Number.NEGATIVE_INFINITY }), "-INF");
       assert.strictEqual(
-        format({ baseType: "integer", value: Number.MAX_SAFE_INTEGER }),
+        format({ baseType: "integer", value: 9_007_199_254_740_991n }),
         "9007199254740991",
       );
     }),
@@ -195,27 +195,19 @@ describe("parseLexical", () => {
     }),
   );
 
-  it.effect("refuses an integer one past either bound of the range a number holds exactly", () =>
-    Effect.gen(function* integerBoundsRefused() {
-      for (const lexical of ["9007199254740992", "-9007199254740992", `1${"0".repeat(400)}`]) {
-        const error = yield* Effect.flip(parseLexical("integer", lexical));
-        assert.strictEqual(error._tag, "InvalidValue");
-        assert.strictEqual(error.baseType, "integer");
-        assert.strictEqual(error.lexical, lexical);
-      }
-    }),
-  );
-
-  it.effect("reads the integer bounds exactly and formats their exact digits", () =>
-    Effect.gen(function* integerBoundsExact() {
-      const cases: readonly (readonly [string, number, string])[] = [
-        ["9007199254740991", Number.MAX_SAFE_INTEGER, "9007199254740991"],
-        ["-9007199254740991", Number.MIN_SAFE_INTEGER, "-9007199254740991"],
-        ["+0009007199254740991", Number.MAX_SAFE_INTEGER, "9007199254740991"],
+  it.effect("reads an integer of any size exactly and formats its exact digits", () =>
+    Effect.gen(function* integersExact() {
+      const cases: readonly (readonly [string, bigint, string])[] = [
+        ["9007199254740993", 2n ** 53n + 1n, "9007199254740993"],
+        ["1000000000000000000000000000000", 10n ** 30n, "1000000000000000000000000000000"],
+        ["-1000000000000000000000000000000", -(10n ** 30n), "-1000000000000000000000000000000"],
+        [`1${"0".repeat(400)}`, 10n ** 400n, `1${"0".repeat(400)}`],
+        ["+0009007199254740993", 2n ** 53n + 1n, "9007199254740993"],
+        ["-0", 0n, "0"],
       ];
-      for (const [lexical, number, digits] of cases) {
+      for (const [lexical, integer, digits] of cases) {
         const single = yield* parseLexical("integer", lexical);
-        assert.deepStrictEqual(single, { baseType: "integer", value: number });
+        assert.deepStrictEqual(single, { baseType: "integer", value: integer });
         assert.strictEqual(format(single), digits);
       }
     }),
@@ -339,16 +331,16 @@ describe("match", () => {
   });
 
   it("compares numbers by value and strings by code point, within one base type", () => {
-    const integer = (number: number): Value =>
-      value("integer", "single", [{ baseType: "integer", value: number }]);
+    const integer = (whole: bigint): Value =>
+      value("integer", "single", [{ baseType: "integer", value: whole }]);
     const float = (number: number): Value =>
       value("float", "single", [{ baseType: "float", value: number }]);
     const string = (text: string): Value =>
       value("string", "single", [{ baseType: "string", value: text }]);
-    assert.isTrue(match(integer(1), integer(1)));
+    assert.isTrue(match(integer(1n), integer(1n)));
     assert.isTrue(match(float(0), float(-0)));
     assert.isFalse(match(float(Number.NaN), float(Number.NaN)));
-    assert.isFalse(match(integer(1), float(1)));
+    assert.isFalse(match(integer(1n), float(1)));
     assert.isFalse(match(string("a"), string("A")));
     assert.isFalse(
       match(
@@ -369,7 +361,7 @@ describe("Value", () => {
           { baseType: "float", value: 2.5 },
           { baseType: "float", value: Number.POSITIVE_INFINITY },
         ]),
-        value("integer", "single", [{ baseType: "integer", value: Number.MAX_SAFE_INTEGER }]),
+        value("integer", "single", [{ baseType: "integer", value: 2n ** 53n + 1n }]),
         value("boolean", "single", [{ baseType: "boolean", value: true }]),
         value("string", "single", [{ baseType: "string", value: " a " }]),
         nullOf("uri", "single"),
@@ -382,17 +374,29 @@ describe("Value", () => {
     }),
   );
 
+  it.effect("encodes an integer as its decimal digits and decodes them to the same bigint", () =>
+    Effect.gen(function* integerAsDigits() {
+      const original = value("integer", "single", [{ baseType: "integer", value: -(10n ** 30n) }]);
+      const encoded = yield* Schema.encodeEffect(Value)(original);
+
+      assert.deepStrictEqual(encoded, {
+        baseType: "integer",
+        cardinality: "single",
+        values: [{ baseType: "integer", value: "-1000000000000000000000000000000" }],
+      });
+      assert.deepStrictEqual(yield* Schema.decodeUnknownEffect(Value)(encoded), original);
+    }),
+  );
+
   it("refuses a value of another base type, an invalid value and two values in a single", () => {
     const valid = Schema.is(Value);
-    assert.isTrue(valid(singleInput("integer", [{ baseType: "integer", value: 1 }])));
+    assert.isTrue(valid(singleInput("integer", [{ baseType: "integer", value: 1n }])));
+    assert.isTrue(valid(singleInput("integer", [{ baseType: "integer", value: 2n ** 53n + 1n }])));
+    assert.isFalse(valid(singleInput("integer", [{ baseType: "integer", value: 1 }])));
+    assert.isFalse(valid(singleInput("integer", [{ baseType: "integer", value: 2 ** 53 }])));
     assert.isFalse(valid(singleInput("integer", [{ baseType: "float", value: 1 }])));
     assert.isFalse(valid(singleInput("integer", [{ baseType: "integer", value: "1" }])));
     assert.isFalse(valid(singleInput("integer", [{ baseType: "integer", value: 1.5 }])));
-    assert.isTrue(
-      valid(singleInput("integer", [{ baseType: "integer", value: Number.MIN_SAFE_INTEGER }])),
-    );
-    assert.isFalse(valid(singleInput("integer", [{ baseType: "integer", value: 2 ** 53 }])));
-    assert.isFalse(valid(singleInput("integer", [{ baseType: "integer", value: -(2 ** 53) }])));
     assert.isFalse(valid(singleInput("identifier", [{ baseType: "identifier", value: "1" }])));
     assert.isFalse(valid(singleInput("pair", [{ baseType: "pair", value: ["A", "1"] }])));
     assert.isFalse(valid(singleInput("string", [{ baseType: "string", value: "" }])));

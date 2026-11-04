@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Effect, Option } from "effect";
+import { attr, doc, el, text } from "#plate/document/source.ts";
 import {
   OutcomeMismatchError,
   UnknownIdentifierError,
@@ -17,6 +18,7 @@ import type {
   ResponseDeclaration,
   Rule,
 } from "#plate/model/item.ts";
+import { buildItem } from "#plate/model/item.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
@@ -383,7 +385,7 @@ describe("runRules", () => {
     const integerOne: Value = {
       baseType: "integer",
       cardinality: "single",
-      values: [{ baseType: "integer", value: 1 }],
+      values: [{ baseType: "integer", value: 1n }],
     };
 
     assert.throws(() => {
@@ -425,6 +427,53 @@ describe("evaluateExpression", () => {
 
     assert.deepStrictEqual(value, nullOf("boolean", "single"));
   });
+
+  it.effect("[I-9b] a match tells an integer correct response beyond 2^53 from its neighbour", () =>
+    Effect.gen(function* exactIntegerMatch() {
+      const built = yield* buildItem(
+        doc(
+          "items/exact.xml",
+          el(
+            "qti-assessment-item",
+            [attr("identifier", "exact"), attr("title", "Exact")],
+            [
+              el(
+                "qti-response-declaration",
+                [
+                  attr("base-type", "integer"),
+                  attr("cardinality", "single"),
+                  attr("identifier", "RESPONSE"),
+                ],
+                [el("qti-correct-response", [], [el("qti-value", [], [text("9007199254740993")])])],
+              ),
+              el("qti-item-body"),
+            ],
+          ),
+        ),
+      );
+      const matches = (answer: bigint): Value =>
+        evaluateExpression(
+          {
+            kind: "match",
+            operands: [variable("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
+          },
+          built,
+          {
+            outcomes: {},
+            responses: {
+              RESPONSE: {
+                baseType: "integer",
+                cardinality: "single",
+                values: [{ baseType: "integer", value: answer }],
+              },
+            },
+          },
+        );
+
+      assert.deepStrictEqual(matches(2n ** 53n), booleanValue(false));
+      assert.deepStrictEqual(matches(2n ** 53n + 1n), booleanValue(true));
+    }),
+  );
 
   it("[I-9b] correct is the declared correct response, or NULL of the declared type", () => {
     const variables = variablesOf(identifierValue("A"));

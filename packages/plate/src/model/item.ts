@@ -503,17 +503,31 @@ const typed = <A>(
   );
 
 /**
- * Read the number a numeric value holds.
+ * Read the number a float value holds.
  *
- * @param single A value that {@link parseLexical} gave for `integer` or `float`.
+ * @param single A value that {@link parseLexical} gave for `float`.
  * @returns Its number.
  */
-const numberOf = (single: Single): number => {
-  if (single.baseType === "integer" || single.baseType === "float") {
+const floatOf = (single: Single): number => {
+  if (single.baseType === "float") {
     return single.value;
   }
 
-  throw new Error(`A ${single.baseType} value holds no number.`);
+  throw new Error(`A ${single.baseType} value holds no float.`);
+};
+
+/**
+ * Read the exact integer an integer value holds.
+ *
+ * @param single A value that {@link parseLexical} gave for `integer`.
+ * @returns Its integer.
+ */
+const integerOf = (single: Single): bigint => {
+  if (single.baseType === "integer") {
+    return single.value;
+  }
+
+  throw new Error(`A ${single.baseType} value holds no integer.`);
 };
 
 /**
@@ -608,7 +622,7 @@ const xsInteger = (
         build,
         attributePath(pathOf(build, element), attribute),
         parseLexical("integer", attribute.value.replaceAll(outerSpace, "")),
-      ).pipe(Effect.map(numberOf)),
+      ).pipe(Effect.map((single) => Number(integerOf(single)))),
     ),
   );
 
@@ -678,7 +692,7 @@ const floatAttribute = (
         build,
         attributePath(pathOf(build, element), attribute),
         parseLexical("float", attribute.value),
-      ).pipe(Effect.map(numberOf)),
+      ).pipe(Effect.map(floatOf)),
     ),
   );
 
@@ -899,7 +913,7 @@ const mappingOf = (
         return {
           caseSensitive: yield* xsBoolean(build, entry, "case-sensitive", false),
           key: yield* typed(build, attributePath(path, key), parseLexical(baseType, key.value)),
-          value: numberOf(
+          value: floatOf(
             yield* typed(build, attributePath(path, value), parseLexical("float", value.value)),
           ),
         };
