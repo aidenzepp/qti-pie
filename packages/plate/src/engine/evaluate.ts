@@ -6,12 +6,13 @@
  * one expression. They take rules the item model ({@link Item}) built and variables that hold a
  * value for every modelled declaration, as the session record does. A rule that names an identifier
  * outside them, sets an outcome to a value of another type, or maps a response that has no mapping
- * is a defect in what the caller passed, thrown as {@link UnknownIdentifierError},
- * {@link OutcomeMismatchError} or {@link UnmappedResponseError}.
+ * is a failure of what the caller passed, and the caller can cause each one: the variables come
+ * from a record the host hands back. So the functions stay plain and synchronous and return each
+ * failure, an {@link EngineFailure}, in a `Result`; the first failure ends the run.
  *
  * @module
  */
-import { Array as Arr, Option } from "effect";
+import { Array as Arr, Data, Option, Result } from "effect";
 import type {
   Expression,
   Item,
@@ -35,15 +36,14 @@ export interface Variables {
 }
 
 /**
- * The defect of a rule tree that names an identifier the item or the variables do not hold in the
+ * The failure of a rule tree that names an identifier the item or the variables do not hold in the
  * role the rule reads it in: a variable with no value, a `qti-correct` of no response, or a
  * `qti-set-outcome-value` of no outcome.
  *
- * In a valid item every identifier a rule names is declared, and the record holds a value for every
- * modelled declaration, so the evaluator, which returns a value and has no error channel, throws
- * it.
+ * In a valid item every identifier a rule names is declared, but the variables come from the record
+ * the host hands back, which may lack a value, so the evaluator returns it.
  */
-export class UnknownIdentifierError extends Error {
+export class UnknownIdentifierError extends Data.TaggedError("UnknownIdentifierError")<{
   /**
    * The identifier the rule names.
    */
@@ -53,26 +53,18 @@ export class UnknownIdentifierError extends Error {
    * What the rule reads the identifier as.
    */
   readonly role: "outcome" | "response" | "variable";
-
+}> {
   /**
-   * Construct the defect for `identifier` read as `role`.
-   *
-   * @param identifier The identifier the rule names.
-   * @param role What the rule reads it as.
+   * The identifier, the role it is read in, and what to run instead, in one line.
    */
-  constructor(identifier: string, role: "outcome" | "response" | "variable") {
-    super(
-      `The rules read ${JSON.stringify(identifier)} as a ${role}, and the item holds no ${role} by that name: run rules built from this item, with the variables its record holds.`,
-    );
-    this.name = "UnknownIdentifierError";
-    this.identifier = identifier;
-    this.role = role;
+  override get message(): string {
+    return `The rules read ${JSON.stringify(this.identifier)} as a ${this.role}, and the item holds no ${this.role} by that name: run rules built from this item, with the variables its record holds.`;
   }
 }
 
 /**
- * The defect of a `qti-set-outcome-value` whose expression's base type or cardinality differs from
- * the outcome's declaration.
+ * The failure of a `qti-set-outcome-value` whose expression's base type or cardinality differs
+ * from the outcome's declaration, which the evaluator returns.
  *
  * QTI assigns without conversion: "floating point values can not be assigned to integer variables
  * and vice-versa", and the expression's type must match the target's. A NULL keeps the type of the
@@ -81,7 +73,7 @@ export class UnknownIdentifierError extends Error {
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_SetValue
  */
-export class OutcomeMismatchError extends Error {
+export class OutcomeMismatchError extends Data.TaggedError("OutcomeMismatchError")<{
   /**
    * The base type and cardinality the expression gave.
    */
@@ -96,52 +88,42 @@ export class OutcomeMismatchError extends Error {
    * The outcome's identifier.
    */
   readonly identifier: string;
-
+}> {
   /**
-   * Construct the defect for the outcome `identifier`.
-   *
-   * @param identifier The outcome's identifier.
-   * @param expected Its declared base type and cardinality.
-   * @param actual The expression's base type and cardinality.
+   * The outcome, both types, and the expression to give it, in one line.
    */
-  constructor(identifier: string, expected: string, actual: string) {
-    super(
-      `The rules set ${JSON.stringify(identifier)}, declared ${expected}, to a ${actual} value: give its qti-set-outcome-value an expression of base type and cardinality ${expected}.`,
-    );
-    this.name = "OutcomeMismatchError";
-    this.identifier = identifier;
-    this.expected = expected;
-    this.actual = actual;
+  override get message(): string {
+    return `The rules set ${JSON.stringify(this.identifier)}, declared ${this.expected}, to a ${this.actual} value: give its qti-set-outcome-value an expression of base type and cardinality ${this.expected}.`;
   }
 }
 
 /**
- * The defect of a `qti-map-response` whose response is declared without a `qti-mapping`.
+ * The failure of a `qti-map-response` whose response is declared without a `qti-mapping`.
  *
  * QTI maps a response "using the associated mapping, which must have been declared", and the
- * evaluator, which returns a value and has no error channel, throws it.
+ * evaluator returns it.
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
  */
-export class UnmappedResponseError extends Error {
+export class UnmappedResponseError extends Data.TaggedError("UnmappedResponseError")<{
   /**
    * The response's identifier.
    */
   readonly identifier: string;
-
+}> {
   /**
-   * Construct the defect for the response `identifier`.
-   *
-   * @param identifier The response's identifier.
+   * The response and the two ways to score it, in one line.
    */
-  constructor(identifier: string) {
-    super(
-      `The rules map the response ${JSON.stringify(identifier)}, and its declaration has no qti-mapping: give the declaration a qti-mapping, or score it without qti-map-response.`,
-    );
-    this.name = "UnmappedResponseError";
-    this.identifier = identifier;
+  override get message(): string {
+    return `The rules map the response ${JSON.stringify(this.identifier)}, and its declaration has no qti-mapping: give the declaration a qti-mapping, or score it without qti-map-response.`;
   }
 }
+
+/**
+ * A failure the engine returns: the rules name an identifier the item or the variables do not hold,
+ * set an outcome to a value of another type, or map a response that has no mapping.
+ */
+export type EngineFailure = OutcomeMismatchError | UnknownIdentifierError | UnmappedResponseError;
 
 /**
  * Look up a variable by identifier among the record's own keys.
@@ -162,27 +144,33 @@ const own = (values: Readonly<Record<string, Value>>, identifier: string): Optio
  *
  * @param variables The variables of the attempt.
  * @param identifier The variable's identifier.
- * @returns Its current value.
- * @throws {UnknownIdentifierError} When neither the responses nor the outcomes hold it.
+ * @returns Its current value, or an {@link UnknownIdentifierError} when neither the responses nor
+ *   the outcomes hold it.
  */
-const variableValue = (variables: Variables, identifier: string): Value =>
-  Option.getOrThrowWith(
+const variableValue = (
+  variables: Variables,
+  identifier: string,
+): Result.Result<Value, UnknownIdentifierError> =>
+  Result.fromOption(
     Option.orElse(own(variables.responses, identifier), () => own(variables.outcomes, identifier)),
-    () => new UnknownIdentifierError(identifier, "variable"),
+    () => new UnknownIdentifierError({ identifier, role: "variable" }),
   );
 
 /**
- * Find the response declaration a `qti-correct` names.
+ * Find the response declaration a `qti-correct` or a `qti-map-response` names.
  *
  * @param item The item.
  * @param identifier The response's identifier.
- * @returns The declaration.
- * @throws {UnknownIdentifierError} When the item declares no modelled response by that name.
+ * @returns The declaration, or an {@link UnknownIdentifierError} when the item declares no
+ *   modelled response by that name.
  */
-const responseOf = (item: Item, identifier: string): ResponseDeclaration =>
-  Option.getOrThrowWith(
+const responseOf = (
+  item: Item,
+  identifier: string,
+): Result.Result<ResponseDeclaration, UnknownIdentifierError> =>
+  Result.fromOption(
     Option.fromUndefinedOr(item.responses.get(identifier)),
-    () => new UnknownIdentifierError(identifier, "response"),
+    () => new UnknownIdentifierError({ identifier, role: "response" }),
   );
 
 /**
@@ -274,35 +262,42 @@ const mappedValue = (mapping: Mapping, single: Single): number =>
  * @param item The item, whose declaration gives the mapping.
  * @param variables The variables of the attempt.
  * @param identifier The response's identifier.
- * @returns The mapped value.
- * @throws {UnknownIdentifierError} When the item declares no modelled response by that name, or the
- *   variables hold no value of it.
- * @throws {UnmappedResponseError} When the response's declaration has no mapping.
+ * @returns The mapped value; or an {@link UnknownIdentifierError} when the item declares no
+ *   modelled response by that name, an {@link UnmappedResponseError} when its declaration has no
+ *   mapping, or an {@link UnknownIdentifierError} when the variables hold no value of it, checked
+ *   in that order.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
  */
-const mapResponse = (item: Item, variables: Variables, identifier: string): Value => {
-  const mapping = Option.getOrThrowWith(
-    responseOf(item, identifier).mapping,
-    () => new UnmappedResponseError(identifier),
-  );
-  const response = Option.getOrThrowWith(
-    own(variables.responses, identifier),
-    () => new UnknownIdentifierError(identifier, "response"),
-  );
-  let sum = 0;
-  for (const single of Arr.dedupeWith(response.values, equal)) {
-    sum += mappedValue(mapping, single);
-  }
+const mapResponse = (
+  item: Item,
+  variables: Variables,
+  identifier: string,
+): Result.Result<Value, UnknownIdentifierError | UnmappedResponseError> =>
+  Result.gen(function* mapOneResponse() {
+    const declaration = yield* responseOf(item, identifier);
+    const mapping = yield* Result.fromOption(
+      declaration.mapping,
+      () => new UnmappedResponseError({ identifier }),
+    );
+    const response = yield* Result.fromOption(
+      own(variables.responses, identifier),
+      () => new UnknownIdentifierError({ identifier, role: "response" }),
+    );
+    let sum = 0;
+    for (const single of Arr.dedupeWith(response.values, equal)) {
+      sum += mappedValue(mapping, single);
+    }
 
-  const lower = Option.getOrElse(mapping.lowerBound, () => Number.NEGATIVE_INFINITY);
-  const upper = Option.getOrElse(mapping.upperBound, () => Number.POSITIVE_INFINITY);
+    const lower = Option.getOrElse(mapping.lowerBound, () => Number.NEGATIVE_INFINITY);
+    const upper = Option.getOrElse(mapping.upperBound, () => Number.POSITIVE_INFINITY);
+    const mapped: Value = {
+      baseType: "float",
+      cardinality: "single",
+      values: [{ baseType: "float", value: Math.min(upper, Math.max(lower, sum)) }],
+    };
 
-  return {
-    baseType: "float",
-    cardinality: "single",
-    values: [{ baseType: "float", value: Math.min(upper, Math.max(lower, sum)) }],
-  };
-};
+    return mapped;
+  });
 
 /**
  * Report whether a condition's value is true.
@@ -331,13 +326,14 @@ const isTrue = (value: Value): boolean => {
  *   either is NULL.
  * - `map-response`: a single float, the response's value through its declaration's mapping.
  *
+ * Operands are evaluated left to right, and the first failure is the result.
+ *
  * @param expression The expression.
  * @param item The item, whose declarations give the correct responses and the mappings.
  * @param variables The variables of the attempt.
- * @returns The expression's value.
- * @throws {UnknownIdentifierError} When the expression names a variable or response that is not
- *   held.
- * @throws {UnmappedResponseError} When a `map-response` names a response with no mapping.
+ * @returns The expression's value; or an {@link UnknownIdentifierError} when it names a variable
+ *   or response that is not held, or an {@link UnmappedResponseError} when a `map-response` names a
+ *   response with no mapping.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpMatch
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpIsNull
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
@@ -346,35 +342,40 @@ export const evaluateExpression = (
   expression: Expression,
   item: Item,
   variables: Variables,
-): Value => {
+): Result.Result<Value, EngineFailure> => {
   if (expression.kind === "variable") {
     return variableValue(variables, expression.identifier);
   }
 
   if (expression.kind === "correct") {
-    const declaration = responseOf(item, expression.identifier);
-
-    return Option.getOrElse(declaration.correct, () =>
-      nullOf(declaration.baseType, declaration.cardinality),
+    return Result.map(responseOf(item, expression.identifier), (declaration) =>
+      Option.getOrElse(declaration.correct, () =>
+        nullOf(declaration.baseType, declaration.cardinality),
+      ),
     );
   }
 
   if (expression.kind === "base-value") {
-    return expression.value;
+    return Result.succeed(expression.value);
   }
 
   if (expression.kind === "is-null") {
-    return booleanOf(isNull(evaluateExpression(expression.operand, item, variables)));
+    return Result.map(evaluateExpression(expression.operand, item, variables), (value) =>
+      booleanOf(isNull(value)),
+    );
   }
 
   if (expression.kind === "match") {
     const [left, right] = expression.operands;
-    const leftValue = evaluateExpression(left, item, variables);
-    const rightValue = evaluateExpression(right, item, variables);
 
-    return isNull(leftValue) || isNull(rightValue)
-      ? nullOf("boolean", "single")
-      : booleanOf(match(leftValue, rightValue));
+    return Result.gen(function* matchOperands() {
+      const leftValue = yield* evaluateExpression(left, item, variables);
+      const rightValue = yield* evaluateExpression(right, item, variables);
+
+      return isNull(leftValue) || isNull(rightValue)
+        ? nullOf("boolean", "single")
+        : booleanOf(match(leftValue, rightValue));
+    });
   }
 
   return mapResponse(item, variables, expression.identifier);
@@ -387,9 +388,9 @@ export const evaluateExpression = (
  * @param variables The variables before the rule.
  * @param identifier The outcome's identifier.
  * @param value The expression's value.
- * @returns The variables with the outcome set and everything else as it was.
- * @throws {UnknownIdentifierError} When the item declares no modelled outcome by that name.
- * @throws {OutcomeMismatchError} When the value's base type or cardinality differs from the
+ * @returns The variables with the outcome set and everything else as it was; or an
+ *   {@link UnknownIdentifierError} when the item declares no modelled outcome by that name, or an
+ *   {@link OutcomeMismatchError} when the value's base type or cardinality differs from the
  *   outcome's.
  */
 const setOutcome = (
@@ -397,21 +398,51 @@ const setOutcome = (
   variables: Variables,
   identifier: string,
   value: Value,
-): Variables => {
-  const declaration = Option.getOrThrowWith(
-    Option.fromUndefinedOr(item.outcomes.get(identifier)),
-    () => new UnknownIdentifierError(identifier, "outcome"),
-  );
-  if (value.baseType !== declaration.baseType || value.cardinality !== declaration.cardinality) {
-    throw new OutcomeMismatchError(
-      identifier,
-      `${declaration.baseType} ${declaration.cardinality}`,
-      `${value.baseType} ${value.cardinality}`,
+): Result.Result<Variables, OutcomeMismatchError | UnknownIdentifierError> =>
+  Result.gen(function* setOneOutcome() {
+    const declaration = yield* Result.fromOption(
+      Option.fromUndefinedOr(item.outcomes.get(identifier)),
+      () => new UnknownIdentifierError({ identifier, role: "outcome" }),
     );
-  }
+    if (value.baseType !== declaration.baseType || value.cardinality !== declaration.cardinality) {
+      return yield* Result.fail(
+        new OutcomeMismatchError({
+          actual: `${value.baseType} ${value.cardinality}`,
+          expected: `${declaration.baseType} ${declaration.cardinality}`,
+          identifier,
+        }),
+      );
+    }
 
-  return { ...variables, outcomes: { ...variables.outcomes, [identifier]: value } };
-};
+    return { ...variables, outcomes: { ...variables.outcomes, [identifier]: value } };
+  });
+
+/**
+ * Choose the rules a condition runs: those of its first branch whose condition is true, else its
+ * `otherwise`, else none.
+ *
+ * Branch conditions are evaluated in order, and those after the chosen branch, or after a
+ * condition that fails, are not evaluated.
+ *
+ * @param condition The `qti-response-condition`.
+ * @param item The item.
+ * @param variables The variables before the condition.
+ * @returns The chosen rules, or the first failure of a branch condition.
+ */
+const chosenRules = (
+  condition: Extract<Rule, { readonly kind: "condition" }>,
+  item: Item,
+  variables: Variables,
+): Result.Result<readonly Rule[], EngineFailure> =>
+  Result.gen(function* chooseBranch() {
+    for (const branch of condition.branches) {
+      if (isTrue(yield* evaluateExpression(branch.when, item, variables))) {
+        return branch.then;
+      }
+    }
+
+    return Option.getOrElse(condition.otherwise, () => []);
+  });
 
 /**
  * Run one response rule.
@@ -422,26 +453,25 @@ const setOutcome = (
  * @param rule The rule.
  * @param item The item.
  * @param variables The variables before the rule.
- * @returns The variables after it.
+ * @returns The variables after it, or the first failure of the rule.
  */
-const runRule = (rule: Rule, item: Item, variables: Variables): Variables => {
-  if (rule.kind === "set-outcome") {
-    return setOutcome(
-      item,
-      variables,
-      rule.identifier,
-      evaluateExpression(rule.expression, item, variables),
-    );
-  }
+const runRule = (
+  rule: Rule,
+  item: Item,
+  variables: Variables,
+): Result.Result<Variables, EngineFailure> =>
+  Result.gen(function* runOneRule() {
+    if (rule.kind === "set-outcome") {
+      const value = yield* evaluateExpression(rule.expression, item, variables);
 
-  const chosen = rule.branches.find((branch) =>
-    isTrue(evaluateExpression(branch.when, item, variables)),
-  );
-  const then = chosen === undefined ? Option.getOrElse(rule.otherwise, () => []) : chosen.then;
+      return yield* setOutcome(item, variables, rule.identifier, value);
+    }
 
-  // oxlint-disable-next-line eslint/no-use-before-define -- `runRule` and `runRules` are mutually recursive, as conditions nest; the call runs only after both are defined.
-  return runRules(then, item, variables);
-};
+    const then = yield* chosenRules(rule, item, variables);
+
+    // oxlint-disable-next-line eslint/no-use-before-define -- `runRule` and `runRules` are mutually recursive, as conditions nest; the call runs only after both are defined.
+    return yield* runRules(then, item, variables);
+  });
 
 /**
  * Run response rules in order, each seeing the variables the rules before it left.
@@ -451,18 +481,23 @@ const runRule = (rule: Rule, item: Item, variables: Variables): Variables => {
  * @param rules The rules, as the item model built them.
  * @param item The item they belong to.
  * @param variables The variables before the rules run.
- * @returns The variables after the last rule.
- * @throws {UnknownIdentifierError} When a rule names an identifier the item or the variables do not
- *   hold in the role the rule reads it in.
- * @throws {OutcomeMismatchError} When a rule sets an outcome to a value of another type.
- * @throws {UnmappedResponseError} When a rule maps a response that has no mapping.
+ * @returns The variables after the last rule; or the first failure, after which no rule runs: an
+ *   {@link UnknownIdentifierError} when a rule names an identifier the item or the variables do not
+ *   hold in the role the rule reads it in, an {@link OutcomeMismatchError} when a rule sets an
+ *   outcome to a value of another type, or an {@link UnmappedResponseError} when a rule maps a
+ *   response that has no mapping.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Root_ResponseProcessing
  */
-export const runRules = (rules: readonly Rule[], item: Item, variables: Variables): Variables => {
-  let current = variables;
-  for (const rule of rules) {
-    current = runRule(rule, item, current);
-  }
+export const runRules = (
+  rules: readonly Rule[],
+  item: Item,
+  variables: Variables,
+): Result.Result<Variables, EngineFailure> =>
+  Result.gen(function* runInOrder() {
+    let current = variables;
+    for (const rule of rules) {
+      current = yield* runRule(rule, item, current);
+    }
 
-  return current;
-};
+    return current;
+  });
