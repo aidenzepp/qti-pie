@@ -47,7 +47,7 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    usage-data mapping (`ud:mapping`'s `defaultValue`, `lowerBound` and `upperBound`, and its `ud:mapEntry` entries'
    `mappedValue`). Where the value is of base type string, as for a `map-key` or `target-value` of a string variable,
    its whitespace is part of the value and is kept, as above. An attribute the XSD itself types, such
-   as `normal-maximum` as `xs:double` or `max-choices` as `xs:int`, is read as the XSD reads it, outer whitespace
+   as `normal-maximum` as `xs:double` or `max-choices` as `xs:nonNegativeInteger`, is read as the XSD reads it, outer whitespace
    collapsed, under reading 1. Free-text attributes such as `title` or `label` keep their text as written, spaces
    included. The split is a ruling because QTI's schema types the text of `qti-value` as `xs:normalizedString` and of
    `qti-base-value` as `xs:string`, never as the value's base type, and its information model lists each base type's
@@ -249,3 +249,19 @@ against it. A reading that is not an information-model-over-XSD case says which 
     rendered and `audio`, `break`, `emphasis`, `mark`, `phoneme`, `prosody`, `say-as` and `sub`. The XSD's `tokenType`
     also admits `voice`. This follows the SSML Recommendation, which defines the language, and sets aside the XSD, which
     is looser than it. (2026-11-04.)
+45. **An integer has no largest or smallest value.** QTI's integer base type is "the same as the set of values
+    defined by the integer primitiveType", and the information model's data types define Integer as "derived from
+    the 'decimal' data-type i.e. no decimal places", beside Int, "with a numeric value from -2147483648 to
+    2147483647". Neither the information model nor the XSD bounds the integer base type. So every integer written as
+    a value of base type integer, in `qti-value`, in `qti-base-value` or in a typed-value attribute of reading 7 such
+    as `map-key`, is accepted and kept exactly, however many digits it has: `9007199254740993` and
+    `9007199254740992` are two values, and so are `1000000000000000000000000000000` and
+    `1000000000000000000000000000001`. A package never refuses an integer for its size, never rounds one to a float
+    and never stores one as an infinity, and it compares and computes integer results exactly. This reading is
+    about values. A count attribute such as `max-choices` is not a value of the integer base type: a shared reading of
+    its own holds counts to the signed 64-bit range, read exactly, and refuses a count beyond it with its rule and
+    location. An attribute the XSD types `xs:int`, such as `base`, keeps `xs:int`'s range. Where
+    QTI's types make a result a float, an integer operand becomes the nearest float, and an integer beyond the
+    largest finite float becomes the largest finite float of its sign. This is not a case of documents
+    in conflict: the sources agree that the type is unbounded and say nothing of overflow, and this reading forbids
+    a package to add a bound, so reading 1 holds without an exception. (2026-11-04.)

@@ -1,6 +1,6 @@
 # QTI on grizzle: intent
 
-What was settled before planning, for whoever plans and builds `packages/qti`. It records intent and constraints, not a
+What was settled before planning, for whoever plans and builds `packages/pantry`. It records intent and constraints, not a
 design. Every design decision is still open unless this page says otherwise.
 
 ## Why this exists
@@ -41,7 +41,7 @@ every item and test; they are stored and round-tripped, never run.
 - **Local only.** Node on the local grizzle cluster. No Cloudflare, no deploy.
 - **Toolchain.** pnpm, Effect `4.0.7`, Vite+, and the lint, format and TypeScript rules carried over from the
   Cloudflare monorepo template. See [AGENTS.md](../AGENTS.md).
-- **Location.** `packages/qti` in this workspace, as `@gr8des/qti`.
+- **Location.** `packages/pantry` in this workspace, as `@qti-pie/pantry`.
 
 ## Open
 
@@ -79,7 +79,7 @@ From grizzle's README (Limits) and its agent guide, `.agents/skills/grizzle/SKIL
 
 ## Starting point
 
-`packages/qti/src/smoke/` is a two-table schema with a role, a login and a workload, migrated on the local cluster and
+`packages/pantry/src/smoke/` is a two-table schema with a role, a login and a workload, migrated on the local cluster and
 tested end to end. It proves the toolchain and is deleted once real schemas replace it.
 
 ## References
