@@ -978,6 +978,22 @@ export const compounds = (selector: string): readonly Compound[] =>
   splitCompounds(selector).segments.map(readCompound);
 
 /**
+ * Read a selector's compounds at any depth: its own, and those of every selector a `:where`,
+ * `:is`, `:not` or `:has` holds, recursively.
+ *
+ * @param selector One selector, normalised or not.
+ * @returns Its top-level compounds in order, each followed by the compounds of the selectors its
+ *   pseudo-classes hold.
+ */
+export const compoundsDeep = (selector: string): readonly Compound[] =>
+  compounds(selector).flatMap((compound) => [
+    compound,
+    ...compound.pseudoClasses.flatMap((pseudoClass) =>
+      pseudoClass.selectors.flatMap(compoundsDeep),
+    ),
+  ]);
+
+/**
  * Build one use.
  *
  * @param kind The kind of feature.

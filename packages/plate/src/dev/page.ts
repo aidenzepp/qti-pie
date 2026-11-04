@@ -416,7 +416,9 @@ const notePage = (status: number, title: string, said: string): Page =>
   page(status, "en", title, [h("h1", {}, [text(title)]), h("p", {}, [text(said)]), home]);
 
 /**
- * The 404 every refused path answers with, a traversal included.
+ * Construct the 404 page every refused path answers with, a traversal included.
+ *
+ * @returns The 404 page.
  */
 const notFound = (): Page =>
   notePage(404, "Not found", "No document, asset or open item is at this address.");

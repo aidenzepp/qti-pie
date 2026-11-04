@@ -4,8 +4,9 @@
  * Every set is closed: a value outside it is unsupported or invalid, never guessed at. The model
  * builder, the verdict and the emitter read these lists, so what phase 1 renders is decided once.
  *
- * Phase 1's emitter consults no behaviour class: what an element does comes from its QTI name,
- * attributes and binding alone. The presentational classes are M1-S2's stylesheet.
+ * The emitter consults no vocabulary class: what an element does comes from its QTI name,
+ * attributes and binding alone. {@link styledClasses} lists the classes `styles.css` presents, and
+ * {@link behaviourClasses} those whose meaning needs script, which M1 styles none of.
  *
  * @module
  */

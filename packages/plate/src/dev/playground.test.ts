@@ -3,8 +3,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { browserSupport } from "#plate/ledger/browser-support.ts";
 import { checkFloor, readWebFeatures } from "#plate/test/baseline.ts";
-import { compounds, scanSheet, uses, varReferences } from "#plate/test/css.ts";
-import type { Compound, StyleRule } from "#plate/test/css.ts";
+import { compounds, compoundsDeep, scanSheet, uses, varReferences } from "#plate/test/css.ts";
+import type { StyleRule } from "#plate/test/css.ts";
 import { tokens } from "#plate/test/tokens.ts";
 
 /**
@@ -17,22 +17,6 @@ const sheet = Effect.gen(function* sheet() {
 
   return yield* scanSheet(text);
 });
-
-/**
- * Read a selector's compounds at any depth: its own, and those of every selector a `:where`,
- * `:is`, `:not` or `:has` holds, recursively.
- *
- * @param selector One selector.
- * @returns Every compound, the selector's own first in order, each followed by those its
- *   pseudo-classes hold.
- */
-const deepCompounds = (selector: string): readonly Compound[] =>
-  compounds(selector).flatMap((compound) => [
-    compound,
-    ...compound.pseudoClasses.flatMap((pseudoClass) =>
-      pseudoClass.selectors.flatMap(deepCompounds),
-    ),
-  ]);
 
 /**
  * Decide whether a rule draws a `button`: one of its selectors ends in a compound whose type is
@@ -103,7 +87,7 @@ describe("dev/playground.css", () => {
       const scanned = yield* sheet;
 
       for (const selector of scanned.rules.flatMap((rule) => rule.selectors)) {
-        for (const compound of deepCompounds(selector)) {
+        for (const compound of compoundsDeep(selector)) {
           assert.notInclude(
             compound.attributes.map((attribute) => attribute.name),
             "data-slot",
@@ -133,7 +117,7 @@ describe("dev/playground.css", () => {
       const scanned = yield* sheet;
       const focused = scanned.rules.filter((rule) =>
         rule.selectors.some((selector) =>
-          deepCompounds(selector).some((compound) =>
+          compoundsDeep(selector).some((compound) =>
             compound.pseudoClasses.some((pseudoClass) => pseudoClass.name === "focus-visible"),
           ),
         ),
