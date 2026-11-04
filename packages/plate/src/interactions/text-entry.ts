@@ -17,13 +17,14 @@
  */
 import { Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { authoredId } from "#plate/emit/body.ts";
+import { when } from "#plate/emit/node.ts";
 import type { Attributes, Element } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import type { PartOf, PartRow } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
+import { textControlName } from "#plate/interactions/name.ts";
 import { message } from "#plate/messages.ts";
 import type { Locale, MessageKey } from "#plate/messages.ts";
 import type { TextEntryInteraction } from "#plate/model/item.ts";
@@ -59,21 +60,6 @@ const rows: Rows = {
 };
 
 /**
- * The ASCII whitespace that separates the ids of an IDREFS value.
- */
-const idSeparator = /[\t\n\f\r ]+/u;
-
-/**
- * Give attributes only when a condition holds, so a part's props read as one object literal.
- *
- * @param condition Whether the attributes apply.
- * @param attributes The attributes.
- * @returns `attributes`, or none when `condition` is false.
- */
-const when = (condition: boolean, attributes: Attributes): Attributes =>
-  condition ? attributes : {};
-
-/**
  * Give the attributes of an optional value, none when it is absent.
  *
  * @param value The value.
@@ -104,58 +90,15 @@ const inputModeOf = (interaction: TextEntryPayload): Attributes => {
 };
 
 /**
- * Name the Control for assistive technology (§4.8, Q10).
- *
- * The author's `aria-labelledby`, its ids scoped as the body scopes the ids it names, and the
- * author's `aria-label` win. A Control with neither is named by the renderer: "Answer", or
- * "Answer n of count" when the item holds more than one such control.
- *
- * @param interaction The Text Entry.
- * @param instance The item instance key, which scopes the author's ids.
- * @param locale The locale of the renderer's text.
- * @returns The naming attributes.
- */
-const nameAttributes = (
-  interaction: TextEntryPayload,
-  instance: string,
-  locale: Locale,
-): Attributes => {
-  const { ariaLabel, ariaLabelledby, unnamed } = interaction.name;
-
-  if (Option.isSome(ariaLabel) || Option.isSome(ariaLabelledby)) {
-    return {
-      ...whenSome(ariaLabel, (label) => ({ "aria-label": label })),
-      ...whenSome(ariaLabelledby, (ids) => ({
-        "aria-labelledby": ids
-          .split(idSeparator)
-          .filter((id) => id !== "")
-          .map((id) => authoredId(instance, id))
-          .join(" "),
-      })),
-    };
-  }
-
-  const count = (n: number): string => new Intl.NumberFormat(locale).format(n);
-
-  return {
-    "aria-label": Option.match(unnamed.pipe(Option.filter((position) => position.count > 1)), {
-      onNone: () => message(locale, "answer"),
-      onSome: (position) =>
-        message(locale, "answerOf", { count: count(position.count), n: count(position.n) }),
-    }),
-  };
-};
-
-/**
  * Compute every attribute of both parts of one Text Entry: the connect function.
  *
  * - Root: the marker, the state (`data-mode`, and `data-disabled` when the author disabled every
  *   control), and the author's `class`.
  * - Control: a text `input`; its id, the payload's `formName` and its restored `value`; `disabled`
  *   when finished; `inputmode` by the base type; `expected-length` as `size` when above 0, which
- *   HTML requires; `placeholder-text` as `placeholder`; its name; `aria-invalid` and
- *   `aria-describedby` → the message ids when the response is invalid; and `autofocus` when the
- *   payload says.
+ *   HTML requires; `placeholder-text` as `placeholder`; its name ({@link textControlName});
+ *   `aria-invalid` and `aria-describedby` → the message ids when the response is invalid; and
+ *   `autofocus` when the payload says.
  *
  * @param interaction The Text Entry.
  * @param payload The payload, which gives the instance and `finished`.
@@ -164,7 +107,7 @@ const nameAttributes = (
  */
 const connect = (interaction: TextEntryPayload, payload: Payload, locale: Locale): Connected => ({
   control: {
-    ...nameAttributes(interaction, payload.instance, locale),
+    ...textControlName(interaction.name, payload.instance, locale),
     ...when(interaction.invalid, {
       "aria-describedby": interaction.messageIds.join(" "),
       "aria-invalid": "true",

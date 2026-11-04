@@ -2,10 +2,9 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord, ItemRecordSchema } from "#plate/codec/record.ts";
-import type { Item } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
-import type { Value } from "#plate/model/values.ts";
+import { bg007Item, integer } from "#plate/test/fixtures.ts";
 
 /**
  * Whether two types are the same type, not merely assignable to each other: `true` only when the
@@ -20,110 +19,6 @@ type Equals<A, B> =
  * part.
  */
 const recordPinned: Equals<typeof ItemRecordSchema.Type, ItemRecord> = true;
-
-/**
- * A single integer value.
- *
- * @param value The integer.
- * @returns The value holding it.
- */
-const integer = (value: bigint): Value => ({
-  baseType: "integer",
-  cardinality: "single",
-  values: [{ baseType: "integer", value }],
-});
-
-/**
- * A single float value.
- *
- * @param value The number.
- * @returns The value holding it.
- */
-const float = (value: number): Value => ({
-  baseType: "float",
-  cardinality: "single",
-  values: [{ baseType: "float", value }],
-});
-
-/**
- * A BG007-shaped item, built by hand: an identifier `RESPONSE`, a float `SCORE` with default 1,
- * outcomes with no default of each kind, one notice and one mark.
- */
-const item: Item = {
-  body: [],
-  document: "items/BG007.xml",
-  identifier: "beginnersguide007",
-  lang: Option.none(),
-  outcomes: new Map([
-    [
-      "SCORE",
-      {
-        baseType: "float",
-        cardinality: "single",
-        defaultValue: Option.some(float(1)),
-        identifier: "SCORE",
-      },
-    ],
-    [
-      "MAXSCORE",
-      {
-        baseType: "float",
-        cardinality: "single",
-        defaultValue: Option.none(),
-        identifier: "MAXSCORE",
-      },
-    ],
-    [
-      "COUNT",
-      {
-        baseType: "integer",
-        cardinality: "single",
-        defaultValue: Option.none(),
-        identifier: "COUNT",
-      },
-    ],
-    [
-      "FEEDBACK",
-      {
-        baseType: "identifier",
-        cardinality: "multiple",
-        defaultValue: Option.none(),
-        identifier: "FEEDBACK",
-      },
-    ],
-  ]),
-  processing: Option.none(),
-  responses: new Map([
-    [
-      "RESPONSE",
-      {
-        baseType: "identifier",
-        cardinality: "single",
-        correct: Option.some<Value>({
-          baseType: "identifier",
-          cardinality: "single",
-          values: [{ baseType: "identifier", value: "true" }],
-        }),
-        defaultValue: Option.none(),
-        identifier: "RESPONSE",
-        mapping: Option.none(),
-      },
-    ],
-  ]),
-  title: "BG true false example ",
-  unsupported: [
-    {
-      feature: "qti-hotspot-interaction",
-      path: "qti-assessment-item/qti-item-body/qti-hotspot-interaction",
-      shown: "notice",
-    },
-    {
-      feature: 'shuffle="true"',
-      path: "qti-assessment-item/qti-item-body/qti-choice-interaction",
-      shown: "mark",
-    },
-  ],
-};
 
 /**
  * Pass a record through a host: encode it, write it as JSON text, read the text back and decode
@@ -149,7 +44,7 @@ describe("the plain type", () => {
 
 describe("encodeRecord and decodeRecord", () => {
   it("return Results: a fresh record's stored form is JSON text and decodes back to the record", () => {
-    const record = fresh(item, "i1");
+    const record = fresh(bg007Item, "i1");
     const encoded = encodeRecord(record);
     assert.isTrue(Result.isResult(encoded));
     assert.isTrue(Result.isSuccess(encoded.pipe(Result.map((stored) => JSON.stringify(stored)))));
@@ -160,7 +55,7 @@ describe("encodeRecord and decodeRecord", () => {
   });
 
   it('decodeRecord refuses a record with attempt "late": a failed Result tagged InvalidRecord', () => {
-    const encoded = encodeRecord(fresh(item, "i1"));
+    const encoded = encodeRecord(fresh(bg007Item, "i1"));
     assert.isTrue(Result.isResult(encoded));
     assert.isTrue(Result.isSuccess(encoded));
 
@@ -178,7 +73,7 @@ describe("encodeRecord and decodeRecord", () => {
 describe("decodeRecord", () => {
   it.effect("round-trips a record through encodeRecord and JSON", () =>
     Effect.gen(function* roundTrips() {
-      const record = fresh(item, "i1");
+      const record = fresh(bg007Item, "i1");
 
       assert.deepStrictEqual(yield* Effect.fromResult(throughHost(record)), record);
     }),
@@ -187,9 +82,9 @@ describe("decodeRecord", () => {
   it.effect("round-trips integers beyond 2^53 exactly, stored as their decimal digits", () =>
     Effect.gen(function* integersExact() {
       const record: ItemRecord = {
-        ...fresh(item, "i1"),
+        ...fresh(bg007Item, "i1"),
         outcomes: {
-          ...fresh(item, "i1").outcomes,
+          ...fresh(bg007Item, "i1").outcomes,
           BELOW: integer(-(10n ** 30n)),
           COUNT: integer(2n ** 53n + 1n),
           HUGE: integer(10n ** 30n),
@@ -209,7 +104,7 @@ describe("decodeRecord", () => {
 
   it.effect('refuses a stored integer written as the number 5 or as "1.5"', () =>
     Effect.gen(function* refusesInexactIntegers() {
-      const stored = yield* Effect.fromResult(encodeRecord(fresh(item, "i1")));
+      const stored = yield* Effect.fromResult(encodeRecord(fresh(bg007Item, "i1")));
       for (const written of [5, "1.5"]) {
         const error = yield* Effect.flip(
           Effect.fromResult(
@@ -236,7 +131,7 @@ describe("decodeRecord", () => {
     'refuses attempt "refused", which no function writes: InvalidRecord at stage decode',
     () =>
       Effect.gen(function* refusesRefused() {
-        const stored = yield* Effect.fromResult(encodeRecord(fresh(item, "i1")));
+        const stored = yield* Effect.fromResult(encodeRecord(fresh(bg007Item, "i1")));
         const result = decodeRecord({ ...stored, attempt: "refused" });
         assert.isTrue(Result.isResult(result));
 
@@ -248,7 +143,7 @@ describe("decodeRecord", () => {
 
   it.effect("refuses a negative numAttempts and a response that is not a value", () =>
     Effect.gen(function* refusesMalformed() {
-      const stored = yield* Effect.fromResult(encodeRecord(fresh(item, "i1")));
+      const stored = yield* Effect.fromResult(encodeRecord(fresh(bg007Item, "i1")));
       const negative = yield* Effect.flip(
         Effect.fromResult(decodeRecord({ ...stored, numAttempts: -1 })),
       );
@@ -273,9 +168,9 @@ describe("encodeRecord", () => {
           values: [{ baseType: "integer", value: 1.5 }],
         } as const;
         const record: ItemRecord = {
-          ...fresh(item, "i1"),
+          ...fresh(bg007Item, "i1"),
           outcomes: {
-            ...fresh(item, "i1").outcomes,
+            ...fresh(bg007Item, "i1").outcomes,
             // @ts-expect-error -- an integer holds a bigint; the number 1.5 is what encode must refuse.
             COUNT: inexact,
           },

@@ -17,7 +17,7 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
-import { isModelled, parseElementText, parseLexical } from "#plate/model/values.ts";
+import { isModelled, parseElementText, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
 import type { InvalidValue, ModelledBaseType, Single, Value } from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
@@ -353,37 +353,6 @@ const markedAttributes: ReadonlySet<string> = new Set(
     mark.on === "body" && mark.when.kind === "attribute" ? [mark.when.name] : [],
   ),
 );
-
-/**
- * Report whether a character is XML whitespace: space, tab, carriage return or line feed. No other
- * character counts, so a no-break space stays part of the value it pads.
- *
- * @param character One character of the text.
- * @returns Whether it is one of the four.
- */
-const isXmlSpace = (character: string): boolean =>
-  character === " " || character === "\t" || character === "\n" || character === "\r";
-
-/**
- * Remove the outer XML whitespace an XSD-typed attribute value sheds before its lexical check,
- * stepping in from each end once, so the time is linear in the length of the value.
- *
- * @param text The value as written.
- * @returns The value without its leading and trailing XML whitespace.
- */
-const trimXmlSpace = (text: string): string => {
-  let start = 0;
-  let end = text.length;
-  while (start < end && isXmlSpace(text.charAt(start))) {
-    start += 1;
-  }
-
-  while (end > start && isXmlSpace(text.charAt(end - 1))) {
-    end -= 1;
-  }
-
-  return text.slice(start, end);
-};
 
 /**
  * Name an element as a feature or a path step does: its local name in the QTI namespace,

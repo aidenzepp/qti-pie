@@ -1,6 +1,9 @@
 /**
  * The public surface of `@qti-pie/plate`, published through the `exports` map in `package.json`:
- * the pure functions an author calls, the native-form helpers, their types and their errors.
+ * the functions an author calls, the native-form helpers, their types and their errors.
+ *
+ * `open` and `configure` return Effects. Every other function is plain, callable with no Effect
+ * runtime: it returns its value, or a `Result` when a caller can make it fail.
  *
  * Nothing else under `src/` is reachable from outside the package. The tests' seam
  * (`acceptForTest`) and the redacted item's brand constructor (`brandRedacted`) are never exported
@@ -49,6 +52,7 @@ export type {
   Entry,
   InstanceRequirement,
   Partition,
+  PostedBaseType,
 } from "#plate/form/encoding.ts";
 
 export {
@@ -56,6 +60,7 @@ export {
   decode,
   encode,
   entryName,
+  isPosted,
   Malformed,
   partition,
 } from "#plate/form/encoding.ts";

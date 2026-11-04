@@ -95,10 +95,11 @@ export interface PartRow {
   readonly listOwner: boolean;
   /**
    * The attributes the interaction's connect function computes for this part, beyond the
-   * `data-slot` marker and the session state, which I1 writes over a replacement's.
+   * `data-slot` marker and the Root state of spec §4.4 (`data-mode`, `data-disabled`), which I1
+   * writes over a replacement's: every one the part can carry, some only in some states.
    *
-   * This records what the connect function computes; the merge itself writes whatever the props
-   * carry.
+   * This records what the connect function computes, and `parts.test.ts` renders every row to
+   * hold the two equal; the merge itself writes whatever the props carry.
    */
   readonly merged: readonly string[];
   readonly part: PartKey;
@@ -421,7 +422,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     element: "fieldset",
     interaction: "choice-interaction",
     listOwner: false,
-    merged: ["aria-labelledby"],
+    merged: ["aria-labelledby", "aria-label", "class", "data-orientation"],
     part: "root",
     tagClass: "fieldset",
   },
@@ -463,6 +464,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
       "aria-labelledby",
       "aria-invalid",
       "aria-describedby",
+      "autofocus",
     ],
     part: "control",
     tagClass: "native-input",
@@ -487,7 +489,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     element: "qti-text-entry-interaction",
     interaction: "text-entry-interaction",
     listOwner: false,
-    merged: [],
+    merged: ["class"],
     part: "root",
     tagClass: "phrasing-container",
   },
@@ -508,6 +510,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
       "aria-labelledby",
       "aria-invalid",
       "aria-describedby",
+      "autofocus",
     ],
     part: "control",
     tagClass: "text-input",
@@ -516,7 +519,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     element: "qti-extended-text-interaction",
     interaction: "extended-text-interaction",
     listOwner: false,
-    merged: [],
+    merged: ["class", "data-format"],
     part: "root",
     tagClass: "flow-container",
   },
@@ -536,11 +539,13 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
       "id",
       "name",
       "rows",
+      "placeholder",
       "disabled",
       "aria-label",
       "aria-labelledby",
       "aria-invalid",
       "aria-describedby",
+      "autofocus",
     ],
     part: "control",
     tagClass: "textarea",
@@ -700,7 +705,7 @@ export const rowFor = <I extends InteractionKey>(
 
   if (row.interaction === "choice-interaction" && context.promptMarkup === "legend") {
     if (row.part === "root") {
-      return { ...row, legendOwner: true, merged: [] };
+      return { ...row, legendOwner: true, merged: ["class", "data-orientation"] };
     }
 
     if (row.part === "prompt") {
@@ -753,6 +758,50 @@ export const positionUnder = (parentTag: string, insideParagraph: boolean): Posi
  */
 export const scopedId = (instance: string, ...segments: readonly (number | string)[]): string =>
   [instance, ...segments].join("-");
+
+/**
+ * Scope an id the author wrote by the item instance, so it meets no other instance's ids and none
+ * of the ids the renderer writes for its own parts.
+ *
+ * The renderer's ids are `<instance>-<segment>-…` ({@link scopedId}), where the first segment is a
+ * response identifier or a part name and so starts with a letter or an underscore. The empty
+ * segment here gives `<instance>--<id>`: the double hyphen is a prefix no renderer id has, so an
+ * authored `RESPONSE-control-0`, `item` or `status` stays distinct from the Control, Root and
+ * Status ids. The `id` attribute, every IDREF attribute and every same-document `#id` fragment use
+ * this one helper, so a reference still finds its target.
+ *
+ * @param instance The item instance key.
+ * @param id The id as the author wrote it.
+ * @returns `<instance>--<id>`.
+ */
+export const authoredId = (instance: string, id: string): string => scopedId(instance, "", id);
+
+/**
+ * The ASCII whitespace that separates the ids of an IDREFS value.
+ */
+const idSeparator = /[\t\n\f\r ]+/u;
+
+/**
+ * Split an IDREFS value, such as `aria-labelledby` or `headers`, into its ids.
+ *
+ * @param value The attribute's value.
+ * @returns The ids in order, with no empty id from leading, trailing or repeated whitespace.
+ */
+export const splitIdrefs = (value: string): readonly string[] =>
+  value.split(idSeparator).filter((id) => id !== "");
+
+/**
+ * Scope every id of an IDREFS value the author wrote through {@link authoredId}, so each still
+ * names its scoped target.
+ *
+ * @param instance The item instance key.
+ * @param value The attribute's value as the author wrote it.
+ * @returns The scoped ids, in order, joined by one space.
+ */
+export const authoredIdrefs = (instance: string, value: string): string =>
+  splitIdrefs(value)
+    .map((id) => authoredId(instance, id))
+    .join(" ");
 
 /**
  * Replacement part functions keyed by interaction, then by part: the goal's tier-2 swap, such as

@@ -1,6 +1,6 @@
 import { Option } from "effect";
 import type { Element } from "#plate/emit/node.ts";
-import { isFocusable } from "#plate/test/accessibility.ts";
+import { attribute, inputType, isFocusable, tabindexOf } from "#plate/test/accessibility.ts";
 
 /**
  * A key a keyboard walk presses, or a run of text typed into the focused control.
@@ -76,36 +76,6 @@ interface State {
 type Outcome = { readonly focus: Visit | undefined } | { readonly submitted: Element };
 
 /**
- * The `input` types HTML defines; any other value is the Text state.
- *
- * @see https://html.spec.whatwg.org/multipage/input.html#attr-input-type
- */
-const inputTypes: ReadonlySet<string> = new Set([
-  "button",
-  "checkbox",
-  "color",
-  "date",
-  "datetime-local",
-  "email",
-  "file",
-  "hidden",
-  "image",
-  "month",
-  "number",
-  "password",
-  "radio",
-  "range",
-  "reset",
-  "search",
-  "submit",
-  "tel",
-  "text",
-  "time",
-  "url",
-  "week",
-]);
-
-/**
  * The `input` types a person types one line of text into.
  */
 const textTypes: ReadonlySet<string> = new Set([
@@ -132,31 +102,6 @@ const blockingTypes: ReadonlySet<string> = new Set([
   "time",
   "week",
 ]);
-
-/**
- * Read an attribute as a string, a boolean attribute present reading as the empty string.
- *
- * @param element The element to read.
- * @param name The attribute's name.
- * @returns The attribute's value, or `undefined` when the element does not carry it.
- */
-const attribute = (element: Element, name: string): string | undefined => {
-  const value = element.attrs[name];
-
-  return value === true ? "" : value;
-};
-
-/**
- * Read an `input` element's type keyword, ASCII lower-cased; a missing or unknown type is `text`.
- *
- * @param element An `input` element.
- * @returns The type keyword.
- */
-const inputType = (element: Element): string => {
-  const type = (attribute(element, "type") ?? "text").toLowerCase();
-
-  return inputTypes.has(type) ? type : "text";
-};
 
 /**
  * Classify an element by what the walk's keys do to it.
@@ -189,20 +134,6 @@ const kindOf = (element: Element): Kind => {
       return "other";
     }
   }
-};
-
-/**
- * Parse an element's `tabindex` by HTML's rules for parsing integers.
- *
- * @param element The element to read.
- * @returns The parsed index, or `undefined` when it has none or it does not parse.
- * @see https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#rules-for-parsing-integers
- */
-const tabindexOf = (element: Element): number | undefined => {
-  const digits = /^[\t\n\f\r ]*(?<digits>[+-]?\d+)/u.exec(attribute(element, "tabindex") ?? "")
-    ?.groups?.["digits"];
-
-  return digits === undefined ? undefined : Number(digits);
 };
 
 /**
@@ -595,8 +526,10 @@ export const tabOrder = (tree: Element): readonly Element[] => {
  * `textarea`. Enter adds a line feed in a `textarea` and submits from a text `input` by implicit
  * submission. Enter or Space on a submit button submits its form. A form is the focused control's
  * nearest `form` ancestor; a control outside every form submits nothing. Not modelled: `select`,
- * `a` activation, `fieldset disabled`, `readonly`, `maxlength`, constraint validation and the
- * submitter's own entry.
+ * `a` activation, `fieldset disabled`, `readonly`, `maxlength`, constraint validation, the
+ * submitter's own entry, Enter on a focused radio or checkbox (a browser submits the form
+ * implicitly from those too; the walk leaves focus where it is), and a named `hidden` input (a
+ * browser posts it; the walk's `other` kind posts nothing).
  *
  * @param tree The tree's root.
  * @param keys The keys pressed, in order.
