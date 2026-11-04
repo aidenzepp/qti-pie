@@ -2,13 +2,13 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Exit, Layer, Schema } from "effect";
 import { describe, inject } from "vitest";
-import { ImportData } from "#qti/cli/import.ts";
-import { RoundtripData } from "#qti/cli/roundtrip.ts";
-import { successEnvelope } from "#qti/cli/output.ts";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { comparePackage } from "#qti/export/compare.ts";
-import { captureCli, packageCopy } from "#qti/test/cli.ts";
-import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+import { ImportData } from "#pantry/cli/import.ts";
+import { RoundtripData } from "#pantry/cli/roundtrip.ts";
+import { successEnvelope } from "#pantry/cli/output.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { comparePackage } from "#pantry/export/compare.ts";
+import { captureCli, packageCopy } from "#pantry/test/cli.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 const fixtures = inject("fixtures");
 

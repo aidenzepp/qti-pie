@@ -9,10 +9,10 @@
  */
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { Predicate } from "effect";
-import type { Rows as RowSet } from "#qti/import/tree.ts";
-import * as family from "#qti/schema/attributes.ts";
-import { IdrefAttribute } from "#qti/schema/content/rosters.ts";
-import { Author } from "#qti/schema/roles.ts";
+import type { Rows as RowSet } from "#pantry/import/tree.ts";
+import * as family from "#pantry/schema/attributes.ts";
+import { IdrefAttribute } from "#pantry/schema/content/rosters.ts";
+import { Author } from "#pantry/schema/roles.ts";
 
 /**
  * The relations the importer writes, by name.

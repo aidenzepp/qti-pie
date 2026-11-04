@@ -5,15 +5,15 @@
  * A `qti-gap` sits at any depth inside its gap-match's block content, so its interaction is the
  * nearest enclosing one; a gap text and a gap image are direct children and take their parent's.
  */
-import { judgedLater } from "#qti/import/judged.ts";
+import { judgedLater } from "#pantry/import/judged.ts";
 import { Effect, Option } from "effect";
-import type { AttributeReader, InteractionContext } from "#qti/import/interactions.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { closedOf, ItemRefusal, Rows, spelledInteger, withParents } from "#qti/import/tree.ts";
-import type { IndexedNode, UnmodeledVocabulary } from "#qti/import/tree.ts";
-import { MatchGroup } from "#qti/schema/choices.ts";
-import { ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
-import { ChoiceIdentifier } from "#qti/schema/contracts.ts";
+import type { AttributeReader, InteractionContext } from "#pantry/import/interactions.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { closedOf, ItemRefusal, Rows, spelledInteger, withParents } from "#pantry/import/tree.ts";
+import type { IndexedNode, UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import { MatchGroup } from "#pantry/schema/choices.ts";
+import { ShowHide, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import { ChoiceIdentifier } from "#pantry/schema/contracts.ts";
 import {
   DeclaredGapImgShowHide,
   DeclaredGapMatchMaxAssociations,
@@ -40,8 +40,8 @@ import {
   GraphicGapMatchMaxSelectionsMessage,
   GraphicGapMatchMinAssociations,
   GraphicGapMatchMinSelectionsMessage,
-} from "#qti/schema/interactions/gap.ts";
-import type { AttributeNameHandle } from "#qti/schema/node.ts";
+} from "#pantry/schema/interactions/gap.ts";
+import type { AttributeNameHandle } from "#pantry/schema/node.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**

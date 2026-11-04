@@ -2,16 +2,16 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option, Predicate } from "effect";
 import type { AnyRelation } from "@bjornpagen/grizzle";
-import { contentRows } from "#qti/import/content.ts";
-import type { DeclaredVariable } from "#qti/import/interactions.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { ItemRefusal, Rows, treeRows } from "#qti/import/tree.ts";
+import { contentRows } from "#pantry/import/content.ts";
+import type { DeclaredVariable } from "#pantry/import/interactions.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { ItemRefusal, Rows, treeRows } from "#pantry/import/tree.ts";
 import {
   PrintedVariableIntegerOrVariable,
   RecordFieldIdentifier,
   ShowHideIdentifier,
   StylesheetUri,
-} from "#qti/schema/contracts.ts";
+} from "#pantry/schema/contracts.ts";
 import {
   ContextDeclarationArm,
   Declaration,
@@ -20,8 +20,8 @@ import {
   RecordDeclaration,
   TemplateDeclarationArm,
   TypedDeclaration,
-} from "#qti/schema/declaration.ts";
-import { ContextDeclarationId, DocumentId } from "#qti/schema/document.ts";
+} from "#pantry/schema/declaration.ts";
+import { ContextDeclarationId, DocumentId } from "#pantry/schema/document.ts";
 import {
   ContentBodyFeedback,
   ContentBodyModal,
@@ -37,10 +37,10 @@ import {
   ModalFeedback,
   ModalFeedbackTitle,
   TemplateFeedbackBlock,
-} from "#qti/schema/feedback.ts";
-import { AttributeLexical, Node } from "#qti/schema/node.ts";
-import { nodeArms } from "#qti/schema/qti.ts";
-import type { SchemaVersionHandle } from "#qti/schema/node.ts";
+} from "#pantry/schema/feedback.ts";
+import { AttributeLexical, Node } from "#pantry/schema/node.ts";
+import { nodeArms } from "#pantry/schema/qti.ts";
+import type { SchemaVersionHandle } from "#pantry/schema/node.ts";
 import {
   CatalogInfo,
   CompanionMaterialsInfo,
@@ -48,7 +48,7 @@ import {
   Stylesheet,
   StylesheetMedia,
   StylesheetTitle,
-} from "#qti/schema/rubric.ts";
+} from "#pantry/schema/rubric.ts";
 import {
   DeclaredPrintedVariableBase,
   DeclaredPrintedVariableDelimiter,
@@ -69,8 +69,8 @@ import {
   TemplateBlock,
   TemplateContentRef,
   TemplateInline,
-} from "#qti/schema/template.ts";
-import * as values from "#qti/schema/value.ts";
+} from "#pantry/schema/template.ts";
+import * as values from "#pantry/schema/value.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";

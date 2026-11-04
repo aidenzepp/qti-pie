@@ -1,10 +1,10 @@
 import { Cause, Console, Effect, Predicate, Schema } from "effect";
 import { CliError, CliOutput } from "effect/cli";
 import type { HelpDoc } from "effect/cli";
-import { describeFailure, kindExitCode, kindHelp } from "#qti/cli/errors.ts";
-import type { FailureDescription } from "#qti/cli/errors.ts";
-import { ErrorObject } from "#qti/cli/output.ts";
-import type { OutputMode } from "#qti/cli/output.ts";
+import { describeFailure, kindExitCode, kindHelp } from "#pantry/cli/errors.ts";
+import type { FailureDescription } from "#pantry/cli/errors.ts";
+import { ErrorObject } from "#pantry/cli/output.ts";
+import type { OutputMode } from "#pantry/cli/output.ts";
 
 /**
  * Lay a failure out as supdoc does: its kind and what failed on one line, then what to do next.

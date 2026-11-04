@@ -1,18 +1,18 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { manifestGuards } from "#qti/import/guards/manifest.ts";
-import { itemRows } from "#qti/import/item.ts";
-import { manifestRows } from "#qti/import/manifest.ts";
-import { kindOf, Rows } from "#qti/import/tree.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { listPackage, readEntry } from "#qti/package/read.ts";
-import type { Entry } from "#qti/package/read.ts";
+import { manifestGuards } from "#pantry/import/guards/manifest.ts";
+import { itemRows } from "#pantry/import/item.ts";
+import { manifestRows } from "#pantry/import/manifest.ts";
+import { kindOf, Rows } from "#pantry/import/tree.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { listPackage, readEntry } from "#pantry/package/read.ts";
+import type { Entry } from "#pantry/package/read.ts";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
-import { FileMediaType, LomVocabularyValue, PackagePath } from "#qti/schema/contracts.ts";
-import * as cpx from "#qti/schema/kinds/cpx.ts";
-import * as drd from "#qti/schema/kinds/drd.ts";
-import { Document } from "#qti/schema/document.ts";
+import { FileMediaType, LomVocabularyValue, PackagePath } from "#pantry/schema/contracts.ts";
+import * as cpx from "#pantry/schema/kinds/cpx.ts";
+import * as drd from "#pantry/schema/kinds/drd.ts";
+import { Document } from "#pantry/schema/document.ts";
 import {
   CsmCaseItemUri,
   CsmGuid,
@@ -20,8 +20,8 @@ import {
   CsmSet,
   CsmSetResourceLabel,
   CsmSetResourcePartId,
-} from "#qti/schema/csm.ts";
-import { ResourceLomGeneral } from "#qti/schema/lang.ts";
+} from "#pantry/schema/csm.ts";
+import { ResourceLomGeneral } from "#pantry/schema/lang.ts";
 import {
   arms,
   FileLom,
@@ -43,9 +43,9 @@ import {
   ResourceLom,
   ResourceLomIdentified,
   ResourceLomTitled,
-} from "#qti/schema/metadata.ts";
-import { AttributeLexical, Edge, Node, NodeKind, TextNode } from "#qti/schema/node.ts";
-import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
+} from "#pantry/schema/metadata.ts";
+import { AttributeLexical, Edge, Node, NodeKind, TextNode } from "#pantry/schema/node.ts";
+import { rootOfType } from "#pantry/schema/seed/root-of-type.ts";
 import {
   AccessForAllResource,
   DrdAccessMode,
@@ -61,8 +61,8 @@ import {
   Resource,
   Variant,
   VariantMetadata,
-} from "#qti/schema/package.ts";
-import { materialize } from "#qti/test/fixtures.ts";
+} from "#pantry/schema/package.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 

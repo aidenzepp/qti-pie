@@ -3,20 +3,20 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
-import { outcomeRows } from "#qti/import/outcome.ts";
-import { Rows, UnmodeledVocabulary } from "#qti/import/tree.ts";
+import { outcomeRows } from "#pantry/import/outcome.ts";
+import { Rows, UnmodeledVocabulary } from "#pantry/import/tree.ts";
 import {
   Declaration,
   OutcomeDeclarationArm,
   ResponseDeclarationArm,
   TypedDeclaration,
-} from "#qti/schema/declaration.ts";
-import { ManifestIdentifier, PackagePath } from "#qti/schema/contracts.ts";
-import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
-import { OutcomeDocument } from "#qti/schema/outcome.ts";
-import { Edge, Node, TreeRoot } from "#qti/schema/node.ts";
-import * as value from "#qti/schema/value.ts";
-import { materialize } from "#qti/test/fixtures.ts";
+} from "#pantry/schema/declaration.ts";
+import { ManifestIdentifier, PackagePath } from "#pantry/schema/contracts.ts";
+import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/document.ts";
+import { OutcomeDocument } from "#pantry/schema/outcome.ts";
+import { Edge, Node, TreeRoot } from "#pantry/schema/node.ts";
+import * as value from "#pantry/schema/value.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 /**

@@ -4,7 +4,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { inject } from "vitest";
-import { materialize } from "#qti/test/fixtures.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Child, Element } from "@qti-pie/crust/tree.ts";
 

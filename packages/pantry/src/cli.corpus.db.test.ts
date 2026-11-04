@@ -3,15 +3,15 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Console, Duration, Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { describe } from "vitest";
-import { RoundtripData } from "#qti/cli/roundtrip.ts";
-import { ErrorObject, successEnvelope } from "#qti/cli/output.ts";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { comparePackage } from "#qti/export/compare.ts";
-import { exportPackage } from "#qti/export/package.ts";
-import { importPackage } from "#qti/import/package.ts";
-import { spawnCli } from "#qti/test/cli.ts";
-import { materializeCorpus } from "#qti/test/fixtures.ts";
-import { hasLease, settings } from "#qti/test/settings.ts";
+import { RoundtripData } from "#pantry/cli/roundtrip.ts";
+import { ErrorObject, successEnvelope } from "#pantry/cli/output.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { comparePackage } from "#pantry/export/compare.ts";
+import { exportPackage } from "#pantry/export/package.ts";
+import { importPackage } from "#pantry/import/package.ts";
+import { spawnCli } from "#pantry/test/cli.ts";
+import { materializeCorpus } from "#pantry/test/fixtures.ts";
+import { hasLease, settings } from "#pantry/test/settings.ts";
 
 /**
  * The timeout, in milliseconds, for one corpus package: an import and an export in process, then
@@ -27,8 +27,8 @@ import { hasLease, settings } from "#qti/test/settings.ts";
 const corpusCaseTimeoutMs = 120_000;
 
 /**
- * The folder every case's scratch lives under, `packages/qti/work/cli-corpus`; each package has a
- * folder of its own under it, named for the package, so no two cases share a path.
+ * The folder every case's scratch lives under, `packages/pantry/work/cli-corpus`; each package has
+ * a folder of its own under it, named for the package, so no two cases share a path.
  */
 const scratchRoot = path.resolve(import.meta.dirname, "..", "work", "cli-corpus");
 

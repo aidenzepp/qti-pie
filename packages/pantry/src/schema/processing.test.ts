@@ -3,23 +3,23 @@ import { inspect } from "node:util";
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
-import * as contracts from "#qti/schema/contracts.ts";
-import * as declaration from "#qti/schema/declaration.ts";
-import * as document from "#qti/schema/document.ts";
-import * as expressionAttributes from "#qti/schema/expression-attributes.ts";
-import * as item from "#qti/schema/item.ts";
-import * as node from "#qti/schema/node.ts";
-import * as pkg from "#qti/schema/package.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import * as processing from "#qti/schema/processing.ts";
-import * as ruleSchema from "#qti/schema/rule.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
+import * as declaration from "#pantry/schema/declaration.ts";
+import * as document from "#pantry/schema/document.ts";
+import * as expressionAttributes from "#pantry/schema/expression-attributes.ts";
+import * as item from "#pantry/schema/item.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as pkg from "#pantry/schema/package.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import * as processing from "#pantry/schema/processing.ts";
+import * as ruleSchema from "#pantry/schema/rule.ts";
 import {
   operatorArity,
   operatorArityMax,
   operatorArityUnbounded,
-} from "#qti/schema/seed/operator-arity.ts";
-import * as value from "#qti/schema/value.ts";
-import { printSeed } from "#qti/test/seed.ts";
+} from "#pantry/schema/seed/operator-arity.ts";
+import * as value from "#pantry/schema/value.ts";
+import { printSeed } from "#pantry/test/seed.ts";
 
 /**
  * The probe schema: the node and item modules' relations and rules with this module's.

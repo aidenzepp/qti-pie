@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
+import { cliProcessTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The program's entry point.

@@ -5,8 +5,8 @@
  */
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
-import { contentOf, elementChildren } from "#qti/import/leaf.ts";
-import { NotQti3 } from "#qti/import/manifest.ts";
+import { contentOf, elementChildren } from "#pantry/import/leaf.ts";
+import { NotQti3 } from "#pantry/import/manifest.ts";
 import {
   closedOf,
   collapse,
@@ -17,9 +17,9 @@ import {
   typedAttribute,
   UnmodeledVocabulary,
   valueText,
-} from "#qti/import/tree.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
+} from "#pantry/import/tree.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import type { NodeIndex, WhiteSpace } from "#pantry/import/tree.ts";
 import {
   GlossaryUri,
   ManifestIdentifier,
@@ -32,13 +32,13 @@ import {
   UsageMappingScore,
   UsagePartIdentifier,
   UsageValueToken,
-} from "#qti/schema/contracts.ts";
-import { BooleanLiteral, XsBoolean } from "#qti/schema/content/rosters.ts";
-import { BaseType } from "#qti/schema/declaration.ts";
-import { Document } from "#qti/schema/document.ts";
-import { Edge } from "#qti/schema/node.ts";
-import type { AttributeNameHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
-import * as ud from "#qti/schema/usage.ts";
+} from "#pantry/schema/contracts.ts";
+import { BooleanLiteral, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import { BaseType } from "#pantry/schema/declaration.ts";
+import { Document } from "#pantry/schema/document.ts";
+import { Edge } from "#pantry/schema/node.ts";
+import type { AttributeNameHandle, SchemaVersionHandle } from "#pantry/schema/node.ts";
+import * as ud from "#pantry/schema/usage.ts";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 type BaseTypeHandle = (typeof BaseType.handles)[number];

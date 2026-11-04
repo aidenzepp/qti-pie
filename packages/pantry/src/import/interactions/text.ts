@@ -6,20 +6,20 @@
  * count attribute bounds these kinds, and the kind's `BindingFit` rows alone say which variables
  * they accept.
  */
-import { judgedLater } from "#qti/import/judged.ts";
+import { judgedLater } from "#pantry/import/judged.ts";
 import { Effect, Option } from "effect";
-import type { InteractionContext, MarkerRelation, NodeRef } from "#qti/import/interactions.ts";
-import type { ImportRefused } from "#qti/import/refusal.ts";
-import { closedOf, Rows } from "#qti/import/tree.ts";
-import type { ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
-import { ShowHide, TextFormat, XsBoolean } from "#qti/schema/content/rosters.ts";
+import type { InteractionContext, MarkerRelation, NodeRef } from "#pantry/import/interactions.ts";
+import type { ImportRefused } from "#pantry/import/refusal.ts";
+import { closedOf, Rows } from "#pantry/import/tree.ts";
+import type { ItemRefusal, UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import { ShowHide, TextFormat, XsBoolean } from "#pantry/schema/content/rosters.ts";
 import {
   ChoiceCount,
   ChoiceIdentifier,
   ExpectedLength,
   ExpectedLines,
   StringCount,
-} from "#qti/schema/contracts.ts";
+} from "#pantry/schema/contracts.ts";
 import {
   DeclaredExtendedTextBase,
   DeclaredExtendedTextFormat,
@@ -49,8 +49,8 @@ import {
   TextEntryPatternMask,
   TextEntryPatternmaskMessage,
   TextEntryPlaceholderText,
-} from "#qti/schema/interactions/text.ts";
-import type { AncestryHandle } from "#qti/schema/node.ts";
+} from "#pantry/schema/interactions/text.ts";
+import type { AncestryHandle } from "#pantry/schema/node.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**

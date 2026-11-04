@@ -1,13 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { attributeRows } from "#qti/import/attributes.ts";
-import { kindOf, Rows, treeRows } from "#qti/import/tree.ts";
-import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
-import { ClassList, ContentLanguage, IdReference, XmlBaseUri } from "#qti/schema/contracts.ts";
-import * as attributes from "#qti/schema/attributes.ts";
-import { DocumentId, HtmlId, ItemBodyId, PrintedVariableId } from "#qti/schema/document.ts";
-import { AttributeLexical, Tree } from "#qti/schema/node.ts";
-import type { NodeKindHandle, RootKindHandle } from "#qti/schema/node.ts";
+import { attributeRows } from "#pantry/import/attributes.ts";
+import { kindOf, Rows, treeRows } from "#pantry/import/tree.ts";
+import type { IndexedNode, NodeIndex } from "#pantry/import/tree.ts";
+import { ClassList, ContentLanguage, IdReference, XmlBaseUri } from "#pantry/schema/contracts.ts";
+import * as attributes from "#pantry/schema/attributes.ts";
+import { DocumentId, HtmlId, ItemBodyId, PrintedVariableId } from "#pantry/schema/document.ts";
+import { AttributeLexical, Tree } from "#pantry/schema/node.ts";
+import type { NodeKindHandle, RootKindHandle } from "#pantry/schema/node.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 

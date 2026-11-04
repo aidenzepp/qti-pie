@@ -17,7 +17,7 @@
 import { mirrors, on, relation, schema, str, uuid } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
-import * as patterns from "#qti/schema/patterns.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
 

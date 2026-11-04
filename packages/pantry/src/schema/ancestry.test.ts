@@ -1,13 +1,13 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import * as leaf from "#qti/schema/ancestry.ts";
-import * as node from "#qti/schema/node.ts";
-import * as asi from "#qti/schema/kinds/asi.ts";
-import * as cp from "#qti/schema/kinds/cp.ts";
-import * as generic from "#qti/schema/kinds/generic.ts";
-import * as html from "#qti/schema/kinds/html.ts";
-import * as lom from "#qti/schema/kinds/lom.ts";
-import * as qmd from "#qti/schema/kinds/qmd.ts";
+import * as leaf from "#pantry/schema/ancestry.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as asi from "#pantry/schema/kinds/asi.ts";
+import * as cp from "#pantry/schema/kinds/cp.ts";
+import * as generic from "#pantry/schema/kinds/generic.ts";
+import * as html from "#pantry/schema/kinds/html.ts";
+import * as lom from "#pantry/schema/kinds/lom.ts";
+import * as qmd from "#pantry/schema/kinds/qmd.ts";
 import {
   ancestryHandles,
   banned,
@@ -17,7 +17,7 @@ import {
   handleOf,
   KindEnters,
   reachable,
-} from "#qti/schema/seed/ancestry.ts";
+} from "#pantry/schema/seed/ancestry.ts";
 
 /**
  * The Admission rows of every kinds file. `seed/admission.ts` composes the same rows but ranks them

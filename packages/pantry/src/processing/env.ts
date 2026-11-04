@@ -1,5 +1,5 @@
-import { collapse } from "#qti/import/tree.ts";
-import type { BaseTypeOrAny, Cardinality, EffectiveType } from "#qti/processing/types.ts";
+import { collapse } from "#pantry/import/tree.ts";
+import type { BaseTypeOrAny, Cardinality, EffectiveType } from "#pantry/processing/types.ts";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**

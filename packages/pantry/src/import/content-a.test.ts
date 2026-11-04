@@ -6,22 +6,22 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Context, Effect, FileSystem, Layer, Predicate } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { comparePackage, renderReport } from "#qti/export/compare.ts";
-import { exportPackage } from "#qti/export/package.ts";
-import { readTree, treesOf } from "#qti/export/read.ts";
-import { changeSetOf, importPackage, readRows, retrySchedule } from "#qti/import/package.ts";
-import { ruleOfLaw } from "#qti/import/refusal.ts";
-import type { ImportLaw, Rule } from "#qti/import/refusal.ts";
-import { Rows } from "#qti/import/tree.ts";
-import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { comparePackage, renderReport } from "#pantry/export/compare.ts";
+import { exportPackage } from "#pantry/export/package.ts";
+import { readTree, treesOf } from "#pantry/export/read.ts";
+import { changeSetOf, importPackage, readRows, retrySchedule } from "#pantry/import/package.ts";
+import { ruleOfLaw } from "#pantry/import/refusal.ts";
+import type { ImportLaw, Rule } from "#pantry/import/refusal.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { ChoiceTemplateRef } from "#pantry/schema/choices.ts";
 import {
   DeclaredFeedbackBlockShowHide,
   FeedbackBlock,
   DeclaredTemplateFeedbackBlockShowHide,
   TemplateFeedbackBlock,
-} from "#qti/schema/feedback.ts";
-import { Declaration, RecordDeclaration, TypedDeclaration } from "#qti/schema/declaration.ts";
+} from "#pantry/schema/feedback.ts";
+import { Declaration, RecordDeclaration, TypedDeclaration } from "#pantry/schema/declaration.ts";
 import {
   BindingFit,
   ChoiceInteraction,
@@ -31,7 +31,7 @@ import {
   RecordBindingFit,
   SimpleChoice,
   TypedBinding,
-} from "#qti/schema/interaction.ts";
+} from "#pantry/schema/interaction.ts";
 import {
   AssociableHotspot,
   AssociateInteraction,
@@ -42,25 +42,29 @@ import {
   SimpleAssociableChoice,
   SimpleAssociableChoiceMatchMin,
   SimpleMatchSet,
-} from "#qti/schema/interactions/associate.ts";
+} from "#pantry/schema/interactions/associate.ts";
 import {
   Gap,
   GapMatchInteraction,
   GraphicGapMatchInteraction,
-} from "#qti/schema/interactions/gap.ts";
-import { Hottext, HottextOwner, SelectPointInteraction } from "#qti/schema/interactions/hot.ts";
+} from "#pantry/schema/interactions/gap.ts";
+import { Hottext, HottextOwner, SelectPointInteraction } from "#pantry/schema/interactions/hot.ts";
 import {
   OrderInteraction,
   OrderMaxChoicesN,
   OrderMinChoicesN,
-} from "#qti/schema/interactions/order.ts";
-import { MediaInteraction, MediaMaxPlays, MediaMinPlays } from "#qti/schema/interactions/other.ts";
+} from "#pantry/schema/interactions/order.ts";
+import {
+  MediaInteraction,
+  MediaMaxPlays,
+  MediaMinPlays,
+} from "#pantry/schema/interactions/other.ts";
 import {
   ExtendedTextInteraction,
   StringBinding,
   TextEntryInteraction,
-} from "#qti/schema/interactions/text.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
+} from "#pantry/schema/interactions/text.ts";
+import { AuthorApp } from "#pantry/schema/logins.ts";
 import {
   DeclaredRubricTemplateBlockShowHide,
   DeclaredRubricTemplateInlineShowHide,
@@ -68,13 +72,17 @@ import {
   RubricTemplateInline,
   TemplateBlock,
   TemplateInline,
-} from "#qti/schema/template.ts";
-import { Edge, Node } from "#qti/schema/node.ts";
-import { Coords, CoordsDefault, CoordsRect } from "#qti/schema/shapes.ts";
-import { materialize } from "#qti/test/fixtures.ts";
-import type { FixtureName } from "#qti/test/fixtures.ts";
-import { rowsOf } from "#qti/test/rows.ts";
-import { fixtureRowsLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+} from "#pantry/schema/template.ts";
+import { Edge, Node } from "#pantry/schema/node.ts";
+import { Coords, CoordsDefault, CoordsRect } from "#pantry/schema/shapes.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
+import type { FixtureName } from "#pantry/test/fixtures.ts";
+import { rowsOf } from "#pantry/test/rows.ts";
+import {
+  fixtureRowsLayerHookTimeoutMs,
+  hasLease,
+  leaseTestTimeoutMs,
+} from "#pantry/test/settings.ts";
 
 /**
  * The directory every export is written under: the package's gitignored `work/`.

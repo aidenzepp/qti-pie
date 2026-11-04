@@ -41,13 +41,13 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import { Orientation, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
-import * as declaration from "#qti/schema/declaration.ts";
-import * as item from "#qti/schema/item.ts";
-import * as node from "#qti/schema/node.ts";
-import { ChoiceIdentifier, VariableReference } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import { fbFlagged } from "#qti/schema/seed/ancestry.ts";
+import { Orientation, ShowHide, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import * as declaration from "#pantry/schema/declaration.ts";
+import * as item from "#pantry/schema/item.ts";
+import * as node from "#pantry/schema/node.ts";
+import { ChoiceIdentifier, VariableReference } from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import { fbFlagged } from "#pantry/schema/seed/ancestry.ts";
 
 /**
  * The `Ancestry` handles that sit inside feedback: `fbFlagged`, typed as handles of the roster.
@@ -239,7 +239,7 @@ export const RecordBindingFit = relation(
  * The choice kinds' arms, keyed by their `NodeKind` handles.
  *
  * Their containments into `Node` are not written here: one `mirrors` per handle in the composed
- * schema (`#qti/schema/qti.ts`) binds them.
+ * schema (`#pantry/schema/qti.ts`) binds them.
  */
 export const arms = {
   "qti-choice-interaction": ChoiceInteraction,

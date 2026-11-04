@@ -3,12 +3,12 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Cause, Effect, Exit } from "effect";
 import { CliError } from "effect/cli";
-import { captureCli } from "#qti/test/cli.ts";
-import { scratchEnv } from "#qti/test/scratch.ts";
+import { captureCli } from "#pantry/test/cli.ts";
+import { scratchEnv } from "#pantry/test/scratch.ts";
 
 /**
- * The folder the run's home and cluster state live under, `packages/qti/work/cli-completions`. No
- * other test file writes there.
+ * The folder the run's home and cluster state live under, `packages/pantry/work/cli-completions`.
+ * No other test file writes there.
  */
 const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-completions");
 

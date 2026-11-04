@@ -2,19 +2,19 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, beforeAll, layer, inject } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem, Schema } from "effect";
-import { TargetNotEmpty } from "#qti/cli/args.ts";
-import { describeFailure } from "#qti/cli/errors.ts";
-import { successEnvelope } from "#qti/cli/output.ts";
-import { RoundtripData } from "#qti/cli/roundtrip.ts";
-import { exitCodeOf } from "#qti/cli/run.ts";
-import { captureCli, packageCopy, preloadEngine } from "#qti/test/cli.ts";
-import { makeScratch, scratchEnv } from "#qti/test/scratch.ts";
-import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#qti/test/settings.ts";
+import { TargetNotEmpty } from "#pantry/cli/args.ts";
+import { describeFailure } from "#pantry/cli/errors.ts";
+import { successEnvelope } from "#pantry/cli/output.ts";
+import { RoundtripData } from "#pantry/cli/roundtrip.ts";
+import { exitCodeOf } from "#pantry/cli/run.ts";
+import { captureCli, packageCopy, preloadEngine } from "#pantry/test/cli.ts";
+import { makeScratch, scratchEnv } from "#pantry/test/scratch.ts";
+import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
 
 const fixtures = inject("fixtures");
 
 /**
- * The folder the run's home and cluster state live under, `packages/qti/work/cli-roundtrip`. No
+ * The folder the run's home and cluster state live under, `packages/pantry/work/cli-roundtrip`. No
  * other test file writes there.
  */
 const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-roundtrip");

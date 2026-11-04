@@ -3,28 +3,28 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import nodePath from "node:path";
 import { afterAll, assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
-import { inventory } from "#qti/schema/content/xsd-inventory.ts";
-import * as asi from "#qti/schema/kinds/asi.ts";
-import * as html from "#qti/schema/kinds/html.ts";
-import * as xi from "#qti/schema/kinds/xi.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
-import { Ancestry, Node, NodeKind } from "#qti/schema/node.ts";
-import { Qti, nodeArms } from "#qti/schema/qti.ts";
-import { Author, seededNames } from "#qti/schema/roles.ts";
+import { inventory } from "#pantry/schema/content/xsd-inventory.ts";
+import * as asi from "#pantry/schema/kinds/asi.ts";
+import * as html from "#pantry/schema/kinds/html.ts";
+import * as xi from "#pantry/schema/kinds/xi.ts";
+import { AuthorApp } from "#pantry/schema/logins.ts";
+import { Ancestry, Node, NodeKind } from "#pantry/schema/node.ts";
+import { Qti, nodeArms } from "#pantry/schema/qti.ts";
+import { Author, seededNames } from "#pantry/schema/roles.ts";
 import {
   admission,
   ancestryStep,
   attributeAdmission,
   registries,
-} from "#qti/schema/seed/admission.ts";
-import { KindEnters, reachable } from "#qti/schema/seed/ancestry.ts";
-import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
-import { mappableBaseType } from "#qti/schema/seed/mappable-base-type.ts";
-import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
-import { recordBindingFit } from "#qti/schema/seed/record-binding-fit.ts";
-import { resourceTypes } from "#qti/schema/seed/resource-types.ts";
-import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
-import { seedSqlProcessTestTimeoutMs } from "#qti/test/settings.ts";
+} from "#pantry/schema/seed/admission.ts";
+import { KindEnters, reachable } from "#pantry/schema/seed/ancestry.ts";
+import { bindingFit } from "#pantry/schema/seed/binding-fit.ts";
+import { mappableBaseType } from "#pantry/schema/seed/mappable-base-type.ts";
+import { operatorArity, operatorArityMax } from "#pantry/schema/seed/operator-arity.ts";
+import { recordBindingFit } from "#pantry/schema/seed/record-binding-fit.ts";
+import { resourceTypes } from "#pantry/schema/seed/resource-types.ts";
+import { rootOfType } from "#pantry/schema/seed/root-of-type.ts";
+import { seedSqlProcessTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The relations the migration seeds, which no role writes: the list is `roles.ts`'s.

@@ -2,7 +2,7 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem } from "effect";
-import { hash12, materialize, specOf } from "#qti/test/fixtures.ts";
+import { hash12, materialize, specOf } from "#pantry/test/fixtures.ts";
 
 /**
  * The directory every test root is made under: the package's gitignored `work/`.

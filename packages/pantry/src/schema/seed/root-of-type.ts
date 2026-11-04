@@ -1,7 +1,7 @@
 /**
  * Which root element kind a QTI resource type names.
  */
-import type { RootKindHandle } from "#qti/schema/node.ts";
+import type { RootKindHandle } from "#pantry/schema/node.ts";
 
 /**
  * The resource type of each QTI document root.

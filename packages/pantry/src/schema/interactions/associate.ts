@@ -33,13 +33,13 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import { Shape, ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
-import { matchBoundsCheck } from "#qti/schema/choices.ts";
-import { coordsBinding, shapeCapacities } from "#qti/schema/shapes.ts";
-import { InteractionBinding } from "#qti/schema/interaction.ts";
-import { Edge, Node, NodeKind, RootKind } from "#qti/schema/node.ts";
-import { ChoiceIdentifier } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import { Shape, ShowHide, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import { matchBoundsCheck } from "#pantry/schema/choices.ts";
+import { coordsBinding, shapeCapacities } from "#pantry/schema/shapes.ts";
+import { InteractionBinding } from "#pantry/schema/interaction.ts";
+import { Edge, Node, NodeKind, RootKind } from "#pantry/schema/node.ts";
+import { ChoiceIdentifier } from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * An `xs:normalizedString` attribute's value, as the typed column holds it after replacement.

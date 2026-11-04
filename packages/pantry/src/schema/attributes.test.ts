@@ -2,20 +2,20 @@ import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
 
-import { inventory } from "#qti/schema/content/xsd-inventory.ts";
-import * as attributes from "#qti/schema/attributes.ts";
-import * as contracts from "#qti/schema/contracts.ts";
-import * as document from "#qti/schema/document.ts";
-import * as rosters from "#qti/schema/content/rosters.ts";
-import * as asi from "#qti/schema/kinds/asi.ts";
-import * as cp from "#qti/schema/kinds/cp.ts";
-import * as generic from "#qti/schema/kinds/generic.ts";
-import * as html from "#qti/schema/kinds/html.ts";
-import * as lom from "#qti/schema/kinds/lom.ts";
-import * as qmd from "#qti/schema/kinds/qmd.ts";
-import * as node from "#qti/schema/node.ts";
-import * as pkg from "#qti/schema/package.ts";
-import { attributeAdmissionRows } from "#qti/schema/seed/attribute-admission.ts";
+import { inventory } from "#pantry/schema/content/xsd-inventory.ts";
+import * as attributes from "#pantry/schema/attributes.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
+import * as document from "#pantry/schema/document.ts";
+import * as rosters from "#pantry/schema/content/rosters.ts";
+import * as asi from "#pantry/schema/kinds/asi.ts";
+import * as cp from "#pantry/schema/kinds/cp.ts";
+import * as generic from "#pantry/schema/kinds/generic.ts";
+import * as html from "#pantry/schema/kinds/html.ts";
+import * as lom from "#pantry/schema/kinds/lom.ts";
+import * as qmd from "#pantry/schema/kinds/qmd.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as pkg from "#pantry/schema/package.ts";
+import { attributeAdmissionRows } from "#pantry/schema/seed/attribute-admission.ts";
 
 const registries = [
   asi.registry,

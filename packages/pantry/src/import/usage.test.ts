@@ -2,23 +2,23 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
-import { usageGuards } from "#qti/import/guards/usage.ts";
-import { judgedLater } from "#qti/import/judged.ts";
-import { NotQti3 } from "#qti/import/manifest.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { Rows, UnmodeledVocabulary } from "#qti/import/tree.ts";
+import { usageGuards } from "#pantry/import/guards/usage.ts";
+import { judgedLater } from "#pantry/import/judged.ts";
+import { NotQti3 } from "#pantry/import/manifest.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { Rows, UnmodeledVocabulary } from "#pantry/import/tree.ts";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
-import { usageRows } from "#qti/import/usage.ts";
+import { usageRows } from "#pantry/import/usage.ts";
 import {
   ManifestIdentifier,
   PackagePath,
   UsageMappingScore,
   UsageValueToken,
-} from "#qti/schema/contracts.ts";
-import { AttributeLexical, Edge, Tree, TreeRoot } from "#qti/schema/node.ts";
-import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
-import * as ud from "#qti/schema/usage.ts";
-import { materialize, materializePackage } from "#qti/test/fixtures.ts";
+} from "#pantry/schema/contracts.ts";
+import { AttributeLexical, Edge, Tree, TreeRoot } from "#pantry/schema/node.ts";
+import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/document.ts";
+import * as ud from "#pantry/schema/usage.ts";
+import { materialize, materializePackage } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 /**

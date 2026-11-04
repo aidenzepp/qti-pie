@@ -2,19 +2,19 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { Schema } from "effect";
-import { changeSetOf } from "#qti/import/package.ts";
-import type { Rows } from "#qti/import/tree.ts";
-import * as csmd from "#qti/schema/kinds/csmd.ts";
-import * as ud from "#qti/schema/kinds/ud.ts";
-import { AuthorApp, authorWork } from "#qti/schema/logins.ts";
-import { AttributeName, NodeKind } from "#qti/schema/node.ts";
-import { Qti, nodeArms } from "#qti/schema/qti.ts";
-import { Author, seededNames } from "#qti/schema/roles.ts";
-import { admission } from "#qti/schema/seed/admission.ts";
-import { bindingFit } from "#qti/schema/seed/binding-fit.ts";
-import * as csm from "#qti/schema/csm.ts";
-import * as usage from "#qti/schema/usage.ts";
-import { printSeed } from "#qti/test/seed.ts";
+import { changeSetOf } from "#pantry/import/package.ts";
+import type { Rows } from "#pantry/import/tree.ts";
+import * as csmd from "#pantry/schema/kinds/csmd.ts";
+import * as ud from "#pantry/schema/kinds/ud.ts";
+import { AuthorApp, authorWork } from "#pantry/schema/logins.ts";
+import { AttributeName, NodeKind } from "#pantry/schema/node.ts";
+import { Qti, nodeArms } from "#pantry/schema/qti.ts";
+import { Author, seededNames } from "#pantry/schema/roles.ts";
+import { admission } from "#pantry/schema/seed/admission.ts";
+import { bindingFit } from "#pantry/schema/seed/binding-fit.ts";
+import * as csm from "#pantry/schema/csm.ts";
+import * as usage from "#pantry/schema/usage.ts";
+import { printSeed } from "#pantry/test/seed.ts";
 
 /**
  * The part of a ChangeSet's description the test reads: each stratum's members by operation and

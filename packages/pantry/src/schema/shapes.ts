@@ -20,11 +20,11 @@ import {
   within,
 } from "@bjornpagen/grizzle";
 import type { ClosedIdField, Relation } from "@bjornpagen/grizzle";
-import { Shape } from "#qti/schema/content/rosters.ts";
-import { Node, NodeKind } from "#qti/schema/node.ts";
-import type { NodeKindHandle } from "#qti/schema/node.ts";
-import { RectCoords, ShapeCoords } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import { Shape } from "#pantry/schema/content/rosters.ts";
+import { Node, NodeKind } from "#pantry/schema/node.ts";
+import type { NodeKindHandle } from "#pantry/schema/node.ts";
+import { RectCoords, ShapeCoords } from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * The coordinates of one hotspot-like element, and what shape they are for. `ownerKind` copies the

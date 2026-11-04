@@ -1,6 +1,6 @@
 import type { Option } from "effect";
 
-import type { NodeKindHandle } from "#qti/schema/node.ts";
+import type { NodeKindHandle } from "#pantry/schema/node.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**

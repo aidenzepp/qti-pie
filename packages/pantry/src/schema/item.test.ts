@@ -4,22 +4,22 @@ import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import path from "node:path";
 import { inject } from "vitest";
-import { itemRows } from "#qti/import/item.ts";
-import { manifestRows } from "#qti/import/manifest.ts";
-import { Rows } from "#qti/import/tree.ts";
-import { listPackage } from "#qti/package/read.ts";
+import { itemRows } from "#pantry/import/item.ts";
+import { manifestRows } from "#pantry/import/manifest.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { listPackage } from "#pantry/package/read.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
-import * as document from "#qti/schema/document.ts";
-import * as metadata from "#qti/schema/metadata.ts";
-import * as rosters from "#qti/schema/content/rosters.ts";
-import * as html from "#qti/schema/html.ts";
-import * as asiKinds from "#qti/schema/kinds/asi.ts";
-import * as htmlKinds from "#qti/schema/kinds/html.ts";
-import * as item from "#qti/schema/item.ts";
-import * as node from "#qti/schema/node.ts";
-import * as pkg from "#qti/schema/package.ts";
-import * as contracts from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import * as document from "#pantry/schema/document.ts";
+import * as metadata from "#pantry/schema/metadata.ts";
+import * as rosters from "#pantry/schema/content/rosters.ts";
+import * as html from "#pantry/schema/html.ts";
+import * as asiKinds from "#pantry/schema/kinds/asi.ts";
+import * as htmlKinds from "#pantry/schema/kinds/html.ts";
+import * as item from "#pantry/schema/item.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as pkg from "#pantry/schema/package.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * A statement of the probe schema.

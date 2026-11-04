@@ -2,20 +2,20 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, beforeAll, inject, layer } from "@effect/vitest";
 import { Cause, Effect, Exit, Schema } from "effect";
-import { ImportData } from "#qti/cli/import.ts";
-import { successEnvelope } from "#qti/cli/output.ts";
-import { exitCodeOf } from "#qti/cli/run.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { captureCli, preloadEngine } from "#qti/test/cli.ts";
-import { materialize } from "#qti/test/fixtures.ts";
-import { makeScratch, scratchEnv } from "#qti/test/scratch.ts";
-import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#qti/test/settings.ts";
+import { ImportData } from "#pantry/cli/import.ts";
+import { successEnvelope } from "#pantry/cli/output.ts";
+import { exitCodeOf } from "#pantry/cli/run.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { captureCli, preloadEngine } from "#pantry/test/cli.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
+import { makeScratch, scratchEnv } from "#pantry/test/scratch.ts";
+import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
 
 const fixtures = inject("fixtures");
 
 /**
- * The folder the run's home and cluster state live under, `packages/qti/work/cli-import`. No other
- * test file writes there.
+ * The folder the run's home and cluster state live under, `packages/pantry/work/cli-import`. No
+ * other test file writes there.
  */
 const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-import");
 

@@ -5,14 +5,14 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option, Predicate } from "effect";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { inject } from "vitest";
-import { itemGuards, ItemGuardRefusal } from "#qti/import/guards/item.ts";
-import { documentLangRows, itemRows, standardTemplate } from "#qti/import/item.ts";
-import { manifestRows } from "#qti/import/manifest.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { renderTree } from "#qti/export/render.ts";
+import { itemGuards, ItemGuardRefusal } from "#pantry/import/guards/item.ts";
+import { documentLangRows, itemRows, standardTemplate } from "#pantry/import/item.ts";
+import { manifestRows } from "#pantry/import/manifest.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { renderTree } from "#pantry/export/render.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
-import { ItemRefusal, Rows, UnmodeledVocabulary, withParents } from "#qti/import/tree.ts";
-import type { NodeIndex } from "#qti/import/tree.ts";
+import { ItemRefusal, Rows, UnmodeledVocabulary, withParents } from "#pantry/import/tree.ts";
+import type { NodeIndex } from "#pantry/import/tree.ts";
 import {
   Declaration,
   DeclarationExternalScored,
@@ -27,14 +27,14 @@ import {
   ResponseDeclarationArm,
   ResponseDeclarationId,
   TypedDeclaration,
-} from "#qti/schema/declaration.ts";
+} from "#pantry/schema/declaration.ts";
 import {
   Document,
   DocumentId,
   DocumentIdentifier,
   DocumentTitle,
   HtmlId,
-} from "#qti/schema/document.ts";
+} from "#pantry/schema/document.ts";
 import {
   ChoiceIdentifier,
   EmbedSourceUri,
@@ -42,8 +42,8 @@ import {
   PackagePath,
   TemplateUri,
   ToolName,
-} from "#qti/schema/contracts.ts";
-import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#qti/schema/html.ts";
+} from "#pantry/schema/contracts.ts";
+import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#pantry/schema/html.ts";
 import {
   AssessmentItem,
   AssessmentItemLabel,
@@ -54,9 +54,9 @@ import {
   ItemToolName,
   ItemToolVersion,
   Prompt,
-} from "#qti/schema/item.ts";
-import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
-import { Lom, ResourceLom } from "#qti/schema/metadata.ts";
+} from "#pantry/schema/item.ts";
+import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#pantry/schema/lang.ts";
+import { Lom, ResourceLom } from "#pantry/schema/metadata.ts";
 import {
   ChoiceInteraction,
   ChoiceInteractionMinSelectionsMessage,
@@ -67,7 +67,7 @@ import {
   InteractionBinding,
   SimpleChoice,
   TypedBinding,
-} from "#qti/schema/interaction.ts";
+} from "#pantry/schema/interaction.ts";
 import {
   AttributeEntityReference,
   AttributeLexical,
@@ -75,22 +75,22 @@ import {
   Edge,
   EntityReference,
   TextNode,
-} from "#qti/schema/node.ts";
-import { NodeClass, NodeLabel, NodeXmlLang } from "#qti/schema/attributes.ts";
-import { ObjectElement } from "#qti/schema/html/media.ts";
-import { HotspotChoice, HotspotInteraction } from "#qti/schema/interactions/hot.ts";
-import { GraphicOrderInteraction, OrderInteraction } from "#qti/schema/interactions/order.ts";
-import { Coords } from "#qti/schema/shapes.ts";
+} from "#pantry/schema/node.ts";
+import { NodeClass, NodeLabel, NodeXmlLang } from "#pantry/schema/attributes.ts";
+import { ObjectElement } from "#pantry/schema/html/media.ts";
+import { HotspotChoice, HotspotInteraction } from "#pantry/schema/interactions/hot.ts";
+import { GraphicOrderInteraction, OrderInteraction } from "#pantry/schema/interactions/order.ts";
+import { Coords } from "#pantry/schema/shapes.ts";
 import {
   ResponseProcessing,
   ResponseProcessingItem,
   ResponseProcessingTemplate,
   StandardTemplateReference,
-} from "#qti/schema/processing.ts";
-import * as value from "#qti/schema/value.ts";
-import { listPackage, readEntry } from "#qti/package/read.ts";
-import type { FixtureName } from "#qti/test/fixtures.ts";
-import { materialize } from "#qti/test/fixtures.ts";
+} from "#pantry/schema/processing.ts";
+import * as value from "#pantry/schema/value.ts";
+import { listPackage, readEntry } from "#pantry/package/read.ts";
+import type { FixtureName } from "#pantry/test/fixtures.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 const packageId = "22222222-2222-4222-8222-222222222222";

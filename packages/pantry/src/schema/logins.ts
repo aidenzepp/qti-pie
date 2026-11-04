@@ -8,10 +8,10 @@
  * generate` does not check. `importPackage` applies an ad hoc `ChangeSet` instead.
  */
 import { login, workload } from "@bjornpagen/grizzle";
-import { documentIdsOf, nodeQueries, treeOf } from "#qti/export/queries.ts";
-import type { LooseQuery } from "#qti/export/queries.ts";
-import { Qti } from "#qti/schema/qti.ts";
-import { Author } from "#qti/schema/roles.ts";
+import { documentIdsOf, nodeQueries, treeOf } from "#pantry/export/queries.ts";
+import type { LooseQuery } from "#pantry/export/queries.ts";
+import { Qti } from "#pantry/schema/qti.ts";
+import { Author } from "#pantry/schema/roles.ts";
 
 /**
  * The name the query of run `run` of a node's attachments runs under in `db.workload`.

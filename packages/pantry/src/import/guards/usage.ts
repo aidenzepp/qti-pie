@@ -5,10 +5,10 @@
  * state, judged over the rows an import built before any of them is written.
  */
 import { Effect, Predicate, Schema } from "effect";
-import { collapse, replace, Rows, valueText } from "#qti/import/tree.ts";
-import type { WhiteSpace } from "#qti/import/tree.ts";
-import { AttributeLexical, Edge, EntityReference, TextNode, Ws } from "#qti/schema/node.ts";
-import * as ud from "#qti/schema/usage.ts";
+import { collapse, replace, Rows, valueText } from "#pantry/import/tree.ts";
+import type { WhiteSpace } from "#pantry/import/tree.ts";
+import { AttributeLexical, Edge, EntityReference, TextNode, Ws } from "#pantry/schema/node.ts";
+import * as ud from "#pantry/schema/usage.ts";
 
 /**
  * A usage-data guard refused the rows.

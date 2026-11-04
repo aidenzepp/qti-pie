@@ -1,7 +1,7 @@
 import { Effect, Option } from "effect";
 
-import { collapse, replace, UnmodeledVocabulary } from "#qti/import/tree.ts";
-import type { WhiteSpace } from "#qti/import/tree.ts";
+import { collapse, replace, UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import type { WhiteSpace } from "#pantry/import/tree.ts";
 import type {
   AttributeValue,
   ExpressionNode,
@@ -12,10 +12,10 @@ import type {
   ProcessingAst,
   RuleNode,
   RuleOrExpressionKind,
-} from "#qti/processing/ast.ts";
-import * as asi from "#qti/schema/kinds/asi.ts";
-import * as xi from "#qti/schema/kinds/xi.ts";
-import { ncName, xsDouble, xsInteger } from "#qti/schema/patterns.ts";
+} from "#pantry/processing/ast.ts";
+import * as asi from "#pantry/schema/kinds/asi.ts";
+import * as xi from "#pantry/schema/kinds/xi.ts";
+import { ncName, xsDouble, xsInteger } from "#pantry/schema/patterns.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**

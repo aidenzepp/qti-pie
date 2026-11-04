@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect } from "effect";
-import { captureCli } from "#qti/test/cli.ts";
+import { captureCli } from "#pantry/test/cli.ts";
 
 /**
  * The lines of the `EXAMPLES` section of a help text: from its heading to the next heading, which

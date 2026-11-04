@@ -3,11 +3,11 @@ import { ConfigProvider, Console, Effect, FileSystem, Layer, Stdio, Stream } fro
 import type { Exit } from "effect";
 import type { Command } from "effect/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { cli } from "#qti/cli.ts";
-import { runCli } from "#qti/cli/run.ts";
+import { cli } from "#pantry/cli.ts";
+import { runCli } from "#pantry/cli/run.ts";
 
 /**
- * The package folder, `packages/qti`: where the program runs by default and where `work/` is.
+ * The package folder, `packages/pantry`: where the program runs by default and where `work/` is.
  */
 const packageRoot = path.resolve(import.meta.dirname, "..", "..");
 
@@ -24,17 +24,17 @@ const copiesRoot = path.join(packageRoot, "work", "cli-copies");
  * gets added here:
  *
  * ```sh
- * cd packages/qti && grep -hoE 'import\("#qti/[^"]+"\)' src/cli.ts $(ls src/cli/*.ts | grep -v '\.test\.ts$') | sort -u
+ * cd packages/pantry && grep -hoE 'import\("#pantry/[^"]+"\)' src/cli.ts $(ls src/cli/*.ts | grep -v '\.test\.ts$') | sort -u
  * ```
  */
 export const preloadEngine = Effect.promise(() =>
   Promise.all([
-    import("#qti/db/layer.ts"),
-    import("#qti/export/compare.ts"),
-    import("#qti/export/package.ts"),
-    import("#qti/import/package.ts"),
-    import("#qti/import/preview.ts"),
-    import("#qti/package/read.ts"),
+    import("#pantry/db/layer.ts"),
+    import("#pantry/export/compare.ts"),
+    import("#pantry/export/package.ts"),
+    import("#pantry/import/package.ts"),
+    import("#pantry/import/preview.ts"),
+    import("#pantry/package/read.ts"),
   ]),
 );
 
@@ -97,7 +97,7 @@ export const captureCli = Effect.fn("test.cli.captureCli")(function* captureCli<
  * Run the program as a child process, as a person's shell would, and collect how it ended.
  *
  * @param args - The command line after the program name.
- * @param options - The folder to run in, which must exist (default `packages/qti`), and variables
+ * @param options - The folder to run in, which must exist (default `packages/pantry`), and variables
  *   laid over a copy of this process's environment.
  * @returns The exit code, and what the child wrote to standard output and standard error.
  */
@@ -134,8 +134,8 @@ export const spawnCli = Effect.fn("test.cli.spawnCli")(function* spawnCli(
 });
 
 /**
- * Copy the package folder `source` to `packages/qti/work/cli-copies/<label>`, replacing any earlier
- * copy, so a test that exports or rewrites a package works on a folder of its own.
+ * Copy the package folder `source` to `packages/pantry/work/cli-copies/<label>`, replacing any
+ * earlier copy, so a test that exports or rewrites a package works on a folder of its own.
  *
  * @param source - The package folder to copy.
  * @param label - The copy's name; it starts `copy-` and appears in one test file only.

@@ -2,7 +2,7 @@
  * The author role: the one that reads and writes a QTI document or manifest tree.
  */
 import { role } from "@bjornpagen/grizzle";
-import { Qti } from "#qti/schema/qti.ts";
+import { Qti } from "#pantry/schema/qti.ts";
 
 /**
  * The relations the migration seeds, which no role writes.

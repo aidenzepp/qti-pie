@@ -2,7 +2,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Cause, Console, Effect, Exit, Stdio } from "effect";
 import { Command } from "effect/cli";
-import { cli } from "#qti/cli.ts";
+import { cli } from "#pantry/cli.ts";
 
 /**
  * Run the command on `args` with the console captured, in place of writing to the terminal.

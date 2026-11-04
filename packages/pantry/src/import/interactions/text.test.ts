@@ -12,21 +12,21 @@ import {
   nearestInteraction,
   templateRef,
   typedCopy,
-} from "#qti/import/interactions.ts";
-import type { DeclaredVariable, InteractionContext } from "#qti/import/interactions.ts";
-import { textRows } from "#qti/import/interactions/text.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { ItemRefusal, Rows } from "#qti/import/tree.ts";
-import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
+} from "#pantry/import/interactions.ts";
+import type { DeclaredVariable, InteractionContext } from "#pantry/import/interactions.ts";
+import { textRows } from "#pantry/import/interactions/text.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { ItemRefusal, Rows } from "#pantry/import/tree.ts";
+import type { IndexedNode, NodeIndex } from "#pantry/import/tree.ts";
 import {
   ChoiceCount,
   ChoiceIdentifier,
   ExpectedLength,
   ExpectedLines,
   StringCount,
-} from "#qti/schema/contracts.ts";
-import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
-import { InteractionBinding, RecordBinding, TypedBinding } from "#qti/schema/interaction.ts";
+} from "#pantry/schema/contracts.ts";
+import { ChoiceTemplateRef } from "#pantry/schema/choices.ts";
+import { InteractionBinding, RecordBinding, TypedBinding } from "#pantry/schema/interaction.ts";
 import {
   DeclaredExtendedTextBase,
   DeclaredExtendedTextFormat,
@@ -56,9 +56,9 @@ import {
   TextEntryPatternMask,
   TextEntryPatternmaskMessage,
   TextEntryPlaceholderText,
-} from "#qti/schema/interactions/text.ts";
-import { AttributeLexical } from "#qti/schema/node.ts";
-import type { NodeKindHandle } from "#qti/schema/node.ts";
+} from "#pantry/schema/interactions/text.ts";
+import { AttributeLexical } from "#pantry/schema/node.ts";
+import type { NodeKindHandle } from "#pantry/schema/node.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";

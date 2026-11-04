@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Option } from "effect";
-import { corpusRequested, leaseDatabase } from "#qti/test/settings.ts";
+import { corpusRequested, leaseDatabase } from "#pantry/test/settings.ts";
 
 /**
  * Resolve both settings under a provider built from `values`.

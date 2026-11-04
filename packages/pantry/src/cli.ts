@@ -1,16 +1,16 @@
 import { Logger } from "effect";
 import { Command } from "effect/cli";
-import { kindExitCode } from "#qti/cli/errors.ts";
-import type { Kind } from "#qti/cli/errors.ts";
-import { completionsCommand } from "#qti/cli/completions.ts";
-import { exportCommand } from "#qti/cli/export.ts";
-import { importCommand } from "#qti/cli/import.ts";
-import { outputGlobalFlags } from "#qti/cli/output.ts";
-import { roundtripCommand } from "#qti/cli/roundtrip.ts";
-import { runMain } from "#qti/cli/run.ts";
-import { schemaCommand } from "#qti/cli/schema.ts";
-import { timeoutGlobalFlags, withTimeout } from "#qti/cli/timeout.ts";
-import { verbosityGlobalFlags, withVerbosity } from "#qti/cli/verbosity.ts";
+import { kindExitCode } from "#pantry/cli/errors.ts";
+import type { Kind } from "#pantry/cli/errors.ts";
+import { completionsCommand } from "#pantry/cli/completions.ts";
+import { exportCommand } from "#pantry/cli/export.ts";
+import { importCommand } from "#pantry/cli/import.ts";
+import { outputGlobalFlags } from "#pantry/cli/output.ts";
+import { roundtripCommand } from "#pantry/cli/roundtrip.ts";
+import { runMain } from "#pantry/cli/run.ts";
+import { schemaCommand } from "#pantry/cli/schema.ts";
+import { timeoutGlobalFlags, withTimeout } from "#pantry/cli/timeout.ts";
+import { verbosityGlobalFlags, withVerbosity } from "#pantry/cli/verbosity.ts";
 
 /**
  * What each exit code means, in the order the help prints them. Codes 0 and 130 have no kind.

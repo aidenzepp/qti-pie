@@ -1,11 +1,11 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, inject, layer } from "@effect/vitest";
 import { Effect } from "effect";
-import { ContentGuardRefusal } from "#qti/import/guards/content.ts";
-import { readRows } from "#qti/import/package.ts";
-import { previewPackage } from "#qti/import/preview.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { materialize } from "#qti/test/fixtures.ts";
+import { ContentGuardRefusal } from "#pantry/import/guards/content.ts";
+import { readRows } from "#pantry/import/package.ts";
+import { previewPackage } from "#pantry/import/preview.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
 
 const fixtures = inject("fixtures");
 

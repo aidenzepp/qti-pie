@@ -1,9 +1,9 @@
 import { Console, Effect, JsonSchema, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
-import { ExportData } from "#qti/cli/export.ts";
-import { ImportData } from "#qti/cli/import.ts";
-import { ErrorObject, successEnvelope } from "#qti/cli/output.ts";
-import { RoundtripData } from "#qti/cli/roundtrip.ts";
+import { ExportData } from "#pantry/cli/export.ts";
+import { ImportData } from "#pantry/cli/import.ts";
+import { ErrorObject, successEnvelope } from "#pantry/cli/output.ts";
+import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 
 /**
  * The envelope each name stands for: a command's success envelope with its full data union, and

@@ -2,17 +2,17 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
-import * as contracts from "#qti/schema/contracts.ts";
-import * as choices from "#qti/schema/choices.ts";
-import * as rosters from "#qti/schema/content/rosters.ts";
-import * as declaration from "#qti/schema/declaration.ts";
-import * as document from "#qti/schema/document.ts";
-import * as interaction from "#qti/schema/interaction.ts";
-import * as item from "#qti/schema/item.ts";
-import * as associate from "#qti/schema/interactions/associate.ts";
-import * as node from "#qti/schema/node.ts";
-import * as pkg from "#qti/schema/package.ts";
-import * as shapes from "#qti/schema/shapes.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
+import * as choices from "#pantry/schema/choices.ts";
+import * as rosters from "#pantry/schema/content/rosters.ts";
+import * as declaration from "#pantry/schema/declaration.ts";
+import * as document from "#pantry/schema/document.ts";
+import * as interaction from "#pantry/schema/interaction.ts";
+import * as item from "#pantry/schema/item.ts";
+import * as associate from "#pantry/schema/interactions/associate.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as pkg from "#pantry/schema/package.ts";
+import * as shapes from "#pantry/schema/shapes.ts";
 
 /**
  * The probe schema: the spine relations the module reads, with its own.

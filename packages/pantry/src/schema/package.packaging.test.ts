@@ -1,12 +1,12 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
-import * as rosters from "#qti/schema/content/rosters.ts";
-import * as contracts from "#qti/schema/contracts.ts";
-import { kinds as cpxKinds } from "#qti/schema/kinds/cpx.ts";
-import { kinds as drdKinds } from "#qti/schema/kinds/drd.ts";
-import * as node from "#qti/schema/node.ts";
-import * as pkg from "#qti/schema/package.ts";
+import * as rosters from "#pantry/schema/content/rosters.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
+import { kinds as cpxKinds } from "#pantry/schema/kinds/cpx.ts";
+import { kinds as drdKinds } from "#pantry/schema/kinds/drd.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as pkg from "#pantry/schema/package.ts";
 import {
   AccessForAllResource,
   DrdAccessMode,
@@ -22,8 +22,8 @@ import {
   variantDrdRelations,
   variantDrdRules,
   VariantMetadata,
-} from "#qti/schema/package.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+} from "#pantry/schema/package.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * The schema over the node and package modules and the staged trio, which the package module's own

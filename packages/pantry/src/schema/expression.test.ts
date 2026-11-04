@@ -1,14 +1,14 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import * as contracts from "#qti/schema/contracts.ts";
-import * as declaration from "#qti/schema/declaration.ts";
-import * as document from "#qti/schema/document.ts";
-import * as expression from "#qti/schema/expression.ts";
-import * as item from "#qti/schema/item.ts";
-import * as node from "#qti/schema/node.ts";
-import * as pkg from "#qti/schema/package.ts";
-import * as processing from "#qti/schema/processing.ts";
-import * as value from "#qti/schema/value.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
+import * as declaration from "#pantry/schema/declaration.ts";
+import * as document from "#pantry/schema/document.ts";
+import * as expression from "#pantry/schema/expression.ts";
+import * as item from "#pantry/schema/item.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as pkg from "#pantry/schema/package.ts";
+import * as processing from "#pantry/schema/processing.ts";
+import * as value from "#pantry/schema/value.ts";
 
 /**
  * The 42 attribute-less expression kinds, each with the relation that is its arm: the 33

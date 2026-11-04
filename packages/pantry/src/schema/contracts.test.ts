@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import { str } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import * as contracts from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import { Qti } from "#qti/schema/qti.ts";
-import * as valueContracts from "#qti/schema/value-contracts.ts";
+import * as contracts from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import { Qti } from "#pantry/schema/qti.ts";
+import * as valueContracts from "#pantry/schema/value-contracts.ts";
 
 /**
  * The 136 contracts of the schema tightening, from the dry run `p13-d1` (its list (c)): the 254
@@ -188,7 +188,7 @@ describe("schema/contracts", () => {
   it("imports only the patterns module, so it cannot sit on a cycle through value.ts", () => {
     assert.deepStrictEqual(
       importsOf(new URL("contracts.ts", import.meta.url)).filter(
-        (specifier) => !specifier.startsWith("@") && specifier !== "#qti/schema/patterns.ts",
+        (specifier) => !specifier.startsWith("@") && specifier !== "#pantry/schema/patterns.ts",
       ),
       [],
     );

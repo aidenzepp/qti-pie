@@ -1,6 +1,6 @@
-import type { BaseType } from "#qti/schema/declaration.ts";
-import type { expressionKinds } from "#qti/schema/kinds/asi.ts";
-import type { NodeKindHandle } from "#qti/schema/node.ts";
+import type { BaseType } from "#pantry/schema/declaration.ts";
+import type { expressionKinds } from "#pantry/schema/kinds/asi.ts";
+import type { NodeKindHandle } from "#pantry/schema/node.ts";
 
 /**
  * A base type an expression can have: one of phase-1's eleven declared base types, `any` (the

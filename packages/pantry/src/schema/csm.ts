@@ -17,10 +17,10 @@ import {
   within,
 } from "@bjornpagen/grizzle";
 import type { AnyRelation } from "@bjornpagen/grizzle";
-import type * as csmd from "#qti/schema/kinds/csmd.ts";
-import { CaseItemUri } from "#qti/schema/contracts.ts";
-import { Edge, Node } from "#qti/schema/node.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import type * as csmd from "#pantry/schema/kinds/csmd.ts";
+import { CaseItemUri } from "#pantry/schema/contracts.ts";
+import { Edge, Node } from "#pantry/schema/node.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags);
 

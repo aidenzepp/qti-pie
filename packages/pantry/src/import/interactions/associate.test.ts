@@ -12,14 +12,14 @@ import {
   nearestInteraction,
   templateRef,
   typedCopy,
-} from "#qti/import/interactions.ts";
-import type { DeclaredVariable, InteractionContext, Shared } from "#qti/import/interactions.ts";
-import { associateRows } from "#qti/import/interactions/associate.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { ItemRefusal, Rows } from "#qti/import/tree.ts";
-import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
-import { MatchGroupList } from "#qti/schema/contracts.ts";
-import { ChoiceTemplateRef, MatchGroup } from "#qti/schema/choices.ts";
+} from "#pantry/import/interactions.ts";
+import type { DeclaredVariable, InteractionContext, Shared } from "#pantry/import/interactions.ts";
+import { associateRows } from "#pantry/import/interactions/associate.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { ItemRefusal, Rows } from "#pantry/import/tree.ts";
+import type { IndexedNode, NodeIndex } from "#pantry/import/tree.ts";
+import { MatchGroupList } from "#pantry/schema/contracts.ts";
+import { ChoiceTemplateRef, MatchGroup } from "#pantry/schema/choices.ts";
 import {
   AssociableHotspot,
   AssociableHotspotLabel,
@@ -43,10 +43,10 @@ import {
   SimpleAssociableChoiceMatchSet,
   SimpleAssociableChoiceShowHide,
   SimpleMatchSet,
-} from "#qti/schema/interactions/associate.ts";
-import { InteractionBinding, TypedBinding } from "#qti/schema/interaction.ts";
-import { AttributeLexical, AttributeSpelling, NodeKind } from "#qti/schema/node.ts";
-import { Coords, CoordsCircle } from "#qti/schema/shapes.ts";
+} from "#pantry/schema/interactions/associate.ts";
+import { InteractionBinding, TypedBinding } from "#pantry/schema/interaction.ts";
+import { AttributeLexical, AttributeSpelling, NodeKind } from "#pantry/schema/node.ts";
+import { Coords, CoordsCircle } from "#pantry/schema/shapes.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";

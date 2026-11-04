@@ -15,7 +15,11 @@
  */
 import { Option } from "effect";
 
-import type { AdmissionRow, RegistryRow, SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
+import type {
+  AdmissionRow,
+  RegistryRow,
+  SchemaVersionHandle,
+} from "#pantry/schema/kinds/generic.ts";
 
 const namespace = "http://www.w3.org/2001/XInclude";
 

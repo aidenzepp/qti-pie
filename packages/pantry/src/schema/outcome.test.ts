@@ -1,11 +1,11 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import * as declaration from "#qti/schema/declaration.ts";
-import * as document from "#qti/schema/document.ts";
-import * as node from "#qti/schema/node.ts";
-import * as outcome from "#qti/schema/outcome.ts";
-import * as pkg from "#qti/schema/package.ts";
-import * as value from "#qti/schema/value.ts";
+import * as declaration from "#pantry/schema/declaration.ts";
+import * as document from "#pantry/schema/document.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as outcome from "#pantry/schema/outcome.ts";
+import * as pkg from "#pantry/schema/package.ts";
+import * as value from "#pantry/schema/value.ts";
 
 /**
  * The schema over the modules `OutcomeDocument` binds and the module itself.

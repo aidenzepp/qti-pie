@@ -5,9 +5,9 @@
  * over its field types, can be applied by `value.ts` without an import cycle.
  */
 import { closedId, str } from "@bjornpagen/grizzle";
-import { BooleanLiteral } from "#qti/schema/content/rosters.ts";
-import type { Rule } from "#qti/import/refusal.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import { BooleanLiteral } from "#pantry/schema/content/rosters.ts";
+import type { Rule } from "#pantry/import/refusal.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * The places a `qti-value`'s text is written as one of the eleven base types, each with the prefix

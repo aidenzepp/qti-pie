@@ -7,8 +7,8 @@ import {
   requireReplaceable,
   yesFlag,
   zipFlag,
-} from "#qti/cli/args.ts";
-import { emitSuccess, outputMode } from "#qti/cli/output.ts";
+} from "#pantry/cli/args.ts";
+import { emitSuccess, outputMode } from "#pantry/cli/output.ts";
 
 /**
  * One file `export` wrote: its path inside the package and its size.
@@ -92,10 +92,10 @@ export const exportCommand = Command.make(
     yield* requirePackageId(packageId);
     yield* requireReplaceable(target, yes);
 
-    const { AuthorAppLayer } = yield* Effect.promise(() => import("#qti/db/layer.ts"));
+    const { AuthorAppLayer } = yield* Effect.promise(() => import("#pantry/db/layer.ts"));
 
     if (dryRun) {
-      const { exportEntries } = yield* Effect.promise(() => import("#qti/export/package.ts"));
+      const { exportEntries } = yield* Effect.promise(() => import("#pantry/export/package.ts"));
       const planned = yield* exportEntries(packageId).pipe(Effect.provide(AuthorAppLayer));
       const entries = planned.map(({ bytes, path }) => ({ bytes: bytes.byteLength, path }));
       const action = yield* targetActionOf(target);
@@ -118,7 +118,7 @@ export const exportCommand = Command.make(
       return;
     }
 
-    const { exportPackage } = yield* Effect.promise(() => import("#qti/export/package.ts"));
+    const { exportPackage } = yield* Effect.promise(() => import("#pantry/export/package.ts"));
 
     yield* replaceWith(target, (written) =>
       exportPackage(packageId, written).pipe(Effect.provide(AuthorAppLayer)),
@@ -128,7 +128,9 @@ export const exportCommand = Command.make(
       return;
     }
 
-    const { listPackage, readEntry } = yield* Effect.promise(() => import("#qti/package/read.ts"));
+    const { listPackage, readEntry } = yield* Effect.promise(
+      () => import("#pantry/package/read.ts"),
+    );
     const listed = yield* listPackage(target);
     const entries = yield* Effect.all(
       listed.map(({ path }) =>

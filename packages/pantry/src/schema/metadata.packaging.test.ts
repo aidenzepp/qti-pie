@@ -1,8 +1,8 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
-import * as document from "#qti/schema/document.ts";
-import * as metadata from "#qti/schema/metadata.ts";
+import * as document from "#pantry/schema/document.ts";
+import * as metadata from "#pantry/schema/metadata.ts";
 import {
   arms,
   LomId,
@@ -14,12 +14,12 @@ import {
   r30Capacities,
   relations,
   rules,
-} from "#qti/schema/metadata.ts";
-import * as lom from "#qti/schema/kinds/lom.ts";
-import * as qmd from "#qti/schema/kinds/qmd.ts";
-import * as node from "#qti/schema/node.ts";
-import * as pkg from "#qti/schema/package.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+} from "#pantry/schema/metadata.ts";
+import * as lom from "#pantry/schema/kinds/lom.ts";
+import * as qmd from "#pantry/schema/kinds/qmd.ts";
+import * as node from "#pantry/schema/node.ts";
+import * as pkg from "#pantry/schema/package.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * The handles of the 21 LOM remainder arms, the spec's 4.3 and U01.

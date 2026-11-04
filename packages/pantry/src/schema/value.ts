@@ -24,13 +24,13 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import * as declaration from "#qti/schema/declaration.ts";
-import * as node from "#qti/schema/node.ts";
-import { RecordFieldIdentifier } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import type { ValueContext } from "#qti/schema/value-contexts.ts";
-import { lexicalOf } from "#qti/schema/value-contexts.ts";
-import { valueArmContracts } from "#qti/schema/value-contracts.ts";
+import * as declaration from "#pantry/schema/declaration.ts";
+import * as node from "#pantry/schema/node.ts";
+import { RecordFieldIdentifier } from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import type { ValueContext } from "#pantry/schema/value-contexts.ts";
+import { lexicalOf } from "#pantry/schema/value-contexts.ts";
+import { valueArmContracts } from "#pantry/schema/value-contracts.ts";
 
 /**
  * Which element a value set is written as.

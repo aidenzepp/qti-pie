@@ -36,18 +36,18 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import { ShowHide, TextFormat, XsBoolean } from "#qti/schema/content/rosters.ts";
-import { Declaration } from "#qti/schema/declaration.ts";
-import { InteractionBinding } from "#qti/schema/interaction.ts";
-import { Edge, Node, RootKind } from "#qti/schema/node.ts";
+import { ShowHide, TextFormat, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import { Declaration } from "#pantry/schema/declaration.ts";
+import { InteractionBinding } from "#pantry/schema/interaction.ts";
+import { Edge, Node, RootKind } from "#pantry/schema/node.ts";
 import {
   ChoiceCount,
   ChoiceIdentifier,
   ExpectedLength,
   ExpectedLines,
   StringCount,
-} from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+} from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * An `xs:int` attribute's lexical form.

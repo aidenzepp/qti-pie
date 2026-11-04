@@ -6,8 +6,8 @@ import {
   materializeProcessing,
   processingFixtureNames,
   specOfProcessing,
-} from "#qti/processing/fixtures.ts";
-import type { ProcessingFixtureName } from "#qti/processing/fixtures.ts";
+} from "#pantry/processing/fixtures.ts";
+import type { ProcessingFixtureName } from "#pantry/processing/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Child, Element } from "@qti-pie/crust/tree.ts";
 

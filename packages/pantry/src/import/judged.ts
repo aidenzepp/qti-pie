@@ -13,7 +13,7 @@
  * The value is one the source wrote, or an empty fill for an attribute whose column pattern
  * refuses `""` at commit (the identifier-class members, refused there under their law-mapped
  * rule). A required attribute of a free-text column never reaches the cast absent, because
- * `requiredAttribute` (`#qti/import/required.ts`) refused it first. The one empty fill left in a
+ * `requiredAttribute` (`#pantry/import/required.ts`) refused it first. The one empty fill left in a
  * free-text column is a `picture`'s `source/@src`, which the export omits.
  */
 // oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- `T` is the column type the caller's row demands; the call site names it by inference.

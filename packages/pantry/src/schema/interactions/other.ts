@@ -26,11 +26,11 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
-import { Orientation, XsBoolean } from "#qti/schema/content/rosters.ts";
-import { InteractionBinding } from "#qti/schema/interaction.ts";
-import { Node, RootKind } from "#qti/schema/node.ts";
-import { MediaRectCoords } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import { Orientation, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import { InteractionBinding } from "#pantry/schema/interaction.ts";
+import { Node, RootKind } from "#pantry/schema/node.ts";
+import { MediaRectCoords } from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * An `xs:normalizedString` attribute's value, as the typed column holds it after replacement.

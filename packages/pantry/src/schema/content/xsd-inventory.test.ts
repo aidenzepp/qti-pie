@@ -1,13 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 
-import { kinds as asiKinds } from "#qti/schema/kinds/asi.ts";
-import { kinds as htmlKinds } from "#qti/schema/kinds/html.ts";
-import type { InventoryAttribute } from "#qti/schema/content/xsd-inventory.ts";
-import { entryOf, inventory } from "#qti/schema/content/xsd-inventory.ts";
-import { asiInventory } from "#qti/schema/content/inventory/asi.ts";
-import { htmlInventory } from "#qti/schema/content/inventory/html.ts";
-import { processingInventory } from "#qti/schema/content/inventory/processing.ts";
+import { kinds as asiKinds } from "#pantry/schema/kinds/asi.ts";
+import { kinds as htmlKinds } from "#pantry/schema/kinds/html.ts";
+import type { InventoryAttribute } from "#pantry/schema/content/xsd-inventory.ts";
+import { entryOf, inventory } from "#pantry/schema/content/xsd-inventory.ts";
+import { asiInventory } from "#pantry/schema/content/inventory/asi.ts";
+import { htmlInventory } from "#pantry/schema/content/inventory/html.ts";
+import { processingInventory } from "#pantry/schema/content/inventory/processing.ts";
 
 /**
  * Find a declared attribute of a kind, failing the test when the kind or attribute is absent.

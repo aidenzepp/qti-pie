@@ -2,12 +2,12 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Result } from "effect";
 import { inject } from "vitest";
-import { ContentGuardRefusal } from "#qti/import/guards/content.ts";
-import { readRows } from "#qti/import/package.ts";
-import { ruleOfError } from "#qti/import/refusal.ts";
-import type { Rule } from "#qti/import/refusal.ts";
-import { fixtureNames, materialize } from "#qti/test/fixtures.ts";
-import type { FixtureName } from "#qti/test/fixtures.ts";
+import { ContentGuardRefusal } from "#pantry/import/guards/content.ts";
+import { readRows } from "#pantry/import/package.ts";
+import { ruleOfError } from "#pantry/import/refusal.ts";
+import type { Rule } from "#pantry/import/refusal.ts";
+import { fixtureNames, materialize } from "#pantry/test/fixtures.ts";
+import type { FixtureName } from "#pantry/test/fixtures.ts";
 
 const fixtures = inject("fixtures");
 

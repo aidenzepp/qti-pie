@@ -6,12 +6,12 @@
  */
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { Effect, Predicate, Schema } from "effect";
-import { Rows, valueText } from "#qti/import/tree.ts";
-import { expressionKinds } from "#qti/schema/kinds/asi.ts";
-import { Edge, EntityReference, Node, TextNode, vocabularies, Ws } from "#qti/schema/node.ts";
-import * as processing from "#qti/schema/processing.ts";
-import * as ruleSchema from "#qti/schema/rule.ts";
-import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
+import { Rows, valueText } from "#pantry/import/tree.ts";
+import { expressionKinds } from "#pantry/schema/kinds/asi.ts";
+import { Edge, EntityReference, Node, TextNode, vocabularies, Ws } from "#pantry/schema/node.ts";
+import * as processing from "#pantry/schema/processing.ts";
+import * as ruleSchema from "#pantry/schema/rule.ts";
+import { operatorArity, operatorArityMax } from "#pantry/schema/seed/operator-arity.ts";
 
 /**
  * A processing guard refused the rows.

@@ -13,13 +13,13 @@ import {
   nearestInteraction,
   templateRef,
   typedCopy,
-} from "#qti/import/interactions.ts";
-import type { DeclaredVariable } from "#qti/import/interactions.ts";
-import { ItemRefusal, Rows } from "#qti/import/tree.ts";
-import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
-import { RectCoords, ShapeCoords } from "#qti/schema/contracts.ts";
-import { CoordsRect, Coords } from "#qti/schema/shapes.ts";
-import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
+} from "#pantry/import/interactions.ts";
+import type { DeclaredVariable } from "#pantry/import/interactions.ts";
+import { ItemRefusal, Rows } from "#pantry/import/tree.ts";
+import type { IndexedNode, NodeIndex } from "#pantry/import/tree.ts";
+import { RectCoords, ShapeCoords } from "#pantry/schema/contracts.ts";
+import { CoordsRect, Coords } from "#pantry/schema/shapes.ts";
+import { ChoiceTemplateRef } from "#pantry/schema/choices.ts";
 import {
   DeclaredMaxChoices,
   DeclaredShuffle,
@@ -27,9 +27,9 @@ import {
   InteractionBinding,
   RecordBinding,
   TypedBinding,
-} from "#qti/schema/interaction.ts";
-import { AttributeLexical } from "#qti/schema/node.ts";
-import type { NodeKindHandle } from "#qti/schema/node.ts";
+} from "#pantry/schema/interaction.ts";
+import { AttributeLexical } from "#pantry/schema/node.ts";
+import type { NodeKindHandle } from "#pantry/schema/node.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";

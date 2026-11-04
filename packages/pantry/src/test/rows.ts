@@ -1,7 +1,7 @@
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
-import { readTree, treesOf } from "#qti/export/read.ts";
-import { Rows } from "#qti/import/tree.ts";
+import { readTree, treesOf } from "#pantry/export/read.ts";
+import { Rows } from "#pantry/import/tree.ts";
 
 /**
  * The rows of `relation` an imported package holds, from every tree it has.

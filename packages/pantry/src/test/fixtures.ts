@@ -2682,7 +2682,7 @@ const corpusExcludedMember = "qtiv2p2-examples/items/items.zip";
 
 /**
  * The root every fixture directory lives under, relative to the test runner's working directory
- * (`packages/qti`) unless the environment gives an absolute path.
+ * (`packages/pantry`) unless the environment gives an absolute path.
  */
 const fixturesRoot = Config.NonEmptyString("GR8DES_QTI_FIXTURES").pipe(
   Config.withDefault("work/fixtures"),

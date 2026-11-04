@@ -8,7 +8,7 @@
  * the row's rules need it) so each can be judged against it. A parent or position a row copies is
  * bound to the `Edge` of the same child. The arms are the LOM kinds', keyed by node id; their
  * containments into `Node` are bound by one `mirrors` per handle in the composed
- * schema (`#qti/schema/qti.ts`), so none is written here.
+ * schema (`#pantry/schema/qti.ts`), so none is written here.
  */
 import {
   alternatives,
@@ -32,10 +32,10 @@ import {
   QmdInteractionTypeValue,
   QmdScoringModeValue,
   XsBoolean,
-} from "#qti/schema/content/rosters.ts";
-import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
-import { Edge, Node, NodeKind, TreeRoot } from "#qti/schema/node.ts";
-import { File, FileMetadata, Resource, ResourceMetadata } from "#qti/schema/package.ts";
+} from "#pantry/schema/content/rosters.ts";
+import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/document.ts";
+import { Edge, Node, NodeKind, TreeRoot } from "#pantry/schema/node.ts";
+import { File, FileMetadata, Resource, ResourceMetadata } from "#pantry/schema/package.ts";
 import {
   LangStringLanguage,
   LomToken,
@@ -45,8 +45,8 @@ import {
   ToolName,
   ToolVendor,
   ToolVersion,
-} from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+} from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 const ncName = str.regex(patterns.ncName);
 

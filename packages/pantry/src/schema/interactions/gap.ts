@@ -31,12 +31,12 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
-import { ShowHide, XsBoolean } from "#qti/schema/content/rosters.ts";
-import { matchBoundsCheck } from "#qti/schema/choices.ts";
-import { GapMatchBinding, InteractionBinding } from "#qti/schema/interaction.ts";
-import { Edge, Node, RootKind } from "#qti/schema/node.ts";
-import { ChoiceIdentifier, ContainerWidth } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import { ShowHide, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import { matchBoundsCheck } from "#pantry/schema/choices.ts";
+import { GapMatchBinding, InteractionBinding } from "#pantry/schema/interaction.ts";
+import { Edge, Node, RootKind } from "#pantry/schema/node.ts";
+import { ChoiceIdentifier, ContainerWidth } from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * An `xs:string` attribute's value, whitespace preserved.

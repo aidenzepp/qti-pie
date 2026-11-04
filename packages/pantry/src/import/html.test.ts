@@ -2,12 +2,12 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option } from "effect";
-import { renderTree } from "#qti/export/render.ts";
-import { htmlRows } from "#qti/import/html.ts";
-import { itemRows } from "#qti/import/item.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { ItemRefusal, Rows, treeRows, UnmodeledVocabulary } from "#qti/import/tree.ts";
-import type { NodeIndex, TreeInput } from "#qti/import/tree.ts";
+import { renderTree } from "#pantry/export/render.ts";
+import { htmlRows } from "#pantry/import/html.ts";
+import { itemRows } from "#pantry/import/item.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { ItemRefusal, Rows, treeRows, UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import type { NodeIndex, TreeInput } from "#pantry/import/tree.ts";
 import {
   CitationUri,
   ContentMediaType,
@@ -15,14 +15,14 @@ import {
   HyperlinkUri,
   TableSpan,
   TrackLanguage,
-} from "#qti/schema/contracts.ts";
-import { Img, P } from "#qti/schema/html.ts";
-import * as media from "#qti/schema/html/media.ts";
-import * as structure from "#qti/schema/html/structure.ts";
-import * as text from "#qti/schema/html/text.ts";
-import { AttributeLexical } from "#qti/schema/node.ts";
-import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
-import { materialize } from "#qti/test/fixtures.ts";
+} from "#pantry/schema/contracts.ts";
+import { Img, P } from "#pantry/schema/html.ts";
+import * as media from "#pantry/schema/html/media.ts";
+import * as structure from "#pantry/schema/html/structure.ts";
+import * as text from "#pantry/schema/html/text.ts";
+import { AttributeLexical } from "#pantry/schema/node.ts";
+import { entryOf } from "#pantry/schema/content/xsd-inventory.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 

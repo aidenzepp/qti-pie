@@ -1,16 +1,16 @@
 import { Effect, FileSystem } from "effect";
 import type { PlatformError } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
-import { listPackage, readEntry } from "#qti/package/read.ts";
-import type { PackageReadError } from "#qti/package/read.ts";
-import type { ZipRefusal } from "#qti/package/zip.ts";
-import { recordTypes, soleFileTypes } from "#qti/import/record.ts";
-import { collapse } from "#qti/import/tree.ts";
-import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
+import { listPackage, readEntry } from "#pantry/package/read.ts";
+import type { PackageReadError } from "#pantry/package/read.ts";
+import type { ZipRefusal } from "#pantry/package/zip.ts";
+import { recordTypes, soleFileTypes } from "#pantry/import/record.ts";
+import { collapse } from "#pantry/import/tree.ts";
+import { rootOfType } from "#pantry/schema/seed/root-of-type.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
-import { xmllintC14n } from "#qti/xml/oracle.ts";
-import type { OracleError } from "#qti/xml/oracle.ts";
+import { xmllintC14n } from "#pantry/xml/oracle.ts";
+import type { OracleError } from "#pantry/xml/oracle.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 

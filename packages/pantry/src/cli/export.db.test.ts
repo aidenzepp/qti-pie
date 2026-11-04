@@ -3,22 +3,22 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem, Layer, Schema } from "effect";
 import { describe, inject } from "vitest";
-import { TargetNotEmpty } from "#qti/cli/args.ts";
-import { describeFailure } from "#qti/cli/errors.ts";
-import { ExportData } from "#qti/cli/export.ts";
-import { ErrorObject, successEnvelope } from "#qti/cli/output.ts";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { PackageNotFound } from "#qti/export/package.ts";
-import { importPackage } from "#qti/import/package.ts";
-import { exitCodeOf } from "#qti/cli/run.ts";
-import { captureCli } from "#qti/test/cli.ts";
-import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+import { TargetNotEmpty } from "#pantry/cli/args.ts";
+import { describeFailure } from "#pantry/cli/errors.ts";
+import { ExportData } from "#pantry/cli/export.ts";
+import { ErrorObject, successEnvelope } from "#pantry/cli/output.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { PackageNotFound } from "#pantry/export/package.ts";
+import { importPackage } from "#pantry/import/package.ts";
+import { exitCodeOf } from "#pantry/cli/run.ts";
+import { captureCli } from "#pantry/test/cli.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 const fixtures = inject("fixtures");
 
 /**
- * The folder every case here works under, `packages/qti/work/cli-export-db`. Each case uses its own
- * folders under it, and no other test file writes there.
+ * The folder every case here works under, `packages/pantry/work/cli-export-db`. Each case uses its
+ * own folders under it, and no other test file writes there.
  */
 const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-export-db");
 

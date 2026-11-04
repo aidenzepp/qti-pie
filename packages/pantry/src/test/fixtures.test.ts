@@ -13,9 +13,9 @@ import {
   materializePackage,
   specOf,
   transformHash,
-} from "#qti/test/fixtures.ts";
-import type { Edit, FixtureName, FixtureSpec } from "#qti/test/fixtures.ts";
-import { settings as hostSettings } from "#qti/test/settings.ts";
+} from "#pantry/test/fixtures.ts";
+import type { Edit, FixtureName, FixtureSpec } from "#pantry/test/fixtures.ts";
+import { settings as hostSettings } from "#pantry/test/settings.ts";
 
 /**
  * The directory every test root is made under: the package's gitignored `work/`.

@@ -9,7 +9,7 @@
  * in one the composed schema already spreads.
  */
 import { closedId, contained, on, relation } from "@bjornpagen/grizzle";
-import { Ancestry, Edge, Node, NodeKind } from "#qti/schema/node.ts";
+import { Ancestry, Edge, Node, NodeKind } from "#pantry/schema/node.ts";
 
 /**
  * One kind that may sit at one ancestry, and the ancestry its children sit at. Seeded by a custom

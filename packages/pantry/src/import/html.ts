@@ -7,21 +7,21 @@
  * (`class`, `id`, `lang`, `dir`, `label` and the rest) and a cell's `headers` belong to the
  * attribute pass.
  */
-import { judgedLater } from "#qti/import/judged.ts";
+import { judgedLater } from "#pantry/import/judged.ts";
 import type { AnyRelation, Fact, Relation, uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
-import { attributeReader } from "#qti/import/interactions.ts";
-import type { AttributeReader, NodeRef } from "#qti/import/interactions.ts";
-import { requiredAttribute } from "#qti/import/required.ts";
-import type { ImportRefused } from "#qti/import/refusal.ts";
+import { attributeReader } from "#pantry/import/interactions.ts";
+import type { AttributeReader, NodeRef } from "#pantry/import/interactions.ts";
+import { requiredAttribute } from "#pantry/import/required.ts";
+import type { ImportRefused } from "#pantry/import/refusal.ts";
 import {
   closedOf,
   Rows,
   typedAttribute,
   UnmodeledVocabulary,
   withParents,
-} from "#qti/import/tree.ts";
-import type { ItemRefusal, NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
+} from "#pantry/import/tree.ts";
+import type { ItemRefusal, NodeIndex, WhiteSpace } from "#pantry/import/tree.ts";
 import {
   CellAlign,
   CellScope,
@@ -36,13 +36,17 @@ import {
   TrackDefaultValue,
   TrackKind,
   XsBoolean,
-} from "#qti/schema/content/rosters.ts";
-import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
-import * as media from "#qti/schema/html/media.ts";
-import * as structure from "#qti/schema/html/structure.ts";
-import * as text from "#qti/schema/html/text.ts";
-import { Node } from "#qti/schema/node.ts";
-import type { AttributeNameHandle, NodeKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
+} from "#pantry/schema/content/rosters.ts";
+import { entryOf } from "#pantry/schema/content/xsd-inventory.ts";
+import * as media from "#pantry/schema/html/media.ts";
+import * as structure from "#pantry/schema/html/structure.ts";
+import * as text from "#pantry/schema/html/text.ts";
+import { Node } from "#pantry/schema/node.ts";
+import type {
+  AttributeNameHandle,
+  NodeKindHandle,
+  SchemaVersionHandle,
+} from "#pantry/schema/node.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**

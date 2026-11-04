@@ -2,10 +2,10 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Cause, Effect, Exit, Stdio } from "effect";
 import { CliError, Command } from "effect/cli";
-import { cli } from "#qti/cli.ts";
-import { commandOfArguments, valuedGlobalFlags } from "#qti/cli/present.ts";
-import { exitCodeOf, rewriteVerbose } from "#qti/cli/run.ts";
-import { captureCli, spawnCli } from "#qti/test/cli.ts";
+import { cli } from "#pantry/cli.ts";
+import { commandOfArguments, valuedGlobalFlags } from "#pantry/cli/present.ts";
+import { exitCodeOf, rewriteVerbose } from "#pantry/cli/run.ts";
+import { captureCli, spawnCli } from "#pantry/test/cli.ts";
 
 layer(NodeServices.layer, { excludeTestServices: true })("p14-u2d: no wizard", (it) => {
   it.effect("refuses --wizard as an unrecognized flag, with nothing on stdout", () =>

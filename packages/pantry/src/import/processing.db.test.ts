@@ -5,16 +5,16 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option, Predicate, Result, Schema } from "effect";
 import { describe } from "vitest";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { comparePackage, renderReport } from "#qti/export/compare.ts";
-import { exportPackage } from "#qti/export/package.ts";
-import { changeSetOf, importPackage, readRows, retrySchedule } from "#qti/import/package.ts";
-import { ImportRefused, isMappedLaw, refusalOfLaw, ruleOfLaw } from "#qti/import/refusal.ts";
-import type { ImportLaw, ImportWitness, Rule } from "#qti/import/refusal.ts";
-import type { Rows } from "#qti/import/tree.ts";
-import { materializeProcessing } from "#qti/processing/fixtures.ts";
-import type { ProcessingFixtureName } from "#qti/processing/fixtures.ts";
-import { Correct, Null } from "#qti/schema/expression.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { comparePackage, renderReport } from "#pantry/export/compare.ts";
+import { exportPackage } from "#pantry/export/package.ts";
+import { changeSetOf, importPackage, readRows, retrySchedule } from "#pantry/import/package.ts";
+import { ImportRefused, isMappedLaw, refusalOfLaw, ruleOfLaw } from "#pantry/import/refusal.ts";
+import type { ImportLaw, ImportWitness, Rule } from "#pantry/import/refusal.ts";
+import type { Rows } from "#pantry/import/tree.ts";
+import { materializeProcessing } from "#pantry/processing/fixtures.ts";
+import type { ProcessingFixtureName } from "#pantry/processing/fixtures.ts";
+import { Correct, Null } from "#pantry/schema/expression.ts";
 import {
   Equal,
   EqualTolerance,
@@ -25,10 +25,10 @@ import {
   RoundTo,
   Variable,
   VariableWeightIdentifier,
-} from "#qti/schema/expression-attributes.ts";
-import { AssessmentItem } from "#qti/schema/item.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
-import { Edge, Node } from "#qti/schema/node.ts";
+} from "#pantry/schema/expression-attributes.ts";
+import { AssessmentItem } from "#pantry/schema/item.ts";
+import { AuthorApp } from "#pantry/schema/logins.ts";
+import { Edge, Node } from "#pantry/schema/node.ts";
 import {
   BuiltInRef,
   DeclaredRef,
@@ -39,7 +39,7 @@ import {
   ResponseProcessingItem,
   TemplateParameterRef,
   VariableRef,
-} from "#qti/schema/processing.ts";
+} from "#pantry/schema/processing.ts";
 import {
   ResponseConditionArm,
   ResponseIfArm,
@@ -49,10 +49,10 @@ import {
   TemplateConstraint,
   TemplateIfArm,
   TemplateProcessing,
-} from "#qti/schema/rule.ts";
-import { ancestryStepRows, KindEnters } from "#qti/schema/seed/ancestry.ts";
-import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
-import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+} from "#pantry/schema/rule.ts";
+import { ancestryStepRows, KindEnters } from "#pantry/schema/seed/ancestry.ts";
+import { operatorArity, operatorArityMax } from "#pantry/schema/seed/operator-arity.ts";
+import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The directory every export is written under: the package's gitignored `work/`.

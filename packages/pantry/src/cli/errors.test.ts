@@ -1,9 +1,9 @@
 import { CredentialError, OpenError, TokenError, TransportFailure } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Config, ConfigProvider, Effect, Result } from "effect";
-import { describeFailure, kindExitCode, kindHelp, RoundtripDiffers } from "#qti/cli/errors.ts";
-import { ClusterConfigError, SnapshotLoadError } from "#qti/db/layer.ts";
-import { PackageNotFound } from "#qti/export/package.ts";
+import { describeFailure, kindExitCode, kindHelp, RoundtripDiffers } from "#pantry/cli/errors.ts";
+import { ClusterConfigError, SnapshotLoadError } from "#pantry/db/layer.ts";
+import { PackageNotFound } from "#pantry/export/package.ts";
 
 /**
  * What a failure is, without its help: the kind and the exit code.

@@ -4,14 +4,14 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { inject } from "vitest";
-import { manifestGuards, ManifestGuardRefusal } from "#qti/import/guards/manifest.ts";
-import { manifestRows, NotQti3 } from "#qti/import/manifest.ts";
-import { ImportRefused } from "#qti/import/refusal.ts";
-import { Rows } from "#qti/import/tree.ts";
-import { ManifestIdentifier, PackagePath, ResourceEntryHref } from "#qti/schema/contracts.ts";
-import { ResourceLomLanguageSet } from "#qti/schema/lang.ts";
-import type { Entry } from "#qti/package/read.ts";
-import { listPackage, PackageReadError, readEntry } from "#qti/package/read.ts";
+import { manifestGuards, ManifestGuardRefusal } from "#pantry/import/guards/manifest.ts";
+import { manifestRows, NotQti3 } from "#pantry/import/manifest.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { ManifestIdentifier, PackagePath, ResourceEntryHref } from "#pantry/schema/contracts.ts";
+import { ResourceLomLanguageSet } from "#pantry/schema/lang.ts";
+import type { Entry } from "#pantry/package/read.ts";
+import { listPackage, PackageReadError, readEntry } from "#pantry/package/read.ts";
 import {
   Lom,
   LomFormat,
@@ -27,9 +27,9 @@ import {
   QmdPortableCustomInteractionContext,
   QmdTimeDependent,
   QtiMetadata,
-} from "#qti/schema/metadata.ts";
-import { Document } from "#qti/schema/document.ts";
-import { AttributeLexical, Edge, Node, TextNode, TreeRoot } from "#qti/schema/node.ts";
+} from "#pantry/schema/metadata.ts";
+import { Document } from "#pantry/schema/document.ts";
+import { AttributeLexical, Edge, Node, TextNode, TreeRoot } from "#pantry/schema/node.ts";
 import {
   File,
   FileContent,
@@ -41,9 +41,9 @@ import {
   PackageEntry,
   Resource,
   ResourceHref,
-} from "#qti/schema/package.ts";
+} from "#pantry/schema/package.ts";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
-import { materialize, materializePackage } from "#qti/test/fixtures.ts";
+import { materialize, materializePackage } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 /**

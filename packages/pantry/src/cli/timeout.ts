@@ -7,8 +7,8 @@
 import { Config, Duration, Effect, Option, Predicate, Runtime, Schema } from "effect";
 import type { Command as CommandType } from "effect/cli";
 import { CliError, Command, Flag, GlobalFlag } from "effect/cli";
-import { cliKind, kindExitCode } from "#qti/cli/errors.ts";
-import type { Kind } from "#qti/cli/errors.ts";
+import { cliKind, kindExitCode } from "#pantry/cli/errors.ts";
+import type { Kind } from "#pantry/cli/errors.ts";
 
 /**
  * The limit a command has when neither `--timeout` nor `QTI_TIMEOUT` names one. Provisional: the

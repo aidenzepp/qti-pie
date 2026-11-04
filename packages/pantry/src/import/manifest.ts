@@ -12,16 +12,23 @@
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
-import { attributeRows } from "#qti/import/attributes.ts";
-import { closedOf, collapse, replace, Rows, treeRows, typedAttribute } from "#qti/import/tree.ts";
-import type { NodeIndex, UnmodeledVocabulary } from "#qti/import/tree.ts";
-import { classed, contentOf, elementChildren, qmdLeafRows } from "#qti/import/leaf.ts";
-import { recordFile, recordTypes, soleFileTypes } from "#qti/import/record.ts";
-import type { ExternalRefusal } from "#qti/import/record.ts";
-import type { ImportRefused } from "#qti/import/refusal.ts";
-import { readEntry } from "#qti/package/read.ts";
-import type { Entry, PackageReadError } from "#qti/package/read.ts";
-import type { ZipRefusal } from "#qti/package/zip.ts";
+import { attributeRows } from "#pantry/import/attributes.ts";
+import {
+  closedOf,
+  collapse,
+  replace,
+  Rows,
+  treeRows,
+  typedAttribute,
+} from "#pantry/import/tree.ts";
+import type { NodeIndex, UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import { classed, contentOf, elementChildren, qmdLeafRows } from "#pantry/import/leaf.ts";
+import { recordFile, recordTypes, soleFileTypes } from "#pantry/import/record.ts";
+import type { ExternalRefusal } from "#pantry/import/record.ts";
+import type { ImportRefused } from "#pantry/import/refusal.ts";
+import { readEntry } from "#pantry/package/read.ts";
+import type { Entry, PackageReadError } from "#pantry/package/read.ts";
+import type { ZipRefusal } from "#pantry/package/zip.ts";
 import {
   CaseItemUri,
   FileMediaType,
@@ -32,13 +39,17 @@ import {
   ManifestIdentifier,
   PackagePath,
   ResourceEntryHref,
-} from "#qti/schema/contracts.ts";
-import * as csm from "#qti/schema/csm.ts";
-import { ResourceLomGeneral, ResourceLomLanguageSet } from "#qti/schema/lang.ts";
-import { CpSchema, XsBoolean } from "#qti/schema/content/rosters.ts";
-import * as md from "#qti/schema/metadata.ts";
-import { Edge } from "#qti/schema/node.ts";
-import type { AttributeNameHandle, NodeKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
+} from "#pantry/schema/contracts.ts";
+import * as csm from "#pantry/schema/csm.ts";
+import { ResourceLomGeneral, ResourceLomLanguageSet } from "#pantry/schema/lang.ts";
+import { CpSchema, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import * as md from "#pantry/schema/metadata.ts";
+import { Edge } from "#pantry/schema/node.ts";
+import type {
+  AttributeNameHandle,
+  NodeKindHandle,
+  SchemaVersionHandle,
+} from "#pantry/schema/node.ts";
 import {
   AccessForAllResource,
   Dependency,
@@ -79,7 +90,7 @@ import {
   Resources,
   Variant,
   VariantMetadata,
-} from "#qti/schema/package.ts";
+} from "#pantry/schema/package.ts";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**

@@ -3,8 +3,8 @@
 import os from "node:os";
 import { Config, Effect, FileSystem, Option, Path, Runtime, Schema } from "effect";
 import { Flag } from "effect/cli";
-import { cliKind, kindExitCode, NotADirectory } from "#qti/cli/errors.ts";
-import type { Kind } from "#qti/cli/errors.ts";
+import { cliKind, kindExitCode, NotADirectory } from "#pantry/cli/errors.ts";
+import type { Kind } from "#pantry/cli/errors.ts";
 
 /**
  * Refuse a path that is neither a directory nor a `.zip` file, before anything opens the database.

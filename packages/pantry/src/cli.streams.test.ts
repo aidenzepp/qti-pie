@@ -1,8 +1,8 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect } from "effect";
-import { spawnCli } from "#qti/test/cli.ts";
-import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
+import { spawnCli } from "#pantry/test/cli.ts";
+import { cliProcessTestTimeoutMs } from "#pantry/test/settings.ts";
 
 layer(NodeServices.layer, { excludeTestServices: true })("cli.ts streams, database-free", (it) => {
   it.effect(

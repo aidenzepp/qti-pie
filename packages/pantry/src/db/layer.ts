@@ -4,7 +4,7 @@ import { CredentialError, DbLayer } from "@bjornpagen/grizzle";
 import { NodeFileSystem } from "@effect/platform-node";
 import { Config, Effect, FileSystem, Layer, Option, Redacted, Schema } from "effect";
 import { fileURLToPath } from "node:url";
-import { AuthorApp } from "#qti/schema/logins.ts";
+import { AuthorApp } from "#pantry/schema/logins.ts";
 
 /**
  * The migrations snapshot could not be read from disk or is not a JSON object with a `fingerprint`.

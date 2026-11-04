@@ -4,18 +4,18 @@ import { assert, beforeAll, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Schema } from "effect";
 import { Command } from "effect/cli";
 import { inject } from "vitest";
-import { RoundtripDiffers } from "#qti/cli/errors.ts";
+import { RoundtripDiffers } from "#pantry/cli/errors.ts";
 import {
   ErrorObject,
   emitSuccess,
   outputGlobalFlags,
   outputMode,
   successEnvelope,
-} from "#qti/cli/output.ts";
-import { RoundtripData } from "#qti/cli/roundtrip.ts";
-import { exitCodeOf } from "#qti/cli/run.ts";
-import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#qti/test/settings.ts";
-import { captureCli, preloadEngine } from "#qti/test/cli.ts";
+} from "#pantry/cli/output.ts";
+import { RoundtripData } from "#pantry/cli/roundtrip.ts";
+import { exitCodeOf } from "#pantry/cli/run.ts";
+import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
+import { captureCli, preloadEngine } from "#pantry/test/cli.ts";
 
 const fixtures = inject("fixtures");
 

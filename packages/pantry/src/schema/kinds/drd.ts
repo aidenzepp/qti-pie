@@ -4,7 +4,11 @@
  */
 import { Option } from "effect";
 
-import type { AdmissionRow, RegistryRow, SchemaVersionHandle } from "#qti/schema/kinds/generic.ts";
+import type {
+  AdmissionRow,
+  RegistryRow,
+  SchemaVersionHandle,
+} from "#pantry/schema/kinds/generic.ts";
 
 // targetNamespace of imsqtiv3p0_afa3p0drd_v1p0.xsd, line 3.
 const namespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0drd_v1p0";

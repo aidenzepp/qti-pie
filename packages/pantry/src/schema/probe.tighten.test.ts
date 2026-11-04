@@ -45,7 +45,7 @@ import {
 } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
-import * as patterns from "#qti/schema/patterns.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 describe("schema tightening probe", () => {
   it.effect("case 1: a primary key that is a contract over ncName is admitted", () =>

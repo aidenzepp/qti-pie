@@ -2,7 +2,7 @@
  * The refusal of an absent required attribute.
  */
 import { Effect, Option } from "effect";
-import { ItemRefusal } from "#qti/import/tree.ts";
+import { ItemRefusal } from "#pantry/import/tree.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**

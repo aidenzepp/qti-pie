@@ -3,14 +3,14 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe, inject } from "vitest";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { changeSetOf, readRows, retrySchedule } from "#qti/import/package.ts";
-import { isMappedLaw, refusalOfLaw, ruleOfLaw } from "#qti/import/refusal.ts";
-import type { ImportLaw } from "#qti/import/refusal.ts";
-import { Rows } from "#qti/import/tree.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
-import { ManifestSchemaVersion } from "#qti/schema/package.ts";
-import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { changeSetOf, readRows, retrySchedule } from "#pantry/import/package.ts";
+import { isMappedLaw, refusalOfLaw, ruleOfLaw } from "#pantry/import/refusal.ts";
+import type { ImportLaw } from "#pantry/import/refusal.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { AuthorApp } from "#pantry/schema/logins.ts";
+import { ManifestSchemaVersion } from "#pantry/schema/package.ts";
+import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The lease case of decision 124: a `cp:schemaversion` row that names a version other than its

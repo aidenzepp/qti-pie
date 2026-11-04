@@ -97,8 +97,8 @@ import {
   SuppressTtsMode,
   TextDirection,
   XsBoolean,
-} from "#qti/schema/content/rosters.ts";
-import { DocumentId, HtmlId } from "#qti/schema/document.ts";
+} from "#pantry/schema/content/rosters.ts";
+import { DocumentId, HtmlId } from "#pantry/schema/document.ts";
 import {
   AttributeLexical,
   AttributeName,
@@ -106,7 +106,7 @@ import {
   Node,
   NodeKind,
   RootKind,
-} from "#qti/schema/node.ts";
+} from "#pantry/schema/node.ts";
 import {
   AriaInteger,
   AriaPositiveInteger,
@@ -114,8 +114,8 @@ import {
   ContentLanguage,
   IdReference,
   XmlBaseUri,
-} from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+} from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
  * One attribute a node kind may carry. Seeded by a custom migration and read-only to every role.

@@ -5,18 +5,18 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, it as unitIt, layer } from "@effect/vitest";
 import { Context, Effect, Layer, Option, Predicate } from "effect";
 import { describe, inject } from "vitest";
-import { AuthorAppLayer } from "#qti/db/layer.ts";
-import { externalRows } from "#qti/import/external.ts";
-import { itemRows } from "#qti/import/item.ts";
-import { manifestRows } from "#qti/import/manifest.ts";
-import { outcomeRows } from "#qti/import/outcome.ts";
-import { changeSetOf, retrySchedule } from "#qti/import/package.ts";
-import { usageRows } from "#qti/import/usage.ts";
-import { kindOf, Rows } from "#qti/import/tree.ts";
-import { listPackage, readEntry } from "#qti/package/read.ts";
-import { admission as lomAdmission } from "#qti/schema/kinds/lom.ts";
-import { Declaration, OutcomeDeclarationArm } from "#qti/schema/declaration.ts";
-import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { externalRows } from "#pantry/import/external.ts";
+import { itemRows } from "#pantry/import/item.ts";
+import { manifestRows } from "#pantry/import/manifest.ts";
+import { outcomeRows } from "#pantry/import/outcome.ts";
+import { changeSetOf, retrySchedule } from "#pantry/import/package.ts";
+import { usageRows } from "#pantry/import/usage.ts";
+import { kindOf, Rows } from "#pantry/import/tree.ts";
+import { listPackage, readEntry } from "#pantry/package/read.ts";
+import { admission as lomAdmission } from "#pantry/schema/kinds/lom.ts";
+import { Declaration, OutcomeDeclarationArm } from "#pantry/schema/declaration.ts";
+import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/document.ts";
 import {
   CsmCaseItemUri,
   CsmGuid,
@@ -30,9 +30,9 @@ import {
   CsmSetOfGuidsVersion,
   CsmSetResourceLabel,
   CsmSetResourcePartId,
-} from "#qti/schema/csm.ts";
-import { ResourceLomGeneral } from "#qti/schema/lang.ts";
-import { AuthorApp } from "#qti/schema/logins.ts";
+} from "#pantry/schema/csm.ts";
+import { ResourceLomGeneral } from "#pantry/schema/lang.ts";
+import { AuthorApp } from "#pantry/schema/logins.ts";
 import {
   ExternalLom,
   FileLom,
@@ -49,9 +49,9 @@ import {
   arms as metadataArms,
   r30Asserts,
   rules as metadataRules,
-} from "#qti/schema/metadata.ts";
-import { Admission, AttributeLexical, Edge, Node, Tree, TreeRoot } from "#qti/schema/node.ts";
-import { OutcomeDocument } from "#qti/schema/outcome.ts";
+} from "#pantry/schema/metadata.ts";
+import { Admission, AttributeLexical, Edge, Node, Tree, TreeRoot } from "#pantry/schema/node.ts";
+import { OutcomeDocument } from "#pantry/schema/outcome.ts";
 import {
   AccessForAllResource,
   DrdAccessMode,
@@ -84,10 +84,10 @@ import {
   RootOfType,
   Variant,
   VariantMetadata,
-} from "#qti/schema/package.ts";
-import * as patterns from "#qti/schema/patterns.ts";
-import { ResponseProcessing, ResponseProcessingItem } from "#qti/schema/processing.ts";
-import { ancestryStepRows, KindEnters } from "#qti/schema/seed/ancestry.ts";
+} from "#pantry/schema/package.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
+import { ResponseProcessing, ResponseProcessingItem } from "#pantry/schema/processing.ts";
+import { ancestryStepRows, KindEnters } from "#pantry/schema/seed/ancestry.ts";
 import {
   CategorizedStatisticArm,
   OrdinaryStatisticArm,
@@ -110,10 +110,14 @@ import {
   UsageValueFieldIdentifier,
   TargetObjectPartIdentifier,
   relations as usageRelations,
-} from "#qti/schema/usage.ts";
-import { materialize } from "#qti/test/fixtures.ts";
-import type { FixtureName } from "#qti/test/fixtures.ts";
-import { fixtureRowsLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
+} from "#pantry/schema/usage.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
+import type { FixtureName } from "#pantry/test/fixtures.ts";
+import {
+  fixtureRowsLayerHookTimeoutMs,
+  hasLease,
+  leaseTestTimeoutMs,
+} from "#pantry/test/settings.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 /**

@@ -10,13 +10,13 @@
  * record has a `general` category.
  */
 import { closedId, contained, key, on, relation, select, str, uuid } from "@bjornpagen/grizzle";
-import { NodeLabel, NodeXmlLang } from "#qti/schema/attributes.ts";
-import { YesNo } from "#qti/schema/content/rosters.ts";
-import { Document } from "#qti/schema/document.ts";
-import { ItemToolBoth } from "#qti/schema/item.ts";
-import { LomGeneral, LomLanguage, ResourceLom } from "#qti/schema/metadata.ts";
-import { ManifestIdentifier } from "#qti/schema/contracts.ts";
-import * as patterns from "#qti/schema/patterns.ts";
+import { NodeLabel, NodeXmlLang } from "#pantry/schema/attributes.ts";
+import { YesNo } from "#pantry/schema/content/rosters.ts";
+import { Document } from "#pantry/schema/document.ts";
+import { ItemToolBoth } from "#pantry/schema/item.ts";
+import { LomGeneral, LomLanguage, ResourceLom } from "#pantry/schema/metadata.ts";
+import { ManifestIdentifier } from "#pantry/schema/contracts.ts";
+import * as patterns from "#pantry/schema/patterns.ts";
 
 const bcp47 = str.regex(patterns.bcp47);
 

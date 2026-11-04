@@ -5,8 +5,8 @@
  * are numbered contiguously from zero.
  */
 import { Effect, Schema } from "effect";
-import { Rows } from "#qti/import/tree.ts";
-import { Edge, Node, Tree, TreeRoot } from "#qti/schema/node.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { Edge, Node, Tree, TreeRoot } from "#pantry/schema/node.ts";
 
 /**
  * A guard refused the rows.

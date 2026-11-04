@@ -1,16 +1,16 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Cause, Effect, Exit, Option, Stdio } from "effect";
 import { CliConfig, CliError, CliOutput, Command } from "effect/cli";
-import { builtIns } from "#qti/cli/config.ts";
-import { describeFailure, kindExitCode } from "#qti/cli/errors.ts";
-import { modeOfArguments, modeOfEnvironment } from "#qti/cli/output.ts";
+import { builtIns } from "#pantry/cli/config.ts";
+import { describeFailure, kindExitCode } from "#pantry/cli/errors.ts";
+import { modeOfArguments, modeOfEnvironment } from "#pantry/cli/output.ts";
 import {
   commandOfArguments,
   formatterFor,
   presenterFor,
   printFailures,
   valuedGlobalFlags,
-} from "#qti/cli/present.ts";
+} from "#pantry/cli/present.ts";
 
 /**
  * Read `-v` as `--verbose`. Effect's `--version` built-in claims the alias `v`, and an alias on the

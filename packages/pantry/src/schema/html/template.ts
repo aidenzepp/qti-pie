@@ -8,7 +8,7 @@
  * It exists because every `NodeKind` handle has an arm: the arm was added when it was (E5 (a),
  * `p2-65`), and it stays. Whether to thin arms is phase 6's question, not this module's. The arm's
  * containment into `Node` is bound by one `mirrors` per handle in the composed schema
- * (`#qti/schema/qti.ts`), not written here.
+ * (`#pantry/schema/qti.ts`), not written here.
  */
 import { relation, uuid } from "@bjornpagen/grizzle";
 

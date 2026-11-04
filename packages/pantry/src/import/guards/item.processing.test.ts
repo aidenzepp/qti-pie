@@ -2,16 +2,16 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
-import { ItemGuardRefusal, itemGuards } from "#qti/import/guards/item.ts";
-import { itemRows } from "#qti/import/item.ts";
-import { Rows } from "#qti/import/tree.ts";
-import * as attributed from "#qti/schema/expression-attributes.ts";
-import { AttributeLexical } from "#qti/schema/node.ts";
+import { ItemGuardRefusal, itemGuards } from "#pantry/import/guards/item.ts";
+import { itemRows } from "#pantry/import/item.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import * as attributed from "#pantry/schema/expression-attributes.ts";
+import { AttributeLexical } from "#pantry/schema/node.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
- * The committed processing fixture whose attributes are padded, relative to `packages/qti`, where
- * the tests run.
+ * The committed processing fixture whose attributes are padded, relative to `packages/pantry`,
+ * where the tests run.
  */
 const padded = "src/processing/fixtures/guards/padded-processing.xml";
 

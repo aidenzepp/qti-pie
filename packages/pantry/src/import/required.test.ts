@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { ruleOfError } from "#qti/import/refusal.ts";
-import { requiredAttribute } from "#qti/import/required.ts";
-import { ItemRefusal } from "#qti/import/tree.ts";
+import { ruleOfError } from "#pantry/import/refusal.ts";
+import { requiredAttribute } from "#pantry/import/required.ts";
+import { ItemRefusal } from "#pantry/import/tree.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 const element = Effect.gen(function* oneElement() {

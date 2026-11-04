@@ -2,14 +2,19 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option } from "effect";
-import { externalRows } from "#qti/import/external.ts";
-import { recordFile } from "#qti/import/record.ts";
-import { Rows } from "#qti/import/tree.ts";
-import { Document } from "#qti/schema/document.ts";
-import { CsmSet } from "#qti/schema/csm.ts";
-import { ExternalLom, Lom, QtiMetadata, QtiMetadataInExternalLom } from "#qti/schema/metadata.ts";
-import { Node, TreeMisc } from "#qti/schema/node.ts";
-import { materialize } from "#qti/test/fixtures.ts";
+import { externalRows } from "#pantry/import/external.ts";
+import { recordFile } from "#pantry/import/record.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { Document } from "#pantry/schema/document.ts";
+import { CsmSet } from "#pantry/schema/csm.ts";
+import {
+  ExternalLom,
+  Lom,
+  QtiMetadata,
+  QtiMetadataInExternalLom,
+} from "#pantry/schema/metadata.ts";
+import { Node, TreeMisc } from "#pantry/schema/node.ts";
+import { materialize } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 /**

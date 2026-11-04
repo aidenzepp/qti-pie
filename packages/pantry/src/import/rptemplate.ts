@@ -15,25 +15,31 @@
  * @module
  */
 import { Effect, Option } from "effect";
-import { processingRows } from "#qti/import/processing.ts";
-import type { ProcessingRefused } from "#qti/import/processing.ts";
-import { kindOf, Rows, treeRows, typedAttribute, UnmodeledVocabulary } from "#qti/import/tree.ts";
-import type { ImportRefused } from "#qti/import/refusal.ts";
-import type { NodeIndex } from "#qti/import/tree.ts";
-import { emptyEnvironment } from "#qti/processing/env.ts";
+import { processingRows } from "#pantry/import/processing.ts";
+import type { ProcessingRefused } from "#pantry/import/processing.ts";
+import {
+  kindOf,
+  Rows,
+  treeRows,
+  typedAttribute,
+  UnmodeledVocabulary,
+} from "#pantry/import/tree.ts";
+import type { ImportRefused } from "#pantry/import/refusal.ts";
+import type { NodeIndex } from "#pantry/import/tree.ts";
+import { emptyEnvironment } from "#pantry/processing/env.ts";
 import {
   ManifestIdentifier,
   PackagePath,
   TemplateLocationUri,
   TemplateUri,
-} from "#qti/schema/contracts.ts";
-import { Document } from "#qti/schema/document.ts";
-import type { AttributeNameHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
+} from "#pantry/schema/contracts.ts";
+import { Document } from "#pantry/schema/document.ts";
+import type { AttributeNameHandle, SchemaVersionHandle } from "#pantry/schema/node.ts";
 import {
   ResponseProcessing,
   ResponseProcessingTemplate,
   ResponseProcessingTemplateLocation,
-} from "#qti/schema/processing.ts";
+} from "#pantry/schema/processing.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
