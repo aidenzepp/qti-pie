@@ -268,7 +268,8 @@ export type PayloadNode = ElementPayload | InteractionPayload | NoticePayload | 
  * Everything the emitter may know about one render of an item.
  *
  * `lang` is the item's `xml:lang`, else the view's locale. `finished` is the view's: the author
- * disabled every control. `notices` names the unsupported features the body shows as notices.
+ * disabled every control. `mode` is the Root's `data-mode` state (spec §4.4), which phase 1 only
+ * renders as `answering`. `notices` names the unsupported features the body shows as notices.
  */
 export interface Payload {
   readonly body: readonly PayloadNode[];

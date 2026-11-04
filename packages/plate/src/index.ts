@@ -7,7 +7,8 @@
  *
  * Nothing else under `src/` is reachable from outside the package. The tests' seam
  * (`acceptForTest`) and the redacted item's brand constructor (`brandRedacted`) are never exported
- * here, so only `check` makes an `Accepted` and only `redact` a `Redacted`.
+ * here, so only `check` makes an `Accepted`, and only `redact` and `decodeRedacted` make a
+ * `Redacted`.
  *
  * @module
  */

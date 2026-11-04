@@ -356,43 +356,45 @@ export const evaluateExpression = (
   expression: Expression,
   item: Item,
   variables: Variables,
-): Result.Result<Value, EngineFailure> => {
-  if (expression.kind === "variable") {
-    return variableValue(variables, expression.identifier);
+): Result.Result<Value, UnknownIdentifierError | UnmappedResponseError> => {
+  switch (expression.kind) {
+    case "variable": {
+      return variableValue(variables, expression.identifier);
+    }
+    case "correct": {
+      return Result.map(responseOf(item, expression.identifier), (declaration) =>
+        Option.getOrElse(declaration.correct, () =>
+          nullOf(declaration.baseType, declaration.cardinality),
+        ),
+      );
+    }
+    case "base-value": {
+      return Result.succeed(expression.value);
+    }
+    case "is-null": {
+      return Result.map(evaluateExpression(expression.operand, item, variables), (value) =>
+        booleanOf(isNull(value)),
+      );
+    }
+    case "match": {
+      const [left, right] = expression.operands;
+
+      return Result.gen(function* matchOperands() {
+        const leftValue = yield* evaluateExpression(left, item, variables);
+        const rightValue = yield* evaluateExpression(right, item, variables);
+
+        return isNull(leftValue) || isNull(rightValue)
+          ? nullOf("boolean", "single")
+          : booleanOf(match(leftValue, rightValue));
+      });
+    }
+    case "map-response": {
+      return mapResponse(item, variables, expression.identifier);
+    }
+    default: {
+      return expression satisfies never;
+    }
   }
-
-  if (expression.kind === "correct") {
-    return Result.map(responseOf(item, expression.identifier), (declaration) =>
-      Option.getOrElse(declaration.correct, () =>
-        nullOf(declaration.baseType, declaration.cardinality),
-      ),
-    );
-  }
-
-  if (expression.kind === "base-value") {
-    return Result.succeed(expression.value);
-  }
-
-  if (expression.kind === "is-null") {
-    return Result.map(evaluateExpression(expression.operand, item, variables), (value) =>
-      booleanOf(isNull(value)),
-    );
-  }
-
-  if (expression.kind === "match") {
-    const [left, right] = expression.operands;
-
-    return Result.gen(function* matchOperands() {
-      const leftValue = yield* evaluateExpression(left, item, variables);
-      const rightValue = yield* evaluateExpression(right, item, variables);
-
-      return isNull(leftValue) || isNull(rightValue)
-        ? nullOf("boolean", "single")
-        : booleanOf(match(leftValue, rightValue));
-    });
-  }
-
-  return mapResponse(item, variables, expression.identifier);
 };
 
 /**

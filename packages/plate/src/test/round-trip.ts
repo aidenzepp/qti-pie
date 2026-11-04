@@ -18,7 +18,7 @@ const attributeName = (attribute: { readonly name: string; readonly prefix?: str
     : `${attribute.prefix}:${attribute.name}`;
 
 /**
- * The child nodes of a parse5 parent, where a `template` holds its children in its `content`.
+ * Read the child nodes of a parse5 parent, where a `template` holds its children in its `content`.
  *
  * @param parent The parse5 node whose children are read.
  * @returns The children the parser placed under `parent`.
@@ -56,7 +56,7 @@ const fromParse5 = (nodes: readonly DefaultTreeAdapterTypes.ChildNode[]): readon
  * Parse HTML as a fragment, the way a browser parses `innerHTML`, into the emitter's node tree.
  *
  * Test support: it is the oracle's reading of what the serialiser wrote, so nothing outside
- * `src/test/` imports it, and `parse5` is never reachable from the core.
+ * `src/test/` and test files imports it, and `parse5` is never reachable from the core.
  *
  * @param html The HTML to parse.
  * @returns The fragment's top-level nodes: elements with every attribute value a string and text as
@@ -140,8 +140,8 @@ const sameNode = (left: Node, right: Node): boolean => {
  *
  * @param node The tree to write and read back.
  * @returns Whether the tree survives a write and a parse unchanged.
- * @throws {VoidElementChildren} When `node` or a descendant is a void element with children, as
- *   {@link toHtml} does.
+ * @throws {VoidElementChildren} When `node` or a descendant is a void element with children, or
+ *   any other refusal {@link toHtml} documents, for a tree that breaks that refusal's rule.
  */
 export const roundTrips = (node: Node): boolean => {
   const parsed = parseHtml(toHtml(node));
