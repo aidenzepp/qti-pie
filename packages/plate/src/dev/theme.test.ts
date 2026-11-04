@@ -188,6 +188,23 @@ describe("parseTheme", () => {
     ["a quoted string across a carriage return", ":root { --x: 'a\rb' }", "value", "--x"],
     ["a quoted string across a form feed", ':root { --x: "a\fb" }', "value", "--x"],
     ["an escaped line feed inside quotes", ':root { --x: "a\\\nb" }', "value", "\\"],
+    [
+      "an unclosed parenthesis before the next declaration",
+      ":root { --a: oklch(0.5 0 0; --b: blue }",
+      "value",
+      "(",
+    ],
+    [
+      "an unclosed calc() before the next declaration",
+      ":root { --x: calc(1; --y: red }",
+      "value",
+      "(",
+    ],
+    ["a lone bracket", ":root { --a: [ }", "value", "["],
+    ["a stray closing parenthesis", ":root { --a: ) }", "value", ")"],
+    ["a stray closing bracket", ":root { --a: a] }", "value", "]"],
+    ["a bracket closed by a parenthesis", ":root { --a: [a) }", "value", "["],
+    ["a ! that does not begin !important", ":root { --x: a!b }", "value", "!"],
     ["an extra closing brace", ":root { --x: 1 } }", "unbalanced", "}"],
     ["an unclosed block", ":root { --x: 1", "unbalanced", "{"],
     ["an unterminated string", ':root { --x: "a }', "unbalanced", '"'],
@@ -213,6 +230,23 @@ describe("parseTheme", () => {
       assert.deepStrictEqual(theme.light, [["--font-sans", '"Inter",\n    sans-serif']]);
       assert.deepStrictEqual(yield* parseTheme(themeText(theme)), theme);
     }),
+  );
+
+  it.effect(
+    "keeps balanced parentheses and brackets, and a parenthesis, bracket or ! inside quotes",
+    () =>
+      Effect.gen(function* balancedValues() {
+        const theme = yield* parseTheme(
+          ':root {\n  --x: calc(1px + (2px * 3));\n  --y: var(--a, var(--b, oklch(0.5 0 0)));\n  --z: [a] "(]!";\n}\n',
+        );
+
+        assert.deepStrictEqual(theme.light, [
+          ["--x", "calc(1px + (2px * 3))"],
+          ["--y", "var(--a, var(--b, oklch(0.5 0 0)))"],
+          ["--z", '[a] "(]!"'],
+        ]);
+        assert.deepStrictEqual(yield* parseTheme(themeText(theme)), theme);
+      }),
   );
 
   it.effect("refuses 33 KiB of declarations as too-large", () =>

@@ -50,7 +50,7 @@ describe("contrastRatio", () => {
     ["placeholder, light", "oklch(0.556 0 0)", "oklch(1 0 0)", "4.73"],
     ["placeholder, dark", "oklch(0.708 0 0)", "oklch(0.205 0 0)", "6.91"],
     ["Notice, light", "oklch(0.556 0 0)", "oklch(1 0 0)", "4.73"],
-    ["Notice, dark", "oklch(0.708 0 0)", "oklch(0.145 0 0)", "7.63"],
+    ["muted text on the host surface, dark", "oklch(0.708 0 0)", "oklch(0.145 0 0)", "7.63"],
     ["qti-well text, light", "oklch(0.145 0 0)", "oklch(0.97 0 0)", "18.15"],
     ["qti-well text, dark", "oklch(0.985 0 0)", "oklch(0.269 0 0)", "14.48"],
     ["row hover, light", "oklch(0.205 0 0)", "oklch(0.97 0 0)", "16.42"],
