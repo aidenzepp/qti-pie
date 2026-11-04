@@ -82,6 +82,7 @@ const names = [
  * `target` and `target-identifier`; p5-19 `access`, so `declared` equals `names`.
  */
 const declared: readonly string[] = [
+  "access",
   "allow-comment",
   "allow-late-submission",
   "allow-review",
@@ -103,38 +104,6 @@ const declared: readonly string[] = [
   "visible",
   "with-replacement",
 ];
-
-/**
- * The handles whose heading slice has not filled their registry row: the 7 the later headings
- * fill. p5-18 removed `qti-pre-condition`, `qti-branch-rule`, `qti-variable-mapping`,
- * `qti-weight` and `qti-template-default`; p5-19 the rest, and deletes the list with its branch.
- */
-const awaiting: ReadonlySet<string> = new Set(
-  handles.filter(
-    (handle) =>
-      ![
-        "qti-assessment-test",
-        "qti-test-part",
-        "qti-assessment-section",
-        "qti-assessment-section-ref",
-        "qti-assessment-item-ref",
-        "qti-selection",
-        "qti-ordering",
-        "qti-adaptive-selection",
-        "qti-adaptive-engine-ref",
-        "qti-adaptive-settings-ref",
-        "qti-usagedata-ref",
-        "qti-metadata-ref",
-        "qti-item-session-control",
-        "qti-time-limits",
-        "qti-pre-condition",
-        "qti-branch-rule",
-        "qti-variable-mapping",
-        "qti-weight",
-        "qti-template-default",
-      ].includes(handle),
-  ),
-);
 
 const mixed = ["text", "ws", "comment", "pi", "entityRef"];
 
@@ -359,20 +328,17 @@ describe("the test kinds", () => {
     }
   });
 
-  it("registers one row per kind, empty while awaiting its heading, and the dotted parents", () => {
+  it("registers one row per kind, its attributes the inventory's, and the dotted parents", () => {
     for (const handle of handles) {
       const row = test.registry[handle];
       assert.strictEqual(row.namespace, namespace, handle);
-      if (awaiting.has(handle)) {
-        assert.deepStrictEqual(row.attributes, [], handle);
-      } else {
-        const entry = testInventory[handle];
-        assert.isDefined(entry, handle);
 
-        const wanted = entry?.attributes.map((attribute) => attribute.name);
-        assert.deepStrictEqual(new Set(row.attributes), new Set(wanted), handle);
-        assert.strictEqual(row.attributes.length, new Set(row.attributes).size, handle);
-      }
+      const entry = testInventory[handle];
+      assert.isDefined(entry, handle);
+
+      const wanted = entry?.attributes.map((attribute) => attribute.name);
+      assert.deepStrictEqual(new Set(row.attributes), new Set(wanted), handle);
+      assert.strictEqual(row.attributes.length, new Set(row.attributes).size, handle);
 
       assert.isTrue(
         registries.some((registry) => handle in registry),

@@ -127,7 +127,7 @@ describe("the test rule relations", () => {
     for (const name of ["source-identifier", "target", "target-identifier"]) {
       assert.include(test.attributes, name);
     }
-    assert.strictEqual(test.attributes.length, 20);
+    assert.strictEqual(test.attributes.length, 21);
     assert.deepStrictEqual([...test.attributes], [...test.attributes].toSorted());
   });
 });

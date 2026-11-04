@@ -164,6 +164,7 @@ describe("the test structure relations", () => {
     assert.deepStrictEqual(
       [...test.attributes],
       [
+        "access",
         "allow-comment",
         "allow-late-submission",
         "allow-review",

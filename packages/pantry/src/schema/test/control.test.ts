@@ -208,6 +208,7 @@ describe("the test control relations", () => {
       [...test.attributes],
       [
         ...names,
+        "access",
         "category",
         "keep-together",
         "navigation-mode",
