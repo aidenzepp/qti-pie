@@ -150,7 +150,8 @@ export interface ChoiceInteraction {
   readonly class: string;
   readonly kind: "choice";
   /**
-   * `max-choices`, 1 when absent.
+   * `max-choices`, 1 when absent: an `xs:nonNegativeInteger` count, held as a number and clamped
+   * to 2^53-1, which no response can reach.
    */
   readonly maxChoices: number;
   /**
@@ -159,7 +160,8 @@ export interface ChoiceInteraction {
    */
   readonly messages: { readonly max: Option.Option<string>; readonly min: Option.Option<string> };
   /**
-   * `min-choices`, 0 when absent.
+   * `min-choices`, 0 when absent: an `xs:nonNegativeInteger` count, held as a number and clamped
+   * to 2^53-1, which no response can reach.
    */
   readonly minChoices: number;
   readonly orientation: Option.Option<string>;
@@ -179,7 +181,7 @@ export interface TextEntryInteraction {
   readonly ariaLabel: Option.Option<string>;
   readonly ariaLabelledby: Option.Option<string>;
   /**
-   * The number base of an integer response, `base`, 10 when absent.
+   * The number base of an integer response, `base`, an `xs:int`, 10 when absent.
    */
   readonly base: number;
   readonly baseType: "float" | "integer" | "string";
@@ -187,6 +189,10 @@ export interface TextEntryInteraction {
    * The author's `class` value, empty when absent.
    */
   readonly class: string;
+  /**
+   * `expected-length`: an `xs:nonNegativeInteger` count, held as a number and clamped to 2^53-1,
+   * which no response can reach.
+   */
   readonly expectedLength: Option.Option<number>;
   readonly kind: "text-entry";
   readonly path: string;
@@ -209,6 +215,10 @@ export interface TextEntryInteraction {
  * a `format` of `plain` (the default) or `preformatted`.
  */
 export interface ExtendedTextInteraction extends Omit<TextEntryInteraction, "kind"> {
+  /**
+   * `expected-lines`: an `xs:nonNegativeInteger` count, held as a number and clamped to 2^53-1,
+   * which no response can reach.
+   */
   readonly expectedLines: Option.Option<number>;
   readonly format: "plain" | "preformatted";
   readonly kind: "extended-text";
@@ -340,9 +350,35 @@ const markedAttributes: ReadonlySet<string> = new Set(
 );
 
 /**
- * Outer XML whitespace, which an XSD-typed attribute value sheds before its lexical check.
+ * Report whether a character is XML whitespace: space, tab, carriage return or line feed. No other
+ * character counts, so a no-break space stays part of the value it pads.
+ *
+ * @param character One character of the text.
+ * @returns Whether it is one of the four.
  */
-const outerSpace = /^[\t\n\r ]+|[\t\n\r ]+$/gu;
+const isXmlSpace = (character: string): boolean =>
+  character === " " || character === "\t" || character === "\n" || character === "\r";
+
+/**
+ * Remove the outer XML whitespace an XSD-typed attribute value sheds before its lexical check,
+ * stepping in from each end once, so the time is linear in the length of the value.
+ *
+ * @param text The value as written.
+ * @returns The value without its leading and trailing XML whitespace.
+ */
+const trimXmlSpace = (text: string): string => {
+  let start = 0;
+  let end = text.length;
+  while (start < end && isXmlSpace(text.charAt(start))) {
+    start += 1;
+  }
+
+  while (end > start && isXmlSpace(text.charAt(end - 1))) {
+    end -= 1;
+  }
+
+  return text.slice(start, end);
+};
 
 /**
  * Name an element as a feature or a path step does: its local name in the QTI namespace,
@@ -604,26 +640,96 @@ const enumerated = <const T extends string>(
   );
 
 /**
- * Read an `xs:int` attribute: its outer whitespace goes, then it reads as a QTI integer.
+ * Read an attribute of an XSD integer type exactly: its outer whitespace goes, then it reads as a
+ * QTI integer, which must lie within the type.
  *
  * @param build The build.
  * @param element The element.
  * @param name The attribute's name.
- * @returns The number, none when absent, or the refusal `value-type`.
+ * @param type The XSD type, such as `xs:int`, which the refusal names.
+ * @param within Whether an integer lies within the type.
+ * @returns The integer, none when absent, or the refusal `value-type` at the attribute when the
+ *   value is not an integer or lies outside the type.
  */
-const xsInteger = (
+const xsIntegerOf = (
+  build: Build,
+  element: SourceElement,
+  name: string,
+  type: string,
+  within: (value: bigint) => boolean,
+): Effect.Effect<Option.Option<bigint>, Refusal> =>
+  Effect.transposeOption(
+    Option.map(attributeOf(element, name), (attribute) => {
+      const path = attributePath(pathOf(build, element), attribute);
+      const lexical = trimXmlSpace(attribute.value);
+
+      return typed(build, path, parseLexical("integer", lexical)).pipe(
+        Effect.map(integerOf),
+        Effect.filterOrFail(within, () =>
+          refusal(build, "value-type", path, { baseType: type, lexical }),
+        ),
+      );
+    }),
+  );
+
+/**
+ * The least `xs:int`, -2^31.
+ */
+const leastInt = -2_147_483_648n;
+
+/**
+ * The greatest `xs:int`, 2^31-1.
+ */
+const greatestInt = 2_147_483_647n;
+
+/**
+ * The greatest integer a number holds exactly, 2^53-1, as a bigint.
+ */
+const greatestSafe = BigInt(Number.MAX_SAFE_INTEGER);
+
+/**
+ * Read an `xs:int` attribute, such as `base`, through {@link xsIntegerOf}.
+ *
+ * @param build The build.
+ * @param element The element.
+ * @param name The attribute's name.
+ * @returns The number, none when absent, or the refusal `value-type` when the value is outside
+ *   -2^31 to 2^31-1.
+ */
+const xsInt = (
   build: Build,
   element: SourceElement,
   name: string,
 ): Effect.Effect<Option.Option<number>, Refusal> =>
-  Effect.transposeOption(
-    Option.map(attributeOf(element, name), (attribute) =>
-      typed(
-        build,
-        attributePath(pathOf(build, element), attribute),
-        parseLexical("integer", attribute.value.replaceAll(outerSpace, "")),
-      ).pipe(Effect.map((single) => Number(integerOf(single)))),
+  Effect.map(
+    xsIntegerOf(
+      build,
+      element,
+      name,
+      "xs:int",
+      (value) => value >= leastInt && value <= greatestInt,
     ),
+    Option.map(Number),
+  );
+
+/**
+ * Read an `xs:nonNegativeInteger` count, such as `max-choices`, through {@link xsIntegerOf}. A
+ * count above 2^53-1 reads as 2^53-1, which no response can reach, so the count stays a number
+ * (integer decision Q1).
+ *
+ * @param build The build.
+ * @param element The element.
+ * @param name The attribute's name.
+ * @returns The count, none when absent, or the refusal `value-type` when the value is below 0.
+ */
+const xsNonNegativeInteger = (
+  build: Build,
+  element: SourceElement,
+  name: string,
+): Effect.Effect<Option.Option<number>, Refusal> =>
+  Effect.map(
+    xsIntegerOf(build, element, name, "xs:nonNegativeInteger", (value) => value >= 0n),
+    Option.map((value) => (value <= greatestSafe ? Number(value) : Number.MAX_SAFE_INTEGER)),
   );
 
 /**
@@ -634,7 +740,7 @@ const xsInteger = (
  * @returns The boolean, or none when the value is outside `xs:boolean`'s lexical space.
  */
 const xsBooleanOf = (written: string): Option.Option<boolean> => {
-  const lexical = written.replaceAll(outerSpace, "");
+  const lexical = trimXmlSpace(written);
   if (lexical === "true" || lexical === "1") {
     return Option.some(true);
   }
@@ -1086,7 +1192,7 @@ const textFields = (
   baseType: TextEntryInteraction["baseType"],
 ): Effect.Effect<Omit<TextEntryInteraction, "kind">, Refusal> =>
   Effect.gen(function* readTextFields() {
-    const base = yield* xsInteger(build, interaction, "base");
+    const base = yield* xsInt(build, interaction, "base");
 
     return {
       ariaLabel: valueOf(interaction, "aria-label"),
@@ -1094,7 +1200,7 @@ const textFields = (
       base: Option.getOrElse(base, () => 10),
       baseType,
       class: Option.getOrElse(valueOf(interaction, "class"), () => ""),
-      expectedLength: yield* xsInteger(build, interaction, "expected-length"),
+      expectedLength: yield* xsNonNegativeInteger(build, interaction, "expected-length"),
       path: pathOf(build, interaction),
       patternMaskMessage: valueOf(interaction, "data-patternmask-message"),
       placeholder: valueOf(interaction, "placeholder-text"),
@@ -1116,8 +1222,8 @@ const choiceInteraction = (
   cardinality: ChoiceInteraction["cardinality"],
 ): Effect.Effect<ChoiceInteraction, Refusal> =>
   Effect.gen(function* readChoice() {
-    const maxChoices = yield* xsInteger(build, interaction, "max-choices");
-    const minChoices = yield* xsInteger(build, interaction, "min-choices");
+    const maxChoices = yield* xsNonNegativeInteger(build, interaction, "max-choices");
+    const minChoices = yield* xsNonNegativeInteger(build, interaction, "min-choices");
     const shuffle = yield* xsBoolean(build, interaction, "shuffle", false);
     const prompt = yield* promptOf(build, interaction);
     const choices = yield* Effect.forEach(
@@ -1224,7 +1330,7 @@ const interactionNode = (
     markElement(build, interaction, true);
 
     const fields = yield* textFields(build, interaction, bound.success.baseType);
-    const expectedLines = yield* xsInteger(build, interaction, "expected-lines");
+    const expectedLines = yield* xsNonNegativeInteger(build, interaction, "expected-lines");
     const prompt = yield* promptOf(build, interaction);
 
     return { ...fields, expectedLines, format, kind: "extended-text", prompt };
