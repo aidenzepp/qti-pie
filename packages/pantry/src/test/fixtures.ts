@@ -81,14 +81,51 @@ export interface CutEdit {
 }
 
 /**
+ * The edit that turns an extracted package into a minimal package of one test.
+ *
+ * It keeps the test document `test`, every document its item, section and stimulus refs reach
+ * (transitively) and every file those documents reference by a relative `src`, `data`, `href`,
+ * `poster`, `srcset` or `cite`, and deletes every other entry. It writes a manifest declaring
+ * `schemaversion` with one resource per kept document under its real type
+ * (`imsqti_test_xmlv3p0`, `imsqti_section_xmlv3p0`, `imsqti_item_xmlv3p0`,
+ * `imsqti_stimulus_xmlv3p0`), each referenced file listed under the resource whose document
+ * references it. It applies after the {@link FileEdit}s and {@link TextEdit}s of its spec.
+ */
+export interface CutTestEdit {
+  readonly _tag: "cutTest";
+  readonly test: string;
+  readonly schemaversion: "3.0.0" | "3.0.1";
+}
+
+/**
+ * The edit that packages one loose test document with generated stub items.
+ *
+ * The spec's member is the loose test, which lands at the package root under its file name; `test`
+ * names it (a member under `qtiv3-examples/tests/`). The edit writes one stub item per distinct
+ * item `href` of the test, from `simple`'s item as the template, at that `href`. A stub's
+ * identifier is the item ref's identifier and it declares `RESPONSE` (identifier, single),
+ * `SCORE` (float, single) and every other variable the test prefixes with that identifier or names
+ * in a `qti-variable-mapping` `source-identifier` inside that item ref, as a float single outcome.
+ * It writes a manifest declaring `schemaversion` of one test resource and one item resource per
+ * stub, and deletes every other entry. It applies last, after the spec's {@link FileEdit}s and
+ * {@link TextEdit}s.
+ */
+export interface LooseTestEdit {
+  readonly _tag: "looseTest";
+  readonly test: string;
+  readonly schemaversion: "3.0.0" | "3.0.1";
+}
+
+/**
  * One edit of a fixture: a {@link TextEdit} of one file's text, a {@link FileEdit} of the file
- * set, or the {@link CutEdit} that reduces the package to one item.
+ * set, or the {@link CutEdit}, {@link CutTestEdit} or {@link LooseTestEdit} that reduces the
+ * package to one item or one test.
  *
  * A spec's file edits apply first, in list order, so a text edit can name a file an `addFile` or
  * `copyFile` made; its text edits then apply file by file, as {@link TextEdit} says; its cut
  * applies last.
  */
-export type Edit = TextEdit | FileEdit | CutEdit;
+export type Edit = TextEdit | FileEdit | CutEdit | CutTestEdit | LooseTestEdit;
 
 /**
  * A fixture's whole definition: what it is called, the tarball member it comes from and the edits
@@ -2979,9 +3016,93 @@ const escapeAttribute = (text: string): string =>
   text.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
 
 /**
- * Write the minimal manifest of a cut: the QTI 3 content-package namespaces, `QTI Package` and the
- * edit's `schemaversion`, no LOM, and one `imsqti_item_xmlv3p0` resource of the item with a `file`
- * for each kept entry.
+ * Extract one tarball member, as a file, into a directory.
+ *
+ * @param tarball - The examples tarball.
+ * @param top - The tarball's top-level directory.
+ * @param member - The member's path below `top`.
+ * @param into - The directory the member lands in, as `<into>/<member>`.
+ * @returns Completes once the file exists.
+ */
+const extractMember = Effect.fn("fixtures.extractMember")(function* extractMember(
+  tarball: string,
+  top: string,
+  member: string,
+  into: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+
+  yield* fs.makeDirectory(into, { recursive: true });
+  yield* run("tar", ["-xzf", tarball, "-C", into, "--strip-components", "1", `${top}/${member}`]);
+});
+
+/**
+ * Write one file of a package, making its directories.
+ *
+ * @param file - The file's path.
+ * @param bytes - The bytes to write.
+ * @returns Completes once the file exists.
+ */
+const writeInto = Effect.fn("fixtures.writeInto")(function* writeInto(
+  file: string,
+  bytes: Uint8Array,
+) {
+  const fs = yield* FileSystem.FileSystem;
+
+  yield* fs.makeDirectory(path.dirname(file), { recursive: true });
+  yield* fs.writeFile(file, bytes);
+});
+
+/**
+ * One resource of a written manifest: its identifier, type, `href` and the `href` of each `file`
+ * it lists.
+ */
+interface ManifestResource {
+  readonly identifier: string;
+  readonly type: string;
+  readonly href: string;
+  readonly files: readonly string[];
+}
+
+/**
+ * Write a minimal manifest: the QTI 3 content-package namespaces, `QTI Package` and a
+ * `schemaversion`, no LOM, and the given resources.
+ *
+ * @param identifier - The manifest's identifier.
+ * @param schemaversion - The `schemaversion` it declares.
+ * @param resources - The resources, in order.
+ * @returns The manifest's text.
+ */
+const manifestText = (
+  identifier: string,
+  schemaversion: CutEdit["schemaversion"],
+  resources: readonly ManifestResource[],
+): string =>
+  [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"',
+    '  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+    '  xsi:schemaLocation="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0_imscpv1p2_v1p0.xsd"',
+    `  identifier="MANIFEST-${identifier}">`,
+    "  <metadata>",
+    "    <schema>QTI Package</schema>",
+    `    <schemaversion>${schemaversion}</schemaversion>`,
+    "  </metadata>",
+    "  <organizations/>",
+    "  <resources>",
+    ...resources.flatMap((resource) => [
+      `    <resource identifier="${resource.identifier}" type="${resource.type}" href="${escapeAttribute(resource.href)}">`,
+      ...resource.files.map((file) => `      <file href="${escapeAttribute(file)}"/>`),
+      "    </resource>",
+    ]),
+    "  </resources>",
+    "</manifest>",
+    "",
+  ].join("\n");
+
+/**
+ * Write the minimal manifest of a cut: one `imsqti_item_xmlv3p0` resource of the item with a
+ * `file` for each kept entry.
  *
  * @param edit - The cut.
  * @param kept - Every kept path, the item first.
@@ -2990,26 +3111,44 @@ const escapeAttribute = (text: string): string =>
 const cutManifest = (edit: CutEdit, kept: readonly string[]): string => {
   const identifier = ncNameOf(edit.item);
 
-  return [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"',
-    '  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
-    '  xsi:schemaLocation="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0_imscpv1p2_v1p0.xsd"',
-    `  identifier="MANIFEST-${identifier}">`,
-    "  <metadata>",
-    "    <schema>QTI Package</schema>",
-    `    <schemaversion>${edit.schemaversion}</schemaversion>`,
-    "  </metadata>",
-    "  <organizations/>",
-    "  <resources>",
-    `    <resource identifier="${identifier}" type="imsqti_item_xmlv3p0" href="${escapeAttribute(edit.item)}">`,
-    ...kept.map((file) => `      <file href="${escapeAttribute(file)}"/>`),
-    "    </resource>",
-    "  </resources>",
-    "</manifest>",
-    "",
-  ].join("\n");
+  return manifestText(identifier, edit.schemaversion, [
+    { files: kept, href: edit.item, identifier, type: "imsqti_item_xmlv3p0" },
+  ]);
 };
+
+/**
+ * Reduce an extracted package to the files in `kept` and a manifest, in place.
+ *
+ * The kept files keep their paths and bytes; every other entry is deleted.
+ *
+ * @param pkg - The extracted package directory.
+ * @param tmp - The temporary directory that holds it, where the result is assembled.
+ * @param kept - The paths to keep, each a file of `pkg`.
+ * @param manifest - The text of the `imsmanifest.xml` that replaces the package's own.
+ * @returns Completes once `pkg` holds only `kept` and the manifest.
+ */
+const keepOnly = Effect.fn("fixtures.keepOnly")(function* keepOnly(
+  pkg: string,
+  tmp: string,
+  kept: readonly string[],
+  manifest: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const cut = `${tmp}/cut`;
+
+  yield* Effect.forEach(
+    kept,
+    (file) =>
+      Effect.gen(function* copyKept() {
+        yield* fs.makeDirectory(path.posix.dirname(`${cut}/${file}`), { recursive: true });
+        yield* fs.writeFile(`${cut}/${file}`, yield* fs.readFile(`${pkg}/${file}`));
+      }),
+    { discard: true },
+  );
+  yield* fs.writeFileString(`${cut}/imsmanifest.xml`, manifest);
+  yield* fs.remove(pkg, { recursive: true });
+  yield* fs.rename(cut, pkg);
+});
 
 /**
  * Cut an extracted package down to one item, in place.
@@ -3057,58 +3196,405 @@ const cutPackage = Effect.fn("fixtures.cutPackage")(function* cutPackage(
     }
   }
 
-  const cut = `${tmp}/cut`;
-
-  yield* Effect.forEach(
-    kept,
-    (file) =>
-      Effect.gen(function* copyKept() {
-        yield* fs.makeDirectory(path.posix.dirname(`${cut}/${file}`), { recursive: true });
-        yield* fs.writeFile(`${cut}/${file}`, yield* fs.readFile(`${pkg}/${file}`));
-      }),
-    { discard: true },
-  );
-  yield* fs.writeFileString(`${cut}/imsmanifest.xml`, cutManifest(edit, kept));
-  yield* fs.remove(pkg, { recursive: true });
-  yield* fs.rename(cut, pkg);
+  yield* keepOnly(pkg, tmp, kept, cutManifest(edit, kept));
 });
 
 /**
- * Extract one tarball member, as a file, into a directory.
- *
- * @param tarball - The examples tarball.
- * @param top - The tarball's top-level directory.
- * @param member - The member's path below `top`.
- * @param into - The directory the member lands in, as `<into>/<member>`.
- * @returns Completes once the file exists.
+ * The item, section and stimulus refs of a QTI document, each with the resource type of the
+ * document it names.
  */
-const extractMember = Effect.fn("fixtures.extractMember")(function* extractMember(
+const documentRefTypes: ReadonlyMap<string, string> = new Map([
+  ["qti-assessment-item-ref", "imsqti_item_xmlv3p0"],
+  ["qti-assessment-section-ref", "imsqti_section_xmlv3p0"],
+  ["qti-assessment-stimulus-ref", "imsqti_stimulus_xmlv3p0"],
+]);
+
+/**
+ * An item, section or stimulus ref start tag, with its attribute text.
+ */
+const documentRefPattern =
+  /<(?<tag>qti-assessment-item-ref|qti-assessment-section-ref|qti-assessment-stimulus-ref)\b(?<attrs>[^>]*?)(?<self>\/?)>/gu;
+
+/**
+ * One `name="value"` or `name='value'` attribute of a start tag.
+ */
+const attributePattern =
+  /(?<name>[A-Za-z_][\w:.-]*)\s*=\s*(?:"(?<double>[^"]*)"|'(?<single>[^']*)')/gu;
+
+/**
+ * The attributes whose values may name a file of the package: `src`, `data`, `href`, `poster`,
+ * `srcset` and `cite`.
+ */
+const fileAttributePattern =
+  /\s(?<name>src|data|href|poster|srcset|cite)\s*=\s*(?:"(?<double>[^"]*)"|'(?<single>[^']*)')/gu;
+
+/**
+ * Read XML's five predefined entities back out of an attribute value.
+ *
+ * @param text - An attribute value as written.
+ * @returns The value the attribute holds.
+ */
+const unescapeAttribute = (text: string): string =>
+  text
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&amp;", "&");
+
+/**
+ * Read the attributes of a start tag's attribute text.
+ *
+ * @param attrs - The text between the tag's name and its closing `>`.
+ * @returns Each attribute's value by name.
+ */
+const attributesOf = (attrs: string): ReadonlyMap<string, string> =>
+  new Map(
+    [...attrs.matchAll(attributePattern)].map((match) => [
+      match.groups?.["name"] ?? "",
+      unescapeAttribute(match.groups?.["double"] ?? match.groups?.["single"] ?? ""),
+    ]),
+  );
+
+/**
+ * The item, section and stimulus refs of a document's text.
+ *
+ * @param text - A QTI document, decoded as UTF-8.
+ * @returns Each ref's resource `type`, its `identifier` (empty when absent) and its `href`, in
+ *   document order.
+ */
+const refsOf = (text: string) =>
+  [...text.matchAll(documentRefPattern)].flatMap((match) => {
+    const attributes = attributesOf(match.groups?.["attrs"] ?? "");
+    const href = attributes.get("href");
+    const type = documentRefTypes.get(match.groups?.["tag"] ?? "");
+
+    return href === undefined || href === "" || type === undefined
+      ? []
+      : [{ href, identifier: attributes.get("identifier") ?? "", type }];
+  });
+
+/**
+ * The relative file paths a document references, resolved against the document's folder.
+ *
+ * Item, section and stimulus refs name documents, not files, so their start tags are left out.
+ * A `srcset` value is a comma separated list of a URL and an optional descriptor each. Fragments
+ * and queries are cut off, and a reference with a scheme, a leading `/` or only a fragment is not
+ * a path inside the package.
+ *
+ * @param text - A QTI document, decoded as UTF-8.
+ * @param documentPath - The document's path in the package.
+ * @returns The resolved paths, each once, in document order. They are not checked for existence.
+ */
+const fileReferencesOf = (text: string, documentPath: string): string[] => {
+  const folder = path.posix.dirname(documentPath);
+  const paths = new Set<string>();
+
+  for (const match of text.replaceAll(documentRefPattern, "").matchAll(fileAttributePattern)) {
+    const value = unescapeAttribute(match.groups?.["double"] ?? match.groups?.["single"] ?? "");
+    const references =
+      match.groups?.["name"] === "srcset"
+        ? value.split(",").map((candidate) => candidate.trim().split(/\s+/u)[0] ?? "")
+        : [value];
+
+    for (const raw of references) {
+      const reference = raw.replace(/[?#].*$/u, "");
+
+      if (reference !== "" && !externalReference.test(reference)) {
+        paths.add(path.posix.join(folder, reference));
+      }
+    }
+  }
+
+  return [...paths];
+};
+
+/**
+ * Give each name an identifier that no earlier one has, by adding `-2`, `-3` and so on.
+ *
+ * @param names - The wanted `NCName`s, in order.
+ * @returns One distinct `NCName` per name, in order.
+ */
+const distinctNames = (names: readonly string[]): string[] => {
+  const used = new Set<string>();
+
+  return names.map((name) => {
+    let candidate = name;
+
+    for (let count = 2; used.has(candidate); count += 1) {
+      candidate = `${name}-${count}`;
+    }
+
+    used.add(candidate);
+
+    return candidate;
+  });
+};
+
+/**
+ * Whether a path is a file of an extracted package.
+ *
+ * @param pkg - The extracted package directory.
+ * @param file - A path inside it.
+ * @returns `true` for a file that exists.
+ */
+const isPackageFile = Effect.fn("fixtures.isPackageFile")(function* isPackageFile(
+  pkg: string,
+  file: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+
+  return (
+    !file.startsWith("..") &&
+    (yield* fs.exists(`${pkg}/${file}`)) &&
+    (yield* fs.stat(`${pkg}/${file}`)).type === "File"
+  );
+});
+
+/**
+ * Cut an extracted package down to one test and what it reaches, in place.
+ *
+ * The documents kept are the test and, transitively, every document an item, section or stimulus
+ * ref of a kept document names (resolved from that document's folder, and only when the package
+ * holds the file). The files kept are the ones those documents reference. Every other entry is
+ * deleted, and a fresh `imsmanifest.xml` of one resource per kept document, with each referenced
+ * file listed under the resource whose document references it, replaces the package's own.
+ *
+ * @param pkg - The extracted package directory.
+ * @param tmp - The temporary directory that holds it, where the cut is assembled.
+ * @param edit - The cut.
+ * @returns Completes once `pkg` holds only the kept entries and the manifest.
+ */
+const cutTestPackage = Effect.fn("fixtures.cutTestPackage")(function* cutTestPackage(
+  pkg: string,
+  tmp: string,
+  edit: CutTestEdit,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const documents: { path: string; type: string }[] = [
+    { path: edit.test, type: "imsqti_test_xmlv3p0" },
+  ];
+  const files: string[][] = [];
+
+  for (let at = 0; at < documents.length; at += 1) {
+    const document = documents[at];
+
+    if (document === undefined) {
+      continue;
+    }
+
+    const text = yield* fs.readFileString(`${pkg}/${document.path}`);
+    const folder = path.posix.dirname(document.path);
+
+    for (const ref of refsOf(text)) {
+      const resolved = path.posix.join(folder, ref.href.replace(/[?#].*$/u, ""));
+
+      if (
+        !documents.some((known) => known.path === resolved) &&
+        (yield* isPackageFile(pkg, resolved))
+      ) {
+        documents.push({ path: resolved, type: ref.type });
+      }
+    }
+
+    files[at] = [];
+
+    for (const reference of fileReferencesOf(text, document.path)) {
+      if (yield* isPackageFile(pkg, reference)) {
+        files[at]?.push(reference);
+      }
+    }
+  }
+
+  const identifiers = distinctNames(documents.map((document) => ncNameOf(document.path)));
+  const resources = documents.map((document, at): ManifestResource => ({
+    files: [...new Set([document.path, ...(files[at] ?? [])])],
+    href: document.path,
+    identifier: identifiers[at] ?? "",
+    type: document.type,
+  }));
+
+  yield* keepOnly(
+    pkg,
+    tmp,
+    [...new Set(resources.flatMap((resource) => resource.files))],
+    manifestText(ncNameOf(edit.test), edit.schemaversion, resources),
+  );
+});
+
+/**
+ * The variables a loose test names for each of its item refs.
+ *
+ * Every attribute value, but an `href` or a schema location, of the form `<identifier>.<VAR>` or
+ * `<identifier>.<N>.<VAR>` over an item ref's identifier names `VAR` for it, and so does the
+ * `source-identifier` of a `qti-variable-mapping` inside the item ref. `duration` is the test's own
+ * name for an item's duration, not a declared variable. `RESPONSE` and `SCORE` are always there.
+ *
+ * @param test - The test document's text.
+ * @returns For each distinct item `href`, the first ref's identifier and the variables of every
+ *   ref that names that `href`, besides `RESPONSE` and `SCORE`.
+ */
+const stubsOf = (test: string) => {
+  const refs = [...test.matchAll(documentRefPattern)].flatMap((match) => {
+    if (match.groups?.["tag"] !== "qti-assessment-item-ref") {
+      return [];
+    }
+
+    const attributes = attributesOf(match.groups["attrs"] ?? "");
+    const identifier = attributes.get("identifier");
+    const href = attributes.get("href");
+
+    if (identifier === undefined || href === undefined) {
+      return [];
+    }
+
+    const mapped: string[] = [];
+
+    if (match.groups["self"] !== "/") {
+      const start = (match.index ?? 0) + match[0].length;
+      const end = test.indexOf("</qti-assessment-item-ref>", start);
+
+      for (const mapping of test
+        .slice(start, end === -1 ? test.length : end)
+        .matchAll(/<qti-variable-mapping\b(?<attrs>[^>]*?)\/?>/gu)) {
+        const source = attributesOf(mapping.groups?.["attrs"] ?? "").get("source-identifier");
+
+        if (source !== undefined) {
+          mapped.push(source);
+        }
+      }
+    }
+
+    return [{ href, identifier, mapped }];
+  });
+  const values = [...test.matchAll(attributePattern)]
+    .filter((match) => !["href", "xsi:schemaLocation"].includes(match.groups?.["name"] ?? ""))
+    .map((match) => unescapeAttribute(match.groups?.["double"] ?? match.groups?.["single"] ?? ""));
+  const stubs = new Map<string, { identifier: string; variables: Set<string> }>();
+
+  for (const ref of refs) {
+    const stub = stubs.get(ref.href) ?? {
+      identifier: ref.identifier,
+      variables: new Set<string>(),
+    };
+
+    for (const mapped of ref.mapped) {
+      stub.variables.add(mapped);
+    }
+
+    for (const value of values) {
+      const prefix = `${ref.identifier}.`;
+
+      if (value.startsWith(prefix)) {
+        const variable = value.slice(prefix.length).replace(/^\d+\./u, "");
+
+        if (variable !== "" && variable !== "duration") {
+          stub.variables.add(variable);
+        }
+      }
+    }
+
+    stubs.set(ref.href, stub);
+  }
+
+  return [...stubs].map(([href, stub]) => ({
+    href,
+    identifier: stub.identifier,
+    variables: [...stub.variables].filter(
+      (variable) => variable !== "RESPONSE" && variable !== "SCORE",
+    ),
+  }));
+};
+
+/**
+ * Package one loose test with a generated stub item per distinct item `href`, in place.
+ *
+ * Each stub is `simple`'s `choice.xml` with its identifier and title set to the item ref's
+ * identifier, its picture paragraph removed (a stub names no file) and one further float single
+ * outcome declaration for each variable {@link stubsOf} names. A fresh `imsmanifest.xml` of the
+ * test's resource and one item resource per stub replaces the package's own.
+ *
+ * @param pkg - The extracted package directory, holding the loose test at its root.
+ * @param tmp - The temporary directory that holds it.
+ * @param tarball - The examples tarball, which `simple` is extracted from.
+ * @param top - The tarball's top-level directory.
+ * @param edit - The edit.
+ * @returns Completes once `pkg` holds only the test, its stubs and the manifest.
+ */
+const packageLooseTest = Effect.fn("fixtures.packageLooseTest")(function* packageLooseTest(
+  pkg: string,
+  tmp: string,
   tarball: string,
   top: string,
-  member: string,
-  into: string,
+  edit: LooseTestEdit,
 ) {
   const fs = yield* FileSystem.FileSystem;
+  const testPath = path.posix.basename(edit.test);
+  const test = yield* fs.readFileString(`${pkg}/${testPath}`);
+  const scratch = `${tmp}/loose-template`;
 
-  yield* fs.makeDirectory(into, { recursive: true });
-  yield* run("tar", ["-xzf", tarball, "-C", into, "--strip-components", "1", `${top}/${member}`]);
-});
+  yield* extractMember(tarball, top, simpleMember, scratch);
+  yield* run("unzip", [
+    "-q",
+    "-o",
+    `${scratch}/${simpleMember}`,
+    "choice.xml",
+    "-d",
+    `${scratch}/zip`,
+  ]);
 
-/**
- * Write one file of a package, making its directories.
- *
- * @param file - The file's path.
- * @param bytes - The bytes to write.
- * @returns Completes once the file exists.
- */
-const writeInto = Effect.fn("fixtures.writeInto")(function* writeInto(
-  file: string,
-  bytes: Uint8Array,
-) {
-  const fs = yield* FileSystem.FileSystem;
+  const template = yield* fs.readFileString(`${scratch}/zip/choice.xml`);
+  const stubs = stubsOf(test);
+  const identifiers = distinctNames(stubs.map((stub) => ncNameOf(stub.identifier)));
 
-  yield* fs.makeDirectory(path.dirname(file), { recursive: true });
-  yield* fs.writeFile(file, bytes);
+  yield* Effect.forEach(
+    stubs,
+    (stub) =>
+      writeInto(
+        `${pkg}/${path.posix.normalize(stub.href)}`,
+        new TextEncoder().encode(
+          template
+            .replace(
+              'identifier="choice" title="Unattended Luggage"',
+              `identifier="${escapeAttribute(stub.identifier)}" title="${escapeAttribute(stub.identifier)}"`,
+            )
+            .replace(/<p>\s*<img [^>]*\/>\s*<\/p>\s*/u, "")
+            .replace(
+              "    <qti-item-body>",
+              [
+                ...stub.variables.map(
+                  (variable) =>
+                    `    <qti-outcome-declaration identifier="${escapeAttribute(variable)}" cardinality="single" base-type="float"/>\n`,
+                ),
+                "    <qti-item-body>",
+              ].join(""),
+            ),
+        ),
+      ),
+    { discard: true },
+  );
+
+  const hrefs = stubs.map((stub) => path.posix.normalize(stub.href));
+
+  yield* keepOnly(
+    pkg,
+    tmp,
+    [testPath, ...hrefs],
+    manifestText(ncNameOf(testPath), edit.schemaversion, [
+      {
+        files: [testPath],
+        href: testPath,
+        identifier: ncNameOf(testPath),
+        type: "imsqti_test_xmlv3p0",
+      },
+      ...hrefs.map((href, at): ManifestResource => ({
+        files: [href],
+        href,
+        identifier: identifiers[at] ?? "",
+        type: "imsqti_item_xmlv3p0",
+      })),
+    ]),
+  );
 });
 
 /**
@@ -3219,6 +3705,10 @@ const build = Effect.fn("fixtures.build")(function* build(
   for (const edit of spec.edits) {
     if (edit._tag === "cut") {
       yield* cutPackage(`${tmp}/pkg`, tmp, edit);
+    } else if (edit._tag === "cutTest") {
+      yield* cutTestPackage(`${tmp}/pkg`, tmp, edit);
+    } else if (edit._tag === "looseTest") {
+      yield* packageLooseTest(`${tmp}/pkg`, tmp, tarball, top, edit);
     }
   }
 });
