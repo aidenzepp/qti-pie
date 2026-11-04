@@ -1,8 +1,9 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
-import { attr, doc, el, text } from "#plate/document/source.ts";
+import { attr, doc, el, entity, text } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceElement } from "#plate/document/source.ts";
-import { checkRules } from "#plate/validate/rules.ts";
+import { checkRules, wildcardContentHolders } from "#plate/validate/rules.ts";
+import { tables } from "#plate/validate/tables.ts";
 
 /**
  * The location every hand-built item in these tests carries.
@@ -1100,6 +1101,122 @@ describe("checkRules", () => {
         ),
         [],
       );
+    });
+  });
+
+  describe("what the rules do not judge", () => {
+    /**
+     * 1EdTech's `match_correct` response-processing template, as its own document's root.
+     */
+    const matchCorrect = processing(undefined, [
+      el(
+        "qti-response-condition",
+        [],
+        [
+          el(
+            "qti-response-if",
+            [],
+            [
+              el("qti-match", [], [variable("RESPONSE"), variable("RESPONSE", "qti-correct")]),
+              setScore(baseValue("float", "1")),
+            ],
+          ),
+          el("qti-response-else", [], [setScore(baseValue("float", "0"))]),
+        ],
+      ),
+    ]);
+
+    it("gives no refusal for a processing root, which phase 1 leaves unchecked", () => {
+      assert.deepStrictEqual(judged(doc(location, matchCorrect)), []);
+    });
+
+    it("still refuses the same processing inside an item with no declarations", () => {
+      assert.deepStrictEqual(
+        judged(item([], [], [matchCorrect])).map((refused) => refused.rule),
+        [
+          "undeclared-variable",
+          "undeclared-variable",
+          "undeclared-variable",
+          "undeclared-variable",
+        ],
+      );
+    });
+
+    it("gives no refusal for an item whose correct response holds an unexpanded entity", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "identifier", [
+                el("qti-correct-response", [], [el("qti-value", [], [entity("choiceA")])]),
+              ]),
+            ],
+            [],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("gives no refusal for an item whose response-identifier holds an unexpanded entity", () => {
+      assert.deepStrictEqual(
+        judged(
+          item([], [el("qti-choice-interaction", [attr("response-identifier", "&r;", "", ["r"])])]),
+        ),
+        [],
+      );
+    });
+
+    it("does not read a Choice inside a custom interaction as QTI (reading 6)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier")],
+            [
+              el(
+                "qti-custom-interaction",
+                [attr("response-identifier", "RESPONSE")],
+                [choice("VENDOR")],
+              ),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("does not read a Choice inside an element of another namespace as QTI", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier")],
+            [el("widget", [], [choice("VENDOR")], "https://vendor.example/widgets")],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("still refuses the same Choice directly in the body", () => {
+      assert.deepStrictEqual(
+        judged(item([response("RESPONSE", "single", "identifier")], [choice("VENDOR")])),
+        [
+          {
+            detail: { response: "VENDOR" },
+            path: "qti-assessment-item/qti-item-body/qti-choice-interaction/@response-identifier",
+            rule: "undeclared-response",
+          },
+        ],
+      );
+    });
+
+    it("passes over the children of exactly the elements whose content is an ##any wildcard", () => {
+      const holders = Object.entries(tables.elements)
+        .filter(([, table]) => table.anyElement?.namespace === "##any")
+        .map(([name]) => name)
+        .toSorted();
+
+      assert.deepStrictEqual([...wildcardContentHolders].toSorted(), holders);
     });
   });
 });
