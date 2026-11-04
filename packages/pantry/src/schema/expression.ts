@@ -7,8 +7,13 @@
  * `qti-base-value` is not a relation of this module: its arm is `Literal` of the processing
  * module.
  */
-import { contained, on, relation, uuid } from "@bjornpagen/grizzle";
-import { CategoryList, SectionReference } from "#pantry/schema/contracts.ts";
+import { closedId, contained, on, relation, uuid } from "@bjornpagen/grizzle";
+import { StructureHolder } from "#pantry/schema/content/rosters.ts";
+import {
+  CategoryList,
+  SectionReference,
+  TestStructureIdentifier,
+} from "#pantry/schema/contracts.ts";
 import * as processing from "#pantry/schema/processing.ts";
 
 /**
@@ -254,6 +259,22 @@ export const ExpressionSectionIdentifier = relation(
 );
 
 /**
+ * The structure node a section identifier names, once per test that reaches the expression's
+ * document: the identifier as written and the kind of node that holds it.
+ */
+export const SectionIdentifierTarget = relation(
+  "SectionIdentifierTarget",
+  {
+    document: uuid,
+    holderKind: closedId(StructureHolder),
+    identifier: TestStructureIdentifier,
+    node: uuid,
+    test: uuid,
+  },
+  ["node", "test"],
+);
+
+/**
  * The expression kinds' arms, keyed by `NodeKind` handle. `qti-base-value` is the constant arm,
  * `Literal` of the processing module. The containment of an arm into `Node` is not written here:
  * `alternatives(Node, "kind", NodeKind, ...)` in the composed schema expands to it.
@@ -350,6 +371,7 @@ export const relations = {
   Product,
   Random,
   Round,
+  SectionIdentifierTarget,
   Subtract,
   Sum,
   Truncate,

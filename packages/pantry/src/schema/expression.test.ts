@@ -1,5 +1,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import * as rosters from "#pantry/schema/content/rosters.ts";
+import { StructureHolder } from "#pantry/schema/content/rosters.ts";
 import * as contracts from "#pantry/schema/contracts.ts";
 import * as declaration from "#pantry/schema/declaration.ts";
 import * as document from "#pantry/schema/document.ts";
@@ -98,6 +100,7 @@ const probe = () =>
       ...declaration.relations,
       ...value.relations,
       ...item.relations,
+      ...rosters.relations,
       ...processing.relations,
       ...expression.relations,
     },
@@ -135,10 +138,10 @@ describe("expression", () => {
     }
   });
 
-  it("adds exactly the 42 arms and the three filter relations", () => {
+  it("adds exactly the 42 arms, the three filter relations and the section identifier target", () => {
     assert.deepStrictEqual(
       Object.keys(expression.relations).toSorted(),
-      [...Object.values(thin), ...filters].toSorted(),
+      [...Object.values(thin), ...filters, "SectionIdentifierTarget"].toSorted(),
     );
   });
 
@@ -205,6 +208,45 @@ describe("contracts (expression)", () => {
     );
   });
   it("types ExpressionSectionIdentifier.value SectionReference", () => {
+    assert.strictEqual(
+      expression.ExpressionSectionIdentifier.fields.value.name,
+      contracts.SectionReference.name,
+    );
+  });
+});
+
+/**
+ * A relation name widened to a string, so a comparison against a name outside the union is allowed.
+ */
+const sourceName = (name: string): string => name;
+
+describe("expression: the section identifier target", () => {
+  it("declares SectionIdentifierTarget keyed by (node, test)", () => {
+    const target = expression.SectionIdentifierTarget;
+    assert.strictEqual(target.name, "SectionIdentifierTarget");
+    assert.deepStrictEqual(Object.keys(target.fields).toSorted(), [
+      "document",
+      "holderKind",
+      "identifier",
+      "node",
+      "test",
+    ]);
+    assert.deepStrictEqual([...target.primaryKey], ["node", "test"]);
+    assert.strictEqual(target.fields.identifier.name, contracts.TestStructureIdentifier.name);
+    assert.strictEqual(target.fields.holderKind.roster, StructureHolder);
+    assert.strictEqual(expression.relations.SectionIdentifierTarget, target);
+  });
+
+  it("declares no statement over it and leaves ExpressionSectionIdentifier.value SectionReference", () => {
+    assert.deepStrictEqual(
+      expression.rules.filter(
+        (rule) =>
+          "left" in rule &&
+          "name" in rule.left.source &&
+          sourceName(rule.left.source.name) === expression.relations.SectionIdentifierTarget.name,
+      ),
+      [],
+    );
     assert.strictEqual(
       expression.ExpressionSectionIdentifier.fields.value.name,
       contracts.SectionReference.name,
