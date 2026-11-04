@@ -234,24 +234,30 @@ export const renderExtendedText = Effect.fnUntraced(function* renderExtendedText
       Option.map((content) =>
         emitNodes(content, payload, state, nestedInteraction).pipe(
           Effect.flatMap((nodes) =>
-            applyPart(rowFor(owner, "prompt"), props.prompt, nodes, replacement("prompt")),
+            Effect.fromResult(
+              applyPart(rowFor(owner, "prompt"), props.prompt, nodes, replacement("prompt")),
+            ),
           ),
         ),
       ),
     ),
   );
-  const control = yield* applyPart(
-    rowFor(owner, "control"),
-    props.control,
-    restore === "" ? [] : [text(restore)],
-    replacement("control"),
+  const control = yield* Effect.fromResult(
+    applyPart(
+      rowFor(owner, "control"),
+      props.control,
+      restore === "" ? [] : [text(restore)],
+      replacement("control"),
+    ),
   );
 
-  return yield* applyPart(
-    rowFor(owner, "root"),
-    props.root,
-    [...Option.toArray(prompt), control],
-    replacement("root"),
+  return yield* Effect.fromResult(
+    applyPart(
+      rowFor(owner, "root"),
+      props.root,
+      [...Option.toArray(prompt), control],
+      replacement("root"),
+    ),
   );
 });
 

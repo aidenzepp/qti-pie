@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { Data, Effect, Option, Schema } from "effect";
 import type { Attributes, Element, Node, PartFunction } from "#plate/emit/node.ts";
 
 /**
@@ -548,6 +548,43 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
 ];
 
 /**
+ * The part table broke one of its own rules, a defect of this module that no caller can cause.
+ *
+ * It cannot occur: the table is a constant, its rows are unique by construction and checked once
+ * when the module loads, and {@link rowFor}'s types admit only the keys it holds. It is thrown,
+ * never returned.
+ */
+export class PartTableDefect extends Data.TaggedError("PartTableDefect")<{
+  readonly detail: string;
+}> {
+  /**
+   * The rule the table broke, and where to correct it.
+   */
+  override get message(): string {
+    return `The part table is inconsistent: ${this.detail}. Correct its rows in emit/parts.ts.`;
+  }
+}
+
+/**
+ * A StatusHeading placed at a heading level outside 1 to 6, a defect of the caller that no checked
+ * configuration can cause.
+ *
+ * It cannot occur through the library: the emit state's heading level comes from a configuration
+ * that `configure` decoded, and `configure` admits only 2 to 6. Only a `Configuration` built by
+ * hand, which skips `configure`, can reach it. It is thrown, never returned.
+ */
+export class HeadingLevelDefect extends Data.TaggedError("HeadingLevelDefect")<{
+  readonly level: number;
+}> {
+  /**
+   * The level given, and how to give a valid one.
+   */
+  override get message(): string {
+    return `A heading level is an integer from 1 to 6, not ${this.level}; build the configuration with configure.`;
+  }
+}
+
+/**
  * Derive a part's `data-slot` marker (operator ruling, rule `0e767b8d`): a Root carries its
  * component's name, and every other part `<component>-<part>`, the part key in kebab case.
  *
@@ -594,7 +631,7 @@ const rowIndex: ReadonlyMap<string, PartRow> = new Map(
 );
 
 if (rowIndex.size !== partTable.length) {
-  throw new Error("The part table holds two rows for the same interaction and part.");
+  throw new PartTableDefect({ detail: "it holds two rows for the same interaction and part" });
 }
 
 /**
@@ -605,7 +642,7 @@ const slotIndex: ReadonlyMap<string, PartName> = new Map(
 );
 
 if (slotIndex.size !== partTable.length) {
-  throw new Error("Two rows of the part table derive the same data-slot marker.");
+  throw new PartTableDefect({ detail: "two of its rows derive the same data-slot marker" });
 }
 
 /**
@@ -643,8 +680,9 @@ const knownParts: ReadonlyMap<string, readonly string[]> = new Map(
  * @param context Where the part is placed: the Notice's position, phrasing by default; the
  *   StatusHeading's level, 1 by default; and the Choice Prompt's markup, `labelledby` by default.
  * @returns The part's row.
- * @throws {RangeError} When the heading level is not an integer from 1 to 6, a defect of the
- *   caller, which receives a validated configuration.
+ * @throws {PartTableDefect} When the table has no row for the keys, which its types rule out.
+ * @throws {HeadingLevelDefect} When the heading level is not an integer from 1 to 6, a defect of
+ *   the caller, which receives a validated configuration.
  */
 export const rowFor = <I extends InteractionKey>(
   interaction: I,
@@ -653,7 +691,7 @@ export const rowFor = <I extends InteractionKey>(
 ): PartRow => {
   const row = rowIndex.get(rowKey(interaction, part));
   if (row === undefined) {
-    throw new Error(`The part table has no row for ${interaction} ${part}.`);
+    throw new PartTableDefect({ detail: `it has no row for ${interaction} ${part}` });
   }
 
   if (row.interaction === "item" && row.part === "notice" && context.position === "flow") {
@@ -673,7 +711,7 @@ export const rowFor = <I extends InteractionKey>(
   if (row.interaction === "item" && row.part === "statusHeading") {
     const level = context.headingLevel ?? 1;
     if (!Number.isInteger(level) || level < 1 || level > 6) {
-      throw new RangeError(`A heading level is an integer from 1 to 6, not ${level}.`);
+      throw new HeadingLevelDefect({ level });
     }
 
     return { ...row, element: `h${level}` };
