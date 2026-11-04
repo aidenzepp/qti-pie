@@ -28,7 +28,7 @@ const IdentifierText = Schema.String.check(
 const FloatNames = Schema.Literals(["INF", "-INF", "NaN", "-0"]);
 
 /**
- * Whether a stored float is one of {@link FloatNames} rather than a number.
+ * Decide whether a stored float is one of {@link FloatNames} rather than a number.
  */
 const isFloatName = Schema.is(FloatNames);
 
@@ -98,9 +98,9 @@ export const SingleSchema = Schema.Union([
 /**
  * Report what is wrong with one value of a {@link Value}.
  *
- * @param value The value that holds it.
+ * @param value The value that holds `single`.
  * @param single The value to check.
- * @returns The problem in words that say what to change, or none when the value fits.
+ * @returns The problem in words that say what to change, or none when `single` fits.
  */
 const misfit = (value: Value, single: Single): Option.Option<string> => {
   if (single.baseType !== value.baseType) {

@@ -105,7 +105,8 @@ export class ConformanceHeadingDefect extends Data.TaggedError("ConformanceHeadi
 }
 
 /**
- * The level of a Markdown heading line: the number of `#` it opens with, or 0 for any other line.
+ * Measure the level of a Markdown heading line: the number of `#` it opens with, or 0 for any other
+ * line.
  *
  * @param line A line of the text.
  * @returns The heading's level, or 0.
@@ -114,7 +115,7 @@ const headingLevel = (line: string): number =>
   /^(?<marks>#+) /u.exec(line)?.groups?.["marks"]?.length ?? 0;
 
 /**
- * The lines under a heading, up to the next heading of the same or a higher level.
+ * Take the lines under a heading, up to the next heading of the same or a higher level.
  *
  * @param lines The text's lines.
  * @param heading The whole heading line.
@@ -138,7 +139,7 @@ const section = (lines: readonly string[], heading: string): readonly string[] =
 };
 
 /**
- * The cells of every table in a section, in order, each trimmed with its whitespace collapsed.
+ * Read the cells of every table in a section, in order, each trimmed with its whitespace collapsed.
  *
  * A table is a run of paragraphs that each open with a `|`; the first paragraph that does not ends
  * it. A cell is the text between two `|` markers, or after the last one, and may span lines.
@@ -159,8 +160,8 @@ const cells = (lines: readonly string[]): readonly string[] => {
 };
 
 /**
- * The rows of a section's tables: each cell that is a feature ID, with the cells after it up to the
- * next ID.
+ * Read the rows of a section's tables: each cell that is a feature ID, with the cells after it up
+ * to the next ID.
  *
  * @param lines The section's lines.
  * @returns Each row's ID and its other cells, in order.
@@ -178,7 +179,7 @@ const rows = (
 };
 
 /**
- * Whether a level column's cell requires the feature: it reads `R`, perhaps qualified, as
+ * Decide whether a level column's cell requires the feature: it reads `R`, perhaps qualified, as
  * `R (subset)`.
  *
  * @param cell The cell's text.
@@ -193,7 +194,7 @@ const isRequired = (cell: string | undefined): boolean => /^R\b/u.test(cell ?? "
 const idOrder = Order.Tuple([Order.String, Order.Number, Order.String]);
 
 /**
- * The parts {@link idOrder} compares.
+ * Split a feature ID into the parts {@link idOrder} compares.
  *
  * @param id A feature ID.
  * @returns Its family letter, number and suffix letter.
@@ -226,12 +227,12 @@ export const generateFeatures = (conf: string): readonly Feature[] => {
   const elevated = new Set(rows(section(lines, elevatedHeading)).map((row) => row.id));
 
   /**
-   * The level the rules above give an ID.
+   * Assign a feature ID its level by the rules {@link generateFeatures} states.
    *
    * @param id A feature ID.
    * @returns Its level.
    */
-  const levelOf = (id: string): (typeof levels)[number] => {
+  const levelOf = (id: string): Feature["level"] => {
     if (basic.has(id)) {
       return "basic";
     }

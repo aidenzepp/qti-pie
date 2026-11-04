@@ -54,7 +54,6 @@ interface Page {
    * candidates for a tab stop, before radio groups fold to one stop each.
    */
   readonly sequential: readonly Visit[];
-  readonly tree: Element;
   /**
    * Every element of the tree in document order, the root first.
    */
@@ -168,7 +167,7 @@ const pageOf = (tree: Element): Page => {
     (visit) => isFocusable(visit.element, tree) && (tabindexOf(visit.element) ?? 0) >= 0,
   );
 
-  return { sequential, tree, visits };
+  return { sequential, visits };
 };
 
 /**

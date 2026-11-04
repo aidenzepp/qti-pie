@@ -120,6 +120,9 @@ export const missingModule = "(missing module)";
  */
 const plateAlias = "#plate/";
 
+/**
+ * What a {@link Token} holds: a name, a string literal, one punctuator character, or a value.
+ */
 type TokenKind = "name" | "punctuator" | "string" | "value";
 
 /**
@@ -195,7 +198,7 @@ const matchAt = (pattern: RegExp, source: string, index: number): RegExpExecArra
 };
 
 /**
- * Whether a `/` after a token starts a regular expression literal: at the start, after a
+ * Decide whether a `/` after a token starts a regular expression literal: at the start, after a
  * punctuator that does not close a group, or after a keyword that precedes an expression.
  *
  * @param previous The token before the `/`, if any.
@@ -294,7 +297,7 @@ const tokenize = (source: string): readonly Token[] => {
 };
 
 /**
- * Whether a token is a name, and that name when one is given.
+ * Decide whether a token is a name, and that name when one is given.
  *
  * @param token The token, if any.
  * @param text The name it must be.
@@ -304,7 +307,7 @@ const isName = (token: Token | undefined, text?: string): boolean =>
   token?.kind === "name" && (text === undefined || token.text === text);
 
 /**
- * Whether a token is a given punctuator.
+ * Decide whether a token is a given punctuator.
  *
  * @param token The token, if any.
  * @param text The punctuator.
@@ -314,7 +317,7 @@ const isPunctuator = (token: Token | undefined, text: string): boolean =>
   token?.kind === "punctuator" && token.text === text;
 
 /**
- * Whether a token can name an import: a name, or a string (`import { "a-b" as c }`).
+ * Decide whether a token can name an import: a name, or a string (`import { "a-b" as c }`).
  *
  * @param token The token, if any.
  * @returns Whether it can.
@@ -323,7 +326,7 @@ const isNameOrString = (token: Token | undefined): boolean =>
   token?.kind === "name" || token?.kind === "string";
 
 /**
- * The text a name or string token names: a string without its quotes.
+ * Give the text a name or string token names: a string without its quotes.
  *
  * @param token A name or string token.
  * @returns The name.
@@ -441,13 +444,20 @@ type Reading =
   | { readonly kind: "none" }
   | { readonly kind: "unreadable" };
 
+/**
+ * The reading of an `import` or `export` with nothing to read: a dynamic import, `import.meta` or a
+ * local export.
+ */
 const none: Reading = { kind: "none" };
 
+/**
+ * The reading of an `import` or `export` declaration the reader cannot classify.
+ */
 const notRead: Reading = { kind: "unreadable" };
 
 /**
- * Whether the `type` at an index is `import type`'s modifier rather than a default binding named
- * `type` (`import type from "x"`, `import type, { a } from "x"`).
+ * Decide whether the `type` at an index is `import type`'s modifier rather than a default binding
+ * named `type` (`import type from "x"`, `import type, { a } from "x"`).
  *
  * @param tokens The module's tokens.
  * @param index The index of the token after `import`.
@@ -535,7 +545,7 @@ const readExport = (tokens: readonly Token[], at: number): Reading => {
 };
 
 /**
- * The line an index of the source falls on, from 1.
+ * Find the line an index of the source falls on, from 1.
  *
  * @param source The source.
  * @param index The index.
@@ -578,7 +588,7 @@ export const readImports = (source: string): ModuleImports => {
 };
 
 /**
- * The names a declaration imports as values: none when it is type-only as a whole.
+ * List the names a declaration imports as values: none when it is type-only as a whole.
  *
  * @param declaration The declaration.
  * @returns The names that are not type-only.
@@ -589,7 +599,7 @@ export const valueNames = (declaration: StaticImport): readonly string[] =>
     : declaration.names.filter((name) => !name.typeOnly).map((name) => name.name);
 
 /**
- * The module a `#plate/` specifier names, by path under the package.
+ * Resolve a `#plate/` specifier to the module it names, by path under the package.
  *
  * @param specifier The specifier.
  * @returns `src/<x>` for `#plate/<x>`, or undefined for any other specifier.
@@ -598,7 +608,7 @@ export const resolvePlate = (specifier: string): string | undefined =>
   specifier.startsWith(plateAlias) ? `src/${specifier.slice(plateAlias.length)}` : undefined;
 
 /**
- * Every module the roots reach through declarations that load a module: an `import` or
+ * Collect every module the roots reach through declarations that load a module: an `import` or
  * `export … from` that is not type-only as a whole, of a `#plate/` specifier. A module reached only
  * through `import type` or `export type` is not reached.
  *
@@ -639,7 +649,7 @@ export const valueClosure = (
 };
 
 /**
- * The names of one declaration that break the allowlist.
+ * List the names of one declaration that break the allowlist.
  *
  * @param declaration The declaration.
  * @param modules The module map, to find a `#plate/` target.
@@ -710,7 +720,7 @@ export const checkAllowlist = (
   });
 
 /**
- * The package's TypeScript sources, tests included, read from disk.
+ * Read the package's TypeScript sources, tests included, from disk.
  *
  * @returns Each `.ts` file under `src/`, by path under the package (`src/<x>`), in path order.
  */

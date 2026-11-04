@@ -1,6 +1,8 @@
 /**
  * The renderer's configuration: the settings a host chooses once, decoded and defaulted by one
  * Schema, and {@link configure}, which reads them.
+ *
+ * @module
  */
 import type { SchemaIssue } from "effect";
 import { Config, ConfigProvider, Effect, Match, Option, Schema } from "effect";
