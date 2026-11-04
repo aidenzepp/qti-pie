@@ -68,6 +68,7 @@ export type PId =
   | "P26"
   | "P27"
   | "P29"
+  | "item-duration"
   | "prefixed-ref";
 
 /**
@@ -471,15 +472,48 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
     return unknownType;
   };
 
+  /**
+   * Whether a name read is the `duration` of an item that is not time dependent, which no
+   * expression may read (S-R49, INFO#IV_Response): the item's own built-in in `item` mode, or an
+   * item reference's item-session built-in through the test's reach.
+   */
+  const untimedDuration = (identifier: string): boolean => {
+    if (env.mode === "item") {
+      return identifier === "duration" && !env.timeDependent;
+    }
+
+    const resolution = resolvePrefixed(identifier, env);
+    if (
+      resolution._tag !== "resolved" ||
+      resolution.source !== "builtIn" ||
+      resolution.reading.variable !== "duration"
+    ) {
+      return false;
+    }
+
+    const entry = env.reach.get(resolution.reading.prefix);
+
+    return entry?.kind === "item-ref" && !entry.scope.timeDependent;
+  };
+
   const reference = (identifier: string, kind: string, position: Position): EffectiveType => {
     const declared = read(identifier, kind, position);
     const found = declared?.type ?? env.builtIns.get(identifier);
     if (found !== undefined) {
+      if (declared === undefined && untimedDuration(identifier)) {
+        refuse("item-duration", kind, position);
+      }
+
       return found;
     }
 
     if (env.mode === "test" && prefixedReadings(identifier).length > 0) {
-      return typePrefixed(identifier, kind, position);
+      const type = typePrefixed(identifier, kind, position);
+      if (untimedDuration(identifier)) {
+        refuse("item-duration", kind, position);
+      }
+
+      return type;
     }
 
     if (env.mode !== "template") {

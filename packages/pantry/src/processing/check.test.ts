@@ -854,9 +854,11 @@ const refusalOf = (result: CheckResult) =>
 const scopeOf = (
   declarations: readonly DeclarationEntry[],
   mappings: readonly (readonly [string, EffectiveType])[] = [],
+  timeDependent = false,
 ): ItemRefScope => ({
   declarations: new Map(declarations.map((d) => [d.identifier, d])),
   mappings: new Map(mappings),
+  timeDependent,
 });
 
 /**
@@ -1122,7 +1124,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         const env = reachEnvironment([
           ["PART", { kind: "part" }],
           ["SECTION", { kind: "section" }],
-          ["I1", itemRefOf(scopeOf([]))],
+          ["I1", itemRefOf(scopeOf([], [], true))],
         ]);
         assert.deepStrictEqual(yield* typedAs("PART.duration", env), ["duration/single"]);
         assert.deepStrictEqual(yield* typedAs("SECTION.duration", env), ["duration/single"]);
@@ -1310,5 +1312,73 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         assert.deepStrictEqual(okOf(yield* weightedOutcome("float"), test).unresolved, []);
       }),
     );
+
+    suite.effect(
+      "refuses an item reference's duration item-duration unless its item is timed",
+      () =>
+        Effect.gen(function* testHalf() {
+          const untimed = reachEnvironment([["I1", itemRefOf(scopeOf([]))]]);
+          const timed = reachEnvironment([["I1", itemRefOf(scopeOf([], [], true))]]);
+          assert.deepStrictEqual(yield* refusedAs("I1.duration", untimed), ["item-duration", []]);
+          assert.deepStrictEqual(yield* refusedAs("I1.2.duration", untimed), ["item-duration", []]);
+          assert.deepStrictEqual(yield* typedAs("I1.duration", timed), ["float/single"]);
+          assert.deepStrictEqual(yield* typedAs("I1.numAttempts", untimed), ["integer/single"]);
+        }),
+    );
+
+    suite.effect("reads a declared or mapped duration of an untimed item as that variable", () =>
+      Effect.gen(function* declaredDuration() {
+        const declared = reachEnvironment([
+          ["I1", itemRefOf(scopeOf([outcomeOf("duration", "integer")]))],
+          [
+            "I2",
+            itemRefOf(scopeOf([], [["duration", { baseType: "string", cardinality: "single" }]])),
+          ],
+        ]);
+        assert.deepStrictEqual(yield* typedAs("I1.duration", declared), ["integer/single"]);
+        assert.deepStrictEqual(yield* typedAs("I2.duration", declared), ["string/single"]);
+      }),
+    );
   },
 );
+
+/**
+ * The item mode environment of an item root with the given `time-dependent`, declaring `ANY`.
+ */
+const itemEnvironment = (timeDependent: boolean) =>
+  Effect.gen(function* itemOf() {
+    const text = `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" time-dependent="${timeDependent}"/>`;
+    const document = yield* readXml(new TextEncoder().encode(text));
+
+    return withDeclarations(environmentOf(document, "item"), [outcomeOf("ANY", "any")]);
+  });
+
+describe("an item's own duration (S-R49, item half)", () => {
+  it.effect("refuses duration item-duration when the item is not time dependent", () =>
+    Effect.gen(function* untimedItem() {
+      const env = yield* itemEnvironment(false);
+      assert.strictEqual(env.timeDependent, false);
+      assert.deepStrictEqual(refusalOf(checkProcessing(yield* parseBody(setX("duration")), env)), [
+        "item-duration",
+        [],
+      ]);
+    }),
+  );
+
+  it.effect("accepts the same duration when the item is time dependent, typed float", () =>
+    Effect.gen(function* timedItem() {
+      const env = yield* itemEnvironment(true);
+      assert.strictEqual(env.timeDependent, true);
+
+      const result = okOf(yield* parseBody(setX("duration")), env);
+      assert.deepStrictEqual(typeOfKind(result.typed, "qti-variable"), ["float/single"]);
+    }),
+  );
+
+  it.effect("accepts the other built-ins of an item that is not time dependent", () =>
+    Effect.gen(function* otherBuiltIns() {
+      const env = yield* itemEnvironment(false);
+      okOf(yield* parseBody(setX("numAttempts")), env);
+    }),
+  );
+});
