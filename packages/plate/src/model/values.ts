@@ -1,5 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown. */
-
 /**
  * QTI values and NULL as phase 1 holds them: a base type, a cardinality and the values, with the
  * lexical parse and format of each base type and the equality `qti-match` uses.
@@ -7,7 +5,7 @@
  * The session record, the engine and the form encoding all carry a {@link Value}, so this module
  * owns the one value representation, and the one NCName rule the validator reuses.
  */
-import { Effect, Option, Schema } from "effect";
+import { Data, Option, Result, Schema } from "effect";
 
 /**
  * The base types phase 1 holds values of: every QTI base type but `point`, `duration` and `file`.
@@ -260,10 +258,10 @@ const expected = {
  * The failure of reading text as a value of a base type: the text is outside the base type's
  * lexical space. A document that holds it is invalid.
  */
-export class InvalidValue extends Schema.TaggedError<InvalidValue>()("InvalidValue", {
-  baseType: Schema.Literals(modelledBaseTypes),
-  lexical: Schema.String,
-}) {
+export class InvalidValue extends Data.TaggedError("InvalidValue")<{
+  readonly baseType: ModelledBaseType;
+  readonly lexical: string;
+}> {
   /**
    * The text and the lexical form its base type takes, in one line.
    */
@@ -373,18 +371,15 @@ const readers = {
  *
  * @param baseType The base type to read.
  * @param lexical The text, as written.
- * @returns The value the text names, or {@link InvalidValue} when the text is outside the base
- *   type's lexical space.
+ * @returns The value the text names, or a failure with {@link InvalidValue} when the text is
+ *   outside the base type's lexical space.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Enumerated_BaseTypeEnum
  */
 export const parseLexical = (
   baseType: ModelledBaseType,
   lexical: string,
-): Effect.Effect<Single, InvalidValue> =>
-  Option.match(readers[baseType](lexical), {
-    onNone: () => Effect.fail(new InvalidValue({ baseType, lexical })),
-    onSome: (single) => Effect.succeed(single),
-  });
+): Result.Result<Single, InvalidValue> =>
+  Result.fromOption(readers[baseType](lexical), () => new InvalidValue({ baseType, lexical }));
 
 /**
  * Read the text content of an element, such as `qti-value`, as a value of a base type.
@@ -395,16 +390,16 @@ export const parseLexical = (
  *
  * @param baseType The base type to read.
  * @param text The element's text content, as written.
- * @returns The value the text names, none for NULL, or {@link InvalidValue} when the trimmed text
- *   is outside the base type's lexical space.
+ * @returns The value the text names, none for NULL, or a failure with {@link InvalidValue} when
+ *   the trimmed text is outside the base type's lexical space.
  */
 export const parseElementText = (
   baseType: ModelledBaseType,
   text: string,
-): Effect.Effect<Option.Option<Single>, InvalidValue> =>
+): Result.Result<Option.Option<Single>, InvalidValue> =>
   baseType === "string"
-    ? Effect.succeed(valueIf(text !== "", { baseType, value: text }))
-    : Effect.map(parseLexical(baseType, trimXmlSpace(text)), Option.some);
+    ? Result.succeed(valueIf(text !== "", { baseType, value: text }))
+    : Result.map(parseLexical(baseType, trimXmlSpace(text)), Option.some);
 
 /**
  * Write a float in the lexical space of xs:double.

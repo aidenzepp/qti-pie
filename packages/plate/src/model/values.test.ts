@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Duration, Effect, Option, Schema } from "effect";
+import { Duration, Effect, Option, Result, Schema } from "effect";
 import {
   Value,
   format,
@@ -64,11 +64,11 @@ describe("parseElementText", () => {
   it.effect("[I-1] trims an identifier's outer whitespace and keeps a string's", () =>
     Effect.gen(function* trimsByBaseType() {
       assert.deepStrictEqual(
-        yield* parseElementText("identifier", " completed "),
+        yield* Effect.fromResult(parseElementText("identifier", " completed ")),
         Option.some<Single>({ baseType: "identifier", value: "completed" }),
       );
       assert.deepStrictEqual(
-        yield* parseElementText("string", " a "),
+        yield* Effect.fromResult(parseElementText("string", " a ")),
         Option.some<Single>({ baseType: "string", value: " a " }),
       );
     }),
@@ -76,9 +76,12 @@ describe("parseElementText", () => {
 
   it.effect("reads an empty string as NULL and a blank one as a value", () =>
     Effect.gen(function* emptyStringIsNull() {
-      assert.deepStrictEqual(yield* parseElementText("string", ""), Option.none());
       assert.deepStrictEqual(
-        yield* parseElementText("string", " "),
+        yield* Effect.fromResult(parseElementText("string", "")),
+        Option.none(),
+      );
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(parseElementText("string", " ")),
         Option.some<Single>({ baseType: "string", value: " " }),
       );
     }),
@@ -87,18 +90,33 @@ describe("parseElementText", () => {
   it.effect("trims tabs and line breaks but keeps a no-break space", () =>
     Effect.gen(function* xmlWhitespaceOnly() {
       assert.deepStrictEqual(
-        yield* parseElementText("boolean", "\n\ttrue\r\n"),
+        yield* Effect.fromResult(parseElementText("boolean", "\n\ttrue\r\n")),
         Option.some<Single>({ baseType: "boolean", value: true }),
       );
       assert.deepStrictEqual(
-        yield* parseElementText("pair", " A \n B "),
+        yield* Effect.fromResult(parseElementText("pair", " A \n B ")),
         Option.some<Single>({ baseType: "pair", value: ["A", "B"] }),
       );
 
-      const error = yield* Effect.flip(parseElementText("identifier", " completed"));
+      const error = yield* Effect.flip(
+        Effect.fromResult(parseElementText("identifier", " completed")),
+      );
       assert.strictEqual(error._tag, "InvalidValue");
     }),
   );
+
+  it("returns a Result: none for an empty string, and a trimmed integer as itself", () => {
+    const empty = parseElementText("string", "");
+    assert.isTrue(Result.isResult(empty));
+    assert.deepStrictEqual(Result.getSuccess(empty), Option.some(Option.none()));
+
+    const seven = parseElementText("integer", " 7 ");
+    assert.isTrue(Result.isResult(seven));
+    assert.deepStrictEqual(
+      Result.getSuccess(seven),
+      Option.some(Option.some<Single>({ baseType: "integer", value: 7n })),
+    );
+  });
 
   it.live("trims a 100,000-character whitespace run in linear time", () =>
     Effect.gen(function* linearTrim() {
@@ -109,7 +127,7 @@ describe("parseElementText", () => {
       ];
       for (const [baseType, text, single] of cases) {
         const [elapsed, read] = yield* Effect.timed(
-          Effect.suspend(() => parseElementText(baseType, text)),
+          Effect.suspend(() => Effect.fromResult(parseElementText(baseType, text))),
         );
         assert.deepStrictEqual(read, Option.some(single));
         assert.isBelow(Duration.toMillis(elapsed), 200, `${baseType}: ${Duration.format(elapsed)}`);
@@ -119,10 +137,23 @@ describe("parseElementText", () => {
 });
 
 describe("parseLexical", () => {
+  it("returns a Result whose failure is an InvalidValue naming the base type and the text", () => {
+    const parsed = parseLexical("integer", "abc");
+    assert.isTrue(Result.isResult(parsed));
+    assert.deepStrictEqual(
+      Option.map(Result.getFailure(parsed), ({ _tag, baseType, lexical }) => ({
+        _tag,
+        baseType,
+        lexical,
+      })),
+      Option.some({ _tag: "InvalidValue", baseType: "integer", lexical: "abc" }),
+    );
+  });
+
   it.effect("refuses 1 and 6 as identifiers", () =>
     Effect.gen(function* digitsAreNotIdentifiers() {
       for (const lexical of ["1", "6"]) {
-        const error = yield* Effect.flip(parseLexical("identifier", lexical));
+        const error = yield* Effect.flip(Effect.fromResult(parseLexical("identifier", lexical)));
         assert.strictEqual(error._tag, "InvalidValue");
         assert.strictEqual(error.baseType, "identifier");
         assert.strictEqual(error.lexical, lexical);
@@ -132,16 +163,16 @@ describe("parseLexical", () => {
 
   it.effect("reads true and false and refuses 1 and 0 as booleans", () =>
     Effect.gen(function* booleanLexicalSpace() {
-      assert.deepStrictEqual(yield* parseLexical("boolean", "true"), {
+      assert.deepStrictEqual(yield* Effect.fromResult(parseLexical("boolean", "true")), {
         baseType: "boolean",
         value: true,
       });
-      assert.deepStrictEqual(yield* parseLexical("boolean", "false"), {
+      assert.deepStrictEqual(yield* Effect.fromResult(parseLexical("boolean", "false")), {
         baseType: "boolean",
         value: false,
       });
       for (const lexical of ["1", "0", "TRUE"]) {
-        const error = yield* Effect.flip(parseLexical("boolean", lexical));
+        const error = yield* Effect.flip(Effect.fromResult(parseLexical("boolean", lexical)));
         assert.strictEqual(error._tag, "InvalidValue");
         assert.strictEqual(error.lexical, lexical);
       }
@@ -166,12 +197,12 @@ describe("parseLexical", () => {
         ["float", "NaN"],
       ];
       for (const [baseType, lexical] of cases) {
-        const single = yield* parseLexical(baseType, lexical);
-        const again = yield* parseLexical(baseType, format(single));
+        const single = yield* Effect.fromResult(parseLexical(baseType, lexical));
+        const again = yield* Effect.fromResult(parseLexical(baseType, format(single)));
         assert.strictEqual(again.baseType, baseType);
         assert.isTrue(Object.is(single.value, again.value), `${baseType} ${lexical}`);
       }
-      assert.deepStrictEqual(yield* parseLexical("float", "INF"), {
+      assert.deepStrictEqual(yield* Effect.fromResult(parseLexical("float", "INF")), {
         baseType: "float",
         value: Number.POSITIVE_INFINITY,
       });
@@ -185,11 +216,11 @@ describe("parseLexical", () => {
 
   it.effect("refuses abc as a float and 1.5 as an integer", () =>
     Effect.gen(function* numbersRefused() {
-      const float = yield* Effect.flip(parseLexical("float", "abc"));
+      const float = yield* Effect.flip(Effect.fromResult(parseLexical("float", "abc")));
       assert.strictEqual(float._tag, "InvalidValue");
       assert.strictEqual(float.baseType, "float");
 
-      const integer = yield* Effect.flip(parseLexical("integer", "1.5"));
+      const integer = yield* Effect.flip(Effect.fromResult(parseLexical("integer", "1.5")));
       assert.strictEqual(integer._tag, "InvalidValue");
       assert.strictEqual(integer.baseType, "integer");
     }),
@@ -206,7 +237,7 @@ describe("parseLexical", () => {
         ["-0", 0n, "0"],
       ];
       for (const [lexical, integer, digits] of cases) {
-        const single = yield* parseLexical("integer", lexical);
+        const single = yield* Effect.fromResult(parseLexical("integer", lexical));
         assert.deepStrictEqual(single, { baseType: "integer", value: integer });
         assert.strictEqual(format(single), digits);
       }
@@ -221,7 +252,7 @@ describe("parseLexical", () => {
         ["1e-400", 0],
       ];
       for (const [lexical, number] of cases) {
-        assert.deepStrictEqual(yield* parseLexical("float", lexical), {
+        assert.deepStrictEqual(yield* Effect.fromResult(parseLexical("float", lexical)), {
           baseType: "float",
           value: number,
         });
@@ -231,11 +262,11 @@ describe("parseLexical", () => {
 
   it.effect("reads a pair as written and refuses one with outer whitespace", () =>
     Effect.gen(function* pairsAsWritten() {
-      const directed = yield* parseLexical("directedPair", "A B");
+      const directed = yield* Effect.fromResult(parseLexical("directedPair", "A B"));
       assert.deepStrictEqual(directed, { baseType: "directedPair", value: ["A", "B"] });
       assert.strictEqual(format(directed), "A B");
       for (const lexical of [" A B", "A", "A B C", "A 1"]) {
-        const error = yield* Effect.flip(parseLexical("pair", lexical));
+        const error = yield* Effect.flip(Effect.fromResult(parseLexical("pair", lexical)));
         assert.strictEqual(error._tag, "InvalidValue");
       }
     }),
@@ -258,9 +289,12 @@ describe("format", () => {
         ["uri", "https://example.org/a b", "https://example.org/a b"],
       ];
       for (const [baseType, lexical, written] of cases) {
-        const single = yield* parseLexical(baseType, lexical);
+        const single = yield* Effect.fromResult(parseLexical(baseType, lexical));
         assert.strictEqual(format(single), written, `${baseType} ${lexical}`);
-        assert.deepStrictEqual(yield* parseLexical(baseType, format(single)), single);
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(parseLexical(baseType, format(single))),
+          single,
+        );
       }
     }),
   );

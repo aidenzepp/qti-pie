@@ -11,7 +11,7 @@
  *
  * @module
  */
-import { Array as Arr, Effect, Option, Result } from "effect";
+import { Array as Arr, Option, Result } from "effect";
 import { attributePath, qtiNamespace, walk } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
@@ -685,8 +685,8 @@ const textOf = (element: SourceElement): string =>
  * @param parsed The parse.
  * @returns The `InvalidValue`, none when the text is in the base type's lexical space.
  */
-const invalid = <A>(parsed: Effect.Effect<A, InvalidValue>): Option.Option<InvalidValue> =>
-  Result.getFailure(Effect.runSync(Effect.result(parsed)));
+const invalid = <A>(parsed: Result.Result<A, InvalidValue>): Option.Option<InvalidValue> =>
+  Result.getFailure(parsed);
 
 /**
  * Construct the `value-type` refusals of a parse.
@@ -699,7 +699,7 @@ const invalid = <A>(parsed: Effect.Effect<A, InvalidValue>): Option.Option<Inval
 const valueRefusals = <A>(
   source: SourceDocument,
   path: string,
-  parsed: Effect.Effect<A, InvalidValue>,
+  parsed: Result.Result<A, InvalidValue>,
 ): readonly Refusal[] =>
   Option.toArray(
     Option.map(invalid(parsed), (failure) =>
