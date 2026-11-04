@@ -5,16 +5,23 @@
  * {@link runRules} runs response rules in order, and {@link evaluateExpression} gives the value of
  * one expression. They take rules the item model ({@link Item}) built and variables that hold a
  * value for every modelled declaration, as the session record does. A rule that names an identifier
- * outside them, sets an outcome to a value of another type, or holds an expression this evaluator
- * does not run is a defect in what the caller passed, thrown as {@link UnknownIdentifierError},
- * {@link OutcomeMismatchError} or {@link UnevaluatedExpressionError}.
+ * outside them, sets an outcome to a value of another type, or maps a response that has no mapping
+ * is a defect in what the caller passed, thrown as {@link UnknownIdentifierError},
+ * {@link OutcomeMismatchError} or {@link UnmappedResponseError}.
  *
  * @module
  */
-import { Option } from "effect";
-import type { Expression, Item, ResponseDeclaration, Rule } from "#plate/model/item.ts";
+import { Array as Arr, Option } from "effect";
+import type {
+  Expression,
+  Item,
+  MapEntry,
+  Mapping,
+  ResponseDeclaration,
+  Rule,
+} from "#plate/model/item.ts";
 import { isNull, match, nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { Single, Value } from "#plate/model/values.ts";
 
 /**
  * The variables of one attempt: each response and each outcome by identifier.
@@ -109,28 +116,30 @@ export class OutcomeMismatchError extends Error {
 }
 
 /**
- * The defect of an expression kind the item model admits and this evaluator does not run yet.
+ * The defect of a `qti-map-response` whose response is declared without a `qti-mapping`.
  *
- * The item model marks every element outside the engine unsupported and builds no rules for it,
- * so only a kind of its {@link Expression} union can reach here.
+ * QTI maps a response "using the associated mapping, which must have been declared", and the
+ * evaluator, which returns a value and has no error channel, throws it.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
  */
-export class UnevaluatedExpressionError extends Error {
+export class UnmappedResponseError extends Error {
   /**
-   * The expression's kind.
+   * The response's identifier.
    */
-  readonly kind: string;
+  readonly identifier: string;
 
   /**
-   * Construct the defect for the expression kind `kind`.
+   * Construct the defect for the response `identifier`.
    *
-   * @param kind The expression's kind.
+   * @param identifier The response's identifier.
    */
-  constructor(kind: string) {
+  constructor(identifier: string) {
     super(
-      `The engine does not evaluate ${kind} expressions: build rules that use only match, variable, correct, base-value and is-null.`,
+      `The rules map the response ${JSON.stringify(identifier)}, and its declaration has no qti-mapping: give the declaration a qti-mapping, or score it without qti-map-response.`,
     );
-    this.name = "UnevaluatedExpressionError";
-    this.kind = kind;
+    this.name = "UnmappedResponseError";
+    this.identifier = identifier;
   }
 }
 
@@ -189,6 +198,115 @@ const booleanOf = (value: boolean): Value => ({
 });
 
 /**
+ * Report whether two singles are equal, as `match` compares single values: the same base type,
+ * numbers by value, strings and identifiers by code point, and a `pair` in either order.
+ *
+ * @param left One single.
+ * @param right The other.
+ * @returns Whether they are equal.
+ */
+const equal = (left: Single, right: Single): boolean =>
+  match(
+    { baseType: left.baseType, cardinality: "single", values: [left] },
+    { baseType: right.baseType, cardinality: "single", values: [right] },
+  );
+
+/**
+ * Fold a string's case for a case-insensitive map entry: upper case then lower case, by Unicode's
+ * default mappings and independent of locale, so `YORK` and `york`, or `SS` and `ß`, compare
+ * equal.
+ *
+ * @param text The string.
+ * @returns Its folded form.
+ */
+const foldCase = (text: string): string => text.toUpperCase().toLowerCase();
+
+/**
+ * Report whether a map entry compares its key exactly: a string key when it is `case-sensitive`,
+ * and a key of every other base type always, identifiers included.
+ *
+ * @param entry The map entry.
+ * @returns Whether its key compares exactly.
+ */
+const comparesExactly = (entry: MapEntry): boolean =>
+  entry.caseSensitive || entry.key.baseType !== "string";
+
+/**
+ * Report whether a map entry's key matches a response value: exactly when the entry compares
+ * exactly, else as strings with case folded.
+ *
+ * @param entry The map entry.
+ * @param single The response value.
+ * @returns Whether the entry maps it.
+ */
+const keyMatches = (entry: MapEntry, single: Single): boolean =>
+  !comparesExactly(entry) && entry.key.baseType === "string" && single.baseType === "string"
+    ? foldCase(entry.key.value) === foldCase(single.value)
+    : equal(entry.key, single);
+
+/**
+ * Give the value a mapping maps one response value to.
+ *
+ * Overlapping entries are valid, and a value is mapped by one of them (reading Q5): the first entry
+ * that compares exactly and equals it, else the first entry in document order that matches it,
+ * else the mapping's default. So BG010's `York` maps by its case-sensitive `York` entry, and
+ * `YORK` by its `york` entry.
+ *
+ * @param mapping The response's mapping.
+ * @param single The response value.
+ * @returns The mapped value.
+ */
+const mappedValue = (mapping: Mapping, single: Single): number =>
+  Option.match(
+    Option.orElse(
+      Arr.findFirst(mapping.entries, (entry) => comparesExactly(entry) && equal(entry.key, single)),
+      () => Arr.findFirst(mapping.entries, (entry) => keyMatches(entry, single)),
+    ),
+    { onNone: () => mapping.defaultValue, onSome: (entry) => entry.value },
+  );
+
+/**
+ * Give the value of a `qti-map-response`: a single float.
+ *
+ * A value is the sum of the mapped values of the response's distinct values, so a `single` value
+ * maps to its one value's, `{B,B,C}` counts `B` once, and a NULL response maps to 0. The mapping's
+ * `lower-bound` and `upper-bound` then clamp the sum, a single value's and a NULL's included
+ * (reading 9.13).
+ *
+ * @param item The item, whose declaration gives the mapping.
+ * @param variables The variables of the attempt.
+ * @param identifier The response's identifier.
+ * @returns The mapped value.
+ * @throws {UnknownIdentifierError} When the item declares no modelled response by that name, or the
+ *   variables hold no value of it.
+ * @throws {UnmappedResponseError} When the response's declaration has no mapping.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
+ */
+const mapResponse = (item: Item, variables: Variables, identifier: string): Value => {
+  const mapping = Option.getOrThrowWith(
+    responseOf(item, identifier).mapping,
+    () => new UnmappedResponseError(identifier),
+  );
+  const response = Option.getOrThrowWith(
+    own(variables.responses, identifier),
+    () => new UnknownIdentifierError(identifier, "response"),
+  );
+  let sum = 0;
+  for (const single of Arr.dedupeWith(response.values, equal)) {
+    sum += mappedValue(mapping, single);
+  }
+
+  const lower = Option.getOrElse(mapping.lowerBound, () => Number.NEGATIVE_INFINITY);
+  const upper = Option.getOrElse(mapping.upperBound, () => Number.POSITIVE_INFINITY);
+
+  return {
+    baseType: "float",
+    cardinality: "single",
+    values: [{ baseType: "float", value: Math.min(upper, Math.max(lower, sum)) }],
+  };
+};
+
+/**
  * Report whether a condition's value is true.
  *
  * A response condition runs a branch only on a single boolean `true`: false or NULL counts as not
@@ -213,16 +331,18 @@ const isTrue = (value: Value): boolean => {
  * - `is-null`: a single boolean, whether the operand is NULL.
  * - `match`: a single boolean, whether the operands match by `match` of the value model; NULL when
  *   either is NULL.
+ * - `map-response`: a single float, the response's value through its declaration's mapping.
  *
  * @param expression The expression.
- * @param item The item, whose declarations give the correct responses.
+ * @param item The item, whose declarations give the correct responses and the mappings.
  * @param variables The variables of the attempt.
  * @returns The expression's value.
  * @throws {UnknownIdentifierError} When the expression names a variable or response that is not
  *   held.
- * @throws {UnevaluatedExpressionError} For a `map-response`, which this evaluator does not run.
+ * @throws {UnmappedResponseError} When a `map-response` names a response with no mapping.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpMatch
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpIsNull
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
  */
 export const evaluateExpression = (
   expression: Expression,
@@ -259,7 +379,7 @@ export const evaluateExpression = (
       : booleanOf(match(leftValue, rightValue));
   }
 
-  throw new UnevaluatedExpressionError(expression.kind);
+  return mapResponse(item, variables, expression.identifier);
 };
 
 /**
@@ -337,7 +457,7 @@ const runRule = (rule: Rule, item: Item, variables: Variables): Variables => {
  * @throws {UnknownIdentifierError} When a rule names an identifier the item or the variables do not
  *   hold in the role the rule reads it in.
  * @throws {OutcomeMismatchError} When a rule sets an outcome to a value of another type.
- * @throws {UnevaluatedExpressionError} When a rule holds an expression this evaluator does not run.
+ * @throws {UnmappedResponseError} When a rule maps a response that has no mapping.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Root_ResponseProcessing
  */
 export const runRules = (rules: readonly Rule[], item: Item, variables: Variables): Variables => {

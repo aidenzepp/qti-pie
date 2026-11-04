@@ -3,6 +3,7 @@ import { Option } from "effect";
 import {
   OutcomeMismatchError,
   UnknownIdentifierError,
+  UnmappedResponseError,
   evaluateExpression,
   runRules,
 } from "#plate/engine/evaluate.ts";
@@ -11,12 +12,13 @@ import type {
   Branch,
   Expression,
   Item,
+  Mapping,
   OutcomeDeclaration,
   ResponseDeclaration,
   Rule,
 } from "#plate/model/item.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { Single, Value } from "#plate/model/values.ts";
 
 /**
  * Construct a single identifier value.
@@ -72,6 +74,82 @@ const response: ResponseDeclaration = {
 const open: ResponseDeclaration = { ...response, correct: Option.none(), identifier: "OPEN" };
 
 /**
+ * BG010's mapping: `York` maps to 1 compared case-sensitively, `york` to 0.5 compared with case
+ * folded, as `case-sensitive` defaults to false, and every other answer to 0.
+ */
+const yorkMapping: Mapping = {
+  defaultValue: 0,
+  entries: [
+    { caseSensitive: true, key: { baseType: "string", value: "York" }, value: 1 },
+    { caseSensitive: false, key: { baseType: "string", value: "york" }, value: 0.5 },
+  ],
+  lowerBound: Option.none(),
+  upperBound: Option.none(),
+};
+
+/**
+ * BG010's single string response, `CITY` here, with its mapping.
+ */
+const city: ResponseDeclaration = {
+  baseType: "string",
+  cardinality: "single",
+  correct: Option.none(),
+  defaultValue: Option.none(),
+  identifier: "CITY",
+  mapping: Option.some(yorkMapping),
+};
+
+/**
+ * BG010's response with its mapping bounded from 0.25 to 0.4.
+ */
+const bounded: ResponseDeclaration = {
+  ...city,
+  identifier: "BOUNDED",
+  mapping: Option.some({
+    ...yorkMapping,
+    lowerBound: Option.some(0.25),
+    upperBound: Option.some(0.4),
+  }),
+};
+
+/**
+ * A multiple identifier response mapping `A` to 1 and `C` to 0.5.
+ */
+const choices: ResponseDeclaration = {
+  baseType: "identifier",
+  cardinality: "multiple",
+  correct: Option.none(),
+  defaultValue: Option.none(),
+  identifier: "CHOICES",
+  mapping: Option.some({
+    defaultValue: 0,
+    entries: [
+      { caseSensitive: false, key: { baseType: "identifier", value: "A" }, value: 1 },
+      { caseSensitive: false, key: { baseType: "identifier", value: "C" }, value: 0.5 },
+    ],
+    lowerBound: Option.none(),
+    upperBound: Option.none(),
+  }),
+};
+
+/**
+ * A single pair response mapping the pair `A B` to 1.
+ */
+const paired: ResponseDeclaration = {
+  baseType: "pair",
+  cardinality: "single",
+  correct: Option.none(),
+  defaultValue: Option.none(),
+  identifier: "PAIRED",
+  mapping: Option.some({
+    defaultValue: 0,
+    entries: [{ caseSensitive: false, key: { baseType: "pair", value: ["A", "B"] }, value: 1 }],
+    lowerBound: Option.none(),
+    upperBound: Option.none(),
+  }),
+};
+
+/**
  * A single float outcome with no default, as `SCORE` is declared.
  */
 const score: OutcomeDeclaration = {
@@ -102,6 +180,10 @@ const item: Item = {
   responses: new Map([
     ["RESPONSE", response],
     ["OPEN", open],
+    ["CITY", city],
+    ["BOUNDED", bounded],
+    ["CHOICES", choices],
+    ["PAIRED", paired],
   ]),
   title: "Evaluate",
   unsupported: [],
@@ -134,6 +216,49 @@ const variable = (identifier: string): Expression => ({ identifier, kind: "varia
  * @returns The expression.
  */
 const base = (value: Value): Expression => ({ kind: "base-value", value });
+
+/**
+ * Construct a response value of the base type and cardinality its declaration in {@link item} has.
+ *
+ * @param identifier The response.
+ * @param values Its values, none for NULL.
+ * @returns The value.
+ */
+const answerOf = (identifier: string, values: readonly Single[]): Value => {
+  const declaration = item.responses.get(identifier);
+  assert.isDefined(declaration);
+
+  return { baseType: declaration.baseType, cardinality: declaration.cardinality, values };
+};
+
+/**
+ * Give the value of a `qti-map-response` of one response.
+ *
+ * @param identifier The response.
+ * @param values Its values, none for NULL.
+ * @returns The mapped value.
+ */
+const mapped = (identifier: string, values: readonly Single[]): Value =>
+  evaluateExpression({ identifier, kind: "map-response" }, item, {
+    ...variablesOf(identifierValue("A")),
+    responses: { [identifier]: answerOf(identifier, values) },
+  });
+
+/**
+ * Construct a single string.
+ *
+ * @param value The text.
+ * @returns The single.
+ */
+const stringOf = (value: string): Single => ({ baseType: "string", value });
+
+/**
+ * Construct a single identifier.
+ *
+ * @param value The identifier.
+ * @returns The single.
+ */
+const identifierOf = (value: string): Single => ({ baseType: "identifier", value });
 
 /**
  * Construct a `qti-set-outcome-value`.
@@ -331,5 +456,46 @@ describe("evaluateExpression", () => {
     assert.throws(() => {
       evaluateExpression(variable("constructor"), item, variablesOf(identifierValue("A")));
     }, UnknownIdentifierError);
+  });
+});
+
+describe("map-response", () => {
+  it("[I-9b] maps BG010's answers: YORK and york to 0.5, Paris and NULL to 0", () => {
+    assert.deepStrictEqual(mapped("CITY", [stringOf("YORK")]), floatValue(0.5));
+    assert.deepStrictEqual(mapped("CITY", [stringOf("york")]), floatValue(0.5));
+    assert.deepStrictEqual(mapped("CITY", [stringOf("Paris")]), floatValue(0));
+    assert.deepStrictEqual(mapped("CITY", []), floatValue(0));
+  });
+
+  it("[I-9b] the bounds clamp a single value, and a NULL response's 0 too", () => {
+    assert.deepStrictEqual(mapped("BOUNDED", [stringOf("york")]), floatValue(0.4));
+    assert.deepStrictEqual(mapped("BOUNDED", []), floatValue(0.25));
+  });
+
+  it("[I-9b] a multiple response sums its distinct values, each once", () => {
+    const answer = [identifierOf("A"), identifierOf("A"), identifierOf("C")];
+
+    assert.deepStrictEqual(mapped("CHOICES", answer), floatValue(1.5));
+  });
+
+  it("[I-9b] an identifier key keeps its case, and a pair key matches in either order", () => {
+    assert.deepStrictEqual(
+      mapped("CHOICES", [identifierOf("a"), identifierOf("C")]),
+      floatValue(0.5),
+    );
+    assert.deepStrictEqual(
+      mapped("PAIRED", [{ baseType: "pair", value: ["B", "A"] }]),
+      floatValue(1),
+    );
+  });
+
+  it("refuses to map a response with no mapping", () => {
+    assert.throws(() => {
+      evaluateExpression(
+        { identifier: "OPEN", kind: "map-response" },
+        item,
+        variablesOf(identifierValue("A")),
+      );
+    }, UnmappedResponseError);
   });
 });
