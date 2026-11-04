@@ -1554,6 +1554,33 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/guards/processi
     }),
   );
 
+  suite.effect("P32 refuses an identifier literal that keeps its padding", () =>
+    Effect.gen(function* untrimmedLiteral() {
+      const prepared = yield* prepareBody(
+        '<qti-set-outcome-value identifier="completionStatus"><qti-base-value base-type="identifier"> completed </qti-base-value></qti-set-outcome-value>',
+        itemOptions,
+      );
+      const built = yield* processed(prepared);
+      const literals = of(built, processing.relations.LiteralIdentifier);
+      assert.deepStrictEqual(
+        literals.map((row) => row.value),
+        ["completed"],
+      );
+      assert.strictEqual(
+        yield* guardRefusal(
+          withRows(
+            built,
+            processing.relations.LiteralIdentifier,
+            // SAFETY: the brand only marks the column's type; the guard under test reads the text.
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+            literals.map((row) => ({ ...row, value: " completed " as typeof row.value })),
+          ),
+        ),
+        "P32",
+      );
+    }),
+  );
+
   suite.effect("passes the rows of response.xml and padded-processing.xml", () =>
     Effect.gen(function* soundRows() {
       for (const name of ["response", "padded-processing"] as const) {
@@ -1719,6 +1746,21 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts read
     }),
   );
 
+  suite.effect("reads the padded-literal package with its identifier trimmed", () =>
+    Effect.gen(function* paddedLiteral() {
+      const read = yield* readRows(yield* materializeProcessing("padded-literal"));
+
+      const values = Rows.of(read.rows, processing.relations.LiteralIdentifier).map((row) =>
+        String(row.value),
+      );
+
+      assert.include(values, "ChoiceA");
+      for (const value of values) {
+        assert.strictEqual(value, value.trim());
+      }
+    }),
+  );
+
   suite.effect("refuses a boolean qti-base-value outside true and false under P7", () =>
     Effect.gen(function* outsideLiteral() {
       for (const spelling of ["yes", "1", "TRUE"]) {
@@ -1745,6 +1787,55 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts read
       assert.deepStrictEqual(
         of(built, processing.relations.LiteralBoolean).map((row) => row.value),
         ["false"],
+      );
+    }),
+  );
+
+  suite.effect("reads a padded boolean qti-base-value as its handle", () =>
+    Effect.gen(function* paddedBoolean() {
+      const prepared = yield* prepareBody(
+        '<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="boolean"> true </qti-base-value></qti-set-outcome-value>',
+        { language: "outcome", mode: "test", rootKind: "test" },
+      );
+      const built = yield* processed(prepared);
+
+      assert.deepStrictEqual(
+        of(built, processing.relations.LiteralBoolean).map((row) => row.value),
+        ["true"],
+      );
+    }),
+  );
+
+  suite.effect("reads a padded identifier qti-base-value trimmed and a string one as written", () =>
+    Effect.gen(function* paddedLiterals() {
+      const identifiers = [
+        [" completed ", "completed"],
+        ["\n    ChoiceA\n  ", "ChoiceA"],
+      ];
+      for (const [written, read] of identifiers) {
+        const prepared = yield* prepareBody(
+          `<qti-set-outcome-value identifier="completionStatus"><qti-base-value base-type="identifier">${written}</qti-base-value></qti-set-outcome-value>`,
+          itemOptions,
+        );
+        const built = yield* processed(prepared);
+
+        assert.deepStrictEqual(
+          of(built, processing.relations.LiteralIdentifier).map((row) => String(row.value)),
+          [read],
+        );
+      }
+
+      const prepared = yield* prepareBody(
+        '<qti-set-outcome-value identifier="SCORE"><qti-string-match case-sensitive="true"><qti-base-value base-type="string"> a </qti-base-value><qti-base-value base-type="string">a</qti-base-value></qti-string-match></qti-set-outcome-value>',
+        { language: "outcome", mode: "test", rootKind: "test" },
+      );
+      const built = yield* processed(prepared);
+
+      assert.deepStrictEqual(
+        of(built, processing.relations.LiteralString)
+          .map((row) => row.value)
+          .toSorted(),
+        [" a ", "a"],
       );
     }),
   );

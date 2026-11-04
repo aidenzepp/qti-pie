@@ -97,7 +97,10 @@ const detached = (doc: XmlDocument, element: Element): XmlDocument => {
   };
 };
 
-const outcomeOf = (identifier: string, baseType: "boolean" | "float" | "integer") => {
+const outcomeOf = (
+  identifier: string,
+  baseType: "boolean" | "float" | "identifier" | "integer",
+) => {
   const entry: DeclarationEntry = {
     areaMapping: false,
     identifier,
@@ -249,6 +252,26 @@ layer(TestLayer, { excludeTestServices: true })("renderTree on processing docume
         assert.strictEqual(forms.rendered, forms.read);
         assert.include(forms.rendered, `figures="${figures}"`);
       }
+    }),
+  );
+
+  suite.effect("renders a padded identifier qti-base-value as written", () =>
+    Effect.gen(function* paddedIdentifier() {
+      const doc = yield* readXml(
+        new TextEncoder().encode(
+          `<qti-response-processing xmlns="${asiNamespace}"><qti-set-outcome-value identifier="S"><qti-base-value base-type="identifier"> completed </qti-base-value></qti-set-outcome-value></qti-response-processing>`,
+        ),
+      );
+      const forms = yield* roundTrip(doc, "qti-response-processing", {
+        env: withDeclarations(emptyEnvironment("item"), [outcomeOf("S", "identifier")]),
+        language: "response",
+        mode: "item",
+        rootKind: "item",
+      });
+
+      assert.strictEqual(forms.rendered, forms.read);
+      assert.strictEqual(forms.rendered, forms.oracle);
+      assert.include(forms.rendered, "> completed <");
     }),
   );
 

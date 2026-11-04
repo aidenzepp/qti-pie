@@ -6,7 +6,7 @@
  */
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { Effect, Predicate, Schema } from "effect";
-import { Rows } from "#qti/import/tree.ts";
+import { Rows, valueText } from "#qti/import/tree.ts";
 import { expressionKinds } from "#qti/schema/kinds/asi.ts";
 import { Edge, EntityReference, Node, TextNode, vocabularies, Ws } from "#qti/schema/node.ts";
 import * as processing from "#qti/schema/processing.ts";
@@ -299,16 +299,22 @@ const literalArms: readonly AnyRelation[] = Object.values<unknown>(processing.re
 );
 
 /**
- * `P32` of the literals: each arm row holds the concatenation of its node's text children.
+ * `P32` of the literals: each arm row holds the concatenation of its node's text children with
+ * outer whitespace removed for every base type but string (decision 157).
  */
 const literalCopy = (rows: Rows, index: Index): Finding => {
+  const baseTypes = new Map(
+    Rows.of(rows, processing.Literal).map((row) => [row.id, row.baseType] as const),
+  );
   for (const relation of literalArms) {
     for (const row of rows.get(relation) ?? []) {
       if (!isArmRow(row)) {
         continue;
       }
 
-      const expected = contentOf(index, row.id);
+      const content = contentOf(index, row.id);
+      const baseType = baseTypes.get(row.id);
+      const expected = baseType === undefined ? content : valueText(baseType, content);
       if (row.value !== expected) {
         return refuse(
           "P32",
