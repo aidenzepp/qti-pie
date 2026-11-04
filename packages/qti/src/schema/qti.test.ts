@@ -24,7 +24,7 @@ import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity
 import { recordBindingFit } from "#qti/schema/seed/record-binding-fit.ts";
 import { resourceTypes } from "#qti/schema/seed/resource-types.ts";
 import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
-import { cliProcessTestTimeoutMs } from "#qti/test/settings.ts";
+import { seedSqlProcessTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**
  * The relations the migration seeds, which no role writes: the list is `roles.ts`'s.
@@ -327,7 +327,7 @@ describe("qti", () => {
       assert.strictEqual(tuples(sql, "operator_arity"), operatorArity.length);
       assert.strictEqual(tuples(sql, "operator_arity_max"), operatorArityMax.length);
     },
-    cliProcessTestTimeoutMs,
+    seedSqlProcessTestTimeoutMs,
   );
 
   it("keeps each arity seed distinct by kind and over NodeKind handles", () => {
@@ -369,7 +369,7 @@ describe("qti", () => {
         expected.reduce((total, [, rows]) => total + Math.ceil(rows / 1000), 0),
       );
     },
-    cliProcessTestTimeoutMs,
+    seedSqlProcessTestTimeoutMs,
   );
 
   it(
@@ -391,7 +391,7 @@ describe("qti", () => {
         assert.deepStrictEqual(rest, all.slice(10));
       }
     },
-    cliProcessTestTimeoutMs,
+    3 * seedSqlProcessTestTimeoutMs,
   );
 
   it(
@@ -419,7 +419,7 @@ describe("qti", () => {
       );
       assert.deepStrictEqual(rest, [...all.slice(3, 6), ...all.slice(8)]);
     },
-    cliProcessTestTimeoutMs,
+    2 * seedSqlProcessTestTimeoutMs,
   );
 
   it("seeds the attribute admission and the ancestry steps from the composed registries", () => {

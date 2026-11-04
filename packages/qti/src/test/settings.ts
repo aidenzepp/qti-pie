@@ -111,3 +111,19 @@ export const engineLoadHookTimeoutMs = 26_000;
  * Raise it only on a new measurement recorded here, never to make a run pass.
  */
 export const cutItemRenderTestTimeoutMs = 10_000;
+
+/**
+ * The timeout, in milliseconds, for each spawn of `scripts/seed-sql.ts` that a test makes; a test
+ * that spawns it more than once takes this times its number of spawns.
+ *
+ * Each spawn loads the whole Qti schema, which the CLI start `cliProcessTestTimeoutMs` measures
+ * does not. Measured on 2026-11-03 at `a776f20`, from `packages/qti`, with the printed seed read
+ * to its end: three serial spawns alone took 642, 635 and 673 ms at a one-minute load average of
+ * 20.4 before and after, and three runs of 13 concurrent spawns (vitest's default worker count on
+ * 14 CPUs, `availableParallelism() - 1`) took 1640 to 1740 ms (maximum 1740 ms), 1399 to 1461 ms
+ * and 1498 to 1596 ms, at load averages of 20.4, 20.4 and 20.1 before and 20.4, 20.1 and 20.1
+ * after. The budget is the larger of twice the concurrent maximum (3.5 s) and 10 s, the floor being
+ * twice the default, rounded up to the next second. Raise it only on a new measurement recorded
+ * here, never to make a run pass.
+ */
+export const seedSqlProcessTestTimeoutMs = 10_000;
