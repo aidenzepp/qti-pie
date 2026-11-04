@@ -84,6 +84,8 @@ const textEntry = (response: string): TextEntryInteraction => ({
  * A Choice with a Prompt, bound to `CAPITAL`, whose correct response and mapping key are markers.
  */
 const choice: ChoiceInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
     { content: [text("Paris")], identifier: "A" },
@@ -537,6 +539,24 @@ describe("payload", () => {
     assert.strictEqual(capital.maxChoices, 1n);
     assert.strictEqual(capital.class, "stacked");
     assert.deepStrictEqual(capital.restore, []);
+  });
+
+  it("[Q-2] carries the Choice's aria-label and aria-labelledby as the model holds them", () => {
+    const named: ChoiceInteraction = {
+      ...choice,
+      ariaLabel: Option.some("Pick a city"),
+      ariaLabelledby: Option.some("intro"),
+    };
+
+    for (const interaction of [choice, named]) {
+      const capital = choiceFor(
+        payload(redactItem({ ...item, body: [interaction] }), answering),
+        "CAPITAL",
+      );
+
+      assert.deepStrictEqual(capital.ariaLabel, interaction.ariaLabel);
+      assert.deepStrictEqual(capital.ariaLabelledby, interaction.ariaLabelledby);
+    }
   });
 
   it("[Q-2] [Q-20] [Q-5] with messages, restores the posted strings and autofocuses the first interaction with a message", () => {

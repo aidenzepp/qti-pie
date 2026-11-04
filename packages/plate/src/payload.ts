@@ -159,6 +159,15 @@ export interface ValidationPayload {
  * document order, and the identifiers to show as checked.
  */
 export interface ChoicePayload extends ValidationPayload {
+  /**
+   * The author's `aria-label`, which names the group when there is no Prompt.
+   */
+  readonly ariaLabel: Option.Option<string>;
+  /**
+   * The author's `aria-labelledby`, the ids unscoped, which names the group when there is no
+   * Prompt.
+   */
+  readonly ariaLabelledby: Option.Option<string>;
   readonly cardinality: "multiple" | "single";
   readonly choices: readonly {
     readonly content: readonly PayloadNode[];
@@ -502,6 +511,8 @@ const copyNodes = (nodes: readonly BodyNode[], build: Build): readonly PayloadNo
  */
 const choicePayload = (interaction: ChoiceInteraction, build: Build): ChoicePayload => ({
   ...validationOf(interaction, build),
+  ariaLabel: interaction.ariaLabel,
+  ariaLabelledby: interaction.ariaLabelledby,
   cardinality: interaction.cardinality,
   choices: interaction.choices.map((choice) => ({
     content: copyNodes(choice.content, build),
