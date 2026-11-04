@@ -18,6 +18,9 @@ const effectLogStatement = {
     'ExpressionStatement:matches([expression.type="CallExpression"], [expression.type="YieldExpression"]):has(CallExpression[callee.type="MemberExpression"][callee.object.name="Effect"][callee.property.name=/^log(Trace|Debug|Info|Warning|Error|Fatal)?$/])',
 };
 
+/**
+ * Import specifiers every package refuses: relative paths, and absolute or `file:` paths.
+ */
 const sharedImportPatterns = [
   {
     message: "Use the package's `#<package>/*` import alias instead of a relative source import.",

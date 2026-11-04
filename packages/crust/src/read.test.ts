@@ -54,7 +54,7 @@ it.effect("saxes appends ENTITIES replacement text unnormalized and unparsed", (
 /**
  * One child as a string: an entity reference as `&name;`, text as its value, anything else `-`.
  */
-const describe = (child: Child): string => {
+const describeChild = (child: Child): string => {
   if (child.kind === "entityRef") {
     return `&${child.name};`;
   }
@@ -74,10 +74,24 @@ const names = (node: Element): readonly string[] =>
 const attr = (node: Element, qname: string): string | undefined =>
   node.attributes.find((attribute) => attribute.qname === qname)?.value;
 
+/**
+ * Read one file under `fixtures/`, named relative to it.
+ */
+const readFixtureBytes = (relative: string) =>
+  Effect.gen(function* readFixtureFile() {
+    const fs = yield* FileSystem.FileSystem;
+
+    return yield* fs.readFile(path.join(import.meta.dirname, "fixtures", relative));
+  });
+
+/**
+ * Read `text` as UTF-8 bytes.
+ */
+const readText = (text: string) => readXml(new TextEncoder().encode(text));
+
 layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
   /**
-   * The expected outcome of each file under `fixtures/dtd/`: the attribute `x` of the root, a child
-   * element name, or the refusal.
+   * The attribute `x` of the root that each of these files under `fixtures/dtd/` reads to.
    */
   const dtdFixtures: readonly (readonly [string, string])[] = [
     ["attr-ws.xml", "a b"],
@@ -88,8 +102,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
   for (const [file, expected] of dtdFixtures) {
     suite.effect(`reads dtd/${file} with x as ${JSON.stringify(expected)}`, () =>
       Effect.gen(function* readDtd() {
-        const fs = yield* FileSystem.FileSystem;
-        const bytes = yield* fs.readFile(path.join(import.meta.dirname, "fixtures/dtd", file));
+        const bytes = yield* readFixtureBytes(`dtd/${file}`);
         const document = yield* readXml(bytes);
 
         assert.strictEqual(attr(document.root, "x"), expected);
@@ -99,8 +112,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
 
   suite.effect("reads dtd/markup.xml with a b element under a", () =>
     Effect.gen(function* readMarkup() {
-      const fs = yield* FileSystem.FileSystem;
-      const bytes = yield* fs.readFile(path.join(import.meta.dirname, "fixtures/dtd/markup.xml"));
+      const bytes = yield* readFixtureBytes("dtd/markup.xml");
       const document = yield* readXml(bytes);
 
       assert.deepStrictEqual(
@@ -114,8 +126,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
 
   suite.effect("refuses dtd/attr-lt.xml", () =>
     Effect.gen(function* refuseAttrLt() {
-      const fs = yield* FileSystem.FileSystem;
-      const bytes = yield* fs.readFile(path.join(import.meta.dirname, "fixtures/dtd/attr-lt.xml"));
+      const bytes = yield* readFixtureBytes("dtd/attr-lt.xml");
       const error = yield* Effect.flip(readXml(bytes));
 
       assert.strictEqual(error._tag, "WellFormednessError");
@@ -126,7 +137,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
     Effect.gen(function* readTypes() {
       const text =
         '<!DOCTYPE a [<!ATTLIST a i ID " p  q " e (u|v) " u " d NMTOKENS "  m  &amp;n  &z;  " c CDATA " k  ">]><a e=" v  " c=" k  "/>';
-      const { root } = yield* readXml(new TextEncoder().encode(text));
+      const { root } = yield* readText(text);
 
       assert.deepStrictEqual(names(root), ["e", "c", "i", "d"]);
       assert.strictEqual(attr(root, "e"), "v");
@@ -147,7 +158,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
     Effect.gen(function* readMixed() {
       const text =
         '<?xml version="1.0"?><!--a--><?t d?><r>x<![CDATA[<y>]]>z&amp;w<!--c--><e/></r><?u v?>';
-      const document: XmlDocument = yield* readXml(new TextEncoder().encode(text));
+      const document: XmlDocument = yield* readText(text);
 
       assert.deepStrictEqual(document.prolog, [
         { kind: "comment", text: "a" },
@@ -165,7 +176,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
 
   suite.effect("reports the position of a well-formedness error", () =>
     Effect.gen(function* readBroken() {
-      const error = yield* Effect.flip(readXml(new TextEncoder().encode("<a>\n  </b>")));
+      const error = yield* Effect.flip(readText("<a>\n  </b>"));
 
       assert.strictEqual(error._tag, "WellFormednessError");
       assert.strictEqual(error._tag === "WellFormednessError" && error.line, 2);
@@ -176,7 +187,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
   suite.effect("flags an error after an entity substitution", () =>
     Effect.gen(function* readSubstituted() {
       const text = '<!DOCTYPE a [<!ENTITY e "<b>">]><a>&e;</c></a>';
-      const error = yield* Effect.flip(readXml(new TextEncoder().encode(text)));
+      const error = yield* Effect.flip(readText(text));
 
       assert.strictEqual(error._tag === "WellFormednessError" && error.afterSubstitution, true);
     }),
@@ -186,7 +197,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
     Effect.gen(function* refuseStandalone() {
       const text =
         '<?xml version="1.0" standalone="yes"?><!DOCTYPE a SYSTEM "a.dtd"><a>&undeclared;</a>';
-      const error = yield* Effect.flip(readXml(new TextEncoder().encode(text)));
+      const error = yield* Effect.flip(readText(text));
 
       assert.strictEqual(error._tag, "ReaderRefusal");
       assert.strictEqual(error._tag === "ReaderRefusal" && error.rule, "undeclared-entity");
@@ -196,10 +207,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
 
   suite.effect("refuses bad/07-undeclared-entity.xml under the named rule", () =>
     Effect.gen(function* refuseNbsp() {
-      const fs = yield* FileSystem.FileSystem;
-      const bytes = yield* fs.readFile(
-        path.join(import.meta.dirname, "fixtures/bad/07-undeclared-entity.xml"),
-      );
+      const bytes = yield* readFixtureBytes("bad/07-undeclared-entity.xml");
       const error = yield* Effect.flip(readXml(bytes));
 
       assert.strictEqual(error._tag === "ReaderRefusal" && error.rule, "undeclared-entity");
@@ -211,14 +219,14 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
     Effect.gen(function* readHidden() {
       const text =
         '<!DOCTYPE a SYSTEM "a.dtd"><a x="&p;&#xE000;&q;"><!--&n;--><![CDATA[&m;]]>\uE000&p;&#xE001;&q;&p;</a>';
-      const { root } = yield* readXml(new TextEncoder().encode(text));
+      const { root } = yield* readText(text);
 
       assert.deepStrictEqual(root.attributes[0]?.references, [
         { name: "p", offset: 0 },
         { name: "q", offset: 4 },
       ]);
       assert.strictEqual(root.attributes[0]?.value, "&p;\uE000&q;");
-      assert.deepStrictEqual(root.children.map(describe), [
+      assert.deepStrictEqual(root.children.map(describeChild), [
         "-",
         "&m;",
         "\uE000",
@@ -232,9 +240,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
 
   suite.effect("reads a document nested 256 elements deep", () =>
     Effect.gen(function* readDeepest() {
-      const { root } = yield* readXml(
-        new TextEncoder().encode("<a>".repeat(256) + "</a>".repeat(256)),
-      );
+      const { root } = yield* readText("<a>".repeat(256) + "</a>".repeat(256));
 
       let depth = 1;
       let node = root;
@@ -251,9 +257,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
 
   suite.effect("refuses a document nested 257 elements deep under rule element-depth", () =>
     Effect.gen(function* refuseTooDeep() {
-      const error = yield* Effect.flip(
-        readXml(new TextEncoder().encode("<a>".repeat(257) + "</a>".repeat(257))),
-      );
+      const error = yield* Effect.flip(readText("<a>".repeat(257) + "</a>".repeat(257)));
 
       assert.strictEqual(error._tag, "ReaderRefusal");
       assert.strictEqual(error._tag === "ReaderRefusal" ? error.rule : undefined, "element-depth");
@@ -297,8 +301,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
   for (const [file, tag] of refused) {
     suite.effect(`refuses bad/${file}`, () =>
       Effect.gen(function* refuseBad() {
-        const fs = yield* FileSystem.FileSystem;
-        const bytes = yield* fs.readFile(path.join(import.meta.dirname, "fixtures/bad", file));
+        const bytes = yield* readFixtureBytes(`bad/${file}`);
         const error = yield* Effect.flip(readXml(bytes));
 
         assert.strictEqual(error._tag, tag);
