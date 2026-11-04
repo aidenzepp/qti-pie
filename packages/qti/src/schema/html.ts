@@ -6,6 +6,7 @@
  * the composed schema, not written here.
  */
 import { contained, on, relation, str, uuid } from "@bjornpagen/grizzle";
+import { EmbedSourceUri, LongDescriptionUri } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -24,7 +25,7 @@ export const Img = relation(
   {
     alt: str.regex(patterns.xsString, patterns.xsStringFlags),
     id: uuid,
-    src: str.regex(patterns.anyUri),
+    src: EmbedSourceUri,
   },
   ["id"],
 );
@@ -32,11 +33,9 @@ export const Img = relation(
 /**
  * An image's `longdesc`, when written.
  */
-export const ImgLongdesc = relation(
-  "ImgLongdesc",
-  { node: uuid, value: str.regex(patterns.anyUri) },
-  ["node"],
-);
+export const ImgLongdesc = relation("ImgLongdesc", { node: uuid, value: LongDescriptionUri }, [
+  "node",
+]);
 
 /**
  * An image's `height`, when written.

@@ -2,6 +2,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as choices from "#qti/schema/choices.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
@@ -295,23 +296,46 @@ describe("interactions/associate", () => {
     }
   });
 
+  it("holds the association and match bounds as integers only, with no lexical relation or column beside them", () => {
+    for (const name of [
+      "AssociateMaxAssociations",
+      "AssociateMinAssociations",
+      "GraphicAssociateMaxAssociations",
+      "MatchMaxAssociations",
+      "MatchMinAssociations",
+    ]) {
+      assert.notInclude(Object.keys(relations), name);
+    }
+
+    for (const marker of [
+      relations.GraphicAssociateMinAssociations,
+      relations.SimpleAssociableChoiceMatchMin,
+      relations.AssociableHotspotMatchMin,
+    ]) {
+      assert.deepStrictEqual(Object.keys(marker.fields), ["node"], marker.name);
+    }
+
+    for (const arm of [relations.SimpleAssociableChoice, relations.AssociableHotspot]) {
+      const fields = Object.keys(arm.fields);
+
+      assert.include(fields, "matchMaxN");
+      assert.include(fields, "matchMinN");
+      assert.notInclude(fields, "matchMax", arm.name);
+    }
+  });
+
   it("contains every marker and optional value into the arm it belongs to", () => {
     const owners = [
       [relations.DeclaredAssociateShuffle, relations.AssociateInteraction],
       [relations.DeclaredAssociateMaxAssociations, relations.AssociateInteraction],
       [relations.DeclaredAssociateMinAssociations, relations.AssociateInteraction],
-      [relations.AssociateMaxAssociations, relations.AssociateInteraction],
-      [relations.AssociateMinAssociations, relations.AssociateInteraction],
       [relations.DeclaredMatchShuffle, relations.MatchInteraction],
       [relations.DeclaredMatchMaxAssociations, relations.MatchInteraction],
       [relations.DeclaredMatchMinAssociations, relations.MatchInteraction],
-      [relations.MatchMaxAssociations, relations.MatchInteraction],
-      [relations.MatchMinAssociations, relations.MatchInteraction],
       [relations.MatchMinSelectionsMessage, relations.MatchInteraction],
       [relations.MatchMaxSelectionsMessage, relations.MatchInteraction],
       [relations.MatchFirstColumnHeader, relations.MatchInteraction],
       [relations.DeclaredGraphicAssociateMaxAssociations, relations.GraphicAssociateInteraction],
-      [relations.GraphicAssociateMaxAssociations, relations.GraphicAssociateInteraction],
       [relations.GraphicAssociateMinAssociations, relations.GraphicAssociateInteraction],
       [relations.SimpleAssociableChoiceFixed, relations.SimpleAssociableChoice],
       [relations.SimpleAssociableChoiceShowHide, relations.SimpleAssociableChoice],
@@ -328,5 +352,34 @@ describe("interactions/associate", () => {
       assert.deepStrictEqual(owned[0]?.left, ["node"]);
       assert.deepStrictEqual(owned[0]?.right, ["id"]);
     }
+  });
+
+  it("types its boolean, show-hide, orientation and format columns as closedId of their rosters", () => {
+    assert.strictEqual(relations.AssociateInteraction.fields.shuffle.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.MatchInteraction.fields.shuffle.roster, rosters.XsBoolean);
+    assert.strictEqual(
+      relations.SimpleAssociableChoiceFixed.fields.value.roster,
+      rosters.XsBoolean,
+    );
+    assert.strictEqual(
+      relations.SimpleAssociableChoiceShowHide.fields.value.roster,
+      rosters.ShowHide,
+    );
+    assert.strictEqual(relations.AssociableHotspot.fields.showHide.roster, rosters.ShowHide);
+  });
+});
+
+describe("contracts (interactions/associate)", () => {
+  it("types SimpleAssociableChoice.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(
+      associate.SimpleAssociableChoice.fields.identifier.name,
+      contracts.ChoiceIdentifier.name,
+    );
+  });
+  it("types AssociableHotspot.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(
+      associate.AssociableHotspot.fields.identifier.name,
+      contracts.ChoiceIdentifier.name,
+    );
   });
 });

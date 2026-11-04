@@ -1,6 +1,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as choices from "#qti/schema/choices.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
@@ -233,17 +234,38 @@ describe("interactions/gap", () => {
     );
   });
 
+  it("holds the association and match bounds as integers only, with no lexical relation or column beside them", () => {
+    for (const name of ["GapMatchMaxAssociations", "GraphicGapMatchMaxAssociations"]) {
+      assert.notInclude(Object.keys(relations), name);
+    }
+
+    for (const marker of [
+      relations.GapMatchMinAssociations,
+      relations.GraphicGapMatchMinAssociations,
+      relations.GapTextMatchMin,
+      relations.GapImgMatchMin,
+    ]) {
+      assert.deepStrictEqual(Object.keys(marker.fields), ["node"], marker.name);
+    }
+
+    for (const arm of [relations.GapText, relations.GapImg]) {
+      const fields = Object.keys(arm.fields);
+
+      assert.include(fields, "matchMaxN");
+      assert.include(fields, "matchMinN");
+      assert.notInclude(fields, "matchMax", arm.name);
+    }
+  });
+
   it("contains every marker and optional value into the arm it belongs to", () => {
     const owners = [
       [relations.DeclaredGapMatchShuffle, relations.GapMatchInteraction],
       [relations.DeclaredGapMatchMaxAssociations, relations.GapMatchInteraction],
-      [relations.GapMatchMaxAssociations, relations.GapMatchInteraction],
       [relations.GapMatchMinAssociations, relations.GapMatchInteraction],
       [relations.GapMatchMinSelectionsMessage, relations.GapMatchInteraction],
       [relations.GapMatchMaxSelectionsMessage, relations.GapMatchInteraction],
       [relations.GapMatchChoicesContainerWidth, relations.GapMatchInteraction],
       [relations.DeclaredGraphicGapMatchMaxAssociations, relations.GraphicGapMatchInteraction],
-      [relations.GraphicGapMatchMaxAssociations, relations.GraphicGapMatchInteraction],
       [relations.GraphicGapMatchMinAssociations, relations.GraphicGapMatchInteraction],
       [relations.GraphicGapMatchMinSelectionsMessage, relations.GraphicGapMatchInteraction],
       [relations.GraphicGapMatchMaxSelectionsMessage, relations.GraphicGapMatchInteraction],
@@ -266,5 +288,37 @@ describe("interactions/gap", () => {
       assert.deepStrictEqual(owned[0]?.left, ["node"]);
       assert.deepStrictEqual(owned[0]?.right, ["id"]);
     }
+  });
+
+  it("types its boolean, show-hide, orientation and format columns as closedId of their rosters", () => {
+    assert.strictEqual(relations.GapMatchInteraction.fields.shuffle.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.Gap.fields.required.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.Gap.fields.showHide.roster, rosters.ShowHide);
+    assert.strictEqual(relations.GapText.fields.showHide.roster, rosters.ShowHide);
+    assert.strictEqual(relations.GapImg.fields.showHide.roster, rosters.ShowHide);
+  });
+});
+
+describe("contracts (interactions/gap)", () => {
+  it("types Gap.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(gap.Gap.fields.identifier.name, contracts.ChoiceIdentifier.name);
+  });
+  it("types GapText.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(gap.GapText.fields.identifier.name, contracts.ChoiceIdentifier.name);
+  });
+  it("types GapImg.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(gap.GapImg.fields.identifier.name, contracts.ChoiceIdentifier.name);
+  });
+  it("types GapMatchChoicesContainerWidth.value ContainerWidth", () => {
+    assert.strictEqual(
+      gap.GapMatchChoicesContainerWidth.fields.value.name,
+      contracts.ContainerWidth.name,
+    );
+  });
+  it("types GraphicGapMatchChoicesContainerWidth.value ContainerWidth", () => {
+    assert.strictEqual(
+      gap.GraphicGapMatchChoicesContainerWidth.fields.value.name,
+      contracts.ContainerWidth.name,
+    );
   });
 });

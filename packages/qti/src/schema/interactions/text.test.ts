@@ -1,5 +1,6 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as choices from "#qti/schema/choices.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
@@ -166,24 +167,21 @@ describe("interactions/text", () => {
       patterns.xsInt,
     );
     assert.strictEqual(
-      relations.TextEntryExpectedLength.fields.value.pattern.source,
+      relations.TextEntryExpectedLength.fields.value.base.pattern.source,
       patterns.xsNonNegativeInteger,
     );
     assert.strictEqual(
-      relations.ExtendedTextMaxStrings.fields.value.pattern.source,
+      relations.ExtendedTextMaxStrings.fields.value.base.pattern.source,
       patterns.xsNonNegativeInteger,
     );
     assert.strictEqual(
-      relations.ExtendedTextExpectedLines.fields.value.pattern.source,
+      relations.ExtendedTextExpectedLines.fields.value.base.pattern.source,
       patterns.xsNonNegativeInteger,
     );
   });
 
   it("types extended-text format as the enumeration and text-entry format as free text", () => {
-    assert.strictEqual(
-      relations.ExtendedTextInteraction.fields.format.pattern.source,
-      patterns.textFormat,
-    );
+    assert.strictEqual(relations.ExtendedTextInteraction.fields.format.roster, rosters.TextFormat);
     assert.strictEqual(
       relations.TextEntryFormat.fields.value.pattern.source,
       patterns.xsNormalizedString,
@@ -270,5 +268,52 @@ describe("interactions/text", () => {
     assert.deepStrictEqual(Object.keys(relations.QtiLabel.fields), ["id"]);
     assert.notProperty(relations, "Label");
     assert.notProperty(relations, "InlineChoiceTemplate");
+  });
+
+  it("types its boolean, show-hide, orientation and format columns as closedId of their rosters", () => {
+    assert.strictEqual(relations.InlineChoiceInteraction.fields.required.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.InlineChoiceInteraction.fields.shuffle.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.InlineChoice.fields.fixed.roster, rosters.XsBoolean);
+    assert.strictEqual(relations.InlineChoice.fields.showHide.roster, rosters.ShowHide);
+    assert.strictEqual(relations.ExtendedTextInteraction.fields.format.roster, rosters.TextFormat);
+  });
+});
+
+describe("contracts (interactions/text)", () => {
+  it("types InlineChoice.identifier ChoiceIdentifier", () => {
+    assert.strictEqual(text.InlineChoice.fields.identifier.name, contracts.ChoiceIdentifier.name);
+  });
+  it("types InlineChoiceInteraction.minChoices ChoiceCount", () => {
+    assert.strictEqual(
+      text.InlineChoiceInteraction.fields.minChoices.name,
+      contracts.ChoiceCount.name,
+    );
+  });
+  it("types TextEntryExpectedLength.value ExpectedLength", () => {
+    assert.strictEqual(
+      text.TextEntryExpectedLength.fields.value.name,
+      contracts.ExpectedLength.name,
+    );
+  });
+  it("types ExtendedTextExpectedLength.value ExpectedLength", () => {
+    assert.strictEqual(
+      text.ExtendedTextExpectedLength.fields.value.name,
+      contracts.ExpectedLength.name,
+    );
+  });
+  it("types ExtendedTextExpectedLines.value ExpectedLines", () => {
+    assert.strictEqual(
+      text.ExtendedTextExpectedLines.fields.value.name,
+      contracts.ExpectedLines.name,
+    );
+  });
+  it("types ExtendedTextInteraction.minStrings StringCount", () => {
+    assert.strictEqual(
+      text.ExtendedTextInteraction.fields.minStrings.name,
+      contracts.StringCount.name,
+    );
+  });
+  it("types ExtendedTextMaxStrings.value StringCount", () => {
+    assert.strictEqual(text.ExtendedTextMaxStrings.fields.value.name, contracts.StringCount.name);
   });
 });

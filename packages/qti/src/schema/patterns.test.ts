@@ -13,7 +13,6 @@ const fields = [
   ["ncNameOrEmpty", () => str.regex(patterns.ncNameOrEmpty)],
   ["qName", () => str.regex(patterns.qName)],
   ["encName", () => str.regex(patterns.encName)],
-  ["xsBoolean", () => str.regex(patterns.xsBoolean)],
   ["xsNonNegativeInteger", () => str.regex(patterns.xsNonNegativeInteger)],
   ["xsInteger", () => str.regex(patterns.xsInteger)],
   ["xsDouble", () => str.regex(patterns.xsDouble)],
@@ -30,9 +29,9 @@ const fields = [
     () => str.regex(patterns.nonWhitespaceText, patterns.nonWhitespaceTextFlags),
   ],
   ["uncollapsed", () => str.regex(patterns.uncollapsed, patterns.uncollapsedFlags)],
+  ["nonCanonicalInteger", () => str.regex(patterns.nonCanonicalInteger)],
   ["wildcard", () => str.regex(patterns.wildcard, patterns.wildcardFlags)],
   ["xmlVersion", () => str.regex(patterns.xmlVersion)],
-  ["yesNo", () => str.regex(patterns.yesNo)],
   ["base64", () => str.regex(patterns.base64)],
   ["hrefInPackage", () => str.regex(patterns.hrefInPackage)],
   ["anyUri", () => str.regex(patterns.anyUri)],
@@ -41,15 +40,6 @@ const fields = [
   ["mimeType", () => str.regex(patterns.mimeType)],
   ["lengthDType", () => str.regex(patterns.lengthDType)],
   ["resourceType", () => str.regex(patterns.resourceType)],
-  ["cpSchema", () => str.regex(patterns.cpSchema)],
-  ["schemaVersion", () => str.regex(patterns.schemaVersion)],
-  ["qmdInteractionType", () => str.regex(patterns.qmdInteractionType)],
-  ["qmdFeedbackType", () => str.regex(patterns.qmdFeedbackType)],
-  ["qmdScoringMode", () => str.regex(patterns.qmdScoringMode)],
-  ["booleanLiteral", () => str.regex(patterns.booleanLiteral)],
-  ["externalScored", () => str.regex(patterns.externalScored)],
-  ["orientation", () => str.regex(patterns.orientation)],
-  ["showHide", () => str.regex(patterns.showHide)],
   ["point", () => str.regex(patterns.point)],
   ["pair", () => str.regex(patterns.pair)],
   ["toolString", () => str.regex(patterns.toolString, patterns.toolStringFlags)],
@@ -73,33 +63,7 @@ const fields = [
   ["coordsCircle", () => str.regex(patterns.coordsCircle)],
   ["coordsPoly", () => str.regex(patterns.coordsPoly)],
   ["coordsAny", () => str.regex(patterns.coordsAny)],
-  ["ariaRole", () => str.regex(patterns.ariaRole)],
-  ["ariaAutocomplete", () => str.regex(patterns.ariaAutocomplete)],
-  ["ariaChecked", () => str.regex(patterns.ariaChecked)],
-  ["ariaCurrent", () => str.regex(patterns.ariaCurrent)],
-  ["ariaExpanded", () => str.regex(patterns.ariaExpanded)],
-  ["ariaInvalid", () => str.regex(patterns.ariaInvalid)],
-  ["ariaLive", () => str.regex(patterns.ariaLive)],
-  ["ariaOrientation", () => str.regex(patterns.ariaOrientation)],
-  ["ariaPressed", () => str.regex(patterns.ariaPressed)],
-  ["ariaSelected", () => str.regex(patterns.ariaSelected)],
-  ["ariaSort", () => str.regex(patterns.ariaSort)],
   ["ariaRelevantList", () => str.regex(patterns.ariaRelevantList)],
-  ["autoplayEnum", () => str.regex(patterns.autoplayEnum)],
-  ["loopEnum", () => str.regex(patterns.loopEnum)],
-  ["mutedEnum", () => str.regex(patterns.mutedEnum)],
-  ["controlsEnum", () => str.regex(patterns.controlsEnum)],
-  ["defaultEnum", () => str.regex(patterns.defaultEnum)],
-  ["dirEnum", () => str.regex(patterns.dirEnum)],
-  ["suppressTts", () => str.regex(patterns.suppressTts)],
-  ["valuetype", () => str.regex(patterns.valuetype)],
-  ["scope", () => str.regex(patterns.scope)],
-  ["align", () => str.regex(patterns.align)],
-  ["valign", () => str.regex(patterns.valign)],
-  ["preload", () => str.regex(patterns.preload)],
-  ["crossorigin", () => str.regex(patterns.crossorigin)],
-  ["trackKind", () => str.regex(patterns.trackKind)],
-  ["textFormat", () => str.regex(patterns.textFormat)],
 ] as const;
 
 /**
@@ -125,16 +89,91 @@ const dashed = (n: number, part: string): string => Array.from({ length: n }, ()
 const subtagTag = (subtags: number): string => `en-${dashed(subtags - 1, "a1")}`;
 
 /**
- * The 74 values of `@role` in `imsqti_asiv3p0p1_v1p0.xsd` lines 24413 to 24486, in the XSD's order.
+ * Every export of `patterns.ts`, sorted: the 53 open, 2 list and 11 media-extension patterns of the
+ * closed-vocabulary classification, `nonCanonicalInteger`, and the `*Flags` constants. A pattern
+ * that a roster replaced is not among them.
  */
-const roles =
-  "article columnheader definition document group heading img list listitem math note presentation region row rowgroup rowheader separator toolbar button checkbox gridcell link log option radio slider spinbutton status tab tabpanel textbox timer listbox radiogroup tablist complementary contentinfo alert alertdialog application banner combobox dialog form grid main marquee menu menubar menuitem menuitemcheckbox menuitemradio navigation progressbar scrollbar search tooltip tree treegrid treeitem searchbox switch term figure code time subscript superscript meter generic insertion deletion strong emphasis".split(
-    " ",
-  );
+const exportNames = [
+  "anyUri",
+  "ariaRelevantList",
+  "base64",
+  "bcp47",
+  "boundedToken",
+  "boundedTokenFlags",
+  "classList",
+  "coords",
+  "coordsAny",
+  "coordsCircle",
+  "coordsEllipse",
+  "coordsPoly",
+  "coordsRect",
+  "drdAccessMode",
+  "drdAccessModeAdapted",
+  "drdAdaptationDetail",
+  "drdAdaptationMediaType",
+  "drdAdaptationType",
+  "drdApiInteroperable",
+  "drdControlFlexibility",
+  "drdDisplayTransformability",
+  "drdEducationalComplexityOfAdaptation",
+  "drdExt",
+  "drdHazard",
+  "encName",
+  "floatOrVariableRef",
+  "hrefInPackage",
+  "identifierList",
+  "intOrIdentifier",
+  "integerList",
+  "integerOrVariableRef",
+  "integerOrVariableString",
+  "lengthDType",
+  "mimeType",
+  "mimeTypeList",
+  "ncName",
+  "ncNameList",
+  "ncNameListOrEmpty",
+  "ncNameOrEmpty",
+  "nonCanonicalInteger",
+  "nonNegativeDouble",
+  "nonWhitespaceText",
+  "nonWhitespaceTextFlags",
+  "pair",
+  "point",
+  "positiveDouble",
+  "positiveInteger",
+  "printfFormat",
+  "qName",
+  "resourceType",
+  "toleranceList",
+  "toolString",
+  "toolStringFlags",
+  "uncollapsed",
+  "uncollapsedFlags",
+  "usageDate",
+  "useEnumExt",
+  "viewList",
+  "whitespaceOnly",
+  "wildcard",
+  "wildcardFlags",
+  "xmlVersion",
+  "xsDecimal",
+  "xsDouble",
+  "xsInt",
+  "xsInteger",
+  "xsLanguage",
+  "xsLanguageOrEmpty",
+  "xsNonNegativeInteger",
+  "xsNormalizedString",
+  "xsNormalizedStringFlags",
+  "xsString",
+  "xsStringFlags",
+  "xsToken",
+  "xsTokenFlags",
+] as const;
 
 describe("patterns", () => {
-  it("roles lists the 74 values", () => {
-    assert.strictEqual(new Set(roles).size, 74);
+  it("exports exactly the open, list and media-extension patterns and their flags", () => {
+    assert.deepStrictEqual(Object.keys(patterns).toSorted(), [...exportNames]);
   });
 
   describe("grizzle builds a relation over each source", () => {
@@ -158,11 +197,6 @@ describe("patterns", () => {
     assert.isTrue(admits(patterns.qName, "u", "imsmd:lom"));
     assert.isTrue(admits(patterns.qName, "u", "lom"));
     assert.isFalse(admits(patterns.qName, "u", "a:b:c"));
-  });
-
-  it("xsBoolean", () => {
-    assert.isTrue(admits(patterns.xsBoolean, "u", "1"));
-    assert.isFalse(admits(patterns.xsBoolean, "u", "yes"));
   });
 
   it("xsDouble", () => {
@@ -201,6 +235,15 @@ describe("patterns", () => {
     }
   });
 
+  it("nonCanonicalInteger", () => {
+    for (const value of ["+5", "05", "-0", "-05"]) {
+      assert.isTrue(admits(patterns.nonCanonicalInteger, "u", value), JSON.stringify(value));
+    }
+    for (const value of ["5", "0", "-5", ""]) {
+      assert.isFalse(admits(patterns.nonCanonicalInteger, "u", value), JSON.stringify(value));
+    }
+  });
+
   it("xsString and xsNormalizedString admit every whitespace character and the empty string", () => {
     for (const value of ["a\tb", "a\nb", "a\rb", ""]) {
       assert.isTrue(admits(patterns.xsString, patterns.xsStringFlags, value));
@@ -211,11 +254,6 @@ describe("patterns", () => {
   it("xmlVersion", () => {
     assert.isTrue(admits(patterns.xmlVersion, "u", "1.0"));
     assert.isFalse(admits(patterns.xmlVersion, "u", "2.0"));
-  });
-
-  it("yesNo", () => {
-    assert.isFalse(admits(patterns.yesNo, "u", "true"));
-    assert.isTrue(admits(patterns.yesNo, "u", "yes"));
   });
 
   it("hrefInPackage", () => {
@@ -298,33 +336,10 @@ describe("patterns", () => {
     assert.isFalse(admits(patterns.xsLanguage, "u", ""));
   });
 
-  it("cpSchema", () => {
-    assert.isTrue(admits(patterns.cpSchema, "u", "QTI Package"));
-    assert.isFalse(admits(patterns.cpSchema, "u", "QTI Packages"));
-  });
-
-  it("schemaVersion", () => {
-    assert.isTrue(admits(patterns.schemaVersion, "u", "3.0.0"));
-    assert.isTrue(admits(patterns.schemaVersion, "u", "3.0.1"));
-    assert.isFalse(admits(patterns.schemaVersion, "u", "3.0.2"));
-  });
-
-  it("the qmd vocabularies", () => {
-    assert.isTrue(admits(patterns.qmdInteractionType, "u", "choiceInteraction"));
-    assert.isTrue(admits(patterns.qmdFeedbackType, "u", "none"));
-    assert.isTrue(admits(patterns.qmdScoringMode, "u", "externalmachine"));
-    assert.isFalse(admits(patterns.qmdFeedbackType, "u", "nonadaptiv"));
-  });
-
   it("toolString", () => {
     const { toolString, toolStringFlags } = patterns;
     assert.isTrue(admits(toolString, toolStringFlags, "x".repeat(256)));
     assert.isFalse(admits(toolString, toolStringFlags, "x".repeat(257)));
-  });
-
-  it("booleanLiteral", () => {
-    assert.isTrue(admits(patterns.booleanLiteral, "u", "true"));
-    assert.isFalse(admits(patterns.booleanLiteral, "u", "1"));
   });
 
   it("pair", () => {
@@ -501,18 +516,6 @@ describe("patterns", () => {
     }
   });
 
-  it("ariaRole", () => {
-    assert.isTrue(admits(patterns.ariaRole, "u", "heading"));
-    assert.isTrue(admits(patterns.ariaRole, "u", "tab"));
-    assert.isFalse(admits(patterns.ariaRole, "u", "Heading"));
-    assert.isFalse(admits(patterns.ariaRole, "u", "head"));
-    assert.isFalse(admits(patterns.ariaRole, "u", "heading tab"));
-    for (const role of roles) {
-      assert.isTrue(admits(patterns.ariaRole, "u", role), role);
-      assert.isFalse(admits(patterns.ariaRole, "u", `${role}x`), role);
-    }
-  });
-
   it("ariaRelevantList admits the empty list and refuses an unknown token", () => {
     const { ariaRelevantList } = patterns;
     for (const value of ["additions text", "", "all", "removals"]) {
@@ -521,61 +524,6 @@ describe("patterns", () => {
     for (const value of ["extra", "additions extra", "additions  text", " text"]) {
       assert.isFalse(admits(ariaRelevantList, "u", value), JSON.stringify(value));
     }
-  });
-
-  it("the ARIA token enumerations", () => {
-    assert.isTrue(admits(patterns.ariaLive, "u", "polite"));
-    assert.isFalse(admits(patterns.ariaLive, "u", "loud"));
-    assert.isTrue(admits(patterns.ariaOrientation, "u", "vertical"));
-    assert.isTrue(admits(patterns.ariaAutocomplete, "u", "both"));
-    assert.isTrue(admits(patterns.ariaChecked, "u", "mixed"));
-    assert.isTrue(admits(patterns.ariaPressed, "u", "mixed"));
-    assert.isFalse(admits(patterns.ariaExpanded, "u", "mixed"));
-    assert.isFalse(admits(patterns.ariaSelected, "u", "mixed"));
-    assert.isTrue(admits(patterns.ariaInvalid, "u", "spelling"));
-    assert.isTrue(admits(patterns.ariaSort, "u", "other"));
-    assert.isTrue(admits(patterns.ariaCurrent, "u", "location"));
-    assert.isFalse(admits(patterns.ariaCurrent, "u", "mixed"));
-  });
-
-  it("the version booleans of 3.0.1 take the true, the false and the attribute name", () => {
-    const cases = [
-      [patterns.autoplayEnum, "autoplay"],
-      [patterns.loopEnum, "loop"],
-      [patterns.mutedEnum, "muted"],
-      [patterns.controlsEnum, "controls"],
-      [patterns.defaultEnum, "default"],
-    ] as const;
-    for (const [source, name] of cases) {
-      for (const value of ["true", "false", name]) {
-        assert.isTrue(admits(source, "u", value), value);
-      }
-      assert.isFalse(admits(source, "u", "yes"));
-      assert.isFalse(admits(source, "u", "1"));
-    }
-  });
-
-  it("the enumerations typed as text", () => {
-    assert.isTrue(admits(patterns.dirEnum, "u", "rtl"));
-    assert.isFalse(admits(patterns.dirEnum, "u", "LTR"));
-    assert.isTrue(admits(patterns.suppressTts, "u", "screen-reader"));
-    assert.isFalse(admits(patterns.suppressTts, "u", "none"));
-    assert.isTrue(admits(patterns.valuetype, "u", "DATA"));
-    assert.isFalse(admits(patterns.valuetype, "u", "data"));
-    assert.isTrue(admits(patterns.scope, "u", "colgroup"));
-    assert.isFalse(admits(patterns.scope, "u", "cell"));
-    assert.isTrue(admits(patterns.align, "u", "justify"));
-    assert.isFalse(admits(patterns.align, "u", "top"));
-    assert.isTrue(admits(patterns.valign, "u", "baseline"));
-    assert.isFalse(admits(patterns.valign, "u", "left"));
-    assert.isTrue(admits(patterns.preload, "u", "metadata"));
-    assert.isFalse(admits(patterns.preload, "u", "true"));
-    assert.isTrue(admits(patterns.crossorigin, "u", "use-credentials"));
-    assert.isFalse(admits(patterns.crossorigin, "u", ""));
-    assert.isTrue(admits(patterns.trackKind, "u", "subtitles"));
-    assert.isFalse(admits(patterns.trackKind, "u", "subtitle"));
-    assert.isTrue(admits(patterns.textFormat, "u", "xhtml"));
-    assert.isFalse(admits(patterns.textFormat, "u", "html"));
   });
 });
 
@@ -657,44 +605,6 @@ describe("processing patterns", () => {
       () =>
         relation("PintOrIdentifier", { id: uuid, v: str.regex(patterns.intOrIdentifier) }, ["id"]),
     ],
-    [
-      "baseType",
-      () => relation("PbaseType", { id: uuid, v: str.regex(patterns.baseType) }, ["id"]),
-    ],
-    [
-      "toleranceMode",
-      () => relation("PtoleranceMode", { id: uuid, v: str.regex(patterns.toleranceMode) }, ["id"]),
-    ],
-    [
-      "roundingMode",
-      () => relation("ProundingMode", { id: uuid, v: str.regex(patterns.roundingMode) }, ["id"]),
-    ],
-    ["shape", () => relation("Pshape", { id: uuid, v: str.regex(patterns.shape) }, ["id"])],
-    [
-      "mathOperatorName",
-      () =>
-        relation("PmathOperatorName", { id: uuid, v: str.regex(patterns.mathOperatorName) }, [
-          "id",
-        ]),
-    ],
-    [
-      "statsOperatorName",
-      () =>
-        relation("PstatsOperatorName", { id: uuid, v: str.regex(patterns.statsOperatorName) }, [
-          "id",
-        ]),
-    ],
-    [
-      "mathConstantName",
-      () =>
-        relation("PmathConstantName", { id: uuid, v: str.regex(patterns.mathConstantName) }, [
-          "id",
-        ]),
-    ],
-    [
-      "xincludeParse",
-      () => relation("PxincludeParse", { id: uuid, v: str.regex(patterns.xincludeParse) }, ["id"]),
-    ],
   ] as const;
 
   for (const [name, probe] of referenceProbes) {
@@ -727,59 +637,5 @@ describe("processing patterns", () => {
       assert.isTrue(admits(intOrIdentifier, "u", value), value);
     }
     assert.isFalse(admits(intOrIdentifier, "u", "1.5"));
-  });
-
-  /**
-   * Each enumeration admits exactly the XSD values and refuses a padded, a re-cased and a
-   * prefix-only form of the first.
-   */
-  const enumerations = [
-    [
-      "baseType",
-      patterns.baseType,
-      "boolean directedPair duration file float identifier integer pair point string uri",
-    ],
-    ["toleranceMode", patterns.toleranceMode, "absolute exact relative"],
-    ["roundingMode", patterns.roundingMode, "decimalPlaces significantFigures"],
-    ["shape", patterns.shape, "circle default ellipse poly rect"],
-    [
-      "mathOperatorName",
-      patterns.mathOperatorName,
-      "sin cos tan sec csc cot asin acos atan atan2 asec acsc acot sinh cosh tanh sech csch coth log ln exp abs signum floor ceil toDegrees toRadians",
-    ],
-    [
-      "statsOperatorName",
-      patterns.statsOperatorName,
-      "mean sampleVariance sampleSD popVariance popSD",
-    ],
-    ["mathConstantName", patterns.mathConstantName, "pi e"],
-    ["xincludeParse", patterns.xincludeParse, "xml text"],
-  ] as const;
-
-  for (const [name, source, values] of enumerations) {
-    it(`${name} admits exactly its XSD values`, () => {
-      const members = values.split(" ");
-      for (const value of members) {
-        assert.isTrue(admits(source, "u", value), value);
-      }
-      const [first = ""] = members;
-      for (const value of [` ${first}`, `${first} `, `${first.toUpperCase()}x`, `${first}x`, ""]) {
-        assert.isFalse(admits(source, "u", value), JSON.stringify(value));
-      }
-    });
-  }
-
-  it("toleranceMode refuses a padded or re-cased value", () => {
-    assert.isFalse(admits(patterns.toleranceMode, "u", " exact"));
-    assert.isFalse(admits(patterns.toleranceMode, "u", "Exact"));
-  });
-
-  it("shape refuses rectangle", () => {
-    assert.isFalse(admits(patterns.shape, "u", "rectangle"));
-  });
-
-  it("mathOperatorName refuses sign", () => {
-    assert.isTrue(admits(patterns.mathOperatorName, "u", "signum"));
-    assert.isFalse(admits(patterns.mathOperatorName, "u", "sign"));
   });
 });

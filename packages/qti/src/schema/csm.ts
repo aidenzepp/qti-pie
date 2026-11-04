@@ -18,10 +18,9 @@ import {
 } from "@bjornpagen/grizzle";
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import type * as csmd from "#qti/schema/kinds/csmd.ts";
+import { CaseItemUri } from "#qti/schema/contracts.ts";
 import { Edge, Node } from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-
-const anyUri = str.regex(patterns.anyUri);
 
 const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags);
 
@@ -106,7 +105,7 @@ export const CsmLabel = relation(
  */
 export const CsmCaseItemUri = relation(
   "CsmCaseItemUri",
-  { id: uuid, labelledGuid: uuid, value: anyUri },
+  { id: uuid, labelledGuid: uuid, value: CaseItemUri },
   ["id"],
 );
 

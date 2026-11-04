@@ -12,11 +12,17 @@
  */
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
+import { ImportRefused } from "#qti/import/refusal.ts";
+import type { Rule } from "#qti/import/refusal.ts";
+import type { BaseType } from "#qti/schema/declaration.ts";
+import { YesNo } from "#qti/schema/content/rosters.ts";
+import type { YesNoHandle } from "#qti/schema/content/rosters.ts";
 import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
 import {
   Ancestry,
   AttributeEntityReference,
   AttributeLexical,
+  AttributeSpelling,
   Comment,
   Edge,
   EntityReference,
@@ -44,11 +50,14 @@ import type {
   RootKindHandle,
   SchemaVersionHandle,
 } from "#qti/schema/node.ts";
+import { NamespacePrefix, NamespaceUri, PiTarget, XmlEntityName } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import { FLAGS, handleOf, KindEnters } from "#qti/schema/seed/ancestry.ts";
 import type { Flag } from "#qti/schema/seed/ancestry.ts";
 import { exportCharset } from "#qti/xml/charset.ts";
 import type { Child, Element, Misc, XmlDocument } from "#qti/xml/tree.ts";
+
+type BaseTypeHandle = (typeof BaseType.handles)[number];
 
 /**
  * The rows an import has built so far, by relation.
@@ -195,6 +204,25 @@ export const collapse = (s: string): string =>
   replace(s).replaceAll(/ +/gu, " ").replaceAll(/^ | $/gu, "");
 
 /**
+ * The value a typed `qti-value` holds for the element text `text` of base type `baseType`.
+ *
+ * Decision 157, item 1: for a typed value written as element content, outer whitespace is
+ * formatting, not meaning, so every base type but `string` is read with its leading and trailing
+ * space, tab, line feed and carriage return removed; internal whitespace is untouched. A `string`
+ * keeps its whitespace. `file` is trimmed, since only `string` is exempt.
+ *
+ * The source spelling stays in the document tree's own text rows (`TextNode`, `Ws` and
+ * `EntityReference` children of the value node), which export renders, so a round trip reproduces
+ * the padded spelling byte for byte.
+ *
+ * @param baseType - The value's base type.
+ * @param text - The `replace`d text of the value node.
+ * @returns The text the value's arm row holds.
+ */
+export const valueText = (baseType: BaseTypeHandle, text: string): string =>
+  baseType === "string" ? text : text.replaceAll(/^[ \t\n\r]+|[ \t\n\r]+$/gu, "");
+
+/**
  * The value a typed column holds for `lexical` under `whiteSpace`.
  */
 const processed = (lexical: string, whiteSpace: WhiteSpace): string => {
@@ -234,6 +262,129 @@ export const typedAttribute = (
         value,
       };
 };
+
+/**
+ * The integer spaces {@link integerOf} reads: `xs:integer`, `xs:nonNegativeInteger` and
+ * `xs:positiveInteger`.
+ */
+export type IntegerSpace = "integer" | "nonNegativeInteger" | "positiveInteger";
+
+/**
+ * The handle of a closed roster that `text` equals.
+ *
+ * @param handles - The roster's handles.
+ * @param text - The attribute's text, as the caller processed it.
+ * @param rule - The rule a refusal carries.
+ * @param where - The element and attribute, in a short phrase, for the refusal's detail.
+ * @returns The handle equal to `text`, or an `ImportRefused` under `rule` when none is.
+ */
+export const closedOf = <const Handle extends string>(
+  handles: readonly Handle[],
+  text: string,
+  rule: Rule,
+  where: string,
+): Effect.Effect<Handle, ImportRefused> => {
+  const handle = handles.find((member) => member === text);
+
+  return handle === undefined
+    ? Effect.fail(
+        new ImportRefused({
+          detail: `${where} is "${text}", which is not one of ${handles.map((member) => `"${member}"`).join(", ")}. Write exactly one of those values.`,
+          rule,
+        }),
+      )
+    : Effect.succeed(handle);
+};
+
+/**
+ * The lexical form of each integer space, from XSD Part 2. A non-negative integer admits a minus
+ * sign only on zero; a positive integer admits none, since its value is at least one.
+ */
+const integerForms: Readonly<Record<IntegerSpace, RegExp>> = {
+  integer: /^[+-]?[0-9]+$/u,
+  nonNegativeInteger: /^(?:\+?[0-9]+|-0+)$/u,
+  positiveInteger: /^\+?[0-9]+$/u,
+};
+
+const integerNames: Readonly<Record<IntegerSpace, string>> = {
+  integer: "an integer, optionally signed",
+  nonNegativeInteger: "a whole number of zero or more",
+  positiveInteger: "a whole number of one or more",
+};
+
+const smallest = -9_223_372_036_854_775_808n;
+
+const largest = 9_223_372_036_854_775_807n;
+
+/**
+ * The integer `text` writes in `space`.
+ *
+ * @param text - The attribute's text, collapsed by the caller.
+ * @param space - The integer space the attribute is declared in.
+ * @param rule - The rule a refusal carries.
+ * @param where - The element and attribute, in a short phrase, for the refusal's detail.
+ * @returns The value, or an `ImportRefused` under `rule` when the text is outside the space or the
+ *   value outside the signed 64-bit range.
+ */
+export const integerOf = (
+  text: string,
+  space: IntegerSpace,
+  rule: Rule,
+  where: string,
+): Effect.Effect<bigint, ImportRefused> => {
+  const refuse = (why: string) =>
+    Effect.fail(new ImportRefused({ detail: `${where} is "${text}", ${why}.`, rule }));
+
+  if (!integerForms[space].test(text)) {
+    return refuse(`which is not ${integerNames[space]}. Write ${integerNames[space]}`);
+  }
+
+  const value = BigInt(text);
+
+  if (space === "positiveInteger" && value < 1n) {
+    return refuse(`which is not ${integerNames[space]}. Write ${integerNames[space]}`);
+  }
+
+  return value < smallest || value > largest
+    ? refuse(`which is outside ${smallest} to ${largest}. Write a value inside that range`)
+    : Effect.succeed(value);
+};
+
+/**
+ * Read one integer attribute and keep its spelling when the package spells it non-canonically.
+ *
+ * Writes a spelling row exactly when the collapsed text parses and differs from
+ * `String(parse(collapsed))`.
+ *
+ * @param rows - The rows so far.
+ * @param node - The id of the element that carries the attribute.
+ * @param kind - The element's kind.
+ * @param name - The attribute's registry name.
+ * @param text - The attribute's text after its whitespace step.
+ * @param space - The integer space the attribute is declared in.
+ * @param rule - The rule a refusal carries.
+ * @param where - The element and attribute, in a short phrase, for the refusal's detail.
+ * @returns The value, and the rows with one `AttributeSpelling` row appended exactly when
+ *   `text` differs from `String(value)`; or an `ImportRefused` under `rule` when
+ *   {@link integerOf} refuses the text.
+ */
+export const spelledInteger = (
+  rows: Rows,
+  node: string,
+  kind: NodeKindHandle,
+  name: AttributeNameHandle,
+  text: string,
+  space: IntegerSpace,
+  rule: Rule,
+  where: string,
+): Effect.Effect<{ value: bigint; rows: Rows }, ImportRefused> =>
+  Effect.map(integerOf(text, space, rule, where), (value) => ({
+    rows:
+      text === String(value)
+        ? rows
+        : Rows.add(rows, AttributeSpelling, [{ attribute: name, kind, node, value: text }]),
+    value,
+  }));
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
@@ -469,10 +620,10 @@ const walk = (
     walked.comments.push({ id, text: child.text });
   } else if (child.kind === "pi") {
     kind = "pi";
-    walked.pis.push({ data: child.data, id, target: child.target });
+    walked.pis.push({ data: child.data, id, target: PiTarget(child.target) });
   } else {
     kind = "entityRef";
-    walked.entityReferences.push({ id, name: child.name });
+    walked.entityReferences.push({ id, name: XmlEntityName(child.name) });
   }
 
   walked.nodes.push({ ...common, ancestry, id, kind, prefix, rootKind: input.root });
@@ -500,17 +651,21 @@ const walk = (
         node: id,
         position: BigInt(declared),
         prefix: attribute.qname === "xmlns" ? "" : attribute.local,
-        uri: attribute.value,
+        uri: NamespaceUri(attribute.value),
       });
       declared += 1;
     } else if (attribute.namespace === xsiNamespace && attribute.local === "schemaLocation") {
-      walked.schemaLocations.push({ node: id, prefix: attribute.prefix, value: attribute.value });
+      walked.schemaLocations.push({
+        node: id,
+        prefix: NamespacePrefix(attribute.prefix),
+        value: attribute.value,
+      });
     }
 
     for (const reference of attribute.references) {
       walked.attributeReferences.push({
         attribute: attribute.qname,
-        name: reference.name,
+        name: XmlEntityName(reference.name),
         node: id,
         offset: BigInt(reference.offset),
       });
@@ -554,14 +709,14 @@ const miscRow = (item: Misc): { kind: "comment" | "pi"; text: string } =>
  * @returns The rows with this tree's added, and the node index holding every element; the node,
  *   edge and generic-arm rows, `TreeRoot`, the namespace declarations, the `xsi:schemaLocation` and
  *   the attribute entity references are among them; `UnmodeledVocabulary` for the first element or
- *   attribute no registry names. The XML-namespace names a kind's registry lists are modeled; their
- *   rows are `attributeRows`'s.
+ *   attribute no registry names, `ImportRefused` for a `standalone` that is neither `yes` nor `no`.
+ *   The XML-namespace names a kind's registry lists are modeled; their rows are `attributeRows`'s.
  */
 export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
   doc: XmlDocument,
   input: TreeInput,
   rows: Rows,
-): Effect.fn.Return<{ rows: Rows; nodes: NodeIndex }, UnmodeledVocabulary> {
+): Effect.fn.Return<{ rows: Rows; nodes: NodeIndex }, ImportRefused | UnmodeledVocabulary> {
   const refusal = firstUnmodeled(doc.root, Option.none(), []);
   if (Option.isSome(refusal)) {
     return yield* refusal.value;
@@ -582,9 +737,19 @@ export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
     .pipe(Option.map(({ version }) => version))
     .pipe(Option.filter(isXmlVersion));
   const encoding = declaration.pipe(Option.flatMap((found) => found.encoding));
-  const standalone = declaration
-    .pipe(Option.flatMap((found) => found.standalone))
-    .pipe(Option.filter((value) => value === "yes" || value === "no"));
+  const standalone = yield* Option.match(
+    declaration.pipe(Option.flatMap((found) => found.standalone)),
+    {
+      onNone: () => Effect.succeed(Option.none<YesNoHandle>()),
+      onSome: (value) =>
+        closedOf(
+          YesNo.handles,
+          value,
+          "value-lexical",
+          "the standalone pseudo-attribute of the XML declaration",
+        ).pipe(Effect.map(Option.some)),
+    },
+  );
   const withTree = Rows.add(rows, Tree, [
     { charset: input.charset, id, kind: input.kind, root: input.root, version: input.version },
   ]);

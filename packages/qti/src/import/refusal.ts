@@ -8,7 +8,8 @@
  * the schema that the apply broke. {@link ruleOfError} maps the first two and {@link ruleOfLaw} the
  * third, so a caller and a test see one closed roster, {@link ImportRule}, whichever refused.
  */
-import { Match, Schema } from "effect";
+import type { ApplyError } from "@bjornpagen/grizzle";
+import { Match, Option, Schema } from "effect";
 import type { ContentGuardRefusal } from "#qti/import/guards/content.ts";
 import type { ItemGuardRefusal } from "#qti/import/guards/item.ts";
 import type { ManifestGuardRefusal } from "#qti/import/guards/manifest.ts";
@@ -168,6 +169,7 @@ export const ImportRule = Schema.Literals([
   "record-unnamed",
   "entry-kind",
   "zip-format",
+  "program-budget",
   "P1",
   "P2",
   "P3",
@@ -350,7 +352,7 @@ const keyRule = (relation: string, fields: readonly string[]): Rule | undefined 
     return rule;
   }
 
-  if (relation === "AttributeLexical") {
+  if (relation === "AttributeLexical" || relation === "AttributeSpelling") {
     return "attribute-lexical";
   }
 
@@ -389,6 +391,7 @@ const checkRules = new Map<string, Rule>([
   ["DeclaredRefKind", "P8"],
   ["DependencyNotSelf", "dependency-target"],
   ["EqualRoundedFigures", "P10"],
+  ["EqualRoundedFiguresRefZero", "P32"],
   ["FeedbackOutcomeRefType", "feedback-ref"],
   ["GapImgBounds", "choice-bounds"],
   ["GapMatchBounds", "choice-bounds"],
@@ -396,8 +399,10 @@ const checkRules = new Map<string, Rule>([
   ["GraphicAssociateBounds", "choice-bounds"],
   ["GraphicGapMatchBounds", "choice-bounds"],
   ["GraphicOrderChoiceBounds", "choice-bounds"],
+  ["GraphicOrderMinChoicesPositive", "attribute-lexical"],
   ["HotspotChoiceBounds", "choice-bounds"],
   ["HottextChoiceBounds", "choice-bounds"],
+  ["IndexNRefZero", "P32"],
   ["IndexPositive", "P11"],
   ["LomLearningResourceType", "lom-learning-resource-type"],
   ["MatchBounds", "choice-bounds"],
@@ -405,14 +410,17 @@ const checkRules = new Map<string, Rule>([
   ["NoDefaultHotspotInGraphicGapMatch", "hotspot-default"],
   ["NodeLabelNotRoot", "attribute-admission"],
   ["OrderChoiceBounds", "choice-bounds"],
+  ["OrderMinChoicesPositive", "attribute-lexical"],
   ["OutcomeMinMaxKind", "outcome-minmax-kind"],
   ["PositionObjectChoiceBounds", "choice-bounds"],
   ["PrintedVariableRefKind", "printed-variable-ref"],
   ["PrintedVariableVarRefType", "printed-variable-ref"],
   ["ProcessingRoot", "processing-root"],
   ["RepeatInt", "P6"],
+  ["RepeatNumberRepeatsRefZero", "P32"],
   ["ReservedOutcomeTypes", "reserved-type"],
   ["RoundToFigures", "P10"],
+  ["RoundToFiguresRefZero", "P32"],
   ["RuleOperandKind", "P3"],
   ["SelectPointChoiceBounds", "choice-bounds"],
   ["SimpleAssociableChoiceBounds", "choice-bounds"],
@@ -447,6 +455,7 @@ const capacityRules = new Map<string, Rule>([
   ["ChoiceInteraction<SimpleChoice", "choice-present"],
   ["ColgroupSpan<Edge", "colgroup-span"],
   ["Details<Edge", "details-summary"],
+  ["EqualRounded<EqualRoundedFiguresRef", "P32"],
   ["Document<DocumentIdentifier", "root-identifier"],
   ["Document<DocumentTitle", "root-title"],
   ["Expression<Operand", "P2"],
@@ -454,6 +463,7 @@ const capacityRules = new Map<string, Rule>([
   ["GapMatchBinding<Gap", "gap-multiple"],
   ["GraphicOrderInteraction<HotspotChoice", "order-choice-count"],
   ["HotspotChoice<Coords", "coords-owner"],
+  ["Index<IndexNRef", "P32"],
   ["InlineChoiceInteraction<InlineChoice", "choice-present"],
   ["ManifestMetadata<ManifestSchema", "schema-single"],
   ["ManifestMetadata<ManifestSchemaVersion", "schema-single"],
@@ -464,11 +474,13 @@ const capacityRules = new Map<string, Rule>([
   ["Package<ManifestMetadata", "manifest-children"],
   ["Package<Organizations", "manifest-children"],
   ["Package<Resources", "manifest-children"],
+  ["Repeat<RepeatNumberRepeatsRef", "P32"],
   ["Resource<File", "resource-file-present"],
   ["ResourceLomIdentified<LomIdentifier", "lom-identifier"],
   ["ResourceLomIdentified<LomObjectIdentifier", "lom-identifier"],
   ["ResourceLomTitled<LomGeneralTitle", "lom-title-single"],
   ["ResourceLomTitled<LomObjectTitle", "lom-title"],
+  ["RoundTo<RoundToFiguresRef", "P32"],
   ["Table<Edge", "table-parts"],
   ["TypedValueSet<DeclaredValue", "value-single"],
   ["ValueSet<DeclaredValue", "value-present"],
@@ -536,6 +548,33 @@ const referenceRules = new Map<string, Rule>([
   ["StringBinding", "string-binding"],
   ["TemplateContentRef", "template-ref"],
 ]);
+
+/**
+ * The relations whose containments state one law, by the relation they leave: the copy of a count
+ * attribute's typed value to its interaction's column is a typed copy, and a reference arm of a
+ * processing attribute is held by the parent that selects it, `P32`.
+ */
+const copyLeaves = new Map<string, Rule>([
+  ["EqualRoundedFiguresRef", "P32"],
+  ["GraphicOrderMaxChoicesN", "typed-copy"],
+  ["GraphicOrderMinChoicesN", "typed-copy"],
+  ["IndexNRef", "P32"],
+  ["OrderMaxChoicesN", "typed-copy"],
+  ["OrderMinChoicesN", "typed-copy"],
+  ["RepeatNumberRepeatsRef", "P32"],
+  ["RoundToFiguresRef", "P32"],
+]);
+
+/**
+ * The rule of the two containments that state a manifest's `cp:schemaversion` is its package's
+ * `schemaversion`: both are a typed copy, though the second enters `Package.schemaversion`, which a
+ * resource's own containment names `schema-version`.
+ */
+const schemaVersionCopyRule = (from: LawSide): Rule | undefined =>
+  from.relation === "ManifestSchemaVersion" &&
+  (fieldsAre(from, "metadata", "package") || fieldsAre(from, "package", "version"))
+    ? "typed-copy"
+    : undefined;
 
 /**
  * The relations of the document and LOM language sets: a containment that leaves or enters one of
@@ -729,6 +768,8 @@ const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
   }
 
   const rule =
+    copyLeaves.get(from.relation) ??
+    schemaVersionCopyRule(from) ??
     containedRules.get(`${from.relation}>${to.relation}`) ??
     referenceRules.get(from.relation) ??
     selectedContainedRule(from, to) ??
@@ -745,34 +786,20 @@ const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
  * that spells the same language, so a source names every column that uses it: `anyUri` is also the
  * `Uri` value arm's, the three DRD URIs', `CsmCaseItemUri.value`'s, `Statistic.context`'s and the
  * two glossaries' (every `anyUri` column of the usage and DRD relations is `uri-syntax` through
- * it); `hrefInPackage` is the pattern of every path column; and `xsBoolean` is
- * `attribute-lexical` for every column that spells it, the M1 attribute flags, the QTI metadata
- * flags, the DRD `atInteroperable` and the usage `caseSensitive` flag alike, since no earlier
- * phase's row named it. The `Literal` value arms share their sources with `DeclaredValue`'s, so a
- * pattern law cannot tell `P7` from `value-lexical`: P7 is named by the other laws of the `Literal`
- * arms (the pattern law carries no relation).
+ * it); and `hrefInPackage` is the pattern of every path column. A closed vocabulary has no
+ * row: its column is a roster handle, so no pattern law names it. The `Literal` value arms share
+ * their sources with `DeclaredValue`'s, so a pattern law cannot tell `P7` from `value-lexical`: P7
+ * is named by the other laws of the `Literal` arms (the pattern law carries no relation).
  *
- * A source shared with an earlier phase's columns keeps that phase's rule, since the law carries
- * no relation to tell the columns apart: `ncName`, `xsInteger`, `xsDouble`, `pair`, `point` and
- * `booleanLiteral` name `value-lexical`, never `drd-value`, `usage-lexical` or
- * `usage-typed-value`. Only a source no earlier column spells names the new rule: the nine DRD
- * vocabularies and the usage date.
+ * A source shared with an earlier phase's columns keeps that phase's rule, since the law carries no
+ * relation to tell the columns apart: `ncName`, `xsInteger`, `xsDouble`, `pair` and `point` name
+ * `value-lexical`, never `drd-value`, `usage-lexical` or `usage-typed-value`. Only a source no
+ * earlier column spells names the new rule: the nine DRD vocabularies and the usage date.
  */
 const patternRules = new Map<string, Rule>([
-  [patterns.align, "attribute-lexical"],
   [patterns.anyUri, "uri-syntax"],
-  [patterns.ariaAutocomplete, "attribute-lexical"],
-  [patterns.ariaChecked, "attribute-lexical"],
-  [patterns.ariaCurrent, "attribute-lexical"],
-  [patterns.ariaExpanded, "attribute-lexical"],
-  [patterns.ariaInvalid, "attribute-lexical"],
-  [patterns.ariaLive, "attribute-lexical"],
   [patterns.ariaRelevantList, "attribute-lexical"],
-  [patterns.ariaRole, "attribute-lexical"],
-  [patterns.ariaSort, "attribute-lexical"],
-  [patterns.baseType, "P6"],
   [patterns.bcp47, "attribute-lexical"],
-  [patterns.booleanLiteral, "value-lexical"],
   [patterns.classList, "attribute-lexical"],
   [patterns.coords, "P6"],
   [patterns.coordsAny, "attribute-lexical"],
@@ -780,8 +807,6 @@ const patternRules = new Map<string, Rule>([
   [patterns.coordsEllipse, "attribute-lexical"],
   [patterns.coordsPoly, "attribute-lexical"],
   [patterns.coordsRect, "attribute-lexical"],
-  [patterns.crossorigin, "attribute-lexical"],
-  [patterns.dirEnum, "attribute-lexical"],
   [patterns.drdAccessMode, "drd-value"],
   [patterns.drdAdaptationDetail, "drd-value"],
   [patterns.drdAdaptationMediaType, "drd-value"],
@@ -799,45 +824,34 @@ const patternRules = new Map<string, Rule>([
   [patterns.integerOrVariableString, "attribute-lexical"],
   [patterns.intOrIdentifier, "P6"],
   [patterns.lengthDType, "attribute-lexical"],
-  [patterns.mathConstantName, "P6"],
-  [patterns.mathOperatorName, "P6"],
   [patterns.mimeTypeList, "attribute-lexical"],
   [patterns.ncName, "value-lexical"],
   [patterns.ncNameList, "attribute-lexical"],
   [patterns.ncNameListOrEmpty, "attribute-lexical"],
   [patterns.nonNegativeDouble, "attribute-lexical"],
-  [patterns.orientation, "attribute-lexical"],
   [patterns.pair, "value-lexical"],
   [patterns.point, "value-lexical"],
   [patterns.positiveDouble, "normal-maximum"],
   [patterns.positiveInteger, "attribute-lexical"],
-  [patterns.preload, "attribute-lexical"],
   [patterns.printfFormat, "attribute-lexical"],
-  [patterns.roundingMode, "P6"],
-  [patterns.scope, "attribute-lexical"],
-  [patterns.shape, "P6"],
-  [patterns.showHide, "attribute-lexical"],
-  [patterns.statsOperatorName, "P6"],
-  [patterns.suppressTts, "attribute-lexical"],
-  [patterns.textFormat, "attribute-lexical"],
   [patterns.toleranceList, "P6"],
-  [patterns.toleranceMode, "P6"],
   [patterns.toolString, "tool-string-length"],
-  [patterns.trackKind, "attribute-lexical"],
   [patterns.uncollapsed, "attribute-lexical"],
   [patterns.usageDate, "usage-lexical"],
   [patterns.useEnumExt, "attribute-lexical"],
-  [patterns.valign, "attribute-lexical"],
-  [patterns.valuetype, "attribute-lexical"],
   [patterns.viewList, "attribute-lexical"],
-  [patterns.xincludeParse, "P6"],
-  [patterns.xsBoolean, "attribute-lexical"],
   [patterns.xsDecimal, "attribute-lexical"],
   [patterns.xsDouble, "value-lexical"],
   [patterns.xsInt, "attribute-lexical"],
   [patterns.xsInteger, "value-lexical"],
   [patterns.xsNonNegativeInteger, "attribute-lexical"],
 ]);
+
+/**
+ * The regex source of every pattern that has a row, in the map's order: a read-only view for the
+ * test that each row names a pattern the schema still exports.
+ */
+export const patternRuleSources: readonly string[] = [...patternRules.keys()];
 
 /**
  * Whether a relation is one of the usage-data module's: the data, its statistics, their target
@@ -1061,6 +1075,159 @@ const conditionMirrors: ReadonlySet<string> = new Set([
   "TemplateConditionArm",
 ]);
 
+/**
+ * The contracts of the schema that `valueContexts` does not mint, each rule beside the names it
+ * judges. A contract is a branded domain, so two contracts of one language are told apart by name
+ * here: `CategoryList` is `P6` and `MatchGroupList` `attribute-lexical`,
+ * `ExpressionIntegerOrVariable` `P6` and `PrintedVariableIntegerOrVariable` `attribute-lexical`,
+ * `ExpressionCoords` `P6` and `ShapeCoords` `attribute-lexical`, `ClassList` `attribute-lexical`
+ * and `LomToken` `value-lexical`.
+ */
+const writtenContractRules: readonly (readonly [Rule, readonly string[]])[] = [
+  [
+    "attribute-lexical",
+    [
+      "AriaInteger",
+      "AriaPositiveInteger",
+      "ChoiceCount",
+      "ClassList",
+      "ContainerWidth",
+      "ContentLanguage",
+      "ContentMediaType",
+      "ExpectedLength",
+      "ExpectedLines",
+      "IdReference",
+      "InterpolationSourceValue",
+      "MappingScore",
+      "MatchGroupList",
+      "MatchSourceValue",
+      "MediaRectCoords",
+      "PrintedVariableIntegerOrVariable",
+      "RectCoords",
+      "ShapeCoords",
+      "ShowHideIdentifier",
+      "StringCount",
+      "TableSpan",
+      "TrackLanguage",
+    ],
+  ],
+  ["drd-value", ["AccessMode", "AccessModeAdapted"]],
+  ["href-path", ["PackagePath", "ResourceEntryHref"]],
+  ["manifest-identifier", ["ManifestIdentifier"]],
+  ["P6", ["CategoryList", "ExpressionCoords", "ExpressionIntegerOrVariable"]],
+  ["tool-string-length", ["ToolName", "ToolVendor", "ToolVersion"]],
+  [
+    "uri-syntax",
+    [
+      "CaseItemUri",
+      "CitationUri",
+      "CustomOperatorDefinitionUri",
+      "DrdAdaptationUri",
+      "EmbedSourceUri",
+      "GlossaryUri",
+      "HyperlinkUri",
+      "LongDescriptionUri",
+      "LongInterpretationUri",
+      "NamespaceUri",
+      "StatisticContextUri",
+      "StylesheetUri",
+      "TemplateLocationUri",
+      "TemplateUri",
+      "XIncludeUri",
+      "XmlBaseUri",
+    ],
+  ],
+  [
+    "usage-lexical",
+    [
+      "StatisticMeasure",
+      "StatisticName",
+      "UsageCaseCount",
+      "UsageFieldIdentifier",
+      "UsageMappingScore",
+      "UsagePartIdentifier",
+      "UsageValueToken",
+    ],
+  ],
+  [
+    "value-lexical",
+    [
+      "ChoiceIdentifier",
+      "CustomOperatorClassName",
+      "FileMediaType",
+      "LangStringLanguage",
+      "LomToken",
+      "LomVocabularySource",
+      "LomVocabularyValue",
+      "NamespacePrefix",
+      "OutcomeScaleValue",
+      "PiTarget",
+      "RecordFieldIdentifier",
+      "SectionReference",
+      "TemplateParameterName",
+      "VariableReference",
+      "WeightReference",
+      "XmlEntityName",
+    ],
+  ],
+];
+
+/**
+ * The rule of each of the eight contexts of a typed value, for the eight arm contracts
+ * `<Context><BaseType>Value` it mints. This repeats the `rule` of `valueContexts` in
+ * `schema/value.ts`, which this module cannot import: that module imports this one's `Rule`.
+ */
+const armContextRules: readonly (readonly [string, Rule])[] = [
+  ["Declared", "value-lexical"],
+  ["InterpolationDefault", "attribute-lexical"],
+  ["InterpolationTarget", "attribute-lexical"],
+  ["Literal", "P7"],
+  ["MapKey", "map-key-lexical"],
+  ["MatchDefault", "attribute-lexical"],
+  ["MatchTarget", "attribute-lexical"],
+  ["Usage", "usage-typed-value"],
+];
+
+/**
+ * The contexts whose Uri arm refuses by the anyUri pattern rather than its context's rule: the
+ * merged tree refuses a bad URI in these columns under `uri-syntax`, and a moved refusal keeps its
+ * rule (decision 150).
+ */
+const uriSyntaxContexts: ReadonlySet<string> = new Set([
+  "Declared",
+  "InterpolationDefault",
+  "InterpolationTarget",
+  "MatchDefault",
+  "MatchTarget",
+]);
+
+const armBaseTypes = [
+  "DirectedPair",
+  "Duration",
+  "Float",
+  "Identifier",
+  "Integer",
+  "Pair",
+  "Point",
+  "Uri",
+] as const;
+
+/**
+ * The rule each named contract of the schema maps to: the written-out contracts, then the 64 arms.
+ * A contract no row names falls to {@link nearest}, `value-lexical`, unmapped.
+ */
+const contractRules: ReadonlyMap<string, Rule> = new Map([
+  ...writtenContractRules.flatMap(([rule, names]) =>
+    names.map((name): [string, Rule] => [name, rule]),
+  ),
+  ...armContextRules.flatMap(([context, rule]) =>
+    armBaseTypes.map((base): [string, Rule] => [
+      `${context}${base}Value`,
+      base === "Uri" && uriSyntaxContexts.has(context) ? "uri-syntax" : rule,
+    ]),
+  ),
+]);
+
 const some = (rule: Rule | undefined): Mapped | undefined =>
   rule === undefined ? undefined : named(rule);
 
@@ -1100,6 +1267,10 @@ const recognized = (law: ImportLaw): Mapped | undefined => {
 
   if (law.kind === "pattern") {
     return some(patternRules.get(law.source)) ?? { mapped: false, rule: "value-lexical" };
+  }
+
+  if (law.kind === "contract") {
+    return some(contractRules.get(law.contract));
   }
 
   return undefined;
@@ -1194,11 +1365,13 @@ export const refusalOfLaw = (law: ImportLaw, witness?: ImportWitness): ImportRef
 };
 
 /**
- * Every error that refuses an import before the database does.
+ * Every error that refuses an import before the database does, an `ImportRefused` the importer
+ * raised itself among them.
  */
 export type ReadRefusal =
   | ExternalRefusal
   | GuardRefusal
+  | ImportRefused
   | ItemGuardRefusal
   | ItemRefusal
   | ManifestGuardRefusal
@@ -1218,6 +1391,8 @@ export type ReadRefusal =
  * A guard's `rule` is the rule of the same name; `PackageReadError` maps by its own rule, a missing
  * manifest to `manifest-root` and an entry path outside the package to `href-path` (R8's pattern
  * law names the same cause); `ItemRefusal` names the importer rule it carries (`import/tree.ts`).
+ * An `ImportRefused` is a refusal the importer raised itself before the write (`closedOf`,
+ * `integerOf`, `spelledInteger`); it already names its rule and is its own answer.
  *
  * `ContentGuardRefusal` is accepted beside {@link ReadRefusal}, not inside it: `ReadRefusal` is the
  * error channel `import/package.ts` narrows to, and the content guards join that channel when
@@ -1232,6 +1407,7 @@ export const ruleOfError = (e: ContentGuardRefusal | ReadRefusal): ImportRefused
       ContentGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ExternalRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       GuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
+      ImportRefused: (g) => g,
       ItemGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ItemRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ManifestGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
@@ -1263,3 +1439,35 @@ export const ruleOfError = (e: ContentGuardRefusal | ReadRefusal): ImportRefused
 if (import.meta.main) {
   process.stdout.write(`ImportRule: ${ImportRule.members.length} names\n`);
 }
+
+/**
+ * The refusal of an apply that grizzle's compiler refused for size.
+ *
+ * Grizzle compiles the whole `ChangeSet` of a package into one program, and refuses it when the
+ * program crosses a compiler budget (`ResourceBound` of kind `budget`). That is the package being
+ * too large for one transaction, not a fault of the database, so it is the rule `program-budget`.
+ * Every other bound kind and every other failure is grizzle's own and maps to nothing.
+ *
+ * @param error - The error an apply failed with.
+ * @returns The refusal when the compiler's budget refused the program, else nothing.
+ */
+export const budgetRefusalOf = (error: ApplyError): Option.Option<ImportRefused> => {
+  if (error._tag !== "ExecutionFailure" || error.reason._tag !== "CompileError") {
+    return Option.none();
+  }
+
+  const { reason } = error.reason;
+
+  if (reason._tag !== "ResourceBound" || reason.bound.kind !== "budget") {
+    return Option.none();
+  }
+
+  const { budget, limit, needed } = reason.bound;
+
+  return Option.some(
+    new ImportRefused({
+      detail: `the package's import program needs ${needed} of the ${budget} budget and grizzle compiles at most ${limit} in one transaction; split the package's documents across packages, or report the package`,
+      rule: "program-budget",
+    }),
+  );
+};

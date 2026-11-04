@@ -11,6 +11,7 @@
  * and body rows are in.
  */
 import { judgedLater } from "#qti/import/judged.ts";
+import type { ImportRefused } from "#qti/import/refusal.ts";
 import { Effect, Option } from "effect";
 import { attributeRows } from "#qti/import/attributes.ts";
 import { contentRows } from "#qti/import/content.ts";
@@ -21,14 +22,17 @@ import { processingRows as processingTreeRows } from "#qti/import/processing.ts"
 import type { ProcessingRefused } from "#qti/import/processing.ts";
 import { requiredAttribute } from "#qti/import/required.ts";
 import {
+  closedOf,
   collapse,
   ItemRefusal,
   kindOf,
   replace,
   Rows,
+  spelledInteger,
   treeRows,
   typedAttribute,
   UnmodeledVocabulary,
+  valueText,
   withParents,
 } from "#qti/import/tree.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
@@ -51,7 +55,28 @@ import {
   TypedCardinality,
   TypedDeclaration,
 } from "#qti/schema/declaration.ts";
+import {
+  ChoiceIdentifier,
+  EmbedSourceUri,
+  LongDescriptionUri,
+  LongInterpretationUri,
+  ManifestIdentifier,
+  OutcomeScaleValue,
+  PackagePath,
+  RecordFieldIdentifier,
+  ToolName,
+  ToolVersion,
+  VariableReference,
+} from "#qti/schema/contracts.ts";
 import type { DeclarationShape } from "#qti/schema/declaration.ts";
+import {
+  BooleanLiteral,
+  ExternalScored,
+  Orientation,
+  ShowHide,
+  XsBoolean,
+} from "#qti/schema/content/rosters.ts";
+import type { XsBooleanHandle } from "#qti/schema/content/rosters.ts";
 import { Document, DocumentId, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#qti/schema/html.ts";
 import {
@@ -208,7 +233,7 @@ export const documentLangRows = (
       document: documentId,
       lomGeneral: input.resourceLomHasGeneral ? "yes" : "no",
       package: input.packageId,
-      resource: input.resource,
+      resource: ManifestIdentifier(input.resource),
       value,
     })),
   );
@@ -222,19 +247,19 @@ const toolRows = (rows: Rows, root: Element, tree: string): Rows => {
   const version = lexicalOf(root, "tool-version");
   if (Option.isSome(name) && Option.isSome(version)) {
     return Rows.add(Rows.add(rows, ItemTool, [{ shape: "both", tree }]), ItemToolBoth, [
-      { toolName: name.value, toolVersion: version.value, tree },
+      { toolName: ToolName(name.value), toolVersion: ToolVersion(version.value), tree },
     ]);
   }
 
   if (Option.isSome(name)) {
     return Rows.add(Rows.add(rows, ItemTool, [{ shape: "nameOnly", tree }]), ItemToolName, [
-      { toolName: name.value, tree },
+      { toolName: ToolName(name.value), tree },
     ]);
   }
 
   return Option.isSome(version)
     ? Rows.add(Rows.add(rows, ItemTool, [{ shape: "versionOnly", tree }]), ItemToolVersion, [
-        { toolVersion: version.value, tree },
+        { toolVersion: ToolVersion(version.value), tree },
       ])
     : rows;
 };
@@ -280,13 +305,6 @@ const textOf = (element: Element): string =>
   element.children.map((child) => (child.kind === "text" ? child.value : "")).join("");
 
 /**
- * The non-negative integer a lexical form writes. A form that is not one reads as 0: the lexical
- * column beside it carries the form and its pattern refuses it at commit.
- */
-const naturalOf = (lexical: string): bigint =>
-  /^\+?[0-9]+$/u.test(lexical) ? BigInt(lexical) : 0n;
-
-/**
  * The variable a declaration names, as the values and bindings of the document copy it.
  */
 interface Declared {
@@ -311,12 +329,12 @@ interface DeclarationRows {
  * kind arm, its typed or record row, the outcome's optional values, and for a response declaration
  * the document's id holder.
  */
-const declarationRows = (
+const declarationRows = Effect.fn("import.item.declarationRows")(function* declarationRows(
   rows: Rows,
   element: Element,
   node: NodeEntry,
   documentId: string,
-): DeclarationRows => {
+): Effect.fn.Return<DeclarationRows, ImportRefused> {
   const attributes = reader(rows, element, node);
   const text = Option.getOrElse(attributes.read("identifier", "collapse"), () => "");
   const cardinalityText = attributes.read("cardinality", "preserve");
@@ -374,19 +392,45 @@ const declarationRows = (
     return { declared, identifier: text, rows: built };
   }
 
+  const externalScoredHandle = Option.isSome(externalScored)
+    ? Option.some(
+        yield* closedOf(
+          ExternalScored.handles,
+          externalScored.value,
+          "value-lexical",
+          "the external-scored attribute of qti-outcome-declaration",
+        ),
+      )
+    : Option.none();
   const owned = (value: Option.Option<string>) =>
     written(value, (own) => ({ declaration, value: own }));
+  const ownedAs = <Value extends string>(
+    value: Option.Option<string>,
+    brand: (text: string) => Value,
+  ) => written(value, (own) => ({ declaration, value: brand(own) }));
   built = Rows.add(built, DeclarationView, owned(view));
   built = Rows.add(built, DeclarationInterpretation, owned(interpretation));
-  built = Rows.add(built, DeclarationLongInterpretation, owned(longInterpretation));
+  built = Rows.add(
+    built,
+    DeclarationLongInterpretation,
+    ownedAs(longInterpretation, LongInterpretationUri),
+  );
   built = Rows.add(built, DeclarationNormalMaximum, owned(normalMaximum));
-  built = Rows.add(built, DeclarationNormalMinimum, owned(normalMinimum));
-  built = Rows.add(built, DeclarationMasteryValue, owned(masteryValue));
-  built = Rows.add(built, DeclarationExternalScored, owned(externalScored));
-  built = Rows.add(built, DeclarationVariableIdentifierRef, owned(variableIdentifierRef));
+  built = Rows.add(built, DeclarationNormalMinimum, ownedAs(normalMinimum, OutcomeScaleValue));
+  built = Rows.add(built, DeclarationMasteryValue, ownedAs(masteryValue, OutcomeScaleValue));
+  built = Rows.add(
+    built,
+    DeclarationExternalScored,
+    written(externalScoredHandle, (own) => ({ declaration, value: own })),
+  );
+  built = Rows.add(
+    built,
+    DeclarationVariableIdentifierRef,
+    ownedAs(variableIdentifierRef, VariableReference),
+  );
 
   return { declared, identifier: text, rows: built };
-};
+});
 
 /**
  * The rows of one `qti-correct-response` or `qti-default-value`: the set, its role arm, its typed
@@ -430,11 +474,13 @@ const valueSetRows = (rows: Rows, element: Element, node: NodeEntry, owner: Decl
 };
 
 /**
- * The row of a `qti-value` in the arm of its base type.
+ * The row of a `qti-value` in the arm of each base type but boolean, which {@link booleanValueRow}
+ * narrows to its roster first.
  */
-const valueArmRows: Record<BaseTypeHandle, (rows: Rows, id: string, text: string) => Rows> = {
-  boolean: (rows, id, text) =>
-    Rows.add(rows, values.relations.DeclaredValueBoolean, [{ id, value: judgedLater(text) }]),
+const valueArmRows: Record<
+  Exclude<BaseTypeHandle, "boolean">,
+  (rows: Rows, id: string, text: string) => Rows
+> = {
   directedPair: (rows, id, text) =>
     Rows.add(rows, values.relations.DeclaredValueDirectedPair, [{ id, value: judgedLater(text) }]),
   duration: (rows, id, text) =>
@@ -458,17 +504,42 @@ const valueArmRows: Record<BaseTypeHandle, (rows: Rows, id: string, text: string
 };
 
 /**
+ * The row of a boolean `qti-value`: its text, a handle of `BooleanLiteral`.
+ *
+ * @param rows - The rows so far.
+ * @param id - The value node's id.
+ * @param text - The text `valueText` gives the value, which the `text-copy` guard requires the row
+ *   to copy.
+ * @returns The rows with the arm added; `ImportRefused` (`value-lexical`) for text that is neither
+ *   `true` nor `false`.
+ */
+const booleanValueRow = Effect.fn("import.booleanValueRow")(function* booleanValueRow(
+  rows: Rows,
+  id: string,
+  text: string,
+): Effect.fn.Return<Rows, ImportRefused> {
+  const value = yield* closedOf(
+    BooleanLiteral.handles,
+    text,
+    "value-lexical",
+    "a boolean qti-value",
+  );
+
+  return Rows.add(rows, values.relations.DeclaredValueBoolean, [{ id, value }]);
+});
+
+/**
  * The rows of one `qti-value`: the value at its position, its arm, and for a record value its
  * field. A typed value has its set's base type and a record field has the one it wrote; a value
  * with no base type has no row, and the missing arm is the commit's refusal.
  */
-const valueRows = (
+const valueRows = Effect.fn("import.valueRows")(function* valueRows(
   rows: Rows,
   element: Element,
   node: NodeEntry,
   set: { readonly id: string; readonly owner: Declared },
   position: bigint,
-): Rows => {
+): Effect.fn.Return<Rows, ImportRefused> {
   const attributes = reader(rows, element, node);
   const field = attributes.read("field-identifier", "collapse");
   const baseType =
@@ -489,14 +560,18 @@ const valueRows = (
       valueSet: set.id,
     },
   ]);
-  const withArm = valueArmRows[baseType.value](withValue, node.id, replace(textOf(element)));
+  const text = valueText(baseType.value, replace(textOf(element)));
+  const withArm =
+    baseType.value === "boolean"
+      ? yield* booleanValueRow(withValue, node.id, text)
+      : valueArmRows[baseType.value](withValue, node.id, text);
 
   return set.owner.shape === "record"
     ? Rows.add(withArm, values.RecordField, [
-        { fieldIdentifier: Option.getOrElse(field, () => ""), id: node.id },
+        { fieldIdentifier: RecordFieldIdentifier(Option.getOrElse(field, () => "")), id: node.id },
       ])
     : withArm;
-};
+});
 
 /**
  * The rows of one `qti-choice-interaction` and its binding to the response variable it names.
@@ -505,16 +580,17 @@ const valueRows = (
  * the pass calls it beside them.
  *
  * @returns The rows; `ItemRefusal` for a `response-identifier` that no declaration of the document
- *   names, since no type can be copied to the binding.
+ *   names, since no type can be copied to the binding; `ImportRefused` (`attribute-lexical`) for a
+ *   `max-choices` or `min-choices` outside the non-negative integers.
  */
 const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
   function* choiceInteractionRows(
     rows: Rows,
     element: Element,
     node: NodeEntry,
-    item: { readonly adaptive: string; readonly documentId: string },
+    item: { readonly adaptive: XsBooleanHandle; readonly documentId: string },
     declarations: ReadonlyMap<string, Declared>,
-  ): Effect.fn.Return<Rows, ItemRefusal> {
+  ): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
     const { adaptive, documentId } = item;
     const attributes = reader(rows, element, node);
     const responseIdentifier = Option.getOrElse(
@@ -535,21 +611,51 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
       });
     }
 
-    const maxLexical = Option.getOrElse(maxChoices, () => "1");
-    const minLexical = Option.getOrElse(minChoices, () => "0");
     const interactionKind = "qti-choice-interaction";
-    let built = attributes.rows();
+    const bound = (
+      at: Rows,
+      name: "max-choices" | "min-choices",
+      text: Option.Option<string>,
+      fallback: bigint,
+    ) =>
+      Option.match(text, {
+        onNone: () => Effect.succeed({ rows: at, value: fallback }),
+        onSome: (spelling) =>
+          spelledInteger(
+            at,
+            node.id,
+            interactionKind,
+            name,
+            spelling,
+            "nonNegativeInteger",
+            "attribute-lexical",
+            `${interactionKind} ${name}`,
+          ),
+      });
+    const max = yield* bound(attributes.rows(), "max-choices", maxChoices, 1n);
+    const min = yield* bound(max.rows, "min-choices", minChoices, 0n);
+    const orientationHandle = yield* closedOf(
+      Orientation.handles,
+      Option.getOrElse(orientation, () => "vertical"),
+      "attribute-lexical",
+      `the orientation attribute of ${interactionKind}`,
+    );
+    const shuffleHandle = yield* closedOf(
+      XsBoolean.handles,
+      Option.getOrElse(shuffle, () => "false"),
+      "attribute-lexical",
+      `the shuffle attribute of ${interactionKind}`,
+    );
+    let built = min.rows;
     built = Rows.add(built, ChoiceInteraction, [
       {
         id: node.id,
-        maxChoices: judgedLater(maxLexical),
-        maxChoicesN: naturalOf(maxLexical),
-        minChoices: judgedLater(minLexical),
-        minChoicesN: naturalOf(minLexical),
-        orientation: judgedLater(Option.getOrElse(orientation, () => "vertical")),
+        maxChoicesN: max.value,
+        minChoicesN: min.value,
+        orientation: orientationHandle,
         responseIdentifier,
         rootKind: "item",
-        shuffle: judgedLater(Option.getOrElse(shuffle, () => "false")),
+        shuffle: shuffleHandle,
       },
     ]);
     const marker = (value: Option.Option<string>) => written(value, () => ({ node: node.id }));
@@ -569,7 +675,7 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
     );
     built = Rows.add(built, InteractionBinding, [
       {
-        adaptive: judgedLater(adaptive),
+        adaptive,
         ancestry: node.ancestry,
         document: documentId,
         interactionKind,
@@ -589,7 +695,7 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
             cardinality: declared.cardinality.value,
             document: documentId,
             interactionKind,
-            maxCount: naturalOf(maxLexical),
+            maxCount: max.value,
             node: node.id,
             responseIdentifier,
           },
@@ -601,21 +707,38 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
 /**
  * The rows of one `qti-simple-choice` of the interaction `interaction`.
  */
-const choiceRows = (rows: Rows, element: Element, node: NodeEntry, interaction: string): Rows => {
+const choiceRows = Effect.fn("import.choiceRows")(function* choiceRows(
+  rows: Rows,
+  element: Element,
+  node: NodeEntry,
+  interaction: string,
+): Effect.fn.Return<Rows, ImportRefused> {
   const attributes = reader(rows, element, node);
   const identifier = Option.getOrElse(attributes.read("identifier", "collapse"), () => "");
   const fixed = attributes.read("fixed", "collapse");
   const templateIdentifier = attributes.read("template-identifier", "collapse");
   const showHide = attributes.read("show-hide", "preserve");
+  const fixedHandle = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(fixed, () => "false"),
+    "attribute-lexical",
+    "the fixed attribute of qti-simple-choice",
+  );
+  const showHideHandle = yield* closedOf(
+    ShowHide.handles,
+    Option.getOrElse(showHide, () => "show"),
+    "attribute-lexical",
+    "the show-hide attribute of qti-simple-choice",
+  );
 
   let built = attributes.rows();
   built = Rows.add(built, SimpleChoice, [
     {
-      fixed: judgedLater(Option.getOrElse(fixed, () => "false")),
+      fixed: fixedHandle,
       id: node.id,
-      identifier,
+      identifier: ChoiceIdentifier(identifier),
       interaction,
-      showHide: judgedLater(Option.getOrElse(showHide, () => "show")),
+      showHide: showHideHandle,
     },
   ]);
   built = Rows.add(
@@ -632,9 +755,9 @@ const choiceRows = (rows: Rows, element: Element, node: NodeEntry, interaction: 
   return Rows.add(
     built,
     SimpleChoiceTemplateIdentifier,
-    written(templateIdentifier, (own) => ({ node: node.id, value: own })),
+    written(templateIdentifier, (own) => ({ node: node.id, value: VariableReference(own) })),
   );
-};
+});
 
 /**
  * The lexical prefixes of a published template's URI; a name follows each, with or without `.xml`.
@@ -700,7 +823,7 @@ const processingRows = (rows: Rows, element: Element, node: NodeEntry, item: str
  * element and the position of each node under its parent.
  */
 interface SemanticInput {
-  readonly adaptive: string;
+  readonly adaptive: XsBooleanHandle;
   readonly documentId: string;
   readonly nodes: NodeIndex;
   readonly positions: ReadonlyMap<string, bigint>;
@@ -719,13 +842,17 @@ interface SemanticInput {
  *
  * @returns The rows and the declared variables by identifier, the first declaration of an
  *   identifier winning; `ItemRefusal` for an interaction whose `response-identifier` names no
- *   declaration.
+ *   declaration; `ImportRefused` for a choice interaction's `max-choices` or `min-choices` outside
+ *   the non-negative integers.
  */
 export const semanticRows = Effect.fn("import.semanticRows")(function* semanticRows(
   rows: Rows,
   input: SemanticInput,
   walked: readonly (readonly [Element, Option.Option<Element>])[],
-): Effect.fn.Return<{ declarations: ReadonlyMap<string, Declared>; rows: Rows }, ItemRefusal> {
+): Effect.fn.Return<
+  { declarations: ReadonlyMap<string, Declared>; rows: Rows },
+  ImportRefused | ItemRefusal
+> {
   const { adaptive, documentId, nodes, positions, rootId } = input;
   let built = rows;
   const declaredBy = new Map<Element, Declared>();
@@ -736,7 +863,7 @@ export const semanticRows = Effect.fn("import.semanticRows")(function* semanticR
       node !== undefined &&
       (node.kind === "qti-response-declaration" || node.kind === "qti-outcome-declaration")
     ) {
-      const declaration = declarationRows(built, element, node, documentId);
+      const declaration = yield* declarationRows(built, element, node, documentId);
       built = declaration.rows;
       declaredBy.set(element, declaration.declared);
       if (!declarations.has(declaration.identifier)) {
@@ -762,7 +889,7 @@ export const semanticRows = Effect.fn("import.semanticRows")(function* semanticR
       built = valueSetRows(built, element, node, owner.value);
       setOwners.set(element, { id: node.id, owner: owner.value });
     } else if (node.kind === "qti-value" && Option.isSome(set)) {
-      built = valueRows(built, element, node, set.value, positions.get(node.id) ?? 0n);
+      built = yield* valueRows(built, element, node, set.value, positions.get(node.id) ?? 0n);
     } else if (node.kind === "qti-choice-interaction") {
       built = yield* choiceInteractionRows(
         built,
@@ -776,7 +903,7 @@ export const semanticRows = Effect.fn("import.semanticRows")(function* semanticR
       Option.isSome(parentNode) &&
       parentNode.value.kind === "qti-choice-interaction"
     ) {
-      built = choiceRows(built, element, node, parentNode.value.id);
+      built = yield* choiceRows(built, element, node, parentNode.value.id);
     } else if (node.kind === "qti-response-processing") {
       built = processingRows(built, element, node, rootId);
     }
@@ -806,14 +933,15 @@ export const semanticRows = Effect.fn("import.semanticRows")(function* semanticR
  * @returns The rows with this item's added, the node index of its tree and the document's id, which
  *   is the tree's; `UnmodeledVocabulary` for a root that is not `qti-assessment-item` in the ASI
  *   namespace, naming it, and for any element or attribute the registries do not model;
- *   `ProcessingRefused` for a response or template processing the processing checker refuses.
+ *   `ProcessingRefused` for a response or template processing the processing checker refuses;
+ *   `ImportRefused` for a choice interaction's bound outside the non-negative integers.
  */
 export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
   input: ItemInput,
   rows: Rows,
 ): Effect.fn.Return<
   { rows: Rows; nodes: NodeIndex; documentId: string },
-  UnmodeledVocabulary | ItemRefusal | ProcessingRefused
+  ImportRefused | UnmodeledVocabulary | ItemRefusal | ProcessingRefused
 > {
   const { doc, packageId, version } = input;
   const { root } = doc;
@@ -836,8 +964,8 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
     {
       id: documentId,
       package: packageId,
-      path: input.path,
-      resource: input.resource,
+      path: PackagePath(input.path),
+      resource: ManifestIdentifier(input.resource),
       resourceType: input.resourceType,
       root: "item",
       version,
@@ -855,7 +983,7 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
   const common = {
     document: documentId,
     package: packageId,
-    resource: input.resource,
+    resource: ManifestIdentifier(input.resource),
     root: "item",
   } as const;
   const identifier = attributeOf(built, root, rootNode, "identifier", "collapse");
@@ -889,12 +1017,23 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
     });
   }
 
-  const adaptiveLexical = Option.getOrElse(adaptive.value, () => "false");
+  const adaptiveLexical = yield* closedOf(
+    XsBoolean.handles,
+    Option.getOrElse(adaptive.value, () => "false"),
+    "attribute-lexical",
+    "the adaptive attribute of qti-assessment-item",
+  );
+  const timeDependentHandle = yield* closedOf(
+    XsBoolean.handles,
+    timeDependent.value.value,
+    "attribute-lexical",
+    "the time-dependent attribute of qti-assessment-item",
+  );
   built = Rows.add(built, AssessmentItem, [
     {
-      adaptive: judgedLater(adaptiveLexical),
+      adaptive: adaptiveLexical,
       id: rootNode.id,
-      timeDependent: judgedLater(timeDependent.value.value),
+      timeDependent: timeDependentHandle,
       tree: documentId,
     },
   ]);
@@ -946,13 +1085,13 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
       const width = lexicalOf(element, "width");
       const alt = yield* requiredAttribute(element, "alt", lexicalOf(element, "alt"));
       const imgSrc = yield* requiredAttribute(element, "src", src.value);
-      built = Rows.add(built, Img, [{ alt, id: node.id, src: imgSrc }]);
+      built = Rows.add(built, Img, [{ alt, id: node.id, src: EmbedSourceUri(imgSrc) }]);
       built = Rows.add(
         built,
         ImgLongdesc,
         Option.match(longdesc.value, {
           onNone: () => [],
-          onSome: (value) => [{ node: node.id, value }],
+          onSome: (value) => [{ node: node.id, value: LongDescriptionUri(value) }],
         }),
       );
       built = Rows.add(

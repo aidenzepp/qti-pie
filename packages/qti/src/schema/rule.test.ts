@@ -2,6 +2,8 @@
 import { schema } from "@bjornpagen/grizzle";
 import type { Statement } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import * as contracts from "#qti/schema/contracts.ts";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as item from "#qti/schema/item.ts";
 import * as xi from "#qti/schema/kinds/xi.ts";
@@ -332,6 +334,13 @@ describe("rule", () => {
     }
   });
 
+  it("types XIncludeParse as closedId of its roster", () => {
+    assert.strictEqual(
+      rule.relations.XIncludeParse.fields.value.roster,
+      rosters.XIncludeParseValue,
+    );
+  });
+
   it("holds exactly three mirrors, each condition arm against its if arm's condition", () => {
     const expected = [
       ["ResponseConditionArm", "ResponseIfArm"],
@@ -415,5 +424,11 @@ describe("kinds/xi", () => {
       "parse",
       "xpointer",
     ]);
+  });
+});
+
+describe("contracts (rule)", () => {
+  it("types XIncludeHref.value XIncludeUri", () => {
+    assert.strictEqual(rule.XIncludeHref.fields.value.name, contracts.XIncludeUri.name);
   });
 });

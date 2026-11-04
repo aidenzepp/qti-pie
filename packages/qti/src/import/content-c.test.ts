@@ -90,6 +90,7 @@ interface Side {
 type Law =
   | { readonly kind: "check"; readonly name: string; readonly relation: string }
   | { readonly flags: "su" | "u"; readonly kind: "pattern"; readonly source: string }
+  | { readonly contract: string; readonly kind: "contract" }
   | { readonly from: Side; readonly kind: "contained"; readonly to: Side };
 
 const side = (
@@ -107,6 +108,8 @@ const checkLaw = (relation: AnyRelation, name: string): Law => ({
 });
 
 const patternLaw = (source: string): Law => ({ flags: "u", kind: "pattern", source });
+
+const contractLaw = (contract: string): Law => ({ contract, kind: "contract" });
 
 /**
  * The rows of every base fixture, read once for the suite.
@@ -590,9 +593,9 @@ const negatives: readonly Negative[] = [
       });
     },
     fixture: "cut-choice",
-    law: patternLaw(patterns.ncName),
-    name: "a map key of Choice A on an identifier map entry is refused by the ncName pattern",
-    rule: "value-lexical",
+    law: contractLaw("MapKeyIdentifierValue"),
+    name: "a map key of Choice A on an identifier map entry is refused by the MapKeyIdentifierValue contract",
+    rule: "map-key-lexical",
   },
   {
     alter: (draft) => {

@@ -18,6 +18,7 @@ import * as htmlKinds from "#qti/schema/kinds/html.ts";
 import * as item from "#qti/schema/item.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -58,6 +59,16 @@ const containments = (
       ? [[[...rule.left.fields], rule.right.source, [...rule.right.fields]] as const]
       : [],
   );
+
+/**
+ * The source of a column's base pattern, whether the column is a bare pattern or a contract over
+ * one.
+ */
+const sourceOf = (
+  field:
+    | { readonly pattern: { readonly source: string } }
+    | { readonly base: { readonly pattern: { readonly source: string } } },
+): string => ("base" in field ? field.base.pattern.source : field.pattern.source);
 
 describe("item", () => {
   it("builds the probe schema over node, item and html without refusal", () => {
@@ -103,8 +114,8 @@ describe("item", () => {
   it("gives AssessmentItem its two boolean attributes and its tree, and no identifier or title", () => {
     const { fields } = item.relations.AssessmentItem;
     assert.deepStrictEqual(Object.keys(fields), ["adaptive", "id", "timeDependent", "tree"]);
-    assert.strictEqual(fields.adaptive.pattern.source, patterns.xsBoolean);
-    assert.strictEqual(fields.timeDependent.pattern.source, patterns.xsBoolean);
+    assert.strictEqual(fields.adaptive.roster, rosters.XsBoolean);
+    assert.strictEqual(fields.timeDependent.roster, rosters.XsBoolean);
   });
 
   it("gives Img a preserved alt, an anyUri src and three optional-value rows", () => {
@@ -112,7 +123,7 @@ describe("item", () => {
     assert.deepStrictEqual(Object.keys(fields), ["alt", "id", "src"]);
     assert.strictEqual(fields.alt.pattern.source, patterns.xsString);
     assert.strictEqual(fields.alt.pattern.flags, patterns.xsStringFlags);
-    assert.strictEqual(fields.src.pattern.source, patterns.anyUri);
+    assert.strictEqual(fields.src.base.pattern.source, patterns.anyUri);
 
     const optional = [
       [html.relations.ImgLongdesc, patterns.anyUri],
@@ -122,7 +133,7 @@ describe("item", () => {
 
     for (const [relation, pattern] of optional) {
       assert.deepStrictEqual([...relation.primaryKey], ["node"]);
-      assert.strictEqual(relation.fields.value.pattern.source, pattern);
+      assert.strictEqual(sourceOf(relation.fields.value), pattern);
       assert.deepStrictEqual(containments(html.rules, relation), [
         [["node"], html.relations.Img, ["id"]],
       ]);
@@ -361,4 +372,13 @@ layer(NodeServices.layer, { excludeTestServices: true })("the importers' copies"
       assert.isTrue(languages.some((language) => owners.get(language.lom) === "manifest"));
     }),
   );
+});
+
+describe("contracts (item)", () => {
+  it("types the item tool name ToolName and the tool version ToolVersion", () => {
+    assert.strictEqual(item.ItemToolBoth.fields.toolName.name, contracts.ToolName.name);
+    assert.strictEqual(item.ItemToolBoth.fields.toolVersion.name, contracts.ToolVersion.name);
+    assert.strictEqual(item.ItemToolName.fields.toolName.name, contracts.ToolName.name);
+    assert.strictEqual(item.ItemToolVersion.fields.toolVersion.name, contracts.ToolVersion.name);
+  });
 });

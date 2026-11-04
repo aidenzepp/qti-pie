@@ -15,16 +15,16 @@ import {
 } from "#qti/import/interactions.ts";
 import type { DeclaredVariable, InteractionContext, Shared } from "#qti/import/interactions.ts";
 import { associateRows } from "#qti/import/interactions/associate.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
+import { MatchGroupList } from "#qti/schema/contracts.ts";
 import { ChoiceTemplateRef, MatchGroup } from "#qti/schema/choices.ts";
 import {
   AssociableHotspot,
   AssociableHotspotLabel,
   AssociableHotspotMatchMin,
   AssociateInteraction,
-  AssociateMaxAssociations,
-  AssociateMinAssociations,
   DeclaredAssociableHotspotShowHide,
   DeclaredAssociateMaxAssociations,
   DeclaredAssociateMinAssociations,
@@ -32,7 +32,7 @@ import {
   DeclaredGraphicAssociateMaxAssociations,
   DeclaredMatchShuffle,
   GraphicAssociateInteraction,
-  GraphicAssociateMaxAssociations,
+  GraphicAssociateMinAssociations,
   MatchFirstColumnHeader,
   MatchInteraction,
   MatchMaxSelectionsMessage,
@@ -45,7 +45,7 @@ import {
   SimpleMatchSet,
 } from "#qti/schema/interactions/associate.ts";
 import { InteractionBinding, TypedBinding } from "#qti/schema/interaction.ts";
-import { AttributeLexical, NodeKind } from "#qti/schema/node.ts";
+import { AttributeLexical, AttributeSpelling, NodeKind } from "#qti/schema/node.ts";
 import { Coords, CoordsCircle } from "#qti/schema/shapes.ts";
 import type { Attribute, Element } from "#qti/xml/tree.ts";
 
@@ -179,14 +179,8 @@ describe("associateRows on a match interaction", () => {
 
       const choices = Rows.of(built, SimpleAssociableChoice);
       assert.deepStrictEqual(
-        choices.map((row) => [
-          row.identifier,
-          row.interaction,
-          row.matchMax,
-          row.matchMaxN,
-          row.matchMinN,
-        ]),
-        ["A", "B", "X", "Y", "Z"].map((identifier) => [identifier, "node-2", "1", 1n, 0n]),
+        choices.map((row) => [row.identifier, row.interaction, row.matchMaxN, row.matchMinN]),
+        ["A", "B", "X", "Y", "Z"].map((identifier) => [identifier, "node-2", 1n, 0n]),
       );
       assert.deepStrictEqual(
         Rows.of(built, SimpleAssociableChoiceMatchSet).map((row) => [
@@ -354,12 +348,6 @@ describe("associateRows on an associate interaction", () => {
           shuffle: "true",
         },
       ]);
-      assert.deepStrictEqual(Rows.of(built, AssociateMaxAssociations), [
-        { node: "node-2", value: "3" },
-      ]);
-      assert.deepStrictEqual(Rows.of(built, AssociateMinAssociations), [
-        { node: "node-2", value: "1" },
-      ]);
       for (const marker of [
         DeclaredAssociateShuffle,
         DeclaredAssociateMaxAssociations,
@@ -380,16 +368,10 @@ describe("associateRows on an associate interaction", () => {
 
       const rows = Rows.of(built, SimpleAssociableChoice);
       assert.deepStrictEqual(
-        rows.map((row) => [
-          row.identifier,
-          row.interaction,
-          row.matchMax,
-          row.matchMaxN,
-          row.matchMinN,
-        ]),
+        rows.map((row) => [row.identifier, row.interaction, row.matchMaxN, row.matchMinN]),
         [
-          ["A", "node-2", "2", 2n, 1n],
-          ["B", "node-2", "1", 1n, 0n],
+          ["A", "node-2", 2n, 1n],
+          ["B", "node-2", 1n, 0n],
         ],
       );
       assert.strictEqual(Rows.of(built, SimpleAssociableChoiceMatchSet).length, 0);
@@ -399,10 +381,10 @@ describe("associateRows on an associate interaction", () => {
       assert.deepStrictEqual(Rows.of(built, SimpleAssociableChoiceShowHide), [
         { node: "node-3", value: "hide" },
       ]);
-      assert.deepStrictEqual(Rows.of(built, SimpleAssociableChoiceMatchMin), [
-        { node: "node-3", value: "1" },
+      assert.deepStrictEqual(Rows.of(built, SimpleAssociableChoiceMatchMin), [{ node: "node-3" }]);
+      assert.deepStrictEqual(Rows.of(built, MatchGroup), [
+        { node: "node-3", value: MatchGroupList("g1 g2") },
       ]);
-      assert.deepStrictEqual(Rows.of(built, MatchGroup), [{ node: "node-3", value: "g1 g2" }]);
       assert.deepStrictEqual(Rows.of(built, ChoiceTemplateRef), [
         {
           baseType: "identifier",
@@ -516,6 +498,7 @@ describe("associateRows on a graphic associate interaction", () => {
         },
       ]);
       assert.strictEqual(Rows.of(built, DeclaredGraphicAssociateMaxAssociations).length, 0);
+      assert.strictEqual(Rows.of(built, GraphicAssociateMinAssociations).length, 0);
       assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 1n);
       assert.deepStrictEqual(
         Rows.of(built, AssociableHotspot).map((row) => [
@@ -524,13 +507,12 @@ describe("associateRows on a graphic associate interaction", () => {
           row.interaction,
           row.parentKind,
           row.shape,
-          row.matchMax,
           row.matchMaxN,
           row.matchMinN,
         ]),
         [
-          ["node-4", "H1", "node-2", "qti-graphic-associate-interaction", "circle", "1", 1n, 0n],
-          ["node-5", "H2", "node-2", "qti-graphic-associate-interaction", "circle", "2", 2n, 1n],
+          ["node-4", "H1", "node-2", "qti-graphic-associate-interaction", "circle", 1n, 0n],
+          ["node-5", "H2", "node-2", "qti-graphic-associate-interaction", "circle", 2n, 1n],
         ],
       );
       assert.deepStrictEqual(
@@ -550,7 +532,7 @@ describe("associateRows on a graphic associate interaction", () => {
     }),
   );
 
-  it.effect("keeps a hotspot's written match-min and writes none it omitted", () =>
+  it.effect("marks a hotspot's written match-min and writes none it omitted", () =>
     Effect.gen(function* hotspotMatchMin() {
       const ctx = contextOf(
         [
@@ -576,9 +558,7 @@ describe("associateRows on a graphic associate interaction", () => {
 
       const built = yield* associateRows(ctx, Rows.empty());
 
-      assert.deepStrictEqual(Rows.of(built, AssociableHotspotMatchMin), [
-        { node: "node-4", value: "2" },
-      ]);
+      assert.deepStrictEqual(Rows.of(built, AssociableHotspotMatchMin), [{ node: "node-4" }]);
       assert.deepStrictEqual(
         Rows.of(built, AssociableHotspot).map((row) => [row.identifier, row.matchMinN]),
         [
@@ -589,19 +569,21 @@ describe("associateRows on a graphic associate interaction", () => {
     }),
   );
 
-  it.effect("copies a written max-associations and marks it", () =>
+  it.effect("copies a written max-associations and min-associations and marks each", () =>
     Effect.gen(function* maximum() {
-      const ctx = contextOf([graphicItem({ "max-associations": "4" })], graphicDeclarations);
+      const ctx = contextOf(
+        [graphicItem({ "max-associations": "4", "min-associations": "1" })],
+        graphicDeclarations,
+      );
 
       const built = yield* associateRows(ctx, Rows.empty());
 
       assert.strictEqual(Rows.of(built, GraphicAssociateInteraction)[0]?.maxAssociationsN, 4n);
-      assert.deepStrictEqual(Rows.of(built, GraphicAssociateMaxAssociations), [
-        { node: "node-2", value: "4" },
-      ]);
       assert.deepStrictEqual(Rows.of(built, DeclaredGraphicAssociateMaxAssociations), [
         { node: "node-2" },
       ]);
+      assert.strictEqual(Rows.of(built, GraphicAssociateInteraction)[0]?.minAssociationsN, 1n);
+      assert.deepStrictEqual(Rows.of(built, GraphicAssociateMinAssociations), [{ node: "node-2" }]);
       assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 4n);
     }),
   );
@@ -686,4 +668,305 @@ describe("associateRows on a tree with no associate interaction", () => {
       assert.strictEqual(yield* associateRows(ctx, rows), rows);
     }),
   );
+});
+
+const importRuleOf = (exit: Exit.Exit<Rows, unknown>): string => {
+  const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
+
+  return Option.isSome(failure) && failure.value instanceof ImportRefused ? failure.value.rule : "";
+};
+
+const importDetailOf = (exit: Exit.Exit<Rows, unknown>): string => {
+  const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
+
+  return Option.isSome(failure) && failure.value instanceof ImportRefused
+    ? failure.value.detail
+    : "";
+};
+
+const hotspotOf = (more: Readonly<Record<string, string>>): Element =>
+  element("qti-graphic-associate-interaction", { "response-identifier": "RESPONSE" }, [
+    element("img", { alt: "map", src: "map.png" }),
+    element("qti-associable-hotspot", {
+      coords: "10,10,5",
+      identifier: "H1",
+      "match-max": "1",
+      shape: "circle",
+      ...more,
+    }),
+  ]);
+
+describe("associateRows on an integer outside its space", () => {
+  const refused: readonly (readonly [string, Element, ReadonlyMap<string, DeclaredVariable>])[] = [
+    [
+      "max-associations of an associate interaction",
+      element("qti-associate-interaction", {
+        "max-associations": "-1",
+        "response-identifier": "RESPONSE",
+      }),
+      associateDeclarations,
+    ],
+    [
+      "min-associations of an associate interaction",
+      element("qti-associate-interaction", {
+        "min-associations": "x",
+        "response-identifier": "RESPONSE",
+      }),
+      associateDeclarations,
+    ],
+    [
+      "max-associations of a match interaction",
+      element(
+        "qti-match-interaction",
+        { "max-associations": "-1", "response-identifier": "RESPONSE" },
+        [
+          element("qti-simple-match-set", {}, [choice("A")]),
+          element("qti-simple-match-set", {}, [choice("X")]),
+        ],
+      ),
+      pairs,
+    ],
+    [
+      "min-associations of a graphic associate interaction",
+      element("qti-graphic-associate-interaction", {
+        "min-associations": "-1",
+        "response-identifier": "RESPONSE",
+      }),
+      graphicDeclarations,
+    ],
+    [
+      "match-max of a simple associable choice",
+      element("qti-associate-interaction", { "response-identifier": "RESPONSE" }, [
+        choice("A", { "match-max": "abc" }),
+      ]),
+      associateDeclarations,
+    ],
+    [
+      "a missing match-max of a simple associable choice",
+      element("qti-associate-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-simple-associable-choice", { identifier: "A" }),
+      ]),
+      associateDeclarations,
+    ],
+    [
+      "match-min of a simple associable choice",
+      element("qti-associate-interaction", { "response-identifier": "RESPONSE" }, [
+        choice("A", { "match-min": "-1" }),
+      ]),
+      associateDeclarations,
+    ],
+    ["match-max of an associable hotspot", hotspotOf({ "match-max": "abc" }), graphicDeclarations],
+    [
+      "a missing match-max of an associable hotspot",
+      element("qti-graphic-associate-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-associable-hotspot", {
+          coords: "10,10,5",
+          identifier: "H1",
+          shape: "circle",
+        }),
+      ]),
+      graphicDeclarations,
+    ],
+    ["match-min of an associable hotspot", hotspotOf({ "match-min": "-1" }), graphicDeclarations],
+  ];
+
+  for (const [name, tree, declarations] of refused) {
+    it.effect(`refuses ${name} under attribute-lexical before any row is written`, () =>
+      Effect.gen(function* outside() {
+        const exit = yield* Effect.exit(
+          associateRows(contextOf([tree], declarations), Rows.empty()),
+        );
+
+        assert.strictEqual(importRuleOf(exit), "attribute-lexical");
+      }),
+    );
+  }
+});
+
+describe("associateRows on a non-canonical integer spelling", () => {
+  it.effect("keeps a signed match-max as the value and one spelling row", () =>
+    Effect.gen(function* signed() {
+      const ctx = contextOf(
+        [
+          element("qti-associate-interaction", { "response-identifier": "RESPONSE" }, [
+            choice("A", { "match-max": "+2" }),
+          ]),
+        ],
+        associateDeclarations,
+      );
+
+      const built = yield* associateRows(ctx, Rows.empty());
+
+      assert.strictEqual(Rows.of(built, SimpleAssociableChoice)[0]?.matchMaxN, 2n);
+      assert.deepStrictEqual(Rows.of(built, AttributeSpelling), [
+        {
+          attribute: "match-max",
+          kind: "qti-simple-associable-choice",
+          node: "node-3",
+          value: "+2",
+        },
+      ]);
+    }),
+  );
+
+  it.effect("keeps a padded match-min on a hotspot as the value and one spelling row", () =>
+    Effect.gen(function* padded() {
+      const ctx = contextOf([hotspotOf({ "match-min": "03" })], graphicDeclarations);
+
+      const built = yield* associateRows(ctx, Rows.empty());
+
+      assert.strictEqual(Rows.of(built, AssociableHotspot)[0]?.matchMinN, 3n);
+      assert.deepStrictEqual(Rows.of(built, AttributeSpelling), [
+        { attribute: "match-min", kind: "qti-associable-hotspot", node: "node-4", value: "03" },
+      ]);
+    }),
+  );
+
+  it.effect("keeps a padded max-associations on each interaction as one spelling row", () =>
+    Effect.gen(function* interactions() {
+      const ctx = contextOf(
+        [
+          element("qti-associate-interaction", {
+            "max-associations": "03",
+            "response-identifier": "RESPONSE",
+          }),
+        ],
+        associateDeclarations,
+      );
+
+      const built = yield* associateRows(ctx, Rows.empty());
+
+      assert.strictEqual(Rows.of(built, AssociateInteraction)[0]?.maxAssociationsN, 3n);
+      assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 3n);
+      assert.deepStrictEqual(
+        Rows.of(built, AttributeSpelling).map((row) => [row.attribute, row.value]),
+        [["max-associations", "03"]],
+      );
+    }),
+  );
+
+  it.effect("writes no spelling row for a canonical value", () =>
+    Effect.gen(function* canonical() {
+      const built = yield* associateRows(
+        contextOf([writtenAssociate()], associateDeclarations),
+        Rows.empty(),
+      );
+
+      assert.strictEqual(Rows.of(built, AttributeSpelling).length, 0);
+    }),
+  );
+});
+
+describe("associateRows on a flag outside its roster", () => {
+  const refused: readonly (readonly [string, Element, ReadonlyMap<string, DeclaredVariable>])[] = [
+    [
+      "shuffle of yes on an associate interaction",
+      element("qti-associate-interaction", { "response-identifier": "RESPONSE", shuffle: "yes" }),
+      associateDeclarations,
+    ],
+    [
+      "shuffle of yes on a match interaction",
+      element("qti-match-interaction", { "response-identifier": "RESPONSE", shuffle: "yes" }),
+      pairs,
+    ],
+    [
+      "fixed of yes on a simple associable choice",
+      element("qti-associate-interaction", { "response-identifier": "RESPONSE" }, [
+        choice("A", { fixed: "yes" }),
+      ]),
+      associateDeclarations,
+    ],
+    [
+      "show-hide of visible on a simple associable choice",
+      element("qti-associate-interaction", { "response-identifier": "RESPONSE" }, [
+        choice("A", { "show-hide": "visible" }),
+      ]),
+      associateDeclarations,
+    ],
+    [
+      "show-hide of visible on an associable hotspot",
+      hotspotOf({ "show-hide": "visible" }),
+      graphicDeclarations,
+    ],
+  ];
+
+  for (const [name, tree, declarations] of refused) {
+    it.effect(`refuses ${name} under attribute-lexical before any row is written`, () =>
+      Effect.gen(function* outside() {
+        const exit = yield* Effect.exit(
+          associateRows(contextOf([tree], declarations), Rows.empty()),
+        );
+
+        assert.strictEqual(importRuleOf(exit), "attribute-lexical");
+      }),
+    );
+  }
+
+  it.effect("admits the xs:boolean spelling 1 and the show-hide of hide", () =>
+    Effect.gen(function* admitted() {
+      const built = yield* associateRows(
+        contextOf(
+          [
+            element(
+              "qti-associate-interaction",
+              { "response-identifier": "RESPONSE", shuffle: "1" },
+              [choice("A", { fixed: "0", "show-hide": "hide" })],
+            ),
+          ],
+          associateDeclarations,
+        ),
+        Rows.empty(),
+      );
+
+      assert.deepStrictEqual(
+        Rows.of(built, AssociateInteraction).map((row) => row.shuffle),
+        ["1"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(built, SimpleAssociableChoiceFixed).map((row) => row.value),
+        ["0"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(built, SimpleAssociableChoiceShowHide).map((row) => row.value),
+        ["hide"],
+      );
+    }),
+  );
+});
+
+describe("associateRows on a missing match-max", () => {
+  const missing: readonly (readonly [string, Element, typeof associateDeclarations])[] = [
+    [
+      "a simple associable choice",
+      element("qti-associate-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-simple-associable-choice", { identifier: "A" }),
+      ]),
+      associateDeclarations,
+    ],
+    [
+      "an associable hotspot",
+      element("qti-graphic-associate-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-associable-hotspot", {
+          coords: "10,10,5",
+          identifier: "H1",
+          shape: "circle",
+        }),
+      ]),
+      graphicDeclarations,
+    ],
+  ];
+
+  for (const [name, tree, declarations] of missing) {
+    it.effect(`tells ${name} with no match-max from an empty one`, () =>
+      Effect.gen(function* outside() {
+        const exit = yield* Effect.exit(
+          associateRows(contextOf([tree], declarations), Rows.empty()),
+        );
+
+        assert.strictEqual(importRuleOf(exit), "attribute-lexical");
+        assert.include(importDetailOf(exit), "has no match-max");
+        assert.notInclude(importDetailOf(exit), '""');
+      }),
+    );
+  }
 });

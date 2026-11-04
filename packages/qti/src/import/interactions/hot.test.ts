@@ -17,8 +17,10 @@ import {
 } from "#qti/import/interactions.ts";
 import type { DeclaredVariable, InteractionContext, Shared } from "#qti/import/interactions.ts";
 import { hotRows } from "#qti/import/interactions/hot.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
 import { ItemRefusal, Rows, treeRows } from "#qti/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#qti/import/tree.ts";
+import { ChoiceIdentifier, RectCoords } from "#qti/schema/contracts.ts";
 import { ChoiceTemplateRef } from "#qti/schema/choices.ts";
 import {
   DeclaredHotspotChoiceShowHide,
@@ -33,27 +35,21 @@ import {
   HotspotChoice,
   HotspotChoiceLabel,
   HotspotInteraction,
-  HotspotMaxChoices,
   HotspotMaxSelectionsMessage,
   HotspotMinSelectionsMessage,
   Hottext,
   HottextInteraction,
-  HottextMaxChoices,
   HottextMaxSelectionsMessage,
-  HottextMinChoices,
   HottextMinSelectionsMessage,
   HottextOwner,
   PositionObjectCenterPoint,
   PositionObjectInteraction,
-  PositionObjectMaxChoices,
   PositionObjectMinChoices,
   PositionObjectStage,
   SelectPointInteraction,
-  SelectPointMaxChoices,
-  SelectPointMinChoices,
 } from "#qti/schema/interactions/hot.ts";
 import { InteractionBinding, TypedBinding } from "#qti/schema/interaction.ts";
-import { NodeKind } from "#qti/schema/node.ts";
+import { AttributeSpelling, NodeKind } from "#qti/schema/node.ts";
 import { Coords, CoordsCircle, CoordsRect } from "#qti/schema/shapes.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import { readXml } from "#qti/xml/read.ts";
@@ -236,7 +232,6 @@ describe("hotRows on a hotspot interaction", () => {
           rootKind: "item",
         },
       ]);
-      assert.deepStrictEqual(Rows.of(built, HotspotMaxChoices), [{ node: "node-2", value: "2" }]);
       assert.deepStrictEqual(Rows.of(built, DeclaredHotspotMaxChoices), [{ node: "node-2" }]);
       assert.strictEqual(Rows.of(built, DeclaredHotspotMinChoices).length, 0);
       assert.deepStrictEqual(Rows.of(built, HotspotMinSelectionsMessage), [
@@ -267,7 +262,9 @@ describe("hotRows on a hotspot interaction", () => {
           ["node-4", "qti-hotspot-choice", "circle", "5,5,3"],
         ],
       );
-      assert.deepStrictEqual(Rows.of(built, CoordsRect), [{ node: "node-3", value: "0,0,10,10" }]);
+      assert.deepStrictEqual(Rows.of(built, CoordsRect), [
+        { node: "node-3", value: RectCoords("0,0,10,10") },
+      ]);
       assert.deepStrictEqual(Rows.of(built, CoordsCircle), [{ node: "node-4", value: "5,5,3" }]);
       assert.deepStrictEqual(Rows.of(built, TypedBinding), [
         {
@@ -295,7 +292,6 @@ describe("hotRows on a hotspot interaction", () => {
       const [row] = Rows.of(built, HotspotInteraction);
       assert.strictEqual(row?.maxChoicesN, 1n);
       assert.strictEqual(row?.minChoicesN, 0n);
-      assert.strictEqual(Rows.of(built, HotspotMaxChoices).length, 0);
       assert.strictEqual(Rows.of(built, DeclaredHotspotMaxChoices).length, 0);
       assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 1n);
     }),
@@ -386,7 +382,6 @@ describe("hotRows on a select-point interaction", () => {
       ]);
       assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 0n);
       assert.strictEqual(Rows.of(built, DeclaredSelectPointMaxChoices).length, 0);
-      assert.strictEqual(Rows.of(built, SelectPointMaxChoices).length, 0);
     }),
   );
 
@@ -408,12 +403,6 @@ describe("hotRows on a select-point interaction", () => {
       const [row] = Rows.of(built, SelectPointInteraction);
       assert.strictEqual(row?.maxChoicesN, 3n);
       assert.strictEqual(row?.minChoicesN, 1n);
-      assert.deepStrictEqual(Rows.of(built, SelectPointMaxChoices), [
-        { node: "node-2", value: "3" },
-      ]);
-      assert.deepStrictEqual(Rows.of(built, SelectPointMinChoices), [
-        { node: "node-2", value: "1" },
-      ]);
       assert.deepStrictEqual(Rows.of(built, DeclaredSelectPointMaxChoices), [{ node: "node-2" }]);
       assert.deepStrictEqual(Rows.of(built, DeclaredSelectPointMinChoices), [{ node: "node-2" }]);
       assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 3n);
@@ -448,7 +437,6 @@ describe("hotRows on a position-object interaction", () => {
       assert.deepStrictEqual(Rows.of(built, PositionObjectCenterPoint), [
         { node: "node-3", value: "10 20" },
       ]);
-      assert.strictEqual(Rows.of(built, PositionObjectMaxChoices).length, 0);
       assert.strictEqual(Rows.of(built, PositionObjectMinChoices).length, 0);
       assert.strictEqual(Rows.of(built, DeclaredPositionObjectMaxChoices).length, 0);
       assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 1n);
@@ -473,9 +461,7 @@ describe("hotRows on a position-object interaction", () => {
       const [row] = Rows.of(built, PositionObjectInteraction);
       assert.strictEqual(row?.maxChoicesN, 2n);
       assert.strictEqual(row?.minChoicesN, 1n);
-      assert.deepStrictEqual(Rows.of(built, PositionObjectMinChoices), [
-        { node: "node-2", value: "1" },
-      ]);
+      assert.deepStrictEqual(Rows.of(built, PositionObjectMinChoices), [{ node: "node-2" }]);
       assert.deepStrictEqual(Rows.of(built, DeclaredPositionObjectMaxChoices), [
         { node: "node-2" },
       ]);
@@ -554,8 +540,6 @@ describe("hotRows on hottexts", () => {
           ["node-7", "B", "node-2"],
         ],
       );
-      assert.deepStrictEqual(Rows.of(built, HottextMaxChoices), [{ node: "node-2", value: "2" }]);
-      assert.deepStrictEqual(Rows.of(built, HottextMinChoices), [{ node: "node-2", value: "1" }]);
       assert.deepStrictEqual(Rows.of(built, DeclaredHottextMaxChoices), [{ node: "node-2" }]);
       assert.deepStrictEqual(Rows.of(built, DeclaredHottextMinChoices), [{ node: "node-2" }]);
       assert.deepStrictEqual(Rows.of(built, HottextMinSelectionsMessage), [
@@ -578,7 +562,7 @@ describe("hotRows on hottexts", () => {
       const built = yield* hotRows(ctx, Rows.empty());
 
       assert.deepStrictEqual(Rows.of(built, Hottext), [
-        { id: idOf(ctx, "qti-hottext"), identifier: "X", showHide: "show" },
+        { id: idOf(ctx, "qti-hottext"), identifier: ChoiceIdentifier("X"), showHide: "show" },
       ]);
       assert.strictEqual(Rows.of(built, HottextOwner).length, 0);
       assert.strictEqual(Rows.of(built, HottextInteraction).length, 0);
@@ -592,7 +576,7 @@ describe("hotRows on hottexts", () => {
       const built = yield* hotRows(ctx, Rows.empty());
 
       assert.deepStrictEqual(Rows.of(built, Hottext), [
-        { id: "node-2", identifier: "Y", showHide: "show" },
+        { id: "node-2", identifier: ChoiceIdentifier("Y"), showHide: "show" },
       ]);
       assert.strictEqual(Rows.of(built, HottextOwner).length, 0);
     }),
@@ -684,3 +668,189 @@ layer(NodeServices.layer, { excludeTestServices: true })(
     );
   },
 );
+
+const importRuleOf = (exit: Exit.Exit<Rows, unknown>): string => {
+  const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
+
+  return Option.isSome(failure) && failure.value instanceof ImportRefused ? failure.value.rule : "";
+};
+
+describe("hotRows on an integer outside its space", () => {
+  const refused: readonly (readonly [string, Element, ReadonlyMap<string, DeclaredVariable>])[] = [
+    [
+      "min-choices of a hotspot interaction",
+      element("qti-hotspot-interaction", {
+        "min-choices": "-1",
+        "response-identifier": "RESPONSE",
+      }),
+      single,
+    ],
+    [
+      "max-choices of a hotspot interaction",
+      element("qti-hotspot-interaction", {
+        "max-choices": "-1",
+        "response-identifier": "RESPONSE",
+      }),
+      single,
+    ],
+    [
+      "max-choices of a select point",
+      element("qti-select-point-interaction", {
+        "max-choices": "x",
+        "response-identifier": "RESPONSE",
+      }),
+      point,
+    ],
+    [
+      "min-choices of a select point",
+      element("qti-select-point-interaction", {
+        "min-choices": "1.5",
+        "response-identifier": "RESPONSE",
+      }),
+      point,
+    ],
+    [
+      "max-choices of a hottext interaction",
+      element("qti-hottext-interaction", {
+        "max-choices": "-1",
+        "response-identifier": "RESPONSE",
+      }),
+      single,
+    ],
+    [
+      "min-choices of a position-object interaction",
+      element("qti-position-object-interaction", {
+        "min-choices": "abc",
+        "response-identifier": "RESPONSE",
+      }),
+      point,
+    ],
+  ];
+
+  for (const [name, tree, declarations] of refused) {
+    it.effect(`refuses ${name} under attribute-lexical before any row is written`, () =>
+      Effect.gen(function* outside() {
+        const exit = yield* Effect.exit(hotRows(contextOf([tree], declarations), Rows.empty()));
+
+        assert.strictEqual(importRuleOf(exit), "attribute-lexical");
+      }),
+    );
+  }
+});
+
+describe("hotRows on a non-canonical integer spelling", () => {
+  it.effect("keeps a padded max-choices on a hottext interaction as one spelling row", () =>
+    Effect.gen(function* padded() {
+      const ctx = contextOf(
+        [
+          element("qti-hottext-interaction", {
+            "max-choices": "05",
+            "response-identifier": "RESPONSE",
+          }),
+        ],
+        multiple,
+      );
+
+      const built = yield* hotRows(ctx, Rows.empty());
+
+      assert.strictEqual(Rows.of(built, HottextInteraction)[0]?.maxChoicesN, 5n);
+      assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 5n);
+      assert.deepStrictEqual(Rows.of(built, AttributeSpelling), [
+        {
+          attribute: "max-choices",
+          kind: "qti-hottext-interaction",
+          node: "node-2",
+          value: "05",
+        },
+      ]);
+    }),
+  );
+
+  it.effect("keeps a signed min-choices on a hotspot interaction as one spelling row", () =>
+    Effect.gen(function* signed() {
+      const ctx = contextOf(
+        [
+          element("qti-hotspot-interaction", {
+            "max-choices": "3",
+            "min-choices": "+1",
+            "response-identifier": "RESPONSE",
+          }),
+        ],
+        multiple,
+      );
+
+      const built = yield* hotRows(ctx, Rows.empty());
+
+      assert.strictEqual(Rows.of(built, HotspotInteraction)[0]?.minChoicesN, 1n);
+      assert.deepStrictEqual(
+        Rows.of(built, AttributeSpelling).map((row) => [row.attribute, row.value]),
+        [["min-choices", "+1"]],
+      );
+    }),
+  );
+
+  it.effect("writes no spelling row for a canonical value", () =>
+    Effect.gen(function* canonical() {
+      const ctx = contextOf(
+        [
+          element("qti-select-point-interaction", {
+            "max-choices": "3",
+            "min-choices": "0",
+            "response-identifier": "RESPONSE",
+          }),
+        ],
+        point,
+      );
+
+      const built = yield* hotRows(ctx, Rows.empty());
+
+      assert.strictEqual(Rows.of(built, AttributeSpelling).length, 0);
+    }),
+  );
+});
+
+describe("hotRows on a choice outside the show-hide roster", () => {
+  const refused: readonly (readonly [string, Element])[] = [
+    [
+      "show-hide of visible on a hottext",
+      element("qti-hottext-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-hottext", { identifier: "A", "show-hide": "visible" }),
+      ]),
+    ],
+    [
+      "show-hide of visible on a hotspot choice",
+      element("qti-hotspot-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-hotspot-choice", {
+          coords: "0,0,1,1",
+          identifier: "A",
+          shape: "rect",
+          "show-hide": "visible",
+        }),
+      ]),
+    ],
+  ];
+
+  for (const [name, tree] of refused) {
+    it.effect(`refuses ${name} under attribute-lexical before any row is written`, () =>
+      Effect.gen(function* outside() {
+        const exit = yield* Effect.exit(hotRows(contextOf([tree], single), Rows.empty()));
+
+        assert.strictEqual(importRuleOf(exit), "attribute-lexical");
+      }),
+    );
+  }
+
+  it.effect("admits show-hide of hide on a hottext", () =>
+    Effect.gen(function* admitted() {
+      const tree = element("qti-hottext-interaction", { "response-identifier": "RESPONSE" }, [
+        element("qti-hottext", { identifier: "A", "show-hide": "hide" }),
+      ]);
+      const built = yield* hotRows(contextOf([tree], single), Rows.empty());
+
+      assert.deepStrictEqual(
+        Rows.of(built, Hottext).map((row) => row.showHide),
+        ["hide"],
+      );
+    }),
+  );
+});

@@ -54,9 +54,467 @@ export const IdrefAttribute = closed("IdrefAttribute", [
 ]);
 
 /**
+ * The `xs:boolean` lexical space (XML Schema Part 2, section 3.2.2.1): `true`, `false`, `1` or
+ * `0`. The built-in type has no enumeration in the QTI XSDs.
+ */
+export const XsBoolean = closed("XsBoolean", ["true", "false", "1", "0"]);
+
+/**
+ * The seven `schema` values of the QTI 3 content-package profile (`imsqtiv3p0_imscpv1p2_v1p0.xsd`
+ * lines 327 to 333, `imsqtiv3p0p1_imscpv1p2_v1p0.xsd` lines 295 to 301), in XSD order.
+ */
+export const CpSchema = closed("CpSchema", [
+  "QTI Package",
+  "QTI Test Bank",
+  "QTI Item Bank",
+  "QTI Object Bank",
+  "QTI Test",
+  "QTI Section",
+  "QTI Item",
+]);
+
+/**
+ * The 22 `interactionType` values of the QTI metadata XSD (`imsqti_metadatav3p0_v1p0.xsd` lines
+ * 169 to 190), in XSD order.
+ */
+export const QmdInteractionTypeValue = closed("QmdInteractionTypeValue", [
+  "associateInteraction",
+  "choiceInteraction",
+  "customInteraction",
+  "drawingInteraction",
+  "endAttemptInteraction",
+  "extendedTextInteraction",
+  "gapMatchInteraction",
+  "graphicAssociateInteraction",
+  "graphicGapMatchInteraction",
+  "graphicOrderInteraction",
+  "hotspotInteraction",
+  "hottextInteraction",
+  "inlineChoiceInteraction",
+  "matchInteraction",
+  "mediaInteraction",
+  "orderInteraction",
+  "portableCustomInteraction",
+  "positionObjectInteraction",
+  "selectPointInteraction",
+  "sliderInteraction",
+  "textEntryInteraction",
+  "uploadInteraction",
+]);
+
+/**
+ * The three `feedbackType` values of the QTI metadata XSD (`imsqti_metadatav3p0_v1p0.xsd` lines
+ * 203 to 205), in XSD order.
+ */
+export const QmdFeedbackTypeValue = closed("QmdFeedbackTypeValue", [
+  "adaptive",
+  "nonadaptive",
+  "none",
+]);
+
+/**
+ * The three `scoringMode` values of the QTI metadata XSD (`imsqti_metadatav3p0_v1p0.xsd` lines 218
+ * to 220), in XSD order. `externalmachine` is spelled in lower case here, unlike `ExternalScored`.
+ */
+export const QmdScoringModeValue = closed("QmdScoringModeValue", [
+  "human",
+  "externalmachine",
+  "responseprocessing",
+]);
+
+/**
+ * The `boolean` base-type literal of the QTI information model: `true` or `false`. The XSDs type
+ * `qti-value` as `xs:string`, so no enumeration backs it.
+ */
+export const BooleanLiteral = closed("BooleanLiteral", ["true", "false"]);
+
+/**
+ * The `externalScored` values of an outcome declaration (`imsqti_asiv3p0p1_v1p0.xsd` lines 30147
+ * to 30148). The XSD lists `externalMachine` before `human`; the roster lists `human` first.
+ */
+export const ExternalScored = closed("ExternalScored", ["human", "externalMachine"]);
+
+/**
+ * The `toleranceMode` values of `qti-equal` (`imsqti_asiv3p0p1_v1p0.xsd` lines 27021 to 27023), in
+ * XSD order.
+ */
+export const ToleranceMode = closed("ToleranceMode", ["absolute", "exact", "relative"]);
+
+/**
+ * The `roundingMode` values of `qti-equal-rounded` and `qti-round-to` (`imsqti_asiv3p0p1_v1p0.xsd`
+ * lines 27121 to 27122), in XSD order.
+ */
+export const RoundingMode = closed("RoundingMode", ["decimalPlaces", "significantFigures"]);
+
+/**
+ * The 28 `name` values of `qti-math-operator` (`imsqti_asiv3p0p1_v1p0.xsd` lines 29708 to 29735),
+ * in XSD order.
+ */
+export const MathOperatorName = closed("MathOperatorName", [
+  "sin",
+  "cos",
+  "tan",
+  "sec",
+  "csc",
+  "cot",
+  "asin",
+  "acos",
+  "atan",
+  "atan2",
+  "asec",
+  "acsc",
+  "acot",
+  "sinh",
+  "cosh",
+  "tanh",
+  "sech",
+  "csch",
+  "coth",
+  "log",
+  "ln",
+  "exp",
+  "abs",
+  "signum",
+  "floor",
+  "ceil",
+  "toDegrees",
+  "toRadians",
+]);
+
+/**
+ * The five `name` values of `qti-stats-operator` (`imsqti_asiv3p0p1_v1p0.xsd` lines 32114 to
+ * 32118), in XSD order.
+ */
+export const StatsOperatorName = closed("StatsOperatorName", [
+  "mean",
+  "sampleVariance",
+  "sampleSD",
+  "popVariance",
+  "popSD",
+]);
+
+/**
+ * The `name` values of `qti-math-constant` (`imsqti_asiv3p0p1_v1p0.xsd` lines 34421 to 34422), in
+ * XSD order.
+ */
+export const MathConstantName = closed("MathConstantName", ["pi", "e"]);
+
+/**
+ * The `parse` values of `xi:include` (`w3/XInclude.xsd` lines 31 to 36), in XSD order.
+ */
+export const XIncludeParseValue = closed("XIncludeParseValue", ["xml", "text"]);
+
+/**
+ * The 74 `role` values of `ARIABaseDType` (`imsqti_asiv3p0p1_v1p0.xsd` lines 24413 to 24486), in
+ * XSD order.
+ */
+export const AriaRoleValue = closed("AriaRoleValue", [
+  "article",
+  "columnheader",
+  "definition",
+  "document",
+  "group",
+  "heading",
+  "img",
+  "list",
+  "listitem",
+  "math",
+  "note",
+  "presentation",
+  "region",
+  "row",
+  "rowgroup",
+  "rowheader",
+  "separator",
+  "toolbar",
+  "button",
+  "checkbox",
+  "gridcell",
+  "link",
+  "log",
+  "option",
+  "radio",
+  "slider",
+  "spinbutton",
+  "status",
+  "tab",
+  "tabpanel",
+  "textbox",
+  "timer",
+  "listbox",
+  "radiogroup",
+  "tablist",
+  "complementary",
+  "contentinfo",
+  "alert",
+  "alertdialog",
+  "application",
+  "banner",
+  "combobox",
+  "dialog",
+  "form",
+  "grid",
+  "main",
+  "marquee",
+  "menu",
+  "menubar",
+  "menuitem",
+  "menuitemcheckbox",
+  "menuitemradio",
+  "navigation",
+  "progressbar",
+  "scrollbar",
+  "search",
+  "tooltip",
+  "tree",
+  "treegrid",
+  "treeitem",
+  "searchbox",
+  "switch",
+  "term",
+  "figure",
+  "code",
+  "time",
+  "subscript",
+  "superscript",
+  "meter",
+  "generic",
+  "insertion",
+  "deletion",
+  "strong",
+  "emphasis",
+]);
+
+/**
+ * The `aria-live` values (`imsqti_asiv3p0p1_v1p0.xsd` lines 24504 to 24506), in XSD order.
+ */
+export const AriaLiveValue = closed("AriaLiveValue", ["off", "polite", "assertive"]);
+
+/**
+ * The `aria-orientation` values (`imsqti_asiv3p0p1_v1p0.xsd` lines 24518 to 24519), in XSD order.
+ * An ARIA state of its own, not the QTI layout axis `Orientation`.
+ */
+export const AriaOrientationValue = closed("AriaOrientationValue", ["vertical", "horizontal"]);
+
+/**
+ * The `aria-autocomplete` values (`imsqti_asiv3p0p1_v1p0.xsd` lines 24535 to 24538), in XSD order.
+ */
+export const AriaAutocompleteValue = closed("AriaAutocompleteValue", [
+  "inline",
+  "list",
+  "both",
+  "none",
+]);
+
+/**
+ * The ARIA tristate values, shared by `aria-checked` (`imsqti_asiv3p0p1_v1p0.xsd` lines 24551 to
+ * 24554) and `aria-pressed` (lines 24600 to 24603), in XSD order.
+ */
+export const AriaTristate = closed("AriaTristate", ["true", "false", "mixed", "undefined"]);
+
+/**
+ * The ARIA true, false or undefined values, shared by `aria-expanded` (`imsqti_asiv3p0p1_v1p0.xsd`
+ * lines 24567 to 24569) and `aria-selected` (lines 24622 to 24624), in XSD order.
+ */
+export const AriaTrueFalseUndefined = closed("AriaTrueFalseUndefined", [
+  "true",
+  "false",
+  "undefined",
+]);
+
+/**
+ * The `aria-invalid` values (`imsqti_asiv3p0p1_v1p0.xsd` lines 24582 to 24585), in XSD order.
+ */
+export const AriaInvalidValue = closed("AriaInvalidValue", [
+  "true",
+  "false",
+  "grammar",
+  "spelling",
+]);
+
+/**
+ * The `aria-sort` values (`imsqti_asiv3p0p1_v1p0.xsd` lines 24637 to 24640), in XSD order.
+ */
+export const AriaSortValue = closed("AriaSortValue", ["ascending", "descending", "none", "other"]);
+
+/**
+ * The eight `aria-current` values (`imsqti_asiv3p0p1_v1p0.xsd` lines 24659 to 24666), in XSD
+ * order.
+ */
+export const AriaCurrentValue = closed("AriaCurrentValue", [
+  "page",
+  "step",
+  "location",
+  "date",
+  "time",
+  "true",
+  "false",
+  "undefined",
+]);
+
+/**
+ * The `dir` values (`imsqti_asiv3p0p1_v1p0.xsd` lines 25240 to 25242), in XSD order.
+ */
+export const TextDirection = closed("TextDirection", ["ltr", "rtl", "auto"]);
+
+/**
+ * The `data-qti-suppress-tts` values (`imsqti_asiv3p0p1_v1p0.xsd` lines 25257 to 25259), in XSD
+ * order.
+ */
+export const SuppressTtsMode = closed("SuppressTtsMode", [
+  "computer-read-aloud",
+  "screen-reader",
+  "all",
+]);
+
+/**
+ * The `valuetype` values of `param` (`imsqti_asiv3p0p1_v1p0.xsd` lines 34499 to 34500), in XSD
+ * order.
+ */
+export const ParamValuetype = closed("ParamValuetype", ["DATA", "REF"]);
+
+/**
+ * The `scope` values of `td` and `th` (`imsqti_asiv3p0p1_v1p0.xsd` lines 32499 to 32502). The XSD
+ * lists `col`, `colgroup`, `row`, `rowgroup`; the roster lists `row`, `col`, `rowgroup`,
+ * `colgroup`.
+ */
+export const CellScope = closed("CellScope", ["row", "col", "rowgroup", "colgroup"]);
+
+/**
+ * The `align` values of `td` and `th` (`imsqti_asiv3p0p1_v1p0.xsd` lines 32519 to 32523), in XSD
+ * order.
+ */
+export const CellAlign = closed("CellAlign", ["left", "center", "right", "justify", "char"]);
+
+/**
+ * The `valign` values of `td` and `th` (`imsqti_asiv3p0p1_v1p0.xsd` lines 32536 to 32539), in XSD
+ * order.
+ */
+export const CellValign = closed("CellValign", ["bottom", "middle", "top", "baseline"]);
+
+/**
+ * The `preload` values of `audio` and `video` (`imsqti_asiv3p0p1_v1p0.xsd` lines 24972 to 24974),
+ * in XSD order.
+ */
+export const MediaPreload = closed("MediaPreload", ["none", "auto", "metadata"]);
+
+/**
+ * The `crossorigin` values of `audio` and `video` (`imsqti_asiv3p0p1_v1p0.xsd` lines 24958 to
+ * 24959), in XSD order.
+ */
+export const CrossOrigin = closed("CrossOrigin", ["anonymous", "use-credentials"]);
+
+/**
+ * The `kind` values of `track` (`imsqti_asiv3p0p1_v1p0.xsd` lines 33586 to 33590), in XSD order.
+ */
+export const TrackKind = closed("TrackKind", [
+  "subtitles",
+  "captions",
+  "descriptions",
+  "chapters",
+  "metadata",
+]);
+
+/**
+ * The `format` values of `qti-extended-text-interaction` (`imsqti_asiv3p0p1_v1p0.xsd` lines 27173
+ * to 27175), in XSD order.
+ */
+export const TextFormat = closed("TextFormat", ["plain", "preformatted", "xhtml"]);
+
+/**
+ * The values of `audio` and `video` `autoplay`: the three of the 3.0.1 enumeration
+ * (`imsqti_asiv3p0p1_v1p0.xsd` lines 24988 to 24990) and the `xs:boolean` spellings `1` and `0`
+ * that 3.0.0 admits (`imsqti_asiv3p0_v1p0.xsd` types it `xs:boolean`), each version's own set
+ * judged by a check.
+ */
+export const MediaAutoplay = closed("MediaAutoplay", ["true", "false", "1", "0", "autoplay"]);
+
+/**
+ * The values of `audio` and `video` `loop`: the three of the 3.0.1 enumeration
+ * (`imsqti_asiv3p0p1_v1p0.xsd` lines 25005 to 25007) and the `xs:boolean` spellings `1` and `0`
+ * that 3.0.0 admits (`imsqti_asiv3p0_v1p0.xsd` types it `xs:boolean`), each version's own set
+ * judged by a check.
+ */
+export const MediaLoop = closed("MediaLoop", ["true", "false", "1", "0", "loop"]);
+
+/**
+ * The values of `audio` and `video` `muted`: the three of the 3.0.1 enumeration
+ * (`imsqti_asiv3p0p1_v1p0.xsd` lines 25021 to 25023) and the `xs:boolean` spellings `1` and `0`
+ * that 3.0.0 admits (`imsqti_asiv3p0_v1p0.xsd` types it `xs:boolean`), each version's own set
+ * judged by a check.
+ */
+export const MediaMuted = closed("MediaMuted", ["true", "false", "1", "0", "muted"]);
+
+/**
+ * The values of `audio` and `video` `controls`: the three of the 3.0.1 enumeration
+ * (`imsqti_asiv3p0p1_v1p0.xsd` lines 25037 to 25039) and the `xs:boolean` spellings `1` and `0`
+ * that 3.0.0 admits (`imsqti_asiv3p0_v1p0.xsd` types it `xs:boolean`), each version's own set
+ * judged by a check.
+ */
+export const MediaControls = closed("MediaControls", ["true", "false", "1", "0", "controls"]);
+
+/**
+ * The values of `track` `default`: the three of the 3.0.1 enumeration (`imsqti_asiv3p0p1_v1p0.xsd`
+ * lines 33606 to 33608) and the `xs:boolean` spellings `1` and `0` that 3.0.0 admits
+ * (`imsqti_asiv3p0_v1p0.xsd` types it `xs:boolean`), each version's own set judged by a check.
+ */
+export const TrackDefaultValue = closed("TrackDefaultValue", [
+  "true",
+  "false",
+  "1",
+  "0",
+  "default",
+]);
+
+/**
  * The rosters as schema members.
  */
-export const relations = { Bound, IdrefAttribute, Orientation, Shape, ShowHide, ToolShape, YesNo };
+export const relations = {
+  AriaAutocompleteValue,
+  AriaCurrentValue,
+  AriaInvalidValue,
+  AriaLiveValue,
+  AriaOrientationValue,
+  AriaRoleValue,
+  AriaSortValue,
+  AriaTristate,
+  AriaTrueFalseUndefined,
+  BooleanLiteral,
+  Bound,
+  CellAlign,
+  CellScope,
+  CellValign,
+  CpSchema,
+  CrossOrigin,
+  ExternalScored,
+  IdrefAttribute,
+  MathConstantName,
+  MathOperatorName,
+  MediaAutoplay,
+  MediaControls,
+  MediaLoop,
+  MediaMuted,
+  MediaPreload,
+  Orientation,
+  ParamValuetype,
+  QmdFeedbackTypeValue,
+  QmdInteractionTypeValue,
+  QmdScoringModeValue,
+  RoundingMode,
+  Shape,
+  ShowHide,
+  StatsOperatorName,
+  SuppressTtsMode,
+  TextDirection,
+  TextFormat,
+  ToleranceMode,
+  ToolShape,
+  TrackDefaultValue,
+  TrackKind,
+  XIncludeParseValue,
+  XsBoolean,
+  YesNo,
+};
 
 /**
  * The statements of this module: none.
@@ -97,3 +555,188 @@ export type YesNoHandle = (typeof YesNo.handles)[number];
  * A handle of `IdrefAttribute`.
  */
 export type IdrefAttributeHandle = (typeof IdrefAttribute.handles)[number];
+
+/**
+ * A handle of `XsBoolean`.
+ */
+export type XsBooleanHandle = (typeof XsBoolean.handles)[number];
+
+/**
+ * A handle of `CpSchema`.
+ */
+export type CpSchemaHandle = (typeof CpSchema.handles)[number];
+
+/**
+ * A handle of `QmdInteractionTypeValue`.
+ */
+export type QmdInteractionTypeValueHandle = (typeof QmdInteractionTypeValue.handles)[number];
+
+/**
+ * A handle of `QmdFeedbackTypeValue`.
+ */
+export type QmdFeedbackTypeValueHandle = (typeof QmdFeedbackTypeValue.handles)[number];
+
+/**
+ * A handle of `QmdScoringModeValue`.
+ */
+export type QmdScoringModeValueHandle = (typeof QmdScoringModeValue.handles)[number];
+
+/**
+ * A handle of `BooleanLiteral`.
+ */
+export type BooleanLiteralHandle = (typeof BooleanLiteral.handles)[number];
+
+/**
+ * A handle of `ExternalScored`.
+ */
+export type ExternalScoredHandle = (typeof ExternalScored.handles)[number];
+
+/**
+ * A handle of `ToleranceMode`.
+ */
+export type ToleranceModeHandle = (typeof ToleranceMode.handles)[number];
+
+/**
+ * A handle of `RoundingMode`.
+ */
+export type RoundingModeHandle = (typeof RoundingMode.handles)[number];
+
+/**
+ * A handle of `MathOperatorName`.
+ */
+export type MathOperatorNameHandle = (typeof MathOperatorName.handles)[number];
+
+/**
+ * A handle of `StatsOperatorName`.
+ */
+export type StatsOperatorNameHandle = (typeof StatsOperatorName.handles)[number];
+
+/**
+ * A handle of `MathConstantName`.
+ */
+export type MathConstantNameHandle = (typeof MathConstantName.handles)[number];
+
+/**
+ * A handle of `XIncludeParseValue`.
+ */
+export type XIncludeParseValueHandle = (typeof XIncludeParseValue.handles)[number];
+
+/**
+ * A handle of `AriaRoleValue`.
+ */
+export type AriaRoleValueHandle = (typeof AriaRoleValue.handles)[number];
+
+/**
+ * A handle of `AriaLiveValue`.
+ */
+export type AriaLiveValueHandle = (typeof AriaLiveValue.handles)[number];
+
+/**
+ * A handle of `AriaOrientationValue`.
+ */
+export type AriaOrientationValueHandle = (typeof AriaOrientationValue.handles)[number];
+
+/**
+ * A handle of `AriaAutocompleteValue`.
+ */
+export type AriaAutocompleteValueHandle = (typeof AriaAutocompleteValue.handles)[number];
+
+/**
+ * A handle of `AriaTristate`.
+ */
+export type AriaTristateHandle = (typeof AriaTristate.handles)[number];
+
+/**
+ * A handle of `AriaTrueFalseUndefined`.
+ */
+export type AriaTrueFalseUndefinedHandle = (typeof AriaTrueFalseUndefined.handles)[number];
+
+/**
+ * A handle of `AriaInvalidValue`.
+ */
+export type AriaInvalidValueHandle = (typeof AriaInvalidValue.handles)[number];
+
+/**
+ * A handle of `AriaSortValue`.
+ */
+export type AriaSortValueHandle = (typeof AriaSortValue.handles)[number];
+
+/**
+ * A handle of `AriaCurrentValue`.
+ */
+export type AriaCurrentValueHandle = (typeof AriaCurrentValue.handles)[number];
+
+/**
+ * A handle of `TextDirection`.
+ */
+export type TextDirectionHandle = (typeof TextDirection.handles)[number];
+
+/**
+ * A handle of `SuppressTtsMode`.
+ */
+export type SuppressTtsModeHandle = (typeof SuppressTtsMode.handles)[number];
+
+/**
+ * A handle of `ParamValuetype`.
+ */
+export type ParamValuetypeHandle = (typeof ParamValuetype.handles)[number];
+
+/**
+ * A handle of `CellScope`.
+ */
+export type CellScopeHandle = (typeof CellScope.handles)[number];
+
+/**
+ * A handle of `CellAlign`.
+ */
+export type CellAlignHandle = (typeof CellAlign.handles)[number];
+
+/**
+ * A handle of `CellValign`.
+ */
+export type CellValignHandle = (typeof CellValign.handles)[number];
+
+/**
+ * A handle of `MediaPreload`.
+ */
+export type MediaPreloadHandle = (typeof MediaPreload.handles)[number];
+
+/**
+ * A handle of `CrossOrigin`.
+ */
+export type CrossOriginHandle = (typeof CrossOrigin.handles)[number];
+
+/**
+ * A handle of `TrackKind`.
+ */
+export type TrackKindHandle = (typeof TrackKind.handles)[number];
+
+/**
+ * A handle of `TextFormat`.
+ */
+export type TextFormatHandle = (typeof TextFormat.handles)[number];
+
+/**
+ * A handle of `MediaAutoplay`.
+ */
+export type MediaAutoplayHandle = (typeof MediaAutoplay.handles)[number];
+
+/**
+ * A handle of `MediaLoop`.
+ */
+export type MediaLoopHandle = (typeof MediaLoop.handles)[number];
+
+/**
+ * A handle of `MediaMuted`.
+ */
+export type MediaMutedHandle = (typeof MediaMuted.handles)[number];
+
+/**
+ * A handle of `MediaControls`.
+ */
+export type MediaControlsHandle = (typeof MediaControls.handles)[number];
+
+/**
+ * A handle of `TrackDefaultValue`.
+ */
+export type TrackDefaultValueHandle = (typeof TrackDefaultValue.handles)[number];

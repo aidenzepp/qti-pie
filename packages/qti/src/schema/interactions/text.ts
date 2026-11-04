@@ -36,25 +36,23 @@ import {
   uuid,
   within,
 } from "@bjornpagen/grizzle";
+import { ShowHide, TextFormat, XsBoolean } from "#qti/schema/content/rosters.ts";
 import { Declaration } from "#qti/schema/declaration.ts";
 import { InteractionBinding } from "#qti/schema/interaction.ts";
 import { Edge, Node, RootKind } from "#qti/schema/node.ts";
+import {
+  ChoiceCount,
+  ChoiceIdentifier,
+  ExpectedLength,
+  ExpectedLines,
+  StringCount,
+} from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-
-/**
- * An `xs:boolean` attribute's lexical form.
- */
-const xsBoolean = str.regex(patterns.xsBoolean);
 
 /**
  * An `xs:int` attribute's lexical form.
  */
 const xsInt = str.regex(patterns.xsInt);
-
-/**
- * An `xs:nonNegativeInteger` attribute's lexical form.
- */
-const xsNonNegativeInteger = str.regex(patterns.xsNonNegativeInteger);
 
 /**
  * An `xs:string` attribute's value, whitespace preserved.
@@ -70,16 +68,6 @@ const xsNormalizedString = str.regex(patterns.xsNormalizedString, patterns.xsNor
  * An identifier: an `xs:NCName`.
  */
 const ncName = str.regex(patterns.ncName);
-
-/**
- * A choice's `show-hide`: `show` or `hide`.
- */
-const showHide = str.regex(patterns.showHide);
-
-/**
- * An extended-text interaction's `format`: `plain`, `preformatted` or `xhtml`.
- */
-const textFormat = str.regex(patterns.textFormat);
 
 /**
  * A `qti-text-entry-interaction`: an empty element. `base` is the attribute's value, 10 where the
@@ -99,9 +87,9 @@ export const ExtendedTextInteraction = relation(
   "ExtendedTextInteraction",
   {
     base: xsInt,
-    format: textFormat,
+    format: closedId(TextFormat),
     id: uuid,
-    minStrings: xsNonNegativeInteger,
+    minStrings: StringCount,
     responseIdentifier: ncName,
     rootKind: closedId(RootKind),
   },
@@ -116,11 +104,11 @@ export const InlineChoiceInteraction = relation(
   "InlineChoiceInteraction",
   {
     id: uuid,
-    minChoices: xsNonNegativeInteger,
-    required: xsBoolean,
+    minChoices: ChoiceCount,
+    required: closedId(XsBoolean),
     responseIdentifier: ncName,
     rootKind: closedId(RootKind),
-    shuffle: xsBoolean,
+    shuffle: closedId(XsBoolean),
   },
   ["id"],
 );
@@ -131,7 +119,13 @@ export const InlineChoiceInteraction = relation(
  */
 export const InlineChoice = relation(
   "InlineChoice",
-  { fixed: xsBoolean, id: uuid, identifier: ncName, interaction: uuid, showHide },
+  {
+    fixed: closedId(XsBoolean),
+    id: uuid,
+    identifier: ChoiceIdentifier,
+    interaction: uuid,
+    showHide: closedId(ShowHide),
+  },
   ["id"],
 );
 
@@ -156,7 +150,7 @@ export const StringBinding = relation(
  */
 export const TextEntryExpectedLength = relation(
   "TextEntryExpectedLength",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid, value: ExpectedLength },
   ["node"],
 );
 
@@ -201,7 +195,7 @@ export const TextEntryPatternmaskMessage = relation(
  */
 export const ExtendedTextExpectedLength = relation(
   "ExtendedTextExpectedLength",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid, value: ExpectedLength },
   ["node"],
 );
 
@@ -228,7 +222,7 @@ export const ExtendedTextPlaceholderText = relation(
  */
 export const ExtendedTextMaxStrings = relation(
   "ExtendedTextMaxStrings",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid, value: StringCount },
   ["node"],
 );
 
@@ -237,7 +231,7 @@ export const ExtendedTextMaxStrings = relation(
  */
 export const ExtendedTextExpectedLines = relation(
   "ExtendedTextExpectedLines",
-  { node: uuid, value: xsNonNegativeInteger },
+  { node: uuid, value: ExpectedLines },
   ["node"],
 );
 

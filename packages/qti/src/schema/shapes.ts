@@ -23,6 +23,7 @@ import type { ClosedIdField, Relation } from "@bjornpagen/grizzle";
 import { Shape } from "#qti/schema/content/rosters.ts";
 import { Node, NodeKind } from "#qti/schema/node.ts";
 import type { NodeKindHandle } from "#qti/schema/node.ts";
+import { RectCoords, ShapeCoords } from "#qti/schema/contracts.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 
 /**
@@ -35,7 +36,7 @@ export const Coords = relation(
     node: uuid,
     ownerKind: closedId(NodeKind),
     shape: closedId(Shape),
-    value: str.regex(patterns.coordsAny),
+    value: ShapeCoords,
   },
   ["node"],
 );
@@ -52,20 +53,14 @@ export const CoordsCircle = relation(
 /**
  * The default shape's coordinates, which the shape leaves free.
  */
-export const CoordsDefault = relation(
-  "CoordsDefault",
-  { node: uuid, value: str.regex(patterns.coordsAny) },
-  ["node"],
-);
+export const CoordsDefault = relation("CoordsDefault", { node: uuid, value: ShapeCoords }, [
+  "node",
+]);
 
 /**
  * An ellipse's coordinates: the same four values as a rectangle.
  */
-export const CoordsEllipse = relation(
-  "CoordsEllipse",
-  { node: uuid, value: str.regex(patterns.coordsEllipse) },
-  ["node"],
-);
+export const CoordsEllipse = relation("CoordsEllipse", { node: uuid, value: RectCoords }, ["node"]);
 
 /**
  * A polygon's coordinates: at least three points.
@@ -79,11 +74,7 @@ export const CoordsPoly = relation(
 /**
  * A rectangle's coordinates: two corners.
  */
-export const CoordsRect = relation(
-  "CoordsRect",
-  { node: uuid, value: str.regex(patterns.coordsRect) },
-  ["node"],
-);
+export const CoordsRect = relation("CoordsRect", { node: uuid, value: RectCoords }, ["node"]);
 
 /**
  * The relations of this module, as schema members.

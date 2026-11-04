@@ -1,12 +1,14 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import { admission, kinds as cpKinds } from "#qti/schema/kinds/cp.ts";
 import * as node from "#qti/schema/node.ts";
 import { RootKind } from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
 import { resourceTypes } from "#qti/schema/seed/resource-types.ts";
 import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 
 const versions = ["3.0.0", "3.0.1"] as const;
 
@@ -153,6 +155,43 @@ const boundsOf = (rule: (typeof pkg.rules)[number]): readonly [unknown, unknown]
  */
 const capacities = () => pkg.rules.filter((rule) => rule.kind === "capacity");
 
+/**
+ * One side of a containment statement: a relation and the fields it names.
+ */
+interface Side {
+  readonly fields: readonly string[];
+  readonly source: unknown;
+}
+
+const isSide = (value: unknown): value is Side =>
+  Predicate.hasProperty(value, "fields") &&
+  Array.isArray(value.fields) &&
+  Predicate.hasProperty(value, "source");
+
+/**
+ * The containment statements of this module that start at `source`, each as
+ * `left fields in Target(right fields)`; the public statement type exposes the sides only through
+ * its union.
+ */
+const containmentsFrom = (source: (typeof pkg.relations)[keyof typeof pkg.relations]): string[] =>
+  pkg.rules.flatMap((rule) => {
+    if (
+      !Predicate.hasProperty(rule, "left") ||
+      !Predicate.hasProperty(rule, "right") ||
+      !isSide(rule.left) ||
+      !isSide(rule.right) ||
+      rule.left.source !== source ||
+      !Predicate.hasProperty(rule.right.source, "name") ||
+      !Predicate.isString(rule.right.source.name)
+    ) {
+      return [];
+    }
+
+    return [
+      `${rule.left.fields.join(",")} in ${rule.right.source.name}(${rule.right.fields.join(",")})`,
+    ];
+  });
+
 describe("package", () => {
   it("builds a schema over node and package relations and rules without refusal", () => {
     const built = probe();
@@ -202,6 +241,23 @@ describe("package", () => {
     ]);
   });
 
+  it("states ManifestSchemaVersion as a closed copy of its package's version, by two containments", () => {
+    const row = pkg.relations.ManifestSchemaVersion;
+    assert.deepStrictEqual(Object.keys(row.fields).toSorted(), [
+      "id",
+      "metadata",
+      "package",
+      "version",
+    ]);
+
+    const forms = containmentsFrom(row);
+    assert.includeMembers(forms, [
+      "metadata in ManifestMetadata(id)",
+      "metadata,package in ManifestMetadata(id,manifest)",
+      "package,version in Package(id,schemaversion)",
+    ]);
+  });
+
   it("holds two capacity statements targeting ManifestMetadata, each exactly one", () => {
     const onMetadata = capacities().filter(
       (rule) => rule.target.source === pkg.relations.ManifestMetadata,
@@ -241,5 +297,66 @@ describe("package", () => {
       rule.kind === "check" && rule.relation === pkg.relations.Dependency ? [rule.name] : [],
     );
     assert.deepStrictEqual(names, ["DependencyNotSelf"]);
+  });
+
+  it("holds cp:schema to the seven names of CpSchema", () => {
+    assert.strictEqual(pkg.relations.ManifestSchema.fields.value.roster, rosters.CpSchema);
+  });
+});
+
+describe("manifest contracts (package)", () => {
+  const idColumns = [
+    pkg.Package.fields.identifier,
+    pkg.Resource.fields.identifier,
+    pkg.Dependency.fields.resource,
+    pkg.Dependency.fields.target,
+    pkg.Variant.fields.identifier,
+    pkg.Variant.fields.identifierref,
+    pkg.Variant.fields.resourceIdentifier,
+    pkg.ManifestId.fields.id,
+    pkg.ManifestIdOfManifest.fields.id,
+    pkg.ManifestIdOfResource.fields.id,
+    pkg.ManifestIdOfVariant.fields.id,
+  ];
+
+  it("types the eleven xs:ID columns ManifestIdentifier", () => {
+    for (const column of idColumns) {
+      assert.strictEqual(column.name, contracts.ManifestIdentifier.name);
+    }
+  });
+
+  it("types the path columns PackagePath, one contract on both sides", () => {
+    for (const column of [
+      pkg.File.fields.href,
+      pkg.FileContent.fields.path,
+      pkg.PackageEntry.fields.path,
+    ]) {
+      assert.strictEqual(column.name, contracts.PackagePath.name);
+    }
+  });
+
+  it("types the resource entry href and the file media type", () => {
+    assert.strictEqual(pkg.ResourceHref.fields.href.name, contracts.ResourceEntryHref.name);
+    assert.strictEqual(pkg.FileContent.fields.mimeType.name, contracts.FileMediaType.name);
+  });
+});
+
+describe("contracts (drd)", () => {
+  it("types the four adaptation links DrdAdaptationUri", () => {
+    for (const relation of [
+      pkg.DrdHasAdaptation,
+      pkg.DrdIsAdaptationOf,
+      pkg.DrdIsFullAdaptationOf,
+      pkg.DrdIsPartialAdaptationOf,
+    ]) {
+      assert.strictEqual(relation.fields.value.name, contracts.DrdAdaptationUri.name);
+    }
+  });
+  it("types the access modes AccessMode and AccessModeAdapted", () => {
+    assert.strictEqual(pkg.DrdAccessMode.fields.value.name, contracts.AccessMode.name);
+    assert.strictEqual(
+      pkg.DrdAccessModeAdapted.fields.value.name,
+      contracts.AccessModeAdapted.name,
+    );
   });
 });

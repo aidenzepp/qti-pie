@@ -2,11 +2,14 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as contracts from "#qti/schema/contracts.ts";
+import * as rosters from "#qti/schema/content/rosters.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";
 import * as node from "#qti/schema/node.ts";
 import * as pkg from "#qti/schema/package.ts";
 import * as patterns from "#qti/schema/patterns.ts";
+import * as valueContexts from "#qti/schema/value-contexts.ts";
 import * as value from "#qti/schema/value.ts";
 
 /**
@@ -18,6 +21,7 @@ const probe = () =>
     "QtiValueProbe",
     {
       ...node.relations,
+      ...rosters.relations,
       ...pkg.relations,
       ...document.relations,
       ...declaration.relations,
@@ -227,29 +231,56 @@ describe("value", () => {
     assert.strictEqual(value.arms["qti-default-value"], value.relations.DefaultValueArm);
   });
 
+  it("types the eight non-text arms of each context with that context's contract", () => {
+    for (const { context, prefix } of valueContexts.valueContexts) {
+      const built = value.valueArms(prefix, context);
+      assert.strictEqual(built.directedPair.fields.value.name, `${context}DirectedPairValue`);
+      assert.strictEqual(built.duration.fields.value.name, `${context}DurationValue`);
+      assert.strictEqual(built.float.fields.value.name, `${context}FloatValue`);
+      assert.strictEqual(built.identifier.fields.value.name, `${context}IdentifierValue`);
+      assert.strictEqual(built.integer.fields.value.name, `${context}IntegerValue`);
+      assert.strictEqual(built.pair.fields.value.name, `${context}PairValue`);
+      assert.strictEqual(built.point.fields.value.name, `${context}PointValue`);
+      assert.strictEqual(built.uri.fields.value.name, `${context}UriValue`);
+    }
+  });
+
   it("builds the eleven value arms of a prefix, each keyed by id with a typed value", () => {
-    const built = value.valueArms("Probe");
+    const built = value.valueArms("Probe", "Declared");
     assert.deepStrictEqual(Object.keys(built).toSorted(), [...baseTypes].toSorted());
 
-    const expected = [
-      [built.boolean, "ProbeBoolean", patterns.booleanLiteral],
+    const typed = [
       [built.directedPair, "ProbeDirectedPair", patterns.pair],
       [built.duration, "ProbeDuration", patterns.xsDouble],
-      [built.file, "ProbeFile", patterns.xsNormalizedString],
       [built.float, "ProbeFloat", patterns.xsDouble],
       [built.identifier, "ProbeIdentifier", patterns.ncName],
       [built.integer, "ProbeInteger", patterns.xsInteger],
       [built.pair, "ProbePair", patterns.pair],
       [built.point, "ProbePoint", patterns.point],
-      [built.string, "ProbeString", patterns.xsNormalizedString],
       [built.uri, "ProbeUri", patterns.anyUri],
     ] as const;
-    for (const [arm, name, pattern] of expected) {
+    for (const [arm, name, pattern] of typed) {
       assert.strictEqual(arm.name, name);
       assert.deepStrictEqual(Object.keys(arm.fields).toSorted(), ["id", "value"]);
       assert.deepStrictEqual([...arm.primaryKey], ["id"]);
-      assert.strictEqual(arm.fields.value.pattern.source, pattern);
+      assert.strictEqual(arm.fields.value.base.pattern.source, pattern);
     }
+
+    const text = [
+      [built.file, "ProbeFile"],
+      [built.string, "ProbeString"],
+    ] as const;
+    for (const [arm, name] of text) {
+      assert.strictEqual(arm.name, name);
+      assert.deepStrictEqual(Object.keys(arm.fields).toSorted(), ["id", "value"]);
+      assert.deepStrictEqual([...arm.primaryKey], ["id"]);
+      assert.strictEqual(arm.fields.value.pattern.source, patterns.xsNormalizedString);
+    }
+
+    assert.strictEqual(built.boolean.name, "ProbeBoolean");
+    assert.deepStrictEqual(Object.keys(built.boolean.fields).toSorted(), ["id", "value"]);
+    assert.deepStrictEqual([...built.boolean.primaryKey], ["id"]);
+    assert.strictEqual(built.boolean.fields.value.roster, rosters.BooleanLiteral);
   });
 
   it("gives DeclaredValue its fields, key and containments", () => {
@@ -350,11 +381,20 @@ describe("value", () => {
 
   it("refuses an identifier with a space or padding by the identifier arm's pattern", () => {
     const pattern = new RegExp(
-      value.valueArms("Probe").identifier.fields.value.pattern.source,
+      value.valueArms("Probe", "Declared").identifier.fields.value.base.pattern.source,
       "u",
     );
     assert.isTrue(pattern.test("ChoiceA"));
     assert.isFalse(pattern.test("Choice A"));
     assert.isFalse(pattern.test(" ChoiceA "));
+  });
+});
+
+describe("contracts (value)", () => {
+  it("types RecordField.fieldIdentifier RecordFieldIdentifier", () => {
+    assert.strictEqual(
+      value.RecordField.fields.fieldIdentifier.name,
+      contracts.RecordFieldIdentifier.name,
+    );
   });
 });

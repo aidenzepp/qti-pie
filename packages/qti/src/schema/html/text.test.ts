@@ -2,6 +2,7 @@ import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 import { entryOf } from "#qti/schema/content/xsd-inventory.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 import * as node from "#qti/schema/node.ts";
 import * as patterns from "#qti/schema/patterns.ts";
 import * as text from "#qti/schema/html/text.ts";
@@ -45,6 +46,16 @@ const containments = (rules: typeof text.rules, source: Source) =>
       : [],
   );
 
+/**
+ * The source of a column's base pattern, whether the column is a bare pattern or a contract over
+ * one.
+ */
+const sourceOf = (
+  field:
+    | { readonly pattern: { readonly source: string } }
+    | { readonly base: { readonly pattern: { readonly source: string } } },
+): string => ("base" in field ? field.base.pattern.source : field.pattern.source);
+
 describe("html/text", () => {
   it("keys 46 arms by the V04 handles", () => {
     assert.strictEqual(handles.length, 46);
@@ -73,7 +84,7 @@ describe("html/text", () => {
   it("gives A a collapsed anyUri href", () => {
     const { fields } = text.relations.A;
     assert.deepStrictEqual(Object.keys(fields), ["href", "id"]);
-    assert.strictEqual(fields.href.pattern.source, patterns.anyUri);
+    assert.strictEqual(fields.href.base.pattern.source, patterns.anyUri);
   });
 
   it("holds an optional attribute as a node-keyed row contained into its arm", () => {
@@ -81,7 +92,7 @@ describe("html/text", () => {
       const relation = text.relations[name];
       assert.deepStrictEqual([...relation.primaryKey], ["node"], name);
       assert.deepStrictEqual(Object.keys(relation.fields), ["node", "value"], name);
-      assert.strictEqual(relation.fields.value.pattern.source, pattern, name);
+      assert.strictEqual(sourceOf(relation.fields.value), pattern, name);
       assert.deepStrictEqual(containments(text.rules, relation), [
         [["node"], text.relations[arm], ["id"]],
       ]);
@@ -97,5 +108,20 @@ describe("html/text", () => {
       assert.property(probe.relations, name);
     }
     assert.strictEqual(Object.keys(text.relations).length, 46 + optional.length);
+  });
+});
+
+describe("contracts (html/text)", () => {
+  it("types A.href HyperlinkUri", () => {
+    assert.strictEqual(text.A.fields.href.name, contracts.HyperlinkUri.name);
+  });
+  it("types BlockquoteCite.value CitationUri", () => {
+    assert.strictEqual(text.BlockquoteCite.fields.value.name, contracts.CitationUri.name);
+  });
+  it("types QCite.value CitationUri", () => {
+    assert.strictEqual(text.QCite.fields.value.name, contracts.CitationUri.name);
+  });
+  it("types AType.value ContentMediaType", () => {
+    assert.strictEqual(text.AType.fields.value.name, contracts.ContentMediaType.name);
   });
 });

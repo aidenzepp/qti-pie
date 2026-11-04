@@ -5,6 +5,7 @@ import { Effect, FileSystem } from "effect";
 import { ItemGuardRefusal, itemGuards } from "#qti/import/guards/item.ts";
 import { itemRows } from "#qti/import/item.ts";
 import { Rows } from "#qti/import/tree.ts";
+import * as attributed from "#qti/schema/expression-attributes.ts";
 import { AttributeLexical } from "#qti/schema/node.ts";
 import { readXml } from "#qti/xml/read.ts";
 
@@ -64,6 +65,23 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/guards/item.ts"
         Rows.of(rows, AttributeLexical).map((row) =>
           row.kind === "qti-correct" ? { ...row, value: " S " } : row,
         ),
+      );
+      const refusal = yield* Effect.flip(itemGuards(wrong));
+
+      assert.instanceOf(refusal, ItemGuardRefusal);
+      assert.strictEqual(refusal.rule, "typed-copy");
+    }),
+  );
+
+  suite.effect("refuses a figures number that its padded lexical row does not process to", () =>
+    Effect.gen(function* figuresDisagrees() {
+      const rows = yield* paddedRows();
+      const wrong = new Map(rows).set(
+        attributed.EqualRounded,
+        Rows.of(rows, attributed.EqualRounded).map((row) => ({
+          ...row,
+          figuresValue: row.figuresValue + 1n,
+        })),
       );
       const refusal = yield* Effect.flip(itemGuards(wrong));
 

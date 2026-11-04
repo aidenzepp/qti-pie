@@ -8,10 +8,14 @@ import { inject } from "vitest";
 import { itemGuards, ItemGuardRefusal } from "#qti/import/guards/item.ts";
 import { documentLangRows, itemRows, standardTemplate } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
+import { ImportRefused } from "#qti/import/refusal.ts";
+import { renderTree } from "#qti/export/render.ts";
+import { canonicalize } from "#qti/xml/canonical.ts";
 import { ItemRefusal, Rows, UnmodeledVocabulary, withParents } from "#qti/import/tree.ts";
 import type { NodeIndex } from "#qti/import/tree.ts";
 import {
   Declaration,
+  DeclarationExternalScored,
   DeclarationInterpretation,
   DeclarationLongInterpretation,
   DeclarationMasteryValue,
@@ -31,6 +35,14 @@ import {
   DocumentTitle,
   HtmlId,
 } from "#qti/schema/document.ts";
+import {
+  ChoiceIdentifier,
+  EmbedSourceUri,
+  ManifestIdentifier,
+  PackagePath,
+  TemplateUri,
+  ToolName,
+} from "#qti/schema/contracts.ts";
 import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#qti/schema/html.ts";
 import {
   AssessmentItem,
@@ -59,6 +71,7 @@ import {
 import {
   AttributeEntityReference,
   AttributeLexical,
+  AttributeSpelling,
   Edge,
   EntityReference,
   TextNode,
@@ -228,6 +241,17 @@ const bodyBeforeDeclarations = (text: string): string => {
     .replace(/<qti-response-declaration/u, (first) => `${body}\n${first}`);
 };
 
+/**
+ * An edit that sets `attribute` to `spelling` on the first `tag` element, replacing the attribute
+ * when the element already writes it.
+ */
+const setting =
+  (tag: string, attribute: string, spelling: string) =>
+  (text: string): string =>
+    text
+      .replace(new RegExp(`(<${tag}\\b[^>]*?)\\s${attribute}="[^"]*"`, "u"), "$1")
+      .replace(`<${tag}`, `<${tag} ${attribute}="${spelling}"`);
+
 layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suite) => {
   suite.effect(
     "choice.xml yields the document, the item root, its body, prompt, ps and image",
@@ -245,8 +269,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
           {
             id: documentId,
             package: packageId,
-            path: "choice.xml",
-            resource: "choice",
+            path: PackagePath("choice.xml"),
+            resource: ManifestIdentifier("choice"),
             resourceType: "imsqti_item_xmlv3p0",
             root: "item",
             version: "3.0.0",
@@ -256,7 +280,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
         const common = {
           document: documentId,
           package: packageId,
-          resource: "choice",
+          resource: ManifestIdentifier("choice"),
           root: "item" as const,
         };
         assert.deepStrictEqual(Rows.of(rows, DocumentIdentifier), [{ ...common, value: "choice" }]);
@@ -283,7 +307,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
           {
             alt: "NEVER LEAVE LUGGAGE UNATTENDED",
             id: idOf("img"),
-            src: "images/sign.png",
+            src: EmbedSourceUri("images/sign.png"),
           },
         ]);
         assert.deepStrictEqual(Rows.of(rows, ImgLongdesc), []);
@@ -439,10 +463,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
         },
         { baseType: "float", id: defaultValue, position: 1n, shape: "typed", valueSet: initial },
       ]);
-      assert.deepStrictEqual(Rows.of(rows, value.relations.DeclaredValueIdentifier), [
+      assert.deepStrictEqual<unknown>(Rows.of(rows, value.relations.DeclaredValueIdentifier), [
         { id: correctValue, value: "ChoiceA" },
       ]);
-      assert.deepStrictEqual(Rows.of(rows, value.relations.DeclaredValueFloat), [
+      assert.deepStrictEqual<unknown>(Rows.of(rows, value.relations.DeclaredValueFloat), [
         { id: defaultValue, value: "0" },
       ]);
       assert.deepStrictEqual(Rows.of(rows, value.RecordField), []);
@@ -450,9 +474,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
       assert.deepStrictEqual(Rows.of(rows, ChoiceInteraction), [
         {
           id: interaction,
-          maxChoices: "1",
           maxChoicesN: 1n,
-          minChoices: "0",
           minChoicesN: 0n,
           orientation: "vertical",
           responseIdentifier: "RESPONSE",
@@ -492,7 +514,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
         ["ChoiceA", "ChoiceB", "ChoiceC"].map((identifier, index) => ({
           fixed: "false" as const,
           id: idAt(nodes, "qti-simple-choice", index),
-          identifier,
+          identifier: ChoiceIdentifier(identifier),
           interaction,
           showHide: "show" as const,
         })),
@@ -509,7 +531,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
       assert.deepStrictEqual(Rows.of(rows, ResponseProcessingTemplate), [
         {
           node: processing,
-          uri: "https://www.imsglobal.org/question/qti_v3p0/rptemplates/match_correct.xml",
+          uri: TemplateUri(
+            "https://www.imsglobal.org/question/qti_v3p0/rptemplates/match_correct.xml",
+          ),
         },
       ]);
       assert.deepStrictEqual(Rows.of(rows, StandardTemplateReference), [
@@ -549,12 +573,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
       const interaction = onlyId(nodes, "qti-choice-interaction");
 
       assert.deepStrictEqual(
-        Rows.of(rows, ChoiceInteraction).map((row) => [
-          row.responseIdentifier,
-          row.maxChoices,
-          row.maxChoicesN,
-        ]),
-        [["RESPONSE", "1", 1n]],
+        Rows.of(rows, ChoiceInteraction).map((row) => [row.responseIdentifier, row.maxChoicesN]),
+        [["RESPONSE", 1n]],
       );
       assert.strictEqual(Rows.of(rows, SimpleChoice)[0]?.identifier, "ChoiceA");
       assert.deepStrictEqual(
@@ -708,7 +728,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
   );
 
   suite.effect(
-    "typed-copy refuses a maxChoicesN or minChoicesN that is not its lexical's parse",
+    "typed-copy refuses a maxChoicesN its binding does not hold, or a minChoicesN its spelling does not parse to",
     () =>
       Effect.gen(function* choiceCounts() {
         yield* refusal("typed-copy", inject("fixtures").simple, {
@@ -716,12 +736,126 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
             mapRows(rows, ChoiceInteraction, (row) => patched(row, { maxChoicesN: 2n })),
         });
 
-        const failure = yield* refusal("typed-copy", inject("fixtures").simple, {
+        yield* refusal("typed-copy", inject("fixtures").simple, {
           alter: (rows) =>
             mapRows(rows, ChoiceInteraction, (row) => patched(row, { minChoicesN: 1n })),
+          edit: ['max-choices="1"', 'max-choices="1" min-choices="00"'],
         });
-        assert.include(failure.detail, "minChoicesN");
       }),
+  );
+
+  suite.effect(
+    "max-choices spelled 02 reads 2, keeps one spelling row and renders as written",
+    () =>
+      Effect.gen(function* spelledMax() {
+        const doc = yield* readChoice(inject("fixtures").simple, [
+          'max-choices="1"',
+          'max-choices="02"',
+        ]);
+        const { documentId, nodes, rows } = yield* itemOf(doc);
+        const interaction = onlyId(nodes, "qti-choice-interaction");
+
+        assert.deepStrictEqual(
+          Rows.of(rows, ChoiceInteraction).map((row) => [row.maxChoicesN, row.minChoicesN]),
+          [[2n, 0n]],
+        );
+        assert.deepStrictEqual(
+          Rows.of(rows, TypedBinding).map((row) => row.maxCount),
+          [2n],
+        );
+        assert.deepStrictEqual(
+          Rows.of(rows, AttributeSpelling).filter((row) => row.node === interaction),
+          [
+            {
+              attribute: "max-choices",
+              kind: "qti-choice-interaction",
+              node: interaction,
+              value: "02",
+            },
+          ],
+        );
+        assert.include(
+          new TextDecoder().decode(canonicalize(renderTree(rows, documentId))),
+          'max-choices="02"',
+        );
+      }),
+  );
+
+  suite.effect(
+    "a max-choices or min-choices outside the non-negative integers is refused attribute-lexical",
+    () =>
+      Effect.gen(function* refusedBounds() {
+        const edits: readonly (readonly [string, string])[] = [
+          ['max-choices="1"', 'max-choices="abc"'],
+          ['max-choices="1"', 'max-choices="-1"'],
+          ['max-choices="1"', 'max-choices="-1"'],
+          ['max-choices="1"', 'max-choices="1" min-choices="-1"'],
+        ];
+        for (const edit of edits) {
+          const doc = yield* readChoice(inject("fixtures").simple, edit);
+          const failure = yield* Effect.flip(itemOf(doc));
+
+          assert.strictEqual(failure._tag, "ImportRefused");
+          assert.strictEqual(
+            failure instanceof ImportRefused ? failure.rule : "",
+            "attribute-lexical",
+          );
+        }
+      }),
+  );
+
+  suite.effect(
+    "an xs:boolean, orientation or show-hide attribute outside its roster is refused attribute-lexical before the write",
+    () =>
+      Effect.gen(function* refusedRosters() {
+        const edits = [
+          setting("qti-choice-interaction", "shuffle", "yes"),
+          setting("qti-choice-interaction", "orientation", "diagonal"),
+          setting("qti-simple-choice", "fixed", "yes"),
+          setting("qti-simple-choice", "show-hide", "hidden"),
+          setting("qti-assessment-item", "adaptive", "yes"),
+          setting("qti-assessment-item", "time-dependent", "maybe"),
+        ];
+        for (const edit of edits) {
+          const doc = yield* readChoice(inject("fixtures").simple, edit);
+          const failure = yield* Effect.flip(itemOf(doc));
+
+          assert.strictEqual(failure._tag, "ImportRefused");
+          assert.strictEqual(
+            failure instanceof ImportRefused ? failure.rule : "",
+            "attribute-lexical",
+          );
+        }
+      }),
+  );
+
+  suite.effect("the xs:boolean spellings 1 and 0 are admitted on an item and a choice", () =>
+    Effect.gen(function* admittedBooleans() {
+      const doc = yield* readChoice(inject("fixtures").simple, (text) =>
+        setting(
+          "qti-assessment-item",
+          "adaptive",
+          "1",
+        )(
+          setting(
+            "qti-simple-choice",
+            "fixed",
+            "0",
+          )(setting("qti-choice-interaction", "shuffle", "1")(text)),
+        ),
+      );
+      const { rows } = yield* itemOf(doc);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, ChoiceInteraction).map((row) => row.shuffle),
+        ["1"],
+      );
+      assert.deepStrictEqual(
+        Rows.of(rows, AssessmentItem).map((row) => row.adaptive),
+        ["1"],
+      );
+      assert.strictEqual(Rows.of(rows, SimpleChoice)[0]?.fixed, "0");
+    }),
   );
 
   suite.effect("typed-copy refuses a lexical row whose processed value is not its column", () =>
@@ -737,6 +871,42 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
             },
           ]),
       });
+    }),
+  );
+
+  suite.effect("typed-copy refuses a spelling that does not parse to the typed value", () =>
+    Effect.gen(function* spellingOther() {
+      const failure = yield* refusal("typed-copy", inject("fixtures").simple, {
+        alter: (rows, nodes) =>
+          Rows.add(rows, AttributeSpelling, [
+            {
+              attribute: "max-choices",
+              kind: "qti-choice-interaction",
+              node: onlyId(nodes, "qti-choice-interaction"),
+              value: "+6",
+            },
+          ]),
+      });
+      assert.include(failure.detail, "does not parse to the typed value");
+    }),
+  );
+
+  suite.effect("typed-copy admits a spelling beside its lexical row", () =>
+    Effect.gen(function* spellingAndLexical() {
+      const guards = yield* guarded(inject("fixtures").simple, {
+        alter: (rows, nodes) => {
+          const node = onlyId(nodes, "qti-choice-interaction");
+
+          return Rows.add(
+            Rows.add(rows, AttributeSpelling, [
+              { attribute: "max-choices", kind: "qti-choice-interaction", node, value: "+1" },
+            ]),
+            AttributeLexical,
+            [{ attribute: "max-choices", kind: "qti-choice-interaction", node, value: " +1 " }],
+          );
+        },
+      });
+      assert.isUndefined(guards);
     }),
   );
 
@@ -880,6 +1050,12 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
 const itemNamespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 
 /**
+ * An item with one outcome declaration that writes `external-scored` as `spelling`.
+ */
+const externalScoredItem = (spelling: string) =>
+  `<qti-assessment-item xmlns="${itemNamespace}" identifier="hand" title="Hand" time-dependent="false"><qti-outcome-declaration identifier="O" cardinality="single" base-type="float" external-scored="${spelling}"/><qti-item-body><p>x</p></qti-item-body></qti-assessment-item>`;
+
+/**
  * The item rows of a hand-written item whose root carries `rootAttributes` and whose body is
  * `body`.
  */
@@ -965,7 +1141,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts root ro
 
       assert.deepStrictEqual(Rows.of(rows, ItemTool), [{ shape: "nameOnly", tree: documentId }]);
       assert.deepStrictEqual(Rows.of(rows, ItemToolName), [
-        { toolName: "Authoring", tree: documentId },
+        { toolName: ToolName("Authoring"), tree: documentId },
       ]);
       assert.deepStrictEqual(Rows.of(rows, ItemToolBoth), []);
       assert.deepStrictEqual(Rows.of(rows, ItemToolVersion), []);
@@ -1044,12 +1220,16 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts root ro
         {
           lom: resourceLom.lom,
           package: resourceLom.package,
-          resource: "choice",
+          resource: ManifestIdentifier("choice"),
           value: "en",
         },
       ]);
       assert.deepStrictEqual(Rows.of(rows, ResourceLomGeneral), [
-        { lom: resourceLom.lom, package: resourceLom.package, resource: "choice" },
+        {
+          lom: resourceLom.lom,
+          package: resourceLom.package,
+          resource: ManifestIdentifier("choice"),
+        },
       ]);
       assert.strictEqual(Rows.of(rows, Lom).length, 1);
     }),
@@ -1256,6 +1436,144 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts composi
       for (const choice of choices) {
         assert.strictEqual(choice.interaction, interaction);
       }
+    }),
+  );
+
+  suite.effect(
+    "a boolean qti-value outside true and false is refused value-lexical before the write",
+    () =>
+      Effect.gen(function* refusedBoolean() {
+        for (const spelling of ["yes", "1", "TRUE"]) {
+          const doc = yield* readChoice(inject("fixtures").simple, (text) =>
+            text
+              .replace('base-type="float"', 'base-type="boolean"')
+              .replace("<qti-value>0</qti-value>", `<qti-value>${spelling}</qti-value>`),
+          );
+          const failure = yield* Effect.flip(itemOf(doc));
+
+          assert.strictEqual(failure._tag, "ImportRefused", spelling);
+          assert.strictEqual(
+            failure instanceof ImportRefused ? failure.rule : "",
+            "value-lexical",
+            spelling,
+          );
+        }
+      }),
+  );
+
+  suite.effect("a padded boolean qti-value reads as its handle and renders as written", () =>
+    Effect.gen(function* paddedBoolean() {
+      for (const [spelling, handle] of [
+        [" true ", "true"],
+        ["\n    false\n  ", "false"],
+      ] as const) {
+        const edit = (text: string) =>
+          text
+            .replace('base-type="float"', 'base-type="boolean"')
+            .replace("<qti-value>0</qti-value>", `<qti-value>${spelling}</qti-value>`);
+        const doc = yield* readChoice(inject("fixtures").simple, edit);
+        const { documentId, rows } = yield* itemOf(doc);
+
+        assert.deepStrictEqual(
+          Rows.of(rows, value.relations.DeclaredValueBoolean).map((row) => row.value),
+          [handle],
+        );
+        yield* guarded(inject("fixtures").simple, { edit });
+
+        const rendered = new TextDecoder().decode(canonicalize(renderTree(rows, documentId)));
+        assert.include(rendered, `<qti-value>${spelling}</qti-value>`);
+      }
+    }),
+  );
+
+  suite.effect("a padded identifier qti-value reads trimmed and renders as written", () =>
+    Effect.gen(function* paddedIdentifier() {
+      const directory = yield* materialize("padded-identifier-value");
+      const doc = yield* readChoice(directory);
+      const { documentId, rows } = yield* itemOf(doc);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, value.relations.DeclaredValueIdentifier).map((row) => row.value),
+        ["ChoiceA"],
+      );
+      yield* guarded(directory);
+      assert.include(
+        new TextDecoder().decode(canonicalize(renderTree(rows, documentId))),
+        "> ChoiceA <",
+      );
+    }),
+  );
+
+  suite.effect("a string qti-value keeps its outer whitespace", () =>
+    Effect.gen(function* paddedString() {
+      const doc = yield* readChoice(inject("fixtures").simple, (text) =>
+        text
+          .replace('base-type="float"', 'base-type="string"')
+          .replace("<qti-value>0</qti-value>", "<qti-value> a </qti-value>"),
+      );
+      const { rows } = yield* itemOf(doc);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, value.relations.DeclaredValueString).map((row) => row.value),
+        [" a "],
+      );
+    }),
+  );
+
+  suite.effect("text-copy refuses an identifier value that keeps its children's padding", () =>
+    Effect.gen(function* paddedCopy() {
+      yield* refusal("text-copy", yield* materialize("padded-identifier-value"), {
+        alter: (rows) =>
+          mapRows(rows, value.relations.DeclaredValueIdentifier, (row) =>
+            patched(row, { value: " ChoiceA " }),
+          ),
+      });
+    }),
+  );
+
+  suite.effect("a boolean qti-value of true or false is written in its arm", () =>
+    Effect.gen(function* admittedBoolean() {
+      const doc = yield* readChoice(inject("fixtures").simple, (text) =>
+        text
+          .replace('base-type="float"', 'base-type="boolean"')
+          .replace("<qti-value>0</qti-value>", "<qti-value>false</qti-value>"),
+      );
+      const { rows } = yield* itemOf(doc);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, value.relations.DeclaredValueBoolean).map((row) => row.value),
+        ["false"],
+      );
+    }),
+  );
+
+  suite.effect(
+    "external-scored outside human and externalMachine, padded included, is refused value-lexical",
+    () =>
+      Effect.gen(function* refusedExternalScored() {
+        for (const spelling of ["robot", " human"]) {
+          const doc = yield* readXml(new TextEncoder().encode(externalScoredItem(spelling)));
+          const failure = yield* Effect.flip(itemOf(doc));
+
+          assert.strictEqual(failure._tag, "ImportRefused", spelling);
+          assert.strictEqual(
+            failure instanceof ImportRefused ? failure.rule : "",
+            "value-lexical",
+            spelling,
+          );
+        }
+      }),
+  );
+
+  suite.effect("external-scored externalMachine is written as its handle", () =>
+    Effect.gen(function* admittedExternalScored() {
+      const doc = yield* readXml(new TextEncoder().encode(externalScoredItem("externalMachine")));
+      const { rows } = yield* itemOf(doc);
+
+      assert.deepStrictEqual(
+        Rows.of(rows, DeclarationExternalScored).map((row) => row.value),
+        ["externalMachine"],
+      );
     }),
   );
 });
