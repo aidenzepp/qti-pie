@@ -4,11 +4,11 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option } from "effect";
 import { materialize } from "#qti/test/fixtures.ts";
-import { exportCharset } from "#qti/xml/charset.ts";
-import { encode } from "#qti/xml/encode.ts";
-import { EncodeError } from "#qti/xml/errors.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Child, Element, XmlDocument } from "#qti/xml/tree.ts";
+import { exportCharset } from "@qti-pie/crust/charset.ts";
+import { encode } from "@qti-pie/crust/encode.ts";
+import { EncodeError } from "@qti-pie/crust/errors.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
  * Read `choice.xml` of the materialized fixture `name`, returning its bytes and the tree read.

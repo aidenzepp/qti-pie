@@ -23,7 +23,7 @@ import { ResourceLom } from "#qti/schema/metadata.ts";
 import { AttributeLexical, AttributeSpelling, Node } from "#qti/schema/node.ts";
 import type { SchemaVersionHandle } from "#qti/schema/node.ts";
 import { PrintedVariableVarRef } from "#qti/schema/template.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 const itemNamespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 

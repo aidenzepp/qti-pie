@@ -80,7 +80,7 @@ import {
   Variant,
   VariantMetadata,
 } from "#qti/schema/package.ts";
-import type { Element, XmlDocument } from "#qti/xml/tree.ts";
+import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
  * The package is not a QTI 3 content package: its manifest root is not in the QTI 3 content

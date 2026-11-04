@@ -3,9 +3,9 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Layer } from "effect";
 import { materialize } from "#qti/test/fixtures.ts";
-import { canonicalize } from "#qti/xml/canonical.ts";
+import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { OracleError, OracleLayer, xmllintC14n } from "#qti/xml/oracle.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
  * What every test here runs on: the process spawner `xmllintC14n` needs and the file system and

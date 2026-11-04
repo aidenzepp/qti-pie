@@ -34,7 +34,7 @@ import {
   ResponseProcessingTemplate,
   ResponseProcessingTemplateLocation,
 } from "#qti/schema/processing.ts";
-import type { XmlDocument } from "#qti/xml/tree.ts";
+import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
  * What {@link rptemplateRows} needs to know about the document beside its tree: the same as an

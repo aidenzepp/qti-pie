@@ -19,7 +19,7 @@ import { AttributeLexical, Edge, Tree, TreeRoot } from "#qti/schema/node.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#qti/schema/document.ts";
 import * as ud from "#qti/schema/usage.ts";
 import { materialize, materializePackage } from "#qti/test/fixtures.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
  * The one row of a list that must hold exactly one.

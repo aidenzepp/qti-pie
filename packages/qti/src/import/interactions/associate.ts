@@ -44,7 +44,7 @@ import {
   SimpleMatchSet,
 } from "#qti/schema/interactions/associate.ts";
 import type { AttributeNameHandle } from "#qti/schema/node.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * One fact of an optional-value relation where the attribute was written, none where it was not.

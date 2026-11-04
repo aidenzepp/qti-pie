@@ -39,7 +39,7 @@ import {
 } from "#qti/schema/interactions/other.ts";
 import { AttributeLexical, AttributeSpelling } from "#qti/schema/node.ts";
 import type { NodeKindHandle } from "#qti/schema/node.ts";
-import type { Attribute, Element } from "#qti/xml/tree.ts";
+import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";
 

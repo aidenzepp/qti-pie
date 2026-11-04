@@ -37,8 +37,8 @@ import type { NodeKindHandle, RootKindHandle } from "#qti/schema/node.ts";
 import * as processing from "#qti/schema/processing.ts";
 import * as ruleSchema from "#qti/schema/rule.ts";
 import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Element, XmlDocument } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
  * The committed processing fixtures, relative to `packages/qti`, where the tests run.

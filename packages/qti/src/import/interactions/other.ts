@@ -33,7 +33,7 @@ import {
   UploadType,
 } from "#qti/schema/interactions/other.ts";
 import type { AncestryHandle } from "#qti/schema/node.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * The `maxCount` the other interactions' typed bindings hold.

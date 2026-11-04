@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
-import { ReaderRefusal, WellFormednessError } from "#qti/xml/errors.ts";
-import type { XmlDeclaration } from "#qti/xml/tree.ts";
+import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
+import type { XmlDeclaration } from "#crust/tree.ts";
 
 /**
  * The type and the default value of one declared attribute.
