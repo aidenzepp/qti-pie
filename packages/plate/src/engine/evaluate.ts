@@ -245,12 +245,13 @@ const keyMatches = (entry: MapEntry, single: Single): boolean =>
     : equal(entry.key, single);
 
 /**
- * Give the value a mapping maps one response value to.
+ * Give the value a mapping maps one response value to: the value of the first entry in document
+ * order that matches it, else the mapping's default.
  *
- * Overlapping entries are valid, and a value is mapped by one of them (reading Q5): the first entry
- * that compares exactly and equals it, else the first entry in document order that matches it,
- * else the mapping's default. So BG010's `York` maps by its case-sensitive `York` entry, and
- * `YORK` by its `york` entry.
+ * Overlapping entries are valid, so a value two or more entries match takes the first of them in
+ * document order. That rule is a placeholder while spec §12 Q5 is open: the operator's answer
+ * changes this one expression and its test. BG010 lists its case-sensitive `York` before its
+ * `york`, so its `York` maps by the first and `YORK` by the second.
  *
  * @param mapping The response's mapping.
  * @param single The response value.
@@ -258,10 +259,7 @@ const keyMatches = (entry: MapEntry, single: Single): boolean =>
  */
 const mappedValue = (mapping: Mapping, single: Single): number =>
   Option.match(
-    Option.orElse(
-      Arr.findFirst(mapping.entries, (entry) => comparesExactly(entry) && equal(entry.key, single)),
-      () => Arr.findFirst(mapping.entries, (entry) => keyMatches(entry, single)),
-    ),
+    Arr.findFirst(mapping.entries, (entry) => keyMatches(entry, single)),
     { onNone: () => mapping.defaultValue, onSome: (entry) => entry.value },
   );
 
