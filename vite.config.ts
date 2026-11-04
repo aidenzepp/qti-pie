@@ -32,7 +32,14 @@ const sharedImportPatterns = [
 
 export default defineConfig({
   fmt: {
-    ignorePatterns: [".agents/**", ".claude/**", "pnpm-lock.yaml", "**/migrations/**"],
+    ignorePatterns: [
+      ".agents/**",
+      ".claude/**",
+      "pnpm-lock.yaml",
+      "**/migrations/**",
+      "README.md",
+      "packages/*/README.md",
+    ],
     jsdoc: { commentLineStrategy: "multiline", lineWrappingStyle: "balance" },
   },
   lint: {
