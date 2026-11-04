@@ -1202,6 +1202,191 @@ describe("buildItem", () => {
     }),
   );
 
+  it.effect('[I-1] [Q-2] binds response-identifier=" RESPONSE " to the declaration RESPONSE', () =>
+    Effect.gen(function* bindsPaddedReference() {
+      const built = yield* buildItem(
+        item({
+          body: [
+            el(
+              "qti-choice-interaction",
+              [attr("response-identifier", " RESPONSE ")],
+              [choice("A", "Ant"), choice("B", "Bee")],
+            ),
+          ],
+          declarations: [
+            declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+          ],
+        }),
+      );
+
+      assert.strictEqual(choiceIn(built.body).response, "RESPONSE");
+    }),
+  );
+
+  it.effect('[I-1] [Q-2] keys a declaration identifier="\\tRESPONSE\\n" as RESPONSE', () =>
+    Effect.gen(function* keysPaddedDeclaration() {
+      const built = yield* buildItem(
+        item({
+          body: [
+            el(
+              "qti-choice-interaction",
+              [attr("response-identifier", "RESPONSE")],
+              [choice("A", "Ant"), choice("B", "Bee")],
+            ),
+          ],
+          declarations: [
+            declaration("qti-response-declaration", "\tRESPONSE\n", "identifier", "single"),
+          ],
+        }),
+      );
+
+      assert.deepStrictEqual([...built.responses.keys()], ["RESPONSE"]);
+      assert.strictEqual(built.responses.get("RESPONSE")?.identifier, "RESPONSE");
+      assert.strictEqual(choiceIn(built.body).response, "RESPONSE");
+    }),
+  );
+
+  it.effect('[Q-2] reads a qti-simple-choice identifier=" A " as A', () =>
+    Effect.gen(function* readsPaddedChoice() {
+      const built = yield* buildItem(
+        item({
+          body: [
+            el(
+              "qti-choice-interaction",
+              [attr("response-identifier", "RESPONSE")],
+              [choice(" A ", "Ant"), choice("B", "Bee")],
+            ),
+          ],
+          declarations: [
+            declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+          ],
+        }),
+      );
+
+      assert.deepStrictEqual(
+        choiceIn(built.body).choices.map((option) => option.identifier),
+        ["A", "B"],
+      );
+    }),
+  );
+
+  it.effect(
+    "[I-9b] reads padded identifiers in inline processing as the declarations they name, with no mark",
+    () =>
+      Effect.gen(function* readsPaddedProcessing() {
+        const built = yield* buildItem(
+          item({
+            after: [
+              el(
+                "qti-response-processing",
+                [],
+                [
+                  el(
+                    "qti-set-outcome-value",
+                    [attr("identifier", " SCORE ")],
+                    [el("qti-variable", [attr("identifier", " RESPONSE ")])],
+                  ),
+                ],
+              ),
+            ],
+            body: [],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "float", "single"),
+              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(
+          built.processing,
+          Option.some<readonly Rule[]>([
+            {
+              expression: { identifier: "RESPONSE", kind: "variable" },
+              identifier: "SCORE",
+              kind: "set-outcome",
+            },
+          ]),
+        );
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect('[I-0] reads a root identifier=" item-1 " as item-1', () =>
+    Effect.gen(function* readsPaddedRoot() {
+      const built = yield* buildItem(
+        doc(
+          "items/test.xml",
+          el(
+            root,
+            [attr("identifier", " item-1 "), attr("title", "Item")],
+            [el("qti-item-body", [], [])],
+          ),
+        ),
+      );
+
+      assert.strictEqual(built.identifier, "item-1");
+    }),
+  );
+
+  it.effect(
+    '[I-1] [Q-2] names the collapsed identifier when response-identifier=" OTHER " binds no declaration',
+    () =>
+      Effect.gen(function* namesCollapsedReference() {
+        const refusal = yield* Effect.flip(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "qti-choice-interaction",
+                  [attr("response-identifier", " OTHER ")],
+                  [choice("A", "Ant")],
+                ),
+              ],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+              ],
+            }),
+          ),
+        );
+
+        assert.strictEqual(refusal.rule, "undeclared-response");
+        assert.deepStrictEqual(refusal.location, {
+          kind: "path",
+          path: `${body}/qti-choice-interaction/@response-identifier`,
+        });
+        assert.deepStrictEqual(refusal.detail, { response: "OTHER" });
+      }),
+  );
+
+  it.effect('[I-1] [Q-2] refuses response-identifier="OTHER" with no such declaration', () =>
+    Effect.gen(function* refusesUnboundReference() {
+      const refusal = yield* Effect.flip(
+        buildItem(
+          item({
+            body: [
+              el(
+                "qti-choice-interaction",
+                [attr("response-identifier", "OTHER")],
+                [choice("A", "Ant")],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+            ],
+          }),
+        ),
+      );
+
+      assert.strictEqual(refusal._tag, "Refusal");
+      assert.strictEqual(refusal.rule, "undeclared-response");
+      assert.deepStrictEqual(refusal.location, {
+        kind: "path",
+        path: `${body}/qti-choice-interaction/@response-identifier`,
+      });
+      assert.deepStrictEqual(refusal.detail, { response: "OTHER" });
+    }),
+  );
+
   it.live("trims a 50,000-character inner whitespace run in an attribute in linear time", () =>
     Effect.gen(function* linearAttributeTrim() {
       const run = " \t\n\r".repeat(12_500);
