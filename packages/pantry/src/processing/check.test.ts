@@ -730,7 +730,7 @@ const checkBroken = (name: string, language: "response" | "template", mode: "ite
  * The refusals of the bin 2 rules this file checks: one broken tree each, refused naming exactly
  * its rule and the kind of the node that breaks it.
  */
-const refusals = [
+const cases = [
   ["p20-float-into-integer-outcome", "response", "P20", "qti-set-outcome-value"],
   ["p21-sum-as-condition", "response", "P21", "qti-response-if"],
   ["p22-string-into-lookup", "response", "P22", "qti-lookup-outcome-value"],
@@ -760,7 +760,7 @@ const refusals = [
 ] as const;
 
 layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts rules", (suite) => {
-  for (const [name, language, rule, kind] of refusals) {
+  for (const [name, language, rule, kind] of cases) {
     suite.effect(`refuses ${name} naming ${rule}`, () =>
       Effect.gen(function* refuseBroken() {
         const result = yield* checkBroken(name, language, "item");
@@ -1061,6 +1061,56 @@ const weighted = (base: string) =>
 
 const weightedOutcome = (base: string) => parseOutcome(weighted(base));
 
+/**
+ * The reach of the P24 cases: `I1`, whose item declares outcomes `COUNT`, `SCORE`, `F` and
+ * `NAME`, template `T` and response `RESP`, with mapping targets `M` and `MF`, and `PART`.
+ */
+const p24Environment = (declarations: readonly DeclarationEntry[]) =>
+  reachEnvironment([
+    [
+      "I1",
+      itemRefOf(
+        scopeOf(
+          declarations,
+          [
+            ["M", { baseType: "integer", cardinality: "single" }],
+            ["MF", { baseType: "float", cardinality: "single" }],
+          ],
+          true,
+        ),
+      ),
+    ],
+    ["PART", { kind: "part" }],
+  ]);
+
+const p24Reach = p24Environment([
+  outcomeOf("COUNT", "integer"),
+  outcomeOf("SCORE", "float"),
+  outcomeOf("F", "float"),
+  outcomeOf("NAME", "string"),
+  { ...outcomeOf("T", "integer"), kind: "template", paramVariable: true },
+  { ...outcomeOf("RESP", "integer"), kind: "response" },
+]);
+
+const figuresBody = (figures: string): string =>
+  `<qti-set-outcome-value identifier="ANY"><qti-equal-rounded rounding-mode="decimalPlaces" figures="${figures}"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">1</qti-base-value></qti-equal-rounded></qti-set-outcome-value>`;
+
+const randomBody = (max: string): string =>
+  `<qti-set-outcome-value identifier="ANY"><qti-random-float min="0" max="${max}"/></qti-set-outcome-value>`;
+
+const patternBody = (pattern: string): string =>
+  `<qti-set-outcome-value identifier="ANY"><qti-pattern-match pattern="${pattern}"><qti-base-value base-type="string">x</qti-base-value></qti-pattern-match></qti-set-outcome-value>`;
+
+const p24Of = (body: string, env: Environment) =>
+  Effect.gen(function* checkBodyUnder() {
+    const result = checkProcessing(yield* parseBody(body), env);
+
+    return result._tag === "refused" ? [result.rule, result.kind] : result._tag;
+  });
+
+const reachingV = (type: "integer" | "float") =>
+  reachEnvironment([["I2", itemRefOf(scopeOf([outcomeOf("V", type)]))]]);
+
 layer(NodeServices.layer, { excludeTestServices: true })(
   "processing/check.ts types a prefixed name in a test's reach",
   (suite) => {
@@ -1074,6 +1124,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           reading: plain("I1", "SCORE"),
           source: "declared",
           type: { baseType: "float", cardinality: "single" },
+          variableKind: "outcome",
         });
       }),
     );
@@ -1166,6 +1217,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           reading: plain("a.b", "SCORE"),
           source: "declared",
           type: { baseType: "float", cardinality: "single" },
+          variableKind: "outcome",
         });
       }),
     );
@@ -1337,6 +1389,52 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         ]);
         assert.deepStrictEqual(yield* typedAs("I1.duration", declared), ["integer/single"]);
         assert.deepStrictEqual(yield* typedAs("I2.duration", declared), ["string/single"]);
+      }),
+    );
+
+    suite.effect(
+      "accepts a resolved prefixed name that is an outcome, a template or a mapping",
+      () =>
+        Effect.gen(function* acceptedP24() {
+          assert.deepStrictEqual(yield* p24Of(figuresBody("I1.COUNT"), p24Reach), "ok");
+          assert.deepStrictEqual(yield* p24Of(figuresBody("I1.T"), p24Reach), "ok");
+          assert.deepStrictEqual(yield* p24Of(figuresBody("I1.M"), p24Reach), "ok");
+          assert.deepStrictEqual(yield* p24Of(randomBody("I1.F"), p24Reach), "ok");
+          assert.deepStrictEqual(yield* p24Of(patternBody("{I1.NAME}"), p24Reach), "ok");
+        }),
+    );
+
+    suite.effect("refuses P24 for a resolved prefixed name that is not a fitting variable", () =>
+      Effect.gen(function* refusedP24() {
+        const notFitting = [
+          [figuresBody("I1.SCORE"), "qti-equal-rounded"],
+          [figuresBody("I1.RESP"), "qti-equal-rounded"],
+          [figuresBody("I1.MF"), "qti-equal-rounded"],
+          [figuresBody("I1.numAttempts"), "qti-equal-rounded"],
+          [figuresBody("PART.duration"), "qti-equal-rounded"],
+          [patternBody("{I1.COUNT}"), "qti-pattern-match"],
+        ] as const;
+        for (const [body, kind] of notFitting) {
+          assert.deepStrictEqual(yield* p24Of(body, p24Reach), ["P24", kind]);
+        }
+      }),
+    );
+
+    suite.effect("still refuses an unresolved prefixed name in a reference attribute", () =>
+      Effect.gen(function* unresolvedP24() {
+        const result = checkProcessing(yield* parseBody(figuresBody("NOPE.X")), p24Reach);
+        assert.deepStrictEqual(refusalOf(result), ["prefixed-ref", []]);
+      }),
+    );
+
+    suite.effect("applies P24 to the variable each reaching test resolves", () =>
+      Effect.gen(function* perTest() {
+        const body = figuresBody("I2.V");
+        assert.deepStrictEqual(yield* p24Of(body, reachingV("integer")), "ok");
+        assert.deepStrictEqual(yield* p24Of(body, reachingV("float")), [
+          "P24",
+          "qti-equal-rounded",
+        ]);
       }),
     );
   },

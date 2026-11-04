@@ -286,13 +286,16 @@ export type PrefixedSource = "builtIn" | "declared" | "duration" | "mapped";
 
 /**
  * A reading of a prefixed name that names a variable: the reading, what its prefix names, where the
- * variable comes from and its type.
+ * variable comes from, the kind of variable it is and its type. A mapping target counts as an
+ * outcome (INFO 7.48 treats it as an outcome variable declared under the target name); an
+ * item-session built-in and a part's or section's `duration` are `builtIn`.
  */
 export interface ResolvedReading {
   readonly names: PrefixedNames;
   readonly reading: PrefixedForm;
   readonly source: PrefixedSource;
   readonly type: EffectiveType;
+  readonly variableKind: DeclarationKind | "builtIn";
 }
 
 /**
@@ -332,25 +335,49 @@ const resolveReading = (
 
   if (entry.kind !== "item-ref") {
     return reading.instance === undefined && reading.variable === "duration"
-      ? { names: entry.kind, reading, source: "duration", type: partDuration }
+      ? {
+          names: entry.kind,
+          reading,
+          source: "duration",
+          type: partDuration,
+          variableKind: "builtIn",
+        }
       : undefined;
   }
 
   const mapped = entry.scope.mappings.get(reading.variable);
   if (mapped !== undefined) {
-    return { names: "item-ref", reading, source: "mapped", type: mapped };
+    return {
+      names: "item-ref",
+      reading,
+      source: "mapped",
+      type: mapped,
+      variableKind: "outcome",
+    };
   }
 
   const declared = entry.scope.declarations.get(reading.variable);
   if (declared !== undefined) {
-    return { names: "item-ref", reading, source: "declared", type: declared.type };
+    return {
+      names: "item-ref",
+      reading,
+      source: "declared",
+      type: declared.type,
+      variableKind: declared.kind,
+    };
   }
 
   const builtIn = itemSessionBuiltIns.get(reading.variable);
 
   return builtIn === undefined
     ? undefined
-    : { names: "item-ref", reading, source: "builtIn", type: builtIn };
+    : {
+        names: "item-ref",
+        reading,
+        source: "builtIn",
+        type: builtIn,
+        variableKind: "builtIn",
+      };
 };
 
 /**
