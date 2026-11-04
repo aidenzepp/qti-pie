@@ -115,14 +115,14 @@ describe("interactions/other", () => {
     assert.strictEqual(relations.SliderStep.fields.value.pattern.source, patterns.positiveDouble);
   });
 
-  it("types the slider bounds as non-negative doubles and requires autostart and title", () => {
+  it("types the slider bounds as SliderBound and requires autostart and title", () => {
     assert.strictEqual(
-      relations.SliderInteraction.fields.lowerBound.pattern.source,
-      patterns.nonNegativeDouble,
+      relations.SliderInteraction.fields.lowerBound.name,
+      contracts.SliderBound.name,
     );
     assert.strictEqual(
-      relations.SliderInteraction.fields.upperBound.pattern.source,
-      patterns.nonNegativeDouble,
+      relations.SliderInteraction.fields.upperBound.name,
+      contracts.SliderBound.name,
     );
     assert.property(relations.MediaInteraction.fields, "autostart");
     assert.property(relations.EndAttemptInteraction.fields, "title");

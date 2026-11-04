@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import {
   ImportRefused,
+  ImportRule,
   isMappedLaw,
   patternRuleSources,
   ruleOfError,
@@ -11,6 +12,46 @@ import * as contracts from "#pantry/schema/contracts.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
 import * as valueContracts from "#pantry/schema/value-contracts.ts";
 import * as valueContexts from "#pantry/schema/value-contexts.ts";
+
+const phase5Rules = [
+  "structure-count",
+  "section-empty",
+  "structure-identifier",
+  "reach-copy",
+  "section-ref-cycle",
+  "section-ref-target",
+  "item-ref-target",
+  "stimulus-ref-target",
+  "stimulus-ref-key",
+  "resolution-copy",
+  "document-reference",
+  "selection-bounds",
+  "selection-required",
+  "branch-target",
+  "branch-forward",
+  "variable-mapping-source",
+  "variable-mapping-target",
+  "template-default-target",
+  "prefixed-ref",
+  "prefixed-root",
+  "prefixed-copy",
+  "item-duration",
+  "section-identifier-target",
+  "section-root-copy",
+  "include-xpointer",
+  "include-parse",
+  "section-variable-ref",
+  "section-copy",
+];
+
+it("holds the 28 rule names of the phase-5 spec 4.16 in ImportRule", () => {
+  const held = new Set<string>(ImportRule.members.map((member) => member.literal));
+
+  assert.strictEqual(phase5Rules.length, 28);
+  for (const rule of phase5Rules) {
+    assert.isTrue(held.has(rule), rule);
+  }
+});
 
 it("sends a contract no row names to value-lexical, unmapped", () => {
   const law: ImportLaw = { contract: "NoSuchContract", kind: "contract" };
@@ -229,6 +270,8 @@ const contractLaw = (name: string): ImportLaw => ({ contract: name, kind: "contr
 const writtenRules = {
   P6: ["CategoryList", "ExpressionCoords", "ExpressionIntegerOrVariable"],
   "attribute-lexical": [
+    "SliderBound",
+    "TimeLimitSeconds",
     "AriaInteger",
     "AriaPositiveInteger",
     "ChoiceCount",
@@ -257,6 +300,7 @@ const writtenRules = {
   "manifest-identifier": ["ManifestIdentifier"],
   "tool-string-length": ["ToolName", "ToolVendor", "ToolVersion"],
   "uri-syntax": [
+    "AdaptiveRefHref",
     "CaseItemUri",
     "CitationUri",
     "CustomOperatorDefinitionUri",
@@ -264,10 +308,13 @@ const writtenRules = {
     "EmbedSourceUri",
     "GlossaryUri",
     "HyperlinkUri",
+    "ItemRefHref",
     "LongDescriptionUri",
     "LongInterpretationUri",
     "NamespaceUri",
+    "SectionRefHref",
     "StatisticContextUri",
+    "StimulusRefHref",
     "StylesheetUri",
     "TemplateLocationUri",
     "TemplateUri",
@@ -284,6 +331,7 @@ const writtenRules = {
     "UsageValueToken",
   ],
   "value-lexical": [
+    "AdaptiveRefIdentifier",
     "ChoiceIdentifier",
     "CustomOperatorClassName",
     "FileMediaType",
@@ -291,14 +339,18 @@ const writtenRules = {
     "LomToken",
     "LomVocabularySource",
     "LomVocabularyValue",
+    "MappedVariableName",
     "NamespacePrefix",
     "OutcomeScaleValue",
     "PiTarget",
     "RecordFieldIdentifier",
     "SectionReference",
+    "StimulusRefIdentifier",
     "TemplateParameterName",
+    "TestStructureIdentifier",
     "VariableReference",
     "WeightReference",
+    "WeightValue",
     "XmlEntityName",
   ],
 } satisfies Record<string, readonly string[]>;
@@ -372,11 +424,11 @@ const makeEveryContract = (): readonly string[] => {
 const everyContract: readonly string[] = makeEveryContract();
 
 describe("the rules of a contract", () => {
-  it("names 136 contracts, each in the expected table once", () => {
+  it("names 147 contracts, each in the expected table once", () => {
     const names = everyContract;
 
-    assert.strictEqual(names.length, 136);
-    assert.strictEqual(expectedRules.size, 136);
+    assert.strictEqual(names.length, 147);
+    assert.strictEqual(expectedRules.size, 147);
     assert.deepStrictEqual([...expectedRules.keys()].toSorted(), names.toSorted());
   });
 
