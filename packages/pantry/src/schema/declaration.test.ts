@@ -301,7 +301,7 @@ describe("declaration", () => {
     }
   });
 
-  it("declares the DocumentId holder alternatives with five arms", () => {
+  it("declares the DocumentId holder alternatives with six arms", () => {
     const [rule, ...rest] = ofKind("alternatives").filter(
       (candidate) => candidate.parent === document.relations.DocumentId,
     );
@@ -317,6 +317,7 @@ describe("declaration", () => {
         ["itemBody", document.relations.ItemBodyId],
         ["printedVariable", document.relations.PrintedVariableId],
         ["responseDeclaration", declaration.relations.ResponseDeclarationId],
+        ["xmlId", document.relations.DocumentXmlId],
       ],
     );
   });

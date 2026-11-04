@@ -46,6 +46,7 @@ export const IdHolder = closed("IdHolder", [
   "itemBody",
   "printedVariable",
   "contextDeclaration",
+  "xmlId",
 ]);
 
 /**
@@ -131,6 +132,23 @@ export const HtmlId = relation(
 );
 
 /**
+ * The `xml:id` of an element of a document, once per document, in `HtmlId`'s shape: it shares the
+ * document's `id` space with every other holder of `DocumentId`. `attribute` is always `xml:id`.
+ * The value is the bare NCName: the item's `xs:ID` space is another module's concern.
+ */
+export const DocumentXmlId = relation(
+  "DocumentXmlId",
+  {
+    attribute: closedId(AttributeName),
+    document: uuid,
+    id: ncName,
+    kind: closedId(NodeKind),
+    node: uuid,
+  },
+  ["document", "id"],
+);
+
+/**
  * The `id` of the item body.
  */
 export const ItemBodyId = relation("ItemBodyId", { document: uuid, id: ncName, node: uuid }, [
@@ -194,6 +212,7 @@ export const relations = {
   DocumentId,
   DocumentIdentifier,
   DocumentTitle,
+  DocumentXmlId,
   HtmlId,
   IdHolder,
   ItemBodyId,
@@ -252,6 +271,8 @@ export const rules = [
   contained(on(DocumentId, "document"), on(Document, "id")),
   key(HtmlId, ["node"]),
   contained(on(HtmlId, "node", "document", "kind"), on(Node, "id", "tree", "kind")),
+  key(DocumentXmlId, ["node"]),
+  contained(on(DocumentXmlId, "node", "document", "kind"), on(Node, "id", "tree", "kind")),
   key(ItemBodyId, ["node"]),
   contained(on(ItemBodyId, "node", "document"), on(Node, "id", "tree")),
   key(PrintedVariableId, ["node"]),

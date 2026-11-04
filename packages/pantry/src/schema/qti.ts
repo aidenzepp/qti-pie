@@ -20,6 +20,7 @@ import * as expression from "#pantry/schema/expression.ts";
 import * as expressionAttributes from "#pantry/schema/expression-attributes.ts";
 import * as document from "#pantry/schema/document.ts";
 import * as feedback from "#pantry/schema/feedback.ts";
+import * as foreignAttributes from "#pantry/schema/foreign-attributes.ts";
 import * as foreign from "#pantry/schema/foreign.ts";
 import * as html from "#pantry/schema/html.ts";
 import * as htmlMedia from "#pantry/schema/html/media.ts";
@@ -140,6 +141,7 @@ export const Qti = schema(
     ...other.relations,
     ...feedback.relations,
     ...foreign.relations,
+    ...foreignAttributes.relations,
     ...template.relations,
     ...rubric.relations,
     ...mapping.relations,
@@ -181,6 +183,7 @@ export const Qti = schema(
     ...other.rules,
     ...feedback.rules,
     ...foreign.rules,
+    ...foreignAttributes.rules,
     ...template.rules,
     ...rubric.rules,
     ...mapping.rules,

@@ -1183,6 +1183,7 @@ export const shared: readonly Own[] = [
   ["label", first(optional(R.NodeLabel), optional(R.AssessmentItemLabel))],
   ["dir", optional(R.NodeDir)],
   ["xml:base", optional(R.NodeXmlBase)],
+  ["xml:space", optional(R.NodeXmlSpace)],
   ["data-qti-suppress-tts", optional(R.NodeSuppressTts)],
   ["data-catalog-idref", optional(R.NodeCatalogIdref)],
   [
@@ -1193,6 +1194,7 @@ export const shared: readonly Own[] = [
       column(R.PrintedVariableId, "id", "node"),
     ),
   ],
+  ["xml:id", first(column(R.DocumentXmlId, "id", "node"))],
   ...aria,
   ...IdrefAttribute.handles.map((name): Own => [name, tokens(name)]),
 ];
