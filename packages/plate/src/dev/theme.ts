@@ -86,7 +86,7 @@ const remedies = {
   "too-large": `is more than the ${sizeLimit} bytes (32 KiB) the box reads. Paste only the \`:root\` and \`.dark\` blocks of custom properties`,
   unbalanced:
     "is never matched. Close every brace, quote and comment the theme opens, and open every brace it closes",
-  value: `marks a value the box refuses. Give each custom property a value that is not empty, has at most ${valueLimit} characters, and holds none of \`;\`, \`{\`, \`}\`, \`<\`, \`>\`, \`\\\`, \`/*\`, \`@\` or \`!important\`, and no \`url()\`, \`image()\` or \`image-set()\` call`,
+  value: `marks a value the box refuses. Give each custom property a value that is not empty, has at most ${valueLimit} characters, and holds none of \`;\`, \`{\`, \`}\`, \`<\`, \`>\`, \`\\\`, \`/*\`, \`@\` or \`!important\`, and no \`url()\`, \`src()\`, \`image()\` or \`image-set()\` call`,
 } satisfies Record<RefusalCause, string>;
 
 /**
@@ -115,10 +115,11 @@ const customProperty = /^--[\w-]+$/u;
 
 /**
  * The tokens a value may not hold, matched in any letter case: the earliest in a value is the one a
- * refusal quotes. `url(`, `image(` and `image-set(` fetch, `@` and `!important` change the
- * cascade, and the rest could end the declaration, the block or the page's `<style>` element.
+ * refusal quotes. `url(`, `src(`, `image(` and `image-set(` (with its `-webkit-` prefix) fetch,
+ * `@` and `!important` change the cascade, and the rest could end the declaration, the block or
+ * the page's `<style>` element.
  */
-const forbiddenToken = /;|\{|\}|<|>|\\|\/\*|@|!\s*important|url\(|image\(|image-set\(/iu;
+const forbiddenToken = /;|\{|\}|<|>|\\|\/\*|@|!\s*important|url\(|src\(|image\(|image-set\(/iu;
 
 /**
  * The selectors the box reads, each at most once.
@@ -471,3 +472,58 @@ export const parseTheme = (text: string): Effect.Effect<Theme, ThemeRefused> =>
       return { dark: declarationsOf(named, ".dark"), light: declarationsOf(named, ":root") };
     }),
   ).pipe(Effect.withSpan("parseTheme"));
+
+/**
+ * Write one block: `<selector> {`, then one `<name>: <value>;` line per declaration indented by two
+ * spaces, then `}`, each line ending in a newline.
+ *
+ * @param selector The block's selector.
+ * @param declarations Its declarations, in order.
+ * @returns The block's text.
+ */
+const block = (selector: string, declarations: readonly ThemeDeclaration[]): string =>
+  `${selector} {\n${declarations.map(([name, value]) => `  ${name}: ${value};\n`).join("")}}\n`;
+
+/**
+ * Write a theme's blocks, `:root` first, then `.dark`, leaving out a block with no declarations and
+ * separating the rest with one blank line.
+ *
+ * This is the text the theme box shows: `parseTheme(themeText(theme))` gives `theme` back.
+ *
+ * @param theme An accepted theme.
+ * @returns The blocks' text, or `""` for the empty theme.
+ */
+export const themeText = (theme: Theme): string =>
+  (
+    [
+      [":root", theme.light],
+      [".dark", theme.dark],
+    ] as const
+  )
+    .filter(([, declarations]) => declarations.length > 0)
+    .map(([selector, declarations]) => block(selector, declarations))
+    .join("\n");
+
+/**
+ * The dev playground's host CSS: the theme's blocks, then the colour schemes, then the page's font
+ * and colours on those tokens, so the browser's own colours follow the theme.
+ *
+ * `.dark` takes `color-scheme: dark` only when the theme has `.dark` declarations, so with no
+ * `.dark` block ticking Dark changes nothing.
+ *
+ * @param theme An accepted theme.
+ * @returns The CSS, its blocks separated by one blank line.
+ */
+export const themeCss = (theme: Theme): string =>
+  [
+    themeText(theme),
+    block(":root", [["color-scheme", "light"]]),
+    theme.dark.length === 0 ? "" : block(".dark", [["color-scheme", "dark"]]),
+    block("html", [["font-family", "var(--font-sans, system-ui, sans-serif)"]]),
+    block("body", [
+      ["background-color", "var(--background, Canvas)"],
+      ["color", "var(--foreground, CanvasText)"],
+    ]),
+  ]
+    .filter((text) => text !== "")
+    .join("\n");
