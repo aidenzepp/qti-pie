@@ -35,6 +35,7 @@ import * as html from "#pantry/schema/kinds/html.ts";
 import * as lom from "#pantry/schema/kinds/lom.ts";
 import * as qmd from "#pantry/schema/kinds/qmd.ts";
 import * as ud from "#pantry/schema/kinds/ud.ts";
+import * as test from "#pantry/schema/kinds/test.ts";
 import * as xi from "#pantry/schema/kinds/xi.ts";
 import {
   NamespacePrefix,
@@ -51,7 +52,20 @@ import { ancestryHandles } from "#pantry/schema/seed/ancestry.ts";
  * Each roster spreads these modules' tuples in this order; a kinds file added to one is added to
  * the other and to this list, which the tests read as the composition's source of truth.
  */
-export const vocabularies = [generic, asi, html, cp, lom, qmd, cpx, drd, csmd, ud, xi] as const;
+export const vocabularies = [
+  generic,
+  asi,
+  html,
+  cp,
+  lom,
+  qmd,
+  cpx,
+  drd,
+  csmd,
+  ud,
+  xi,
+  test,
+] as const;
 
 /**
  * The kinds tuples `NodeKind` spreads, in the order of `vocabularies`; the tests read the
@@ -69,6 +83,7 @@ export const kindTuples = [
   csmd.kinds,
   ud.kinds,
   xi.kinds,
+  test.kinds,
 ] as const;
 
 /**
@@ -86,6 +101,7 @@ export const attributeTuples = [
   csmd.attributes,
   ud.attributes,
   xi.attributes,
+  test.attributes,
 ] as const;
 
 const schemaVersions = ["3.0.0", "3.0.1"] as const satisfies readonly SchemaVersionHandle[];
@@ -140,6 +156,7 @@ export const NodeKind = closed("NodeKind", [
   ...csmd.kinds,
   ...ud.kinds,
   ...xi.kinds,
+  ...test.kinds,
 ]);
 
 /**
@@ -161,6 +178,7 @@ export const AttributeName = closed("AttributeName", [
   ...csmd.attributes,
   ...ud.attributes,
   ...xi.attributes,
+  ...test.attributes,
 ]);
 
 /**
