@@ -2,8 +2,10 @@ import { assert, describe, it } from "@effect/vitest";
 import { h, text } from "#plate/emit/node.ts";
 import {
   EscapableRawTextElementChild,
+  EventHandlerAttribute,
   MalformedAttributeName,
   MalformedTagName,
+  PlaintextElement,
   RawTextChildren,
   serialise,
   toHtml,
@@ -100,6 +102,65 @@ describe("toHtml", () => {
         }, RawTextChildren);
       }
     }
+  });
+
+  it("throws PlaintextElement for an empty plaintext element, at the root or under another", () => {
+    assert.throws(() => {
+      toHtml(h("plaintext", {}));
+    }, PlaintextElement);
+    assert.throws(() => {
+      toHtml(
+        h("div", {}, [
+          h("p", {}, [h("plaintext", {})]),
+          h("button", { type: "submit" }, [text("Submit")]),
+        ]),
+      );
+    }, PlaintextElement);
+  });
+
+  it("writes none of a plaintext element's bytes before refusing it", () => {
+    const chunks: string[] = [];
+    assert.throws(() => {
+      serialise(h("div", {}, [h("plaintext", {})]), {
+        write: (chunk) => {
+          chunks.push(chunk);
+        },
+      });
+    }, PlaintextElement);
+    assert.deepStrictEqual(chunks, ["<div>"]);
+  });
+
+  it("throws EventHandlerAttribute for an attribute name starting with on, in any case, with any value", () => {
+    for (const name of ["onclick", "ONLOAD", "onfocus", "oNmouseover", "on"]) {
+      assert.throws(() => {
+        toHtml(h("p", { [name]: "alert(1)" }));
+      }, EventHandlerAttribute);
+      assert.throws(() => {
+        toHtml(h("input", { [name]: true }));
+      }, EventHandlerAttribute);
+      assert.throws(() => {
+        toHtml(h("div", {}, [h("button", { [name]: "" }, [text("Submit")])]));
+      }, EventHandlerAttribute);
+    }
+  });
+
+  it("writes none of an element's bytes before refusing its event-handler attribute", () => {
+    const chunks: string[] = [];
+    assert.throws(() => {
+      serialise(h("div", {}, [h("b", { onclick: "x" }, [text("a")])]), {
+        write: (chunk) => {
+          chunks.push(chunk);
+        },
+      });
+    }, EventHandlerAttribute);
+    assert.deepStrictEqual(chunks, ["<div>"]);
+  });
+
+  it("writes an attribute that holds on anywhere but at the start of its name", () => {
+    assert.strictEqual(
+      toHtml(h("button", { "aria-controls": "c1", "data-onclick": "x" }, [text("Go")])),
+      '<button aria-controls="c1" data-onclick="x">Go</button>',
+    );
   });
 
   it("writes a raw-text element with no children as its start and end tags", () => {
