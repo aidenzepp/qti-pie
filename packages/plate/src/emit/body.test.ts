@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { emitBody } from "#plate/emit/body.ts";
+import { emitBody, htmlSubset } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
@@ -8,6 +8,7 @@ import { resolveOverrides, rowFor, scopedId } from "#plate/emit/parts.ts";
 import type { PartOverrides } from "#plate/emit/parts.ts";
 import { toHtml } from "#plate/emit/serialise.ts";
 import { entryName } from "#plate/form/encoding.ts";
+import { renderChoice } from "#plate/interactions/choice.ts";
 import { message } from "#plate/messages.ts";
 import type {
   ChoicePayload,
@@ -293,6 +294,18 @@ describe("emitBody", () => {
           elementsIn(nodes).find((element) => element.tag === "img")?.attrs["alt"],
           "Picture of crows roosting in a tree",
         );
+        assert.deepStrictEqual(
+          elementsIn(nodes).map(({ attrs }) => Object.keys(attrs).toSorted()),
+          [
+            [],
+            ["alt", "height", "src", "width"],
+            [],
+            ["controls", "height", "width"],
+            ["src", "type"],
+            ["src", "type"],
+            ["kind", "src", "srclang"],
+          ],
+        );
       }),
   );
 
@@ -457,10 +470,10 @@ describe("emitBody", () => {
     "[I-8] an event-handler attribute is dropped, so the serialiser writes the element",
     () =>
       Effect.gen(function* handlers() {
-        const nodes = yield* emit([el("p", { ONCLICK: "x()", onclick: "alert(1)", title: "t" })]);
+        const nodes = yield* emit([el("p", { ONCLICK: "x()", class: "t", onclick: "alert(1)" })]);
 
-        assert.deepStrictEqual(nodes, [h("p", { title: "t" })]);
-        assert.strictEqual(nodes.map(toHtml).join(""), '<p title="t"></p>');
+        assert.deepStrictEqual(nodes, [h("p", { class: "t" })]);
+        assert.strictEqual(nodes.map(toHtml).join(""), '<p class="t"></p>');
       }),
   );
 
@@ -709,18 +722,179 @@ describe("emitBody, URLs", () => {
     () =>
       Effect.gen(function* unsecured() {
         const nodes = yield* emit([
-          el("p", {}, [el("a", { href: "java\tscript:alert(1)", title: "t" }, [txt("read")])]),
+          el("p", {}, [el("a", { class: "t", href: "java\tscript:alert(1)" }, [txt("read")])]),
           el("img", { alt: "x", src: "data:image/png;base64,AAAA" }),
           el("object", { data: "https://evil.example/x.svg" }, [txt("fallback")]),
           el("audio", { src: "/etc/passwd" }),
         ]);
 
         assert.deepStrictEqual(nodes, [
-          h("p", {}, [h("a", { title: "t" }, [text("read")])]),
+          h("p", {}, [h("a", { class: "t" }, [text("read")])]),
           h("img", { alt: "x" }),
           h("object", {}, [text("fallback")]),
           h("audio", {}),
         ]);
       }),
   );
+});
+
+/**
+ * A script URL: test input the walk must never write.
+ */
+// oxlint-disable-next-line eslint/no-script-url -- the value is test input the emitter must drop, never a URL this code navigates to.
+const scriptUrl = "javascript:alert(1)";
+
+describe("emitBody, the XSD's HTML subset", () => {
+  // Every payload here is built by hand, as a `Redacted` that crossed the network as JSON and lost
+  // its type would arrive: no `check`, no `redactItem`. The emitter must not trust it.
+
+  it.effect("[I-8] script, form and iframe elements are dropped with their subtrees", () =>
+    Effect.gen(function* droppedElements() {
+      const nodes = yield* emit([
+        el("div", {}, [
+          el("script", {}, [txt("alert(1)")]),
+          el("form", { action: "https://evil.example/" }, [el("p", {}, [txt("Inside")])]),
+          el("iframe", { src: "https://evil.example/" }, [txt("Frame")]),
+          el("p", {}, [txt("Kept")]),
+        ]),
+      ]);
+
+      assert.deepStrictEqual(nodes, [h("div", {}, [h("p", {}, [text("Kept")])])]);
+    }),
+  );
+
+  it.effect(
+    "[I-8] a p keeps only lang: handlers, style and every undeclared data-* are dropped",
+    () =>
+      Effect.gen(function* undeclaredAttributes() {
+        const nodes = yield* emit([
+          el(
+            "p",
+            {
+              "data-foo": "1",
+              "data-mode": "review",
+              "data-slot": "choice-interaction-control",
+              lang: "fr",
+              onclick: "x",
+              style: "color:red",
+            },
+            [txt("Oui")],
+          ),
+        ]);
+
+        assert.deepStrictEqual(nodes, [h("p", { lang: "fr" }, [text("Oui")])]);
+      }),
+  );
+
+  it.effect("[I-8] a javascript: href placed straight into the payload is dropped", () =>
+    Effect.gen(function* javascriptHref() {
+      const nodes = yield* emit([el("a", { href: scriptUrl }, [txt("read")])]);
+
+      assert.deepStrictEqual(nodes, [h("a", {}, [text("read")])]);
+    }),
+  );
+
+  it.effect("[I-8] names are matched exactly: a mixed-case element or attribute is dropped", () =>
+    Effect.gen(function* mixedCase() {
+      const nodes = yield* emit([
+        el("A", { href: scriptUrl }, [txt("upper")]),
+        el("a", { HREF: scriptUrl }, [txt("read")]),
+        el("img", { Src: scriptUrl, alt: "x" }),
+      ]);
+
+      assert.deepStrictEqual(nodes, [h("a", {}, [text("read")]), h("img", { alt: "x" })]);
+    }),
+  );
+
+  it.effect("[I-8] [A-1] an img keeps src and alt, src in its parsed form", () =>
+    Effect.gen(function* keptImage() {
+      const nodes = yield* emit([el("img", { alt: "x", src: "HTTPS://CDN.Example/x.png" })]);
+
+      assert.deepStrictEqual(nodes, [h("img", { alt: "x", src: "https://cdn.example/x.png" })]);
+    }),
+  );
+
+  it.effect("[I-8] label loses for, which the XSD does not declare on it", () =>
+    Effect.gen(function* labelFor() {
+      const nodes = yield* emit([el("label", { for: "x" }, [txt("Name")])]);
+
+      assert.deepStrictEqual(nodes, [h("label", {}, [text("Name")])]);
+    }),
+  );
+
+  it.effect("[I-8] either spelling of aria-keyshortcuts on an empty element writes ARIA's", () =>
+    Effect.gen(function* keyShortcuts() {
+      const nodes = yield* emit([
+        el("br", { "aria-keyshorts": "Alt+B" }),
+        el("hr", { "aria-keyshortcuts": "Alt+H" }),
+        el("p", { "aria-keyshortcuts": "Alt+P" }, [txt("P")]),
+      ]);
+
+      assert.deepStrictEqual(nodes, [
+        h("br", { "aria-keyshortcuts": "Alt+B" }),
+        h("hr", { "aria-keyshortcuts": "Alt+H" }),
+        h("p", { "aria-keyshortcuts": "Alt+P" }, [text("P")]),
+      ]);
+    }),
+  );
+
+  it.effect("[I-8] a node of a kind the payload does not define is dropped", () =>
+    Effect.gen(function* unknownKind() {
+      // A JSON payload can carry any object; this one would serialise as an iframe if kept.
+      const parsed: unknown = JSON.parse(
+        '{"attrs":{"src":"https://evil.example/"},"children":[],"kind":"raw","tag":"iframe"}',
+      );
+      // SAFETY: none holds, on purpose: a payload that crossed the network reaches the walk typed `PayloadNode`, whatever it holds.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The SAFETY note above: the test stands in for a payload that lost its type.
+      const smuggled = parsed as PayloadNode;
+      const nodes = yield* emit([el("p", {}, [smuggled, txt("Kept")])]);
+
+      assert.deepStrictEqual(nodes, [h("p", {}, [text("Kept")])]);
+    }),
+  );
+
+  it.effect(
+    "[Q-2] [I-8] a data-slot in choice content is dropped, the real Control keeps its marker",
+    () =>
+      Effect.gen(function* choiceMarker() {
+        const marker = rowFor("choice-interaction", "control").slot;
+        const marked: ChoicePayload = {
+          ...choice,
+          choices: [
+            { content: [el("span", { "data-slot": marker }, [txt("Red")])], identifier: "A" },
+          ],
+        };
+        const state = yield* stateAt(2);
+        const root = yield* renderChoice(marked, payloadOf([marked]), state);
+        const slotted = elementsIn([root]).filter(({ attrs }) => attrs["data-slot"] === marker);
+        const content = elementsIn([root]).find(
+          ({ children, tag }) => tag === "span" && children[0]?.kind === "text",
+        );
+
+        assert.deepStrictEqual(
+          slotted.map((element) => element.tag),
+          ["input"],
+        );
+        assert.deepStrictEqual(content, h("span", {}, [text("Red")]));
+      }),
+  );
+
+  it("[I-8] htmlSubset holds the XSD's 76 HTML elements, none of them executable or global", () => {
+    assert.strictEqual(htmlSubset.size, 76);
+
+    for (const tag of ["script", "style", "form", "iframe", "embed", "base", "link", "meta"]) {
+      assert.isFalse(htmlSubset.has(tag), tag);
+    }
+  });
+
+  it("[I-8] htmlSubset names every element and attribute in lower case, so lookups are exact", () => {
+    for (const [tag, attributes] of htmlSubset) {
+      assert.strictEqual(tag, tag.toLowerCase());
+
+      for (const attribute of attributes) {
+        assert.strictEqual(attribute, attribute.toLowerCase(), `${tag}@${attribute}`);
+        assert.isFalse(attribute.startsWith("on") || attribute === "style", `${tag}@${attribute}`);
+      }
+    }
+  });
 });
