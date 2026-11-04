@@ -980,6 +980,118 @@ describe("buildItem", () => {
     }),
   );
 
+  it.effect(
+    "[I-9b] marks a point RESPONSE's match_correct as variable:RESPONSE and runs no processing",
+    () =>
+      Effect.gen(function* marksPointMatchCorrect() {
+        const built = yield* buildItem(
+          item({
+            after: [
+              template("match_correct"),
+              el("qti-modal-feedback", [attr("identifier", "fb")], [text("Well done")]),
+            ],
+            body: [],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "point", "single", [
+                values("qti-correct-response", "10 10"),
+              ]),
+              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(built.processing, Option.none());
+        assert.deepStrictEqual(built.unsupported, [
+          {
+            feature: 'base-type="point"',
+            path: `${root}/qti-response-declaration`,
+            shown: "mark",
+          },
+          { feature: "variable:RESPONSE", path: `${root}/qti-response-processing`, shown: "mark" },
+          { feature: "qti-modal-feedback", path: `${root}/qti-modal-feedback`, shown: "mark" },
+        ]);
+      }),
+  );
+
+  it.effect("[I-9b] marks inline rules that read the built-in duration as variable:duration", () =>
+    Effect.gen(function* marksBuiltInDuration() {
+      const built = yield* buildItem(
+        item({
+          after: [
+            el(
+              "qti-response-processing",
+              [],
+              [
+                el(
+                  "qti-set-outcome-value",
+                  [attr("identifier", "SCORE")],
+                  [el("qti-variable", [attr("identifier", "duration")])],
+                ),
+              ],
+            ),
+          ],
+          body: [],
+          declarations: [declaration("qti-outcome-declaration", "SCORE", "float", "single")],
+        }),
+      );
+
+      assert.deepStrictEqual(built.processing, Option.none());
+      assert.deepStrictEqual(built.unsupported, [
+        { feature: "variable:duration", path: `${root}/qti-response-processing`, shown: "mark" },
+      ]);
+    }),
+  );
+
+  it.effect("[I-9b] marks inline rules that read a template variable as variable:T", () =>
+    Effect.gen(function* marksTemplateVariable() {
+      const built = yield* buildItem(
+        item({
+          after: [
+            el(
+              "qti-response-processing",
+              [],
+              [
+                el(
+                  "qti-set-outcome-value",
+                  [attr("identifier", "SCORE")],
+                  [el("qti-variable", [attr("identifier", "T")])],
+                ),
+              ],
+            ),
+          ],
+          body: [],
+          declarations: [
+            declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+            el("qti-template-declaration", [
+              attr("base-type", "float"),
+              attr("cardinality", "single"),
+              attr("identifier", "T"),
+            ]),
+          ],
+        }),
+      );
+
+      assert.deepStrictEqual(built.processing, Option.none());
+      assert.deepStrictEqual(built.unsupported, [
+        {
+          feature: "qti-template-declaration",
+          path: `${root}/qti-template-declaration`,
+          shown: "mark",
+        },
+        { feature: "variable:T", path: `${root}/qti-response-processing`, shown: "mark" },
+      ]);
+    }),
+  );
+
+  it.effect("[I-9b] keeps BG007's match_correct tree, every identifier held, with no mark", () =>
+    Effect.gen(function* keepsHeldTree() {
+      const built = yield* buildItem(bg007(template("match_correct")));
+
+      assert.deepStrictEqual(built.processing, Option.some(matchCorrect));
+      assert.deepStrictEqual(built.unsupported, []);
+    }),
+  );
+
   it.live("trims a 50,000-character inner whitespace run in an attribute in linear time", () =>
     Effect.gen(function* linearAttributeTrim() {
       const run = " \t\n\r".repeat(12_500);
