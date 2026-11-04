@@ -454,6 +454,54 @@ describe("buildItem", () => {
     }),
   );
 
+  it.effect(
+    "[I-0] [Q-2] marks adaptive and shuffle when true or 1, and neither when false or 0",
+    () =>
+      Effect.gen(function* booleanMarks() {
+        const cases = [
+          ["true", true],
+          ["1", true],
+          [" 1 ", true],
+          ["false", false],
+          ["0", false],
+        ] as const;
+
+        for (const [written, on] of cases) {
+          const built = yield* buildItem(
+            item({
+              attributes: [attr("adaptive", written)],
+              body: [
+                el(
+                  "qti-choice-interaction",
+                  [attr("response-identifier", "RESPONSE"), attr("shuffle", written)],
+                  [choice("A", "Ant"), choice("B", "Bee")],
+                ),
+              ],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+              ],
+            }),
+          );
+
+          assert.strictEqual(choiceIn(built.body).shuffle, on, written);
+          assert.deepStrictEqual(
+            built.unsupported,
+            on
+              ? [
+                  { feature: 'adaptive="true"', path: root, shown: "mark" },
+                  {
+                    feature: 'shuffle="true"',
+                    path: `${body}/qti-choice-interaction`,
+                    shown: "mark",
+                  },
+                ]
+              : [],
+            written,
+          );
+        }
+      }),
+  );
+
   it.effect("[Q-20] builds a Text Entry with its attributes and base 10 by default", () =>
     Effect.gen(function* buildsTextEntry() {
       const built = yield* buildItem(
@@ -635,6 +683,74 @@ describe("buildItem", () => {
         { feature: "qti-modal-feedback", path: `${root}/qti-modal-feedback`, shown: "mark" },
       ]);
     }),
+  );
+
+  it.effect("[I-1] [I-2] marks each record and each untyped declaration at its path", () =>
+    Effect.gen(function* marksUnmodelledDeclarations() {
+      const built = yield* buildItem(
+        item({
+          body: [],
+          declarations: [
+            el("qti-response-declaration", [
+              attr("cardinality", "record"),
+              attr("identifier", "DETAIL"),
+            ]),
+            el("qti-response-declaration", [
+              attr("cardinality", "single"),
+              attr("identifier", "BARE"),
+            ]),
+            declaration("qti-response-declaration", "RESPONSE", "string", "single"),
+            el("qti-outcome-declaration", [
+              attr("cardinality", "record"),
+              attr("identifier", "CONTEXT"),
+            ]),
+            el("qti-outcome-declaration", [
+              attr("cardinality", "multiple"),
+              attr("identifier", "LIST"),
+            ]),
+          ],
+        }),
+      );
+      const response = `${root}/qti-response-declaration`;
+      const outcome = `${root}/qti-outcome-declaration`;
+
+      assert.deepStrictEqual([...built.responses.keys()], ["RESPONSE"]);
+      assert.deepStrictEqual([...built.outcomes.keys()], []);
+      assert.deepStrictEqual(built.unsupported, [
+        { feature: 'cardinality="record"', path: `${response}[1]`, shown: "mark" },
+        { feature: 'base-type=""', path: `${response}[2]`, shown: "mark" },
+        { feature: 'cardinality="record"', path: `${outcome}[1]`, shown: "mark" },
+        { feature: 'base-type=""', path: `${outcome}[2]`, shown: "mark" },
+      ]);
+    }),
+  );
+
+  it.effect(
+    "[I-1] reads a response's qti-default-value through the value model, none without",
+    () =>
+      Effect.gen(function* readsResponseDefault() {
+        const built = yield* buildItem(
+          item({
+            body: [],
+            declarations: [
+              declaration("qti-response-declaration", "WITH", "integer", "single", [
+                values("qti-default-value", " 7 "),
+              ]),
+              declaration("qti-response-declaration", "WITHOUT", "integer", "single"),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(
+          built.responses.get("WITH")?.defaultValue,
+          Option.some<Value>({
+            baseType: "integer",
+            cardinality: "single",
+            values: [{ baseType: "integer", value: 7 }],
+          }),
+        );
+        assert.deepStrictEqual(built.responses.get("WITHOUT")?.defaultValue, Option.none());
+      }),
   );
 
   it.effect(

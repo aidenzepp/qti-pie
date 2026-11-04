@@ -76,6 +76,7 @@ const item: Item = {
           cardinality: "single",
           values: [{ baseType: "identifier", value: "true" }],
         }),
+        defaultValue: Option.none(),
         identifier: "RESPONSE",
         mapping: Option.none(),
       },
