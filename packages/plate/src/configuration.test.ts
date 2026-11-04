@@ -24,9 +24,14 @@ describe("configure", () => {
         maxAttempts: 1,
         showFeedback: false,
         showSolution: false,
-        trust: "secure",
         validateResponses: false,
       });
+    }),
+  );
+
+  it.effect("decodes an empty configuration with no trust key", () =>
+    Effect.gen(function* noTrust() {
+      assert.isFalse(Object.hasOwn(yield* configure({}), "trust"));
     }),
   );
 
