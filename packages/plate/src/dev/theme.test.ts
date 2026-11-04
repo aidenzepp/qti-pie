@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { emptyTheme, parseTheme } from "#plate/dev/theme.ts";
+import { emptyTheme, parseTheme, themeCss, themeText } from "#plate/dev/theme.ts";
 import type { ThemeDeclaration, ThemeRefused } from "#plate/dev/theme.ts";
 
 /**
@@ -170,6 +170,9 @@ describe("parseTheme", () => {
     ["a url() call", ":root { --x: url(https://e.example/a) }", "value", "url("],
     ["a url() call in capitals", ":root { --x: URL(https://e.example/a) }", "value", "URL("],
     ["an image-set() call", ":root { --x: image-set(a 1x) }", "value", "image-set("],
+    ["a -webkit-image-set() call", ":root { --x: -webkit-image-set(a 1x) }", "value", "image-set("],
+    ["a src() call", ':root { --x: src("https://e.example/a") }', "value", "src("],
+    ["a src() call in capitals", ':root { --x: SRC("https://e.example/a") }', "value", "SRC("],
     ["markup", ":root { --x: </textarea> }", "value", "<"],
     ["!important", ":root { --x: red !important }", "value", "!important"],
     ["a semicolon inside quotes", ':root { --x: "a;b" }', "value", ";"],
@@ -238,4 +241,85 @@ describe("parseTheme", () => {
       assert.strictEqual(error.detail, `.${"x".repeat(79)}`);
     }),
   );
+});
+
+/**
+ * A line that declares a custom property, as ` --name: value;`.
+ */
+const customPropertyLine = /^\s*--[\w-]+\s*:/mu;
+
+describe("themeText", () => {
+  it.effect("gives back the theme parseTheme read from it", () =>
+    Effect.gen(function* roundTrip() {
+      const fixtureTheme = yield* parseTheme(fixture);
+
+      assert.deepStrictEqual(yield* parseTheme(themeText(fixtureTheme)), fixtureTheme);
+    }),
+  );
+
+  it("writes each block in one format, :root first and an empty block left out", () => {
+    assert.strictEqual(
+      themeText({
+        dark: [["--a", "2"]],
+        light: [
+          ["--a", "1"],
+          ["--b", '"x y"'],
+        ],
+      }),
+      ':root {\n  --a: 1;\n  --b: "x y";\n}\n\n.dark {\n  --a: 2;\n}\n',
+    );
+    assert.strictEqual(themeText({ dark: [["--a", "2"]], light: [] }), ".dark {\n  --a: 2;\n}\n");
+  });
+
+  it.effect("writes the empty theme as nothing, which reads back as the empty theme", () =>
+    Effect.gen(function* emptyText() {
+      assert.strictEqual(themeText(emptyTheme), "");
+      assert.deepStrictEqual(yield* parseTheme(themeText(emptyTheme)), emptyTheme);
+    }),
+  );
+});
+
+describe("themeCss", () => {
+  it("lets the browser's own colours follow an empty theme, with no .dark rule", () => {
+    const css = themeCss(emptyTheme);
+
+    assert.include(css, ":root {\n  color-scheme: light;\n}");
+    assert.include(css, "html {\n  font-family: var(--font-sans, system-ui, sans-serif);\n}");
+    assert.include(
+      css,
+      "body {\n  background-color: var(--background, Canvas);\n  color: var(--foreground, CanvasText);\n}",
+    );
+    assert.notMatch(css, customPropertyLine);
+    assert.notInclude(css, ".dark");
+  });
+
+  it.effect(
+    "starts with the theme's text and gives a theme with .dark declarations a dark scheme",
+    () =>
+      Effect.gen(function* fixtureCss() {
+        const fixtureTheme = yield* parseTheme(fixture);
+        const css = themeCss(fixtureTheme);
+
+        assert.isTrue(css.startsWith(themeText(fixtureTheme)));
+        assert.include(css, ".dark {\n  color-scheme: dark;\n}");
+      }),
+  );
+
+  it("gives a theme with no .dark declarations no dark scheme", () => {
+    assert.notInclude(themeCss({ dark: [], light: [["--a", "1"]] }), "color-scheme: dark");
+  });
+
+  it("writes the theme, then the schemes, then the html and body rules, each block once", () => {
+    assert.strictEqual(
+      themeCss({ dark: [["--a", "2"]], light: [["--a", "1"]] }),
+      [
+        ":root {\n  --a: 1;\n}\n",
+        ".dark {\n  --a: 2;\n}\n",
+        ":root {\n  color-scheme: light;\n}\n",
+        ".dark {\n  color-scheme: dark;\n}\n",
+        "html {\n  font-family: var(--font-sans, system-ui, sans-serif);\n}\n",
+        "body {\n  background-color: var(--background, Canvas);\n  color: var(--foreground, CanvasText);\n}\n",
+      ].join("\n"),
+    );
+  });
 });
