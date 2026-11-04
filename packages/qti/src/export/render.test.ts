@@ -196,7 +196,7 @@ const synthetic = `<?xml version="1.0" encoding="UTF-8"?>
     <qti-order-interaction response-identifier="RESPONSE" shuffle="true"><qti-simple-choice identifier="A" fixed="true">a</qti-simple-choice><qti-simple-choice identifier="B">b</qti-simple-choice></qti-order-interaction>
     <qti-order-interaction response-identifier="OTHER"><qti-simple-choice identifier="C">c</qti-simple-choice></qti-order-interaction>
     <qti-order-interaction response-identifier="THIRD" shuffle="false"><qti-simple-choice identifier="D">d</qti-simple-choice></qti-order-interaction>
-    <picture><source srcset="a.svg" type="image/svg"/><img src="a.png" alt=""/></picture>
+    <p><picture><source srcset="a.svg" type="image/svg"/><img src="a.png" alt=""/></picture></p>
   </qti-item-body>
 </qti-assessment-item>`;
 
