@@ -665,4 +665,26 @@ describe("payload", () => {
     });
     assert.deepStrictEqual(textFor(built, "ESSAY").name.unnamed, Option.none());
   });
+
+  it("[Q-20] counts a text control whose aria-labelledby names no id as one with no authored name", () => {
+    const blank: Item = {
+      ...item,
+      body: item.body.map((node) =>
+        node.kind === "element"
+          ? {
+              ...node,
+              children: node.children.map((child) =>
+                child.kind === "text-entry" && child.response === "NAMED"
+                  ? { ...child, ariaLabel: Option.none(), ariaLabelledby: Option.some(" \t ") }
+                  : child,
+              ),
+            }
+          : node,
+      ),
+    };
+    const built = payload(redactItem(blank), answering);
+
+    assert.deepStrictEqual(textFor(built, "FIRST").name.unnamed, Option.some({ count: 3, n: 1 }));
+    assert.deepStrictEqual(textFor(built, "NAMED").name.unnamed, Option.some({ count: 3, n: 3 }));
+  });
 });

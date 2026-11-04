@@ -101,7 +101,7 @@ export const emitItem = (
  * heading names, and what the region shows under the heading.
  *
  * The region shows the score when `score` is set; else one Message per entry of `messages`, when
- * there are any; else, for `responseRecorded`, that state's text; else nothing under the heading.
+ * there are any; else nothing under the heading, which names the state on its own.
  * `autofocus` is the author's focus choice: the region carries `autofocus` exactly when it is true.
  */
 export interface StatusInput {
@@ -125,8 +125,8 @@ export interface StatusInput {
 }
 
 /**
- * Emit what the Status region shows under its heading: the score, the Messages, or the
- * `responseRecorded` text, by {@link StatusInput}'s precedence.
+ * Emit what the Status region shows under its heading: the score or the Messages, by
+ * {@link StatusInput}'s precedence.
  *
  * @param input The author's Status input.
  * @param state The emit state, which gives the locale and the part overrides.
@@ -153,16 +153,12 @@ const statusDetail = (
     });
   }
 
-  return Result.succeed(
-    input.heading === "responseRecorded"
-      ? [h("p", {}, [text(message(locale, "responseRecorded"))])]
-      : [],
-  );
+  return Result.succeed([]);
 };
 
 /**
- * Emit the Status part: the status region, its heading at the base level, then the score, the
- * Messages or the `responseRecorded` text.
+ * Emit the Status part: the status region, its heading at the base level, then the score or the
+ * Messages, if any.
  *
  * The region (`section`) carries its scoped `id`, `role="status"`, `aria-labelledby` naming its
  * heading, `tabindex="-1"`, and `autofocus` only when `input.autofocus` is true. Each Message `li`
