@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Duration, Effect } from "effect";
 import { decode, encode, entryName, partition } from "#plate/form/encoding.ts";
 import type { Binding, Entry, Malformed } from "#plate/form/encoding.ts";
 import type { Single, Value } from "#plate/model/values.ts";
@@ -166,6 +166,79 @@ describe("encode and decode", () => {
 
       const error = yield* Effect.flip(decode(posted("102"), integer, { base: 2 }));
       assert.strictEqual(error.reason, "number");
+    }),
+  );
+
+  it.effect("[Q-20] reads a posted integer exactly, beyond the safe integers", () =>
+    Effect.gen(function* exactIntegers() {
+      const integer = binding("integer");
+      const cases: readonly (readonly [string, bigint])[] = [
+        ["9007199254740993", 2n ** 53n + 1n],
+        [" 1000000000000000000000000000000 ", 10n ** 30n],
+        ["-1000000000000000000000000000000", -(10n ** 30n)],
+        ["+0009007199254740993", 2n ** 53n + 1n],
+      ];
+
+      for (const [text, exact] of cases) {
+        assert.deepStrictEqual(
+          yield* decode(posted(text), integer),
+          value(integer, { baseType: "integer", value: exact }),
+        );
+      }
+    }),
+  );
+
+  it.effect("[Q-20] reads a posted integer exactly in bases 16 and 7", () =>
+    Effect.gen(function* exactInBase() {
+      const integer = binding("integer");
+      const exact = value(integer, { baseType: "integer", value: 2n ** 53n + 1n });
+
+      assert.deepStrictEqual(yield* decode(posted("20000000000001"), integer, { base: 16 }), exact);
+      assert.deepStrictEqual(
+        yield* decode(posted((2n ** 53n + 1n).toString(7)), integer, { base: 7 }),
+        exact,
+      );
+      assert.deepStrictEqual(
+        yield* decode(posted(`-${(10n ** 30n).toString(7)}`), integer, { base: 7 }),
+        value(integer, { baseType: "integer", value: -(10n ** 30n) }),
+      );
+    }),
+  );
+
+  it.live("[Q-20] reads 100,000 base-36 digits exactly in under 200 ms", () =>
+    Effect.gen(function* longBase36() {
+      const integer = binding("integer");
+      const exact = 17n * 36n ** 99_999n + 7n ** 90_000n;
+      const spelling = exact.toString(36);
+      assert.strictEqual(spelling.length, 100_000);
+
+      const [elapsed, read] = yield* Effect.timed(
+        Effect.suspend(() => decode(posted(spelling), integer, { base: 36 })),
+      );
+      assert.deepStrictEqual(read, value(integer, { baseType: "integer", value: exact }));
+      assert.isBelow(Duration.toMillis(elapsed), 200, Duration.format(elapsed));
+    }),
+  );
+
+  it.effect("[Q-20] refuses a decimal, INF, a bare sign and a base outside 2 to 36", () =>
+    Effect.gen(function* integerRefusals() {
+      const integer = binding("integer");
+      const cases: readonly (readonly [string, number])[] = [
+        ["1.5", 10],
+        ["INF", 10],
+        ["+", 10],
+        ["-", 10],
+        ["102", 2],
+        ["1", 1],
+        ["1", 2.5],
+        ["1", 37],
+      ];
+
+      for (const [text, base] of cases) {
+        const error = yield* Effect.flip(decode(posted(text), integer, { base }));
+        assert.strictEqual(error._tag, "Malformed");
+        assert.strictEqual(error.reason, "number", `${text} in base ${String(base)}`);
+      }
     }),
   );
 
