@@ -45,14 +45,14 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    `lower-bound`, `upper-bound` and `default-value`; a match table's and an interpolation table's `default-value`, and
    their entries' `target-value`; an interpolation table entry's `source-value`; and the value attributes of the
    usage-data mapping (`ud:mapping`'s `defaultValue`, `lowerBound` and `upperBound`, and its `ud:mapEntry` entries'
-   `mappedValue`). Where the value is of base type string, as for a `map-key` or `target-value` of a string variable, its whitespace is part of
-   the value and is kept, as above. An attribute the XSD itself types, such as `normal-maximum` as `xs:double` or
-   `max-choices` as `xs:int`, is read as the XSD reads it, outer whitespace collapsed, under reading 1. Free-text
-   attributes such as `title` or `label` keep their text as written, spaces included. The split is a ruling because
-   QTI's schema types the text of `qti-value` as `xs:normalizedString` and of `qti-base-value` as `xs:string`, never as
-   the value's base type, and its information model lists each base type's values without saying how written text maps
-   to them. The specification is silent, and the
-   operator rules this reading. (2026-11-04.)
+   `mappedValue`). Where the value is of base type string, as for a `map-key` or `target-value` of a string variable,
+   its whitespace is part of the value and is kept, as above. An attribute the XSD itself types, such
+   as `normal-maximum` as `xs:double` or `max-choices` as `xs:int`, is read as the XSD reads it, outer whitespace
+   collapsed, under reading 1. Free-text attributes such as `title` or `label` keep their text as written, spaces
+   included. The split is a ruling because QTI's schema types the text of `qti-value` as `xs:normalizedString` and of
+   `qti-base-value` as `xs:string`, never as the value's base type, and its information model lists each base type's
+   values without saying how written text maps to them. The specification is silent, and the operator rules this
+   reading. (2026-11-04.)
 
 ## Where QTI's own documents conflict
 
