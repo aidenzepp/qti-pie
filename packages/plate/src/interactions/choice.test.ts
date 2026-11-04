@@ -1,16 +1,18 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Exit, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
+import { authoredId } from "#plate/emit/body.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element } from "#plate/emit/node.ts";
 import { partForSlot, resolveOverrides, rowFor } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
 import { toHtml } from "#plate/emit/serialise.ts";
-import { entryName } from "#plate/form/encoding.ts";
+import { Malformed, decode, entryName } from "#plate/form/encoding.ts";
 import type { Entry } from "#plate/form/encoding.ts";
 import { renderChoice, validateChoice } from "#plate/interactions/choice.ts";
 import { message } from "#plate/messages.ts";
 import type { BodyNode, ChoiceInteraction, Item } from "#plate/model/item.ts";
+import type { Value } from "#plate/model/values.ts";
 import { payload, redactItem } from "#plate/payload.ts";
 import type { ChoicePayload, EmitState, Payload, View } from "#plate/payload.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
@@ -256,6 +258,26 @@ const childAt = (element: Element, index: number): Element =>
 const posting = (...values: readonly string[]): readonly Entry[] =>
   values.map((value) => [name, value]);
 
+/**
+ * Decode the entries posted for a Choice as its caller does, under the entry name the caller gave
+ * its Controls, as identifiers of the Choice's cardinality.
+ *
+ * @param interaction The Choice.
+ * @param entries The posted entries.
+ * @param entry The entry name the caller reads, the Choice's default name unless given.
+ * @returns The decoded value, or the {@link Malformed} `decode` gave.
+ */
+const decoded = (
+  interaction: ChoiceInteraction,
+  entries: readonly Entry[],
+  entry: string = name,
+): Effect.Effect<Value | Malformed> =>
+  decode(entries, {
+    baseType: "identifier",
+    cardinality: interaction.cardinality,
+    name: entry,
+  }).pipe(Effect.result, Effect.map(Result.merge));
+
 describe("renderChoice", () => {
   it.effect(
     "[Q-2] names each Control by its choice text and the group by its Prompt, and passes checkTree",
@@ -432,20 +454,17 @@ describe("renderChoice", () => {
 
       assert.deepStrictEqual(posted, Option.some([[name, "B"]]));
 
-      const validation = validateChoice(
-        colours,
-        Option.getOrElse(posted, () => []),
-        yield* configure({}),
-        instance,
+      assert.deepStrictEqual(
+        validateChoice(
+          colours,
+          yield* decoded(
+            colours,
+            Option.getOrElse(posted, () => []),
+          ),
+          yield* configure({}),
+        ),
+        [],
       );
-      assert.deepStrictEqual(validation, {
-        messages: [],
-        value: {
-          baseType: "identifier",
-          cardinality: "single",
-          values: [{ baseType: "identifier", value: "B" }],
-        },
-      });
     }),
   );
 
@@ -471,16 +490,16 @@ describe("renderChoice", () => {
         ]),
       );
 
-      const validation = validateChoice(
-        pairs,
-        Option.getOrElse(posted, () => []),
-        yield* configure({ validateResponses: true }),
-        instance,
-      );
-      assert.deepStrictEqual(validation.messages, []);
       assert.deepStrictEqual(
-        validation.value.values.map((single) => single.value),
-        ["A", "C"],
+        validateChoice(
+          pairs,
+          yield* decoded(
+            pairs,
+            Option.getOrElse(posted, () => []),
+          ),
+          yield* configure({ validateResponses: true }),
+        ),
+        [],
       );
     }),
   );
@@ -490,11 +509,14 @@ describe("renderChoice", () => {
     () =>
       Effect.gen(function* afterRefused() {
         const configuration = yield* configure({});
-        const entries = posting("A", "B", "C");
-        const validation = validateChoice(pairs, entries, configuration, instance);
+        const messages = validateChoice(
+          pairs,
+          yield* decoded(pairs, posting("A", "B", "C")),
+          configuration,
+        );
         const built = payloadOf(pairs, {
           ...answering,
-          messages: validation.messages,
+          messages,
           posted: Option.some(new Map([[response, ["A", "B", "C"]]])),
         });
         const root = yield* render(built);
@@ -551,40 +573,87 @@ describe("renderChoice", () => {
       assert.isTrue(elementsIn(root).every((element) => element.attrs["autofocus"] === undefined));
     }),
   );
+
+  it.effect(
+    "[Q-2] [I-8] emits a choice's content as the body does: an h1 at the heading level, an authored id scoped",
+    () =>
+      Effect.gen(function* contentAsBody() {
+        const headed: ChoiceInteraction = {
+          ...colours,
+          choices: [
+            {
+              content: [
+                {
+                  attributes: [{ name: "id", value: "red" }],
+                  children: [words("Red")],
+                  kind: "element",
+                  path: "qti-assessment-item/qti-item-body/qti-choice-interaction/qti-simple-choice/h1",
+                  tag: "h1",
+                },
+              ],
+              identifier: "A",
+            },
+            ...colours.choices.slice(1),
+          ],
+        };
+        const state = yield* emitState;
+        const built = payloadOf(headed);
+        const root = yield* render(built);
+        const tree = page(root, built);
+        const [label] = partsIn(root, "label");
+        const heading = childAt(label ?? assert.fail("The Choice has no Label."), 1);
+
+        assert.strictEqual(heading.tag, `h${state.headingLevel}`);
+        assert.strictEqual(heading.attrs["id"], authoredId(instance, "red"));
+        assert.deepStrictEqual(
+          partsIn(tree, "control").map((control) => nameOf(control, tree)),
+          ["Red", "Green", "Blue"],
+        );
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: state.headingLevel }), []);
+        assert.isTrue(roundTrips(tree));
+      }),
+  );
+
+  it.effect(
+    "dies when a choice's content holds an interaction, which QTI admits nowhere there",
+    () =>
+      Effect.gen(function* nestedDies() {
+        const built = payloadOf(colours);
+        const outer = choiceIn(built);
+        const nested: ChoicePayload = {
+          ...outer,
+          choices: [{ content: [outer], identifier: "A" }],
+        };
+        const exit = yield* Effect.exit(renderChoice(nested, built, yield* emitState));
+
+        assert.isTrue(Exit.hasDies(exit));
+      }),
+  );
 });
 
 describe("validateChoice", () => {
   it.effect("[Q-2] refuses over-ticking with validateResponses false and true alike", () =>
     Effect.gen(function* overTicking() {
       for (const validateResponses of [false, true]) {
-        const validation = validateChoice(
+        const messages = validateChoice(
           pairs,
-          posting("A", "B", "C"),
+          yield* decoded(pairs, posting("A", "B", "C")),
           yield* configure({ validateResponses }),
-          instance,
         );
 
-        assert.deepStrictEqual(validation.messages, [
-          { response, text: message("en", "atMost", { n: "2" }) },
-        ]);
+        assert.deepStrictEqual(messages, [{ response, text: message("en", "atMost", { n: "2" }) }]);
       }
     }),
   );
 
   it.effect("[Q-2] refuses fewer than min-choices only with validateResponses true", () =>
     Effect.gen(function* tooFew() {
-      const lenient = validateChoice(pairs, posting("A"), yield* configure({}), instance);
-      const strict = validateChoice(
-        pairs,
-        posting("A"),
-        yield* configure({ validateResponses: true }),
-        instance,
-      );
+      const one = yield* decoded(pairs, posting("A"));
+      const lenient = validateChoice(pairs, one, yield* configure({}));
+      const strict = validateChoice(pairs, one, yield* configure({ validateResponses: true }));
 
-      assert.deepStrictEqual(lenient.messages, []);
-      assert.deepStrictEqual(strict.messages, [
-        { response, text: message("en", "atLeast", { n: "2" }) },
-      ]);
+      assert.deepStrictEqual(lenient, []);
+      assert.deepStrictEqual(strict, [{ response, text: message("en", "atLeast", { n: "2" }) }]);
     }),
   );
 
@@ -596,47 +665,113 @@ describe("validateChoice", () => {
         const unknown = { response, text: message("en", "unknownChoice") };
 
         assert.deepStrictEqual(
-          validateChoice(colours, posting("Z"), configuration, instance).messages,
+          validateChoice(colours, yield* decoded(colours, posting("Z")), configuration),
           [unknown],
         );
         assert.deepStrictEqual(
-          validateChoice(colours, posting("not an identifier"), configuration, instance).messages,
+          validateChoice(
+            colours,
+            yield* decoded(colours, posting("not an identifier")),
+            configuration,
+          ),
           [unknown],
         );
         assert.deepStrictEqual(
-          validateChoice(pairs, posting("A", "A"), configuration, instance).messages,
+          validateChoice(pairs, yield* decoded(pairs, posting("A", "A")), configuration),
           [unknown],
         );
-
-        const single = validateChoice(colours, posting("A", "B"), configuration, instance);
-        assert.deepStrictEqual(single, {
-          messages: [{ response, text: message("en", "atMost", { n: "1" }) }],
-          value: { baseType: "identifier", cardinality: "single", values: [] },
-        });
+        assert.deepStrictEqual(
+          validateChoice(colours, yield* decoded(colours, posting("A", "B")), configuration),
+          [{ response, text: message("en", "atMost", { n: "1" }) }],
+        );
       }),
   );
 
-  it.effect("[Q-2] reads only this response's entries, and no entry is NULL", () =>
-    Effect.gen(function* ownEntries() {
-      const configuration = yield* configure({});
-      const other = entryName(instance, "OTHER");
+  it.effect(
+    "[Q-2] checks the value decoded under the caller's entry name, the author's form name included, and accepts NULL",
+    () =>
+      Effect.gen(function* callerDecodes() {
+        const configuration = yield* configure({});
+        const other = entryName(instance, "OTHER");
+        const authored = payloadOf(colours, {
+          ...answering,
+          names: new Map([[response, "colour"]]),
+        });
+        const walked = keyboardWalk(page(yield* render(authored), authored), [
+          "Tab",
+          "ArrowDown",
+          "Tab",
+          "Enter",
+        ]);
+        const colour = choiceIn(authored).formName;
 
-      assert.deepStrictEqual(
-        validateChoice(colours, [[other, "A"], ...posting("B")], configuration, instance),
-        {
-          messages: [],
-          value: {
-            baseType: "identifier",
-            cardinality: "single",
-            values: [{ baseType: "identifier", value: "B" }],
-          },
-        },
-      );
-      assert.deepStrictEqual(validateChoice(colours, [[other, "A"]], configuration, instance), {
-        messages: [],
-        value: { baseType: "identifier", cardinality: "single", values: [] },
-      });
-    }),
+        assert.deepStrictEqual(
+          validateChoice(
+            colours,
+            yield* decoded(colours, [[other, "A"], ...posting("B")]),
+            configuration,
+          ),
+          [],
+        );
+        assert.deepStrictEqual(
+          validateChoice(
+            colours,
+            yield* decoded(
+              colours,
+              Option.getOrElse(walked, () => []),
+              colour,
+            ),
+            configuration,
+          ),
+          [],
+        );
+        assert.deepStrictEqual(
+          validateChoice(
+            pairs,
+            yield* decoded(
+              pairs,
+              [
+                [colour, "A"],
+                [colour, "B"],
+                [colour, "C"],
+              ],
+              colour,
+            ),
+            configuration,
+          ),
+          [{ response, text: message("en", "atMost", { n: "2" }) }],
+        );
+        assert.deepStrictEqual(
+          validateChoice(colours, yield* decoded(colours, [[other, "A"]]), configuration),
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-2] gives a Malformed single-many atMost 1, the author's max message when set, and any other unknownChoice",
+    () =>
+      Effect.gen(function* malformedInput() {
+        const configuration = yield* configure({});
+        const twice = new Malformed({ entry: name, reason: "single-many" });
+        const authored: ChoiceInteraction = {
+          ...colours,
+          messages: { max: Option.some("One only, please."), min: Option.none() },
+        };
+
+        assert.deepStrictEqual(validateChoice(colours, twice, configuration), [
+          { response, text: message("en", "atMost", { n: "1" }) },
+        ]);
+        assert.deepStrictEqual(validateChoice(authored, twice, configuration), [
+          { response, text: "One only, please." },
+        ]);
+        for (const reason of ["identifier", "number", "file"] as const) {
+          assert.deepStrictEqual(
+            validateChoice(colours, new Malformed({ entry: name, reason }), configuration),
+            [{ response, text: message("en", "unknownChoice") }],
+          );
+        }
+      }),
   );
 
   it.effect(
@@ -650,11 +785,11 @@ describe("validateChoice", () => {
         const configuration = yield* configure({ validateResponses: true });
 
         assert.deepStrictEqual(
-          validateChoice(authored, posting("A", "B", "C"), configuration, instance).messages,
+          validateChoice(authored, yield* decoded(authored, posting("A", "B", "C")), configuration),
           [{ response, text: "Two at most, please." }],
         );
         assert.deepStrictEqual(
-          validateChoice(authored, posting("A"), configuration, instance).messages,
+          validateChoice(authored, yield* decoded(authored, posting("A")), configuration),
           [{ response, text: "Pick two." }],
         );
       }),
