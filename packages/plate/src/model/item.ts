@@ -9,7 +9,7 @@
  *
  * @module
  */
-import { Array as Arr, Effect, Option, Result, pipe } from "effect";
+import { Array as Arr, Data, Effect, Option, Result, pipe } from "effect";
 import { attributePath, qtiNamespace, walk, xmlNamespace } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
@@ -473,6 +473,25 @@ const textOf = (element: SourceElement): string =>
   element.children.flatMap((child) => (child.kind === "text" ? [child.text] : [])).join("");
 
 /**
+ * A broken invariant of {@link buildItem}'s own walk or parse, a defect of this module that no input
+ * can cause.
+ *
+ * It cannot occur: every element the build reads is in its walk, and a value {@link parseLexical}
+ * gave for `float` or `integer` holds that base type. It is thrown, never returned, so
+ * {@link buildItem}'s error channel holds only content refusals.
+ */
+export class BuildDefect extends Data.TaggedError("BuildDefect")<{
+  readonly detail: string;
+}> {
+  /**
+   * The broken invariant, and what to do with it.
+   */
+  override get message(): string {
+    return `${this.detail} This is a defect in buildItem; report it with the item that caused it.`;
+  }
+}
+
+/**
  * Give an element's path from the build's walk.
  *
  * @param build The build.
@@ -482,7 +501,9 @@ const textOf = (element: SourceElement): string =>
 const pathOf = (build: Build, element: SourceElement): string => {
   const path = build.paths.get(element);
   if (path === undefined) {
-    throw new Error(`The element ${nameOf(element)} is not part of the document being built.`);
+    throw new BuildDefect({
+      detail: `The element ${nameOf(element)} is not part of the document being built.`,
+    });
   }
 
   return path;
@@ -554,7 +575,7 @@ const floatOf = (single: Single): number => {
     return single.value;
   }
 
-  throw new Error(`A ${single.baseType} value holds no float.`);
+  throw new BuildDefect({ detail: `A ${single.baseType} value holds no float.` });
 };
 
 /**
@@ -568,7 +589,7 @@ const integerOf = (single: Single): bigint => {
     return single.value;
   }
 
-  throw new Error(`A ${single.baseType} value holds no integer.`);
+  throw new BuildDefect({ detail: `A ${single.baseType} value holds no integer.` });
 };
 
 /**
@@ -1782,8 +1803,8 @@ const processingOf = (
  * first names it.
  *
  * The evaluator holds only the item's modelled responses and outcomes (`Variables` in
- * `#plate/engine/evaluate.ts`) and throws `UnknownIdentifierError` for any other identifier a rule
- * names, so `buildItem` runs no tree this walk finds a name in, and those defects stay unreachable.
+ * `#plate/engine/evaluate.ts`) and returns `UnknownIdentifierError` for any other identifier a rule
+ * names, so `buildItem` runs no tree this walk finds a name in, and that failure stays unreachable.
  * A `qti-variable` reads a response or an outcome, `qti-correct` and `qti-map-response` read a
  * response, and `qti-set-outcome-value` sets an outcome. The names it finds are valid content,
  * never refused (reading 1): a response the model does not hold (base type `point`, `duration` or
