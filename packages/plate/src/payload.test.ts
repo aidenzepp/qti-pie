@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
+import { entryName } from "#plate/form/encoding.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -7,29 +8,30 @@ import type {
   Item,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
-import { fresh } from "#plate/model/record.ts";
-import type { ItemRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
-import { payload } from "#plate/payload.ts";
+import { identifyMessages, payload, redactItem } from "#plate/payload.ts";
 import type {
   ChoicePayload,
   ExtendedTextPayload,
   InteractionPayload,
   Payload,
   PayloadNode,
+  Redacted,
   TextEntryPayload,
   View,
 } from "#plate/payload.ts";
 
 /**
- * The strings only the hidden parts of {@link item} hold: its correct responses, a mapping key, an
- * outcome default and a value in its response processing. None appears in its body.
+ * The strings only the hidden parts of {@link item} hold: its correct responses, a mapping key, a
+ * response default, an outcome default and a value in its response processing. None appears in
+ * its body.
  */
 const markers = [
   "MarkerCorrectChoice",
   "MarkerCorrectText",
   "MarkerMapKey",
   "MarkerOutcomeDefault",
+  "MarkerResponseDefault",
   "MarkerRuleValue",
 ] as const;
 
@@ -114,8 +116,8 @@ const essay: ExtendedTextInteraction = {
 /**
  * A hand-built item: a paragraph, a Choice, a paragraph holding two unnamed Text Entries and one
  * named by `aria-label`, an Extended Text with a Prompt, and an unsupported feedback block. Its
- * correct responses, mapping key, `FEEDBACK` default and processing value are the
- * {@link markers}.
+ * correct responses, mapping key, `NAMED` default, `FEEDBACK` default and processing value are
+ * the {@link markers}.
  */
 const item: Item = {
   body: [
@@ -247,7 +249,10 @@ const item: Item = {
             baseType: "string",
             cardinality: "single",
             correct: Option.none(),
-            defaultValue: Option.none(),
+            defaultValue:
+              identifier === "NAMED"
+                ? Option.some(one({ baseType: "string", value: "MarkerResponseDefault" }))
+                : Option.none(),
             identifier,
             mapping: Option.none(),
           },
@@ -265,23 +270,38 @@ const item: Item = {
 };
 
 /**
- * The view of a first `open`.
+ * The item as the page may know it.
+ */
+const redacted = redactItem(item);
+
+/**
+ * The view of a first render: no messages, nothing posted, no values and no author's names.
  */
 const answering: View = {
-  attempt: "none",
   finished: false,
+  instance,
   locale: "en",
   messages: [],
+  names: new Map(),
   posted: Option.none(),
+  values: new Map(),
 };
 
 /**
- * The view after a refused submit: what was posted, and a message for `SECOND` and for `ESSAY`.
+ * The values the author's flow holds for this instance: `CAPITAL` answered `A` and `FIRST`
+ * answered `Marseille`.
+ */
+const held: ReadonlyMap<string, Value> = new Map([
+  ["CAPITAL", one({ baseType: "identifier", value: "A" })],
+  ["FIRST", one({ baseType: "string", value: "Marseille" })],
+]);
+
+/**
+ * The view the author asks for after refusing what was posted: the posted strings, a message for
+ * `SECOND` and two for `ESSAY`, beside the values held before the post.
  */
 const refused: View = {
-  attempt: "refused",
-  finished: false,
-  locale: "en",
+  ...answering,
   messages: [
     { response: "SECOND", text: "Enter a city." },
     { response: "ESSAY", text: "Write at least a sentence." },
@@ -294,46 +314,38 @@ const refused: View = {
       ["SECOND", ["Lyon?"]],
     ]),
   ),
+  values: held,
 };
 
 /**
- * The view after a scored submit that finished the session.
+ * The view the author asks for once every control is disabled: the held values, no messages, and
+ * stale posted strings, which apply only beside messages.
  */
-const submitted: View = {
-  attempt: "submitted",
+const finished: View = {
+  ...answering,
   finished: true,
-  locale: "en",
-  messages: [],
-  posted: Option.none(),
+  posted: Option.some(new Map([["FIRST", ["Nice"]]])),
+  values: held,
 };
 
 /**
- * The record after a scored submit: the responses as processed, `SCORE` 1, and `FEEDBACK` still
- * at its marker default.
+ * Hand `payload` a full item, which its type refuses: the type test is the `@ts-expect-error`
+ * below, which `tsc` fails on if the call ever type-checks. No test calls it.
+ *
+ * @returns What `payload` would make of the item.
  */
-const scoredRecord: ItemRecord = {
-  ...fresh(item, instance),
-  attempt: "submitted",
-  numAttempts: 1,
-  outcomes: {
-    ...fresh(item, instance).outcomes,
-    SCORE: one({ baseType: "float", value: 1 }),
-  },
-  responses: {
-    ...fresh(item, instance).responses,
-    CAPITAL: one({ baseType: "identifier", value: "A" }),
-    FIRST: one({ baseType: "string", value: "Marseille" }),
-  },
-};
+const payloadOfItem = (): Payload =>
+  // @ts-expect-error -- an `Item` is not `Redacted`: only `redactItem` makes one, so the hidden parts never reach `payload`.
+  payload(item, answering);
 
 /**
- * Write a value as JSON, with every `Map` and `Set` written as its entries, so nothing a payload
- * holds is hidden from a search of the text.
+ * Write a value as JSON, with every `Map` and `Set` written as its entries, so nothing it holds is
+ * hidden from a search of the text.
  *
  * @param value The value.
  * @returns Its JSON text.
  */
-const json = (value: ItemRecord | Payload): string =>
+const json = (value: Item | Payload | Redacted): string =>
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- `JSON.stringify` hands its replacer every value the payload holds, of any type; the replacer only looks for a `Map` or a `Set` to write out.
   JSON.stringify(value, (_key, field: unknown) =>
     field instanceof Map || field instanceof Set ? [...field] : field,
@@ -393,17 +405,67 @@ const textFor = (built: Payload, response: string): ExtendedTextPayload | TextEn
   return found.kind === "choice" ? assert.fail(`${response} is a Choice`) : found;
 };
 
+describe("redactItem", () => {
+  it("[Q-2] [Q-20] keeps no correct response, mapping key, default or rule value", () => {
+    const written = json(redacted);
+
+    for (const marker of markers) {
+      assert.include(json(item), marker, `the item holds ${marker}`);
+      assert.notInclude(written, marker, `the redacted item holds ${marker}`);
+    }
+
+    assert.include(written, "Which city is the capital of France?");
+  });
+
+  it("[I-1] copies only the fields it names, and each response's binding", () => {
+    // TypeScript admits a wider object wherever an `Item` is expected, so a field the model gains,
+    // or one a caller adds, reaches `redactItem` with no cast; it must not reach the output.
+    const extra = "MarkerExtraField";
+    const widened = {
+      ...item,
+      extra,
+      responses: new Map(
+        [...item.responses].map(([identifier, declaration]) => [
+          identifier,
+          { ...declaration, extra },
+        ]),
+      ),
+    };
+    const copied = redactItem(widened);
+
+    assert.notInclude(json(copied), extra);
+    assert.deepStrictEqual(Object.keys(copied).toSorted(), [
+      "body",
+      "document",
+      "identifier",
+      "lang",
+      "notices",
+      "responses",
+      "title",
+    ]);
+    assert.deepStrictEqual(copied.responses, [
+      { baseType: "identifier", cardinality: "single", identifier: "CAPITAL" },
+      { baseType: "string", cardinality: "single", identifier: "FIRST" },
+      { baseType: "string", cardinality: "single", identifier: "SECOND" },
+      { baseType: "string", cardinality: "single", identifier: "NAMED" },
+      { baseType: "string", cardinality: "single", identifier: "ESSAY" },
+    ]);
+    assert.deepStrictEqual(copied.notices, ["qti-feedback-block"]);
+    assert.strictEqual(copied.document, "items/capitals.xml");
+    assert.strictEqual(copied.identifier, "capitals");
+  });
+});
+
 describe("payload", () => {
-  it("[Q-2] [Q-20] [Q-5] holds no correct response, mapping key, rule value or outcome default in any state", () => {
-    const states: readonly (readonly [string, ItemRecord, View])[] = [
-      ["answering", fresh(item, instance), answering],
-      ["refused", { ...fresh(item, instance), attempt: "refused" }, refused],
-      ["submitted", scoredRecord, submitted],
+  it("[Q-2] [Q-20] [Q-5] holds no correct response, mapping key, default or rule value in any view", () => {
+    const views: readonly (readonly [string, View])[] = [
+      ["no messages", answering],
+      ["messages and posted text", refused],
+      ["finished", finished],
     ];
 
-    assert.include(json(scoredRecord), "MarkerOutcomeDefault");
-    for (const [state, record, view] of states) {
-      const written = json(payload(item, record, view));
+    for (const [state, view] of views) {
+      const written = json(payload(redacted, view));
 
       assert.include(written, "Which city is the capital of France?", state);
       for (const marker of markers) {
@@ -412,8 +474,12 @@ describe("payload", () => {
     }
   });
 
+  it("[Q-2] takes only a redacted item, never an Item", () => {
+    assert.isFunction(payloadOfItem);
+  });
+
   it("[I-7] keeps the body's elements and text, and shows an unsupported part as its notice", () => {
-    const built = payload(item, fresh(item, instance), answering);
+    const built = payload(redacted, answering);
 
     assert.deepStrictEqual(built.body[0], {
       attributes: [{ name: "class", value: "lead" }],
@@ -429,19 +495,30 @@ describe("payload", () => {
     );
   });
 
-  it("[I-0] carries the instance, the title, and the locale as lang when the item has none", () => {
-    const built = payload(item, fresh(item, instance), answering);
-    const welsh = payload({ ...item, lang: Option.some("cy") }, fresh(item, instance), answering);
+  it("[I-0] carries the view's instance, the title, and the locale as lang when the item has none", () => {
+    const built = payload(redacted, answering);
+    const welsh = payload(redactItem({ ...item, lang: Option.some("cy") }), answering);
 
+    assert.deepStrictEqual(Object.keys(built).toSorted(), [
+      "body",
+      "finished",
+      "instance",
+      "lang",
+      "messages",
+      "mode",
+      "notices",
+      "title",
+    ]);
     assert.strictEqual(built.instance, instance);
     assert.strictEqual(built.title, "Capitals");
     assert.strictEqual(built.mode, "answering");
     assert.strictEqual(built.lang, "en");
     assert.strictEqual(welsh.lang, "cy");
+    assert.isFalse(built.finished);
   });
 
   it("[Q-2] presents the choices in document order with the Prompt and the binding", () => {
-    const capital = choiceFor(payload(item, fresh(item, instance), answering), "CAPITAL");
+    const capital = choiceFor(payload(redacted, answering), "CAPITAL");
 
     assert.deepStrictEqual(capital.choices, [
       { content: [{ kind: "text", text: "Paris" }], identifier: "A" },
@@ -457,8 +534,8 @@ describe("payload", () => {
     assert.deepStrictEqual(capital.restore, []);
   });
 
-  it("[Q-2] [Q-20] [Q-5] after a refused submit, restores the posted strings and autofocuses the first interaction with a message", () => {
-    const built = payload(item, { ...scoredRecord, attempt: "refused" }, refused);
+  it("[Q-2] [Q-20] [Q-5] with messages, restores the posted strings and autofocuses the first interaction with a message", () => {
+    const built = payload(redacted, refused);
 
     assert.deepStrictEqual(choiceFor(built, "CAPITAL").restore, ["B"]);
     assert.strictEqual(textFor(built, "FIRST").restore, "Nice");
@@ -487,20 +564,44 @@ describe("payload", () => {
       { id: `${instance}-ESSAY-message-0`, response: "ESSAY", text: "Write at least a sentence." },
       { id: `${instance}-ESSAY-message-1`, response: "ESSAY", text: "Name the river." },
     ]);
-    assert.strictEqual(built.attempt, "refused");
+    assert.deepStrictEqual(identifyMessages(instance, refused.messages), built.messages);
   });
 
-  it("[Q-2] [Q-20] restores from the record outside a refused submit", () => {
-    const built = payload(item, scoredRecord, submitted);
+  it("[Q-2] [Q-20] with no messages, restores the view's values, ignores posted text, and autofocuses nothing", () => {
+    const built = payload(redacted, finished);
+    const opened = payload(redacted, answering);
 
     assert.deepStrictEqual(choiceFor(built, "CAPITAL").restore, ["A"]);
     assert.strictEqual(textFor(built, "FIRST").restore, "Marseille");
     assert.strictEqual(textFor(built, "SECOND").restore, "");
     assert.isFalse(interactionsIn(built.body).some((interaction) => interaction.autofocus));
     assert.isTrue(built.finished);
+    assert.deepStrictEqual(choiceFor(opened, "CAPITAL").restore, []);
+    assert.strictEqual(textFor(opened, "FIRST").restore, "");
   });
 
-  it("[Q-20] restores an integer from the record in the interaction's base", () => {
+  it("[Q-2] [Q-20] names each control's entries by the instance and response, or by the author's name", () => {
+    const named = payload(redacted, {
+      ...answering,
+      names: new Map([
+        ["CAPITAL", "capital"],
+        ["FIRST", "first-city"],
+      ]),
+    });
+    const plain = payload(redacted, answering);
+
+    assert.deepStrictEqual(
+      interactionsIn(plain.body).map((interaction) => interaction.formName),
+      ["CAPITAL", "FIRST", "SECOND", "NAMED", "ESSAY"].map((response) =>
+        entryName(instance, response),
+      ),
+    );
+    assert.strictEqual(choiceFor(named, "CAPITAL").formName, "capital");
+    assert.strictEqual(textFor(named, "FIRST").formName, "first-city");
+    assert.strictEqual(textFor(named, "SECOND").formName, entryName(instance, "SECOND"));
+  });
+
+  it("[Q-20] restores an integer value in the interaction's base", () => {
     const hex: TextEntryInteraction = { ...textEntry("HEX"), base: 16, baseType: "integer" };
     const hexItem: Item = {
       ...item,
@@ -519,17 +620,16 @@ describe("payload", () => {
         ],
       ]),
     };
-    const record: ItemRecord = {
-      ...fresh(hexItem, instance),
-      attempt: "submitted",
-      responses: { HEX: one({ baseType: "integer", value: 255n }) },
+    const view: View = {
+      ...answering,
+      values: new Map([["HEX", one({ baseType: "integer", value: 255n })]]),
     };
 
-    assert.strictEqual(textFor(payload(hexItem, record, submitted), "HEX").restore, "ff");
+    assert.strictEqual(textFor(payload(redactItem(hexItem), view), "HEX").restore, "ff");
   });
 
   it("[Q-20] [Q-5] numbers the text controls with no authored name and no Prompt", () => {
-    const built = payload(item, fresh(item, instance), answering);
+    const built = payload(redacted, answering);
 
     assert.deepStrictEqual(textFor(built, "FIRST").name.unnamed, Option.some({ count: 2, n: 1 }));
     assert.deepStrictEqual(textFor(built, "SECOND").name.unnamed, Option.some({ count: 2, n: 2 }));
@@ -539,18 +639,5 @@ describe("payload", () => {
       unnamed: Option.none(),
     });
     assert.deepStrictEqual(textFor(built, "ESSAY").name.unnamed, Option.none());
-  });
-
-  it("[I-9b] shows the score after a processed submit, and recorded for an item with no processing", () => {
-    const scored = payload(item, scoredRecord, submitted);
-    const unprocessed = payload({ ...item, processing: Option.none() }, scoredRecord, submitted);
-    const opened = payload(item, fresh(item, instance), answering);
-
-    assert.deepStrictEqual(scored.score, Option.some("1"));
-    assert.isFalse(scored.recorded);
-    assert.deepStrictEqual(unprocessed.score, Option.none());
-    assert.isTrue(unprocessed.recorded);
-    assert.deepStrictEqual(opened.score, Option.none());
-    assert.isFalse(opened.recorded);
   });
 });
