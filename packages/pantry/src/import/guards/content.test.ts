@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
 import { ContentGuardRefusal, contentGuards } from "#pantry/import/guards/content.ts";
+import { ItemGuardRefusal, itemGuards } from "#pantry/import/guards/item.ts";
 import { itemRows } from "#pantry/import/item.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import {
@@ -18,6 +19,7 @@ import { Gap, GapText } from "#pantry/schema/interactions/gap.ts";
 import { HottextOwner } from "#pantry/schema/interactions/hot.ts";
 import { OrderInteraction } from "#pantry/schema/interactions/order.ts";
 import { MediaInteraction } from "#pantry/schema/interactions/other.ts";
+import { Document, DocumentTitle } from "#pantry/schema/document.ts";
 import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#pantry/schema/lang.ts";
 import { ResourceLom } from "#pantry/schema/metadata.ts";
 import { AttributeLexical, AttributeSpelling, Node } from "#pantry/schema/node.ts";
@@ -261,6 +263,12 @@ const nodeId = (rows: Rows, kind: string, index = 0): string => {
 
   return found.id;
 };
+
+/**
+ * `rows` with every document read as a `test` document, the rows of its tree unchanged.
+ */
+const asTest = (rows: Rows): Rows =>
+  edited(rows, Document, (facts) => facts.map((fact) => ({ ...fact, root: "test" as const })));
 
 const hottext = (identifier: string) => `<qti-hottext identifier="${identifier}">a</qti-hottext>`;
 
@@ -525,6 +533,28 @@ describe("contentGuards varref-copy", () => {
         edited(integer, PrintedVariableVarRef, () => Rows.of(named, PrintedVariableVarRef)),
         "integer",
       );
+    }),
+  );
+});
+
+describe("contentGuards on a test root", () => {
+  it.effect("refuses a test document with no title as an item's guards do", () =>
+    Effect.gen(function* testRequired() {
+      const rows = yield* rowsOf("3.0.1", `<p>a</p>`);
+      yield* itemGuards(asTest(rows));
+
+      const failure = yield* Effect.flip(itemGuards(asTest(edited(rows, DocumentTitle, () => []))));
+
+      assert.instanceOf(failure, ItemGuardRefusal);
+      assert.strictEqual(failure.rule, "typed-copy");
+    }),
+  );
+
+  it.effect("refuses a test whose language set differs from its DocumentLang rows", () =>
+    Effect.gen(function* testLanguageSet() {
+      const rows = yield* rowsOf("3.0.1", `<p xml:lang="fr">a</p>`);
+      yield* contentGuards(asTest(rows));
+      yield* refusalOfRows("lang-set-copy", asTest(edited(rows, DocumentLang, () => [])), "fr");
     }),
   );
 });

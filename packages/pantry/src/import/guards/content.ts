@@ -1007,7 +1007,7 @@ const langSetCopy = (rows: Rows, index: Index): Finding => {
   const declared = Map.groupBy(Rows.of(rows, DocumentLang), (row) => row.document);
   const documents = new Set([
     ...Rows.of(rows, Document)
-      .filter((document) => document.root === "item")
+      .filter((document) => document.root === "item" || document.root === "test")
       .map((document) => document.id),
     ...declared.keys(),
   ]);
