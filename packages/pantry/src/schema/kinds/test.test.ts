@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import { kindOf } from "#pantry/import/tree.ts";
+import { testInventory } from "#pantry/schema/content/inventory/test.ts";
 import { expressionKinds } from "#pantry/schema/kinds/asi.ts";
 import * as test from "#pantry/schema/kinds/test.ts";
 import * as node from "#pantry/schema/node.ts";
@@ -45,7 +46,8 @@ const handles = [
 ] as const;
 
 /**
- * The 21 attribute names the spec's 3.5 lists as new.
+ * The 21 attribute names the spec's 3.5 lists as new: the phase's final list, reached when p5-19
+ * lands.
  */
 const names = [
   "access",
@@ -70,6 +72,25 @@ const names = [
   "visible",
   "with-replacement",
 ] as const;
+
+/**
+ * The names the landed heading slices declare in `test.attributes`, alphabetical and a subset of
+ * `names`. None yet. p5-16 inserts `category`, `keep-together`, `navigation-mode`,
+ * `submission-mode` and `visible`; p5-17 the twelve of its kinds; p5-18 `source-identifier`,
+ * `target` and `target-identifier`; p5-19 `access`, so `declared` equals `names`.
+ */
+const declared: readonly string[] = [];
+
+/**
+ * The handles whose heading slice has not filled their registry row: all 26 now. p5-16 removes
+ * `qti-assessment-test`, `qti-test-part`, `qti-assessment-section`, `qti-assessment-section-ref`
+ * and `qti-assessment-item-ref`; p5-17 `qti-selection`, `qti-ordering`, `qti-adaptive-selection`,
+ * `qti-adaptive-engine-ref`, `qti-adaptive-settings-ref`, `qti-usagedata-ref`, `qti-metadata-ref`,
+ * `qti-item-session-control` and `qti-time-limits`; p5-18 `qti-pre-condition`,
+ * `qti-branch-rule`, `qti-variable-mapping`, `qti-weight` and `qti-template-default`; p5-19 the
+ * rest, and deletes the list with its branch.
+ */
+const awaiting: ReadonlySet<string> = new Set(handles);
 
 const mixed = ["text", "ws", "comment", "pi", "entityRef"];
 
@@ -282,21 +303,33 @@ describe("the test kinds", () => {
     assert.deepStrictEqual([...test.kinds], [...handles]);
   });
 
-  it("follows xi's handles in NodeKind, and the 21 names are in AttributeName", () => {
+  it("follows xi's handles in NodeKind, and the declared names are in AttributeName", () => {
     const roster = node.NodeKind.handles;
     const at = roster.indexOf("xi:fallback");
     assert.deepStrictEqual(roster.slice(at + 1), [...handles]);
-    assert.deepStrictEqual([...test.attributes], [...names]);
-    for (const name of names) {
+    assert.deepStrictEqual([...test.attributes], [...declared]);
+    assert.deepStrictEqual([...declared], [...declared].toSorted());
+    for (const name of declared) {
+      assert.include(names, name);
       assert.include(node.AttributeName.handles, name);
     }
   });
 
-  it("registers one row per kind with no attributes and the dotted parents", () => {
+  it("registers one row per kind, empty while awaiting its heading, and the dotted parents", () => {
     for (const handle of handles) {
       const row = test.registry[handle];
       assert.strictEqual(row.namespace, namespace, handle);
-      assert.deepStrictEqual(row.attributes, [], handle);
+      if (awaiting.has(handle)) {
+        assert.deepStrictEqual(row.attributes, [], handle);
+      } else {
+        const entry = testInventory[handle];
+        assert.isDefined(entry, handle);
+
+        const wanted = entry?.attributes.map((attribute) => attribute.name);
+        assert.deepStrictEqual(new Set(row.attributes), new Set(wanted), handle);
+        assert.strictEqual(row.attributes.length, new Set(row.attributes).size, handle);
+      }
+
       assert.isTrue(
         registries.some((registry) => handle in registry),
         handle,

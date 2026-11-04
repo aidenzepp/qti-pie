@@ -9,9 +9,10 @@
  * `grep -n 'complexType name=' imsqti_asiv3p0p1_v1p0.xsd` over the cached XSD
  * (`~/.cache/gr8des/qti3/xsd/`); the four `AdaptiveHrefDType` elements, one type, follow their
  * declaration order in `AdaptiveSelectionDType`. Each kind's registry `attributes` list is empty
- * here: the schema slice of its heading fills its kinds' (the spec's 4.2). `attributes` names the
- * 21 attribute names the test kinds introduce, in first-appearance order over the roster; the
- * other 17 names the M4 types declare are already declared by earlier vocabularies.
+ * here: the schema slice of its heading fills its kinds' (the spec's 4.2). `attributes` is empty
+ * for the same reason: the 21 names the test kinds introduce are declared by the heading slices
+ * with the rows that carry them, and the other 17 names the M4 types declare are already declared
+ * by earlier vocabularies.
  *
  * `admission` is `admissionOf(testInventory, typed)`, the same rows in both versions: the
  * 3.0.0 stimulus-body deltas are `xi:include` and its attributes, which later slices add, and
@@ -60,31 +61,13 @@ export const kinds = [
 ] as const;
 
 /**
- * The attribute names these kinds introduce, in first-appearance order over the roster.
+ * The attribute names these kinds introduce, empty until their headings fill their registry rows.
+ *
+ * A name is declared with the first registry row that carries it. Each heading slice (p5-16 to
+ * p5-19) inserts the new names its kinds carry when it fills their rows, in alphabetical order;
+ * p5-19 completes the 21.
  */
-export const attributes = [
-  "access",
-  "allow-comment",
-  "allow-late-submission",
-  "allow-review",
-  "allow-skipping",
-  "category",
-  "keep-together",
-  "max-attempts",
-  "max-time",
-  "min-time",
-  "navigation-mode",
-  "select",
-  "show-feedback",
-  "show-solution",
-  "source-identifier",
-  "submission-mode",
-  "target",
-  "target-identifier",
-  "validate-responses",
-  "visible",
-  "with-replacement",
-] as const;
+export const attributes = [] as const;
 
 /**
  * The registry row of each test kind, with no attributes yet.
