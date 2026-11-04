@@ -1,0 +1,188 @@
+/*
+ * plate's stylesheet, linked by a host page.
+ *
+ * Tokens: it reads thirteen shadcn/ui tokens and no others, each as var(--token, <fallback>), the
+ * fallback shadcn's default neutral light value: --primary, --primary-foreground, --accent,
+ * --accent-foreground, --muted, --muted-foreground, --card, --card-foreground, --destructive,
+ * --border, --input, --ring and --radius. Source: shadcn/ui's theming file,
+ * https://github.com/shadcn-ui/ui/blob/4aaea19d9cff3e0908e12a8c1d504b8c5ec34610/apps/v4/content/docs/(root)/theming.mdx
+ * (lines 204-223). It declares no token: the host's theme sets them, at :root and .dark.
+ *
+ * Every rule sits inside :where(), so it weighs nothing and any host rule wins by order; only the
+ * authored qti-* classes count. Every combinator is the descendant one, so a part swapped for the
+ * host's own markup, with wrappers between, still matches.
+ */
+
+/* == base: QTI vocabulary classes == */
+
+/* == theme: shadcn manner, on the part markers == */
+
+/* The item Root: a block. The page's surface, text colour and font are the host's. */
+:where([data-slot="item"]) {
+  display: block;
+}
+
+/* The Choice Root, a native fieldset: no border, margin or padding, and no minimum width. */
+:where(fieldset[data-slot="choice-interaction"]) {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+
+/* The Prompt's legend shape loses the legend's own padding, so both shapes look alike. */
+:where(legend[data-slot="choice-interaction-prompt"]) {
+  padding: 0;
+}
+
+/* The Prompt, a legend or its own element. */
+:where([data-slot="choice-interaction-prompt"]) {
+  display: block;
+  margin-block-end: 0.75rem;
+  font-weight: 500;
+}
+
+/* The Choices: no bullets, and space between the rows. */
+:where([data-slot="choice-interaction-choices"]) {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A Choice row: a bordered box that holds its hidden Control. */
+:where([data-slot="choice-interaction-choice"]) {
+  position: relative;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border, oklch(0.922 0 0));
+  border-radius: var(--radius, 0.625rem);
+}
+
+/* A Choice row under the pointer, unless its Control is disabled. */
+:where(
+  [data-slot="choice-interaction-choice"]:hover:not(
+      :has([data-slot="choice-interaction-control"]:disabled)
+    )
+) {
+  background-color: var(--accent, oklch(0.97 0 0));
+  color: var(--accent-foreground, oklch(0.205 0 0));
+}
+
+/* A selected Choice row. */
+:where(
+  [data-slot="choice-interaction-choice"]:has([data-slot="choice-interaction-control"]:checked)
+) {
+  border-color: var(--primary, oklch(0.205 0 0));
+}
+
+/* A Choice row whose Control holds a refused answer; after the selected rule, so it shows. */
+:where(
+  [data-slot="choice-interaction-choice"]:has(
+    [data-slot="choice-interaction-control"][aria-invalid="true"]
+  )
+) {
+  border-color: var(--destructive, oklch(0.577 0.245 27.325));
+}
+
+/* A Choice row whose Control is disabled. */
+:where(
+  [data-slot="choice-interaction-choice"]:has([data-slot="choice-interaction-control"]:disabled)
+) {
+  opacity: 0.5;
+}
+
+/* Focus on a Choice row, by its Control: shadcn's 3px ring at half strength. */
+:where(
+  [data-slot="choice-interaction-choice"]:has(
+    [data-slot="choice-interaction-control"]:focus-visible
+  )
+) {
+  outline-width: 3px;
+  outline-offset: 0;
+  outline-style: solid;
+  outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
+}
+
+/*
+ * The Choice Control, hidden from sight only: it stays focusable, named and in the form, so never
+ * display: none or visibility: hidden.
+ */
+:where([data-slot="choice-interaction-control"]) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The Label: the Indicator and the choice content on one line, across the row. */
+:where([data-slot="choice-interaction-label"]) {
+  display: block;
+}
+
+/* The Indicator, the visible mark: a box for a checkbox Control. */
+:where([data-slot="choice-interaction-indicator"]) {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 1em;
+  height: 1em;
+  margin-inline-end: 0.5em;
+  padding: 3px;
+  border: 1px solid var(--input, oklch(0.922 0 0));
+  border-radius: calc(var(--radius, 0.625rem) * 0.6);
+  vertical-align: middle;
+}
+
+/* The Indicator for a radio Control: round. */
+:where(
+  [data-slot="choice-interaction-choice"]:has(
+      [data-slot="choice-interaction-control"][type="radio"]
+    )
+    [data-slot="choice-interaction-indicator"]
+) {
+  border-radius: 50%;
+}
+
+/* The Indicator of a selected choice: filled. */
+:where(
+  [data-slot="choice-interaction-choice"]:has([data-slot="choice-interaction-control"]:checked)
+    [data-slot="choice-interaction-indicator"]
+) {
+  border-color: var(--primary, oklch(0.205 0 0));
+  background-color: var(--primary, oklch(0.205 0 0));
+}
+
+/* The Indicator of a selected radio: a dot inside the ring, the padding left unfilled. */
+:where(
+  [data-slot="choice-interaction-choice"]:has(
+      [data-slot="choice-interaction-control"][type="radio"]:checked
+    )
+    [data-slot="choice-interaction-indicator"]
+) {
+  background-clip: content-box;
+}
+
+/*
+ * Forced colours drop drawn backgrounds, so the native Control shows in place of the Indicator,
+ * on the Label's line.
+ */
+@media (forced-colors: active) {
+  :where([data-slot="choice-interaction-control"]) {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+
+  :where([data-slot="choice-interaction-indicator"]) {
+    display: none;
+  }
+
+  :where([data-slot="choice-interaction-label"]) {
+    display: inline;
+  }
+}
