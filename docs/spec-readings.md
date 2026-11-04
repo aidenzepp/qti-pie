@@ -257,9 +257,10 @@ against it. A reading that is not an information-model-over-XSD case says which 
     as `map-key`, is accepted and kept exactly, however many digits it has: `9007199254740993` and
     `9007199254740992` are two values, and so are `1000000000000000000000000000000` and
     `1000000000000000000000000000001`. A package never refuses an integer for its size, never rounds one to a float
-    and never stores one as an infinity, and it compares and computes integer results exactly. An attribute the XSD
-    types `xs:integer` or `xs:nonNegativeInteger`, such as `max-choices` or `figures`, has no bound either, because
-    reading 7 reads it as the XSD does; one the XSD types `xs:int`, such as `base`, keeps `xs:int`'s range. Where
+    and never stores one as an infinity, and it compares and computes integer results exactly. This reading is
+    about values. A count attribute such as `max-choices` is not a value of the integer base type: a shared reading of
+    its own holds counts to the signed 64-bit range, read exactly, and refuses a count beyond it with its rule and
+    location. An attribute the XSD types `xs:int`, such as `base`, keeps `xs:int`'s range. Where
     QTI's types make a result a float, an integer operand becomes the nearest float, and an integer beyond the
     largest finite float becomes the largest finite float of its sign. This is not a case of documents
     in conflict: the sources agree that the type is unbounded and say nothing of overflow, and this reading forbids
