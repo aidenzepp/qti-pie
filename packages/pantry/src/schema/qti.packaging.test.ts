@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { Schema } from "effect";
@@ -10,7 +10,6 @@ import { AuthorApp, authorWork } from "#pantry/schema/logins.ts";
 import { AttributeName, NodeKind } from "#pantry/schema/node.ts";
 import { Qti, nodeArms } from "#pantry/schema/qti.ts";
 import { Author, seededNames } from "#pantry/schema/roles.ts";
-import { admission } from "#pantry/schema/seed/admission.ts";
 import { bindingFit } from "#pantry/schema/seed/binding-fit.ts";
 import * as csm from "#pantry/schema/csm.ts";
 import * as usage from "#pantry/schema/usage.ts";
@@ -44,13 +43,16 @@ const stored = () =>
   );
 
 /**
- * Every `01-seed.sql` of a migration folder other than this phase's `seed_packaging`.
+ * The `01-seed.sql` of the one `seed` migration folder: the history holds exactly one.
  */
-const earlierSeeds = (): string[] =>
-  readdirSync(migrations, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && !entry.name.endsWith("_seed_packaging"))
-    .map((entry) => path.join(migrations, entry.name, "01-seed.sql"))
-    .filter((file) => existsSync(file));
+const committedSeed = (): string => {
+  const folders = readdirSync(migrations, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name.endsWith("_seed"))
+    .map((entry) => path.join(migrations, entry.name, "01-seed.sql"));
+  assert.strictEqual(folders.length, 1);
+
+  return readFileSync(folders[0] ?? "", "utf-8");
+};
 
 /**
  * The tuples one table's INSERT statements hold, as strings.
@@ -65,17 +67,6 @@ const tuplesOf = (sql: string, table: string): string[] => {
       line.slice(line.indexOf(" VALUES (") + " VALUES (".length, -2).split("), ("),
     );
 };
-
-/**
- * The recipe's output: the seed rows of `Admission` and `RootOfType` the earlier folders do not
- * hold.
- */
-const recipe = (): string =>
-  printSeed([
-    "--only",
-    "Admission,RootOfType",
-    ...earlierSeeds().flatMap((file) => ["--minus", file]),
-  ]);
 
 describe("qti packaging composition", () => {
   it("holds every csmd and ud handle in the rosters", () => {
@@ -145,36 +136,12 @@ describe("qti packaging composition", () => {
     );
   });
 
-  it("prints this phase's seed rows from the recipe, as the committed seed_packaging file holds them", () => {
-    const printed = recipe();
-    const earlier = earlierSeeds()
-      .map((file) => readFileSync(file, "utf-8"))
-      .join("\n");
-    const taken = new Set(tuplesOf(earlier, "admission"));
-    const beyond = admission.length - tuplesOf(earlier, "admission").length;
-    assert.isAbove(taken.size, 0);
-    assert.strictEqual(tuplesOf(printed, "admission").length, beyond);
-    assert.strictEqual(tuplesOf(printed, "root_of_type").length, 2);
-    assert.strictEqual(tuplesOf(printed, "binding_fit").length, 0);
-
-    const folder = readdirSync(migrations).find((name) => name.endsWith("_seed_packaging"));
-    assert.isDefined(folder);
-
-    const committed = readFileSync(path.join(migrations, folder ?? "", "01-seed.sql"), "utf-8");
-    for (const table of ["admission", "root_of_type", "binding_fit"]) {
-      assert.deepStrictEqual(
-        tuplesOf(committed, table).toSorted(),
-        tuplesOf(printed, table).toSorted(),
-      );
-    }
+  it("holds exactly the full seed the recipe prints, in the one seed folder", () => {
+    assert.strictEqual(committedSeed(), printSeed([]));
   });
 
   it("keeps the BindingFit rows as the seed module holds them", () => {
     assert.isAbove(bindingFit.length, 0);
-
-    const earlier = earlierSeeds()
-      .map((file) => readFileSync(file, "utf-8"))
-      .join("\n");
-    assert.strictEqual(tuplesOf(earlier, "binding_fit").length, bindingFit.length);
+    assert.strictEqual(tuplesOf(committedSeed(), "binding_fit").length, bindingFit.length);
   });
 });
