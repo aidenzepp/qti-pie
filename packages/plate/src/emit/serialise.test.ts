@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
+import { Option, Result } from "effect";
 import { h, text } from "#plate/emit/node.ts";
+import type { Node } from "#plate/emit/node.ts";
 import {
   EscapableRawTextElementChild,
   EventHandlerAttribute,
@@ -11,6 +13,17 @@ import {
   toHtml,
   VoidElementChildren,
 } from "#plate/emit/serialise.ts";
+
+/**
+ * Read what {@link toHtml} throws for a tree through effect's `Result`, so a refusal case asserts
+ * the refusal's `_tag` and fields rather than its message.
+ *
+ * @param tree The tree the serialiser refuses.
+ * @returns The thrown value, or undefined when `tree` is written.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- A thrown value can be any value; each case asserts its `_tag` and fields.
+const refusalOf = (tree: Node): unknown =>
+  Option.getOrUndefined(Result.getFailure(Result.try(() => toHtml(tree))));
 
 describe("toHtml", () => {
   it("escapes &, < and > in text", () => {
@@ -43,6 +56,8 @@ describe("toHtml", () => {
       assert.throws(() => {
         toHtml(h("div", {}, [h(tag, {})]));
       }, MalformedTagName);
+      assert.include(refusalOf(h(tag, {})), { _tag: "MalformedTagName", tag });
+      assert.include(refusalOf(h("div", {}, [h(tag, {})])), { _tag: "MalformedTagName", tag });
     }
   });
 
@@ -68,6 +83,16 @@ describe("toHtml", () => {
       assert.throws(() => {
         toHtml(h("input", { [name]: true }));
       }, MalformedAttributeName);
+      assert.include(refusalOf(h("p", { [name]: "x" })), {
+        _tag: "MalformedAttributeName",
+        attribute: name,
+        tag: "p",
+      });
+      assert.include(refusalOf(h("input", { [name]: true })), {
+        _tag: "MalformedAttributeName",
+        attribute: name,
+        tag: "input",
+      });
     }
   });
 
@@ -82,6 +107,7 @@ describe("toHtml", () => {
     assert.throws(() => {
       toHtml(h("br", {}, [text("x")]));
     }, VoidElementChildren);
+    assert.include(refusalOf(h("br", {}, [text("x")])), { _tag: "VoidElementChildren", tag: "br" });
   });
 
   it("throws RawTextChildren for any child, text or element, of a raw-text element", () => {
@@ -100,6 +126,7 @@ describe("toHtml", () => {
         assert.throws(() => {
           toHtml(h(tag, {}, [child]));
         }, RawTextChildren);
+        assert.include(refusalOf(h(tag, {}, [child])), { _tag: "RawTextChildren", tag });
       }
     }
   });
@@ -116,6 +143,10 @@ describe("toHtml", () => {
         ]),
       );
     }, PlaintextElement);
+    assert.include(refusalOf(h("plaintext", {})), { _tag: "PlaintextElement" });
+    assert.include(refusalOf(h("div", {}, [h("p", {}, [h("plaintext", {})])])), {
+      _tag: "PlaintextElement",
+    });
   });
 
   it("writes none of a plaintext element's bytes before refusing it", () => {
@@ -141,6 +172,21 @@ describe("toHtml", () => {
       assert.throws(() => {
         toHtml(h("div", {}, [h("button", { [name]: "" }, [text("Submit")])]));
       }, EventHandlerAttribute);
+      assert.include(refusalOf(h("p", { [name]: "alert(1)" })), {
+        _tag: "EventHandlerAttribute",
+        attribute: name,
+        tag: "p",
+      });
+      assert.include(refusalOf(h("input", { [name]: true })), {
+        _tag: "EventHandlerAttribute",
+        attribute: name,
+        tag: "input",
+      });
+      assert.include(refusalOf(h("div", {}, [h("button", { [name]: "" }, [text("Submit")])])), {
+        _tag: "EventHandlerAttribute",
+        attribute: name,
+        tag: "button",
+      });
     }
   });
 
@@ -172,6 +218,11 @@ describe("toHtml", () => {
       assert.throws(() => {
         toHtml(h(tag, {}, [text("a"), h("b", {}, [text("x")])]));
       }, EscapableRawTextElementChild);
+      assert.include(refusalOf(h(tag, {}, [text("a"), h("b", {}, [text("x")])])), {
+        _tag: "EscapableRawTextElementChild",
+        child: "b",
+        tag,
+      });
     }
   });
 

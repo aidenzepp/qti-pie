@@ -10,7 +10,7 @@
  *
  * @module
  */
-import { Effect, Option } from "effect";
+import { Option, Result } from "effect";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
@@ -49,7 +49,7 @@ const itemPart = (
   props: Attributes,
   children: readonly Node[],
   context?: RowContext,
-): Effect.Effect<Element, PartSwapRefused> => {
+): Result.Result<Element, PartSwapRefused> => {
   const row = rowFor("item", part, context);
 
   return applyPart(
@@ -68,7 +68,7 @@ const itemPart = (
  * in order, and nothing else: no form, no submit control, no attempt state.
  *
  * @example
- *   emitItem(payload, state, body).pipe(Effect.map(toHtml));
+ *   Result.map(emitItem(payload, state, body), toHtml);
  *   // a qti-assessment-item element, its id `<instance>-item`, holding the body's HTML
  *
  * @param payload The render's payload, which gives the language, the instance and the state.
@@ -80,7 +80,7 @@ export const emitItem = (
   payload: Payload,
   state: EmitState,
   body: readonly Node[],
-): Effect.Effect<Element, PartSwapRefused> =>
+): Result.Result<Element, PartSwapRefused> =>
   itemPart(
     state,
     "root",
@@ -135,23 +135,25 @@ export interface StatusInput {
 const statusDetail = (
   input: StatusInput,
   state: EmitState,
-): Effect.Effect<readonly Node[], PartSwapRefused> => {
+): Result.Result<readonly Node[], PartSwapRefused> => {
   const { locale } = state;
   const messages = input.messages ?? [];
   if (input.score !== undefined) {
-    return Effect.succeed([h("p", {}, [text(message(locale, "score", { score: input.score }))])]);
+    return Result.succeed([h("p", {}, [text(message(locale, "score", { score: input.score }))])]);
   }
 
   if (messages.length > 0) {
-    return Effect.forEach(identifyMessages(input.instance, messages), (entry) =>
-      itemPart(state, "message", { id: entry.id }, [text(entry.text)]),
-    ).pipe(
-      Effect.flatMap((items) => itemPart(state, "messages", {}, items)),
-      Effect.map((list) => [list]),
-    );
+    return Result.gen(function* statusMessages() {
+      const items: Element[] = [];
+      for (const entry of identifyMessages(input.instance, messages)) {
+        items.push(yield* itemPart(state, "message", { id: entry.id }, [text(entry.text)]));
+      }
+
+      return [yield* itemPart(state, "messages", {}, items)];
+    });
   }
 
-  return Effect.succeed(
+  return Result.succeed(
     input.heading === "responseRecorded"
       ? [h("p", {}, [text(message(locale, "responseRecorded"))])]
       : [],
@@ -169,7 +171,7 @@ const statusDetail = (
  * both are the author's composition (spec §4.7).
  *
  * @example
- *   emitStatus({ heading: "scored", instance: "i1", score: "1" }, state).pipe(Effect.map(toHtml));
+ *   Result.map(emitStatus({ heading: "scored", instance: "i1", score: "1" }, state), toHtml);
  *   // a section, id `i1-status`, holding the heading "Scored" and "Score: 1"
  *
  * @param input The author's Status input.
@@ -177,33 +179,34 @@ const statusDetail = (
  *   overrides.
  * @returns The Status region, or the refusal of a replacement that breaks the swap invariant.
  */
-export const emitStatus = Effect.fnUntraced(function* emitStatus(
+export const emitStatus = (
   input: StatusInput,
   state: EmitState,
-): Effect.fn.Return<Element, PartSwapRefused> {
-  const headingId = scopedId(input.instance, "status", "heading");
-  const heading = yield* itemPart(
-    state,
-    "statusHeading",
-    { id: headingId },
-    [text(message(state.locale, input.heading))],
-    { headingLevel: state.headingLevel },
-  );
-  const detail = yield* statusDetail(input, state);
+): Result.Result<Element, PartSwapRefused> =>
+  Result.gen(function* statusRegion() {
+    const headingId = scopedId(input.instance, "status", "heading");
+    const heading = yield* itemPart(
+      state,
+      "statusHeading",
+      { id: headingId },
+      [text(message(state.locale, input.heading))],
+      { headingLevel: state.headingLevel },
+    );
+    const detail = yield* statusDetail(input, state);
 
-  return yield* itemPart(
-    state,
-    "status",
-    withFlag(
-      {
-        "aria-labelledby": headingId,
-        id: scopedId(input.instance, "status"),
-        role: "status",
-        tabindex: "-1",
-      },
-      "autofocus",
-      input.autofocus === true,
-    ),
-    [heading, ...detail],
-  );
-});
+    return yield* itemPart(
+      state,
+      "status",
+      withFlag(
+        {
+          "aria-labelledby": headingId,
+          id: scopedId(input.instance, "status"),
+          role: "status",
+          tabindex: "-1",
+        },
+        "autofocus",
+        input.autofocus === true,
+      ),
+      [heading, ...detail],
+    );
+  });

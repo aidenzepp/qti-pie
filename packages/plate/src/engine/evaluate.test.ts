@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Option, Result } from "effect";
 import { attr, doc, el, text } from "#plate/document/source.ts";
 import {
   OutcomeMismatchError,
@@ -260,10 +260,12 @@ const answerOf = (identifier: string, values: readonly Single[]): Value => {
  * @returns The mapped value.
  */
 const mapped = (identifier: string, values: readonly Single[]): Value =>
-  evaluateExpression({ identifier, kind: "map-response" }, item, {
-    ...variablesOf(identifierValue("A")),
-    responses: { [identifier]: answerOf(identifier, values) },
-  });
+  Result.getOrThrow(
+    evaluateExpression({ identifier, kind: "map-response" }, item, {
+      ...variablesOf(identifierValue("A")),
+      responses: { [identifier]: answerOf(identifier, values) },
+    }),
+  );
 
 /**
  * Construct a single string.
@@ -336,26 +338,41 @@ const matchCorrect: readonly Rule[] = [
   ),
 ];
 
+/**
+ * Give the failure a Result holds, after checking that it is a Result and that it failed.
+ *
+ * @param result The Result the engine returned.
+ * @returns Its failure.
+ */
+const failureOf = <A, E>(result: Result.Result<A, E>): E => {
+  assert.isTrue(Result.isResult(result));
+  assert.isTrue(Result.isFailure(result));
+
+  return Result.getOrThrow(Result.flip(result));
+};
+
 describe("runRules", () => {
   it("[I-9b] a match with a NULL response takes the else branch", () => {
-    const after = runRules(
-      matchCorrect,
-      item,
-      variablesOf(nullOf("identifier", "single"), floatValue(1)),
+    const after = Result.getOrThrow(
+      runRules(matchCorrect, item, variablesOf(nullOf("identifier", "single"), floatValue(1))),
     );
 
     assert.deepStrictEqual(after.outcomes["SCORE"], floatValue(0));
   });
 
   it("[I-9b] a match with the correct identifier takes the if branch", () => {
-    const after = runRules(matchCorrect, item, variablesOf(identifierValue("true")));
+    const after = Result.getOrThrow(
+      runRules(matchCorrect, item, variablesOf(identifierValue("true"))),
+    );
 
     assert.deepStrictEqual(after.outcomes["SCORE"], floatValue(1));
   });
 
   it("[I-9b] set-outcome writes a float and leaves the responses as they were", () => {
     const before = variablesOf(identifierValue("false"));
-    const after = runRules([setOutcome("SCORE", base(floatValue(2.5)))], item, before);
+    const after = Result.getOrThrow(
+      runRules([setOutcome("SCORE", base(floatValue(2.5)))], item, before),
+    );
 
     assert.deepStrictEqual(after.outcomes["SCORE"], floatValue(2.5));
     assert.deepStrictEqual(after.responses, before.responses);
@@ -375,7 +392,7 @@ describe("runRules", () => {
         [setOutcome("SCORE", base(floatValue(0)))],
       ),
     ];
-    const after = runRules(rules, item, variablesOf(identifierValue("B")));
+    const after = Result.getOrThrow(runRules(rules, item, variablesOf(identifierValue("B"))));
 
     assert.deepStrictEqual(after.outcomes["SCORE"], floatValue(0.5));
   });
@@ -385,7 +402,9 @@ describe("runRules", () => {
       setOutcome("EMPTY", { kind: "is-null", operand: variable("RESPONSE") }),
       condition([branchOf(variable("EMPTY"), [setOutcome("SCORE", base(floatValue(0.5)))])]),
     ];
-    const after = runRules(rules, item, variablesOf(nullOf("identifier", "single")));
+    const after = Result.getOrThrow(
+      runRules(rules, item, variablesOf(nullOf("identifier", "single"))),
+    );
 
     assert.deepStrictEqual(after.outcomes["EMPTY"], booleanValue(true));
     assert.deepStrictEqual(after.outcomes["SCORE"], floatValue(0.5));
@@ -397,7 +416,7 @@ describe("runRules", () => {
     ];
     const before = variablesOf(identifierValue("A"), floatValue(0.25));
 
-    assert.deepStrictEqual(runRules(rules, item, before), before);
+    assert.deepStrictEqual(Result.getOrThrow(runRules(rules, item, before)), before);
   });
 
   it("refuses to set an outcome to a value of another base type", () => {
@@ -407,41 +426,74 @@ describe("runRules", () => {
       values: [{ baseType: "integer", value: 1n }],
     };
 
-    assert.throws(() => {
-      runRules([setOutcome("SCORE", base(integerOne))], item, variablesOf(identifierValue("A")));
-    }, OutcomeMismatchError);
+    const failure = failureOf(
+      runRules([setOutcome("SCORE", base(integerOne))], item, variablesOf(identifierValue("A"))),
+    );
+
+    assert.instanceOf(failure, OutcomeMismatchError);
+    assert.deepStrictEqual(
+      {
+        _tag: failure._tag,
+        actual: failure.actual,
+        expected: failure.expected,
+        identifier: failure.identifier,
+      },
+      {
+        _tag: "OutcomeMismatchError",
+        actual: "integer single",
+        expected: "float single",
+        identifier: "SCORE",
+      },
+    );
   });
 
   it("refuses an outcome or a variable the item does not declare", () => {
-    assert.throws(() => {
+    const outcome = failureOf(
       runRules(
         [setOutcome("RESPONSE", base(floatValue(1)))],
         item,
         variablesOf(identifierValue("A")),
-      );
-    }, UnknownIdentifierError);
-    assert.throws(() => {
-      runRules([setOutcome("SCORE", variable("MISSING"))], item, variablesOf(identifierValue("A")));
-    }, UnknownIdentifierError);
+      ),
+    );
+    const missing = failureOf(
+      runRules([setOutcome("SCORE", variable("MISSING"))], item, variablesOf(identifierValue("A"))),
+    );
+
+    assert.instanceOf(outcome, UnknownIdentifierError);
+    assert.instanceOf(missing, UnknownIdentifierError);
+    assert.deepStrictEqual(
+      [
+        { _tag: outcome._tag, identifier: outcome.identifier, role: outcome.role },
+        { _tag: missing._tag, identifier: missing.identifier, role: missing.role },
+      ],
+      [
+        { _tag: "UnknownIdentifierError", identifier: "RESPONSE", role: "outcome" },
+        { _tag: "UnknownIdentifierError", identifier: "MISSING", role: "variable" },
+      ],
+    );
   });
 });
 
 describe("evaluateExpression", () => {
   it("[I-9b] is-null on NULL is true", () => {
-    const value = evaluateExpression(
-      { kind: "is-null", operand: variable("RESPONSE") },
-      item,
-      variablesOf(nullOf("identifier", "single")),
+    const value = Result.getOrThrow(
+      evaluateExpression(
+        { kind: "is-null", operand: variable("RESPONSE") },
+        item,
+        variablesOf(nullOf("identifier", "single")),
+      ),
     );
 
     assert.deepStrictEqual(value, booleanValue(true));
   });
 
   it("[I-9b] a match with a NULL side is NULL", () => {
-    const value = evaluateExpression(
-      { kind: "match", operands: [variable("OPEN"), base(identifierValue("A"))] },
-      item,
-      variablesOf(identifierValue("A")),
+    const value = Result.getOrThrow(
+      evaluateExpression(
+        { kind: "match", operands: [variable("OPEN"), base(identifierValue("A"))] },
+        item,
+        variablesOf(identifierValue("A")),
+      ),
     );
 
     assert.deepStrictEqual(value, nullOf("boolean", "single"));
@@ -470,27 +522,29 @@ describe("evaluateExpression", () => {
           ),
         ),
       );
-      const matches = (answer: bigint): Value =>
-        evaluateExpression(
-          {
-            kind: "match",
-            operands: [variable("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
-          },
-          built,
-          {
-            outcomes: {},
-            responses: {
-              RESPONSE: {
-                baseType: "integer",
-                cardinality: "single",
-                values: [{ baseType: "integer", value: answer }],
+      const matches = (answer: bigint) =>
+        Effect.fromResult(
+          evaluateExpression(
+            {
+              kind: "match",
+              operands: [variable("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
+            },
+            built,
+            {
+              outcomes: {},
+              responses: {
+                RESPONSE: {
+                  baseType: "integer",
+                  cardinality: "single",
+                  values: [{ baseType: "integer", value: answer }],
+                },
               },
             },
-          },
+          ),
         );
 
-      assert.deepStrictEqual(matches(2n ** 53n), booleanValue(false));
-      assert.deepStrictEqual(matches(2n ** 53n + 1n), booleanValue(true));
+      assert.deepStrictEqual(yield* matches(2n ** 53n), booleanValue(false));
+      assert.deepStrictEqual(yield* matches(2n ** 53n + 1n), booleanValue(true));
     }),
   );
 
@@ -498,11 +552,15 @@ describe("evaluateExpression", () => {
     const variables = variablesOf(identifierValue("A"));
 
     assert.deepStrictEqual(
-      evaluateExpression({ identifier: "RESPONSE", kind: "correct" }, item, variables),
+      Result.getOrThrow(
+        evaluateExpression({ identifier: "RESPONSE", kind: "correct" }, item, variables),
+      ),
       identifierValue("true"),
     );
     assert.deepStrictEqual(
-      evaluateExpression({ identifier: "OPEN", kind: "correct" }, item, variables),
+      Result.getOrThrow(
+        evaluateExpression({ identifier: "OPEN", kind: "correct" }, item, variables),
+      ),
       nullOf("identifier", "single"),
     );
   });
@@ -511,19 +569,25 @@ describe("evaluateExpression", () => {
     const variables = variablesOf(identifierValue("A"), floatValue(0.75));
 
     assert.deepStrictEqual(
-      evaluateExpression(variable("RESPONSE"), item, variables),
+      Result.getOrThrow(evaluateExpression(variable("RESPONSE"), item, variables)),
       identifierValue("A"),
     );
     assert.deepStrictEqual(
-      evaluateExpression(variable("SCORE"), item, variables),
+      Result.getOrThrow(evaluateExpression(variable("SCORE"), item, variables)),
       floatValue(0.75),
     );
   });
 
   it("refuses a variable named like an Object.prototype member", () => {
-    assert.throws(() => {
-      evaluateExpression(variable("constructor"), item, variablesOf(identifierValue("A")));
-    }, UnknownIdentifierError);
+    const failure = failureOf(
+      evaluateExpression(variable("constructor"), item, variablesOf(identifierValue("A"))),
+    );
+
+    assert.instanceOf(failure, UnknownIdentifierError);
+    assert.deepStrictEqual(
+      { _tag: failure._tag, identifier: failure.identifier, role: failure.role },
+      { _tag: "UnknownIdentifierError", identifier: "constructor", role: "variable" },
+    );
   });
 });
 
@@ -562,12 +626,18 @@ describe("map-response", () => {
   });
 
   it("refuses to map a response with no mapping", () => {
-    assert.throws(() => {
+    const failure = failureOf(
       evaluateExpression(
         { identifier: "OPEN", kind: "map-response" },
         item,
         variablesOf(identifierValue("A")),
-      );
-    }, UnmappedResponseError);
+      ),
+    );
+
+    assert.instanceOf(failure, UnmappedResponseError);
+    assert.deepStrictEqual(
+      { _tag: failure._tag, identifier: failure.identifier },
+      { _tag: "UnmappedResponseError", identifier: "OPEN" },
+    );
   });
 });

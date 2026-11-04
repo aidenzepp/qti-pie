@@ -1,6 +1,7 @@
+import { threadCpuUsage } from "node:process";
 import { assert, describe, it } from "@effect/vitest";
-import { Duration, Effect } from "effect";
-import { decode, encode, entryName, partition } from "#plate/form/encoding.ts";
+import { Effect, Option, Result } from "effect";
+import { checkInstance, decode, encode, entryName, partition } from "#plate/form/encoding.ts";
 import type { Binding, Entry, Malformed } from "#plate/form/encoding.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
@@ -64,7 +65,102 @@ const identifier = (text: string): Single => ({ baseType: "identifier", value: t
  * @returns The value the entries decode to.
  */
 const roundTrip = (bound: Binding, original: Value): Effect.Effect<Value, Malformed> =>
-  decode(encode(original, bound), bound);
+  Effect.fromResult(decode(encode(original, bound), bound));
+
+/**
+ * The digits the Q-20 growth check reads first, before it reads {@link digitGrowth} times as many.
+ */
+const fewerDigits = 12_500;
+
+/**
+ * How many times as many digits the growth check reads second: a linear parse then takes about 8
+ * times as long, and a quadratic one about 64 times.
+ */
+const digitGrowth = 8;
+
+/**
+ * The most a parse's time may grow by on {@link digitGrowth} times the digits, 4 times linear and
+ * half of quadratic, so a busy machine neither fails a linear parse nor passes a quadratic one.
+ */
+const growthLimit = 32;
+
+/**
+ * The runs of each size the growth check times, keeping the fastest, so a run a busy machine
+ * slowed does not count.
+ */
+const growthRuns = 3;
+
+/**
+ * The quadratic control reads 100,000 digits three times, about 1.5 s alone; under load that nears
+ * vitest's default of 5 s.
+ */
+const controlTimeoutMs = 60_000;
+
+/**
+ * Run a computation and measure the CPU time this thread spent on it, which a busy machine
+ * inflates far less than wall-clock time: the time other processes hold the CPU is not counted.
+ *
+ * @param work The computation.
+ * @returns The thread's CPU time over `work`, in milliseconds.
+ */
+const cpuMillis = (work: () => void): Effect.Effect<number> =>
+  Effect.sync(() => {
+    const before = threadCpuUsage();
+    work();
+
+    const { system, user } = threadCpuUsage(before);
+
+    return (system + user) / 1000;
+  });
+
+/**
+ * Measure how a parse's CPU time grows with its digits: time it on the first {@link fewerDigits}
+ * digits and on {@link digitGrowth} times as many, alternating so a busy spell slows both sizes,
+ * and keep the fastest of {@link growthRuns} runs of each. A run of the smaller size parses it
+ * {@link digitGrowth} times over, so both runs last about as long for a linear parse and meet the
+ * same cores and clock speeds.
+ *
+ * @param spelling The digits, at least `fewerDigits * digitGrowth` of them.
+ * @param parse The parse to time.
+ * @returns How many times as long the parse took on the larger prefix as on the smaller.
+ */
+const growthRatio = (spelling: string, parse: (digits: string) => void): Effect.Effect<number> =>
+  Effect.gen(function* timeGrowth() {
+    const fewer = spelling.slice(0, fewerDigits);
+    const more = spelling.slice(0, fewerDigits * digitGrowth);
+    let fewerMs = Number.POSITIVE_INFINITY;
+    let moreMs = Number.POSITIVE_INFINITY;
+    for (let run = 0; run < growthRuns; run += 1) {
+      const fewerRun = yield* cpuMillis(() => {
+        for (let repeat = 0; repeat < digitGrowth; repeat += 1) {
+          parse(fewer);
+        }
+      });
+      const moreRun = yield* cpuMillis(() => {
+        parse(more);
+      });
+      fewerMs = Math.min(fewerMs, fewerRun / digitGrowth);
+      moreMs = Math.min(moreMs, moreRun);
+    }
+
+    return moreMs / fewerMs;
+  });
+
+/**
+ * The growth check's control, a deliberately quadratic parse: a per-digit `total * 36n + digit`
+ * loop, which copies the whole bigint at every digit.
+ *
+ * @param digits Base-36 digits.
+ * @returns The integer the digits name.
+ */
+const parseQuadratically = (digits: string): bigint => {
+  let total = 0n;
+  for (const digit of digits) {
+    total = total * 36n + BigInt(Number.parseInt(digit, 36));
+  }
+
+  return total;
+};
 
 describe("entryName", () => {
   it("[Q-2] names an entry by the instance and the response", () => {
@@ -73,6 +169,23 @@ describe("entryName", () => {
 });
 
 describe("encode and decode", () => {
+  it("[Q-20] decode returns a Result: Malformed for a float that is not a number, 7n for an integer", () => {
+    const refused = decode(posted("abc"), binding("float"));
+    assert.isTrue(Result.isResult(refused));
+    assert.deepStrictEqual(
+      Option.map(Result.getFailure(refused), ({ _tag, reason }) => ({ _tag, reason })),
+      Option.some({ _tag: "Malformed", reason: "number" }),
+    );
+
+    const integer = binding("integer");
+    const seven = decode(posted("7"), integer);
+    assert.isTrue(Result.isResult(seven));
+    assert.deepStrictEqual(
+      Result.getSuccess(seven),
+      Option.some(value(integer, { baseType: "integer", value: 7n })),
+    );
+  });
+
   it.effect("[Q-2] round-trip an identifier single and multiple, in order", () =>
     Effect.gen(function* identifierRoundTrip() {
       const single = binding("identifier");
@@ -105,13 +218,13 @@ describe("encode and decode", () => {
       const multiple = binding("identifier", "multiple");
 
       assert.deepStrictEqual(encode(value(multiple), multiple), []);
-      assert.deepStrictEqual(yield* decode([], multiple), value(multiple));
+      assert.deepStrictEqual(yield* Effect.fromResult(decode([], multiple)), value(multiple));
       assert.deepStrictEqual(
-        yield* decode(posted(""), binding("identifier")),
+        yield* Effect.fromResult(decode(posted(""), binding("identifier"))),
         value(binding("identifier")),
       );
       assert.deepStrictEqual(
-        yield* decode(posted(""), binding("string")),
+        yield* Effect.fromResult(decode(posted(""), binding("string"))),
         value(binding("string")),
       );
     }),
@@ -120,7 +233,7 @@ describe("encode and decode", () => {
   it.effect("[Q-20] refuses abc, INF, -INF and NaN as a float", () =>
     Effect.gen(function* floatRefusals() {
       for (const text of ["abc", "INF", "-INF", "NaN"]) {
-        const error = yield* Effect.flip(decode(posted(text), binding("float")));
+        const error = yield* Effect.flip(Effect.fromResult(decode(posted(text), binding("float"))));
         assert.strictEqual(error._tag, "Malformed");
         assert.strictEqual(error.reason, "number");
       }
@@ -132,11 +245,11 @@ describe("encode and decode", () => {
       const float = binding("float");
 
       assert.deepStrictEqual(
-        yield* decode(posted("1E999"), float),
+        yield* Effect.fromResult(decode(posted("1E999"), float)),
         value(float, { baseType: "float", value: Number.MAX_VALUE }),
       );
       assert.deepStrictEqual(
-        yield* decode(posted("-1E999"), float),
+        yield* Effect.fromResult(decode(posted("-1E999"), float)),
         value(float, { baseType: "float", value: -Number.MAX_VALUE }),
       );
     }),
@@ -148,23 +261,25 @@ describe("encode and decode", () => {
       const float = binding("float");
 
       assert.deepStrictEqual(
-        yield* decode(posted(" 7 "), integer),
+        yield* Effect.fromResult(decode(posted(" 7 "), integer)),
         value(integer, { baseType: "integer", value: 7n }),
       );
       assert.deepStrictEqual(
-        yield* decode(posted(" 1E3 "), float),
+        yield* Effect.fromResult(decode(posted(" 1E3 "), float)),
         value(float, { baseType: "float", value: 1000 }),
       );
       assert.deepStrictEqual(
-        yield* decode(posted("101"), integer, { base: 2 }),
+        yield* Effect.fromResult(decode(posted("101"), integer, { base: 2 })),
         value(integer, { baseType: "integer", value: 5n }),
       );
       assert.deepStrictEqual(
-        yield* decode(posted("-ff"), integer, { base: 16 }),
+        yield* Effect.fromResult(decode(posted("-ff"), integer, { base: 16 })),
         value(integer, { baseType: "integer", value: -255n }),
       );
 
-      const error = yield* Effect.flip(decode(posted("102"), integer, { base: 2 }));
+      const error = yield* Effect.flip(
+        Effect.fromResult(decode(posted("102"), integer, { base: 2 })),
+      );
       assert.strictEqual(error.reason, "number");
     }),
   );
@@ -181,7 +296,7 @@ describe("encode and decode", () => {
 
       for (const [text, exact] of cases) {
         assert.deepStrictEqual(
-          yield* decode(posted(text), integer),
+          yield* Effect.fromResult(decode(posted(text), integer)),
           value(integer, { baseType: "integer", value: exact }),
         );
       }
@@ -193,31 +308,65 @@ describe("encode and decode", () => {
       const integer = binding("integer");
       const exact = value(integer, { baseType: "integer", value: 2n ** 53n + 1n });
 
-      assert.deepStrictEqual(yield* decode(posted("20000000000001"), integer, { base: 16 }), exact);
       assert.deepStrictEqual(
-        yield* decode(posted((2n ** 53n + 1n).toString(7)), integer, { base: 7 }),
+        yield* Effect.fromResult(decode(posted("20000000000001"), integer, { base: 16 })),
         exact,
       );
       assert.deepStrictEqual(
-        yield* decode(posted(`-${(10n ** 30n).toString(7)}`), integer, { base: 7 }),
+        yield* Effect.fromResult(
+          decode(posted((2n ** 53n + 1n).toString(7)), integer, { base: 7 }),
+        ),
+        exact,
+      );
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(
+          decode(posted(`-${(10n ** 30n).toString(7)}`), integer, { base: 7 }),
+        ),
         value(integer, { baseType: "integer", value: -(10n ** 30n) }),
       );
     }),
   );
 
-  it.live("[Q-20] reads 100,000 base-36 digits exactly in under 200 ms", () =>
-    Effect.gen(function* longBase36() {
-      const integer = binding("integer");
-      const exact = 17n * 36n ** 99_999n + 7n ** 90_000n;
-      const spelling = exact.toString(36);
-      assert.strictEqual(spelling.length, 100_000);
+  it.effect(
+    "[Q-20] reads 100,000 base-36 digits exactly, 8 times the digits in under 32 times the time",
+    () =>
+      Effect.gen(function* longBase36() {
+        const integer = binding("integer");
+        const exact = 17n * 36n ** 99_999n + 7n ** 90_000n;
+        const spelling = exact.toString(36);
+        assert.strictEqual(spelling.length, 100_000);
 
-      const [elapsed, read] = yield* Effect.timed(
-        Effect.suspend(() => decode(posted(spelling), integer, { base: 36 })),
-      );
-      assert.deepStrictEqual(read, value(integer, { baseType: "integer", value: exact }));
-      assert.isBelow(Duration.toMillis(elapsed), 200, Duration.format(elapsed));
-    }),
+        const read = yield* Effect.fromResult(decode(posted(spelling), integer, { base: 36 }));
+        assert.deepStrictEqual(read, value(integer, { baseType: "integer", value: exact }));
+
+        const growth = yield* growthRatio(spelling, (digits) => {
+          decode(posted(digits), integer, { base: 36 });
+        });
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the digits took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-20] control: a quadratic parse fails the growth check",
+    () =>
+      Effect.gen(function* quadraticControl() {
+        const spelling = "z".repeat(fewerDigits * digitGrowth);
+        assert.strictEqual(parseQuadratically("zz"), 35n * 36n + 35n);
+
+        const growth = yield* growthRatio(spelling, (digits) => {
+          parseQuadratically(digits);
+        });
+        assert.isAtLeast(
+          growth,
+          growthLimit,
+          `8 times the digits took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    controlTimeoutMs,
   );
 
   it.effect("[Q-20] refuses a decimal, INF, a bare sign and a base outside 2 to 36", () =>
@@ -235,7 +384,9 @@ describe("encode and decode", () => {
       ];
 
       for (const [text, base] of cases) {
-        const error = yield* Effect.flip(decode(posted(text), integer, { base }));
+        const error = yield* Effect.flip(
+          Effect.fromResult(decode(posted(text), integer, { base })),
+        );
         assert.strictEqual(error._tag, "Malformed");
         assert.strictEqual(error.reason, "number", `${text} in base ${String(base)}`);
       }
@@ -247,11 +398,11 @@ describe("encode and decode", () => {
       const string = binding("string");
 
       assert.deepStrictEqual(
-        yield* decode(posted("a\r\nb"), string),
+        yield* Effect.fromResult(decode(posted("a\r\nb"), string)),
         value(string, { baseType: "string", value: "a\nb" }),
       );
       assert.deepStrictEqual(
-        yield* decode(posted("a\rb\n"), string),
+        yield* Effect.fromResult(decode(posted("a\rb\n"), string)),
         value(string, { baseType: "string", value: "a\nb\n" }),
       );
     }),
@@ -261,13 +412,17 @@ describe("encode and decode", () => {
     Effect.gen(function* refusals() {
       const single = binding("identifier");
 
-      const many = yield* Effect.flip(decode(posted("choiceA", "choiceB"), single));
+      const many = yield* Effect.flip(
+        Effect.fromResult(decode(posted("choiceA", "choiceB"), single)),
+      );
       assert.strictEqual(many.reason, "single-many");
 
-      const notNcName = yield* Effect.flip(decode(posted("1st"), single));
+      const notNcName = yield* Effect.flip(Effect.fromResult(decode(posted("1st"), single)));
       assert.strictEqual(notNcName.reason, "identifier");
 
-      const file = yield* Effect.flip(decode(posted(new Blob(["x"])), binding("string")));
+      const file = yield* Effect.flip(
+        Effect.fromResult(decode(posted(new Blob(["x"])), binding("string"))),
+      );
       assert.strictEqual(file.reason, "file");
     }),
   );
@@ -280,12 +435,62 @@ describe("encode and decode", () => {
         [entryName(instance, "RESPONSE"), "choiceB"],
       ];
 
-      assert.deepStrictEqual(yield* decode(entries, single), value(single, identifier("choiceB")));
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode(entries, single)),
+        value(single, identifier("choiceB")),
+      );
     }),
   );
 });
 
+describe("checkInstance", () => {
+  it("refuses an empty token first", () => {
+    assert.deepStrictEqual(checkInstance(""), Option.some("non-empty"));
+  });
+
+  it("refuses a character outside ASCII letters, digits, _, ., : and -", () => {
+    for (const token of ["a b", "«r1»", "q1/2", "é"]) {
+      assert.deepStrictEqual(checkInstance(token), Option.some("characters"), token);
+    }
+  });
+
+  it("refuses a trailing - and a --, which would let a chrome id meet an authored id", () => {
+    for (const token of ["ab-", "a--b", "-", "--"]) {
+      assert.deepStrictEqual(checkInstance(token), Option.some("id-boundary"), token);
+    }
+  });
+
+  it("admits React's useId forms, a lowercase UUID and a plain token", () => {
+    for (const token of ["_r_1_", ":r1:", "q1", "a.b", instance, crypto.randomUUID()]) {
+      assert.deepStrictEqual(checkInstance(token), Option.none(), token);
+    }
+  });
+});
+
 describe("partition", () => {
+  it("takes an entry as this instance's for any valid token, by the <instance>. prefix", () => {
+    const own: Entry = ["q1.RESPONSE", "A"];
+    assert.deepStrictEqual(partition([own], "q1").own, [own]);
+
+    const react: Entry = ["_r_1_.RESPONSE", "A"];
+    assert.deepStrictEqual(partition([react], "_r_1_").own, [react]);
+  });
+
+  it("takes a longer token's entry as a host field, not as this instance's", () => {
+    const longer: Entry = ["q10.RESPONSE", "A"];
+    assert.deepStrictEqual(partition([longer], "q1"), { foreign: [], host: [longer], own: [] });
+  });
+
+  it("takes another UUID's entry as foreign, and a name with no dot as a host field", () => {
+    const foreign: Entry = [entryName(otherInstance, "RESPONSE"), "B"];
+    const bare: Entry = ["RESPONSE", "C"];
+    assert.deepStrictEqual(partition([foreign, bare], "q1"), {
+      foreign: [foreign],
+      host: [bare],
+      own: [],
+    });
+  });
+
   it("detects a foreign key and sets a host field apart", () => {
     const own: Entry = [entryName(instance, "RESPONSE"), "choiceA"];
     const foreign: Entry = [entryName(otherInstance, "RESPONSE"), "choiceB"];

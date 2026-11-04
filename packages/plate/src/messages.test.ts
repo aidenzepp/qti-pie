@@ -23,7 +23,9 @@ const english = {
   answering: "Answering",
   atLeast: "Select at least 1.",
   atMost: "Select at most 1.",
+  malformedFile: "Enter text, not a file.",
   malformedNumber: "Enter a number.",
+  malformedSingleMany: "Enter one answer.",
   notAccepted: "Not accepted",
   notice: "Not supported here: pattern-mask",
   responseRecorded: "Response recorded",
@@ -66,6 +68,17 @@ describe("message", () => {
 
   it("writes a key with no placeholder without params", () => {
     assert.strictEqual(message("en", "submit"), "Submit");
+  });
+
+  it("gives each string text control refusal its own text, apart from the number and status ones", () => {
+    const texts = [
+      message("en", "malformedFile"),
+      message("en", "malformedSingleMany"),
+      message("en", "malformedNumber"),
+      message("en", "notAccepted"),
+    ];
+
+    assert.strictEqual(new Set(texts).size, texts.length);
   });
 
   it("refuses, in its type, a call that leaves a placeholder unfilled", () => {

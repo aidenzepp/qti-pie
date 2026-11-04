@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Exit, Option, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { authoredId } from "#plate/emit/body.ts";
 import { h, text } from "#plate/emit/node.ts";
@@ -14,7 +14,7 @@ import { message } from "#plate/messages.ts";
 import type { BodyNode, ChoiceInteraction, Item } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import { payload, redactItem } from "#plate/payload.ts";
-import type { ChoicePayload, EmitState, Payload, View } from "#plate/payload.ts";
+import type { ChoicePayload, EmitState, Payload, TextEntryPayload, View } from "#plate/payload.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
@@ -46,6 +46,8 @@ const words = (value: string): BodyNode => ({ kind: "text", text: value });
  * A single Choice of three colours with a phrasing Prompt, which takes the `legend` markup.
  */
 const colours: ChoiceInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
     { content: [words("Red")], identifier: "A" },
@@ -54,9 +56,9 @@ const colours: ChoiceInteraction = {
   ],
   class: "swatches",
   kind: "choice",
-  maxChoices: 1,
+  maxChoices: 1n,
   messages: { max: Option.none(), min: Option.none() },
-  minChoices: 0,
+  minChoices: 0n,
   orientation: Option.some("horizontal"),
   path: "qti-assessment-item/qti-item-body/qti-choice-interaction",
   prompt: Option.some([words("Pick a colour.")]),
@@ -71,8 +73,8 @@ const colours: ChoiceInteraction = {
 const pairs: ChoiceInteraction = {
   ...colours,
   cardinality: "multiple",
-  maxChoices: 2,
-  minChoices: 2,
+  maxChoices: 2n,
+  minChoices: 2n,
 };
 
 /**
@@ -160,7 +162,7 @@ const choiceIn = (built: Payload): ChoicePayload => {
 /**
  * The emit state of every render here, with no part overrides.
  */
-const emitState: Effect.Effect<EmitState> = resolveOverrides().pipe(
+const emitState: Effect.Effect<EmitState> = Effect.fromResult(resolveOverrides()).pipe(
   Effect.orDie,
   Effect.map((parts): EmitState => ({
     assetBase: "",
@@ -178,7 +180,9 @@ const emitState: Effect.Effect<EmitState> = resolveOverrides().pipe(
  */
 const render = (built: Payload): Effect.Effect<Element> =>
   emitState.pipe(
-    Effect.flatMap((state) => Effect.orDie(renderChoice(choiceIn(built), built, state))),
+    Effect.flatMap((state) =>
+      Effect.orDie(Effect.fromResult(renderChoice(choiceIn(built), built, state))),
+    ),
   );
 
 /**
@@ -272,11 +276,15 @@ const decoded = (
   entries: readonly Entry[],
   entry: string = name,
 ): Effect.Effect<Value | Malformed> =>
-  decode(entries, {
-    baseType: "identifier",
-    cardinality: interaction.cardinality,
-    name: entry,
-  }).pipe(Effect.result, Effect.map(Result.merge));
+  Effect.succeed(
+    Result.merge(
+      decode(entries, {
+        baseType: "identifier",
+        cardinality: interaction.cardinality,
+        name: entry,
+      }),
+    ),
+  );
 
 describe("renderChoice", () => {
   it.effect(
@@ -325,6 +333,65 @@ describe("renderChoice", () => {
       assert.lengthOf(partsIn(root, "control"), 3);
       assert.deepStrictEqual(checkTree(page(root, built), { baseLevel: 2 }), []);
     }),
+  );
+
+  it.effect("[Q-2] names a Choice with no Prompt by the author's aria-label", () =>
+    Effect.gen(function* namesByAriaLabel() {
+      const built = payloadOf({
+        ...colours,
+        ariaLabel: Option.some("Pick a city"),
+        prompt: Option.none(),
+      });
+      const root = yield* render(built);
+
+      assert.strictEqual(root.attrs["aria-label"], "Pick a city");
+      assert.isUndefined(root.attrs["aria-labelledby"]);
+      assert.strictEqual(nameOf(root, page(root, built)), "Pick a city");
+    }),
+  );
+
+  it.effect(
+    "[Q-2] names a Choice with no Prompt by the author's aria-labelledby, each id scoped by the instance",
+    () =>
+      Effect.gen(function* namesByAriaLabelledby() {
+        const root = yield* render(
+          payloadOf({
+            ...colours,
+            ariaLabelledby: Option.some("intro note"),
+            prompt: Option.none(),
+          }),
+        );
+
+        assert.strictEqual(
+          root.attrs["aria-labelledby"],
+          `${authoredId(instance, "intro")} ${authoredId(instance, "note")}`,
+        );
+        assert.isUndefined(root.attrs["aria-label"]);
+      }),
+  );
+
+  it.effect(
+    "[Q-2] names a Choice by its Prompt, not the author's attributes, when it has one",
+    () =>
+      Effect.gen(function* promptWins() {
+        const legendRoot = yield* render(
+          payloadOf({ ...colours, ariaLabel: Option.some("Pick a city") }),
+        );
+
+        assert.strictEqual(childAt(legendRoot, 0).tag, "legend");
+        assert.isUndefined(legendRoot.attrs["aria-label"]);
+        assert.isUndefined(legendRoot.attrs["aria-labelledby"]);
+
+        const labelledRoot = yield* render(
+          payloadOf({ ...paragraphPrompt, ariaLabelledby: Option.some("intro") }),
+        );
+        const [prompt] = partsIn(labelledRoot, "prompt");
+
+        assert.strictEqual(prompt?.tag, "qti-prompt");
+        assert.isDefined(prompt?.attrs["id"]);
+        assert.strictEqual(labelledRoot.attrs["aria-labelledby"], prompt?.attrs["id"]);
+        assert.isUndefined(labelledRoot.attrs["aria-label"]);
+      }),
   );
 
   it.effect(
@@ -614,19 +681,71 @@ describe("renderChoice", () => {
       }),
   );
 
+  it.effect("returns a Result, a plain function callable with no Effect runtime", () =>
+    Effect.gen(function* plainResult() {
+      const built = payloadOf(colours);
+      const rendered = renderChoice(choiceIn(built), built, yield* emitState);
+
+      assert.isTrue(Result.isResult(rendered));
+      assert.isTrue(Result.isSuccess(rendered));
+    }),
+  );
+
   it.effect(
-    "dies when a choice's content holds an interaction, which QTI admits nowhere there",
+    "throws NestedInteractionDefect when a choice's content holds an interaction, which QTI admits nowhere there",
     () =>
-      Effect.gen(function* nestedDies() {
+      Effect.gen(function* nestedInContent() {
         const built = payloadOf(colours);
         const outer = choiceIn(built);
         const nested: ChoicePayload = {
           ...outer,
           choices: [{ content: [outer], identifier: "A" }],
         };
-        const exit = yield* Effect.exit(renderChoice(nested, built, yield* emitState));
+        const state = yield* emitState;
+        const thrown = Result.getFailure(Result.try(() => renderChoice(nested, built, state)));
+        assert.isTrue(Option.isSome(thrown));
 
-        assert.isTrue(Exit.hasDies(exit));
+        const defect = Option.getOrThrow(thrown);
+        assert.propertyVal(defect, "_tag", "NestedInteractionDefect");
+        assert.propertyVal(defect, "within", "choice-interaction");
+        assert.propertyVal(defect, "kind", "choice");
+      }),
+  );
+
+  it.effect(
+    "throws NestedInteractionDefect when the Prompt holds a Text Entry, which QTI admits nowhere there",
+    () =>
+      Effect.gen(function* nestedInPrompt() {
+        const built = payloadOf(colours);
+        const textEntry: TextEntryPayload = {
+          autofocus: false,
+          base: 10,
+          baseType: "string",
+          class: "",
+          expectedLength: Option.none(),
+          formName: entryName(instance, "TEXT"),
+          invalid: false,
+          kind: "text-entry",
+          messageIds: [],
+          name: {
+            ariaLabel: Option.none(),
+            ariaLabelledby: Option.none(),
+            unnamed: Option.some({ count: 1, n: 1 }),
+          },
+          placeholder: Option.none(),
+          response: "TEXT",
+          restore: "",
+        };
+        const prompted: ChoicePayload = { ...choiceIn(built), prompt: Option.some([textEntry]) };
+        const state = yield* emitState;
+        const thrown = Result.getFailure(Result.try(() => renderChoice(prompted, built, state)));
+        assert.isTrue(Option.isSome(thrown));
+
+        const defect = Option.getOrThrow(thrown);
+        assert.propertyVal(defect, "_tag", "NestedInteractionDefect");
+        assert.propertyVal(defect, "within", "choice-interaction");
+        assert.propertyVal(defect, "kind", "text-entry");
+        assert.propertyVal(defect, "response", "TEXT");
       }),
   );
 });

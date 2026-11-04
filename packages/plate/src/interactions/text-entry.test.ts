@@ -56,7 +56,7 @@ const city: TextEntryInteraction = {
   base: 10,
   baseType: "string",
   class: "short-answer",
-  expectedLength: Option.some(12),
+  expectedLength: Option.some(12n),
   kind: "text-entry",
   path: `${paragraphPath}/qti-text-entry-interaction`,
   patternMaskMessage: Option.none(),
@@ -159,7 +159,7 @@ const payloadOf = (
 /**
  * The emit state of every render here, with no part overrides.
  */
-const emitState: Effect.Effect<EmitState> = resolveOverrides().pipe(
+const emitState: Effect.Effect<EmitState> = Effect.fromResult(resolveOverrides()).pipe(
   Effect.orDie,
   Effect.map((parts): EmitState => ({
     assetBase: "",
@@ -181,10 +181,12 @@ const page = (built: Payload): Effect.Effect<Element> =>
   Effect.gen(function* renderPage() {
     const state = yield* emitState;
     const body = yield* Effect.orDie(
-      emitBody(built, state, (interaction) =>
-        interaction.kind === "text-entry"
-          ? renderTextEntry(interaction, built, state)
-          : Effect.die(new Error(`This test renders Text Entries only, not ${interaction.kind}.`)),
+      Effect.fromResult(
+        emitBody(built, state, (interaction) =>
+          interaction.kind === "text-entry"
+            ? renderTextEntry(interaction, built, state)
+            : assert.fail(`This test renders Text Entries only, not ${interaction.kind}.`),
+        ),
       ),
     );
 
@@ -263,11 +265,15 @@ const decoded = (
   entries: readonly Entry[],
   entry: string = name,
 ): Effect.Effect<Value | Malformed> =>
-  decode(
-    entries,
-    { baseType: interaction.baseType, cardinality: "single", name: entry },
-    { base: interaction.base },
-  ).pipe(Effect.result, Effect.map(Result.merge));
+  Effect.succeed(
+    Result.merge(
+      decode(
+        entries,
+        { baseType: interaction.baseType, cardinality: "single", name: entry },
+        { base: interaction.base },
+      ),
+    ),
+  );
 
 describe("renderTextEntry", () => {
   it.effect('[Q-20] names the Control "Answer", and "Answer 2 of 2" for the second of two', () =>
@@ -412,7 +418,7 @@ describe("renderTextEntry", () => {
         const tree = yield* page(payloadOf([city]));
         const root = onlyPart(tree, "root");
         const control = onlyPart(tree, "control");
-        const plain = yield* page(payloadOf([{ ...length, expectedLength: Option.some(0) }]));
+        const plain = yield* page(payloadOf([{ ...length, expectedLength: Option.some(0n) }]));
 
         assert.strictEqual(root.tag, "qti-text-entry-interaction");
         assert.strictEqual(root.attrs["class"], "short-answer");
@@ -502,6 +508,40 @@ describe("validateTextEntry", () => {
         assert.deepStrictEqual(validateTextEntry(authored, abc, configuration), [
           { response, text: "Enter a length in metres." },
         ]);
+      }),
+  );
+
+  it.effect(
+    "[Q-20] gives a string's file malformedFile and its second entry malformedSingleMany, and an integer's file malformedNumber",
+    () =>
+      Effect.gen(function* stringRefusals() {
+        const configuration = yield* configure({});
+        const file = yield* decoded(city, [[name, new Blob(["York"])]]);
+        const twice = yield* decoded(city, [
+          [name, "York"],
+          [name, "Leeds"],
+        ]);
+
+        assert.instanceOf(file, Malformed);
+        assert.strictEqual(file.reason, "file");
+        assert.deepStrictEqual(validateTextEntry(city, file, configuration), [
+          { response, text: message("en", "malformedFile") },
+        ]);
+        assert.instanceOf(twice, Malformed);
+        assert.strictEqual(twice.reason, "single-many");
+        assert.deepStrictEqual(validateTextEntry(city, twice, configuration), [
+          { response, text: message("en", "malformedSingleMany") },
+        ]);
+
+        const counted: TextEntryInteraction = { ...length, baseType: "integer" };
+        assert.deepStrictEqual(
+          validateTextEntry(
+            counted,
+            yield* decoded(counted, [[name, new Blob(["3"])]]),
+            configuration,
+          ),
+          [{ response, text: message("en", "malformedNumber") }],
+        );
       }),
   );
 

@@ -11,13 +11,14 @@
  * scoping, heading shift and placeholders.
  *
  * {@link validateExtendedText} checks a value the caller decoded. Phase 1 has tier (a) only: a
- * number binding refuses text that is not a number.
+ * number binding refuses text that is not a number, and every binding refuses a file or a second
+ * entry, which a native textarea never posts.
  *
  * @module
  */
-import { Effect, Option } from "effect";
+import { Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { authoredId, emitNodes } from "#plate/emit/body.ts";
+import { NestedInteractionDefect, authoredId, emitNodes } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import { text } from "#plate/emit/node.ts";
 import type { Attributes, Element } from "#plate/emit/node.ts";
@@ -27,7 +28,7 @@ import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
 import { message } from "#plate/messages.ts";
-import type { Locale } from "#plate/messages.ts";
+import type { Locale, MessageKey } from "#plate/messages.ts";
 import type { ExtendedTextInteraction } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { EmitState, ExtendedTextPayload, Payload, ValidationMessage } from "#plate/payload.ts";
@@ -76,14 +77,15 @@ const when = (condition: boolean, attributes: Attributes): Attributes =>
  * a defect, since only a hand-built item can hold one.
  *
  * @param nested The interaction's payload.
- * @returns Never; it dies with an error that names the interaction.
+ * @returns Never; it throws {@link NestedInteractionDefect}, which names the interaction.
  */
-const nestedInteraction: RenderInteraction = (nested) =>
-  Effect.die(
-    new Error(
-      `A ${nested.kind} interaction for the response ${JSON.stringify(nested.response)} sits inside an Extended Text's Prompt, where QTI's schema admits no interaction; move it out to the item body, or render an item that check accepted.`,
-    ),
-  );
+const nestedInteraction: RenderInteraction = (nested) => {
+  throw new NestedInteractionDefect({
+    kind: nested.kind,
+    response: nested.response,
+    within: "extended-text-interaction",
+  });
+};
 
 /**
  * Compute how the Control is named (§4.8, Q10): the Prompt when there is one; else the author's
@@ -186,7 +188,7 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
         onSome: (placeholder) => ({ placeholder }),
       }),
       ...interaction.expectedLines.pipe(
-        Option.filter((lines) => lines > 0),
+        Option.filter((lines) => lines > 0n),
         Option.match({
           onNone: () => ({}),
           onSome: (lines) => ({ rows: String(lines) }),
@@ -217,43 +219,57 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
  * @param payload The payload of the whole render, which gives the instance and `finished`.
  * @param state The locale, the heading level and the resolved part overrides.
  * @returns The Extended Text Root, or {@link PartSwapRefused} when a replacement breaks the swap
- *   invariant. It dies when the Prompt holds an interaction, which QTI admits nowhere there.
+ *   invariant. It throws {@link NestedInteractionDefect} when the Prompt holds an interaction,
+ *   which QTI admits nowhere there.
  */
-export const renderExtendedText = Effect.fnUntraced(function* renderExtendedText(
+export const renderExtendedText = (
   interaction: ExtendedTextPayload,
   payload: Payload,
   state: EmitState,
-): Effect.fn.Return<Element, PartSwapRefused> {
-  const replacement = (part: ExtendedTextPart) =>
-    Option.getOrUndefined(state.parts.replacementFor(owner, part));
-  const props = connect(interaction, payload, state.locale);
-  const restore = interaction.restore.replaceAll(lineBreak, "\n");
+): Result.Result<Element, PartSwapRefused> =>
+  Result.gen(function* extendedTextRoot() {
+    const replacement = (part: ExtendedTextPart) =>
+      Option.getOrUndefined(state.parts.replacementFor(owner, part));
+    const props = connect(interaction, payload, state.locale);
+    const restore = interaction.restore.replaceAll(lineBreak, "\n");
 
-  const prompt = yield* Effect.transposeOption(
-    interaction.prompt.pipe(
-      Option.map((content) =>
-        emitNodes(content, payload, state, nestedInteraction).pipe(
-          Effect.flatMap((nodes) =>
+    const prompt = yield* Result.transposeOption(
+      interaction.prompt.pipe(
+        Option.map((content) =>
+          Result.flatMap(emitNodes(content, payload, state, nestedInteraction), (nodes) =>
             applyPart(rowFor(owner, "prompt"), props.prompt, nodes, replacement("prompt")),
           ),
         ),
       ),
-    ),
-  );
-  const control = yield* applyPart(
-    rowFor(owner, "control"),
-    props.control,
-    restore === "" ? [] : [text(restore)],
-    replacement("control"),
-  );
+    );
+    const control = yield* applyPart(
+      rowFor(owner, "control"),
+      props.control,
+      restore === "" ? [] : [text(restore)],
+      replacement("control"),
+    );
 
-  return yield* applyPart(
-    rowFor(owner, "root"),
-    props.root,
-    [...Option.toArray(prompt), control],
-    replacement("root"),
-  );
-});
+    return yield* applyPart(
+      rowFor(owner, "root"),
+      props.root,
+      [...Option.toArray(prompt), control],
+      replacement("root"),
+    );
+  });
+
+/**
+ * The message a string Extended Text gives for each reason its entries did not decode.
+ *
+ * `decode` keeps a string as posted, so for one it fails only as `file` (a file was posted) or
+ * `single-many` (the entry was posted twice), each with its own message. `number` and `identifier`,
+ * which only a {@link Malformed} built by hand carries here, get the general `notAccepted`.
+ */
+const stringRefusals = {
+  file: "malformedFile",
+  identifier: "notAccepted",
+  number: "notAccepted",
+  "single-many": "malformedSingleMany",
+} as const satisfies Readonly<Record<Malformed["reason"], MessageKey>>;
 
 /**
  * Check an Extended Text's response, which the caller decoded.
@@ -265,8 +281,8 @@ export const renderExtendedText = Effect.fnUntraced(function* renderExtendedText
  *
  * - A {@link Malformed} input of an `integer` or `float` binding: `malformedNumber`, or the author's
  *   `data-patternmask-message` when set.
- * - A {@link Malformed} input of a `string` binding, which a native form never posts (two entries, or
- *   a file): `notAccepted`.
+ * - A {@link Malformed} input of a `string` binding, which a native form never posts: the message of
+ *   its reason, `malformedFile` for a file and `malformedSingleMany` for a second entry.
  *
  * @param interaction The Extended Text.
  * @param input The decoded value, or why the entries did not decode.
@@ -285,7 +301,7 @@ export const validateExtendedText = (
   const { locale } = configuration;
   const words =
     interaction.baseType === "string"
-      ? message(locale, "notAccepted")
+      ? message(locale, stringRefusals[input.reason])
       : Option.getOrElse(interaction.patternMaskMessage, () => message(locale, "malformedNumber"));
 
   return [{ response: interaction.response, text: words }];

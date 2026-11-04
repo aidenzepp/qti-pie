@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Option, Predicate } from "effect";
 import { entryName } from "#plate/form/encoding.ts";
 import type {
   BodyNode,
@@ -84,6 +84,8 @@ const textEntry = (response: string): TextEntryInteraction => ({
  * A Choice with a Prompt, bound to `CAPITAL`, whose correct response and mapping key are markers.
  */
 const choice: ChoiceInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
     { content: [text("Paris")], identifier: "A" },
@@ -91,9 +93,9 @@ const choice: ChoiceInteraction = {
   ],
   class: "stacked",
   kind: "choice",
-  maxChoices: 1,
+  maxChoices: 1n,
   messages: { max: Option.none(), min: Option.none() },
-  minChoices: 0,
+  minChoices: 0n,
   orientation: Option.none(),
   path: "qti-assessment-item/qti-item-body/qti-choice-interaction",
   prompt: Option.some([text("Which city is the capital of France?")]),
@@ -106,7 +108,7 @@ const choice: ChoiceInteraction = {
  */
 const essay: ExtendedTextInteraction = {
   ...textEntry("ESSAY"),
-  expectedLines: Option.some(3),
+  expectedLines: Option.some(3n),
   format: "plain",
   kind: "extended-text",
   path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
@@ -340,16 +342,21 @@ const payloadOfItem = (): Payload =>
 
 /**
  * Write a value as JSON, with every `Map` and `Set` written as its entries, so nothing it holds is
- * hidden from a search of the text.
+ * hidden from a search of the text, and every bigint, such as a count, as its decimal digits, which
+ * plain `JSON.stringify` refuses to write.
  *
  * @param value The value.
  * @returns Its JSON text.
  */
 const json = (value: Item | Payload | Redacted): string =>
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- `JSON.stringify` hands its replacer every value the payload holds, of any type; the replacer only looks for a `Map` or a `Set` to write out.
-  JSON.stringify(value, (_key, field: unknown) =>
-    field instanceof Map || field instanceof Set ? [...field] : field,
-  );
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- `JSON.stringify` hands its replacer every value the payload holds, of any type; the replacer only looks for a bigint, a `Map` or a `Set` to write out.
+  JSON.stringify(value, (_key, field: unknown) => {
+    if (Predicate.isBigInt(field)) {
+      return String(field);
+    }
+
+    return field instanceof Map || field instanceof Set ? [...field] : field;
+  });
 
 /**
  * Collect the interaction payloads of a body in document order, inside elements included.
@@ -529,9 +536,27 @@ describe("payload", () => {
       Option.some([{ kind: "text", text: "Which city is the capital of France?" }]),
     );
     assert.strictEqual(capital.cardinality, "single");
-    assert.strictEqual(capital.maxChoices, 1);
+    assert.strictEqual(capital.maxChoices, 1n);
     assert.strictEqual(capital.class, "stacked");
     assert.deepStrictEqual(capital.restore, []);
+  });
+
+  it("[Q-2] carries the Choice's aria-label and aria-labelledby as the model holds them", () => {
+    const named: ChoiceInteraction = {
+      ...choice,
+      ariaLabel: Option.some("Pick a city"),
+      ariaLabelledby: Option.some("intro"),
+    };
+
+    for (const interaction of [choice, named]) {
+      const capital = choiceFor(
+        payload(redactItem({ ...item, body: [interaction] }), answering),
+        "CAPITAL",
+      );
+
+      assert.deepStrictEqual(capital.ariaLabel, interaction.ariaLabel);
+      assert.deepStrictEqual(capital.ariaLabelledby, interaction.ariaLabelledby);
+    }
   });
 
   it("[Q-2] [Q-20] [Q-5] with messages, restores the posted strings and autofocuses the first interaction with a message", () => {

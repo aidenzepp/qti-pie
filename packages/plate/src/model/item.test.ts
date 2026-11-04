@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Duration, Effect, Option } from "effect";
+import { configure } from "#plate/configuration.ts";
 import { attr, doc, el, text, xmlNamespace } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
@@ -7,6 +8,8 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
+import { validateChoice } from "#plate/interactions/choice.ts";
+import { message } from "#plate/messages.ts";
 import { buildItem } from "#plate/model/item.ts";
 import type {
   BodyNode,
@@ -345,8 +348,8 @@ describe("buildItem", () => {
         assert.deepStrictEqual(interaction.choices[0]?.content, [{ kind: "text", text: "True" }]);
         assert.strictEqual(interaction.response, "RESPONSE");
         assert.strictEqual(interaction.cardinality, "single");
-        assert.strictEqual(interaction.maxChoices, 1);
-        assert.strictEqual(interaction.minChoices, 0);
+        assert.strictEqual(interaction.maxChoices, 1n);
+        assert.strictEqual(interaction.minChoices, 0n);
         assert.strictEqual(interaction.shuffle, false);
         assert.strictEqual(interaction.path, `${body}/qti-choice-interaction`);
         assert.deepStrictEqual(
@@ -543,6 +546,22 @@ describe("buildItem", () => {
       }),
   );
 
+  it.effect("[Q-2] reads a Choice's aria-label and aria-labelledby, none when absent", () =>
+    Effect.gen(function* choiceNames() {
+      const named = choiceIn(
+        (yield* buildItem(
+          choiceItem([attr("aria-label", "Pick a city"), attr("aria-labelledby", "intro")]),
+        )).body,
+      );
+      const unnamed = choiceIn((yield* buildItem(choiceItem([]))).body);
+
+      assert.deepStrictEqual(named.ariaLabel, Option.some("Pick a city"));
+      assert.deepStrictEqual(named.ariaLabelledby, Option.some("intro"));
+      assert.deepStrictEqual(unnamed.ariaLabel, Option.none());
+      assert.deepStrictEqual(unnamed.ariaLabelledby, Option.none());
+    }),
+  );
+
   it.effect("[Q-20] builds a Text Entry with its attributes and base 10 by default", () =>
     Effect.gen(function* buildsTextEntry() {
       const built = yield* buildItem(
@@ -570,7 +589,7 @@ describe("buildItem", () => {
         base: 10,
         baseType: "string",
         class: "",
-        expectedLength: Option.some(12),
+        expectedLength: Option.some(12n),
         kind: "text-entry",
         path: `${body}/p/qti-text-entry-interaction`,
         patternMaskMessage: Option.none(),
@@ -638,7 +657,7 @@ describe("buildItem", () => {
       assert.strictEqual(node?.kind, "extended-text");
       assert.deepStrictEqual(
         node?.kind === "extended-text" ? [node.format, node.expectedLines, node.prompt] : [],
-        ["preformatted", Option.some(5), Option.some([{ kind: "text", text: "Write a poem." }])],
+        ["preformatted", Option.some(5n), Option.some([{ kind: "text", text: "Write a poem." }])],
       );
     }),
   );
@@ -965,18 +984,109 @@ describe("buildItem", () => {
     }),
   );
 
-  it.effect("[Q-2] clamps a count of 10^30 to 2^53-1 and reads -0 as 0", () =>
-    Effect.gen(function* clampsCounts() {
-      const built = yield* buildItem(
-        choiceItem([
-          attr("max-choices", "1000000000000000000000000000000"),
-          attr("min-choices", "-0"),
-        ]),
+  it.effect("[Q-2] refuses a max-choices of 10^30 as count-range and reads -0 as 0", () =>
+    Effect.gen(function* refusesHugeCount() {
+      const refusal = yield* Effect.flip(
+        buildItem(choiceItem([attr("max-choices", "1000000000000000000000000000000")])),
       );
-      const interaction = choiceIn(built.body);
+      const built = yield* buildItem(choiceItem([attr("min-choices", "-0")]));
 
-      assert.strictEqual(interaction.maxChoices, Number.MAX_SAFE_INTEGER);
-      assert.strictEqual(interaction.minChoices, 0);
+      assert.strictEqual(refusal.rule, "count-range");
+      assert.deepStrictEqual(refusal.location, {
+        kind: "path",
+        path: `${body}/qti-choice-interaction/@max-choices`,
+      });
+      assert.strictEqual(choiceIn(built.body).minChoices, 0n);
+    }),
+  );
+
+  it.effect("[Q-2] holds a min-choices of 2^53+1 exactly", () =>
+    Effect.gen(function* holdsBeyondSafe() {
+      const built = yield* buildItem(choiceItem([attr("min-choices", "9007199254740993")]));
+
+      assert.strictEqual(choiceIn(built.body).minChoices, 9_007_199_254_740_993n);
+    }),
+  );
+
+  it.effect("[Q-2] holds a max-choices of 2^63-1, the greatest count, by its value", () =>
+    Effect.gen(function* holdsGreatestCount() {
+      for (const written of ["9223372036854775807", "+09223372036854775807"]) {
+        const built = yield* buildItem(choiceItem([attr("max-choices", written)]));
+
+        assert.strictEqual(choiceIn(built.body).maxChoices, 9_223_372_036_854_775_807n, written);
+      }
+    }),
+  );
+
+  it.effect("[Q-2] refuses a max-choices or min-choices of 2^63 as count-range (reading 46)", () =>
+    Effect.gen(function* refusesBeyondCount() {
+      for (const attribute of ["max-choices", "min-choices"]) {
+        const refusal = yield* Effect.flip(
+          buildItem(choiceItem([attr(attribute, "9223372036854775808")])),
+        );
+
+        assert.strictEqual(refusal.rule, "count-range", attribute);
+        assert.deepStrictEqual(refusal.location, {
+          kind: "path",
+          path: `${body}/qti-choice-interaction/@${attribute}`,
+        });
+        assert.deepStrictEqual(refusal.detail, {
+          attribute,
+          greatest: "9223372036854775807",
+          least: "-9223372036854775808",
+          lexical: "9223372036854775808",
+          reading: "46",
+        });
+      }
+    }),
+  );
+
+  it.effect("[Q-20] [Q-5] holds expected-length and expected-lines exactly, with no bound", () =>
+    Effect.gen(function* holdsUnboundedSizes() {
+      const entry = yield* buildItem(
+        textEntryItem([attr("expected-length", "9223372036854775808")]),
+      );
+      const extended = yield* buildItem(
+        item({
+          body: [
+            el("qti-extended-text-interaction", [
+              attr("expected-lines", "1000000000000000000000000000000"),
+              attr("response-identifier", "RESPONSE"),
+            ]),
+          ],
+          declarations: [declaration("qti-response-declaration", "RESPONSE", "string", "single")],
+        }),
+      );
+      const [node] = childrenOf(entry.body[0]);
+      const [lines] = extended.body;
+
+      assert.deepStrictEqual(
+        node?.kind === "text-entry" ? node.expectedLength : undefined,
+        Option.some(9_223_372_036_854_775_808n),
+      );
+      assert.deepStrictEqual(
+        lines?.kind === "extended-text" ? lines.expectedLines : undefined,
+        Option.some(10n ** 30n),
+      );
+    }),
+  );
+
+  it.effect("[Q-2] says the too-few count it read from the source exactly, 2^53+1", () =>
+    Effect.gen(function* saysExactCount() {
+      const built = yield* buildItem(choiceItem([attr("min-choices", "9007199254740993")]));
+      const messages = validateChoice(
+        choiceIn(built.body),
+        {
+          baseType: "identifier",
+          cardinality: "single",
+          values: [{ baseType: "identifier", value: "A" }],
+        },
+        yield* configure({ validateResponses: true }),
+      );
+
+      assert.deepStrictEqual(messages, [
+        { response: "RESPONSE", text: message("en", "atLeast", { n: "9,007,199,254,740,993" }) },
+      ]);
     }),
   );
 
@@ -1089,6 +1199,191 @@ describe("buildItem", () => {
 
       assert.deepStrictEqual(built.processing, Option.some(matchCorrect));
       assert.deepStrictEqual(built.unsupported, []);
+    }),
+  );
+
+  it.effect('[I-1] [Q-2] binds response-identifier=" RESPONSE " to the declaration RESPONSE', () =>
+    Effect.gen(function* bindsPaddedReference() {
+      const built = yield* buildItem(
+        item({
+          body: [
+            el(
+              "qti-choice-interaction",
+              [attr("response-identifier", " RESPONSE ")],
+              [choice("A", "Ant"), choice("B", "Bee")],
+            ),
+          ],
+          declarations: [
+            declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+          ],
+        }),
+      );
+
+      assert.strictEqual(choiceIn(built.body).response, "RESPONSE");
+    }),
+  );
+
+  it.effect('[I-1] [Q-2] keys a declaration identifier="\\tRESPONSE\\n" as RESPONSE', () =>
+    Effect.gen(function* keysPaddedDeclaration() {
+      const built = yield* buildItem(
+        item({
+          body: [
+            el(
+              "qti-choice-interaction",
+              [attr("response-identifier", "RESPONSE")],
+              [choice("A", "Ant"), choice("B", "Bee")],
+            ),
+          ],
+          declarations: [
+            declaration("qti-response-declaration", "\tRESPONSE\n", "identifier", "single"),
+          ],
+        }),
+      );
+
+      assert.deepStrictEqual([...built.responses.keys()], ["RESPONSE"]);
+      assert.strictEqual(built.responses.get("RESPONSE")?.identifier, "RESPONSE");
+      assert.strictEqual(choiceIn(built.body).response, "RESPONSE");
+    }),
+  );
+
+  it.effect('[Q-2] reads a qti-simple-choice identifier=" A " as A', () =>
+    Effect.gen(function* readsPaddedChoice() {
+      const built = yield* buildItem(
+        item({
+          body: [
+            el(
+              "qti-choice-interaction",
+              [attr("response-identifier", "RESPONSE")],
+              [choice(" A ", "Ant"), choice("B", "Bee")],
+            ),
+          ],
+          declarations: [
+            declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+          ],
+        }),
+      );
+
+      assert.deepStrictEqual(
+        choiceIn(built.body).choices.map((option) => option.identifier),
+        ["A", "B"],
+      );
+    }),
+  );
+
+  it.effect(
+    "[I-9b] reads padded identifiers in inline processing as the declarations they name, with no mark",
+    () =>
+      Effect.gen(function* readsPaddedProcessing() {
+        const built = yield* buildItem(
+          item({
+            after: [
+              el(
+                "qti-response-processing",
+                [],
+                [
+                  el(
+                    "qti-set-outcome-value",
+                    [attr("identifier", " SCORE ")],
+                    [el("qti-variable", [attr("identifier", " RESPONSE ")])],
+                  ),
+                ],
+              ),
+            ],
+            body: [],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "float", "single"),
+              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(
+          built.processing,
+          Option.some<readonly Rule[]>([
+            {
+              expression: { identifier: "RESPONSE", kind: "variable" },
+              identifier: "SCORE",
+              kind: "set-outcome",
+            },
+          ]),
+        );
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect('[I-0] reads a root identifier=" item-1 " as item-1', () =>
+    Effect.gen(function* readsPaddedRoot() {
+      const built = yield* buildItem(
+        doc(
+          "items/test.xml",
+          el(
+            root,
+            [attr("identifier", " item-1 "), attr("title", "Item")],
+            [el("qti-item-body", [], [])],
+          ),
+        ),
+      );
+
+      assert.strictEqual(built.identifier, "item-1");
+    }),
+  );
+
+  it.effect(
+    '[I-1] [Q-2] names the collapsed identifier when response-identifier=" OTHER " binds no declaration',
+    () =>
+      Effect.gen(function* namesCollapsedReference() {
+        const refusal = yield* Effect.flip(
+          buildItem(
+            item({
+              body: [
+                el(
+                  "qti-choice-interaction",
+                  [attr("response-identifier", " OTHER ")],
+                  [choice("A", "Ant")],
+                ),
+              ],
+              declarations: [
+                declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+              ],
+            }),
+          ),
+        );
+
+        assert.strictEqual(refusal.rule, "undeclared-response");
+        assert.deepStrictEqual(refusal.location, {
+          kind: "path",
+          path: `${body}/qti-choice-interaction/@response-identifier`,
+        });
+        assert.deepStrictEqual(refusal.detail, { response: "OTHER" });
+      }),
+  );
+
+  it.effect('[I-1] [Q-2] refuses response-identifier="OTHER" with no such declaration', () =>
+    Effect.gen(function* refusesUnboundReference() {
+      const refusal = yield* Effect.flip(
+        buildItem(
+          item({
+            body: [
+              el(
+                "qti-choice-interaction",
+                [attr("response-identifier", "OTHER")],
+                [choice("A", "Ant")],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+            ],
+          }),
+        ),
+      );
+
+      assert.strictEqual(refusal._tag, "Refusal");
+      assert.strictEqual(refusal.rule, "undeclared-response");
+      assert.deepStrictEqual(refusal.location, {
+        kind: "path",
+        path: `${body}/qti-choice-interaction/@response-identifier`,
+      });
+      assert.deepStrictEqual(refusal.detail, { response: "OTHER" });
     }),
   );
 

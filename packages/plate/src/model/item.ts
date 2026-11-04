@@ -9,7 +9,7 @@
  *
  * @module
  */
-import { Array as Arr, Effect, Option, Result, pipe } from "effect";
+import { Array as Arr, Data, Effect, Option, Result, pipe } from "effect";
 import { attributePath, qtiNamespace, walk, xmlNamespace } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
@@ -142,6 +142,15 @@ export interface SimpleChoice {
  * cardinality. Its choices stay in document order whatever `shuffle` says.
  */
 export interface ChoiceInteraction {
+  /**
+   * The author's `aria-label`, which names the group when there is no Prompt.
+   */
+  readonly ariaLabel: Option.Option<string>;
+  /**
+   * The author's `aria-labelledby`, an IDREFS value as written, which names the group when there is
+   * no Prompt.
+   */
+  readonly ariaLabelledby: Option.Option<string>;
   readonly cardinality: "multiple" | "single";
   readonly choices: readonly SimpleChoice[];
   /**
@@ -150,20 +159,18 @@ export interface ChoiceInteraction {
   readonly class: string;
   readonly kind: "choice";
   /**
-   * `max-choices`, 1 when absent: an `xs:nonNegativeInteger` count, held as a number and clamped
-   * to 2^53-1, which no response can reach.
+   * `max-choices`, 1 when absent: a count, 0 to 2^63-1, held exactly (reading 46).
    */
-  readonly maxChoices: number;
+  readonly maxChoices: bigint;
   /**
    * The author's replacements for the too-many and too-few messages,
    * `data-max-selections-message` and `data-min-selections-message`.
    */
   readonly messages: { readonly max: Option.Option<string>; readonly min: Option.Option<string> };
   /**
-   * `min-choices`, 0 when absent: an `xs:nonNegativeInteger` count, held as a number and clamped
-   * to 2^53-1, which no response can reach.
+   * `min-choices`, 0 when absent: a count, 0 to 2^63-1, held exactly (reading 46).
    */
-  readonly minChoices: number;
+  readonly minChoices: bigint;
   readonly orientation: Option.Option<string>;
   readonly path: string;
   readonly prompt: Option.Option<readonly BodyNode[]>;
@@ -190,10 +197,9 @@ export interface TextEntryInteraction {
    */
   readonly class: string;
   /**
-   * `expected-length`: an `xs:nonNegativeInteger` count, held as a number and clamped to 2^53-1,
-   * which no response can reach.
+   * `expected-length`: a count, held exactly, with no upper bound.
    */
-  readonly expectedLength: Option.Option<number>;
+  readonly expectedLength: Option.Option<bigint>;
   readonly kind: "text-entry";
   readonly path: string;
   /**
@@ -216,10 +222,9 @@ export interface TextEntryInteraction {
  */
 export interface ExtendedTextInteraction extends Omit<TextEntryInteraction, "kind"> {
   /**
-   * `expected-lines`: an `xs:nonNegativeInteger` count, held as a number and clamped to 2^53-1,
-   * which no response can reach.
+   * `expected-lines`: a count, held exactly, with no upper bound.
    */
-  readonly expectedLines: Option.Option<number>;
+  readonly expectedLines: Option.Option<bigint>;
   readonly format: "plain" | "preformatted";
   readonly kind: "extended-text";
   readonly prompt: Option.Option<readonly BodyNode[]>;
@@ -468,6 +473,25 @@ const textOf = (element: SourceElement): string =>
   element.children.flatMap((child) => (child.kind === "text" ? [child.text] : [])).join("");
 
 /**
+ * A broken invariant of {@link buildItem}'s own walk or parse, a defect of this module that no input
+ * can cause.
+ *
+ * It cannot occur: every element the build reads is in its walk, and a value {@link parseLexical}
+ * gave for `float` or `integer` holds that base type. It is thrown, never returned, so
+ * {@link buildItem}'s error channel holds only content refusals.
+ */
+export class BuildDefect extends Data.TaggedError("BuildDefect")<{
+  readonly detail: string;
+}> {
+  /**
+   * The broken invariant, and what to do with it.
+   */
+  override get message(): string {
+    return `${this.detail} This is a defect in buildItem; report it with the item that caused it.`;
+  }
+}
+
+/**
  * Give an element's path from the build's walk.
  *
  * @param build The build.
@@ -477,7 +501,9 @@ const textOf = (element: SourceElement): string =>
 const pathOf = (build: Build, element: SourceElement): string => {
   const path = build.paths.get(element);
   if (path === undefined) {
-    throw new Error(`The element ${nameOf(element)} is not part of the document being built.`);
+    throw new BuildDefect({
+      detail: `The element ${nameOf(element)} is not part of the document being built.`,
+    });
   }
 
   return path;
@@ -532,9 +558,9 @@ const refusal = (
 const typed = <A>(
   build: Build,
   path: string,
-  parsed: Effect.Effect<A, InvalidValue>,
+  parsed: Result.Result<A, InvalidValue>,
 ): Effect.Effect<A, Refusal> =>
-  Effect.mapError(parsed, (invalid) =>
+  Effect.mapError(Effect.fromResult(parsed), (invalid) =>
     refusal(build, "value-type", path, { baseType: invalid.baseType, lexical: invalid.lexical }),
   );
 
@@ -549,7 +575,7 @@ const floatOf = (single: Single): number => {
     return single.value;
   }
 
-  throw new Error(`A ${single.baseType} value holds no float.`);
+  throw new BuildDefect({ detail: `A ${single.baseType} value holds no float.` });
 };
 
 /**
@@ -563,7 +589,7 @@ const integerOf = (single: Single): bigint => {
     return single.value;
   }
 
-  throw new Error(`A ${single.baseType} value holds no integer.`);
+  throw new BuildDefect({ detail: `A ${single.baseType} value holds no integer.` });
 };
 
 /**
@@ -606,6 +632,39 @@ const required = (
   Effect.map(requiredAttribute(build, element, name), (attribute) => attribute.value);
 
 /**
+ * Read an identifier as its XSD type reads it.
+ *
+ * Every identifier the item reads is an `xs:NCName`, or an `xs:ID` or `xs:IDREF` derived from it:
+ * the root's, a declaration's and a choice's `identifier`, an interaction's `response-identifier`,
+ * and the `identifier` of `qti-variable`, `qti-correct`, `qti-map-response` and
+ * `qti-set-outcome-value`. Their whitespace facet is `collapse`, and an NCName holds no inner
+ * whitespace, so collapsing is removing the outer XML whitespace. Reading 7 keeps an attribute's
+ * outer whitespace only for the base-typed attributes the XSD types as strings, which no
+ * identifier is, so `" RESPONSE "` names `RESPONSE`, and refusing it would refuse valid content
+ * (reading 1). The validators read these attributes the same way (`identifierOf` in
+ * `src/validate/rules.ts`).
+ *
+ * @param written The attribute's value as written.
+ * @returns The identifier it names.
+ */
+const identifierOf = (written: string): string => trimXmlSpace(written);
+
+/**
+ * Read an identifier attribute the element must carry, as `identifierOf` reads it.
+ *
+ * @param build The build.
+ * @param element The element.
+ * @param name The attribute's name.
+ * @returns The identifier, or the refusal `missing-attribute`.
+ */
+const identifierAttribute = (
+  build: Build,
+  element: SourceElement,
+  name: string,
+): Effect.Effect<string, Refusal> =>
+  Effect.map(requiredAttribute(build, element, name), (attribute) => identifierOf(attribute.value));
+
+/**
  * Read an attribute whose value is one of a closed list, such as `cardinality`.
  *
  * @param build The build.
@@ -640,23 +699,33 @@ const enumerated = <const T extends string>(
   );
 
 /**
+ * The check an integer attribute's type makes of a value: none when the type accepts it, or the
+ * rule and the detail of the refusal.
+ *
+ * @param value The integer, exact.
+ * @param lexical The attribute's value with its outer whitespace gone, as the refusal names it.
+ */
+type IntegerCheck = (
+  value: bigint,
+  lexical: string,
+) => Option.Option<readonly [RefusalRule, Readonly<Record<string, string>>]>;
+
+/**
  * Read an attribute of an XSD integer type exactly: its outer whitespace goes, then it reads as a
- * QTI integer, which must lie within the type.
+ * QTI integer, which `refuse` checks against the type.
  *
  * @param build The build.
  * @param element The element.
  * @param name The attribute's name.
- * @param type The XSD type, such as `xs:int`, which the refusal names.
- * @param within Whether an integer lies within the type.
- * @returns The integer, none when absent, or the refusal `value-type` at the attribute when the
- *   value is not an integer or lies outside the type.
+ * @param refuse The type's check of the integer.
+ * @returns The integer, none when absent, the refusal `value-type` at the attribute when the value
+ *   is not an integer, or the refusal `refuse` names, at the attribute.
  */
 const xsIntegerOf = (
   build: Build,
   element: SourceElement,
   name: string,
-  type: string,
-  within: (value: bigint) => boolean,
+  refuse: IntegerCheck,
 ): Effect.Effect<Option.Option<bigint>, Refusal> =>
   Effect.transposeOption(
     Option.map(attributeOf(element, name), (attribute) => {
@@ -665,8 +734,11 @@ const xsIntegerOf = (
 
       return typed(build, path, parseLexical("integer", lexical)).pipe(
         Effect.map(integerOf),
-        Effect.filterOrFail(within, () =>
-          refusal(build, "value-type", path, { baseType: type, lexical }),
+        Effect.flatMap((value) =>
+          Option.match(refuse(value, lexical), {
+            onNone: () => Effect.succeed(value),
+            onSome: ([rule, detail]) => Effect.fail(refusal(build, rule, path, detail)),
+          }),
         ),
       );
     }),
@@ -683,9 +755,21 @@ const leastInt = -2_147_483_648n;
 const greatestInt = 2_147_483_647n;
 
 /**
- * The greatest integer a number holds exactly, 2^53-1, as a bigint.
+ * The least signed 64-bit value, -2^63, the low end of the range a count's refusal names.
  */
-const greatestSafe = BigInt(Number.MAX_SAFE_INTEGER);
+const leastCount = -9_223_372_036_854_775_808n;
+
+/**
+ * The greatest count, 2^63-1: a count attribute holds a signed 64-bit value, read exactly, and a
+ * greater one is refused (reading 46; operator ruling D, 2026-11-04).
+ */
+const greatestCount = 9_223_372_036_854_775_807n;
+
+/**
+ * The count attributes plate reads that reading 46 holds to the signed 64-bit range.
+ * `expected-length` and `expected-lines` are counts it does not name, so they have no upper bound.
+ */
+const rangedCounts: ReadonlySet<string> = new Set(["max-choices", "min-choices"]);
 
 /**
  * Read an `xs:int` attribute, such as `base`, through {@link xsIntegerOf}.
@@ -702,35 +786,51 @@ const xsInt = (
   name: string,
 ): Effect.Effect<Option.Option<number>, Refusal> =>
   Effect.map(
-    xsIntegerOf(
-      build,
-      element,
-      name,
-      "xs:int",
-      (value) => value >= leastInt && value <= greatestInt,
+    xsIntegerOf(build, element, name, (value, lexical) =>
+      value >= leastInt && value <= greatestInt
+        ? Option.none()
+        : Option.some(["value-type", { baseType: "xs:int", lexical }]),
     ),
     Option.map(Number),
   );
 
 /**
- * Read an `xs:nonNegativeInteger` count, such as `max-choices`, through {@link xsIntegerOf}. A
- * count above 2^53-1 reads as 2^53-1, which no response can reach, so the count stays a number
- * (integer decision Q1).
+ * Read a count attribute, an `xs:nonNegativeInteger` such as `max-choices`, exactly through
+ * {@link xsIntegerOf}. `max-choices` and `min-choices` are reading 46's counts, which hold a signed
+ * 64-bit value, so one above 2^63-1 is refused (operator ruling D, 2026-11-04). `expected-length`
+ * and `expected-lines` are held at any size.
  *
  * @param build The build.
  * @param element The element.
  * @param name The attribute's name.
- * @returns The count, none when absent, or the refusal `value-type` when the value is below 0.
+ * @returns The count, none when absent, the refusal `value-type` when the value is below 0, or the
+ *   refusal `count-range` when a reading-46 count is above 2^63-1.
  */
-const xsNonNegativeInteger = (
+const countAttribute = (
   build: Build,
   element: SourceElement,
   name: string,
-): Effect.Effect<Option.Option<number>, Refusal> =>
-  Effect.map(
-    xsIntegerOf(build, element, name, "xs:nonNegativeInteger", (value) => value >= 0n),
-    Option.map((value) => (value <= greatestSafe ? Number(value) : Number.MAX_SAFE_INTEGER)),
-  );
+): Effect.Effect<Option.Option<bigint>, Refusal> =>
+  xsIntegerOf(build, element, name, (value, lexical) => {
+    if (value < 0n) {
+      return Option.some(["value-type", { baseType: "xs:nonNegativeInteger", lexical }]);
+    }
+
+    if (rangedCounts.has(name) && value > greatestCount) {
+      return Option.some([
+        "count-range",
+        {
+          attribute: name,
+          greatest: String(greatestCount),
+          least: String(leastCount),
+          lexical,
+          reading: "46",
+        },
+      ]);
+    }
+
+    return Option.none();
+  });
 
 /**
  * Read an `xs:boolean` attribute value as XSD does (reading Q8): its outer whitespace goes, then
@@ -804,7 +904,7 @@ const floatAttribute = (
 
 /**
  * Find the response declaration an element binds through `response-identifier`; the last one when
- * two share the identifier.
+ * two share the identifier. Both sides are compared as `identifierOf` reads them.
  *
  * @param build The build.
  * @param element An interaction.
@@ -812,10 +912,12 @@ const floatAttribute = (
  *   identifier.
  */
 const boundDeclaration = (build: Build, element: SourceElement): Option.Option<SourceElement> =>
-  Option.flatMap(valueOf(element, "response-identifier"), (response) =>
+  Option.flatMap(Option.map(valueOf(element, "response-identifier"), identifierOf), (response) =>
     Arr.findLast(
       childrenNamed(build.document.root, "qti-response-declaration"),
-      (declaration) => Option.getOrUndefined(valueOf(declaration, "identifier")) === response,
+      (declaration) =>
+        Option.getOrUndefined(Option.map(valueOf(declaration, "identifier"), identifierOf)) ===
+        response,
     ),
   );
 
@@ -980,7 +1082,7 @@ const declared = (
   declaration: SourceElement,
 ): Effect.Effect<Option.Option<Declared>, Refusal> =>
   Effect.gen(function* readDeclared() {
-    const identifier = yield* required(build, declaration, "identifier");
+    const identifier = yield* identifierAttribute(build, declaration, "identifier");
     yield* requiredAttribute(build, declaration, "cardinality");
 
     const cardinality = yield* enumerated(build, declaration, "cardinality", cardinalities);
@@ -1200,11 +1302,11 @@ const textFields = (
       base: Option.getOrElse(base, () => 10),
       baseType,
       class: Option.getOrElse(valueOf(interaction, "class"), () => ""),
-      expectedLength: yield* xsNonNegativeInteger(build, interaction, "expected-length"),
+      expectedLength: yield* countAttribute(build, interaction, "expected-length"),
       path: pathOf(build, interaction),
       patternMaskMessage: valueOf(interaction, "data-patternmask-message"),
       placeholder: valueOf(interaction, "placeholder-text"),
-      response: yield* required(build, interaction, "response-identifier"),
+      response: yield* identifierAttribute(build, interaction, "response-identifier"),
     };
   });
 
@@ -1222,8 +1324,8 @@ const choiceInteraction = (
   cardinality: ChoiceInteraction["cardinality"],
 ): Effect.Effect<ChoiceInteraction, Refusal> =>
   Effect.gen(function* readChoice() {
-    const maxChoices = yield* xsNonNegativeInteger(build, interaction, "max-choices");
-    const minChoices = yield* xsNonNegativeInteger(build, interaction, "min-choices");
+    const maxChoices = yield* countAttribute(build, interaction, "max-choices");
+    const minChoices = yield* countAttribute(build, interaction, "min-choices");
     const shuffle = yield* xsBoolean(build, interaction, "shuffle", false);
     const prompt = yield* promptOf(build, interaction);
     const choices = yield* Effect.forEach(
@@ -1232,27 +1334,29 @@ const choiceInteraction = (
         Effect.gen(function* simpleChoice() {
           markElement(build, choice, true);
 
-          const identifier = yield* required(build, choice, "identifier");
+          const identifier = yield* identifierAttribute(build, choice, "identifier");
 
           return { content: yield* bodyNodes(build, choice), identifier };
         }),
     );
 
     return {
+      ariaLabel: valueOf(interaction, "aria-label"),
+      ariaLabelledby: valueOf(interaction, "aria-labelledby"),
       cardinality,
       choices,
       class: Option.getOrElse(valueOf(interaction, "class"), () => ""),
       kind: "choice",
-      maxChoices: Option.getOrElse(maxChoices, () => 1),
+      maxChoices: Option.getOrElse(maxChoices, () => 1n),
       messages: {
         max: valueOf(interaction, "data-max-selections-message"),
         min: valueOf(interaction, "data-min-selections-message"),
       },
-      minChoices: Option.getOrElse(minChoices, () => 0),
+      minChoices: Option.getOrElse(minChoices, () => 0n),
       orientation: valueOf(interaction, "orientation"),
       path: pathOf(build, interaction),
       prompt,
-      response: yield* required(build, interaction, "response-identifier"),
+      response: yield* identifierAttribute(build, interaction, "response-identifier"),
       shuffle,
     };
   });
@@ -1278,7 +1382,7 @@ const interactionNode = (
     if (Option.isNone(declaration)) {
       return yield* Effect.fail(
         refusal(build, "undeclared-response", attributePath(path, response), {
-          response: response.value,
+          response: identifierOf(response.value),
         }),
       );
     }
@@ -1330,7 +1434,7 @@ const interactionNode = (
     markElement(build, interaction, true);
 
     const fields = yield* textFields(build, interaction, bound.success.baseType);
-    const expectedLines = yield* xsNonNegativeInteger(build, interaction, "expected-lines");
+    const expectedLines = yield* countAttribute(build, interaction, "expected-lines");
     const prompt = yield* promptOf(build, interaction);
 
     return { ...fields, expectedLines, format, kind: "extended-text", prompt };
@@ -1425,7 +1529,7 @@ const expression = (
       case "qti-variable":
       case "qti-correct":
       case "qti-map-response": {
-        const identifier = yield* required(build, element, "identifier");
+        const identifier = yield* identifierAttribute(build, element, "identifier");
         const kinds = {
           "qti-correct": "correct",
           "qti-map-response": "map-response",
@@ -1553,7 +1657,7 @@ const rule = (build: Build, element: SourceElement): Effect.Effect<Option.Option
   Effect.gen(function* readRule() {
     const parts = elementsOf(element);
     if (isQti(element, "qti-set-outcome-value")) {
-      const identifier = yield* required(build, element, "identifier");
+      const identifier = yield* identifierAttribute(build, element, "identifier");
       const [operand, ...extra] = parts;
       if (operand === undefined || extra.length > 0) {
         return yield* unread(build, element);
@@ -1699,8 +1803,8 @@ const processingOf = (
  * first names it.
  *
  * The evaluator holds only the item's modelled responses and outcomes (`Variables` in
- * `#plate/engine/evaluate.ts`) and throws `UnknownIdentifierError` for any other identifier a rule
- * names, so `buildItem` runs no tree this walk finds a name in, and those defects stay unreachable.
+ * `#plate/engine/evaluate.ts`) and returns `UnknownIdentifierError` for any other identifier a rule
+ * names, so `buildItem` runs no tree this walk finds a name in, and that failure stays unreachable.
  * A `qti-variable` reads a response or an outcome, `qti-correct` and `qti-map-response` read a
  * response, and `qti-set-outcome-value` sets an outcome. The names it finds are valid content,
  * never refused (reading 1): a response the model does not hold (base type `point`, `duration` or
@@ -1859,7 +1963,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
     const { root } = source;
     markElement(build, root, false);
 
-    const identifier = yield* required(build, root, "identifier");
+    const identifier = yield* identifierAttribute(build, root, "identifier");
     const title = yield* required(build, root, "title");
     const responses = new Map<string, ResponseDeclaration>();
     const outcomes = new Map<string, OutcomeDeclaration>();

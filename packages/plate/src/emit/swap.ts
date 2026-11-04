@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Data, Result } from "effect";
 import { h } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node, PartFunction } from "#plate/emit/node.ts";
 import { allows, lists } from "#plate/emit/parts.ts";
@@ -57,15 +57,15 @@ const controlRemedy = (interaction: string): string =>
  * A part's replacement that broke the swap invariant, refused at `open`.
  *
  * It runs on every emit, not only in development, because a replacement is host code that ships.
- * `detail` names the returned element or the child at fault; the message adds what to change.
+ * `detail` names the returned element or the child at fault; the message adds what to change. It is
+ * returned through a `Result`, never thrown.
  */
-// oxlint-disable-next-line unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown.
-export class PartSwapRefused extends Schema.TaggedError<PartSwapRefused>()("PartSwapRefused", {
-  cause: Schema.Literals(swapCauses),
-  detail: Schema.String,
-  interaction: Schema.String,
-  part: Schema.String,
-}) {
+export class PartSwapRefused extends Data.TaggedError("PartSwapRefused")<{
+  readonly cause: SwapCause;
+  readonly detail: string;
+  readonly interaction: string;
+  readonly part: string;
+}> {
   /**
    * The part, the cause and its facts, and what to change.
    */
@@ -76,6 +76,26 @@ export class PartSwapRefused extends Schema.TaggedError<PartSwapRefused>()("Part
         : remedies[this.cause];
 
     return `A part swap was refused at ${this.interaction} ${this.part} (${this.cause}): ${this.detail}. ${remedy}`;
+  }
+}
+
+/**
+ * The emitter handed a part's replacement the same node twice, a defect of the emitter that no
+ * caller can cause.
+ *
+ * It cannot occur: the emitter builds each child once and hands it to one part. Only an emitter bug
+ * repeats one, and identity could not then tell the replacement's fault from the emitter's, so the
+ * swap check stops rather than blame the replacement. It is thrown, never returned.
+ */
+export class HandedNodeDefect extends Data.TaggedError("HandedNodeDefect")<{
+  readonly interaction: string;
+  readonly part: string;
+}> {
+  /**
+   * The part and what to fix in the emitter.
+   */
+  override get message(): string {
+    return `The emitter handed ${this.interaction} ${this.part} the same node twice; build each child once.`;
   }
 }
 
@@ -189,17 +209,22 @@ const checkRoot = (row: PartRow, root: Element): Breach | undefined =>
  * The root itself is not a handed node, because I1 writes onto the root and a copy would lose the
  * child's identity; a replacement that returns a handed node as its root leaves that node missing.
  *
+ * @param row The part's row, which names the part a defect reports.
  * @param root The replacement's root.
  * @param children The nodes the emitter handed over.
  * @returns The first duplicated child, else the first missing one, else the first out of order, or
  *   undefined when the children hold.
- * @throws {Error} When `children` holds one node twice, a defect of the emitter: identity cannot
- *   tell the two places apart, so the replacement would be blamed for the emitter's reuse.
+ * @throws {HandedNodeDefect} When `children` holds one node twice, a defect of the emitter: identity
+ *   cannot tell the two places apart, so the replacement would be blamed for the emitter's reuse.
  */
-const checkChildren = (root: Element, children: readonly Node[]): Breach | undefined => {
+const checkChildren = (
+  row: PartRow,
+  root: Element,
+  children: readonly Node[],
+): Breach | undefined => {
   const handed = new Map(children.map((child, index) => [child, index]));
   if (handed.size !== children.length) {
-    throw new Error("The emitter handed a part the same node twice; build each child once.");
+    throw new HandedNodeDefect({ interaction: row.interaction, part: row.part });
   }
 
   const seen = new Set<number>();
@@ -371,25 +396,25 @@ const refuse = (row: PartRow, breach: Breach): PartSwapRefused =>
  * @param props The attributes the part's connect function computed.
  * @param children The nodes the part holds.
  * @param replacement The embedder's part function.
- * @returns The replacement's root with `props` written over it.
+ * @returns The replacement's root with `props` written over it, or the refusal of the first breach.
+ * @throws {HandedNodeDefect} When `children` holds one node twice, a defect of the emitter.
  */
-const swapIn = Effect.fnUntraced(function* swapIn(
+const swapIn = (
   row: PartRow,
   props: Attributes,
   children: readonly Node[],
   replacement: PartFunction<Attributes>,
-): Effect.fn.Return<Element, PartSwapRefused> {
+): Result.Result<Element, PartSwapRefused> => {
   const root = replacement(props, children);
   const breach =
     checkRoot(row, root) ??
-    checkChildren(root, children) ??
+    checkChildren(row, root, children) ??
     (row.legendOwner ? checkLegendFirst(root, children) : undefined);
-  if (breach !== undefined) {
-    return yield* refuse(row, breach);
-  }
 
-  return mergeRequired(root, props);
-});
+  return breach === undefined
+    ? Result.succeed(mergeRequired(root, props))
+    : Result.fail(refuse(row, breach));
+};
 
 /**
  * Construct a part's root, through its replacement when the embedder swapped it, holding the swap
@@ -401,33 +426,39 @@ const swapIn = Effect.fnUntraced(function* swapIn(
  * over its attributes (I1). A legend owner (the Choice Root under the `legend` markup) must keep
  * the legend Prompt its first element child; the fast path holds it as handed. A list owner
  * (Choices) also applies the list joint rule on either path. Every breach is a
- * {@link PartSwapRefused} (I4).
+ * {@link PartSwapRefused} (I4), returned as the `Result`'s failure.
+ *
+ * @example
+ *   Result.map(applyPart(rowFor("item", "root"), props, body), toHtml);
+ *   // the default qti-assessment-item element holding `body`, as HTML
  *
  * @param row The part's row, as `rowFor` gives it for the placement.
  * @param props The attributes the part's connect function computed, written over a replacement's.
  * @param children The nodes the part holds, which a replacement must keep.
  * @param replacement The embedder's part function, none for the default element.
- * @returns The part's root element.
+ * @returns The part's root element, or the refusal of a replacement that breaks the invariant.
+ * @throws {HandedNodeDefect} When a replacement is given and `children` holds one node twice, a
+ *   defect of the emitter.
  */
-export const applyPart = Effect.fnUntraced(function* applyPart(
+export const applyPart = (
   row: PartRow,
   props: Attributes,
   children: readonly Node[],
   replacement?: PartFunction<Attributes>,
-): Effect.fn.Return<Element, PartSwapRefused> {
-  const result =
+): Result.Result<Element, PartSwapRefused> => {
+  const placed =
     replacement === undefined
-      ? h(row.element, props, children)
-      : yield* swapIn(row, props, children, replacement);
-  if (!row.listOwner) {
-    return result;
+      ? Result.succeed(h(row.element, props, children))
+      : swapIn(row, props, children, replacement);
+  if (Result.isFailure(placed) || !row.listOwner) {
+    return placed;
   }
 
-  if (!lists.has(result.tag)) {
-    return withListRoles(result, children);
+  if (!lists.has(placed.success.tag)) {
+    return Result.succeed(withListRoles(placed.success, children));
   }
 
-  const breach = checkListItems(result, children);
+  const breach = checkListItems(placed.success, children);
 
-  return breach === undefined ? result : yield* refuse(row, breach);
-});
+  return breach === undefined ? placed : Result.fail(refuse(row, breach));
+};

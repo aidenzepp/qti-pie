@@ -15,9 +15,9 @@
  *
  * @module
  */
-import { Effect, Option, pipe } from "effect";
+import { Option, Result, pipe } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { emitNodes } from "#plate/emit/body.ts";
+import { NestedInteractionDefect, authoredId, emitNodes } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { promptMarkupFor, rowFor, scopedId } from "#plate/emit/parts.ts";
@@ -46,6 +46,11 @@ const owner = "choice-interaction";
  * A Choice part.
  */
 type ChoicePart = PartOf<typeof owner>;
+
+/**
+ * The ASCII whitespace that separates the ids of an IDREFS value.
+ */
+const idSeparator = /[\t\n\f\r ]+/u;
 
 /**
  * The row of every Choice part as placed, the Root's and the Prompt's set by the Prompt's markup.
@@ -92,14 +97,40 @@ const when = (condition: boolean, attributes: Attributes): Attributes =>
  * there: a defect, since only a hand-built item can hold one.
  *
  * @param nested The interaction's payload.
- * @returns Never; it dies with an error that names the interaction.
+ * @returns Never; it throws {@link NestedInteractionDefect}, which names the interaction.
  */
-const nestedInteraction: RenderInteraction = (nested) =>
-  Effect.die(
-    new Error(
-      `A ${nested.kind} interaction for the response ${JSON.stringify(nested.response)} sits inside a Choice's Prompt or choice content, where QTI's schema admits no interaction; move it out to the item body, or render an item that check accepted.`,
-    ),
-  );
+const nestedInteraction: RenderInteraction = (nested) => {
+  throw new NestedInteractionDefect({
+    kind: nested.kind,
+    response: nested.response,
+    within: "choice-interaction",
+  });
+};
+
+/**
+ * Give the author's names for a Choice's group: `aria-label` as written, and each id of
+ * `aria-labelledby` scoped by the instance through {@link authoredId}, joined by one space.
+ *
+ * @param interaction The Choice.
+ * @param instance The item instance key, which scopes the author's ids.
+ * @returns The attributes the author gave, none when they gave neither.
+ */
+const authorsName = (interaction: ChoicePayload, instance: string): Attributes => ({
+  ...Option.match(interaction.ariaLabel, {
+    onNone: () => ({}),
+    onSome: (label) => ({ "aria-label": label }),
+  }),
+  ...Option.match(interaction.ariaLabelledby, {
+    onNone: () => ({}),
+    onSome: (ids) => ({
+      "aria-labelledby": ids
+        .split(idSeparator)
+        .filter((id) => id !== "")
+        .map((id) => authoredId(instance, id))
+        .join(" "),
+    }),
+  }),
+});
 
 /**
  * Give the row of every Choice part for a Prompt markup.
@@ -128,8 +159,12 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
  * Compute every attribute of every part of one Choice: the connect function.
  *
  * - Root: the marker, the state (`data-mode`, and `data-disabled` when the author disabled every
- *   control), the author's `class`, `data-orientation`, and `aria-labelledby` → the Prompt's id
- *   under the `labelledby` markup. It carries no `role`: a native `fieldset` is the group.
+ *   control), the author's `class`, `data-orientation`, and the group's name, in the text controls'
+ *   order of precedence: with a Prompt, the Prompt names it (a `legend` natively, or
+ *   `aria-labelledby` → the Prompt's id under the `labelledby` markup) and the author's
+ *   `aria-label` and `aria-labelledby` are not written; with none, the author's `aria-label`, and
+ *   `aria-labelledby` with each id scoped by the instance; with neither, the group stays unnamed.
+ *   It carries no `role`: a native `fieldset` is the group.
  * - Prompt: the marker, and its id under the `labelledby` markup; a `legend` names its group natively
  *   and needs none.
  * - Control: a radio when one choice can be posted (`max-choices` 1, or a single response), else a
@@ -157,7 +192,7 @@ const connect = (
   const promptId = scopedId(instance, interaction.response, "prompt");
   const labelledby = Option.contains(markup, "labelledby");
   const type =
-    interaction.maxChoices === 1 || interaction.cardinality === "single" ? "radio" : "checkbox";
+    interaction.maxChoices === 1n || interaction.cardinality === "single" ? "radio" : "checkbox";
 
   return {
     choices: { "data-slot": rows.choices.slot },
@@ -190,6 +225,7 @@ const connect = (
     prompt: { "data-slot": rows.prompt.slot, ...when(labelledby, { id: promptId }) },
     root: {
       ...when(labelledby, { "aria-labelledby": promptId }),
+      ...when(Option.isNone(markup), authorsName(interaction, instance)),
       ...when(interaction.class !== "", { class: interaction.class }),
       ...when(payload.finished, { "data-disabled": true }),
       "data-mode": payload.mode,
@@ -216,63 +252,74 @@ const connect = (
  * @param payload The payload of the whole render, which gives the instance and `finished`.
  * @param state The locale, the heading level and the resolved part overrides.
  * @returns The Choice Root, or {@link PartSwapRefused} when a replacement breaks the swap
- *   invariant. It dies when the content holds an interaction, which QTI admits nowhere there.
+ *   invariant. It throws {@link NestedInteractionDefect} when the content holds an interaction,
+ *   which QTI admits nowhere there.
  */
-export const renderChoice = Effect.fnUntraced(function* renderChoice(
+export const renderChoice = (
   interaction: ChoicePayload,
   payload: Payload,
   state: EmitState,
-): Effect.fn.Return<Element, PartSwapRefused> {
+): Result.Result<Element, PartSwapRefused> => {
   const emitContent = (
     nodes: readonly PayloadNode[],
-  ): Effect.Effect<readonly Node[], PartSwapRefused> =>
+  ): Result.Result<readonly Node[], PartSwapRefused> =>
     emitNodes(nodes, payload, state, nestedInteraction);
   const replacement = (part: ChoicePart) =>
     Option.getOrUndefined(state.parts.replacementFor(owner, part));
-  const promptContent = yield* Effect.transposeOption(
-    interaction.prompt.pipe(Option.map(emitContent)),
-  );
-  const markup = promptContent.pipe(Option.map(promptMarkupFor));
-  const rows = rowsFor(markup);
-  const props = connect(interaction, payload, rows, markup);
 
-  const choices = yield* pipe(
-    props.items,
-    Effect.forEach((item) =>
-      Effect.gen(function* choiceItem() {
-        const nodes = yield* emitContent(item.content);
-        const indicator = yield* applyPart(
-          rows.indicator,
-          item.indicator,
-          [],
-          replacement("indicator"),
-        );
-        const label = yield* applyPart(
-          rows.label,
-          item.label,
-          [indicator, ...nodes],
-          replacement("label"),
-        );
-        const control = yield* applyPart(rows.control, item.control, [], replacement("control"));
+  return Result.gen(function* choiceRoot() {
+    const promptContent = yield* Result.transposeOption(
+      interaction.prompt.pipe(Option.map(emitContent)),
+    );
+    const markup = promptContent.pipe(Option.map(promptMarkupFor));
+    const rows = rowsFor(markup);
+    const props = connect(interaction, payload, rows, markup);
 
-        return yield* applyPart(rows.choice, item.choice, [control, label], replacement("choice"));
-      }),
-    ),
-  );
-  const list = yield* applyPart(rows.choices, props.choices, choices, replacement("choices"));
-  const prompt = yield* Effect.transposeOption(
-    promptContent.pipe(
-      Option.map((content) => applyPart(rows.prompt, props.prompt, content, replacement("prompt"))),
-    ),
-  );
+    const choices = yield* pipe(
+      props.items.map((item) =>
+        Result.gen(function* choiceItem() {
+          const nodes = yield* emitContent(item.content);
+          const indicator = yield* applyPart(
+            rows.indicator,
+            item.indicator,
+            [],
+            replacement("indicator"),
+          );
+          const label = yield* applyPart(
+            rows.label,
+            item.label,
+            [indicator, ...nodes],
+            replacement("label"),
+          );
+          const control = yield* applyPart(rows.control, item.control, [], replacement("control"));
 
-  return yield* applyPart(
-    rows.root,
-    props.root,
-    [...Option.toArray(prompt), list],
-    replacement("root"),
-  );
-});
+          return yield* applyPart(
+            rows.choice,
+            item.choice,
+            [control, label],
+            replacement("choice"),
+          );
+        }),
+      ),
+      Result.all,
+    );
+    const list = yield* applyPart(rows.choices, props.choices, choices, replacement("choices"));
+    const prompt = yield* Result.transposeOption(
+      promptContent.pipe(
+        Option.map((content) =>
+          applyPart(rows.prompt, props.prompt, content, replacement("prompt")),
+        ),
+      ),
+    );
+
+    return yield* applyPart(
+      rows.root,
+      props.root,
+      [...Option.toArray(prompt), list],
+      replacement("root"),
+    );
+  });
+};
 
 /**
  * Check a Choice's response, which the caller decoded, in two tiers.
@@ -306,19 +353,19 @@ export const validateChoice = (
     response: interaction.response,
     text: words,
   });
-  const count = (n: number): string => new Intl.NumberFormat(locale).format(n);
-  const tooMany = (n: number) =>
+  const count = (n: bigint): string => new Intl.NumberFormat(locale).format(n);
+  const tooMany = (n: bigint) =>
     say(
       Option.getOrElse(interaction.messages.max, () => message(locale, "atMost", { n: count(n) })),
     );
-  const tooFew = (n: number) =>
+  const tooFew = (n: bigint) =>
     say(
       Option.getOrElse(interaction.messages.min, () => message(locale, "atLeast", { n: count(n) })),
     );
   const unknown = say(message(locale, "unknownChoice"));
 
   if (input instanceof Malformed) {
-    return [input.reason === "single-many" ? tooMany(1) : unknown];
+    return [input.reason === "single-many" ? tooMany(1n) : unknown];
   }
 
   const presented = new Set(interaction.choices.map((choice) => choice.identifier));
@@ -328,10 +375,10 @@ export const validateChoice = (
 
   return [
     ...(stray || repeated ? [unknown] : []),
-    ...(interaction.maxChoices > 0 && chosen.length > interaction.maxChoices
+    ...(interaction.maxChoices > 0n && BigInt(chosen.length) > interaction.maxChoices
       ? [tooMany(interaction.maxChoices)]
       : []),
-    ...(configuration.validateResponses && chosen.length < interaction.minChoices
+    ...(configuration.validateResponses && BigInt(chosen.length) < interaction.minChoices
       ? [tooFew(interaction.minChoices)]
       : []),
   ];

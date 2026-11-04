@@ -56,7 +56,7 @@ const essay: ExtendedTextInteraction = {
   baseType: "string",
   class: "qti-height-lines-6",
   expectedLength: Option.none(),
-  expectedLines: Option.some(5),
+  expectedLines: Option.some(5n),
   format: "plain",
   kind: "extended-text",
   path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
@@ -175,7 +175,7 @@ const extendedTextIn = (built: Payload, index = 0): ExtendedTextPayload => {
 /**
  * The emit state of every render here, with no part overrides.
  */
-const emitState: Effect.Effect<EmitState> = resolveOverrides().pipe(
+const emitState: Effect.Effect<EmitState> = Effect.fromResult(resolveOverrides()).pipe(
   Effect.orDie,
   Effect.map((parts): EmitState => ({
     assetBase: "",
@@ -195,7 +195,9 @@ const emitState: Effect.Effect<EmitState> = resolveOverrides().pipe(
 const render = (built: Payload, index = 0): Effect.Effect<Element> =>
   emitState.pipe(
     Effect.flatMap((state) =>
-      Effect.orDie(renderExtendedText(extendedTextIn(built, index), built, state)),
+      Effect.orDie(
+        Effect.fromResult(renderExtendedText(extendedTextIn(built, index), built, state)),
+      ),
     ),
   );
 
@@ -276,11 +278,15 @@ const decoded = (
   interaction: ExtendedTextInteraction,
   entries: readonly Entry[],
 ): Effect.Effect<Value | Malformed> =>
-  decode(entries, {
-    baseType: interaction.baseType,
-    cardinality: "single",
-    name: entryName(instance, interaction.response),
-  }).pipe(Effect.result, Effect.map(Result.merge));
+  Effect.succeed(
+    Result.merge(
+      decode(entries, {
+        baseType: interaction.baseType,
+        cardinality: "single",
+        name: entryName(instance, interaction.response),
+      }),
+    ),
+  );
 
 describe("renderExtendedText", () => {
   it.effect(
@@ -543,24 +549,36 @@ describe("validateExtendedText", () => {
       }),
   );
 
-  it.effect("[Q-5] accepts any decoded text, and refuses a string response posted twice", () =>
-    Effect.gen(function* stringValues() {
-      const configuration = yield* configure({ validateResponses: true });
+  it.effect(
+    "[Q-5] accepts any decoded text, and refuses a string response posted twice or as a file, each with its own message",
+    () =>
+      Effect.gen(function* stringValues() {
+        const configuration = yield* configure({ validateResponses: true });
 
-      for (const posted of [[], [[name, ""]], [[name, "a\r\nb"]]] as const) {
-        assert.deepStrictEqual(
-          validateExtendedText(essay, yield* decoded(essay, posted), configuration),
-          [],
-        );
-      }
+        for (const posted of [[], [[name, ""]], [[name, "a\r\nb"]]] as const) {
+          assert.deepStrictEqual(
+            validateExtendedText(essay, yield* decoded(essay, posted), configuration),
+            [],
+          );
+        }
 
-      const twice = yield* decoded(essay, [
-        [name, "a"],
-        [name, "b"],
-      ]);
-      assert.instanceOf(twice, Malformed);
-      assert.lengthOf(validateExtendedText(essay, twice, configuration), 1);
-    }),
+        const twice = yield* decoded(essay, [
+          [name, "a"],
+          [name, "b"],
+        ]);
+        assert.instanceOf(twice, Malformed);
+        assert.strictEqual(twice.reason, "single-many");
+        assert.deepStrictEqual(validateExtendedText(essay, twice, configuration), [
+          { response, text: message("en", "malformedSingleMany") },
+        ]);
+
+        const file = yield* decoded(essay, [[name, new Blob(["My day."])]]);
+        assert.instanceOf(file, Malformed);
+        assert.strictEqual(file.reason, "file");
+        assert.deepStrictEqual(validateExtendedText(essay, file, configuration), [
+          { response, text: message("en", "malformedFile") },
+        ]);
+      }),
   );
 });
 
@@ -648,14 +666,16 @@ describe("an Extended Text the renderer does not support", () => {
               return renderExtendedText(interaction, built, state);
             }
             case "text-entry": {
-              return Effect.die(new Error("This item holds no Text Entry."));
+              return assert.fail("This item holds no Text Entry.");
             }
             default: {
               return interaction satisfies never;
             }
           }
         };
-        const nodes = yield* Effect.orDie(emitBody(built, state, renderInteraction));
+        const nodes = yield* Effect.orDie(
+          Effect.fromResult(emitBody(built, state, renderInteraction)),
+        );
         const tree = page(nodes, built);
 
         assert.lengthOf(

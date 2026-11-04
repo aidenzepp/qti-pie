@@ -1,5 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown. */
-
 /**
  * The one mapping between QTI values and form entries: the name each response posts under, the
  * entries a value encodes to, the value posted entries decode to, and which posted entries belong
@@ -9,7 +7,7 @@
  * {@link parseLexical}'s, with the allowances a posted form needs: a number is trimmed, and a
  * string's line breaks are a textarea's.
  */
-import { Array, Effect, Option, Schema } from "effect";
+import { Array, Data, Option, Result } from "effect";
 import { format, parseLexical } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
@@ -85,10 +83,10 @@ const remedies = {
  * The failure of decoding posted entries: they are not a value of their binding, for the reason
  * given.
  */
-export class Malformed extends Schema.TaggedError<Malformed>()("Malformed", {
-  entry: Schema.String,
-  reason: Schema.Literals(malformedReasons),
-}) {
+export class Malformed extends Data.TaggedError("Malformed")<{
+  readonly entry: string;
+  readonly reason: MalformedReason;
+}> {
   /**
    * The entry name and what to post instead, in one line.
    */
@@ -98,11 +96,62 @@ export class Malformed extends Schema.TaggedError<Malformed>()("Malformed", {
 }
 
 /**
+ * The requirements an instance token meets, in the order {@link checkInstance} checks them.
+ *
+ * - `non-empty`: it holds at least one character.
+ * - `characters`: every character is an ASCII letter, a digit, `_`, `.`, `:` or `-`, which an `id`,
+ *   an IDREFS list and a form entry name all take, and none of which is whitespace.
+ * - `id-boundary`: it does not end in `-` and holds no `--`. The renderer's ids are
+ *   `<instance>-<segment>-…` (`scopedId`) and an authored id is `<instance>--<id>` (`authoredId`),
+ *   so a token that broke this would let one instance's part id equal another's authored id: `ab-`
+ *   with `status` and `ab` with an authored `status` both give `ab--status`.
+ */
+export const instanceRequirements = ["non-empty", "characters", "id-boundary"] as const;
+
+/**
+ * A requirement an instance token meets: one of {@link instanceRequirements}.
+ */
+export type InstanceRequirement = (typeof instanceRequirements)[number];
+
+/**
+ * The characters an instance token is made of: ASCII letters, digits, `_`, `.`, `:` and `-`.
+ */
+const tokenCharacters = /^[\w.:-]*$/u;
+
+/**
+ * Whether a token meets each requirement, one check per requirement.
+ */
+const meets: Readonly<Record<InstanceRequirement, (token: string) => boolean>> = {
+  characters: (token) => tokenCharacters.test(token),
+  "id-boundary": (token) => !token.endsWith("-") && !token.includes("--"),
+  "non-empty": (token) => token !== "",
+};
+
+/**
+ * Check an instance token: an opaque token, unique per page, that scopes an item instance's ids
+ * and entry names.
+ *
+ * A lowercase UUID passes, as do React's `useId()` forms `_r_1_` (React 19.2 and later) and `:r1:`
+ * (React 18 and 19.0); React 19.1's `«r1»` does not, so its caller passes a token of their own.
+ *
+ * @example
+ *   checkInstance("_r_1_"); // Option.none()
+ *   checkInstance("ab-"); // Option.some("id-boundary")
+ *
+ * @param token The token an author passes as the instance.
+ * @returns The first of {@link instanceRequirements} the token breaks, or none when it meets them
+ *   all.
+ */
+export const checkInstance = (token: string): Option.Option<InstanceRequirement> =>
+  Array.findFirst(instanceRequirements, (requirement) => !meets[requirement](token));
+
+/**
  * Name the form entry a response posts under in one item instance.
  *
  * The OD-2 placeholder: changing the wire name is this one edit.
  *
- * @param instance The item instance key, a lowercase UUID.
+ * @param instance The item instance token, one {@link checkInstance} passes, such as a lowercase
+ *   UUID.
  * @param response The response declaration's identifier.
  * @returns `<instance>.<response>`.
  */
@@ -204,6 +253,13 @@ const readInteger = (text: string, base: number): Option.Option<bigint> => {
 };
 
 /**
+ * The reason a posted number is refused, whichever step refuses it.
+ *
+ * @returns `number`.
+ */
+const notANumber = (): MalformedReason => "number";
+
+/**
  * Read one posted string as a value of a base type.
  *
  * Empty text is no value. A number is trimmed first, so blank text is no value too. An integer is
@@ -220,31 +276,33 @@ const readPosted = (
   baseType: PostedBaseType,
   text: string,
   base: number,
-): Effect.Effect<Option.Option<Single>, MalformedReason> => {
+): Result.Result<Option.Option<Single>, MalformedReason> => {
   const lexical = baseType === "integer" || baseType === "float" ? text.trim() : text;
   if (lexical === "") {
-    return Effect.succeedNone;
+    return Result.succeedNone;
   }
 
   if (baseType === "string") {
-    return Effect.succeedSome({ baseType, value: lexical.replaceAll(/\r\n?/gu, "\n") });
+    return Result.succeedSome({ baseType, value: lexical.replaceAll(/\r\n?/gu, "\n") });
   }
 
   if (baseType === "identifier") {
     return parseLexical(baseType, lexical).pipe(
-      Effect.mapError((): MalformedReason => "identifier"),
-      Effect.map(Option.some),
+      Result.mapError((): MalformedReason => "identifier"),
+      Result.map(Option.some),
     );
   }
 
   const decimal =
     baseType === "integer" ? Option.map(readInteger(lexical, base), String) : Option.some(lexical);
 
-  return Effect.fromOption(decimal).pipe(
-    Effect.flatMap((number) => parseLexical(baseType, number)),
-    Effect.filterOrFail((single) => single.baseType !== "float" || Number.isFinite(single.value)),
-    Effect.mapError((): MalformedReason => "number"),
-    Effect.map(Option.some),
+  return Result.fromOption(decimal, notANumber).pipe(
+    Result.flatMap((number) => Result.mapError(parseLexical(baseType, number), notANumber)),
+    Result.filterOrFail(
+      (single) => single.baseType !== "float" || Number.isFinite(single.value),
+      notANumber,
+    ),
+    Result.map(Option.some),
   );
 };
 
@@ -270,24 +328,24 @@ export const decode = (
   entries: readonly Entry[],
   binding: Binding,
   options: DecodeOptions = {},
-): Effect.Effect<Value, Malformed> => {
+): Result.Result<Value, Malformed> => {
   const posted = entries.filter(([name]) => name === binding.name).map(([, value]) => value);
   const texts = posted.filter((value): value is string => typeof value === "string");
   const malformed = (reason: MalformedReason) => new Malformed({ entry: binding.name, reason });
 
   if (texts.length < posted.length) {
-    return Effect.fail(malformed("file"));
+    return Result.fail(malformed("file"));
   }
 
   if (binding.cardinality === "single" && texts.length > 1) {
-    return Effect.fail(malformed("single-many"));
+    return Result.fail(malformed("single-many"));
   }
 
-  return Effect.all(
+  return Result.all(
     texts.map((text) => readPosted(binding.baseType, text, options.base ?? 10)),
   ).pipe(
-    Effect.mapError(malformed),
-    Effect.map((values) => ({
+    Result.mapError(malformed),
+    Result.map((values) => ({
       baseType: binding.baseType,
       cardinality: binding.cardinality,
       values: Array.getSomes(values),
@@ -314,28 +372,32 @@ export interface Partition {
 }
 
 /**
- * An entry name an item instance gives: a UUID, a dot, then the rest of the name.
+ * An entry name another item instance gives when its token is the UUID `render` draws: a UUID, a
+ * dot, then the rest of the name.
  */
-const instanceName =
-  /^(?<key>[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12})\./u;
+const drawnInstanceName =
+  /^[\dA-Fa-f]{8}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{4}-[\dA-Fa-f]{12}\./u;
 
 /**
  * Split posted entries into this instance's, other instances', and the host's.
  *
+ * Only a drawn token has a shape, so a UUID is the one other instance this can recognise; another
+ * instance with a token of its own posts what reads as host fields here.
+ *
  * @param entries The posted entries, in order.
- * @param instance This item instance's key.
- * @returns The entries in posted order, by owner: a name `<uuid>.<anything>` is this instance's
- *   when the UUID is `instance` and a foreign instance's otherwise; every other name is a host
- *   field.
+ * @param instance This item instance's token, any that {@link checkInstance} passes.
+ * @returns The entries in posted order, by owner: a name beginning `<instance>.` is this
+ *   instance's; else a name `<uuid>.<anything>` is a foreign instance's; every other name is a
+ *   host field.
  */
 export const partition = (entries: readonly Entry[], instance: string): Partition => {
+  const prefix = `${instance}.`;
   const owner = ([name]: Entry): keyof Partition => {
-    const key = instanceName.exec(name)?.groups?.["key"];
-    if (key === undefined) {
-      return "host";
+    if (name.startsWith(prefix)) {
+      return "own";
     }
 
-    return key === instance ? "own" : "foreign";
+    return drawnInstanceName.test(name) ? "foreign" : "host";
   };
 
   return {

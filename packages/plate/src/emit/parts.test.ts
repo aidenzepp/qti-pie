@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Option, Result } from "effect";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Node } from "#plate/emit/node.ts";
 import {
@@ -142,6 +142,17 @@ describe("rowFor", () => {
 
   it("makes the StatusHeading the heading of the given level", () => {
     assert.strictEqual(rowFor("item", "statusHeading", { headingLevel: 3 }).element, "h3");
+  });
+
+  it("throws HeadingLevelDefect, carrying the level, for a StatusHeading level above 6", () => {
+    const thrown = Result.getFailure(
+      Result.try(() => rowFor("item", "statusHeading", { headingLevel: 7 })),
+    );
+    assert.isTrue(Option.isSome(thrown));
+
+    const defect = Option.getOrThrow(thrown);
+    assert.propertyVal(defect, "_tag", "HeadingLevelDefect");
+    assert.propertyVal(defect, "level", 7);
   });
 
   it("makes the Choice Prompt a legend first in its fieldset under the legend markup", () => {
@@ -302,39 +313,37 @@ describe("scopedId", () => {
 });
 
 describe("resolveOverrides", () => {
-  it.effect("resolves a replacement for a known part", () =>
-    Effect.gen(function* knownPart() {
-      const resolved = yield* resolveOverrides({ "choice-interaction": { indicator } });
-      const replacement = resolved.replacementFor("choice-interaction", "indicator");
-      assert.isTrue(Option.isSome(replacement));
-      assert.strictEqual(Option.getOrUndefined(replacement), indicator);
-      assert.isTrue(Option.isNone(resolved.replacementFor("choice-interaction", "label")));
-      assert.isTrue(Option.isNone(resolved.replacementFor("item", "root")));
-    }),
-  );
+  it("resolves a replacement for a known part", () => {
+    const resolved = Result.getOrThrow(resolveOverrides({ "choice-interaction": { indicator } }));
+    const replacement = resolved.replacementFor("choice-interaction", "indicator");
+    assert.isTrue(Option.isSome(replacement));
+    assert.strictEqual(Option.getOrUndefined(replacement), indicator);
+    assert.isTrue(Option.isNone(resolved.replacementFor("choice-interaction", "label")));
+    assert.isTrue(Option.isNone(resolved.replacementFor("item", "root")));
+  });
 
-  it.effect("resolves no overrides to no replacements", () =>
-    Effect.gen(function* noOverrides() {
-      const resolved = yield* resolveOverrides();
-      assert.isTrue(Option.isNone(resolved.replacementFor("choice-interaction", "indicator")));
-    }),
-  );
+  it("resolves no overrides to no replacements", () => {
+    const resolved = Result.getOrThrow(resolveOverrides());
+    assert.isTrue(Option.isNone(resolved.replacementFor("choice-interaction", "indicator")));
+  });
 
-  it.effect("fails with UnknownPart naming an unknown interaction", () =>
-    Effect.gen(function* unknownInteraction() {
-      const error = yield* Effect.flip(resolveOverrides({ "hotspot-interaction": {} }));
-      assert.strictEqual(error._tag, "UnknownPart");
-      assert.strictEqual(error.interaction, "hotspot-interaction");
-      assert.isTrue(Option.isNone(error.part));
-    }),
-  );
+  it("returns a Result, failing UnknownPart with no part for an unknown interaction", () => {
+    const resolved = resolveOverrides({ "hotspot-interaction": {} });
+    assert.isTrue(Result.isResult(resolved));
+    assert.isTrue(Result.isFailure(resolved));
 
-  it.effect("fails with UnknownPart naming an unknown part", () =>
-    Effect.gen(function* unknownPart() {
-      const error = yield* Effect.flip(resolveOverrides({ "choice-interaction": { badge } }));
-      assert.strictEqual(error._tag, "UnknownPart");
-      assert.strictEqual(error.interaction, "choice-interaction");
-      assert.strictEqual(Option.getOrUndefined(error.part), "badge");
-    }),
-  );
+    const error = Option.getOrThrow(Result.getFailure(resolved));
+    assert.strictEqual(error._tag, "UnknownPart");
+    assert.strictEqual(error.interaction, "hotspot-interaction");
+    assert.isTrue(Option.isNone(error.part));
+  });
+
+  it("fails with UnknownPart naming an unknown part", () => {
+    const error = Option.getOrThrow(
+      Result.getFailure(resolveOverrides({ "choice-interaction": { badge } })),
+    );
+    assert.strictEqual(error._tag, "UnknownPart");
+    assert.strictEqual(error.interaction, "choice-interaction");
+    assert.strictEqual(Option.getOrUndefined(error.part), "badge");
+  });
 });

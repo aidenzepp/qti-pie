@@ -74,14 +74,22 @@ const keyShortcuts = "aria-keyshortcuts";
  */
 const keyShortcutsMisspelt = "aria-keyshorts";
 
-describe("validate/tables.ts", () => {
-  it.effect("the committed tables are what the generator builds from the cached XSD", () =>
-    Effect.gen(function* regenerateNoDiff() {
-      const source = yield* readSource("imsqti_asiv3p0p1_v1p0.xsd", yield* xsdBytes);
-      const generated = yield* generateTables(source);
+/**
+ * Parsing the full XSD and regenerating the tables nears vitest's 5 s default under load.
+ */
+const regenerateTimeoutMs = 60_000;
 
-      assert.deepStrictEqual(tables, generated);
-    }),
+describe("validate/tables.ts", () => {
+  it.effect(
+    "the committed tables are what the generator builds from the cached XSD",
+    () =>
+      Effect.gen(function* regenerateNoDiff() {
+        const source = yield* readSource("imsqti_asiv3p0p1_v1p0.xsd", yield* xsdBytes);
+        const generated = yield* generateTables(source);
+
+        assert.deepStrictEqual(tables, generated);
+      }),
+    regenerateTimeoutMs,
   );
 
   it.effect("the cached XSD is the one the tables were generated from", () =>

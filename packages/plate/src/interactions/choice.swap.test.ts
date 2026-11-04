@@ -37,6 +37,8 @@ const words = (value: string): BodyNode => ({ kind: "text", text: value });
  * `aria-labelledby`, which `nameOf` reads.
  */
 const colours: ChoiceInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
     { content: [words("Red")], identifier: "A" },
@@ -45,9 +47,9 @@ const colours: ChoiceInteraction = {
   ],
   class: "",
   kind: "choice",
-  maxChoices: 1,
+  maxChoices: 1n,
   messages: { max: Option.none(), min: Option.none() },
-  minChoices: 0,
+  minChoices: 0n,
   orientation: Option.none(),
   path: "qti-assessment-item/qti-item-body/qti-choice-interaction",
   prompt: Option.some([
@@ -133,12 +135,12 @@ const promptText = "Pick a colour.";
 const renderSwapped = (
   replacements: Partial<Record<PartOf<"choice-interaction">, PartFunction<Attributes>>>,
 ): Effect.Effect<Element, PartSwapRefused> =>
-  resolveOverrides({ "choice-interaction": replacements }).pipe(
+  Effect.fromResult(resolveOverrides({ "choice-interaction": replacements })).pipe(
     Effect.orDie,
     Effect.flatMap((parts) => {
       const state: EmitState = { assetBase: "", headingLevel: 2, locale: "en", parts };
 
-      return renderChoice(choice, built, state);
+      return Effect.fromResult(renderChoice(choice, built, state));
     }),
   );
 
