@@ -84,13 +84,11 @@ export class PartSwapRefused extends Schema.TaggedError<PartSwapRefused>()("Part
  */
 const mayBecome = {
   any: "any element",
-  button: "a <button>",
   "choice-item": "an <li>, or a flow container such as <div> under a Choices that is not a list",
   "choice-list": "a <ul>, an <ol> or a flow container such as <div>",
   fieldset: "a <fieldset>, which groups the choices natively",
   "flow-container":
     "a flow container such as <div>, <section> or <span>, or a custom element, and never a control, link or list",
-  form: "a <form>",
   heading: "a heading, <h1> to <h6>",
   legend: "a <legend>, which names its <fieldset> natively",
   li: "an <li>",

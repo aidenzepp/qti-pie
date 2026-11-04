@@ -185,8 +185,8 @@ const render = (built: Payload): Effect.Effect<Element> =>
   );
 
 /**
- * Place a Choice Root in a minimal item: a Root carrying `lang`, and a Form holding the Choice and
- * a Submit after it.
+ * Place a Choice Root in a minimal item: a Root carrying `lang`, and a plain `form`, as an author
+ * composes it, holding the Choice and a submit button after it.
  *
  * @param root The Choice Root.
  * @param built The payload it was rendered from, which gives `lang`.
@@ -194,21 +194,10 @@ const render = (built: Payload): Effect.Effect<Element> =>
  */
 const page = (root: Element, built: Payload): Element =>
   h("qti-assessment-item", { "data-slot": rowFor("item", "root").slot, lang: built.lang }, [
-    h(
-      "form",
-      {
-        action: "/submit",
-        "data-slot": rowFor("item", "form").slot,
-        method: "post",
-        novalidate: true,
-      },
-      [
-        root,
-        h("button", { "data-slot": rowFor("item", "submit").slot, type: "submit" }, [
-          text("Submit"),
-        ]),
-      ],
-    ),
+    h("form", { action: "/submit", method: "post", novalidate: true }, [
+      root,
+      h("button", { type: "submit" }, [text("Submit")]),
+    ]),
   ]);
 
 /**

@@ -15,7 +15,7 @@ interface PartsOf {
     | "prompt"
     | "root";
   "extended-text-interaction": "control" | "prompt" | "root";
-  item: "form" | "message" | "messages" | "notice" | "root" | "status" | "statusHeading" | "submit";
+  item: "message" | "messages" | "notice" | "root" | "status" | "statusHeading";
   "text-entry-interaction": "control" | "root";
 }
 
@@ -48,7 +48,7 @@ export type Position = "flow" | "phrasing";
  *
  * - `flow-container`, `phrasing-container`: any element of that container class.
  * - `prompt`: a flow or phrasing container, or `p`, so the prompt is valid in any parent.
- * - `form`, `button`, `li`, `textarea`, `fieldset`, `legend`: that element only.
+ * - `li`, `textarea`, `fieldset`, `legend`: that element only.
  * - `heading`: `h1` to `h6`. `list`: `ul`, `ol` or `menu`.
  * - `choice-list`: `ul`, `ol` or a flow container; a swap to a flow container adds the list roles.
  * - `choice-item`: `li`, or a flow container under a Choices that is not a list.
@@ -59,12 +59,10 @@ export type Position = "flow" | "phrasing";
  */
 export type TagClass =
   | "any"
-  | "button"
   | "choice-item"
   | "choice-list"
   | "fieldset"
   | "flow-container"
-  | "form"
   | "heading"
   | "legend"
   | "li"
@@ -351,12 +349,10 @@ const isTextType = (type: string | true | undefined): boolean =>
  */
 const admits = {
   any: () => true,
-  button: ({ tag }) => tag === "button",
   "choice-item": ({ tag }) => tag === "li" || isFlowContainer(tag),
   "choice-list": ({ tag }) => tag === "ol" || tag === "ul" || isFlowContainer(tag),
   fieldset: ({ tag }) => tag === "fieldset",
   "flow-container": ({ tag }) => isFlowContainer(tag),
-  form: ({ tag }) => tag === "form",
   heading: ({ tag }) => headings.has(tag),
   legend: ({ tag }) => tag === "legend",
   li: ({ tag }) => tag === "li",
@@ -380,14 +376,6 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     merged: ["lang", "id"],
     part: "root",
     tagClass: "flow-container",
-  },
-  {
-    element: "form",
-    interaction: "item",
-    listOwner: false,
-    merged: ["method", "action", "novalidate"],
-    part: "form",
-    tagClass: "form",
   },
   {
     element: "section",
@@ -420,14 +408,6 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     merged: ["id"],
     part: "message",
     tagClass: "li",
-  },
-  {
-    element: "button",
-    interaction: "item",
-    listOwner: false,
-    merged: ["type", "disabled"],
-    part: "submit",
-    tagClass: "button",
   },
   {
     element: "span",

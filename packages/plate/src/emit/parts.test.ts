@@ -25,12 +25,10 @@ import {
  */
 const specRows = [
   ["item", "root", "item", "qti-assessment-item"],
-  ["item", "form", "item-form", "form"],
   ["item", "status", "item-status", "section"],
   ["item", "statusHeading", "item-status-heading", "h1"],
   ["item", "messages", "item-messages", "ul"],
   ["item", "message", "item-message", "li"],
-  ["item", "submit", "item-submit", "button"],
   ["item", "notice", "item-notice", "span"],
   ["choice-interaction", "root", "choice-interaction", "fieldset"],
   ["choice-interaction", "prompt", "choice-interaction-prompt", "qti-prompt"],
@@ -77,6 +75,18 @@ describe("partTable", () => {
       assert.strictEqual(rows[0]?.slot, slot, `${interaction} ${part}`);
       assert.strictEqual(rows[0]?.element, element, `${interaction} ${part}`);
     }
+  });
+
+  it("gives the item chrome no Form and no Submit: a host composes its own form", () => {
+    const item = partTable.filter((row) => row.interaction === "item").map((row) => row.part);
+    assert.deepStrictEqual(item, [
+      "root",
+      "status",
+      "statusHeading",
+      "messages",
+      "message",
+      "notice",
+    ]);
   });
 
   it("gives every marker once across the table", () => {
