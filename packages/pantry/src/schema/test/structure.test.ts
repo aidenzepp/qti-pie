@@ -160,10 +160,28 @@ describe("the test structure relations", () => {
     }
   });
 
-  it("declares the five new names the kinds carry, alphabetically", () => {
+  it("declares the names the landed headings carry, the five of p5-16 among them, alphabetically", () => {
     assert.deepStrictEqual(
       [...test.attributes],
-      ["category", "keep-together", "navigation-mode", "submission-mode", "visible"],
+      [
+        "allow-comment",
+        "allow-late-submission",
+        "allow-review",
+        "allow-skipping",
+        "category",
+        "keep-together",
+        "max-attempts",
+        "max-time",
+        "min-time",
+        "navigation-mode",
+        "select",
+        "show-feedback",
+        "show-solution",
+        "submission-mode",
+        "validate-responses",
+        "visible",
+        "with-replacement",
+      ],
     );
   });
 });
