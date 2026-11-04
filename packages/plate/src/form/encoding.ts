@@ -1,5 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown. */
-
 /**
  * The one mapping between QTI values and form entries: the name each response posts under, the
  * entries a value encodes to, the value posted entries decode to, and which posted entries belong
@@ -9,7 +7,7 @@
  * {@link parseLexical}'s, with the allowances a posted form needs: a number is trimmed, and a
  * string's line breaks are a textarea's.
  */
-import { Array, Effect, Option, Schema } from "effect";
+import { Array, Data, Option, Result } from "effect";
 import { format, parseLexical } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
@@ -85,10 +83,10 @@ const remedies = {
  * The failure of decoding posted entries: they are not a value of their binding, for the reason
  * given.
  */
-export class Malformed extends Schema.TaggedError<Malformed>()("Malformed", {
-  entry: Schema.String,
-  reason: Schema.Literals(malformedReasons),
-}) {
+export class Malformed extends Data.TaggedError("Malformed")<{
+  readonly entry: string;
+  readonly reason: MalformedReason;
+}> {
   /**
    * The entry name and what to post instead, in one line.
    */
@@ -204,6 +202,13 @@ const readInteger = (text: string, base: number): Option.Option<bigint> => {
 };
 
 /**
+ * The reason a posted number is refused, whichever step refuses it.
+ *
+ * @returns `number`.
+ */
+const notANumber = (): MalformedReason => "number";
+
+/**
  * Read one posted string as a value of a base type.
  *
  * Empty text is no value. A number is trimmed first, so blank text is no value too. An integer is
@@ -220,31 +225,33 @@ const readPosted = (
   baseType: PostedBaseType,
   text: string,
   base: number,
-): Effect.Effect<Option.Option<Single>, MalformedReason> => {
+): Result.Result<Option.Option<Single>, MalformedReason> => {
   const lexical = baseType === "integer" || baseType === "float" ? text.trim() : text;
   if (lexical === "") {
-    return Effect.succeedNone;
+    return Result.succeedNone;
   }
 
   if (baseType === "string") {
-    return Effect.succeedSome({ baseType, value: lexical.replaceAll(/\r\n?/gu, "\n") });
+    return Result.succeedSome({ baseType, value: lexical.replaceAll(/\r\n?/gu, "\n") });
   }
 
   if (baseType === "identifier") {
-    return Effect.fromResult(parseLexical(baseType, lexical)).pipe(
-      Effect.mapError((): MalformedReason => "identifier"),
-      Effect.map(Option.some),
+    return parseLexical(baseType, lexical).pipe(
+      Result.mapError((): MalformedReason => "identifier"),
+      Result.map(Option.some),
     );
   }
 
   const decimal =
     baseType === "integer" ? Option.map(readInteger(lexical, base), String) : Option.some(lexical);
 
-  return Effect.fromOption(decimal).pipe(
-    Effect.flatMap((number) => Effect.fromResult(parseLexical(baseType, number))),
-    Effect.filterOrFail((single) => single.baseType !== "float" || Number.isFinite(single.value)),
-    Effect.mapError((): MalformedReason => "number"),
-    Effect.map(Option.some),
+  return Result.fromOption(decimal, notANumber).pipe(
+    Result.flatMap((number) => Result.mapError(parseLexical(baseType, number), notANumber)),
+    Result.filterOrFail(
+      (single) => single.baseType !== "float" || Number.isFinite(single.value),
+      notANumber,
+    ),
+    Result.map(Option.some),
   );
 };
 
@@ -270,24 +277,24 @@ export const decode = (
   entries: readonly Entry[],
   binding: Binding,
   options: DecodeOptions = {},
-): Effect.Effect<Value, Malformed> => {
+): Result.Result<Value, Malformed> => {
   const posted = entries.filter(([name]) => name === binding.name).map(([, value]) => value);
   const texts = posted.filter((value): value is string => typeof value === "string");
   const malformed = (reason: MalformedReason) => new Malformed({ entry: binding.name, reason });
 
   if (texts.length < posted.length) {
-    return Effect.fail(malformed("file"));
+    return Result.fail(malformed("file"));
   }
 
   if (binding.cardinality === "single" && texts.length > 1) {
-    return Effect.fail(malformed("single-many"));
+    return Result.fail(malformed("single-many"));
   }
 
-  return Effect.all(
+  return Result.all(
     texts.map((text) => readPosted(binding.baseType, text, options.base ?? 10)),
   ).pipe(
-    Effect.mapError(malformed),
-    Effect.map((values) => ({
+    Result.mapError(malformed),
+    Result.map((values) => ({
       baseType: binding.baseType,
       cardinality: binding.cardinality,
       values: Array.getSomes(values),

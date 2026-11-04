@@ -263,11 +263,15 @@ const decoded = (
   entries: readonly Entry[],
   entry: string = name,
 ): Effect.Effect<Value | Malformed> =>
-  decode(
-    entries,
-    { baseType: interaction.baseType, cardinality: "single", name: entry },
-    { base: interaction.base },
-  ).pipe(Effect.result, Effect.map(Result.merge));
+  Effect.succeed(
+    Result.merge(
+      decode(
+        entries,
+        { baseType: interaction.baseType, cardinality: "single", name: entry },
+        { base: interaction.base },
+      ),
+    ),
+  );
 
 describe("renderTextEntry", () => {
   it.effect('[Q-20] names the Control "Answer", and "Answer 2 of 2" for the second of two', () =>

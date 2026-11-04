@@ -276,11 +276,15 @@ const decoded = (
   interaction: ExtendedTextInteraction,
   entries: readonly Entry[],
 ): Effect.Effect<Value | Malformed> =>
-  decode(entries, {
-    baseType: interaction.baseType,
-    cardinality: "single",
-    name: entryName(instance, interaction.response),
-  }).pipe(Effect.result, Effect.map(Result.merge));
+  Effect.succeed(
+    Result.merge(
+      decode(entries, {
+        baseType: interaction.baseType,
+        cardinality: "single",
+        name: entryName(instance, interaction.response),
+      }),
+    ),
+  );
 
 describe("renderExtendedText", () => {
   it.effect(
