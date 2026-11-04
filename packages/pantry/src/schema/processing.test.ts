@@ -3,6 +3,7 @@ import { inspect } from "node:util";
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
+import * as rosters from "#pantry/schema/content/rosters.ts";
 import * as contracts from "#pantry/schema/contracts.ts";
 import * as declaration from "#pantry/schema/declaration.ts";
 import * as document from "#pantry/schema/document.ts";
@@ -34,6 +35,7 @@ const probe = () =>
       ...declaration.relations,
       ...value.relations,
       ...item.relations,
+      ...rosters.relations,
       ...processing.relations,
     },
     [
@@ -535,7 +537,7 @@ describe("processing", () => {
   it("names the referring kinds on the three reference arms and the rules over them", () => {
     const { BuiltInRef, DeclaredRef, TemplateParameterRef } = processing.relations;
     assert.include(processing.RefKind.handles, "templateParameter");
-    assert.strictEqual(processing.RefKind.handles.at(-1), "templateParameter");
+    assert.strictEqual(processing.RefKind.handles.at(-1), "sectionVariable");
     assert.deepStrictEqual(Object.keys(DeclaredRef.fields).toSorted(), [
       "declarationKind",
       "document",
@@ -657,6 +659,7 @@ describe("processing", () => {
         "itemInstanceVariable",
         "sectionDuration",
         "templateParameter",
+        "sectionVariable",
       ],
     );
     assert.deepStrictEqual(
@@ -721,6 +724,131 @@ describe("contracts (processing)", () => {
     assert.strictEqual(
       processing.TemplateParameterRef.fields.identifier.name,
       contracts.TemplateParameterName.name,
+    );
+  });
+});
+
+/**
+ * The relations the prefixed and section variable references add, each with its columns (sorted)
+ * and primary key, in the spec's 4.9.
+ */
+const headings = [
+  ["ItemVariableRef", ["document", "id", "prefix", "root", "variable"], ["id"]],
+  ["ItemInstanceVariableRef", ["document", "id", "instance", "prefix", "root", "variable"], ["id"]],
+  ["SectionDurationRef", ["document", "id", "prefix", "root"], ["id"]],
+  ["SectionVariableRef", ["document", "id", "identifier", "referrerKind", "root"], ["id"]],
+  ["ItemInstanceSpelling", ["ref", "value"], ["ref"]],
+  [
+    "PrefixedVariableSource",
+    ["document", "itemDocument", "itemRef", "prefix", "ref", "refKind", "source", "test"],
+    ["ref", "test"],
+  ],
+  ["PrefixedDeclared", ["itemDocument", "ref", "test", "variable"], ["ref", "test"]],
+  ["PrefixedMapped", ["itemRef", "ref", "test", "variable"], ["ref", "test"]],
+  ["PrefixedBuiltIn", ["builtIn", "ref", "test"], ["ref", "test"]],
+  [
+    "SectionDurationTarget",
+    ["document", "holder", "holderKind", "prefix", "ref", "refKind", "test"],
+    ["ref", "test"],
+  ],
+  ["SectionVariableResolution", ["document", "ref", "target", "test"], ["ref", "test"]],
+  [
+    "SectionVariableDeclared",
+    ["declarationKind", "identifier", "ref", "referrerKind", "test"],
+    ["ref", "test"],
+  ],
+  ["SectionVariablePrefixed", ["ref", "test"], ["ref", "test"]],
+  ["SectionVariableDuration", ["ref", "test"], ["ref", "test"]],
+] as const;
+
+describe("processing headings: the prefixed arms and the per-test relations", () => {
+  it("declares 14 relations, each with the columns and primary key of the spec", () => {
+    assert.strictEqual(headings.length, 14);
+    for (const [name, columns, primaryKey] of headings) {
+      const relation = processing.relations[name];
+      assert.strictEqual(relation.name, name);
+      assert.deepStrictEqual(Object.keys(relation.fields).toSorted(), [...columns], name);
+      assert.deepStrictEqual([...relation.primaryKey], [...primaryKey], name);
+    }
+  });
+
+  it("appends sectionVariable last to RefKind, seven handles in all", () => {
+    assert.deepStrictEqual(
+      [...processing.RefKind.handles],
+      [
+        "declared",
+        "builtIn",
+        "itemVariable",
+        "itemInstanceVariable",
+        "sectionDuration",
+        "templateParameter",
+        "sectionVariable",
+      ],
+    );
+  });
+
+  it("types the columns by their rosters and contracts", () => {
+    const r = processing.relations;
+    for (const name of [
+      "ItemVariableRef",
+      "ItemInstanceVariableRef",
+      "SectionDurationRef",
+      "SectionVariableRef",
+    ] as const) {
+      assert.strictEqual(r[name].fields.root.roster, node.RootKind, name);
+    }
+    assert.strictEqual(r.SectionVariableRef.fields.referrerKind.roster, node.NodeKind);
+    assert.strictEqual(r.SectionVariableRef.fields.identifier.pattern.source, patterns.ncName);
+    for (const name of [
+      "ItemVariableRef",
+      "ItemInstanceVariableRef",
+      "SectionDurationRef",
+      "PrefixedVariableSource",
+      "SectionDurationTarget",
+    ] as const) {
+      assert.strictEqual(r[name].fields.prefix.name, contracts.TestStructureIdentifier.name, name);
+    }
+    assert.strictEqual(r.PrefixedMapped.fields.variable.name, contracts.MappedVariableName.name);
+    assert.strictEqual(r.PrefixedVariableSource.fields.refKind.roster, processing.RefKind);
+    assert.strictEqual(r.PrefixedVariableSource.fields.source.roster, rosters.PrefixedSource);
+    assert.strictEqual(r.PrefixedBuiltIn.fields.builtIn.roster, processing.BuiltIn);
+    assert.strictEqual(r.SectionDurationTarget.fields.refKind.roster, processing.RefKind);
+    assert.strictEqual(r.SectionDurationTarget.fields.holderKind.roster, rosters.StructureHolder);
+    assert.strictEqual(
+      r.SectionVariableResolution.fields.target.roster,
+      rosters.SectionVariableTarget,
+    );
+    assert.strictEqual(
+      r.SectionVariableDeclared.fields.declarationKind.roster,
+      declaration.DeclarationKind,
+    );
+    assert.strictEqual(r.SectionVariableDeclared.fields.referrerKind.roster, node.NodeKind);
+    assert.strictEqual(
+      r.ItemInstanceSpelling.fields.value.pattern.source,
+      patterns.nonCanonicalInteger,
+    );
+  });
+
+  it("keeps the VariableRef alternatives at three arms and declares no statement of its own", () => {
+    const [rule, ...rest] = ofKind("alternatives").filter(
+      (candidate) => candidate.parent === processing.relations.VariableRef,
+    );
+    assert.strictEqual(rest.length, 0);
+    assert.deepStrictEqual(Object.keys(rule?.arms ?? {}).toSorted(), [
+      "builtIn",
+      "declared",
+      "templateParameter",
+    ]);
+
+    const added = new Set<unknown>(headings.map(([name]) => processing.relations[name]));
+    assert.deepStrictEqual(
+      processing.rules.filter(
+        (statement) =>
+          ("relation" in statement && added.has(statement.relation)) ||
+          ("left" in statement && added.has(statement.left.source)) ||
+          ("parent" in statement && added.has(statement.parent)),
+      ),
+      [],
     );
   });
 });
