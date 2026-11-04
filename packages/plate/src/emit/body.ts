@@ -6,19 +6,28 @@
  * by the item instance through {@link authoredId}; and a heading shifts so that `h1` sits at the
  * configured heading level. A `tr` the author placed directly in a `table` gains the `tbody` the
  * HTML parser would insert, so the tree survives a parse. Text becomes text, an interaction goes
- * to its render function, and an unsupported feature becomes a placeholder note. URL attributes
- * pass through unchanged.
+ * to its render function, and each notice `check` handed in becomes the Notice part, a `span` at a
+ * phrasing position and a `div` where the parent takes flow content.
+ *
+ * URL attributes are `url.ts`'s, and so is every decision about them: `check` has already dropped
+ * each refused value, placed its notice, and written each kept value in its parsed form. The walk
+ * classifies a value again only to write it, rebasing a package path onto the asset base and
+ * scoping a same-document `#id` as the id it names.
  *
  * @module
  * @see {@link Payload} for what the walk reads.
  */
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
-import { headings, rowFor, scopedId } from "#plate/emit/parts.ts";
+import { headings, positionUnder, rowFor, scopedId } from "#plate/emit/parts.ts";
+import type { Position, Resolved } from "#plate/emit/parts.ts";
+import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { message } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
+import { classifyUrl, formatUrl, urlContextOf } from "#plate/model/url.ts";
+import type { KeptUrl, UrlContext } from "#plate/model/url.ts";
 import type {
   AttributePayload,
   ElementPayload,
@@ -74,12 +83,24 @@ const separator = /[\t\n\f\r ]+/u;
 const blank = /^[\t\n\f\r ]*$/u;
 
 /**
- * What the walk carries from the payload and the state into every node.
+ * What the walk carries from the payload and the state into every node, and where those nodes
+ * stand.
  */
 interface Walk {
+  readonly assetBase: string;
   readonly headingLevel: number;
   readonly instance: string;
   readonly locale: Locale;
+  readonly parts: Resolved;
+  /**
+   * Whether no node below may stand at a flow position: a `p` is open above, whose content a `div`
+   * would close, or the caller placed the nodes where only phrasing content stands.
+   */
+  readonly phrasingOnly: boolean;
+  /**
+   * The position a Notice among the nodes stands at.
+   */
+  readonly position: Position;
   readonly renderInteraction: RenderInteraction;
 }
 
@@ -112,32 +133,80 @@ const tagFor = (tag: string, headingLevel: number): string =>
   headings.has(tag) ? `h${Math.min(6, Number(tag.slice(1)) + headingLevel - 1)}` : tag;
 
 /**
+ * Scope a kept same-document reference as the id it names, so `#q1` still finds the authored
+ * `id="q1"` after both are scoped.
+ *
+ * The fragment is percent-encoded as the URL parser writes it; a browser decodes it before it
+ * looks for the id, so it still meets an id with characters the parser encodes. A bare `#`, which
+ * names no id and takes the reader to the top of the page, stays as written.
+ *
+ * @param url The kept value.
+ * @param instance The item instance key.
+ * @returns The value with its fragment scoped, or the value itself when it is not a fragment.
+ */
+const scopedFragment = (url: KeptUrl, instance: string): KeptUrl =>
+  url.kind === "fragment" && url.fragment !== ""
+    ? { fragment: authoredId(instance, url.fragment), kind: "fragment" }
+    : url;
+
+/**
+ * Write a URL attribute's value as it renders, through `url.ts` alone.
+ *
+ * `check` has written every value it kept in its parsed form, so classifying it again gives the
+ * same classification; it is done only so {@link formatUrl} can rebase a package path onto the
+ * asset base. A value `url.ts` refuses, which only a payload `check` did not secure can hold, is
+ * never written; `check` places the notice for each one it drops, so none is added here.
+ *
+ * @param context The attribute's context, from `urlContextOf`.
+ * @param value The value as the payload holds it.
+ * @param walk What the walk carries: the asset base and the item instance key.
+ * @returns The value to write, or none when the attribute is dropped.
+ */
+const urlFor = (context: UrlContext, value: string, walk: Walk): Option.Option<string> => {
+  const url = classifyUrl(context, value);
+
+  return url.kind === "dropped"
+    ? Option.none()
+    : Option.some(formatUrl(scopedFragment(url, walk.instance), walk.assetBase));
+};
+
+/**
  * Give one authored attribute as it renders.
  *
  * @param attribute The attribute as the model kept it.
- * @param instance The item instance key.
- * @returns The attribute's name and value as emitted: `xml:lang` as `lang`, an `id` and each id an
- *   IDREF attribute names through {@link authoredId}, any other value as written.
+ * @param tag The authored element's local name, which says whether the attribute is a URL.
+ * @param walk What the walk carries.
+ * @returns The attribute's name and value as emitted, or nothing when it is dropped: `xml:lang` as
+ *   `lang`, an `id` and each id an IDREF attribute names through {@link authoredId}, a URL through
+ *   {@link urlFor}, and any other value as written.
  */
 const attributeFor = (
   { name, value }: AttributePayload,
-  instance: string,
-): readonly [string, string] => {
+  tag: string,
+  walk: Walk,
+): readonly (readonly [string, string])[] => {
   if (name === "xml:lang") {
-    return ["lang", value];
+    return [["lang", value]];
   }
 
   if (name === "id") {
-    return [name, authoredId(instance, value)];
+    return [[name, authoredId(walk.instance, value)]];
   }
 
   if (idReferences.has(name)) {
     const ids = value.split(separator).filter((id) => id !== "");
 
-    return [name, ids.map((id) => authoredId(instance, id)).join(" ")];
+    return [[name, ids.map((id) => authoredId(walk.instance, id)).join(" ")]];
   }
 
-  return [name, value];
+  return Option.match(urlContextOf(tag, name), {
+    onNone: () => [[name, value]],
+    onSome: (context) =>
+      Option.match(urlFor(context, value, walk), {
+        onNone: () => [],
+        onSome: (url) => [[name, url]],
+      }),
+  });
 };
 
 /**
@@ -147,17 +216,17 @@ const attributeFor = (
  * removes and marks every attribute only the XSD's wildcard admits, so this drop is the emitter's
  * own guard. When the author wrote both `lang` and `xml:lang`, `xml:lang` wins, as it does in HTML.
  *
- * @param attributes The attributes as the model kept them.
- * @param instance The item instance key.
+ * @param element The element as the model kept it.
+ * @param walk What the walk carries.
  * @returns The attributes to emit.
  */
-const attributesFor = (attributes: readonly AttributePayload[], instance: string): Attributes => {
+const attributesFor = ({ attributes, tag }: ElementPayload, walk: Walk): Attributes => {
   const hasXmlLang = attributes.some(({ name }) => name === "xml:lang");
 
   return Object.fromEntries(
     attributes
       .filter(({ name }) => !eventHandler.test(name) && !(hasXmlLang && name === "lang"))
-      .map((attribute) => attributeFor(attribute, instance)),
+      .flatMap((attribute) => attributeFor(attribute, tag, walk)),
   );
 };
 
@@ -211,24 +280,44 @@ const withBodies = (children: readonly Node[]): readonly Node[] => {
 };
 
 /**
- * Give the placeholder of an unsupported feature: a phrasing `span` note carrying the Notice
- * marker and the locale's notice text, standing in until the body renders the Notice part.
+ * Construct the Notice part for a notice `check` handed in: a note naming the feature in the
+ * locale's text, through the embedder's replacement when there is one.
  *
  * @param notice The notice's payload.
- * @param locale The locale the text is written in.
- * @returns The placeholder.
+ * @param walk What the walk carries: the position, the locale and the part overrides.
+ * @returns The Notice, a `span` at a phrasing position and a `div` at a flow position by default,
+ *   or the refusal of its replacement.
  */
-const placeholder = (notice: NoticePayload, locale: Locale): Element =>
-  h("span", { "data-slot": rowFor("item", "notice").slot, role: "note" }, [
-    text(message(locale, "notice", { feature: notice.feature })),
-  ]);
+const noticeOf = (notice: NoticePayload, walk: Walk): Effect.Effect<Element, PartSwapRefused> => {
+  const row = rowFor("item", "notice", { position: walk.position });
+
+  return applyPart(
+    row,
+    { "data-slot": row.slot, role: "note" },
+    [text(message(walk.locale, "notice", { feature: notice.feature }))],
+    Option.getOrUndefined(walk.parts.replacementFor("item", "notice")),
+  );
+};
+
+/**
+ * Give the walk below an authored element: its children stand where the element's content stands.
+ *
+ * @param walk The walk at the element.
+ * @param tag The element's authored local name.
+ * @returns The walk for the element's children.
+ */
+const below = (walk: Walk, tag: string): Walk => ({
+  ...walk,
+  phrasingOnly: walk.phrasingOnly || tag === "p",
+  position: positionUnder(tag, walk.phrasingOnly),
+});
 
 /**
  * Emit body nodes, in order.
  *
  * @param nodes The payload nodes.
  * @param walk What the walk carries.
- * @returns The emitted nodes, or the first refusal of an interaction's part swap.
+ * @returns The emitted nodes, or the first refusal of a part swap.
  */
 const nodesOf = (
   nodes: readonly PayloadNode[],
@@ -242,13 +331,13 @@ const nodesOf = (
  *
  * @param element The element's payload.
  * @param walk What the walk carries.
- * @returns The element as it renders, or the first refusal of an interaction's part swap.
+ * @returns The element as it renders, or the first refusal of a part swap.
  */
 const elementOf = (element: ElementPayload, walk: Walk): Effect.Effect<Element, PartSwapRefused> =>
-  Effect.map(nodesOf(element.children, walk), (children) =>
+  Effect.map(nodesOf(element.children, below(walk, element.tag)), (children) =>
     h(
       tagFor(element.tag, walk.headingLevel),
-      attributesFor(element.attributes, walk.instance),
+      attributesFor(element, walk),
       element.tag === "table" ? withBodies(children) : children,
     ),
   );
@@ -258,7 +347,7 @@ const elementOf = (element: ElementPayload, walk: Walk): Effect.Effect<Element, 
  *
  * @param node The payload node.
  * @param walk What the walk carries.
- * @returns The node as it renders, or the refusal of an interaction's part swap.
+ * @returns The node as it renders, or the refusal of a part swap.
  */
 const nodeOf = (node: PayloadNode, walk: Walk): Effect.Effect<Node, PartSwapRefused> => {
   switch (node.kind) {
@@ -269,7 +358,7 @@ const nodeOf = (node: PayloadNode, walk: Walk): Effect.Effect<Node, PartSwapRefu
       return Effect.succeed(text(node.text));
     }
     case "notice": {
-      return Effect.succeed(placeholder(node, walk.locale));
+      return noticeOf(node, walk);
     }
     case "choice":
     case "extended-text":
@@ -283,14 +372,44 @@ const nodeOf = (node: PayloadNode, walk: Walk): Effect.Effect<Node, PartSwapRefu
 };
 
 /**
+ * Start a walk over nodes that stand at a position.
+ *
+ * @param payload The payload, which gives the item instance key.
+ * @param state The emit state, which gives the locale, the heading level, the asset base and the
+ *   part overrides.
+ * @param renderInteraction The render function for an interaction among the nodes.
+ * @param position Where the nodes stand. At a phrasing position nothing below them stands at a
+ *   flow position either, since the walk cannot see whether a `p` is open above.
+ * @returns The walk.
+ */
+const walkOf = (
+  payload: Payload,
+  state: EmitState,
+  renderInteraction: RenderInteraction,
+  position: Position,
+): Walk => ({
+  assetBase: state.assetBase,
+  headingLevel: state.headingLevel,
+  instance: payload.instance,
+  locale: state.locale,
+  parts: state.parts,
+  phrasingOnly: position === "phrasing",
+  position,
+  renderInteraction,
+});
+
+/**
  * Emit payload nodes from anywhere in the body, such as a Prompt's or a choice's content, with the
- * same id scoping, heading shift and placeholders as the body itself.
+ * same id scoping, heading shift, URLs and Notice part as the body itself.
+ *
+ * The nodes stand at a phrasing position, so a Notice among them, or anywhere below them, is a
+ * `span`: content inside a Label or a `legend` holds phrasing content only.
  *
  * @param nodes The payload nodes.
  * @param payload The payload, which gives the item instance key.
- * @param state The emit state, which gives the locale and the heading level.
+ * @param state The emit state.
  * @param renderInteraction The render function for an interaction among the nodes.
- * @returns The emitted nodes, in order, or the first refusal of an interaction's part swap.
+ * @returns The emitted nodes, in order, or the first refusal of a part swap.
  */
 export const emitNodes = (
   nodes: readonly PayloadNode[],
@@ -298,24 +417,25 @@ export const emitNodes = (
   state: EmitState,
   renderInteraction: RenderInteraction,
 ): Effect.Effect<readonly Node[], PartSwapRefused> =>
-  nodesOf(nodes, {
-    headingLevel: state.headingLevel,
-    instance: payload.instance,
-    locale: state.locale,
-    renderInteraction,
-  });
+  nodesOf(nodes, walkOf(payload, state, renderInteraction, "phrasing"));
 
 /**
  * Emit the item body: the payload's body nodes as the output tree's nodes, in order.
  *
+ * The body stands in the item Root, which takes flow content, so a Notice directly in the body is
+ * a `div`.
+ *
  * @param payload The payload, whose body the walk reads.
  * @param state The emit state.
  * @param renderInteraction The render function each interaction of the body is handed to.
- * @returns The body's nodes, or the first refusal of an interaction's part swap.
+ * @returns The body's nodes, or the first refusal of a part swap.
  */
 export const emitBody = (
   payload: Payload,
   state: EmitState,
   renderInteraction: RenderInteraction,
 ): Effect.Effect<readonly Node[], PartSwapRefused> =>
-  emitNodes(payload.body, payload, state, renderInteraction);
+  nodesOf(
+    payload.body,
+    walkOf(payload, state, renderInteraction, positionUnder(rowFor("item", "root").element, false)),
+  );
