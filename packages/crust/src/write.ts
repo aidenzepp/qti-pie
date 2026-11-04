@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
-import { EncodeError } from "#qti/xml/errors.ts";
-import type { Attribute, Child, XmlDocument, XmlDeclaration } from "#qti/xml/tree.ts";
+import { EncodeError } from "#crust/errors.ts";
+import type { Attribute, Child, XmlDocument, XmlDeclaration } from "#crust/tree.ts";
 
 /**
  * How the writer treats code points above the highest one the label's encoder represents.

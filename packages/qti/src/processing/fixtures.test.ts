@@ -8,8 +8,8 @@ import {
   specOfProcessing,
 } from "#qti/processing/fixtures.ts";
 import type { ProcessingFixtureName } from "#qti/processing/fixtures.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Child, Element } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Child, Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * The packages whose `choice.xml` is not a hand-written item: three keep `simple`'s own item root

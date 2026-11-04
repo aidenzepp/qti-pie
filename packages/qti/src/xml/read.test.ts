@@ -6,8 +6,8 @@ import { Effect, FileSystem, Option } from "effect";
 import { SaxesParser } from "saxes";
 import { inject } from "vitest";
 import { materialize } from "#qti/test/fixtures.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Child, Element, XmlDocument } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
  * The events one `saxes` parse reported: every text run in order, every attribute value in order,

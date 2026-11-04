@@ -36,7 +36,7 @@ import type { RegistryRow } from "#qti/schema/kinds/generic.ts";
 import { AttributeLexical, AttributeName, Tree } from "#qti/schema/node.ts";
 import type { NodeKindHandle } from "#qti/schema/node.ts";
 import { registries } from "#qti/schema/seed/admission.ts";
-import type { Attribute, Element } from "#qti/xml/tree.ts";
+import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 

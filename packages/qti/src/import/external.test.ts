@@ -10,7 +10,7 @@ import { CsmSet } from "#qti/schema/csm.ts";
 import { ExternalLom, Lom, QtiMetadata, QtiMetadataInExternalLom } from "#qti/schema/metadata.ts";
 import { Node, TreeMisc } from "#qti/schema/node.ts";
 import { materialize } from "#qti/test/fixtures.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
  * The one row of a list that must hold exactly one.

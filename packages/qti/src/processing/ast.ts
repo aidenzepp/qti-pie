@@ -1,7 +1,7 @@
 import type { Option } from "effect";
 
 import type { NodeKindHandle } from "#qti/schema/node.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * The processing AST: the response, outcome and template processing of an item or test, read from

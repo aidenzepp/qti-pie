@@ -1,6 +1,6 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The XML 1.0 section 4.3.3 label spellings (`UTF-8`, `US-ASCII`) and the closed encoder-class names (`utf8`) are this module's data, not identifiers passed to a Node encoding API. */
 import { Option } from "effect";
-import type { Child, XmlDocument } from "#qti/xml/tree.ts";
+import type { Child, XmlDocument } from "#crust/tree.ts";
 
 /**
  * How a label's characters become bytes: `decode-only` marks a label the reader can decode but the

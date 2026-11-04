@@ -1,4 +1,4 @@
-import type { Attribute, Child, Element, Misc, XmlDocument } from "#qti/xml/tree.ts";
+import type { Attribute, Child, Element, Misc, XmlDocument } from "#crust/tree.ts";
 
 /**
  * The namespace name that every namespace declaration's attribute is in.

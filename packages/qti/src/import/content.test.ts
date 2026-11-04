@@ -71,7 +71,7 @@ import {
   TemplateInline,
 } from "#qti/schema/template.ts";
 import * as values from "#qti/schema/value.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";
 

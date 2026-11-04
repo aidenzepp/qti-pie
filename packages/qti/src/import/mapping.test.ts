@@ -30,8 +30,8 @@ import {
 import { RectCoords } from "#qti/schema/contracts.ts";
 import { AttributeLexical, Edge } from "#qti/schema/node.ts";
 import { Coords, CoordsRect } from "#qti/schema/shapes.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 const {
   InterpolationTableDefaultValueBoolean,

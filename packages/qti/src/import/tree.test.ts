@@ -46,8 +46,8 @@ import {
   valueText,
 } from "#qti/import/tree.ts";
 import type { NodeIndex, TreeInput } from "#qti/import/tree.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 const treeId = "11111111-1111-4111-8111-111111111111";
 

@@ -7,12 +7,12 @@ import type { ZipRefusal } from "#qti/package/zip.ts";
 import { recordTypes, soleFileTypes } from "#qti/import/record.ts";
 import { collapse } from "#qti/import/tree.ts";
 import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
-import { canonicalize } from "#qti/xml/canonical.ts";
-import type { ReaderRefusal, WellFormednessError } from "#qti/xml/errors.ts";
+import { canonicalize } from "@qti-pie/crust/canonical.ts";
+import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import { xmllintC14n } from "#qti/xml/oracle.ts";
 import type { OracleError } from "#qti/xml/oracle.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Child, Element, XmlDocument } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
  * What comparing one entry found.
