@@ -1199,8 +1199,11 @@ type Admission =
  * is the verdict's `not-qti-root`, so it is passed over. A child of an element the walk did not
  * check is passed over. A child its parent's table names is checked when it is in the QTI namespace
  * and has a table, refused when it is in the QTI namespace and has none, and passed over in any
- * other namespace. A child only the parent's element wildcard matches is passed over (reading 6).
- * Any other child is refused.
+ * other namespace. A child only the parent's element wildcard matches is passed over, and so is
+ * everything below it: phase 1 skips wildcard content, an interim, not a reading. Reading 6 covers
+ * only a nested QTI root, and rule `5b8ee08b` validates a known QTI element inside lax wildcard
+ * content as QTI, so M1-R validates it here and in the prose rules (the ledger's lax-wildcard
+ * deferral). Any other child is refused.
  *
  * @param element The element.
  * @param parent Its parent, none for the root.
