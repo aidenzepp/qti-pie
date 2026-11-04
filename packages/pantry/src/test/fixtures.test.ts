@@ -11,6 +11,7 @@ import {
   materialize,
   materializeCorpus,
   materializePackage,
+  materializeSpec,
   specOf,
   transformHash,
 } from "#pantry/test/fixtures.ts";
@@ -150,6 +151,86 @@ const baseSpec: FixtureSpec = { edits: [], member: "dir/one.zip", name: "one" };
  * An edit list entry; its content only has to differ from the empty list.
  */
 const someEdit: Edit = { _tag: "ReplaceText", file: "choice.xml", replacement: "b", search: "a" };
+
+/**
+ * The resources of a manifest, read with plain patterns: each resource's identifier, type and
+ * `href`, and the `href` of every `file` it lists.
+ *
+ * @param manifest - A manifest's text.
+ * @returns One entry per resource, in document order.
+ */
+const resourcesOf = (manifest: string) =>
+  [...manifest.matchAll(/<resource\b(?<attrs>[^>]*)>(?<body>[\s\S]*?)<\/resource>/gu)].map(
+    (match) => {
+      const attribute = (name: string) =>
+        new RegExp(`\\s${name}="(?<value>[^"]*)"`, "u").exec(match.groups?.["attrs"] ?? "")
+          ?.groups?.["value"] ?? "";
+
+      return {
+        files: [...(match.groups?.["body"] ?? "").matchAll(/<file href="(?<href>[^"]*)"/gu)].map(
+          (file) => file.groups?.["href"] ?? "",
+        ),
+        href: attribute("href"),
+        identifier: attribute("identifier"),
+        type: attribute("type"),
+      };
+    },
+  );
+
+/**
+ * The `href` of each item ref of a test document, as written.
+ *
+ * @param test - A test document's text.
+ * @returns The hrefs, in document order.
+ */
+const itemHrefsOf = (test: string): string[] =>
+  [...test.matchAll(/<qti-assessment-item-ref\b[^>]*\shref="(?<href>[^"]*)"/gu)].map(
+    (match) => match.groups?.["href"] ?? "",
+  );
+
+/**
+ * Every path a materialized package holds, files only.
+ *
+ * @param dir - The package directory.
+ * @returns The file paths, relative to `dir`.
+ */
+const filesOf = Effect.fn("filesOf")(function* filesOf(dir: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const entries = yield* fs.readDirectory(dir, { recursive: true });
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    if ((yield* fs.stat(`${dir}/${entry}`)).type === "File") {
+      files.push(entry);
+    }
+  }
+
+  return files.toSorted();
+});
+
+/**
+ * BegGuide's test, cut with the documents it reaches.
+ */
+const begGuideCut: FixtureSpec = {
+  edits: [{ _tag: "cutTest", schemaversion: "3.0.1", test: "BGtest.xml" }],
+  member: "QTI3_BeginnersGuide_Examples/BegGuide_March2025.zip",
+  name: "cut-test-begguide",
+};
+
+/**
+ * The corpus's loose `rtest13.xml`, packaged with one generated stub item per item `href`.
+ */
+const looseRtest13: FixtureSpec = {
+  edits: [
+    {
+      _tag: "looseTest",
+      schemaversion: "3.0.0",
+      test: "qtiv3-examples/tests/rtest13.xml",
+    },
+  ],
+  member: "qtiv3-examples/tests/rtest13.xml",
+  name: "loose-test-rtest13",
+};
 
 layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it) => {
   it.effect("the globalSetup provides the base set before the file's own first materialize", () =>
@@ -544,5 +625,107 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           assert.strictEqual(choice[14], "    <qti-item-body>");
         }),
       ),
+  );
+  it.effect(
+    "cutTest keeps the test, its six items and the four media files, each listed once",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* cutTestPackage() {
+          const fs = yield* FileSystem.FileSystem;
+          const dir = yield* materializeSpec(begGuideCut);
+          const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+          const test = yield* fs.readFileString(`${dir}/BGtest.xml`);
+          const resources = resourcesOf(manifest);
+          const files = yield* filesOf(dir);
+          const listed = resources.flatMap((resource) => resource.files);
+
+          assert.deepStrictEqual(
+            resources.map((resource) => [resource.type, resource.href]),
+            [
+              ["imsqti_test_xmlv3p0", "BGtest.xml"],
+              ["imsqti_item_xmlv3p0", "items/firstexample.xml"],
+              ["imsqti_item_xmlv3p0", "items/BG007.xml"],
+              ["imsqti_item_xmlv3p0", "items/BG008.xml"],
+              ["imsqti_item_xmlv3p0", "items/BG009.xml"],
+              ["imsqti_item_xmlv3p0", "items/BG010.xml"],
+              ["imsqti_item_xmlv3p0", "items/BG011.xml"],
+            ],
+          );
+          assert.strictEqual(new Set(resources.map((resource) => resource.identifier)).size, 7);
+          assert.include(manifest, "<schemaversion>3.0.1</schemaversion>");
+
+          for (const href of itemHrefsOf(test)) {
+            assert.include(files, href);
+          }
+
+          assert.deepStrictEqual(
+            resources.find((resource) => resource.href === "items/BG011.xml")?.files.toSorted(),
+            [
+              "items/BG011.xml",
+              "items/resources/crow_movie.mp4",
+              "items/resources/crow_movie.ogg",
+              "items/resources/crows.jpg",
+              "items/resources/subtitles_en.vtt",
+            ],
+          );
+          assert.deepStrictEqual(
+            files.filter((file) => file !== "imsmanifest.xml"),
+            [...new Set(listed)].toSorted(),
+          );
+          assert.deepStrictEqual(
+            files.toSorted(),
+            [...new Set(listed), "imsmanifest.xml"].toSorted(),
+          );
+          assert.notInclude(files, "items/BG007.xml.bak");
+        }),
+      ),
+  );
+
+  it.effect("looseTest packages rtest13 with one stub per item href declaring its variables", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* looseTestPackage() {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* materializeSpec(looseRtest13);
+        const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+        const test = yield* fs.readFileString(`${dir}/rtest13.xml`);
+        const resources = resourcesOf(manifest);
+        const files = yield* filesOf(dir);
+        const hrefs = itemHrefsOf(test);
+
+        assert.strictEqual(hrefs.length, 6);
+        assert.deepStrictEqual(
+          resources.map((resource) => [resource.type, resource.href]),
+          [
+            ["imsqti_test_xmlv3p0", "rtest13.xml"],
+            ...hrefs.map((href) => ["imsqti_item_xmlv3p0", href]),
+          ],
+        );
+
+        for (const href of hrefs) {
+          assert.include(files, href);
+        }
+
+        assert.deepStrictEqual(
+          files,
+          [...resources.flatMap((resource) => resource.files), "imsmanifest.xml"]
+            .filter((file, at, all) => all.indexOf(file) === at)
+            .toSorted(),
+        );
+
+        const stub = yield* fs.readFileString(`${dir}/item034.xml`);
+
+        assert.include(stub, 'identifier="item034"');
+        assert.match(
+          stub,
+          /<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/u,
+        );
+        assert.match(
+          stub,
+          /<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/u,
+        );
+        assert.notInclude(stub, "sign.png");
+        assert.notInclude(stub, 'identifier="xml"');
+      }),
+    ),
   );
 });
