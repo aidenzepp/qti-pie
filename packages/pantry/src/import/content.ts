@@ -12,7 +12,7 @@
  * kinds.
  */
 import { judgedLater } from "#pantry/import/judged.ts";
-import type { Relation, uuid } from "@bjornpagen/grizzle";
+import type { Relation, Uuid, uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { attributeReader, markers } from "#pantry/import/interactions.ts";
@@ -119,11 +119,11 @@ interface KnownVariable extends DeclaredVariable {
  * position of each node, the variables the item declares, and the rows so far.
  */
 interface Context {
-  readonly documentId: string;
+  readonly documentId: Uuid;
   readonly nodes: NodeIndex;
-  readonly positions: ReadonlyMap<string, bigint>;
+  readonly positions: ReadonlyMap<Uuid, bigint>;
   readonly variables: ReadonlyMap<string, KnownVariable>;
-  readonly versions: ReadonlyMap<string, string>;
+  readonly versions: ReadonlyMap<Uuid, string>;
 }
 
 const integerPattern = new RegExp(patterns.xsInteger, "u");
@@ -181,7 +181,7 @@ const valueRows = Effect.fn("import.content.valueRows")(function* valueRows(
   rows: Rows,
   element: Element,
   node: NodeRef,
-  set: { readonly id: string; readonly owner: DeclaredVariable },
+  set: { readonly id: Uuid; readonly owner: DeclaredVariable },
   position: bigint,
 ): Effect.fn.Return<Rows, ImportRefused> {
   const attributes = attributeReader(rows, element, node);
@@ -1009,7 +1009,7 @@ const declarationPass = Effect.fn("import.content.declarationPass")(function* de
 export const contentRows = Effect.fn("import.contentRows")(function* contentRows(
   root: Element,
   nodes: NodeIndex,
-  documentId: string,
+  documentId: Uuid,
   declarations: ReadonlyMap<string, DeclaredVariable>,
   rows: Rows,
 ): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal | ImportRefused> {
