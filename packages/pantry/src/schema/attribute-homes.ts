@@ -560,6 +560,14 @@ export const ownAttributes = {
     ["type", optional(R.ParamType)],
   ],
   q: [["cite", optional(R.QCite)]],
+  "qti-adaptive-engine-ref": [
+    identifierOf(R.AdaptiveEngineRef),
+    ["href", arm(R.AdaptiveEngineRef, "href")],
+  ],
+  "qti-adaptive-settings-ref": [
+    identifierOf(R.AdaptiveSettingsRef),
+    ["href", arm(R.AdaptiveSettingsRef, "href")],
+  ],
   "qti-any-n": [
     ["min", arm(R.AnyN, "min")],
     ["max", arm(R.AnyN, "max")],
@@ -863,6 +871,18 @@ export const ownAttributes = {
     ],
     ["target-value", byBaseType(interpolationTargets, "id", "targetValue")],
   ],
+  "qti-item-session-control": [
+    ["max-attempts", optional(R.ItemSessionMaxAttempts)],
+    ["show-feedback", marked(R.DeclaredShowFeedback, arm(R.ItemSessionControl, "showFeedback"))],
+    ["allow-review", marked(R.DeclaredAllowReview, arm(R.ItemSessionControl, "allowReview"))],
+    ["show-solution", marked(R.DeclaredShowSolution, arm(R.ItemSessionControl, "showSolution"))],
+    ["allow-comment", marked(R.DeclaredAllowComment, arm(R.ItemSessionControl, "allowComment"))],
+    ["allow-skipping", marked(R.DeclaredAllowSkipping, arm(R.ItemSessionControl, "allowSkipping"))],
+    [
+      "validate-responses",
+      marked(R.DeclaredValidateResponses, arm(R.ItemSessionControl, "validateResponses")),
+    ],
+  ],
   "qti-lookup-outcome-value": referring,
   "qti-map-entry": [
     ["map-key", byBaseType(mapKeys, "id", "mapKey")],
@@ -906,6 +926,7 @@ export const ownAttributes = {
     ["loop", marked(R.DeclaredMediaLoop, arm(R.MediaInteraction, "loop"))],
     ["coords", optional(R.MediaCoords)],
   ],
+  "qti-metadata-ref": [identifierOf(R.MetadataRef), ["href", arm(R.MetadataRef, "href")]],
   "qti-modal-feedback": [
     ["outcome-identifier", arm(R.ModalFeedback, "outcomeIdentifier")],
     ["show-hide", arm(R.ModalFeedback, "showHide")],
@@ -927,6 +948,7 @@ export const ownAttributes = {
     ["data-max-selections-message", optional(R.OrderMaxSelectionsMessage)],
     ["data-choices-container-width", optional(R.OrderChoicesContainerWidth)],
   ],
+  "qti-ordering": [["shuffle", marked(R.DeclaredOrderingShuffle, arm(R.Ordering, "shuffle"))]],
   "qti-outcome-declaration": [
     ...declared,
     ["view", column(R.DeclarationView, "value", "declaration")],
@@ -1004,6 +1026,10 @@ export const ownAttributes = {
       "max-choices",
       marked(R.DeclaredSelectPointMaxChoices, arm(R.SelectPointInteraction, "maxChoicesN")),
     ],
+  ],
+  "qti-selection": [
+    ["select", arm(R.Selection, "select")],
+    ["with-replacement", marked(R.DeclaredWithReplacement, arm(R.Selection, "withReplacement"))],
   ],
   "qti-set-correct-response": referring,
   "qti-set-default-value": referring,
@@ -1091,10 +1117,19 @@ export const ownAttributes = {
     ["format", optional(R.TextEntryFormat)],
     ["data-patternmask-message", optional(R.TextEntryPatternmaskMessage)],
   ],
+  "qti-time-limits": [
+    ["min-time", optional(R.TimeLimitMin)],
+    ["max-time", optional(R.TimeLimitMax)],
+    [
+      "allow-late-submission",
+      marked(R.DeclaredAllowLateSubmission, arm(R.TimeLimits, "allowLateSubmission")),
+    ],
+  ],
   "qti-upload-interaction": [
     responseIdentifierOf(R.UploadInteraction),
     ["type", optional(R.UploadType)],
   ],
+  "qti-usagedata-ref": [identifierOf(R.UsageDataRef), ["href", arm(R.UsageDataRef, "href")]],
   "qti-value": [
     ["field-identifier", arm(R.RecordField, "fieldIdentifier")],
     ["base-type", recordValueBaseType],
