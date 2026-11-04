@@ -2637,7 +2637,7 @@ const refusedMembers: Record<NamedPackage, string> = {
  * The tarball member of each zip {@link materializeCorpus} lists (28 of the tarball's 29 zips, the
  * QTI 2.2 archive left out), keyed by the zip's file name without `.zip`.
  */
-const zipMembers = {
+export const zipMembers = {
   BBQsTest: "qtiv3-examples/packaging/BBQsTest/BBQsTest.zip",
   BPIG_22April: "QTI3_BPIG_Examples/BPIG_22April.zip",
   BegGuide_March2025: "QTI3_BeginnersGuide_Examples/BegGuide_March2025.zip",
@@ -3320,7 +3320,7 @@ export const materializePackage = (
  * The corpus is each zip of the tarball but {@link corpusExcludedMember}, listed from the tarball,
  * each a no-edit spec named by the zip's file name without `.zip`.
  *
- * @returns Each package's name and directory, in tarball order.
+ * @returns Each package's name, directory and tarball member, in tarball order.
  */
 export const materializeCorpus = Effect.fn("fixtures.materializeCorpus")(
   function* materializeCorpus() {
@@ -3333,7 +3333,7 @@ export const materializeCorpus = Effect.fn("fixtures.materializeCorpus")(
         const name = member.slice(member.lastIndexOf("/") + 1, -".zip".length);
 
         return materializeSpec({ edits: [], member, name }).pipe(
-          Effect.map((dir) => ({ dir, name })),
+          Effect.map((dir) => ({ dir, member, name })),
         );
       },
       { concurrency: 4 },
