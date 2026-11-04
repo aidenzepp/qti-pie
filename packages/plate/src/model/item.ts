@@ -1887,15 +1887,13 @@ const runnable = (
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
 ): Option.Option<readonly Rule[]> => {
   const unheld = unheldIdentifiers(read.tree, responses, outcomes);
-  build.unsupported.splice(
-    read.at,
-    0,
-    ...unheld.map((identifier): UnsupportedFeature => ({
-      feature: `variable:${identifier}`,
-      path: read.path,
-      shown: "mark",
-    })),
-  );
+  const after = build.unsupported.splice(read.at);
+  for (const identifier of unheld) {
+    build.unsupported.push({ feature: `variable:${identifier}`, path: read.path, shown: "mark" });
+  }
+  for (const entry of after) {
+    build.unsupported.push(entry);
+  }
 
   return unheld.length === 0 ? Option.some(read.tree) : Option.none();
 };
@@ -1942,7 +1940,9 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
     for (const part of elementsOf(root).filter((child) => isQti(child))) {
       if (part.local === "qti-item-body") {
         markElement(build, part, true);
-        body.push(...(yield* bodyNodes(build, part)));
+        for (const node of yield* bodyNodes(build, part)) {
+          body.push(node);
+        }
       } else if (part.local === "qti-response-processing") {
         markElement(build, part, false);
 

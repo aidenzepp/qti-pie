@@ -368,8 +368,12 @@ const placeNodes = (
   for (const node of nodes) {
     // oxlint-disable-next-line eslint/no-use-before-define -- `placeNodes` and `placeNode` are mutually recursive, as body nodes nest; the call runs only after both are defined.
     const result = placeNode(node, drops, placed, inMedia);
-    out.push(...result.nodes);
-    lifted.push(...result.lifted);
+    for (const placedNode of result.nodes) {
+      out.push(placedNode);
+    }
+    for (const notice of result.lifted) {
+      lifted.push(notice);
+    }
   }
 
   return { lifted, nodes: out };
