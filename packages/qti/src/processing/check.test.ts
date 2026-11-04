@@ -18,8 +18,8 @@ import { numerical, resultType, resultTypes, unify } from "#qti/processing/types
 import type { EffectiveType } from "#qti/processing/types.ts";
 import { expressionKinds } from "#qti/schema/kinds/asi.ts";
 import type { NodeKindHandle } from "#qti/schema/node.ts";
-import { readXml } from "#qti/xml/read.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * The 64 expression kinds of section 3.3 table A, by name: the oracle `resultType` must be total

@@ -43,7 +43,7 @@ import * as structure from "#qti/schema/html/structure.ts";
 import * as text from "#qti/schema/html/text.ts";
 import { Node } from "#qti/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle, SchemaVersionHandle } from "#qti/schema/node.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * What a step reads of the element it writes for: the element, its node, the node it sits under,

@@ -8,7 +8,7 @@ import { itemRows } from "#qti/import/item.ts";
 import { manifestRows } from "#qti/import/manifest.ts";
 import { Rows } from "#qti/import/tree.ts";
 import { listPackage } from "#qti/package/read.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 import * as document from "#qti/schema/document.ts";
 import * as metadata from "#qti/schema/metadata.ts";
 import * as rosters from "#qti/schema/content/rosters.ts";

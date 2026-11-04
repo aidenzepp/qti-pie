@@ -39,7 +39,7 @@ import {
   CoordsPoly,
   CoordsRect,
 } from "#qti/schema/shapes.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * The variable a declaration names, as the bindings of an interaction copy it.

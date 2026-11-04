@@ -15,7 +15,7 @@ import {
   XsBoolean,
 } from "#qti/schema/content/rosters.ts";
 import * as md from "#qti/schema/metadata.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * The element children of `element`, whatever their namespace.

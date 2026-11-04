@@ -7,7 +7,7 @@ import { Effect, FileSystem, Predicate } from "effect";
 import { inject } from "vitest";
 import { itemRows } from "#qti/import/item.ts";
 import { Rows } from "#qti/import/tree.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 import * as contracts from "#qti/schema/contracts.ts";
 import * as declaration from "#qti/schema/declaration.ts";
 import * as document from "#qti/schema/document.ts";

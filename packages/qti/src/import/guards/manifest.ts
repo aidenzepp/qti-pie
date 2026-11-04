@@ -39,7 +39,7 @@ import {
   variantDrdRelations,
 } from "#qti/schema/package.ts";
 import { rootOfType } from "#qti/schema/seed/root-of-type.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
  * A manifest guard refused the rows.

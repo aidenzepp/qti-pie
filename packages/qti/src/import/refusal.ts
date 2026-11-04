@@ -23,7 +23,7 @@ import type { ItemRefusal, UnmodeledVocabulary } from "#qti/import/tree.ts";
 import type { PackageReadError } from "#qti/package/read.ts";
 import type { ZipRefusal } from "#qti/package/zip.ts";
 import * as patterns from "#qti/schema/patterns.ts";
-import type { ReaderRefusal, WellFormednessError } from "#qti/xml/errors.ts";
+import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 
 /**
  * Every name a refused import may carry: the rules the schema holds at commit, the guards that run

@@ -17,9 +17,9 @@ import { Author } from "#qti/schema/roles.ts";
 import { materialize } from "#qti/test/fixtures.ts";
 import type { FixtureName } from "#qti/test/fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
-import { canonicalize } from "#qti/xml/canonical.ts";
+import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { xmllintC14n } from "#qti/xml/oracle.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
  * The text of a canonical form, so a failed comparison prints the two documents and not two byte

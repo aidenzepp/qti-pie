@@ -70,7 +70,7 @@ import {
   ValueSet,
   relations as valueRelations,
 } from "#qti/schema/value.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#qti/test/settings.ts";
 
 /**

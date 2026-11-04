@@ -97,7 +97,7 @@ import {
   TemplateInline,
 } from "#qti/schema/template.ts";
 import * as values from "#qti/schema/value.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 type BaseTypeHandle = (typeof BaseType.handles)[number];
 

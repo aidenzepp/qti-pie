@@ -17,7 +17,7 @@ import { OutcomeDocument } from "#qti/schema/outcome.ts";
 import { Edge, Node, TreeRoot } from "#qti/schema/node.ts";
 import * as value from "#qti/schema/value.ts";
 import { materialize } from "#qti/test/fixtures.ts";
-import { readXml } from "#qti/xml/read.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
  * The one row of a list that must hold exactly one.

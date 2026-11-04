@@ -14,8 +14,8 @@
   "dependencies": {
     "@bjornpagen/grizzle": "file:../../vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz",
     "@effect/platform-node": "4.0.7",
-    "effect": "4.0.7",
-    "saxes": "6.0.0"
+    "@qti-pie/crust": "workspace:*",
+    "effect": "4.0.7"
   },
   "devDependencies": {
     "@effect/vitest": "4.0.7",

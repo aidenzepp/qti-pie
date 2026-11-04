@@ -51,7 +51,7 @@ import type {
 import * as processing from "#qti/schema/processing.ts";
 import * as ruleSchema from "#qti/schema/rule.ts";
 import { operatorArity, operatorArityMax } from "#qti/schema/seed/operator-arity.ts";
-import type { Element } from "#qti/xml/tree.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
  * A processing tree the importer refuses to write rows for.
