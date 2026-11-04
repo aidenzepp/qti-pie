@@ -1,5 +1,6 @@
 import path from "node:path";
 import { Db, query, uuid, v } from "@bjornpagen/grizzle";
+import type { Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option, Ref, Schema } from "effect";
@@ -159,7 +160,7 @@ const nodesOf = query(Author).rule((r) => {
  * Every tree an imported package holds: the manifest's, whose id is the package id, and its
  * documents'.
  */
-const treesOf = (packageId: string) =>
+const treesOf = (packageId: Uuid) =>
   Effect.gen(function* treesOfPackage() {
     const db = yield* Db.open(AuthorApp.roles.author, {});
     const documents = yield* (yield* db.execute(documentsOf, { package: packageId })).collect;
@@ -170,7 +171,7 @@ const treesOf = (packageId: string) =>
 /**
  * The `AttributeLexical` rows of every tree of a package, read back by a query over the relation.
  */
-const lexicalsOfPackage = (packageId: string) =>
+const lexicalsOfPackage = (packageId: Uuid) =>
   Effect.gen(function* lexicalsOfTrees() {
     const db = yield* Db.open(AuthorApp.roles.author, {});
     const found = [];
@@ -185,7 +186,7 @@ const lexicalsOfPackage = (packageId: string) =>
 /**
  * How many nodes a package's trees hold in all, read back by a query over `Node`.
  */
-const nodeTotalOf = (packageId: string) =>
+const nodeTotalOf = (packageId: Uuid) =>
   Effect.gen(function* nodeTotalOfPackage() {
     const db = yield* Db.open(AuthorApp.roles.author, {});
     let total = 0n;

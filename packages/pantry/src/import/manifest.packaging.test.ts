@@ -355,7 +355,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
       assert.strictEqual(rest.length, 0);
 
       const named = identifiers.find((row) => row.id === object?.identifier);
-      assert.strictEqual(edges.get(named?.parent ?? "")?.childKind, "lom:general");
+      assert.strictEqual(
+        named === undefined ? undefined : edges.get(named.parent)?.childKind,
+        "lom:general",
+      );
     }),
   );
 
@@ -438,7 +441,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
       const kinds = new Map(Rows.of(rows, Node).map((node) => [node.id, node.kind]));
       const [metadata, ...more] = Rows.of(rows, FileMetadata);
       assert.strictEqual(more.length, 0);
-      assert.strictEqual(kinds.get(metadata?.file ?? ""), "cp:file");
+      assert.strictEqual(metadata === undefined ? undefined : kinds.get(metadata.file), "cp:file");
 
       const records = Rows.of(rows, FileLom);
       assert.strictEqual(records.length, 2);
@@ -449,7 +452,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
 
       const sets = Rows.of(rows, CsmSet).filter((set) => set.host === metadata?.id);
       assert.strictEqual(sets.length, 2);
-      assert.strictEqual(kinds.get(metadata?.id ?? ""), "cp:metadata.file");
+      assert.strictEqual(
+        metadata === undefined ? undefined : kinds.get(metadata.id),
+        "cp:metadata.file",
+      );
 
       const fileLoms = new Set(records.map((record) => record.lom));
       for (const record of Rows.of(rows, ResourceLom)) {
