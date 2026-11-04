@@ -6,8 +6,8 @@ import type { StatusInput } from "#plate/emit/item.ts";
 import { h } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
-import { checkInstance, entryName } from "#plate/form/encoding.ts";
-import type { InstanceRequirement } from "#plate/form/encoding.ts";
+import { checkInstance, entryName, partition } from "#plate/form/encoding.ts";
+import type { Entry, InstanceRequirement } from "#plate/form/encoding.ts";
 import type { BodyNode, ChoiceInteraction, Item, TextEntryInteraction } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { Redacted } from "#plate/payload.ts";
@@ -588,6 +588,38 @@ describe("render, the instance token", () => {
       assert.deepStrictEqual(checkInstance(drawn), Option.none());
     }),
   );
+
+  it.effect("returns the instance it used, which validates and partitions its entries", () =>
+    Effect.gen(function* returnedToken() {
+      const configuration = yield* defaults;
+      const drawn = yield* Effect.fromResult(render(redacted, configuration));
+      assert.match(drawn.instance, /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/u);
+      assert.deepStrictEqual(checkInstance(drawn.instance), Option.none());
+
+      const elements = elementsIn(drawn);
+      assert.strictEqual(elements[0]?.attrs["id"], scopedId(drawn.instance, "item"));
+
+      const posted: readonly Entry[] = elements.flatMap((element) => {
+        const { name } = element.attrs;
+
+        return name === undefined || name === true ? [] : [[name, "x"] as const];
+      });
+      const host: Entry = ["csrf-token", "abc"];
+      assert.lengthOf(posted, 4);
+      assert.includeMembers(
+        posted.map(([name]) => name),
+        [entryName(drawn.instance, "RESPONSE"), entryName(drawn.instance, "CITY")],
+      );
+      assert.deepStrictEqual(partition([...posted, host], drawn.instance), {
+        foreign: [],
+        host: [host],
+        own: posted,
+      });
+
+      const passed = yield* Effect.fromResult(render(redacted, configuration, { instance: "q1" }));
+      assert.strictEqual(passed.instance, "q1");
+    }),
+  );
 });
 
 describe("renderStatus", () => {
@@ -596,14 +628,15 @@ describe("renderStatus", () => {
    */
   const scored: StatusInput = { heading: "scored", instance, score: "1" };
 
-  it.effect("[I-0] returns { html }, which parses to the Status region", () =>
+  it.effect("[I-0] returns { html, instance }, whose html parses to the Status region", () =>
     Effect.gen(function* statusRegion() {
       const configuration = yield* defaults;
       const result = renderStatus(scored, configuration);
       assert.isTrue(Result.isResult(result));
 
       const rendered = yield* Effect.fromResult(result);
-      assert.deepStrictEqual(Object.keys(rendered), ["html"]);
+      assert.deepStrictEqual(Object.keys(rendered).toSorted(), ["html", "instance"]);
+      assert.strictEqual(rendered.instance, instance);
 
       const [region, ...rest] = parseHtml(rendered.html);
       assert.deepStrictEqual(rest, []);

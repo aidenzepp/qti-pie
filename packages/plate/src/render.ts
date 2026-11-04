@@ -54,10 +54,15 @@ export interface Options {
 }
 
 /**
- * What {@link render} and {@link renderStatus} return: the part's HTML.
+ * What {@link render} and {@link renderStatus} return: the part's HTML and the instance token that
+ * scopes it.
+ *
+ * `instance` is the token the render used, the one the author passed or the UUID `render` drew, so
+ * the author can hand it to `renderStatus`, `entryName`, `decode` and `partition`.
  */
 export interface Rendered {
   readonly html: string;
+  readonly instance: string;
 }
 
 /**
@@ -211,19 +216,20 @@ const interactionRenderer =
  * It resolves the overrides once, takes the instance from `options.instance` or draws a lowercase
  * UUID (`crypto.randomUUID()`, never derived from the seed), builds the payload from the redacted
  * item and the options, and emits the body and the Root. It writes no form, submit control, title
- * or record. Given the same instance and inputs, it gives the same HTML.
+ * or record. Given the same instance and inputs, it gives the same HTML, and it returns the
+ * instance it used.
  *
  * @example
  *   const rendered = render(redact(accepted), configuration, { instance: "q1" });
- *   // Result.succeed({ html: '<qti-assessment-item id="q1-item" …>…</qti-assessment-item>' })
+ *   // Result.succeed({ html: '<qti-assessment-item id="q1-item" …>…</qti-assessment-item>', instance: "q1" })
  *
  * @param item The item `redact` gave.
  * @param configuration The configuration, which gives the locale, the heading level and the asset
  *   base.
  * @param options The author's inputs, none by default.
- * @returns The Root's HTML, or {@link UnknownPart} for an override the part table lacks,
- *   {@link InvalidInstance} for an instance token that breaks a requirement, or
- *   {@link PartSwapRefused} for a replacement that breaks the swap invariant.
+ * @returns The Root's HTML and the instance token it used, or {@link UnknownPart} for an override
+ *   the part table lacks, {@link InvalidInstance} for an instance token that breaks a requirement,
+ *   or {@link PartSwapRefused} for a replacement that breaks the swap invariant.
  */
 export const render = (
   item: Redacted,
@@ -240,7 +246,7 @@ export const render = (
     const body = yield* emitBody(built, state, interactionRenderer(built, state));
     const root = yield* emitItem(built, state, body);
 
-    return { html: toHtml(root) };
+    return { html: toHtml(root), instance };
   });
 
 /**
@@ -252,14 +258,14 @@ export const render = (
  *
  * @example
  *   renderStatus({ heading: "scored", instance: "q1", score: "1" }, configuration);
- *   // Result.succeed({ html: '<section id="q1-status" role="status" …>…</section>' })
+ *   // Result.succeed({ html: '<section id="q1-status" role="status" …>…</section>', instance: "q1" })
  *
  * @param input The author's Status input.
  * @param configuration The configuration, which gives the locale and the heading level.
  * @param options The part overrides, none by default.
- * @returns The region's HTML, or {@link InvalidInstance} for an `input.instance` that breaks a
- *   requirement, {@link UnknownPart} for an override the part table lacks, or
- *   {@link PartSwapRefused} for a replacement that breaks the swap invariant.
+ * @returns The region's HTML and `input.instance`, or {@link InvalidInstance} for an
+ *   `input.instance` that breaks a requirement, {@link UnknownPart} for an override the part table
+ *   lacks, or {@link PartSwapRefused} for a replacement that breaks the swap invariant.
  */
 export const renderStatus = (
   input: StatusInput,
@@ -272,5 +278,5 @@ export const renderStatus = (
     const parts = yield* resolveOverrides(options.parts);
     const region = yield* emitStatus(input, stateOf(configuration, parts));
 
-    return { html: toHtml(region) };
+    return { html: toHtml(region), instance: input.instance };
   });
