@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceChild, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { runAttempt } from "#plate/engine/attempt.ts";
@@ -195,6 +195,19 @@ const instance = "q1";
  */
 const score = (record: ItemRecord): Value | undefined => record.outcomes["SCORE"];
 
+/**
+ * Give the failure a Result holds, after checking that it is a Result and that it failed.
+ *
+ * @param result The Result the attempt returned.
+ * @returns Its failure.
+ */
+const failureOf = <A, E>(result: Result.Result<A, E>): E => {
+  assert.isTrue(Result.isResult(result));
+  assert.isTrue(Result.isFailure(result));
+
+  return Result.getOrThrow(Result.flip(result));
+};
+
 describe("runAttempt", () => {
   it.effect(
     "[I-9b] scores a BG007-shaped item: true gives 1, false 0 and NULL 0, though SCORE's default is 1",
@@ -203,9 +216,15 @@ describe("runAttempt", () => {
         const item = yield* buildItem(bg007);
         const record = fresh(item, instance);
 
-        const correct = runAttempt(item, record, { RESPONSE: identifierValue("true") });
-        const wrong = runAttempt(item, record, { RESPONSE: identifierValue("false") });
-        const empty = runAttempt(item, record, { RESPONSE: nullOf("identifier", "single") });
+        const correct = yield* Effect.fromResult(
+          runAttempt(item, record, { RESPONSE: identifierValue("true") }),
+        );
+        const wrong = yield* Effect.fromResult(
+          runAttempt(item, record, { RESPONSE: identifierValue("false") }),
+        );
+        const empty = yield* Effect.fromResult(
+          runAttempt(item, record, { RESPONSE: nullOf("identifier", "single") }),
+        );
 
         assert.deepStrictEqual(correct, {
           ...record,
@@ -228,8 +247,12 @@ describe("runAttempt", () => {
       const item = yield* buildItem(bg010);
       const record = fresh(item, instance);
 
-      const empty = runAttempt(item, record, { RESPONSE: nullOf("string", "single") });
-      const mapped = runAttempt(item, record, { RESPONSE: stringValue("york") });
+      const empty = yield* Effect.fromResult(
+        runAttempt(item, record, { RESPONSE: nullOf("string", "single") }),
+      );
+      const mapped = yield* Effect.fromResult(
+        runAttempt(item, record, { RESPONSE: stringValue("york") }),
+      );
 
       assert.deepStrictEqual(empty, {
         ...record,
@@ -247,10 +270,12 @@ describe("runAttempt", () => {
     () =>
       Effect.gen(function* resetsFirst() {
         const item = yield* buildItem(correctOnly);
-        const first = runAttempt(item, fresh(item, instance), {
-          RESPONSE: identifierValue("true"),
-        });
-        const second = runAttempt(item, first, { RESPONSE: identifierValue("false") });
+        const first = yield* Effect.fromResult(
+          runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
+        );
+        const second = yield* Effect.fromResult(
+          runAttempt(item, first, { RESPONSE: identifierValue("false") }),
+        );
 
         assert.deepStrictEqual(score(first), floatValue(1));
         assert.deepStrictEqual(score(second), floatValue(0));
@@ -265,7 +290,9 @@ describe("runAttempt", () => {
       const item = yield* buildItem(itemDocument(trueFalse, scoreOfOne));
       const scored: ItemRecord = { ...fresh(item, instance), outcomes: { SCORE: floatValue(0) } };
 
-      const after = runAttempt(item, scored, { RESPONSE: identifierValue("false") });
+      const after = yield* Effect.fromResult(
+        runAttempt(item, scored, { RESPONSE: identifierValue("false") }),
+      );
 
       assert.deepStrictEqual(after.outcomes, { SCORE: floatValue(1) });
       assert.deepStrictEqual(after.responses, { RESPONSE: identifierValue("false") });
@@ -279,7 +306,7 @@ describe("runAttempt", () => {
       const item = yield* buildItem(bg007);
       const record = fresh(item, instance);
 
-      const after = runAttempt(item, record, {});
+      const after = yield* Effect.fromResult(runAttempt(item, record, {}));
 
       assert.deepStrictEqual(after.responses, record.responses);
       assert.deepStrictEqual(score(after), floatValue(0));
@@ -287,8 +314,8 @@ describe("runAttempt", () => {
     }),
   );
 
-  it.effect("throws the evaluator's defect and leaves the record it was given unchanged", () =>
-    Effect.gen(function* throwsDefect() {
+  it.effect("returns the evaluator's failure and leaves the record it was given unchanged", () =>
+    Effect.gen(function* returnsFailure() {
       const item = yield* buildItem(
         itemDocument(
           trueFalse,
@@ -299,9 +326,10 @@ describe("runAttempt", () => {
       const record = fresh(item, instance);
       const before = structuredClone(record);
 
-      assert.throws(() => {
-        runAttempt(item, record, { RESPONSE: identifierValue("true") });
-      }, OutcomeMismatchError);
+      const failure = failureOf(runAttempt(item, record, { RESPONSE: identifierValue("true") }));
+
+      assert.instanceOf(failure, OutcomeMismatchError);
+      assert.strictEqual(failure._tag, "OutcomeMismatchError");
       assert.deepStrictEqual(record, before);
     }),
   );

@@ -128,10 +128,12 @@ const scoreAfter = (source: SourceDocument, posted: string) =>
     const item = yield* buildItem(source);
     const response = yield* decode([[binding.name, posted]], binding);
     const rules = yield* Effect.fromOption(item.processing);
-    const after = runRules(rules, item, {
-      outcomes: outcomeDefaults(item),
-      responses: { RESPONSE: response },
-    });
+    const after = yield* Effect.fromResult(
+      runRules(rules, item, {
+        outcomes: outcomeDefaults(item),
+        responses: { RESPONSE: response },
+      }),
+    );
 
     return after.outcomes["SCORE"]?.values.map(format);
   });
