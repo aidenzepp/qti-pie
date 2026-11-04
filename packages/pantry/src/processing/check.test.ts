@@ -1,0 +1,799 @@
+import path from "node:path";
+import { NodeServices } from "@effect/platform-node";
+import { assert, describe, it, layer } from "@effect/vitest";
+import { Effect, FileSystem, Option } from "effect";
+import type { Language, ProcessingAst } from "#pantry/processing/ast.ts";
+import { checkProcessing } from "#pantry/processing/check.ts";
+import type {
+  TypedAst,
+  TypedExpression,
+  TypedRuleNode,
+  Unresolved,
+} from "#pantry/processing/check.ts";
+import { emptyEnvironment, environmentOf, withDeclarations } from "#pantry/processing/env.ts";
+import type { DeclarationEntry, Environment } from "#pantry/processing/env.ts";
+import { corpusPackage, templateDocuments } from "#pantry/processing/fixtures.ts";
+import { parseProcessing } from "#pantry/processing/parse.ts";
+import { numerical, resultType, resultTypes, unify } from "#pantry/processing/types.ts";
+import type { EffectiveType } from "#pantry/processing/types.ts";
+import { expressionKinds } from "#pantry/schema/kinds/asi.ts";
+import type { NodeKindHandle } from "#pantry/schema/node.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
+
+/**
+ * The 64 expression kinds of section 3.3 table A, by name: the oracle `resultType` must be total
+ * over.
+ */
+const tableA = [
+  "qti-and",
+  "qti-any-n",
+  "qti-base-value",
+  "qti-container-size",
+  "qti-contains",
+  "qti-correct",
+  "qti-custom-operator",
+  "qti-default",
+  "qti-delete",
+  "qti-divide",
+  "qti-duration-gte",
+  "qti-duration-lt",
+  "qti-equal",
+  "qti-equal-rounded",
+  "qti-field-value",
+  "qti-gcd",
+  "qti-gt",
+  "qti-gte",
+  "qti-index",
+  "qti-inside",
+  "qti-integer-divide",
+  "qti-integer-modulus",
+  "qti-integer-to-float",
+  "qti-is-null",
+  "qti-lcm",
+  "qti-lt",
+  "qti-lte",
+  "qti-map-response",
+  "qti-map-response-point",
+  "qti-match",
+  "qti-math-constant",
+  "qti-math-operator",
+  "qti-max",
+  "qti-member",
+  "qti-min",
+  "qti-multiple",
+  "qti-not",
+  "qti-null",
+  "qti-number-correct",
+  "qti-number-incorrect",
+  "qti-number-presented",
+  "qti-number-responded",
+  "qti-number-selected",
+  "qti-or",
+  "qti-ordered",
+  "qti-outcome-maximum",
+  "qti-outcome-minimum",
+  "qti-pattern-match",
+  "qti-power",
+  "qti-product",
+  "qti-random",
+  "qti-random-float",
+  "qti-random-integer",
+  "qti-repeat",
+  "qti-round",
+  "qti-round-to",
+  "qti-stats-operator",
+  "qti-string-match",
+  "qti-substring",
+  "qti-subtract",
+  "qti-sum",
+  "qti-test-variables",
+  "qti-truncate",
+  "qti-variable",
+];
+
+const single = (baseType: EffectiveType["baseType"]): EffectiveType => ({
+  baseType,
+  cardinality: "single",
+});
+
+describe("resultType", () => {
+  it("is defined for every one of table A's 64 kinds and no other", () => {
+    assert.deepStrictEqual(expressionKinds.toSorted(), tableA.toSorted());
+    assert.deepStrictEqual(Object.keys(resultTypes).toSorted(), tableA.toSorted());
+    assert.strictEqual(tableA.length, 64);
+  });
+
+  it("types the boolean family boolean single", () => {
+    const boolean = single("boolean");
+    for (const kind of [
+      "qti-and",
+      "qti-or",
+      "qti-not",
+      "qti-any-n",
+      "qti-match",
+      "qti-equal",
+      "qti-equal-rounded",
+      "qti-gt",
+      "qti-gte",
+      "qti-lt",
+      "qti-lte",
+      "qti-duration-lt",
+      "qti-duration-gte",
+      "qti-member",
+      "qti-contains",
+      "qti-substring",
+      "qti-string-match",
+      "qti-pattern-match",
+      "qti-inside",
+      "qti-is-null",
+    ] as const) {
+      assert.deepStrictEqual(resultType(kind, [], {}), boolean, kind);
+    }
+  });
+
+  it("types qti-sum integer over integers and float once a float joins", () => {
+    assert.deepStrictEqual(
+      resultType("qti-sum", [single("integer"), single("integer")], {}),
+      single("integer"),
+    );
+    assert.deepStrictEqual(
+      resultType("qti-sum", [single("integer"), single("float")], {}),
+      single("float"),
+    );
+    assert.deepStrictEqual(
+      resultType("qti-sum", [{ baseType: "integer", cardinality: "multiple" }], {}),
+      single("integer"),
+    );
+  });
+
+  it("types qti-divide and qti-power float", () => {
+    const integers = [single("integer"), single("integer")];
+    assert.deepStrictEqual(resultType("qti-divide", integers, {}), single("float"));
+    assert.deepStrictEqual(resultType("qti-power", integers, {}), single("float"));
+  });
+
+  it("types the rounding family integer", () => {
+    assert.deepStrictEqual(resultType("qti-round", [single("float")], {}), single("integer"));
+    assert.deepStrictEqual(resultType("qti-truncate", [single("float")], {}), single("integer"));
+  });
+
+  it("types qti-math-operator by its operator name", () => {
+    const operand = [single("float")];
+    assert.deepStrictEqual(
+      resultType("qti-math-operator", operand, { name: "signum" }),
+      single("integer"),
+    );
+    assert.deepStrictEqual(
+      resultType("qti-math-operator", operand, { name: "floor" }),
+      single("integer"),
+    );
+    assert.deepStrictEqual(
+      resultType("qti-math-operator", operand, { name: "ceil" }),
+      single("integer"),
+    );
+    assert.deepStrictEqual(
+      resultType("qti-math-operator", operand, { name: "ln" }),
+      single("float"),
+    );
+  });
+
+  it("types containers from their operands", () => {
+    assert.deepStrictEqual(resultType("qti-multiple", [single("integer"), single("integer")], {}), {
+      baseType: "integer",
+      cardinality: "multiple",
+    });
+    assert.deepStrictEqual(resultType("qti-ordered", [single("string")], {}), {
+      baseType: "string",
+      cardinality: "ordered",
+    });
+    assert.deepStrictEqual(
+      resultType(
+        "qti-delete",
+        [single("identifier"), { baseType: "identifier", cardinality: "multiple" }],
+        {},
+      ),
+      { baseType: "identifier", cardinality: "multiple" },
+    );
+  });
+
+  it("types qti-null as any, with no cardinality", () => {
+    assert.deepStrictEqual(resultType("qti-null", [], {}), {
+      baseType: "any",
+      cardinality: "unknown",
+    });
+  });
+});
+
+describe("the lattice", () => {
+  it("joins any away and keeps unknown", () => {
+    assert.strictEqual(unify(single("any"), single("integer")).baseType, "integer");
+    assert.strictEqual(unify(single("unknown"), single("integer")).baseType, "unknown");
+  });
+
+  it("calls only integer and float numerical", () => {
+    assert.strictEqual(numerical(single("integer")), true);
+    assert.strictEqual(numerical(single("float")), true);
+    assert.strictEqual(numerical(single("duration")), false);
+  });
+});
+
+/**
+ * The committed trees, relative to `packages/pantry`, where the tests run.
+ */
+const validDirectory = "src/processing/fixtures/valid";
+
+/**
+ * Read a committed fixture and build its `item` mode environment.
+ */
+const environmentOfFixture = (name: string) =>
+  Effect.gen(function* environmentOfFile() {
+    const fs = yield* FileSystem.FileSystem;
+    const document = yield* readXml(yield* fs.readFile(path.join(validDirectory, `${name}.xml`)));
+
+    return environmentOf(document, "item");
+  });
+
+/**
+ * The part of a declaration entry that a fixture's attributes fix, as `[kind, type]`.
+ */
+const typeOfDeclaration = (env: Environment, identifier: string) => {
+  const entry = env.declarations.get(identifier);
+
+  return entry === undefined
+    ? undefined
+    : [entry.kind, entry.type.baseType, entry.type.cardinality];
+};
+
+layer(NodeServices.layer, { excludeTestServices: true })("processing/env.ts", (suite) => {
+  suite.effect("holds every declaration of template.xml by identifier", () =>
+    Effect.gen(function* templateDeclarations() {
+      const env = yield* environmentOfFixture("template");
+      assert.deepStrictEqual([...env.declarations.keys()].toSorted(), [
+        "A",
+        "CTX",
+        "M",
+        "N",
+        "RESPONSE",
+        "SCORE",
+      ]);
+      assert.deepStrictEqual(typeOfDeclaration(env, "CTX"), ["context", "integer", "single"]);
+      assert.deepStrictEqual(typeOfDeclaration(env, "RESPONSE"), ["response", "integer", "single"]);
+      assert.deepStrictEqual(typeOfDeclaration(env, "SCORE"), ["outcome", "float", "single"]);
+      assert.deepStrictEqual(typeOfDeclaration(env, "A"), ["template", "integer", "single"]);
+      assert.deepStrictEqual(typeOfDeclaration(env, "N"), ["template", "integer", "single"]);
+      assert.strictEqual(env.declarations.get("A")?.paramVariable, true);
+      assert.strictEqual(env.declarations.get("N")?.paramVariable, false);
+      assert.strictEqual(env.declarations.get("N")?.mathVariable, false);
+      assert.strictEqual(env.mode, "item");
+    }),
+  );
+
+  suite.effect("holds the four built-ins of item mode, QTI_CONTEXT a record", () =>
+    Effect.gen(function* builtIns() {
+      const env = yield* environmentOfFixture("template");
+      assert.deepStrictEqual([...env.builtIns.keys()].toSorted(), [
+        "QTI_CONTEXT",
+        "completionStatus",
+        "duration",
+        "numAttempts",
+      ]);
+      assert.deepStrictEqual(env.builtIns.get("completionStatus"), {
+        baseType: "identifier",
+        cardinality: "single",
+      });
+      assert.deepStrictEqual(env.builtIns.get("numAttempts"), {
+        baseType: "integer",
+        cardinality: "single",
+      });
+      assert.deepStrictEqual(env.builtIns.get("duration"), {
+        baseType: "float",
+        cardinality: "single",
+      });
+      assert.deepStrictEqual(env.builtIns.get("QTI_CONTEXT"), {
+        baseType: "unknown",
+        cardinality: "record",
+      });
+    }),
+  );
+
+  suite.effect("reads the mapping and table children of response-mapped.xml", () =>
+    Effect.gen(function* mappedFlags() {
+      const env = yield* environmentOfFixture("response-mapped");
+      const flags = (identifier: string) => {
+        const entry = env.declarations.get(identifier);
+
+        return entry === undefined
+          ? undefined
+          : {
+              areaMapping: entry.areaMapping,
+              interpolationTable: entry.interpolationTable,
+              mapping: entry.mapping,
+              matchTable: entry.matchTable,
+            };
+      };
+      const none = {
+        areaMapping: false,
+        interpolationTable: false,
+        mapping: false,
+        matchTable: false,
+      };
+      assert.deepStrictEqual(flags("RESPONSE"), { ...none, mapping: true });
+      assert.deepStrictEqual(flags("SPOT"), { ...none, areaMapping: true });
+      assert.deepStrictEqual(flags("LEVEL"), { ...none, matchTable: true });
+      assert.deepStrictEqual(flags("GRADE"), { ...none, interpolationTable: true });
+      assert.deepStrictEqual(flags("SCORE"), none);
+      assert.deepStrictEqual(typeOfDeclaration(env, "SPOT"), ["response", "point", "single"]);
+      assert.deepStrictEqual(typeOfDeclaration(env, "LEVEL"), ["outcome", "string", "single"]);
+    }),
+  );
+});
+
+/**
+ * A float outcome entry named `identifier`.
+ */
+const entry = (identifier: string): DeclarationEntry => ({
+  areaMapping: false,
+  identifier,
+  interpolationTable: false,
+  kind: "outcome",
+  mapping: false,
+  matchTable: false,
+  mathVariable: false,
+  paramVariable: false,
+  type: { baseType: "float", cardinality: "single" },
+});
+
+describe("emptyEnvironment and withDeclarations", () => {
+  it("holds no declaration in template mode", () => {
+    const env = emptyEnvironment("template");
+    assert.strictEqual(env.mode, "template");
+    assert.strictEqual(env.declarations.size, 0);
+  });
+
+  it("holds the built-ins of the mode and none of the declarations in test mode", () => {
+    const env = emptyEnvironment("test");
+    assert.strictEqual(env.declarations.size, 0);
+    assert.deepStrictEqual([...env.builtIns.keys()].toSorted(), [
+      "QTI_CONTEXT",
+      "completionStatus",
+      "duration",
+      "numAttempts",
+    ]);
+  });
+
+  it("adds entries by identifier and leaves the argument unchanged", () => {
+    const base = emptyEnvironment("test");
+    const extended = withDeclarations(withDeclarations(base, [entry("A"), entry("B")]), [
+      { ...entry("A"), kind: "template" },
+    ]);
+    assert.strictEqual(base.declarations.size, 0);
+    assert.deepStrictEqual([...extended.declarations.keys()].toSorted(), ["A", "B"]);
+    assert.strictEqual(extended.declarations.get("A")?.kind, "template");
+    assert.strictEqual(extended.mode, "test");
+  });
+});
+
+/**
+ * The `qti-<language>-processing` child of an item root, or the root itself for `outcome`.
+ */
+const processingRoot = (root: Element, name: string): Element => {
+  if (name === "outcome") {
+    return root;
+  }
+
+  const local = `qti-${name === "response-mapped" ? "response" : name}-processing`;
+  const found = root.children.find((c) => c.kind === "element" && c.local === local);
+
+  return found?.kind === "element" ? found : assert.fail(`no ${local} in ${name}.xml`);
+};
+
+const languageOf = (name: string): Language => {
+  if (name === "outcome") {
+    return "outcome";
+  }
+
+  return name === "template" ? "template" : "response";
+};
+
+/**
+ * Read a committed fixture and parse its processing tree, with the item mode environment of its own
+ * document.
+ */
+const parseValid = (name: string) =>
+  Effect.gen(function* parseValidFile() {
+    const fs = yield* FileSystem.FileSystem;
+    const document = yield* readXml(yield* fs.readFile(path.join(validDirectory, `${name}.xml`)));
+    const ast = yield* parseProcessing(processingRoot(document.root, name), languageOf(name));
+
+    return { ast, document };
+  });
+
+/**
+ * Parse a response processing tree written as a string.
+ */
+const parseBody = (body: string) =>
+  Effect.gen(function* parseBodyText() {
+    const text = `<qti-response-processing xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">${body}</qti-response-processing>`;
+    const document = yield* readXml(new TextEncoder().encode(text));
+
+    return yield* parseProcessing(document.root, "response");
+  });
+
+/**
+ * The result of a check that must be `ok`.
+ */
+const okOf = (ast: ProcessingAst, env: Environment) => {
+  const result = checkProcessing(ast, env);
+
+  return result._tag === "ok"
+    ? result
+    : assert.fail(`refused ${result.rule} at ${result.kind} ${result.position.path.join("/")}`);
+};
+
+/**
+ * A typed expression and its operands, in document order.
+ */
+const withOperands = (node: TypedExpression): readonly TypedExpression[] => [
+  node,
+  ...node.operands.flatMap((operand) => withOperands(operand)),
+];
+
+/**
+ * Whether an expression is of a given node kind.
+ */
+const isKind = (node: TypedExpression, kind: NodeKindHandle): boolean => node.kind === kind;
+
+/**
+ * Every typed expression of a typed tree, in document order, each before its operands.
+ */
+const expressionsOfRule = (node: TypedRuleNode): readonly TypedExpression[] => [
+  ...Option.match(node.expression, { onNone: () => [], onSome: withOperands }),
+  ...node.branches.flatMap((branch) => expressionsOfRule(branch)),
+  ...node.rules.flatMap((child) => (child.kind === "xi:include" ? [] : expressionsOfRule(child))),
+];
+
+const expressionsOf = (typed: TypedAst): readonly TypedExpression[] =>
+  typed.rules.flatMap((rule) => (rule.kind === "xi:include" ? [] : expressionsOfRule(rule)));
+
+const typeOfKind = (typed: TypedAst, kind: NodeKindHandle): readonly string[] =>
+  expressionsOf(typed)
+    .filter((e) => isKind(e, kind))
+    .map((e) => `${e.type.baseType}/${e.type.cardinality}`);
+
+/**
+ * An outcome declaration of a base type and single cardinality.
+ */
+const outcomeOf = (identifier: string, baseType: EffectiveType["baseType"]): DeclarationEntry => ({
+  areaMapping: false,
+  identifier,
+  interpolationTable: false,
+  kind: "outcome",
+  mapping: false,
+  matchTable: false,
+  mathVariable: false,
+  paramVariable: false,
+  type: { baseType, cardinality: "single" },
+});
+
+/**
+ * The test environment `outcome.xml` is typed under.
+ */
+const testEnvironment = withDeclarations(emptyEnvironment("test"), [
+  outcomeOf("TOTAL", "float"),
+  outcomeOf("MAXTOTAL", "float"),
+  outcomeOf("COUNT", "integer"),
+  outcomeOf("PASSED", "boolean"),
+]);
+
+/**
+ * The reason and identifier of each unresolved entry, in order.
+ */
+const summary = (unresolved: readonly Unresolved[]) =>
+  unresolved.map((u) => [u.reason, u.identifier]);
+
+layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts", (suite) => {
+  suite.effect(
+    "checks response.xml ok, unresolved only at the custom operator and the record field",
+    () =>
+      Effect.gen(function* checkResponse() {
+        const { ast, document } = yield* parseValid("response");
+        const result = okOf(ast, environmentOf(document, "item"));
+        assert.deepStrictEqual(summary(result.unresolved), [
+          ["custom-operator", "com.example.Operator"],
+          ["untyped-variable", "level"],
+        ]);
+      }),
+  );
+
+  suite.effect("checks template.xml and response-mapped.xml ok with nothing unresolved", () =>
+    Effect.gen(function* checkTemplateAndMapped() {
+      for (const name of ["template", "response-mapped"]) {
+        const { ast, document } = yield* parseValid(name);
+        assert.deepStrictEqual(okOf(ast, environmentOf(document, "item")).unresolved, []);
+      }
+    }),
+  );
+
+  suite.effect("checks outcome.xml ok under the test environment, and unresolved without it", () =>
+    Effect.gen(function* checkOutcome() {
+      const { ast } = yield* parseValid("outcome");
+      assert.deepStrictEqual(okOf(ast, testEnvironment).unresolved, []);
+      assert.deepStrictEqual(summary(okOf(ast, emptyEnvironment("test")).unresolved), [
+        ["untyped-variable", "TOTAL"],
+        ["untyped-variable", "TOTAL"],
+      ]);
+    }),
+  );
+
+  suite.effect("types response.xml's operators from their operands", () =>
+    Effect.gen(function* typeResponse() {
+      const { ast, document } = yield* parseValid("response");
+      const { typed } = okOf(ast, environmentOf(document, "item"));
+      assert.deepStrictEqual(typeOfKind(typed, "qti-sum"), ["float/single", "integer/single"]);
+      assert.deepStrictEqual(typeOfKind(typed, "qti-divide"), ["float/single"]);
+      assert.deepStrictEqual(typeOfKind(typed, "qti-round"), ["integer/single"]);
+      assert.deepStrictEqual(typeOfKind(typed, "qti-math-operator"), [
+        "float/single",
+        "integer/single",
+      ]);
+      assert.deepStrictEqual(typeOfKind(typed, "qti-multiple"), [
+        "identifier/multiple",
+        "float/multiple",
+        "identifier/multiple",
+        "string/multiple",
+      ]);
+      assert.deepStrictEqual(typeOfKind(typed, "qti-null"), ["any/unknown", "any/unknown"]);
+      assert.deepStrictEqual(typeOfKind(typed, "qti-custom-operator"), ["unknown/unknown"]);
+    }),
+  );
+
+  suite.effect("types a reference by its declaration and a built-in by its mode", () =>
+    Effect.gen(function* typeReferences() {
+      const { ast, document } = yield* parseValid("response");
+      const { typed } = okOf(ast, environmentOf(document, "item"));
+      const variables = expressionsOf(typed)
+        .filter((e) => isKind(e, "qti-variable"))
+        .map(
+          (e) =>
+            `${e.attributes.get("identifier")?.processed}:${e.type.baseType}/${e.type.cardinality}`,
+        );
+      assert.include(variables, "RESPONSE:identifier/single");
+      assert.include(variables, "BAG:identifier/multiple");
+      assert.include(variables, "SCORE:float/single");
+      assert.include(variables, "QTI_CONTEXT:unknown/record");
+      assert.deepStrictEqual(typeOfKind(typed, "qti-correct"), ["identifier/single"]);
+      assert.deepStrictEqual(typeOfKind(typed, "qti-default"), ["float/single"]);
+    }),
+  );
+
+  suite.effect("accepts qti-null beside an integer as an operand of qti-match", () =>
+    Effect.gen(function* nullBesideInteger() {
+      const ast = yield* parseBody(
+        `<qti-set-outcome-value identifier="X"><qti-match><qti-null/><qti-base-value base-type="integer">1</qti-base-value></qti-match></qti-set-outcome-value>`,
+      );
+      const result = okOf(
+        ast,
+        withDeclarations(emptyEnvironment("item"), [outcomeOf("X", "boolean")]),
+      );
+      assert.deepStrictEqual(result.unresolved, []);
+      assert.deepStrictEqual(typeOfKind(result.typed, "qti-match"), ["boolean/single"]);
+
+      const match = expressionsOf(result.typed).find((e) => isKind(e, "qti-match"));
+      assert.deepStrictEqual(
+        match?.operands.map((o) => `${o.type.baseType}/${o.type.cardinality}`),
+        ["any/unknown", "integer/single"],
+      );
+    }),
+  );
+
+  suite.effect("checks response.xml in template mode ok, every variable reference unresolved", () =>
+    Effect.gen(function* checkTemplateMode() {
+      const { ast } = yield* parseValid("response");
+      const { unresolved } = okOf(ast, emptyEnvironment("template"));
+      const references = new Set(
+        unresolved.filter((u) => u.reason === "template-parameter").map((u) => u.identifier),
+      );
+      assert.deepStrictEqual([...references].toSorted(), [
+        "BAG",
+        "COUNT",
+        "FLAG",
+        "NOTE",
+        "RESPONSE",
+        "SCORE",
+        "SPOT",
+        "TAKEN",
+      ]);
+      assert.deepStrictEqual(
+        [
+          ...new Set(
+            unresolved.filter((u) => u.reason !== "template-parameter").map((u) => u.reason),
+          ),
+        ].toSorted(),
+        ["custom-operator", "untyped-variable"],
+      );
+    }),
+  );
+
+  suite.effect("records a reference in a mixed-union attribute, refusing it in item mode", () =>
+    Effect.gen(function* checkAttributeReference() {
+      const ast = yield* parseBody(
+        `<qti-set-outcome-value identifier="X"><qti-equal-rounded rounding-mode="decimalPlaces" figures="N"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">1</qti-base-value></qti-equal-rounded></qti-set-outcome-value>`,
+      );
+      const target = [outcomeOf("X", "boolean")];
+      const undeclared = checkProcessing(ast, withDeclarations(emptyEnvironment("item"), target));
+      assert.deepStrictEqual(undeclared._tag === "refused" && [undeclared.rule, undeclared.kind], [
+        "P8",
+        "qti-equal-rounded",
+      ]);
+      assert.deepStrictEqual(
+        summary(okOf(ast, withDeclarations(emptyEnvironment("test"), target)).unresolved),
+        [["untyped-variable", "N"]],
+      );
+      assert.deepStrictEqual(summary(okOf(ast, emptyEnvironment("template")).unresolved), [
+        ["template-parameter", "N"],
+      ]);
+
+      const declared = withDeclarations(emptyEnvironment("item"), [
+        ...target,
+        outcomeOf("N", "integer"),
+      ]);
+      assert.deepStrictEqual(okOf(ast, declared).unresolved, []);
+    }),
+  );
+
+  suite.effect(
+    "checks the five corpus template documents ok in template mode, all unresolved",
+    () =>
+      Effect.gen(function* checkCorpusTemplates() {
+        const fs = yield* FileSystem.FileSystem;
+        const documents = yield* templateDocuments();
+        assert.deepStrictEqual(
+          documents.map((d) => `${d.pkg}/${path.basename(d.path)}`).toSorted(),
+          [
+            "ccPackage/CC2_map_response.xml",
+            "ccPackage/CC2_match.xml",
+            "ccPackage/CC2_match_basic.xml",
+            "maxfiles/map_response.xml",
+            "maxfiles/match_correct.xml",
+          ],
+        );
+
+        for (const { path: file } of documents) {
+          const document = yield* readXml(yield* fs.readFile(file));
+          const ast = yield* parseProcessing(document.root, "response");
+          const result = okOf(ast, emptyEnvironment("template"));
+          assert.isAbove(result.unresolved.length, 0, file);
+          assert.deepStrictEqual(
+            [...new Set(result.unresolved.map((u) => u.reason))],
+            ["template-parameter"],
+            file,
+          );
+        }
+      }),
+  );
+
+  suite.effect("finds the svg corpus package by name, holding svg.xml", () =>
+    Effect.gen(function* findSvg() {
+      const fs = yield* FileSystem.FileSystem;
+      const dir = yield* corpusPackage("svg");
+      assert.isTrue(yield* fs.exists(path.join(dir, "svg.xml")));
+    }),
+  );
+});
+
+const brokenDirectory = "src/processing/fixtures/broken";
+
+/**
+ * Check a hand-broken fixture: read it, parse the processing root of its language, and check it
+ * under the environment of its own document in the mode given (`item` by default).
+ */
+const checkBroken = (name: string, language: "response" | "template", mode: "item" | "template") =>
+  Effect.gen(function* checkBrokenFile() {
+    const fs = yield* FileSystem.FileSystem;
+    const document = yield* readXml(yield* fs.readFile(path.join(brokenDirectory, `${name}.xml`)));
+    const ast = yield* parseProcessing(processingRoot(document.root, language), language);
+
+    return checkProcessing(
+      ast,
+      mode === "item" ? environmentOf(document, "item") : emptyEnvironment("template"),
+    );
+  });
+
+/**
+ * The refusals of the bin 2 rules this file checks: one broken tree each, refused naming exactly
+ * its rule and the kind of the node that breaks it.
+ */
+const refusals = [
+  ["p20-float-into-integer-outcome", "response", "P20", "qti-set-outcome-value"],
+  ["p21-sum-as-condition", "response", "P21", "qti-response-if"],
+  ["p22-string-into-lookup", "response", "P22", "qti-lookup-outcome-value"],
+  ["p22-lookup-without-table", "response", "P22", "qti-lookup-outcome-value"],
+  ["p23-and-string-operand", "response", "P23", "qti-and"],
+  ["p23-match-duration-pair", "response", "P23", "qti-match"],
+  ["p23-gt-strings", "response", "P23", "qti-gt"],
+  ["p23-duration-lt-integers", "response", "P23", "qti-duration-lt"],
+  ["p23-member-multiple-first", "response", "P23", "qti-member"],
+  ["p23-contains-singles", "response", "P23", "qti-contains"],
+  ["p23-substring-integers", "response", "P23", "qti-substring"],
+  ["p23-inside-integer", "response", "P23", "qti-inside"],
+  ["p23-multiple-two-base-types", "response", "P23", "qti-multiple"],
+  ["p23-index-single", "response", "P23", "qti-index"],
+  ["p23-field-value-single", "response", "P23", "qti-field-value"],
+  ["p23-sum-record", "response", "P23", "qti-sum"],
+  ["p23-gcd-floats", "response", "P23", "qti-gcd"],
+  ["p23-divide-multiple", "response", "P23", "qti-divide"],
+  ["p23-integer-divide-floats", "response", "P23", "qti-integer-divide"],
+  ["p23-stats-operator-single", "response", "P23", "qti-stats-operator"],
+  ["p24-figures-float-variable", "response", "P24", "qti-equal-rounded"],
+  ["p25-number-correct-in-response", "response", "P25", "qti-number-correct"],
+  ["p25-number-correct-in-template", "template", "P25", "qti-number-correct"],
+  ["p26-template-reads-response", "template", "P26", "qti-variable"],
+  ["p27-map-response-unmapped", "response", "P27", "qti-map-response"],
+  ["undeclared-reference", "response", "P8", "qti-variable"],
+] as const;
+
+layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts rules", (suite) => {
+  for (const [name, language, rule, kind] of refusals) {
+    suite.effect(`refuses ${name} naming ${rule}`, () =>
+      Effect.gen(function* refuseBroken() {
+        const result = yield* checkBroken(name, language, "item");
+        assert.strictEqual(result._tag, "refused");
+        if (result._tag === "refused") {
+          assert.strictEqual(result.rule, rule);
+          assert.strictEqual(result.kind, kind);
+        }
+      }),
+    );
+  }
+
+  suite.effect("refuses p29-test-variables-weight-integer.xml naming P29 in test mode", () =>
+    Effect.gen(function* refuseWeight() {
+      const fs = yield* FileSystem.FileSystem;
+      const document = yield* readXml(
+        yield* fs.readFile(path.join(brokenDirectory, "p29-test-variables-weight-integer.xml")),
+      );
+      const ast = yield* parseProcessing(document.root, "outcome");
+      const countEnvironment = withDeclarations(emptyEnvironment("test"), [
+        outcomeOf("COUNT", "integer"),
+      ]);
+      const result = checkProcessing(ast, countEnvironment);
+      assert.strictEqual(result._tag, "refused");
+      if (result._tag === "refused") {
+        assert.strictEqual(result.rule, "P29");
+        assert.strictEqual(result.kind, "qti-test-variables");
+      }
+    }),
+  );
+
+  suite.effect("accepts a template rule that reads QTI_CONTEXT", () =>
+    Effect.gen(function* acceptContext() {
+      const result = yield* checkBroken("p26-template-reads-context", "template", "item");
+      assert.strictEqual(result._tag, "ok");
+    }),
+  );
+
+  suite.effect(
+    "checks undeclared-reference.xml in template mode ok, the reference unresolved",
+    () =>
+      Effect.gen(function* undeclaredInTemplate() {
+        const result = yield* checkBroken("undeclared-reference", "response", "template");
+        assert.strictEqual(result._tag, "ok");
+        if (result._tag === "ok") {
+          assert.deepStrictEqual(summary(result.unresolved), [["template-parameter", "MISSING"]]);
+        }
+      }),
+  );
+
+  suite.effect("checks a custom operator ok with exactly one unresolved entry", () =>
+    Effect.gen(function* customOperator() {
+      const result = yield* checkBroken("p49-custom-operator-unresolved", "response", "item");
+      assert.strictEqual(result._tag, "ok");
+      if (result._tag === "ok") {
+        assert.deepStrictEqual(summary(result.unresolved), [
+          ["custom-operator", "com.example.Operator"],
+        ]);
+      }
+    }),
+  );
+});
