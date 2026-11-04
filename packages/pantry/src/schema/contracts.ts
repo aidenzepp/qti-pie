@@ -80,6 +80,94 @@ export const TemplateParameterName = contract("TemplateParameterName", str.regex
 export const SectionReference = contract("SectionReference", str.regex(patterns.ncName));
 
 /**
+ * The identifier of a test part, an assessment section or an assessment item reference of a test
+ * (the `identifier` columns of the test-structure relations).
+ *
+ * The base is `patterns.ncName`.
+ */
+export const TestStructureIdentifier = contract(
+  "TestStructureIdentifier",
+  str.regex(patterns.ncName),
+);
+
+/**
+ * The identifier of an assessment stimulus reference (the `identifier` column of the
+ * stimulus-reference relation).
+ *
+ * The base is `patterns.ncName`.
+ */
+export const StimulusRefIdentifier = contract("StimulusRefIdentifier", str.regex(patterns.ncName));
+
+/**
+ * The identifier of an adaptive engine reference (the `identifier` column of the adaptive-reference
+ * relation).
+ *
+ * The base is `patterns.ncName`.
+ */
+export const AdaptiveRefIdentifier = contract("AdaptiveRefIdentifier", str.regex(patterns.ncName));
+
+/**
+ * The name of a variable on either side of a test variable mapping (the `sourceIdentifier` and
+ * `targetIdentifier` columns of the variable-mapping relation).
+ *
+ * The base is `patterns.ncName`.
+ */
+export const MappedVariableName = contract("MappedVariableName", str.regex(patterns.ncName));
+
+/**
+ * The `href` of an assessment item reference (the `href` column of the item-reference relation).
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const ItemRefHref = contract("ItemRefHref", str.regex(patterns.anyUri));
+
+/**
+ * The `href` of an assessment section reference (the `href` column of the section-reference
+ * relation).
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const SectionRefHref = contract("SectionRefHref", str.regex(patterns.anyUri));
+
+/**
+ * The `href` of an assessment stimulus reference (the `href` column of the stimulus-reference
+ * relation).
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const StimulusRefHref = contract("StimulusRefHref", str.regex(patterns.anyUri));
+
+/**
+ * The `href` of an adaptive engine reference (the `href` column of the adaptive-reference
+ * relation).
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const AdaptiveRefHref = contract("AdaptiveRefHref", str.regex(patterns.anyUri));
+
+/**
+ * The `value` of a weight of a test structure (the `value` column of the weight relation).
+ *
+ * The base is `patterns.xsDouble`.
+ */
+export const WeightValue = contract("WeightValue", str.regex(patterns.xsDouble));
+
+/**
+ * A time limit in seconds (the `minTime` and `maxTime` columns of the time-limit relations).
+ *
+ * The base is `patterns.nonNegativeDouble`.
+ */
+export const TimeLimitSeconds = contract("TimeLimitSeconds", str.regex(patterns.nonNegativeDouble));
+
+/**
+ * A bound of a slider interaction (the `lowerBound` and `upperBound` columns of
+ * `SliderInteraction`).
+ *
+ * The base is `patterns.nonNegativeDouble`.
+ */
+export const SliderBound = contract("SliderBound", str.regex(patterns.nonNegativeDouble));
+
+/**
  * The Java-style class name of a custom operator.
  *
  * The base is `patterns.ncName`.
