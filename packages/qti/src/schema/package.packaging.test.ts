@@ -2,6 +2,7 @@ import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
 import * as rosters from "#qti/schema/content/rosters.ts";
+import * as contracts from "#qti/schema/contracts.ts";
 import { kinds as cpxKinds } from "#qti/schema/kinds/cpx.ts";
 import { kinds as drdKinds } from "#qti/schema/kinds/drd.ts";
 import * as node from "#qti/schema/node.ts";
@@ -87,6 +88,28 @@ const leafPatternSource = (leaf: { readonly fields: { readonly value: object } }
     : undefined;
 };
 
+/**
+ * The regular expression source of the base of a contract-typed leaf's `value` column.
+ */
+const contractBaseSource = (leaf: { readonly fields: { readonly value: object } }) => {
+  const { value } = leaf.fields;
+
+  return Predicate.hasProperty(value, "base") &&
+    Predicate.hasProperty(value.base, "pattern") &&
+    Predicate.hasProperty(value.base.pattern, "source")
+    ? value.base.pattern.source
+    : undefined;
+};
+
+/**
+ * The name of the contract a leaf's `value` column carries.
+ */
+const contractName = (leaf: { readonly fields: { readonly value: object } }) => {
+  const { value } = leaf.fields;
+
+  return Predicate.hasProperty(value, "name") ? value.name : undefined;
+};
+
 describe("package staged variant and DRD trio", () => {
   it("builds a schema over the node and package modules and the staged trio without refusal", () => {
     const built = probe();
@@ -157,9 +180,11 @@ describe("package staged variant and DRD trio", () => {
     assert.isTrue(hasKey(AccessForAllResource, ["metadata"]));
   });
 
-  it("types each union leaf by its pattern and the URI leaves by anyUri", () => {
-    assert.strictEqual(leafPatternSource(DrdAccessMode), patterns.drdAccessMode);
-    assert.strictEqual(leafPatternSource(DrdHasAdaptation), patterns.anyUri);
+  it("types each union leaf by its pattern, through its contract where it has one, and the URI leaves by DrdAdaptationUri", () => {
+    assert.strictEqual(contractName(DrdAccessMode), contracts.AccessMode.name);
+    assert.strictEqual(contractBaseSource(DrdAccessMode), patterns.drdAccessMode);
+    assert.strictEqual(contractName(DrdHasAdaptation), contracts.DrdAdaptationUri.name);
+    assert.strictEqual(contractBaseSource(DrdHasAdaptation), patterns.anyUri);
     assert.strictEqual(
       leafPatternSource(DrdEducationalComplexityOfAdaptation),
       patterns.drdEducationalComplexityOfAdaptation,

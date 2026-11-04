@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
+import { Predicate } from "effect";
 
 import * as rosters from "#qti/schema/content/rosters.ts";
 import { HBLOCK, HFLOW, HINL, PHR, hostAdditions, setOf } from "#qti/schema/content/sets.ts";
@@ -45,7 +46,23 @@ describe("shared rosters", () => {
   });
 
   it("exports every roster as a schema member and no rules", () => {
-    assert.deepStrictEqual(Object.keys(rosters.relations).toSorted(), [
+    const values: readonly unknown[] = Object.values(rosters);
+    const exported = values
+      .flatMap((member) =>
+        Predicate.hasProperty(member, "handles") &&
+        Array.isArray(member.handles) &&
+        Predicate.hasProperty(member, "name") &&
+        Predicate.isString(member.name)
+          ? [member.name]
+          : [],
+      )
+      .toSorted((left, right) => left.localeCompare(right));
+    const members = Object.keys(rosters.relations).toSorted((left, right) =>
+      left.localeCompare(right),
+    );
+
+    assert.deepStrictEqual(exported, members);
+    assert.includeMembers(members, [
       "Bound",
       "IdrefAttribute",
       "Orientation",
