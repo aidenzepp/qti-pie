@@ -302,3 +302,13 @@ against it. A reading that is not an information-model-over-XSD case says which 
     not a case of documents in conflict: the specification reserves `.` for prefixing and says nothing of splitting a
     reference at a dot, so this reading fills the gap and keeps every unambiguous reference valid, as reading 1
     requires. (2026-11-04.)
+49. **A `qti-` element beneath MathML or in card content is refused, a nested root included.** Reading 6 keeps a QTI
+    root nested in wildcard content as foreign content, and reading 30 admits no `qti-` element beneath MathML. They
+    meet inside `m:annotation-xml`, whose wildcard would otherwise let one through, and in card content, which is HTML
+    content too. Reading 30 wins in both places. Every element in the QTI namespace whose name starts `qti-` is
+    refused there, whether it is a known kind or would be kept as foreign content under reading 6, and whether it sits
+    directly in the MathML or deeper inside non-HTML markup it holds: `m:annotation-xml > qti-printed-variable`,
+    `m:annotation-xml > svg:g > qti-prompt` and `m:annotation-xml > qti-assessment-item` are all refused. A nested
+    assessment root is no exception, so reading 6 does not apply beneath MathML or in card content. HTML elements in
+    the QTI namespace, such as `div` and `p`, stay allowed. This binds the renderer the same way as the qti package, so
+    the two refuse the same file. (Decision 212, 2026-11-04.)
