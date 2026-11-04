@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
+import { isDeepStrictEqual } from "node:util";
 import { assert, describe, it, layer } from "@effect/vitest";
-import { Context, Effect, Layer, Option } from "effect";
+import { Context, Effect, Layer, Option, Record as Rec } from "effect";
 import { partForSlot, partTable, rowFor } from "#plate/emit/parts.ts";
 import { browserSupport } from "#plate/ledger/browser-support.ts";
 import { checkFloor, readWebFeatures } from "#plate/test/baseline.ts";
@@ -8,18 +9,19 @@ import type { FloorViolation, WebFeatures } from "#plate/test/baseline.ts";
 import { compounds, scanSheet, uses, varReferences } from "#plate/test/css.ts";
 import type { Compound, Sheet, StyleRule } from "#plate/test/css.ts";
 import { contrastRatio, parseOklch, tokens } from "#plate/test/tokens.ts";
-import { styledClasses } from "#plate/vocabulary.ts";
+import { behaviourClasses, styledClasses } from "#plate/vocabulary.ts";
 import type { ClassOwner } from "#plate/vocabulary.ts";
 
 /**
- * The markers the stylesheet's rules are read against, from the part table: the Choice parts, the
- * text Controls and the results box.
+ * The markers the stylesheet's rules are read against, from the part table: the item Root, the
+ * Choice parts, the text Controls and the results box.
  */
 const marker = {
   choice: rowFor("choice-interaction", "choice").slot,
   control: rowFor("choice-interaction", "control").slot,
   extendedTextControl: rowFor("extended-text-interaction", "control").slot,
   indicator: rowFor("choice-interaction", "indicator").slot,
+  item: rowFor("item", "root").slot,
   message: rowFor("item", "message").slot,
   prompt: rowFor("choice-interaction", "prompt").slot,
   status: rowFor("item", "status").slot,
@@ -282,6 +284,47 @@ const tokenFallback = (rule: StyleRule, property: string): Option.Option<string>
   );
 
 /**
+ * Read the token a property's value takes, by name.
+ *
+ * @param rule One rule.
+ * @param property The property's name.
+ * @returns The name of the value's first `var()`; none when the rule does not declare the
+ *   property, or declares it without a `var()`.
+ */
+const tokenName = (rule: StyleRule, property: string): Option.Option<string> =>
+  declared(rule, property).pipe(
+    Option.flatMap((value) => Option.fromUndefinedOr(varReferences(value)[0])),
+    Option.map((reference) => reference.name),
+  );
+
+/**
+ * Tell whether a rule declares a property, with any value or with one value.
+ *
+ * @param rule One rule.
+ * @param property The property's name.
+ * @param value The value it must have; any value when absent.
+ * @returns Whether one of the rule's declarations matches.
+ */
+const declares = (rule: StyleRule, property: string, value?: string): boolean =>
+  rule.declarations.some(
+    (declaration) =>
+      declaration.property === property && (value === undefined || declaration.value === value),
+  );
+
+/**
+ * Read a length in px.
+ *
+ * @param value A declared value.
+ * @returns The length in px when the value is `<number>px` or `0`; none otherwise.
+ */
+const pxLength = (value: string): Option.Option<number> =>
+  value === "0"
+    ? Option.some(0)
+    : Option.fromUndefinedOr(/^(?<length>\d+(?:\.\d+)?)px$/u.exec(value)?.groups?.["length"]).pipe(
+        Option.map(Number),
+      );
+
+/**
  * Check the sheet's uses against the browser floor, with the browser-support note's rows.
  *
  * @param sheet The scanned sheet.
@@ -535,6 +578,130 @@ const unstyledClasses = (sheet: Sheet, owner: ClassOwner): readonly string[] => 
 
   return styledClasses[owner].filter((name) => !named.has(name));
 };
+
+/**
+ * Find the behaviour classes the sheet names, at any depth: their meaning needs script, which M1
+ * does not run, so the sheet gives them no rule.
+ *
+ * @param sheet The scanned sheet.
+ * @returns Each behaviour class of any owner that some selector names.
+ */
+const namedBehaviourClasses = (sheet: Sheet): readonly string[] => {
+  const named = sheetClasses(sheet);
+
+  return Object.values(behaviourClasses)
+    .flat()
+    .filter((name) => named.has(name));
+};
+
+/**
+ * Read the rules that style a class on its own: a selector whose top-level compounds are one
+ * compound holding the class.
+ *
+ * @param sheet The scanned sheet.
+ * @param name The class's name.
+ * @returns Each such rule.
+ */
+const classRules = (sheet: Sheet, name: string): readonly StyleRule[] =>
+  sheet.rules.filter((rule) =>
+    rule.selectors.some((selector) => {
+      const top = compounds(selector);
+
+      return top.length === 1 && top.some((compound) => compound.classes.includes(name));
+    }),
+  );
+
+/**
+ * Find the sized classes of an owner whose rules do not size a Control as the class says: each
+ * class `<prefix>N` that no rule reaching the Control names, or whose rules reaching it do not all
+ * declare `<property>: N<unit>`.
+ *
+ * @param sheet The scanned sheet.
+ * @param size What the classes size: the owner, the classes' prefix, the Control's marker, and the
+ *   property and unit each rule declares.
+ * @returns Each class left without its size.
+ */
+const unsizedClasses = (
+  sheet: Sheet,
+  size: {
+    readonly owner: ClassOwner;
+    readonly prefix: string;
+    readonly property: string;
+    readonly slot: string;
+    readonly unit: string;
+  },
+): readonly string[] =>
+  styledClasses[size.owner]
+    .filter((name) => name.startsWith(size.prefix))
+    .filter((name) => {
+      const rules = sheet.rules.filter(
+        (rule) =>
+          holdsAnywhere(rule, (compound) => compound.classes.includes(name)) &&
+          reaches(rule, size.slot),
+      );
+      const length = `${name.slice(size.prefix.length)}${size.unit}`;
+
+      return (
+        rules.length === 0 ||
+        !rules.every((rule) => Option.contains(declared(rule, size.property), length))
+      );
+    });
+
+/**
+ * Read the base section's text: the lines between the line that opens it and the line that opens
+ * the theme section.
+ *
+ * @param text The stylesheet's text.
+ * @returns The base section, without its opening line.
+ */
+const baseSection = (text: string): string => {
+  const lines = text.split("\n");
+
+  return lines.slice(lines.indexOf(baseLine) + 1, lines.indexOf(themeLine)).join("\n");
+};
+
+/**
+ * The item Root's selector as the containment rule writes it: the marker alone, inside `:where()`.
+ */
+const itemRoot = compounds(`:where([data-slot="${marker.item}"])`);
+
+/**
+ * Read how far a focus ring reaches past its part: the largest `outline-width` plus
+ * `outline-offset` that any `:focus-visible` rule declares.
+ *
+ * @param sheet The scanned sheet.
+ * @returns The reach in px; none when some `:focus-visible` rule declares either length other than
+ *   in px, or no rule shows focus.
+ */
+const focusRingReach = (sheet: Sheet): Option.Option<number> =>
+  Option.all(
+    sheet.rules
+      .filter((rule) =>
+        holdsAnywhere(rule, (compound) => holdsPseudoClass(compound, "focus-visible")),
+      )
+      .map((rule) =>
+        Option.zipWith(
+          Option.flatMap(declared(rule, "outline-width"), pxLength),
+          Option.flatMap(declared(rule, "outline-offset"), pxLength),
+          (width, offset) => width + offset,
+        ),
+      ),
+  ).pipe(
+    Option.filter((rings) => rings.length > 0),
+    Option.map((rings) => Math.max(...rings)),
+  );
+
+/**
+ * Read a rule's padding, side by side.
+ *
+ * @param rule One rule.
+ * @returns Each length of its `padding`, in px; none when it declares no padding, or a side other
+ *   than in px.
+ */
+const paddingSides = (rule: StyleRule): Option.Option<readonly number[]> =>
+  declared(rule, "padding").pipe(
+    Option.flatMap((value) => Option.all(value.split(/\s+/u).map(pxLength))),
+  );
 
 /**
  * Find the `qti-*` classes the sheet names that no owner's styled list holds.
@@ -937,6 +1104,106 @@ layer(Stylesheet.layer)("styles.css", (test) => {
 
         assert.isNotEmpty(hiddenControlRules(sheet));
         assert.deepStrictEqual(removedHiddenControls(sheet), []);
+      }),
+  );
+
+  test.effect("[I-19] names every styled class of every owner, and no behaviour class", () =>
+    Effect.gen(function* vocabulary() {
+      const { sheet } = yield* Stylesheet;
+
+      for (const owner of Rec.keys(styledClasses)) {
+        assert.deepStrictEqual(unstyledClasses(sheet, owner), [], owner);
+      }
+
+      assert.deepStrictEqual(namedBehaviourClasses(sheet), []);
+    }),
+  );
+
+  test.effect(
+    "[I-19] hides qti-hidden by display: none, and qti-visually-hidden from sight only, without clip",
+    () =>
+      Effect.gen(function* hiddenClasses() {
+        const { sheet } = yield* Stylesheet;
+        const hidden = classRules(sheet, "qti-hidden");
+        const visuallyHidden = classRules(sheet, "qti-visually-hidden");
+
+        assert.isNotEmpty(hidden);
+        assert.isTrue(hidden.every((rule) => declares(rule, "display", "none")));
+        assert.isNotEmpty(visuallyHidden);
+        assert.isFalse(
+          visuallyHidden.some(
+            (rule) => declares(rule, "display", "none") || declares(rule, "clip"),
+          ),
+        );
+      }),
+  );
+
+  test.effect("[I-19] sets qti-well on the --muted surface, with no text colour of its own", () =>
+    Effect.gen(function* well() {
+      const { sheet } = yield* Stylesheet;
+      const wells = classRules(sheet, "qti-well");
+
+      assert.isNotEmpty(wells);
+      assert.isTrue(
+        wells.every((rule) => Option.contains(tokenName(rule, "background-color"), "--muted")),
+      );
+      assert.isFalse(wells.some((rule) => declares(rule, "color")));
+    }),
+  );
+
+  test.effect(
+    "contains the item Root in the base section, padded past every focus ring, in px",
+    () =>
+      Effect.gen(function* containment() {
+        const { sheet, text } = yield* Stylesheet;
+        const base = yield* scanSheet(baseSection(text));
+        const reach = focusRingReach(sheet);
+        const contained = base.rules.filter(
+          (rule) =>
+            rule.selectors.every((selector) => isDeepStrictEqual(compounds(selector), itemRoot)) &&
+            declares(rule, "contain", "layout paint"),
+        );
+
+        assert.isTrue(Option.isSome(reach), "every focus ring's width and offset in px");
+        assert.isNotEmpty(contained);
+        for (const rule of contained) {
+          assert.isTrue(declares(rule, "overflow", "auto"), "overflow: auto");
+
+          const padded = Option.zipWith(paddingSides(rule), reach, (sides, ring) =>
+            sides.every((side) => side >= ring),
+          );
+
+          assert.isTrue(Option.contains(padded, true), "padding");
+        }
+      }),
+  );
+
+  test.effect(
+    "[Q-20] [Q-5] sizes the text Controls: Text Entry's width in ch, Extended Text's height in lh",
+    () =>
+      Effect.gen(function* controlSizes() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.deepStrictEqual(
+          unsizedClasses(sheet, {
+            owner: "text-entry-interaction",
+            prefix: "qti-input-width-",
+            property: "min-inline-size",
+            slot: marker.textEntryControl,
+            unit: "ch",
+          }),
+          [],
+        );
+        assert.deepStrictEqual(
+          unsizedClasses(sheet, {
+            owner: "extended-text-interaction",
+            prefix: "qti-height-lines-",
+            property: "block-size",
+            slot: marker.extendedTextControl,
+            unit: "lh",
+          }),
+          [],
+        );
       }),
   );
 });
