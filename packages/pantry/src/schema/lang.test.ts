@@ -183,6 +183,18 @@ describe("lang", () => {
       );
     });
 
+    it("holds the test twin: a test tree's xml:lang is in its document's set", () => {
+      assert.deepStrictEqual(
+        fieldsOf(attributes.NodeXmlLang, { rootKind: "test" }, lang.relations.DocumentLang),
+        [
+          [
+            ["tree", "value"],
+            ["document", "value"],
+          ],
+        ],
+      );
+    });
+
     it("holds the R26 rule: a LOM-flagged language is in the resource's LOM set", () => {
       assert.deepStrictEqual(
         fieldsOf(
@@ -246,10 +258,10 @@ describe("lang", () => {
       );
     });
 
-    it("declares the five rules, the copies and the two candidate keys, and nothing else", () => {
+    it("declares the six rules, the copies and the two candidate keys, and nothing else", () => {
       const containedCount = lang.rules.filter((rule) => rule.kind === "contained").length;
-      // The five rules above, plus the copies of the three relations: one, one and two.
-      assert.strictEqual(containedCount, 5 + 1 + 1 + 2);
+      // The six rules above, plus the copies of the three relations: one, one and two.
+      assert.strictEqual(containedCount, 6 + 1 + 1 + 2);
       assert.strictEqual(lang.rules.filter((rule) => rule.kind !== "contained").length, 2);
     });
   });
