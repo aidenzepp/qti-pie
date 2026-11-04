@@ -1,0 +1,225 @@
+import { assert, describe, it } from "@effect/vitest";
+import { Effect, Option } from "effect";
+import { h, text } from "#plate/emit/node.ts";
+import type { Attributes, Node } from "#plate/emit/node.ts";
+import {
+  allows,
+  controls,
+  isFlowContainer,
+  isPhrasingContainer,
+  links,
+  lists,
+  partTable,
+  positionUnder,
+  resolveOverrides,
+  rowFor,
+  scopedId,
+} from "#plate/emit/parts.ts";
+
+/**
+ * The spec's part table (§4.3), one entry per row: interaction, part, `data-slot` and default
+ * element.
+ */
+const specRows = [
+  ["item", "root", "item", "qti-assessment-item"],
+  ["item", "form", "form", "form"],
+  ["item", "status", "status", "section"],
+  ["item", "statusHeading", "status-heading", "h1"],
+  ["item", "messages", "messages", "ul"],
+  ["item", "message", "message", "li"],
+  ["item", "submit", "submit", "button"],
+  ["item", "notice", "notice", "span"],
+  ["choice-interaction", "root", "root", "fieldset"],
+  ["choice-interaction", "prompt", "prompt", "qti-prompt"],
+  ["choice-interaction", "choices", "choices", "ul"],
+  ["choice-interaction", "choice", "choice", "li"],
+  ["choice-interaction", "control", "control", "input"],
+  ["choice-interaction", "indicator", "indicator", "span"],
+  ["choice-interaction", "label", "label", "label"],
+  ["text-entry-interaction", "root", "root", "qti-text-entry-interaction"],
+  ["text-entry-interaction", "control", "control", "input"],
+  ["extended-text-interaction", "root", "root", "qti-extended-text-interaction"],
+  ["extended-text-interaction", "prompt", "prompt", "qti-prompt"],
+  ["extended-text-interaction", "control", "control", "textarea"],
+] as const;
+
+/**
+ * A replacement part function that returns a `span` holding the children it was handed.
+ *
+ * @param props The attributes the part carries.
+ * @param children The nodes the part holds.
+ * @returns A `span` with `props` and `children`.
+ */
+const indicator = (props: Attributes, children: readonly Node[]) => h("span", props, children);
+
+/**
+ * A replacement for a part the Choice interaction does not have.
+ *
+ * @param props The attributes the part carries.
+ * @returns A `span` with `props`, reading "new".
+ */
+const badge = (props: Attributes) => h("span", props, [text("new")]);
+
+describe("partTable", () => {
+  it("holds every row of the spec's table once, with its slot and default element", () => {
+    assert.strictEqual(partTable.length, specRows.length);
+    for (const [interaction, part, slot, element] of specRows) {
+      const rows = partTable.filter((row) => row.interaction === interaction && row.part === part);
+      assert.strictEqual(rows.length, 1, `${interaction} ${part}`);
+      assert.strictEqual(rows[0]?.slot, slot, `${interaction} ${part}`);
+      assert.strictEqual(rows[0]?.element, element, `${interaction} ${part}`);
+    }
+  });
+
+  it("gives every slot once within an interaction", () => {
+    const slots = partTable.map((row) => `${row.interaction} ${row.slot}`);
+    assert.strictEqual(new Set(slots).size, slots.length);
+  });
+
+  it("marks only Choices as the owner of a list", () => {
+    const owners = partTable.filter((row) => row.listOwner).map((row) => row.part);
+    assert.deepStrictEqual(owners, ["choices"]);
+    assert.isTrue(rowFor("choice-interaction", "choices").listOwner);
+  });
+
+  it("records the attributes I1 merges onto the Choice Control", () => {
+    assert.deepStrictEqual(rowFor("choice-interaction", "control").merged, [
+      "id",
+      "name",
+      "type",
+      "value",
+      "checked",
+      "disabled",
+      "aria-labelledby",
+      "aria-invalid",
+      "aria-describedby",
+    ]);
+  });
+});
+
+describe("rowFor", () => {
+  it("makes the Notice a span at a phrasing position and a div at a flow position", () => {
+    const phrasing = rowFor("item", "notice", { position: "phrasing" });
+    const flow = rowFor("item", "notice", { position: "flow" });
+    assert.strictEqual(phrasing.element, "span");
+    assert.strictEqual(phrasing.tagClass, "phrasing-container");
+    assert.strictEqual(flow.element, "div");
+    assert.strictEqual(flow.tagClass, "flow-container");
+  });
+
+  it("makes the StatusHeading the heading of the given level", () => {
+    assert.strictEqual(rowFor("item", "statusHeading", { headingLevel: 3 }).element, "h3");
+  });
+});
+
+describe("allows", () => {
+  it("accepts each row's default element", () => {
+    const rows = [
+      ...partTable,
+      rowFor("item", "notice", { position: "flow" }),
+      rowFor("item", "statusHeading", { headingLevel: 6 }),
+    ];
+    for (const row of rows) {
+      assert.isTrue(allows(row, h(row.element, {})), `${row.interaction} ${row.part}`);
+    }
+  });
+
+  it("refuses an input for a Choice Root", () => {
+    assert.isFalse(allows(rowFor("choice-interaction", "root"), h("input", {})));
+  });
+
+  it("refuses a div for a Control", () => {
+    assert.isFalse(allows(rowFor("choice-interaction", "control"), h("div", {})));
+    assert.isFalse(allows(rowFor("text-entry-interaction", "control"), h("div", {})));
+    assert.isFalse(allows(rowFor("extended-text-interaction", "control"), h("div", {})));
+  });
+
+  it("refuses an input of type checkbox for the Text Entry Control", () => {
+    const row = rowFor("text-entry-interaction", "control");
+    assert.isFalse(allows(row, h("input", { type: "checkbox" })));
+    assert.isTrue(allows(row, h("input", { type: "text" })));
+  });
+
+  it("refuses a ul for a Root", () => {
+    assert.isFalse(allows(rowFor("item", "root"), h("ul", {})));
+    assert.isFalse(allows(rowFor("choice-interaction", "root"), h("ul", {})));
+    assert.isFalse(allows(rowFor("extended-text-interaction", "root"), h("ul", {})));
+  });
+
+  it("accepts a div for Choices and for a Choice, and a custom element for a Root", () => {
+    assert.isTrue(allows(rowFor("choice-interaction", "choices"), h("div", {})));
+    assert.isTrue(allows(rowFor("choice-interaction", "choice"), h("div", {})));
+    assert.isTrue(allows(rowFor("choice-interaction", "root"), h("my-group", {})));
+  });
+});
+
+describe("tag classes", () => {
+  it("keeps every control, link and list out of the container classes", () => {
+    for (const tag of [...controls, ...links, ...lists]) {
+      assert.isFalse(isFlowContainer(tag), tag);
+      assert.isFalse(isPhrasingContainer(tag), tag);
+    }
+  });
+
+  it("counts a custom element as a phrasing and a flow container", () => {
+    assert.isTrue(isPhrasingContainer("qti-prompt"));
+    assert.isTrue(isFlowContainer("qti-prompt"));
+  });
+});
+
+describe("positionUnder", () => {
+  it("gives phrasing under a p, under a phrasing element and inside an open p", () => {
+    assert.strictEqual(positionUnder("p", false), "phrasing");
+    assert.strictEqual(positionUnder("span", false), "phrasing");
+    assert.strictEqual(positionUnder("div", true), "phrasing");
+  });
+
+  it("gives flow under a div or an li with no p open", () => {
+    assert.strictEqual(positionUnder("div", false), "flow");
+    assert.strictEqual(positionUnder("li", false), "flow");
+  });
+});
+
+describe("scopedId", () => {
+  it("joins the instance and the segments with a hyphen", () => {
+    assert.strictEqual(scopedId("i1", "RESPONSE", "control", 0), "i1-RESPONSE-control-0");
+  });
+});
+
+describe("resolveOverrides", () => {
+  it.effect("resolves a replacement for a known part", () =>
+    Effect.gen(function* knownPart() {
+      const resolved = yield* resolveOverrides({ "choice-interaction": { indicator } });
+      const replacement = resolved.replacementFor("choice-interaction", "indicator");
+      assert.isTrue(Option.isSome(replacement));
+      assert.strictEqual(Option.getOrUndefined(replacement), indicator);
+      assert.isTrue(Option.isNone(resolved.replacementFor("choice-interaction", "label")));
+      assert.isTrue(Option.isNone(resolved.replacementFor("item", "root")));
+    }),
+  );
+
+  it.effect("resolves no overrides to no replacements", () =>
+    Effect.gen(function* noOverrides() {
+      const resolved = yield* resolveOverrides();
+      assert.isTrue(Option.isNone(resolved.replacementFor("choice-interaction", "indicator")));
+    }),
+  );
+
+  it.effect("fails with UnknownPart naming an unknown interaction", () =>
+    Effect.gen(function* unknownInteraction() {
+      const error = yield* Effect.flip(resolveOverrides({ "hotspot-interaction": {} }));
+      assert.strictEqual(error._tag, "UnknownPart");
+      assert.strictEqual(error.interaction, "hotspot-interaction");
+      assert.isTrue(Option.isNone(error.part));
+    }),
+  );
+
+  it.effect("fails with UnknownPart naming an unknown part", () =>
+    Effect.gen(function* unknownPart() {
+      const error = yield* Effect.flip(resolveOverrides({ "choice-interaction": { badge } }));
+      assert.strictEqual(error._tag, "UnknownPart");
+      assert.strictEqual(error.interaction, "choice-interaction");
+      assert.strictEqual(Option.getOrUndefined(error.part), "badge");
+    }),
+  );
+});
