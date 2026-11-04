@@ -290,8 +290,10 @@ export type Rule =
  *
  * `responses` and `outcomes` hold the declarations of modelled base types and cardinalities, in
  * document order; every other declaration is a mark. `processing` is none when the item has no
- * response processing, or when phase 1 cannot run it, which `unsupported` then marks. `unsupported`
- * lists every feature not rendered, in document order, each once per feature and path.
+ * response processing, or when phase 1 cannot run it, which `unsupported` then marks. Phase 1
+ * cannot run it on an item with template processing, which phase 1 does not run and which may set a
+ * value response processing reads, such as a correct response. `unsupported` lists every feature
+ * not rendered, in document order, each once per feature and path.
  */
 export interface Item {
   readonly body: readonly BodyNode[];
@@ -1917,7 +1919,11 @@ const pathsOf = (document: SourceDocument): ReadonlyMap<SourceElement, string> =
  * not read. Response processing is a rule tree: a built-in template resolves to the tree its text
  * gives, and inline rules become their tree when every element is in the engine. The tree is kept
  * only when the engine holds every identifier it names; each one it does not is the mark
- * `variable:<identifier>` at the processing element's path, and the processing is then none.
+ * `variable:<identifier>` at the processing element's path, and the processing is then none. An
+ * item whose root has a `qti-template-processing` child keeps that element's mark and has no
+ * processing, whatever the tree: template processing may set a template variable, a default value
+ * or a correct response, and phase 1 runs none of it, so a score computed without it could be
+ * wrong.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The item, or the refusal `value-type` at the first typed value outside its lexical
@@ -1974,15 +1980,18 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       }
     }
 
+    const runs = processing.pipe(
+      Option.flatMap((read) => runnable(build, read, responses, outcomes)),
+    );
+    const templated = childrenNamed(root, "qti-template-processing").length > 0;
+
     return {
       body,
       document: source.location,
       identifier,
       lang: valueOf(root, "xml:lang"),
       outcomes,
-      processing: processing.pipe(
-        Option.flatMap((read) => runnable(build, read, responses, outcomes)),
-      ),
+      processing: templated ? Option.none() : runs,
       responses,
       title,
       unsupported: build.unsupported,
