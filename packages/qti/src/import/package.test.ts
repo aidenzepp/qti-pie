@@ -345,7 +345,6 @@ describe.skipIf(!hasLease)(
         ["choice-in-prompt", ["admission", "choice-parent"]],
         ["two-values-single", ["value-single"]],
         ["bad-identifier-value", ["value-lexical"]],
-        ["padded-identifier-value", ["value-lexical"]],
         ["choice-bounds", ["choice-bounds"]],
         ["body-empty", ["body-empty"]],
         ["bad-template-uri", ["uri-syntax"]],
@@ -364,6 +363,7 @@ describe.skipIf(!hasLease)(
         "external",
         "utf16",
         "comment-in-element",
+        "padded-identifier-value",
       ];
       for (const name of clean) {
         it.effect(`accepts ${name}`, () =>

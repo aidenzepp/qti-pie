@@ -2109,14 +2109,15 @@ const overUsage = (name: string, ...edits: readonly Edit[]): FixtureSpec => ({
  * - `padded-text` is valid QTI whose manifest `collapse` leaf carries spaces and whose item gains a
  *   `replace` leaf holding a tab and a line feed.
  *
- * The eleven hand-broken packages each break one rule of the import guards and are otherwise
+ * The ten hand-broken packages each break one rule of the import guards and are otherwise
  * `simple`:
  *
  * - `undeclared-response` points the interaction at `RESP`, which no declaration names.
  * - `choice-in-prompt` moves the first choice inside the prompt.
  * - `two-values-single` gives the single-cardinality default value a second `qti-value`.
- * - `bad-identifier-value` reads `Choice A` where an identifier is due, and `padded-identifier-value`
- *   reads `ChoiceA`, which only the identifier pattern refuses.
+ * - `bad-identifier-value` reads `Choice A` where an identifier is due. `padded-identifier-value`
+ *   pads `ChoiceA` in a `qti-value`, which decision 157 reads as `ChoiceA` (outer whitespace
+ *   removed for every non-string base type), so it imports and round-trips byte for byte.
  * - `choice-bounds` adds `min-choices="2"` beside `max-choices="1"`.
  * - `identifier-mismatch` and `title-mismatch` make the manifest's resource metadata disagree with
  *   the item (`choice2`, `Unattended Luggage 2`).
@@ -2498,6 +2499,8 @@ const specs: Record<FixtureName, FixtureSpec> = {
     "usage3-feb-30",
     editFirstStatistic({ lastUpdated: 'lastUpdated="2004-02-30"' }),
   ),
+  // `<value baseType="float"> 0.87 </value>`: decision 157 reads the float as 0.87, so the package
+  // imports and round-trips byte for byte.
   "usage3-float-padded": overUsage(
     "usage3-float-padded",
     replaceIn("example.xml", "<value>0.87</value>", '<value baseType="float"> 0.87 </value>'),

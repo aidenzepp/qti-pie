@@ -61,24 +61,26 @@ const exportRoot = `${import.meta.dirname}/../../work/export`;
 
 /**
  * The packages whose import is accepted and whose export compares all equal: the two round-trip
- * packages of M3 and the guard package whose four padded attributes are decision 19's witnesses.
+ * packages of M3, the guard package whose four padded attributes are decision 19's witnesses, and
+ * the padded identifier literal decision 157 reads trimmed.
  */
 const roundTripped = [
   "processing-item",
   "rptemplates",
   "padded-processing",
+  "padded-literal",
 ] as const satisfies readonly ProcessingFixtureName[];
 
 /**
  * Each package the XML path refuses, with the rule its refusal names.
  *
  * The checker's P8, P20, P21, P22 (the lookup without a table), P23, P24, P25 (the response case),
- * P27 come from `broken/`, the builder's P5 and the guard's P30 from `guards/`, and the two padded
- * packages are refused by the database (`attribute-lexical`: the pattern law on `figures`, whose
- * source is the one string that `main`'s `integerOrVariableRef` (P6) and content's
+ * P27 come from `broken/`, the builder's P5 and the guard's P30 from `guards/`, and the padded
+ * reference package is refused by the database (`attribute-lexical`: the pattern law on `figures`,
+ * whose source is the one string that `main`'s `integerOrVariableRef` (P6) and content's
  * `integerOrVariableString` both are, so the refusal names content's rule, the side the
- * forward-merge plan's F2 took for identical pairs; `P7`: the contract law of the identifier
- * literal arm, `LiteralIdentifierValue`, on the content as read).
+ * forward-merge plan's F2 took for identical pairs). `padded-literal` is not refused: decision 157
+ * reads its identifier literal with outer whitespace removed, so it is in `roundTripped`.
  * `p29-test-variables-weight-integer` has a test root, which the reader refuses as
  * `unmodeled-vocabulary`; its XML path is M4's. Five packages hold content's vocabulary
  * (`qti-template-declaration`, `qti-context-declaration`, `qti-match-table`) that the reader
@@ -116,7 +118,6 @@ const refused: readonly (readonly [ProcessingFixtureName, Rule])[] = [
   ["missing-identifier", "P5"],
   ["else-before-if", "P30"],
   ["padded-reference", "attribute-lexical"],
-  ["padded-literal", "P7"],
 ];
 
 /**
@@ -1176,25 +1177,6 @@ describe.skipIf(!hasLease)(
                 rule,
                 String(result.failure),
               );
-
-              if (name === "padded-literal" && result.failure instanceof ImportRefused) {
-                // A contract law names the contract and no relation (`refusal.ts`): the law is the
-                // `LiteralIdentifier` arm's contract, whose rule is P7.
-                const { law } = result.failure;
-
-                assert.isTrue(
-                  isContractLaw(law),
-                  `law is not a contract law: ${JSON.stringify(law)}`,
-                );
-
-                if (isContractLaw(law)) {
-                  assert.strictEqual(law.contract, "LiteralIdentifierValue");
-                }
-
-                yield* Effect.log(`padded-literal detail: ${result.failure.detail}`);
-
-                yield* Effect.log(`padded-literal law: ${JSON.stringify(law)}`);
-              }
             }
           }),
         );
