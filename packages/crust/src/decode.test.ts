@@ -3,18 +3,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { decode } from "#crust/decode.ts";
 import type { ReaderRefusal } from "#crust/errors.ts";
+import { ascii, bytesOf, declared } from "#crust/test/bytes.ts";
 import { withoutBuffer } from "#crust/test/without-buffer.ts";
-
-/**
- * The bytes of ASCII `text`.
- */
-const ascii = (text: string): readonly number[] => [...new TextEncoder().encode(text)];
-
-/**
- * Builds the bytes of a document from runs of byte values, in the order given.
- */
-const bytesOf = (...parts: readonly (readonly number[])[]): Uint8Array =>
-  Uint8Array.from(parts.flat());
 
 /**
  * Builds a UTF-16 document of the Basic Multilingual Plane `text` with its byte order mark, in the
@@ -47,12 +37,6 @@ const refusalOf = (input: Uint8Array): Effect.Effect<ReaderRefusal> =>
       onSuccess: (decoded) => assert.fail(`expected a refusal, decoded ${JSON.stringify(decoded)}`),
     }),
   );
-
-/**
- * A document that declares `encoding` and whose root holds the byte runs of `body`.
- */
-const declared = (encoding: string, ...body: readonly (readonly number[])[]): Uint8Array =>
-  bytesOf(ascii(`<?xml version="1.0" encoding="${encoding}"?><a>`), ...body, ascii("</a>"));
 
 describe("decode refuses what it cannot decode faithfully", () => {
   it.effect("a label WHATWG remaps, naming the label", () =>

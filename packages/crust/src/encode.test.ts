@@ -3,6 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { encode } from "#crust/encode.ts";
 import { readXml } from "#crust/read.ts";
+import { declared } from "#crust/test/bytes.ts";
 import { withoutBuffer } from "#crust/test/without-buffer.ts";
 
 /**
@@ -17,13 +18,6 @@ const contains = (bytes: Uint8Array, run: readonly number[]): boolean => {
 
   return false;
 };
-
-const declared = (label: string, body: readonly number[]): Uint8Array =>
-  Uint8Array.from([
-    ...new TextEncoder().encode(`<?xml version="1.0" encoding="${label}"?><a>`),
-    ...body,
-    ...new TextEncoder().encode("</a>"),
-  ]);
 
 /**
  * A tree read from UTF-8 bytes. The declaration stays UTF-8: the encoder writes it as the document
