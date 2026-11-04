@@ -830,7 +830,6 @@ const negatives: readonly Negative[] = [
       Object.assign(
         find(draft, Repeat, () => true),
         {
-          numberRepeats: "2147483648",
           numberRepeatsKind: "literal",
           numberRepeatsValue: 2_147_483_648n,
         },
@@ -856,7 +855,6 @@ const negatives: readonly Negative[] = [
       Object.assign(
         find(draft, RoundTo, () => true),
         {
-          figures: "0",
           figuresKind: "literal",
           figuresValue: 0n,
           roundingMode: "significantFigures",
@@ -871,7 +869,7 @@ const negatives: readonly Negative[] = [
     alter: (draft) => {
       Object.assign(
         find(draft, Index, () => true),
-        { n: "0", nKind: "literal", nValue: 0n },
+        { nKind: "literal", nValue: 0n },
       );
     },
     laws: ["check Index.IndexPositive"],
