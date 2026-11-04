@@ -6,6 +6,7 @@ import { Effect, FileSystem } from "effect";
 import { SaxesParser } from "saxes";
 import { readXml } from "#crust/read.ts";
 import type { Child, Element, XmlDocument } from "#crust/tree.ts";
+import { declared } from "#crust/test/bytes.ts";
 import { withoutBuffer } from "#crust/test/without-buffer.ts";
 
 /**
@@ -127,11 +128,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
   });
 
   suite.effect("reads an ISO-8859-1 document without Node's Buffer", () => {
-    const bytes = Uint8Array.from([
-      ...new TextEncoder().encode('<?xml version="1.0" encoding="ISO-8859-1"?><a>'),
-      0xe9,
-      ...new TextEncoder().encode("</a>"),
-    ]);
+    const bytes = declared("ISO-8859-1", [0xe9]);
 
     return withoutBuffer(
       Effect.gen(function* readsLatin1WithoutBuffer() {
