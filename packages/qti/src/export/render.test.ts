@@ -844,7 +844,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       }),
     );
 
-    for (const name of ["usage3", "usage3-padded"] as const) {
+    for (const name of ["usage3", "usage3-padded", "usage3-float-padded"] as const) {
       it.effect(`${name}: example.xml renders to the oracle's canonical bytes`, () =>
         Effect.gen(function* usageRenders() {
           const { expected, id, rows } = yield* usageOf(name);

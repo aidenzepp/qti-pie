@@ -5,7 +5,7 @@
  * state, judged over the rows an import built before any of them is written.
  */
 import { Effect, Predicate, Schema } from "effect";
-import { collapse, replace, Rows } from "#qti/import/tree.ts";
+import { collapse, replace, Rows, valueText } from "#qti/import/tree.ts";
 import type { WhiteSpace } from "#qti/import/tree.ts";
 import { AttributeLexical, Edge, EntityReference, TextNode, Ws } from "#qti/schema/node.ts";
 import * as ud from "#qti/schema/usage.ts";
@@ -380,20 +380,25 @@ const typedArms = Object.entries<unknown>(ud.relations)
 
 /**
  * `typed-copy` of the typed values: a `UsageTypedValue` and the arm row of its base type each hold
- * the text of their `UsageValue`.
+ * the text of their `UsageValue` read as `valueText` reads it, trimmed for every base type but
+ * `string` (decision 157, item 1).
  */
 const typedCopy = (rows: Rows): Finding => {
   const texts = new Map(Rows.of(rows, ud.UsageValue).map((row) => [row.id, row.value]));
+  const baseTypes = new Map(Rows.of(rows, ud.UsageTypedValue).map((row) => [row.id, row.baseType]));
   const held: readonly { readonly name: string; readonly id: string; readonly value: string }[] = [
     ...Rows.of(rows, ud.UsageTypedValue).map((row) => ({ ...row, name: "UsageTypedValue" })),
     ...typedArms.flatMap((arm) => Rows.of(rows, arm).map((row) => ({ ...row, name: arm.name }))),
   ];
   for (const row of held) {
     const text = texts.get(row.id);
-    if (row.value !== text) {
+    const baseType = baseTypes.get(row.id);
+    const expected =
+      text === undefined || baseType === undefined ? text : valueText(baseType, text);
+    if (row.value !== expected) {
       return refuse(
         "typed-copy",
-        `${row.name} ${row.id} holds ${quoted(row.value)}; its UsageValue holds ${quoted(text ?? "")}.`,
+        `${row.name} ${row.id} holds ${quoted(row.value)}; its UsageValue holds ${quoted(text ?? "")}, which reads as ${quoted(expected ?? "")}.`,
       );
     }
   }
