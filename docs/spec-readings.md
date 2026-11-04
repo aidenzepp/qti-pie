@@ -291,12 +291,14 @@ against it. A reading that is not an information-model-over-XSD case says which 
     (the Wildcard Schema Component, `{process contents}`) and section 3.10.4 (Item Valid (Wildcard)) define `skip` and
     `lax`. This is not a case of documents in conflict: QTI's XSD is itself an XML Schema, so the XML Schema
     Recommendation decides what is valid in it. (2026-11-04.)
-48. **A dotted reference is accepted when exactly one reading names a real item ref and its variable.** Reading 37
-    lets an identifier contain `.`, so a prefixed reference such as `ITEMREF.VAR` can be split at more than one dot.
-    Take a test whose item refs include `a` and `a.b`: `a.b.SCORE` could be item ref `a.b` with variable `SCORE`, or
-    item ref `a` with variable `b.SCORE`. When only one of those readings names a real item ref and a variable that
-    item has, that reading is meant, and the reference is accepted. When both resolve, QTI itself leaves the case
-    ambiguous, and the document is refused with a refusal that names both readings. This binds the renderer the same
-    way as the qti package, so the two never read the same file differently. This is not a case of documents in
-    conflict: the specification reserves `.` for prefixing and says nothing of splitting a reference at a dot, so this
-    reading fills the gap and keeps every unambiguous reference valid, as reading 1 requires. (2026-11-04.)
+48. **A dotted reference is accepted when exactly one reading names a real item ref, test part or section and its
+    variable.** Reading 37 lets an identifier contain `.`, so a prefixed reference such as `ITEMREF.VAR` can be split at
+    more than one dot. Take a test whose item refs include `a` and `a.b`: `a.b.SCORE` could be item ref `a.b` with
+    variable `SCORE`, or item ref `a` with variable `b.SCORE`. When only one of those readings names a real item ref and
+    a variable that item has, that reading is meant, and the reference is accepted. The same holds when a reading's
+    prefix names a test part or a section, as in a section's `duration`: every reading that resolves counts. When both
+    resolve, QTI itself leaves the case ambiguous, and the document is refused with a refusal that names both readings.
+    This binds the renderer the same way as the qti package, so the two never read the same file differently. This is
+    not a case of documents in conflict: the specification reserves `.` for prefixing and says nothing of splitting a
+    reference at a dot, so this reading fills the gap and keeps every unambiguous reference valid, as reading 1
+    requires. (2026-11-04.)
