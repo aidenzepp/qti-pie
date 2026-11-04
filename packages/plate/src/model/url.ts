@@ -83,8 +83,10 @@ export const urlContextOf = (element: string, attribute: string): Option.Option<
 export const outsidePackageFeature = "url-outside-package";
 
 /**
- * The feature key of a value the URL parser refuses, such as `http://[`. The XSD's `xs:anyURI`
- * and `URLDType` admit it, so it is dropped, never refused.
+ * The feature key of a value the URL parser refuses, such as `http://[`, and of a blank value
+ * (empty, or only spaces and control characters the parser strips), which would request the
+ * item's directory. The XSD's `xs:anyURI` and
+ * `URLDType` admit both, so they are dropped, never refused.
  */
 export const invalidUrlFeature = "url-invalid";
 
@@ -111,9 +113,10 @@ export interface PackageUrl {
    * The parsed path below the item's directory, with its query and fragment, percent-encoded as
    * the parser writes it (`images/a%20b.png`). It is a relative reference that resolves to the
    * same place against any directory: when the bare path would read as a scheme, a host, an
-   * absolute path or a fragment (`javascript:x`, `//evil.com/x`, `#q1`), it starts with `./`.
-   * The prefix is load-bearing: the default asset base is `""`, so the path can reach the page
-   * as the whole attribute value.
+   * absolute path or a fragment (`javascript:x`, `//evil.com/x`, `#q1`), it starts with `./`, and
+   * the item's directory itself is `./`, never the empty value {@link classifyUrl} drops. The
+   * prefix is load-bearing: the default asset base is `""`, so the path can reach the page as the
+   * whole attribute value.
    */
   readonly path: string;
 }
@@ -146,8 +149,8 @@ export interface SrcsetCandidate {
 }
 
 /**
- * A kept `srcset`: the candidates a browser reads from it, in order. A candidate with invalid
- * descriptors, which a browser skips, is classified but left out.
+ * A kept `srcset`: the candidates a browser reads from it, in order, at least one. A candidate
+ * with invalid descriptors, which a browser skips, is classified but left out.
  */
 export interface SrcsetUrl {
   readonly candidates: readonly SrcsetCandidate[];
@@ -224,12 +227,14 @@ const locationOf = (url: URL): string => `${url.pathname}${url.search}${url.hash
  * back as the same URL.
  *
  * @param url A URL on {@link packageOrigin} whose path starts with {@link packageRoot}.
- * @returns Its path below the root, with `./` before it when the bare path would read otherwise.
+ * @returns Its path below the root, with `./` before it when the bare path would read otherwise
+ *   or is empty.
  */
 const packageUrl = (url: URL): PackageUrl => {
   const path = locationOf(url).slice(packageRoot.length);
   const reread = URL.parse(path, packageBase);
   const plain =
+    path !== "" &&
     !URL.canParse(path, opaqueBase) &&
     reread !== null &&
     reread.origin === packageOrigin &&
@@ -239,13 +244,33 @@ const packageUrl = (url: URL): PackageUrl => {
 };
 
 /**
+ * Report whether a value is empty once the URL parser strips it: nothing but spaces and C0
+ * control characters, tab and newline among them. It would resolve to the item's directory.
+ *
+ * @param value The attribute value as written.
+ * @returns Whether every character is a C0 control or a space.
+ * @see https://url.spec.whatwg.org/#c0-control-or-space
+ */
+const isBlank = (value: string): boolean => {
+  for (const character of value) {
+    if (character > " ") {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+/**
  * Classify one fetched URL: a package path, an absolute `http` or `https` URL where remote URLs
  * are admitted, or dropped.
  *
  * `https:evil.com/x` resolves against the `https` base as the package path `evil.com/x`, so it
  * is kept and written as that path, never as `https://evil.com/x`. A network path (`//host`) is
  * dropped even when it resolves to an `http` origin, because it inherits the page's scheme; only
- * a value that reads as the same URL with no base at all is remote.
+ * a value that reads as the same URL with no base at all is remote. A blank value is dropped as
+ * {@link invalidUrlFeature}: kept, it would request the item's directory, and an object would lose
+ * its fallback content.
  *
  * @param value The attribute value as written.
  * @param remoteAdmitted Whether the context keeps remote URLs.
@@ -255,7 +280,7 @@ const classifyFetched = (
   value: string,
   remoteAdmitted: boolean,
 ): DroppedUrl | PackageUrl | RemoteUrl => {
-  const url = URL.parse(value, packageBase);
+  const url = isBlank(value) ? null : URL.parse(value, packageBase);
   if (url === null) {
     return dropped(invalidUrlFeature);
   }
@@ -465,7 +490,9 @@ const validDescriptors = (descriptors: readonly string[]): boolean => {
  *
  * @param url The kept value.
  * @param assetBase The prefix for package paths: `""` keeps them relative to the page, and a
- *   directory URL ending in `/` places them under it.
+ *   directory URL places them under it. A base without its closing `/` gets one, so an
+ *   authority-only base (`https://cdn.example`) cannot read a path such as `@evil.com/x` or
+ *   `:8080/x` as another host or port.
  * @returns The attribute value. A `srcset` is its candidates, each URL written the same way and
  *   followed by its descriptors, joined by `, `.
  */
@@ -476,7 +503,9 @@ export const formatUrl = (url: KeptUrl, assetBase = ""): string => {
     }
 
     case "package": {
-      return `${assetBase}${url.path}`;
+      const directory = assetBase === "" || assetBase.endsWith("/") ? assetBase : `${assetBase}/`;
+
+      return `${directory}${url.path}`;
     }
 
     case "remote": {
@@ -498,21 +527,22 @@ export const formatUrl = (url: KeptUrl, assetBase = ""): string => {
 };
 
 /**
- * Report whether a candidate URL written into a `srcset` would split back as the same URL. An
- * empty URL, or one that starts or ends with a comma, would not; the parser makes one only from a
- * control character beside a comma.
+ * Report whether a candidate URL written into a `srcset` would split back as the same URL. One
+ * that starts or ends with a comma would not; the parser makes one only from a control character
+ * beside a comma. A written URL is never empty: a blank candidate is dropped before it is written.
  *
  * @param written The candidate's URL as {@link formatUrl} writes it.
  * @returns Whether the `srcset` parser reads it back unchanged.
  */
-const splitsBack = (written: string): boolean =>
-  written !== "" && !written.startsWith(",") && !written.endsWith(",");
+const splitsBack = (written: string): boolean => !written.startsWith(",") && !written.endsWith(",");
 
 /**
  * Classify a `srcset`: every candidate's URL as a resource, kept whole or dropped whole.
  *
  * @param value The attribute value as written.
  * @returns The candidates a browser reads, or the first candidate's reason to drop the attribute.
+ *   A value a browser reads no candidate from, a blank one included, would be written empty, so it
+ *   is dropped as {@link invalidUrlFeature}, as an empty value is in every context.
  */
 const classifySrcset = (value: string): DroppedUrl | SrcsetUrl => {
   const candidates: SrcsetCandidate[] = [];
@@ -531,7 +561,7 @@ const classifySrcset = (value: string): DroppedUrl | SrcsetUrl => {
     }
   }
 
-  return { candidates, kind: "srcset" };
+  return candidates.length === 0 ? dropped(invalidUrlFeature) : { candidates, kind: "srcset" };
 };
 
 /**
@@ -542,7 +572,8 @@ const classifySrcset = (value: string): DroppedUrl | SrcsetUrl => {
  * URL where the context admits remote URLs, or a same-document fragment in the link context.
  * Everything else is dropped with its feature key: {@link schemeFeature} for any other scheme
  * (`javascript:`, `data:`, `mailto:`, `tel:`), {@link outsidePackageFeature} for `/x`, `../x`,
- * `//host` and `\\host`, and {@link invalidUrlFeature} for a value the parser refuses.
+ * `//host` and `\\host`, and {@link invalidUrlFeature} for a value the parser refuses and for a
+ * blank one (empty, or only spaces and control characters).
  *
  * Classifying a kept value's {@link formatUrl} form gives the same classification.
  *

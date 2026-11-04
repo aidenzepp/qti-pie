@@ -237,6 +237,40 @@ describe("classifyUrl", () => {
     );
   });
 
+  it("drops an empty or whitespace-only value as url-invalid in every context", () => {
+    for (const value of ["", " ", " \t\n\r "]) {
+      for (const context of ["link", "resource", "embed", "srcset"] as const) {
+        assert.deepStrictEqual(
+          classifyUrl(context, value),
+          dropped(invalidUrlFeature),
+          `${JSON.stringify(value)} in ${context}`,
+        );
+      }
+    }
+  });
+
+  it("drops a value of control characters, which the parser strips to nothing, as url-invalid", () => {
+    for (const context of singleContexts) {
+      assert.deepStrictEqual(
+        classifyUrl(context, "\u0001 \u001F"),
+        dropped(invalidUrlFeature),
+        context,
+      );
+    }
+  });
+
+  it("keeps a reference to the item's directory itself as the package path ./", () => {
+    for (const value of [".", "./", "?", "images/..", "https:"]) {
+      for (const context of singleContexts) {
+        assert.deepStrictEqual(
+          classifyUrl(context, value),
+          inPackage("./"),
+          `${JSON.stringify(value)} in ${context}`,
+        );
+      }
+    }
+  });
+
   it("drops a value the URL parser refuses as url-invalid", () => {
     for (const context of singleContexts) {
       assert.deepStrictEqual(classifyUrl(context, "http://["), dropped(invalidUrlFeature), context);
@@ -254,6 +288,9 @@ describe("classifyUrl", () => {
       "#q1",
       "x?",
       "",
+      ".",
+      "./",
+      "?",
       "HTTPS://Example.COM/x",
       "a.png 1x, https://example.com/b.png 2x",
     ];
@@ -323,11 +360,21 @@ describe("classifyUrl, srcset", () => {
       srcset(candidate(inPackage("a.png")), candidate(inPackage("b.png"), "2x")),
     );
     assert.deepStrictEqual(
-      classifyUrl("srcset", "a.png (1x, javascript:alert(1) 2x)"),
-      srcset(),
-      "a parenthesised descriptor holds its comma, so the browser reads no second URL",
+      classifyUrl("srcset", "a.png 1x, b.png (1x, javascript:alert(1) 2x)"),
+      srcset(candidate(inPackage("a.png"), "1x")),
+      "a parenthesised descriptor holds its comma, so the browser reads no third URL",
     );
-    assert.deepStrictEqual(classifyUrl("srcset", "  "), srcset());
+  });
+
+  it("drops a srcset a browser reads no candidate from as url-invalid, since it is written empty", () => {
+    for (const value of [
+      ",",
+      "a.png 100h",
+      "images/a b.png",
+      "a.png (1x, javascript:alert(1) 2x)",
+    ]) {
+      assert.deepStrictEqual(classifyUrl("srcset", value), dropped(invalidUrlFeature), value);
+    }
   });
 
   it("drops a srcset whose candidate URL would not split back as the same URL as url-invalid", () => {
@@ -348,6 +395,44 @@ describe("formatUrl", () => {
       "https://example.com/x",
     );
     assert.strictEqual(formatUrl({ fragment: "q1", kind: "fragment" }, "/assets/items/"), "#q1");
+  });
+
+  it("adds the / an asset base lacks, so a package path stays on the base's host and port", () => {
+    const cases = [
+      ["https://cdn.example", "@evil.com/x", "https://cdn.example/@evil.com/x"],
+      ["https://cdn.example", ":8080/x", "https://cdn.example/:8080/x"],
+      ["//cdn.example", "@evil.com/x", "//cdn.example/@evil.com/x"],
+      ["//cdn.example", ":8080/x", "//cdn.example/:8080/x"],
+    ] as const;
+    for (const [assetBase, value, expected] of cases) {
+      const kept = classifyUrl("resource", value);
+      assert.strictEqual(kept.kind, "package", value);
+      if (kept.kind === "package") {
+        const written = formatUrl(kept, assetBase);
+        assert.strictEqual(written, expected, `${value} under ${assetBase}`);
+        assert.strictEqual(
+          new URL(written, "https://page.example/item").host,
+          "cdn.example",
+          `${value} under ${assetBase}`,
+        );
+      }
+    }
+    assert.strictEqual(
+      formatUrl(inPackage("images/a.png"), "https://cdn.example"),
+      "https://cdn.example/images/a.png",
+    );
+  });
+
+  it("leaves an empty asset base, and one that ends in /, as it is", () => {
+    assert.strictEqual(formatUrl(inPackage("images/a.png"), ""), "images/a.png");
+    assert.strictEqual(
+      formatUrl(inPackage("images/a.png"), "https://cdn.example/"),
+      "https://cdn.example/images/a.png",
+    );
+    assert.strictEqual(
+      formatUrl(inPackage("images/a.png"), "/assets/items/"),
+      "/assets/items/images/a.png",
+    );
   });
 
   it("writes a srcset candidate by candidate, rebasing each package path", () => {
