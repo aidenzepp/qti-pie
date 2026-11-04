@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
 import { ConfigProvider, Effect } from "effect";
@@ -133,6 +133,80 @@ const post = (handle: Handler, action: string, entries: readonly (readonly [stri
   }
 
   return send(handle, new Request(new URL(action, origin), { body: form, method: "POST" }));
+};
+
+/**
+ * The origin the theme cases send to, the name a browser shows, so an absolute `return` on it
+ * reaches the second origin check.
+ */
+const themeOrigin = "http://localhost:5190";
+
+/**
+ * Send a GET for a target on {@link themeOrigin} and read the body as bytes.
+ *
+ * @param handle The handler.
+ * @param target The path and query.
+ * @returns The response and its body's bytes.
+ */
+const bytes = (handle: Handler, target: string) =>
+  Effect.promise(async () => {
+    const response = await handle(new Request(`${themeOrigin}${target}`));
+
+    return { body: new Uint8Array(await response.arrayBuffer()), response };
+  });
+
+/**
+ * Post the theme box's fields to `/theme` on {@link themeOrigin}.
+ *
+ * @param handle The handler.
+ * @param entries The fields, in order.
+ * @returns The response and its body.
+ */
+const postTheme = (handle: Handler, entries: readonly (readonly [string, string])[]) => {
+  const form = new FormData();
+  for (const [name, value] of entries) {
+    form.append(name, value);
+  }
+
+  return send(handle, new Request(`${themeOrigin}/theme`, { body: form, method: "POST" }));
+};
+
+/**
+ * Read the stored theme's CSS from `/theme.css` on {@link themeOrigin}.
+ *
+ * @param handle The handler.
+ * @returns The response and its body.
+ */
+const themeSheet = (handle: Handler) => send(handle, new Request(`${themeOrigin}/theme.css`));
+
+/**
+ * A theme the box accepts: `--primary` in both blocks and `--font-sans` in `:root`.
+ */
+const acceptedTheme = `:root {
+  --primary: oklch(0.205 0 0);
+  --font-sans: "Inter", sans-serif;
+}
+
+.dark {
+  --primary: oklch(0.922 0 0);
+}
+`;
+
+/**
+ * Assert that a response carries every header the listing carries, its type aside.
+ *
+ * @param listing The `GET /` response.
+ * @param response The response to check.
+ */
+const assertPageHeaders = (listing: Response, response: Response): void => {
+  for (const [name, value] of listing.headers) {
+    if (name !== "content-type") {
+      assert.strictEqual(response.headers.get(name), value, name);
+    }
+  }
+  for (const [, value] of response.headers) {
+    assert.notInclude(value, "unsafe-inline");
+  }
 };
 
 /**
@@ -496,6 +570,139 @@ describe("dev/page.ts", () => {
       assert.notInclude(html, "<script");
       assert.include(html, "&lt;script&gt;");
       assert.strictEqual(textOf(heading.children), hostileTitle);
+    }),
+  );
+
+  it.effect(
+    "GET /styles.css and /playground.css serve their files as text/css, and they and /theme.css carry the page headers",
+    () =>
+      Effect.gen(function* sheets() {
+        const handle = createHandler();
+        const listing = yield* get(handle, "/");
+        const files = [
+          ["/styles.css", "#plate/styles.css"],
+          ["/playground.css", "#plate/dev/playground.css"],
+        ] as const;
+
+        for (const [target, specifier] of files) {
+          const served = yield* bytes(handle, target);
+
+          assert.strictEqual(served.response.status, 200, target);
+          assert.strictEqual(
+            served.response.headers.get("content-type"),
+            "text/css; charset=utf-8",
+          );
+          assert.deepStrictEqual(
+            served.body,
+            new Uint8Array(readFileSync(new URL(import.meta.resolve(specifier)))),
+          );
+          assertPageHeaders(listing.response, served.response);
+        }
+
+        const theme = yield* themeSheet(handle);
+        assert.strictEqual(theme.response.status, 200);
+        assert.strictEqual(theme.response.headers.get("content-type"), "text/css; charset=utf-8");
+        assertPageHeaders(listing.response, theme.response);
+      }),
+  );
+
+  it.effect(
+    "POST /theme stores an accepted theme and answers 303 to its return; /theme.css then serves it",
+    () =>
+      Effect.gen(function* stored() {
+        const handle = createHandler();
+        const listing = yield* get(handle, "/");
+        const before = yield* themeSheet(handle);
+        const target = `/item?path=${paths.bg007}`;
+        const posted = yield* postTheme(handle, [
+          ["theme", acceptedTheme],
+          ["dark", "on"],
+          ["return", target],
+        ]);
+        const after = yield* themeSheet(handle);
+
+        assert.notInclude(before.html, "--primary");
+        assert.strictEqual(posted.response.status, 303);
+        assert.strictEqual(posted.response.headers.get("location"), target);
+        assertPageHeaders(listing.response, posted.response);
+        assert.include(
+          after.html,
+          ':root {\n  --primary: oklch(0.205 0 0);\n  --font-sans: "Inter", sans-serif;\n}',
+        );
+        assert.include(after.html, ".dark {\n  --primary: oklch(0.922 0 0);\n}");
+        assert.include(after.html, ".dark {\n  color-scheme: dark;\n}");
+      }),
+  );
+
+  it.effect(
+    "a refused theme answers 400 with its refusal escaped and the page headers, and leaves /theme.css unchanged",
+    () =>
+      Effect.gen(function* refused() {
+        const handle = createHandler();
+        const listing = yield* get(handle, "/");
+        yield* postTheme(handle, [["theme", acceptedTheme]]);
+
+        const before = yield* themeSheet(handle);
+        const answered = yield* postTheme(handle, [
+          ["theme", ":root { --x: 1 }\n<b> { --y: 2 }"],
+          ["return", "/"],
+        ]);
+        const after = yield* themeSheet(handle);
+        const cause = find(answered.html, (element) => element.attrs["data-cause"] !== undefined);
+
+        assert.strictEqual(answered.response.status, 400);
+        assert.strictEqual(
+          answered.response.headers.get("content-type"),
+          "text/html; charset=utf-8",
+        );
+        assertPageHeaders(listing.response, answered.response);
+        assert.isNull(answered.response.headers.get("location"));
+        assert.strictEqual(cause.attrs["data-cause"], "selector");
+        assert.include(textOf(cause.children), "<b>");
+        assert.include(answered.html, "&lt;b&gt;");
+        assert.notInclude(answered.html, "<b>");
+        assert.include(before.html, "--primary");
+        assert.strictEqual(after.html, before.html);
+      }),
+  );
+
+  it.effect("a return that leaves the origin, or whose path begins with //, redirects to /", () =>
+    Effect.gen(function* offsite() {
+      const handle = createHandler();
+      const returns = [
+        "//evil.example/",
+        "/\t/evil.example",
+        "/\t\\evil.example",
+        "/.//evil.example",
+        "/x/..//evil.example",
+        "http://localhost:5190//evil.example",
+      ];
+
+      for (const value of returns) {
+        const posted = yield* postTheme(handle, [
+          ["theme", acceptedTheme],
+          ["return", value],
+        ]);
+
+        assert.strictEqual(posted.response.status, 303, JSON.stringify(value));
+        assert.strictEqual(posted.response.headers.get("location"), "/", JSON.stringify(value));
+      }
+    }),
+  );
+
+  it.effect("an absent or empty return redirects to /", () =>
+    Effect.gen(function* fallback() {
+      const handle = createHandler();
+      const absent = yield* postTheme(handle, [["theme", acceptedTheme]]);
+      const empty = yield* postTheme(handle, [
+        ["theme", acceptedTheme],
+        ["return", ""],
+      ]);
+
+      for (const { response } of [absent, empty]) {
+        assert.strictEqual(response.status, 303);
+        assert.strictEqual(response.headers.get("location"), "/");
+      }
     }),
   );
 });
