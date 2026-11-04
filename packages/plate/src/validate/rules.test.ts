@@ -269,6 +269,24 @@ const lookupItem = (table: string, operand: SourceElement) =>
   );
 
 /**
+ * Construct a `qti-template-processing` holding template rules.
+ *
+ * @param rules Its rules.
+ * @returns The processing element.
+ */
+const templateProcessing = (...rules: readonly SourceElement[]): SourceElement =>
+  el("qti-template-processing", [], rules);
+
+/**
+ * Construct a template rule that sets a response's correct response to the identifier `A`.
+ *
+ * @param identifier The response it names, as written.
+ * @returns The `qti-set-correct-response`.
+ */
+const setCorrect = (identifier: string): SourceElement =>
+  el("qti-set-correct-response", [attr("identifier", identifier)], [baseValue("identifier", "A")]);
+
+/**
  * Reduce refusals to what a test asserts: the rule, the path and the detail.
  *
  * @param source The document to check.
@@ -569,6 +587,108 @@ describe("checkRules", () => {
           ),
         ),
         [],
+      );
+    });
+
+    it("[I-9b] accepts match_correct when template processing sets RESPONSE's correct response", () => {
+      for (const identifier of ["RESPONSE", " RESPONSE "]) {
+        assert.deepStrictEqual(
+          judged(
+            item(
+              [
+                response("RESPONSE", "single", "identifier"),
+                outcome("SCORE"),
+                templateProcessing(setCorrect(identifier)),
+              ],
+              [choice("RESPONSE")],
+              [processing("match_correct")],
+            ),
+          ),
+          [],
+          JSON.stringify(identifier),
+        );
+      }
+    });
+
+    it("[I-9b] accepts match_correct when a template condition's branch sets RESPONSE's correct response", () => {
+      const branch = el(
+        "qti-template-condition",
+        [],
+        [el("qti-template-if", [], [baseValue("boolean", "true"), setCorrect("RESPONSE")])],
+      );
+
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "identifier"),
+              outcome("SCORE"),
+              templateProcessing(branch),
+            ],
+            [choice("RESPONSE")],
+            [processing("match_correct")],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("[I-9b] refuses match_correct when template processing sets another response's correct response", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "identifier"),
+              response("OTHER", "single", "identifier"),
+              outcome("SCORE"),
+              templateProcessing(setCorrect("OTHER")),
+            ],
+            [choice("RESPONSE")],
+            [processing("match_correct")],
+          ),
+        ),
+        [
+          {
+            detail: {
+              child: "qti-correct-response",
+              declaration: "qti-response-declaration",
+              element: "qti-response-processing",
+              identifier: "RESPONSE",
+              template: "match_correct",
+            },
+            path: processingPath,
+            rule: "template-requirements",
+          },
+        ],
+      );
+    });
+
+    it("[I-9b] refuses map_response with no qti-mapping though template processing sets RESPONSE's correct response", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "identifier"),
+              outcome("SCORE"),
+              templateProcessing(setCorrect("RESPONSE")),
+            ],
+            [choice("RESPONSE")],
+            [processing("map_response")],
+          ),
+        ),
+        [
+          {
+            detail: {
+              child: "qti-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-response-processing",
+              identifier: "RESPONSE",
+              template: "map_response",
+            },
+            path: processingPath,
+            rule: "template-requirements",
+          },
+        ],
       );
     });
 
