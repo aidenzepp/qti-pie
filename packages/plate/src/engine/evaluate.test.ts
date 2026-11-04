@@ -102,6 +102,24 @@ const city: ResponseDeclaration = {
 };
 
 /**
+ * A single string response whose entries overlap in the order BG010's do not: `york` (0.5, with
+ * case folded) comes before `York` (1, compared case-sensitively), so `York` matches both.
+ */
+const tied: ResponseDeclaration = {
+  ...city,
+  identifier: "TIED",
+  mapping: Option.some({
+    defaultValue: 0,
+    entries: [
+      { caseSensitive: false, key: { baseType: "string", value: "york" }, value: 0.5 },
+      { caseSensitive: true, key: { baseType: "string", value: "York" }, value: 1 },
+    ],
+    lowerBound: Option.none(),
+    upperBound: Option.none(),
+  }),
+};
+
+/**
  * BG010's response with its mapping bounded from 0.25 to 0.4.
  */
 const bounded: ResponseDeclaration = {
@@ -183,6 +201,7 @@ const item: Item = {
     ["RESPONSE", response],
     ["OPEN", open],
     ["CITY", city],
+    ["TIED", tied],
     ["BOUNDED", bounded],
     ["CHOICES", choices],
     ["PAIRED", paired],
@@ -514,6 +533,10 @@ describe("map-response", () => {
     assert.deepStrictEqual(mapped("CITY", [stringOf("york")]), floatValue(0.5));
     assert.deepStrictEqual(mapped("CITY", [stringOf("Paris")]), floatValue(0));
     assert.deepStrictEqual(mapped("CITY", []), floatValue(0));
+  });
+
+  it("[I-9b] a value two entries match maps by the first in document order (placeholder while spec §12 Q5 is open)", () => {
+    assert.deepStrictEqual(mapped("TIED", [stringOf("York")]), floatValue(0.5));
   });
 
   it("[I-9b] the bounds clamp a single value, and a NULL response's 0 too", () => {
