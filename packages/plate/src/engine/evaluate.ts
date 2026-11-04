@@ -7,8 +7,10 @@
  * value for every modelled declaration, as the session record does. A rule that names an identifier
  * outside them, sets an outcome to a value of another type, or maps a response that has no mapping
  * is a failure of what the caller passed, and the caller can cause each one: the variables come
- * from a record the host hands back. So the functions stay plain and synchronous and return each
- * failure, an {@link EngineFailure}, in a `Result`; the first failure ends the run.
+ * from a record the host hands back. An identifier the variables hold no value of is the record's
+ * gap, and one the item declares nothing of is the item's; the failure says which. So the
+ * functions stay plain and synchronous and return each failure, an {@link EngineFailure}, in a
+ * `Result`; the first failure ends the run.
  *
  * @module
  */
@@ -37,13 +39,21 @@ export interface Variables {
 
 /**
  * The failure of a rule tree that names an identifier the item or the variables do not hold in the
- * role the rule reads it in: a variable with no value, a `qti-correct` of no response, or a
- * `qti-set-outcome-value` of no outcome.
+ * role the rule reads it in: a variable or a mapped response with no value, a `qti-correct` or a
+ * `qti-map-response` of no declared response, or a `qti-set-outcome-value` of no declared outcome.
  *
  * In a valid item every identifier a rule names is declared, but the variables come from the record
- * the host hands back, which may lack a value, so the evaluator returns it.
+ * the host hands back, which may lack a value, so the evaluator returns it. Its `holder` says which
+ * of the two lacks the identifier, and the message names the one to fix.
  */
 export class UnknownIdentifierError extends Data.TaggedError("UnknownIdentifierError")<{
+  /**
+   * What lacks the identifier: `"record"` when the variables, which come from the session record,
+   * hold no value of it, and `"item"` when the item declares no modelled response or outcome by
+   * that name.
+   */
+  readonly holder: "item" | "record";
+
   /**
    * The identifier the rule names.
    */
@@ -55,10 +65,14 @@ export class UnknownIdentifierError extends Data.TaggedError("UnknownIdentifierE
   readonly role: "outcome" | "response" | "variable";
 }> {
   /**
-   * The identifier, the role it is read in, and what to run instead, in one line.
+   * The identifier, the role it is read in, what lacks it, and what to pass instead, in one line.
    */
   override get message(): string {
-    return `The rules read ${JSON.stringify(this.identifier)} as a ${this.role}, and the item holds no ${this.role} by that name: run rules built from this item, with the variables its record holds.`;
+    const identifier = JSON.stringify(this.identifier);
+
+    return this.holder === "record"
+      ? `The session record holds no value for ${identifier}, which the rules read as a ${this.role}: pass back, unchanged, the record score returned for this item, or none to start it afresh.`
+      : `The rules read ${identifier} as a ${this.role}, and the item holds no ${this.role} by that name: run rules built from this item, with the variables its record holds.`;
   }
 }
 
@@ -153,7 +167,7 @@ const variableValue = (
 ): Result.Result<Value, UnknownIdentifierError> =>
   Result.fromOption(
     Option.orElse(own(variables.responses, identifier), () => own(variables.outcomes, identifier)),
-    () => new UnknownIdentifierError({ identifier, role: "variable" }),
+    () => new UnknownIdentifierError({ holder: "record", identifier, role: "variable" }),
   );
 
 /**
@@ -170,7 +184,7 @@ const responseOf = (
 ): Result.Result<ResponseDeclaration, UnknownIdentifierError> =>
   Result.fromOption(
     Option.fromUndefinedOr(item.responses.get(identifier)),
-    () => new UnknownIdentifierError({ identifier, role: "response" }),
+    () => new UnknownIdentifierError({ holder: "item", identifier, role: "response" }),
   );
 
 /**
@@ -281,7 +295,7 @@ const mapResponse = (
     );
     const response = yield* Result.fromOption(
       own(variables.responses, identifier),
-      () => new UnknownIdentifierError({ identifier, role: "response" }),
+      () => new UnknownIdentifierError({ holder: "record", identifier, role: "response" }),
     );
     let sum = 0;
     for (const single of Arr.dedupeWith(response.values, equal)) {
@@ -402,7 +416,7 @@ const setOutcome = (
   Result.gen(function* setOneOutcome() {
     const declaration = yield* Result.fromOption(
       Option.fromUndefinedOr(item.outcomes.get(identifier)),
-      () => new UnknownIdentifierError({ identifier, role: "outcome" }),
+      () => new UnknownIdentifierError({ holder: "item", identifier, role: "outcome" }),
     );
     if (value.baseType !== declaration.baseType || value.cardinality !== declaration.cardinality) {
       return yield* Result.fail(
