@@ -397,7 +397,9 @@ const baseTypeOf = (value: string | undefined): BaseTypeOrAny =>
  * is not a refusal. A reference whose identifier the environment does not hold is refused naming P8
  * in `item` and `test` mode, except that in `test` mode a name declared nowhere whole that has a
  * prefixed form's shape is typed by `resolvePrefixed` in the test's reach, and refused
- * `prefixed-ref` when no reading or more than one resolves; in `template` mode it is a template
+ * `prefixed-ref` when no reading or more than one resolves. A resolved prefixed name in a reference
+ * attribute meets P24 like a whole name: the variable it resolves to is a template or outcome
+ * variable of the matching base type; in `template` mode it is a template
  * parameter, typed `unknown` and recorded as unresolved. A
  * `qti-custom-operator` and the field of a `qti-field-value` are `unknown` and unresolved too (P49
  * is a record, never a refusal).
@@ -552,6 +554,12 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
     return undefined;
   };
 
+  /**
+   * P24: a reference in an attribute names a template or outcome variable of the matching base type
+   * and single cardinality. A name declared whole or a built-in meets it directly; in `test` mode a
+   * resolved prefixed name meets it through the variable it resolves to, and an unresolved or
+   * ambiguous one is left to `reference`, which has refused it `prefixed-ref`.
+   */
   const checkAttributeReference = (
     node: ExpressionNode,
     name: string,
@@ -567,6 +575,17 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
     const variable = declared?.kind === "template" || declared?.kind === "outcome";
     if (named && (!variable || !compatible(type, expected))) {
       refuse("P24", node.kind, node.position);
+    }
+
+    if (!named && env.mode === "test") {
+      const resolution = resolvePrefixed(identifier, env);
+      const fitting =
+        resolution._tag === "resolved" &&
+        (resolution.variableKind === "template" || resolution.variableKind === "outcome") &&
+        compatible(resolution.type, expected);
+      if (resolution._tag === "resolved" && !fitting) {
+        refuse("P24", node.kind, node.position);
+      }
     }
   };
 
