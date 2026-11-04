@@ -5,12 +5,12 @@
  * The session record, the engine and the form encoding all carry a {@link Value}, so this module
  * owns the one value representation, and the one NCName rule the validator reuses.
  */
-import { Data, Option, Result, Schema } from "effect";
+import { Data, Option, Result } from "effect";
 
 /**
  * The base types phase 1 holds values of: every QTI base type but `point`, `duration` and `file`.
  */
-const modelledBaseTypes = [
+export const modelledBaseTypes = [
   "identifier",
   "boolean",
   "integer",
@@ -29,7 +29,7 @@ export type ModelledBaseType = (typeof modelledBaseTypes)[number];
 /**
  * The cardinalities a phase-1 value takes. Records are not modelled.
  */
-const modelledCardinalities = ["single", "multiple", "ordered"] as const;
+export const modelledCardinalities = ["single", "multiple", "ordered"] as const;
 
 /**
  * Report whether phase 1 holds values of a base type.
@@ -119,105 +119,39 @@ const integerLexical = /^[+-]?[0-9]+$/u;
 const doubleLexical = /^(?:[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|-?INF|NaN)$/u;
 
 /**
- * An identifier as a Schema: a string that is an NCName.
- */
-const IdentifierText = Schema.String.check(
-  Schema.makeFilter((text: string) =>
-    isNcName(text) ? undefined : "an identifier must be an NCName; start it with a letter or _",
-  ),
-);
-
-/**
  * One QTI value, tagged by its base type: a string for `identifier`, `string` and `uri`; a
  * `bigint` for `integer`; a number for `float`; a boolean for `boolean`; and two identifiers for
  * `pair` and `directedPair`, the source first.
  *
- * An integer is exact at any size. Its encoded form is its decimal digits, which
- * {@link parseLexical} reads to the same value, so a value decoded from a record is one the parser
- * could have read. A float is an xs:double.
+ * An integer is exact at any size. A float is an xs:double. `SingleSchema` in
+ * `#plate/codec/values.ts` checks and encodes this type at the boundaries.
  */
-// oxlint-disable-next-line eslint/no-redeclare -- `Single` is a Schema and the type it decodes under one name, as section 0.5 of the phase-1 slice list names it, so `Single` reads as one thing in values and in signatures.
-export const Single = Schema.Union([
-  Schema.Struct({ baseType: Schema.Literal("identifier"), value: IdentifierText }),
-  Schema.Struct({ baseType: Schema.Literal("boolean"), value: Schema.Boolean }),
-  Schema.Struct({ baseType: Schema.Literal("integer"), value: Schema.BigIntFromString }),
-  Schema.Struct({ baseType: Schema.Literal("float"), value: Schema.Number }),
-  Schema.Struct({ baseType: Schema.Literal("string"), value: Schema.String }),
-  Schema.Struct({
-    baseType: Schema.Literal("pair"),
-    value: Schema.Tuple([IdentifierText, IdentifierText]),
-  }),
-  Schema.Struct({
-    baseType: Schema.Literal("directedPair"),
-    value: Schema.Tuple([IdentifierText, IdentifierText]),
-  }),
-  Schema.Struct({ baseType: Schema.Literal("uri"), value: Schema.String }),
-]);
-
-/**
- * One QTI value, tagged by its base type.
- */
-export type Single = typeof Single.Type;
-
-/**
- * Report what is wrong with one value of a {@link Value}.
- *
- * @param value The value that holds it.
- * @param single The value to check.
- * @returns The problem in words that say what to change, or none when the value fits.
- */
-const misfit = (value: Value, single: Single): Option.Option<string> => {
-  if (single.baseType !== value.baseType) {
-    return Option.some(
-      `this value has base type ${single.baseType} inside a ${value.baseType} value; give it base type ${value.baseType}`,
-    );
-  }
-
-  return single.baseType === "string" && single.value === ""
-    ? Option.some("an empty string is NULL, not a value; remove it, so NULL is no values")
-    : Option.none();
-};
+export type Single =
+  | { readonly baseType: "identifier"; readonly value: string }
+  | { readonly baseType: "boolean"; readonly value: boolean }
+  | { readonly baseType: "integer"; readonly value: bigint }
+  | { readonly baseType: "float"; readonly value: number }
+  | { readonly baseType: "string"; readonly value: string }
+  | { readonly baseType: "pair"; readonly value: readonly [string, string] }
+  | { readonly baseType: "directedPair"; readonly value: readonly [string, string] }
+  | { readonly baseType: "uri"; readonly value: string };
 
 /**
  * A QTI value of a modelled base type, as the session record, the engine and the form encoding
- * carry it.
+ * carry it: a base type, a cardinality and its values, none for NULL.
  *
  * NULL is `values: []` at any cardinality, because QTI treats an empty string and an empty
- * container as NULL; there is no other spelling of NULL, so the Schema refuses an empty string. A
- * `single` holds at most one value, and every value carries the value's own base type.
+ * container as NULL; there is no other spelling of NULL, so an empty string is never one of the
+ * values. A `single` holds at most one value, and every value carries the value's own base type.
+ * `ValueSchema` in `#plate/codec/values.ts` checks these rules at the boundaries.
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Variables
  */
-// oxlint-disable-next-line eslint/no-redeclare -- `Value` is a Schema and the type it decodes under one name, as section 0.5 of the phase-1 slice list names it, so `Value` reads as one thing in the record, the engine and the form encoding.
-export const Value = Schema.Struct({
-  baseType: Schema.Literals(modelledBaseTypes),
-  cardinality: Schema.Literals(modelledCardinalities),
-  values: Schema.Array(Single),
-}).check(
-  Schema.makeFilter((value) => {
-    const misfits: Schema.FilterIssue[] = value.values.flatMap((single, index) =>
-      Option.match(misfit(value, single), {
-        onNone: () => [],
-        onSome: (issue) => [{ issue, path: ["values", index] }],
-      }),
-    );
-
-    return value.cardinality === "single" && value.values.length > 1
-      ? [
-          ...misfits,
-          {
-            issue: `a single value holds at most one value, not ${String(value.values.length)}; keep one, or none for NULL`,
-            path: ["values"],
-          },
-        ]
-      : misfits;
-  }),
-);
-
-/**
- * A QTI value of a modelled base type: a base type, a cardinality and its values, none for NULL.
- */
-export type Value = typeof Value.Type;
+export interface Value {
+  readonly baseType: ModelledBaseType;
+  readonly cardinality: (typeof modelledCardinalities)[number];
+  readonly values: readonly Single[];
+}
 
 /**
  * Construct the NULL value of a base type and cardinality.

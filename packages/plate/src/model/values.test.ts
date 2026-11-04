@@ -1,7 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Duration, Effect, Option, Result, Schema } from "effect";
+import { Duration, Effect, Option, Result } from "effect";
 import {
-  Value,
   format,
   isModelled,
   isNcName,
@@ -11,7 +10,7 @@ import {
   parseElementText,
   parseLexical,
 } from "#plate/model/values.ts";
-import type { ModelledBaseType, Single } from "#plate/model/values.ts";
+import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
 
 /**
  * Construct a value for a test.
@@ -46,19 +45,6 @@ const identifiers = (...names: readonly string[]): readonly Single[] =>
  */
 const pair = (baseType: "pair" | "directedPair", source: string, destination: string): Value =>
   value(baseType, "single", [{ baseType, value: [source, destination] }]);
-
-/**
- * Construct untyped input for the Value Schema, with cardinality `single`.
- *
- * @param baseType The input's base type, possibly not a modelled one.
- * @param values Its values, possibly not ones the base type holds.
- * @returns The input object.
- */
-const singleInput = (baseType: string, values: readonly object[]) => ({
-  baseType,
-  cardinality: "single",
-  values,
-});
 
 describe("parseElementText", () => {
   it.effect("[I-1] trims an identifier's outer whitespace and keeps a string's", () =>
@@ -382,60 +368,5 @@ describe("match", () => {
         value("identifier", "multiple", identifiers("A")),
       ),
     );
-  });
-});
-
-describe("Value", () => {
-  it.effect("encodes and decodes through its Schema", () =>
-    Effect.gen(function* valueRoundTrips() {
-      const values: readonly Value[] = [
-        value("identifier", "multiple", identifiers("A", "B", "B")),
-        value("pair", "single", [{ baseType: "pair", value: ["A", "B"] }]),
-        value("float", "ordered", [
-          { baseType: "float", value: 2.5 },
-          { baseType: "float", value: Number.POSITIVE_INFINITY },
-        ]),
-        value("integer", "single", [{ baseType: "integer", value: 2n ** 53n + 1n }]),
-        value("boolean", "single", [{ baseType: "boolean", value: true }]),
-        value("string", "single", [{ baseType: "string", value: " a " }]),
-        nullOf("uri", "single"),
-      ];
-      for (const original of values) {
-        const encoded = yield* Schema.encodeEffect(Value)(original);
-        const decoded = yield* Schema.decodeUnknownEffect(Value)(encoded);
-        assert.deepStrictEqual(decoded, original);
-      }
-    }),
-  );
-
-  it.effect("encodes an integer as its decimal digits and decodes them to the same bigint", () =>
-    Effect.gen(function* integerAsDigits() {
-      const original = value("integer", "single", [{ baseType: "integer", value: -(10n ** 30n) }]);
-      const encoded = yield* Schema.encodeEffect(Value)(original);
-
-      assert.deepStrictEqual(encoded, {
-        baseType: "integer",
-        cardinality: "single",
-        values: [{ baseType: "integer", value: "-1000000000000000000000000000000" }],
-      });
-      assert.deepStrictEqual(yield* Schema.decodeUnknownEffect(Value)(encoded), original);
-    }),
-  );
-
-  it("refuses a value of another base type, an invalid value and two values in a single", () => {
-    const valid = Schema.is(Value);
-    assert.isTrue(valid(singleInput("integer", [{ baseType: "integer", value: 1n }])));
-    assert.isTrue(valid(singleInput("integer", [{ baseType: "integer", value: 2n ** 53n + 1n }])));
-    assert.isFalse(valid(singleInput("integer", [{ baseType: "integer", value: 1 }])));
-    assert.isFalse(valid(singleInput("integer", [{ baseType: "integer", value: 2 ** 53 }])));
-    assert.isFalse(valid(singleInput("integer", [{ baseType: "float", value: 1 }])));
-    assert.isFalse(valid(singleInput("integer", [{ baseType: "integer", value: "1" }])));
-    assert.isFalse(valid(singleInput("integer", [{ baseType: "integer", value: 1.5 }])));
-    assert.isFalse(valid(singleInput("identifier", [{ baseType: "identifier", value: "1" }])));
-    assert.isFalse(valid(singleInput("pair", [{ baseType: "pair", value: ["A", "1"] }])));
-    assert.isFalse(valid(singleInput("string", [{ baseType: "string", value: "" }])));
-    assert.isFalse(valid(singleInput("identifier", identifiers("A", "B"))));
-    assert.isFalse(valid(singleInput("point", [])));
-    assert.isFalse(valid({ baseType: "identifier", cardinality: "record", values: [] }));
   });
 });

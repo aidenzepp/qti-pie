@@ -1,0 +1,99 @@
+/**
+ * The Schema codecs of the value model, for the server and the boundaries: {@link SingleSchema}
+ * and {@link ValueSchema} check, encode and decode the plain {@link Single} and {@link Value} types
+ * of `#plate/model/values.ts`.
+ *
+ * No browser module imports this file, so Schema stays out of the browser bundle.
+ *
+ * @module
+ */
+import { Option, Schema } from "effect";
+import { isNcName, modelledBaseTypes, modelledCardinalities } from "#plate/model/values.ts";
+import type { Single, Value } from "#plate/model/values.ts";
+
+/**
+ * An identifier as a Schema: a string that is an NCName.
+ */
+const IdentifierText = Schema.String.check(
+  Schema.makeFilter((text: string) =>
+    isNcName(text) ? undefined : "an identifier must be an NCName; start it with a letter or _",
+  ),
+);
+
+/**
+ * The Schema of one QTI value, tagged by its base type; its type is {@link Single}.
+ *
+ * An integer is exact at any size. Its encoded form is its decimal digits, which `parseLexical`
+ * reads to the same value, so a value decoded from a record is one the parser could have read. A
+ * float is an xs:double.
+ */
+export const SingleSchema = Schema.Union([
+  Schema.Struct({ baseType: Schema.Literal("identifier"), value: IdentifierText }),
+  Schema.Struct({ baseType: Schema.Literal("boolean"), value: Schema.Boolean }),
+  Schema.Struct({ baseType: Schema.Literal("integer"), value: Schema.BigIntFromString }),
+  Schema.Struct({ baseType: Schema.Literal("float"), value: Schema.Number }),
+  Schema.Struct({ baseType: Schema.Literal("string"), value: Schema.String }),
+  Schema.Struct({
+    baseType: Schema.Literal("pair"),
+    value: Schema.Tuple([IdentifierText, IdentifierText]),
+  }),
+  Schema.Struct({
+    baseType: Schema.Literal("directedPair"),
+    value: Schema.Tuple([IdentifierText, IdentifierText]),
+  }),
+  Schema.Struct({ baseType: Schema.Literal("uri"), value: Schema.String }),
+]);
+
+/**
+ * Report what is wrong with one value of a {@link Value}.
+ *
+ * @param value The value that holds it.
+ * @param single The value to check.
+ * @returns The problem in words that say what to change, or none when the value fits.
+ */
+const misfit = (value: Value, single: Single): Option.Option<string> => {
+  if (single.baseType !== value.baseType) {
+    return Option.some(
+      `this value has base type ${single.baseType} inside a ${value.baseType} value; give it base type ${value.baseType}`,
+    );
+  }
+
+  return single.baseType === "string" && single.value === ""
+    ? Option.some("an empty string is NULL, not a value; remove it, so NULL is no values")
+    : Option.none();
+};
+
+/**
+ * The Schema of a QTI value of a modelled base type, as the session record carries it; its type is
+ * {@link Value}.
+ *
+ * NULL is `values: []` at any cardinality, because QTI treats an empty string and an empty
+ * container as NULL; there is no other spelling of NULL, so the Schema refuses an empty string. A
+ * `single` holds at most one value, and every value carries the value's own base type.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Variables
+ */
+export const ValueSchema = Schema.Struct({
+  baseType: Schema.Literals(modelledBaseTypes),
+  cardinality: Schema.Literals(modelledCardinalities),
+  values: Schema.Array(SingleSchema),
+}).check(
+  Schema.makeFilter((value) => {
+    const misfits: Schema.FilterIssue[] = value.values.flatMap((single, index) =>
+      Option.match(misfit(value, single), {
+        onNone: () => [],
+        onSome: (issue) => [{ issue, path: ["values", index] }],
+      }),
+    );
+
+    return value.cardinality === "single" && value.values.length > 1
+      ? [
+          ...misfits,
+          {
+            issue: `a single value holds at most one value, not ${String(value.values.length)}; keep one, or none for NULL`,
+            path: ["values"],
+          },
+        ]
+      : misfits;
+  }),
+);
