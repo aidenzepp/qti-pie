@@ -283,6 +283,54 @@ describe("score", () => {
     );
   });
 
+  it("fails InvalidRecord at decode, naming the response, when a stored response has another type than its declaration", () => {
+    const stored = Result.getOrThrow(encodeRecord(fresh(item, "")));
+    const retyped: StoredRecord = {
+      ...stored,
+      responses: {
+        ...stored.responses,
+        PICK: {
+          baseType: "string",
+          cardinality: "multiple",
+          values: [{ baseType: "string", value: "A" }],
+        },
+      },
+    };
+
+    assert.deepStrictEqual(
+      Option.map(failureOf(score(accepted, {}, retyped)), (failure) =>
+        failure._tag === "InvalidRecord"
+          ? [failure._tag, failure.stage, failure.issue.includes('"PICK"')]
+          : [failure._tag],
+      ),
+      Option.some(["InvalidRecord", "decode", true]),
+    );
+  });
+
+  it("fails InvalidRecord at decode, naming the response, when a stored response is one the item does not score", () => {
+    const stored = Result.getOrThrow(encodeRecord(fresh(item, "")));
+    const extra: StoredRecord = {
+      ...stored,
+      responses: {
+        ...stored.responses,
+        EXTRA: {
+          baseType: "identifier",
+          cardinality: "single",
+          values: [{ baseType: "identifier", value: "A" }],
+        },
+      },
+    };
+
+    assert.deepStrictEqual(
+      Option.map(failureOf(score(accepted, {}, extra)), (failure) =>
+        failure._tag === "InvalidRecord"
+          ? [failure._tag, failure.stage, failure.issue.includes('"EXTRA"')]
+          : [failure._tag],
+      ),
+      Option.some(["InvalidRecord", "decode", true]),
+    );
+  });
+
   it("fails RecordMismatch when the record belongs to another item", () => {
     const stored = Result.getOrThrow(encodeRecord(fresh(other.item, "")));
 
@@ -329,6 +377,23 @@ describe("score", () => {
         problem,
       );
     }
+  });
+
+  it("fails InvalidResponses for a response the item does not score, saying a declaration of an unscored type is one", () => {
+    assert.deepStrictEqual(
+      Option.map(failureOf(score(accepted, { EXTRA: identifiers("single", "A") })), (failure) =>
+        failure._tag === "InvalidResponses"
+          ? [
+              failure._tag,
+              failure.problem,
+              Option.isNone(failure.expected),
+              failure.message.includes('"EXTRA"'),
+              failure.message.includes("point"),
+            ]
+          : [failure._tag],
+      ),
+      Option.some(["InvalidResponses", "undeclared", true, true, true]),
+    );
   });
 
   it("fails ResponsesRefused with the messages when three identifiers break max-choices 2", () => {

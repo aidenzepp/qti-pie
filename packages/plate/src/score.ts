@@ -11,8 +11,8 @@
  * @module
  */
 import { Data, Option, Result, Schema } from "effect";
-import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
-import type { InvalidRecord, StoredRecord } from "#plate/codec/record.ts";
+import { InvalidRecord, decodeRecord, encodeRecord } from "#plate/codec/record.ts";
+import type { StoredRecord } from "#plate/codec/record.ts";
 import { ValueSchema } from "#plate/codec/values.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { runAttempt } from "#plate/engine/attempt.ts";
@@ -48,7 +48,9 @@ export class RecordMismatch extends Data.TaggedError("RecordMismatch")<{
 /**
  * Why a response is not one {@link score} takes.
  *
- * - `undeclared`: the item declares no response by that identifier.
+ * - `undeclared`: the item scores no response by that identifier. It declares none, or declares one
+ *   the renderer does not score: base type `point`, `duration` or `file`, cardinality `record`, or
+ *   no base type.
  * - `not-a-value`: it is not a value at all (an integer as a number rather than a `bigint`, an empty
  *   string, two values in a single, …).
  * - `base-type`: a value of another base type than its declaration's.
@@ -63,14 +65,14 @@ const problemWords: Readonly<Record<ResponseProblem, string>> = {
   "base-type": "has another base type than its declaration",
   cardinality: "has another cardinality than its declaration",
   "not-a-value": "is not a value",
-  undeclared: "is not declared",
+  undeclared: "is not a response the item scores",
 };
 
 /**
  * A response {@link score} cannot run: a developer error, returned through a `Result`.
  *
  * `response` is its identifier, `problem` what is wrong with it, and `expected` its declaration's
- * base type and cardinality, none when the item declares no such response.
+ * base type and cardinality, none when the item scores no such response (`undeclared`).
  */
 export class InvalidResponses extends Data.TaggedError("InvalidResponses")<{
   readonly expected: Option.Option<Pick<ResponseDeclaration, "baseType" | "cardinality">>;
@@ -85,7 +87,7 @@ export class InvalidResponses extends Data.TaggedError("InvalidResponses")<{
 
     return Option.match(this.expected, {
       onNone: () =>
-        `The responses hold ${name}, which the item declares no response for. Pass only the item's declared responses, each under its identifier.`,
+        `The responses hold ${name}, but the item scores no response by that identifier: it declares none, or declares one the renderer does not score (base type point, duration or file, cardinality record, or no base type). Leave ${name} out of the responses.`,
       onSome: ({ baseType, cardinality }) =>
         `The response ${name} ${problemWords[this.problem]}. Pass a value of base type ${baseType} and cardinality ${cardinality}, an integer as a bigint and NULL as no values, as decode gives it.`,
     });
@@ -154,6 +156,64 @@ const belonging = (item: Item, record: ItemRecord): Result.Result<ItemRecord, Re
       );
 
 /**
+ * Say what is wrong with one response a stored record holds, as a value of its declaration's type.
+ *
+ * The record's codec has already checked the value is a value, so only its base type and
+ * cardinality are left to check.
+ *
+ * @param identifier The response's identifier.
+ * @param declaration The response's declaration, none when the item scores no such response.
+ * @param value The record's value of it.
+ * @returns The issue, in words that name the response, or none when the value fits.
+ */
+const storedMisfit = (
+  identifier: string,
+  declaration: Option.Option<ResponseDeclaration>,
+  value: Value,
+): Option.Option<string> => {
+  const name = JSON.stringify(identifier);
+
+  return Option.match(declaration, {
+    onNone: () =>
+      Option.some(
+        `it holds the response ${name}, but the item scores no response by that identifier`,
+      ),
+    onSome: ({ baseType, cardinality }) =>
+      value.baseType === baseType && value.cardinality === cardinality
+        ? Option.none()
+        : Option.some(
+            `its response ${name} has base type ${value.baseType} and cardinality ${value.cardinality}, but the item declares it with base type ${baseType} and cardinality ${cardinality}`,
+          ),
+  });
+};
+
+/**
+ * Check that each response a decoded record holds is one the item scores, of its declaration's
+ * base type and cardinality.
+ *
+ * A declared response the record lacks is left to the engine, which fails
+ * `UnknownIdentifierError` if the processing reads it. Outcomes are not checked: the attempt resets
+ * them to the item's defaults before the rules run, so no record outcome reaches the engine.
+ *
+ * @param item The item.
+ * @param record The decoded record, which belongs to the item.
+ * @returns The record, or {@link InvalidRecord} at stage `decode` naming the first response that
+ *   does not fit.
+ */
+const fitting = (item: Item, record: ItemRecord): Result.Result<ItemRecord, InvalidRecord> =>
+  Option.match(
+    Option.firstSomeOf(
+      Object.entries(record.responses).map(([identifier, value]) =>
+        storedMisfit(identifier, Option.fromUndefinedOr(item.responses.get(identifier)), value),
+      ),
+    ),
+    {
+      onNone: () => Result.succeed(record),
+      onSome: (issue) => Result.fail(new InvalidRecord({ issue, stage: "decode" })),
+    },
+  );
+
+/**
  * Find what is wrong with one response, as a value of its declaration's type.
  *
  * It checks the type-side value (`Schema.is`), so an integer is a `bigint`, as `decode` gives it.
@@ -220,10 +280,12 @@ const checkedResponses = (
  * Score one attempt of an item: run its response processing over the responses and return the
  * record the host stores.
  *
- * In order: it decodes the record the host handed back, or starts a fresh one when there is none;
- * it checks each response as a value of its declaration; it refuses responses that break a tier (a)
- * limit, under the default configuration; then it runs the attempt and writes the record. It sets
- * no attempt limit: `maxAttempts` is the author's flow.
+ * In order: it decodes the record the host handed back, checks that it belongs to the item and
+ * that each response it holds is one the item scores, of its declaration's base type and
+ * cardinality, or starts a fresh record when there is none; it checks each response as a value of
+ * its declaration; it refuses responses that break a tier (a) limit, under the default
+ * configuration; then it runs the attempt and writes the record. It sets no attempt limit:
+ * `maxAttempts` is the author's flow.
  *
  * @example
  *   const stored = score(accepted, { RESPONSE: decoded });
@@ -234,11 +296,12 @@ const checkedResponses = (
  *   type and cardinality, an integer as a `bigint`. A response left out keeps the record's value.
  * @param record The record the last `score` of this item returned, none for the first attempt.
  * @returns The record after the attempt, in the form the host stores, or {@link InvalidRecord} for a
- *   record the renderer did not write (or could not write), {@link RecordMismatch} for another
- *   item's record, {@link InvalidResponses} for a response that does not fit its declaration,
- *   {@link ResponsesRefused} for responses that break a tier (a) limit, or an
- *   {@link EngineFailure} when the record lacks a variable the processing reads or holds one of
- *   another type.
+ *   record the renderer did not write (or could not write), such as one that holds a response the
+ *   item does not score or one of another base type or cardinality than its declaration,
+ *   {@link RecordMismatch} for another item's record, {@link InvalidResponses} for a response that
+ *   does not fit its declaration, {@link ResponsesRefused} for responses that break a tier (a)
+ *   limit, or an {@link EngineFailure} when the record lacks a response the processing reads or the
+ *   processing sets an outcome to a value of another type.
  */
 export const score = (
   document: Accepted,
@@ -251,7 +314,9 @@ export const score = (
   Result.gen(function* scoreAttempt() {
     const { item } = document;
     const before =
-      record === undefined ? fresh(item, "") : yield* belonging(item, yield* decodeRecord(record));
+      record === undefined
+        ? fresh(item, "")
+        : yield* fitting(item, yield* belonging(item, yield* decodeRecord(record)));
     const checked = yield* checkedResponses(item, responses);
     const messages = checkResponses(document, checked, tierA);
     if (messages.length > 0) {
