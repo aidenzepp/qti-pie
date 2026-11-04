@@ -20,7 +20,7 @@ import type {
 } from "#plate/document/source.ts";
 import type { BodyElement, BodyNode, Item } from "#plate/model/item.ts";
 import { Refusal, refusalRules } from "#plate/validate/refusal.ts";
-import type { Location } from "#plate/validate/refusal.ts";
+import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { acceptForTest, check, describeRefusal } from "#plate/validate/verdict.ts";
 import type { Accepted, Verdict } from "#plate/validate/verdict.ts";
@@ -824,19 +824,137 @@ describe("acceptForTest", () => {
   });
 });
 
+/**
+ * Construct a refusal of `item.xml` at the item root.
+ *
+ * @param rule The rule it breaks.
+ * @param detail The facts its wording reads.
+ * @returns The refusal.
+ */
+const refusalOf = (rule: RefusalRule, detail: Readonly<Record<string, string>>): Refusal =>
+  new Refusal({
+    detail,
+    document: "item.xml",
+    location: { kind: "path", path: root },
+    readerRule: Option.none(),
+    rule,
+    suggestion: Option.none(),
+  });
+
+/**
+ * What remains of a Markdown sentence once its code spans are removed, and the spans' contents.
+ */
+interface CodeSpans {
+  readonly outside: string;
+  readonly spans: readonly string[];
+}
+
+/**
+ * Remove a line's code spans by CommonMark's rule (0.31.2, §6.1): a run of n backticks opens a
+ * span that the next run of exactly n backticks closes, and a run that no later run closes is
+ * literal text. A span's content loses one space at each end when it begins and ends with a space
+ * and is not all spaces.
+ *
+ * @param markdown One line of Markdown.
+ * @returns The text outside the spans, and each span's content in order.
+ */
+const codeSpans = (markdown: string): CodeSpans => {
+  const opener = /`+/u.exec(markdown);
+
+  if (opener === null) {
+    return { outside: markdown, spans: [] };
+  }
+
+  const [fence] = opener;
+  const rest = markdown.slice(opener.index + fence.length);
+  const closer = [...rest.matchAll(/`+/gu)].find((run) => run[0].length === fence.length);
+
+  if (closer === undefined) {
+    const after = codeSpans(rest);
+
+    return {
+      outside: markdown.slice(0, opener.index + fence.length) + after.outside,
+      spans: after.spans,
+    };
+  }
+
+  const content = rest.slice(0, closer.index);
+  const padded = content.startsWith(" ") && content.endsWith(" ") && content.trim() !== "";
+  const after = codeSpans(rest.slice(closer.index + fence.length));
+
+  return {
+    outside: markdown.slice(0, opener.index) + after.outside,
+    spans: [padded ? content.slice(1, -1) : content, ...after.spans],
+  };
+};
+
+/**
+ * The gate review's value (P2-8): backticks that close a one-backtick span early, then an image
+ * and a link.
+ */
+const escapingValue =
+  "1`` ![](https://tracker.example/p.gif) [Approve item](https://evil.example) ``";
+
+/**
+ * The URI of 1EdTech's `match_correct` response processing template.
+ */
+const matchCorrectUri = "https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct";
+
 describe("describeRefusal", () => {
   it("words every rule in refusalRules", () => {
     for (const rule of refusalRules) {
-      const refusal = new Refusal({
-        detail: {},
-        document: "item.xml",
-        location: { kind: "path", path: root },
-        readerRule: Option.none(),
-        rule,
-        suggestion: Option.none(),
-      });
-
-      assert.isAbove(describeRefusal(refusal).length, 0, rule);
+      assert.isAbove(describeRefusal(refusalOf(rule, {})).length, 0, rule);
     }
+  });
+
+  it("keeps a value holding backticks inside one code span, whole", () => {
+    const { outside, spans } = codeSpans(
+      describeRefusal(refusalOf("value-type", { baseType: "integer", lexical: escapingValue })),
+    );
+
+    assert.notInclude(outside, "![");
+    assert.notInclude(outside, "](");
+    assert.include(spans, escapingValue);
+  });
+
+  it("writes a value holding a blank line on the sentence's one line", () => {
+    const sentence = describeRefusal(
+      refusalOf("value-type", {
+        baseType: "integer",
+        lexical: "1\n\n![](https://tracker.example/p.gif)\r\n",
+      }),
+    );
+
+    assert.notMatch(sentence, /[\n\r]/u);
+    assert.notInclude(codeSpans(sentence).outside, "![");
+  });
+
+  it("names the qti-map-response that needs a mapping, not a template", () => {
+    const sentence = describeRefusal(
+      refusalOf("template-requirements", {
+        child: "qti-mapping",
+        declaration: "qti-response-declaration",
+        element: "qti-map-response",
+        identifier: "RESPONSE",
+      }),
+    );
+
+    assert.include(sentence, "`qti-map-response`");
+    assert.notInclude(sentence, "response processing template");
+  });
+
+  it("names the response processing template and its URI when a template needs the declaration", () => {
+    const sentence = describeRefusal(
+      refusalOf("template-requirements", {
+        child: "qti-mapping",
+        declaration: "qti-response-declaration",
+        element: "qti-response-processing",
+        identifier: "RESPONSE",
+        template: matchCorrectUri,
+      }),
+    );
+
+    assert.include(sentence, "response processing template");
+    assert.include(sentence, matchCorrectUri);
   });
 });
