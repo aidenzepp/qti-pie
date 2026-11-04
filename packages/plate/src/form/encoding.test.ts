@@ -117,13 +117,28 @@ describe("encode and decode", () => {
     }),
   );
 
-  it.effect("[Q-20] refuses abc, INF, NaN and an overflow as a float", () =>
+  it.effect("[Q-20] refuses abc, INF, -INF and NaN as a float", () =>
     Effect.gen(function* floatRefusals() {
-      for (const text of ["abc", "INF", "-INF", "NaN", "1E999"]) {
+      for (const text of ["abc", "INF", "-INF", "NaN"]) {
         const error = yield* Effect.flip(decode(posted(text), binding("float")));
         assert.strictEqual(error._tag, "Malformed");
         assert.strictEqual(error.reason, "number");
       }
+    }),
+  );
+
+  it.effect("[Q-20] reads a float beyond the largest double as the largest finite double", () =>
+    Effect.gen(function* floatBeyondRange() {
+      const float = binding("float");
+
+      assert.deepStrictEqual(
+        yield* decode(posted("1E999"), float),
+        value(float, { baseType: "float", value: Number.MAX_VALUE }),
+      );
+      assert.deepStrictEqual(
+        yield* decode(posted("-1E999"), float),
+        value(float, { baseType: "float", value: -Number.MAX_VALUE }),
+      );
     }),
   );
 
