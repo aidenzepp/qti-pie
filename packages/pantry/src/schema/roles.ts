@@ -361,6 +361,7 @@ export const Author = role(
     FileLom: Qti.relations.FileLom,
     FileMetadata: Qti.relations.FileMetadata,
     Footer: Qti.relations.Footer,
+    ForeignElement: Qti.relations.ForeignElement,
     Gap: Qti.relations.Gap,
     GapImg: Qti.relations.GapImg,
     GapImgLeft: Qti.relations.GapImgLeft,

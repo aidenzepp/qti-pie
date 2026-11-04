@@ -467,6 +467,57 @@ export const TrackDefaultValue = closed("TrackDefaultValue", [
 ]);
 
 /**
+ * How a `qti-` wildcard admits the namespaces of its elements: any, any but the target namespace,
+ * or any but the target namespace and no namespace (`xs:any` `namespace` of `##any`, `##other`
+ * and `##other ##local`).
+ */
+export const NamespacePolicy = closed("NamespacePolicy", ["any", "other", "otherOrLocal"]);
+
+/**
+ * How strictly a wildcard judges the content it admits (`xs:any` `processContents`).
+ */
+export const ProcessContents = closed("ProcessContents", ["lax", "strict", "skip"]);
+
+/**
+ * The schema sets a foreign tree is judged against: the QTI assessment-item schema, the content
+ * packaging manifest schema, the LOM schema and the usage data schema.
+ */
+export const SchemaSet = closed("SchemaSet", ["asi", "manifest", "lom", "usagedata"]);
+
+/**
+ * The values of `xlink:type` (`w3/xlink.xsd` line 31).
+ */
+export const XlinkTypeValue = closed("XlinkTypeValue", [
+  "simple",
+  "extended",
+  "title",
+  "resource",
+  "locator",
+  "arc",
+]);
+
+/**
+ * The values of `xlink:show` (`w3/xlink.xsd` line 72).
+ */
+export const XlinkShowValue = closed("XlinkShowValue", [
+  "new",
+  "replace",
+  "embed",
+  "other",
+  "none",
+]);
+
+/**
+ * The values of `xlink:actuate` (`w3/xlink.xsd` line 84).
+ */
+export const XlinkActuateValue = closed("XlinkActuateValue", [
+  "onLoad",
+  "onRequest",
+  "other",
+  "none",
+]);
+
+/**
  * The rosters as schema members.
  */
 export const relations = {
@@ -495,12 +546,15 @@ export const relations = {
   MediaLoop,
   MediaMuted,
   MediaPreload,
+  NamespacePolicy,
   Orientation,
   ParamValuetype,
+  ProcessContents,
   QmdFeedbackTypeValue,
   QmdInteractionTypeValue,
   QmdScoringModeValue,
   RoundingMode,
+  SchemaSet,
   Shape,
   ShowHide,
   StatsOperatorName,
@@ -512,6 +566,9 @@ export const relations = {
   TrackDefaultValue,
   TrackKind,
   XIncludeParseValue,
+  XlinkActuateValue,
+  XlinkShowValue,
+  XlinkTypeValue,
   XsBoolean,
   YesNo,
 };
@@ -740,3 +797,33 @@ export type MediaControlsHandle = (typeof MediaControls.handles)[number];
  * A handle of `TrackDefaultValue`.
  */
 export type TrackDefaultValueHandle = (typeof TrackDefaultValue.handles)[number];
+
+/**
+ * A handle of `NamespacePolicy`.
+ */
+export type NamespacePolicyHandle = (typeof NamespacePolicy.handles)[number];
+
+/**
+ * A handle of `ProcessContents`.
+ */
+export type ProcessContentsHandle = (typeof ProcessContents.handles)[number];
+
+/**
+ * A handle of `SchemaSet`.
+ */
+export type SchemaSetHandle = (typeof SchemaSet.handles)[number];
+
+/**
+ * A handle of `XlinkTypeValue`.
+ */
+export type XlinkTypeValueHandle = (typeof XlinkTypeValue.handles)[number];
+
+/**
+ * A handle of `XlinkShowValue`.
+ */
+export type XlinkShowValueHandle = (typeof XlinkShowValue.handles)[number];
+
+/**
+ * A handle of `XlinkActuateValue`.
+ */
+export type XlinkActuateValueHandle = (typeof XlinkActuateValue.handles)[number];

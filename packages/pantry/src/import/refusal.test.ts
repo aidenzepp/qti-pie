@@ -272,6 +272,9 @@ const writtenRules = {
     "TemplateLocationUri",
     "TemplateUri",
     "XIncludeUri",
+    "XlinkArcroleUri",
+    "XlinkHrefUri",
+    "XlinkRoleUri",
     "XmlBaseUri",
   ],
   "usage-lexical": [
@@ -299,7 +302,9 @@ const writtenRules = {
     "TemplateParameterName",
     "VariableReference",
     "WeightReference",
+    "XlinkLabelName",
     "XmlEntityName",
+    "XmlLocalName",
   ],
 } satisfies Record<string, readonly string[]>;
 
@@ -372,11 +377,11 @@ const makeEveryContract = (): readonly string[] => {
 const everyContract: readonly string[] = makeEveryContract();
 
 describe("the rules of a contract", () => {
-  it("names 136 contracts, each in the expected table once", () => {
+  it("names 141 contracts, each in the expected table once", () => {
     const names = everyContract;
 
-    assert.strictEqual(names.length, 136);
-    assert.strictEqual(expectedRules.size, 136);
+    assert.strictEqual(names.length, 141);
+    assert.strictEqual(expectedRules.size, 141);
     assert.deepStrictEqual([...expectedRules.keys()].toSorted(), names.toSorted());
   });
 

@@ -7,6 +7,7 @@ import * as cp from "#pantry/schema/kinds/cp.ts";
 import * as cpx from "#pantry/schema/kinds/cpx.ts";
 import * as csmd from "#pantry/schema/kinds/csmd.ts";
 import * as drd from "#pantry/schema/kinds/drd.ts";
+import * as foreign from "#pantry/schema/kinds/foreign.ts";
 import * as generic from "#pantry/schema/kinds/generic.ts";
 import type {
   AdmissionRow,
@@ -261,6 +262,7 @@ const registries: readonly Readonly<Record<string, RegistryRow>>[] = [
   csmd.registry,
   ud.registry,
   xi.registry,
+  foreign.registry,
 ];
 
 const attributeTuples: readonly (readonly string[])[] = [
@@ -275,6 +277,7 @@ const attributeTuples: readonly (readonly string[])[] = [
   csmd.attributes,
   ud.attributes,
   xi.attributes,
+  foreign.attributes,
 ];
 
 describe("the roster append", () => {
@@ -302,8 +305,8 @@ describe("the roster append", () => {
     }
   });
 
-  it("composes NodeKind from the eleven tuples", () => {
-    const sum = [generic, asi, html, cp, lom, qmd, cpx, drd, csmd, ud, xi].reduce(
+  it("composes NodeKind from the twelve tuples", () => {
+    const sum = [generic, asi, html, cp, lom, qmd, cpx, drd, csmd, ud, xi, foreign].reduce(
       (n, kinds) => n + kinds.kinds.length,
       0,
     );

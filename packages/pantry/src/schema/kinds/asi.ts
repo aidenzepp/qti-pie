@@ -373,6 +373,8 @@ export const attributes = [
   "aria-details",
   "lang",
   "xml:base",
+  "xml:space",
+  "xml:id",
   "data-qti-suppress-tts",
   "shape",
   "coords",
