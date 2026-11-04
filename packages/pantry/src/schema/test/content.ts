@@ -4,7 +4,7 @@
  *
  * The two content bodies are thin: their node only. The arms' containments into `Node` are not
  * written here: one `mirrors` per handle in the composed schema (`#pantry/schema/qti.ts`) binds
- * them, and the statements over these rows arrive with the laws heading.
+ * them. The statements over these rows are `rules`, below.
  *
  * A required attribute is a column of its arm and an optional one its own `(node, value)` relation.
  * The three `Section*` relations are the per-test twins of the feedback and printed-variable
@@ -12,12 +12,31 @@
  * document binds once for each test that reaches the section, so each twin adds the `test` it was
  * resolved for to its original's fields and keys.
  */
-import { closedId, relation, str, uuid } from "@bjornpagen/grizzle";
+import {
+  capacity,
+  check,
+  closedId,
+  contained,
+  on,
+  relation,
+  select,
+  str,
+  uuid,
+  within,
+} from "@bjornpagen/grizzle";
 import { ShowHide, TestFeedbackAccess } from "#pantry/schema/content/rosters.ts";
 import { ShowHideIdentifier, VariableReference } from "#pantry/schema/contracts.ts";
-import { BaseType, DeclarationKind, TypedCardinality } from "#pantry/schema/declaration.ts";
+import {
+  BaseType,
+  Declaration,
+  DeclarationKind,
+  TypedCardinality,
+  TypedDeclaration,
+} from "#pantry/schema/declaration.ts";
+import { Edge, Node } from "#pantry/schema/node.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
-import { PrintedVariableAttr } from "#pantry/schema/template.ts";
+import { PrintedVariable, PrintedVariableAttr } from "#pantry/schema/template.ts";
+import { TestDocument } from "#pantry/schema/test/structure.ts";
 
 const ncName = str.regex(patterns.ncName);
 
@@ -156,6 +175,84 @@ export const relations = {
 } as const;
 
 /**
- * The statements this module declares: none.
+ * The statements over this module's relations. A test rubric's `use` and a test feedback's `title`
+ * belong to their owners. A test rubric has exactly one content body and a test feedback at most
+ * one, each counted from the edges whose child is that body kind under that parent kind. Each
+ * binding twin takes its C twin's laws with the `test` in the document's place on the declaration
+ * side: a section feedback names an outcome declaration of the test with the base type and
+ * cardinality that declaration holds, of identifier type and single or multiple cardinality, and a
+ * section printed variable names an outcome or a template declaration of the test, its `base` and
+ * `index` an integer single one; each is on a node of its own document's tree, and the test reaches
+ * that document.
  */
-export const rules = [] as const;
+export const rules = [
+  contained(on(TestRubricBlockUse, "node"), on(TestRubricBlock, "id")),
+  contained(on(TestFeedbackTitle, "node"), on(TestFeedback, "id")),
+  capacity(on(TestRubricBlock, "id"), {
+    from: on(
+      select(Edge, {
+        childKind: "qti-content-body.testRubric",
+        parentKind: "qti-rubric-block.test",
+      }),
+      "parent",
+    ),
+    within: within(1n, 1n),
+  }),
+  capacity(on(TestFeedback, "id"), {
+    from: on(
+      select(Edge, { childKind: "qti-content-body.testFeedback", parentKind: "qti-test-feedback" }),
+      "parent",
+    ),
+    within: within(0n, 1n),
+  }),
+  contained(
+    on(SectionFeedbackOutcomeRef, "test", "identifier"),
+    on(select(Declaration, { kind: "outcome" }), "document", "identifier"),
+  ),
+  contained(
+    on(SectionFeedbackOutcomeRef, "test", "identifier", "baseType", "cardinality"),
+    on(TypedDeclaration, "document", "identifier", "baseType", "cardinality"),
+  ),
+  contained(on(SectionFeedbackOutcomeRef, "node", "document"), on(Node, "id", "tree")),
+  contained(
+    on(SectionFeedbackOutcomeRef, "test", "document"),
+    on(TestDocument, "test", "document"),
+  ),
+  check("SectionFeedbackOutcomeRefType", SectionFeedbackOutcomeRef, (r) =>
+    r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
+  ),
+  contained(on(SectionPrintedVariableRef, "node"), on(PrintedVariable, "id")),
+  contained(
+    on(SectionPrintedVariableRef, "test", "identifier", "kind"),
+    on(Declaration, "document", "identifier", "kind"),
+  ),
+  contained(on(SectionPrintedVariableRef, "node", "document"), on(Node, "id", "tree")),
+  contained(
+    on(SectionPrintedVariableRef, "test", "document"),
+    on(TestDocument, "test", "document"),
+  ),
+  check("SectionPrintedVariableRefKind", SectionPrintedVariableRef, (r) =>
+    r.in(r.kind, ["outcome", "template"]),
+  ),
+  contained(on(SectionPrintedVariableVarRef, "node"), on(PrintedVariable, "id")),
+  contained(
+    on(SectionPrintedVariableVarRef, "test", "identifier", "baseType", "cardinality"),
+    on(TypedDeclaration, "document", "identifier", "baseType", "cardinality"),
+  ),
+  contained(
+    on(SectionPrintedVariableVarRef, "test", "identifier", "kind"),
+    on(Declaration, "document", "identifier", "kind"),
+  ),
+  contained(on(SectionPrintedVariableVarRef, "node", "document"), on(Node, "id", "tree")),
+  contained(
+    on(SectionPrintedVariableVarRef, "test", "document"),
+    on(TestDocument, "test", "document"),
+  ),
+  check("SectionPrintedVariableVarRefType", SectionPrintedVariableVarRef, (r) =>
+    r.and(
+      r.eq(r.baseType, "integer"),
+      r.eq(r.cardinality, "single"),
+      r.in(r.kind, ["outcome", "template"]),
+    ),
+  ),
+] as const;
