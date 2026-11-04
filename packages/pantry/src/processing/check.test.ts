@@ -515,14 +515,13 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts", 
     }),
   );
 
-  suite.effect("checks outcome.xml ok under the test environment, and unresolved without it", () =>
+  suite.effect("checks outcome.xml ok under the test environment, and refuses P8 without it", () =>
     Effect.gen(function* checkOutcome() {
       const { ast } = yield* parseValid("outcome");
       assert.deepStrictEqual(okOf(ast, testEnvironment).unresolved, []);
-      assert.deepStrictEqual(summary(okOf(ast, emptyEnvironment("test")).unresolved), [
-        ["untyped-variable", "TOTAL"],
-        ["untyped-variable", "TOTAL"],
-      ]);
+
+      const undeclared = checkProcessing(ast, emptyEnvironment("test"));
+      assert.deepStrictEqual(undeclared._tag === "refused" && undeclared.rule, "P8");
     }),
   );
 
@@ -615,31 +614,35 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts", 
     }),
   );
 
-  suite.effect("records a reference in a mixed-union attribute, refusing it in item mode", () =>
-    Effect.gen(function* checkAttributeReference() {
-      const ast = yield* parseBody(
-        `<qti-set-outcome-value identifier="X"><qti-equal-rounded rounding-mode="decimalPlaces" figures="N"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">1</qti-base-value></qti-equal-rounded></qti-set-outcome-value>`,
-      );
-      const target = [outcomeOf("X", "boolean")];
-      const undeclared = checkProcessing(ast, withDeclarations(emptyEnvironment("item"), target));
-      assert.deepStrictEqual(undeclared._tag === "refused" && [undeclared.rule, undeclared.kind], [
-        "P8",
-        "qti-equal-rounded",
-      ]);
-      assert.deepStrictEqual(
-        summary(okOf(ast, withDeclarations(emptyEnvironment("test"), target)).unresolved),
-        [["untyped-variable", "N"]],
-      );
-      assert.deepStrictEqual(summary(okOf(ast, emptyEnvironment("template")).unresolved), [
-        ["template-parameter", "N"],
-      ]);
+  suite.effect(
+    "records a reference in a mixed-union attribute, refusing it in item and test mode",
+    () =>
+      Effect.gen(function* checkAttributeReference() {
+        const ast = yield* parseBody(
+          `<qti-set-outcome-value identifier="X"><qti-equal-rounded rounding-mode="decimalPlaces" figures="N"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">1</qti-base-value></qti-equal-rounded></qti-set-outcome-value>`,
+        );
+        const target = [outcomeOf("X", "boolean")];
+        const undeclared = checkProcessing(ast, withDeclarations(emptyEnvironment("item"), target));
+        assert.deepStrictEqual(
+          undeclared._tag === "refused" && [undeclared.rule, undeclared.kind],
+          ["P8", "qti-equal-rounded"],
+        );
 
-      const declared = withDeclarations(emptyEnvironment("item"), [
-        ...target,
-        outcomeOf("N", "integer"),
-      ]);
-      assert.deepStrictEqual(okOf(ast, declared).unresolved, []);
-    }),
+        const inTest = checkProcessing(ast, withDeclarations(emptyEnvironment("test"), target));
+        assert.deepStrictEqual(inTest._tag === "refused" && [inTest.rule, inTest.kind], [
+          "P8",
+          "qti-equal-rounded",
+        ]);
+        assert.deepStrictEqual(summary(okOf(ast, emptyEnvironment("template")).unresolved), [
+          ["template-parameter", "N"],
+        ]);
+
+        const declared = withDeclarations(emptyEnvironment("item"), [
+          ...target,
+          outcomeOf("N", "integer"),
+        ]);
+        assert.deepStrictEqual(okOf(ast, declared).unresolved, []);
+      }),
   );
 
   suite.effect(
@@ -797,3 +800,145 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts ru
     }),
   );
 });
+
+/**
+ * Parse a single-expression root (`qti-pre-condition`, `qti-branch-rule`, `qti-template-default`)
+ * written as a string.
+ */
+const parseSingle = (root: string, attributes: string, body: string) =>
+  Effect.gen(function* parseSingleRoot() {
+    const text = `<${root} xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"${attributes}>${body}</${root}>`;
+    const document = yield* readXml(new TextEncoder().encode(text));
+
+    return yield* parseProcessing(document.root, "expression");
+  });
+
+/**
+ * A `qti-variable` reference, written as the expression of a rule.
+ */
+const variableRef = (identifier: string): string => `<qti-variable identifier="${identifier}"/>`;
+
+describe("the test environment's built-ins", () => {
+  it("types duration as a duration in test mode and a float in item mode", () => {
+    assert.deepStrictEqual(emptyEnvironment("test").builtIns.get("duration"), {
+      baseType: "duration",
+      cardinality: "single",
+    });
+    assert.deepStrictEqual(emptyEnvironment("item").builtIns.get("duration"), {
+      baseType: "float",
+      cardinality: "single",
+    });
+  });
+});
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "processing/check.ts in test mode",
+  (suite) => {
+    const test = withDeclarations(emptyEnvironment("test"), [
+      outcomeOf("X", "float"),
+      outcomeOf("D", "duration"),
+      outcomeOf("I1.SCORE", "float"),
+    ]);
+
+    suite.effect("refuses an undeclared unprefixed name P8, read and written", () =>
+      Effect.gen(function* refuseUnprefixed() {
+        const read = checkProcessing(
+          yield* parseBody(
+            `<qti-set-outcome-value identifier="X">${variableRef("MISSING")}</qti-set-outcome-value>`,
+          ),
+          test,
+        );
+        assert.deepStrictEqual(read._tag === "refused" && [read.rule, read.kind], [
+          "P8",
+          "qti-variable",
+        ]);
+
+        const written = checkProcessing(
+          yield* parseBody(
+            `<qti-set-outcome-value identifier="MISSING">${variableRef("X")}</qti-set-outcome-value>`,
+          ),
+          test,
+        );
+        assert.deepStrictEqual(written._tag === "refused" && [written.rule, written.kind], [
+          "P8",
+          "qti-set-outcome-value",
+        ]);
+      }),
+    );
+
+    suite.effect("takes a declared dotted name whole, typed by its declaration", () =>
+      Effect.gen(function* declaredDotted() {
+        const ast = yield* parseBody(
+          `<qti-set-outcome-value identifier="X">${variableRef("I1.SCORE")}</qti-set-outcome-value>`,
+        );
+        const result = okOf(ast, test);
+        assert.deepStrictEqual(result.unresolved, []);
+        assert.deepStrictEqual(typeOfKind(result.typed, "qti-variable"), ["float/single"]);
+      }),
+    );
+
+    suite.effect("records an undeclared prefixed shape as an unresolved prefixed reference", () =>
+      Effect.gen(function* undeclaredPrefixed() {
+        const ast = yield* parseBody(
+          `<qti-set-outcome-value identifier="X">${variableRef("I2.SCORE")}</qti-set-outcome-value>`,
+        );
+        assert.deepStrictEqual(summary(okOf(ast, test).unresolved), [["prefixed", "I2.SCORE"]]);
+      }),
+    );
+
+    suite.effect("types a reference to duration as a duration", () =>
+      Effect.gen(function* durationRef() {
+        const ast = yield* parseBody(
+          `<qti-set-outcome-value identifier="D">${variableRef("duration")}</qti-set-outcome-value>`,
+        );
+        assert.deepStrictEqual(typeOfKind(okOf(ast, test).typed, "qti-variable"), [
+          "duration/single",
+        ]);
+      }),
+    );
+
+    suite.effect("checks a pre-condition root, refusing an outcome-only expression P25", () =>
+      Effect.gen(function* preCondition() {
+        const fine = yield* parseSingle("qti-pre-condition", "", variableRef("X"));
+        assert.deepStrictEqual(okOf(fine, test).unresolved, []);
+
+        const refused = checkProcessing(
+          yield* parseSingle(
+            "qti-pre-condition",
+            "",
+            '<qti-gt><qti-number-correct/><qti-base-value base-type="integer">0</qti-base-value></qti-gt>',
+          ),
+          test,
+        );
+        assert.deepStrictEqual(refused._tag === "refused" && [refused.rule, refused.kind], [
+          "P25",
+          "qti-number-correct",
+        ]);
+      }),
+    );
+
+    suite.effect("refuses an outcome-only expression in a branch rule and a template default", () =>
+      Effect.gen(function* otherRoots() {
+        const branch = checkProcessing(
+          yield* parseSingle(
+            "qti-branch-rule",
+            ' target="EXIT_TEST"',
+            '<qti-outcome-maximum outcome-identifier="X"/>',
+          ),
+          test,
+        );
+        assert.deepStrictEqual(branch._tag === "refused" && branch.rule, "P25");
+
+        const template = checkProcessing(
+          yield* parseSingle(
+            "qti-template-default",
+            ' template-identifier="T"',
+            '<qti-test-variables variable-identifier="X"/>',
+          ),
+          test,
+        );
+        assert.deepStrictEqual(template._tag === "refused" && template.rule, "P25");
+      }),
+    );
+  },
+);

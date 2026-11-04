@@ -10,6 +10,7 @@ import type {
 } from "#pantry/processing/ast.ts";
 import type { DeclarationEntry, Environment } from "#pantry/processing/env.ts";
 import { literalOrRef, patternOrRef } from "#pantry/processing/parse.ts";
+import { prefixedReadings } from "#pantry/processing/prefixed.ts";
 import { resultType } from "#pantry/processing/types.ts";
 import type {
   BaseTypeOrAny,
@@ -54,11 +55,24 @@ export interface TypedAst extends Omit<ProcessingAst, "rules"> {
 /**
  * The bin 2 rules the checker owns, by id.
  */
-export type PId = "P8" | "P20" | "P21" | "P22" | "P23" | "P24" | "P25" | "P26" | "P27" | "P29";
+export type PId =
+  | "P8"
+  | "P20"
+  | "P21"
+  | "P22"
+  | "P23"
+  | "P24"
+  | "P25"
+  | "P26"
+  | "P27"
+  | "P29"
+  | "prefixed-ref";
 
 /**
  * A place the checker could not type, and so could not compare: a variable no declaration types, a
- * template parameter, or a custom operator whose result "is defined by the extension".
+ * template parameter, a name in a test that has a prefixed form's shape and is declared nowhere
+ * whole (`prefixed`, which the prefixed typing reads), or a custom operator whose result "is
+ * defined by the extension".
  */
 export interface Unresolved {
   /**
@@ -67,7 +81,7 @@ export interface Unresolved {
    */
   readonly identifier: string;
   readonly position: Position;
-  readonly reason: "custom-operator" | "template-parameter" | "untyped-variable";
+  readonly reason: "custom-operator" | "prefixed" | "template-parameter" | "untyped-variable";
 }
 
 /**
@@ -376,8 +390,9 @@ const baseTypeOf = (value: string | undefined): BaseTypeOrAny =>
  *
  * A rule fires only when the types it compares are known: a comparison against `unknown` or `any`
  * is not a refusal. A reference whose identifier the environment does not hold is refused naming P8
- * in `item` mode; in `template` mode it is a template parameter, and in `test` mode a variable a
- * test environment would type, and either types `unknown` and is recorded as unresolved. A
+ * in `item` and `test` mode, except that in `test` mode a name declared nowhere whole that has a
+ * prefixed form's shape is recorded as an unresolved `prefixed` reference; in `template` mode it is
+ * a template parameter. Either types `unknown` and is recorded as unresolved. A
  * `qti-custom-operator` and the field of a `qti-field-value` are `unknown` and unresolved too (P49
  * is a record, never a refusal).
  *
@@ -433,7 +448,11 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
       return found;
     }
 
-    if (env.mode === "item") {
+    if (env.mode === "test" && prefixedReadings(identifier).length > 0) {
+      return note(identifier, position, "prefixed");
+    }
+
+    if (env.mode !== "template") {
       refuse("P8", kind, position);
     }
 
@@ -445,7 +464,8 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
   };
 
   /**
-   * The type of the variable a rule writes, refusing P8 in `item` mode when nothing is named.
+   * The type of the variable a rule writes, refusing P8 in `item` and `test` mode when nothing is
+   * named, except a `test` name of a prefixed form's shape, which is recorded as `prefixed`.
    */
   const target = (
     identifier: string,
@@ -453,11 +473,19 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
     position: Position,
   ): EffectiveType | undefined => {
     const found = env.declarations.get(identifier)?.type ?? env.builtIns.get(identifier);
-    if (found === undefined && env.mode === "item") {
+    if (found !== undefined) {
+      return found;
+    }
+
+    if (env.mode === "test" && prefixedReadings(identifier).length > 0) {
+      return note(identifier, position, "prefixed");
+    }
+
+    if (env.mode !== "template") {
       refuse("P8", kind, position);
     }
 
-    return found;
+    return undefined;
   };
 
   const checkAttributeReference = (

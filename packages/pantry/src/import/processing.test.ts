@@ -163,12 +163,32 @@ const prepareBody = (body: string, options: Parameters<typeof prepare>[1], attri
   });
 
 /**
+ * A test environment that declares the outcomes the string-built bodies write and read, so that
+ * the tests whose subject is something else (an attribute, a literal, a row) are not refused P8.
+ * The types are `unknown`: only the declaration's existence matters to them.
+ */
+const outcomesDeclared = withDeclarations(
+  emptyEnvironment("test"),
+  ["COUNT", "LIST", "RESPONSE", "SCORE", "digits"].map((identifier): DeclarationEntry => ({
+    areaMapping: false,
+    identifier,
+    interpolationTable: false,
+    kind: "outcome",
+    mapping: false,
+    matchTable: false,
+    mathVariable: false,
+    paramVariable: false,
+    type: { baseType: "unknown", cardinality: "unknown" },
+  })),
+);
+
+/**
  * A `qti-equal-rounded` whose `figures` is the text given, prepared for the writer.
  */
 const equalRoundedOver = (figures: string) =>
   prepareBody(
     `<qti-set-outcome-value identifier="SCORE"><qti-equal-rounded rounding-mode="decimalPlaces" figures="${figures}"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value></qti-equal-rounded></qti-set-outcome-value>`,
-    { language: "response", mode: "test", rootKind: "item" },
+    { env: outcomesDeclared, language: "response", mode: "test", rootKind: "item" },
   );
 
 const itemOptions = { language: "response", mode: "item", rootKind: "item" } as const;
@@ -807,7 +827,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       ]) {
         const prepared = yield* prepareBody(
           `<qti-set-outcome-value identifier="SCORE">${body}</qti-set-outcome-value>`,
-          { language: "response", mode: "test", rootKind: "item" },
+          { env: outcomesDeclared, language: "response", mode: "test", rootKind: "item" },
         );
         const failure = yield* Effect.flip(processed(prepared));
         assert.instanceOf(failure, ImportRefused);
@@ -820,7 +840,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
     Effect.gen(function* paddedReference() {
       const prepared = yield* prepareBody(
         `<qti-set-outcome-value identifier="SCORE"><qti-equal-rounded rounding-mode="decimalPlaces" figures=" COUNT "><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value></qti-equal-rounded></qti-set-outcome-value>`,
-        { language: "response", mode: "test", rootKind: "item" },
+        { env: outcomesDeclared, language: "response", mode: "test", rootKind: "item" },
       );
       const failure = yield* Effect.flip(processed(prepared));
       assert.instanceOf(failure, ImportRefused);
@@ -868,7 +888,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
         for (const [name, operator] of cases) {
           const prepared = yield* prepareBody(
             `<qti-set-outcome-value identifier="SCORE">${operator}</qti-set-outcome-value>`,
-            { language: "outcome", mode: "test", rootKind: "test" },
+            { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "test" },
           );
           const failure = yield* Effect.flip(processed(prepared));
           assert.instanceOf(failure, ImportRefused, name);
@@ -908,7 +928,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       for (const [name, operator] of cases) {
         const prepared = yield* prepareBody(
           `<qti-set-outcome-value identifier="SCORE">${operator}</qti-set-outcome-value>`,
-          { language: "outcome", mode: "test", rootKind: "test" },
+          { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "test" },
         );
         const failure = yield* Effect.flip(processed(prepared));
         assert.instanceOf(failure, ImportRefused, name);
@@ -936,7 +956,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       Effect.gen(function* paddedMode() {
         const prepared = yield* prepareBody(
           '<qti-set-outcome-value identifier="SCORE"><qti-equal tolerance-mode=" exact"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value></qti-equal></qti-set-outcome-value>',
-          { language: "outcome", mode: "test", rootKind: "test" },
+          { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "test" },
         );
         const failure = yield* Effect.flip(processed(prepared));
         assert.instanceOf(failure, ImportRefused);
@@ -1766,7 +1786,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts read
       for (const spelling of ["yes", "1", "TRUE"]) {
         const prepared = yield* prepareBody(
           `<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="boolean">${spelling}</qti-base-value></qti-set-outcome-value>`,
-          { language: "outcome", mode: "test", rootKind: "test" },
+          { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "test" },
         );
         const failure = yield* Effect.flip(processed(prepared));
 
@@ -1780,7 +1800,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts read
     Effect.gen(function* insideLiteral() {
       const prepared = yield* prepareBody(
         '<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="boolean">false</qti-base-value></qti-set-outcome-value>',
-        { language: "outcome", mode: "test", rootKind: "test" },
+        { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "test" },
       );
       const built = yield* processed(prepared);
 
@@ -1795,7 +1815,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts read
     Effect.gen(function* paddedBoolean() {
       const prepared = yield* prepareBody(
         '<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="boolean"> true </qti-base-value></qti-set-outcome-value>',
-        { language: "outcome", mode: "test", rootKind: "test" },
+        { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "test" },
       );
       const built = yield* processed(prepared);
 
@@ -1827,7 +1847,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts read
 
       const prepared = yield* prepareBody(
         '<qti-set-outcome-value identifier="SCORE"><qti-string-match case-sensitive="true"><qti-base-value base-type="string"> a </qti-base-value><qti-base-value base-type="string">a</qti-base-value></qti-string-match></qti-set-outcome-value>',
-        { language: "outcome", mode: "test", rootKind: "test" },
+        { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "test" },
       );
       const built = yield* processed(prepared);
 

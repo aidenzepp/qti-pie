@@ -63,6 +63,9 @@ const contextType: EffectiveType = { baseType: "unknown", cardinality: "record" 
 /**
  * The built-in variables of each mode: `completionStatus`, `numAttempts` and `duration` exist in
  * an item's and a test's processing, `QTI_CONTEXT` in all three.
+ *
+ * `duration` is a float in an item and a duration in a test (reading 29: each information model
+ * sentence is followed at its own level).
  */
 const builtInsOf = (mode: Mode): ReadonlyMap<string, EffectiveType> => {
   const context: readonly (readonly [string, EffectiveType])[] = [["QTI_CONTEXT", contextType]];
@@ -72,7 +75,7 @@ const builtInsOf = (mode: Mode): ReadonlyMap<string, EffectiveType> => {
 
   return new Map([
     ["completionStatus", { baseType: "identifier", cardinality: "single" }],
-    ["duration", { baseType: "float", cardinality: "single" }],
+    ["duration", { baseType: mode === "test" ? "duration" : "float", cardinality: "single" }],
     ["numAttempts", { baseType: "integer", cardinality: "single" }],
     ...context,
   ]);
