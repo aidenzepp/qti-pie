@@ -44,6 +44,129 @@ export class VoidElementChildren extends Error {
 }
 
 /**
+ * The defect of an element whose tag is not a lower-case name, which the serialiser cannot write
+ * without the tag ending early or reading as another element.
+ *
+ * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown.
+ */
+// oxlint-disable-next-line unicorn/custom-error-definition -- Named in the family of `VoidElementChildren`, whose name the phase-1 slice list fixes, so the serialiser's defects read alike.
+export class MalformedTagName extends Error {
+  /**
+   * The tag as the tree spells it.
+   */
+  readonly tag: string;
+
+  /**
+   * Construct the defect for the tag `tag`.
+   *
+   * @param tag The tag as the tree spells it.
+   */
+  constructor(tag: string) {
+    super(
+      `Tag ${JSON.stringify(tag)} is not an element name the serialiser writes: give the element a lower-case name that starts with a letter and holds only a to z, 0 to 9 and "-".`,
+    );
+    this.name = "MalformedTagName";
+    this.tag = tag;
+  }
+}
+
+/**
+ * The defect of an attribute whose name is empty or holds a character that would end the name or
+ * the tag early, so the written attribute would read back as other attributes or other markup.
+ *
+ * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown.
+ */
+// oxlint-disable-next-line unicorn/custom-error-definition -- Named in the family of `VoidElementChildren`, whose name the phase-1 slice list fixes, so the serialiser's defects read alike.
+export class MalformedAttributeName extends Error {
+  /**
+   * The attribute name as the tree spells it.
+   */
+  readonly attribute: string;
+
+  /**
+   * The tag of the element that carries the attribute.
+   */
+  readonly tag: string;
+
+  /**
+   * Construct the defect for the attribute `attribute` on the element `tag`.
+   *
+   * @param tag The tag of the element that carries the attribute.
+   * @param attribute The attribute name as the tree spells it.
+   */
+  constructor(tag: string, attribute: string) {
+    super(
+      `Attribute name ${JSON.stringify(attribute)} on <${tag}> cannot be written as HTML: give the attribute a non-empty name with no whitespace, quote, apostrophe, ">", "/", "=" or control character.`,
+    );
+    this.name = "MalformedAttributeName";
+    this.attribute = attribute;
+    this.tag = tag;
+  }
+}
+
+/**
+ * The defect of a raw-text element built with children, whose content HTML reads with no character
+ * reference decoded, so no escaping writes a child that reads back as itself.
+ *
+ * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown.
+ */
+// oxlint-disable-next-line unicorn/custom-error-definition -- Named in the family of `VoidElementChildren`, whose name the phase-1 slice list fixes, so the serialiser's defects read alike.
+export class RawTextChildren extends Error {
+  /**
+   * The raw-text element's tag.
+   */
+  readonly tag: string;
+
+  /**
+   * Construct the defect for the raw-text element `tag`.
+   *
+   * @param tag The raw-text element's tag.
+   */
+  constructor(tag: string) {
+    super(
+      `<${tag}> is a raw-text element, whose content HTML reads without decoding character references, so the serialiser cannot escape it: build it with no children.`,
+    );
+    this.name = "RawTextChildren";
+    this.tag = tag;
+  }
+}
+
+/**
+ * The defect of an escapable raw-text element (`textarea`, `title`) built with an element child,
+ * which HTML would read back as text rather than as an element.
+ *
+ * Its text children are written escaped, as anywhere else. Like {@link VoidElementChildren}, it is a
+ * defect in the code that built the tree and is thrown.
+ */
+// oxlint-disable-next-line unicorn/custom-error-definition -- Named in the family of `VoidElementChildren`, whose name the phase-1 slice list fixes, so the serialiser's defects read alike.
+export class EscapableRawTextElementChild extends Error {
+  /**
+   * The tag of the element child.
+   */
+  readonly child: string;
+
+  /**
+   * The escapable raw-text element's tag.
+   */
+  readonly tag: string;
+
+  /**
+   * Construct the defect for the element child `child` of the escapable raw-text element `tag`.
+   *
+   * @param tag The escapable raw-text element's tag.
+   * @param child The tag of the element child.
+   */
+  constructor(tag: string, child: string) {
+    super(
+      `<${tag}> holds only text, and HTML would read its child <${child}> as text: build <${tag}> with text children only.`,
+    );
+    this.name = "EscapableRawTextElementChild";
+    this.child = child;
+    this.tag = tag;
+  }
+}
+
+/**
  * HTML's void elements, which have a start tag and never an end tag.
  *
  * @see https://html.spec.whatwg.org/multipage/syntax.html#void-elements
@@ -73,6 +196,50 @@ const voidElements: ReadonlySet<string> = new Set([
 const lineFeedDropping: ReadonlySet<string> = new Set(["listing", "pre", "textarea"]);
 
 /**
+ * The elements whose content the HTML parser reads as text with no character reference decoded, up
+ * to their end tag (`script`, `style`, `xmp`, `iframe`, `noembed`, `noframes`, and `noscript` when
+ * scripting is on) or to the end of the document (`plaintext`).
+ *
+ * No escaping writes their content so that it reads back as written, so the serialiser refuses any
+ * child of one.
+ *
+ * @see https://html.spec.whatwg.org/multipage/parsing.html#parsing-main-inbody
+ */
+const rawText: ReadonlySet<string> = new Set([
+  "iframe",
+  "noembed",
+  "noframes",
+  "noscript",
+  "plaintext",
+  "script",
+  "style",
+  "xmp",
+]);
+
+/**
+ * The escapable raw-text elements, whose content the HTML parser reads as text with character
+ * references decoded: escaped text reads back as written, an element child reads back as text.
+ *
+ * @see https://html.spec.whatwg.org/multipage/syntax.html#elements-2
+ */
+const escapableRawText: ReadonlySet<string> = new Set(["textarea", "title"]);
+
+/**
+ * The tags the serialiser writes: a lower-case ASCII letter, then lower-case ASCII letters, digits
+ * and hyphens, so no tag can end early or carry an attribute.
+ */
+const writableTag = /^[a-z][a-z0-9-]*$/u;
+
+/**
+ * The characters no attribute name holds: whitespace, `"`, `'`, `>`, `/`, `=` and the controls
+ * (`\p{Cc}`, U+0000 to U+001F and U+007F to U+009F), each of which HTML reads as the end of the
+ * name, the attribute or the tag, or which HTML forbids in a name.
+ *
+ * @see https://html.spec.whatwg.org/multipage/syntax.html#attributes-2
+ */
+const refusedInAttributeName = /[\s"'/=>\p{Cc}]/u;
+
+/**
  * Escape character data for an HTML text position.
  *
  * @param value The characters as they read.
@@ -85,10 +252,57 @@ const escapeText = (value: string): string =>
  * Escape an attribute value for a double-quoted position.
  *
  * @param value The value as it reads.
- * @returns `value` with `&` and `"` as character references.
+ * @returns `value` with `&`, `"`, `<` and `>` as character references.
  */
 const escapeAttribute = (value: string): string =>
-  value.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+
+/**
+ * Refuse an element that HTML cannot write so that it reads back as the same tree, before any of
+ * its bytes are written.
+ *
+ * @param element The element about to be written; each descendant is checked when it is written.
+ * @throws {MalformedTagName} When the tag is not a lower-case letter followed by lower-case
+ *   letters, digits and hyphens.
+ * @throws {MalformedAttributeName} When an attribute name is empty or holds whitespace, a quote, an
+ *   apostrophe, `>`, `/`, `=` or a control.
+ * @throws {VoidElementChildren} When a void element has children.
+ * @throws {RawTextChildren} When a raw-text element has children.
+ * @throws {EscapableRawTextElementChild} When `textarea` or `title` has an element child.
+ */
+const refuseUnwritable = (element: Element): void => {
+  if (!writableTag.test(element.tag)) {
+    throw new MalformedTagName(element.tag);
+  }
+
+  const malformed = Object.keys(element.attrs).find(
+    (name) => name === "" || refusedInAttributeName.test(name),
+  );
+
+  if (malformed !== undefined) {
+    throw new MalformedAttributeName(element.tag, malformed);
+  }
+
+  if (element.children.length > 0 && voidElements.has(element.tag)) {
+    throw new VoidElementChildren(element.tag);
+  }
+
+  if (element.children.length > 0 && rawText.has(element.tag)) {
+    throw new RawTextChildren(element.tag);
+  }
+
+  const elementChild = escapableRawText.has(element.tag)
+    ? element.children.find((child) => child.kind === "element")
+    : undefined;
+
+  if (elementChild !== undefined) {
+    throw new EscapableRawTextElementChild(element.tag, elementChild.tag);
+  }
+};
 
 /**
  * Write an element's start tag, its attributes in the object's key order.
@@ -124,11 +338,22 @@ const startsWithLineFeed = (children: readonly Node[]): boolean => {
  *
  * The same tree always gives the same bytes: no whitespace is added, every non-void element (`svg`,
  * `math` and their descendants included) gets an explicit end tag and nothing is self-closed. Text
- * is written as it reads, escaped.
+ * is written as it reads, escaped. An element HTML cannot write so that it reads back as the same
+ * tree is refused before any of its bytes are written; chunks already written for its ancestors
+ * stay written.
+ *
+ * Tag and attribute names are checked, not rewritten, and no attribute or URL is dropped here: what
+ * a part may carry is the emitter's to decide.
  *
  * @param node The node to write, with its descendants.
  * @param sink The destination of the chunks.
+ * @throws {MalformedTagName} When `node` or a descendant has a tag that is not a lower-case name.
+ * @throws {MalformedAttributeName} When `node` or a descendant has an attribute name HTML cannot
+ *   write.
  * @throws {VoidElementChildren} When `node` or a descendant is a void element with children.
+ * @throws {RawTextChildren} When `node` or a descendant is a raw-text element with children.
+ * @throws {EscapableRawTextElementChild} When `node` or a descendant is a `textarea` or `title`
+ *   with an element child.
  */
 export const serialise = (node: Node, sink: Sink): void => {
   if (node.kind === "text") {
@@ -137,17 +362,12 @@ export const serialise = (node: Node, sink: Sink): void => {
     return;
   }
 
+  refuseUnwritable(node);
+  sink.write(startTag(node));
+
   if (voidElements.has(node.tag)) {
-    if (node.children.length > 0) {
-      throw new VoidElementChildren(node.tag);
-    }
-
-    sink.write(startTag(node));
-
     return;
   }
-
-  sink.write(startTag(node));
 
   if (lineFeedDropping.has(node.tag) && startsWithLineFeed(node.children)) {
     sink.write("\n");
@@ -165,7 +385,13 @@ export const serialise = (node: Node, sink: Sink): void => {
  *
  * @param node The node to write, with its descendants.
  * @returns The bytes {@link serialise} writes for `node`, joined.
+ * @throws {MalformedTagName} When `node` or a descendant has a tag that is not a lower-case name.
+ * @throws {MalformedAttributeName} When `node` or a descendant has an attribute name HTML cannot
+ *   write.
  * @throws {VoidElementChildren} When `node` or a descendant is a void element with children.
+ * @throws {RawTextChildren} When `node` or a descendant is a raw-text element with children.
+ * @throws {EscapableRawTextElementChild} When `node` or a descendant is a `textarea` or `title`
+ *   with an element child.
  */
 export const toHtml = (node: Node): string => {
   const chunks: string[] = [];
