@@ -5,6 +5,9 @@
   "imports": {
     "#plate/*": "./src/*"
   },
+  "scripts": {
+    "test": "mkdir -p work/.vp-tmp && TMPDIR=\"$PWD/work/.vp-tmp\" NODE_OPTIONS=\"$NODE_OPTIONS --disable-proto=delete --disable-sigusr1\" vp test run"
+  },
   "dependencies": {
     "effect": "4.0.7"
   },
