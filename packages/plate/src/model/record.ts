@@ -13,11 +13,13 @@ import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 
 /**
- * One item's session as the renderer holds it, each integer an exact `bigint`.
+ * One item's session as the renderer holds it, each value of base type integer an exact `bigint`.
  *
- * `item` is the item's identifier and `document` its location. `attempt` is `none` before any
- * attempt and `submitted` once `score` has processed one. A refused post is no state of the record:
- * `score` returns no record for it, and a host that counts refused posts keeps that count itself.
+ * `item` is the item's identifier and `document` its location. `instance` is the host's name for
+ * this use of the item, which scopes its ids. `attempt` is `none` before any attempt and
+ * `submitted` once `score` has processed one, and `numAttempts` counts the attempts processed. A
+ * refused post is no state of the record: `score` returns no record for it, and a host that counts
+ * refused posts keeps that count itself.
  * `responses` and `outcomes` hold every modelled variable by identifier, NULL included. `notices`
  * names the unsupported features the item shows as notices.
  */
@@ -34,11 +36,11 @@ export interface ItemRecord {
 }
 
 /**
- * Give an outcome's value before any processing that has no default: 0 for a single integer or
- * float, NULL otherwise (`ea422814` §8.2).
+ * Give the value an outcome without a default holds before any processing sets it: 0 for a single
+ * integer or float, NULL otherwise (`ea422814` §8.2).
  *
  * @param outcome The outcome's declaration.
- * @returns The value.
+ * @returns The outcome's starting value.
  */
 const initial = (outcome: OutcomeDeclaration): Value => {
   if (outcome.cardinality === "single" && outcome.baseType === "integer") {

@@ -4,6 +4,8 @@
  *
  * The session record, the engine and the form encoding all carry a {@link Value}, so this module
  * owns the one value representation, and the one NCName rule the validator reuses.
+ *
+ * @module
  */
 import { Data, Option, Result } from "effect";
 

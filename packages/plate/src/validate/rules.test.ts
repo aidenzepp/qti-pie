@@ -1,8 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
-import { attr, doc, el, text } from "#plate/document/source.ts";
+import { Effect, Option } from "effect";
+import { attr, doc, el, entity, text } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceElement } from "#plate/document/source.ts";
-import { checkRules } from "#plate/validate/rules.ts";
+import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
+import { checkRules, wildcardContentHolders } from "#plate/validate/rules.ts";
+import { tables } from "#plate/validate/tables.ts";
 
 /**
  * The location every hand-built item in these tests carries.
@@ -266,6 +268,24 @@ const lookupItem = (table: string, operand: SourceElement) =>
     [],
     [processing(undefined, [lookup("SCORE", operand)])],
   );
+
+/**
+ * Construct a `qti-template-processing` holding template rules.
+ *
+ * @param rules Its rules.
+ * @returns The processing element.
+ */
+const templateProcessing = (...rules: readonly SourceElement[]): SourceElement =>
+  el("qti-template-processing", [], rules);
+
+/**
+ * Construct a template rule that sets a response's correct response to the identifier `A`.
+ *
+ * @param identifier The response it names, as written.
+ * @returns The `qti-set-correct-response`.
+ */
+const setCorrect = (identifier: string): SourceElement =>
+  el("qti-set-correct-response", [attr("identifier", identifier)], [baseValue("identifier", "A")]);
 
 /**
  * Reduce refusals to what a test asserts: the rule, the path and the detail.
@@ -568,6 +588,108 @@ describe("checkRules", () => {
           ),
         ),
         [],
+      );
+    });
+
+    it("[I-9b] accepts match_correct when template processing sets RESPONSE's correct response", () => {
+      for (const identifier of ["RESPONSE", " RESPONSE "]) {
+        assert.deepStrictEqual(
+          judged(
+            item(
+              [
+                response("RESPONSE", "single", "identifier"),
+                outcome("SCORE"),
+                templateProcessing(setCorrect(identifier)),
+              ],
+              [choice("RESPONSE")],
+              [processing("match_correct")],
+            ),
+          ),
+          [],
+          JSON.stringify(identifier),
+        );
+      }
+    });
+
+    it("[I-9b] accepts match_correct when a template condition's branch sets RESPONSE's correct response", () => {
+      const branch = el(
+        "qti-template-condition",
+        [],
+        [el("qti-template-if", [], [baseValue("boolean", "true"), setCorrect("RESPONSE")])],
+      );
+
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "identifier"),
+              outcome("SCORE"),
+              templateProcessing(branch),
+            ],
+            [choice("RESPONSE")],
+            [processing("match_correct")],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("[I-9b] refuses match_correct when template processing sets another response's correct response", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "identifier"),
+              response("OTHER", "single", "identifier"),
+              outcome("SCORE"),
+              templateProcessing(setCorrect("OTHER")),
+            ],
+            [choice("RESPONSE")],
+            [processing("match_correct")],
+          ),
+        ),
+        [
+          {
+            detail: {
+              child: "qti-correct-response",
+              declaration: "qti-response-declaration",
+              element: "qti-response-processing",
+              identifier: "RESPONSE",
+              template: "match_correct",
+            },
+            path: processingPath,
+            rule: "template-requirements",
+          },
+        ],
+      );
+    });
+
+    it("[I-9b] refuses map_response with no qti-mapping though template processing sets RESPONSE's correct response", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "identifier"),
+              outcome("SCORE"),
+              templateProcessing(setCorrect("RESPONSE")),
+            ],
+            [choice("RESPONSE")],
+            [processing("map_response")],
+          ),
+        ),
+        [
+          {
+            detail: {
+              child: "qti-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-response-processing",
+              identifier: "RESPONSE",
+              template: "map_response",
+            },
+            path: processingPath,
+            rule: "template-requirements",
+          },
+        ],
       );
     });
 
@@ -1102,4 +1224,213 @@ describe("checkRules", () => {
       );
     });
   });
+
+  describe("what the rules do not judge", () => {
+    /**
+     * 1EdTech's `match_correct` response-processing template, as its own document's root.
+     */
+    const matchCorrect = processing(undefined, [
+      el(
+        "qti-response-condition",
+        [],
+        [
+          el(
+            "qti-response-if",
+            [],
+            [
+              el("qti-match", [], [variable("RESPONSE"), variable("RESPONSE", "qti-correct")]),
+              setScore(baseValue("float", "1")),
+            ],
+          ),
+          el("qti-response-else", [], [setScore(baseValue("float", "0"))]),
+        ],
+      ),
+    ]);
+
+    it("gives no refusal for a processing root, which phase 1 leaves unchecked", () => {
+      assert.deepStrictEqual(judged(doc(location, matchCorrect)), []);
+    });
+
+    it("still refuses the same processing inside an item with no declarations", () => {
+      assert.deepStrictEqual(
+        judged(item([], [], [matchCorrect])).map((refused) => refused.rule),
+        [
+          "undeclared-variable",
+          "undeclared-variable",
+          "undeclared-variable",
+          "undeclared-variable",
+        ],
+      );
+    });
+
+    it("gives no refusal for an item whose correct response holds an unexpanded entity", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "identifier", [
+                el("qti-correct-response", [], [el("qti-value", [], [entity("choiceA")])]),
+              ]),
+            ],
+            [],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("gives no refusal for an item whose response-identifier holds an unexpanded entity", () => {
+      assert.deepStrictEqual(
+        judged(
+          item([], [el("qti-choice-interaction", [attr("response-identifier", "&r;", "", ["r"])])]),
+        ),
+        [],
+      );
+    });
+
+    // An interim, not a reading: reading 6 covers only a nested QTI root, and rule `5b8ee08b`
+    // validates a known QTI element inside lax wildcard content as QTI. M1-R judges this Choice in
+    // the structural walk and the prose rules (the ledger's lax-wildcard deferral).
+    it("passes over a Choice inside a custom interaction: phase 1 skips wildcard content", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier")],
+            [
+              el(
+                "qti-custom-interaction",
+                [attr("response-identifier", "RESPONSE")],
+                [choice("VENDOR")],
+              ),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("does not read a Choice inside an element of another namespace as QTI", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier")],
+            [el("widget", [], [choice("VENDOR")], "https://vendor.example/widgets")],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("still refuses the same Choice directly in the body", () => {
+      assert.deepStrictEqual(
+        judged(item([response("RESPONSE", "single", "identifier")], [choice("VENDOR")])),
+        [
+          {
+            detail: { response: "VENDOR" },
+            path: "qti-assessment-item/qti-item-body/qti-choice-interaction/@response-identifier",
+            rule: "undeclared-response",
+          },
+        ],
+      );
+    });
+
+    it("passes over the children of exactly the elements whose content is an ##any wildcard", () => {
+      const holders = Object.entries(tables.elements)
+        .filter(([, table]) => table.anyElement?.namespace === "##any")
+        .map(([name]) => name)
+        .toSorted();
+
+      assert.deepStrictEqual([...wildcardContentHolders].toSorted(), holders);
+    });
+  });
+});
+
+/**
+ * The spaces between the two letters of the shorter identifier the growth check reads, before it
+ * reads one with {@link growthFactor} times as many.
+ */
+const fewerSpaces = 4000;
+
+/**
+ * The growth check and its control read identifiers of 32,000 spaces three times each. A quadratic
+ * read took several seconds of that, past vitest's default of 5 s, and a failing check should
+ * report its ratio, not a timeout.
+ */
+const growthTimeoutMs = 60_000;
+
+/**
+ * Construct an identifier of two letters with a run of spaces between them, the input on which a
+ * backtracking trim tries every position of the run and scans the rest of it from each.
+ *
+ * @param spaces The spaces between the letters.
+ * @returns The identifier.
+ */
+const spacedIdentifier = (spaces: number): string => `a${" ".repeat(spaces)}b`;
+
+/**
+ * Construct an item whose response declaration and Choice both name an identifier.
+ *
+ * @param identifier The identifier.
+ * @returns The item.
+ */
+const namingItem = (identifier: string) =>
+  item([response(identifier, "single", "identifier")], [choice(identifier)]);
+
+/**
+ * The outer-whitespace pattern the rules read identifiers with before `p1-g17`: its second branch
+ * matches at every position of an inner run of whitespace and fails at the letter after it, so a
+ * trim with it takes time quadratic in the run.
+ */
+const backtrackingTrim = /^[\t\n\r ]+|[\t\n\r ]+$/gu;
+
+describe("reading an identifier", () => {
+  it.effect(
+    "[I-1] reads 8 times the spaces inside an identifier in under 32 times the time",
+    () =>
+      Effect.gen(function* readsInLinearTime() {
+        const fewer = namingItem(spacedIdentifier(fewerSpaces));
+        const more = namingItem(spacedIdentifier(fewerSpaces * growthFactor));
+        assert.deepStrictEqual(judged(more), []);
+
+        const growth = yield* growthRatio(
+          () => {
+            checkRules(fewer);
+          },
+          () => {
+            checkRules(more);
+          },
+        );
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the spaces took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
+
+  it.effect(
+    "control: a backtracking trim of the same identifiers fails the growth check",
+    () =>
+      Effect.gen(function* quadraticControl() {
+        const fewer = spacedIdentifier(fewerSpaces);
+        const more = spacedIdentifier(fewerSpaces * growthFactor);
+        assert.strictEqual(fewer.replaceAll(backtrackingTrim, ""), fewer);
+
+        const growth = yield* growthRatio(
+          () => {
+            fewer.replaceAll(backtrackingTrim, "");
+          },
+          () => {
+            more.replaceAll(backtrackingTrim, "");
+          },
+        );
+        assert.isAtLeast(
+          growth,
+          growthLimit,
+          `8 times the spaces took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
 });

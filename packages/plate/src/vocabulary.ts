@@ -11,6 +11,7 @@
  * @module
  */
 import { Array as Arr, Option } from "effect";
+import { trimXmlSpace } from "#plate/model/values.ts";
 
 /**
  * The eleven QTI base types, as the `base-type` attribute spells them.
@@ -345,19 +346,32 @@ export const templateNames = ["match_correct", "map_response", "map_response_poi
 export type TemplateName = (typeof templateNames)[number];
 
 /**
+ * A run of XML whitespace.
+ */
+const xmlWhitespaceRun = /[\t\n\r ]+/gu;
+
+/**
  * Resolve a `template` URI to the built-in it names.
  *
- * @param uri The `template` attribute's value.
- * @returns The built-in's name when `uri` is one of {@link templatePrefixes} followed by it, with
- *   or without `.xml`; none for any other URI, the `CC2_*` templates included.
+ * The XSD types `template` as `xs:anyURI`, whose whitespace facet is `collapse`, so the URI is
+ * collapsed before it is matched: the XML whitespace at either end is removed and each inner run
+ * becomes one space. A padded built-in URI names its template; a URI with whitespace inside it
+ * names none.
+ *
+ * @param uri The `template` attribute's value, as written.
+ * @returns The built-in's name when the collapsed `uri` is one of {@link templatePrefixes} followed
+ *   by it, with or without `.xml`; none for any other URI, the `CC2_*` templates included.
  */
-export const templateName = (uri: string): Option.Option<TemplateName> =>
-  Arr.findFirst(templatePrefixes, (prefix) => uri.startsWith(prefix)).pipe(
-    Option.map((prefix) => uri.slice(prefix.length)),
+export const templateName = (uri: string): Option.Option<TemplateName> => {
+  const collapsed = trimXmlSpace(uri).replaceAll(xmlWhitespaceRun, " ");
+
+  return Arr.findFirst(templatePrefixes, (prefix) => collapsed.startsWith(prefix)).pipe(
+    Option.map((prefix) => collapsed.slice(prefix.length)),
     Option.flatMap((rest) =>
       Arr.findFirst(templateNames, (name) => rest === name || rest === `${name}.xml`),
     ),
   );
+};
 
 /**
  * The owners of the QTI shared vocabulary classes M1 knows (I-19): the three interactions it

@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Effect, Option } from "effect";
+import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import {
   baseTypes,
   behaviourClasses,
@@ -23,6 +24,13 @@ const assertDistinct = (list: readonly string[]): void => {
   assert.strictEqual(new Set(list).size, list.length, `duplicates in ${list.join(", ")}`);
 };
 
+/**
+ * The spaces inside the shorter URI the growth check reads, before it reads one with
+ * {@link growthFactor} times as many: a run a backtracking trim of the outer whitespace scans from
+ * each of its positions.
+ */
+const fewerSpaces = 4000;
+
 describe("templateName", () => {
   it("[I-9b] resolves all four spellings of each built-in to its name", () => {
     for (const name of templateNames) {
@@ -44,6 +52,48 @@ describe("templateName", () => {
     assert.isTrue(Option.isNone(templateName("match_correct")));
     assert.isTrue(Option.isNone(templateName("")));
   });
+
+  it("[I-9b] resolves a built-in padded with XML whitespace to its name, as xs:anyURI collapses it", () => {
+    for (const name of templateNames) {
+      for (const prefix of templatePrefixes) {
+        for (const padding of [" ", "\n\t"]) {
+          assert.deepStrictEqual(
+            templateName(`${padding}${prefix}${name}${padding}`),
+            Option.some(name),
+          );
+        }
+      }
+    }
+  });
+
+  it("[I-9b] resolves a URI with whitespace inside its name to none", () => {
+    for (const prefix of templatePrefixes) {
+      assert.isTrue(Option.isNone(templateName(`${prefix}match_ correct`)));
+      assert.isTrue(Option.isNone(templateName(`${prefix}match_\ncorrect`)));
+    }
+  });
+
+  it.effect("[I-9b] reads 8 times the spaces inside a URI in under 32 times the time", () =>
+    Effect.gen(function* readsInLinearTime() {
+      const fewer = `a${" ".repeat(fewerSpaces)}b`;
+      const more = `a${" ".repeat(fewerSpaces * growthFactor)}b`;
+      assert.isTrue(Option.isNone(templateName(more)));
+
+      const growth = yield* growthRatio(
+        () => {
+          templateName(fewer);
+        },
+        () => {
+          templateName(more);
+        },
+      );
+      assert.isBelow(
+        growth,
+        growthLimit,
+        `8 times the spaces took ${growth.toFixed(1)} times as long`,
+      );
+    }),
+  );
 });
 
 describe("the closed value sets", () => {

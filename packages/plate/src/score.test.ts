@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { encodeRecord } from "#plate/codec/record.ts";
 import type { StoredRecord } from "#plate/codec/record.ts";
-import { configure } from "#plate/configuration.ts";
+import { Configuration, configure } from "#plate/configuration.ts";
 import { Malformed } from "#plate/form/encoding.ts";
 import type { PostedBaseType } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
@@ -10,7 +10,8 @@ import type { ChoiceInteraction, Item, TextEntryInteraction } from "#plate/model
 import { fresh } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { render } from "#plate/render.ts";
-import { checkResponses, score } from "#plate/score.ts";
+import { checkResponses } from "#plate/responses.ts";
+import { score, tierA } from "#plate/score.ts";
 import { float } from "#plate/test/fixtures.ts";
 import { acceptForTest } from "#plate/validate/verdict.ts";
 
@@ -282,6 +283,54 @@ describe("score", () => {
     );
   });
 
+  it("fails InvalidRecord at decode, naming the response, when a stored response has another type than its declaration", () => {
+    const stored = Result.getOrThrow(encodeRecord(fresh(item, "")));
+    const retyped: StoredRecord = {
+      ...stored,
+      responses: {
+        ...stored.responses,
+        PICK: {
+          baseType: "string",
+          cardinality: "multiple",
+          values: [{ baseType: "string", value: "A" }],
+        },
+      },
+    };
+
+    assert.deepStrictEqual(
+      Option.map(failureOf(score(accepted, {}, retyped)), (failure) =>
+        failure._tag === "InvalidRecord"
+          ? [failure._tag, failure.stage, failure.issue.includes('"PICK"')]
+          : [failure._tag],
+      ),
+      Option.some(["InvalidRecord", "decode", true]),
+    );
+  });
+
+  it("fails InvalidRecord at decode, naming the response, when a stored response is one the item does not score", () => {
+    const stored = Result.getOrThrow(encodeRecord(fresh(item, "")));
+    const extra: StoredRecord = {
+      ...stored,
+      responses: {
+        ...stored.responses,
+        EXTRA: {
+          baseType: "identifier",
+          cardinality: "single",
+          values: [{ baseType: "identifier", value: "A" }],
+        },
+      },
+    };
+
+    assert.deepStrictEqual(
+      Option.map(failureOf(score(accepted, {}, extra)), (failure) =>
+        failure._tag === "InvalidRecord"
+          ? [failure._tag, failure.stage, failure.issue.includes('"EXTRA"')]
+          : [failure._tag],
+      ),
+      Option.some(["InvalidRecord", "decode", true]),
+    );
+  });
+
   it("fails RecordMismatch when the record belongs to another item", () => {
     const stored = Result.getOrThrow(encodeRecord(fresh(other.item, "")));
 
@@ -330,6 +379,23 @@ describe("score", () => {
     }
   });
 
+  it("fails InvalidResponses for a response the item does not score, saying a declaration of an unscored type is one", () => {
+    assert.deepStrictEqual(
+      Option.map(failureOf(score(accepted, { EXTRA: identifiers("single", "A") })), (failure) =>
+        failure._tag === "InvalidResponses"
+          ? [
+              failure._tag,
+              failure.problem,
+              Option.isNone(failure.expected),
+              failure.message.includes('"EXTRA"'),
+              failure.message.includes("point"),
+            ]
+          : [failure._tag],
+      ),
+      Option.some(["InvalidResponses", "undeclared", true, true, true]),
+    );
+  });
+
   it("fails ResponsesRefused with the messages when three identifiers break max-choices 2", () => {
     assert.deepStrictEqual(
       Option.map(
@@ -361,6 +427,13 @@ describe("score", () => {
 
   it("refuses a hand-built item in its type", () => {
     assert.isFunction(scoreUnchecked);
+  });
+
+  it("runs tier (a) under the configuration the Schema decodes from English and validateResponses off", () => {
+    assert.deepStrictEqual(
+      tierA,
+      Schema.decodeSync(Configuration)({ locale: "en", validateResponses: false }),
+    );
   });
 });
 

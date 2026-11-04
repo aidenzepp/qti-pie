@@ -1,3 +1,15 @@
+/**
+ * The source view: an XML document as the renderer reads it, the namespaces its readers compare
+ * against, and the walk that gives every element its path.
+ *
+ * The validator, the item model and the table generator read a {@link SourceDocument}. The
+ * validator and the item model locate what they find with the paths {@link walk} and
+ * {@link attributePath} build, so every refusal and every unsupported feature names a place the
+ * same way. The shared reader's own types stay inside the adapter that builds the view. The module
+ * also exports small constructors with which a test hand-builds a document.
+ *
+ * @module
+ */
 import { Option } from "effect";
 
 /**
@@ -134,7 +146,7 @@ const stepName = (element: SourceElement): string =>
   element.namespace === qtiNamespace ? element.local : `{${element.namespace}}${element.local}`;
 
 /**
- * Keep the element children of a source element.
+ * Report whether a child of a source element is itself an element.
  *
  * @param child A child of a source element.
  * @returns Whether `child` is an element.

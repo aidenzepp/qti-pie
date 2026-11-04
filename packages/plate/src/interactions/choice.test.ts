@@ -706,6 +706,66 @@ describe("renderChoice", () => {
       }),
   );
 
+  it.effect(
+    "[Q-2] writes an authored label in a choice's content as a span, so no label nests a label",
+    () =>
+      Effect.gen(function* labelAsSpan() {
+        const choicePath =
+          "qti-assessment-item/qti-item-body/qti-choice-interaction/qti-simple-choice";
+        const labelled: ChoiceInteraction = {
+          ...colours,
+          choices: [
+            {
+              content: [
+                {
+                  attributes: [{ name: "id", value: "red" }],
+                  children: [
+                    words("Bright "),
+                    {
+                      attributes: [],
+                      children: [words("red")],
+                      kind: "element",
+                      path: `${choicePath}/label/strong`,
+                      tag: "strong",
+                    },
+                  ],
+                  kind: "element",
+                  path: `${choicePath}/label`,
+                  tag: "label",
+                },
+              ],
+              identifier: "A",
+            },
+            ...colours.choices.slice(1),
+          ],
+        };
+        const built = payloadOf(labelled);
+        const root = yield* render(built);
+        const tree = page(root, built);
+        const [label] = partsIn(root, "label");
+        const choiceLabel = label ?? assert.fail("The Choice has no Label.");
+
+        assert.deepStrictEqual(
+          elementsIn(choiceLabel)
+            .slice(1)
+            .filter((element) => element.tag === "label"),
+          [],
+        );
+
+        const span = childAt(choiceLabel, 1);
+        assert.strictEqual(span.tag, "span");
+        assert.strictEqual(span.attrs["id"], authoredId(instance, "red"));
+        assert.strictEqual(textOf(span), "Bright red");
+        assert.strictEqual(childAt(span, 0).tag, "strong");
+        assert.deepStrictEqual(
+          partsIn(tree, "control").map((control) => nameOf(control, tree)),
+          ["Bright red", "Green", "Blue"],
+        );
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+      }),
+  );
+
   it.effect("returns a Result, a plain function callable with no Effect runtime", () =>
     Effect.gen(function* plainResult() {
       const built = payloadOf(colours);

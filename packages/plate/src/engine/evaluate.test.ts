@@ -472,6 +472,27 @@ describe("runRules", () => {
       ],
     );
   });
+
+  it("says the item lacks an outcome it does not declare", () => {
+    const failure = failureOf(
+      runRules(
+        [setOutcome("UNDECLARED", base(floatValue(1)))],
+        item,
+        variablesOf(identifierValue("A")),
+      ),
+    );
+
+    assert.instanceOf(failure, UnknownIdentifierError);
+    assert.deepStrictEqual(
+      {
+        _tag: failure._tag,
+        holder: failure.holder,
+        identifier: failure.identifier,
+        role: failure.role,
+      },
+      { _tag: "UnknownIdentifierError", holder: "item", identifier: "UNDECLARED", role: "outcome" },
+    );
+  });
 });
 
 describe("evaluateExpression", () => {
@@ -588,6 +609,25 @@ describe("evaluateExpression", () => {
       { _tag: failure._tag, identifier: failure.identifier, role: failure.role },
       { _tag: "UnknownIdentifierError", identifier: "constructor", role: "variable" },
     );
+  });
+
+  it("says the record lacks a variable the variables hold no value of", () => {
+    const failure = failureOf(
+      evaluateExpression(variable("MISSING"), item, variablesOf(identifierValue("A"))),
+    );
+
+    assert.instanceOf(failure, UnknownIdentifierError);
+    assert.deepStrictEqual(
+      {
+        _tag: failure._tag,
+        holder: failure.holder,
+        identifier: failure.identifier,
+        role: failure.role,
+      },
+      { _tag: "UnknownIdentifierError", holder: "record", identifier: "MISSING", role: "variable" },
+    );
+    assert.include(failure.message, JSON.stringify("MISSING"));
+    assert.include(failure.message, "session record");
   });
 });
 

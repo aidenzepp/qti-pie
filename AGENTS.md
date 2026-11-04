@@ -1,12 +1,12 @@
 # Agent instructions
 
-qti-pie (the first local checkout is still the folder `gr8des`) is a pnpm workspace. `packages/qti` implements IMS QTI
-3.0 on [grizzle](vendor/README.md), and exists first to put grizzle through a large, real data model. Read
-[docs/qti-intent.md](docs/qti-intent.md) before planning or changing the QTI model. `packages/renderer` is planned: it
-renders QTI 3.0, and its intent and rules arrive with its own goal; the qti package's intent (a grizzle test vehicle,
-delivery out of scope) does not bind it. `packages/crust` (`@qti-pie/crust`) is the shared XML reader and writer, bytes
-to an XML tree and back; its dependencies stay `effect` and `saxes`, so grizzle stays out of anything that depends on
-it. The packages read the specifications the same way: [docs/spec-readings.md](docs/spec-readings.md). Everything runs locally; there is no deploy target. The shared repository
+qti-pie (the first local checkout is still the folder `gr8des`) is a pnpm workspace of three packages. `packages/crust`
+(`@qti-pie/crust`) is the shared XML reader and writer, bytes to an XML tree and back; its dependencies stay `effect`
+and `saxes`, so grizzle stays out of anything that depends on it. `packages/pantry` (`@qti-pie/pantry`) implements IMS
+QTI 3.0 on [grizzle](vendor/README.md), and exists first to put grizzle through a large, real data model. Read
+[docs/qti-intent.md](docs/qti-intent.md) before planning or changing the QTI model. `packages/plate` (`@qti-pie/plate`)
+is planned: it renders QTI 3.0, depends on crust and never on pantry, and its intent and rules arrive with its own goal;
+pantry's intent (a grizzle test vehicle, delivery out of scope) does not bind it. The packages read the specifications the same way: [docs/spec-readings.md](docs/spec-readings.md). Everything runs locally; there is no deploy target. The shared repository
 is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (private), the remote `origin`.
 
 ## Toolchain
@@ -39,7 +39,7 @@ There are two servers of that build, both verify-full TLS only. Server A is griz
 clone creates it and `pnpm pg --coverage start` starts it. Its plpgsql_check profiler is off and `log_min_error_statement`
 is `panic`, both set in its generated `postgresql.conf`. `scripts/db.sh` and `src/db/layer.ts` read the server from the
 environment: a seat on server B exports `GRIZZLE_PG_STATE=$HOME/.local/var/grizzle/pg19rc1-coverage` and
-`GR8DES_PG_PORT=5435` beside `GR8DES_PG_DATABASE`, and with nothing exported they use server A. From `packages/qti`:
+`GR8DES_PG_PORT=5435` beside `GR8DES_PG_DATABASE`, and with nothing exported they use server A. From `packages/pantry`:
 
 ```sh
 scripts/db.sh create    # database gr8des_qti from grizzle_template, owned by grizzle_dev
@@ -103,7 +103,7 @@ purpose; never restore it. Pushing code may come later, but only on an explicit 
 
 ## Code
 
-Before writing Effect code, read `packages/qti/node_modules/effect/AGENTS.md` and follow its links. For APIs it does not
+Before writing Effect code, read `packages/pantry/node_modules/effect/AGENTS.md` and follow its links. For APIs it does not
 cover, read `node_modules/effect/src` of the installed version.
 
 Use the skills in `.agents/skills/`:
@@ -120,8 +120,8 @@ named (`func-names`).
 
 Import shape, for every package: it exposes its public parts through an `"exports"` map in `package.json` pointing at
 TypeScript source (no build step), consumers depend with `"workspace:*"`, and it imports its own files through its own
-`#<package>/*` alias from `package.json` `imports` (`#qti/*` in the qti package, `#crust/*` in crust, and `#migrations/*`
-for committed snapshots), never relative paths. Nothing outside a package reaches a file its `"exports"` map does not
+`#<package>/*` alias from `package.json` `imports` (`#pantry/*` in pantry, `#crust/*` in crust, and `#migrations/*`
+for committed snapshots), never relative paths. pantry's `"exports"` is `{}`: it exports nothing, so nothing depends on it. Nothing outside a package reaches a file its `"exports"` map does not
 list. The checks that enforce it:
 
 - The resolver (`tsc` in `pnpm check`, and Node at run time) refuses a subpath an `"exports"` map does not list, and
@@ -135,6 +135,15 @@ Read environment-backed settings with Effect `Config`, with constraints and defa
 
 Tests use `@effect/vitest` (`it.effect`, `layer`) and sit beside the code they test. A test that needs the database
 uses the local cluster through a login's `DbLayer`, never a mock.
+
+The corpus verdict file, `packages/pantry/verdicts/<corpus tarball basename>.tsv` (today `qti-examples-0a92fbb.tsv`),
+records what the importer did with each 1EdTech example zip. It is TSV with LF line ends and the columns `file`,
+`verdict` (`accepted` or `refused`) and `rule` (the refusal rule, empty when accepted), sorted by `file`, one row per
+corpus zip keyed by its tarball member. It holds no 1EdTech content, only member paths, verdicts and rule names. To
+regenerate it, run the corpus witness under a lease (`GR8DES_CORPUS=1 GR8DES_PG_DATABASE=<database> pnpm
+--fail-if-no-match --filter @qti-pie/pantry run test src/cli.corpus.db.test.ts`), then run the `cp` its failure message
+prints to adopt `packages/pantry/work/verdicts/<name>.tsv`. A stale file fails that corpus run; a renamed rule or a
+corpus zip without a row fails `src/test/verdicts.committed.test.ts`, which needs no lease.
 
 ## Planning and building with shipyard
 
@@ -228,10 +237,10 @@ resource budget for `vivi boot`.
 
 Two checkouts of `origin` work at once, each with its own Mind and its own vivi mailspace:
 
-| Checkout                                               | Package             | Feature branches          | Mailspace        |
-| ------------------------------------------------------ | ------------------- | ------------------------- | ---------------- |
-| `~/Documents/dev/workspaces/personal/gr8des`           | `packages/qti`      | `qti/<feature>/main`      | its own `.vivi/` |
-| `~/Documents/dev/workspaces/personal/qti-pie-renderer` | `packages/renderer` | `renderer/<feature>/main` | its own `.vivi/` |
+| Checkout                                               | Package           | Feature branches          | Mailspace        |
+| ------------------------------------------------------ | ----------------- | ------------------------- | ---------------- |
+| `~/Documents/dev/workspaces/personal/gr8des`           | `packages/pantry` | `qti/<feature>/main`      | its own `.vivi/` |
+| `~/Documents/dev/workspaces/personal/qti-pie-renderer` | `packages/plate`  | `renderer/<feature>/main` | its own `.vivi/` |
 
 - A Mind and its seats work only in their own checkout and its worktrees. Never run `vivi` against the other checkout,
   and never create a worktree of one checkout inside the other.

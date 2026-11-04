@@ -93,8 +93,9 @@ export class NestedInteractionDefect extends Data.TaggedError("NestedInteraction
 }
 
 /**
- * The render function for content where QTI's schema admits no interaction, a Prompt's or a
- * choice's: meeting one is a defect, since only a hand-built item can hold one.
+ * Give the render function for content where QTI's schema admits no interaction, a Prompt's or a
+ * choice's: meeting one is a defect, since only a payload that never came from `redact` can hold
+ * one.
  *
  * @param within Where the content sits.
  * @returns A render function that throws {@link NestedInteractionDefect}, naming the interaction
@@ -548,14 +549,22 @@ const withBodies = (children: readonly Node[]): readonly Node[] => {
       result.push(h("tbody", {}, rows));
     }
 
-    result.push(...gap);
+    // A gap holds one node per comment the reader dropped, so it can outgrow a spread's arguments.
+    for (const node of gap) {
+      result.push(node);
+    }
+
     rows = [];
     gap = [];
   };
 
   for (const child of children) {
     if (isRow(child)) {
-      rows.push(...gap, child);
+      for (const node of gap) {
+        rows.push(node);
+      }
+
+      rows.push(child);
       gap = [];
     } else if (rows.length > 0 && child.kind === "text" && blank.test(child.text)) {
       gap.push(child);

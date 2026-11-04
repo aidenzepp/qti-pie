@@ -461,6 +461,18 @@ const complete = Effect.fnUntraced(function* complete(
 const valuesOf = (values: StoredRecord["outcomes"], identifier: string): readonly unknown[] =>
   values[identifier]?.values.map((single) => single.value) ?? [];
 
+/**
+ * Construct a single float answer, as a posted Text Entry decodes to.
+ *
+ * @param minutes The number answered.
+ * @returns The response value.
+ */
+const floatAnswer = (minutes: number): Value => ({
+  baseType: "float",
+  cardinality: "single",
+  values: [{ baseType: "float", value: minutes }],
+});
+
 describe("the vertical witness over the fixtures", () => {
   it.effect("[I-0] open gives each fixture its verdict from spec §4.5's table", () =>
     Effect.gen(function* verdicts() {
@@ -600,4 +612,30 @@ describe("the vertical witness over the fixtures", () => {
         }),
     );
   });
+});
+
+describe("an item whose template processing sets its correct response", () => {
+  it.effect(
+    "[I-9b] template_digging opens with its template processing marked, and scores any two answers alike",
+    () =>
+      Effect.gen(function* templateDigging() {
+        const location = "QTI3_BPIG_Examples/items/template_digging.xml";
+        const { verdict } = yield* openFixture(location);
+        const accepted =
+          verdict.verdict === "accepted-with-unsupported"
+            ? verdict.accepted
+            : assert.fail(`${location} is ${verdict.verdict}, not accepted-with-unsupported`);
+        const fifteen = yield* Effect.fromResult(score(accepted, { RESPONSE: floatAnswer(15) }));
+        const twenty = yield* Effect.fromResult(score(accepted, { RESPONSE: floatAnswer(20) }));
+
+        assert.isTrue(
+          accepted.unsupported.some((entry) => entry.feature === "qti-template-processing"),
+          "the template processing is marked",
+        );
+        assert.isTrue(Option.isNone(accepted.item.processing), "no response processing runs");
+        assert.deepStrictEqual(valuesOf(fifteen.responses, "RESPONSE"), [15]);
+        assert.deepStrictEqual(valuesOf(twenty.responses, "RESPONSE"), [20]);
+        assert.deepStrictEqual(fifteen.outcomes, twenty.outcomes);
+      }),
+  );
 });

@@ -7,6 +7,7 @@ import {
   entity,
   mathmlNamespace,
   text,
+  xincludeNamespace,
   xmlNamespace,
   xmlnsNamespace,
   xsiNamespace,
@@ -19,7 +20,7 @@ import type {
 } from "#plate/document/source.ts";
 import type { BodyElement, BodyNode, Item } from "#plate/model/item.ts";
 import { Refusal, refusalRules } from "#plate/validate/refusal.ts";
-import type { Location } from "#plate/validate/refusal.ts";
+import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { acceptForTest, check, describeRefusal } from "#plate/validate/verdict.ts";
 import type { Accepted, Verdict } from "#plate/validate/verdict.ts";
@@ -130,6 +131,53 @@ const choiceInteraction = (attributes: readonly SourceAttribute[] = []): SourceE
       el("qti-simple-choice", [attr("identifier", "B")], [text("No")]),
     ],
   );
+
+/**
+ * 1EdTech's `match_correct` response-processing template (`rptemplates/match_correct.xml`), the
+ * root of its own document.
+ */
+const matchCorrect = el(
+  "qti-response-processing",
+  [],
+  [
+    el(
+      "qti-response-condition",
+      [],
+      [
+        el(
+          "qti-response-if",
+          [],
+          [
+            el(
+              "qti-match",
+              [],
+              [
+                el("qti-variable", [attr("identifier", "RESPONSE")]),
+                el("qti-correct", [attr("identifier", "RESPONSE")]),
+              ],
+            ),
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "SCORE")],
+              [el("qti-base-value", [attr("base-type", "float")], [text("1")])],
+            ),
+          ],
+        ),
+        el(
+          "qti-response-else",
+          [],
+          [
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "SCORE")],
+              [el("qti-base-value", [attr("base-type", "float")], [text("0")])],
+            ),
+          ],
+        ),
+      ],
+    ),
+  ],
+);
 
 /**
  * Check a document against the committed tables.
@@ -281,6 +329,78 @@ describe("check", () => {
         { path: `${bodyPath}/p/{${mathmlNamespace}}math`, reason: "mathml" },
       ]);
     }
+  });
+
+  it("leaves an XInclude child unchecked, with no accepted document", () => {
+    const include = el(
+      "include",
+      [attr("href", "x.xml"), attr("parse", "bogus")],
+      [el("div", [], [])],
+      xincludeNamespace,
+    );
+    const verdict = verdictOf(item([body([el("p", [], [include])])]));
+
+    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.isFalse("accepted" in verdict);
+    if (verdict.verdict === "unchecked") {
+      assert.deepStrictEqual(verdict.reasons, [
+        { path: `${bodyPath}/p/{${xincludeNamespace}}include`, reason: "xinclude" },
+      ]);
+    }
+  });
+
+  it("leaves 1EdTech's match_correct template, a processing root, unchecked", () => {
+    const verdict = verdictOf(doc("match_correct.xml", matchCorrect));
+
+    assert.strictEqual(verdict.verdict, "unchecked");
+    if (verdict.verdict === "unchecked") {
+      assert.deepStrictEqual(verdict.reasons, [
+        { path: "qti-response-processing", reason: "root" },
+      ]);
+    }
+  });
+
+  it("leaves an entity reference in a correct response's value unchecked, not refused", () => {
+    const verdict = verdictOf(
+      item([
+        response("identifier", "single", [
+          el("qti-correct-response", [], [el("qti-value", [], [entity("choiceA")])]),
+        ]),
+        body([el("p", [], [text("Hello")])]),
+      ]),
+    );
+
+    assert.strictEqual(verdict.verdict, "unchecked");
+    if (verdict.verdict === "unchecked") {
+      assert.deepStrictEqual(verdict.reasons, [
+        {
+          path: `${root}/qti-response-declaration/qti-correct-response/qti-value`,
+          reason: "entity",
+        },
+      ]);
+    }
+  });
+
+  // An interim, not a reading: reading 6 covers only a nested QTI root, and rule `5b8ee08b`
+  // validates a known QTI element inside lax wildcard content as QTI. M1-R judges this Choice in
+  // the structural walk and the prose rules (the ledger's lax-wildcard deferral).
+  it("accepts a Choice inside a custom interaction, unsupported: phase 1 skips wildcard content", () => {
+    const vendor = el(
+      "qti-choice-interaction",
+      [attr("response-identifier", "VENDOR")],
+      [
+        el("qti-simple-choice", [attr("identifier", "A")], [text("Yes")]),
+        el("qti-simple-choice", [attr("identifier", "B")], [text("No")]),
+      ],
+    );
+    const verdict = verdictOf(
+      item([
+        response("identifier", "single"),
+        body([el("qti-custom-interaction", [attr("response-identifier", "RESPONSE")], [vendor])]),
+      ]),
+    );
+
+    assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
   });
 
   it("leaves an entity reference unchecked, in text and in an attribute value", () => {
@@ -707,19 +827,147 @@ describe("acceptForTest", () => {
   });
 });
 
+/**
+ * Construct a refusal of `item.xml` at the item root.
+ *
+ * @param rule The rule it breaks.
+ * @param detail The facts its wording reads.
+ * @returns The refusal.
+ */
+const refusalOf = (rule: RefusalRule, detail: Readonly<Record<string, string>>): Refusal =>
+  new Refusal({
+    detail,
+    document: "item.xml",
+    location: { kind: "path", path: root },
+    readerRule: Option.none(),
+    rule,
+    suggestion: Option.none(),
+  });
+
+/**
+ * What remains of a Markdown sentence once its code spans are removed, and the spans' contents.
+ */
+interface CodeSpans {
+  readonly outside: string;
+  readonly spans: readonly string[];
+}
+
+/**
+ * Remove a line's code spans by CommonMark's rule (0.31.2, §6.1): a run of n backticks opens a
+ * span that the next run of exactly n backticks closes, and a run that no later run closes is
+ * literal text. A span's content loses one space at each end when it begins and ends with a space
+ * and is not all spaces, where a space is U+0020 alone: a tab or any other whitespace is content.
+ *
+ * @param markdown One line of Markdown.
+ * @returns The text outside the spans, and each span's content in order.
+ */
+const codeSpans = (markdown: string): CodeSpans => {
+  const opener = /`+/u.exec(markdown);
+
+  if (opener === null) {
+    return { outside: markdown, spans: [] };
+  }
+
+  const [fence] = opener;
+  const rest = markdown.slice(opener.index + fence.length);
+  const closer = [...rest.matchAll(/`+/gu)].find((run) => run[0].length === fence.length);
+
+  if (closer === undefined) {
+    const after = codeSpans(rest);
+
+    return {
+      outside: markdown.slice(0, opener.index + fence.length) + after.outside,
+      spans: after.spans,
+    };
+  }
+
+  const content = rest.slice(0, closer.index);
+  const padded = content.startsWith(" ") && content.endsWith(" ") && /[^ ]/u.test(content);
+  const after = codeSpans(rest.slice(closer.index + fence.length));
+
+  return {
+    outside: markdown.slice(0, opener.index) + after.outside,
+    spans: [padded ? content.slice(1, -1) : content, ...after.spans],
+  };
+};
+
+/**
+ * The gate review's value (P2-8): backticks that close a one-backtick span early, then an image
+ * and a link.
+ */
+const escapingValue =
+  "1`` ![](https://tracker.example/p.gif) [Approve item](https://evil.example) ``";
+
+/**
+ * The URI of 1EdTech's `match_correct` response processing template.
+ */
+const matchCorrectUri = "https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct";
+
 describe("describeRefusal", () => {
   it("words every rule in refusalRules", () => {
     for (const rule of refusalRules) {
-      const refusal = new Refusal({
-        detail: {},
-        document: "item.xml",
-        location: { kind: "path", path: root },
-        readerRule: Option.none(),
-        rule,
-        suggestion: Option.none(),
-      });
-
-      assert.isAbove(describeRefusal(refusal).length, 0, rule);
+      assert.isAbove(describeRefusal(refusalOf(rule, {})).length, 0, rule);
     }
+  });
+
+  it("keeps a value holding backticks inside one code span, whole", () => {
+    const { outside, spans } = codeSpans(
+      describeRefusal(refusalOf("value-type", { baseType: "integer", lexical: escapingValue })),
+    );
+
+    assert.notInclude(outside, "![");
+    assert.notInclude(outside, "](");
+    assert.include(spans, escapingValue);
+  });
+
+  it("keeps a value of spaces and other whitespace whole inside its code span", () => {
+    for (const lexical of [" \t ", "  \t\t  ", " \u00A0 ", " \t", "\t ", "\t", "   "]) {
+      const { spans } = codeSpans(
+        describeRefusal(refusalOf("value-type", { baseType: "integer", lexical })),
+      );
+
+      assert.include(spans, lexical, JSON.stringify(lexical));
+    }
+  });
+
+  it("writes a value holding a blank line on the sentence's one line", () => {
+    const sentence = describeRefusal(
+      refusalOf("value-type", {
+        baseType: "integer",
+        lexical: "1\n\n![](https://tracker.example/p.gif)\r\n",
+      }),
+    );
+
+    assert.notMatch(sentence, /[\n\r]/u);
+    assert.notInclude(codeSpans(sentence).outside, "![");
+  });
+
+  it("names the qti-map-response that needs a mapping, not a template", () => {
+    const sentence = describeRefusal(
+      refusalOf("template-requirements", {
+        child: "qti-mapping",
+        declaration: "qti-response-declaration",
+        element: "qti-map-response",
+        identifier: "RESPONSE",
+      }),
+    );
+
+    assert.include(sentence, "`qti-map-response`");
+    assert.notInclude(sentence, "response processing template");
+  });
+
+  it("names the response processing template and its URI when a template needs the declaration", () => {
+    const sentence = describeRefusal(
+      refusalOf("template-requirements", {
+        child: "qti-mapping",
+        declaration: "qti-response-declaration",
+        element: "qti-response-processing",
+        identifier: "RESPONSE",
+        template: matchCorrectUri,
+      }),
+    );
+
+    assert.include(sentence, "response processing template");
+    assert.include(sentence, matchCorrectUri);
   });
 });

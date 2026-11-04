@@ -290,8 +290,10 @@ export type Rule =
  *
  * `responses` and `outcomes` hold the declarations of modelled base types and cardinalities, in
  * document order; every other declaration is a mark. `processing` is none when the item has no
- * response processing, or when phase 1 cannot run it, which `unsupported` then marks. `unsupported`
- * lists every feature not rendered, in document order, each once per feature and path.
+ * response processing, or when phase 1 cannot run it, which `unsupported` then marks. Phase 1
+ * cannot run it on an item with template processing, which phase 1 does not run and which may set a
+ * value response processing reads, such as a correct response. `unsupported` lists every feature
+ * not rendered, in document order, each once per feature and path.
  */
 export interface Item {
   readonly body: readonly BodyNode[];
@@ -316,12 +318,23 @@ export interface Item {
  * features found so far, in document order.
  */
 interface Build {
+  /**
+   * The root's response declarations, keyed by their identifier as `identifierOf` reads it; the
+   * last one when two share an identifier. Built once, so binding an interaction does not rescan
+   * the root.
+   */
+  readonly declarations: ReadonlyMap<string, SourceElement>;
   readonly document: SourceDocument;
   /**
    * Each element's path, keyed by the element itself. A reader builds a fresh object per element,
    * so no element sits at two places in one document.
    */
   readonly paths: ReadonlyMap<SourceElement, string>;
+  /**
+   * The paths each feature in `unsupported` was recorded at, keyed by the feature, so
+   * {@link record} finds a repeat without scanning the features recorded so far.
+   */
+  readonly recorded: Map<string, Set<string>>;
   readonly unsupported: UnsupportedFeature[];
 }
 
@@ -479,15 +492,16 @@ const pathOf = (build: Build, element: SourceElement): string => {
 };
 
 /**
- * Record an unsupported feature, once per feature and path.
+ * Record an unsupported feature, once per feature and path, in constant time.
  *
  * @param build The build that collects it.
  * @param entry The feature, its path and how it is shown.
  */
 const record = (build: Build, entry: UnsupportedFeature): void => {
-  if (
-    !build.unsupported.some((held) => held.feature === entry.feature && held.path === entry.path)
-  ) {
+  const paths = build.recorded.get(entry.feature) ?? new Set<string>();
+  if (!paths.has(entry.path)) {
+    paths.add(entry.path);
+    build.recorded.set(entry.feature, paths);
     build.unsupported.push(entry);
   }
 };
@@ -673,6 +687,7 @@ const enumerated = <const T extends string>(
  *
  * @param value The integer, exact.
  * @param lexical The attribute's value with its outer whitespace gone, as the refusal names it.
+ * @returns None when the type accepts `value`, or the refusal's rule and detail.
  */
 type IntegerCheck = (
   value: bigint,
@@ -882,12 +897,7 @@ const floatAttribute = (
  */
 const boundDeclaration = (build: Build, element: SourceElement): Option.Option<SourceElement> =>
   Option.flatMap(Option.map(valueOf(element, "response-identifier"), identifierOf), (response) =>
-    Arr.findLast(
-      childrenNamed(build.document.root, "qti-response-declaration"),
-      (declaration) =>
-        Option.getOrUndefined(Option.map(valueOf(declaration, "identifier"), identifierOf)) ===
-        response,
-    ),
+    Option.fromUndefinedOr(build.declarations.get(response)),
   );
 
 /**
@@ -1683,10 +1693,10 @@ const setScore = (operand: Expression): Rule => ({
 });
 
 /**
- * A float base value.
+ * Construct a single float base value.
  *
  * @param value The number.
- * @returns The expression.
+ * @returns The `base-value` expression of `value`.
  */
 const floatValue = (value: number): Expression => ({
   kind: "base-value",
@@ -1786,7 +1796,7 @@ const processingOf = (
  * @param tree The rule tree.
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
- * @returns The identifiers the engine does not hold, none when it can run the tree.
+ * @returns The identifiers the engine does not hold, empty when it can run the tree.
  */
 const unheldIdentifiers = (
   tree: readonly Rule[],
@@ -1794,6 +1804,12 @@ const unheldIdentifiers = (
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
 ): readonly string[] => {
   const unheld = new Set<string>();
+
+  /**
+   * Add each identifier an expression and its operands read that the engine does not hold.
+   *
+   * @param operand The expression.
+   */
   const read = (operand: Expression): void => {
     switch (operand.kind) {
       case "variable": {
@@ -1829,6 +1845,13 @@ const unheldIdentifiers = (
       }
     }
   };
+
+  /**
+   * Add each identifier a rule sequence names, nested branches included, that the engine does not
+   * hold: each outcome it sets, and each identifier its expressions read.
+   *
+   * @param sequence The rules, in order.
+   */
   const run = (sequence: readonly Rule[]): void => {
     for (const each of sequence) {
       if (each.kind === "set-outcome") {
@@ -1887,15 +1910,13 @@ const runnable = (
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
 ): Option.Option<readonly Rule[]> => {
   const unheld = unheldIdentifiers(read.tree, responses, outcomes);
-  build.unsupported.splice(
-    read.at,
-    0,
-    ...unheld.map((identifier): UnsupportedFeature => ({
-      feature: `variable:${identifier}`,
-      path: read.path,
-      shown: "mark",
-    })),
-  );
+  const after = build.unsupported.splice(read.at);
+  for (const identifier of unheld) {
+    build.unsupported.push({ feature: `variable:${identifier}`, path: read.path, shown: "mark" });
+  }
+  for (const entry of after) {
+    build.unsupported.push(entry);
+  }
 
   return unheld.length === 0 ? Option.some(read.tree) : Option.none();
 };
@@ -1910,6 +1931,24 @@ const pathsOf = (document: SourceDocument): ReadonlyMap<SourceElement, string> =
   new Map(Array.from(walk(document), (visit) => [visit.element, visit.path]));
 
 /**
+ * Key a document's response declarations by their identifier, as {@link Build}'s `declarations`
+ * holds them: a later declaration replaces an earlier one with the same identifier, and one without
+ * an identifier binds nothing.
+ *
+ * @param document The document.
+ * @returns Each response declaration, keyed by its identifier as `identifierOf` reads it.
+ */
+const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceElement> =>
+  new Map(
+    childrenNamed(document.root, "qti-response-declaration").flatMap((declaration) =>
+      Option.match(valueOf(declaration, "identifier"), {
+        onNone: () => [],
+        onSome: (identifier) => [[identifierOf(identifier), declaration] as const],
+      }),
+    ),
+  );
+
+/**
  * Build the item model of a valid `qti-assessment-item`.
  *
  * The body keeps text and HTML elements as written. Choice, Text Entry and Extended Text become
@@ -1919,7 +1958,11 @@ const pathsOf = (document: SourceDocument): ReadonlyMap<SourceElement, string> =
  * not read. Response processing is a rule tree: a built-in template resolves to the tree its text
  * gives, and inline rules become their tree when every element is in the engine. The tree is kept
  * only when the engine holds every identifier it names; each one it does not is the mark
- * `variable:<identifier>` at the processing element's path, and the processing is then none.
+ * `variable:<identifier>` at the processing element's path, and the processing is then none. An
+ * item whose root has a `qti-template-processing` child keeps that element's mark and has no
+ * processing, whatever the tree: template processing may set a template variable, a default value
+ * or a correct response, and phase 1 runs none of it, so a score computed without it could be
+ * wrong.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The item, or the refusal `value-type` at the first typed value outside its lexical
@@ -1928,7 +1971,13 @@ const pathsOf = (document: SourceDocument): ReadonlyMap<SourceElement, string> =
  */
 export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> =>
   Effect.gen(function* readItem() {
-    const build: Build = { document: source, paths: pathsOf(source), unsupported: [] };
+    const build: Build = {
+      declarations: declarationsOf(source),
+      document: source,
+      paths: pathsOf(source),
+      recorded: new Map(),
+      unsupported: [],
+    };
     const { root } = source;
     markElement(build, root, false);
 
@@ -1942,7 +1991,9 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
     for (const part of elementsOf(root).filter((child) => isQti(child))) {
       if (part.local === "qti-item-body") {
         markElement(build, part, true);
-        body.push(...(yield* bodyNodes(build, part)));
+        for (const node of yield* bodyNodes(build, part)) {
+          body.push(node);
+        }
       } else if (part.local === "qti-response-processing") {
         markElement(build, part, false);
 
@@ -1974,15 +2025,18 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       }
     }
 
+    const runs = processing.pipe(
+      Option.flatMap((read) => runnable(build, read, responses, outcomes)),
+    );
+    const templated = childrenNamed(root, "qti-template-processing").length > 0;
+
     return {
       body,
       document: source.location,
       identifier,
       lang: valueOf(root, "xml:lang"),
       outcomes,
-      processing: processing.pipe(
-        Option.flatMap((read) => runnable(build, read, responses, outcomes)),
-      ),
+      processing: templated ? Option.none() : runs,
       responses,
       title,
       unsupported: build.unsupported,

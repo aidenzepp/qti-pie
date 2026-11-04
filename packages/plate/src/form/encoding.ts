@@ -6,6 +6,8 @@
  * Entries carry QTI's lexical forms, so a value's form is {@link format}'s and its reading is
  * {@link parseLexical}'s, with the allowances a posted form needs: a number is trimmed, and a
  * string's line breaks are a textarea's.
+ *
+ * @module
  */
 import { Array, Data, Option, Result } from "effect";
 import { format, parseLexical } from "#plate/model/values.ts";
@@ -60,12 +62,7 @@ export interface DecodeOptions {
 /**
  * Why posted entries do not decode to a value of their binding.
  */
-const malformedReasons = ["single-many", "number", "identifier", "file"] as const;
-
-/**
- * Why posted entries do not decode to a value of their binding.
- */
-type MalformedReason = (typeof malformedReasons)[number];
+type MalformedReason = "file" | "identifier" | "number" | "single-many";
 
 /**
  * What each {@link MalformedReason} asks the poster to change.
@@ -82,6 +79,9 @@ const remedies = {
 /**
  * The failure of decoding posted entries: they are not a value of their binding, for the reason
  * given.
+ *
+ * `entry` is the binding's entry name, and `reason` is the first of {@link decode}'s refusals the
+ * entries meet.
  */
 export class Malformed extends Data.TaggedError("Malformed")<{
   readonly entry: string;
@@ -253,7 +253,7 @@ const readInteger = (text: string, base: number): Option.Option<bigint> => {
 };
 
 /**
- * The reason a posted number is refused, whichever step refuses it.
+ * Give the reason a posted number is refused, whichever step refuses it.
  *
  * @returns `number`.
  */

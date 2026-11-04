@@ -24,6 +24,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ConfigProvider, Effect, Option, Ref, Result, Schema } from "effect";
 import type { Config } from "effect";
+import { decodeStoredFloat } from "#plate/codec/values.ts";
 import { emptyTheme, parseTheme, themeCss, themeText } from "#plate/dev/theme.ts";
 import type { Theme, ThemeRefused } from "#plate/dev/theme.ts";
 import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
@@ -769,7 +770,9 @@ const scoreText = (
 
   switch (single.baseType) {
     case "float": {
-      return Option.some(new Intl.NumberFormat(locale).format(single.value));
+      return Option.map(decodeStoredFloat(single.value), (number) =>
+        new Intl.NumberFormat(locale).format(number),
+      );
     }
     case "integer": {
       return Option.some(new Intl.NumberFormat(locale).format(BigInt(single.value)));

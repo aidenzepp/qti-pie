@@ -17,7 +17,9 @@ import type { Value } from "#plate/model/values.ts";
 import { brandRedacted } from "#plate/payload.ts";
 import type { Redacted, RedactedFields } from "#plate/payload.ts";
 import { redact, render } from "#plate/render.ts";
+import { open } from "#plate/validate/open.ts";
 import { acceptForTest } from "#plate/validate/verdict.ts";
+import type { Verdict } from "#plate/validate/verdict.ts";
 
 /**
  * Whether two types are the same type, not merely assignable to each other: `true` only when the
@@ -285,6 +287,41 @@ const failureOf = (
   return Effect.flip(Effect.fromResult(result));
 };
 
+/**
+ * The JSON form of the notice item with its body replaced by one chain of `span`s, each the only
+ * child of the one around it, with a run of text in the innermost.
+ *
+ * @param levels How many `span`s deep the chain nests.
+ * @returns The JSON form, which `encodeRedacted` never writes for a chain deeper than the reader
+ *   lets an item nest.
+ */
+const nestedSpans = (levels: number): RedactedJson => {
+  let node: RedactedJson["body"][number] = { kind: "text", text: "deep" };
+  for (let level = 0; level < levels; level += 1) {
+    node = {
+      attributes: [],
+      children: [node],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/span",
+      tag: "span",
+    };
+  }
+
+  return { ...Result.getOrThrow(encodeRedacted(redact(acceptForTest(noticeItem)))), body: [node] };
+};
+
+/**
+ * An item document whose body is one chain of `div`s, each the only child of the one around it,
+ * with a run of text in the innermost.
+ *
+ * @param levels How many `div`s deep the chain nests under `qti-item-body`.
+ * @returns The document's bytes.
+ */
+const nestedDivs = (levels: number): Uint8Array =>
+  new TextEncoder().encode(
+    `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="deep" title="deep" adaptive="false" time-dependent="false"><qti-item-body>${"<div>".repeat(levels)}deep${"</div>".repeat(levels)}</qti-item-body></qti-assessment-item>`,
+  );
+
 describe("the Schema and the model", () => {
   it("agree on the body nodes and the redacted fields", () => {
     assert.isTrue(bodyPinned);
@@ -367,6 +404,104 @@ describe("decodeRedacted", () => {
       assert.strictEqual(error._tag, "InvalidRedacted");
       assert.strictEqual(error.stage, "decode");
     }),
+  );
+});
+
+describe("decodeRedacted on a deeply nested body", () => {
+  for (const levels of [1000, 10_000]) {
+    it.effect(
+      `refuses a body nested ${String(levels)} levels: InvalidRedacted at stage decode, not a throw`,
+      () =>
+        Effect.gen(function* refusesDeepBody() {
+          const error = yield* failureOf(decodeRedacted(nestedSpans(levels)));
+
+          assert.strictEqual(error._tag, "InvalidRedacted");
+          assert.strictEqual(error.stage, "decode");
+        }),
+    );
+  }
+
+  it.effect(
+    "refuses one span past the bound, 511 spans nesting 1,025 levels, and decodes 510 spans nesting 1,023",
+    () =>
+      Effect.gen(function* boundsDepth() {
+        const error = yield* failureOf(decodeRedacted(nestedSpans(511)));
+
+        assert.strictEqual(error.stage, "decode");
+        assert.include(error.issue, "more than 1024 levels deep");
+        assert.isTrue(Result.isSuccess(decodeRedacted(nestedSpans(510))));
+      }),
+  );
+
+  it.effect(
+    "decodes the deepest body the reader lets an item nest: 254 divs under qti-item-body, 256 elements open at once",
+    () =>
+      Effect.gen(function* decodesDeepestItem() {
+        const deepest: Verdict = yield* open("deep.xml", nestedDivs(254));
+        const pastReader: Verdict = yield* open("deep.xml", nestedDivs(255));
+        const accepted =
+          deepest.verdict === "accepted"
+            ? deepest.accepted
+            : assert.fail(`The 254-deep item is ${deepest.verdict}, not accepted.`);
+        const redacted = redact(accepted);
+        // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
+        const handedOver: unknown = JSON.parse(
+          JSON.stringify(Result.getOrThrow(encodeRedacted(redacted))),
+        );
+
+        assert.deepStrictEqual(
+          pastReader.verdict === "refused"
+            ? pastReader.refusals.map((refusal) => refusal.readerRule)
+            : pastReader.verdict,
+          [Option.some("element-depth")],
+        );
+        assert.deepStrictEqual(Result.getOrThrow(decodeRedacted(handedOver)), redacted);
+      }),
+  );
+});
+
+describe("decodeRedacted on a live object", () => {
+  it.effect(
+    "refuses an object whose fields, a body nested 10,000 spans among them, it inherits: InvalidRedacted at stage decode, not a throw",
+    () =>
+      Effect.gen(function* refusesInheritedBody() {
+        const error = yield* failureOf(decodeRedacted(Object.create(nestedSpans(10_000))));
+
+        assert.strictEqual(error._tag, "InvalidRedacted");
+        assert.strictEqual(error.stage, "decode");
+      }),
+  );
+
+  it.effect(
+    "refuses an object whose body, nested 10,000 spans, is not enumerable: InvalidRedacted at stage decode, not a throw",
+    () =>
+      Effect.gen(function* refusesHiddenBody() {
+        const { body, ...fields } = nestedSpans(10_000);
+        const hidden = Object.defineProperty(fields, "body", { enumerable: false, value: body });
+        const error = yield* failureOf(decodeRedacted(hidden));
+
+        assert.strictEqual(error._tag, "InvalidRedacted");
+        assert.strictEqual(error.stage, "decode");
+      }),
+  );
+
+  it.effect(
+    "refuses an object whose body is a getter that throws: InvalidRedacted at stage decode, not a throw",
+    () =>
+      Effect.gen(function* refusesThrowingGetter() {
+        const { body: _body, ...fields } = nestedSpans(1);
+        const throwing = Object.defineProperty(fields, "body", {
+          enumerable: true,
+          get: (): never => {
+            throw new TypeError("the host's getter");
+          },
+        });
+        const error = yield* failureOf(decodeRedacted(throwing));
+
+        assert.strictEqual(error._tag, "InvalidRedacted");
+        assert.strictEqual(error.stage, "decode");
+        assert.include(error.issue, "the host's getter");
+      }),
   );
 });
 

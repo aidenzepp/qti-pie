@@ -24,6 +24,29 @@ const openCorpusFile = (location: string) =>
 const refusalsOf = (verdict: Verdict): readonly Refusal[] =>
   verdict.verdict === "refused" ? verdict.refusals : [];
 
+/**
+ * How many entries a large flat document repeats: past the roughly 120,000 arguments V8 takes in
+ * one call, so a spread of them into a call's arguments overflows the stack.
+ */
+const large = 200_000;
+
+/**
+ * A large flat document takes this long at most, in milliseconds; each opens in about 2 s here.
+ */
+const largeTimeout = 60_000;
+
+/**
+ * Write an item document as bytes, as a host reads one from storage.
+ *
+ * @param head The declarations before the body.
+ * @param body The content of `qti-item-body`.
+ * @returns The document's UTF-8 bytes.
+ */
+const itemBytes = (head: string, body: string): Uint8Array =>
+  new TextEncoder().encode(
+    `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false">${head}<qti-item-body>${body}</qti-item-body></qti-assessment-item>`,
+  );
+
 describe("validate/open.ts", () => {
   it.effect(
     "fractions_deps_2.xml is refused, fallback-configuration among its refusals with the suggestion secondary-configuration",
@@ -71,4 +94,52 @@ describe("validate/open.ts", () => {
       assert.strictEqual(verdict.document, location);
     }),
   );
+
+  describe("a large flat document", () => {
+    it.effect(
+      "a body of 200,000 hr elements is accepted",
+      () =>
+        Effect.gen(function* manyChildren() {
+          const verdict = yield* open("large.xml", itemBytes("", "<hr/>".repeat(large)));
+
+          assert.strictEqual(verdict.verdict, "accepted");
+        }),
+      largeTimeout,
+    );
+
+    it.effect(
+      "a declaration with 200,000 undeclared attributes is refused, one unknown-attribute each",
+      () =>
+        Effect.gen(function* manyAttributes() {
+          const attributes = Array.from({ length: large }, (_, index) => ` a${index}="x"`).join("");
+          const head = `<qti-outcome-declaration identifier="O" cardinality="single" base-type="float"${attributes}/>`;
+          const verdict = yield* open("large.xml", itemBytes(head, "<p>x</p>"));
+          const refusals = refusalsOf(verdict);
+          const paths = new Set(
+            refusals.map((refusal) =>
+              refusal.location.kind === "path" ? refusal.location.path : "",
+            ),
+          );
+
+          assert.strictEqual(verdict.verdict, "refused");
+          assert.lengthOf(refusals, large);
+          assert.isTrue(refusals.every((refusal) => refusal.rule === "unknown-attribute"));
+          assert.strictEqual(paths.size, large);
+        }),
+      largeTimeout,
+    );
+
+    it.effect(
+      "a video holding 200,000 sources with javascript URLs is accepted with unsupported features",
+      () =>
+        Effect.gen(function* manySources() {
+          const sources = '<source src="javascript:x"/>'.repeat(large);
+          const body = `<video controls="controls">${sources}</video>`;
+          const verdict = yield* open("large.xml", itemBytes("", body));
+
+          assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+        }),
+      largeTimeout,
+    );
+  });
 });

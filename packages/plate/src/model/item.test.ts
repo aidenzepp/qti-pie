@@ -8,6 +8,7 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
+import { runAttempt } from "#plate/engine/attempt.ts";
 import { validateChoice } from "#plate/interactions/choice.ts";
 import { message } from "#plate/messages.ts";
 import { buildItem } from "#plate/model/item.ts";
@@ -19,9 +20,12 @@ import type {
   Item,
   Rule,
   TextEntryInteraction,
+  UnsupportedFeature,
 } from "#plate/model/item.ts";
+import { fresh } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { float } from "#plate/test/fixtures.ts";
+import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 
 /**
  * The path of the item root, which every path in these tests starts with.
@@ -203,6 +207,42 @@ const bg007 = (processing: SourceElement): SourceDocument =>
   );
 
 /**
+ * A float `RESPONSE` whose correct response is 1.5, a float `SCORE` with no default, and
+ * `match_correct`.
+ *
+ * @param templating What follows the declarations, such as a `qti-template-processing`; nothing
+ *   by default.
+ * @returns The document at `items/test.xml`.
+ */
+const floatMatchCorrect = (templating: readonly SourceElement[] = []): SourceDocument =>
+  item({
+    after: [template("match_correct")],
+    body: [],
+    declarations: [
+      declaration("qti-response-declaration", "RESPONSE", "float", "single", [
+        values("qti-correct-response", "1.5"),
+      ]),
+      declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+      ...templating,
+    ],
+  });
+
+/**
+ * A `qti-template-processing` that sets `RESPONSE`'s correct response to the float 2.5.
+ */
+const setsCorrectResponse: SourceElement = el(
+  "qti-template-processing",
+  [],
+  [
+    el(
+      "qti-set-correct-response",
+      [attr("identifier", "RESPONSE")],
+      [el("qti-base-value", [attr("base-type", "float")], [text("2.5")])],
+    ),
+  ],
+);
+
+/**
  * Set `SCORE` to a float.
  *
  * @param value The number.
@@ -312,6 +352,120 @@ const childrenOf = (node: BodyNode | undefined): readonly BodyNode[] => {
 
   return node?.kind === "element" ? node.children : [];
 };
+
+/**
+ * The declarations each growth check builds first, before it builds {@link growthFactor} times as
+ * many.
+ */
+const fewerDeclarations = 1000;
+
+/**
+ * Each growth check and its control build 8,000 declarations three times and 1,000 declarations 24
+ * times. A quadratic record took about 4 s of that, and a quadratic binding about 20 s, beyond
+ * vitest's default of 5 s, and a failing check should report its ratio, not a timeout.
+ */
+const growthTimeoutMs = 60_000;
+
+/**
+ * An item with `count` template declarations and an empty body. The model does not read a template
+ * declaration, so each is one unsupported feature at its own path.
+ *
+ * @param count How many declarations the item holds.
+ * @returns The document at `items/test.xml`.
+ */
+const templated = (count: number): SourceDocument =>
+  item({
+    body: [],
+    declarations: Array.from({ length: count }, (_, index) =>
+      el("qti-template-declaration", [
+        attr("base-type", "integer"),
+        attr("cardinality", "single"),
+        attr("identifier", `T${index}`),
+      ]),
+    ),
+  });
+
+/**
+ * The growth check's control, a deliberately quadratic dedupe: the scan `buildItem` made before it
+ * kept each feature's paths in a set, which compares each entry with every entry kept so far.
+ *
+ * @param entries The features, in document order.
+ * @returns The features once per feature and path, in document order.
+ */
+const dedupeQuadratically = (
+  entries: readonly UnsupportedFeature[],
+): readonly UnsupportedFeature[] => {
+  const kept: UnsupportedFeature[] = [];
+  for (const entry of entries) {
+    if (!kept.some((held) => held.feature === entry.feature && held.path === entry.path)) {
+      kept.push(entry);
+    }
+  }
+
+  return kept;
+};
+
+/**
+ * An item with `count` string response declarations and, in one paragraph, `count` Text Entry
+ * interactions, each bound to its own declaration.
+ *
+ * @param count How many declarations and interactions the item holds.
+ * @returns The document at `items/test.xml`.
+ */
+const textEntries = (count: number): SourceDocument =>
+  item({
+    body: [
+      el(
+        "p",
+        [],
+        Array.from({ length: count }, (_, index) =>
+          el("qti-text-entry-interaction", [attr("response-identifier", `R${index}`)]),
+        ),
+      ),
+    ],
+    declarations: Array.from({ length: count }, (_, index) =>
+      declaration("qti-response-declaration", `R${index}`, "string", "single"),
+    ),
+  });
+
+/**
+ * Keep an element's element children, as the quadratic binding reads them.
+ *
+ * @param element The element.
+ * @returns Its element children, in document order.
+ */
+const elementsIn = (element: SourceElement): readonly SourceElement[] =>
+  element.children.filter((child): child is SourceElement => child.kind === "element");
+
+/**
+ * Read an attribute's value as written, as the quadratic binding reads it.
+ *
+ * @param element The element.
+ * @param name The attribute's local name.
+ * @returns The value, or `undefined` when the element does not carry it.
+ */
+const valueIn = (element: SourceElement, name: string): string | undefined =>
+  element.attributes.find((attribute) => attribute.local === name)?.value;
+
+/**
+ * The growth check's control, a deliberately quadratic binding: the scan `buildItem` made before it
+ * kept a map of declarations, which reads every child of the root once per interaction.
+ *
+ * @param source An item from {@link textEntries}.
+ * @returns Each interaction's declaration, the last one with its identifier, in document order.
+ */
+const bindQuadratically = (source: SourceDocument): readonly (SourceElement | undefined)[] =>
+  elementsIn(source.root)
+    .filter((part) => part.local === "qti-item-body")
+    .flatMap(elementsIn)
+    .flatMap(elementsIn)
+    .map((interaction) =>
+      elementsIn(source.root).findLast(
+        (part) =>
+          part.local === "qti-response-declaration" &&
+          valueIn(part, "identifier") === valueIn(interaction, "response-identifier"),
+      ),
+    );
 
 describe("buildItem", () => {
   it.effect(
@@ -1191,6 +1345,103 @@ describe("buildItem", () => {
     }),
   );
 
+  it.effect(
+    "[I-9b] runs no processing for an item with template processing, and marks qti-template-processing",
+    () =>
+      Effect.gen(function* templatedRunsNone() {
+        const built = yield* buildItem(floatMatchCorrect([setsCorrectResponse]));
+
+        assert.deepStrictEqual(built.processing, Option.none());
+        assert.deepStrictEqual(built.unsupported, [
+          {
+            feature: "qti-template-processing",
+            path: `${root}/qti-template-processing`,
+            shown: "mark",
+          },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-9b] gives equal outcomes for the correct value and another on an item with template processing",
+    () =>
+      Effect.gen(function* templatedScoresNone() {
+        const built = yield* buildItem(floatMatchCorrect([setsCorrectResponse]));
+        const correct = yield* Effect.fromResult(
+          runAttempt(built, fresh(built, "i"), { RESPONSE: float(1.5) }),
+        );
+        const other = yield* Effect.fromResult(
+          runAttempt(built, fresh(built, "i"), { RESPONSE: float(2.5) }),
+        );
+
+        assert.deepStrictEqual(correct.outcomes, other.outcomes);
+      }),
+  );
+
+  it.effect(
+    "[I-9b] keeps match_correct for the same item without template processing, and scores 1",
+    () =>
+      Effect.gen(function* untemplatedRuns() {
+        const built = yield* buildItem(floatMatchCorrect());
+        const correct = yield* Effect.fromResult(
+          runAttempt(built, fresh(built, "i"), { RESPONSE: float(1.5) }),
+        );
+        const other = yield* Effect.fromResult(
+          runAttempt(built, fresh(built, "i"), { RESPONSE: float(2.5) }),
+        );
+
+        assert.deepStrictEqual(built.processing, Option.some(matchCorrect));
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.deepStrictEqual(correct.outcomes["SCORE"], float(1));
+        assert.deepStrictEqual(other.outcomes["SCORE"], float(0));
+      }),
+  );
+
+  it.effect(
+    "[I-9b] runs a template URI padded with XML whitespace as the built-in it names, with no mark",
+    () =>
+      Effect.gen(function* runsPaddedTemplate() {
+        const built = yield* buildItem(
+          item({
+            after: [
+              el("qti-response-processing", [
+                attr(
+                  "template",
+                  " \n\thttps://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct\n ",
+                ),
+              ]),
+            ],
+            body: [
+              el(
+                "qti-choice-interaction",
+                [attr("max-choices", "1"), attr("response-identifier", "RESPONSE")],
+                [choice("A", "Ant"), choice("B", "Bee")],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "identifier", "single", [
+                values("qti-correct-response", "A"),
+              ]),
+              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+            ],
+          }),
+        );
+        const after = yield* Effect.fromResult(
+          runAttempt(built, fresh(built, "i"), {
+            RESPONSE: {
+              baseType: "identifier",
+              cardinality: "single",
+              values: [{ baseType: "identifier", value: "A" }],
+            },
+          }),
+        );
+
+        assert.deepStrictEqual(built.processing, Option.some(matchCorrect));
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.deepStrictEqual(after.outcomes["SCORE"], float(1));
+      }),
+  );
+
   it.effect('[I-1] [Q-2] binds response-identifier=" RESPONSE " to the declaration RESPONSE', () =>
     Effect.gen(function* bindsPaddedReference() {
       const built = yield* buildItem(
@@ -1395,5 +1646,112 @@ describe("buildItem", () => {
         assert.isBelow(Duration.toMillis(elapsed), 200, `${name}: ${Duration.format(elapsed)}`);
       }
     }),
+  );
+
+  it.effect(
+    "[I-0] records 8,000 unsupported declarations, 8 times as many in under 32 times the time",
+    () =>
+      Effect.gen(function* recordsInConstantTime() {
+        const fewer = templated(fewerDeclarations);
+        const more = templated(fewerDeclarations * growthFactor);
+        const built = yield* buildItem(more);
+        assert.strictEqual(built.unsupported.length, fewerDeclarations * growthFactor);
+
+        const growth = yield* growthRatio(
+          () => {
+            Effect.runSync(buildItem(fewer));
+          },
+          () => {
+            Effect.runSync(buildItem(more));
+          },
+        );
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the declarations took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
+
+  it.effect(
+    "[I-0] binds 8,000 Text Entries to 8,000 declarations, 8 times as many in under 32 times the time",
+    () =>
+      Effect.gen(function* bindsInConstantTime() {
+        const fewer = textEntries(fewerDeclarations);
+        const more = textEntries(fewerDeclarations * growthFactor);
+        const built = yield* buildItem(more);
+        const entries = childrenOf(built.body[0]);
+        assert.strictEqual(entries.length, fewerDeclarations * growthFactor);
+        assert.isTrue(entries.every((node) => node.kind === "text-entry"));
+        assert.deepStrictEqual(built.unsupported, []);
+
+        const growth = yield* growthRatio(
+          () => {
+            Effect.runSync(buildItem(fewer));
+          },
+          () => {
+            Effect.runSync(buildItem(more));
+          },
+        );
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the interactions took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
+
+  it.effect(
+    "control: a quadratic binding of the same interactions fails the growth check",
+    () =>
+      Effect.gen(function* quadraticBindingControl() {
+        const fewer = textEntries(fewerDeclarations);
+        const more = textEntries(fewerDeclarations * growthFactor);
+        const bound = bindQuadratically(fewer);
+        assert.strictEqual(bound.length, fewerDeclarations);
+        assert.isTrue(bound.every((found) => found !== undefined));
+
+        const growth = yield* growthRatio(
+          () => {
+            bindQuadratically(fewer);
+          },
+          () => {
+            bindQuadratically(more);
+          },
+        );
+        assert.isAtLeast(
+          growth,
+          growthLimit,
+          `8 times the interactions took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
+
+  it.effect(
+    "control: a quadratic dedupe of the same features fails the growth check",
+    () =>
+      Effect.gen(function* quadraticControl() {
+        const fewer = (yield* buildItem(templated(fewerDeclarations))).unsupported;
+        const more = (yield* buildItem(templated(fewerDeclarations * growthFactor))).unsupported;
+        assert.deepStrictEqual(dedupeQuadratically([...fewer, ...fewer]), fewer);
+
+        const growth = yield* growthRatio(
+          () => {
+            dedupeQuadratically(fewer);
+          },
+          () => {
+            dedupeQuadratically(more);
+          },
+        );
+        assert.isAtLeast(
+          growth,
+          growthLimit,
+          `8 times the features took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
   );
 });

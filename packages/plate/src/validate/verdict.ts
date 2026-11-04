@@ -20,6 +20,7 @@ import {
   qtiNamespace,
   ssmlNamespace,
   walk,
+  xincludeNamespace,
   xmlNamespace,
   xmlnsNamespace,
   xsiNamespace,
@@ -42,12 +43,13 @@ import type { ElementTable, Tables } from "#plate/validate/xsd.ts";
 
 /**
  * Why a valid document is left unchecked: it holds MathML (reading 2) or SSML (reading 3), whose
- * validity phase 1 cannot judge, an entity reference the reader kept unexpanded, or a root that is
- * not `qti-assessment-item`. `path` is the element or attribute at issue.
+ * validity phase 1 cannot judge, an XInclude `include`, whose inclusion phase 1 neither performs
+ * nor judges, an entity reference the reader kept unexpanded, or a root that is not
+ * `qti-assessment-item`. `path` is the element or attribute at issue.
  */
 export interface UncheckedReason {
   readonly path: string;
-  readonly reason: "entity" | "mathml" | "root" | "ssml";
+  readonly reason: "entity" | "mathml" | "root" | "ssml" | "xinclude";
 }
 
 /**
@@ -368,8 +370,12 @@ const placeNodes = (
   for (const node of nodes) {
     // oxlint-disable-next-line eslint/no-use-before-define -- `placeNodes` and `placeNode` are mutually recursive, as body nodes nest; the call runs only after both are defined.
     const result = placeNode(node, drops, placed, inMedia);
-    out.push(...result.nodes);
-    lifted.push(...result.lifted);
+    for (const placedNode of result.nodes) {
+      out.push(placedNode);
+    }
+    for (const notice of result.lifted) {
+      lifted.push(notice);
+    }
   }
 
   return { lifted, nodes: out };
@@ -521,9 +527,9 @@ const complete = (built: Item, secured: Secured): Item => {
 
 /**
  * Collect every reason phase 1 cannot judge a document: a root other than `qti-assessment-item`,
- * then in document order each MathML or SSML element whose parent is outside its namespace, each
- * attribute whose value holds an unexpanded entity reference, and each element with one among its
- * children.
+ * then in document order each MathML, SSML or XInclude element whose parent is outside its
+ * namespace, each attribute whose value holds an unexpanded entity reference, and each element
+ * with one among its children.
  *
  * @param source A document whose root is in QTI's namespace.
  * @returns The reasons, empty when phase 1 can judge all of it.
@@ -531,6 +537,13 @@ const complete = (built: Item, secured: Secured): Item => {
 const uncheckedReasons = (source: SourceDocument): readonly UncheckedReason[] => {
   const reasons: UncheckedReason[] = [];
   for (const { element, parent, path } of walk(source)) {
+    /**
+     * Report whether the element starts an island of a namespace: it is in that namespace and its
+     * parent, if any, is not.
+     *
+     * @param namespace The island's namespace.
+     * @returns Whether the element is the island's outermost element.
+     */
     const island = (namespace: string): boolean =>
       element.namespace === namespace &&
       !Option.exists(parent, (container) => container.namespace === namespace);
@@ -544,6 +557,10 @@ const uncheckedReasons = (source: SourceDocument): readonly UncheckedReason[] =>
 
     if (island(ssmlNamespace)) {
       reasons.push({ path, reason: "ssml" });
+    }
+
+    if (island(xincludeNamespace)) {
+      reasons.push({ path, reason: "xinclude" });
     }
 
     for (const attribute of element.attributes) {
@@ -582,8 +599,8 @@ const notQtiRoot = (source: SourceDocument): Refusal =>
  * 1. A root outside QTI's namespace is `refused`, with `not-qti-root` alone.
  * 2. The structural validator's refusals and the prose rules', together and in that order, with no
  *    short-circuit: any one makes the document `refused`, with all of them.
- * 3. A document holding MathML, SSML, an unexpanded entity reference, or a root other than
- *    `qti-assessment-item` is `unchecked`, with every reason. It is never rendered.
+ * 3. A document holding MathML, SSML, an XInclude `include`, an unexpanded entity reference, or a root
+ *    other than `qti-assessment-item` is `unchecked`, with every reason. It is never rendered.
  * 4. Otherwise each attribute only a wildcard admitted is removed and marked `attribute:<name>` (E3),
  *    and each URL attribute goes through `url.ts`: a kept value is written in its parsed form, and
  *    a dropped one goes, with its notice beside its element.
@@ -639,9 +656,49 @@ export const acceptForTest = (item: Item): Accepted =>
   accept({ document: item.document, item, unsupported: item.unsupported });
 
 /**
+ * Write text as a Markdown code span that holds it exactly (CommonMark 0.31.2, §6.1), so that a
+ * refusal's facts, which are author text, stay text: no backtick in them closes the span early.
+ *
+ * - The fence is one backtick longer than the longest run of backticks in the text, so no run inside
+ *   matches it.
+ * - One space pads each side when the text begins or ends with a backtick, or begins and ends with a
+ *   space without being all spaces, where a space is U+0020 alone: a tab or any other whitespace is
+ *   content. A renderer removes one space from each side of such a span and of no other, so the
+ *   text it shows is the text given.
+ * - Each line ending is written as a space, which is what a renderer shows for one inside a span. A
+ *   blank line would end the paragraph and leave the span open, with the text after it live.
+ * - Empty text, which no span holds, is written as a span of one space.
+ *
+ * @param text The text, as the detail holds it.
+ * @returns The code span.
+ */
+const code = (text: string): string => {
+  const line = text.replaceAll(/\r\n|\r|\n/gu, " ");
+
+  if (line === "") {
+    return "` `";
+  }
+
+  let longest = 0;
+
+  for (const [run] of line.matchAll(/`+/gu)) {
+    longest = Math.max(longest, run.length);
+  }
+
+  const fence = "`".repeat(longest + 1);
+  const padded =
+    line.startsWith("`") ||
+    line.endsWith("`") ||
+    (line.startsWith(" ") && line.endsWith(" ") && /[^ ]/u.test(line));
+  const inner = padded ? ` ${line} ` : line;
+
+  return `${fence}${inner}${fence}`;
+};
+
+/**
  * QTI 3.0's namespace as a sentence names it.
  */
-const qtiNamespaceText = `\`${qtiNamespace}\``;
+const qtiNamespaceText = code(qtiNamespace);
 
 /**
  * Read one fact of a refusal's detail.
@@ -710,7 +767,7 @@ const opening = (refusal: Refusal): string => {
  * @returns The sentence.
  */
 const sentence = (refusal: Refusal, wrong: string, change: string): string =>
-  `${opening(refusal)} ${wrong} Rule \`${refusal.rule}\`. To make it valid: ${change}.`;
+  `${opening(refusal)} ${wrong} Rule ${code(refusal.rule)}. To make it valid: ${change}.`;
 
 /**
  * Write a refusal of a file that is not a QTI document, in spec §4.6's shape.
@@ -721,7 +778,7 @@ const sentence = (refusal: Refusal, wrong: string, change: string): string =>
  * @returns The sentence.
  */
 const notQti = (refusal: Refusal, wrong: string, change: string): string =>
-  `**${refusal.document}: refused, not a QTI document.** ${wrong} Rule \`${refusal.rule}\`: a document is well-formed XML whose root is a QTI 3.0 element. To make it valid: ${change}.`;
+  `**${refusal.document}: refused, not a QTI document.** ${wrong} Rule ${code(refusal.rule)}: a document is well-formed XML whose root is a QTI 3.0 element. To make it valid: ${change}.`;
 
 /**
  * Name a base type in a sentence, `untyped` for none.
@@ -729,8 +786,7 @@ const notQti = (refusal: Refusal, wrong: string, change: string): string =>
  * @param baseType The base type as the detail writes it.
  * @returns The base type in code, or `untyped`.
  */
-const baseTypeText = (baseType: string): string =>
-  baseType === "" ? "untyped" : `\`${baseType}\``;
+const baseTypeText = (baseType: string): string => (baseType === "" ? "untyped" : code(baseType));
 
 /**
  * Word an `undeclared-variable` refusal's kind of variable.
@@ -757,14 +813,14 @@ const expressionType = (refusal: Refusal): string => {
     onNone: () =>
       sentence(
         refusal,
-        `\`${element}\` sets \`${identifier}\`, a ${fact(refusal, "outcomeCardinality", "")} ${baseTypeText(fact(refusal, "outcomeBaseType", ""))} outcome, to a ${expression} value${citation(refusal)}.`,
-        `give the expression the base type and cardinality of \`${identifier}\`, or change its declaration`,
+        `${code(element)} sets ${code(identifier)}, a ${fact(refusal, "outcomeCardinality", "")} ${baseTypeText(fact(refusal, "outcomeBaseType", ""))} outcome, to a ${expression} value${citation(refusal)}.`,
+        `give the expression the base type and cardinality of ${code(identifier)}, or change its declaration`,
       ),
     onSome: (table) =>
       sentence(
         refusal,
-        `\`${element}\` looks \`${identifier}\` up in its \`${table}\` with a ${expression} value, which that table cannot read${citation(refusal)}.`,
-        `look up a value of the base type \`${table}\` reads, or use the other lookup table`,
+        `${code(element)} looks ${code(identifier)} up in its ${code(table)} with a ${expression} value, which that table cannot read${citation(refusal)}.`,
+        `look up a value of the base type ${code(table)} reads, or use the other lookup table`,
       ),
   });
 };
@@ -782,7 +838,10 @@ const named = (refusal: Refusal) => ({
 });
 
 /**
- * Word the `template-requirements` refusal: the declaration a standard template needs.
+ * Word the `template-requirements` refusal: the declaration a standard template, an inline
+ * `qti-map-response` or a `qti-lookup-outcome-value` needs. The sentence names the template when
+ * the detail has one, and otherwise the element that needs the declaration, so it never blames a
+ * template the item may not have.
  *
  * @param refusal The refusal.
  * @returns The sentence.
@@ -790,19 +849,25 @@ const named = (refusal: Refusal) => ({
 const templateRequirements = (refusal: Refusal): string => {
   const needs = [
     ...Option.toArray(
-      Option.map(optionalFact(refusal, "baseType"), (type) => `of base type \`${type}\``),
+      Option.map(optionalFact(refusal, "baseType"), (type) => `of base type ${code(type)}`),
     ),
-    ...Option.toArray(Option.map(optionalFact(refusal, "child"), (child) => `with a \`${child}\``)),
+    ...Option.toArray(
+      Option.map(optionalFact(refusal, "child"), (child) => `with a ${code(child)}`),
+    ),
   ].join(" ");
-  const declared = `\`${fact(refusal, "identifier", "")}\` in a \`${fact(refusal, "declaration", "declaration")}\`${needs === "" ? "" : ` ${needs}`}`;
-  const template = Option.match(optionalFact(refusal, "template"), {
-    onNone: () => "The response processing template",
-    onSome: (uri) => `The response processing template \`${uri}\``,
+  const declared = `${code(fact(refusal, "identifier", ""))} in a ${code(fact(refusal, "declaration", "declaration"))}${needs === "" ? "" : ` ${needs}`}`;
+  const needer = Option.match(optionalFact(refusal, "template"), {
+    onNone: () =>
+      Option.match(optionalFact(refusal, "element"), {
+        onNone: () => "The element",
+        onSome: code,
+      }),
+    onSome: (uri) => `The response processing template ${code(uri)}`,
   });
 
   return sentence(
     refusal,
-    `${template} needs ${declared}, and the item has none.`,
+    `${needer} needs ${declared}, and the item has none.`,
     `declare ${declared}`,
   );
 };
@@ -817,7 +882,7 @@ const wordings = {
 
     return sentence(
       refusal,
-      `\`${element}\`'s attribute \`${attribute}\` is \`${fact(refusal, "value", "")}\`, which is not ${Option.getOrElse(expected, () => "a value its type allows")}${cite}.`,
+      `${code(element)}'s attribute ${code(attribute)} is ${code(fact(refusal, "value", ""))}, which is not ${Option.getOrElse(expected, () => "a value its type allows")}${cite}.`,
       `write a value that is ${Option.getOrElse(expected, () => "of the attribute's type")}`,
     );
   },
@@ -827,8 +892,8 @@ const wordings = {
 
     return sentence(
       refusal,
-      `\`${interaction}\` cannot be bound to \`${response}\`, a ${fact(refusal, "cardinality", "")} response of base type ${baseTypeText(fact(refusal, "baseType", ""))}.`,
-      `bind \`${interaction}\` to a response of a base type and cardinality it accepts, or change the declaration of \`${response}\``,
+      `${code(interaction)} cannot be bound to ${code(response)}, a ${fact(refusal, "cardinality", "")} response of base type ${baseTypeText(fact(refusal, "baseType", ""))}.`,
+      `bind ${code(interaction)} to a response of a base type and cardinality it accepts, or change the declaration of ${code(response)}`,
     );
   },
   "child-count": (refusal) => {
@@ -842,8 +907,8 @@ const wordings = {
 
     return sentence(
       refusal,
-      `\`${element}\` must hold ${required} ${child}${source}.`,
-      `give \`${element}\` ${required} ${child}`,
+      `${code(element)} must hold ${required} ${child}${source}.`,
+      `give ${code(element)} ${required} ${child}`,
     );
   },
   "count-range": (refusal) => {
@@ -853,7 +918,7 @@ const wordings = {
 
     return sentence(
       refusal,
-      `\`${attribute}\` is ${fact(refusal, "lexical", "")}, outside the signed 64-bit range a count holds, ${least} to ${greatest}${cite}.`,
+      `${code(attribute)} is ${fact(refusal, "lexical", "")}, outside the signed 64-bit range a count holds, ${least} to ${greatest}${cite}.`,
       `write a value from ${least} to ${greatest}`,
     );
   },
@@ -862,8 +927,8 @@ const wordings = {
 
     return sentence(
       refusal,
-      `The identifier \`${identifier}\` is given more than once where each must be unique.`,
-      `give each one its own identifier in place of \`${identifier}\``,
+      `The identifier ${code(identifier)} is given more than once where each must be unique.`,
+      `give each one its own identifier in place of ${code(identifier)}`,
     );
   },
   "expression-type": expressionType,
@@ -872,8 +937,8 @@ const wordings = {
 
     return sentence(
       refusal,
-      `\`${element}\` is allowed only ${fact(refusal, "requires", "elsewhere")}${cite}.`,
-      `move \`${element}\` where it is allowed, or remove it`,
+      `${code(element)} is allowed only ${fact(refusal, "requires", "elsewhere")}${cite}.`,
+      `move ${code(element)} where it is allowed, or remove it`,
     );
   },
   "missing-attribute": (refusal) => {
@@ -881,17 +946,17 @@ const wordings = {
 
     return sentence(
       refusal,
-      `\`${element}\` must carry the attribute \`${attribute}\`, and it has none.`,
-      `add \`${attribute}\` to \`${element}\``,
+      `${code(element)} must carry the attribute ${code(attribute)}, and it has none.`,
+      `add ${code(attribute)} to ${code(element)}`,
     );
   },
   "not-qti-root": (refusal) => {
     const namespace = fact(refusal, "namespace", "");
-    const where = namespace === "" ? "in no namespace" : `in the namespace \`${namespace}\``;
+    const where = namespace === "" ? "in no namespace" : `in the namespace ${code(namespace)}`;
 
     return notQti(
       refusal,
-      `The root element \`${named(refusal).element}\` is ${where}, not QTI 3.0's ${qtiNamespaceText}.`,
+      `The root element ${code(named(refusal).element)} is ${where}, not QTI 3.0's ${qtiNamespaceText}.`,
       "replace this file with the QTI document it was meant to be, or put its root in QTI 3.0's namespace",
     );
   },
@@ -912,14 +977,14 @@ const wordings = {
 
     return sentence(
       refusal,
-      `\`${element}\`'s attribute \`${attribute}\` is \`${fact(refusal, "value", "")}\`, with whitespace at its start or end, which this value may not carry${cite}.`,
+      `${code(element)}'s attribute ${code(attribute)} is ${code(fact(refusal, "value", ""))}, with whitespace at its start or end, which this value may not carry${cite}.`,
       "remove the whitespace around the value",
     );
   },
   "reader-refused": (refusal) => {
     const rule = Option.match(refusal.readerRule, {
       onNone: () => "",
-      onSome: (name) => ` (reader rule \`${name}\`)`,
+      onSome: (name) => ` (reader rule ${code(name)})`,
     });
 
     return notQti(
@@ -934,8 +999,8 @@ const wordings = {
 
     return sentence(
       refusal,
-      `\`${element}\` holds text, and QTI 3.0's schema allows it none.`,
-      `remove the text from \`${element}\`, or wrap it in an element that allows text`,
+      `${code(element)} holds text, and QTI 3.0's schema allows it none.`,
+      `remove the text from ${code(element)}, or wrap it in an element that allows text`,
     );
   },
   "undeclared-response": (refusal) => {
@@ -943,8 +1008,8 @@ const wordings = {
 
     return sentence(
       refusal,
-      `The interaction is bound to the response \`${response}\`, which the item does not declare.`,
-      `declare \`${response}\` in a \`qti-response-declaration\`, or bind the interaction to a declared response`,
+      `The interaction is bound to the response ${code(response)}, which the item does not declare.`,
+      `declare ${code(response)} in a \`qti-response-declaration\`, or bind the interaction to a declared response`,
     );
   },
   "undeclared-variable": (refusal) => {
@@ -953,8 +1018,8 @@ const wordings = {
 
     return sentence(
       refusal,
-      `\`${named(refusal).element}\` names \`${identifier}\`, and the item declares no ${kind} \`${identifier}\`.`,
-      `declare \`${identifier}\`, or name a declared ${kind}`,
+      `${code(named(refusal).element)} names ${code(identifier)}, and the item declares no ${kind} ${code(identifier)}.`,
+      `declare ${code(identifier)}, or name a declared ${kind}`,
     );
   },
   "unknown-attribute": (refusal) => {
@@ -964,13 +1029,13 @@ const wordings = {
       onNone: () =>
         sentence(
           refusal,
-          `\`${element}\` has no attribute \`${attribute}\`${cite}.`,
+          `${code(element)} has no attribute ${code(attribute)}${cite}.`,
           "remove the attribute",
         ),
       onSome: (suggestion) =>
         sentence(
           refusal,
-          `\`${element}\` has no attribute \`${attribute}\`; QTI 3.0's schema names it \`${suggestion}\`${cite}.`,
+          `${code(element)} has no attribute ${code(attribute)}; QTI 3.0's schema names it ${code(suggestion)}${cite}.`,
           "rename the attribute",
         ),
     });
@@ -982,14 +1047,14 @@ const wordings = {
       onNone: () =>
         sentence(
           refusal,
-          `QTI 3.0's schema declares no root element \`${element}\`.`,
+          `QTI 3.0's schema declares no root element ${code(element)}.`,
           "use a QTI 3.0 element as the root",
         ),
       onSome: (parent) =>
         sentence(
           refusal,
-          `\`${parent}\` may not hold \`${element}\`; QTI 3.0's schema allows no such child there.`,
-          `remove \`${element}\`, or use an element \`${parent}\` allows`,
+          `${code(parent)} may not hold ${code(element)}; QTI 3.0's schema allows no such child there.`,
+          `remove ${code(element)}, or use an element ${code(parent)} allows`,
         ),
     });
   },
@@ -998,7 +1063,7 @@ const wordings = {
 
     return sentence(
       refusal,
-      `\`${fact(refusal, "lexical", "")}\` is not a value of base type ${baseType}.`,
+      `${code(fact(refusal, "lexical", ""))} is not a value of base type ${baseType}.`,
       `write a value of base type ${baseType}`,
     );
   },

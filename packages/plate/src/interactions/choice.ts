@@ -8,7 +8,7 @@
  * the embedder's replacement when there is one (ruling `fb4fe744` S1, S2). The Controls are native
  * radios or checkboxes, so the browser's own keyboard map applies (§4.8): the radios form one
  * native group by their shared `name`. The Prompt and each choice's content go through the body's
- * {@link emitNodes}, so they get the body's id scoping, heading shift and placeholders.
+ * {@link emitNodes}, so they get the body's id scoping, heading shift, URLs and Notices.
  *
  * {@link validateChoice} checks a value the caller decoded, in two tiers: tier (a) always, tier (b)
  * only under `validateResponses` (D5).
@@ -18,7 +18,7 @@
 import { Option, Result, pipe } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
 import { emitNodes, nestedInteraction } from "#plate/emit/body.ts";
-import { when } from "#plate/emit/node.ts";
+import { h, when } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { promptMarkupFor, rowFor, scopedId } from "#plate/emit/parts.ts";
 import type { PartOf, PartRow, PromptMarkup, RowContext } from "#plate/emit/parts.ts";
@@ -123,7 +123,7 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
  * Every id is `scopedId(instance, response, part, index)`.
  *
  * @param interaction The Choice.
- * @param payload The payload, which gives the instance and `finished`.
+ * @param payload The payload, which gives the instance, the mode and `finished`.
  * @param rows The rows of the Choice's parts as placed.
  * @param markup The Prompt's markup, none when there is no Prompt.
  * @returns The attributes of every part.
@@ -185,6 +185,39 @@ const connect = (
 };
 
 /**
+ * Write every `label` element in a node of a choice's emitted content, at any depth, as a `span`
+ * with the same children and the same attributes, `for` dropped.
+ *
+ * Spec §4.3: a `label` never nests a `label`. The XSD admits `label` in `qti-simple-choice`, and a
+ * choice's content sits inside its Label part, a `label` by default, which already labels the
+ * choice's Control; so an authored `label` there is written as a `span`, and loses `for`, which is
+ * not an attribute of `span`. A subtree that holds no `label` is kept by identity.
+ *
+ * @param node A node of the choice's content as {@link emitNodes} gave it.
+ * @returns The node with no `label` element at or below it.
+ */
+const labelAsSpan = (node: Node): Node => {
+  if (node.kind === "text") {
+    return node;
+  }
+
+  const rewritten = node.children.map(labelAsSpan);
+  const children = rewritten.every((child, index) => child === node.children[index])
+    ? node.children
+    : rewritten;
+
+  if (node.tag === "label") {
+    return h(
+      "span",
+      Object.fromEntries(Object.entries(node.attrs).filter(([name]) => name !== "for")),
+      children,
+    );
+  }
+
+  return children === node.children ? node : h(node.tag, node.attrs, children);
+};
+
+/**
  * Render a Choice as spec §4.3 structures it: a `fieldset` Root holding the Prompt, when there is
  * one, then a `ul` of Choices, each `li > [Control, Label > [Indicator, …choice content]]`.
  *
@@ -192,14 +225,17 @@ const connect = (
  * content is the Root's first child, a `legend`; any other is a `qti-prompt` the Root names through
  * `aria-labelledby`. Choices render in document order, whatever `shuffle` says. Each part goes
  * through `applyPart` with its replacement from `state.parts`, so every swap holds I1 to I4. The
- * Prompt's and each choice's content go through {@link emitNodes}, as the body's do.
+ * Prompt's and each choice's content go through {@link emitNodes}, as the body's do; then every
+ * `label` in a choice's content is written as a `span` ({@link labelAsSpan}) before the Label part
+ * takes it, so a replacement Label is handed the rewritten children.
  *
  * @param interaction The Choice's payload.
  * @param payload The payload of the whole render, which gives the instance and `finished`.
  * @param state The locale, the heading level and the resolved part overrides.
  * @returns The Choice Root, or {@link PartSwapRefused} when a replacement breaks the swap
- *   invariant. It throws `NestedInteractionDefect` when the content holds an interaction,
- *   which QTI admits nowhere there.
+ *   invariant.
+ * @throws {NestedInteractionDefect} When the Prompt or a choice's content holds an interaction,
+ *   which QTI admits nowhere there ({@link nestedInteraction}).
  */
 export const renderChoice = (
   interaction: ChoicePayload,
@@ -224,7 +260,7 @@ export const renderChoice = (
     const choices = yield* pipe(
       props.items.map((item) =>
         Result.gen(function* choiceItem() {
-          const nodes = yield* emitContent(item.content);
+          const nodes = (yield* emitContent(item.content)).map(labelAsSpan);
           const indicator = yield* applyPart(
             rows.indicator,
             item.indicator,
@@ -272,7 +308,7 @@ export const renderChoice = (
  *
  * The caller decodes the posted entries with `decode`, under the entry name its form gave the
  * Controls and the Choice's binding (identifiers of its cardinality), and passes the value, or the
- * {@link Malformed} `decode` gave. The entry name so stays the caller's, while the messages and the
+ * {@link Malformed} `decode` gave. So the entry name stays the caller's, while the messages and the
  * author's overrides stay here.
  *
  * - A {@link Malformed} input: `atMost` 1 when a single response was posted more than once, else
