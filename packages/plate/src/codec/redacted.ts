@@ -14,7 +14,7 @@
  * @see `redactItem` in `#plate/payload.ts`, the allowlist that decides which fields a `Redacted`
  *   holds.
  */
-import { Data, Result, Schema } from "effect";
+import { Data, Predicate, Result, Schema } from "effect";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -270,7 +270,8 @@ const redactedRemedies: Readonly<Record<RedactedStage, (issue: string) => string
  */
 export class InvalidRedacted extends Data.TaggedError("InvalidRedacted")<{
   /**
-   * What the Schema found wrong, with the path to it.
+   * What the Schema found wrong, with the path to it, or how deep the input nests past
+   * {@link maximumDepth}.
    */
   readonly issue: string;
   /**
@@ -301,18 +302,69 @@ export const encodeRedacted = (item: Redacted): Result.Result<RedactedJson, Inva
   );
 
 /**
+ * The most levels of arrays and objects the JSON form may nest, the outermost value counted as
+ * the first.
+ *
+ * `encodeRedacted` never writes more than 511 levels for an item `redact` produced. The reader
+ * opens at most 256 elements at once (`ELEMENT_DEPTH` in `@qti-pie/crust/read.ts`), so at most 254
+ * nest below `qti-item-body`; each adds at most two levels to the outermost object's one, the array
+ * that holds it and its own object, and a run of text or an attribute inside the deepest adds two
+ * more. Schema's decode recurses through every level and overflows Node's default stack from about
+ * 1,540 levels, on a chain of `span`s in a fresh process. The bound sits between, about twice the
+ * deepest item, so a body shape that spends four levels per element still fits.
+ */
+const maximumDepth = 1024;
+
+/**
+ * Whether a value nests arrays and objects more than {@link maximumDepth} levels deep, measured
+ * with a list of pending values rather than by recursion, so the measure cannot overflow the stack
+ * it guards, and stopping at the first value past the bound, so a cycle ends it too.
+ *
+ * @param input The value as the host handed it over.
+ * @returns Whether some array or object in it sits more than `maximumDepth` levels down.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- The JSON form arrives from the host as any value, and this measures it before the Schema reads it.
+const nestsTooDeep = (input: unknown): boolean => {
+  const pending: { readonly depth: number; readonly value: unknown }[] = [
+    { depth: 1, value: input },
+  ];
+
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    if (Predicate.isObjectOrArray(next.value)) {
+      if (next.depth > maximumDepth) {
+        return true;
+      }
+
+      for (const value of Object.values(next.value)) {
+        pending.push({ depth: next.depth + 1, value });
+      }
+    }
+  }
+
+  return false;
+};
+
+/**
  * Check the JSON form of a redacted item and make the {@link Redacted} `render` takes.
  *
  * @param input The JSON form as the host handed it over: the {@link RedactedJson}
  *   {@link encodeRedacted} wrote, after any JSON round trip. A count written as a JSON number is
- *   refused.
+ *   refused, and so is input that nests arrays and objects more than {@link maximumDepth} levels
+ *   deep, which no item the reader accepts reaches.
  * @returns The redacted item, branded only after every field passed {@link RedactedSchema}, or
  *   {@link InvalidRedacted} at stage `decode` naming what does not fit.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The JSON form arrives from the host as any value, and this is the check that parses it.
 export const decodeRedacted = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
-  Result.mapBoth(Schema.decodeUnknownResult(RedactedSchema)(input), {
-    onFailure: (schemaError) =>
-      new InvalidRedacted({ issue: schemaError.message, stage: "decode" }),
-    onSuccess: (fields: RedactedFields) => brandRedacted(fields),
-  });
+  nestsTooDeep(input)
+    ? Result.fail(
+        new InvalidRedacted({
+          issue: `it nests arrays and objects more than ${String(maximumDepth)} levels deep, deeper than encodeRedacted writes for any item the reader accepts`,
+          stage: "decode",
+        }),
+      )
+    : Result.mapBoth(Schema.decodeUnknownResult(RedactedSchema)(input), {
+        onFailure: (schemaError) =>
+          new InvalidRedacted({ issue: schemaError.message, stage: "decode" }),
+        onSuccess: (fields: RedactedFields) => brandRedacted(fields),
+      });
