@@ -218,7 +218,10 @@ describe.skipIf(!hasLease)("cli.corpus.db.test.ts, on the lease", () => {
         );
 
         yield* fs.makeDirectory(path.dirname(fresh), { recursive: true });
-        yield* fs.writeFileString(fresh, yield* renderVerdicts(verdicts));
+
+        const rendered = yield* renderVerdicts(verdicts);
+
+        yield* fs.writeFileString(fresh, rendered);
 
         const expected = yield* fs.readFileString(committed).pipe(Effect.option);
 
@@ -227,7 +230,7 @@ describe.skipIf(!hasLease)("cli.corpus.db.test.ts, on the lease", () => {
           `no committed verdict file at ${committed}; adopt the fresh one at ${fresh} with: cp ${fresh} ${committed}`,
         );
         assert.strictEqual(
-          yield* fs.readFileString(fresh),
+          rendered,
           Option.getOrThrow(expected),
           `the verdicts differ from ${committed}; to adopt ${fresh}, run: cp ${fresh} ${committed}`,
         );

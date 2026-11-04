@@ -5,12 +5,13 @@ import { ImportRule } from "#pantry/import/refusal.ts";
 import { examplesTarball, zipMembers } from "#pantry/test/fixtures.ts";
 import { parseVerdicts, verdictsPath } from "#pantry/test/verdicts.ts";
 
-/**
- * Guards the committed verdict file without a lease or the corpus tarball: it reads only the file
- * and the table of zip members, so a plain run notices a missing row or a renamed rule.
- */
 const isRule = Schema.is(ImportRule);
 
+/**
+ * The rows of the committed verdict file. These cases guard that file without a lease or the corpus
+ * tarball: they read only the file and the table of zip members, so a plain run notices a missing
+ * row or a renamed rule.
+ */
 const committedRows = Effect.gen(function* committedRows() {
   const tarball = yield* examplesTarball;
 
