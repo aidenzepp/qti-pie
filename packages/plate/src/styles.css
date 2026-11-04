@@ -773,8 +773,17 @@
   color: var(--destructive, oklch(0.577 0.245 27.325));
 }
 
-/* The Notice: subdued text on whatever surface it sits on, with no background of its own. */
+/*
+ * The Notice: subdued text on a framed card surface of its own, so its pair is 4.73:1 at the
+ * fallbacks and 6.91:1 under .dark wherever it stands, in a qti-well or a Choice row under the
+ * pointer included. Forced colours drop the surface and give the text and the frame system
+ * colours, so it stays readable there and the frame still sets it apart.
+ */
 :where([data-slot="item-notice"]) {
+  padding: 0.125rem 0.375rem;
+  border: 1px solid var(--border, oklch(0.922 0 0));
+  border-radius: var(--radius, 0.625rem);
+  background-color: var(--card, oklch(1 0 0));
   color: var(--muted-foreground, oklch(0.556 0 0));
 }
 

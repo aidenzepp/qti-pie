@@ -14,7 +14,7 @@ import type { ClassOwner } from "#plate/vocabulary.ts";
 
 /**
  * The markers the stylesheet's rules are read against, from the part table: the item Root, the
- * Choice parts, the text Controls and the results box.
+ * Choice parts, the text Controls, the results box and the Notice.
  */
 const marker = {
   choice: rowFor("choice-interaction", "choice").slot,
@@ -23,6 +23,7 @@ const marker = {
   indicator: rowFor("choice-interaction", "indicator").slot,
   item: rowFor("item", "root").slot,
   message: rowFor("item", "message").slot,
+  notice: rowFor("item", "notice").slot,
   prompt: rowFor("choice-interaction", "prompt").slot,
   status: rowFor("item", "status").slot,
   textEntryControl: rowFor("text-entry-interaction", "control").slot,
@@ -88,6 +89,53 @@ const hostSurface = "oklch(1 0 0)";
  * The least contrast between text and its surface, WCAG 2.2 AA for normal text (1.4.3).
  */
 const minimumContrast = 4.5;
+
+/**
+ * Shadcn's `.dark` values of the colour tokens the sheet reads, from the theming file the sheet's
+ * header names (`theming.mdx:239-271` at `4aaea19`), in the order of `tokens`; `.dark` sets no
+ * `--radius`.
+ */
+const darkTokens: ReadonlyMap<string, string> = new Map([
+  ["--primary", "oklch(0.922 0 0)"],
+  ["--primary-foreground", "oklch(0.205 0 0)"],
+  ["--accent", "oklch(0.269 0 0)"],
+  ["--accent-foreground", "oklch(0.985 0 0)"],
+  ["--muted", "oklch(0.269 0 0)"],
+  ["--muted-foreground", "oklch(0.708 0 0)"],
+  ["--card", "oklch(0.205 0 0)"],
+  ["--card-foreground", "oklch(0.985 0 0)"],
+  ["--destructive", "oklch(0.704 0.191 22.216)"],
+  ["--border", "oklch(1 0 0 / 10%)"],
+  ["--input", "oklch(1 0 0 / 15%)"],
+  ["--ring", "oklch(0.556 0 0)"],
+]);
+
+/**
+ * Token values a contrast is measured under, with the host's surface beneath them.
+ */
+interface Palette {
+  /**
+   * The palette's name, as a report names it.
+   */
+  readonly name: string;
+  /**
+   * The host's surface, shadcn's `--background` in the same block, where no rule paints one.
+   */
+  readonly surface: string;
+  /**
+   * Each token's value.
+   */
+  readonly tokens: ReadonlyMap<string, string>;
+}
+
+/**
+ * The palettes a nested pair is measured under: the fallbacks on shadcn's light `--background`, and
+ * shadcn's `.dark` values on its dark `--background` (`theming.mdx:240`).
+ */
+const palettes: readonly Palette[] = [
+  { name: "fallbacks", surface: hostSurface, tokens },
+  { name: ".dark", surface: "oklch(0.145 0 0)", tokens: darkTokens },
+];
 
 /**
  * The condition of the rules that undo the drawn mark when forced colours drop its backgrounds.
@@ -412,6 +460,89 @@ const lowContrastRules = (sheet: Sheet): readonly string[] =>
       }),
     )
     .map((rule) => rule.selectors.join(", "));
+
+/**
+ * Read the token a part's rules set a property to: the `var()` of the last top-level rule that
+ * reaches the part and declares the property.
+ *
+ * @param sheet The scanned sheet.
+ * @param slot The part's marker.
+ * @param property The property's name.
+ * @returns The token's name; none when no such rule declares the property, or declares it without
+ *   a `var()`.
+ */
+const partToken = (sheet: Sheet, slot: string, property: string): Option.Option<string> =>
+  Option.fromUndefinedOr(
+    sheet.rules.findLast(
+      (rule) => rule.conditions.length === 0 && reaches(rule, slot) && declares(rule, property),
+    ),
+  ).pipe(Option.flatMap((rule) => tokenName(rule, property)));
+
+/**
+ * Read the surfaces the sheet paints that a Notice can sit in. The emitter puts a Notice where an
+ * unsupported element stood, at any depth of the item body, so it can sit in anything that holds
+ * content: a `qti-well`, a Choice row under the pointer, and every other painted part. Rules
+ * reaching the Notice, the Indicator or a Control are left out: the Notice's own surface is not one
+ * it sits in, and those parts hold no element.
+ *
+ * @param sheet The scanned sheet.
+ * @returns Each surface's token once, in the sheet's order; the host's surface is not among them.
+ */
+const noticeSurfaces = (sheet: Sheet): readonly string[] => {
+  const empty = [
+    marker.notice,
+    marker.indicator,
+    marker.control,
+    marker.textEntryControl,
+    marker.extendedTextControl,
+  ];
+
+  return [
+    ...new Set(
+      sheet.rules
+        .filter((rule) => !empty.some((slot) => reaches(rule, slot)))
+        .flatMap((rule) => Option.toArray(tokenName(rule, "background-color"))),
+    ),
+  ];
+};
+
+/**
+ * Find the pairs the Notice's text makes below 4.5:1, under each palette, on the host's surface and
+ * in each surface it can sit in. Its text sits on its own background when it declares one, and on
+ * the surface around it when it does not, so an ancestor's surface then decides its pair.
+ *
+ * @param sheet The scanned sheet.
+ * @returns Each low pair, as `<palette>, in <surface>: <ratio>:1`, with `none` for a pair whose
+ *   colours do not resolve.
+ */
+const lowNoticePairs = (sheet: Sheet): readonly string[] => {
+  const text = partToken(sheet, marker.notice, "color");
+  const own = partToken(sheet, marker.notice, "background-color");
+  const surfaces = [Option.none<string>(), ...noticeSurfaces(sheet).map(Option.some)];
+
+  return palettes.flatMap((palette) => {
+    const colour = (token: string) =>
+      Option.fromUndefinedOr(palette.tokens.get(token)).pipe(Option.flatMap(parseOklch));
+
+    return surfaces.flatMap((surface) => {
+      const under = Option.orElse(own, () => surface);
+      const ratio = Option.zipWith(
+        text.pipe(Option.flatMap(colour)),
+        Option.match(under, { onNone: () => parseOklch(palette.surface), onSome: colour }),
+        contrastRatio,
+      );
+
+      return Option.exists(ratio, (value) => value >= minimumContrast)
+        ? []
+        : [
+            `${palette.name}, in ${Option.getOrElse(surface, () => "the host's surface")}: ${Option.match(
+              ratio,
+              { onNone: () => "none", onSome: (value) => `${value.toFixed(2)}:1` },
+            )}`,
+          ];
+    });
+  });
+};
 
 /**
  * Find the pseudo-classes outside the eight, at any depth.
@@ -892,6 +1023,23 @@ layer(Stylesheet.layer)("styles.css", (test) => {
     }),
   );
 
+  test.effect(
+    "paints the Notice's own surface, so its text holds 4.5:1 in a qti-well, a hovered Choice row and every other surface, at the fallbacks and under .dark",
+    () =>
+      Effect.gen(function* notice() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.includeMembers([...noticeSurfaces(sheet)], ["--muted", "--accent"]);
+        assert.deepStrictEqual(lowNoticePairs(sheet), []);
+        assert.isTrue(
+          Option.exists(partToken(sheet, marker.notice, "background-color"), (name) =>
+            tokens.has(name),
+          ),
+          "the Notice's own background, a token",
+        );
+      }),
+  );
+
   test.effect("uses only the eight pseudo-classes", () =>
     Effect.gen(function* pseudoClasses() {
       const { sheet } = yield* Stylesheet;
@@ -1207,6 +1355,23 @@ describe("styles.css predicates, on negative controls", () => {
 
       assert.deepStrictEqual(lowContrastRules(sheet), [selector]);
     }),
+  );
+
+  it.effect(
+    "a Notice with no surface of its own is reported in a qti-well, and with one is not",
+    () =>
+      Effect.gen(function* noticeInWell() {
+        const notice = `:where([data-slot="${marker.notice}"])`;
+        const text = "color: var(--muted-foreground, oklch(0.556 0 0));";
+        const well = ".qti-well {\n  background-color: var(--muted, oklch(0.97 0 0));\n}\n";
+        const bare = yield* scanSheet(`${well}\n${notice} {\n  ${text}\n}\n`);
+        const painted = yield* scanSheet(
+          `${well}\n${notice} {\n  background-color: var(--card, oklch(1 0 0));\n  ${text}\n}\n`,
+        );
+
+        assert.deepStrictEqual(lowNoticePairs(bare), ["fallbacks, in --muted: 4.34:1"]);
+        assert.deepStrictEqual(lowNoticePairs(painted), []);
+      }),
   );
 
   it.effect("a refused look on the Status region alone is reported, and on its :has() is not", () =>
