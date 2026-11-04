@@ -453,7 +453,7 @@ interface Positive {
 const nameOnlyTool = (draft: Draft) => {
   const { tree } = itemOf(draft);
 
-  of(draft, ItemTool).push({ shape: "nameOnly", tree });
+  of(draft, ItemTool).push({ root: "item", shape: "nameOnly", tree });
   of(draft, ItemToolName).push({ toolName: "gr8des", tree });
 };
 
@@ -479,7 +479,7 @@ const bodyLabel = (draft: Draft) => {
 const rootLabel = (draft: Draft, version: string) => {
   const { id, tree } = itemOf(draft);
 
-  of(draft, AssessmentItemLabel).push({ node: id, tree, value: "L", version });
+  of(draft, AssessmentItemLabel).push({ node: id, root: "item", tree, value: "L", version });
 };
 
 /**
@@ -641,7 +641,14 @@ const negatives: readonly Negative[] = [
     },
     fixture: "cut-choice",
     law: containedLaw(
-      side(AssessmentItemLabel, ["tree"], [{ field: "version", value: "3.0.1" }]),
+      side(
+        AssessmentItemLabel,
+        ["tree"],
+        [
+          { field: "root", value: "item" },
+          { field: "version", value: "3.0.1" },
+        ],
+      ),
       side(ItemToolBoth, ["tree"]),
     ),
     name: "a root label of a 3.0.1 item with no tool values is refused by the containment into ItemToolBoth",
