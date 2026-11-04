@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "command": { "type": "string", "enum": ["roundtrip"] },
+    "data": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "differing": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "export_dir": { "type": "string" },
+            "package_id": { "type": "string" },
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": { "kind": { "type": "string", "enum": ["canonical-equal"] } },
+                        "required": ["kind"],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": { "kind": { "type": "string", "enum": ["byte-identical"] } },
+                        "required": ["kind"],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "at": { "type": "string" },
+                          "kind": { "type": "string", "enum": ["differs"] }
+                        },
+                        "required": ["at", "kind"],
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "path": { "type": "string" }
+                },
+                "required": ["outcome", "path"],
+                "additionalProperties": true
+              }
+            }
+          },
+          "required": ["differing", "export_dir", "package_id", "entries"],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "database_checked": { "type": "boolean", "enum": [false] },
+            "dry_run": { "type": "boolean", "enum": [true] },
+            "export_dir": { "type": "string" },
+            "export_dir_action": { "type": "string", "enum": ["create", "replace"] },
+            "package_dir": { "type": "string" },
+            "relations": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "rows": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 }
+          },
+          "required": [
+            "database_checked",
+            "dry_run",
+            "export_dir",
+            "export_dir_action",
+            "package_dir",
+            "relations",
+            "rows"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "ok": { "type": "boolean" },
+    "schema_version": { "type": "number", "enum": [1] }
+  },
+  "required": ["command", "data", "ok", "schema_version"],
+  "additionalProperties": true,
+  "$defs": {}
+}
