@@ -548,14 +548,22 @@ const withBodies = (children: readonly Node[]): readonly Node[] => {
       result.push(h("tbody", {}, rows));
     }
 
-    result.push(...gap);
+    // A gap holds one node per comment the reader dropped, so it can outgrow a spread's arguments.
+    for (const node of gap) {
+      result.push(node);
+    }
+
     rows = [];
     gap = [];
   };
 
   for (const child of children) {
     if (isRow(child)) {
-      rows.push(...gap, child);
+      for (const node of gap) {
+        rows.push(node);
+      }
+
+      rows.push(child);
       gap = [];
     } else if (rows.length > 0 && child.kind === "text" && blank.test(child.text)) {
       gap.push(child);

@@ -56,6 +56,18 @@ const el = (
 const txt = (value: string): TextPayload => ({ kind: "text", text: value });
 
 /**
+ * The whitespace nodes between two rows in the far-apart case: what 200,000 comments between them
+ * leave once the reader drops each comment and keeps the text on either side of it.
+ */
+const farGap = 200_000;
+
+/**
+ * The far-apart case builds and compares 200,002 nodes, which can pass vitest's default of 5 s on a
+ * busy machine.
+ */
+const farTimeoutMs = 60_000;
+
+/**
  * Build a payload around a body, with no messages and every control enabled.
  *
  * @param body The body's payload nodes.
@@ -399,6 +411,26 @@ describe("emitBody", () => {
       ]);
       assert.isTrue(nodes.every(roundTrips));
     }),
+  );
+
+  it.effect(
+    "[I-8] rows far apart still share one tbody",
+    () =>
+      Effect.gen(function* farRows() {
+        const gap = Array.from({ length: farGap }, () => txt(" "));
+        const nodes = yield* emit([el("table", {}, [row("1"), ...gap, row("2")])]);
+
+        assert.deepStrictEqual(nodes, [
+          h("table", {}, [
+            h("tbody", {}, [
+              emittedRow("1"),
+              ...Array.from({ length: farGap }, () => text(" ")),
+              emittedRow("2"),
+            ]),
+          ]),
+        ]);
+      }),
+    farTimeoutMs,
   );
 
   it.effect("[I-8] an authored id and the aria-labelledby naming it are scoped alike", () =>
