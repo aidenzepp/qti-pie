@@ -549,24 +549,36 @@ describe("validateExtendedText", () => {
       }),
   );
 
-  it.effect("[Q-5] accepts any decoded text, and refuses a string response posted twice", () =>
-    Effect.gen(function* stringValues() {
-      const configuration = yield* configure({ validateResponses: true });
+  it.effect(
+    "[Q-5] accepts any decoded text, and refuses a string response posted twice or as a file, each with its own message",
+    () =>
+      Effect.gen(function* stringValues() {
+        const configuration = yield* configure({ validateResponses: true });
 
-      for (const posted of [[], [[name, ""]], [[name, "a\r\nb"]]] as const) {
-        assert.deepStrictEqual(
-          validateExtendedText(essay, yield* decoded(essay, posted), configuration),
-          [],
-        );
-      }
+        for (const posted of [[], [[name, ""]], [[name, "a\r\nb"]]] as const) {
+          assert.deepStrictEqual(
+            validateExtendedText(essay, yield* decoded(essay, posted), configuration),
+            [],
+          );
+        }
 
-      const twice = yield* decoded(essay, [
-        [name, "a"],
-        [name, "b"],
-      ]);
-      assert.instanceOf(twice, Malformed);
-      assert.lengthOf(validateExtendedText(essay, twice, configuration), 1);
-    }),
+        const twice = yield* decoded(essay, [
+          [name, "a"],
+          [name, "b"],
+        ]);
+        assert.instanceOf(twice, Malformed);
+        assert.strictEqual(twice.reason, "single-many");
+        assert.deepStrictEqual(validateExtendedText(essay, twice, configuration), [
+          { response, text: message("en", "malformedSingleMany") },
+        ]);
+
+        const file = yield* decoded(essay, [[name, new Blob(["My day."])]]);
+        assert.instanceOf(file, Malformed);
+        assert.strictEqual(file.reason, "file");
+        assert.deepStrictEqual(validateExtendedText(essay, file, configuration), [
+          { response, text: message("en", "malformedFile") },
+        ]);
+      }),
   );
 });
 

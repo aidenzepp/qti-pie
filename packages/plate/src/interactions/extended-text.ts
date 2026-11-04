@@ -11,7 +11,8 @@
  * scoping, heading shift and placeholders.
  *
  * {@link validateExtendedText} checks a value the caller decoded. Phase 1 has tier (a) only: a
- * number binding refuses text that is not a number.
+ * number binding refuses text that is not a number, and every binding refuses a file or a second
+ * entry, which a native textarea never posts.
  *
  * @module
  */
@@ -27,7 +28,7 @@ import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
 import { message } from "#plate/messages.ts";
-import type { Locale } from "#plate/messages.ts";
+import type { Locale, MessageKey } from "#plate/messages.ts";
 import type { ExtendedTextInteraction } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { EmitState, ExtendedTextPayload, Payload, ValidationMessage } from "#plate/payload.ts";
@@ -257,6 +258,20 @@ export const renderExtendedText = (
   });
 
 /**
+ * The message a string Extended Text gives for each reason its entries did not decode.
+ *
+ * `decode` keeps a string as posted, so for one it fails only as `file` (a file was posted) or
+ * `single-many` (the entry was posted twice), each with its own message. `number` and `identifier`,
+ * which only a {@link Malformed} built by hand carries here, get the general `notAccepted`.
+ */
+const stringRefusals = {
+  file: "malformedFile",
+  identifier: "notAccepted",
+  number: "notAccepted",
+  "single-many": "malformedSingleMany",
+} as const satisfies Readonly<Record<Malformed["reason"], MessageKey>>;
+
+/**
  * Check an Extended Text's response, which the caller decoded.
  *
  * The caller decodes the posted entries with `decode`, under the entry name its form gave the
@@ -266,8 +281,8 @@ export const renderExtendedText = (
  *
  * - A {@link Malformed} input of an `integer` or `float` binding: `malformedNumber`, or the author's
  *   `data-patternmask-message` when set.
- * - A {@link Malformed} input of a `string` binding, which a native form never posts (two entries, or
- *   a file): `notAccepted`.
+ * - A {@link Malformed} input of a `string` binding, which a native form never posts: the message of
+ *   its reason, `malformedFile` for a file and `malformedSingleMany` for a second entry.
  *
  * @param interaction The Extended Text.
  * @param input The decoded value, or why the entries did not decode.
@@ -286,7 +301,7 @@ export const validateExtendedText = (
   const { locale } = configuration;
   const words =
     interaction.baseType === "string"
-      ? message(locale, "notAccepted")
+      ? message(locale, stringRefusals[input.reason])
       : Option.getOrElse(interaction.patternMaskMessage, () => message(locale, "malformedNumber"));
 
   return [{ response: interaction.response, text: words }];

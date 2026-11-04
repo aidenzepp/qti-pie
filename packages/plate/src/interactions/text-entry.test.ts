@@ -512,6 +512,40 @@ describe("validateTextEntry", () => {
   );
 
   it.effect(
+    "[Q-20] gives a string's file malformedFile and its second entry malformedSingleMany, and an integer's file malformedNumber",
+    () =>
+      Effect.gen(function* stringRefusals() {
+        const configuration = yield* configure({});
+        const file = yield* decoded(city, [[name, new Blob(["York"])]]);
+        const twice = yield* decoded(city, [
+          [name, "York"],
+          [name, "Leeds"],
+        ]);
+
+        assert.instanceOf(file, Malformed);
+        assert.strictEqual(file.reason, "file");
+        assert.deepStrictEqual(validateTextEntry(city, file, configuration), [
+          { response, text: message("en", "malformedFile") },
+        ]);
+        assert.instanceOf(twice, Malformed);
+        assert.strictEqual(twice.reason, "single-many");
+        assert.deepStrictEqual(validateTextEntry(city, twice, configuration), [
+          { response, text: message("en", "malformedSingleMany") },
+        ]);
+
+        const counted: TextEntryInteraction = { ...length, baseType: "integer" };
+        assert.deepStrictEqual(
+          validateTextEntry(
+            counted,
+            yield* decoded(counted, [[name, new Blob(["3"])]]),
+            configuration,
+          ),
+          [{ response, text: message("en", "malformedNumber") }],
+        );
+      }),
+  );
+
+  it.effect(
     "[Q-20] accepts every decoded value, an integer in its base and NULL included, whatever validateResponses says",
     () =>
       Effect.gen(function* decodedValues() {
