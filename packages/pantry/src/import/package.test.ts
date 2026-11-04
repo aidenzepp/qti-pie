@@ -34,19 +34,19 @@ const fixtures = inject("fixtures");
  * The package ids a document's trees are, beside the manifest's tree, which is the package id.
  */
 const documentsOf = query(Author).rule((r) => {
-  const { id } = v(Document);
+  const { id } = v(Document, "document");
 
   return r.match(Document, { id, package: r.param("package", uuid) }).find({ id });
 });
 
 const charsetsOf = query(Author).rule((r) => {
-  const { label } = v(TreeExportCharset);
+  const { label } = v(TreeExportCharset, "treeExportCharset");
 
   return r.match(TreeExportCharset, { label, tree: r.param("tree", uuid) }).find({ label });
 });
 
 const lexicalsOf = query(Author).rule((r) => {
-  const { attribute, node } = v(AttributeLexical);
+  const { attribute, node } = v(AttributeLexical, "attributeLexical");
 
   return r
     .match(Node, { id: node, tree: r.param("tree", uuid) })
@@ -55,7 +55,7 @@ const lexicalsOf = query(Author).rule((r) => {
 });
 
 const packageRows = query(Author).rule((r) => {
-  const { id } = v(Package);
+  const { id } = v(Package, "package");
 
   return r
     .match(Package, { id })

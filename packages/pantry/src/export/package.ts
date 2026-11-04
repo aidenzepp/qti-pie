@@ -29,7 +29,7 @@ const MANIFEST_PATH = "imsmanifest.xml";
  * The entry path of the document whose tree is `id`.
  */
 const documentPathOf = query(Author).rule((r) => {
-  const { path } = v(Document);
+  const { path } = v(Document, "document");
 
   return r.match(Document, { id: r.param("id", uuid), path }).find({ path });
 });
@@ -38,7 +38,7 @@ const documentPathOf = query(Author).rule((r) => {
  * The manifest `identifier` of the package whose id is `id`; no row when no package has that id.
  */
 const packageOf = query(Author).rule((r) => {
-  const { identifier } = v(Package);
+  const { identifier } = v(Package, "package");
 
   return r.match(Package, { id: r.param("id", uuid), identifier }).find({ identifier });
 });
@@ -47,7 +47,7 @@ const packageOf = query(Author).rule((r) => {
  * The path and base64 content of every stored file of a package.
  */
 const contentsOf = query(Author).rule((r) => {
-  const { content, path } = v(FileContent);
+  const { content, path } = v(FileContent, "fileContent");
 
   return r.match(FileContent, { content, package: r.param("package", uuid), path }).find({
     content,

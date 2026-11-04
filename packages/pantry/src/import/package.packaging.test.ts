@@ -113,13 +113,13 @@ const isContractLaw = Schema.is(
 );
 
 const documentsOf = query(Author).rule((r) => {
-  const { id } = v(Document);
+  const { id } = v(Document, "document");
 
   return r.match(Document, { id, package: r.param("package", uuid) }).find({ id });
 });
 
 const lexicalsOf = query(Author).rule((r) => {
-  const { attribute, kind, node, value } = v(AttributeLexical);
+  const { attribute, kind, node, value } = v(AttributeLexical, "attributeLexical");
 
   return r
     .match(Node, { id: node, tree: r.param("tree", uuid) })
@@ -128,7 +128,7 @@ const lexicalsOf = query(Author).rule((r) => {
 });
 
 const documentRootsOf = query(Author).rule((r) => {
-  const { id, resource, root } = v(Document);
+  const { id, resource, root } = v(Document, "document");
 
   return r
     .match(Document, { id, package: r.param("package", uuid), resource, root })
@@ -136,7 +136,7 @@ const documentRootsOf = query(Author).rule((r) => {
 });
 
 const filePathsOf = query(Author).rule((r) => {
-  const { path: file } = v(FileContent);
+  const { path: file } = v(FileContent, "fileContent");
 
   return r
     .match(FileContent, { package: r.param("package", uuid), path: file })
@@ -144,13 +144,13 @@ const filePathsOf = query(Author).rule((r) => {
 });
 
 const packagesCounted = query(Author).rule((r) => {
-  const { id } = v(Package);
+  const { id } = v(Package, "package");
 
   return r.match(Package, { id }).find({ total: r.count() });
 });
 
 const nodesOf = query(Author).rule((r) => {
-  const { id } = v(Node);
+  const { id } = v(Node, "node");
 
   return r.match(Node, { id, tree: r.param("tree", uuid) }).find({ total: r.count() });
 });

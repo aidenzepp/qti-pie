@@ -13,19 +13,19 @@ import { admission, ancestryStep, attributeAdmission } from "#pantry/schema/seed
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 const admissionCount = query(Author).rule((r) => {
-  const { child, parent, version } = v(Admission);
+  const { child, parent, version } = v(Admission, "admission");
 
   return r.match(Admission, { child, parent, version }).find({ total: r.count() });
 });
 
 const ancestryStepCount = query(Author).rule((r) => {
-  const { ancestry, kind, next } = v(AncestryStep);
+  const { ancestry, kind, next } = v(AncestryStep, "ancestryStep");
 
   return r.match(AncestryStep, { ancestry, kind, next }).find({ total: r.count() });
 });
 
 const attributeAdmissionCount = query(Author).rule((r) => {
-  const { attribute, kind } = v(AttributeAdmission);
+  const { attribute, kind } = v(AttributeAdmission, "attributeAdmission");
 
   return r.match(AttributeAdmission, { attribute, kind }).find({ total: r.count() });
 });
