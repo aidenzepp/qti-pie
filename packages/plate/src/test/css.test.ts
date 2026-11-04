@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { rowFor } from "#plate/emit/parts.ts";
-import { scanSheet } from "#plate/test/css.ts";
-import type { CssUnsupported } from "#plate/test/css.ts";
+import { compounds, scanSheet, uses, varReferences } from "#plate/test/css.ts";
+import type { Compound, CssUnsupported, Use } from "#plate/test/css.ts";
 
 /**
  * Lines 15 to 34 of `work/planning/095fa660/fmt-probe/formatted.css`, what `vp fmt` writes for this
@@ -167,4 +167,174 @@ describe("scanSheet", () => {
       }),
     );
   }
+});
+
+/**
+ * A compound with nothing in it, for building the expected compounds.
+ */
+const empty: Compound = {
+  attributes: [],
+  classes: [],
+  ids: [],
+  pseudoClasses: [],
+  pseudoElements: [],
+  type: Option.none(),
+};
+
+describe("compounds", () => {
+  it("reads :where() and :has() one level at a time, with the markers as attribute tests", () => {
+    const choice = rowFor("choice-interaction", "choice").slot;
+    const control = rowFor("choice-interaction", "control").slot;
+    const inner = `[data-slot="${choice}"]:has([data-slot="${control}"]:checked)`;
+
+    const outer = compounds(`:where(${inner})`);
+    assert.deepStrictEqual(outer, [
+      { ...empty, pseudoClasses: [{ name: "where", selectors: [inner] }] },
+    ]);
+
+    const where = compounds(outer[0]?.pseudoClasses[0]?.selectors[0] ?? "");
+    assert.deepStrictEqual(where, [
+      {
+        ...empty,
+        attributes: [
+          {
+            flag: Option.none(),
+            name: "data-slot",
+            operator: Option.some("="),
+            value: Option.some(choice),
+          },
+        ],
+        pseudoClasses: [{ name: "has", selectors: [`[data-slot="${control}"]:checked`] }],
+      },
+    ]);
+
+    const has = compounds(where[0]?.pseudoClasses[0]?.selectors[0] ?? "");
+    assert.deepStrictEqual(has, [
+      {
+        ...empty,
+        attributes: [
+          {
+            flag: Option.none(),
+            name: "data-slot",
+            operator: Option.some("="),
+            value: Option.some(control),
+          },
+        ],
+        pseudoClasses: [{ name: "checked", selectors: [] }],
+      },
+    ]);
+  });
+
+  it("drops the combinators between compounds", () => {
+    assert.deepStrictEqual(compounds(".a b > [x]::before"), [
+      { ...empty, classes: ["a"] },
+      { ...empty, type: Option.some("b") },
+      {
+        ...empty,
+        attributes: [
+          { flag: Option.none(), name: "x", operator: Option.none(), value: Option.none() },
+        ],
+        pseudoElements: ["before"],
+      },
+    ]);
+  });
+
+  it("reads an ID, an attribute test's flag and a single-colon pseudo-element", () => {
+    assert.deepStrictEqual(compounds('*#main + [lang|="en" i] ~ p:BEFORE'), [
+      { ...empty, ids: ["main"], type: Option.some("*") },
+      {
+        ...empty,
+        attributes: [
+          {
+            flag: Option.some("i"),
+            name: "lang",
+            operator: Option.some("|="),
+            value: Option.some("en"),
+          },
+        ],
+      },
+      { ...empty, pseudoElements: ["before"], type: Option.some("p") },
+    ]);
+  });
+});
+
+/**
+ * Write each use as one line, `<kind> <name>`, with ` for <property>` after a `value` use.
+ *
+ * @param found The uses.
+ * @returns One line per use, in order.
+ */
+const lines = (found: readonly Use[]): readonly string[] =>
+  found.map(
+    (use) =>
+      `${use.kind} ${use.name}${Option.match(use.property, { onNone: () => "", onSome: (property) => ` for ${property}` })}`,
+  );
+
+describe("uses", () => {
+  it.effect(
+    "reports a sheet's properties, values, functions, units, selectors and conditions",
+    () =>
+      Effect.gen(function* sheetUses() {
+        const sheet = yield* scanSheet(
+          "a { display: grid; width: 10ch; outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent); } @media (forced-colors: active) { .b > c:hover::before { display: none } }",
+        );
+
+        assert.includeMembers(
+          [...lines(uses(sheet))],
+          [
+            "function color-mix",
+            "function var",
+            "function oklch",
+            "unit ch",
+            "unit %",
+            "media-feature forced-colors",
+            "at-rule media",
+            "value grid for display",
+            "selector type",
+            "selector class",
+            "selector child",
+            "pseudo-class hover",
+            "pseudo-element before",
+            "property outline-color",
+          ],
+        );
+      }),
+  );
+
+  it.effect("descends into :where(), :is(), :not() and :has()", () =>
+    Effect.gen(function* nestedUses() {
+      const sheet = yield* scanSheet("x:where(y:has(z:checked)) { color: red }");
+
+      assert.includeMembers(
+        [...lines(uses(sheet))],
+        ["pseudo-class where", "pseudo-class has", "pseudo-class checked"],
+      );
+    }),
+  );
+});
+
+describe("varReferences", () => {
+  it("reads a reference's name and fallback", () => {
+    assert.deepStrictEqual(varReferences("var(--ring, oklch(0.708 0 0))"), [
+      { fallback: Option.some("oklch(0.708 0 0)"), name: "--ring" },
+    ]);
+  });
+
+  it("gives a reference without a comma no fallback", () => {
+    assert.deepStrictEqual(varReferences("var(--a)"), [{ fallback: Option.none(), name: "--a" }]);
+  });
+
+  it("finds a reference inside another function", () => {
+    assert.deepStrictEqual(
+      varReferences("color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent)"),
+      [{ fallback: Option.some("oklch(0.708 0 0)"), name: "--ring" }],
+    );
+  });
+
+  it("finds a reference nested in a fallback, after the one that holds it", () => {
+    assert.deepStrictEqual(varReferences("var(--a,  var( --b, red ))"), [
+      { fallback: Option.some("var(--b, red)"), name: "--a" },
+      { fallback: Option.some("red"), name: "--b" },
+    ]);
+  });
 });
