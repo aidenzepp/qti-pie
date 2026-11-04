@@ -9,38 +9,46 @@ import {
   isPhrasingContainer,
   links,
   lists,
+  partForSlot,
   partTable,
   positionUnder,
+  promptMarkupFor,
   resolveOverrides,
   rowFor,
   scopedId,
 } from "#plate/emit/parts.ts";
 
 /**
- * The spec's part table (§4.3), one entry per row: interaction, part, `data-slot` and default
- * element.
+ * The spec's part table (§4.3), one entry per row: interaction, part, `data-slot` marker and
+ * default element. The markers are the operator's ruling (rule `0e767b8d`): a Root carries its
+ * component's name, and every other part `<component>-<part>` in kebab case.
  */
 const specRows = [
   ["item", "root", "item", "qti-assessment-item"],
-  ["item", "form", "form", "form"],
-  ["item", "status", "status", "section"],
-  ["item", "statusHeading", "status-heading", "h1"],
-  ["item", "messages", "messages", "ul"],
-  ["item", "message", "message", "li"],
-  ["item", "submit", "submit", "button"],
-  ["item", "notice", "notice", "span"],
-  ["choice-interaction", "root", "root", "fieldset"],
-  ["choice-interaction", "prompt", "prompt", "qti-prompt"],
-  ["choice-interaction", "choices", "choices", "ul"],
-  ["choice-interaction", "choice", "choice", "li"],
-  ["choice-interaction", "control", "control", "input"],
-  ["choice-interaction", "indicator", "indicator", "span"],
-  ["choice-interaction", "label", "label", "label"],
-  ["text-entry-interaction", "root", "root", "qti-text-entry-interaction"],
-  ["text-entry-interaction", "control", "control", "input"],
-  ["extended-text-interaction", "root", "root", "qti-extended-text-interaction"],
-  ["extended-text-interaction", "prompt", "prompt", "qti-prompt"],
-  ["extended-text-interaction", "control", "control", "textarea"],
+  ["item", "form", "item-form", "form"],
+  ["item", "status", "item-status", "section"],
+  ["item", "statusHeading", "item-status-heading", "h1"],
+  ["item", "messages", "item-messages", "ul"],
+  ["item", "message", "item-message", "li"],
+  ["item", "submit", "item-submit", "button"],
+  ["item", "notice", "item-notice", "span"],
+  ["choice-interaction", "root", "choice-interaction", "fieldset"],
+  ["choice-interaction", "prompt", "choice-interaction-prompt", "qti-prompt"],
+  ["choice-interaction", "choices", "choice-interaction-choices", "ul"],
+  ["choice-interaction", "choice", "choice-interaction-choice", "li"],
+  ["choice-interaction", "control", "choice-interaction-control", "input"],
+  ["choice-interaction", "indicator", "choice-interaction-indicator", "span"],
+  ["choice-interaction", "label", "choice-interaction-label", "label"],
+  ["text-entry-interaction", "root", "text-entry-interaction", "qti-text-entry-interaction"],
+  ["text-entry-interaction", "control", "text-entry-interaction-control", "input"],
+  [
+    "extended-text-interaction",
+    "root",
+    "extended-text-interaction",
+    "qti-extended-text-interaction",
+  ],
+  ["extended-text-interaction", "prompt", "extended-text-interaction-prompt", "qti-prompt"],
+  ["extended-text-interaction", "control", "extended-text-interaction-control", "textarea"],
 ] as const;
 
 /**
@@ -71,9 +79,24 @@ describe("partTable", () => {
     }
   });
 
-  it("gives every slot once within an interaction", () => {
-    const slots = partTable.map((row) => `${row.interaction} ${row.slot}`);
+  it("gives every marker once across the table", () => {
+    const slots = partTable.map((row) => row.slot);
     assert.strictEqual(new Set(slots).size, slots.length);
+  });
+
+  it("resolves every row's marker back to its interaction and part", () => {
+    for (const row of partTable) {
+      assert.deepStrictEqual(Option.getOrUndefined(partForSlot(row.slot)), {
+        interaction: row.interaction,
+        part: row.part,
+      });
+    }
+  });
+
+  it("resolves no part from a bare part name or an unknown marker", () => {
+    for (const slot of ["root", "prompt", "status", "status-heading", "choice-interaction-badge"]) {
+      assert.isTrue(Option.isNone(partForSlot(slot)), slot);
+    }
   });
 
   it("marks only Choices as the owner of a list", () => {
@@ -110,6 +133,68 @@ describe("rowFor", () => {
   it("makes the StatusHeading the heading of the given level", () => {
     assert.strictEqual(rowFor("item", "statusHeading", { headingLevel: 3 }).element, "h3");
   });
+
+  it("makes the Choice Prompt a legend first in its fieldset under the legend markup", () => {
+    const prompt = rowFor("choice-interaction", "prompt", { promptMarkup: "legend" });
+    const root = rowFor("choice-interaction", "root", { promptMarkup: "legend" });
+    assert.strictEqual(prompt.element, "legend");
+    assert.strictEqual(prompt.tagClass, "legend");
+    assert.deepStrictEqual(prompt.merged, []);
+    assert.strictEqual(prompt.slot, "choice-interaction-prompt");
+    assert.strictEqual(root.element, "fieldset");
+    assert.isTrue(root.legendOwner);
+    assert.deepStrictEqual(root.merged, []);
+  });
+
+  it("keeps the Choice Prompt its own element, named by the Root, under the labelledby markup", () => {
+    for (const context of [{}, { promptMarkup: "labelledby" } as const]) {
+      const prompt = rowFor("choice-interaction", "prompt", context);
+      const root = rowFor("choice-interaction", "root", context);
+      assert.strictEqual(prompt.element, "qti-prompt");
+      assert.deepStrictEqual(prompt.merged, ["id"]);
+      assert.strictEqual(root.element, "fieldset");
+      assert.isFalse(root.legendOwner);
+      assert.deepStrictEqual(root.merged, ["aria-labelledby"]);
+    }
+  });
+
+  it("gives the Extended Text Prompt no legend markup", () => {
+    const prompt = rowFor("extended-text-interaction", "prompt", { promptMarkup: "legend" });
+    assert.strictEqual(prompt.element, "qti-prompt");
+  });
+});
+
+describe("promptMarkupFor", () => {
+  it("gives the legend markup to a prompt of phrasing content only", () => {
+    const phrasing = [
+      [],
+      [text("Which city is the capital of France?")],
+      [
+        text("Pick "),
+        h("em", {}, [text("one")]),
+        h("img", { alt: "A map", src: "map.png" }),
+        h("a", { href: "#x" }, [h("strong", {}, [text("city")])]),
+        h("br", {}),
+        h("span", { role: "note" }, [text("Not shown.")]),
+        h("math", {}, [h("mi", {}, [text("x")])]),
+      ],
+    ];
+    for (const content of phrasing) {
+      assert.strictEqual(promptMarkupFor(content), "legend");
+    }
+  });
+
+  it("gives the labelledby markup to a prompt holding a paragraph, a list or a div", () => {
+    const blocks = [
+      [h("p", {}, [text("Which city is the capital of France?")])],
+      [text("Pick one:"), h("ul", {}, [h("li", {}, [text("Paris")])])],
+      [h("span", {}, [h("div", { role: "note" }, [text("Not shown.")])])],
+      [h("a", { href: "#x" }, [h("p", {}, [text("A link around a paragraph.")])])],
+    ];
+    for (const content of blocks) {
+      assert.strictEqual(promptMarkupFor(content), "labelledby");
+    }
+  });
 });
 
 describe("allows", () => {
@@ -118,6 +203,8 @@ describe("allows", () => {
       ...partTable,
       rowFor("item", "notice", { position: "flow" }),
       rowFor("item", "statusHeading", { headingLevel: 6 }),
+      rowFor("choice-interaction", "prompt", { promptMarkup: "legend" }),
+      rowFor("choice-interaction", "root", { promptMarkup: "legend" }),
     ];
     for (const row of rows) {
       assert.isTrue(allows(row, h(row.element, {})), `${row.interaction} ${row.part}`);
@@ -146,10 +233,28 @@ describe("allows", () => {
     assert.isFalse(allows(rowFor("extended-text-interaction", "root"), h("ul", {})));
   });
 
-  it("accepts a div for Choices and for a Choice, and a custom element for a Root", () => {
+  it("accepts a div for Choices and for a Choice, and a custom element for an Extended Text Root", () => {
     assert.isTrue(allows(rowFor("choice-interaction", "choices"), h("div", {})));
     assert.isTrue(allows(rowFor("choice-interaction", "choice"), h("div", {})));
-    assert.isTrue(allows(rowFor("choice-interaction", "root"), h("my-group", {})));
+    assert.isTrue(allows(rowFor("extended-text-interaction", "root"), h("my-essay", {})));
+  });
+
+  it("keeps the Choice Root a native fieldset under either Prompt markup", () => {
+    for (const promptMarkup of ["legend", "labelledby"] as const) {
+      const row = rowFor("choice-interaction", "root", { promptMarkup });
+      assert.isTrue(allows(row, h("fieldset", {})), promptMarkup);
+      assert.isFalse(allows(row, h("div", {})), promptMarkup);
+      assert.isFalse(allows(row, h("my-group", {})), promptMarkup);
+    }
+  });
+
+  it("keeps a legend Prompt a legend, and lets a labelledby Prompt become a p or a div", () => {
+    const legend = rowFor("choice-interaction", "prompt", { promptMarkup: "legend" });
+    const labelled = rowFor("choice-interaction", "prompt", { promptMarkup: "labelledby" });
+    assert.isTrue(allows(legend, h("legend", {})));
+    assert.isFalse(allows(legend, h("span", {})));
+    assert.isTrue(allows(labelled, h("p", {})));
+    assert.isTrue(allows(labelled, h("div", {})));
   });
 });
 

@@ -1,8 +1,20 @@
 import { assert, describe, it } from "@effect/vitest";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
+import { rowFor } from "#plate/emit/parts.ts";
+import type { InteractionKey, PartOf } from "#plate/emit/parts.ts";
 import { checkTree, isFocusable, nameOf, textOf } from "#plate/test/accessibility.ts";
 import type { Check } from "#plate/test/accessibility.ts";
+
+/**
+ * Read a part's `data-slot` marker from the part table, as an emitter writes it.
+ *
+ * @param interaction The interaction that owns the part.
+ * @param part The part.
+ * @returns The part's marker.
+ */
+const slot = <I extends InteractionKey>(interaction: I, part: PartOf<I>): string =>
+  rowFor(interaction, part).slot;
 
 /**
  * Build one Choice row as the part table lays it out: `li > [Control, Label > [Indicator, text]]`,
@@ -20,10 +32,10 @@ const choiceRow = (
   label: string,
   control: Attributes = {},
 ): Element =>
-  h("li", { "data-slot": "choice" }, [
+  h("li", { "data-slot": slot("choice-interaction", "choice") }, [
     h("input", {
       "aria-labelledby": `q1-${response}-${key}-label`,
-      "data-slot": "control",
+      "data-slot": slot("choice-interaction", "control"),
       id: `q1-${response}-${key}`,
       name: `q1-${response}`,
       type: "radio",
@@ -32,36 +44,64 @@ const choiceRow = (
     }),
     h(
       "label",
-      { "data-slot": "label", for: `q1-${response}-${key}`, id: `q1-${response}-${key}-label` },
-      [h("span", { "aria-hidden": "true", "data-slot": "indicator" }, [text("o")]), text(label)],
+      {
+        "data-slot": slot("choice-interaction", "label"),
+        for: `q1-${response}-${key}`,
+        id: `q1-${response}-${key}-label`,
+      },
+      [
+        h("span", { "aria-hidden": "true", "data-slot": slot("choice-interaction", "indicator") }, [
+          text("o"),
+        ]),
+        text(label),
+      ],
     ),
   ]);
 
 /**
- * Build a Choice interaction: a `fieldset` group Root holding a Prompt and the rows' list.
+ * Build the Choices list holding the rows.
  *
- * @param response The response identifier the Prompt's id is scoped by.
+ * @param rows The Choice rows.
+ * @returns The Choices part.
+ */
+const choices = (rows: readonly Element[]): Element =>
+  h("ul", { "data-slot": slot("choice-interaction", "choices") }, rows);
+
+/**
+ * Build a Choice interaction in the legend markup: a `fieldset` Root with no role, its first child
+ * a `legend` Prompt of phrasing content, which names it.
+ *
  * @param prompt The Prompt's text.
  * @param rows The Choice rows.
+ * @returns The interaction Root.
+ */
+const choice = (prompt: string, rows: readonly Element[]): Element =>
+  h("fieldset", { "data-slot": slot("choice-interaction", "root") }, [
+    h("legend", { "data-slot": slot("choice-interaction", "prompt") }, [text(prompt)]),
+    choices(rows),
+  ]);
+
+/**
+ * Build a Choice interaction in the labelledby markup: a `fieldset` Root with no role, named by
+ * `aria-labelledby` → a `qti-prompt` Prompt that holds a paragraph, which a legend may not.
+ *
+ * @param prompt The Prompt's element: `qti-prompt` by default, `legend` for a negative case.
  * @param root The Root's naming attributes, `aria-labelledby` to the Prompt by default.
  * @returns The interaction Root.
  */
-const choice = (
-  response: string,
-  prompt: string,
-  rows: readonly Element[],
-  root?: Attributes,
-): Element =>
+const paragraphChoice = (prompt = "qti-prompt", root?: Attributes): Element =>
   h(
     "fieldset",
     {
-      "data-slot": "root",
-      role: "group",
-      ...(root ?? { "aria-labelledby": `q1-${response}-prompt` }),
+      "data-slot": slot("choice-interaction", "root"),
+      ...(root ?? { "aria-labelledby": "q1-RESPONSE-prompt" }),
     },
     [
-      h("qti-prompt", { "data-slot": "prompt", id: `q1-${response}-prompt` }, [text(prompt)]),
-      h("ul", { "data-slot": "choices" }, rows),
+      h(prompt, { "data-slot": slot("choice-interaction", "prompt"), id: "q1-RESPONSE-prompt" }, [
+        h("p", {}, [text("Paris is on the Seine.")]),
+        h("p", {}, [text("Which city is the capital of France?")]),
+      ]),
+      choices([choiceRow("RESPONSE", "A", "Paris"), choiceRow("RESPONSE", "B", "London")]),
     ],
   );
 
@@ -72,10 +112,14 @@ const choice = (
  * @returns The interaction Root.
  */
 const essay = (control: Attributes): Element =>
-  h("qti-extended-text-interaction", { "data-slot": "root" }, [
-    h("qti-prompt", { "data-slot": "prompt", id: "q1-ESSAY-prompt" }, [text("Describe Paris.")]),
+  h("qti-extended-text-interaction", { "data-slot": slot("extended-text-interaction", "root") }, [
+    h(
+      "qti-prompt",
+      { "data-slot": slot("extended-text-interaction", "prompt"), id: "q1-ESSAY-prompt" },
+      [text("Describe Paris.")],
+    ),
     h("textarea", {
-      "data-slot": "control",
+      "data-slot": slot("extended-text-interaction", "control"),
       id: "q1-ESSAY",
       name: "q1-ESSAY",
       rows: "6",
@@ -86,7 +130,7 @@ const essay = (control: Attributes): Element =>
 /**
  * The item Root's attributes, `lang` among them.
  */
-const itemRoot: Attributes = { "data-slot": "item", id: "q1", lang: "en" };
+const itemRoot: Attributes = { "data-slot": slot("item", "root"), id: "q1", lang: "en" };
 
 /**
  * Build the item chrome around a Form's children.
@@ -99,7 +143,7 @@ const item = (children: readonly Node[], root: Attributes = itemRoot): Element =
   h("qti-assessment-item", root, [
     h(
       "form",
-      { action: "/attempt", "data-slot": "form", method: "post", novalidate: true },
+      { action: "/attempt", "data-slot": slot("item", "form"), method: "post", novalidate: true },
       children,
     ),
   ]);
@@ -111,23 +155,29 @@ const status = h(
   "section",
   {
     "aria-labelledby": "q1-status-heading",
-    "data-slot": "status",
+    "data-slot": slot("item", "status"),
     id: "q1-status",
     role: "status",
     tabindex: "-1",
   },
-  [h("h2", { "data-slot": "status-heading", id: "q1-status-heading" }, [text("Status")])],
+  [
+    h("h2", { "data-slot": slot("item", "statusHeading"), id: "q1-status-heading" }, [
+      text("Status"),
+    ]),
+  ],
 );
 
 /**
  * The Submit button, named by its own text.
  */
-const submit = h("button", { "data-slot": "submit", type: "submit" }, [text("Submit")]);
+const submit = h("button", { "data-slot": slot("item", "submit"), type: "submit" }, [
+  text("Submit"),
+]);
 
 /**
  * The positive Choice: a Prompt and two rows.
  */
-const capital = choice("RESPONSE", "Which city is the capital of France?", [
+const capital = choice("Which city is the capital of France?", [
   choiceRow("RESPONSE", "A", "Paris"),
   choiceRow("RESPONSE", "B", "London"),
 ]);
@@ -252,6 +302,10 @@ describe("checkTree", () => {
     assert.deepStrictEqual(checkTree(item([status, capital, submit]), { baseLevel: 2 }), []);
   });
 
+  it("passes a Choice whose Prompt holds a paragraph, named through aria-labelledby", () => {
+    assert.deepStrictEqual(checksOf(item([status, paragraphChoice(), submit])), []);
+  });
+
   it("passes an Extended Text whose Control is named by its Prompt", () => {
     assert.deepStrictEqual(
       checksOf(item([status, essay({ "aria-labelledby": "q1-ESSAY-prompt" }), submit])),
@@ -271,9 +325,18 @@ describe("checkTree", () => {
   });
 
   it("control-name: a control with no name", () => {
-    const entry = h("qti-text-entry-interaction", { "data-slot": "root" }, [
-      h("input", { "data-slot": "control", id: "q1-TEXT", name: "q1-TEXT", type: "text" }),
-    ]);
+    const entry = h(
+      "qti-text-entry-interaction",
+      { "data-slot": slot("text-entry-interaction", "root") },
+      [
+        h("input", {
+          "data-slot": slot("text-entry-interaction", "control"),
+          id: "q1-TEXT",
+          name: "q1-TEXT",
+          type: "text",
+        }),
+      ],
+    );
     assert.deepStrictEqual(checkTree(item([status, capital, entry, submit]), { baseLevel: 2 }), [
       {
         check: "control-name",
@@ -283,7 +346,7 @@ describe("checkTree", () => {
   });
 
   it("label-name: a Control whose aria-labelledby points at another row's Label", () => {
-    const crossed = choice("RESPONSE", "Which city is the capital of France?", [
+    const crossed = choice("Which city is the capital of France?", [
       choiceRow("RESPONSE", "A", "Paris", { "aria-labelledby": "q1-RESPONSE-B-label" }),
       choiceRow("RESPONSE", "B", "London"),
     ]);
@@ -295,16 +358,33 @@ describe("checkTree", () => {
     ]);
   });
 
-  it("prompt-name: a Choice Root with a Prompt but no aria-labelledby to it", () => {
-    const unnamed = choice(
-      "RESPONSE",
-      "Which city is the capital of France?",
-      [choiceRow("RESPONSE", "A", "Paris"), choiceRow("RESPONSE", "B", "London")],
-      {},
+  it("prompt-name: a paragraph Prompt whose Root has no aria-labelledby to it", () => {
+    assert.deepStrictEqual(
+      checkTree(item([status, paragraphChoice("qti-prompt", {}), submit]), { baseLevel: 2 }),
+      [{ check: "prompt-name", path: ["qti-assessment-item", "form", "fieldset"] }],
     );
-    assert.deepStrictEqual(checkTree(item([status, unnamed, submit]), { baseLevel: 2 }), [
+  });
+
+  it("prompt-name: a paragraph Prompt rendered as the fieldset's legend", () => {
+    assert.deepStrictEqual(checksOf(item([status, paragraphChoice("legend", {}), submit])), [
+      "prompt-name",
+    ]);
+  });
+
+  it("prompt-name: a legend Prompt that is not the fieldset's first child", () => {
+    const [legend, list] = capital.children;
+    assert.isDefined(legend);
+    assert.isDefined(list);
+
+    const late = h("fieldset", capital.attrs, [list, legend]);
+    assert.deepStrictEqual(checkTree(item([status, late, submit]), { baseLevel: 2 }), [
       { check: "prompt-name", path: ["qti-assessment-item", "form", "fieldset"] },
     ]);
+  });
+
+  it("prompt-name: a legend Choice Root that keeps role=group", () => {
+    const grouped = h("fieldset", { ...capital.attrs, role: "group" }, capital.children);
+    assert.deepStrictEqual(checksOf(item([status, grouped, submit])), ["prompt-name"]);
   });
 
   it("prompt-name: an Extended Text Control named by something other than its Prompt", () => {
@@ -325,7 +405,7 @@ describe("checkTree", () => {
 
   it("lang: a root with no lang", () => {
     assert.deepStrictEqual(
-      checkTree(item([status, capital, submit], { "data-slot": "item", id: "q1" }), {
+      checkTree(item([status, capital, submit], { "data-slot": slot("item", "root"), id: "q1" }), {
         baseLevel: 2,
       }),
       [{ check: "lang", path: ["qti-assessment-item"] }],
@@ -367,7 +447,7 @@ describe("checkTree", () => {
   });
 
   it("autofocus: two autofocus", () => {
-    const twice = choice("RESPONSE", "Which city is the capital of France?", [
+    const twice = choice("Which city is the capital of France?", [
       choiceRow("RESPONSE", "A", "Paris", { autofocus: true }),
       choiceRow("RESPONSE", "B", "London", { autofocus: true }),
     ]);
@@ -385,17 +465,17 @@ describe("checkTree", () => {
   });
 
   it("radio-group: a radio group split across two Roots", () => {
-    const first = choice("RESPONSE", "Which city is the capital of France?", [
+    const first = choice("Which city is the capital of France?", [
       choiceRow("RESPONSE", "A", "Paris"),
     ]);
-    const second = choice("RESPONSE2", "Which city is the capital of Spain?", [
+    const second = choice("Which city is the capital of Spain?", [
       choiceRow("RESPONSE2", "B", "Madrid", { name: "q1-RESPONSE" }),
     ]);
     assert.deepStrictEqual(checksOf(item([status, first, second, submit])), ["radio-group"]);
   });
 
   it("radio-group: radios of two names in one Root", () => {
-    const mixed = choice("RESPONSE", "Which city is the capital of France?", [
+    const mixed = choice("Which city is the capital of France?", [
       choiceRow("RESPONSE", "A", "Paris"),
       choiceRow("RESPONSE", "B", "London", { name: "q1-OTHER" }),
     ]);
@@ -409,8 +489,11 @@ describe("checkTree", () => {
   });
 
   it("submit-order: a Submit outside the Form", () => {
-    const root = h("qti-assessment-item", { "data-slot": "item", id: "q1", lang: "en" }, [
-      h("form", { action: "/attempt", "data-slot": "form", method: "post" }, [status, capital]),
+    const root = h("qti-assessment-item", itemRoot, [
+      h("form", { action: "/attempt", "data-slot": slot("item", "form"), method: "post" }, [
+        status,
+        capital,
+      ]),
       submit,
     ]);
     assert.deepStrictEqual(checksOf(root), ["submit-order"]);
@@ -421,9 +504,12 @@ describe("checkTree", () => {
     assert.isDefined(control);
     assert.isDefined(label);
 
-    const hidden = choice("RESPONSE", "Which city is the capital of France?", [
+    const hidden = choice("Which city is the capital of France?", [
       choiceRow("RESPONSE", "A", "Paris"),
-      h("li", { "aria-hidden": "true", "data-slot": "choice" }, [control, label]),
+      h("li", { "aria-hidden": "true", "data-slot": slot("choice-interaction", "choice") }, [
+        control,
+        label,
+      ]),
     ]);
     assert.deepStrictEqual(checksOf(item([status, hidden, submit])), ["hidden-control"]);
   });
