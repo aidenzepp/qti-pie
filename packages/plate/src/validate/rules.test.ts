@@ -1031,4 +1031,75 @@ describe("checkRules", () => {
       });
     });
   });
+
+  describe("a lookup's outcome", () => {
+    const lookupPath = "qti-assessment-item/qti-response-processing/qti-lookup-outcome-value";
+
+    it("[I-9b] refuses a lookup that names no outcome declaration, as undeclared-variable", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [processing(undefined, [lookup("NOPE", baseValue("integer", "1"))])],
+          ),
+        ),
+        [
+          {
+            detail: {
+              element: "qti-lookup-outcome-value",
+              expected: "outcome",
+              identifier: "NOPE",
+            },
+            path: lookupPath,
+            rule: "undeclared-variable",
+          },
+        ],
+      );
+    });
+
+    it("[I-9b] refuses a lookup whose outcome holds no lookup table, as template-requirements", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [processing(undefined, [lookup("SCORE", baseValue("integer", "1"))])],
+          ),
+        ),
+        [
+          {
+            detail: {
+              child: "qti-match-table or qti-interpolation-table",
+              declaration: "qti-outcome-declaration",
+              element: "qti-lookup-outcome-value",
+              identifier: "SCORE",
+            },
+            path: lookupPath,
+            rule: "template-requirements",
+          },
+        ],
+      );
+    });
+
+    it("[I-9b] accepts an integer operand under an interpolation table", () => {
+      assert.deepStrictEqual(
+        judged(lookupItem("qti-interpolation-table", baseValue("integer", "1"))),
+        [],
+      );
+    });
+
+    it("[I-9b] accepts a lookup that names the built-in completionStatus", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [processing(undefined, [lookup("completionStatus", baseValue("integer", "1"))])],
+          ),
+        ),
+        [],
+      );
+    });
+  });
 });

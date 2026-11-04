@@ -902,10 +902,13 @@ type Expected = "outcome" | "response" | "variable";
  * "This expression looks up the value of an item variable that has been declared in a
  * corresponding variable declaration or is one of the built-in variables" (`qti-variable`,
  * `info-compact.txt:9286`); `qti-correct` and `qti-map-response` read a response variable
- * (`:11418`, `:11438`); `qti-set-outcome-value` sets an outcome variable (`:11770`).
+ * (`:11418`, `:11438`); `qti-set-outcome-value` sets an outcome variable (`:11770`), and so does
+ * `qti-lookup-outcome-value`, whose `identifier` is "The identifier of the outcome variable to be
+ * set" (`:10775`).
  */
 const referencing: ReadonlyMap<string, Expected> = new Map([
   ["qti-correct", "response"],
+  ["qti-lookup-outcome-value", "outcome"],
   ["qti-map-response", "response"],
   ["qti-set-outcome-value", "outcome"],
   ["qti-variable", "variable"],
@@ -1026,8 +1029,8 @@ const variableType = (
  *
  * `qti-variable` names a response, outcome, template or context declaration of the item, or a
  * built-in variable (`info-compact.txt:9286`); `qti-correct` and `qti-map-response` name a
- * response declaration; `qti-set-outcome-value` names an outcome declaration or
- * `completionStatus`. Template processing is not checked here.
+ * response declaration; `qti-set-outcome-value` and `qti-lookup-outcome-value` name an outcome
+ * declaration or `completionStatus`. Template processing is not checked here.
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1215,12 +1218,60 @@ const lookupTableOf = (declaration: SourceElement): Option.Option<LookupTable> =
   );
 
 /**
+ * Apply `template-requirements` to a `qti-lookup-outcome-value` of inline response processing: the
+ * outcome it names is declared with a lookup table, as the lookup "sets the value of an outcome
+ * variable to the value obtained by looking up the value of the associated expression in the
+ * lookupTable associated with the outcome's declaration" (the information model,
+ * `info-compact.txt:10774`).
+ *
+ * A lookup that names no outcome declaration is not judged here: an undeclared variable is its own
+ * refusal, and this rule refuses only a declared outcome that holds neither a `qti-match-table` nor
+ * a `qti-interpolation-table`. The detail has {@link neededDetail}'s keys, with both tables in
+ * `child`.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The item's declarations and the parents the walk has met.
+ * @returns The refusal at the `qti-lookup-outcome-value`'s path when its outcome holds no lookup
+ *   table; none for any other element.
+ */
+const lookupTableRequirements = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] => {
+  const attribute = attributeOf(visit.element, "identifier");
+  if (
+    !isQti(visit.element, (local) => local === "qti-lookup-outcome-value") ||
+    Option.isNone(attribute) ||
+    !inResponseProcessing(context, visit.element)
+  ) {
+    return [];
+  }
+
+  const identifier = identifierOf(attribute.value);
+  const declaration = context.outcomes.get(identifier);
+
+  return declaration === undefined || Option.isSome(lookupTableOf(declaration))
+    ? []
+    : [
+        refusal(source, "template-requirements", visit.path, {
+          child: "qti-match-table or qti-interpolation-table",
+          declaration: "qti-outcome-declaration",
+          element: visit.element.local,
+          identifier,
+        }),
+      ];
+};
+
+/**
  * Apply `expression-type` to a `qti-lookup-outcome-value`'s operand (reading 28).
  *
  * The operand is a single integer, float or duration, and an integer when the outcome holds a
  * `qti-match-table` (operator ruling `96840ced`, Q15 B: refused although phase 1 never runs a
- * lookup). An operand phase 1 cannot type is accepted untyped, and an outcome that is undeclared
- * or holds no lookup table is not judged here.
+ * lookup). An operand phase 1 cannot type is accepted untyped. An outcome that is undeclared or
+ * holds no lookup table is not judged here: they are `undeclared-variable`'s refusal and
+ * {@link lookupTableRequirements}'s.
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1287,7 +1338,9 @@ const variableDeclarations = [
 /**
  * Check a document against the prose rules: `undeclared-response`, `duplicate-identifier`,
  * `binding`, `template-requirements`, `value-type`, `undeclared-variable` and `expression-type`,
- * and reading 19's `max-strings` on an Extended Text bound to a container.
+ * and reading 19's `max-strings` on an Extended Text bound to a container. `template-requirements`
+ * judges the declarations a standard template, an inline `qti-map-response` and a
+ * `qti-lookup-outcome-value` need.
  *
  * Every refusal is located at an element or attribute path and returned in document order; the
  * check never stops at the first. An empty list means no prose rule this module implements refuses
@@ -1320,6 +1373,7 @@ export const checkRules = (source: SourceDocument): readonly Refusal[] => {
       ...textValueType(source, visit, context),
       ...undeclaredVariable(source, visit, context),
       ...setOutcomeType(source, visit, context),
+      ...lookupTableRequirements(source, visit, context),
       ...lookupOperandType(source, visit, context),
     );
   }
