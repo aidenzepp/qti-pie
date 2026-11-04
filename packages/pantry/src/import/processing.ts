@@ -75,6 +75,7 @@ export class ProcessingRefused extends Schema.TaggedError<ProcessingRefused>()(
       "P26",
       "P27",
       "P29",
+      "prefixed-ref",
     ]),
   },
 ) {
@@ -165,6 +166,8 @@ const guidance: Readonly<Record<PId, string>> = {
   P27: "it names a variable that has no mapping of the kind it needs. Declare the mapping or name another variable.",
   P29: "a weighted test variable must be a float. Set base-type to float or remove the weight.",
   P8: "it names a variable that no declaration of the document declares and no built-in provides. Declare the variable, or correct the identifier.",
+  "prefixed-ref":
+    "its prefixed variable name does not name exactly one variable of the test. Name one item reference, part or section and one of its variables, or declare the name whole.",
 };
 
 /**
