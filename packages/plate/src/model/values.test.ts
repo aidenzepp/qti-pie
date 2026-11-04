@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option, Schema } from "effect";
+import { Duration, Effect, Option, Schema } from "effect";
 import {
   Value,
   format,
@@ -99,6 +99,23 @@ describe("parseElementText", () => {
       assert.strictEqual(error._tag, "InvalidValue");
     }),
   );
+
+  it.live("trims a 100,000-character whitespace run in linear time", () =>
+    Effect.gen(function* linearTrim() {
+      const run = " \t\n\r".repeat(25_000);
+      const cases: readonly (readonly [ModelledBaseType, string, Single])[] = [
+        ["identifier", `${run}x`, { baseType: "identifier", value: "x" }],
+        ["pair", `A${run}B${run}`, { baseType: "pair", value: ["A", "B"] }],
+      ];
+      for (const [baseType, text, single] of cases) {
+        const [elapsed, read] = yield* Effect.timed(
+          Effect.suspend(() => parseElementText(baseType, text)),
+        );
+        assert.deepStrictEqual(read, Option.some(single));
+        assert.isBelow(Duration.toMillis(elapsed), 200, `${baseType}: ${Duration.format(elapsed)}`);
+      }
+    }),
+  );
 });
 
 describe("parseLexical", () => {
@@ -137,7 +154,7 @@ describe("parseLexical", () => {
         ["integer", "0"],
         ["integer", "-12"],
         ["integer", "+7"],
-        ["integer", "1000000000000000000000"],
+        ["integer", "9007199254740991"],
         ["float", "2.5"],
         ["float", "1E3"],
         ["float", ".5"],
@@ -159,7 +176,10 @@ describe("parseLexical", () => {
         value: Number.POSITIVE_INFINITY,
       });
       assert.strictEqual(format({ baseType: "float", value: Number.NEGATIVE_INFINITY }), "-INF");
-      assert.strictEqual(format({ baseType: "integer", value: 1e21 }), "1000000000000000000000");
+      assert.strictEqual(
+        format({ baseType: "integer", value: Number.MAX_SAFE_INTEGER }),
+        "9007199254740991",
+      );
     }),
   );
 
@@ -175,6 +195,48 @@ describe("parseLexical", () => {
     }),
   );
 
+  it.effect("refuses an integer one past either bound of the range a number holds exactly", () =>
+    Effect.gen(function* integerBoundsRefused() {
+      for (const lexical of ["9007199254740992", "-9007199254740992", `1${"0".repeat(400)}`]) {
+        const error = yield* Effect.flip(parseLexical("integer", lexical));
+        assert.strictEqual(error._tag, "InvalidValue");
+        assert.strictEqual(error.baseType, "integer");
+        assert.strictEqual(error.lexical, lexical);
+      }
+    }),
+  );
+
+  it.effect("reads the integer bounds exactly and formats their exact digits", () =>
+    Effect.gen(function* integerBoundsExact() {
+      const cases: readonly (readonly [string, number, string])[] = [
+        ["9007199254740991", Number.MAX_SAFE_INTEGER, "9007199254740991"],
+        ["-9007199254740991", Number.MIN_SAFE_INTEGER, "-9007199254740991"],
+        ["+0009007199254740991", Number.MAX_SAFE_INTEGER, "9007199254740991"],
+      ];
+      for (const [lexical, number, digits] of cases) {
+        const single = yield* parseLexical("integer", lexical);
+        assert.deepStrictEqual(single, { baseType: "integer", value: number });
+        assert.strictEqual(format(single), digits);
+      }
+    }),
+  );
+
+  it.effect("reads a float beyond the largest double as the closest finite double, not INF", () =>
+    Effect.gen(function* floatOverflowIsFinite() {
+      const cases: readonly (readonly [string, number])[] = [
+        ["1e400", Number.MAX_VALUE],
+        ["-1E400", -Number.MAX_VALUE],
+        ["1e-400", 0],
+      ];
+      for (const [lexical, number] of cases) {
+        assert.deepStrictEqual(yield* parseLexical("float", lexical), {
+          baseType: "float",
+          value: number,
+        });
+      }
+    }),
+  );
+
   it.effect("reads a pair as written and refuses one with outer whitespace", () =>
     Effect.gen(function* pairsAsWritten() {
       const directed = yield* parseLexical("directedPair", "A B");
@@ -183,6 +245,30 @@ describe("parseLexical", () => {
       for (const lexical of [" A B", "A", "A B C", "A 1"]) {
         const error = yield* Effect.flip(parseLexical("pair", lexical));
         assert.strictEqual(error._tag, "InvalidValue");
+      }
+    }),
+  );
+});
+
+describe("format", () => {
+  it.effect("writes every value the parser accepts, one case per base type", () =>
+    Effect.gen(function* formatIsTotal() {
+      const cases: readonly (readonly [ModelledBaseType, string, string])[] = [
+        ["identifier", "RESPONSE_1", "RESPONSE_1"],
+        ["boolean", "false", "false"],
+        ["integer", "-9007199254740991", "-9007199254740991"],
+        ["float", "1e400", "1.7976931348623157e+308"],
+        ["float", "-INF", "-INF"],
+        ["float", "NaN", "NaN"],
+        ["string", "a b", "a b"],
+        ["pair", "A B", "A B"],
+        ["directedPair", "B A", "B A"],
+        ["uri", "https://example.org/a b", "https://example.org/a b"],
+      ];
+      for (const [baseType, lexical, written] of cases) {
+        const single = yield* parseLexical(baseType, lexical);
+        assert.strictEqual(format(single), written, `${baseType} ${lexical}`);
+        assert.deepStrictEqual(yield* parseLexical(baseType, format(single)), single);
       }
     }),
   );
@@ -283,7 +369,7 @@ describe("Value", () => {
           { baseType: "float", value: 2.5 },
           { baseType: "float", value: Number.POSITIVE_INFINITY },
         ]),
-        value("integer", "single", [{ baseType: "integer", value: 1e21 }]),
+        value("integer", "single", [{ baseType: "integer", value: Number.MAX_SAFE_INTEGER }]),
         value("boolean", "single", [{ baseType: "boolean", value: true }]),
         value("string", "single", [{ baseType: "string", value: " a " }]),
         nullOf("uri", "single"),
@@ -302,6 +388,11 @@ describe("Value", () => {
     assert.isFalse(valid(singleInput("integer", [{ baseType: "float", value: 1 }])));
     assert.isFalse(valid(singleInput("integer", [{ baseType: "integer", value: "1" }])));
     assert.isFalse(valid(singleInput("integer", [{ baseType: "integer", value: 1.5 }])));
+    assert.isTrue(
+      valid(singleInput("integer", [{ baseType: "integer", value: Number.MIN_SAFE_INTEGER }])),
+    );
+    assert.isFalse(valid(singleInput("integer", [{ baseType: "integer", value: 2 ** 53 }])));
+    assert.isFalse(valid(singleInput("integer", [{ baseType: "integer", value: -(2 ** 53) }])));
     assert.isFalse(valid(singleInput("identifier", [{ baseType: "identifier", value: "1" }])));
     assert.isFalse(valid(singleInput("pair", [{ baseType: "pair", value: ["A", "1"] }])));
     assert.isFalse(valid(singleInput("string", [{ baseType: "string", value: "" }])));
