@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Option, Result } from "effect";
 import { emitItem, emitStatus } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import { h, text } from "#plate/emit/node.ts";
@@ -99,7 +99,7 @@ describe("emitItem", () => {
       Effect.gen(function* rootAttributes() {
         const state = yield* stateWith();
         for (const render of renders) {
-          const root = yield* emitItem(render, state, body());
+          const root = yield* Effect.fromResult(emitItem(render, state, body()));
           assert.strictEqual(root.tag, rowFor("item", "root").element);
           assert.strictEqual(root.attrs["data-slot"], rowFor("item", "root").slot);
           assert.strictEqual(root.attrs["lang"], "en-GB");
@@ -118,7 +118,7 @@ describe("emitItem", () => {
         const state = yield* stateWith();
         for (const render of renders) {
           const nodes = body();
-          const root = yield* emitItem(render, state, nodes);
+          const root = yield* Effect.fromResult(emitItem(render, state, nodes));
           assert.strictEqual(root.children.length, nodes.length);
           assert.isTrue(nodes.every((node, index) => root.children[index] === node));
           assert.notInclude(tagsIn(root), "form");
@@ -131,7 +131,7 @@ describe("emitItem", () => {
     Effect.gen(function* swappedRoot() {
       const state = yield* stateWith({ item: { root: hostPart("div") } });
       const nodes = body();
-      const root = yield* emitItem(payloadOf(false), state, nodes);
+      const root = yield* Effect.fromResult(emitItem(payloadOf(false), state, nodes));
       assert.strictEqual(root.tag, "div");
       assert.strictEqual(root.attrs["class"], "host");
       assert.strictEqual(root.attrs["lang"], "en-GB");
@@ -146,7 +146,9 @@ describe("emitItem", () => {
       const state = yield* stateWith({
         item: { root: (props, children) => h("a", props, children) },
       });
-      const error = yield* Effect.flip(emitItem(payloadOf(false), state, body()));
+      const error = yield* Effect.flip(
+        Effect.fromResult(emitItem(payloadOf(false), state, body())),
+      );
       assert.strictEqual(error._tag, "PartSwapRefused");
       assert.strictEqual(error.cause, "root-not-allowed");
       assert.strictEqual(error.interaction, "item");
@@ -158,7 +160,7 @@ describe("emitItem", () => {
     Effect.gen(function* checkedTree() {
       const state = yield* stateWith();
       for (const render of renders) {
-        const root = yield* emitItem(render, state, body());
+        const root = yield* Effect.fromResult(emitItem(render, state, body()));
         assert.deepStrictEqual(checkTree(root, { baseLevel: 2 }), []);
         assert.isTrue(roundTrips(root));
       }
@@ -302,6 +304,16 @@ const interactionsIn = (nodes: readonly PayloadNode[]): readonly InteractionPayl
     }
   });
 
+describe("the item chrome, plain functions", () => {
+  it.effect("emitItem and emitStatus return Results", () =>
+    Effect.gen(function* chromeResults() {
+      const state = yield* stateWith();
+      assert.isTrue(Result.isResult(emitItem(payloadOf(false), state, body())));
+      assert.isTrue(Result.isResult(emitStatus(scored, state)));
+    }),
+  );
+});
+
 describe("emitStatus", () => {
   it.effect(
     "[I-0] the region's heading is at the base level, reads the state's text, and names it",
@@ -309,7 +321,7 @@ describe("emitStatus", () => {
       Effect.gen(function* statusHeading() {
         const state = yield* stateWith();
         for (const input of statuses) {
-          const status = yield* emitStatus(input, state);
+          const status = yield* Effect.fromResult(emitStatus(input, state));
           const heading = elementAt(status, 0);
           const headingRow = rowFor("item", "statusHeading", { headingLevel: state.headingLevel });
           assert.strictEqual(status.tag, rowFor("item", "status").element);
@@ -331,9 +343,11 @@ describe("emitStatus", () => {
     Effect.gen(function* statusAutofocus() {
       const state = yield* stateWith();
       for (const input of statuses) {
-        const absent = yield* emitStatus(input, state);
-        const declined = yield* emitStatus({ ...input, autofocus: false }, state);
-        const asked = yield* emitStatus({ ...input, autofocus: true }, state);
+        const absent = yield* Effect.fromResult(emitStatus(input, state));
+        const declined = yield* Effect.fromResult(
+          emitStatus({ ...input, autofocus: false }, state),
+        );
+        const asked = yield* Effect.fromResult(emitStatus({ ...input, autofocus: true }, state));
         assert.deepStrictEqual(carrying(absent, "autofocus"), []);
         assert.deepStrictEqual(carrying(declined, "autofocus"), []);
         assert.deepStrictEqual(carrying(asked, "autofocus"), [asked]);
@@ -348,11 +362,11 @@ describe("emitStatus", () => {
       Effect.gen(function* statusDetail() {
         const state = yield* stateWith();
 
-        const score = yield* emitStatus(scored, state);
+        const score = yield* Effect.fromResult(emitStatus(scored, state));
         assert.strictEqual(score.children.length, 2);
         assert.strictEqual(textOf(elementAt(score, 1)), message("en", "score", { score: "1" }));
 
-        const refused = yield* emitStatus(notAccepted, state);
+        const refused = yield* Effect.fromResult(emitStatus(notAccepted, state));
         const list = elementAt(refused, 1);
         assert.strictEqual(refused.children.length, 2);
         assert.strictEqual(list.tag, rowFor("item", "messages").element);
@@ -370,11 +384,11 @@ describe("emitStatus", () => {
           ]),
         );
 
-        const response = yield* emitStatus(recorded, state);
+        const response = yield* Effect.fromResult(emitStatus(recorded, state));
         assert.strictEqual(response.children.length, 2);
         assert.strictEqual(textOf(elementAt(response, 1)), message("en", "responseRecorded"));
 
-        const both = yield* emitStatus({ ...scored, messages: refusals }, state);
+        const both = yield* Effect.fromResult(emitStatus({ ...scored, messages: refusals }, state));
         assert.strictEqual(both.children.length, 2);
         assert.strictEqual(textOf(elementAt(both, 1)), message("en", "score", { score: "1" }));
       }),
@@ -385,7 +399,7 @@ describe("emitStatus", () => {
     () =>
       Effect.gen(function* statusMessageIds() {
         const state = yield* stateWith();
-        const list = elementAt(yield* emitStatus(notAccepted, state), 1);
+        const list = elementAt(yield* Effect.fromResult(emitStatus(notAccepted, state)), 1);
         const ids = list.children.map((_, index) => String(elementAt(list, index).attrs["id"]));
         assert.deepStrictEqual(
           ids,
@@ -419,7 +433,7 @@ describe("emitStatus", () => {
     Effect.gen(function* statusChrome() {
       const state = yield* stateWith();
       for (const input of statuses) {
-        const status = yield* emitStatus({ ...input, autofocus: true }, state);
+        const status = yield* Effect.fromResult(emitStatus({ ...input, autofocus: true }, state));
         assert.notInclude(tagsIn(status), "form");
         assert.notInclude(tagsIn(status), "button");
       }
@@ -431,7 +445,7 @@ describe("emitStatus", () => {
     () =>
       Effect.gen(function* swappedStatus() {
         const state = yield* stateWith({ item: { status: hostPart("div") } });
-        const status = yield* emitStatus({ ...scored, autofocus: true }, state);
+        const status = yield* Effect.fromResult(emitStatus({ ...scored, autofocus: true }, state));
         assert.strictEqual(status.tag, "div");
         assert.strictEqual(status.attrs["class"], "host");
         assert.strictEqual(status.attrs["id"], scopedId(instance, "status"));
@@ -449,10 +463,12 @@ describe("emitStatus", () => {
         const state = yield* stateWith();
         for (const input of statuses) {
           for (const status of [
-            yield* emitStatus(input, state),
-            yield* emitStatus({ ...input, autofocus: true }, state),
+            yield* Effect.fromResult(emitStatus(input, state)),
+            yield* Effect.fromResult(emitStatus({ ...input, autofocus: true }, state)),
           ]) {
-            const root = yield* emitItem(payloadOf(false), state, [status, ...body()]);
+            const root = yield* Effect.fromResult(
+              emitItem(payloadOf(false), state, [status, ...body()]),
+            );
             assert.deepStrictEqual(checkTree(root, { baseLevel: 2 }), []);
             assert.isTrue(roundTrips(status));
             assert.isTrue(roundTrips(root));

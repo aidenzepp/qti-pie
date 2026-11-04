@@ -211,9 +211,11 @@ export const renderTextEntry = Effect.fnUntraced(function* renderTextEntry(
   const replacement = (part: TextEntryPart) =>
     Option.getOrUndefined(state.parts.replacementFor(owner, part));
   const props = connect(interaction, payload, state.locale);
-  const control = yield* applyPart(rows.control, props.control, [], replacement("control"));
+  const control = yield* Effect.fromResult(
+    applyPart(rows.control, props.control, [], replacement("control")),
+  );
 
-  return yield* applyPart(rows.root, props.root, [control], replacement("root"));
+  return yield* Effect.fromResult(applyPart(rows.root, props.root, [control], replacement("root")));
 });
 
 /**

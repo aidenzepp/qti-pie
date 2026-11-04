@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Option, Result } from "effect";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Node } from "#plate/emit/node.ts";
 import {
@@ -142,6 +142,17 @@ describe("rowFor", () => {
 
   it("makes the StatusHeading the heading of the given level", () => {
     assert.strictEqual(rowFor("item", "statusHeading", { headingLevel: 3 }).element, "h3");
+  });
+
+  it("throws HeadingLevelDefect, carrying the level, for a StatusHeading level above 6", () => {
+    const thrown = Result.getFailure(
+      Result.try(() => rowFor("item", "statusHeading", { headingLevel: 7 })),
+    );
+    assert.isTrue(Option.isSome(thrown));
+
+    const defect = Option.getOrThrow(thrown);
+    assert.propertyVal(defect, "_tag", "HeadingLevelDefect");
+    assert.propertyVal(defect, "level", 7);
   });
 
   it("makes the Choice Prompt a legend first in its fieldset under the legend markup", () => {

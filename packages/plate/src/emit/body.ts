@@ -552,11 +552,13 @@ const withBodies = (children: readonly Node[]): readonly Node[] => {
 const noticeOf = (notice: NoticePayload, walk: Walk): Effect.Effect<Element, PartSwapRefused> => {
   const row = rowFor("item", "notice", { position: walk.position });
 
-  return applyPart(
-    row,
-    { "data-slot": row.slot, role: "note" },
-    [text(message(walk.locale, "notice", { feature: notice.feature }))],
-    Option.getOrUndefined(walk.parts.replacementFor("item", "notice")),
+  return Effect.fromResult(
+    applyPart(
+      row,
+      { "data-slot": row.slot, role: "note" },
+      [text(message(walk.locale, "notice", { feature: notice.feature }))],
+      Option.getOrUndefined(walk.parts.replacementFor("item", "notice")),
+    ),
   );
 };
 

@@ -276,36 +276,35 @@ export const renderChoice = Effect.fnUntraced(function* renderChoice(
     Effect.forEach((item) =>
       Effect.gen(function* choiceItem() {
         const nodes = yield* emitContent(item.content);
-        const indicator = yield* applyPart(
-          rows.indicator,
-          item.indicator,
-          [],
-          replacement("indicator"),
+        const indicator = yield* Effect.fromResult(
+          applyPart(rows.indicator, item.indicator, [], replacement("indicator")),
         );
-        const label = yield* applyPart(
-          rows.label,
-          item.label,
-          [indicator, ...nodes],
-          replacement("label"),
+        const label = yield* Effect.fromResult(
+          applyPart(rows.label, item.label, [indicator, ...nodes], replacement("label")),
         );
-        const control = yield* applyPart(rows.control, item.control, [], replacement("control"));
+        const control = yield* Effect.fromResult(
+          applyPart(rows.control, item.control, [], replacement("control")),
+        );
 
-        return yield* applyPart(rows.choice, item.choice, [control, label], replacement("choice"));
+        return yield* Effect.fromResult(
+          applyPart(rows.choice, item.choice, [control, label], replacement("choice")),
+        );
       }),
     ),
   );
-  const list = yield* applyPart(rows.choices, props.choices, choices, replacement("choices"));
+  const list = yield* Effect.fromResult(
+    applyPart(rows.choices, props.choices, choices, replacement("choices")),
+  );
   const prompt = yield* Effect.transposeOption(
     promptContent.pipe(
-      Option.map((content) => applyPart(rows.prompt, props.prompt, content, replacement("prompt"))),
+      Option.map((content) =>
+        Effect.fromResult(applyPart(rows.prompt, props.prompt, content, replacement("prompt"))),
+      ),
     ),
   );
 
-  return yield* applyPart(
-    rows.root,
-    props.root,
-    [...Option.toArray(prompt), list],
-    replacement("root"),
+  return yield* Effect.fromResult(
+    applyPart(rows.root, props.root, [...Option.toArray(prompt), list], replacement("root")),
   );
 });
 
