@@ -39,13 +39,20 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    every non-string base type: `" completed "` is the identifier `completed` and `" true "` is `true`. For base type
    string, whitespace is part of the value and is kept. A round trip still reproduces the source spelling byte for
    byte. An attribute value is not reformatted by tools, so `" true"` is not `"true"`: outer whitespace around a typed
-   value in an attribute (`map-key`, `mapped-value`, default and target values and the like) makes it invalid, and the
-   document is refused. This applies only to attributes that carry a typed QTI value (map-key, mapped-value, default,
-   correct and target values, mapping bounds and the like); free-text attributes such as `title` or `label` keep their
-   text as written, spaces included. The split is a ruling because QTI's schema types the text of `qti-value` as
-   `xs:normalizedString` and of `qti-base-value` as `xs:string`, never as the value's base type, and its information
-   model lists each base type's values without saying how written text maps to them. The specification is silent, and
-   the operator rules this reading. (2026-11-04.)
+   value in an attribute makes it invalid, and the document is refused. The attributes this covers are those whose value
+   takes its type from a QTI base type while the XSD types them as strings, and they are exactly these: `map-key` of a
+   map entry and `mapped-value` of a map entry and of an area map entry; a mapping's and an area mapping's
+   `lower-bound`, `upper-bound` and `default-value`; a match table's and an interpolation table's `default-value`, and
+   their entries' `target-value`; an interpolation table entry's `source-value`; and the value attributes of the
+   usage-data mapping (its `default-value`, `lower-bound` and `upper-bound`, and its entries' `mapped-value`). Where the
+   value is of base type string, as for a `map-key` or `target-value` of a string variable, its whitespace is part of
+   the value and is kept, as above. An attribute the XSD itself types, such as `normal-maximum` as `xs:double` or
+   `max-choices` as `xs:int`, is read as the XSD reads it, outer whitespace collapsed, under reading 1. Free-text
+   attributes such as `title` or `label` keep their text as written, spaces included. The split is a ruling because
+   QTI's schema types the text of `qti-value` as `xs:normalizedString` and of `qti-base-value` as `xs:string`, never as
+   the value's base type, and its information model lists each base type's values without saying how written text maps
+   to them. The specification is silent, and the
+   operator rules this reading. (2026-11-04.)
 
 ## Where QTI's own documents conflict
 
