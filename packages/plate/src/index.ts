@@ -12,6 +12,13 @@ export type { StoredRecord } from "#plate/codec/record.ts";
 
 export { InvalidRecord } from "#plate/codec/record.ts";
 
+export {
+  decodeRedacted,
+  encodeRedacted,
+  InvalidRedacted,
+  type RedactedJson,
+} from "#plate/codec/redacted.ts";
+
 export type { Configuration } from "#plate/configuration.ts";
 
 export { configure, InvalidConfiguration } from "#plate/configuration.ts";
