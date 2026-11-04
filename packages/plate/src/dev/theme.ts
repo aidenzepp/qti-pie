@@ -86,7 +86,7 @@ const remedies = {
   "too-large": `is more than the ${sizeLimit} bytes (32 KiB) the box reads. Paste only the \`:root\` and \`.dark\` blocks of custom properties`,
   unbalanced:
     "is never matched. Close every brace, quote and comment the theme opens, and open every brace it closes",
-  value: `marks a value the box refuses. Give each custom property a value that is not empty, has at most ${valueLimit} characters, and holds none of \`;\`, \`{\`, \`}\`, \`<\`, \`>\`, \`\\\`, \`/*\`, \`@\` or \`!important\`, no \`url()\`, \`src()\`, \`image()\` or \`image-set()\` call, and no quoted string that crosses a line`,
+  value: `marks a value the box refuses. Give each custom property a value that is not empty, has at most ${valueLimit} characters, closes each \`(\` and \`[\` it opens with a matching \`)\` or \`]\`, and holds none of \`;\`, \`{\`, \`}\`, \`<\`, \`>\`, \`\\\`, \`/*\`, \`@\` or \`!important\`, no \`!\` outside a quoted string, no \`url()\`, \`src()\`, \`image()\` or \`image-set()\` call, and no quoted string that crosses a line`,
 } satisfies Record<RefusalCause, string>;
 
 /**
@@ -94,8 +94,8 @@ const remedies = {
  *
  * `detail` quotes only the offending part, at most 80 characters, never the paste: the size in
  * bytes, the selector or at-rule name, the property name, the forbidden token (or the property
- * name when the value is empty, too long or holds a string that crosses a line), or the unmatched
- * character.
+ * name when the value is empty, too long or holds a string that crosses a line), the `!`, the
+ * parenthesis or bracket a value leaves unmatched, or the unmatched brace, quote or comment.
  */
 export class ThemeRefused extends Schema.TaggedError<ThemeRefused>()("ThemeRefused", {
   cause: Schema.Literals(refusalCauses),
@@ -254,6 +254,50 @@ const crossesLine = (value: string): boolean => {
   }
 
   return false;
+};
+
+/**
+ * Each closing parenthesis and bracket, with the character that opens it.
+ */
+const openers: ReadonlyMap<string, string> = new Map([
+  [")", "("],
+  ["]", "["],
+]);
+
+/**
+ * Find the first character outside strings that keeps a value from being one CSS declaration value
+ * (CSS Syntax 3's `<declaration-value>`): a `!`, a `)` or `]` that closes nothing or closes the
+ * other kind, or a `(` or `[` left open. CSS drops a declaration with a stray closer or a `!`, and
+ * an open `(` or `[` starts a block that runs past the `;` and the `}`, swallowing every later rule
+ * of the served theme.
+ *
+ * @param value A value, its strings closed.
+ * @returns The `!` or the stray closer, the opener a closer of the other kind meets, the last
+ *   opener left open, or none when the value is one declaration value.
+ */
+const unmatched = (value: string): string | undefined => {
+  const open: string[] = [];
+  let position = 0;
+  while (position < value.length) {
+    const character = value.charAt(position);
+    const opener = openers.get(character);
+    if (character === "!") {
+      return character;
+    }
+
+    if (character === "(" || character === "[") {
+      open.push(character);
+    } else if (opener !== undefined) {
+      const top = open.pop();
+      if (top !== opener) {
+        return top ?? character;
+      }
+    }
+
+    position = nextToken(value, position);
+  }
+
+  return open.at(-1);
 };
 
 /**
@@ -451,12 +495,14 @@ const readNames = (
 };
 
 /**
- * Check one value: not empty, at most 512 characters, holding no forbidden token, and holding no
- * string that crosses a line.
+ * Check one value: not empty, at most 512 characters, holding no forbidden token, holding no string
+ * that crosses a line, and read by CSS as one declaration value, with no `!` outside a string and
+ * every parenthesis and bracket matched.
  *
  * @param declaration The declaration whose value to check.
- * @returns Nothing, or the refusal quoting the earliest forbidden token, or the property's name when
- *   the value is empty, too long or holds a string that crosses a line.
+ * @returns Nothing, or the refusal quoting the earliest forbidden token, the property's name when
+ *   the value is empty, too long or holds a string that crosses a line, or the `!`, parenthesis or
+ *   bracket `unmatched` finds.
  */
 const checkValue = ([name, value]: ThemeDeclaration): Result.Result<void, ThemeRefused> => {
   if (!valueLength.test(value)) {
@@ -468,7 +514,13 @@ const checkValue = ([name, value]: ThemeDeclaration): Result.Result<void, ThemeR
     return refuse("value", token[0]);
   }
 
-  return crossesLine(value) ? refuse("value", name) : Result.void;
+  if (crossesLine(value)) {
+    return refuse("value", name);
+  }
+
+  const character = unmatched(value);
+
+  return character === undefined ? Result.void : refuse("value", character);
 };
 
 /**
