@@ -1,5 +1,6 @@
+import { threadCpuUsage } from "node:process";
 import { assert, describe, it } from "@effect/vitest";
-import { Duration, Effect, Option, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import { checkInstance, decode, encode, entryName, partition } from "#plate/form/encoding.ts";
 import type { Binding, Entry, Malformed } from "#plate/form/encoding.ts";
 import type { Single, Value } from "#plate/model/values.ts";
@@ -65,6 +66,101 @@ const identifier = (text: string): Single => ({ baseType: "identifier", value: t
  */
 const roundTrip = (bound: Binding, original: Value): Effect.Effect<Value, Malformed> =>
   Effect.fromResult(decode(encode(original, bound), bound));
+
+/**
+ * The digits the Q-20 growth check reads first, before it reads {@link digitGrowth} times as many.
+ */
+const fewerDigits = 12_500;
+
+/**
+ * How many times as many digits the growth check reads second: a linear parse then takes about 8
+ * times as long, and a quadratic one about 64 times.
+ */
+const digitGrowth = 8;
+
+/**
+ * The most a parse's time may grow by on {@link digitGrowth} times the digits, 4 times linear and
+ * half of quadratic, so a busy machine neither fails a linear parse nor passes a quadratic one.
+ */
+const growthLimit = 32;
+
+/**
+ * The runs of each size the growth check times, keeping the fastest, so a run a busy machine
+ * slowed does not count.
+ */
+const growthRuns = 3;
+
+/**
+ * The quadratic control reads 100,000 digits three times, about 1.5 s alone; under load that nears
+ * vitest's default of 5 s.
+ */
+const controlTimeoutMs = 60_000;
+
+/**
+ * Run a computation and measure the CPU time this thread spent on it, which a busy machine
+ * inflates far less than wall-clock time: the time other processes hold the CPU is not counted.
+ *
+ * @param work The computation.
+ * @returns The thread's CPU time over `work`, in milliseconds.
+ */
+const cpuMillis = (work: () => void): Effect.Effect<number> =>
+  Effect.sync(() => {
+    const before = threadCpuUsage();
+    work();
+
+    const { system, user } = threadCpuUsage(before);
+
+    return (system + user) / 1000;
+  });
+
+/**
+ * Measure how a parse's CPU time grows with its digits: time it on the first {@link fewerDigits}
+ * digits and on {@link digitGrowth} times as many, alternating so a busy spell slows both sizes,
+ * and keep the fastest of {@link growthRuns} runs of each. A run of the smaller size parses it
+ * {@link digitGrowth} times over, so both runs last about as long for a linear parse and meet the
+ * same cores and clock speeds.
+ *
+ * @param spelling The digits, at least `fewerDigits * digitGrowth` of them.
+ * @param parse The parse to time.
+ * @returns How many times as long the parse took on the larger prefix as on the smaller.
+ */
+const growthRatio = (spelling: string, parse: (digits: string) => void): Effect.Effect<number> =>
+  Effect.gen(function* timeGrowth() {
+    const fewer = spelling.slice(0, fewerDigits);
+    const more = spelling.slice(0, fewerDigits * digitGrowth);
+    let fewerMs = Number.POSITIVE_INFINITY;
+    let moreMs = Number.POSITIVE_INFINITY;
+    for (let run = 0; run < growthRuns; run += 1) {
+      const fewerRun = yield* cpuMillis(() => {
+        for (let repeat = 0; repeat < digitGrowth; repeat += 1) {
+          parse(fewer);
+        }
+      });
+      const moreRun = yield* cpuMillis(() => {
+        parse(more);
+      });
+      fewerMs = Math.min(fewerMs, fewerRun / digitGrowth);
+      moreMs = Math.min(moreMs, moreRun);
+    }
+
+    return moreMs / fewerMs;
+  });
+
+/**
+ * The growth check's control, a deliberately quadratic parse: a per-digit `total * 36n + digit`
+ * loop, which copies the whole bigint at every digit.
+ *
+ * @param digits Base-36 digits.
+ * @returns The integer the digits name.
+ */
+const parseQuadratically = (digits: string): bigint => {
+  let total = 0n;
+  for (const digit of digits) {
+    total = total * 36n + BigInt(Number.parseInt(digit, 36));
+  }
+
+  return total;
+};
 
 describe("entryName", () => {
   it("[Q-2] names an entry by the instance and the response", () => {
@@ -231,19 +327,46 @@ describe("encode and decode", () => {
     }),
   );
 
-  it.live("[Q-20] reads 100,000 base-36 digits exactly in under 200 ms", () =>
-    Effect.gen(function* longBase36() {
-      const integer = binding("integer");
-      const exact = 17n * 36n ** 99_999n + 7n ** 90_000n;
-      const spelling = exact.toString(36);
-      assert.strictEqual(spelling.length, 100_000);
+  it.effect(
+    "[Q-20] reads 100,000 base-36 digits exactly, 8 times the digits in under 32 times the time",
+    () =>
+      Effect.gen(function* longBase36() {
+        const integer = binding("integer");
+        const exact = 17n * 36n ** 99_999n + 7n ** 90_000n;
+        const spelling = exact.toString(36);
+        assert.strictEqual(spelling.length, 100_000);
 
-      const [elapsed, read] = yield* Effect.timed(
-        Effect.suspend(() => Effect.fromResult(decode(posted(spelling), integer, { base: 36 }))),
-      );
-      assert.deepStrictEqual(read, value(integer, { baseType: "integer", value: exact }));
-      assert.isBelow(Duration.toMillis(elapsed), 200, Duration.format(elapsed));
-    }),
+        const read = yield* Effect.fromResult(decode(posted(spelling), integer, { base: 36 }));
+        assert.deepStrictEqual(read, value(integer, { baseType: "integer", value: exact }));
+
+        const growth = yield* growthRatio(spelling, (digits) => {
+          decode(posted(digits), integer, { base: 36 });
+        });
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the digits took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-20] control: a quadratic parse fails the growth check",
+    () =>
+      Effect.gen(function* quadraticControl() {
+        const spelling = "z".repeat(fewerDigits * digitGrowth);
+        assert.strictEqual(parseQuadratically("zz"), 35n * 36n + 35n);
+
+        const growth = yield* growthRatio(spelling, (digits) => {
+          parseQuadratically(digits);
+        });
+        assert.isAtLeast(
+          growth,
+          growthLimit,
+          `8 times the digits took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    controlTimeoutMs,
   );
 
   it.effect("[Q-20] refuses a decimal, INF, a bare sign and a base outside 2 to 36", () =>
