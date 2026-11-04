@@ -68,7 +68,7 @@ export type InteractionName = (typeof interactionNames)[number];
 const textInteractions = ["qti-text-entry-interaction", "qti-extended-text-interaction"] as const;
 
 /**
- * The declarations whose `base-type` the model reads.
+ * The declarations whose `base-type` and `cardinality` the model reads.
  */
 const declarations = ["qti-response-declaration", "qti-outcome-declaration"] as const;
 
@@ -117,15 +117,21 @@ export interface FormattedBinding extends Binding {
  * - `attribute`: the element carries the attribute `name`, with any value. A name in the XML
  *   namespace is spelled with its reserved prefix, `xml:base`.
  * - `attribute-value`: the element's attribute `name` has the value `value`.
+ * - `attribute-true`: the element's `xs:boolean` attribute `name` is true: `true` or `1` once its
+ *   outer whitespace goes, as XSD reads it (reading Q8).
  * - `cardinality`: the response declaration the interaction binds has this cardinality.
  * - `template`: the element's `template` URI resolves to this built-in ({@link templateName}).
+ * - `untyped`: the declaration carries no `base-type` and its cardinality is not `record`, the one
+ *   cardinality that has none.
  */
 export type Condition =
   | { readonly kind: "element" }
   | { readonly kind: "attribute"; readonly name: string }
   | { readonly kind: "attribute-value"; readonly name: string; readonly value: string }
+  | { readonly kind: "attribute-true"; readonly name: string }
   | { readonly cardinality: Cardinality; readonly kind: "cardinality" }
-  | { readonly kind: "template"; readonly name: TemplateName };
+  | { readonly kind: "template"; readonly name: TemplateName }
+  | { readonly kind: "untyped" };
 
 /**
  * A feature phase 1 does not render, with the key the verdict and its notice name it by.
@@ -162,11 +168,12 @@ export interface Renders {
    */
   readonly engine: readonly string[];
   /**
-   * The features recorded on the verdict with no body notice. Beyond these, a `qti-*` element
-   * outside the item body and outside `elements` is a mark keyed by its own name, response
-   * processing by a template URI outside the built-ins is a mark keyed `template="<uri>"`, and
-   * inline response processing with an element outside `engine` is a mark keyed by that element's
-   * name.
+   * The features recorded on the verdict with no body notice. A declaration the model does not hold
+   * carries one: its base type (`point`, `duration`, `file`, or `base-type=""` when it has none) or
+   * `cardinality="record"`. Beyond these, a `qti-*` element outside the item body and outside
+   * `elements` is a mark keyed by its own name, response processing by a template URI outside the
+   * built-ins is a mark keyed `template="<uri>"`, and inline response processing with an element
+   * outside `engine` is a mark keyed by that element's name.
    */
   readonly marks: readonly Feature[];
   /**
@@ -220,7 +227,7 @@ export const renders = {
     {
       feature: 'shuffle="true"',
       on: ["qti-choice-interaction"],
-      when: { kind: "attribute-value", name: "shuffle", value: "true" },
+      when: { kind: "attribute-true", name: "shuffle" },
     },
     {
       feature: "string-identifier",
@@ -230,7 +237,7 @@ export const renders = {
     {
       feature: 'adaptive="true"',
       on: ["qti-assessment-item"],
-      when: { kind: "attribute-value", name: "adaptive", value: "true" },
+      when: { kind: "attribute-true", name: "adaptive" },
     },
     {
       feature: "qti-template-declaration",
@@ -252,6 +259,13 @@ export const renders = {
       on: declarations,
       when: { kind: "attribute-value", name: "base-type", value: "file" },
     },
+    {
+      feature: 'cardinality="record"',
+      on: declarations,
+      when: { kind: "attribute-value", name: "cardinality", value: "record" },
+    },
+    // A declaration with no base type is keyed `base-type=""`, as an interaction bound to one is.
+    { feature: 'base-type=""', on: declarations, when: { kind: "untyped" } },
     { feature: "xml:base", on: "body", when: { kind: "attribute", name: "xml:base" } },
     {
       feature: "data-catalog-idref",

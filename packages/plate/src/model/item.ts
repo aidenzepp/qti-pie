@@ -80,6 +80,10 @@ export interface ResponseDeclaration {
    * The `qti-correct-response`, when the declaration has one.
    */
   readonly correct: Option.Option<Value>;
+  /**
+   * The `qti-default-value`, when the declaration has one.
+   */
+  readonly defaultValue: Option.Option<Value>;
   readonly identifier: string;
   readonly mapping: Option.Option<Mapping>;
 }
@@ -270,9 +274,9 @@ export type Rule =
  * A valid `qti-assessment-item` as phase 1 models it.
  *
  * `responses` and `outcomes` hold the declarations of modelled base types and cardinalities, in
- * document order. `processing` is none when the item has no response processing, or when phase 1
- * cannot run it, which `unsupported` then marks. `unsupported` lists every feature not rendered,
- * in document order, each once per feature and path.
+ * document order; every other declaration is a mark. `processing` is none when the item has no
+ * response processing, or when phase 1 cannot run it, which `unsupported` then marks. `unsupported`
+ * lists every feature not rendered, in document order, each once per feature and path.
  */
 export interface Item {
   readonly body: readonly BodyNode[];
@@ -609,8 +613,23 @@ const xsInteger = (
   );
 
 /**
- * Read an `xs:boolean` attribute, such as `shuffle`: its outer whitespace goes, and `true` or `1`
- * is true and `false` or `0` is false, as XSD reads it (reading Q8).
+ * Read an `xs:boolean` attribute value as XSD does (reading Q8): its outer whitespace goes, then
+ * `true` or `1` is true and `false` or `0` is false.
+ *
+ * @param written The value as written.
+ * @returns The boolean, or none when the value is outside `xs:boolean`'s lexical space.
+ */
+const xsBooleanOf = (written: string): Option.Option<boolean> => {
+  const lexical = written.replaceAll(outerSpace, "");
+  if (lexical === "true" || lexical === "1") {
+    return Option.some(true);
+  }
+
+  return lexical === "false" || lexical === "0" ? Option.some(false) : Option.none();
+};
+
+/**
+ * Read an `xs:boolean` attribute, such as `shuffle`, through {@link xsBooleanOf}.
  *
  * @param build The build.
  * @param element The element.
@@ -626,23 +645,17 @@ const xsBoolean = (
 ): Effect.Effect<boolean, Refusal> =>
   Option.match(attributeOf(element, name), {
     onNone: () => Effect.succeed(absent),
-    onSome: (attribute) => {
-      const lexical = attribute.value.replaceAll(outerSpace, "");
-      if (lexical === "true" || lexical === "1") {
-        return Effect.succeed(true);
-      }
-
-      if (lexical === "false" || lexical === "0") {
-        return Effect.succeed(false);
-      }
-
-      return Effect.fail(
-        refusal(build, "value-type", attributePath(pathOf(build, element), attribute), {
-          baseType: "boolean",
-          lexical: attribute.value,
-        }),
-      );
-    },
+    onSome: (attribute) =>
+      Option.match(xsBooleanOf(attribute.value), {
+        onNone: () =>
+          Effect.fail(
+            refusal(build, "value-type", attributePath(pathOf(build, element), attribute), {
+              baseType: "boolean",
+              lexical: attribute.value,
+            }),
+          ),
+        onSome: (value) => Effect.succeed(value),
+      }),
   });
 
 /**
@@ -705,6 +718,20 @@ const holds = (build: Build, condition: Condition, element: SourceElement): bool
 
   if (condition.kind === "attribute-value") {
     return Option.getOrUndefined(valueOf(element, condition.name)) === condition.value;
+  }
+
+  if (condition.kind === "attribute-true") {
+    return Option.getOrElse(
+      Option.flatMap(valueOf(element, condition.name), xsBooleanOf),
+      () => false,
+    );
+  }
+
+  if (condition.kind === "untyped") {
+    return (
+      Option.isNone(attributeOf(element, "base-type")) &&
+      Option.getOrUndefined(valueOf(element, "cardinality")) !== "record"
+    );
   }
 
   if (condition.kind === "cardinality") {
@@ -905,13 +932,14 @@ const responseDeclaration = (
     }
 
     const correct = yield* optionalValue(build, declaration, "qti-correct-response", read.value);
+    const defaultValue = yield* optionalValue(build, declaration, "qti-default-value", read.value);
     const mapping = yield* Effect.transposeOption(
       Option.map(Arr.head(childrenNamed(declaration, "qti-mapping")), (element) =>
         mappingOf(build, element, read.value.baseType),
       ),
     );
 
-    return Option.some({ ...read.value, correct, mapping });
+    return Option.some({ ...read.value, correct, defaultValue, mapping });
   });
 
 /**

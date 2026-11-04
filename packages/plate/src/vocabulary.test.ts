@@ -134,6 +134,8 @@ describe("the closed value sets", () => {
           'base-type="point"',
           'base-type="duration"',
           'base-type="file"',
+          'cardinality="record"',
+          'base-type=""',
           "xml:base",
           "data-catalog-idref",
           "data-qti-suppress-tts",
