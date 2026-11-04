@@ -3,7 +3,7 @@
  * imported from, and every other file of the package written from its stored bytes.
  */
 import { Db, query, uuid, v } from "@bjornpagen/grizzle";
-import type { DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle";
+import type { DbLayer, OpenError, ReadError, Uuid } from "@bjornpagen/grizzle";
 import { Effect, FileSystem, Option, Path, Schema } from "effect";
 import type { PlatformError } from "effect";
 import { readTree, treesOf } from "#pantry/export/read.ts";
@@ -109,7 +109,7 @@ const declaring = (doc: XmlDocument, label: string): XmlDocument => ({
  *   or `PackageNotFound`, every one an export raises before it writes.
  */
 export const exportEntries = Effect.fn("export.exportEntries")(function* exportEntries(
-  packageId: string,
+  packageId: Uuid,
 ): Effect.fn.Return<
   readonly ZipEntry[],
   OpenError | ReadError | PackageNotFound | EncodeError,
@@ -165,7 +165,7 @@ export const exportEntries = Effect.fn("export.exportEntries")(function* exportE
  * @returns Nothing. Fails with the database's, the encoder's or the file system's error.
  */
 export const exportPackage = Effect.fn("export.exportPackage")(function* exportPackage(
-  packageId: string,
+  packageId: Uuid,
   target: string,
 ): Effect.fn.Return<void, ExportError, DbLayer<typeof Author> | FileSystem.FileSystem | Path.Path> {
   yield* Effect.annotateCurrentSpan({ packageId, target });
