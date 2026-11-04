@@ -13,7 +13,10 @@
  * - An interaction kind at any set holding `int`, `choice`, `htx`, `rubric`, `tmpl` or `modal`;
  * - `qti-gap` at a set without `gap`;
  * - `qti-rubric-block` at a set holding `rubric`;
- * - `qti-hottext` at a set holding `htx` (a hottext under a prompt or a choice is admitted).
+ * - `qti-hottext` at a set holding `htx` (a hottext under a prompt or a choice is admitted);
+ * - At a set holding `testfb`, every interaction kind, every template kind and both rubric block
+ *   kinds (reading 25: a test's rubric and feedback hold no interactions or templates, and no
+ *   nested rubric); `qti-printed-variable` and `qti-feedback-inline` stay admitted.
  *
  * `ancestryHandles` is the closure over the `Admission` rows of the kinds files, printed and
  * pasted: this module cannot compute it at load, because the composed rows (`seed/admission.ts`)
@@ -22,9 +25,19 @@
  */
 
 /**
- * The flags, in the canonical order that names an ancestry. A later phase appends after `htx`.
+ * The flags, in the canonical order that names an ancestry. A later phase appends after `testfb`.
  */
-export const FLAGS = ["fb", "modal", "rubric", "tmpl", "int", "gap", "choice", "htx"] as const;
+export const FLAGS = [
+  "fb",
+  "modal",
+  "rubric",
+  "tmpl",
+  "int",
+  "gap",
+  "choice",
+  "htx",
+  "testfb",
+] as const;
 
 /**
  * One flag an ancestry holds.
@@ -92,6 +105,7 @@ export const KindEnters: KindEnterTable = Object.fromEntries(
           "qti-template-inline.rubric",
         ]),
         ...entering("modal", ["qti-modal-feedback"]),
+        ...entering("testfb", ["qti-rubric-block.test", "qti-test-feedback"]),
         ...entering("fb", [
           "qti-feedback-block",
           "qti-feedback-block.template",
@@ -114,6 +128,15 @@ export const handleOf = (flags: readonly Flag[]): string =>
 
 const interactions: ReadonlySet<string> = new Set(interactionKinds);
 
+const templates: ReadonlySet<string> = new Set([
+  "qti-template-block",
+  "qti-template-block.rubric",
+  "qti-template-inline",
+  "qti-template-inline.rubric",
+]);
+
+const rubricBlocks: ReadonlySet<string> = new Set(["qti-rubric-block", "qti-rubric-block.test"]);
+
 const isInteraction = (kind: string): boolean => interactions.has(kind);
 
 /**
@@ -121,6 +144,10 @@ const isInteraction = (kind: string): boolean => interactions.has(kind);
  */
 export const banned = (flagSet: readonly Flag[], kind: string): boolean => {
   const has = (flag: Flag): boolean => flagSet.includes(flag);
+  if (has("testfb") && (isInteraction(kind) || templates.has(kind) || rubricBlocks.has(kind))) {
+    return true;
+  }
+
   if (isInteraction(kind)) {
     return (["int", "choice", "htx", "rubric", "tmpl", "modal"] as const).some(has);
   }
@@ -191,8 +218,9 @@ export const reachable = (
 };
 
 /**
- * The 56 reachable ancestries over the kinds files' `Admission` rows (M0 and M1), by size and then
- * `FLAGS` order, as `reachable(admission, KindEnters)` printed them. The count stays under 64.
+ * The 60 reachable ancestries over the kinds files' `Admission` rows (M0, M1 and the test kinds),
+ * by size and then `FLAGS` order, as `reachable(admission, KindEnters)` printed them. The count
+ * stays under 64.
  */
 export const ancestryHandles = [
   "root",
@@ -202,11 +230,13 @@ export const ancestryHandles = [
   "tmpl",
   "int",
   "htx",
+  "testfb",
   "fb.modal",
   "fb.rubric",
   "fb.tmpl",
   "fb.int",
   "fb.htx",
+  "fb.testfb",
   "modal.tmpl",
   "modal.htx",
   "rubric.tmpl",
@@ -216,6 +246,7 @@ export const ancestryHandles = [
   "int.gap",
   "int.choice",
   "int.htx",
+  "htx.testfb",
   "fb.modal.tmpl",
   "fb.modal.htx",
   "fb.rubric.tmpl",
@@ -225,6 +256,7 @@ export const ancestryHandles = [
   "fb.int.gap",
   "fb.int.choice",
   "fb.int.htx",
+  "fb.htx.testfb",
   "modal.tmpl.htx",
   "rubric.tmpl.htx",
   "tmpl.int.gap",
