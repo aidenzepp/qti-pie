@@ -1,6 +1,4 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
-
-import { Schema } from "effect";
+import { Data } from "effect";
 
 /**
  * The parser refused the text because it is not well-formed XML.
@@ -8,31 +6,27 @@ import { Schema } from "effect";
  * `line` and `column` give the position the parser reported, `message` says what it found there,
  * and `afterSubstitution` is true when an entity substitution preceded that position.
  */
-export class WellFormednessError extends Schema.TaggedError<WellFormednessError>()(
-  "WellFormednessError",
-  {
-    afterSubstitution: Schema.Boolean,
-    column: Schema.Int,
-    line: Schema.Int,
-    message: Schema.String,
-  },
-) {}
+export class WellFormednessError extends Data.TaggedError("WellFormednessError")<{
+  readonly afterSubstitution: boolean;
+  readonly column: number;
+  readonly line: number;
+  readonly message: string;
+}> {}
 
 /**
  * The reader refused the input under a named rule, with `detail` saying what in the input broke it.
  */
-export class ReaderRefusal extends Schema.TaggedError<ReaderRefusal>()("ReaderRefusal", {
-  detail: Schema.String,
-  rule: Schema.Literals([
-    "decode",
-    "bare-utf16",
-    "nul-or-surrogate",
-    "undeclared-entity",
-    "entity-cycle",
-    "entity-expansion",
-    "element-depth",
-  ]),
-}) {}
+export class ReaderRefusal extends Data.TaggedError("ReaderRefusal")<{
+  readonly detail: string;
+  readonly rule:
+    | "decode"
+    | "bare-utf16"
+    | "nul-or-surrogate"
+    | "undeclared-entity"
+    | "entity-cycle"
+    | "entity-expansion"
+    | "element-depth";
+}> {}
 
 /**
  * The encoder could not write the document in the label it was given.
@@ -42,8 +36,8 @@ export class ReaderRefusal extends Schema.TaggedError<ReaderRefusal>()("ReaderRe
  * the highest code point the label's encoder class represents; `where: "label"` means the label
  * itself has no encoder and both numbers are 0.
  */
-export class EncodeError extends Schema.TaggedError<EncodeError>()("EncodeError", {
-  codePoint: Schema.Int,
-  threshold: Schema.Int,
-  where: Schema.Literals(["label", "doctype", "name", "comment", "pi", "text", "attribute"]),
-}) {}
+export class EncodeError extends Data.TaggedError("EncodeError")<{
+  readonly codePoint: number;
+  readonly threshold: number;
+  readonly where: "label" | "doctype" | "name" | "comment" | "pi" | "text" | "attribute";
+}> {}
