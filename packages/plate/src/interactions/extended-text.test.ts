@@ -353,7 +353,7 @@ describe("renderExtendedText", () => {
   );
 
   it.effect(
-    "[Q-5] puts the author's class, data-mode and, for preformatted, data-format on the Root, and data-finished only when finished",
+    "[Q-5] puts the author's class, data-mode and, for preformatted, data-format on the Root, and data-disabled only when finished",
     () =>
       Effect.gen(function* rootState() {
         const root = yield* render(payloadOf([essay]));
@@ -361,7 +361,7 @@ describe("renderExtendedText", () => {
         assert.strictEqual(root.attrs["class"], "qti-height-lines-6");
         assert.strictEqual(root.attrs["data-mode"], "answering");
         assert.isUndefined(root.attrs["data-format"]);
-        assert.isUndefined(root.attrs["data-finished"]);
+        assert.isUndefined(root.attrs["data-disabled"]);
         assert.isUndefined(root.attrs["data-attempt"]);
 
         const preformatted = yield* render(payloadOf([{ ...essay, format: "preformatted" }]));
@@ -371,7 +371,8 @@ describe("renderExtendedText", () => {
         assert.isUndefined(plain.attrs["class"]);
 
         const finished = yield* render(payloadOf([essay], { ...answering, finished: true }));
-        assert.isTrue(finished.attrs["data-finished"]);
+        assert.isTrue(finished.attrs["data-disabled"]);
+        assert.notProperty(finished.attrs, "data-finished");
         assert.isTrue(onePart(finished, "control").attrs["disabled"]);
         assert.isUndefined(onePart(root, "control").attrs["disabled"]);
       }),

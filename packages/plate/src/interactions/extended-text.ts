@@ -144,7 +144,7 @@ const nameAttributes = (
 /**
  * Compute every attribute of every part of one Extended Text: the connect function.
  *
- * - Root: the marker, the state (`data-mode`, and `data-finished` when the author disabled every
+ * - Root: the marker, the state (`data-mode`, and `data-disabled` when the author disabled every
  *   control), the author's `class`, and `data-format="preformatted"` for a preformatted format.
  * - Prompt: the marker and its id, which the Control's `aria-labelledby` names.
  * - Control: its id, the payload's `formName`, `rows` from `expected-lines` above 0, the author's
@@ -196,7 +196,7 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
     prompt: { "data-slot": rowFor(owner, "prompt").slot, id: promptId },
     root: {
       ...when(interaction.class !== "", { class: interaction.class }),
-      ...when(payload.finished, { "data-finished": true }),
+      ...when(payload.finished, { "data-disabled": true }),
       ...when(interaction.format === "preformatted", { "data-format": "preformatted" }),
       "data-mode": payload.mode,
       "data-slot": rowFor(owner, "root").slot,

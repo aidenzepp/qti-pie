@@ -418,7 +418,7 @@ describe("renderTextEntry", () => {
         assert.strictEqual(root.attrs["class"], "short-answer");
         assert.strictEqual(root.attrs["data-mode"], "answering");
         assert.isUndefined(root.attrs["data-attempt"]);
-        assert.isUndefined(root.attrs["data-finished"]);
+        assert.isUndefined(root.attrs["data-disabled"]);
         assert.deepStrictEqual(root.children, [control]);
         assert.strictEqual(control.tag, "input");
         assert.strictEqual(control.attrs["type"], "text");
@@ -455,7 +455,8 @@ describe("renderTextEntry", () => {
       );
       const control = onlyPart(tree, "control");
 
-      assert.strictEqual(onlyPart(tree, "root").attrs["data-finished"], true);
+      assert.strictEqual(onlyPart(tree, "root").attrs["data-disabled"], true);
+      assert.notProperty(onlyPart(tree, "root").attrs, "data-finished");
       assert.strictEqual(control.attrs["disabled"], true);
       assert.strictEqual(control.attrs["value"], "York");
       assert.isUndefined(control.attrs["aria-invalid"]);
