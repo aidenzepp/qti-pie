@@ -135,12 +135,12 @@ const promptText = "Pick a colour.";
 const renderSwapped = (
   replacements: Partial<Record<PartOf<"choice-interaction">, PartFunction<Attributes>>>,
 ): Effect.Effect<Element, PartSwapRefused> =>
-  resolveOverrides({ "choice-interaction": replacements }).pipe(
+  Effect.fromResult(resolveOverrides({ "choice-interaction": replacements })).pipe(
     Effect.orDie,
     Effect.flatMap((parts) => {
       const state: EmitState = { assetBase: "", headingLevel: 2, locale: "en", parts };
 
-      return renderChoice(choice, built, state);
+      return Effect.fromResult(renderChoice(choice, built, state));
     }),
   );
 

@@ -14,7 +14,7 @@
  *
  * @module
  */
-import { Effect, Option } from "effect";
+import { Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
 import { authoredId } from "#plate/emit/body.ts";
 import type { Attributes, Element } from "#plate/emit/node.ts";
@@ -203,20 +203,19 @@ const connect = (interaction: TextEntryPayload, payload: Payload, locale: Locale
  * @returns The Text Entry Root, or {@link PartSwapRefused} when a replacement breaks the swap
  *   invariant.
  */
-export const renderTextEntry = Effect.fnUntraced(function* renderTextEntry(
+export const renderTextEntry = (
   interaction: TextEntryPayload,
   payload: Payload,
   state: EmitState,
-): Effect.fn.Return<Element, PartSwapRefused> {
-  const replacement = (part: TextEntryPart) =>
-    Option.getOrUndefined(state.parts.replacementFor(owner, part));
-  const props = connect(interaction, payload, state.locale);
-  const control = yield* Effect.fromResult(
-    applyPart(rows.control, props.control, [], replacement("control")),
-  );
+): Result.Result<Element, PartSwapRefused> =>
+  Result.gen(function* textEntryRoot() {
+    const replacement = (part: TextEntryPart) =>
+      Option.getOrUndefined(state.parts.replacementFor(owner, part));
+    const props = connect(interaction, payload, state.locale);
+    const control = yield* applyPart(rows.control, props.control, [], replacement("control"));
 
-  return yield* Effect.fromResult(applyPart(rows.root, props.root, [control], replacement("root")));
-});
+    return yield* applyPart(rows.root, props.root, [control], replacement("root"));
+  });
 
 /**
  * Check a Text Entry's response, which the caller decoded.

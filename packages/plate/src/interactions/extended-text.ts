@@ -15,9 +15,9 @@
  *
  * @module
  */
-import { Effect, Option } from "effect";
+import { Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { authoredId, emitNodes } from "#plate/emit/body.ts";
+import { NestedInteractionDefect, authoredId, emitNodes } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import { text } from "#plate/emit/node.ts";
 import type { Attributes, Element } from "#plate/emit/node.ts";
@@ -76,14 +76,15 @@ const when = (condition: boolean, attributes: Attributes): Attributes =>
  * a defect, since only a hand-built item can hold one.
  *
  * @param nested The interaction's payload.
- * @returns Never; it dies with an error that names the interaction.
+ * @returns Never; it throws {@link NestedInteractionDefect}, which names the interaction.
  */
-const nestedInteraction: RenderInteraction = (nested) =>
-  Effect.die(
-    new Error(
-      `A ${nested.kind} interaction for the response ${JSON.stringify(nested.response)} sits inside an Extended Text's Prompt, where QTI's schema admits no interaction; move it out to the item body, or render an item that check accepted.`,
-    ),
-  );
+const nestedInteraction: RenderInteraction = (nested) => {
+  throw new NestedInteractionDefect({
+    kind: nested.kind,
+    response: nested.response,
+    within: "extended-text-interaction",
+  });
+};
 
 /**
  * Compute how the Control is named (§4.8, Q10): the Prompt when there is one; else the author's
@@ -217,49 +218,43 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
  * @param payload The payload of the whole render, which gives the instance and `finished`.
  * @param state The locale, the heading level and the resolved part overrides.
  * @returns The Extended Text Root, or {@link PartSwapRefused} when a replacement breaks the swap
- *   invariant. It dies when the Prompt holds an interaction, which QTI admits nowhere there.
+ *   invariant. It throws {@link NestedInteractionDefect} when the Prompt holds an interaction,
+ *   which QTI admits nowhere there.
  */
-export const renderExtendedText = Effect.fnUntraced(function* renderExtendedText(
+export const renderExtendedText = (
   interaction: ExtendedTextPayload,
   payload: Payload,
   state: EmitState,
-): Effect.fn.Return<Element, PartSwapRefused> {
-  const replacement = (part: ExtendedTextPart) =>
-    Option.getOrUndefined(state.parts.replacementFor(owner, part));
-  const props = connect(interaction, payload, state.locale);
-  const restore = interaction.restore.replaceAll(lineBreak, "\n");
+): Result.Result<Element, PartSwapRefused> =>
+  Result.gen(function* extendedTextRoot() {
+    const replacement = (part: ExtendedTextPart) =>
+      Option.getOrUndefined(state.parts.replacementFor(owner, part));
+    const props = connect(interaction, payload, state.locale);
+    const restore = interaction.restore.replaceAll(lineBreak, "\n");
 
-  const prompt = yield* Effect.transposeOption(
-    interaction.prompt.pipe(
-      Option.map((content) =>
-        emitNodes(content, payload, state, nestedInteraction).pipe(
-          Effect.flatMap((nodes) =>
-            Effect.fromResult(
-              applyPart(rowFor(owner, "prompt"), props.prompt, nodes, replacement("prompt")),
-            ),
+    const prompt = yield* Result.transposeOption(
+      interaction.prompt.pipe(
+        Option.map((content) =>
+          Result.flatMap(emitNodes(content, payload, state, nestedInteraction), (nodes) =>
+            applyPart(rowFor(owner, "prompt"), props.prompt, nodes, replacement("prompt")),
           ),
         ),
       ),
-    ),
-  );
-  const control = yield* Effect.fromResult(
-    applyPart(
+    );
+    const control = yield* applyPart(
       rowFor(owner, "control"),
       props.control,
       restore === "" ? [] : [text(restore)],
       replacement("control"),
-    ),
-  );
+    );
 
-  return yield* Effect.fromResult(
-    applyPart(
+    return yield* applyPart(
       rowFor(owner, "root"),
       props.root,
       [...Option.toArray(prompt), control],
       replacement("root"),
-    ),
-  );
-});
+    );
+  });
 
 /**
  * Check an Extended Text's response, which the caller decoded.

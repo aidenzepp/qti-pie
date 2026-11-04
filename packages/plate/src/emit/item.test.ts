@@ -53,7 +53,7 @@ const renders: readonly Payload[] = [payloadOf(false), payloadOf(true)];
  * @returns The state, locale `en` and heading level 2.
  */
 const stateWith = (overrides?: PartOverrides): Effect.Effect<EmitState> =>
-  Effect.map(Effect.orDie(resolveOverrides(overrides)), (parts) => ({
+  Effect.map(Effect.orDie(Effect.fromResult(resolveOverrides(overrides))), (parts) => ({
     assetBase: "",
     headingLevel: 2,
     locale: "en",

@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Exit, Option, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { authoredId } from "#plate/emit/body.ts";
 import { h, text } from "#plate/emit/node.ts";
@@ -14,7 +14,7 @@ import { message } from "#plate/messages.ts";
 import type { BodyNode, ChoiceInteraction, Item } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import { payload, redactItem } from "#plate/payload.ts";
-import type { ChoicePayload, EmitState, Payload, View } from "#plate/payload.ts";
+import type { ChoicePayload, EmitState, Payload, TextEntryPayload, View } from "#plate/payload.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
@@ -162,7 +162,7 @@ const choiceIn = (built: Payload): ChoicePayload => {
 /**
  * The emit state of every render here, with no part overrides.
  */
-const emitState: Effect.Effect<EmitState> = resolveOverrides().pipe(
+const emitState: Effect.Effect<EmitState> = Effect.fromResult(resolveOverrides()).pipe(
   Effect.orDie,
   Effect.map((parts): EmitState => ({
     assetBase: "",
@@ -180,7 +180,9 @@ const emitState: Effect.Effect<EmitState> = resolveOverrides().pipe(
  */
 const render = (built: Payload): Effect.Effect<Element> =>
   emitState.pipe(
-    Effect.flatMap((state) => Effect.orDie(renderChoice(choiceIn(built), built, state))),
+    Effect.flatMap((state) =>
+      Effect.orDie(Effect.fromResult(renderChoice(choiceIn(built), built, state))),
+    ),
   );
 
 /**
@@ -679,19 +681,71 @@ describe("renderChoice", () => {
       }),
   );
 
+  it.effect("returns a Result, a plain function callable with no Effect runtime", () =>
+    Effect.gen(function* plainResult() {
+      const built = payloadOf(colours);
+      const rendered = renderChoice(choiceIn(built), built, yield* emitState);
+
+      assert.isTrue(Result.isResult(rendered));
+      assert.isTrue(Result.isSuccess(rendered));
+    }),
+  );
+
   it.effect(
-    "dies when a choice's content holds an interaction, which QTI admits nowhere there",
+    "throws NestedInteractionDefect when a choice's content holds an interaction, which QTI admits nowhere there",
     () =>
-      Effect.gen(function* nestedDies() {
+      Effect.gen(function* nestedInContent() {
         const built = payloadOf(colours);
         const outer = choiceIn(built);
         const nested: ChoicePayload = {
           ...outer,
           choices: [{ content: [outer], identifier: "A" }],
         };
-        const exit = yield* Effect.exit(renderChoice(nested, built, yield* emitState));
+        const state = yield* emitState;
+        const thrown = Result.getFailure(Result.try(() => renderChoice(nested, built, state)));
+        assert.isTrue(Option.isSome(thrown));
 
-        assert.isTrue(Exit.hasDies(exit));
+        const defect = Option.getOrThrow(thrown);
+        assert.propertyVal(defect, "_tag", "NestedInteractionDefect");
+        assert.propertyVal(defect, "within", "choice-interaction");
+        assert.propertyVal(defect, "kind", "choice");
+      }),
+  );
+
+  it.effect(
+    "throws NestedInteractionDefect when the Prompt holds a Text Entry, which QTI admits nowhere there",
+    () =>
+      Effect.gen(function* nestedInPrompt() {
+        const built = payloadOf(colours);
+        const textEntry: TextEntryPayload = {
+          autofocus: false,
+          base: 10,
+          baseType: "string",
+          class: "",
+          expectedLength: Option.none(),
+          formName: entryName(instance, "TEXT"),
+          invalid: false,
+          kind: "text-entry",
+          messageIds: [],
+          name: {
+            ariaLabel: Option.none(),
+            ariaLabelledby: Option.none(),
+            unnamed: Option.some({ count: 1, n: 1 }),
+          },
+          placeholder: Option.none(),
+          response: "TEXT",
+          restore: "",
+        };
+        const prompted: ChoicePayload = { ...choiceIn(built), prompt: Option.some([textEntry]) };
+        const state = yield* emitState;
+        const thrown = Result.getFailure(Result.try(() => renderChoice(prompted, built, state)));
+        assert.isTrue(Option.isSome(thrown));
+
+        const defect = Option.getOrThrow(thrown);
+        assert.propertyVal(defect, "_tag", "NestedInteractionDefect");
+        assert.propertyVal(defect, "within", "choice-interaction");
+        assert.propertyVal(defect, "kind", "text-entry");
+        assert.propertyVal(defect, "response", "TEXT");
       }),
   );
 });
