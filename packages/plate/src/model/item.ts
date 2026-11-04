@@ -537,9 +537,9 @@ const refusal = (
 const typed = <A>(
   build: Build,
   path: string,
-  parsed: Effect.Effect<A, InvalidValue>,
+  parsed: Result.Result<A, InvalidValue>,
 ): Effect.Effect<A, Refusal> =>
-  Effect.mapError(parsed, (invalid) =>
+  Effect.mapError(Effect.fromResult(parsed), (invalid) =>
     refusal(build, "value-type", path, { baseType: invalid.baseType, lexical: invalid.lexical }),
   );
 

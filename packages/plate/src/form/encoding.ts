@@ -231,7 +231,7 @@ const readPosted = (
   }
 
   if (baseType === "identifier") {
-    return parseLexical(baseType, lexical).pipe(
+    return Effect.fromResult(parseLexical(baseType, lexical)).pipe(
       Effect.mapError((): MalformedReason => "identifier"),
       Effect.map(Option.some),
     );
@@ -241,7 +241,7 @@ const readPosted = (
     baseType === "integer" ? Option.map(readInteger(lexical, base), String) : Option.some(lexical);
 
   return Effect.fromOption(decimal).pipe(
-    Effect.flatMap((number) => parseLexical(baseType, number)),
+    Effect.flatMap((number) => Effect.fromResult(parseLexical(baseType, number))),
     Effect.filterOrFail((single) => single.baseType !== "float" || Number.isFinite(single.value)),
     Effect.mapError((): MalformedReason => "number"),
     Effect.map(Option.some),
