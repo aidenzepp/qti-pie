@@ -325,6 +325,18 @@ describe("renderTextEntry", () => {
   );
 
   it.effect(
+    '[Q-20] writes no aria-labelledby for an authored one that names no id, and names the Control "Answer"',
+    () =>
+      Effect.gen(function* emptyAriaLabelledby() {
+        const tree = yield* page(payloadOf([{ ...city, ariaLabelledby: Option.some(" \t\n ") }]));
+        const control = onlyPart(tree, "control");
+
+        assert.isUndefined(control.attrs["aria-labelledby"]);
+        assert.strictEqual(nameOf(control, tree), message("en", "answer"));
+      }),
+  );
+
+  it.effect(
     "[Q-20] a keyboard walk (Tab, type York, Enter) posts York under the Control's name",
     () =>
       Effect.gen(function* typeAndSubmit() {

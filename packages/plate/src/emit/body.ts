@@ -452,7 +452,8 @@ const urlFor = (context: UrlContext, value: string, walk: Walk): Option.Option<s
  * @param walk What the walk carries.
  * @returns The attribute's name and value as emitted, or nothing when it is dropped: `xml:lang` as
  *   `lang`, `aria-keyshorts` as `aria-keyshortcuts`, an `id` and each id an IDREF attribute names
- *   through {@link authoredId}, a URL through {@link urlFor}, and any other value as written.
+ *   through {@link authoredId} (an IDREF attribute that names no id is dropped), a URL through
+ *   {@link urlFor}, and any other value as written.
  */
 const attributeFor = (
   { name, value }: AttributePayload,
@@ -472,7 +473,10 @@ const attributeFor = (
   }
 
   if (idReferences.has(name)) {
-    return [[name, authoredIdrefs(walk.instance, value)]];
+    return Option.match(authoredIdrefs(walk.instance, value), {
+      onNone: () => [],
+      onSome: (ids) => [[name, ids]],
+    });
   }
 
   return Option.match(urlContextOf(tag, name), {

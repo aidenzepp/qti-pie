@@ -15,8 +15,23 @@ import type { Locale } from "#plate/messages.ts";
 import type { TextName } from "#plate/payload.ts";
 
 /**
+ * Give the author's `aria-labelledby` with each id scoped by the instance through
+ * `authoredIdrefs`, none when the author wrote none or wrote one that names no id.
+ *
+ * @param names The author's names, the ids unscoped.
+ * @param instance The item instance key, which scopes the author's ids.
+ * @returns The scoped ids joined by one space, or none.
+ */
+const authorsLabelledby = (
+  names: Pick<TextName, "ariaLabelledby">,
+  instance: string,
+): Option.Option<string> =>
+  names.ariaLabelledby.pipe(Option.flatMap((ids) => authoredIdrefs(instance, ids)));
+
+/**
  * Give the names the author wrote: `aria-label` as written, and `aria-labelledby` with each id
- * scoped by the instance through `authoredIdrefs`, joined by one space.
+ * scoped by the instance through `authoredIdrefs`, joined by one space. An `aria-labelledby` that
+ * names no id is no name, and is not written.
  *
  * @param names The author's `aria-label` and `aria-labelledby`, the ids unscoped.
  * @param instance The item instance key, which scopes the author's ids.
@@ -30,9 +45,9 @@ export const authorsName = (
     onNone: () => ({}),
     onSome: (label) => ({ "aria-label": label }),
   }),
-  ...Option.match(names.ariaLabelledby, {
+  ...Option.match(authorsLabelledby(names, instance), {
     onNone: () => ({}),
-    onSome: (ids) => ({ "aria-labelledby": authoredIdrefs(instance, ids) }),
+    onSome: (ids) => ({ "aria-labelledby": ids }),
   }),
 });
 
@@ -40,8 +55,8 @@ export const authorsName = (
  * Name a text control that no Prompt names (§4.8, Q10).
  *
  * The author's `aria-label` and `aria-labelledby` win ({@link authorsName}). A control with
- * neither is named by the renderer: "Answer", or "Answer n of count" when the item holds more than
- * one such control.
+ * neither, an `aria-labelledby` that names no id counting as none, is named by the renderer:
+ * "Answer", or "Answer n of count" when the item holds more than one such control.
  *
  * @param name How the control is named, from the payload.
  * @param instance The item instance key, which scopes the author's ids.
@@ -49,7 +64,7 @@ export const authorsName = (
  * @returns The naming attributes.
  */
 export const textControlName = (name: TextName, instance: string, locale: Locale): Attributes => {
-  if (Option.isSome(name.ariaLabel) || Option.isSome(name.ariaLabelledby)) {
+  if (Option.isSome(name.ariaLabel) || Option.isSome(authorsLabelledby(name, instance))) {
     return authorsName(name, instance);
   }
 

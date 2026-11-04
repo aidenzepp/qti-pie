@@ -14,7 +14,7 @@
  */
 import { Array as Arr, Option } from "effect";
 import type { Brand } from "effect";
-import { scopedId } from "#plate/emit/parts.ts";
+import { scopedId, splitIdrefs } from "#plate/emit/parts.ts";
 import type { Resolved } from "#plate/emit/parts.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import type { Locale } from "#plate/messages.ts";
@@ -190,8 +190,9 @@ export interface ChoicePayload extends ValidationPayload {
  * How a text control is named (§4.8, Q10).
  *
  * `ariaLabel` and `ariaLabelledby` are the author's, the ids unscoped. `unnamed` is set exactly
- * when the control has neither of them nor a Prompt: its position `n`, from 1, among the `count`
- * such controls of the item, in document order.
+ * when the control has neither of them nor a Prompt, an `ariaLabelledby` that names no id
+ * counting as none: its position `n`, from 1, among the `count` such controls of the item, in
+ * document order.
  */
 export interface TextName {
   readonly ariaLabel: Option.Option<string>;
@@ -405,7 +406,8 @@ const interactionsIn = (nodes: readonly BodyNode[]): readonly Interaction[] =>
   });
 
 /**
- * Report whether an interaction is a text control with no authored name and no Prompt (Q10).
+ * Report whether an interaction is a text control with no authored name and no Prompt (Q10). An
+ * `aria-labelledby` that names no id is no authored name.
  *
  * @param interaction The interaction.
  * @returns Whether the renderer must name it.
@@ -413,7 +415,7 @@ const interactionsIn = (nodes: readonly BodyNode[]): readonly Interaction[] =>
 const isUnnamed = (interaction: Interaction): boolean =>
   interaction.kind !== "choice" &&
   Option.isNone(interaction.ariaLabel) &&
-  Option.isNone(interaction.ariaLabelledby) &&
+  !Option.exists(interaction.ariaLabelledby, (ids) => splitIdrefs(ids).length > 0) &&
   (interaction.kind === "text-entry" || Option.isNone(interaction.prompt));
 
 /**

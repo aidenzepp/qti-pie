@@ -351,7 +351,12 @@ describe("splitIdrefs and authoredIdrefs", () => {
   });
 
   it("scope every authored id of the value and join them by one space", () => {
-    assert.strictEqual(authoredIdrefs("i1", "intro   note"), "i1--intro i1--note");
+    assert.deepStrictEqual(authoredIdrefs("i1", "intro   note"), Option.some("i1--intro i1--note"));
+  });
+
+  it("give none for a value that names no id, which is no reference at all", () => {
+    assert.deepStrictEqual(authoredIdrefs("i1", " \t\n\f\r "), Option.none());
+    assert.deepStrictEqual(authoredIdrefs("i1", ""), Option.none());
   });
 });
 

@@ -304,6 +304,28 @@ const interactionsIn = (nodes: readonly PayloadNode[]): readonly InteractionPayl
     }
   });
 
+describe("emitItem, from a built payload", () => {
+  it.effect(
+    "[I-0] a render with every control disabled keeps data-mode answering and carries data-disabled",
+    () =>
+      Effect.gen(function* disabledRender() {
+        const state = yield* stateWith();
+        const built = payload(redactItem(rivers), {
+          finished: true,
+          instance,
+          locale: "en",
+          messages: [],
+          names: new Map(),
+          posted: Option.none(),
+          values: new Map(),
+        });
+        const root = yield* Effect.fromResult(emitItem(built, state, body()));
+        assert.strictEqual(root.attrs["data-mode"], "answering");
+        assert.strictEqual(root.attrs["data-disabled"], true);
+      }),
+  );
+});
+
 describe("the item chrome, plain functions", () => {
   it.effect("emitItem and emitStatus return Results", () =>
     Effect.gen(function* chromeResults() {
@@ -357,7 +379,7 @@ describe("emitStatus", () => {
   );
 
   it.effect(
-    "[I-0] a scored input shows the score, a refused one a Message per message, a recorded one its text",
+    "[I-0] a scored input shows the score, a refused one a Message per message, a recorded one only its heading",
     () =>
       Effect.gen(function* statusDetail() {
         const state = yield* stateWith();
@@ -385,8 +407,8 @@ describe("emitStatus", () => {
         );
 
         const response = yield* Effect.fromResult(emitStatus(recorded, state));
-        assert.strictEqual(response.children.length, 2);
-        assert.strictEqual(textOf(elementAt(response, 1)), message("en", "responseRecorded"));
+        assert.strictEqual(response.children.length, 1);
+        assert.strictEqual(textOf(response), message("en", "responseRecorded"));
 
         const both = yield* Effect.fromResult(emitStatus({ ...scored, messages: refusals }, state));
         assert.strictEqual(both.children.length, 2);

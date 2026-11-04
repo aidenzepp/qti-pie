@@ -794,14 +794,21 @@ export const splitIdrefs = (value: string): readonly string[] =>
  * Scope every id of an IDREFS value the author wrote through {@link authoredId}, so each still
  * names its scoped target.
  *
+ * A value that names no id, being empty or only whitespace, is no reference at all, as the
+ * accessible-name computation reads an `aria-labelledby` that names nothing: it gives none, and
+ * the caller writes no attribute and treats the author as having given none.
+ *
  * @param instance The item instance key.
  * @param value The attribute's value as the author wrote it.
- * @returns The scoped ids, in order, joined by one space.
+ * @returns The scoped ids, in order, joined by one space; none when the value names no id.
  */
-export const authoredIdrefs = (instance: string, value: string): string =>
-  splitIdrefs(value)
-    .map((id) => authoredId(instance, id))
-    .join(" ");
+export const authoredIdrefs = (instance: string, value: string): Option.Option<string> => {
+  const ids = splitIdrefs(value);
+
+  return ids.length === 0
+    ? Option.none()
+    : Option.some(ids.map((id) => authoredId(instance, id)).join(" "));
+};
 
 /**
  * Replacement part functions keyed by interaction, then by part: the goal's tier-2 swap, such as

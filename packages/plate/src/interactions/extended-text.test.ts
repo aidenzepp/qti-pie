@@ -359,6 +359,20 @@ describe("renderExtendedText", () => {
   );
 
   it.effect(
+    '[Q-5] with no Prompt, writes no aria-labelledby for an authored one that names no id, and names the Control "Answer"',
+    () =>
+      Effect.gen(function* emptyAriaLabelledby() {
+        const control = onePart(
+          yield* render(payloadOf([{ ...bare, ariaLabelledby: Option.some(" \t\n ") }])),
+          "control",
+        );
+
+        assert.isUndefined(control.attrs["aria-labelledby"]);
+        assert.strictEqual(control.attrs["aria-label"], message("en", "answer"));
+      }),
+  );
+
+  it.effect(
     "[Q-5] puts the author's class, data-mode and, for preformatted, data-format on the Root, and data-disabled only when finished",
     () =>
       Effect.gen(function* rootState() {
