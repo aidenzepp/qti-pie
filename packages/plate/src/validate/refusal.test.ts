@@ -32,8 +32,50 @@ const cases = () => [
   }),
 ];
 
+/**
+ * An encoded refusal for each rule the readings, the queued follow-ups and the count ruling add,
+ * written as a caller would send it rather than built through the class, so decoding is what
+ * checks the rule against the roster.
+ */
+const addedRules = [
+  {
+    detail: { element: "qti-gap", reading: "reading 38" },
+    path: "qti-assessment-item/qti-item-body/p/qti-gap",
+    rule: "misplaced-element",
+  },
+  {
+    detail: {
+      child: "qti-value",
+      element: "qti-default-value",
+      required: "exactly one",
+      source: "info.txt:73049",
+    },
+    path: "qti-assessment-item/qti-response-declaration/qti-default-value",
+    rule: "child-count",
+  },
+  {
+    detail: { identifier: "SCORE2" },
+    path: "qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-variable/@identifier",
+    rule: "undeclared-variable",
+  },
+  {
+    detail: { identifier: "SCORE" },
+    path: "qti-assessment-item/qti-response-processing/qti-set-outcome-value",
+    rule: "expression-type",
+  },
+  {
+    detail: {
+      attribute: "max-choices",
+      greatest: "9223372036854775807",
+      lexical: "9223372036854775808",
+    },
+    path: "qti-assessment-item/qti-item-body/qti-choice-interaction/@max-choices",
+    rule: "count-range",
+  },
+] as const;
+
 describe("refusalRules", () => {
-  it("lists the validator's, the verdict's and the reader's fourteen rules", () => {
+  it("lists the validator's, the verdict's and the reader's nineteen rules", () => {
     assert.deepStrictEqual(
       [...refusalRules],
       [
@@ -43,11 +85,16 @@ describe("refusalRules", () => {
         "attribute-type",
         "padded-attribute",
         "text-not-allowed",
+        "misplaced-element",
+        "child-count",
         "undeclared-response",
         "duplicate-identifier",
         "binding",
         "template-requirements",
         "value-type",
+        "undeclared-variable",
+        "expression-type",
+        "count-range",
         "not-qti-root",
         "not-well-formed",
         "reader-refused",
@@ -89,6 +136,23 @@ describe("Refusal", () => {
 
       const error = yield* Effect.flip(decode({ ...encoded, rule: "unknown-rule" }));
       assert.strictEqual(error._tag, "SchemaError");
+    }),
+  );
+
+  it.effect.each(addedRules)("decodes a refusal with the rule $rule", ({ detail, path, rule }) =>
+    Effect.gen(function* addedRule() {
+      const decoded = yield* Schema.decodeUnknownEffect(Refusal)({
+        _tag: "Refusal",
+        detail,
+        document: "items/added.xml",
+        location: { kind: "path", path },
+        readerRule: Option.none(),
+        rule,
+        suggestion: Option.none(),
+      });
+      assert.instanceOf(decoded, Refusal);
+      assert.strictEqual(decoded.rule, rule);
+      assert.deepStrictEqual(decoded.detail, detail);
     }),
   );
 });
