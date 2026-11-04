@@ -30,3 +30,15 @@ operator ruling. A new reading lands here by pull request, and a package that ne
 6. **A QTI root, processing root or manifest global nested inside wildcard content** (where QTI admits elements from
    any namespace under lax validation) is valid. It is kept as foreign content like any other element: it is not
    refused, and it is not read as QTI. (2026-11-03.)
+
+## Typed values
+
+7. **A typed value is read exactly as written.** Outer whitespace around a value of any non-string base type (boolean,
+   integer, float, identifier, point, pair, directedPair, duration, uri and the rest) makes the value invalid, and the
+   document is refused. This holds in element content (`qti-value`, `qti-base-value` and the like) and in an attribute
+   (`map-key`, `mapped-value`, default and target values and the like) alike: element and attribute give the same
+   answer. For base type string, whitespace is part of the value and is kept. QTI's schema types the text of
+   `qti-value` as `xs:normalizedString` and of `qti-base-value` as `xs:string`, never as the value's base type, and its
+   information model lists each base type's values without saying how written text maps to them. The specification is
+   silent, and the operator rules the strict reading. A few of 1EdTech's own example files, with padded values such as
+   `" completed "` and `" THREETRIES "`, are refused under this reading. (2026-11-04.)
