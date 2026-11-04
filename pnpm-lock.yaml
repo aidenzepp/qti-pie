@@ -211,7 +211,7 @@ importers:
         specifier: 5.0.1
         version: 5.0.1(@types/node@26.6.4)(@vitest/browser-preview@5.0.1)(@vitest/ui@5.0.1)(@voidzero-dev/vite-plus-core@1.0.0(@types/node@26.6.4)(typescript@7.0.2)(yaml@2.9.1))
 
-  packages/qti:
+  packages/pantry:
     dependencies:
       '@bjornpagen/grizzle':
         specifier: file:../../vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz
