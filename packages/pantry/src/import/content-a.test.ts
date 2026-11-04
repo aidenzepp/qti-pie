@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import path from "node:path";
 import { Db } from "@bjornpagen/grizzle";
-import type { AnyRelation } from "@bjornpagen/grizzle";
+import type { AnyRelation, Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Context, Effect, FileSystem, Layer, Predicate } from "effect";
@@ -159,7 +159,7 @@ const roundTrip = (name: FixtureName) =>
  * @param id - The package id `importPackage` answered.
  * @returns The rows, each a node, the kind of its owner, a shape and a value.
  */
-const coordsOf = (id: string) =>
+const coordsOf = (id: Uuid) =>
   Effect.gen(function* coordsOfPackage() {
     const trees = yield* treesOf(id);
     const read = yield* Effect.all(trees.map((tree) => readTree(id, tree)));
@@ -890,7 +890,7 @@ describe.skipIf(!hasLease)(
  * @returns The identifiers.
  */
 const identifiersOf = (
-  id: string,
+  id: Uuid,
   arm:
     | typeof FeedbackBlock
     | typeof RubricTemplateBlock
