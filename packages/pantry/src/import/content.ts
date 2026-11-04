@@ -43,6 +43,8 @@ import {
 import {
   RecordFieldIdentifier,
   ShowHideIdentifier,
+  StimulusRefHref,
+  StimulusRefIdentifier,
   VariableReference,
 } from "#pantry/schema/contracts.ts";
 import type { DeclarationKind, DeclarationShape } from "#pantry/schema/declaration.ts";
@@ -96,6 +98,7 @@ import {
   TemplateContentRef,
   TemplateInline,
 } from "#pantry/schema/template.ts";
+import { ItemStimulusRef, ItemStimulusRefTitle } from "#pantry/schema/stimulus.ts";
 import * as values from "#pantry/schema/value.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
@@ -947,10 +950,41 @@ type Builder = (
 ) => Effect.Effect<Rows, ImportRefused | ItemRefusal>;
 
 /**
+ * The rows of a `qti-assessment-stimulus-ref`: the reference with the `identifier` and `href` it
+ * must write, and its `title` when it wrote one.
+ */
+const stimulusRefRows = Effect.fn("import.stimulusRefRows")(function* stimulusRefRows(
+  rows: Rows,
+  element: Element,
+  node: NodeRef,
+  context: Context,
+): Effect.fn.Return<Rows, ItemRefusal> {
+  const attributes = attributeReader(rows, element, node);
+  const identifier = yield* requiredAttribute(element, "identifier", attributes.read("identifier"));
+  const href = yield* requiredAttribute(element, "href", attributes.read("href"));
+  const title = attributes.read("title");
+  const built = Rows.add(attributes.rows(), ItemStimulusRef, [
+    {
+      document: context.documentId,
+      href: StimulusRefHref(href),
+      id: node.id,
+      identifier: StimulusRefIdentifier(identifier),
+    },
+  ]);
+
+  return Rows.add(
+    built,
+    ItemStimulusRefTitle,
+    written(title, (value) => ({ node: node.id, value })),
+  );
+});
+
+/**
  * The builder of each kind that has attributes or references; the thin kinds are written by
  * {@link thinRows}.
  */
 const builders: ReadonlyMap<NodeKindHandle, Builder> = new Map<NodeKindHandle, Builder>([
+  ["qti-assessment-stimulus-ref", stimulusRefRows],
   ["qti-feedback-block", feedbackRows],
   ["qti-feedback-block.template", feedbackRows],
   ["qti-feedback-inline", feedbackRows],
