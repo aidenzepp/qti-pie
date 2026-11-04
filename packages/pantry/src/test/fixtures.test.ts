@@ -2,6 +2,7 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem } from "effect";
+import { readXml } from "@qti-pie/crust/read.ts";
 import { inject } from "vitest";
 import {
   FIXTURES_VERSION,
@@ -207,6 +208,43 @@ const filesOf = Effect.fn("filesOf")(function* filesOf(dir: string) {
 
   return files.toSorted();
 });
+
+/**
+ * Phase 5's eleven positive fixtures with the `schemaversion` each package's manifest declares.
+ */
+const positiveVersions: readonly (readonly [FixtureName, "3.0.0" | "3.0.1"])[] = [
+  ["stimulus-301", "3.0.1"],
+  ["stimulus-shared", "3.0.0"],
+  ["test-adaptive", "3.0.0"],
+  ["test-content", "3.0.0"],
+  ["test-include", "3.0.0"],
+  ["test-linear", "3.0.0"],
+  ["test-lti", "3.0.1"],
+  ["test-mapping", "3.0.0"],
+  ["test-section-ref", "3.0.0"],
+  ["test-selection", "3.0.0"],
+  ["test-template-default", "3.0.0"],
+];
+
+/**
+ * The namespace of every QTI document of either version.
+ */
+const qtiNamespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
+
+/**
+ * The paths a manifest lists as `file`s, each once.
+ *
+ * @param manifest - A manifest's text.
+ * @returns The listed paths, sorted.
+ */
+const listedFilesOf = (manifest: string): string[] =>
+  [
+    ...new Set(
+      [...manifest.matchAll(/<file href="(?<href>[^"]*)"/gu)].map(
+        (match) => match.groups?.["href"] ?? "",
+      ),
+    ),
+  ].toSorted();
 
 /**
  * BegGuide's test, cut with the documents it reaches.
@@ -727,5 +765,98 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
         assert.notInclude(stub, 'identifier="xml"');
       }),
     ),
+  );
+  it.effect(
+    "each positive fixture of phase 5 lists every packaged file and holds QTI documents that parse",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* positiveFixtures() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const [name, version] of positiveVersions) {
+            const dir = yield* materialize(name);
+            const files = yield* filesOf(dir);
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+
+            assert.include(manifest, `<schemaversion>${version}</schemaversion>`, name);
+            assert.deepStrictEqual(
+              files.filter((file) => file !== "imsmanifest.xml"),
+              listedFilesOf(manifest),
+              name,
+            );
+
+            for (const file of files) {
+              const isDocument =
+                file.endsWith(".xml") &&
+                file !== "imsmanifest.xml" &&
+                !file.startsWith("adaptive/") &&
+                !file.startsWith("links/");
+
+              if (isDocument) {
+                const document = yield* readXml(yield* fs.readFile(`${dir}/${file}`));
+
+                assert.strictEqual(document.root.namespace, qtiNamespace, `${name}/${file}`);
+              }
+            }
+          }
+        }),
+      ),
+    120_000,
+  );
+
+  it.effect("test-mapping's stubs: I is time-dependent with A.B, J declares no K.SCORE", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* mappingStubs() {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* materialize("test-mapping");
+        const test = yield* fs.readFileString(`${dir}/rtest26.xml`);
+        const timed = yield* fs.readFileString(`${dir}/itemI.xml`);
+        const shared = yield* fs.readFileString(`${dir}/itemJ.xml`);
+
+        for (const identifier of ["J", "J.K"]) {
+          assert.include(
+            test,
+            `<qti-assessment-item-ref identifier="${identifier}" href="itemJ.xml"/>`,
+          );
+        }
+
+        assert.include(test, '<qti-variable identifier="J.K.SCORE"/>');
+        assert.include(timed, 'time-dependent="true"');
+        assert.include(timed, '<qti-variable identifier="duration"/>');
+        assert.include(timed, 'identifier="A.B" cardinality="single" base-type="float"');
+        assert.include(shared, 'time-dependent="false"');
+        assert.include(shared, 'identifier="SCORE" cardinality="single" base-type="float"');
+        assert.notInclude(shared, 'identifier="K.SCORE"');
+        assert.notInclude(shared, 'identifier="K"');
+      }),
+    ),
+  );
+
+  it.effect(
+    "test-section-ref has two tests reaching one section document and one that none reaches",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* sectionRefs() {
+          const fs = yield* FileSystem.FileSystem;
+          const dir = yield* materialize("test-section-ref");
+          const first = yield* fs.readFileString(`${dir}/rtest01.xml`);
+          const second = yield* fs.readFileString(`${dir}/test-b.xml`);
+          const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+          const types = [...manifest.matchAll(/type="(?<type>[^"]*)"/gu)].map(
+            (match) => match.groups?.["type"],
+          );
+
+          for (const test of [first, second]) {
+            assert.include(test, 'href="sections/shared.xml"');
+            assert.notInclude(test, "lonely");
+          }
+
+          assert.strictEqual(types.filter((type) => type === "imsqti_test_xmlv3p0").length, 2);
+          assert.strictEqual(types.filter((type) => type === "imsqti_section_xmlv3p0").length, 2);
+          assert.include(first, 'identifier="I2.SCORE"');
+          assert.notInclude(second, 'identifier="I2.SCORE"');
+          assert.include(second, '<qti-assessment-item-ref identifier="I2"');
+        }),
+      ),
   );
 });

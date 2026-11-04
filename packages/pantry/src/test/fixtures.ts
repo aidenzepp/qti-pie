@@ -313,12 +313,32 @@ const copyNames = [
 ] as const;
 
 /**
+ * The names of phase 5's eleven positive fixtures (the twelfth, the corpus package
+ * `BegGuide_March2025`, needs no spec): tests, section documents and stimuli, each a data-only edit
+ * set over a tarball member.
+ */
+const testNames = [
+  "test-linear",
+  "test-selection",
+  "test-mapping",
+  "test-template-default",
+  "test-section-ref",
+  "test-include",
+  "test-adaptive",
+  "test-content",
+  "stimulus-shared",
+  "stimulus-301",
+  "test-lti",
+] as const;
+
+/**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-edited
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
  * `end-attempt`, phase 2's hand-written positive, the 19 cut items of {@link cutNames}, the 40
  * hand-written HTML positives of {@link htmlElements}, the 14 XML copies of {@link copyNames}, and
- * the packaging phase's metadata and content cuts with their negatives.
+ * the packaging phase's metadata and content cuts with their negatives, and the 11 positive
+ * fixtures of phase 5's tests, sections and stimuli ({@link testNames}).
  */
 export const fixtureNames = [
   "simple",
@@ -346,6 +366,7 @@ export const fixtureNames = [
   ...cutNames,
   ...htmlElements.map((element) => `html-${element}` as const),
   ...copyNames,
+  ...testNames,
   "lomrest",
   "lomrest-two-titles",
   "lomrest-two-purposes",
@@ -2127,6 +2148,1027 @@ const overUsage = (name: string, ...edits: readonly Edit[]): FixtureSpec => ({
 });
 
 /**
+ * Escape text for an XML attribute value written in double quotes.
+ */
+const escapeAttribute = (text: string): string =>
+  text.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+
+/**
+ * One resource of a written manifest: its identifier, type, `href` and the `href` of each `file`
+ * it lists.
+ */
+interface ManifestResource {
+  readonly identifier: string;
+  readonly type: string;
+  readonly href: string;
+  readonly files: readonly string[];
+}
+
+/**
+ * Write a minimal manifest: the QTI 3 content-package namespaces, `QTI Package` and a
+ * `schemaversion`, no LOM, and the given resources.
+ *
+ * @param identifier - The manifest's identifier.
+ * @param schemaversion - The `schemaversion` it declares.
+ * @param resources - The resources, in order.
+ * @returns The manifest's text.
+ */
+const manifestText = (
+  identifier: string,
+  schemaversion: CutEdit["schemaversion"],
+  resources: readonly ManifestResource[],
+): string =>
+  [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"',
+    '  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+    '  xsi:schemaLocation="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0_imscpv1p2_v1p0.xsd"',
+    `  identifier="MANIFEST-${identifier}">`,
+    "  <metadata>",
+    "    <schema>QTI Package</schema>",
+    `    <schemaversion>${schemaversion}</schemaversion>`,
+    "  </metadata>",
+    "  <organizations/>",
+    "  <resources>",
+    ...resources.flatMap((resource) => [
+      `    <resource identifier="${resource.identifier}" type="${resource.type}" href="${escapeAttribute(resource.href)}">`,
+      ...resource.files.map((file) => `      <file href="${escapeAttribute(file)}"/>`),
+      "    </resource>",
+    ]),
+    "  </resources>",
+    "</manifest>",
+    "",
+  ].join("\n");
+
+/**
+ * The tarball member of the tests the loose fixtures of phase 5 are extracted from.
+ */
+const testsDirectory = "qtiv3-examples/tests";
+
+/**
+ * The tarball member of the `sharedStimulus` package.
+ */
+const sharedStimulusMember = "qtiv3-examples/packaging/sharedStimulus/sharedStimulus.zip";
+
+/**
+ * The tarball member of the `basicFeedbackTest` package.
+ */
+const basicFeedbackMember = "qtiv3-examples/packaging/basicFeedbackTest/basicFeedbackTest.zip";
+
+/**
+ * The tarball member of the `BPIG_22April` package.
+ */
+const bpigMember = "QTI3_BPIG_Examples/BPIG_22April.zip";
+
+/**
+ * The namespace and schema declarations every hand-written QTI 3.0.0 document opens with.
+ */
+const asiRoot =
+  'xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd"';
+
+/**
+ * Build the `addFile` edit that writes a hand-written text file into the package.
+ *
+ * @param file - The file's path in the package.
+ * @param text - Its text, written as UTF-8.
+ * @returns The edit as plain data.
+ */
+const addText = (file: string, text: string): FileEdit => ({
+  _tag: "addFile",
+  path: file,
+  source: { text },
+});
+
+/**
+ * Build the `addFile` edit that copies a loose tarball member into the package.
+ *
+ * @param file - The file's path in the package.
+ * @param member - The member's path in the examples tarball.
+ * @returns The edit as plain data.
+ */
+const addExample = (file: string, member: string): FileEdit => ({
+  _tag: "addFile",
+  path: file,
+  source: { member },
+});
+
+/**
+ * Write a hand-written stub item: `RESPONSE` (identifier, single) and `SCORE` (float, single), the
+ * given further outcomes, an empty body and the match-correct response processing.
+ *
+ * @param identifier - The item's identifier and title.
+ * @param outcomes - Each further outcome's identifier and base type, declared single.
+ * @returns The item's text.
+ */
+const stubItem = (
+  identifier: string,
+  outcomes: readonly (readonly [string, string])[] = [],
+): string =>
+  [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<qti-assessment-item ${asiRoot} identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
+    '  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/>',
+    '  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
+    ...outcomes.map(
+      ([name, baseType]) =>
+        `  <qti-outcome-declaration identifier="${name}" cardinality="single" base-type="${baseType}"/>`,
+    ),
+    "  <qti-item-body>",
+    `    <p>${identifier}</p>`,
+    "  </qti-item-body>",
+    '  <qti-response-processing template="https://www.imsglobal.org/question/qti_v3p0/rptemplates/match_correct.xml"/>',
+    "</qti-assessment-item>",
+    "",
+  ].join("\n");
+
+/**
+ * Write the root of a hand-written test document.
+ *
+ * @param identifier - The test's identifier and title.
+ * @param body - The test's children.
+ * @param extra - Further root attributes, each with its leading space.
+ * @returns The test's text.
+ */
+const testDocument = (identifier: string, body: readonly string[], extra = ""): string =>
+  [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<qti-assessment-test ${asiRoot}${extra} identifier="${identifier}" title="${identifier}">`,
+    ...body,
+    "</qti-assessment-test>",
+    "",
+  ].join("\n");
+
+/**
+ * Write the root of a hand-written section document.
+ *
+ * @param identifier - The section's identifier and title.
+ * @param body - The section's children.
+ * @returns The section's text.
+ */
+const sectionDocument = (identifier: string, body: readonly string[]): string =>
+  [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<qti-assessment-section ${asiRoot} identifier="${identifier}" title="${identifier}" visible="true">`,
+    ...body,
+    "</qti-assessment-section>",
+    "",
+  ].join("\n");
+
+/**
+ * A `qti-gt` pre-condition expression comparing a variable with a float.
+ *
+ * @param variable - The variable's name as the document writes it.
+ * @param baseType - The literal's base type.
+ * @param value - The literal.
+ * @returns The expression's text.
+ */
+const greaterThan = (variable: string, baseType: string, value: string): string =>
+  `<qti-gt><qti-variable identifier="${variable}"/><qti-base-value base-type="${baseType}">${value}</qti-base-value></qti-gt>`;
+
+/**
+ * The manifest resource of one hand-written document, with its files.
+ *
+ * @param identifier - The resource's identifier.
+ * @param type - Its type.
+ * @param href - Its document, which is its first file.
+ * @param files - Any further files it lists.
+ * @returns The resource.
+ */
+const resourceOf = (
+  identifier: string,
+  type: string,
+  href: string,
+  files: readonly string[] = [],
+): ManifestResource => ({ files: [href, ...files], href, identifier, type });
+
+/**
+ * `rtest13.xml` with `complete.xml`'s parts merged in, packaged with generated stub items.
+ *
+ * The edits give it a test outcome, test and part time limits (with `allow-late-submission`), a
+ * part `title`, a part `EXIT_TEST` rule, an item time limit, an `EXIT_TESTPART` rule on an item ref
+ * and `complete.xml`'s invisible section holding a pre-conditioned section.
+ */
+const testLinearEdits: readonly Edit[] = [
+  replaceIn(
+    "rtest13.xml",
+    '    <qti-test-part navigation-mode="linear" submission-mode="individual" identifier="RTEST-13-A">\n        <qti-item-session-control show-feedback="true" max-attempts="1" show-solution="false"/>',
+    [
+      '    <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float" interpretation="The Test Score" long-interpretation="http://www.google.com/search?q=interpreting+test+scores" normal-maximum="100.0">',
+      '        <qti-default-value interpretation="Zero">',
+      "            <qti-value>0.0</qti-value>",
+      "        </qti-default-value>",
+      "    </qti-outcome-declaration>",
+      '    <qti-time-limits max-time="3600" min-time="600" allow-late-submission="true"/>',
+      '    <qti-test-part navigation-mode="linear" submission-mode="individual" identifier="RTEST-13-A" title="Part A">',
+      '        <qti-branch-rule target="EXIT_TEST">',
+      `            ${greaterThan("item034.SCORE", "float", "99")}`,
+      "        </qti-branch-rule>",
+      '        <qti-item-session-control show-feedback="true" max-attempts="1" show-solution="false"/>',
+      '        <qti-time-limits max-time="3600"/>',
+    ].join("\n"),
+  ),
+  replaceIn(
+    "rtest13.xml",
+    '<qti-assessment-item-ref identifier="item653" href="item653.xml"/>',
+    [
+      '<qti-assessment-item-ref identifier="item653" href="item653.xml">',
+      '                <qti-branch-rule target="EXIT_TESTPART">',
+      `                    ${greaterThan("item653.SCORE", "float", "0")}`,
+      "                </qti-branch-rule>",
+      "            </qti-assessment-item-ref>",
+    ].join("\n"),
+  ),
+  replaceIn(
+    "rtest13.xml",
+    '<qti-assessment-item-ref identifier="item656" href="item656.xml"/>',
+    [
+      '<qti-assessment-item-ref identifier="item656" href="item656.xml">',
+      '                <qti-time-limits max-time="120"/>',
+      "            </qti-assessment-item-ref>",
+    ].join("\n"),
+  ),
+  replaceIn(
+    "rtest13.xml",
+    "    </qti-test-part>",
+    [
+      '        <qti-assessment-section identifier="main" title="Main Section" visible="false">',
+      '            <qti-assessment-item-ref identifier="switch" href="switch.xml"/>',
+      '            <qti-assessment-section identifier="SA" title="Section A" visible="true">',
+      "                <qti-pre-condition>",
+      "                    <qti-match>",
+      '                        <qti-variable identifier="switch.RESPONSE"/>',
+      '                        <qti-base-value base-type="identifier">A</qti-base-value>',
+      "                    </qti-match>",
+      "                </qti-pre-condition>",
+      '                <qti-assessment-item-ref identifier="A1" href="a1.xml"/>',
+      "            </qti-assessment-section>",
+      "        </qti-assessment-section>",
+      "    </qti-test-part>",
+    ].join("\n"),
+  ),
+  {
+    _tag: "looseTest",
+    schemaversion: "3.0.0",
+    test: "qtiv3-examples/tests/rtest13.xml",
+  },
+];
+
+/**
+ * `rtest12.xml` (`required` children, `shuffle`, `keep-together="false"`) edited toward
+ * `rtest01.xml` and `rtest24.xml`: selection with replacement on one section and a non-canonical
+ * `select="+2"` on another, a `fixed` item ref, and a third section with `keep-together="true"`.
+ * Sections A and B leave `keep-together` to its default.
+ */
+const testSelectionEdits: readonly Edit[] = [
+  replaceIn(
+    "rtest12.xml",
+    '<qti-selection select="2"/>\n            <qti-ordering shuffle="false"/>',
+    '<qti-selection select="2" with-replacement="true"/>\n            <qti-ordering shuffle="false"/>',
+  ),
+  replaceIn(
+    "rtest12.xml",
+    '<qti-selection select="2"/>\n            <qti-ordering shuffle="true"/>',
+    '<qti-selection select="+2"/>\n            <qti-ordering shuffle="true"/>',
+  ),
+  replaceIn(
+    "rtest12.xml",
+    '<qti-assessment-item-ref identifier="item160" href="item160.xml"/>',
+    '<qti-assessment-item-ref identifier="item160" href="item160.xml" fixed="true"/>',
+  ),
+  replaceIn(
+    "rtest12.xml",
+    "    </qti-test-part>",
+    [
+      '        <qti-assessment-section identifier="sectionC" title="Section C" visible="true" keep-together="true">',
+      '            <qti-ordering shuffle="false"/>',
+      '            <qti-assessment-item-ref identifier="item901" href="item901.xml"/>',
+      '            <qti-assessment-item-ref identifier="item902" href="item902.xml"/>',
+      "        </qti-assessment-section>",
+      "    </qti-test-part>",
+    ].join("\n"),
+  ),
+  {
+    _tag: "looseTest",
+    schemaversion: "3.0.0",
+    test: "qtiv3-examples/tests/rtest12.xml",
+  },
+];
+
+/**
+ * The extra outcome declarations of `test-mapping`, one for each prefixed source it names.
+ */
+const mappingOutcomes = [
+  ["DECLARED", "float"],
+  ["DOTTED", "float"],
+  ["INSTANCE", "float"],
+  ["NESTED", "float"],
+  ["PADDED", "float"],
+  ["PARTTIME", "duration"],
+  ["SECTIONSUM", "float"],
+  ["TIMED", "duration"],
+] as const;
+
+/**
+ * One `qti-set-outcome-value` of a test's outcome processing.
+ *
+ * @param outcome - The outcome it sets.
+ * @param expression - The expression it sets it to.
+ * @returns The rule's text.
+ */
+const setOutcome = (outcome: string, expression: string): string =>
+  [
+    `        <qti-set-outcome-value identifier="${outcome}">`,
+    `            ${expression}`,
+    "        </qti-set-outcome-value>",
+  ].join("\n");
+
+/**
+ * `rtest26.xml` (a variable mapping) with `rtest04.xml`'s weights, packaged with generated stubs.
+ *
+ * It names the three prefixed sources (the mapping target `SCORE`, a declaration of an item,
+ * `item160.SCORE`, and `I.duration` of a stub the generator declares time-dependent); `I.2.SCORE`
+ * and the non-canonical `I.02.SCORE`; `PART.duration` with `RTEST-26-A` the part; `I.A.B` of a
+ * stub declaring a float outcome `A.B` (reading 37); and, of decision 189, the item refs `J` and
+ * `J.K` that name one stub declaring `SCORE` and no `K.SCORE`, so that `J.K.SCORE` has one
+ * resolving reading, `J.K` with `SCORE`.
+ */
+const testMappingEdits: readonly Edit[] = [
+  replaceIn("rtest26.xml", "Ã¯tem065.xml", "item065.xml"),
+  replaceIn(
+    "rtest26.xml",
+    "    </qti-outcome-declaration>",
+    [
+      "    </qti-outcome-declaration>",
+      ...mappingOutcomes.map(
+        ([name, baseType]) =>
+          `    <qti-outcome-declaration identifier="${name}" cardinality="single" base-type="${baseType}"/>`,
+      ),
+    ].join("\n"),
+  ),
+  replaceIn(
+    "rtest26.xml",
+    '<qti-assessment-item-ref identifier="item034" href="item034.xml">',
+    '<qti-assessment-item-ref identifier="item034" href="item034.xml" category="easy hard">',
+  ),
+  replaceIn(
+    "rtest26.xml",
+    '<qti-assessment-item-ref identifier="item160" href="item160.xml"/>',
+    [
+      '<qti-assessment-item-ref identifier="item160" href="item160.xml" category="easy">',
+      '                <qti-weight identifier="WEIGHT" value="2"/>',
+      "            </qti-assessment-item-ref>",
+    ].join("\n"),
+  ),
+  replaceIn(
+    "rtest26.xml",
+    '<qti-assessment-item-ref identifier="item063" href="item063.xml"/>',
+    [
+      '<qti-assessment-item-ref identifier="item063" href="item063.xml"/>',
+      '            <qti-assessment-item-ref identifier="I" href="itemI.xml"/>',
+      '            <qti-assessment-item-ref identifier="J" href="itemJ.xml"/>',
+      '            <qti-assessment-item-ref identifier="J.K" href="itemJ.xml"/>',
+    ].join("\n"),
+  ),
+  replaceIn(
+    "rtest26.xml",
+    "    </qti-outcome-processing>",
+    [
+      setOutcome("DECLARED", '<qti-variable identifier="item160.SCORE"/>'),
+      setOutcome("INSTANCE", '<qti-variable identifier="I.2.SCORE"/>'),
+      setOutcome("PADDED", '<qti-variable identifier="I.02.SCORE"/>'),
+      setOutcome("NESTED", '<qti-variable identifier="I.A.B"/>'),
+      setOutcome("TIMED", '<qti-variable identifier="I.duration"/>'),
+      setOutcome("PARTTIME", '<qti-variable identifier="RTEST-26-A.duration"/>'),
+      setOutcome("DOTTED", '<qti-variable identifier="J.K.SCORE"/>'),
+      setOutcome(
+        "SECTIONSUM",
+        '<qti-sum><qti-test-variables variable-identifier="SCORE" section-identifier="sectionA" include-category="easy" weight-identifier="WEIGHT"/></qti-sum>',
+      ),
+      "    </qti-outcome-processing>",
+    ].join("\n"),
+  ),
+  {
+    _tag: "looseTest",
+    schemaversion: "3.0.0",
+    test: "qtiv3-examples/tests/rtest26.xml",
+  },
+];
+
+/**
+ * A hand-written test over `BPIG_22April`'s `template_image.xml`: its `SPEED` template declaration
+ * (integer) takes as default `TRIP.SPEEDLIMIT`, an integer outcome of the item ref before it.
+ */
+const templateDefaultTest: string = testDocument("TEMPLATE-DEFAULT", [
+  '  <qti-test-part identifier="PART" navigation-mode="linear" submission-mode="individual">',
+  '    <qti-assessment-section identifier="SECTION" title="Section" visible="true">',
+  '      <qti-assessment-item-ref identifier="TRIP" href="items/trip.xml"/>',
+  '      <qti-assessment-item-ref identifier="MICK" href="items/template_image.xml">',
+  '        <qti-template-default template-identifier="SPEED">',
+  '          <qti-variable identifier="TRIP.SPEEDLIMIT"/>',
+  "        </qti-template-default>",
+  "      </qti-assessment-item-ref>",
+  "    </qti-assessment-section>",
+  "  </qti-test-part>",
+]);
+
+/**
+ * The outcomes both tests of `test-section-ref` declare, which the shared section document names
+ * unprefixed: `SCORE` (float), `COUNT` (integer, the `base` of the printed variable) and `FLAG`
+ * (identifier, the feedback inline's outcome).
+ */
+const sectionRefOutcomes: readonly string[] = [
+  '  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
+  '  <qti-outcome-declaration identifier="COUNT" cardinality="single" base-type="integer"/>',
+  '  <qti-outcome-declaration identifier="FLAG" cardinality="single" base-type="identifier"/>',
+];
+
+/**
+ * One test of `test-section-ref`: a part `PART` whose section holds an item ref `ITEMREF` and a
+ * ref to the shared section document.
+ *
+ * @param identifier - The test's identifier and title.
+ * @param outcomes - Its outcome declarations.
+ * @param items - Its item refs, as lines.
+ * @returns The test's text.
+ */
+const sectionRefTest = (
+  identifier: string,
+  outcomes: readonly string[],
+  items: readonly string[],
+): string =>
+  testDocument(identifier, [
+    ...outcomes,
+    '  <qti-test-part identifier="PART" navigation-mode="linear" submission-mode="individual">',
+    '    <qti-assessment-section identifier="main" title="Main" visible="true">',
+    ...items,
+    '      <qti-assessment-section-ref identifier="S1" href="sections/shared.xml"/>',
+    "    </qti-assessment-section>",
+    "  </qti-test-part>",
+  ]);
+
+/**
+ * The section document both tests of `test-section-ref` reach: a pre-condition with
+ * `ITEMREF.SCORE`, one naming `SCORE` unprefixed, a branch rule with `PART.duration`, one naming
+ * `I2.SCORE`, a `qti-test-variables` with `section-identifier`, and a rubric with a printed
+ * variable of `SCORE` (`base` `COUNT`) and a feedback inline of `FLAG`.
+ */
+const sharedSection: string = sectionDocument("shared", [
+  `  <qti-pre-condition>${greaterThan("ITEMREF.SCORE", "float", "0")}</qti-pre-condition>`,
+  `  <qti-pre-condition>${greaterThan("SCORE", "float", "0")}</qti-pre-condition>`,
+  '  <qti-pre-condition><qti-gt><qti-sum><qti-test-variables variable-identifier="SCORE" section-identifier="shared"/></qti-sum><qti-base-value base-type="float">0</qti-base-value></qti-gt></qti-pre-condition>',
+  `  <qti-branch-rule target="EXIT_SECTION">${greaterThan("PART.duration", "duration", "100")}</qti-branch-rule>`,
+  `  <qti-branch-rule target="EXIT_SECTION">${greaterThan("I2.SCORE", "float", "0")}</qti-branch-rule>`,
+  '  <qti-rubric-block view="candidate">',
+  "    <qti-content-body>",
+  '      <p>Score <qti-printed-variable identifier="SCORE" base="COUNT"/></p>',
+  '      <p><qti-feedback-inline outcome-identifier="FLAG" identifier="ok" show-hide="show">Well done.</qti-feedback-inline></p>',
+  "    </qti-content-body>",
+  "  </qti-rubric-block>",
+  '  <qti-assessment-item-ref identifier="shared-item" href="../items/shared.xml"/>',
+]);
+
+/**
+ * The section document no test reaches: one prefixed reference in a pre-condition.
+ */
+const lonelySection: string = sectionDocument("lonely", [
+  `  <qti-pre-condition>${greaterThan("ITEMREF.SCORE", "float", "0")}</qti-pre-condition>`,
+  '  <qti-assessment-item-ref identifier="lonely-item" href="../items/shared.xml"/>',
+]);
+
+/**
+ * The manifest of `test-section-ref`, listing the two tests, the two section documents and the
+ * items.
+ */
+const sectionRefManifest: string = manifestText("SECTION-REF", "3.0.0", [
+  resourceOf("test-a", "imsqti_test_xmlv3p0", "rtest01.xml"),
+  resourceOf("test-b", "imsqti_test_xmlv3p0", "test-b.xml"),
+  resourceOf("shared", "imsqti_section_xmlv3p0", "sections/shared.xml"),
+  resourceOf("lonely", "imsqti_section_xmlv3p0", "sections/lonely.xml"),
+  resourceOf("item-a", "imsqti_item_xmlv3p0", "items/a1.xml"),
+  resourceOf("item-b", "imsqti_item_xmlv3p0", "items/b1.xml"),
+  resourceOf("item-i2", "imsqti_item_xmlv3p0", "items/i2.xml"),
+  resourceOf("item-shared", "imsqti_item_xmlv3p0", "items/shared.xml"),
+]);
+
+/**
+ * The hand-written parts of `test-include`: an inline fragment (`span`), a block fragment (`p`)
+ * and an item-ref fragment, each a document root in the QTI namespace.
+ */
+const includeFragments: readonly Edit[] = [
+  addExample("rtest01-fragment.xml", "qtiv3-examples/tests/rtest01-fragment.xml"),
+  addExample("rtest01-set01.xml", "qtiv3-examples/tests/rtest01-set01.xml"),
+  addExample("rtest01-set02.xml", "qtiv3-examples/tests/rtest01-set02.xml"),
+  addExample("rtest01-set03.xml", "qtiv3-examples/tests/rtest01-set03.xml"),
+  addText(
+    "rtest01-span.xml",
+    '<span xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">an included span</span>\n',
+  ),
+  addText(
+    "rtest01-para.xml",
+    '<p xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">an included paragraph</p>\n',
+  ),
+  addText(
+    "rtest01-ref.xml",
+    '<qti-assessment-item-ref xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="set04" href="rtest01-set02.xml"/>\n',
+  ),
+];
+
+/**
+ * The `xi:include` of a hand-written fragment.
+ *
+ * @param href - The fragment's file.
+ * @returns The element's text.
+ */
+const include = (href: string): string => `<xi:include href="${href}" parse="xml"/>`;
+
+/**
+ * `rtest01.xml` with `xi:include` in a section, in a test rubric's and a test feedback's content
+ * body, and (in `rtest01-set01.xml`) in an item body's `p` and `div`.
+ */
+const testIncludeEdits: readonly Edit[] = [
+  ...includeFragments,
+  replaceIn(
+    "rtest01.xml",
+    "<qti-assessment-test xmlns=",
+    '<qti-assessment-test xmlns:xi="http://www.w3.org/2001/XInclude" xmlns=',
+  ),
+  replaceIn(
+    "rtest01.xml",
+    '    <qti-test-part identifier="P1"',
+    [
+      '    <qti-outcome-declaration identifier="FBOUT" cardinality="single" base-type="identifier"/>',
+      '    <qti-rubric-block view="candidate">',
+      `        <qti-content-body>${include("rtest01-para.xml")}</qti-content-body>`,
+      "    </qti-rubric-block>",
+      '    <qti-test-part identifier="P1"',
+    ].join("\n"),
+  ),
+  replaceIn(
+    "rtest01.xml",
+    '<qti-assessment-item-ref identifier="set03" href="rtest01-set03.xml"/>',
+    `<qti-assessment-item-ref identifier="set03" href="rtest01-set03.xml"/>\n            ${include("rtest01-ref.xml")}`,
+  ),
+  replaceIn(
+    "rtest01.xml",
+    "    </qti-test-part>",
+    [
+      "    </qti-test-part>",
+      '    <qti-test-feedback identifier="FB" outcome-identifier="FBOUT" access="atEnd" show-hide="show">',
+      `        <qti-content-body>${include("rtest01-para.xml")}</qti-content-body>`,
+      "    </qti-test-feedback>",
+    ].join("\n"),
+  ),
+  replaceIn(
+    "rtest01-set01.xml",
+    '<xi:include href="rtest01-fragment.xml" parse="xml"/>',
+    [
+      '<xi:include href="rtest01-fragment.xml" parse="xml"/>',
+      `        <p>${include("rtest01-span.xml")}</p>`,
+      `        <div>${include("rtest01-para.xml")}</div>`,
+    ].join("\n"),
+  ),
+  { _tag: "cutTest", schemaversion: "3.0.0", test: "rtest01.xml" },
+];
+
+/**
+ * A hand-written test whose one section selects adaptively, its four refs naming packaged files.
+ */
+const adaptiveTest: string = testDocument("ADAPTIVE", [
+  '  <qti-test-part identifier="PART" navigation-mode="nonlinear" submission-mode="individual">',
+  '    <qti-assessment-section identifier="SECTION" title="Section" visible="true">',
+  "      <qti-adaptive-selection>",
+  '        <qti-adaptive-engine-ref identifier="engine" href="adaptive/engine.xml"/>',
+  '        <qti-adaptive-settings-ref identifier="settings" href="adaptive/settings.xml"/>',
+  '        <qti-usagedata-ref identifier="usagedata" href="adaptive/usagedata.xml"/>',
+  '        <qti-metadata-ref identifier="metadata" href="adaptive/metadata.xml"/>',
+  "      </qti-adaptive-selection>",
+  '      <qti-assessment-item-ref identifier="choice" href="choice.xml"/>',
+  "    </qti-assessment-section>",
+  "  </qti-test-part>",
+]);
+
+/**
+ * The four files `test-adaptive`'s refs name, each a small well-formed document.
+ */
+const adaptiveFiles: readonly Edit[] = ["engine", "settings", "usagedata", "metadata"].map((name) =>
+  addText(`adaptive/${name}.xml`, `<${name}>${name}</${name}>\n`),
+);
+
+/**
+ * `basicFeedbackTest`'s test with its four items' content removed (`id-a360e0fa63e6` holds
+ * MathML, which no language phase has landed), the items kept as stubs of the same identifiers.
+ * The test gains a test rubric, part and section rubrics with and without `use`, a stylesheet, a
+ * context declaration, a `during` feedback with a `title` and `xml:lang`, and its manifest the test
+ * resource's LOM `language`.
+ */
+const testContentEdits: readonly Edit[] = [
+  ...[
+    ["id-53a79b001624/Example01-modalFeedback.xml", "id-53a79b001624"],
+    ["id-692fc07cc3e2/Example05-feedbackBlock-adaptive.xml", "id-692fc07cc3e2"],
+    ["id-a360e0fa63e6/Example03-feedbackBlock-solution.xml", "id-a360e0fa63e6"],
+    ["id-b0dd9e732083/Example02-feedbackInline.xml", "id-b0dd9e732083"],
+  ].map(([file, identifier]) => addText(file ?? "", stubItem(identifier ?? ""))),
+  addText("styles/test.css", ".qti-test { margin: 0; }\n"),
+  replaceIn(
+    "assessment.xml",
+    'title="Simple Feedback Test" identifier="SPECTATUS-GENERATED-TEST">',
+    'title="Simple Feedback Test" identifier="SPECTATUS-GENERATED-TEST" xml:lang="en">',
+  ),
+  replaceIn(
+    "assessment.xml",
+    '<qti-outcome-declaration base-type="float" cardinality="single" identifier="TEST_total">',
+    [
+      '<qti-context-declaration identifier="CONTEXT" cardinality="single" base-type="string"/>',
+      '    <qti-outcome-declaration base-type="float" cardinality="single" identifier="TEST_total">',
+    ].join("\r\n"),
+  ),
+  replaceIn(
+    "assessment.xml",
+    '<qti-test-part submission-mode="simultaneous" navigation-mode="nonlinear" identifier="TP">',
+    [
+      '<qti-stylesheet href="styles/test.css" type="text/css"/>',
+      '    <qti-rubric-block view="candidate" use="instructions">',
+      "        <qti-content-body><p>Test instructions</p></qti-content-body>",
+      "    </qti-rubric-block>",
+      '    <qti-test-part submission-mode="simultaneous" navigation-mode="nonlinear" identifier="TP">',
+      '        <qti-rubric-block view="candidate">',
+      "            <qti-content-body><p>Part notes</p></qti-content-body>",
+      "        </qti-rubric-block>",
+    ].join("\r\n"),
+  ),
+  replaceIn(
+    "assessment.xml",
+    '<qti-assessment-item-ref identifier="id-53a79b001624" href="id-53a79b001624/Example01-modalFeedback.xml"/>',
+    [
+      '<qti-rubric-block view="candidate">',
+      "                <qti-content-body><p>Section notes</p></qti-content-body>",
+      "            </qti-rubric-block>",
+      '            <qti-assessment-item-ref identifier="id-53a79b001624" href="id-53a79b001624/Example01-modalFeedback.xml"/>',
+    ].join("\r\n"),
+  ),
+  replaceIn(
+    "assessment.xml",
+    'outcome-identifier="TEST_FEEDBACK" access="atEnd">',
+    'outcome-identifier="TEST_FEEDBACK" access="atEnd" title="End of test">',
+  ),
+  replaceIn(
+    "assessment.xml",
+    "</qti-test-feedback>",
+    [
+      "</qti-test-feedback>",
+      '    <qti-test-feedback identifier="TEST_FB_DURING" show-hide="show" outcome-identifier="TEST_FEEDBACK" access="during" title="Progress">',
+      "        <qti-content-body>",
+      '            <div>Score so far: <qti-printed-variable format="%.1f" identifier="TEST_total"/> <qti-feedback-inline outcome-identifier="s1FB" identifier="S1-FB-AllOK" show-hide="show">On track.</qti-feedback-inline></div>',
+      "        </qti-content-body>",
+      "    </qti-test-feedback>",
+    ].join("\r\n"),
+  ),
+  replaceIn(
+    "imsmanifest.xml",
+    '<resource href="assessment.xml" type="imsqti_test_xmlv3p0" identifier="SPECTATUS-GENERATED-TEST">',
+    [
+      '<resource href="assessment.xml" type="imsqti_test_xmlv3p0" identifier="SPECTATUS-GENERATED-TEST">',
+      "            <metadata>",
+      "                <imsmd:lom>",
+      "                    <imsmd:general>",
+      "                        <imsmd:language>en</imsmd:language>",
+      "                    </imsmd:general>",
+      "                </imsmd:lom>",
+      "            </metadata>",
+    ].join("\n"),
+  ),
+  replaceIn(
+    "imsmanifest.xml",
+    '<file href="assessment.xml"/>',
+    '<file href="assessment.xml"/>\n            <file href="styles/test.css"/>',
+  ),
+];
+
+/**
+ * Write one of `sharedStimulus`'s three items without its catalog content: its declarations, a
+ * reference to the shared stimulus, the given body and the match-correct response processing.
+ *
+ * @param identifier - The item's identifier.
+ * @param title - The item's title.
+ * @param response - The response declaration's attributes and children.
+ * @param stimulusRef - The stimulus ref's extra attributes, with a leading space.
+ * @param body - The item body's children.
+ * @returns The item's text.
+ */
+const stimulusItem = (
+  identifier: string,
+  title: string,
+  response: string,
+  stimulusRef: string,
+  body: readonly string[],
+): string =>
+  [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<qti-assessment-item ${asiRoot} identifier="${identifier}" title="${title}" adaptive="false" time-dependent="false">`,
+    response,
+    '  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">',
+    "    <qti-default-value><qti-value>0</qti-value></qti-default-value>",
+    "  </qti-outcome-declaration>",
+    '  <qti-outcome-declaration identifier="MAXSCORE" cardinality="single" base-type="float">',
+    "    <qti-default-value><qti-value>1</qti-value></qti-default-value>",
+    "  </qti-outcome-declaration>",
+    `  <qti-assessment-stimulus-ref identifier="Stimulus1" href="passages/unbelievableNight.xml"${stimulusRef}/>`,
+    "  <qti-item-body>",
+    ...body,
+    "  </qti-item-body>",
+    "  <qti-response-processing>",
+    "    <qti-response-condition>",
+    "      <qti-response-if>",
+    '        <qti-match><qti-variable identifier="RESPONSE"/><qti-correct identifier="RESPONSE"/></qti-match>',
+    '        <qti-set-outcome-value identifier="SCORE"><qti-variable identifier="MAXSCORE"/></qti-set-outcome-value>',
+    "      </qti-response-if>",
+    "    </qti-response-condition>",
+    "  </qti-response-processing>",
+    "</qti-assessment-item>",
+    "",
+  ].join("\n");
+
+/**
+ * The edits of `stimulus-shared`: `sharedStimulus` with the two images its stimulus names but does
+ * not hold added (copies of the two it holds, listed in its manifest), its catalog content (the
+ * `qti-catalog-info` blocks and the `data-*` attributes) removed, and its three items written
+ * without that content, one of whose stimulus refs has a `title`.
+ */
+const stimulusSharedEdits: readonly Edit[] = [
+  {
+    _tag: "copyFile",
+    from: "passages/images/exemplarSection01_croc.png",
+    to: "passages/images/apip_VE_IP_05_croc.png",
+  },
+  {
+    _tag: "copyFile",
+    from: "passages/images/exemplarSection01_flamingos.png",
+    to: "passages/images/apip_VE_IP_05_flamingos.png",
+  },
+  addText(
+    "exemplar06.xml",
+    stimulusItem(
+      "Item1",
+      "Why did Anina call the flamingos",
+      '  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="string"/>',
+      ' title="An Unbelievable Night"',
+      [
+        '    <qti-extended-text-interaction expected-length="300" expected-lines="4" format="plain" max-strings="1" min-strings="1" response-identifier="RESPONSE">',
+        "      <qti-prompt>Why did Anina call the flamingos?</qti-prompt>",
+        "    </qti-extended-text-interaction>",
+      ],
+    ),
+  ),
+  addText(
+    "exemplar04.xml",
+    stimulusItem(
+      "Item2",
+      "Put the following sentences in order",
+      [
+        '  <qti-response-declaration identifier="RESPONSE" base-type="identifier" cardinality="ordered">',
+        "    <qti-correct-response><qti-value>fourthSentence</qti-value></qti-correct-response>",
+        "  </qti-response-declaration>",
+      ].join("\n"),
+      "",
+      [
+        '    <qti-order-interaction max-choices="5" min-choices="1" shuffle="false" orientation="vertical" response-identifier="RESPONSE">',
+        "      <qti-prompt>Put the following sentences in the order in which they happened in the story.</qti-prompt>",
+        '      <qti-simple-choice identifier="firstSentence">Anina saw the crocodile.</qti-simple-choice>',
+        '      <qti-simple-choice identifier="secondSentence">The crocodile ate two flamingos.</qti-simple-choice>',
+        '      <qti-simple-choice identifier="thirdSentence">Anina tried to explain the broken door to her parents.</qti-simple-choice>',
+        '      <qti-simple-choice identifier="fourthSentence">Anina started to walk to the bathroom.</qti-simple-choice>',
+        '      <qti-simple-choice identifier="fifthSentence">Anina ran to the bedroom and slammed the door.</qti-simple-choice>',
+        "    </qti-order-interaction>",
+      ],
+    ),
+  ),
+  addText(
+    "exemplar05.xml",
+    stimulusItem(
+      "Item3",
+      "Where did the crocodile come from",
+      [
+        '  <qti-response-declaration identifier="RESPONSE" base-type="identifier" cardinality="single">',
+        "    <qti-correct-response><qti-value>B</qti-value></qti-correct-response>",
+        "  </qti-response-declaration>",
+      ].join("\n"),
+      "",
+      [
+        '    <div class="qti-layout-row">',
+        '      <div class="qti-layout-col6">',
+        '        <div class="qti-shared-stimulus"></div>',
+        "      </div>",
+        '      <div class="qti-layout-col6">',
+        '        <qti-choice-interaction max-choices="1" shuffle="false" response-identifier="RESPONSE">',
+        "          <qti-prompt>Where did the crocodile come from?</qti-prompt>",
+        '          <qti-simple-choice identifier="A">the bathroom</qti-simple-choice>',
+        '          <qti-simple-choice identifier="B">a magazine cover</qti-simple-choice>',
+        '          <qti-simple-choice identifier="C">under the bed</qti-simple-choice>',
+        '          <qti-simple-choice identifier="D">a nearby river</qti-simple-choice>',
+        "        </qti-choice-interaction>",
+        "      </div>",
+        "    </div>",
+      ],
+    ),
+  ),
+  replaceIn(
+    "passages/unbelievableNight.xml",
+    '<span data-catalog-idref="c1234">Anina</span>',
+    "Anina",
+  ),
+  replaceIn(
+    "passages/unbelievableNight.xml",
+    '  <qti-catalog-info> \n    <qti-catalog id="c1234">\n      <qti-card support="linguistic-guidance">\n        <qti-html-content>Anina is the name of a girl.</qti-html-content>\n      </qti-card>\n    </qti-catalog>\n  </qti-catalog-info> \n',
+    "",
+  ),
+  replaceIn(
+    "imsmanifest.xml",
+    '<file href="passages/images/exemplarSection01_flamingos.png"/>',
+    [
+      '<file href="passages/images/exemplarSection01_flamingos.png"/>',
+      '            <file href="passages/images/apip_VE_IP_05_croc.png"/>',
+      '            <file href="passages/images/apip_VE_IP_05_flamingos.png"/>',
+    ].join("\n"),
+  ),
+];
+
+/**
+ * `stimulus-shared` at 3.0.1: the manifest's `schemaversion` and the documents' schema location
+ * move to 3.0.1; the stimulus root gains `tool-name`, `tool-version` and `label`; its body gains
+ * `class`, `xml:lang`, an `xi:include` of a packaged fragment and, bare, an interaction, a
+ * `qti-feedback-inline` and a `qti-template-inline` (goal 5.15).
+ */
+const stimulus301Edits: readonly Edit[] = [
+  ...stimulusSharedEdits,
+  addText(
+    "passages/fragment.xml",
+    '<p xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">an included paragraph</p>\n',
+  ),
+  replaceIn(
+    "imsmanifest.xml",
+    "<schemaversion>3.0.0</schemaversion>",
+    "<schemaversion>3.0.1</schemaversion>",
+  ),
+  replaceIn(
+    "imsmanifest.xml",
+    '<file href="passages/stylesheets/unbelievable_night.css"/>',
+    '<file href="passages/stylesheets/unbelievable_night.css"/>\n            <file href="passages/fragment.xml"/>',
+  ),
+  ...["exemplar06.xml", "exemplar04.xml", "exemplar05.xml"].map((file) =>
+    replaceIn(file, "imsqti_asiv3p0_v1p0.xsd", "imsqti_asiv3p0p1_v1p0.xsd"),
+  ),
+  replaceIn(
+    "passages/unbelievableNight.xml",
+    "imsqti_stimulusv3p0_v1p0.xsd",
+    "imsqti_stimulusv3p0p1_v1p0.xsd",
+  ),
+  replaceIn(
+    "passages/unbelievableNight.xml",
+    'identifier="Stimulus1" title="Common Stimulus" xml:lang="eng">',
+    'identifier="Stimulus1" title="Common Stimulus" xml:lang="eng" label="Passage" tool-name="qti-pie" tool-version="1.0">',
+  ),
+  replaceIn(
+    "passages/unbelievableNight.xml",
+    "<qti-stimulus-body>",
+    '<qti-stimulus-body class="passage" xml:lang="en">',
+  ),
+  replaceIn(
+    "passages/unbelievableNight.xml",
+    '<qti-assessment-stimulus \n\txmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"',
+    '<qti-assessment-stimulus xmlns:xi="http://www.w3.org/2001/XInclude" \n\txmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"',
+  ),
+  replaceIn(
+    "passages/unbelievableNight.xml",
+    "    </div> <!-- /stimulus-wrapper -->",
+    [
+      '      <xi:include href="fragment.xml" parse="xml"/>',
+      '      <qti-choice-interaction response-identifier="RESPONSE" max-choices="1">',
+      '        <qti-simple-choice identifier="A">A</qti-simple-choice>',
+      "      </qti-choice-interaction>",
+      '      <p><qti-feedback-inline outcome-identifier="FB" identifier="done" show-hide="show">done</qti-feedback-inline> <qti-template-inline template-identifier="T" identifier="x" show-hide="show">x</qti-template-inline></p>',
+      "    </div> <!-- /stimulus-wrapper -->",
+    ].join("\n"),
+  ),
+];
+
+/**
+ * A hand-written test whose one item ref names the LTI link's file, the resource that holds it.
+ */
+const ltiTest: string = testDocument("LTI-TEST", [
+  '  <qti-test-part identifier="PART" navigation-mode="linear" submission-mode="individual">',
+  '    <qti-assessment-section identifier="SECTION" title="Section" visible="true">',
+  '      <qti-assessment-item-ref identifier="video" href="links/streaming_video_experiment101.xml"/>',
+  "    </qti-assessment-section>",
+  "  </qti-test-part>",
+]);
+
+/**
+ * The specs of {@link testNames}.
+ */
+const testSpecs: Record<(typeof testNames)[number], FixtureSpec> = {
+  "stimulus-301": {
+    edits: stimulus301Edits,
+    member: sharedStimulusMember,
+    name: "stimulus-301",
+  },
+  "stimulus-shared": {
+    edits: stimulusSharedEdits,
+    member: sharedStimulusMember,
+    name: "stimulus-shared",
+  },
+  "test-adaptive": {
+    edits: [
+      addText("adaptive-test.xml", adaptiveTest),
+      ...adaptiveFiles,
+      { _tag: "cutTest", schemaversion: "3.0.0", test: "adaptive-test.xml" },
+    ],
+    member: simpleMember,
+    name: "test-adaptive",
+  },
+  "test-content": {
+    edits: testContentEdits,
+    member: basicFeedbackMember,
+    name: "test-content",
+  },
+  "test-include": {
+    edits: testIncludeEdits,
+    member: `${testsDirectory}/rtest01.xml`,
+    name: "test-include",
+  },
+  "test-linear": {
+    edits: testLinearEdits,
+    member: `${testsDirectory}/rtest13.xml`,
+    name: "test-linear",
+  },
+  "test-lti": overLti("test-lti", [
+    ltiVersion301,
+    addText("ltitest.xml", ltiTest),
+    replaceIn(
+      "imsmanifest.xml",
+      '<resource identifier="experiment101" type="imslti_xmlv1p1">',
+      '<resource identifier="ltitest" type="imsqti_test_xmlv3p0" href="ltitest.xml">\n            <file href="ltitest.xml"/>\n        </resource>\n        <resource identifier="experiment101" type="imslti_xmlv1p1">',
+    ),
+  ]),
+  "test-mapping": {
+    edits: testMappingEdits,
+    member: `${testsDirectory}/rtest26.xml`,
+    name: "test-mapping",
+  },
+  "test-section-ref": {
+    edits: [
+      addText("sections/shared.xml", sharedSection),
+      addText("sections/lonely.xml", lonelySection),
+      addText("items/a1.xml", stubItem("a1")),
+      addText("items/b1.xml", stubItem("b1")),
+      addText("items/i2.xml", stubItem("i2")),
+      addText("items/shared.xml", stubItem("shared")),
+      addText(
+        "test-b.xml",
+        sectionRefTest("TEST-B", sectionRefOutcomes, [
+          '      <qti-assessment-item-ref identifier="ITEMREF" href="items/b1.xml"/>',
+          '      <qti-assessment-item-ref identifier="I2" href="items/i2.xml"/>',
+        ]),
+      ),
+      addText("imsmanifest.xml", sectionRefManifest),
+      replaceIn(
+        "rtest01.xml",
+        '    <qti-test-part identifier="P1" navigation-mode="linear" submission-mode="individual">',
+        [
+          ...sectionRefOutcomes,
+          '  <qti-outcome-declaration identifier="I2.SCORE" cardinality="single" base-type="float"/>',
+          '    <qti-test-part identifier="PART" navigation-mode="linear" submission-mode="individual">',
+        ].join("\n"),
+      ),
+      replaceIn(
+        "rtest01.xml",
+        '<qti-selection select="2"/>\n            <qti-assessment-item-ref identifier="set01" href="rtest01-set01.xml"/>\n            <qti-assessment-item-ref identifier="set02" href="rtest01-set02.xml"/>\n            <qti-assessment-item-ref identifier="set03" href="rtest01-set03.xml"/>',
+        [
+          '<qti-selection select="2"/>',
+          '            <qti-assessment-item-ref identifier="ITEMREF" href="items/a1.xml"/>',
+          '            <qti-assessment-section-ref identifier="S1" href="sections/shared.xml"/>',
+        ].join("\n"),
+      ),
+    ],
+    member: `${testsDirectory}/rtest01.xml`,
+    name: "test-section-ref",
+  },
+  "test-selection": {
+    edits: testSelectionEdits,
+    member: `${testsDirectory}/rtest12.xml`,
+    name: "test-selection",
+  },
+  "test-template-default": {
+    edits: [
+      addText("template-default-test.xml", templateDefaultTest),
+      addText("items/trip.xml", stubItem("trip", [["SPEEDLIMIT", "integer"]])),
+      { _tag: "cutTest", schemaversion: "3.0.0", test: "template-default-test.xml" },
+    ],
+    member: bpigMember,
+    name: "test-template-default",
+  },
+};
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
  *
@@ -2175,6 +3217,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...cutSpecs,
   ...htmlSpecs,
   ...copySpecs,
+  ...testSpecs,
   "bad-identifier-value": {
     edits: [
       replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value>Choice A</qti-value>"),
@@ -3010,12 +4053,6 @@ const ncNameOf = (item: string): string => {
 };
 
 /**
- * Escape text for an XML attribute value written in double quotes.
- */
-const escapeAttribute = (text: string): string =>
-  text.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
-
-/**
  * Extract one tarball member, as a file, into a directory.
  *
  * @param tarball - The examples tarball.
@@ -3052,53 +4089,6 @@ const writeInto = Effect.fn("fixtures.writeInto")(function* writeInto(
   yield* fs.makeDirectory(path.dirname(file), { recursive: true });
   yield* fs.writeFile(file, bytes);
 });
-
-/**
- * One resource of a written manifest: its identifier, type, `href` and the `href` of each `file`
- * it lists.
- */
-interface ManifestResource {
-  readonly identifier: string;
-  readonly type: string;
-  readonly href: string;
-  readonly files: readonly string[];
-}
-
-/**
- * Write a minimal manifest: the QTI 3 content-package namespaces, `QTI Package` and a
- * `schemaversion`, no LOM, and the given resources.
- *
- * @param identifier - The manifest's identifier.
- * @param schemaversion - The `schemaversion` it declares.
- * @param resources - The resources, in order.
- * @returns The manifest's text.
- */
-const manifestText = (
-  identifier: string,
-  schemaversion: CutEdit["schemaversion"],
-  resources: readonly ManifestResource[],
-): string =>
-  [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"',
-    '  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
-    '  xsi:schemaLocation="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0_imscpv1p2_v1p0.xsd"',
-    `  identifier="MANIFEST-${identifier}">`,
-    "  <metadata>",
-    "    <schema>QTI Package</schema>",
-    `    <schemaversion>${schemaversion}</schemaversion>`,
-    "  </metadata>",
-    "  <organizations/>",
-    "  <resources>",
-    ...resources.flatMap((resource) => [
-      `    <resource identifier="${resource.identifier}" type="${resource.type}" href="${escapeAttribute(resource.href)}">`,
-      ...resource.files.map((file) => `      <file href="${escapeAttribute(file)}"/>`),
-      "    </resource>",
-    ]),
-    "  </resources>",
-    "</manifest>",
-    "",
-  ].join("\n");
 
 /**
  * Write the minimal manifest of a cut: one `imsqti_item_xmlv3p0` resource of the item with a
@@ -3427,12 +4417,16 @@ const cutTestPackage = Effect.fn("fixtures.cutTestPackage")(function* cutTestPac
  *
  * Every attribute value, but an `href` or a schema location, of the form `<identifier>.<VAR>` or
  * `<identifier>.<N>.<VAR>` over an item ref's identifier names `VAR` for it, and so does the
- * `source-identifier` of a `qti-variable-mapping` inside the item ref. `duration` is the test's own
- * name for an item's duration, not a declared variable. `RESPONSE` and `SCORE` are always there.
+ * `source-identifier` of a `qti-variable-mapping` inside the item ref. When two item refs'
+ * identifiers both begin a value (`J` and `J.K` for `J.K.SCORE`), the longer names it; a value that
+ * is itself an item ref's identifier (`J.K`) names no variable. `duration` is the test's own name
+ * for an item's duration, not a declared variable: it makes the item's stub time-dependent.
+ * `RESPONSE` and `SCORE` are always there.
  *
  * @param test - The test document's text.
- * @returns For each distinct item `href`, the first ref's identifier and the variables of every
- *   ref that names that `href`, besides `RESPONSE` and `SCORE`.
+ * @returns For each distinct item `href`, the first ref's identifier, whether any ref names its
+ *   `duration` and the variables of every ref that names that `href`, besides `RESPONSE` and
+ *   `SCORE`.
  */
 const stubsOf = (test: string) => {
   const refs = [...test.matchAll(documentRefPattern)].flatMap((match) => {
@@ -3470,11 +4464,17 @@ const stubsOf = (test: string) => {
   const values = [...test.matchAll(attributePattern)]
     .filter((match) => !["href", "xsi:schemaLocation"].includes(match.groups?.["name"] ?? ""))
     .map((match) => unescapeAttribute(match.groups?.["double"] ?? match.groups?.["single"] ?? ""));
-  const stubs = new Map<string, { identifier: string; variables: Set<string> }>();
+  const identifiers = refs.map((ref) => ref.identifier);
+  const owner = (value: string): string | undefined =>
+    identifiers
+      .filter((identifier) => value.startsWith(`${identifier}.`))
+      .toSorted((left, right) => right.length - left.length)[0];
+  const stubs = new Map<string, { identifier: string; timed: boolean; variables: Set<string> }>();
 
   for (const ref of refs) {
     const stub = stubs.get(ref.href) ?? {
       identifier: ref.identifier,
+      timed: false,
       variables: new Set<string>(),
     };
 
@@ -3485,10 +4485,16 @@ const stubsOf = (test: string) => {
     for (const value of values) {
       const prefix = `${ref.identifier}.`;
 
-      if (value.startsWith(prefix)) {
+      if (
+        value.startsWith(prefix) &&
+        !identifiers.includes(value) &&
+        owner(value) === ref.identifier
+      ) {
         const variable = value.slice(prefix.length).replace(/^\d+\./u, "");
 
-        if (variable !== "" && variable !== "duration") {
+        if (variable === "duration") {
+          stub.timed = true;
+        } else if (variable !== "") {
           stub.variables.add(variable);
         }
       }
@@ -3500,11 +4506,27 @@ const stubsOf = (test: string) => {
   return [...stubs].map(([href, stub]) => ({
     href,
     identifier: stub.identifier,
+    timed: stub.timed,
     variables: [...stub.variables].filter(
       (variable) => variable !== "RESPONSE" && variable !== "SCORE",
     ),
   }));
 };
+
+/**
+ * The response processing of a time-dependent stub: it names `duration`, the built-in variable
+ * only a time-dependent item has.
+ */
+const timedProcessing = [
+  "<qti-response-processing>",
+  "        <qti-response-condition>",
+  "            <qti-response-if>",
+  '                <qti-gt><qti-variable identifier="duration"/><qti-base-value base-type="float">0</qti-base-value></qti-gt>',
+  '                <qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value>',
+  "            </qti-response-if>",
+  "        </qti-response-condition>",
+  "    </qti-response-processing>",
+].join("\n");
 
 /**
  * Package one loose test with a generated stub item per distinct item `href`, in place.
@@ -3559,6 +4581,11 @@ const packageLooseTest = Effect.fn("fixtures.packageLooseTest")(function* packag
               `identifier="${escapeAttribute(stub.identifier)}" title="${escapeAttribute(stub.identifier)}"`,
             )
             .replace(/<p>\s*<img [^>]*\/>\s*<\/p>\s*/u, "")
+            .replace(
+              'time-dependent="false"',
+              stub.timed ? 'time-dependent="true"' : 'time-dependent="false"',
+            )
+            .replace(/<qti-response-processing [^>]*\/>/u, stub.timed ? timedProcessing : "$&")
             .replace(
               "    <qti-item-body>",
               [
