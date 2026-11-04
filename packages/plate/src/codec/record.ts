@@ -30,7 +30,9 @@ export const ItemRecordSchema = Schema.Struct({
 
 /**
  * One item's session in the form the host stores: JSON-safe data, with every integer written as
- * its decimal digits, so no integer is rounded on the way through the host.
+ * its decimal digits, so no integer is rounded on the way through the host, and the floats JSON has
+ * no number for written by name: the infinities as `"INF"` and `"-INF"`, NaN as `"NaN"` and
+ * negative zero as `"-0"`.
  */
 export type StoredRecord = typeof ItemRecordSchema.Encoded;
 

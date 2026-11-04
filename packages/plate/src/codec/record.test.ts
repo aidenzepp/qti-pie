@@ -4,7 +4,7 @@ import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord, ItemRecordSchema } from "#plate/codec/record.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
-import { bg007Item, integer } from "#plate/test/fixtures.ts";
+import { bg007Item, float, integer } from "#plate/test/fixtures.ts";
 
 /**
  * Whether two types are the same type, not merely assignable to each other: `true` only when the
@@ -99,6 +99,26 @@ describe("decodeRecord", () => {
         ["9007199254740993", "1000000000000000000000000000000", "-1000000000000000000000000000000"],
       );
       assert.deepStrictEqual(yield* Effect.fromResult(throughHost(record)), record);
+    }),
+  );
+
+  it.effect("round-trips floats that are infinite, not a number or negative zero exactly", () =>
+    Effect.gen(function* nonFiniteFloatsExact() {
+      const record: ItemRecord = {
+        ...fresh(bg007Item, "i1"),
+        outcomes: {
+          ...fresh(bg007Item, "i1").outcomes,
+          HIGH: float(Number.POSITIVE_INFINITY),
+          LOW: float(Number.NEGATIVE_INFINITY),
+          UNDEFINED: float(Number.NaN),
+          ZERO: float(-0),
+        },
+      };
+      const handedBack = yield* Effect.fromResult(throughHost(record));
+
+      assert.deepStrictEqual(handedBack, record);
+      assert.isTrue(Number.isNaN(handedBack.outcomes["UNDEFINED"]?.values[0]?.value));
+      assert.isTrue(Object.is(handedBack.outcomes["ZERO"]?.values[0]?.value, -0));
     }),
   );
 
