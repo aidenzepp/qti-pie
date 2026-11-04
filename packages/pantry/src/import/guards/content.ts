@@ -224,8 +224,10 @@ const bodyHosts: ReadonlySet<string> = new Set([
   "qti-feedback-block.template",
   "qti-modal-feedback",
   "qti-rubric-block",
+  "qti-rubric-block.test",
   "qti-template-block",
   "qti-template-block.rubric",
+  "qti-test-feedback",
 ]);
 
 const bodyOrder = (kind: string): number | undefined => {
@@ -261,6 +263,121 @@ const promptHosts: ReadonlySet<string> = new Set([
   "qti-slider-interaction",
   "qti-upload-interaction",
 ]);
+
+/**
+ * The ranks of the M4 kinds' sequences (spec 3.4, ASI 3.0.1). A kind absent from a table is not
+ * part of its parent's sequence.
+ */
+const testOrder: ReadonlyMap<string, number> = new Map([
+  ["qti-context-declaration", 0],
+  ["qti-outcome-declaration", 1],
+  ["qti-time-limits", 2],
+  ["qti-stylesheet", 3],
+  ["qti-rubric-block.test", 4],
+  ["qti-test-part", 5],
+  ["qti-outcome-processing", 6],
+  ["qti-test-feedback", 7],
+]);
+
+const partOrder: ReadonlyMap<string, number> = new Map([
+  ["qti-pre-condition", 0],
+  ["qti-branch-rule", 1],
+  ["qti-item-session-control", 2],
+  ["qti-time-limits", 3],
+  ["qti-rubric-block.test", 4],
+  ["qti-assessment-section", 5],
+  ["qti-assessment-section-ref", 5],
+  ["qti-test-feedback", 6],
+]);
+
+const sectionOrder: ReadonlyMap<string, number> = new Map([
+  ["qti-pre-condition", 0],
+  ["qti-branch-rule", 1],
+  ["qti-item-session-control", 2],
+  ["qti-time-limits", 3],
+  ["qti-adaptive-selection", 4],
+  ["qti-selection", 4],
+  ["qti-ordering", 5],
+  ["qti-rubric-block.test", 6],
+  ["qti-assessment-item-ref", 7],
+  ["qti-assessment-section", 7],
+  ["qti-assessment-section-ref", 7],
+  ["xi:include", 7],
+]);
+
+const itemRefOrder: ReadonlyMap<string, number> = new Map([
+  ["qti-pre-condition", 0],
+  ["qti-branch-rule", 1],
+  ["qti-item-session-control", 2],
+  ["qti-time-limits", 3],
+  ["qti-variable-mapping", 4],
+  ["qti-weight", 5],
+  ["qti-template-default", 6],
+]);
+
+const stimulusOrder: ReadonlyMap<string, number> = new Map([
+  ["qti-stylesheet", 0],
+  ["qti-stimulus-body", 1],
+  ["qti-catalog-info", 2],
+]);
+
+const adaptiveOrder: ReadonlyMap<string, number> = new Map([
+  ["qti-adaptive-engine-ref", 0],
+  ["qti-adaptive-settings-ref", 1],
+  ["qti-usagedata-ref", 2],
+  ["qti-metadata-ref", 3],
+]);
+
+const m4Orders: ReadonlyMap<string, readonly [order: ReadonlyMap<string, number>, model: string]> =
+  new Map([
+    [
+      "qti-assessment-test",
+      [
+        testOrder,
+        "declarations, time limits, stylesheets, rubric blocks, test parts, outcome processing, test feedback",
+      ],
+    ],
+    [
+      "qti-test-part",
+      [
+        partOrder,
+        "pre-conditions, branch rules, item session control, time limits, rubric blocks, sections, test feedback",
+      ],
+    ],
+    [
+      "qti-assessment-section",
+      [
+        sectionOrder,
+        "pre-conditions, branch rules, item session control, time limits, adaptive selection or selection and ordering, rubric blocks, children",
+      ],
+    ],
+    [
+      "qti-assessment-item-ref",
+      [
+        itemRefOrder,
+        "pre-conditions, branch rules, item session control, time limits, variable mappings, weights, template defaults",
+      ],
+    ],
+    ["qti-assessment-stimulus", [stimulusOrder, "stylesheets, the stimulus body, catalog info"]],
+    [
+      "qti-adaptive-selection",
+      [adaptiveOrder, "engine, settings, usage data, metadata references"],
+    ],
+  ]);
+
+/**
+ * A section's own sequence offers either an adaptive selection or a selection and an ordering,
+ * never both (S-R28).
+ */
+const adaptiveWithSelection = (family: Family): boolean => {
+  const kinds = new Set(family.children.map((child) => child.kind));
+
+  return (
+    family.kind === "qti-assessment-section" &&
+    kinds.has("qti-adaptive-selection") &&
+    (kinds.has("qti-selection") || kinds.has("qti-ordering"))
+  );
+};
 
 const pictureOrder: ReadonlyMap<string, number> = new Map([
   ["source", 0],
@@ -339,6 +456,22 @@ const orderingOf = (family: Family, defaults: ReadonlySet<string>): string | und
 
   if (kind === "picture") {
     return broken((name) => pictureOrder.get(name), "source, img");
+  }
+
+  if (adaptiveWithSelection(family)) {
+    return "a qti-adaptive-selection and a qti-selection or qti-ordering are both present; the section holds one or the other";
+  }
+
+  const m4 = m4Orders.get(kind);
+  if (m4 !== undefined) {
+    return broken((name) => m4[0].get(name), m4[1]);
+  }
+
+  if (kind === "qti-rubric-block.test") {
+    return broken(
+      (name) => (name === "qti-printed-variable" ? 3 : bodyOrder(name)),
+      "qti-stylesheet, qti-content-body, qti-catalog-info, qti-printed-variable",
+    );
   }
 
   if (bodyHosts.has(kind)) {
