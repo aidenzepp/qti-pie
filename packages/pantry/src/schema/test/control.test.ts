@@ -211,7 +211,10 @@ describe("the test control relations", () => {
         "category",
         "keep-together",
         "navigation-mode",
+        "source-identifier",
         "submission-mode",
+        "target",
+        "target-identifier",
         "visible",
       ].toSorted(),
     );
