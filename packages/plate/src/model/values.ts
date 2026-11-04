@@ -65,10 +65,35 @@ const ncName =
 export const isNcName = (text: string): boolean => ncName.test(text);
 
 /**
- * Outer XML whitespace: space, tab, carriage return and line feed. No other character counts, so a
- * no-break space stays part of the value it pads.
+ * Report whether a character is XML whitespace: space, tab, carriage return or line feed. No other
+ * character counts, so a no-break space stays part of the value it pads.
+ *
+ * @param character One character of the text.
+ * @returns Whether it is one of the four.
  */
-const outerSpace = /^[\t\n\r ]+|[\t\n\r ]+$/gu;
+const isXmlSpace = (character: string): boolean =>
+  character === " " || character === "\t" || character === "\n" || character === "\r";
+
+/**
+ * Remove outer XML whitespace from text, stepping in from each end once, so the time is linear in
+ * the length of the text.
+ *
+ * @param text The text as written.
+ * @returns The text without its leading and trailing XML whitespace.
+ */
+const trimXmlSpace = (text: string): string => {
+  let start = 0;
+  let end = text.length;
+  while (start < end && isXmlSpace(text.charAt(start))) {
+    start += 1;
+  }
+
+  while (end > start && isXmlSpace(text.charAt(end - 1))) {
+    end -= 1;
+  }
+
+  return text.slice(start, end);
+};
 
 /**
  * Two runs of non-whitespace separated by XML whitespace: the lexical form of a pair, before each
@@ -80,6 +105,18 @@ const pairLexical = /^(?<source>[^\t\n\r ]+)[\t\n\r ]+(?<destination>[^\t\n\r ]+
  * The lexical space of a QTI integer: an optional sign and decimal digits.
  */
 const integerLexical = /^[+-]?[0-9]+$/u;
+
+/**
+ * The bounds of an integer value: -(2^53 - 1) and 2^53 - 1, the whole numbers a 64-bit float holds
+ * exactly.
+ *
+ * QTI 3.0 states no range for its integer base type (the integer primitive type is "derived from
+ * the decimal data-type"; open point 9.9 of research `ea422814`), so these are the value model's
+ * limit, not QTI's: an integer outside them is refused, never rounded or stored as an infinity.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#AppA1
+ */
+const integerBounds = `from ${String(Number.MIN_SAFE_INTEGER)} to ${String(Number.MAX_SAFE_INTEGER)}`;
 
 /**
  * The lexical space of xs:double (XML Schema 1.0), which a QTI float uses: a decimal with an
@@ -99,11 +136,14 @@ const IdentifierText = Schema.String.check(
 );
 
 /**
- * A whole number as a Schema, at any magnitude, as the integer lexical space reads one.
+ * An integer as a Schema: a whole number within the bounds {@link parseLexical} reads, so a value
+ * decoded from a record is one the parser could have read.
  */
-const WholeNumber = Schema.Number.check(
+const ExactInteger = Schema.Number.check(
   Schema.makeFilter((number: number) =>
-    Number.isInteger(number) ? undefined : "an integer must be a whole number; drop the fraction",
+    Number.isSafeInteger(number)
+      ? undefined
+      : `an integer must be a whole number ${integerBounds}; drop the fraction or bring it within that range`,
   ),
 );
 
@@ -112,13 +152,14 @@ const WholeNumber = Schema.Number.check(
  * for `integer` and `float`; a boolean for `boolean`; and two identifiers for `pair` and
  * `directedPair`, the source first.
  *
- * Numbers are 64-bit floats, so an integer is exact up to 2^53 and a float is an xs:double.
+ * Numbers are 64-bit floats: an integer is a whole number from -(2^53 - 1) to 2^53 - 1, which a
+ * 64-bit float holds exactly, and a float is an xs:double.
  */
 // oxlint-disable-next-line eslint/no-redeclare -- `Single` is a Schema and the type it decodes under one name, as section 0.5 of the phase-1 slice list names it, so `Single` reads as one thing in values and in signatures.
 export const Single = Schema.Union([
   Schema.Struct({ baseType: Schema.Literal("identifier"), value: IdentifierText }),
   Schema.Struct({ baseType: Schema.Literal("boolean"), value: Schema.Boolean }),
-  Schema.Struct({ baseType: Schema.Literal("integer"), value: WholeNumber }),
+  Schema.Struct({ baseType: Schema.Literal("integer"), value: ExactInteger }),
   Schema.Struct({ baseType: Schema.Literal("float"), value: Schema.Number }),
   Schema.Struct({ baseType: Schema.Literal("string"), value: Schema.String }),
   Schema.Struct({
@@ -226,7 +267,7 @@ const expected = {
   directedPair: "two NCNames separated by whitespace, such as A B",
   float: "a decimal or exponent number such as 2.5 or 1E3, or INF, -INF or NaN",
   identifier: "an NCName: a letter or _ first, then letters, digits, -, _ or .",
-  integer: "decimal digits with an optional sign, such as -12",
+  integer: `decimal digits with an optional sign, such as -12, ${integerBounds}`,
   pair: "two NCNames separated by whitespace, such as A B",
   string: "any text",
   uri: "any text",
@@ -261,8 +302,14 @@ const valueIf = (holds: boolean, single: Single): Option.Option<Single> =>
 /**
  * Read an xs:double lexical form, which {@link doubleLexical} has already admitted, as a number.
  *
+ * XML Schema 1.0 maps a decimal to the value of the basic value space closest to it, and the
+ * infinities are special values outside that space that only `INF` and `-INF` name. So a decimal
+ * beyond the largest double, such as `1e400`, reads as the largest finite double of its sign, where
+ * `Number` would round it to an infinity.
+ *
  * @param lexical The lexical form.
  * @returns The number it names; `INF` and `-INF` are the infinities and `NaN` is NaN.
+ * @see https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/#double
  */
 const readDouble = (lexical: string): number => {
   if (lexical === "INF") {
@@ -273,7 +320,28 @@ const readDouble = (lexical: string): number => {
     return Number.NEGATIVE_INFINITY;
   }
 
-  return Number(lexical);
+  const number = Number(lexical);
+  if (number === Number.POSITIVE_INFINITY) {
+    return Number.MAX_VALUE;
+  }
+
+  return number === Number.NEGATIVE_INFINITY ? -Number.MAX_VALUE : number;
+};
+
+/**
+ * Read a QTI integer lexical form as a number.
+ *
+ * @param lexical The lexical form.
+ * @returns The integer it names, or none when the text is not an integer or names one outside
+ *   the bounds a number holds exactly.
+ */
+const readInteger = (lexical: string): Option.Option<Single> => {
+  const number = Number(lexical);
+
+  return valueIf(integerLexical.test(lexical) && Number.isSafeInteger(number), {
+    baseType: "integer",
+    value: number,
+  });
 };
 
 /**
@@ -310,8 +378,7 @@ const readers = {
     valueIf(doubleLexical.test(lexical), { baseType: "float", value: readDouble(lexical) }),
   identifier: (lexical: string) =>
     valueIf(isNcName(lexical), { baseType: "identifier", value: lexical }),
-  integer: (lexical: string) =>
-    valueIf(integerLexical.test(lexical), { baseType: "integer", value: Number(lexical) }),
+  integer: readInteger,
   pair: (lexical: string) => readPair("pair", lexical),
   string: (lexical: string) => valueIf(true, { baseType: "string", value: lexical }),
   uri: (lexical: string) => valueIf(true, { baseType: "uri", value: lexical }),
@@ -342,8 +409,8 @@ export const parseLexical = (
  * Read the text content of an element, such as `qti-value`, as a value of a base type.
  *
  * Spec reading 7: outer XML whitespace is formatting for every base type but `string`, so it is
- * removed before the text is read; for `string` it is part of the value. An empty `string` is
- * NULL, not a value.
+ * removed before the text is read, in time linear in the text; for `string` it is part of the
+ * value. An empty `string` is NULL, not a value.
  *
  * @param baseType The base type to read.
  * @param text The element's text content, as written.
@@ -356,7 +423,7 @@ export const parseElementText = (
 ): Effect.Effect<Option.Option<Single>, InvalidValue> =>
   baseType === "string"
     ? Effect.succeed(valueIf(text !== "", { baseType, value: text }))
-    : Effect.map(parseLexical(baseType, text.replaceAll(outerSpace, "")), Option.some);
+    : Effect.map(parseLexical(baseType, trimXmlSpace(text)), Option.some);
 
 /**
  * Write a float in the lexical space of xs:double.
@@ -386,8 +453,8 @@ const formatFloat = (number: number): string => {
 /**
  * Write a value in its base type's lexical form.
  *
- * An integer is written as its exact decimal digits, because `String` writes a large one with an
- * exponent (`1e+21`), which the integer lexical space refuses.
+ * An integer is within the bounds a number holds exactly, so `String` writes its exact decimal
+ * digits, never an exponent, and writes negative zero as `0`.
  *
  * @param single The value to write.
  * @returns The lexical form, which {@link parseLexical} reads back to the same value; a pair is its
@@ -399,7 +466,7 @@ export const format = (single: Single): string => {
   }
 
   if (single.baseType === "integer") {
-    return BigInt(single.value).toString();
+    return String(single.value);
   }
 
   if (single.baseType === "float") {
