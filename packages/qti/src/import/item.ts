@@ -32,6 +32,7 @@ import {
   treeRows,
   typedAttribute,
   UnmodeledVocabulary,
+  valueText,
   withParents,
 } from "#qti/import/tree.ts";
 import type { NodeIndex, WhiteSpace } from "#qti/import/tree.ts";
@@ -507,8 +508,8 @@ const valueArmRows: Record<
  *
  * @param rows - The rows so far.
  * @param id - The value node's id.
- * @param text - The `replace`d text of the value, which the `text-copy` guard requires the row to
- *   copy.
+ * @param text - The text `valueText` gives the value, which the `text-copy` guard requires the row
+ *   to copy.
  * @returns The rows with the arm added; `ImportRefused` (`value-lexical`) for text that is neither
  *   `true` nor `false`.
  */
@@ -559,7 +560,7 @@ const valueRows = Effect.fn("import.valueRows")(function* valueRows(
       valueSet: set.id,
     },
   ]);
-  const text = replace(textOf(element));
+  const text = valueText(baseType.value, replace(textOf(element)));
   const withArm =
     baseType.value === "boolean"
       ? yield* booleanValueRow(withValue, node.id, text)

@@ -43,6 +43,7 @@ import {
   treeRows,
   typedAttribute,
   UnmodeledVocabulary,
+  valueText,
 } from "#qti/import/tree.ts";
 import type { NodeIndex, TreeInput } from "#qti/import/tree.ts";
 import { readXml } from "#qti/xml/read.ts";
@@ -629,6 +630,30 @@ it("replace turns tab, line feed and carriage return into spaces", () => {
 
 it("collapse replaces, trims and joins runs of spaces", () => {
   assert.strictEqual(collapse(" \ta \n\r b\t "), "a b");
+});
+
+it("valueText removes outer whitespace from every base type but string", () => {
+  for (const baseType of [
+    "boolean",
+    "identifier",
+    "integer",
+    "float",
+    "pair",
+    "point",
+    "uri",
+    "duration",
+    "directedPair",
+    "file",
+  ] as const) {
+    assert.strictEqual(valueText(baseType, " x "), "x", baseType);
+    assert.strictEqual(valueText(baseType, "\n  x\r\n\t"), "x", baseType);
+    assert.strictEqual(valueText(baseType, " A  B "), "A  B", baseType);
+    assert.strictEqual(valueText(baseType, "   "), "", baseType);
+  }
+});
+
+it("valueText keeps the whitespace of a string", () => {
+  assert.strictEqual(valueText("string", " a "), " a ");
 });
 
 const node = "22222222-2222-4222-8222-222222222222";
