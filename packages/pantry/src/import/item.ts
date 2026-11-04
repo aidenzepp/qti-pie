@@ -1140,7 +1140,7 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
     { adaptive: adaptiveLexical },
     built,
   );
-  built = yield* contentRows(root, nodes, documentId, declarations, built);
+  built = yield* contentRows(root, nodes, documentId, "item", declarations, built);
   built = yield* mappingRows(root, nodes, documentId, declarations, built);
 
   const env = environmentOf(doc, "item");

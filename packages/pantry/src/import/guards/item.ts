@@ -149,7 +149,7 @@ const indexOf = (rows: Rows): Index => ({
   children: Map.groupBy(Rows.of(rows, Edge).toSorted(byPosition), (edge) => edge.parent),
   itemTrees: new Set(
     Rows.of(rows, Document)
-      .filter((document) => document.root === "item")
+      .filter((document) => document.root === "item" || document.root === "test")
       .map((document) => document.id),
   ),
   nodes: new Map(Rows.of(rows, Node).map((node) => [node.id, node])),
