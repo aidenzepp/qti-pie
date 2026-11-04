@@ -315,10 +315,15 @@ const uriContexts: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The value-arm contracts, built once: `valueArmContracts()` makes all 64 on each call.
+ */
+const armContracts = valueContracts.valueArmContracts();
+
+/**
  * Every contract name of the schema with the rule it maps to: the written-out contracts, then the
  * arms, each of which takes its context's rule from `valueContexts`.
  */
-const expectedRules = (): ReadonlyMap<string, string> => {
+const makeExpectedRules = (): ReadonlyMap<string, string> => {
   const expected = new Map<string, string>();
 
   for (const [rule, names] of Object.entries(writtenRules)) {
@@ -327,7 +332,7 @@ const expectedRules = (): ReadonlyMap<string, string> => {
     }
   }
   for (const { context, rule } of valueContexts.valueContexts) {
-    for (const arm of Object.values<Named>(valueContracts.valueArmContracts()[context])) {
+    for (const arm of Object.values<Named>(armContracts[context])) {
       expected.set(
         arm.name,
         uriContexts.has(context) && arm.name.endsWith("UriValue") ? "uri-syntax" : rule,
@@ -339,6 +344,11 @@ const expectedRules = (): ReadonlyMap<string, string> => {
 };
 
 /**
+ * The table of {@link makeExpectedRules}, built once.
+ */
+const expectedRules: ReadonlyMap<string, string> = makeExpectedRules();
+
+/**
  * A contract as the tests read it: its name.
  */
 interface Named {
@@ -348,27 +358,32 @@ interface Named {
 /**
  * The name of every contract the schema makes.
  */
-const everyContract = (): readonly string[] => {
-  const arms = Object.values(valueContracts.valueArmContracts()).flatMap((byBase) =>
+const makeEveryContract = (): readonly string[] => {
+  const arms = Object.values(armContracts).flatMap((byBase) =>
     Object.values<Named>(byBase).map((made) => made.name),
   );
 
   return [...Object.values<Named>(contracts).map((made) => made.name), ...arms];
 };
 
+/**
+ * The names of {@link makeEveryContract}, built once.
+ */
+const everyContract: readonly string[] = makeEveryContract();
+
 describe("the rules of a contract", () => {
   it("names 136 contracts, each in the expected table once", () => {
-    const names = everyContract();
+    const names = everyContract;
 
     assert.strictEqual(names.length, 136);
-    assert.strictEqual(expectedRules().size, 136);
-    assert.deepStrictEqual([...expectedRules().keys()].toSorted(), names.toSorted());
+    assert.strictEqual(expectedRules.size, 136);
+    assert.deepStrictEqual([...expectedRules.keys()].toSorted(), names.toSorted());
   });
 
   it("maps every contract of the schema to its rule, mapped", () => {
-    const expected = expectedRules();
+    const expected = expectedRules;
 
-    for (const name of everyContract()) {
+    for (const name of everyContract) {
       const law = contractLaw(name);
 
       assert.isTrue(isMappedLaw(law), `${name} has no entry`);
