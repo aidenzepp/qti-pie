@@ -94,7 +94,7 @@ const hostPart =
 
 describe("emitItem", () => {
   it.effect(
-    "[I-0] the Root carries lang, id and data-mode, and data-finished only when finished; never data-attempt",
+    "[I-0] the Root carries lang, id and data-mode, and data-disabled only when finished; never data-attempt",
     () =>
       Effect.gen(function* rootAttributes() {
         const state = yield* stateWith();
@@ -105,8 +105,8 @@ describe("emitItem", () => {
           assert.strictEqual(root.attrs["lang"], "en-GB");
           assert.strictEqual(root.attrs["id"], scopedId(instance, "item"));
           assert.strictEqual(root.attrs["data-mode"], "answering");
-          assert.strictEqual(root.attrs["data-finished"], render.finished ? true : undefined);
-          assert.notProperty(root.attrs, "data-attempt");
+          assert.strictEqual(root.attrs["data-disabled"], render.finished ? true : undefined);
+          assert.doesNotHaveAnyKeys(root.attrs, ["data-attempt", "data-finished"]);
         }
       }),
   );

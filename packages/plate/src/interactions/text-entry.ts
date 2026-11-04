@@ -148,7 +148,7 @@ const nameAttributes = (
 /**
  * Compute every attribute of both parts of one Text Entry: the connect function.
  *
- * - Root: the marker, the state (`data-mode`, and `data-finished` when the author disabled every
+ * - Root: the marker, the state (`data-mode`, and `data-disabled` when the author disabled every
  *   control), and the author's `class`.
  * - Control: a text `input`; its id, the payload's `formName` and its restored `value`; `disabled`
  *   when finished; `inputmode` by the base type; `expected-length` as `size` when above 0, which
@@ -184,7 +184,7 @@ const connect = (interaction: TextEntryPayload, payload: Payload, locale: Locale
   },
   root: {
     ...when(interaction.class !== "", { class: interaction.class }),
-    ...when(payload.finished, { "data-finished": true }),
+    ...when(payload.finished, { "data-disabled": true }),
     "data-mode": payload.mode,
     "data-slot": rows.root.slot,
   },
