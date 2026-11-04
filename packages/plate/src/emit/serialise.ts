@@ -167,6 +167,61 @@ export class EscapableRawTextElementChild extends Error {
 }
 
 /**
+ * The defect of a `plaintext` element, whose start tag makes HTML read the whole rest of the
+ * document as its text, so nothing written after it reads back as written.
+ *
+ * It is refused with or without children, because what follows it is out of the serialiser's sight.
+ * Like {@link VoidElementChildren}, it is a defect in the code that built the tree and is thrown.
+ */
+// oxlint-disable-next-line unicorn/custom-error-definition -- Named in the family of `VoidElementChildren`, whose name the phase-1 slice list fixes, so the serialiser's defects read alike.
+export class PlaintextElement extends Error {
+  /**
+   * Construct the defect for a `plaintext` element.
+   */
+  constructor() {
+    super(
+      "<plaintext> makes HTML read the rest of the document as its text, so the serialiser never writes it: build the text in another element, such as <pre>.",
+    );
+    this.name = "PlaintextElement";
+  }
+}
+
+/**
+ * The defect of an attribute whose name starts with `on` in any case, which HTML reads as an
+ * event-handler attribute and runs as script.
+ *
+ * No part, emitter or runtime writes one, so like {@link VoidElementChildren} it is a defect in the
+ * code that built the tree and is thrown.
+ */
+// oxlint-disable-next-line unicorn/custom-error-definition -- Named in the family of `VoidElementChildren`, whose name the phase-1 slice list fixes, so the serialiser's defects read alike.
+export class EventHandlerAttribute extends Error {
+  /**
+   * The attribute name as the tree spells it.
+   */
+  readonly attribute: string;
+
+  /**
+   * The tag of the element that carries the attribute.
+   */
+  readonly tag: string;
+
+  /**
+   * Construct the defect for the event-handler attribute `attribute` on the element `tag`.
+   *
+   * @param tag The tag of the element that carries the attribute.
+   * @param attribute The attribute name as the tree spells it.
+   */
+  constructor(tag: string, attribute: string) {
+    super(
+      `Attribute ${JSON.stringify(attribute)} on <${tag}> names an event handler, which the serialiser never writes: remove it, and attach behaviour with addEventListener instead.`,
+    );
+    this.name = "EventHandlerAttribute";
+    this.attribute = attribute;
+    this.tag = tag;
+  }
+}
+
+/**
  * HTML's void elements, which have a start tag and never an end tag.
  *
  * @see https://html.spec.whatwg.org/multipage/syntax.html#void-elements
@@ -240,6 +295,13 @@ const writableTag = /^[a-z][a-z0-9-]*$/u;
 const refusedInAttributeName = /[\s"'/=>\p{Cc}]/u;
 
 /**
+ * The attribute names HTML reads as event handlers: any name that starts with `on`, in any case.
+ *
+ * @see https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-attributes
+ */
+const eventHandlerName = /^on/iu;
+
+/**
  * Escape character data for an HTML text position.
  *
  * @param value The characters as they read.
@@ -270,8 +332,10 @@ const escapeAttribute = (value: string): string =>
  *   letters, digits and hyphens.
  * @throws {MalformedAttributeName} When an attribute name is empty or holds whitespace, a quote, an
  *   apostrophe, `>`, `/`, `=` or a control.
+ * @throws {EventHandlerAttribute} When an attribute name starts with `on`, in any case.
  * @throws {VoidElementChildren} When a void element has children.
  * @throws {RawTextChildren} When a raw-text element has children.
+ * @throws {PlaintextElement} When the element is a `plaintext` element with no children.
  * @throws {EscapableRawTextElementChild} When `textarea` or `title` has an element child.
  */
 const refuseUnwritable = (element: Element): void => {
@@ -287,12 +351,22 @@ const refuseUnwritable = (element: Element): void => {
     throw new MalformedAttributeName(element.tag, malformed);
   }
 
+  const eventHandler = Object.keys(element.attrs).find((name) => eventHandlerName.test(name));
+
+  if (eventHandler !== undefined) {
+    throw new EventHandlerAttribute(element.tag, eventHandler);
+  }
+
   if (element.children.length > 0 && voidElements.has(element.tag)) {
     throw new VoidElementChildren(element.tag);
   }
 
   if (element.children.length > 0 && rawText.has(element.tag)) {
     throw new RawTextChildren(element.tag);
+  }
+
+  if (element.tag === "plaintext") {
+    throw new PlaintextElement();
   }
 
   const elementChild = escapableRawText.has(element.tag)
@@ -342,16 +416,20 @@ const startsWithLineFeed = (children: readonly Node[]): boolean => {
  * tree is refused before any of its bytes are written; chunks already written for its ancestors
  * stay written.
  *
- * Tag and attribute names are checked, not rewritten, and no attribute or URL is dropped here: what
- * a part may carry is the emitter's to decide.
+ * Tag and attribute names are checked, not rewritten, and no attribute or URL is dropped here: an
+ * event-handler attribute and a `plaintext` element are refused, never dropped, and what else a
+ * part may carry is the emitter's to decide.
  *
  * @param node The node to write, with its descendants.
  * @param sink The destination of the chunks.
  * @throws {MalformedTagName} When `node` or a descendant has a tag that is not a lower-case name.
  * @throws {MalformedAttributeName} When `node` or a descendant has an attribute name HTML cannot
  *   write.
+ * @throws {EventHandlerAttribute} When `node` or a descendant has an attribute name that starts
+ *   with `on`, in any case.
  * @throws {VoidElementChildren} When `node` or a descendant is a void element with children.
  * @throws {RawTextChildren} When `node` or a descendant is a raw-text element with children.
+ * @throws {PlaintextElement} When `node` or a descendant is a `plaintext` element with no children.
  * @throws {EscapableRawTextElementChild} When `node` or a descendant is a `textarea` or `title`
  *   with an element child.
  */
@@ -388,8 +466,11 @@ export const serialise = (node: Node, sink: Sink): void => {
  * @throws {MalformedTagName} When `node` or a descendant has a tag that is not a lower-case name.
  * @throws {MalformedAttributeName} When `node` or a descendant has an attribute name HTML cannot
  *   write.
+ * @throws {EventHandlerAttribute} When `node` or a descendant has an attribute name that starts
+ *   with `on`, in any case.
  * @throws {VoidElementChildren} When `node` or a descendant is a void element with children.
  * @throws {RawTextChildren} When `node` or a descendant is a raw-text element with children.
+ * @throws {PlaintextElement} When `node` or a descendant is a `plaintext` element with no children.
  * @throws {EscapableRawTextElementChild} When `node` or a descendant is a `textarea` or `title`
  *   with an element child.
  */
