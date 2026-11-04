@@ -11,7 +11,7 @@
  *
  * @module
  */
-import { Array as Arr, Option } from "effect";
+import { Array as Arr, Effect, Option, Result } from "effect";
 import { attributePath, qtiNamespace, walk } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
@@ -19,10 +19,12 @@ import type {
   SourceElement,
   Visit,
 } from "#plate/document/source.ts";
+import { isModelled, parseElementText, parseLexical } from "#plate/model/values.ts";
+import type { InvalidValue, ModelledBaseType } from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
-import { baseTypes, cardinalities, interactionNames } from "#plate/vocabulary.ts";
-import type { BaseType, Cardinality, InteractionName } from "#plate/vocabulary.ts";
+import { baseTypes, cardinalities, interactionNames, templateName } from "#plate/vocabulary.ts";
+import type { BaseType, Cardinality, InteractionName, TemplateName } from "#plate/vocabulary.ts";
 
 /**
  * The base types and cardinalities a response declaration may have when an interaction is bound to
@@ -164,19 +166,20 @@ const meets = (
     Option.exists(baseType, (value) => requirement.baseTypes.includes(value)));
 
 /**
- * Index the item's response declarations by the identifier each declares.
+ * Index the item's declarations of one kind by the identifier each declares.
  *
- * The declarations are the root's `qti-response-declaration` children. When two share an
- * identifier, the last one wins, as it does where the item model binds an interaction; the
- * duplicate is `duplicate-identifier`'s refusal.
+ * The declarations are the root's children of that name. When two share an identifier, the last
+ * one wins, as it does where the item model binds an interaction; the duplicate is
+ * `duplicate-identifier`'s refusal.
  *
  * @param source The document.
- * @returns Each declared response identifier with its declaration.
+ * @param kind The declarations' local name, such as `qti-response-declaration`.
+ * @returns Each declared identifier with its declaration.
  */
-const responseDeclarations = (source: SourceDocument): ReadonlyMap<string, SourceElement> =>
+const declarationsOf = (source: SourceDocument, kind: string): ReadonlyMap<string, SourceElement> =>
   new Map(
     source.root.children.flatMap((child) =>
-      child.kind === "element" && isQti(child, (local) => local === "qti-response-declaration")
+      child.kind === "element" && isQti(child, (local) => local === kind)
         ? Option.toArray(
             Option.map(
               attributeOf(child, "identifier"),
@@ -384,8 +387,471 @@ const responseRules = (
 };
 
 /**
- * Check a document against the prose rules: `undeclared-response`, `duplicate-identifier` and
- * `binding`, and reading 19's `max-strings` on an Extended Text bound to a container.
+ * The item's declarations a rule resolves identifiers against, and each element's parent, as the
+ * walk has met them.
+ */
+interface Context {
+  readonly outcomes: ReadonlyMap<string, SourceElement>;
+  /**
+   * Each element the walk has reached, but the root, with its parent.
+   */
+  readonly parents: Map<SourceElement, SourceElement>;
+  readonly responses: ReadonlyMap<string, SourceElement>;
+}
+
+/**
+ * A declaration a response-processing template or a `qti-map-response` needs: its kind and
+ * identifier, and the base type and the child element it must have, where it must.
+ */
+interface Needed {
+  readonly baseType: Option.Option<BaseType>;
+  readonly child: Option.Option<string>;
+  readonly declaration: "qti-outcome-declaration" | "qti-response-declaration";
+  readonly identifier: string;
+}
+
+/**
+ * The `SCORE` every standard template sets, which must be a float (research `ea422814` §5.1, from
+ * the information model's response-processing templates).
+ */
+const floatScore: Needed = {
+  baseType: Option.some("float"),
+  child: Option.none(),
+  declaration: "qti-outcome-declaration",
+  identifier: "SCORE",
+};
+
+/**
+ * Name the `RESPONSE` a standard template reads, which must hold a child element.
+ *
+ * @param child The child's local name.
+ * @param baseType The base type it must have, none when any will do.
+ * @returns What the template needs of `RESPONSE`.
+ */
+const responseHolding = (child: string, baseType: Option.Option<BaseType>): Needed => ({
+  baseType,
+  child: Option.some(child),
+  declaration: "qti-response-declaration",
+  identifier: "RESPONSE",
+});
+
+/**
+ * What each standard template needs declared (research `ea422814` §5.1): a `RESPONSE` and a float
+ * `SCORE`, where `match_correct`'s `RESPONSE` has a correct response, `map_response`'s a
+ * `qti-mapping`, and `map_response_point`'s is a `point` with a `qti-area-mapping`.
+ */
+const templateNeeds = {
+  map_response: [responseHolding("qti-mapping", Option.none()), floatScore],
+  map_response_point: [responseHolding("qti-area-mapping", Option.some("point")), floatScore],
+  match_correct: [responseHolding("qti-correct-response", Option.none()), floatScore],
+} as const satisfies Record<TemplateName, readonly Needed[]>;
+
+/**
+ * Report whether a declaration meets what a template or an expression needs of it.
+ *
+ * Its `base-type` is compared as written, as the binding rule and the item model compare it: a
+ * value outside the vocabulary is the structural validator's refusal.
+ *
+ * @param declaration The declaration found under the needed identifier.
+ * @param needed What is needed of it.
+ * @returns Whether it has the needed base type and child, where they are needed.
+ */
+const provides = (declaration: SourceElement, needed: Needed): boolean =>
+  Option.match(needed.baseType, {
+    onNone: () => true,
+    onSome: (baseType) =>
+      Option.exists(
+        attributeOf(declaration, "base-type"),
+        (attribute) => attribute.value === baseType,
+      ),
+  }) &&
+  Option.match(needed.child, {
+    onNone: () => true,
+    onSome: (child) =>
+      declaration.children.some(
+        (element) => element.kind === "element" && isQti(element, (local) => local === child),
+      ),
+  });
+
+/**
+ * Construct the detail of a `template-requirements` refusal: the element that needs the
+ * declaration, and what it needs.
+ *
+ * @param element The local name of the element that needs it.
+ * @param needed What it needs.
+ * @returns The detail, with `baseType` and `child` only where they are needed.
+ */
+const neededDetail = (element: string, needed: Needed) => ({
+  ...Option.match(needed.baseType, { onNone: () => ({}), onSome: (baseType) => ({ baseType }) }),
+  ...Option.match(needed.child, { onNone: () => ({}), onSome: (child) => ({ child }) }),
+  declaration: needed.declaration,
+  element,
+  identifier: needed.identifier,
+});
+
+/**
+ * Apply `template-requirements` to a `qti-response-processing` that names a standard template.
+ *
+ * Research `ea422814` §5.1: each standard template needs a declared `RESPONSE`, with a correct
+ * response for `match_correct`, a `qti-mapping` for `map_response`, and a `point` base type and a
+ * `qti-area-mapping` for `map_response_point`, and a declared float `SCORE`. The template is
+ * resolved by the vocabulary's `templateName` from its `template` as written, as the item model
+ * resolves it, so a `CC2_*` or other template is not judged. "If both embedded rules and a template
+ * reference are supplied then the internal rules take precedence" (the information model), so a
+ * template beside inline rules never runs and is not judged either; the inline rules are.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The item's declarations.
+ * @returns One refusal at the processing element's path per declaration the template needs and
+ *   lacks; none for any other element.
+ */
+const templateRequirements = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] => {
+  const template = Option.flatMap(attributeOf(visit.element, "template"), (attribute) =>
+    templateName(attribute.value),
+  );
+  const inline = visit.element.children.some((child) => child.kind === "element");
+  if (
+    !isQti(visit.element, (local) => local === "qti-response-processing") ||
+    Option.isNone(template) ||
+    inline
+  ) {
+    return [];
+  }
+
+  return templateNeeds[template.value].flatMap((needed) => {
+    const declarations =
+      needed.declaration === "qti-response-declaration" ? context.responses : context.outcomes;
+    const declaration = declarations.get(needed.identifier);
+
+    return declaration !== undefined && provides(declaration, needed)
+      ? []
+      : [
+          refusal(source, "template-requirements", visit.path, {
+            ...neededDetail(visit.element.local, needed),
+            template: template.value,
+          }),
+        ];
+  });
+};
+
+/**
+ * Climb from an element through its ancestors, each passing its step's test in turn.
+ *
+ * @param context The parents the walk has met.
+ * @param element The element to climb from.
+ * @param steps One test per ancestor, the parent's first.
+ * @returns The last ancestor climbed to, or none when an ancestor is missing or fails its test.
+ */
+const enclosing = (
+  context: Context,
+  element: SourceElement,
+  steps: readonly ((ancestor: SourceElement) => boolean)[],
+): Option.Option<SourceElement> => {
+  let reached = element;
+  for (const step of steps) {
+    const ancestor = context.parents.get(reached);
+    if (ancestor === undefined || !step(ancestor)) {
+      return Option.none();
+    }
+
+    reached = ancestor;
+  }
+
+  return Option.some(reached);
+};
+
+/**
+ * Report whether an element lies anywhere under a `qti-response-processing`.
+ *
+ * @param context The parents the walk has met.
+ * @param element The element.
+ * @returns Whether one of its ancestors is a `qti-response-processing`.
+ */
+const inResponseProcessing = (context: Context, element: SourceElement): boolean => {
+  for (
+    let ancestor = context.parents.get(element);
+    ancestor !== undefined;
+    ancestor = context.parents.get(ancestor)
+  ) {
+    if (isQti(ancestor, (local) => local === "qti-response-processing")) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Apply `template-requirements` to an inline `qti-map-response`: the response it names is declared
+ * with a `qti-mapping`, "the associated mapping, which must have been declared" (the information
+ * model, `info-compact.txt:11438`).
+ *
+ * A `qti-map-response` that names no response declaration is not judged here: an undeclared
+ * variable is its own refusal, and this rule refuses only a declared response with no mapping.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The item's declarations and the parents the walk has met.
+ * @returns The refusal at the `qti-map-response`'s path when its response has no mapping; none for
+ *   any other element.
+ */
+const mapResponseRequirements = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] => {
+  const attribute = attributeOf(visit.element, "identifier");
+  if (
+    !isQti(visit.element, (local) => local === "qti-map-response") ||
+    Option.isNone(attribute) ||
+    !inResponseProcessing(context, visit.element)
+  ) {
+    return [];
+  }
+
+  const needed: Needed = {
+    ...responseHolding("qti-mapping", Option.none()),
+    identifier: identifierOf(attribute.value),
+  };
+  const declaration = context.responses.get(needed.identifier);
+
+  return declaration === undefined || provides(declaration, needed)
+    ? []
+    : [
+        refusal(
+          source,
+          "template-requirements",
+          visit.path,
+          neededDetail(visit.element.local, needed),
+        ),
+      ];
+};
+
+/**
+ * Give an element's `base-type` when the value model holds values of it.
+ *
+ * A base type the value model does not hold (`point`, `duration`, `file`) has no lexical check here
+ * (the slice list's 0.11 item 3), so its values are not judged. A missing or out-of-vocabulary
+ * `base-type` is the structural validator's.
+ *
+ * @param element An element with a `base-type`, such as a declaration or a `qti-base-value`.
+ * @returns Its base type, none when it is absent or not modelled.
+ */
+const modelledBaseType = (element: SourceElement): Option.Option<ModelledBaseType> =>
+  Option.flatMap(attributeOf(element, "base-type"), (attribute) =>
+    isModelled(attribute.value) ? Option.some(attribute.value) : Option.none(),
+  );
+
+/**
+ * Give the base type a declaration's typed values take, when this rule judges them.
+ *
+ * A `record` declaration's values are typed field by field, so they are not judged, and neither
+ * are values of a base type {@link modelledBaseType} does not give.
+ *
+ * @param declaration The declaration.
+ * @returns Its base type, none when its values are not judged.
+ */
+const declaredBaseType = (declaration: SourceElement): Option.Option<ModelledBaseType> =>
+  Option.exists(
+    attributeOf(declaration, "cardinality"),
+    (attribute) => attribute.value === "record",
+  )
+    ? Option.none()
+    : modelledBaseType(declaration);
+
+/**
+ * Join an element's text children, the content of a `qti-value` or a `qti-base-value`, as the item
+ * model joins them.
+ *
+ * @param element The element.
+ * @returns Its text, as written.
+ */
+const textOf = (element: SourceElement): string =>
+  element.children.flatMap((child) => (child.kind === "text" ? [child.text] : [])).join("");
+
+/**
+ * Give the failure of a value parse, if it failed.
+ *
+ * @param parsed The parse.
+ * @returns The `InvalidValue`, none when the text is in the base type's lexical space.
+ */
+const invalid = <A>(parsed: Effect.Effect<A, InvalidValue>): Option.Option<InvalidValue> =>
+  Result.getFailure(Effect.runSync(Effect.result(parsed)));
+
+/**
+ * Construct the `value-type` refusals of a parse.
+ *
+ * @param source The document.
+ * @param path The path of the element or attribute holding the value.
+ * @param parsed The parse of its value.
+ * @returns One refusal naming the base type and the text read, or none when the value parses.
+ */
+const valueRefusals = <A>(
+  source: SourceDocument,
+  path: string,
+  parsed: Effect.Effect<A, InvalidValue>,
+): readonly Refusal[] =>
+  Option.toArray(
+    Option.map(invalid(parsed), (failure) =>
+      refusal(source, "value-type", path, {
+        baseType: failure.baseType,
+        lexical: failure.lexical,
+      }),
+    ),
+  );
+
+/**
+ * Make a test of an element's QTI local name.
+ *
+ * @param names The local names that pass.
+ * @returns The test.
+ */
+const named =
+  (...names: readonly string[]) =>
+  (element: SourceElement): boolean =>
+    isQti(element, (local) => names.includes(local));
+
+/**
+ * The base-typed attributes reading 7 lists whose XSD type is a string, each with its element and
+ * the ancestors that lead to the declaration that types it. The float attributes reading 7 also
+ * lists (`mapped-value`, the mappings' bounds and `default-value`, an interpolation entry's
+ * `source-value`) are XSD doubles, which the structural validator's `attribute-type` checks.
+ */
+const typedAttributes = [
+  // Reading 7: "`map-key` of a map entry", under its response declaration's base type.
+  {
+    attribute: "map-key",
+    element: "qti-map-entry",
+    steps: [named("qti-mapping"), named("qti-response-declaration")],
+  },
+  // Reading 7: "a match table's and an interpolation table's `default-value`", under the outcome's.
+  {
+    attribute: "default-value",
+    element: "qti-match-table",
+    steps: [named("qti-outcome-declaration")],
+  },
+  {
+    attribute: "default-value",
+    element: "qti-interpolation-table",
+    steps: [named("qti-outcome-declaration")],
+  },
+  // Reading 7: "their entries' `target-value`"; reading 8: a match table entry's `target-value` is a
+  // value of the outcome's base type, not a base-type name.
+  {
+    attribute: "target-value",
+    element: "qti-match-table-entry",
+    steps: [named("qti-match-table"), named("qti-outcome-declaration")],
+  },
+  {
+    attribute: "target-value",
+    element: "qti-interpolation-table-entry",
+    steps: [named("qti-interpolation-table"), named("qti-outcome-declaration")],
+  },
+] as const;
+
+/**
+ * Apply `value-type` to the base-typed attributes of one element.
+ *
+ * Reading 7: such an attribute's value is exact, and outer whitespace around a typed value makes it
+ * invalid. That padding is the structural validator's `padded-attribute`, so for a base type other
+ * than `string` the value is read here with its outer whitespace removed, and a padded value gives
+ * one refusal, not two. For `string` the whitespace is part of the value and is kept.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The parents the walk has met.
+ * @returns The refusal at each attribute's path whose value is outside its base type.
+ */
+const attributeValueType = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] =>
+  typedAttributes.flatMap((typed) => {
+    if (!isQti(visit.element, (local) => local === typed.element)) {
+      return [];
+    }
+
+    const attribute = attributeOf(visit.element, typed.attribute);
+    const baseType = Option.flatMap(
+      enclosing(context, visit.element, typed.steps),
+      declaredBaseType,
+    );
+    if (Option.isNone(attribute) || Option.isNone(baseType)) {
+      return [];
+    }
+
+    const written = attribute.value.value;
+    const lexical = baseType.value === "string" ? written : written.replaceAll(outerWhitespace, "");
+
+    return valueRefusals(
+      source,
+      attributePath(visit.path, attribute.value),
+      parseLexical(baseType.value, lexical),
+    );
+  });
+
+/**
+ * Give the base type an element's text is read in, when its text is a typed value this rule
+ * judges: a `qti-base-value`'s own `base-type`, or the declaration's for a `qti-value` in a
+ * declaration's `qti-correct-response` or `qti-default-value`.
+ *
+ * @param visit The element's visit.
+ * @param context The parents the walk has met.
+ * @returns The base type, none for any other element and for a value this rule does not judge.
+ */
+const textBaseType = (visit: Visit, context: Context): Option.Option<ModelledBaseType> => {
+  if (isQti(visit.element, (local) => local === "qti-base-value")) {
+    return modelledBaseType(visit.element);
+  }
+
+  if (!isQti(visit.element, (local) => local === "qti-value")) {
+    return Option.none();
+  }
+
+  return Option.flatMap(
+    enclosing(context, visit.element, [
+      named("qti-correct-response", "qti-default-value"),
+      isDeclaration,
+    ]),
+    declaredBaseType,
+  );
+};
+
+/**
+ * Apply `value-type` to an element whose text is a typed value.
+ *
+ * Reading 1 and the value model's lexical spaces (research `ea422814` §3): a `qti-value` in a
+ * declaration's `qti-correct-response` or `qti-default-value` parses under the declaration's base
+ * type, and a `qti-base-value` under its own `base-type`, after reading 7's trim of element text,
+ * which the value model's `parseElementText` applies. A boolean is `true` or `false` (reading 34).
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The parents the walk has met.
+ * @returns The refusal at the element's path when its text is outside its base type; none for any
+ *   other element and for a value whose base type is not judged.
+ */
+const textValueType = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] =>
+  Option.match(textBaseType(visit, context), {
+    onNone: () => [],
+    onSome: (baseType) =>
+      valueRefusals(source, visit.path, parseElementText(baseType, textOf(visit.element))),
+  });
+
+/**
+ * Check a document against the prose rules: `undeclared-response`, `duplicate-identifier`,
+ * `binding`, `template-requirements` and `value-type`, and reading 19's `max-strings` on an
+ * Extended Text bound to a container.
  *
  * Every refusal is located at an element or attribute path and returned in document order; the
  * check never stops at the first. An empty list means no prose rule this module implements refuses
@@ -396,13 +862,25 @@ const responseRules = (
  * @see {@link Refusal} for what each refusal carries.
  */
 export const checkRules = (source: SourceDocument): readonly Refusal[] => {
-  const declarations = responseDeclarations(source);
+  const context: Context = {
+    outcomes: declarationsOf(source, "qti-outcome-declaration"),
+    parents: new Map(),
+    responses: declarationsOf(source, "qti-response-declaration"),
+  };
   const seen = new Map<SourceElement, Set<string>>();
   const refusals: Refusal[] = [];
   for (const visit of walk(source)) {
+    if (Option.isSome(visit.parent)) {
+      context.parents.set(visit.element, visit.parent.value);
+    }
+
     refusals.push(
       ...duplicateIdentifier(source, visit, seen),
-      ...responseRules(source, visit, declarations),
+      ...responseRules(source, visit, context.responses),
+      ...templateRequirements(source, visit, context),
+      ...mapResponseRequirements(source, visit, context),
+      ...attributeValueType(source, visit, context),
+      ...textValueType(source, visit, context),
     );
   }
 
