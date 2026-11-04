@@ -44,8 +44,8 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    map entry and `mapped-value` of a map entry and of an area map entry; a mapping's and an area mapping's
    `lower-bound`, `upper-bound` and `default-value`; a match table's and an interpolation table's `default-value`, and
    their entries' `target-value`; an interpolation table entry's `source-value`; and the value attributes of the
-   usage-data mapping (its `default-value`, `lower-bound` and `upper-bound`, and its entries' `mapped-value`). Where the
-   value is of base type string, as for a `map-key` or `target-value` of a string variable, its whitespace is part of
+   usage-data mapping (`ud:mapping`'s `defaultValue`, `lowerBound` and `upperBound`, and its `ud:mapEntry` entries'
+   `mappedValue`). Where the value is of base type string, as for a `map-key` or `target-value` of a string variable, its whitespace is part of
    the value and is kept, as above. An attribute the XSD itself types, such as `normal-maximum` as `xs:double` or
    `max-choices` as `xs:int`, is read as the XSD reads it, outer whitespace collapsed, under reading 1. Free-text
    attributes such as `title` or `label` keep their text as written, spaces included. The split is a ruling because
