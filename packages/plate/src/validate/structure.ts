@@ -172,15 +172,16 @@ const whitespaced = (name: BuiltinName, value: string): string => {
 /**
  * The least value of `xs:int`, -2^31.
  */
-const intLeast = -2_147_483_648n;
+const leastInt = -2_147_483_648n;
 
 /**
  * The greatest value of `xs:int`, 2^31 - 1.
  */
-const intGreatest = 2_147_483_647n;
+const greatestInt = 2_147_483_647n;
 
 /**
- * Report whether a value is in a built-in's lexical space, after its whitespace facet.
+ * The lexical check of each built-in: whether a value, after its whitespace facet, is in the
+ * built-in's lexical space.
  *
  * An integer kind's range is compared exactly as a `bigint`, never through a `Number`. `anyURI`,
  * `anyType` and the two string types admit any text.
@@ -194,7 +195,7 @@ const lexicalChecks = {
   decimal: (value: string) => decimalLexical.test(value),
   double: (value: string) => doubleLexical.test(value),
   int: (value: string) =>
-    integerLexical.test(value) && BigInt(value) >= intLeast && BigInt(value) <= intGreatest,
+    integerLexical.test(value) && BigInt(value) >= leastInt && BigInt(value) <= greatestInt,
   integer: (value: string) => integerLexical.test(value),
   nonNegativeInteger: (value: string) => integerLexical.test(value) && BigInt(value) >= 0n,
   normalizedString: () => true,
@@ -1213,6 +1214,12 @@ const admit = (
   checked: ReadonlyMap<SourceElement, ElementTable>,
   tables: Tables,
 ): Admission => {
+  /**
+   * Admit the element by its own table: checked when the tables declare its local name, otherwise
+   * unknown.
+   *
+   * @returns The element's admission.
+   */
   const byTable = (): Admission =>
     Option.match(tableOf(tables, element.local), {
       onNone: () => ({ kind: "unknown" }),

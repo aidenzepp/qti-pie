@@ -537,6 +537,13 @@ const complete = (built: Item, secured: Secured): Item => {
 const uncheckedReasons = (source: SourceDocument): readonly UncheckedReason[] => {
   const reasons: UncheckedReason[] = [];
   for (const { element, parent, path } of walk(source)) {
+    /**
+     * Report whether the element starts an island of a namespace: it is in that namespace and its
+     * parent, if any, is not.
+     *
+     * @param namespace The island's namespace.
+     * @returns Whether the element is the island's outermost element.
+     */
     const island = (namespace: string): boolean =>
       element.namespace === namespace &&
       !Option.exists(parent, (container) => container.namespace === namespace);

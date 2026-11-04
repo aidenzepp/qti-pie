@@ -4,6 +4,8 @@
  * The corpus is extracted once, outside the repository, by phase 1's one-time step (spec §10.2);
  * this module never extracts it and never writes. It reads through `node:fs/promises` inside
  * `Effect.tryPromise`, because the package carries no platform layer for Effect's `FileSystem`.
+ *
+ * @module
  */
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";

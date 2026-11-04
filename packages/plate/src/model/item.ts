@@ -681,6 +681,7 @@ const enumerated = <const T extends string>(
  *
  * @param value The integer, exact.
  * @param lexical The attribute's value with its outer whitespace gone, as the refusal names it.
+ * @returns None when the type accepts `value`, or the refusal's rule and detail.
  */
 type IntegerCheck = (
   value: bigint,
@@ -1691,10 +1692,10 @@ const setScore = (operand: Expression): Rule => ({
 });
 
 /**
- * A float base value.
+ * Construct a single float base value.
  *
  * @param value The number.
- * @returns The expression.
+ * @returns The `base-value` expression of `value`.
  */
 const floatValue = (value: number): Expression => ({
   kind: "base-value",
@@ -1794,7 +1795,7 @@ const processingOf = (
  * @param tree The rule tree.
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
- * @returns The identifiers the engine does not hold, none when it can run the tree.
+ * @returns The identifiers the engine does not hold, empty when it can run the tree.
  */
 const unheldIdentifiers = (
   tree: readonly Rule[],
@@ -1802,6 +1803,12 @@ const unheldIdentifiers = (
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
 ): readonly string[] => {
   const unheld = new Set<string>();
+
+  /**
+   * Add each identifier an expression and its operands read that the engine does not hold.
+   *
+   * @param operand The expression.
+   */
   const read = (operand: Expression): void => {
     switch (operand.kind) {
       case "variable": {
@@ -1837,6 +1844,13 @@ const unheldIdentifiers = (
       }
     }
   };
+
+  /**
+   * Add each identifier a rule sequence names, nested branches included, that the engine does not
+   * hold: each outcome it sets, and each identifier its expressions read.
+   *
+   * @param sequence The rules, in order.
+   */
   const run = (sequence: readonly Rule[]): void => {
     for (const each of sequence) {
       if (each.kind === "set-outcome") {

@@ -3,6 +3,8 @@
  * types and its attribute wildcard, the children it admits, its element wildcard and whether it
  * holds text. {@link generateTables} builds them from the XSD's source view; structural validation
  * reads them and never the XSD itself.
+ *
+ * @module
  */
 import { Effect, Option, Schema } from "effect";
 import type { SourceChild, SourceDocument, SourceElement } from "#plate/document/source.ts";
@@ -444,7 +446,7 @@ const compareNames = (left: QName, right: QName): number =>
   compareText(left.namespace, right.namespace) || compareText(left.local, right.local);
 
 /**
- * Keep the element children in the XML Schema namespace.
+ * Report whether a child of an XSD element is itself an element in the XML Schema namespace.
  *
  * @param child A child of an XSD element.
  * @returns Whether it is an XSD element.
@@ -1027,7 +1029,7 @@ const joinWildcards = Effect.fnUntraced(function* joinWildcards(
 });
 
 /**
- * Report that an attribute declaration has no `fixed` value, which the tables cannot record.
+ * Refuse an attribute declaration that fixes its value, which the tables cannot record.
  *
  * @param declaration The `xs:attribute` element.
  * @returns Nothing, or {@link TableGenerationError} when it fixes its value.

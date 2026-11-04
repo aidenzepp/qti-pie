@@ -3,6 +3,8 @@
  *
  * This is the only module that imports `@qti-pie/crust`: the reader's tree and errors stay here,
  * and everything after it walks a {@link SourceDocument} or holds a {@link Refusal}.
+ *
+ * @module
  */
 import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
