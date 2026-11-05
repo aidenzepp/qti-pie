@@ -185,7 +185,7 @@
  * for k,(doc,p) in PARTS.items():
  *     out.append("\n/**\n * %s\n *\x2f\nconst %s: Particle = %s;\n"%(doc,k,emit(p)))
  *     BYPART[key(p)]=k
- * out.append("\n/**\n * The XSD's content model of each MathML handle, keyed by handle.\n *\x2f\nexport const models = {\n")
+ * out.append("\n/**\n * The XSD's content model of each MathML handle, keyed by handle.\n *\x2f\nconst xsdModels = {\n")
  * for k in sorted(models): out.append('  "%s": [%s],\n'%(k,", ".join(emit(p) for p in models[k])))
  * out.append("} satisfies Models;\n")
  * sys.stdout.write("".join(out))
@@ -698,7 +698,7 @@ const qualifiers: Particle = {
 /**
  * The XSD's content model of each MathML handle, keyed by handle.
  */
-export const models = {
+const xsdModels = {
   "m:abs": [],
   "m:and": [],
   "m:annotation": [],
@@ -998,3 +998,59 @@ export const models = {
   "m:vectorproduct": [],
   "m:xor": [],
 } satisfies Models;
+
+/**
+ * The variable a `m:bvar` binds: a `m:ci` or a `m:semantics.ci`.
+ */
+const bvarVariable: Particle = {
+  kinds: ["m:ci", "m:semantics.ci"],
+  max: 1,
+  min: 1,
+};
+
+/**
+ * The content models of the kinds where the Recommendation is narrower than the XSD (spec 4.8;
+ * decision 109: the Recommendation is the validity, so its rules win where the XSD is looser).
+ *
+ * - `m:bvar` holds one `m:ci` or `m:semantics.ci` and at most one `m:degree`, in either order (E C8
+ *   and C9; RelaxNG `bvar = ((ci | semantics-ci) & degree?)`, REC 4.2.1.7 `contm.bvar`,
+ *   `appendixa.html#parsing_bvar`). The XSD's `m:bvar` holds any number of `m:ci`, `m:semantics.ci`
+ *   and `m:degree` in any order.
+ * - `m:piecewise` holds any number of `m:piece` and at most one `m:otherwise`, in any order (E C10;
+ *   RelaxNG `piecewise = (piece* & otherwise?)`, REC 4.4.1.9 `contm.piecewise`). The XSD admits any
+ *   number of `m:otherwise`. The sequence `piece*, otherwise?, piece*` is that interleave.
+ */
+const recModels = {
+  "m:bvar": [
+    {
+      choice: [
+        { max: 1, min: 1, sequence: [bvarVariable, { kinds: ["m:degree"], max: 1, min: 0 }] },
+        { max: 1, min: 1, sequence: [{ kinds: ["m:degree"], max: 1, min: 1 }, bvarVariable] },
+      ],
+      max: 1,
+      min: 1,
+    },
+  ],
+  "m:piecewise": [
+    { kinds: ["m:piece"], max: undefined, min: 0 },
+    { kinds: ["m:otherwise"], max: 1, min: 0 },
+    { kinds: ["m:piece"], max: undefined, min: 0 },
+  ],
+} satisfies Models;
+
+/**
+ * The content model of each MathML handle, keyed by handle: the XSD's, with the Recommendation's
+ * narrower models of `m:bvar` and `m:piecewise` in place of the XSD's.
+ */
+export const models = { ...xsdModels, ...recModels } satisfies Models;
+
+/**
+ * The kinds that may not end with a given child, as the Recommendation states and neither schema
+ * does (E P10, REC 3.6.5 on elementary math: "It is an error for mscarries to be the last element
+ * of an mstack or mlongdiv", since its children apply to the following row). A finding of this
+ * rule is `ordering`: the child is the right one, in the wrong place.
+ */
+export const notLast = {
+  "m:mlongdiv": ["m:mscarries"],
+  "m:mstack": ["m:mscarries"],
+} satisfies Readonly<Record<string, readonly string[]>>;

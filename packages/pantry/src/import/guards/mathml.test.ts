@@ -199,19 +199,50 @@ describe("modelFinding", () => {
     assert.strictEqual(modelFinding("m:mtr", []), undefined);
   });
 
-  it("holds the bvar's variable and degree in the XSD's loose form", () => {
-    assert.strictEqual(modelFinding("m:bvar", ["m:ci", "m:degree"]), undefined);
+  it("holds one variable and at most one degree in a bvar, in either order (E C8, C9)", () => {
+    assert.strictEqual(modelFinding("m:bvar", ["m:ci"]), undefined);
     assert.strictEqual(modelFinding("m:bvar", ["m:semantics.ci"]), undefined);
+    assert.strictEqual(modelFinding("m:bvar", ["m:ci", "m:degree"]), undefined);
+    assert.strictEqual(modelFinding("m:bvar", ["m:degree", "m:ci"]), undefined);
+    assert.strictEqual(modelFinding("m:bvar", ["m:degree", "m:semantics.ci"]), undefined);
+    assert.strictEqual(modelFinding("m:bvar", ["m:ci", "m:ci"]), "union-count");
+    assert.strictEqual(modelFinding("m:bvar", []), "union-count");
+    assert.strictEqual(modelFinding("m:bvar", ["m:degree"]), "union-count");
+    assert.strictEqual(modelFinding("m:bvar", ["m:ci", "m:degree", "m:degree"]), "union-count");
     assert.strictEqual(modelFinding("m:bvar", ["m:cn"]), "union-count");
   });
 
-  it("holds a piecewise element's pieces and otherwise in the XSD's loose form", () => {
+  it("holds any number of pieces and at most one otherwise in a piecewise (E C10)", () => {
+    assert.strictEqual(modelFinding("m:piecewise", []), undefined);
+    assert.strictEqual(modelFinding("m:piecewise", ["m:piece", "m:otherwise"]), undefined);
     assert.strictEqual(
       modelFinding("m:piecewise", ["m:piece", "m:otherwise", "m:piece"]),
       undefined,
     );
+    assert.strictEqual(modelFinding("m:piecewise", ["m:otherwise", "m:otherwise"]), "union-count");
+    assert.strictEqual(
+      modelFinding("m:piecewise", ["m:piece", "m:otherwise", "m:piece", "m:otherwise"]),
+      "union-count",
+    );
     assert.strictEqual(modelFinding("m:piece", ["m:ci", "m:cn"]), undefined);
     assert.strictEqual(modelFinding("m:piece", ["m:ci"]), "union-count");
+  });
+
+  it("refuses an mscarries as the last element child of an mstack or mlongdiv (E P10)", () => {
+    assert.strictEqual(modelFinding("m:mstack", ["m:mn", "m:mscarries"]), "ordering");
+    assert.strictEqual(modelFinding("m:mstack", ["m:mscarries"]), "ordering");
+    assert.strictEqual(modelFinding("m:mstack", ["m:mscarries", "m:mn"]), undefined);
+    assert.strictEqual(modelFinding("m:mstack", ["m:mn", "m:mscarries", "m:msline"]), undefined);
+    assert.strictEqual(modelFinding("m:mstack", []), undefined);
+    assert.strictEqual(
+      modelFinding("m:mlongdiv", ["m:mn", "m:mn", "m:mn", "m:mscarries"]),
+      "ordering",
+    );
+    assert.strictEqual(
+      modelFinding("m:mlongdiv", ["m:mn", "m:mn", "m:mscarries", "m:mn"]),
+      undefined,
+    );
+    assert.strictEqual(modelFinding("m:msgroup", ["m:mn", "m:mscarries"]), undefined);
   });
 
   it("treats a kind with no model as a programming error", () => {

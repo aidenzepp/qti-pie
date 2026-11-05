@@ -6,15 +6,16 @@
  * unions (`m:mfrac` holds exactly two element children of about 170 kinds), so the guard reads
  * them from `schema/mathml/models.ts`. {@link modelFinding} is the pure core over plain handle
  * strings; {@link mathmlGuards} reads the rows an import built and refuses before any is written.
- * The REC's narrower models and the head-dependent models of `m:apply` and `m:bind` are later
- * slices' (spec MA04, parts 2 to 4), so the models here are the XSD's alone.
+ * The table holds the XSD's models with the Recommendation's narrower ones for `m:bvar` and
+ * `m:piecewise`, and one last-child rule, `m:mscarries` (spec MA04, part 2). The head-dependent
+ * models of `m:apply` and `m:bind` are a later slice's (part 4).
  */
 import { Effect } from "effect";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import { mathmlInventory } from "#pantry/schema/content/inventory/mathml.ts";
 import { kinds as genericKinds } from "#pantry/schema/kinds/generic.ts";
-import { models } from "#pantry/schema/mathml/models.ts";
+import { models, notLast } from "#pantry/schema/mathml/models.ts";
 import type { Model, Particle } from "#pantry/schema/mathml/models.ts";
 import { Edge, Node } from "#pantry/schema/node.ts";
 
@@ -148,6 +149,24 @@ const matches = (entry: Compiled, children: readonly string[]): boolean =>
   entry.pattern.test(children.map((child) => `${child} `).join(""));
 
 /**
+ * The children each kind may not end with, by kind handle.
+ */
+const barredLast: ReadonlyMap<string, readonly string[]> = new Map(Object.entries(notLast));
+
+/**
+ * Whether a child list ends with a child its kind may not end with (E P10).
+ *
+ * @param kind - The node's kind handle.
+ * @param children - The element children's handles, in document order.
+ * @returns True when the last child is one `notLast` bars from the end of this kind.
+ */
+const endsWrong = (kind: string, children: readonly string[]): boolean => {
+  const last = children.at(-1);
+
+  return last !== undefined && (barredLast.get(kind)?.includes(last) ?? false);
+};
+
+/**
  * The rule a failed child list breaks, or nothing when it passes.
  */
 export type ModelFinding = "ordering" | "union-count" | undefined;
@@ -159,7 +178,9 @@ export type ModelFinding = "ordering" | "union-count" | undefined;
  * `entityRef`, `comment` or `pi`. The answer is `union-count` when the multiset of children is
  * wrong (a count, or a child the model does not name), and `ordering` when the same children
  * sorted into the model's particle order would match, so only their order is wrong. Children are
- * sorted by the first top-level particle that names them, equal places keeping their order.
+ * sorted by the first top-level particle that names them, equal places keeping their order. A list
+ * that matches the model but ends with a child its kind may not end with (an `m:mscarries` last in
+ * an `m:mstack`) is `ordering` too.
  *
  * @param kind - The node's kind handle, such as `m:mfrac`.
  * @param children - The element children's handles, in document order.
@@ -176,7 +197,7 @@ export const modelFinding = (kind: string, children: readonly string[]): ModelFi
   }
 
   if (matches(entry, children)) {
-    return undefined;
+    return endsWrong(kind, children) ? "ordering" : undefined;
   }
 
   const place = (child: string): number => entry.places.get(child) ?? entry.model.length;
@@ -272,6 +293,30 @@ const describeChildren = (children: readonly string[]): string => {
 };
 
 /**
+ * Say what is wrong with a node's children, for a refusal.
+ *
+ * @param rule - `ordering` or `union-count`.
+ * @param kind - The node's kind handle.
+ * @param children - The node's element children's handles, in document order.
+ * @returns The sentence that names the fault.
+ */
+const whyWrong = (
+  rule: "ordering" | "union-count",
+  kind: string,
+  children: readonly string[],
+): string => {
+  if (rule === "ordering" && endsWrong(kind, children)) {
+    return "an m:mscarries is the last child, but the Recommendation makes that an error: its children apply to the following row";
+  }
+
+  if (rule === "ordering") {
+    return "the children are the right ones but in the wrong order; the model lists them in the order it gives";
+  }
+
+  return "the children do not match it, by count or by kind; text, comments and processing instructions are not counted";
+};
+
+/**
  * Refuse a MathML node whose element children break its model.
  *
  * @param rule - `ordering` or `union-count`.
@@ -288,10 +333,7 @@ const refusal = (
   children: readonly string[],
 ): ImportRefused => {
   const model = describeModel(compiled.get(node.kind)?.model ?? []);
-  const wrong =
-    rule === "ordering"
-      ? "the children are the right ones but in the wrong order; the model lists them in the order it gives"
-      : "the children do not match it, by count or by kind; text, comments and processing instructions are not counted";
+  const wrong = whyWrong(rule, node.kind, children);
 
   return new ImportRefused({
     detail: `${node.kind} ${node.id} (${node.version}) holds ${describeChildren(children)}, but its content model is ${model}: ${wrong}. Hold the children the model names, in its order, and nothing else.`,
