@@ -38,8 +38,8 @@ import { classifyUrl, formatUrl, urlContextOf } from "#plate/model/url.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { checkRules } from "#plate/validate/rules.ts";
-import { checkStructure } from "#plate/validate/structure.ts";
-import type { ElementTable, Tables } from "#plate/validate/xsd.ts";
+import { checkStructure, governingTables } from "#plate/validate/structure.ts";
+import type { ContentTable, ElementTable, Tables } from "#plate/validate/xsd.ts";
 
 /**
  * Why a valid document is left unchecked: it holds MathML (reading 2) or SSML (reading 3), whose
@@ -183,12 +183,12 @@ const isAllowance = (attribute: SourceAttribute): boolean =>
  * Report whether an element's table declares an attribute by its exact namespace and local name,
  * a prohibited declaration not counting.
  *
- * @param table The element's table.
+ * @param table The table that governs the element.
  * @param namespace The attribute's namespace, `""` for none.
  * @param local The attribute's local name.
  * @returns Whether the table declares it.
  */
-const declares = (table: ElementTable, namespace: string, local: string): boolean =>
+const declares = (table: ContentTable, namespace: string, local: string): boolean =>
   table.attributes.some(
     (declaration) =>
       declaration.use !== "prohibited" &&
@@ -199,15 +199,17 @@ const declares = (table: ElementTable, namespace: string, local: string): boolea
 /**
  * Report whether E3 keeps an attribute of a QTI-namespace element.
  *
- * It keeps an allowance and an attribute the element's table declares by name. Reading 10 accepts
- * both `aria-keyshorts` and `aria-keyshortcuts` where the table declares `aria-keyshorts` (the
- * empty elements), so `aria-keyshortcuts` is kept there too. Names compare exactly, as XML's do.
+ * It keeps an allowance and an attribute the table that governs the element declares by name.
+ * Reading 10 accepts both `aria-keyshorts` and `aria-keyshortcuts` where the table declares
+ * `aria-keyshorts` (the empty elements), so `aria-keyshortcuts` is kept there too. Names compare
+ * exactly, as XML's do.
  *
- * @param table The element's table, none when the XSD declares no element of its name.
+ * @param table The table that governs the element, none when the XSD declares no element of its
+ *   name.
  * @param attribute The attribute.
  * @returns Whether it stays; any other attribute was admitted only by a wildcard.
  */
-const isKept = (table: Option.Option<ElementTable>, attribute: SourceAttribute): boolean =>
+const isKept = (table: Option.Option<ContentTable>, attribute: SourceAttribute): boolean =>
   isAllowance(attribute) ||
   Option.exists(
     table,
@@ -234,8 +236,13 @@ const tableOf = (tables: Tables, local: string): Option.Option<ElementTable> =>
  * Secure one element's attributes: remove each one only a wildcard admits (E3) and pass each URL
  * attribute through `url.ts`.
  *
+ * An element the structural walk checked is read by the table that governs it, so an attribute a
+ * valid `xsi:type`'s type declares is kept (AD-9); any other QTI-namespace element by its name's
+ * table.
+ *
  * @param visit The element's visit.
  * @param tables The tables.
+ * @param governing The table that governs each element the structural walk checked.
  * @param marks Where E3's marks are collected.
  * @param drops Where each dropped URL's feature is collected, by element path.
  * @returns The attributes that stay, each kept URL in its parsed form.
@@ -243,6 +250,7 @@ const tableOf = (tables: Tables, local: string): Option.Option<ElementTable> =>
 const secureAttributes = (
   visit: Visit,
   tables: Tables,
+  governing: ReadonlyMap<SourceElement, ContentTable>,
   marks: UnsupportedFeature[],
   drops: Map<string, string[]>,
 ): readonly SourceAttribute[] => {
@@ -251,7 +259,10 @@ const secureAttributes = (
     return element.attributes;
   }
 
-  const table = tableOf(tables, element.local);
+  const table = Option.orElse(
+    Option.fromUndefinedOr(governing.get(element)),
+    (): Option.Option<ContentTable> => tableOf(tables, element.local),
+  );
   const kept: SourceAttribute[] = [];
   for (const attribute of element.attributes) {
     if (!isKept(table, attribute)) {
@@ -294,9 +305,12 @@ const secureAttributes = (
 const secure = (source: SourceDocument, tables: Tables): Secured => {
   const marks: UnsupportedFeature[] = [];
   const drops = new Map<string, string[]>();
+  const governing = governingTables(source, tables);
   const visits = [...walk(source)];
   const attributes = new Map(
-    visits.map((visit) => [visit.element, secureAttributes(visit, tables, marks, drops)] as const),
+    visits.map(
+      (visit) => [visit.element, secureAttributes(visit, tables, governing, marks, drops)] as const,
+    ),
   );
   const rebuilt = new Map<SourceElement, SourceElement>();
   for (const { element } of visits.toReversed()) {

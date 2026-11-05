@@ -654,6 +654,39 @@ describe("check, reading 47: xsi:type", () => {
     assert.deepStrictEqual(accepted.unsupported, []);
     assert.deepStrictEqual(outline(accepted.item.body), [{ p: ["Hi"] }]);
   });
+
+  it("keeps what the governing type declares: a qti-null typed WeightDType earns no attribute: mark (AD-9)", () => {
+    const weighted = el("qti-null", [
+      xsiType("WeightDType"),
+      attr("identifier", "W"),
+      attr("value", "1"),
+    ]);
+    const verdict = verdictOf(
+      item(
+        [
+          score(),
+          body([el("p", [], [text("Hi")])]),
+          el(
+            "qti-response-processing",
+            [],
+            [el("qti-set-outcome-value", [attr("identifier", "SCORE")], [weighted])],
+          ),
+        ],
+        [attr("q", qtiNamespace, xmlnsNamespace)],
+      ),
+    );
+    // A qti-null is outside M1's engine, so the processing may earn its own marks; only the
+    // attribute marks are asserted.
+    const unsupported =
+      verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
+        ? verdict.accepted.unsupported
+        : assert.fail(`The verdict is ${verdict.verdict}, not an accepting one.`);
+
+    assert.deepStrictEqual(
+      unsupported.filter((mark) => mark.feature.startsWith("attribute:")),
+      [],
+    );
+  });
 });
 
 describe("check, the URL pass", () => {

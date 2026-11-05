@@ -9,14 +9,20 @@ import {
   mathmlNamespace,
   qtiNamespace,
   text,
+  walk as walkDocument,
   xmlNamespace,
   xmlnsNamespace,
   xsdNamespace,
   xsiNamespace,
 } from "#plate/document/source.ts";
-import type { SourceAttribute, SourceChild, SourceDocument } from "#plate/document/source.ts";
+import type {
+  SourceAttribute,
+  SourceChild,
+  SourceDocument,
+  SourceElement,
+} from "#plate/document/source.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
-import { checkStructure } from "#plate/validate/structure.ts";
+import { checkStructure, governingTables } from "#plate/validate/structure.ts";
 import { tables as generatedTables } from "#plate/validate/tables.ts";
 import type {
   AttributeTable,
@@ -631,14 +637,25 @@ const declarations: readonly SourceAttribute[] = [
  * @param name The root's local name.
  * @param written The `xsi:type` as written.
  * @param children The root's children, none by default.
+ * @param attributes The root's other attributes, none by default.
  * @returns The document.
  */
 const typed = (
   name: string,
   written: string,
   children: readonly SourceChild[] = [],
+  attributes: readonly SourceAttribute[] = [],
 ): SourceDocument =>
-  doc(location, el(name, [...declarations, attr("type", written, xsiNamespace)], children));
+  doc(
+    location,
+    el(name, [...declarations, attr("type", written, xsiNamespace), ...attributes], children),
+  );
+
+/**
+ * The attributes `WeightDType` requires, which a `qti-null` typed `WeightDType` carries, because
+ * that type's table governs it (AD-9).
+ */
+const weightAttributes: readonly SourceAttribute[] = [attr("identifier", "W"), attr("value", "1")];
 
 /**
  * Construct a response processing whose root carries the given namespace declarations and holds a
@@ -646,16 +663,21 @@ const typed = (
  *
  * @param scope The root's namespace declarations.
  * @param written The `xsi:type` as written.
+ * @param attributes The `qti-null`'s other attributes, none by default.
  * @returns The document.
  */
-const nestedNull = (scope: readonly SourceAttribute[], written: string): SourceDocument =>
+const nestedNull = (
+  scope: readonly SourceAttribute[],
+  written: string,
+  attributes: readonly SourceAttribute[] = [],
+): SourceDocument =>
   doc(
     location,
     el("qti-response-processing", scope, [
       el(
         "qti-set-outcome-value",
         [attr("identifier", "SCORE")],
-        [el("qti-null", [attr("type", written, xsiNamespace)])],
+        [el("qti-null", [attr("type", written, xsiNamespace), ...attributes])],
       ),
     ]),
   );
@@ -707,6 +729,57 @@ const derivationOf = (entry: TypeEntry) =>
  * no text.
  */
 const noContent = { attributes: [], children: [], text: false } as const;
+
+/**
+ * The path of the `qti-null` {@link governedNull} types.
+ */
+const governedPath = "qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-null";
+
+/**
+ * Construct an item whose response processing sets `SCORE` from a `qti-null` carrying an
+ * `xsi:type`, with `qti` bound to QTI's namespace on the item.
+ *
+ * @param written The `xsi:type` as written.
+ * @param attributes The `qti-null`'s other attributes.
+ * @returns The item as a source document.
+ */
+const governedNull = (written: string, attributes: readonly SourceAttribute[]): SourceDocument =>
+  doc(
+    location,
+    el(
+      "qti-assessment-item",
+      [
+        attr("qti", qtiNamespace, xmlnsNamespace),
+        attr("identifier", "item"),
+        attr("time-dependent", "false"),
+        attr("title", "Governed"),
+      ],
+      [
+        el(
+          "qti-response-processing",
+          [],
+          [
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "SCORE")],
+              [el("qti-null", [attr("type", written, xsiNamespace), ...attributes])],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+/**
+ * Find the element of a document at a path.
+ *
+ * @param source The document.
+ * @param path The element's path.
+ * @returns The element; the test fails when no element has that path.
+ */
+const elementAt = (source: SourceDocument, path: string): SourceElement =>
+  [...walkDocument(source)].find((visit) => visit.path === path)?.element ??
+  assert.fail(`No element at ${path}.`);
 
 describe("checkStructure", () => {
   describe("the six rules", () => {
@@ -1759,14 +1832,14 @@ describe("checkStructure", () => {
         base: qtiType("EmptyPrimitiveTypeDType"),
         derivation: "extension",
       });
-      for (const [name, written] of [
-        ["p", "q:HTMLTextDType"],
-        ["qti-null", "q:EmptyPrimitiveTypeDType"],
-        ["qti-null", "q:WeightDType"],
-        ["qti-null", " q:WeightDType\n"],
+      for (const [name, written, attributes] of [
+        ["p", "q:HTMLTextDType", []],
+        ["qti-null", "q:EmptyPrimitiveTypeDType", []],
+        ["qti-null", "q:WeightDType", weightAttributes],
+        ["qti-null", " q:WeightDType\n", weightAttributes],
       ] as const) {
         assert.deepStrictEqual(
-          found(typed(name, written), generatedTables),
+          found(typed(name, written, [], attributes), generatedTables),
           [],
           `${name} ${written}`,
         );
@@ -1802,14 +1875,18 @@ describe("checkStructure", () => {
 
       assert.deepStrictEqual(
         found(
-          nestedNull([attr("q", qtiNamespace, xmlnsNamespace)], "q:WeightDType"),
+          nestedNull([attr("q", qtiNamespace, xmlnsNamespace)], "q:WeightDType", weightAttributes),
           generatedTables,
         ),
         [],
       );
       assert.deepStrictEqual(
         found(
-          nestedNull([attr("xmlns", qtiNamespace, xmlnsNamespace)], "WeightDType"),
+          nestedNull(
+            [attr("xmlns", qtiNamespace, xmlnsNamespace)],
+            "WeightDType",
+            weightAttributes,
+          ),
           generatedTables,
         ),
         [],
@@ -1923,6 +2000,94 @@ describe("checkStructure", () => {
       );
       assert.include(refusals[0]?.detail["expected"], "integer");
       assert.notInclude(refusals[0]?.detail["expected"]?.toLowerCase(), "entity");
+    });
+  });
+
+  describe("AD-9: the named type governs after a valid xsi:type", () => {
+    it("[I-0] checks a qti-null typed qti:WeightDType by WeightDType's table, not by its name's", () => {
+      assert.deepStrictEqual(
+        found(governedNull("qti:WeightDType", weightAttributes), generatedTables),
+        [],
+      );
+      assert.deepStrictEqual(
+        found(governedNull("qti:WeightDType", [attr("identifier", "W")]), generatedTables),
+        [["missing-attribute", at(governedPath)]],
+      );
+      assert.deepStrictEqual(
+        found(
+          governedNull("qti:EmptyPrimitiveTypeDType", [attr("identifier", "W")]),
+          generatedTables,
+        ),
+        [["unknown-attribute", at(`${governedPath}/@identifier`)]],
+      );
+    });
+
+    it("governingTables gives a typed element its type's table and an untyped one its name's", () => {
+      const source = governedNull("qti:WeightDType", weightAttributes);
+      const governing = governingTables(source, generatedTables);
+      const setter = "qti-assessment-item/qti-response-processing/qti-set-outcome-value";
+
+      assert.strictEqual(
+        governing.get(elementAt(source, governedPath)),
+        generatedTables.types["WeightDType"],
+      );
+      assert.strictEqual(
+        governing.get(elementAt(source, setter)),
+        generatedTables.elements["qti-set-outcome-value"],
+      );
+    });
+
+    it("governingTables gives a name declared with several types the named type's own table, not the union", () => {
+      assert.deepStrictEqual(generatedTables.elements["qti-feedback-block"]?.types, [
+        qtiType("FeedbackBlockDType"),
+        qtiType("TemplateBlockFeedbackBlockDType"),
+      ]);
+
+      const source = typed("qti-feedback-block", "q:TemplateBlockFeedbackBlockDType");
+
+      assert.strictEqual(
+        governingTables(source, generatedTables).get(source.root),
+        generatedTables.types["TemplateBlockFeedbackBlockDType"],
+      );
+    });
+
+    it("governingTables keeps the name's table for a qti-description typed xs:token, a type of XML Schema's", () => {
+      const source = typed("qti-description", "xs:token", [text("calculator")]);
+
+      assert.deepStrictEqual(found(source, generatedTables), []);
+      assert.strictEqual(
+        governingTables(source, generatedTables).get(source.root),
+        generatedTables.elements["qti-description"],
+      );
+    });
+
+    it("admits a typed element's children and text by the named type's table, and by its name's when the type is invalid", () => {
+      // No type in the committed tables widens its base's children, so this pair is hand-built.
+      const widened: Tables = {
+        elements: {
+          leaf: element({ types: qti("LeafDType") }),
+          probe: element({ types: qti("ProbeDType") }),
+        },
+        types: {
+          LeafDType: { ...noContent, base: xsdType("anyType"), derivation: "restriction" },
+          ProbeDType: { ...noContent, base: xsdType("anyType"), derivation: "restriction" },
+          WideProbeDType: {
+            ...noContent,
+            base: qtiType("ProbeDType"),
+            children: qti("leaf"),
+            derivation: "extension",
+            text: true,
+          },
+        },
+      };
+      const content = [el("leaf", []), text("words")];
+
+      assert.deepStrictEqual(found(typed("probe", "q:WideProbeDType", content), widened), []);
+      assert.deepStrictEqual(found(typed("probe", "q:OtherDType", content), widened), [
+        ["attribute-type", at(typePath("probe"))],
+        ["text-not-allowed", at("probe")],
+        ["unknown-element", at("probe/leaf")],
+      ]);
     });
   });
 
