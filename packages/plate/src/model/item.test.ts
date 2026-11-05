@@ -13,6 +13,7 @@ import { validateChoice } from "#plate/interactions/choice.ts";
 import { message } from "#plate/messages.ts";
 import { buildItem } from "#plate/model/item.ts";
 import type {
+  AreaMapping,
   BodyNode,
   Branch,
   ChoiceInteraction,
@@ -73,6 +74,37 @@ const values = (local: string, ...texts: readonly string[]): SourceElement =>
     [],
     texts.map((value) => el("qti-value", [], [text(value)])),
   );
+
+/* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure. */
+/**
+ * Construct a `qti-area-map-entry`.
+ *
+ * @param shape The `shape` value.
+ * @param coords The `coords` value, as written.
+ * @param mappedValue The `mapped-value` value.
+ * @returns The entry element.
+ */
+const areaEntry = (shape: string, coords: string, mappedValue: string): SourceElement =>
+  el("qti-area-map-entry", [
+    attr("coords", coords),
+    attr("mapped-value", mappedValue),
+    attr("shape", shape),
+  ]);
+
+/**
+ * Construct a `qti-area-mapping` of the circle `102,113,16`, mapped to 1, and then a rect whose
+ * third coordinate is written as given, mapped to 0.5.
+ *
+ * @param attributes The mapping's attributes.
+ * @param rectRight The rect's third coordinate, as written.
+ * @returns The mapping element.
+ */
+const areaMapping = (attributes: readonly SourceAttribute[], rectRight: string): SourceElement =>
+  el("qti-area-mapping", attributes, [
+    areaEntry("circle", "102,113,16", "1"),
+    areaEntry("rect", `0,0,${rectRight},40`, "0.5"),
+  ]);
+/* oxlint-enable anti-slop/no-shape-in-symbol-names */
 
 /**
  * Construct a `qti-simple-choice` holding only text.
@@ -569,6 +601,119 @@ describe("buildItem", () => {
         }),
       );
     }),
+  );
+
+  /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure. */
+  it.effect(
+    "[I-1] holds a point declaration's qti-area-mapping, its entries in document order",
+    () =>
+      Effect.gen(function* holdsAreaMapping() {
+        const built = yield* buildItem(
+          item({
+            after: [template("map_response_point")],
+            body: [],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "point", "single", [
+                areaMapping([], "50"),
+              ]),
+              declaration("qti-response-declaration", "OTHER", "identifier", "single", [
+                areaMapping([], "50"),
+              ]),
+              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(
+          built.responses.get("RESPONSE")?.areaMapping,
+          Option.some<AreaMapping>({
+            defaultValue: 0,
+            entries: [
+              { coords: [102, 113, 16], mappedValue: 1, shape: "circle" },
+              { coords: [0, 0, 50, 40], mappedValue: 0.5, shape: "rect" },
+            ],
+            lowerBound: Option.none(),
+            percent: false,
+            upperBound: Option.none(),
+          }),
+        );
+        assert.deepStrictEqual(built.responses.get("OTHER")?.areaMapping, Option.none());
+        assert.deepStrictEqual(built.processing, Option.none());
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: "map_response_point", path: `${root}/qti-response-processing`, shown: "mark" },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-1] holds an area mapping's bounds and default, and percent for a coordinate 50%",
+    () =>
+      Effect.gen(function* holdsPercentAreaMapping() {
+        const built = yield* buildItem(
+          item({
+            body: [],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "point", "multiple", [
+                areaMapping(
+                  [attr("default-value", "-1"), attr("lower-bound", "0"), attr("upper-bound", "2")],
+                  "50%",
+                ),
+              ]),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(
+          built.responses.get("RESPONSE")?.areaMapping,
+          Option.some<AreaMapping>({
+            defaultValue: -1,
+            entries: [
+              { coords: [102, 113, 16], mappedValue: 1, shape: "circle" },
+              { coords: [0, 0, 50, 40], mappedValue: 0.5, shape: "rect" },
+            ],
+            lowerBound: Option.some(0),
+            percent: true,
+            upperBound: Option.some(2),
+          }),
+        );
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  /* oxlint-enable anti-slop/no-shape-in-symbol-names */
+
+  it.effect(
+    "[I-1] refuses an area map entry's shape or coords outside its type as attribute-type",
+    () =>
+      Effect.gen(function* refusesAreaEntry() {
+        const entry = `${root}/qti-response-declaration/qti-area-mapping/qti-area-map-entry`;
+        const cases = [
+          { attribute: "shape", entry: areaEntry("square", "0,0,1,1", "1") },
+          { attribute: "coords", entry: areaEntry("rect", "0,0,1.5,1", "1") },
+          { attribute: "coords", entry: areaEntry("rect", "0,0,1 ,1", "1") },
+        ];
+
+        for (const { attribute, entry: written } of cases) {
+          const refusal = yield* Effect.flip(
+            buildItem(
+              item({
+                body: [],
+                declarations: [
+                  declaration("qti-response-declaration", "RESPONSE", "point", "single", [
+                    el("qti-area-mapping", [], [written]),
+                  ]),
+                ],
+              }),
+            ),
+          );
+
+          assert.strictEqual(refusal.rule, "attribute-type");
+          assert.deepStrictEqual(refusal.location, {
+            kind: "path",
+            path: `${entry}/@${attribute}`,
+          });
+        }
+      }),
   );
 
   it.effect("[I-7] shows a hotspot interaction as a notice and keeps the rest of the body", () =>

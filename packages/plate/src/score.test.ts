@@ -145,6 +145,7 @@ const item: Item = {
     [
       "RESPONSE",
       {
+        areaMapping: Option.none(),
         baseType: "identifier",
         cardinality: "single",
         correct: Option.some(identifiers("single", "A")),
@@ -156,6 +157,7 @@ const item: Item = {
     [
       "PICK",
       {
+        areaMapping: Option.none(),
         baseType: "identifier",
         cardinality: "multiple",
         correct: Option.none(),
@@ -167,6 +169,7 @@ const item: Item = {
     [
       "NUMBER",
       {
+        areaMapping: Option.none(),
         baseType: "integer",
         cardinality: "single",
         correct: Option.none(),

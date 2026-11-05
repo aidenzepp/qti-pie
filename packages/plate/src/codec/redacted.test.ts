@@ -76,6 +76,7 @@ const declaration = (
   baseType: ResponseDeclaration["baseType"],
   cardinality: Value["cardinality"],
 ): ResponseDeclaration => ({
+  areaMapping: Option.none(),
   baseType,
   cardinality,
   correct: Option.none(),

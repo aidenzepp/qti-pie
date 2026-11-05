@@ -62,6 +62,7 @@ const booleanValue = (value: boolean): Value => ({
  * The BG007-shaped response: a single identifier whose correct response is `true`.
  */
 const response: ResponseDeclaration = {
+  areaMapping: Option.none(),
   baseType: "identifier",
   cardinality: "single",
   correct: Option.some(identifierValue("true")),
@@ -93,6 +94,7 @@ const yorkMapping: Mapping = {
  * BG010's single string response, `CITY` here, with its mapping.
  */
 const city: ResponseDeclaration = {
+  areaMapping: Option.none(),
   baseType: "string",
   cardinality: "single",
   correct: Option.none(),
@@ -136,6 +138,7 @@ const bounded: ResponseDeclaration = {
  * A multiple identifier response mapping `A` to 1 and `C` to 0.5.
  */
 const choices: ResponseDeclaration = {
+  areaMapping: Option.none(),
   baseType: "identifier",
   cardinality: "multiple",
   correct: Option.none(),
@@ -156,6 +159,7 @@ const choices: ResponseDeclaration = {
  * A single pair response mapping the pair `A B` to 1.
  */
 const paired: ResponseDeclaration = {
+  areaMapping: Option.none(),
   baseType: "pair",
   cardinality: "single",
   correct: Option.none(),

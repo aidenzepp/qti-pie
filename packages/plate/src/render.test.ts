@@ -165,6 +165,7 @@ const item: Item = {
     [
       "RESPONSE",
       {
+        areaMapping: Option.none(),
         baseType: "identifier",
         cardinality: "single",
         correct: Option.some(one({ baseType: "identifier", value: "MarkerCorrectChoice" })),
@@ -187,6 +188,7 @@ const item: Item = {
     [
       "CITY",
       {
+        areaMapping: Option.none(),
         baseType: "string",
         cardinality: "single",
         correct: Option.some(one({ baseType: "string", value: "MarkerCorrectText" })),

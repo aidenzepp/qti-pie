@@ -110,6 +110,7 @@ const itemOf = (interaction: ChoiceInteraction): Item => ({
     [
       response,
       {
+        areaMapping: Option.none(),
         baseType: "identifier",
         cardinality: interaction.cardinality,
         correct: Option.none(),

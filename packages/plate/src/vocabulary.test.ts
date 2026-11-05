@@ -2,6 +2,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import {
+  // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
+  areaShapes,
   baseTypes,
   behaviourClasses,
   cardinalities,
@@ -119,6 +121,13 @@ describe("the closed value sets", () => {
     assertDistinct(cardinalities);
   });
 
+  it("has exactly the five shapes of a qti-area-map-entry", () => {
+    // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
+    assert.sameMembers([...areaShapes], ["circle", "default", "ellipse", "poly", "rect"]);
+    // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
+    assertDistinct(areaShapes);
+  });
+
   it("holds exactly the members spec §4.5 names, each once", () => {
     const lists: readonly (readonly [string, readonly string[], readonly string[]])[] = [
       [
@@ -155,6 +164,8 @@ describe("the closed value sets", () => {
           "qti-value",
           "qti-mapping",
           "qti-map-entry",
+          "qti-area-mapping",
+          "qti-area-map-entry",
           "qti-item-body",
           "qti-response-processing",
           "qti-choice-interaction",

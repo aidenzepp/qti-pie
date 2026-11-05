@@ -80,6 +80,7 @@ const item: Item = {
     [
       response,
       {
+        areaMapping: Option.none(),
         baseType: "identifier",
         cardinality: "single",
         correct: Option.none(),
