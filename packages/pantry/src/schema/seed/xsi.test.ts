@@ -33,20 +33,15 @@ import {
   cacheDirectory,
   childElements,
   closureOf,
+  deriveTypeTables,
+  indexOf,
   isXs,
   keyOf,
   parseSchema,
+  required,
   resolveQName,
 } from "#pantry/test/xsd.ts";
-import type { Schema } from "#pantry/test/xsd.ts";
-
-/**
- * A type: a named type by its expanded name, or an anonymous one by the path of the declaration
- * that holds it.
- */
-type TypeKey =
-  | { readonly anonymous: string }
-  | { readonly local: string; readonly namespace: string };
+import type { Definition, Schema, TypeKey, TypeTables } from "#pantry/test/xsd.ts";
 
 /**
  * One element particle of a content model, or one global element, with its declared type.
@@ -58,121 +53,9 @@ interface Declared {
 }
 
 /**
- * A named definition and the document it is written in.
- */
-interface Definition {
-  readonly element: Element;
-  readonly local: string;
-  readonly namespace: string;
-  readonly schema: Schema;
-}
-
-/**
- * The definitions of a closure, by expanded name.
- */
-interface Index {
-  readonly complexTypes: ReadonlyMap<string, Definition>;
-  readonly globalElements: ReadonlyMap<string, Definition>;
-  readonly groups: ReadonlyMap<string, Definition>;
-  readonly simpleTypes: ReadonlyMap<string, Definition>;
-  readonly typeNames: readonly (readonly [string, string])[];
-}
-
-/**
- * Index a closure's top-level definitions. A definition inside an `xs:redefine` replaces one that
- * is already named, so it adds a name to nothing but the closure's type names.
- *
- * @param schemas - The closure's documents.
- * @returns The definitions the walks read.
- */
-const indexOf = (schemas: readonly Schema[]): Index => {
-  const complexTypes = new Map<string, Definition>();
-  const globalElements = new Map<string, Definition>();
-  const groups = new Map<string, Definition>();
-  const simpleTypes = new Map<string, Definition>();
-  const typeNames = new Map<string, readonly [string, string]>();
-
-  for (const schema of schemas) {
-    for (const child of childElements(schema.root)) {
-      const inRedefine = isXs(child, "redefine");
-
-      for (const definition of inRedefine ? childElements(child) : [child]) {
-        const name = attributeOf(definition, "name");
-
-        if (name === undefined) {
-          continue;
-        }
-
-        const entry = { element: definition, local: name, namespace: schema.effective, schema };
-        const key = keyOf(schema.effective, name);
-
-        if (isXs(definition, "complexType")) {
-          typeNames.set(key, [schema.effective, name]);
-
-          if (!inRedefine) {
-            complexTypes.set(key, entry);
-          }
-        } else if (isXs(definition, "simpleType")) {
-          typeNames.set(key, [schema.effective, name]);
-
-          if (!inRedefine) {
-            simpleTypes.set(key, entry);
-          }
-        } else if (isXs(definition, "group") && !inRedefine) {
-          groups.set(key, entry);
-        } else if (isXs(definition, "element") && !inRedefine) {
-          globalElements.set(key, entry);
-        }
-      }
-    }
-  }
-
-  return { complexTypes, globalElements, groups, simpleTypes, typeNames: [...typeNames.values()] };
-};
-
-/**
- * The base type a named definition names: the `base` of the `xs:extension` or `xs:restriction`
- * that is its derivation, directly or inside its `xs:complexContent` or `xs:simpleContent`. A
- * simple type that is a list or a union names none.
- *
- * @param definition - The `xs:complexType` or `xs:simpleType`.
- * @returns The `base` as written, or `undefined`.
- */
-const baseOf = (definition: Element) => {
-  const content = childElements(definition).find(
-    (candidate) => isXs(candidate, "complexContent") || isXs(candidate, "simpleContent"),
-  );
-  const derivation = childElements(content ?? definition).find(
-    (candidate) => isXs(candidate, "extension") || isXs(candidate, "restriction"),
-  );
-
-  return derivation === undefined ? undefined : attributeOf(derivation, "base");
-};
-
-/**
- * A value a lookup must have found.
- *
- * @param value - The value, or `undefined`.
- * @param message - What is missing, for the failure.
- * @returns The value; the derivation fails when it is `undefined`.
- */
-const required = <A>(value: A | undefined, message: string): A => {
-  if (value === undefined) {
-    return assert.fail(message);
-  }
-
-  return value;
-};
-
-/**
  * What the walk of one closure found.
  */
 interface Derived {
-  /**
-   * The base type each named type's definition names: the `base` of its `xs:extension` or
-   * `xs:restriction`, as a type key.
-   */
-  readonly bases: readonly { readonly base: TypeKey; readonly type: TypeKey }[];
   /**
    * The complex types' element particles by parent: every named complex type, and every anonymous
    * complex type that a declaration holds.
@@ -186,6 +69,10 @@ interface Derived {
    * The global element declarations.
    */
   readonly roots: readonly Declared[];
+  /**
+   * The derivation, attribute uses and simple facets of the named types.
+   */
+  readonly types: TypeTables;
 }
 
 /**
@@ -355,22 +242,7 @@ const deriveClosure = (
     pending = [...anonymous.keys()].filter((path) => !done.has(path));
   }
 
-  const bases: { base: TypeKey; type: TypeKey }[] = [];
-
-  for (const type of [...index.complexTypes.values(), ...index.simpleTypes.values()]) {
-    const base = baseOf(type.element);
-
-    if (base !== undefined) {
-      const [namespace, local] = resolveQName(type.schema, base);
-
-      bases.push({
-        base: { local, namespace },
-        type: { local: type.local, namespace: type.namespace },
-      });
-    }
-  }
-
-  return { bases, children, named: index.typeNames, roots };
+  return { children, named: index.typeNames, roots, types: deriveTypeTables(index, codeOf) };
 };
 
 /**
@@ -432,6 +304,11 @@ const derivedDatatypes = {
 } as const satisfies Record<string, string>;
 
 /**
+ * The derived datatypes that are lists; the others are restrictions.
+ */
+const listDatatypes: ReadonlySet<string> = new Set(["ENTITIES", "IDREFS", "NMTOKENS"]);
+
+/**
  * The rows without repeats, in code-unit order.
  *
  * @param rows - The rows.
@@ -454,9 +331,12 @@ const textOfKey = (key: TypeKey, codeOf: (namespace: string) => string) =>
  * per row.
  */
 interface Tables {
+  readonly attributeUse: readonly string[];
   readonly declaredChild: readonly string[];
   readonly declaredRoot: readonly string[];
   readonly namedTypes: readonly string[];
+  readonly simpleFacet: readonly string[];
+  readonly typeDerivation: readonly string[];
 }
 
 /**
@@ -468,7 +348,7 @@ interface Tables {
  * @param derived - A closure's derivation.
  * @param codeOf - A namespace's code.
  * @param registry - The codes of the registry namespaces.
- * @returns The three tables.
+ * @returns The tables.
  */
 const tablesOf = (
   derived: Derived,
@@ -478,8 +358,25 @@ const tablesOf = (
   const inRegistry = (key: TypeKey) =>
     registry.has("anonymous" in key ? (key.anonymous.split(":")[0] ?? "") : codeOf(key.namespace));
   const name = (namespace: string, local: string) => `${codeOf(namespace)}:${local}`;
+  const builtin = (local: string) => name(XS, local);
+  const xsDerivations = [
+    `${builtin("anySimpleType")} ${builtin("anyType")} restriction simple`,
+    ...primitiveDatatypes.map(
+      (local) => `${builtin(local)} ${builtin("anySimpleType")} restriction simple`,
+    ),
+    ...Object.entries(derivedDatatypes).map(
+      ([local, base]) =>
+        `${builtin(local)} ${builtin(base)} ${listDatatypes.has(local) ? "list" : "restriction"} simple`,
+    ),
+  ];
 
   return {
+    attributeUse: sortedRows(
+      derived.types.uses.map(
+        (use) =>
+          `${textOfKey(use.type, codeOf)} ${name(use.namespace, use.local)} ${textOfKey(use.attributeType, codeOf)} ${use.required ? "required" : "optional"}`,
+      ),
+    ),
     declaredChild: sortedRows(
       derived.children
         .filter((child) => inRegistry(child.parent))
@@ -498,6 +395,18 @@ const tablesOf = (
       ...["anyType", "anySimpleType", ...primitiveDatatypes, ...Object.keys(derivedDatatypes)].map(
         (local) => name(XS, local),
       ),
+    ]),
+    simpleFacet: sortedRows(
+      derived.types.facets.map(
+        (entry) => `${textOfKey(entry.type, codeOf)} ${entry.facet} ${entry.value}`,
+      ),
+    ),
+    typeDerivation: sortedRows([
+      ...derived.types.derivations.map(
+        (entry) =>
+          `${textOfKey(entry.type, codeOf)} ${textOfKey(entry.base, codeOf)} ${entry.method} ${entry.variety}`,
+      ),
+      ...xsDerivations,
     ]),
   };
 };
@@ -585,8 +494,14 @@ const report = (line: string) => {
  * @param label - Names the comparison.
  * @param actual - The module's rows as strings.
  * @param expected - The derived rows.
+ * @param minimum - How few rows the schemas may hold; a table a schema set has no rows of passes 0.
  */
-const sameRows = (label: string, actual: readonly string[], expected: readonly string[]) => {
+const sameRows = (
+  label: string,
+  actual: readonly string[],
+  expected: readonly string[],
+  minimum = 1,
+) => {
   const have = new Set(actual);
   const want = new Set(expected);
   const missing = [...want].filter((row) => !have.has(row)).toSorted();
@@ -603,7 +518,7 @@ const sameRows = (label: string, actual: readonly string[], expected: readonly s
     { extra: [], extras: 0, missing: [], missings: 0 },
     `${label}: the module and the schemas differ`,
   );
-  assert.isAbove(want.size, 0, `${label} derived no rows`);
+  assert.isAtLeast(want.size, minimum, `${label} derived too few rows`);
   report(`${label}: ${want.size} rows compared`);
 };
 
@@ -630,13 +545,19 @@ const keyText = (key: seed.TypeKey) =>
  *
  * @param set - The schema set.
  * @param version - The version.
- * @returns The three tables.
+ * @returns The tables.
  */
 const moduleTables = (set: (typeof sets)[number], version: (typeof versions)[number]): Tables => {
   const here = (row: { readonly set: string; readonly version: string }) =>
     row.set === set && row.version === version;
 
   return {
+    attributeUse: seed.attributeUse
+      .filter(here)
+      .map(
+        (row) =>
+          `${keyText(row.type)} ${nameText(row.namespace, row.local)} ${keyText(row.attributeType)} ${row.required ? "required" : "optional"}`,
+      ),
     declaredChild: seed.declaredChild
       .filter(here)
       .map(
@@ -647,6 +568,12 @@ const moduleTables = (set: (typeof sets)[number], version: (typeof versions)[num
       .filter(here)
       .map((row) => `${nameText(row.namespace, row.local)} ${keyText(row.type)}`),
     namedTypes: seed.namedTypes.filter(here).map((row) => nameText(row.namespace, row.local)),
+    simpleFacet: seed.simpleFacet
+      .filter(here)
+      .map((row) => `${keyText(row.type)} ${row.facet} ${row.value}`),
+    typeDerivation: seed.typeDerivation
+      .filter(here)
+      .map((row) => `${keyText(row.type)} ${keyText(row.base)} ${row.method} ${row.variety}`),
   };
 };
 
@@ -713,7 +640,7 @@ const typeId = (key: TypeKey) =>
  */
 const censusOf = (derived: Derived) => {
   const baseOfType = new Map<string, string>(
-    derived.bases.map((pair) => [typeId(pair.type), typeId(pair.base)]),
+    derived.types.derivations.map((entry) => [typeId(entry.type), typeId(entry.base)]),
   );
 
   for (const local of primitiveDatatypes) {
@@ -854,24 +781,135 @@ describe.skipIf(!cacheAvailable)(
       }
     });
 
+    it("typeDerivation is the base, method and variety of every named type but xs:anyType", () => {
+      for (const set of sets) {
+        for (const version of versions) {
+          sameRows(
+            `typeDerivation ${set} ${version}`,
+            moduleTables(set, version).typeDerivation,
+            derivedTables(set, version).typeDerivation,
+          );
+        }
+      }
+    });
+
+    it("attributeUse is the attribute uses of every named complex type, base uses included", () => {
+      for (const set of sets) {
+        for (const version of versions) {
+          sameRows(
+            `attributeUse ${set} ${version}`,
+            moduleTables(set, version).attributeUse,
+            derivedTables(set, version).attributeUse,
+          );
+        }
+      }
+    });
+
+    it("simpleFacet is the facets every named simple type and simple content restriction states", () => {
+      for (const set of sets) {
+        for (const version of versions) {
+          sameRows(
+            `simpleFacet ${set} ${version}`,
+            moduleTables(set, version).simpleFacet,
+            derivedTables(set, version).simpleFacet,
+            set === "lom" ? 0 : 1,
+          );
+        }
+      }
+    });
+
     it.skipIf(!existsSync(partTwo))(
-      "the built-in datatypes are the 44 of XML Schema Part 2, section 3",
+      "the built-in datatypes and their bases are those of XML Schema Part 2, section 3",
       () => {
-        const listed = [
-          ...readFileSync(partTwo, "utf-8").matchAll(
-            /\b3\.[23]\.\d+ <a href="#(?<name>[A-Za-z0-9]+)">/gu,
-          ),
-        ]
+        const html = readFileSync(partTwo, "utf-8");
+        const listed = [...html.matchAll(/\b3\.[23]\.\d+ <a href="#(?<name>[A-Za-z0-9]+)">/gu)]
           .map((match) => match.groups?.["name"] ?? "")
           .toSorted();
+        const text = html
+          .replaceAll(/<[^>]+>/gu, "")
+          .replaceAll("&#xb7;", "\u00B7")
+          .replaceAll(/\s+/gu, " ");
+        const bases = Object.fromEntries(
+          [...text.matchAll(/The \u00B7base type\u00B7 of (?<name>\w+) is (?<base>\w+)\./gu)].map(
+            (match) => [match.groups?.["name"] ?? "", match.groups?.["base"] ?? ""],
+          ),
+        );
 
         assert.deepStrictEqual(
           listed,
           [...primitiveDatatypes, ...Object.keys(derivedDatatypes)].toSorted(),
         );
         assert.strictEqual(listed.length, 44);
+        assert.isTrue(
+          text.includes("\u00B7base type\u00B7 of all \u00B7primitive\u00B7 datatypes"),
+          "Part 2 no longer names the base of the primitive datatypes",
+        );
+        assert.deepStrictEqual(
+          bases,
+          Object.fromEntries(
+            Object.entries(derivedDatatypes).filter(([local]) => !listDatatypes.has(local)),
+          ),
+        );
+        assert.strictEqual(Object.keys(bases).length, 22);
+        assert.deepStrictEqual([...listDatatypes].toSorted(), ["ENTITIES", "IDREFS", "NMTOKENS"]);
       },
     );
+
+    it("every base and attribute type resolves, and the derivation has no cycle", () => {
+      for (const set of sets) {
+        for (const version of versions) {
+          const named = new Set(
+            seed.namedTypes
+              .filter((row) => row.set === set && row.version === version)
+              .map((row) => nameText(row.namespace, row.local)),
+          );
+          const here = (row: { readonly set: string; readonly version: string }) =>
+            row.set === set && row.version === version;
+          const rows = seed.typeDerivation.filter(here);
+          const baseByType = new Map(rows.map((row) => [keyText(row.type), keyText(row.base)]));
+          const resolves = (key: seed.TypeKey) =>
+            "anonymous" in key ? key.anonymous.length > 0 : named.has(keyText(key));
+
+          assert.strictEqual(baseByType.size, rows.length, "a type has two derivations");
+          assert.deepStrictEqual(
+            [...baseByType.keys()].toSorted(),
+            [...named].filter((name) => name !== "xs:anyType").toSorted(),
+            `${set} ${version}: the derived types are the named types but xs:anyType`,
+          );
+          assert.deepStrictEqual(
+            rows.filter((row) => !resolves(row.base)).map((row) => keyText(row.type)),
+            [],
+          );
+          assert.deepStrictEqual(
+            seed.attributeUse
+              .filter(here)
+              .filter((row) => !resolves(row.type) || !resolves(row.attributeType))
+              .map((row) => keyText(row.type)),
+            [],
+          );
+          assert.deepStrictEqual(
+            seed.simpleFacet
+              .filter(here)
+              .filter((row) => !resolves(row.type))
+              .map((row) => keyText(row.type)),
+            [],
+          );
+
+          for (const start of baseByType.keys()) {
+            const seen = new Set<string>();
+
+            for (
+              let up: string | undefined = start;
+              up !== undefined && up !== "xs:anyType";
+              up = baseByType.get(up)
+            ) {
+              assert.isFalse(seen.has(up), `${set} ${version}: ${start} derives from itself`);
+              seen.add(up);
+            }
+          }
+        }
+      }
+    });
 
     it(
       "no element declaration in any cached schema is nillable",
