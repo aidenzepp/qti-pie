@@ -30,6 +30,7 @@ import type {
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { redactItem } from "#plate/payload.ts";
+import type { RenderMode } from "#plate/payload.ts";
 import { render, renderStatus } from "#plate/render.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 
@@ -566,15 +567,10 @@ const instance = "merged-0";
 const markerAndState: ReadonlySet<string> = new Set(["data-disabled", "data-mode", "data-slot"]);
 
 /**
- * The merged attributes no connect function writes yet, by marker: the two text Controls'
- * `autocomplete`, which the Text Entry and Extended Text connect functions write in M2's render
- * modes. The merged column may hold them before any render does; it never holds an attribute a
- * render writes and the column lacks.
+ * Every state an item is rendered in. Each writes attributes the others may not, such as the text
+ * Controls' `readonly` in review and solution, so the merged-column test renders all three.
  */
-const notYetComputed: ReadonlyMap<string, readonly string[]> = new Map([
-  [rowFor("text-entry-interaction", "control").slot, ["autocomplete"]],
-  [rowFor("extended-text-interaction", "control").slot, ["autocomplete"]],
-]);
+const modes: readonly RenderMode[] = ["answering", "review", "solution"];
 
 /**
  * Construct a text node of the body.
@@ -807,7 +803,7 @@ const rowKey = (row: PartRow): string =>
 
 describe("the merged column", () => {
   it.effect(
-    "records, for every row render emits, the attributes its connect function computes beyond the marker and the Root state",
+    "records, for every row render emits in answering, review and solution, the attributes its connect function computes beyond the marker and the Root state",
     () =>
       Effect.gen(function* mergedColumn() {
         const configuration = yield* configure({});
@@ -823,13 +819,16 @@ describe("the merged column", () => {
           { interaction: authorNamedGroup, posted: ["A day."] },
         ];
         const rendered = [
-          ...items.map(({ interaction, posted }) =>
-            render(redactItem(itemOf(interaction)), configuration, {
-              disabled: true,
-              instance,
-              messages: [{ response: interaction.response, text: "Check this answer." }],
-              posted: { [interaction.response]: posted },
-            }),
+          ...modes.flatMap((mode) =>
+            items.map(({ interaction, posted }) =>
+              render(redactItem(itemOf(interaction)), configuration, {
+                disabled: true,
+                instance,
+                messages: [{ response: interaction.response, text: "Check this answer." }],
+                mode,
+                posted: { [interaction.response]: posted },
+              }),
+            ),
           ),
           renderStatus(
             {
@@ -869,14 +868,9 @@ describe("the merged column", () => {
         ];
         for (const row of rows) {
           const names = observed.get(rowKey(row));
-          const pending = notYetComputed.get(row.slot) ?? [];
 
           assert.isDefined(names, `${rowKey(row)} was never rendered`);
-          assert.deepStrictEqual(
-            [...(names ?? [])].toSorted(),
-            row.merged.filter((name) => !pending.includes(name) || names?.has(name)).toSorted(),
-            rowKey(row),
-          );
+          assert.deepStrictEqual([...(names ?? [])].toSorted(), row.merged.toSorted(), rowKey(row));
         }
       }),
   );
