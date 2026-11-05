@@ -1177,6 +1177,28 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts root ro
     }),
   );
 
+  suite.effect(
+    "tool attributes with a tab and a line feed are replaced and keep their lexical forms",
+    () =>
+      Effect.gen(function* replacedTools() {
+        const { rows } = yield* handWritten('tool-name="a&#9;b" tool-version="1&#10;2"', "");
+
+        assert.deepStrictEqual(
+          Rows.of(rows, ItemToolBoth).map((row) => [row.toolName, row.toolVersion]),
+          [["a b", "1 2"]],
+        );
+        assert.deepStrictEqual(
+          Rows.of(rows, AttributeLexical)
+            .filter((row) => row.attribute === "tool-name" || row.attribute === "tool-version")
+            .map((row) => [row.attribute, row.value]),
+          [
+            ["tool-name", "a\tb"],
+            ["tool-version", "1\n2"],
+          ],
+        );
+      }),
+  );
+
   suite.effect("a 3.0.0 root label is one AssessmentItemLabel row and no NodeLabel row", () =>
     Effect.gen(function* rootLabel() {
       const { documentId, nodes, rows } = yield* handWritten('label="L"', "");

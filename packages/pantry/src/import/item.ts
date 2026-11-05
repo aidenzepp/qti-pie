@@ -245,15 +245,24 @@ export const documentLangRows = (
   );
 
 /**
- * The tool row of an item root and the arm that holds the strings it wrote, as read; none when it
- * wrote neither `tool-name` nor `tool-version`.
+ * The tool row of an item root and the arm that holds the strings it wrote, each processed by its
+ * `replace` whitespace class; none when it wrote neither `tool-name` nor `tool-version`. A string
+ * that processing changed keeps its lexical form in an `AttributeLexical` row.
  */
-const toolRows = (rows: Rows, root: Element, tree: Uuid): Rows => {
-  const name = lexicalOf(root, "tool-name");
-  const version = lexicalOf(root, "tool-version");
+const toolRows = (
+  rows: Rows,
+  root: Element,
+  rootNode: { readonly id: Uuid; readonly kind: NodeKindHandle },
+  tree: Uuid,
+): Rows => {
+  const nameRead = attributeOf(rows, root, rootNode, "tool-name", "replace");
+  const versionRead = attributeOf(nameRead.rows, root, rootNode, "tool-version", "replace");
+  const built = versionRead.rows;
+  const name = nameRead.value;
+  const version = versionRead.value;
   if (Option.isSome(name) && Option.isSome(version)) {
     return Rows.add(
-      Rows.add(rows, ItemTool, [{ root: "item", shape: "both", tree }]),
+      Rows.add(built, ItemTool, [{ root: "item", shape: "both", tree }]),
       ItemToolBoth,
       [{ toolName: ToolName(name.value), toolVersion: ToolVersion(version.value), tree }],
     );
@@ -261,7 +270,7 @@ const toolRows = (rows: Rows, root: Element, tree: Uuid): Rows => {
 
   if (Option.isSome(name)) {
     return Rows.add(
-      Rows.add(rows, ItemTool, [{ root: "item", shape: "nameOnly", tree }]),
+      Rows.add(built, ItemTool, [{ root: "item", shape: "nameOnly", tree }]),
       ItemToolName,
       [{ toolName: ToolName(name.value), tree }],
     );
@@ -269,11 +278,11 @@ const toolRows = (rows: Rows, root: Element, tree: Uuid): Rows => {
 
   return Option.isSome(version)
     ? Rows.add(
-        Rows.add(rows, ItemTool, [{ root: "item", shape: "versionOnly", tree }]),
+        Rows.add(built, ItemTool, [{ root: "item", shape: "versionOnly", tree }]),
         ItemToolVersion,
         [{ toolVersion: ToolVersion(version.value), tree }],
       )
-    : rows;
+    : built;
 };
 
 /**
@@ -1068,7 +1077,7 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
       version,
     })),
   );
-  built = toolRows(built, root, documentId);
+  built = toolRows(built, root, rootNode, documentId);
 
   const walked = withParents(root, Option.none());
   built = documentLangRows(built, input, documentId, walked);
