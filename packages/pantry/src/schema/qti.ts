@@ -48,6 +48,7 @@ import * as stimulus from "#pantry/schema/stimulus.ts";
 import * as template from "#pantry/schema/template.ts";
 import * as testContent from "#pantry/schema/test/content.ts";
 import * as testControl from "#pantry/schema/test/control.ts";
+import * as testProcessing from "#pantry/schema/test/processing.ts";
 import * as testRules from "#pantry/schema/test/rules.ts";
 import * as testStructure from "#pantry/schema/test/structure.ts";
 import * as usage from "#pantry/schema/usage.ts";
@@ -173,6 +174,7 @@ export const Qti = schema(
     ...value.rules,
     ...interaction.rules,
     ...processing.rules,
+    ...testProcessing.rules,
     ...expression.rules,
     ...expressionAttributes.rules,
     ...rule.rules,
