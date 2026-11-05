@@ -47,6 +47,18 @@ const floatValue = (value: number): Value => ({
 });
 
 /**
+ * Construct a single integer value.
+ *
+ * @param value The integer.
+ * @returns The value.
+ */
+const integerValue = (value: bigint): Value => ({
+  baseType: "integer",
+  cardinality: "single",
+  values: [{ baseType: "integer", value }],
+});
+
+/**
  * Construct a declaration with its three attributes.
  *
  * @param local `qti-response-declaration` or `qti-outcome-declaration`.
@@ -183,6 +195,25 @@ const correctOnly = itemDocument(
 );
 
 /**
+ * An item that sets the integer outcome `ATTEMPTS` from the built-in `numAttempts`.
+ */
+const countsAttempts = itemDocument(
+  trueFalse,
+  declaration("qti-outcome-declaration", "ATTEMPTS", "integer"),
+  el(
+    "qti-response-processing",
+    [],
+    [
+      el(
+        "qti-set-outcome-value",
+        [attr("identifier", "ATTEMPTS")],
+        [el("qti-variable", [attr("identifier", "numAttempts")])],
+      ),
+    ],
+  ),
+);
+
+/**
  * The instance every record here is opened under.
  */
 const instance = "q1";
@@ -282,6 +313,24 @@ describe("runAttempt", () => {
         assert.deepStrictEqual(second.responses, { RESPONSE: identifierValue("false") });
         assert.strictEqual(second.numAttempts, 2);
         assert.strictEqual(second.attempt, "submitted");
+      }),
+  );
+
+  it.effect(
+    "reads numAttempts as the count including this attempt: 1 in the first, 2 in the second",
+    () =>
+      Effect.gen(function* readsNumAttempts() {
+        const item = yield* buildItem(countsAttempts);
+        const first = yield* Effect.fromResult(
+          runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
+        );
+        const second = yield* Effect.fromResult(
+          runAttempt(item, first, { RESPONSE: identifierValue("false") }),
+        );
+
+        assert.deepStrictEqual(first.outcomes["ATTEMPTS"], integerValue(1n));
+        assert.deepStrictEqual(second.outcomes["ATTEMPTS"], integerValue(2n));
+        assert.deepStrictEqual([first.numAttempts, second.numAttempts], [1, 2]);
       }),
   );
 

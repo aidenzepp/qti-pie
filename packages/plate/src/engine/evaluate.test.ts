@@ -751,6 +751,41 @@ describe("evaluateExpression", () => {
     );
   });
 
+  it("a variable reads the built-in numAttempts as a single integer, the attempt count", () => {
+    const variables: Variables = { ...variablesOf(identifierValue("A")), numAttempts: 3n };
+
+    assert.deepStrictEqual(
+      Result.getOrThrow(evaluateExpression(variable("numAttempts"), item, variables)),
+      integerValue(3n),
+    );
+  });
+
+  it("a variable reads a response or an outcome named numAttempts before the attempt count", () => {
+    const plain = variablesOf(identifierValue("A"));
+    const declared: Variables = {
+      ...plain,
+      numAttempts: 3n,
+      outcomes: { ...plain.outcomes, numAttempts: floatValue(0.5) },
+    };
+
+    assert.deepStrictEqual(
+      Result.getOrThrow(evaluateExpression(variable("numAttempts"), item, declared)),
+      floatValue(0.5),
+    );
+  });
+
+  it("says the record lacks numAttempts when the variables carry no attempt count", () => {
+    const failure = failureOf(
+      evaluateExpression(variable("numAttempts"), item, variablesOf(identifierValue("A"))),
+    );
+
+    assert.instanceOf(failure, UnknownIdentifierError);
+    assert.deepStrictEqual(
+      { _tag: failure._tag, holder: failure.holder, identifier: failure.identifier },
+      { _tag: "UnknownIdentifierError", holder: "record", identifier: "numAttempts" },
+    );
+  });
+
   it("refuses a variable named like an Object.prototype member", () => {
     const failure = failureOf(
       evaluateExpression(variable("constructor"), item, variablesOf(identifierValue("A"))),

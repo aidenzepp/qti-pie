@@ -2084,33 +2084,72 @@ const processingOf = (
 };
 
 /**
+ * The elements whose `identifier` declares an item variable.
+ */
+const declarationElements: readonly string[] = [
+  "qti-context-declaration",
+  "qti-outcome-declaration",
+  "qti-response-declaration",
+  "qti-template-declaration",
+];
+
+/**
+ * Give the built-in variables the engine holds a value of for an item: `numAttempts`, the attempt
+ * count `runAttempt` in `#plate/engine/attempt.ts` passes, unless a declaration of the item names
+ * a variable `numAttempts`. A declared variable wins over a built-in of the same name, as the prose
+ * rules read a reference (`variableType` in `#plate/validate/rules.ts`), so such a rule reads the
+ * declared variable: the engine reads it when the model holds it, and otherwise the rule is
+ * marked. `duration` and `completionStatus` are never held.
+ *
+ * @param root The item's root.
+ * @returns The built-in variables' identifiers the engine holds.
+ */
+const heldBuiltIns = (root: SourceElement): ReadonlySet<string> => {
+  const named = new Set(
+    elementsOf(root)
+      .filter((child) => declarationElements.some((local) => isQti(child, local)))
+      .flatMap((declaration) =>
+        Option.match(valueOf(declaration, "identifier"), {
+          onNone: () => [],
+          onSome: (identifier) => [identifierOf(identifier)],
+        }),
+      ),
+  );
+
+  return new Set(["numAttempts"].filter((identifier) => !named.has(identifier)));
+};
+
+/**
  * Give each identifier a rule tree names that the engine does not hold, once, in the order the tree
  * first names it.
  *
- * The evaluator holds only the item's modelled responses and outcomes (`Variables` in
- * `#plate/engine/evaluate.ts`) and returns `UnknownIdentifierError` for any other identifier a rule
- * names, so `buildItem` runs no tree this walk finds a name in, and that failure stays unreachable.
- * A `qti-variable` reads a response or an outcome, `qti-correct`, `qti-map-response` and
- * `qti-map-response-point` read a response, `qti-match`, `qti-equal` and `qti-is-null` read what
- * their operands read, and `qti-set-outcome-value` sets an outcome. The names it finds are valid
- * content, never refused (reading 1): a response the model does not hold (base type `point`,
- * `duration` or `file`, cardinality `record`, or no base type), a template variable, an outcome the
- * model does not hold, and the built-in variables `numAttempts`, `duration` and
- * `completionStatus`, which phase 1 holds no value for. Reading 29 makes an item's `duration` a
- * single float, so it is a valid name in an item's rules. An identifier nothing declares is refused
- * before the model is built when inline rules name it; the walk finds it too. One a built-in
- * template names, such as `MAXSCORE` or `FEEDBACK` in a `CC2_*` template, is not in the document,
- * so nothing refuses it: the walk finds it, and the processing is marked.
+ * The evaluator holds only the item's modelled responses and outcomes and the built-in
+ * `numAttempts` (`Variables` in `#plate/engine/evaluate.ts`) and returns `UnknownIdentifierError`
+ * for any other identifier a rule names, so `buildItem` runs no tree this walk finds a name in, and
+ * that failure stays unreachable. A `qti-variable` reads a response, an outcome or a built-in
+ * variable, `qti-correct`, `qti-map-response` and `qti-map-response-point` read a response,
+ * `qti-match`, `qti-equal` and `qti-is-null` read what their operands read, and
+ * `qti-set-outcome-value` sets an outcome. The names it finds are valid content, never refused
+ * (reading 1): a response the model does not hold (base type `point`, `duration` or `file`,
+ * cardinality `record`, or no base type), a template variable, an outcome the model does not hold,
+ * and the built-in variables `duration` and `completionStatus`, read or set, which the engine
+ * holds no value for. Reading 29 makes an item's `duration` a single float, so it is a valid name
+ * in an item's rules. An identifier nothing declares is refused before the model is built when
+ * inline rules name it; the walk finds it too. One a built-in template names, such as `MAXSCORE`
+ * or `FEEDBACK` in a `CC2_*` template, is not in the document, so nothing refuses it: the walk
+ * finds it, and the processing is marked.
  *
  * @param tree The rule tree.
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
+ * @param builtIns The built-in variables the engine holds for this item ({@link heldBuiltIns}).
  * @returns The identifiers the engine does not hold, empty when it can run the tree.
  */
 const unheldIdentifiers = (
   tree: readonly Rule[],
   responses: ReadonlyMap<string, ResponseDeclaration>,
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
+  builtIns: ReadonlySet<string>,
 ): readonly string[] => {
   const unheld = new Set<string>();
 
@@ -2122,7 +2161,11 @@ const unheldIdentifiers = (
   const read = (operand: Expression): void => {
     switch (operand.kind) {
       case "variable": {
-        if (!responses.has(operand.identifier) && !outcomes.has(operand.identifier)) {
+        if (
+          !responses.has(operand.identifier) &&
+          !outcomes.has(operand.identifier) &&
+          !builtIns.has(operand.identifier)
+        ) {
           unheld.add(operand.identifier);
         }
 
@@ -2298,9 +2341,12 @@ const runnable = (
   responses: ReadonlyMap<string, ResponseDeclaration>,
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
 ): Option.Option<readonly Rule[]> => {
-  const features = unheldIdentifiers(read.tree, responses, outcomes).map(
-    (identifier) => `variable:${identifier}`,
-  );
+  const features = unheldIdentifiers(
+    read.tree,
+    responses,
+    outcomes,
+    heldBuiltIns(build.document.root),
+  ).map((identifier) => `variable:${identifier}`);
   if (readsPercentArea(read.tree, responses)) {
     features.push("area-coords-percent");
   }
