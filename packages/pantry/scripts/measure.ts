@@ -15,7 +15,7 @@ import { NodeFileSystem, NodeRuntime } from "@effect/platform-node";
 import { Effect, FileSystem, Layer, Path } from "effect";
 import snapshot from "#migrations/qti/snapshot.json" with { type: "json" };
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { documentIdsOf, nodeQueries, treeOf } from "#pantry/export/queries.ts";
+import { documentIdsOf, nodesOf, treeOf } from "#pantry/export/queries.ts";
 import type { LooseQuery } from "#pantry/export/queries.ts";
 import { NodeKind } from "#pantry/schema/node.ts";
 import { Qti } from "#pantry/schema/qti.ts";
@@ -180,7 +180,7 @@ const programLines = Effect.gen(function* programLinesOf() {
   const exports: readonly (readonly [string, Program])[] = [
     ["documentIdsOf", documentIdsOf],
     ["treeOf", treeOf],
-    ...nodeQueries.map((nodeQuery, run) => [`nodeQuery${run}`, nodeQuery] as const),
+    ["nodesOf", nodesOf],
   ];
   const exported: Record<Budget, number> = {
     fields: 0,

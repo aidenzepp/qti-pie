@@ -153,7 +153,7 @@ const armRelations: ReadonlySet<AnyRelation> = new Set(nodeArms.values());
  * every other relation it owns. An arm's attachment is named by its handle, not its relation: a
  * relation can be the arm of several handles, and a heading's names are each used once.
  */
-const nodeAttachments: readonly Attachment[] = [
+export const nodeAttachments: readonly Attachment[] = [
   { delivery: "option", name: Edge.name, owner: "child", relation: Edge },
   ...[...nodeArms].map(([handle, relation]): Attachment => ({
     delivery: arm("kind", handle),
@@ -237,31 +237,7 @@ export const subtree = query(Author).recursive("Subtree", {
 });
 
 /**
- * The most attachments one query carries. grizzle compiles a query within a budget of 10,000 nodes,
- * and 85 attachments of this schema's relations fit while 90 do not, so the attachments of a node
- * are read by several queries of at most this many, each walking the tree again.
- */
-const ATTACHMENTS_PER_QUERY = 30;
-
-/**
- * `items` in runs of at most `size`, in order.
- */
-const inRuns = <T>(items: readonly T[], size: number): readonly (readonly T[])[] =>
-  Array.from({ length: Math.ceil(items.length / size) }, (_, run) =>
-    items.slice(run * size, (run + 1) * size),
-  );
-
-/**
- * The runs of `nodeAttachments`, one per query of {@link nodeQueries}.
- */
-export const nodeRuns: readonly (readonly Attachment[])[] = inRuns(
-  nodeAttachments,
-  ATTACHMENTS_PER_QUERY,
-);
-
-/**
- * The query of the nodes of the tree `tree`: each node's `Node` row, which the attachments of a run
- * hang on.
+ * The query of the nodes of the tree `tree`: each node's `Node` row, which its attachments hang on.
  */
 const nodesRule = query(Author).rule((r) => {
   const walk = subtree.bind({ tree: r.param("tree", uuid) });
@@ -282,16 +258,11 @@ const nodesRule = query(Author).rule((r) => {
 const nodesOfTree = nodesRule as unknown as LooseQuery;
 
 /**
- * The queries of the tree `tree`: each walks every node of the tree, delivers its `Node` row, and
- * attaches one run of the node's attachments: its `Edge`, the row of the arm its kind names and
- * every relation it owns. The reads are separate statements, yet they read one state: the store is
- * append-only (no stored relation is `mutable`, no code path deletes or puts), and a package is
- * written in one `db.apply`, so a tree `documentIdsOf` finds is committed whole. Revisit only if
- * the import is ever written in several applies.
+ * The query of the tree `tree`: it walks every node of the tree, delivers its `Node` row, and
+ * attaches every attachment of the node: its `Edge`, the row of the arm its kind names and every
+ * relation it owns, in one statement.
  */
-export const nodeQueries: readonly LooseQuery[] = nodeRuns.map((run) =>
-  attaching(nodesOfTree, run),
-);
+export const nodesOf: LooseQuery = attaching(nodesOfTree, nodeAttachments);
 
 /**
  * The query of the `Tree` row of the tree `tree`, which the fidelity rows hang on.

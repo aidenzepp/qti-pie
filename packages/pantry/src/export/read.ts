@@ -9,10 +9,10 @@
 import { Db } from "@bjornpagen/grizzle";
 import type { AnyRelation, DbLayer, OpenError, ReadError, Uuid } from "@bjornpagen/grizzle";
 import { Array as Arr, Effect, Option } from "effect";
-import { fieldNamesOf, nodeQueries, nodeRuns, treeAttachments } from "#pantry/export/queries.ts";
+import { fieldNamesOf, nodeAttachments, treeAttachments } from "#pantry/export/queries.ts";
 import type { Attachment } from "#pantry/export/queries.ts";
 import type { Rows } from "#pantry/import/tree.ts";
-import { AuthorApp, nodeQueryName } from "#pantry/schema/logins.ts";
+import { AuthorApp } from "#pantry/schema/logins.ts";
 import { Node, Tree } from "#pantry/schema/node.ts";
 import type { Author } from "#pantry/schema/roles.ts";
 
@@ -153,14 +153,9 @@ export const readTree = Effect.fn("export.readTree")(function* readTree(
     addAttached(rows, row, treeAttachments);
   }
 
-  for (const index of nodeQueries.keys()) {
-    for (const row of yield* runOf(db, nodeQueryName(index), treeId)) {
-      if (index === 0) {
-        append(rows, Node, [columns(row, fieldNamesOf(Node))]);
-      }
-
-      addAttached(rows, row, nodeRuns[index] ?? []);
-    }
+  for (const row of yield* runOf(db, "nodesOf", treeId)) {
+    append(rows, Node, [columns(row, fieldNamesOf(Node))]);
+    addAttached(rows, row, nodeAttachments);
   }
 
   return rows;

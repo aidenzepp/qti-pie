@@ -8,15 +8,10 @@
  * generate` does not check. `importPackage` applies an ad hoc `ChangeSet` instead.
  */
 import { login, workload } from "@bjornpagen/grizzle";
-import { documentIdsOf, nodeQueries, treeOf } from "#pantry/export/queries.ts";
+import { documentIdsOf, nodesOf, treeOf } from "#pantry/export/queries.ts";
 import type { LooseQuery } from "#pantry/export/queries.ts";
 import { Qti } from "#pantry/schema/qti.ts";
 import { Author } from "#pantry/schema/roles.ts";
-
-/**
- * The name the query of run `run` of a node's attachments runs under in `db.workload`.
- */
-export const nodeQueryName = (run: number): string => `nodeQuery${run}`;
 
 /**
  * A query the run-time view of the builder made, as the query a workload takes.
@@ -27,13 +22,11 @@ const asProgram = (loose: LooseQuery) => loose as unknown as typeof documentIdsO
 
 /**
  * The export queries: the documents of a package, the `Tree` row with its fidelity rows, and the
- * nodes of a tree, a run of attachments at a time.
+ * nodes of a tree with everything they own.
  */
 export const authorWork = workload(Author, {
-  ...Object.fromEntries(
-    nodeQueries.map((nodeQuery, run) => [nodeQueryName(run), asProgram(nodeQuery)]),
-  ),
   documentIdsOf,
+  nodesOf: asProgram(nodesOf),
   treeOf: asProgram(treeOf),
 });
 
