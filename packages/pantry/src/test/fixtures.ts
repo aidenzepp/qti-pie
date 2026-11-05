@@ -1721,6 +1721,7 @@ const variantEdits = (options: VariantOptions = {}): readonly Edit[] => {
       'identifier="choice" title="Unattended Luggage"',
       'identifier="choice_es" title="Equipaje desatendido"',
     ),
+    replaceIn("es/choice.xml", 'src="images/sign.png"', 'src="../images/sign.png"'),
     declareVariantNamespaces,
     placement,
     addResources(
