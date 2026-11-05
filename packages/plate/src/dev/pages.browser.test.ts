@@ -86,6 +86,7 @@ const ledgerCommand = "pnpm --filter @qti-pie/plate ledger";
  * Metadata row at Advanced.
  */
 const fixtureLedger: Ledger = {
+  browserRuns: [],
   headlines: {
     advanced: { covered: 0, excluded: 1, limited: 0, "unsupported-with-notice": 0 },
     basic: { covered: 1, excluded: 0, limited: 0, "unsupported-with-notice": 0 },

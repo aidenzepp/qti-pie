@@ -436,6 +436,7 @@ export const buildLedger = Effect.fn("buildLedger")(function* buildLedger(
   });
   const results = yield* decodeReport(report, input.root);
   const built = ledger({
+    browserRuns: [],
     claims: input.claims,
     corpus: new Set(members),
     exclusions: input.exclusions,

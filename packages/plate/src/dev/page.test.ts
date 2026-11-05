@@ -137,6 +137,7 @@ const hostileTest = "<script>alert(1)</script> is shown as text";
  * {@link hostileTest}, and at Advanced an `excluded` Metadata row.
  */
 const fixtureLedger: Ledger = {
+  browserRuns: [],
   headlines: {
     advanced: { covered: 0, excluded: 1, limited: 0, "unsupported-with-notice": 0 },
     basic: { covered: 1, excluded: 0, limited: 1, "unsupported-with-notice": 1 },

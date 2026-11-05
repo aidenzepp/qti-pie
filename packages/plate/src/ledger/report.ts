@@ -6,16 +6,18 @@
  * test's full name, file and state. {@link ledger} is pure: it takes every input in memory, the test
  * sources as text, and reads no file. A row's state is derived, never written by hand: `excluded`
  * when the features file excludes it, else `limited` when a claim names it, else `covered` when a
- * passing test carries its tag, else `unsupported-with-notice`.
+ * passing test carries its tag, else `unsupported-with-notice`. Beside the rows, the ledger shows
+ * each engine of each browser run with the browser results it passed and failed.
  *
  * @module
  */
 import path from "node:path";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Tuple } from "effect";
 import type { Claim } from "#plate/ledger/claims.ts";
 import { families, levels } from "#plate/ledger/features.ts";
 import type { Exclusion, Feature } from "#plate/ledger/features.ts";
 import { PassRecord, ScreenReaderPass } from "#plate/ledger/passes.ts";
+import { BrowserRun, EngineRun } from "#plate/ledger/runs.ts";
 
 /**
  * The states Vitest's JSON report gives a test.
@@ -126,10 +128,14 @@ export const rowStates = ["covered", "excluded", "limited", "unsupported-with-no
 export type RowState = (typeof rowStates)[number];
 
 /**
- * How a keyboard proof of an interaction is composed: in the dev playground, or in a form the test
- * builds.
+ * How a keyboard proof of an interaction is composed: in the dev playground, in the dev playground
+ * driven in a browser engine, or in a form the test builds.
  */
-export const compositions = ["dev playground", "test-built form"] as const;
+export const compositions = [
+  "dev playground",
+  "dev playground in a browser",
+  "test-built form",
+] as const;
 
 /**
  * The Schema of one test file among a row's proofs: the titles of its passing tests that carry the
@@ -219,11 +225,34 @@ const StateCounts = Schema.Struct({
 });
 
 /**
- * The Schema of the ledger: each level's headline, the records, and one row per feature in the
- * features file's order.
+ * The Schema of one engine's entry in a browser run as the ledger shows it: the engine, its
+ * version and, on WebKit's entry only, `standsInFor: "Safari"`, as the run recorded them, beside
+ * the run's date and Playwright version and how many browser results the engine passed and failed.
+ */
+// oxlint-disable-next-line eslint/no-redeclare -- `BrowserRunRow` is the Schema and the type of an entry under one name, so a decoder and a signature read as one thing.
+export const BrowserRunRow = EngineRun.mapMembers(
+  Tuple.map(
+    Schema.fieldsAssign({
+      date: BrowserRun.fields.date,
+      failed: Schema.Int,
+      passed: Schema.Int,
+      playwright: Schema.String,
+    }),
+  ),
+);
+
+/**
+ * One engine's entry in a browser run, with its counts.
+ */
+export type BrowserRunRow = typeof BrowserRunRow.Type;
+
+/**
+ * The Schema of the ledger: each engine of each browser run, each level's headline, the records,
+ * and one row per feature in the features file's order.
  */
 // oxlint-disable-next-line eslint/no-redeclare -- `Ledger` is the Schema and the type of the ledger under one name, the interface the phase's slice list fixes, so a decoder of `ledger.json` and a signature read as one thing.
 export const Ledger = Schema.Struct({
+  browserRuns: Schema.Array(BrowserRunRow),
   headlines: Schema.Struct({
     advanced: StateCounts,
     basic: StateCounts,
@@ -243,6 +272,11 @@ export type Ledger = typeof Ledger.Type;
  * What {@link ledger} derives the ledger from.
  */
 export interface LedgerInput {
+  /**
+   * The browser runs, as the browser run's setup records each one in `browser-run.json`.
+   */
+  readonly browserRuns: readonly BrowserRun[];
+
   /**
    * The claims, `claims` from `#plate/ledger/claims.ts`.
    */
@@ -270,7 +304,8 @@ export interface LedgerInput {
   readonly records: readonly PassRecord[];
 
   /**
-   * The test results, as {@link decodeReport} gives them.
+   * The test results, as {@link decodeReport} gives them: the unit run's, and the browser run's
+   * beside them.
    */
   readonly results: readonly TestResult[];
 
@@ -335,6 +370,31 @@ const renders = (file: string): boolean =>
  * The test file of the dev playground, whose keyboard proofs are composed in the playground.
  */
 const playgroundFile = "src/dev/page.test.ts";
+
+/**
+ * Decide whether a test file is a browser file, `src/**\/*.browser.test.ts`, whose cases drive the
+ * dev playground in a browser engine.
+ *
+ * @param file A package-relative test file.
+ * @returns Whether it runs in the browser engines.
+ */
+const isBrowserFile = (file: string): boolean =>
+  /^src\/(?:.+\/)?[^/]+\.browser\.test\.ts$/u.test(file);
+
+/**
+ * Give how a keyboard proof is composed, by its test file.
+ *
+ * @param file The proof's package-relative test file.
+ * @returns `dev playground` for the playground's test file, `dev playground in a browser` for a
+ *   browser file, else `test-built form`.
+ */
+const compositionOf = (file: string): (typeof compositions)[number] => {
+  if (file === playgroundFile) {
+    return "dev playground";
+  }
+
+  return isBrowserFile(file) ? "dev playground in a browser" : "test-built form";
+};
 
 /**
  * A string literal without whitespace, quotes or escapes: the shape a corpus-relative path is
@@ -435,9 +495,7 @@ const interactionColumns = (
   records: readonly PassRecord[],
 ): InteractionColumns => {
   const keyboard = proven.filter((test) => test.keyboard);
-  const composed = new Set(
-    keyboard.map((test) => (test.file === playgroundFile ? "dev playground" : "test-built form")),
-  );
+  const composed = new Set(keyboard.map((test) => compositionOf(test.file)));
   const columns = {
     composition: compositions.filter((composition) => composed.has(composition)),
     keyboard: keyboard.map((test) => test.fullName),
@@ -445,6 +503,44 @@ const interactionColumns = (
   const pass = latestPass(id, records);
 
   return pass === undefined ? columns : { ...columns, screenReaderPass: pass };
+};
+
+/**
+ * Give each engine of each browser run its row: the engine's entry as the run recorded it, the
+ * run's date and Playwright version, and how many browser results ran in the engine and passed or
+ * failed.
+ *
+ * A browser file registers each case under a `describe` named for its engine (`eachEngine` in
+ * `src/test/browsers.ts`), the outermost of the case's titles, and Vitest's full name joins a
+ * case's titles with spaces, so a browser result ran in an engine when its full name starts with
+ * the engine's name and a space. A result in any other file is not a browser result; a skipped or
+ * pending one counts as neither passed nor failed.
+ *
+ * @param runs The browser runs.
+ * @param results The test results.
+ * @returns One row per engine of each run, in the runs' order and each run's engines' order.
+ */
+const browserRunRows = (
+  runs: readonly BrowserRun[],
+  results: readonly TestResult[],
+): readonly BrowserRunRow[] => {
+  const browserResults = results.filter((result) => isBrowserFile(result.file));
+
+  return runs.flatMap((run) =>
+    run.engines.map((engine): BrowserRunRow => {
+      const states = browserResults
+        .filter((result) => result.fullName.startsWith(`${engine.engine} `))
+        .map((result) => result.state);
+
+      return {
+        ...engine,
+        date: run.date,
+        failed: states.filter((state) => state === "failed").length,
+        passed: states.filter((state) => state === "passed").length,
+        playwright: run.playwright,
+      };
+    }),
+  );
 };
 
 /**
@@ -456,11 +552,14 @@ const interactionColumns = (
  * yes when a proof lives under `src/validate/`; Renders when one lives under `src/emit/` or
  * `src/interactions/`, in `src/render.test.ts`, `src/vertical.test.ts` or `src/witness.test.ts`, or
  * in a sweep. An interaction (Q) row also lists its keyboard proofs, their composition and its
- * latest screen-reader pass that ran.
+ * latest screen-reader pass that ran. A keyboard proof in a browser file is composed in the dev
+ * playground in a browser. Each engine of each browser run counts the browser results it passed
+ * and failed.
  *
- * @param input The features, exclusions, claims, records, results, sources and corpus.
- * @returns Each level's headline, the records, and one row per feature in the features file's
- *   order.
+ * @param input The features, exclusions, claims, records, browser runs, results, sources and
+ *   corpus.
+ * @returns Each engine of each browser run, each level's headline, the records, and one row per
+ *   feature in the features file's order.
  */
 export const ledger = (input: LedgerInput): Ledger => {
   const passing: readonly Passing[] = input.results
@@ -548,6 +647,7 @@ export const ledger = (input: LedgerInput): Ledger => {
   };
 
   return {
+    browserRuns: browserRunRows(input.browserRuns, input.results),
     headlines: {
       advanced: headline("advanced"),
       basic: headline("basic"),

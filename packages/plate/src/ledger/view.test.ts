@@ -9,7 +9,8 @@ import { exclusions, families, features, levels } from "#plate/ledger/features.t
 import { sessionNotes } from "#plate/ledger/passes.ts";
 import type { PassRecord, SessionNote } from "#plate/ledger/passes.ts";
 import { ledger } from "#plate/ledger/report.ts";
-import type { TestResult } from "#plate/ledger/report.ts";
+import type { Ledger, TestResult } from "#plate/ledger/report.ts";
+import { standsInForSafari } from "#plate/ledger/runs.ts";
 import { ledgerHtml, ledgerText, verdictLines, verdictTable } from "#plate/ledger/view.ts";
 import { checkTree, textOf } from "#plate/test/accessibility.ts";
 import { bg007Item } from "#plate/test/fixtures.ts";
@@ -148,6 +149,7 @@ const records: readonly PassRecord[] = [
  * claims, beside the fixture results and sources.
  */
 const inputs = {
+  browserRuns: [],
   claims,
   corpus: new Set([bg007]),
   exclusions,
@@ -160,6 +162,32 @@ const inputs = {
  * The fixture ledger, derived by the reporter from the real features file, exclusions and claims.
  */
 const fixture = ledger({ ...inputs, records });
+
+/**
+ * The fixture ledger with one browser run: Chromium, and WebKit standing in for Safari.
+ */
+const runsLedger: Ledger = {
+  ...fixture,
+  browserRuns: [
+    {
+      date: "2026-11-05T18:57:26.239Z",
+      engine: "chromium",
+      failed: 1,
+      passed: 41,
+      playwright: "1.64.1",
+      version: "156.0.8078.4",
+    },
+    {
+      date: "2026-11-05T18:57:26.239Z",
+      engine: "webkit",
+      failed: 0,
+      passed: 42,
+      playwright: "1.64.1",
+      standsInFor: "Safari",
+      version: "27.2",
+    },
+  ],
+};
 
 /**
  * The fixture records of one sitting, as the first one ran: an Extended Text pass that passed and,
@@ -660,6 +688,51 @@ describe("ledger/view.ts", () => {
 
     assert.include(byTag(ledgerHtml(empty), "p").map(textOf), sentence);
     assert.include(ledgerText(empty), `Records\n${sentence}`);
+  });
+
+  it("shows each engine's browser run with its version and counts, WebKit's note the stand-in sentence", () => {
+    const tree = ledgerHtml(runsLedger);
+    const text = ledgerText(runsLedger);
+    const rows = rowsOf(tableCaptioned(tree, "Each engine's run of the browser tests"));
+
+    assert.deepStrictEqual(
+      rows.map((row) =>
+        ["Engine", "Version", "Playwright", "Date", "Passed", "Failed", "Note"].map((column) =>
+          textOf(row.get(column) ?? h("td", {})),
+        ),
+      ),
+      [
+        ["Chromium", "156.0.8078.4", "1.64.1", "2026-11-05T18:57:26.239Z", "41", "1", ""],
+        ["WebKit", "27.2", "1.64.1", "2026-11-05T18:57:26.239Z", "42", "0", standsInForSafari],
+      ],
+    );
+    assert.include(
+      text,
+      "\n\nBrowser runs\nEngine: Chromium; Version: 156.0.8078.4; Playwright: 1.64.1; Date: 2026-11-05T18:57:26.239Z; Passed: 41; Failed: 1\n",
+    );
+    assert.include(
+      text,
+      `Engine: WebKit; Version: 27.2; Playwright: 1.64.1; Date: 2026-11-05T18:57:26.239Z; Passed: 42; Failed: 0; Note: ${standsInForSafari}\n`,
+    );
+    assert.isAbove(text.indexOf("Browser runs\n"), text.indexOf("Session notes\n"));
+    assert.isAbove(
+      childElements(tree).findIndex((child) => textOf(child) === "Browser runs"),
+      childElements(tree).findIndex((child) => textOf(child) === "Session notes"),
+    );
+  });
+
+  it("says no browser run is recorded while there is none", () => {
+    const sentence = "No browser run has been recorded.";
+
+    assert.strictEqual(textOf(afterHeading(ledgerHtml(fixture), "Browser runs")), sentence);
+    assert.include(ledgerText(fixture), `Browser runs\n${sentence}\n`);
+  });
+
+  it("round-trips and passes checkTree with browser runs", () => {
+    const tree = ledgerHtml(runsLedger);
+
+    assert.isTrue(roundTrips(tree));
+    assert.deepStrictEqual(checkTree(tree, { baseLevel: 1 }), []);
   });
 
   it("escapes a test title that holds markup", () => {
