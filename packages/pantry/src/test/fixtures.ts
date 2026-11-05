@@ -12,7 +12,7 @@ import type { Uuid } from "@bjornpagen/grizzle";
  * A fix-forward of the materializer that changes what any directory holds bumps it, so the
  * corrected directories appear beside the old ones under new names instead of replacing them.
  */
-export const FIXTURES_VERSION = "1" as const;
+export const FIXTURES_VERSION = "2" as const;
 
 /**
  * A string edit applied to one file of a freshly extracted package, as plain data.
@@ -71,7 +71,8 @@ export type FileEdit =
 /**
  * The edit that turns an extracted package into a minimal package of one item.
  *
- * It keeps the item file `item` and the files that item references, deletes every other entry and
+ * It keeps the item file `item` and the files that item references by a relative `src`, `data`,
+ * `href`, `poster`, `srcset`, `cite` or `longdesc`, deletes every other entry and
  * writes a manifest of one `imsqti_item_xmlv3p0` resource declaring `schemaversion`. It applies
  * after the {@link FileEdit}s and {@link TextEdit}s of its spec, once the package is extracted.
  */
@@ -86,8 +87,8 @@ export interface CutEdit {
  *
  * It keeps the test document `test`, every document its item, section and stimulus refs reach
  * (transitively) and every file those documents reference by a relative `src`, `data`, `href`,
- * `poster`, `srcset` or `cite`, and deletes every other entry. It writes a manifest declaring
- * `schemaversion` with one resource per kept document under its real type
+ * `poster`, `srcset`, `cite` or `longdesc`, and deletes every other entry. It writes a manifest
+ * declaring `schemaversion` with one resource per kept document under its real type
  * (`imsqti_test_xmlv3p0`, `imsqti_section_xmlv3p0`, `imsqti_item_xmlv3p0`,
  * `imsqti_stimulus_xmlv3p0`), each referenced file listed under the resource whose document
  * references it. It applies after the {@link FileEdit}s and {@link TextEdit}s of its spec.
@@ -4798,15 +4799,6 @@ const applyTextEdits = Effect.fn("fixtures.applyTextEdits")(function* applyTextE
 });
 
 /**
- * The attributes of an item whose values may name a file of the package: `src`, `href`, `data` and
- * `poster`. The item is read with a plain regular expression over its text, not with `readXml`: a
- * match that is not a file (text or a comment that reads `src="x"`) names no entry of the package
- * and is dropped, so the cut keeps exactly the files the item can reach.
- */
-const referencePattern =
-  /\s(?:src|href|data|poster)\s*=\s*(?:"(?<double>[^"]*)"|'(?<single>[^']*)')/gu;
-
-/**
  * A reference that is not a path inside the package: it has a scheme, starts at the root or names
  * only a fragment.
  */
@@ -4913,55 +4905,6 @@ const keepOnly = Effect.fn("fixtures.keepOnly")(function* keepOnly(
   yield* fs.writeFileString(`${cut}/imsmanifest.xml`, manifest);
   yield* fs.remove(pkg, { recursive: true });
   yield* fs.rename(cut, pkg);
-});
-
-/**
- * Cut an extracted package down to one item, in place.
- *
- * The files kept are the item and each file its `src`, `href`, `data` and `poster` values name
- * (relative paths only, resolved from the item's directory, and only when the package holds the
- * file). Every other entry is deleted, the kept files keep their paths, and a fresh
- * `imsmanifest.xml` replaces the package's own. The cut is a function of the package and the edit
- * alone, so the directory it makes is named by the same hash as every other fixture.
- *
- * @param pkg - The extracted package directory.
- * @param tmp - The temporary directory that holds it, where the cut is assembled.
- * @param edit - The cut.
- * @returns Completes once `pkg` holds only the item, its files and the manifest.
- */
-const cutPackage = Effect.fn("fixtures.cutPackage")(function* cutPackage(
-  pkg: string,
-  tmp: string,
-  edit: CutEdit,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const item = yield* fs.readFile(`${pkg}/${edit.item}`);
-  const itemDirectory = path.posix.dirname(edit.item);
-  const kept = [edit.item];
-
-  for (const match of Buffer.from(item).toString("latin1").matchAll(referencePattern)) {
-    const reference = (match.groups?.["double"] ?? match.groups?.["single"] ?? "").replace(
-      /[?#].*$/u,
-      "",
-    );
-
-    if (reference === "" || externalReference.test(reference)) {
-      continue;
-    }
-
-    const resolved = path.posix.join(itemDirectory, reference);
-
-    if (
-      !resolved.startsWith("..") &&
-      !kept.includes(resolved) &&
-      (yield* fs.exists(`${pkg}/${resolved}`)) &&
-      (yield* fs.stat(`${pkg}/${resolved}`)).type === "File"
-    ) {
-      kept.push(resolved);
-    }
-  }
-
-  yield* keepOnly(pkg, tmp, kept, cutManifest(edit, kept));
 });
 
 /**
@@ -5073,6 +5016,44 @@ const fileReferencesOf = (text: string, documentPath: string): string[] => {
 
   return [...paths];
 };
+
+/**
+ * Cut an extracted package down to one item, in place.
+ *
+ * The files kept are the item and each file its `src`, `data`, `href`, `poster`, `srcset`, `cite`
+ * and `longdesc` values name, read as {@link fileReferencesOf} reads a test document's (relative
+ * paths only, resolved from the item's directory, and only when the package holds the file). Every
+ * other entry is deleted, the kept files keep their paths, and a fresh `imsmanifest.xml` replaces
+ * the package's own. The cut is a function of the package and the edit alone, so the directory it
+ * makes is named by the same hash as every other fixture.
+ *
+ * @param pkg - The extracted package directory.
+ * @param tmp - The temporary directory that holds it, where the cut is assembled.
+ * @param edit - The cut.
+ * @returns Completes once `pkg` holds only the item, its files and the manifest.
+ */
+const cutPackage = Effect.fn("fixtures.cutPackage")(function* cutPackage(
+  pkg: string,
+  tmp: string,
+  edit: CutEdit,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const item = yield* fs.readFile(`${pkg}/${edit.item}`);
+  const kept = [edit.item];
+
+  for (const resolved of fileReferencesOf(Buffer.from(item).toString("utf-8"), edit.item)) {
+    if (
+      !resolved.startsWith("..") &&
+      !kept.includes(resolved) &&
+      (yield* fs.exists(`${pkg}/${resolved}`)) &&
+      (yield* fs.stat(`${pkg}/${resolved}`)).type === "File"
+    ) {
+      kept.push(resolved);
+    }
+  }
+
+  yield* keepOnly(pkg, tmp, kept, cutManifest(edit, kept));
+});
 
 /**
  * Give each name an identifier that no earlier one has, by adding `-2`, `-3` and so on.

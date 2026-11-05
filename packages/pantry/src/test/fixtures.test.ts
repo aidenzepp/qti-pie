@@ -728,6 +728,37 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
     ),
   );
 
+  it.effect("cut-drawing keeps the file its srcset names, and its references resolve", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* cutDrawing() {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* materialize("cut-drawing");
+
+        assert.isTrue(yield* fs.exists(`${dir}/items/images/anglePQR.svg`), "anglePQR.svg kept");
+        assert.include(
+          yield* fs.readFileString(`${dir}/imsmanifest.xml`),
+          "items/images/anglePQR.svg",
+          "manifest lists anglePQR.svg",
+        );
+
+        const { rows } = yield* readRows(dir);
+        const references = Rows.of(rows, AttributeFileReference);
+        const entries = Rows.of(rows, PackageEntry);
+
+        assert.isAtLeast(references.length, 1, "file references");
+
+        for (const reference of references) {
+          assert.isTrue(
+            entries.some(
+              (entry) => entry.package === reference.package && entry.path === reference.path,
+            ),
+            `${reference.path} is a package entry`,
+          );
+        }
+      }),
+    ),
+  );
+
   it.effect("doctype declares a general entity and an ATTLIST default and uses the entity", () =>
     inFreshRoot(() =>
       Effect.gen(function* doctypeVariant() {
