@@ -6,6 +6,7 @@ import {
   el,
   entity,
   mathmlNamespace,
+  qtiNamespace,
   text,
   xincludeNamespace,
   xmlNamespace,
@@ -627,6 +628,31 @@ describe("check, E3: attributes only a wildcard admits", () => {
     assert.deepStrictEqual(refusalsOf(refused), [
       { location: { kind: "path", path: `${bodyPath}/p/A` }, rule: "unknown-element" },
     ]);
+  });
+});
+
+/**
+ * Construct an `xsi:type` naming a QTI type through the prefix `q`.
+ *
+ * @param local The type's local name.
+ * @returns The attribute.
+ */
+const xsiType = (local: string): SourceAttribute => attr("type", `q:${local}`, xsiNamespace);
+
+describe("check, reading 47: xsi:type", () => {
+  it("accepts an item carrying valid xsi:type attributes, with no attribute: mark for them", () => {
+    const accepted = acceptedOf(
+      verdictOf(
+        item(
+          [body([el("p", [xsiType("HTMLTextDType")], [text("Hi")])], [xsiType("ItemBodyDType")])],
+          [attr("q", qtiNamespace, xmlnsNamespace), xsiType("AssessmentItemDType")],
+        ),
+      ),
+      "accepted",
+    );
+
+    assert.deepStrictEqual(accepted.unsupported, []);
+    assert.deepStrictEqual(outline(accepted.item.body), [{ p: ["Hi"] }]);
   });
 });
 
