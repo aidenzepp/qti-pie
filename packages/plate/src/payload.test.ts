@@ -321,6 +321,7 @@ const answering: View = {
   instance,
   locale: "en",
   messages: [],
+  mode: "answering",
   names: new Map(),
   posted: Option.none(),
   values: new Map(),
@@ -685,6 +686,8 @@ describe("payload", () => {
       ["no messages", answering],
       ["messages and posted text", refused],
       ["finished", finished],
+      ["review", { ...answering, mode: "review", values: held }],
+      ["solution without values", { ...answering, mode: "solution" }],
     ];
 
     for (const [state, view] of views) {
@@ -738,6 +741,25 @@ describe("payload", () => {
     assert.strictEqual(built.lang, "en");
     assert.strictEqual(welsh.lang, "cy");
     assert.isFalse(built.finished);
+  });
+
+  it("carries the view's mode, and editable on every interaction only when answering, finished or not", () => {
+    for (const mode of ["answering", "review", "solution"] as const) {
+      for (const view of [answering, finished, refused]) {
+        const built = payload(redacted, { ...view, mode });
+        const interactions = interactionsIn(built.body);
+
+        assert.strictEqual(built.mode, mode);
+        assert.lengthOf(interactions, 5);
+        for (const interaction of interactions) {
+          assert.strictEqual(
+            interaction.editable,
+            mode === "answering",
+            `${mode}, ${interaction.response}`,
+          );
+        }
+      }
+    }
   });
 
   it("[Q-2] presents the choices in document order with the Prompt and the binding", () => {

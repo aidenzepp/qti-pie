@@ -160,6 +160,7 @@ const answering: View = {
   instance,
   locale: "en",
   messages: [],
+  mode: "answering",
   names: new Map(),
   posted: Option.none(),
   values: new Map(),
