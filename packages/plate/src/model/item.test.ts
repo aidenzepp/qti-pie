@@ -869,14 +869,9 @@ describe("buildItem", () => {
         tag: "p",
       });
       assert.deepStrictEqual(built.lang, Option.none());
-      assert.deepStrictEqual([...built.responses.keys()], []);
+      assert.deepStrictEqual([...built.responses.keys()], ["POINT"]);
       assert.deepStrictEqual(built.unsupported, [
         { feature: 'adaptive="true"', path: root, shown: "mark" },
-        {
-          feature: 'base-type="point"',
-          path: `${root}/qti-response-declaration`,
-          shown: "mark",
-        },
         {
           feature: "qti-template-declaration",
           path: `${root}/qti-template-declaration`,
@@ -1234,9 +1229,9 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "[I-9b] marks a point RESPONSE's match_correct as variable:RESPONSE and runs no processing",
+    "[I-9b] runs a point RESPONSE's match_correct and marks only what it does not render",
     () =>
-      Effect.gen(function* marksPointMatchCorrect() {
+      Effect.gen(function* runsPointMatchCorrect() {
         const built = yield* buildItem(
           item({
             after: [
@@ -1253,14 +1248,8 @@ describe("buildItem", () => {
           }),
         );
 
-        assert.deepStrictEqual(built.processing, Option.none());
+        assert.isTrue(Option.isSome(built.processing));
         assert.deepStrictEqual(built.unsupported, [
-          {
-            feature: 'base-type="point"',
-            path: `${root}/qti-response-declaration`,
-            shown: "mark",
-          },
-          { feature: "variable:RESPONSE", path: `${root}/qti-response-processing`, shown: "mark" },
           { feature: "qti-modal-feedback", path: `${root}/qti-modal-feedback`, shown: "mark" },
         ]);
       }),

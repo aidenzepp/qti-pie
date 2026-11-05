@@ -778,7 +778,8 @@ const scoreText = (
       return Option.some(new Intl.NumberFormat(locale).format(BigInt(single.value)));
     }
     case "directedPair":
-    case "pair": {
+    case "pair":
+    case "point": {
       return Option.some(single.value.join(" "));
     }
     case "boolean":

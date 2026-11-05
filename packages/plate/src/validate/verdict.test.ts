@@ -782,11 +782,11 @@ describe("check, the URL pass", () => {
 });
 
 describe("check, processing the model does not hold", () => {
-  it("accepts a point response's match_correct with a variable mark, not a refusal", () => {
+  it("accepts a duration response's match_correct with a variable mark, not a refusal", () => {
     const accepted = acceptedOf(
       verdictOf(
         item([
-          response("point", "single", [correct("10 10")]),
+          response("duration", "single", [correct("PT1M")]),
           score(),
           body([el("p", [], [text("Click the city.")])]),
           el("qti-response-processing", [

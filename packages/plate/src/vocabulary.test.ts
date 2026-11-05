@@ -184,7 +184,6 @@ describe("the closed value sets", () => {
           "string-identifier",
           'adaptive="true"',
           "qti-template-declaration",
-          'base-type="point"',
           'base-type="duration"',
           'base-type="file"',
           'cardinality="record"',
