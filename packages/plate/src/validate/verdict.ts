@@ -742,6 +742,18 @@ const optionalFact = (refusal: Refusal, key: string): Option.Option<string> =>
   Object.hasOwn(refusal.detail, key) ? Option.fromUndefinedOr(refusal.detail[key]) : Option.none();
 
 /**
+ * Write a fact of a refusal's detail that holds text the document controls, such as a parser's
+ * message, in a code span.
+ *
+ * @param refusal The refusal.
+ * @param key The fact's name.
+ * @param fallback What to write, as prose, when the detail lacks it.
+ * @returns The fact in a code span, or the fallback.
+ */
+const quoted = (refusal: Refusal, key: string, fallback: string): string =>
+  Option.match(optionalFact(refusal, key), { onNone: () => fallback, onSome: code });
+
+/**
  * Cite the reading a refusal's detail names, if any.
  *
  * @param refusal The refusal.
@@ -754,22 +766,25 @@ const citation = (refusal: Refusal): string =>
   });
 
 /**
- * Open a content refusal's sentence: the document and where in it.
+ * Open a content refusal's sentence: the document and where in it, each name the document controls
+ * in a code span.
  *
  * @param refusal The refusal.
  * @returns `**<document>, at <location>: refused.**`, or `**<document>: refused.**` for one that
  *   points at the whole document.
  */
 const opening = (refusal: Refusal): string => {
+  const document = code(refusal.document);
+
   switch (refusal.location.kind) {
     case "path": {
-      return `**${refusal.document}, at ${refusal.location.path}: refused.**`;
+      return `**${document}, at ${code(refusal.location.path)}: refused.**`;
     }
     case "position": {
-      return `**${refusal.document}, at line ${refusal.location.line}, column ${refusal.location.column}: refused.**`;
+      return `**${document}, at line ${refusal.location.line}, column ${refusal.location.column}: refused.**`;
     }
     case "document": {
-      return `**${refusal.document}: refused.**`;
+      return `**${document}: refused.**`;
     }
     default: {
       return refusal.location satisfies never;
@@ -798,7 +813,7 @@ const sentence = (refusal: Refusal, wrong: string, change: string): string =>
  * @returns The sentence.
  */
 const notQti = (refusal: Refusal, wrong: string, change: string): string =>
-  `**${refusal.document}: refused, not a QTI document.** ${wrong} Rule ${code(refusal.rule)}: a document is well-formed XML whose root is a QTI 3.0 element. To make it valid: ${change}.`;
+  `**${code(refusal.document)}: refused, not a QTI document.** ${wrong} Rule ${code(refusal.rule)}: a document is well-formed XML whose root is a QTI 3.0 element. To make it valid: ${change}.`;
 
 /**
  * Name a base type in a sentence, `untyped` for none.
@@ -988,7 +1003,7 @@ const wordings = {
 
     return notQti(
       refusal,
-      `The file is not well-formed XML: ${fact(refusal, "message", "the parser stopped")}${at}.`,
+      `The file is not well-formed XML: ${quoted(refusal, "message", "the parser stopped")}${at}.`,
       "correct the XML at that line",
     );
   },
@@ -1009,7 +1024,7 @@ const wordings = {
 
     return notQti(
       refusal,
-      `The XML reader refused the file: ${fact(refusal, "detail", "it gave no detail")}${rule}.`,
+      `The XML reader refused the file: ${quoted(refusal, "detail", "it gave no detail")}${rule}.`,
       "replace this file with the QTI document it was meant to be",
     );
   },
