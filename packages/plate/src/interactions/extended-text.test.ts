@@ -1276,7 +1276,7 @@ describe("an Extended Text the renderer does not support", () => {
   );
 
   it.effect(
-    '[Q-5] judges no count for an Extended Text whose min-strings="101" renders the notice in place of its Controls, so its item can be submitted, and still checks its posted value',
+    '[Q-5] judges no min-strings count for an Extended Text whose min-strings="101" renders the notice in place of its Controls, so its item can be submitted, and still checks its posted value against max-strings and the pattern-mask',
     () =>
       Effect.gen(function* overCapCounts() {
         const path = "qti-assessment-item/qti-item-body/qti-extended-text-interaction";
@@ -1348,9 +1348,16 @@ describe("an Extended Text the renderer does not support", () => {
           maxStrings: Option.some(2n),
           minStrings: 101n,
         };
+        assert.deepStrictEqual(
+          validateExtendedText(over, yield* decoded(over, entriesOf("a", "b")), strict),
+          [],
+        );
+
         const three = yield* decoded(over, entriesOf("a", "b", "c"));
         for (const configuration of [lenient, strict]) {
-          assert.deepStrictEqual(validateExtendedText(over, three, configuration), []);
+          assert.deepStrictEqual(validateExtendedText(over, three, configuration), [
+            { response, text: message("en", "atMostStrings", { n: "2" }) },
+          ]);
         }
 
         const overMasked: ExtendedTextInteraction = {

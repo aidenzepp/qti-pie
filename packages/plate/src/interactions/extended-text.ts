@@ -23,7 +23,7 @@
  * entry, which a native textarea never posts, and a nonzero `max-strings` caps the entries (D5).
  * Tier (b), under `validateResponses`: `min-strings`, and the `pattern-mask` on each member,
  * through {@link patternMessage}. An Extended Text that renders the cap's notice in place of its
- * Controls is judged for no count.
+ * Controls is not judged against `min-strings`; tier (a) still holds for it.
  *
  * @module
  */
@@ -303,7 +303,8 @@ export const renderExtendedText = (
  * `max-strings="0"` limits nothing (reading 53). Each count reads in the singular at 1.
  *
  * An Extended Text whose `min-strings` exceeds the cap of 100 renders the cap's notice in place of
- * its Controls (Q23), so it is unsupported and earns no count message.
+ * its Controls (Q23), so it is unsupported and earns no `atLeastStrings`; a nonzero `max-strings`
+ * still caps its entries.
  *
  * @param interaction The Extended Text.
  * @param value The decoded value.
@@ -315,10 +316,6 @@ const countMessages = (
   value: Value,
   configuration: Configuration,
 ): readonly string[] => {
-  if (interaction.minStrings > controlCap.when.limit) {
-    return [];
-  }
-
   const { locale } = configuration;
   const entries = BigInt(value.values.length);
   const tooMany = interaction.maxStrings.pipe(
@@ -330,7 +327,12 @@ const countMessages = (
     ),
   );
   const tooFew = Option.some(interaction.minStrings).pipe(
-    Option.filter((minStrings) => configuration.validateResponses && entries < minStrings),
+    Option.filter(
+      (minStrings) =>
+        configuration.validateResponses &&
+        minStrings <= controlCap.when.limit &&
+        entries < minStrings,
+    ),
     Option.map((minStrings) =>
       minStrings === 1n
         ? message(locale, "atLeastOneString")
@@ -359,9 +361,9 @@ const countMessages = (
  *   `patternMismatch`. NULL is not checked against the pattern.
  *
  * An Extended Text whose `min-strings` exceeds 100 renders the cap's notice in place of its
- * Controls (Q23). It is unsupported, so it is judged for no count, neither `atMostStrings` nor
- * `atLeastStrings`, and its item can still be submitted; the value posted for it, which no Control
- * sends, still gets every other check above.
+ * Controls (Q23). It is unsupported, so tier (b) does not judge its `min-strings` and its item can
+ * still be submitted. Tier (a) holds: the value posted for it, which no Control sends, still gets
+ * `atMostStrings` over a nonzero `max-strings`, and every other check above.
  *
  * An item whose `min-strings` exceeds a `max-strings` of 10 or less renders `max-strings` Controls
  * (Q9), so under `validateResponses` every post of it meets `atLeastStrings`. That is recorded, not
