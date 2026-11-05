@@ -322,6 +322,88 @@ const nestedDivs = (levels: number): Uint8Array =>
     `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="deep" title="deep" adaptive="false" time-dependent="false"><qti-item-body>${"<div>".repeat(levels)}deep${"</div>".repeat(levels)}</qti-item-body></qti-assessment-item>`,
   );
 
+/**
+ * A node of the body in the JSON form.
+ */
+type BodyNodeJson = RedactedJson["body"][number];
+
+/**
+ * The JSON form `encodeRedacted` writes for an accepted item's redaction.
+ *
+ * @param item The item, accepted through the test seam.
+ * @returns The JSON form, before any JSON text.
+ */
+const jsonOf = (item: Item): RedactedJson =>
+  Result.getOrThrow(encodeRedacted(redact(acceptForTest(item))));
+
+/**
+ * A Text Entry for the response `YEAR` in the JSON form, which the edits below place where QTI's
+ * schema admits no interaction.
+ */
+const yearJson: BodyNodeJson = {
+  base: 10,
+  baseType: "integer",
+  class: "",
+  kind: "text-entry",
+  path: "qti-assessment-item/qti-item-body/p/qti-text-entry-interaction",
+  response: "YEAR",
+};
+
+/**
+ * Construct an HTML element of the body in the JSON form, with no attributes.
+ *
+ * @param tag The element's name.
+ * @param children Its children.
+ * @returns The element.
+ */
+const elementJson = (tag: string, children: readonly BodyNodeJson[]): BodyNodeJson => ({
+  attributes: [],
+  children,
+  kind: "element",
+  path: `qti-assessment-item/qti-item-body/${tag}`,
+  tag,
+});
+
+/**
+ * The JSON form of the Choice item with its first choice's content replaced.
+ *
+ * @param content The content the first choice, `TWO`, holds instead of its text.
+ * @returns The edited JSON form.
+ */
+const withFirstChoice = (content: readonly BodyNodeJson[]): RedactedJson => {
+  const json = jsonOf(choiceItem);
+
+  return {
+    ...json,
+    body: json.body.map((node) =>
+      node.kind === "choice"
+        ? {
+            ...node,
+            choices: node.choices.map((simple, index) =>
+              index === 0 ? { ...simple, content } : simple,
+            ),
+          }
+        : node,
+    ),
+  };
+};
+
+/**
+ * One chain of `span`s in the JSON form, each the only child of the one around it.
+ *
+ * @param spans How many `span`s the chain holds.
+ * @param innermost The children of the innermost `span`.
+ * @returns The outermost `span`.
+ */
+const spanChain = (spans: number, innermost: readonly BodyNodeJson[]): BodyNodeJson => {
+  let node = elementJson("span", innermost);
+  for (let span = 1; span < spans; span += 1) {
+    node = elementJson("span", [node]);
+  }
+
+  return node;
+};
+
 describe("the Schema and the model", () => {
   it("agree on the body nodes and the redacted fields", () => {
     assert.isTrue(bodyPinned);
@@ -501,6 +583,87 @@ describe("decodeRedacted on a live object", () => {
         assert.strictEqual(error._tag, "InvalidRedacted");
         assert.strictEqual(error.stage, "decode");
         assert.include(error.issue, "the host's getter");
+      }),
+  );
+});
+
+describe("decodeRedacted on an interaction render cannot emit", () => {
+  const choiceJson = jsonOf(choiceItem);
+  const essayJson = jsonOf(essayItem);
+  /**
+   * Each edit of the JSON form that places the Text Entry where QTI's schema admits no
+   * interaction, with the response of the interaction whose content holds it.
+   */
+  const misplaced: readonly (readonly [string, RedactedJson, string])[] = [
+    [
+      "a choice's content, two elements down",
+      withFirstChoice([elementJson("p", [elementJson("span", [yearJson])])]),
+      "RESPONSE",
+    ],
+    [
+      "the Choice's Prompt",
+      {
+        ...choiceJson,
+        body: choiceJson.body.map((node) =>
+          node.kind === "choice"
+            ? { ...node, prompt: [elementJson("p", [{ kind: "text", text: "In " }, yearJson])] }
+            : node,
+        ),
+      },
+      "RESPONSE",
+    ],
+    [
+      "an Extended Text's Prompt",
+      {
+        ...essayJson,
+        body: essayJson.body.map((node) =>
+          node.kind === "extended-text"
+            ? { ...node, prompt: [{ kind: "text", text: "Since " }, yearJson] }
+            : node,
+        ),
+      },
+      "ESSAY",
+    ],
+  ];
+
+  for (const [place, json, owner] of misplaced) {
+    it.effect(
+      `refuses a Text Entry in ${place}: InvalidRedacted at stage decode naming it and its place`,
+      () =>
+        Effect.gen(function* refusesMisplacedInteraction() {
+          // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the refusal on JSON text, the form a host sends.
+          const handedOver: unknown = JSON.parse(JSON.stringify(json));
+          const error = yield* failureOf(decodeRedacted(handedOver));
+
+          assert.strictEqual(error._tag, "InvalidRedacted");
+          assert.strictEqual(error.stage, "decode");
+          assert.include(error.issue, "text-entry");
+          assert.include(error.issue, '"YEAR"');
+          assert.include(error.issue, JSON.stringify(owner));
+        }),
+    );
+  }
+
+  it.effect("control: decodes the unedited Choice JSON, and render of it succeeds", () =>
+    Effect.gen(function* decodesUnedited() {
+      const configuration = yield* defaults;
+      const decoded = Result.getOrThrow(decodeRedacted(choiceJson));
+
+      assert.isTrue(Result.isSuccess(render(decoded, configuration, { instance })));
+    }),
+  );
+
+  it.effect(
+    "decodes a chain of 497 spans nesting 1,000 levels in a choice's content, and refuses it with a Text Entry in the innermost span",
+    () =>
+      Effect.gen(function* walksDeepContent() {
+        const error = yield* failureOf(
+          decodeRedacted(withFirstChoice([spanChain(497, [yearJson])])),
+        );
+
+        assert.isTrue(Result.isSuccess(decodeRedacted(withFirstChoice([spanChain(497, [])]))));
+        assert.strictEqual(error.stage, "decode");
+        assert.include(error.issue, '"YEAR"');
       }),
   );
 });
