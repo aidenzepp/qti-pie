@@ -3,19 +3,25 @@
 /**
  * The test and section documents' rows: the document itself and its root, the test's tool and
  * outcome declaration rows, the structure (test, part, section, section ref and item ref arms, the
- * identifiers they hold within the document, their children and the required ones among them), and
- * the control elements (selection, ordering, adaptive selection and its references, item session
- * control and time limits).
+ * identifiers they hold within the document, their children and the required ones among them), the
+ * control elements (selection, ordering, adaptive selection and its references, item session
+ * control and time limits), the rule elements (pre-conditions, branch rules and weights), the test
+ * rubric and test feedback, and the shared attribute, HTML, include and content rows of the tree.
  *
- * The rules, the content, the test's processing and every row that spans documents are not written
- * here.
+ * The expressions under a rule, the variable mappings and template defaults, the test's processing
+ * and every row that spans documents are not written here.
  */
 import type { Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
+import { attributeRows } from "#pantry/import/attributes.ts";
+import { contentRows } from "#pantry/import/content.ts";
+import { htmlRows } from "#pantry/import/html.ts";
+import { includeRows } from "#pantry/import/include.ts";
 import { attributeReader, markers } from "#pantry/import/interactions.ts";
 import type { AttributeReader, MarkerRelation } from "#pantry/import/interactions.ts";
-import { semanticRows } from "#pantry/import/item.ts";
+import { judgedLater } from "#pantry/import/judged.ts";
+import { documentLangRows, semanticRows } from "#pantry/import/item.ts";
 import type { ItemInput } from "#pantry/import/item.ts";
 import { requiredAttribute } from "#pantry/import/required.ts";
 import {
@@ -26,11 +32,19 @@ import {
   Rows,
   spelledInteger,
   treeRows,
+  typedAttribute,
   UnmodeledVocabulary,
   withParents,
 } from "#pantry/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#pantry/import/tree.ts";
-import { NavigationMode, SubmissionMode, XsBoolean } from "#pantry/schema/content/rosters.ts";
+import {
+  BranchExit,
+  NavigationMode,
+  ShowHide,
+  SubmissionMode,
+  TestFeedbackAccess,
+  XsBoolean,
+} from "#pantry/schema/content/rosters.ts";
 import type { StructureHolder, XsBooleanHandle } from "#pantry/schema/content/rosters.ts";
 import {
   AdaptiveRefHref,
@@ -40,15 +54,29 @@ import {
   ManifestIdentifier,
   PackagePath,
   SectionRefHref,
+  ShowHideIdentifier,
   TestStructureIdentifier,
   TimeLimitSeconds,
   ToolName,
   ToolVersion,
+  VariableReference,
+  WeightReference,
+  WeightValue,
 } from "#pantry/schema/contracts.ts";
+import type { BaseType, TypedCardinality } from "#pantry/schema/declaration.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/document.ts";
+import { FeedbackOutcomeRef } from "#pantry/schema/feedback.ts";
 import { ItemTool, ItemToolBoth, ItemToolName, ItemToolVersion } from "#pantry/schema/item.ts";
 import { Edge } from "#pantry/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle } from "#pantry/schema/node.ts";
+import {
+  TestFeedback,
+  TestFeedbackContentBody,
+  TestFeedbackTitle,
+  TestRubricBlock,
+  TestRubricBlockUse,
+  TestRubricContentBody,
+} from "#pantry/schema/test/content.ts";
 import {
   AdaptiveEngineRef,
   AdaptiveSelection,
@@ -74,6 +102,13 @@ import {
   UsageDataRef,
 } from "#pantry/schema/test/control.ts";
 import {
+  BranchRule,
+  BranchRuleExit,
+  BranchRuleTarget,
+  PreCondition,
+  Weight,
+} from "#pantry/schema/test/rules.ts";
+import {
   AssessmentSection,
   AssessmentTest,
   DeclaredItemRefFixed,
@@ -94,14 +129,29 @@ import type { Element } from "@qti-pie/crust/tree.ts";
 
 type HolderHandle = (typeof StructureHolder.handles)[number];
 
+type BaseTypeHandle = (typeof BaseType.handles)[number];
+
+type CardinalityHandle = (typeof TypedCardinality.handles)[number];
+
+/**
+ * The type a test's outcome declaration gives its variable, which a test feedback's reference
+ * copies.
+ */
+interface TypedOutcome {
+  readonly baseType: BaseTypeHandle;
+  readonly cardinality: CardinalityHandle;
+}
+
 /**
  * What a builder of one element needs beside the element: the rows so far, its node, the node it
- * sits under and the document.
+ * sits under and the document, and the outcomes the document declares by identifier, `None` for a
+ * section document, which declares nothing and so binds no reference to a declaration.
  */
 interface Site {
   readonly documentId: Uuid;
   readonly element: Element;
   readonly node: IndexedNode;
+  readonly outcomes: Option.Option<ReadonlyMap<string, TypedOutcome>>;
   readonly parent: Option.Option<IndexedNode>;
   readonly rows: Rows;
 }
@@ -609,6 +659,150 @@ const timeLimitsRows = Effect.fn("import.test.timeLimitsRows")(function* timeLim
 });
 
 /**
+ * The rows of one `qti-pre-condition`, which holds nothing but its expression.
+ */
+const preConditionRows = (site: Site): Rows =>
+  Rows.add(site.rows, PreCondition, [{ id: site.node.id }]);
+
+/**
+ * The rows of one `qti-weight`: the identifier it names and its value as written, owned by the item
+ * reference it sits under. A weight under any other parent has no row; the admission of its kind
+ * refuses it.
+ */
+const weightRows = Effect.fn("import.test.weightRows")(function* weightRows(
+  site: Site,
+): Effect.fn.Return<Rows, ItemRefusal> {
+  const { element, node } = site;
+  const attributes = attributeReader(site.rows, element, node);
+  const identifier = yield* requiredAttribute(element, "identifier", attributes.read("identifier"));
+  const value = yield* requiredAttribute(element, "value", attributes.read("value"));
+  const owner = site.parent.pipe(
+    Option.filter((above) => above.kind === "qti-assessment-item-ref"),
+  );
+
+  return Rows.add(
+    attributes.rows(),
+    Weight,
+    written(owner, (above) => ({
+      id: node.id,
+      identifier: WeightReference(identifier),
+      itemRef: above.id,
+      value: WeightValue(value),
+    })),
+  );
+});
+
+/**
+ * The rows of one test `qti-rubric-block`: its `view` as the list it wrote, and its `use` collapsed
+ * with the lexical form kept when it wrote one.
+ */
+const rubricRows = Effect.fn("import.test.rubricRows")(function* rubricRows(
+  site: Site,
+): Effect.fn.Return<Rows, ItemRefusal> {
+  const { element, node } = site;
+  const attributes = attributeReader(site.rows, element, node);
+  const view = yield* requiredAttribute(element, "view", attributes.read("view"));
+  const use = attributes.read("use");
+  const read = attributes.rows();
+  const collapsed = Option.match(use, {
+    onNone: () => ({ rows: read, value: Option.none<string>() }),
+    onSome: (text) => {
+      const typed = typedAttribute(read, node.id, node.kind, "use", text, "collapse");
+
+      return { rows: typed.rows, value: Option.some(typed.value) };
+    },
+  });
+
+  return Rows.add(
+    Rows.add(collapsed.rows, TestRubricBlock, [{ id: node.id, view: judgedLater(view) }]),
+    TestRubricBlockUse,
+    written(collapsed.value, (value) => ({ node: node.id, value: judgedLater(value) })),
+  );
+});
+
+/**
+ * The refusal of a test feedback that names an outcome the test does not declare with a base type
+ * and a cardinality, since no type can be copied into its reference.
+ */
+const undeclaredOutcome = (identifier: string): ItemRefusal =>
+  new ItemRefusal({
+    detail: `The qti-test-feedback names the outcome "${identifier}" in its outcome-identifier, which no qti-outcome-declaration of this test declares with a base-type and a cardinality. Declare it, or correct the outcome-identifier.`,
+    rule: "binding-declared",
+  });
+
+/**
+ * The rows of one `qti-test-feedback`: the arm with its required attributes, its title when
+ * written, and, in a test document, its reference to the test's outcome. A section document
+ * declares nothing, so it writes no reference.
+ */
+const feedbackRows = Effect.fn("import.test.feedbackRows")(function* feedbackRows(
+  site: Site,
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
+  const { documentId, element, node } = site;
+  const attributes = attributeReader(site.rows, element, node);
+  const identifier = yield* requiredAttribute(element, "identifier", attributes.read("identifier"));
+  const outcome = yield* requiredAttribute(
+    element,
+    "outcome-identifier",
+    attributes.read("outcome-identifier"),
+  );
+  const access = yield* closedOf(
+    TestFeedbackAccess.handles,
+    yield* requiredAttribute(element, "access", attributes.read("access")),
+    "attribute-lexical",
+    "the access attribute of qti-test-feedback",
+  );
+  const showHide = yield* closedOf(
+    ShowHide.handles,
+    yield* requiredAttribute(element, "show-hide", attributes.read("show-hide")),
+    "attribute-lexical",
+    "the show-hide attribute of qti-test-feedback",
+  );
+  const title = attributes.read("title");
+
+  let built = Rows.add(attributes.rows(), TestFeedback, [
+    {
+      access,
+      id: node.id,
+      identifier: ShowHideIdentifier(identifier),
+      outcomeIdentifier: VariableReference(outcome),
+      showHide,
+    },
+  ]);
+  built = Rows.add(
+    built,
+    TestFeedbackTitle,
+    written(title, (value) => ({ node: node.id, value: judgedLater(value) })),
+  );
+  if (Option.isNone(site.outcomes)) {
+    return built;
+  }
+
+  const declared = site.outcomes.value.get(outcome);
+  if (declared === undefined) {
+    return yield* undeclaredOutcome(outcome);
+  }
+
+  return Rows.add(built, FeedbackOutcomeRef, [
+    {
+      baseType: declared.baseType,
+      cardinality: declared.cardinality,
+      document: documentId,
+      identifier: outcome,
+      node: node.id,
+    },
+  ]);
+});
+
+/**
+ * The thin arm row of a content body, which carries no attribute of its own.
+ */
+const bodyRows =
+  (arm: typeof TestRubricContentBody | typeof TestFeedbackContentBody) =>
+  (site: Site): Rows =>
+    Rows.add(site.rows, arm, [{ id: site.node.id }]);
+
+/**
  * The tool row of a test root and the arm that holds the strings it wrote, as the attribute reader
  * read them; none when it wrote neither `tool-name` nor `tool-version`.
  */
@@ -662,24 +856,35 @@ const builders: ReadonlyMap<
   ["qti-assessment-item-ref", itemRefRows],
   ["qti-assessment-section", (site) => Effect.map(sectionRows(site), (built) => built.rows)],
   ["qti-assessment-section-ref", sectionRefRows],
+  [
+    "qti-content-body.testFeedback",
+    (site) => Effect.succeed(bodyRows(TestFeedbackContentBody)(site)),
+  ],
+  ["qti-content-body.testRubric", (site) => Effect.succeed(bodyRows(TestRubricContentBody)(site))],
   ["qti-item-session-control", sessionControlRows],
   ["qti-metadata-ref", (site) => referenceRows(site, referenceArms["qti-metadata-ref"])],
   ["qti-ordering", orderingRows],
+  ["qti-pre-condition", (site) => Effect.succeed(preConditionRows(site))],
+  ["qti-rubric-block.test", rubricRows],
   ["qti-selection", selectionRows],
+  ["qti-test-feedback", feedbackRows],
   ["qti-test-part", partRows],
   ["qti-time-limits", timeLimitsRows],
   ["qti-usagedata-ref", (site) => referenceRows(site, referenceArms["qti-usagedata-ref"])],
+  ["qti-weight", weightRows],
 ]);
 
 /**
- * The structure and control rows of every element of the tree under the root, in document order.
- * The `xi:include` of a section is a counted child and has no row of its own.
+ * The structure, control, rule and content rows of every element of the tree under the root, in
+ * document order, except the branch rules'. The `xi:include` of a section keeps its
+ * `StructureChild` row here; its arm and attributes come from `includeRows`.
  */
 const elementRows = Effect.fn("import.test.elementRows")(function* elementRows(
   rows: Rows,
   root: Element,
   nodes: NodeIndex,
   documentId: Uuid,
+  outcomes: Option.Option<ReadonlyMap<string, TypedOutcome>>,
 ): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   let built = rows;
   for (const [element, parent] of withParents(root, Option.none())) {
@@ -691,10 +896,87 @@ const elementRows = Effect.fn("import.test.elementRows")(function* elementRows(
 
     const builder = builders.get(node.kind);
     if (builder !== undefined) {
-      built = yield* builder({ documentId, element, node, parent: parentNode, rows: built });
+      built = yield* builder({
+        documentId,
+        element,
+        node,
+        outcomes,
+        parent: parentNode,
+        rows: built,
+      });
     } else if (node.kind === "xi:include") {
       built = childRows(built, node, parentNode, Option.none());
     }
+  }
+
+  return built;
+});
+
+/**
+ * The rows of every `qti-branch-rule` of the tree: the rule with the node that holds it, and its
+ * target as an exit when it is spelled exactly as one of the three reserved values and as an
+ * identifier of the document otherwise.
+ *
+ * An identifier target takes the holder kind the document's own `TestIdentifier` row gives that
+ * identifier, so the containment into `TestIdentifier.(scope, identifier, holderKind)` and the
+ * check that only a test-part rule targets a part judge it at commit. A target no structure of the
+ * document declares takes its owner's kind, which satisfies the check and leaves the containment to
+ * refuse it. A rule under a parent that holds none (a part, section or item reference) has no row;
+ * the admission of its kind refuses it.
+ *
+ * It runs after the structure rows, because a rule precedes the structure it targets.
+ */
+const branchRuleRows = Effect.fn("import.test.branchRuleRows")(function* branchRuleRows(
+  rows: Rows,
+  root: Element,
+  nodes: NodeIndex,
+  documentId: Uuid,
+): Effect.fn.Return<Rows, ItemRefusal> {
+  const holderOf = new Map<string, HolderHandle>();
+  for (const row of Rows.of(rows, TestIdentifier)) {
+    if (row.scope === documentId && !holderOf.has(row.identifier)) {
+      holderOf.set(row.identifier, row.holderKind);
+    }
+  }
+
+  let built = rows;
+  for (const [element, parent] of withParents(root, Option.none())) {
+    const node = nodes.get(element);
+    if (node?.kind !== "qti-branch-rule") {
+      continue;
+    }
+
+    const attributes = attributeReader(built, element, node);
+    const target = yield* requiredAttribute(element, "target", attributes.read("target"));
+    built = attributes.rows();
+    const owner = Option.flatMapNullishOr(parent, (above) => nodes.get(above));
+    const ownerKind = Option.flatMapNullishOr(owner, (above) => holders[above.kind]);
+    if (Option.isNone(owner) || Option.isNone(ownerKind)) {
+      continue;
+    }
+
+    const exit = BranchExit.handles.find((handle) => handle === target);
+    built = Rows.add(built, BranchRule, [
+      {
+        document: documentId,
+        id: node.id,
+        owner: owner.value.id,
+        ownerKind: ownerKind.value,
+        targetKind: exit === undefined ? "ref" : "exit",
+      },
+    ]);
+    built =
+      exit === undefined
+        ? Rows.add(built, BranchRuleTarget, [
+            {
+              holderKind: holderOf.get(target) ?? ownerKind.value,
+              identifier: TestStructureIdentifier(target),
+              ownerKind: ownerKind.value,
+              rule: node.id,
+              scope: documentId,
+            },
+          ])
+        : Rows.add(built, BranchRuleExit, [{ exit, rule: node.id }]);
   }
 
   return built;
@@ -713,8 +995,12 @@ const elementRows = Effect.fn("import.test.elementRows")(function* elementRows(
  * required attribute the source omits is refused as `required-attribute` before its row.
  *
  * The test's outcome declarations go through the declaration pass the item builder runs. The
- * context declarations, the rules, the rubrics, the feedback and every other content row are
- * written by the passes that follow this one.
+ * attribute, HTML, include and content passes then run over the tree, the content pass with the
+ * test's outcomes as its variables: a test feedback, a feedback inline and a printed variable bind
+ * into them and one that names an undeclared variable is refused `binding-declared`, and the
+ * content pass writes the test's context declarations. A section document declares nothing, so it
+ * binds none of the three. A test's `DocumentLang` rows are written as an item's are; a section
+ * has none.
  *
  * @param input - The decoded test or section and where its package lists it.
  * @param rows - The rows so far.
@@ -722,7 +1008,9 @@ const elementRows = Effect.fn("import.test.elementRows")(function* elementRows(
  *   which is the tree's; `UnmodeledVocabulary` for a root that is neither `qti-assessment-test` nor
  *   `qti-assessment-section`, naming it, and for any element or attribute the registries do not
  *   model; `ItemRefusal` (`required-attribute`) for a required attribute the source omits;
- *   `ImportRefused` (`attribute-lexical`) for a value outside its roster or integer space.
+ *   `ImportRefused` (`attribute-lexical`) for a value outside its roster or integer space;
+ *   `ItemRefusal` (`binding-declared`) for a test feedback, feedback inline or printed variable
+ *   that names a variable the test does not declare.
  */
 export const testRows = Effect.fn("import.testRows")(function* testRows(
   input: ItemInput,
@@ -775,7 +1063,14 @@ export const testRows = Effect.fn("import.testRows")(function* testRows(
     resource: ManifestIdentifier(input.resource),
     root: kind,
   } as const;
-  const own = { documentId, element: root, node: rootNode, parent: Option.none(), rows: built };
+  const own = {
+    documentId,
+    element: root,
+    node: rootNode,
+    outcomes: Option.none<ReadonlyMap<string, TypedOutcome>>(),
+    parent: Option.none(),
+    rows: built,
+  };
   let identifier: Option.Option<string>;
   let title: Option.Option<string>;
   if (kind === "test") {
@@ -809,13 +1104,47 @@ export const testRows = Effect.fn("import.testRows")(function* testRows(
   );
 
   const walked = withParents(root, Option.none());
+  if (kind === "test") {
+    built = documentLangRows(built, input, documentId, walked);
+  }
+
   const positions = new Map(Rows.of(tree.rows, Edge).map((edge) => [edge.child, edge.position]));
   const semantic = yield* semanticRows(
     built,
     { adaptive: "false", documentId, nodes, positions, rootId: rootNode.id },
     walked,
   );
-  built = yield* elementRows(semantic.rows, root, nodes, documentId);
+  const outcomeIds = new Set(
+    [...nodes.values()]
+      .filter((entry) => entry.kind === "qti-outcome-declaration")
+      .map((entry) => entry.id),
+  );
+  const outcomes = new Map<string, TypedOutcome>();
+  for (const [name, declared] of semantic.declarations) {
+    if (
+      outcomeIds.has(declared.id) &&
+      Option.isSome(declared.baseType) &&
+      Option.isSome(declared.cardinality)
+    ) {
+      outcomes.set(name, {
+        baseType: declared.baseType.value,
+        cardinality: declared.cardinality.value,
+      });
+    }
+  }
+
+  built = yield* elementRows(
+    semantic.rows,
+    root,
+    nodes,
+    documentId,
+    kind === "test" ? Option.some(outcomes) : Option.none(),
+  );
+  built = yield* branchRuleRows(built, root, nodes, documentId);
+  built = yield* attributeRows(root, nodes, documentId, built);
+  built = yield* htmlRows(root, nodes, built);
+  built = yield* includeRows(root, nodes, built);
+  built = yield* contentRows(root, nodes, documentId, kind, semantic.declarations, built);
 
   return { documentId, nodes, rows: built };
 });

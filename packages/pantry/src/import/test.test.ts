@@ -8,10 +8,33 @@ import { testRows } from "#pantry/import/test.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { ItemRefusal, Rows, UnmodeledVocabulary } from "#pantry/import/tree.ts";
 import type { NodeIndex } from "#pantry/import/tree.ts";
-import { Declaration, OutcomeDeclarationArm } from "#pantry/schema/declaration.ts";
+import {
+  ContextDeclarationArm,
+  Declaration,
+  OutcomeDeclarationArm,
+  TypedDeclaration,
+} from "#pantry/schema/declaration.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/document.ts";
+import { FeedbackInline, FeedbackOutcomeRef } from "#pantry/schema/feedback.ts";
 import { ItemTool, ItemToolBoth, ItemToolName } from "#pantry/schema/item.ts";
-import { AttributeLexical, AttributeSpelling } from "#pantry/schema/node.ts";
+import { DocumentLang } from "#pantry/schema/lang.ts";
+import { NodeXmlLang } from "#pantry/schema/attributes.ts";
+import { AttributeLexical, AttributeSpelling, Edge } from "#pantry/schema/node.ts";
+import { Stylesheet } from "#pantry/schema/rubric.ts";
+import { XInclude, XIncludeHref, XIncludeParse } from "#pantry/schema/rule.ts";
+import {
+  PrintedVariable,
+  PrintedVariableRef,
+  PrintedVariableVarRef,
+} from "#pantry/schema/template.ts";
+import {
+  TestFeedback,
+  TestFeedbackContentBody,
+  TestFeedbackTitle,
+  TestRubricBlock,
+  TestRubricBlockUse,
+  TestRubricContentBody,
+} from "#pantry/schema/test/content.ts";
 import {
   AdaptiveEngineRef,
   AdaptiveSelection,
@@ -33,6 +56,15 @@ import {
   UsageDataRef,
 } from "#pantry/schema/test/control.ts";
 import {
+  BranchRule,
+  BranchRuleExit,
+  BranchRuleTarget,
+  PreCondition,
+  TemplateDefault,
+  VariableMapping,
+  Weight,
+} from "#pantry/schema/test/rules.ts";
+import {
   AssessmentSection,
   AssessmentTest,
   DeclaredItemRefFixed,
@@ -48,7 +80,8 @@ import {
   TestPart,
   TestPartTitle,
 } from "#pantry/schema/test/structure.ts";
-import { materializeSpec } from "#pantry/test/fixtures.ts";
+import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
+import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 const packageId: Uuid = "33333333-3333-4333-8333-333333333333";
@@ -58,7 +91,7 @@ const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 /**
  * The rows of a test or section document written as text, for the resource the tests describe.
  */
-const built = (text: string, type = "imsqti_test_xmlv3p0") =>
+const built = (text: string, type = "imsqti_test_xmlv3p0", resourceLomHasGeneral = false) =>
   Effect.gen(function* builtDocument() {
     const doc = yield* readXml(new TextEncoder().encode(text));
 
@@ -68,7 +101,7 @@ const built = (text: string, type = "imsqti_test_xmlv3p0") =>
         packageId,
         path: "document.xml",
         resource: "document",
-        resourceLomHasGeneral: false,
+        resourceLomHasGeneral,
         resourceType: type,
         version: "3.0.0",
       },
@@ -129,6 +162,65 @@ const bounded = (spelling: string) =>
  * The failure a document's build ends in.
  */
 const refused = (text: string, type?: string) => Effect.flip(built(text, type));
+
+/**
+ * The rows of one document of a fixture package, whose manifest says schema version 3.0.0, after
+ * `edit` has rewritten its text.
+ */
+const fixtureBuilt = (
+  fixture: FixtureName,
+  file: string,
+  type = "imsqti_test_xmlv3p0",
+  edit: (text: string) => string = (text) => text,
+) =>
+  Effect.gen(function* builtFixture() {
+    const directory = yield* materialize(fixture);
+    const fs = yield* FileSystem.FileSystem;
+    const text = new TextDecoder().decode(yield* fs.readFile(path.join(directory, file)));
+    const doc = yield* readXml(new TextEncoder().encode(edit(text)));
+
+    return yield* testRows(
+      {
+        doc,
+        packageId,
+        path: file,
+        resource: file,
+        resourceLomHasGeneral: false,
+        resourceType: type,
+        version: "3.0.0",
+      },
+      Rows.empty(),
+    );
+  });
+
+/**
+ * `test-content`'s test with its root's `xml:lang` moved onto the first rubric block. The
+ * `qti-assessment-test` registry row lists no `xml:lang` (`schema/kinds/test.ts:147`), so a test
+ * root that writes one is refused as unmodeled vocabulary before any row; a rubric block is where
+ * a test's `xml:lang` is modeled.
+ */
+const contentWithLangOnRubric = (text: string): string =>
+  text
+    .replace(' xml:lang="en">', ">")
+    .replace(
+      '<qti-rubric-block view="candidate" use="instructions">',
+      '<qti-rubric-block view="candidate" use="instructions" xml:lang="en">',
+    );
+
+/**
+ * The id of the item reference that wrote `identifier`.
+ */
+const itemRefId = (rows: Rows, identifier: string): Uuid =>
+  Option.getOrThrow(
+    Option.fromNullishOr(Rows.of(rows, ItemRef).find((ref) => ref.identifier === identifier)),
+  ).id;
+
+/**
+ * Whether the rows hold the edge that makes `parent` the parent of `child`, which is what every
+ * rule's and weight's `(id, owner)` containment into `Edge.(child, parent)` reads.
+ */
+const isChildOf = (rows: Rows, child: Uuid, parent: Uuid): boolean =>
+  Rows.of(rows, Edge).some((edge) => edge.child === child && edge.parent === parent);
 
 layer(NodeServices.layer, { excludeTestServices: true })("import/test.ts", (suite) => {
   suite.effect("BegGuide's BGtest.xml yields the test, part, section and six item refs", () =>
@@ -651,5 +743,485 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/test.ts", (suit
       assert.instanceOf(attempts, ImportRefused);
       assert.strictEqual(attempts.rule, "attribute-lexical");
     }),
+  );
+
+  suite.effect("test-linear's branch rules are exits or targets, each owned by its parent", () =>
+    Effect.gen(function* branchRules() {
+      const { documentId, nodes, rows } = yield* fixtureBuilt("test-linear", "rtest13.xml");
+      const [part] = idsOf(nodes, "qti-test-part");
+      const rules = Rows.of(rows, BranchRule);
+
+      assert.strictEqual(rules.length, idsOf(nodes, "qti-branch-rule").length);
+      assert.strictEqual(rules.length, 4);
+      assert.isTrue(rules.every((rule) => rule.document === documentId));
+      assert.isTrue(rules.every((rule) => isChildOf(rows, rule.id, rule.owner)));
+      assert.sameDeepMembers(
+        rules.map((rule) => [rule.owner, rule.ownerKind, rule.targetKind]),
+        [
+          [part, "part", "exit"],
+          [itemRefId(rows, "item347"), "itemRef", "ref"],
+          [itemRefId(rows, "item347"), "itemRef", "exit"],
+          [itemRefId(rows, "item653"), "itemRef", "exit"],
+        ],
+      );
+
+      const exits = Rows.of(rows, BranchRuleExit);
+      assert.sameMembers(
+        exits.map((exit) => exit.exit),
+        ["EXIT_SECTION", "EXIT_TEST", "EXIT_TESTPART"],
+      );
+      assert.sameMembers(
+        exits.map((exit) => exit.rule),
+        rules.filter((rule) => rule.targetKind === "exit").map((rule) => rule.id),
+      );
+
+      const [target] = Rows.of(rows, BranchRuleTarget);
+      assert.strictEqual(Rows.of(rows, BranchRuleTarget).length, 1);
+      assert.strictEqual(target?.identifier, "item656");
+      assert.strictEqual(target?.holderKind, "itemRef");
+      assert.strictEqual(target?.ownerKind, "itemRef");
+      assert.strictEqual(target?.scope, documentId);
+      assert.strictEqual(target?.rule, rules.find((rule) => rule.targetKind === "ref")?.id);
+    }),
+  );
+
+  suite.effect(
+    "a branch target resolves to its holder within the document, and one that does not still has its row",
+    () =>
+      Effect.gen(function* branchTargets() {
+        const resolved = yield* fixtureBuilt("test-linear", "rtest13.xml");
+        const declared = Rows.of(resolved.rows, TestIdentifier);
+        for (const target of Rows.of(resolved.rows, BranchRuleTarget)) {
+          assert.isTrue(
+            declared.some(
+              (row) =>
+                row.scope === target.scope &&
+                row.identifier === target.identifier &&
+                row.holderKind === target.holderKind,
+            ),
+          );
+          assert.strictEqual(target.holderKind === "part", target.ownerKind === "part");
+        }
+
+        const toItem = yield* built(
+          testText(
+            `<qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual">` +
+              `<qti-branch-rule target="I1"><qti-is-null><qti-variable identifier="X"/></qti-is-null></qti-branch-rule>` +
+              `<qti-assessment-section identifier="S" title="s" visible="true">${itemRef}</qti-assessment-section></qti-test-part>`,
+          ),
+        );
+        const [toItemTarget] = Rows.of(toItem.rows, BranchRuleTarget);
+        assert.strictEqual(toItemTarget?.ownerKind, "part");
+        assert.strictEqual(toItemTarget?.holderKind, "itemRef");
+
+        const misspelled = yield* built(
+          sectioned(
+            `<qti-assessment-item-ref identifier="I1" href="one.xml"><qti-branch-rule target="EXIT_TESTS"><qti-is-null><qti-variable identifier="X"/></qti-is-null></qti-branch-rule></qti-assessment-item-ref>`,
+          ),
+        );
+        assert.strictEqual(Rows.of(misspelled.rows, BranchRuleExit).length, 0);
+        assert.deepStrictEqual(
+          Rows.of(misspelled.rows, BranchRuleTarget).map((row) => row.identifier),
+          ["EXIT_TESTS"],
+        );
+        assert.strictEqual(only(Rows.of(misspelled.rows, BranchRule)).targetKind, "ref");
+
+        const unknown = yield* built(
+          sectioned(
+            `<qti-assessment-item-ref identifier="I1" href="one.xml"><qti-branch-rule target="NOPE"><qti-is-null><qti-variable identifier="X"/></qti-is-null></qti-branch-rule></qti-assessment-item-ref>`,
+          ),
+        );
+        assert.deepStrictEqual(
+          Rows.of(unknown.rows, BranchRuleTarget).map((row) => row.identifier),
+          ["NOPE"],
+        );
+      }),
+  );
+
+  suite.effect("a branch rule without its target is refused as required-attribute", () =>
+    Effect.gen(function* noTarget() {
+      const failure = yield* refused(
+        sectioned(
+          `<qti-assessment-item-ref identifier="I1" href="one.xml"><qti-branch-rule><qti-is-null><qti-variable identifier="X"/></qti-is-null></qti-branch-rule></qti-assessment-item-ref>`,
+        ),
+      );
+
+      assert.instanceOf(failure, ItemRefusal);
+      assert.strictEqual(failure.rule, "required-attribute");
+    }),
+  );
+
+  suite.effect("pre-conditions of an item reference and a section have their rows", () =>
+    Effect.gen(function* preConditions() {
+      const { nodes, rows } = yield* fixtureBuilt("test-linear", "rtest13.xml");
+
+      assert.strictEqual(Rows.of(rows, PreCondition).length, 3);
+      assert.sameMembers(
+        Rows.of(rows, PreCondition).map((row) => row.id),
+        idsOf(nodes, "qti-pre-condition"),
+      );
+    }),
+  );
+
+  suite.effect(
+    "test-mapping's weight has its row, and the mapping's and default's arms are not here",
+    () =>
+      Effect.gen(function* weights() {
+        const { rows } = yield* fixtureBuilt("test-mapping", "rtest26.xml");
+        const weight = only(Rows.of(rows, Weight));
+
+        assert.strictEqual(weight.identifier, "WEIGHT");
+        assert.strictEqual(weight.value, "2");
+        assert.strictEqual(weight.itemRef, itemRefId(rows, "item160"));
+        assert.isTrue(isChildOf(rows, weight.id, weight.itemRef));
+        assert.strictEqual(Rows.of(rows, VariableMapping).length, 0);
+        assert.strictEqual(Rows.of(rows, TemplateDefault).length, 0);
+      }),
+  );
+
+  suite.effect("test-content's rubrics have their rows, each with its body once", () =>
+    Effect.gen(function* rubrics() {
+      const { nodes, rows } = yield* fixtureBuilt(
+        "test-content",
+        "assessment.xml",
+        undefined,
+        contentWithLangOnRubric,
+      );
+      const blocks = Rows.of(rows, TestRubricBlock);
+
+      assert.sameMembers(
+        blocks.map((block) => block.id),
+        idsOf(nodes, "qti-rubric-block.test"),
+      );
+      assert.strictEqual(blocks.length, 4);
+      assert.isTrue(blocks.every((block) => block.view === "candidate"));
+      assert.strictEqual(Rows.of(rows, TestRubricBlockUse).length, 2);
+      assert.isTrue(Rows.of(rows, TestRubricBlockUse).every((use) => use.value === "instructions"));
+      assert.sameMembers(
+        Rows.of(rows, TestRubricContentBody).map((body) => body.id),
+        idsOf(nodes, "qti-content-body.testRubric"),
+      );
+      for (const block of blocks) {
+        assert.strictEqual(
+          Rows.of(rows, Edge).filter(
+            (edge) => edge.parent === block.id && edge.childKind === "qti-content-body.testRubric",
+          ).length,
+          1,
+        );
+      }
+
+      assert.isTrue(
+        Rows.of(rows, Edge)
+          .filter(
+            (edge) => edge.childKind === "p" && edge.parentKind === "qti-content-body.testRubric",
+          )
+          .every((edge) => edge.childAncestry.includes("testfb")),
+      );
+    }),
+  );
+
+  suite.effect("test-content's feedback has its rows and binds into the test's declarations", () =>
+    Effect.gen(function* feedback() {
+      const { documentId, nodes, rows } = yield* fixtureBuilt(
+        "test-content",
+        "assessment.xml",
+        undefined,
+        contentWithLangOnRubric,
+      );
+      const feedbacks = Rows.of(rows, TestFeedback);
+
+      assert.sameMembers(
+        feedbacks.map((row) => row.id),
+        idsOf(nodes, "qti-test-feedback"),
+      );
+      assert.sameDeepMembers(
+        feedbacks.map((row) => [row.identifier, row.access, row.showHide, row.outcomeIdentifier]),
+        [
+          ["TEST_FB", "atEnd", "show", "TEST_FEEDBACK"],
+          ["TEST_FB_DURING", "during", "show", "TEST_FEEDBACK"],
+        ],
+      );
+      assert.sameMembers(
+        Rows.of(rows, TestFeedbackTitle).map((row) => row.value),
+        ["End of test", "Progress"],
+      );
+      assert.sameMembers(
+        Rows.of(rows, TestFeedbackContentBody).map((row) => row.id),
+        idsOf(nodes, "qti-content-body.testFeedback"),
+      );
+
+      const bound = Rows.of(rows, FeedbackOutcomeRef);
+      const own = bound.filter((ref) => feedbacks.some((row) => row.id === ref.node));
+      assert.strictEqual(own.length, 2);
+      assert.isTrue(
+        own.every(
+          (ref) =>
+            ref.identifier === "TEST_FEEDBACK" &&
+            ref.baseType === "identifier" &&
+            ref.cardinality === "multiple" &&
+            ref.document === documentId,
+        ),
+      );
+      assert.strictEqual(bound.length, 4);
+      assert.strictEqual(Rows.of(rows, FeedbackInline).length, 2);
+      assert.isTrue(
+        bound
+          .filter((ref) => ref.identifier === "s1FB")
+          .every((ref) => ref.baseType === "identifier" && ref.cardinality === "single"),
+      );
+
+      const outcomes = Rows.of(rows, Declaration).filter((row) => row.kind === "outcome");
+      const typed = Rows.of(rows, TypedDeclaration);
+      for (const ref of bound) {
+        const declaration = outcomes.find(
+          (row) => row.document === ref.document && row.identifier === ref.identifier,
+        );
+        assert.isDefined(declaration);
+        assert.isTrue(
+          typed.some(
+            (row) =>
+              row.id === declaration?.id &&
+              row.baseType === ref.baseType &&
+              row.cardinality === ref.cardinality,
+          ),
+        );
+      }
+
+      const printed = Rows.of(rows, PrintedVariableRef);
+      assert.strictEqual(Rows.of(rows, PrintedVariable).length, 3);
+      assert.sameDeepMembers(
+        printed.map((ref) => [ref.identifier, ref.kind, ref.document]),
+        [
+          ["SECTION_1_total", "outcome", documentId],
+          ["TEST_total", "outcome", documentId],
+          ["TEST_total", "outcome", documentId],
+        ],
+      );
+      assert.strictEqual(Rows.of(rows, PrintedVariableVarRef).length, 0);
+    }),
+  );
+
+  suite.effect(
+    "test-content's test-level rows: DocumentLang, tool, stylesheet and context declaration",
+    () =>
+      Effect.gen(function* testLevel() {
+        const { documentId, rows } = yield* fixtureBuilt(
+          "test-content",
+          "assessment.xml",
+          undefined,
+          contentWithLangOnRubric,
+        );
+
+        const [lang] = Rows.of(rows, DocumentLang);
+        assert.strictEqual(Rows.of(rows, DocumentLang).length, 1);
+        assert.strictEqual(lang?.value, "en");
+        assert.strictEqual(lang?.document, documentId);
+        assert.strictEqual(lang?.lomGeneral, "no");
+        assert.strictEqual(only(Rows.of(rows, NodeXmlLang)).value, "en");
+
+        assert.strictEqual(only(Rows.of(rows, ItemTool)).root, "test");
+        assert.deepStrictEqual(
+          Rows.of(rows, ItemToolBoth).map((row) => [row.toolName, row.toolVersion]),
+          [["Spectatus", "0.1"]],
+        );
+        assert.strictEqual(Rows.of(rows, Stylesheet).length, 1);
+        assert.deepStrictEqual(
+          Rows.of(rows, Declaration)
+            .filter((row) => row.kind === "context")
+            .map((row) => row.identifier),
+          ["CONTEXT"],
+        );
+        assert.strictEqual(Rows.of(rows, ContextDeclarationArm).length, 1);
+      }),
+  );
+
+  suite.effect(
+    "a test's DocumentLang has a row for each distinct language, flagged by the manifest",
+    () =>
+      Effect.gen(function* languages() {
+        const { rows } = yield* built(
+          testText(
+            `<qti-rubric-block view="candidate" xml:lang="fr"><qti-content-body><p xml:lang=" en ">x</p></qti-content-body></qti-rubric-block>` +
+              `<qti-rubric-block view="candidate" xml:lang="en"><qti-content-body><p>y</p></qti-content-body></qti-rubric-block>`,
+          ),
+          "imsqti_test_xmlv3p0",
+          true,
+        );
+
+        assert.sameMembers(
+          Rows.of(rows, DocumentLang).map((row) => row.value),
+          ["en", "fr"],
+        );
+        assert.isTrue(Rows.of(rows, DocumentLang).every((row) => row.lomGeneral === "yes"));
+
+        const none = yield* built(testText(""));
+        assert.strictEqual(Rows.of(none.rows, DocumentLang).length, 0);
+      }),
+  );
+
+  suite.effect(
+    "a section document's rubric binds nothing and its document has no DocumentLang",
+    () =>
+      Effect.gen(function* sectionBinding() {
+        const { documentId, nodes, rows } = yield* fixtureBuilt(
+          "test-section-ref",
+          "sections/shared.xml",
+          "imsqti_section_xmlv3p0",
+        );
+        const [root] = idsOf(nodes, "qti-assessment-section");
+
+        assert.strictEqual(Rows.of(rows, FeedbackOutcomeRef).length, 0);
+        assert.strictEqual(Rows.of(rows, PrintedVariableRef).length, 0);
+        assert.strictEqual(Rows.of(rows, PrintedVariableVarRef).length, 0);
+        assert.strictEqual(Rows.of(rows, PrintedVariable).length, 1);
+        assert.strictEqual(Rows.of(rows, FeedbackInline).length, 1);
+        assert.strictEqual(Rows.of(rows, TestRubricBlock).length, 1);
+        assert.strictEqual(Rows.of(rows, DocumentLang).length, 0);
+
+        assert.strictEqual(Rows.of(rows, PreCondition).length, 3);
+
+        const rules = Rows.of(rows, BranchRule);
+        assert.deepStrictEqual(
+          rules.map((rule) => [rule.owner, rule.ownerKind, rule.targetKind, rule.document]),
+          [
+            [root, "section", "exit", documentId],
+            [root, "section", "exit", documentId],
+          ],
+        );
+        assert.deepStrictEqual(
+          Rows.of(rows, BranchRuleExit).map((row) => row.exit),
+          ["EXIT_SECTION", "EXIT_SECTION"],
+        );
+      }),
+  );
+
+  suite.effect(
+    "an undeclared outcome or printed variable of a test is refused as binding-declared",
+    () =>
+      Effect.gen(function* undeclared() {
+        const outcome = `<qti-outcome-declaration identifier="OUT" cardinality="single" base-type="identifier"/>`;
+        const feedback = yield* refused(
+          testText(
+            `${outcome}<qti-test-feedback identifier="F" access="atEnd" show-hide="show" outcome-identifier="MISSING"><qti-content-body><p>x</p></qti-content-body></qti-test-feedback>`,
+          ),
+        );
+        assert.instanceOf(feedback, ItemRefusal);
+        assert.strictEqual(feedback.rule, "binding-declared");
+
+        const inline = yield* refused(
+          testText(
+            `${outcome}<qti-test-feedback identifier="F" access="atEnd" show-hide="show" outcome-identifier="OUT"><qti-content-body><p><qti-feedback-inline identifier="I" show-hide="show" outcome-identifier="MISSING">x</qti-feedback-inline></p></qti-content-body></qti-test-feedback>`,
+          ),
+        );
+        assert.instanceOf(inline, ItemRefusal);
+        assert.strictEqual(inline.rule, "binding-declared");
+
+        const printed = yield* refused(
+          testText(
+            `<qti-rubric-block view="candidate"><qti-content-body><p><qti-printed-variable identifier="MISSING"/></p></qti-content-body></qti-rubric-block>`,
+          ),
+        );
+        assert.instanceOf(printed, ItemRefusal);
+        assert.strictEqual(printed.rule, "binding-declared");
+      }),
+  );
+
+  suite.effect(
+    "a test feedback naming a float outcome keeps its row for the database to refuse",
+    () =>
+      Effect.gen(function* floatOutcome() {
+        const { rows } = yield* built(
+          testText(
+            `<qti-outcome-declaration identifier="OUT" cardinality="single" base-type="float"/>` +
+              `<qti-test-feedback identifier="F" access="atEnd" show-hide="show" outcome-identifier="OUT"><qti-content-body><p>x</p></qti-content-body></qti-test-feedback>`,
+          ),
+        );
+        const ref = only(Rows.of(rows, FeedbackOutcomeRef));
+
+        assert.strictEqual(ref.baseType, "float");
+        assert.strictEqual(ref.cardinality, "single");
+      }),
+  );
+
+  suite.effect(
+    "a rubric's use is collapsed with its lexical form kept, and a feedback's required attributes are required",
+    () =>
+      Effect.gen(function* attributes() {
+        const { nodes, rows } = yield* built(
+          testText(
+            `<qti-rubric-block view=" candidate  scorer " use=" instructions "><qti-content-body><p>x</p></qti-content-body></qti-rubric-block>`,
+          ),
+        );
+        const [block] = idsOf(nodes, "qti-rubric-block.test");
+
+        assert.strictEqual(only(Rows.of(rows, TestRubricBlock)).view, "candidate scorer");
+        assert.strictEqual(only(Rows.of(rows, TestRubricBlockUse)).value, "instructions");
+        assert.sameMembers(
+          Rows.of(rows, AttributeLexical)
+            .filter((row) => row.node === block)
+            .map((row) => [row.attribute, row.value].join("=")),
+          ["view= candidate  scorer ", "use= instructions "],
+        );
+
+        const noView = yield* refused(
+          testText(
+            `<qti-rubric-block><qti-content-body><p>x</p></qti-content-body></qti-rubric-block>`,
+          ),
+        );
+        assert.instanceOf(noView, ItemRefusal);
+        assert.strictEqual(noView.rule, "required-attribute");
+
+        const noShowHide = yield* refused(
+          testText(
+            `<qti-outcome-declaration identifier="OUT" cardinality="single" base-type="identifier"/><qti-test-feedback identifier="F" access="atEnd" outcome-identifier="OUT"><qti-content-body><p>x</p></qti-content-body></qti-test-feedback>`,
+          ),
+        );
+        assert.instanceOf(noShowHide, ItemRefusal);
+        assert.strictEqual(noShowHide.rule, "required-attribute");
+
+        const badAccess = yield* refused(
+          testText(
+            `<qti-outcome-declaration identifier="OUT" cardinality="single" base-type="identifier"/><qti-test-feedback identifier="F" access="never" show-hide="show" outcome-identifier="OUT"><qti-content-body><p>x</p></qti-content-body></qti-test-feedback>`,
+          ),
+        );
+        assert.instanceOf(badAccess, ImportRefused);
+        assert.strictEqual(badAccess.rule, "attribute-lexical");
+      }),
+  );
+
+  suite.effect(
+    "test-include: each include of the test has its arm and attributes, and the section's its child row",
+    () =>
+      Effect.gen(function* includes() {
+        const { nodes, rows } = yield* fixtureBuilt("test-include", "rtest01.xml");
+        const includeIds = idsOf(nodes, "xi:include");
+        const [section] = idsOf(nodes, "qti-assessment-section");
+
+        assert.strictEqual(includeIds.length, 3);
+        assert.sameMembers(
+          Rows.of(rows, XInclude).map((row) => row.id),
+          includeIds,
+        );
+        assert.sameMembers(
+          Rows.of(rows, XIncludeHref).map((row) => row.node),
+          includeIds,
+        );
+        assert.sameMembers(
+          Rows.of(rows, XIncludeHref).map((row) => row.value),
+          ["rtest01-para.xml", "rtest01-para.xml", "rtest01-ref.xml"],
+        );
+        assert.sameMembers(
+          Rows.of(rows, XIncludeParse).map((row) => row.node),
+          includeIds,
+        );
+        assert.isTrue(Rows.of(rows, XIncludeParse).every((row) => row.value === "xml"));
+
+        const counted = Rows.of(rows, StructureChild).filter(
+          (row) => row.childKind === "xi:include",
+        );
+        assert.strictEqual(counted.length, 1);
+        assert.strictEqual(counted[0]?.parent, section);
+        assert.include(includeIds, counted[0]?.child);
+      }),
   );
 });
