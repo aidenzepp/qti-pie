@@ -196,6 +196,7 @@ const detailOf = (rule: PId, kind: string, position: Position): string =>
 interface ExpressionLike {
   readonly attributes: ReadonlyMap<string, AttributeValue>;
   readonly element: Element;
+  readonly includes: readonly IncludeNode[];
   readonly kind: RuleOrExpressionKind;
   readonly operands: readonly ExpressionLike[];
   readonly position: Position;
@@ -230,6 +231,17 @@ interface Flat {
 const nothing: Flat = { expressions: [], includes: [], ordered: [], rules: [] };
 
 /**
+ * An include and the includes inside its foreign children, in document order.
+ *
+ * @param node - The include.
+ * @returns The include first, then the ones it holds.
+ */
+const flattenInclude = (node: IncludeNode): readonly IncludeNode[] => [
+  node,
+  ...node.includes.flatMap(flattenInclude),
+];
+
+/**
  * Flatten an expression and its operands, in document order.
  *
  * @param node - The expression at the top of the subtree.
@@ -240,7 +252,10 @@ const flattenExpression = (node: ExpressionLike): Flat => {
 
   return {
     expressions: [node, ...inner.flatMap((found) => found.expressions)],
-    includes: [],
+    includes: [
+      ...node.includes.flatMap(flattenInclude),
+      ...inner.flatMap((found) => found.includes),
+    ],
     ordered: [node, ...inner.flatMap((found) => found.ordered)],
     rules: [],
   };
@@ -255,7 +270,7 @@ const flattenExpression = (node: ExpressionLike): Flat => {
  */
 const flattenRule = (node: IncludeNode | RuleLike): Flat => {
   if (node.kind === "xi:include") {
-    return { ...nothing, includes: [node] };
+    return { ...nothing, includes: flattenInclude(node) };
   }
 
   const own = Option.match(node.expression, { onNone: () => nothing, onSome: flattenExpression });
@@ -263,7 +278,7 @@ const flattenRule = (node: IncludeNode | RuleLike): Flat => {
 
   return {
     expressions: [...own.expressions, ...nested.flatMap((found) => found.expressions)],
-    includes: nested.flatMap((found) => found.includes),
+    includes: [...own.includes, ...nested.flatMap((found) => found.includes)],
     ordered: [node, ...own.ordered, ...nested.flatMap((found) => found.ordered)],
     rules: [node, ...nested.flatMap((found) => found.rules)],
   };

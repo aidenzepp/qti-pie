@@ -439,41 +439,32 @@ const extend = (position: Position, index: number): Position => ({
   path: [...position.path, index],
 });
 
-/**
- * Parse an expression element and, recursively, its operands.
- *
- * Every element child must itself be an expression; the operand count is the importer's check, not
- * the parser's.
- */
-const parseExpression = (
+type ParseInclude = (
   element: Element,
-  entry: ExpressionEntry,
   position: Position,
-): Effect.Effect<ExpressionNode, UnmodeledVocabulary> =>
-  Effect.gen(function* parseExpressionElement() {
-    const attributes = yield* readAttributes(element, entry.attributes, entry.kind);
-    const operands: ExpressionNode[] = [];
-    for (const { child, index } of elementChildren(element)) {
-      const classified = classify(child);
-      if (Option.isNone(classified) || classified.value._tag !== "expression") {
-        if (elementWildcardHosts.has(entry.kind)) {
-          continue;
-        }
+) => Effect.Effect<IncludeNode, UnmodeledVocabulary>;
 
-        return yield* refuseElement(child, element);
-      }
-
-      operands.push(yield* parseExpression(child, classified.value.entry, extend(position, index)));
+/**
+ * The `xi:include` elements in a wildcard child's subtree, in document order: the child itself when
+ * it is one, else the ones under it. Each is parsed as any include is, so its attributes are read
+ * once, by the one parser.
+ */
+const wildcardIncludes = (
+  element: Element,
+  position: Position,
+  parseInclude: ParseInclude,
+): Effect.Effect<readonly IncludeNode[], UnmodeledVocabulary> =>
+  Effect.gen(function* wildcardIncludeSearch() {
+    if (element.namespace === xIncludeNamespace && element.local === "include") {
+      return [yield* parseInclude(element, position)];
     }
 
-    return {
-      attributes,
-      element,
-      kind: entry.kind,
-      operands,
-      position,
-      text: element.local === "qti-base-value" ? Option.some(textOf(element)) : Option.none(),
-    };
+    const found: IncludeNode[] = [];
+    for (const { child, index } of elementChildren(element)) {
+      found.push(...(yield* wildcardIncludes(child, extend(position, index), parseInclude)));
+    }
+
+    return found;
   });
 
 /**
@@ -489,9 +480,11 @@ const parseInclude = (
   Effect.gen(function* parseIncludeElement() {
     const attributes = yield* readAttributes(element, includeAttributes, "xi:include");
     let fallback: Option.Option<Element> = Option.none();
-    for (const { child } of elementChildren(element)) {
+    const includes: IncludeNode[] = [];
+    for (const { child, index } of elementChildren(element)) {
       const classified = classify(child);
       if (elementWildcardHosts.has("xi:include") && child.namespace !== xIncludeNamespace) {
+        includes.push(...(yield* wildcardIncludes(child, extend(position, index), parseInclude)));
         continue;
       }
 
@@ -507,7 +500,47 @@ const parseInclude = (
       fallback = Option.some(child);
     }
 
-    return { attributes, element, fallback, kind: "xi:include", position };
+    return { attributes, element, fallback, includes, kind: "xi:include", position };
+  });
+
+/**
+ * Parse an expression element and, recursively, its operands.
+ *
+ * Every element child must itself be an expression; the operand count is the importer's check, not
+ * the parser's.
+ */
+const parseExpression = (
+  element: Element,
+  entry: ExpressionEntry,
+  position: Position,
+): Effect.Effect<ExpressionNode, UnmodeledVocabulary> =>
+  Effect.gen(function* parseExpressionElement() {
+    const attributes = yield* readAttributes(element, entry.attributes, entry.kind);
+    const operands: ExpressionNode[] = [];
+    const includes: IncludeNode[] = [];
+    for (const { child, index } of elementChildren(element)) {
+      const classified = classify(child);
+      if (Option.isNone(classified) || classified.value._tag !== "expression") {
+        if (elementWildcardHosts.has(entry.kind)) {
+          includes.push(...(yield* wildcardIncludes(child, extend(position, index), parseInclude)));
+          continue;
+        }
+
+        return yield* refuseElement(child, element);
+      }
+
+      operands.push(yield* parseExpression(child, classified.value.entry, extend(position, index)));
+    }
+
+    return {
+      attributes,
+      element,
+      includes,
+      kind: entry.kind,
+      operands,
+      position,
+      text: element.local === "qti-base-value" ? Option.some(textOf(element)) : Option.none(),
+    };
   });
 
 /**
