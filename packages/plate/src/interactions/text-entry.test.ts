@@ -82,6 +82,21 @@ const length: TextEntryInteraction = {
 const second: TextEntryInteraction = { ...city, response: "SECOND" };
 
 /**
+ * The author's message for a mismatch on {@link masked}.
+ */
+const maskMessage = "Enter up to six digits and points.";
+
+/**
+ * The city's Text Entry with a `pattern-mask` of up to six digits and points, and the author's
+ * `data-patternmask-message`.
+ */
+const masked: TextEntryInteraction = {
+  ...city,
+  patternMask: Option.some("([0-9.]{0,6})"),
+  patternMaskMessage: Option.some(maskMessage),
+};
+
+/**
  * Construct an item whose body is one paragraph holding text and the Text Entries, each bound to a
  * single response of its base type, with no response processing.
  *
@@ -339,7 +354,7 @@ describe("renderTextEntry", () => {
   );
 
   it.effect(
-    "[Q-20] a keyboard walk (Tab, type York, Enter) posts York under the Control's name",
+    "[Q-20] [keyboard] a keyboard walk (Tab, type York, Enter) posts York under the Control's name",
     () =>
       Effect.gen(function* typeAndSubmit() {
         const tree = yield* page(payloadOf([city]));
@@ -361,18 +376,20 @@ describe("renderTextEntry", () => {
       }),
   );
 
-  it.effect("[Q-20] names the Control by the author's form name when names gives one", () =>
-    Effect.gen(function* authoredFormName() {
-      const tree = yield* page(
-        payloadOf([city], { ...answering, names: new Map([[response, "city"]]) }),
-      );
+  it.effect(
+    "[Q-20] [keyboard] names the Control by the author's form name when names gives one",
+    () =>
+      Effect.gen(function* authoredFormName() {
+        const tree = yield* page(
+          payloadOf([city], { ...answering, names: new Map([[response, "city"]]) }),
+        );
 
-      assert.strictEqual(onlyPart(tree, "control").attrs["name"], "city");
-      assert.deepStrictEqual(
-        keyboardWalk(tree, ["Tab", { type: "York" }, "Enter"]),
-        Option.some([["city", "York"]]),
-      );
-    }),
+        assert.strictEqual(onlyPart(tree, "control").attrs["name"], "city");
+        assert.deepStrictEqual(
+          keyboardWalk(tree, ["Tab", { type: "York" }, "Enter"]),
+          Option.some([["city", "York"]]),
+        );
+      }),
   );
 
   it.effect(
@@ -399,6 +416,36 @@ describe("renderTextEntry", () => {
           control.attrs["aria-describedby"],
           built.messages.map((entry) => entry.id).join(" "),
         );
+        assert.deepStrictEqual(
+          elementsIn(tree).filter((element) => element.attrs["autofocus"] !== undefined),
+          [control],
+        );
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+      }),
+  );
+
+  it.effect(
+    "[Q-20] renders 12a refused by pattern-mask back with its message: aria-invalid, aria-describedby and one autofocus",
+    () =>
+      Effect.gen(function* afterPatternMismatch() {
+        const messages = validateTextEntry(
+          masked,
+          yield* decoded(masked, [[name, "12a"]]),
+          yield* configure({ validateResponses: true }),
+        );
+        const built = payloadOf([masked], {
+          ...answering,
+          messages,
+          posted: Option.some(new Map([[response, ["12a"]]])),
+        });
+        const tree = yield* page(built);
+        const control = onlyPart(tree, "control");
+
+        assert.deepStrictEqual(messages, [{ response, text: maskMessage }]);
+        assert.lengthOf(built.messages, 1);
+        assert.strictEqual(control.attrs["value"], "12a");
+        assert.strictEqual(control.attrs["aria-invalid"], "true");
+        assert.strictEqual(control.attrs["aria-describedby"], built.messages[0]?.id);
         assert.deepStrictEqual(
           elementsIn(tree).filter((element) => element.attrs["autofocus"] !== undefined),
           [control],
@@ -560,7 +607,68 @@ describe("validateTextEntry", () => {
   );
 
   it.effect(
-    "[Q-20] accepts every decoded value, an integer in its base and NULL included, whatever validateResponses says",
+    "[Q-20] checks pattern-mask under validateResponses only: 12a gives the author's message, 12.5 none",
+    () =>
+      Effect.gen(function* patternMismatch() {
+        const strict = yield* configure({ validateResponses: true });
+        const lenient = yield* configure({});
+        const mismatch = yield* decoded(masked, [[name, "12a"]]);
+
+        assert.deepStrictEqual(validateTextEntry(masked, mismatch, strict), [
+          { response, text: maskMessage },
+        ]);
+        assert.deepStrictEqual(
+          validateTextEntry({ ...masked, patternMaskMessage: Option.none() }, mismatch, strict),
+          [{ response, text: message("en", "patternMismatch") }],
+        );
+        assert.deepStrictEqual(
+          validateTextEntry(masked, yield* decoded(masked, [[name, "12.5"]]), strict),
+          [],
+        );
+        assert.deepStrictEqual(validateTextEntry(masked, mismatch, lenient), []);
+      }),
+  );
+
+  it.effect("[Q-20] checks no NULL against pattern-mask, even one that refuses empty text", () =>
+    Effect.gen(function* nullAgainstPattern() {
+      const digits: TextEntryInteraction = { ...masked, patternMask: Option.some("[0-9]+") };
+      const value = yield* decoded(digits, [[name, ""]]);
+
+      assert.deepStrictEqual(value, { baseType: "string", cardinality: "single", values: [] });
+      assert.deepStrictEqual(
+        validateTextEntry(digits, value, yield* configure({ validateResponses: true })),
+        [],
+      );
+    }),
+  );
+
+  it.effect(
+    "[Q-20] matches a float posted 1.50 against pattern-mask as 1.5, and a string as typed",
+    () =>
+      Effect.gen(function* canonicalFloat() {
+        const strict = yield* configure({ validateResponses: true });
+        const oneDecimal = Option.some(String.raw`[0-9]\.[0-9]`);
+        const measured: TextEntryInteraction = { ...length, patternMask: oneDecimal };
+        const typed: TextEntryInteraction = { ...city, patternMask: oneDecimal };
+        const mismatch = [{ response, text: message("en", "patternMismatch") }];
+
+        assert.deepStrictEqual(
+          validateTextEntry(measured, yield* decoded(measured, [[name, "1.50"]]), strict),
+          [],
+        );
+        assert.deepStrictEqual(
+          validateTextEntry(measured, yield* decoded(measured, [[name, "1.55"]]), strict),
+          mismatch,
+        );
+        assert.deepStrictEqual(
+          validateTextEntry(typed, yield* decoded(typed, [[name, "1.50"]]), strict),
+          mismatch,
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-20] accepts every decoded value without a pattern-mask, an integer in its base and NULL included, whatever validateResponses says",
     () =>
       Effect.gen(function* decodedValues() {
         const hex: TextEntryInteraction = { ...length, base: 16, baseType: "integer" };
