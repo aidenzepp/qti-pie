@@ -361,8 +361,9 @@ const itemHost = (accepted: Accepted, configuration: Configuration): HtmlHost =>
  * It opens the item with `open` and decodes the default configuration with `configure`. It is a
  * generator that yields those Effects rather than an Effect, so the host imports nothing but
  * `#plate/index.ts`: delegate to it from an Effect generator, `yield* htmlHost(location, bytes)`.
- * An item `open` does not accept gives a handler that answers every request with a 500 page
- * naming the verdict.
+ * A document `open` does not accept as an item, a refused or unchecked one or an accepted test,
+ * section or stimulus, gives a handler that answers every request with a 500 page naming the
+ * verdict and the document's kind.
  *
  * @example
  *   Effect.gen(function* serve() {
@@ -380,17 +381,20 @@ const itemHost = (accepted: Accepted, configuration: Configuration): HtmlHost =>
 export const htmlHost = function* htmlHost(location: string, bytes: Uint8Array) {
   const verdict = yield* open(location, bytes);
   const configuration = yield* configure({});
-  if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") {
+  if (
+    (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") &&
+    verdict.kind === "item"
+  ) {
     return itemHost(verdict.accepted, configuration);
   }
 
-  const { verdict: said } = verdict;
+  const { kind, verdict: said } = verdict;
   const refused: HtmlHost = () =>
     Promise.resolve(
       notePage(
         500,
         "Item not accepted",
-        `plate's verdict on ${location} is ${said}, so this host has no item to serve.`,
+        `plate's verdict on ${location} is ${said}, for a document of kind ${kind}, so this host has no item to serve. Give it an item plate accepts.`,
       ),
     );
 
