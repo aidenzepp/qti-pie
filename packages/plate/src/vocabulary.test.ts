@@ -523,7 +523,7 @@ describe("M2's closed sets", () => {
     );
   });
 
-  it("keys exactly spec §4.6's marks, max-attempts:negative among them, each once", () => {
+  it("keys exactly spec §4.6's marks, adaptive selection and xi:include, each once", () => {
     assertDistinct(testMarks);
     assert.include([...testMarks], "max-attempts:negative");
     assert.notInclude([...testMarks], "resource-type-mismatch");
@@ -531,6 +531,7 @@ describe("M2's closed sets", () => {
       [...testMarks],
       [
         "qti-selection",
+        "qti-adaptive-selection",
         "qti-ordering",
         "qti-time-limits",
         "qti-pre-condition",
@@ -544,6 +545,7 @@ describe("M2's closed sets", () => {
         "qti-template-default",
         "qti-variable-mapping",
         "qti-weight",
+        "xi:include",
         'allow-comment="true"',
         "max-attempts:negative",
         "root:qti-assessment-section",

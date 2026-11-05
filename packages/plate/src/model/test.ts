@@ -12,7 +12,13 @@
  */
 import type { Result } from "effect";
 import { Array as Arr, Data, Effect, Option } from "effect";
-import { attributePath, qtiNamespace, walk, xmlNamespace } from "#plate/document/source.ts";
+import {
+  attributePath,
+  qtiNamespace,
+  walk,
+  xincludeNamespace,
+  xmlNamespace,
+} from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import type { OutcomeDeclaration, UnsupportedFeature } from "#plate/model/item.ts";
 import { integerLexical, isModelled, parseElementText, trimXmlSpace } from "#plate/model/values.ts";
@@ -77,7 +83,7 @@ export interface ItemRef {
 
 /**
  * A `qti-assessment-section`. `children` holds its sections and item references in document order;
- * a `qti-assessment-section-ref` is marked and not among them.
+ * a `qti-assessment-section-ref` and an `xi:include` are marked and not among them.
  */
 export interface Section {
   readonly children: readonly SectionChild[];
@@ -167,6 +173,11 @@ interface Build {
 const elementMarks: ReadonlySet<string> = new Set(
   testMarks.filter((mark) => mark.startsWith("qti-")),
 );
+
+/**
+ * The mark of an XInclude `include`, which is never fetched.
+ */
+const includeMark: TestMark = "xi:include";
 
 /**
  * The mark of a `qti-item-session-control` whose `allow-comment` is true.
@@ -841,6 +852,23 @@ const holdsOn = (condition: Condition, declaration: SourceElement): boolean => {
 };
 
 /**
+ * Name the element feature an element is, if it is one: a `qti-*` element `testMarks` names, or an
+ * XInclude `include`.
+ *
+ * @param element The element.
+ * @returns The feature's key, or none when the element is not one.
+ */
+const elementMark = (element: SourceElement): Option.Option<string> => {
+  if (element.namespace === xincludeNamespace) {
+    return element.local === "include" ? Option.some(includeMark) : Option.none();
+  }
+
+  return isQti(element) && elementMarks.has(element.local)
+    ? Option.some(element.local)
+    : Option.none();
+};
+
+/**
  * Give the marks a `qti-item-session-control` carries, in the order its attributes are written:
  * `allow-comment` true at the element, and a negative `max-attempts` at the attribute.
  *
@@ -870,11 +898,11 @@ const controlMarks = (control: SourceElement, path: string): readonly MarkedFeat
 /**
  * Give every feature a test holds and M2 does not deliver, in document order.
  *
- * An element `testMarks` names is marked at its path, and its own subtree is not searched, so a
- * rubric block's stylesheet is not marked apart from the block. A `qti-item-session-control` gives
- * its own marks. A test-level outcome declaration is marked as the item model marks an item's: the
- * `renders` marks that sit on it, at its path, and each `qti-*` element below it that the model
- * does not read, keyed by its name, its subtree not searched.
+ * An element `testMarks` names, an XInclude `include` among them, is marked at its path, and its
+ * own subtree is not searched, so a rubric block's stylesheet is not marked apart from the block. A
+ * `qti-item-session-control` gives its own marks. A test-level outcome declaration is marked as the
+ * item model marks an item's: the `renders` marks that sit on it, at its path, and each `qti-*`
+ * element below it that the model does not read, keyed by its name, its subtree not searched.
  *
  * @param source The test.
  * @returns The marks, each once per feature and path.
@@ -886,6 +914,7 @@ const marksOf = (source: SourceDocument): readonly MarkedFeature[] => {
   for (const visit of walk(source)) {
     const { element, path } = visit;
     const parent = Option.getOrUndefined(visit.parent);
+    const feature = Option.getOrUndefined(elementMark(element));
     if (parent !== undefined && quiet.has(parent)) {
       quiet.add(element);
     } else if (parent !== undefined && declared.has(parent)) {
@@ -899,8 +928,8 @@ const marksOf = (source: SourceDocument): readonly MarkedFeature[] => {
       } else {
         declared.add(element);
       }
-    } else if (isQti(element) && elementMarks.has(element.local)) {
-      marks.push({ feature: element.local, path, shown: "mark" });
+    } else if (feature !== undefined) {
+      marks.push({ feature, path, shown: "mark" });
       quiet.add(element);
     } else if (isQti(element) && element.local === "qti-item-session-control") {
       marks.push(...controlMarks(element, path));
@@ -925,10 +954,11 @@ const marksOf = (source: SourceDocument): readonly MarkedFeature[] => {
  * Build the test model of a valid `qti-assessment-test`.
  *
  * The parts, their sections and item references are read in document order; a
- * `qti-assessment-section-ref` is marked and left out, and every other `testMarks` feature is
- * marked and left out of the tree or, as `allow-comment` and a negative `max-attempts`, held as
- * written. Each `qti-item-session-control` attribute is held as written or absent. The test's
- * outcome declarations are held and marked as the item model holds and marks an item's.
+ * `qti-assessment-section-ref` and an `xi:include` are marked and left out, and every other
+ * `testMarks` feature is marked and left out of the tree or, as `allow-comment` and a negative
+ * `max-attempts`, held as written. Each `qti-item-session-control` attribute is held as written or
+ * absent. The test's outcome declarations are held and marked as the item model holds and marks an
+ * item's.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The test, or the refusal `value-type` at the first typed value outside its lexical

@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { attr, doc, el, text } from "#plate/document/source.ts";
+import { attr, doc, el, text, xincludeNamespace } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
   SourceChild,
@@ -401,6 +401,57 @@ describe("buildTest", () => {
           ...absentControl,
           allowComment: Option.some(true),
         });
+      }),
+  );
+
+  it.effect(
+    "marks an adaptive selection and an xi:include at their paths, and leaves the include out of the tree",
+    () =>
+      Effect.gen(function* marksAdaptiveAndInclude() {
+        const included = test([
+          part("P1", "linear", "individual", [
+            section("S1", [
+              el(
+                "qti-adaptive-selection",
+                [],
+                [
+                  el("qti-adaptive-engine-ref", [
+                    attr("href", "https://engine.example/cat"),
+                    attr("identifier", "ENGINE"),
+                  ]),
+                ],
+              ),
+              itemRef("I1", "items/one.xml"),
+            ]),
+            section("S2", [
+              itemRef("I2", "items/two.xml"),
+              el("include", [attr("href", "shared/items.xml")], [], xincludeNamespace),
+              itemRef("I3", "items/three.xml"),
+            ]),
+          ]),
+        ]);
+        const built = yield* buildTest(included);
+
+        assert.deepStrictEqual(checkStructure(included, tables), []);
+        assert.deepStrictEqual(built.unsupported, [
+          mark(
+            "qti-adaptive-selection",
+            `${firstPart}/qti-assessment-section[1]/qti-adaptive-selection`,
+          ),
+          mark(
+            "xi:include",
+            `${firstPart}/qti-assessment-section[2]/{${xincludeNamespace}}include`,
+          ),
+        ]);
+        assert.deepStrictEqual(
+          built.parts.map((testPart) => testPart.children.map(outline)),
+          [
+            [
+              ["S1", ["I1"]],
+              ["S2", ["I2", "I3"]],
+            ],
+          ],
+        );
       }),
   );
 
