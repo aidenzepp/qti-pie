@@ -1,5 +1,3 @@
-/* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the tool column the rows carry; the shape here is which of the two tool attributes the root wrote, not a structure. */
-
 /**
  * The stimulus document's rows: a `qti-assessment-stimulus` root, its tool and label rows, its
  * body, and the shared attribute, HTML and content rows of the body's tree. This module is the
@@ -15,6 +13,7 @@ import { attributeRows } from "#pantry/import/attributes.ts";
 import { contentRows } from "#pantry/import/content.ts";
 import { htmlRows } from "#pantry/import/html.ts";
 import { includeRows } from "#pantry/import/include.ts";
+import { toolRows } from "#pantry/import/tool.ts";
 import { unboundChoiceRows } from "#pantry/import/item.ts";
 import type { ItemInput } from "#pantry/import/item.ts";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
@@ -30,20 +29,9 @@ import {
   withParents,
 } from "#pantry/import/tree.ts";
 import type { NodeIndex } from "#pantry/import/tree.ts";
-import {
-  ManifestIdentifier,
-  PackagePath,
-  ToolName,
-  ToolVersion,
-} from "#pantry/schema/contracts.ts";
+import { ManifestIdentifier, PackagePath } from "#pantry/schema/contracts.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/document.ts";
-import {
-  AssessmentItemLabel,
-  ItemTool,
-  ItemToolBoth,
-  ItemToolName,
-  ItemToolVersion,
-} from "#pantry/schema/item.ts";
+import { AssessmentItemLabel } from "#pantry/schema/item.ts";
 import { AssessmentStimulus, StimulusBody } from "#pantry/schema/stimulus.ts";
 
 /**
@@ -51,41 +39,6 @@ import { AssessmentStimulus, StimulusBody } from "#pantry/schema/stimulus.ts";
  */
 const written = <Value, Made>(value: Option.Option<Value>, make: (own: Value) => Made): Made[] =>
   Option.match(value, { onNone: () => [], onSome: (own) => [make(own)] });
-
-/**
- * The tool row of a stimulus root and the arm that holds the strings it wrote, as the attribute
- * reader read them; none when it wrote neither `tool-name` nor `tool-version`.
- */
-const toolRows = (
-  rows: Rows,
-  tree: Uuid,
-  name: Option.Option<string>,
-  version: Option.Option<string>,
-): Rows => {
-  if (Option.isSome(name) && Option.isSome(version)) {
-    return Rows.add(
-      Rows.add(rows, ItemTool, [{ root: "stimulus", shape: "both", tree }]),
-      ItemToolBoth,
-      [{ toolName: ToolName(name.value), toolVersion: ToolVersion(version.value), tree }],
-    );
-  }
-
-  if (Option.isSome(name)) {
-    return Rows.add(
-      Rows.add(rows, ItemTool, [{ root: "stimulus", shape: "nameOnly", tree }]),
-      ItemToolName,
-      [{ toolName: ToolName(name.value), tree }],
-    );
-  }
-
-  return Option.isSome(version)
-    ? Rows.add(
-        Rows.add(rows, ItemTool, [{ root: "stimulus", shape: "versionOnly", tree }]),
-        ItemToolVersion,
-        [{ toolVersion: ToolVersion(version.value), tree }],
-      )
-    : rows;
-};
 
 /**
  * Write the rows of a stimulus document: its tree, its `Document` row with the identifier and title
@@ -176,7 +129,7 @@ export const stimulusRows = Effect.fn("import.stimulusRows")(function* stimulusR
       version,
     })),
   );
-  built = toolRows(built, documentId, toolName, toolVersion);
+  built = toolRows(built, "stimulus", documentId, toolName, toolVersion);
 
   for (const node of nodes.values()) {
     if (node.kind === "qti-stimulus-body") {

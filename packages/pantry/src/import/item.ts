@@ -11,6 +11,7 @@
  * and body rows are in.
  */
 import { includeRows } from "#pantry/import/include.ts";
+import { toolRows as toolRowsOf } from "#pantry/import/tool.ts";
 import { judgedLater } from "#pantry/import/judged.ts";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { Effect, Option } from "effect";
@@ -63,8 +64,6 @@ import {
   OutcomeScaleValue,
   PackagePath,
   RecordFieldIdentifier,
-  ToolName,
-  ToolVersion,
   VariableReference,
 } from "#pantry/schema/contracts.ts";
 import type { DeclarationShape } from "#pantry/schema/declaration.ts";
@@ -103,10 +102,6 @@ import {
   AssessmentItemLabel,
   DeclaredAdaptive,
   ItemBody,
-  ItemTool,
-  ItemToolBoth,
-  ItemToolName,
-  ItemToolVersion,
   Prompt,
 } from "#pantry/schema/item.ts";
 import { DocumentLang } from "#pantry/schema/lang.ts";
@@ -254,32 +249,8 @@ const toolRows = (
 ): Rows => {
   const nameRead = attributeOf(rows, root, rootNode, "tool-name", "replace");
   const versionRead = attributeOf(nameRead.rows, root, rootNode, "tool-version", "replace");
-  const built = versionRead.rows;
-  const name = nameRead.value;
-  const version = versionRead.value;
-  if (Option.isSome(name) && Option.isSome(version)) {
-    return Rows.add(
-      Rows.add(built, ItemTool, [{ root: "item", shape: "both", tree }]),
-      ItemToolBoth,
-      [{ toolName: ToolName(name.value), toolVersion: ToolVersion(version.value), tree }],
-    );
-  }
 
-  if (Option.isSome(name)) {
-    return Rows.add(
-      Rows.add(built, ItemTool, [{ root: "item", shape: "nameOnly", tree }]),
-      ItemToolName,
-      [{ toolName: ToolName(name.value), tree }],
-    );
-  }
-
-  return Option.isSome(version)
-    ? Rows.add(
-        Rows.add(built, ItemTool, [{ root: "item", shape: "versionOnly", tree }]),
-        ItemToolVersion,
-        [{ toolVersion: ToolVersion(version.value), tree }],
-      )
-    : built;
+  return toolRowsOf(versionRead.rows, "item", tree, nameRead.value, versionRead.value);
 };
 
 /**
