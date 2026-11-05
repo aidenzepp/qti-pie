@@ -20,7 +20,8 @@ import type { Uuid } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import type { Rows as RowSet } from "#pantry/import/tree.ts";
 import { Rows } from "#pantry/import/tree.ts";
-import { by, indexOf, readersFor } from "#pantry/schema/attribute-homes.ts";
+import { by, foreignAttributesOf, indexOf, readersFor } from "#pantry/schema/attribute-homes.ts";
+import { ForeignElement } from "#pantry/schema/foreign.ts";
 import type { RegistryRow } from "#pantry/schema/kinds/generic.ts";
 import {
   AttributeEntityReference,
@@ -50,7 +51,22 @@ const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
 const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
 
+const xlinkNamespace = "http://www.w3.org/1999/xlink";
+
 const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
+
+/**
+ * The namespace prefixes in scope at a node, each bound to the URI it stands for there.
+ */
+type Scope = ReadonlyMap<string, string>;
+
+/**
+ * The prefix in scope for the XLink namespace, the nearest binding winning: the typed `xlink:`
+ * relations store no prefix, and a source may bind XLink to another one. A source that wrote an
+ * XLink attribute bound it, so `xlink` is only the answer for rows no source wrote.
+ */
+const xlinkPrefixIn = (scope: Scope): string =>
+  [...scope].findLast(([prefix, uri]) => prefix !== "" && uri === xlinkNamespace)?.[0] ?? "xlink";
 
 /**
  * The registry rows that name an element, by kind; the generic kinds are not elements and are left
@@ -73,24 +89,41 @@ if (renderRegistry.size !== elementRows.length) {
 }
 
 /**
- * The attribute `qname` with `value` on the node `id`: `xml:*` names are in the XML namespace and
- * every other name in none.
+ * The attribute `name` with `value`: `xml:*` names are in the XML namespace, `xlink:*` names in the
+ * XLink namespace under `xlinkPrefix`, and every other name in none.
  */
 const attributeOf = (
-  qname: string,
+  name: string,
   value: string,
   references: Attribute["references"],
-): Attribute =>
-  qname.startsWith("xml:")
-    ? {
-        local: qname.slice("xml:".length),
-        namespace: xmlNamespace,
-        prefix: "xml",
-        qname,
-        references,
-        value,
-      }
-    : { local: qname, namespace: "", prefix: "", qname, references, value };
+  xlinkPrefix: string,
+): Attribute => {
+  if (name.startsWith("xml:")) {
+    return {
+      local: name.slice("xml:".length),
+      namespace: xmlNamespace,
+      prefix: "xml",
+      qname: name,
+      references,
+      value,
+    };
+  }
+
+  if (name.startsWith("xlink:")) {
+    const local = name.slice("xlink:".length);
+
+    return {
+      local,
+      namespace: xlinkNamespace,
+      prefix: xlinkPrefix,
+      qname: `${xlinkPrefix}:${local}`,
+      references,
+      value,
+    };
+  }
+
+  return { local: name, namespace: "", prefix: "", qname: name, references, value };
+};
 
 /**
  * A comment or processing instruction of the prolog or epilog from its `TreeMisc` text: a
@@ -142,6 +175,7 @@ export const renderTree = (rows: RowSet, treeId: Uuid): XmlDocument => {
   const instructions = by(Rows.of(rows, PiRow), (row) => row.id);
   const entities = by(Rows.of(rows, EntityReference), (row) => row.id);
   const declarations = Map.groupBy(Rows.of(rows, NamespaceDeclaration), (row) => row.node);
+  const foreignElements = by(Rows.of(rows, ForeignElement), (row) => row.id);
   const schemaLocations = by(Rows.of(rows, SchemaLocation), (row) => row.node);
   const lexical = Map.groupBy(Rows.of(rows, AttributeLexical), (row) => row.node);
   const spelling = Map.groupBy(Rows.of(rows, AttributeSpelling), (row) => row.node);
@@ -151,6 +185,7 @@ export const renderTree = (rows: RowSet, treeId: Uuid): XmlDocument => {
   );
   const index = indexOf(rows);
   const readersOf = readersFor(index);
+  const foreignOf = foreignAttributesOf(index);
 
   const referencesOf = (id: Uuid, qname: string): Attribute["references"] =>
     (references.get(`${id}\n${qname}`) ?? [])
@@ -177,7 +212,17 @@ export const renderTree = (rows: RowSet, treeId: Uuid): XmlDocument => {
     return values;
   };
 
-  const attributesOf = (id: Uuid, kind: string): readonly Attribute[] => [
+  const scopeAt = (id: Uuid, parent: Scope): Scope => {
+    const scope = new Map(parent);
+    for (const row of declarations.get(id) ?? []) {
+      scope.delete(row.prefix);
+      scope.set(row.prefix, row.uri);
+    }
+
+    return scope;
+  };
+
+  const attributesOf = (id: Uuid, kind: string, scope: Scope): readonly Attribute[] => [
     ...(declarations.get(id) ?? [])
       .toSorted((left, right) => Number(left.position - right.position))
       .map((row): Attribute => {
@@ -210,11 +255,23 @@ export const renderTree = (rows: RowSet, treeId: Uuid): XmlDocument => {
       },
     }),
     ...[...stored(id, kind)].map(([name, value]) =>
-      attributeOf(name, value, referencesOf(id, name)),
+      attributeOf(name, value, referencesOf(id, name), xlinkPrefixIn(scope)),
     ),
+    ...foreignOf(id).map((row): Attribute => {
+      const qname = row.prefix === "" ? row.local : `${row.prefix}:${row.local}`;
+
+      return {
+        local: row.local,
+        namespace: row.namespace,
+        prefix: row.prefix,
+        qname,
+        references: referencesOf(id, qname),
+        value: row.value,
+      };
+    }),
   ];
 
-  const render = (id: Uuid): Child => {
+  const render = (id: Uuid, parent: Scope): Child => {
     const node = nodes.get(id) ?? missing("Node row", id);
     if (node.kind === "text") {
       return {
@@ -249,13 +306,17 @@ export const renderTree = (rows: RowSet, treeId: Uuid): XmlDocument => {
       };
     }
 
-    const name = renderRegistry.get(node.kind) ?? missing("registry row for the kind", node.kind);
+    const name =
+      node.kind === "foreign"
+        ? (foreignElements.get(id) ?? missing("ForeignElement row", id))
+        : (renderRegistry.get(node.kind) ?? missing("registry row for the kind", node.kind));
+    const scope = scopeAt(id, parent);
 
     return {
-      attributes: attributesOf(id, node.kind),
+      attributes: attributesOf(id, node.kind, scope),
       children: (children.get(id) ?? [])
         .toSorted((left, right) => Number(left.position - right.position))
-        .map((edge) => render(edge.child)),
+        .map((edge) => render(edge.child, scope)),
       kind: "element",
       local: name.local,
       namespace: name.namespace,
@@ -264,7 +325,7 @@ export const renderTree = (rows: RowSet, treeId: Uuid): XmlDocument => {
     };
   };
 
-  const root = rootId === undefined ? missing("TreeRoot row", treeId) : render(rootId);
+  const root = rootId === undefined ? missing("TreeRoot row", treeId) : render(rootId, new Map());
   if (root.kind !== "element") {
     return missing("root element", treeId);
   }

@@ -1242,6 +1242,36 @@ export const indexOf = (rows: RowSet): Index => {
 };
 
 /**
+ * One attribute of a node that no kind declares, as the `ForeignAttribute` relation holds it: its
+ * expanded name, the prefix it was written under and its value as written.
+ */
+export interface ForeignValue {
+  readonly local: string;
+  readonly namespace: string;
+  readonly prefix: string;
+  readonly value: string;
+}
+
+/**
+ * The by-node reader of `ForeignAttribute`, the one relation whose attribute names are data: each
+ * node's foreign attributes, in the order the rows hold them.
+ *
+ * @param index - The index of the rows to read, from {@link indexOf}.
+ * @returns A function from node to its foreign attributes, none for a node that has none.
+ */
+export const foreignAttributesOf = (index: Index): ((id: Uuid) => readonly ForeignValue[]) => {
+  const owned = index.many(R.ForeignAttribute, "node");
+
+  return (id) =>
+    (owned.get(id) ?? []).map((fact): ForeignValue => ({
+      local: textOf(fact, "local") ?? "",
+      namespace: textOf(fact, "namespace") ?? "",
+      prefix: textOf(fact, "prefix") ?? "",
+      value: textOf(fact, "value") ?? "",
+    }));
+};
+
+/**
  * The readers of an element kind: each own attribute then each shared one, by name, in the order
  * {@link ownAttributes} and the shared list give them, so a reader later in the list replaces an
  * earlier one that names the same attribute.
