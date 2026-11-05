@@ -106,11 +106,17 @@ const sessionLimit = 100;
  * The headers of every HTML page (`work/planning/mind/od14-decisions.md`, rule `723e580c`): no
  * script and no `'unsafe-inline'` in any directive, posts only to this origin, and no caching.
  * The stylesheets and the theme box's redirect carry them too, a stylesheet with its own type.
+ *
+ * `object-src 'self'` lets an item's `object` load a package document from `/assets/`.
+ * `frame-src 'self'` is there for Chromium, which also checks the document an `object` loads
+ * into its nested browsing context against `frame-src` (then `child-src`, then `default-src`);
+ * WebKit and Firefox check `object-src` alone (`docs/research/1909bcff.md`). The nested document
+ * is sandboxed by its own header ({@link assetHeaders}), not by this policy.
  */
 const pageHeaders = {
   "cache-control": "no-store",
   "content-security-policy":
-    "default-src 'none'; style-src 'self'; img-src 'self' https: http:; media-src 'self' https: http:; object-src 'self'; script-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    "default-src 'none'; style-src 'self'; img-src 'self' https: http:; media-src 'self' https: http:; object-src 'self'; frame-src 'self'; script-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   "content-type": "text/html; charset=utf-8",
   "referrer-policy": "no-referrer",
   "x-content-type-options": "nosniff",
