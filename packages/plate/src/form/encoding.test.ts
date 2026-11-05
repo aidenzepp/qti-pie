@@ -3,6 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { checkInstance, decode, encode, entryName, partition } from "#plate/form/encoding.ts";
 import type { Binding, Entry, Malformed } from "#plate/form/encoding.ts";
+import { format } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
 /**
@@ -56,6 +57,14 @@ const value = (bound: Binding, ...values: readonly Single[]): Value => ({
  * @returns The value.
  */
 const identifier = (text: string): Single => ({ baseType: "identifier", value: text });
+
+/**
+ * Construct a string value.
+ *
+ * @param text The string.
+ * @returns The value.
+ */
+const stringOf = (text: string): Single => ({ baseType: "string", value: text });
 
 /**
  * Encode a value under a binding and decode the entries back.
@@ -438,6 +447,46 @@ describe("encode and decode", () => {
       assert.deepStrictEqual(
         yield* Effect.fromResult(decode(entries, single)),
         value(single, identifier("choiceB")),
+      );
+    }),
+  );
+
+  it.effect("decodes an ordered container's filled Controls in the order they were posted", () =>
+    Effect.gen(function* orderedContainer() {
+      const ordered = binding("string", "ordered");
+
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode(posted("a", "", "b"), ordered)),
+        value(ordered, stringOf("a"), stringOf("b")),
+      );
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode(posted("b", "", "a"), ordered)),
+        value(ordered, stringOf("b"), stringOf("a")),
+      );
+    }),
+  );
+
+  it.effect("decodes a multiple container's filled Controls as their multiset", () =>
+    Effect.gen(function* multipleContainer() {
+      const multiple = binding("string", "multiple");
+      const decoded = yield* Effect.fromResult(decode(posted("a", "", "b"), multiple));
+
+      assert.strictEqual(decoded.baseType, "string");
+      assert.strictEqual(decoded.cardinality, "multiple");
+      assert.deepStrictEqual(
+        decoded.values.map(format).toSorted((left, right) => left.localeCompare(right)),
+        ["a", "b"],
+      );
+    }),
+  );
+
+  it.effect("decodes an ordered container whose Controls are all empty as NULL", () =>
+    Effect.gen(function* emptyContainer() {
+      const ordered = binding("string", "ordered");
+
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode(posted("", "", ""), ordered)),
+        value(ordered),
       );
     }),
   );
