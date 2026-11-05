@@ -255,7 +255,7 @@ class SheetUnreadable extends Schema.TaggedError<SheetUnreadable>()("SheetUnread
  * What a page after a post shows, kept so a post past the attempt limit shows it again.
  */
 interface Shown {
-  readonly status: StatusInput;
+  readonly status: StatusInput & { readonly heading: "responseRecorded" | "scored" };
   readonly values: Readonly<Record<string, Value>>;
 }
 
