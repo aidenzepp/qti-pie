@@ -131,8 +131,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       ["bad-identifier-value", ["value-lexical"]],
       ["choice-bounds", ["choice-bounds"]],
       ["body-empty", ["body-empty"]],
-      // The stimulus builder (p5-41) is not merged: until it is the package is refused as unmodeled.
-      ["stimulus-body-empty", ["body-empty", "unmodeled-vocabulary"]],
+      ["stimulus-body-empty", ["body-empty"]],
       ["bad-template-uri", ["uri-syntax"]],
     ];
     for (const [name, rules] of broken) {
