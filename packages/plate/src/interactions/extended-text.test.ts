@@ -28,7 +28,7 @@ import { payload, redactItem } from "#plate/payload.ts";
 import type { EmitState, ExtendedTextPayload, Payload, View } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
-import { keyboardWalk } from "#plate/test/keyboard.ts";
+import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { acceptedItem, check } from "#plate/validate/verdict.ts";
@@ -671,6 +671,54 @@ describe("renderExtendedText", () => {
         assert.isUndefined(calm.attrs["autofocus"]);
       }),
   );
+
+  it.effect(
+    "[Q-5] in review and solution, makes the textarea readonly, not disabled, a tab stop still, its text the value, named by its Prompt",
+    () =>
+      Effect.gen(function* readonlyModes() {
+        const answeringRoot = yield* render(payloadOf([essay], restored("first\nsecond")));
+
+        assert.isUndefined(onePart(answeringRoot, "control").attrs["readonly"]);
+
+        for (const mode of ["review", "solution"] as const) {
+          const built = payloadOf([essay], { ...restored("first\nsecond"), mode });
+          const root = yield* render(built);
+          const tree = page([root], built);
+          const control = onePart(root, "control");
+
+          assert.strictEqual(root.attrs["data-mode"], mode);
+          assert.isUndefined(root.attrs["data-disabled"], mode);
+          assert.isTrue(control.attrs["readonly"], mode);
+          assert.isUndefined(control.attrs["disabled"], mode);
+          assert.deepStrictEqual(control.children, [text("first\nsecond")], mode);
+          assert.strictEqual(control.attrs["name"], name, mode);
+          assert.strictEqual(tabOrder(tree)[0], control, mode);
+          assert.strictEqual(nameOf(control, tree), "Describe your day.", mode);
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], mode);
+          assert.isTrue(roundTrips(tree), mode);
+        }
+      }),
+  );
+
+  it.effect(
+    '[Q-5] writes autocomplete="off" on every Control in answering, review and solution',
+    () =>
+      Effect.gen(function* autocompleteOff() {
+        for (const mode of ["answering", "review", "solution"] as const) {
+          const view: View = { ...answering, mode };
+          const controls = [
+            ...partsIn(yield* render(payloadOf([essay], view)), "control"),
+            ...partsIn(yield* render(payloadOf([rivers], view)), "control"),
+          ];
+
+          assert.deepStrictEqual(
+            controls.map((control) => control.attrs["autocomplete"]),
+            ["off", "off", "off", "off"],
+            mode,
+          );
+        }
+      }),
+  );
 });
 
 describe("validateExtendedText", () => {
@@ -1254,6 +1302,69 @@ describe("an Extended Text bound to a container", () => {
           ),
           [],
         );
+      }),
+  );
+
+  it.effect(
+    "[Q-5] [Q-20] in review and solution, makes the input and every textarea readonly, not disabled, tab stops still, each showing its value, the group named by its Prompt",
+    () =>
+      Effect.gen(function* readonlyGroup() {
+        const values = new Map<string, Value>([
+          [
+            city.response,
+            {
+              baseType: "string",
+              cardinality: "single",
+              values: [{ baseType: "string", value: "York" }],
+            },
+          ],
+          [response, orderedOf("Ouse", "Aire", "Wharfe")],
+        ]);
+
+        for (const mode of ["review", "solution"] as const) {
+          const tree = yield* pageOf(
+            payload(redactItem(besideCity(rivers)), { ...answering, mode, values }),
+          );
+          const inputs = elementsIn(tree).filter((element) => element.tag === "input");
+          const textareas = partsIn(tree, "control");
+          const buttons = elementsIn(tree).filter((element) => element.tag === "button");
+          const root = onePart(tree, "root");
+
+          assert.deepStrictEqual(
+            [...inputs, ...textareas].map((control) => [
+              control.attrs["readonly"],
+              control.attrs["disabled"],
+            ]),
+            [
+              [true, undefined],
+              [true, undefined],
+              [true, undefined],
+              [true, undefined],
+            ],
+            mode,
+          );
+          assert.deepStrictEqual(tabOrder(tree), [...inputs, ...textareas, ...buttons], mode);
+          assert.deepStrictEqual(
+            inputs.map((input) => input.attrs["value"]),
+            ["York"],
+            mode,
+          );
+          assert.deepStrictEqual(
+            textareas.map((control) => control.children),
+            [[text("Ouse")], [text("Aire")], [text("Wharfe")]],
+            mode,
+          );
+          assert.strictEqual(root.attrs["role"], "group", mode);
+          assert.strictEqual(nameOf(root, tree), "Name three rivers.", mode);
+          assert.deepStrictEqual(controlNames(root, tree), answersOf(3), mode);
+          assert.deepStrictEqual(
+            inputs.map((input) => nameOf(input, tree)),
+            [message("en", "answer")],
+            mode,
+          );
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], mode);
+          assert.isTrue(roundTrips(tree), mode);
+        }
       }),
   );
 });

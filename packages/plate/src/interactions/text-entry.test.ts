@@ -21,7 +21,7 @@ import type { Value } from "#plate/model/values.ts";
 import { payload, redactItem } from "#plate/payload.ts";
 import type { EmitState, Payload, View } from "#plate/payload.ts";
 import { checkTree, nameOf } from "#plate/test/accessibility.ts";
-import { keyboardWalk } from "#plate/test/keyboard.ts";
+import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
 
 /**
@@ -685,6 +685,55 @@ describe("renderTextEntry", () => {
       assert.isUndefined(control.attrs["aria-invalid"]);
       assert.isTrue(elementsIn(tree).every((element) => element.attrs["autofocus"] === undefined));
     }),
+  );
+
+  it.effect(
+    "[Q-20] in review and solution, makes the Control readonly, not disabled, a tab stop still, showing the view's value under its name",
+    () =>
+      Effect.gen(function* readonlyModes() {
+        const york: Value = {
+          baseType: "string",
+          cardinality: "single",
+          values: [{ baseType: "string", value: "York" }],
+        };
+        const values = new Map([[response, york]]);
+        const answeringTree = yield* page(payloadOf([city], { ...answering, values }));
+
+        assert.isUndefined(onlyPart(answeringTree, "control").attrs["readonly"]);
+
+        for (const mode of ["review", "solution"] as const) {
+          const tree = yield* page(payloadOf([city], { ...answering, mode, values }));
+          const root = onlyPart(tree, "root");
+          const control = onlyPart(tree, "control");
+
+          assert.strictEqual(root.attrs["data-mode"], mode);
+          assert.isUndefined(root.attrs["data-disabled"], mode);
+          assert.isTrue(control.attrs["readonly"], mode);
+          assert.isUndefined(control.attrs["disabled"], mode);
+          assert.strictEqual(control.attrs["value"], "York", mode);
+          assert.strictEqual(control.attrs["name"], name, mode);
+          assert.strictEqual(tabOrder(tree)[0], control, mode);
+          assert.strictEqual(nameOf(control, tree), message("en", "answer"), mode);
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], mode);
+          assert.isTrue(roundTrips(tree), mode);
+        }
+      }),
+  );
+
+  it.effect(
+    '[Q-20] writes autocomplete="off" on the Control in answering, review and solution',
+    () =>
+      Effect.gen(function* autocompleteOff() {
+        for (const mode of ["answering", "review", "solution"] as const) {
+          const tree = yield* page(payloadOf([city, length], { ...answering, mode }));
+
+          assert.deepStrictEqual(
+            partsIn(tree, "control").map((control) => control.attrs["autocomplete"]),
+            ["off", "off"],
+            mode,
+          );
+        }
+      }),
   );
 
   it.effect(
