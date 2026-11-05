@@ -3089,8 +3089,8 @@ const stimulusSharedEdits: readonly Edit[] = [
 /**
  * `stimulus-shared` at 3.0.1: the manifest's `schemaversion` and the documents' schema location
  * move to 3.0.1; the stimulus root gains `tool-name`, `tool-version` and `label`; its body gains
- * `class`, `xml:lang`, an `xi:include` of a packaged fragment and, bare, an interaction, a
- * `qti-feedback-inline` and a `qti-template-inline` (goal 5.15).
+ * `class`, `xml:lang`, an `xi:include` of a packaged fragment as a child of the body and, bare, an
+ * interaction, a `qti-feedback-inline` and a `qti-template-inline` (goal 5.15).
  */
 const stimulus301Edits: readonly Edit[] = [
   ...stimulusSharedEdits,
@@ -3135,13 +3135,17 @@ const stimulus301Edits: readonly Edit[] = [
     "passages/unbelievableNight.xml",
     "    </div> <!-- /stimulus-wrapper -->",
     [
-      '      <xi:include href="fragment.xml" parse="xml"/>',
       '      <qti-choice-interaction response-identifier="RESPONSE" max-choices="1">',
       '        <qti-simple-choice identifier="A">A</qti-simple-choice>',
       "      </qti-choice-interaction>",
       '      <p><qti-feedback-inline outcome-identifier="FB" identifier="done" show-hide="show">done</qti-feedback-inline> <qti-template-inline template-identifier="T" identifier="x" show-hide="show">x</qti-template-inline></p>',
       "    </div> <!-- /stimulus-wrapper -->",
     ].join("\n"),
+  ),
+  replaceIn(
+    "passages/unbelievableNight.xml",
+    "  </qti-stimulus-body>",
+    '    <xi:include href="fragment.xml" parse="xml"/>\n  </qti-stimulus-body>',
   ),
 ];
 
@@ -3438,8 +3442,8 @@ const stimulusRefTest: string = testDocument("STIMULUS-TEST", [
 ]);
 
 /**
- * The fragment `stimulus-300-include` includes in a 3.0.0 body, as `stimulus-301` does in its 3.0.1
- * one.
+ * The fragment `stimulus-300-include` includes as a child of a 3.0.0 body, where that version
+ * admits none, as `stimulus-301` does in its 3.0.1 one.
  */
 const stimulusFragment =
   '<p xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">an included paragraph</p>\n';
@@ -3816,8 +3820,8 @@ const negativeSpecs: Record<(typeof negativeNames)[number], FixtureSpec> = {
     ),
     replaceIn(
       "passages/unbelievableNight.xml",
-      "    </div> <!-- /stimulus-wrapper -->",
-      '      <xi:include href="fragment.xml" parse="xml"/>\n    </div> <!-- /stimulus-wrapper -->',
+      "  </qti-stimulus-body>",
+      '    <xi:include href="fragment.xml" parse="xml"/>\n  </qti-stimulus-body>',
     ),
   ]),
   "stimulus-body-empty": {
