@@ -19,7 +19,10 @@ import { contentRows } from "#pantry/import/content.ts";
 import { htmlRows } from "#pantry/import/html.ts";
 import { interactionRows } from "#pantry/import/interactions.ts";
 import { mappingRows } from "#pantry/import/mapping.ts";
-import { processingRows as processingTreeRows } from "#pantry/import/processing.ts";
+import {
+  contentIncludeRows,
+  processingRows as processingTreeRows,
+} from "#pantry/import/processing.ts";
 import type { ProcessingRefused } from "#pantry/import/processing.ts";
 import { requiredAttribute } from "#pantry/import/required.ts";
 import {
@@ -919,6 +922,28 @@ export const semanticRows = Effect.fn("import.semanticRows")(function* semanticR
 });
 
 /**
+ * The `xi:include` elements of an item that lie outside its processing roots, in document order.
+ * An include nested in another include or in a fallback is listed beside it.
+ *
+ * @param element - The element to search from.
+ * @param nodes - The item's node index.
+ * @returns The include elements.
+ */
+const contentIncludes = (element: Element, nodes: NodeIndex): readonly Element[] => {
+  const kind = nodes.get(element)?.kind;
+  if (kind === "qti-response-processing" || kind === "qti-template-processing") {
+    return [];
+  }
+
+  return [
+    ...(kind === "xi:include" ? [element] : []),
+    ...element.children.flatMap((child) =>
+      child.kind === "element" ? contentIncludes(child, nodes) : [],
+    ),
+  ];
+};
+
+/**
  * Write the rows of an item document: its tree, its `Document` row with the identifier and title
  * rows, the item root and the body, prompt, paragraph and image rows under it, and, after those,
  * the rows of its response and template processing trees.
@@ -1151,6 +1176,10 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
         built,
       );
     }
+  }
+
+  for (const element of contentIncludes(root, nodes)) {
+    built = yield* contentIncludeRows(built, nodes, element);
   }
 
   return { documentId, nodes, rows: built };

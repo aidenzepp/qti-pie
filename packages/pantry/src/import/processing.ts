@@ -27,7 +27,7 @@ import type {
 import { checkProcessing } from "#pantry/processing/check.ts";
 import type { PId } from "#pantry/processing/check.ts";
 import type { Environment, Mode } from "#pantry/processing/env.ts";
-import { literalOrRef, parseProcessing } from "#pantry/processing/parse.ts";
+import { literalOrRef, parseInclude, parseProcessing } from "#pantry/processing/parse.ts";
 import {
   BooleanLiteral,
   MathConstantName,
@@ -1363,14 +1363,14 @@ const ruleRows = (
  * `Fallback` of its `xi:fallback` child. The include is stored as written and never resolved.
  *
  * @param rows - The rows so far.
- * @param input - The processing input.
+ * @param nodes - The tree's node index, which names the fallback's node.
  * @param node - The include.
  * @param entry - The node it became.
  * @returns The rows with the include's added.
  */
 const includeRows = Effect.fn("import.processing.includeRows")(function* includeRows(
   rows: Rows,
-  input: ProcessingInput,
+  nodes: NodeIndex,
   node: IncludeNode,
   entry: NodeEntry,
 ): Effect.fn.Return<Rows, ImportRefused> {
@@ -1409,12 +1409,37 @@ const includeRows = Effect.fn("import.processing.includeRows")(function* include
     built,
     ruleSchema.Fallback,
     Option.toArray(node.fallback).flatMap((element) => {
-      const fallback = input.nodes.get(element);
+      const fallback = nodes.get(element);
 
       return fallback === undefined ? [] : [{ id: fallback.id }];
     }),
   );
 });
+
+/**
+ * Write the rows of an `xi:include` in item content, outside any processing root: the same rows a
+ * processing include gets, through the same writer. Only the include itself is written; an include
+ * nested in it is a node of the tree and the caller writes it on its own.
+ *
+ * @param rows - The rows so far.
+ * @param nodes - The tree's node index.
+ * @param element - The `xi:include` element.
+ * @returns The rows with the include's added, or the rows unchanged when the element has no node.
+ */
+export const contentIncludeRows = Effect.fn("import.processing.contentIncludeRows")(
+  function* contentIncludeRows(
+    rows: Rows,
+    nodes: NodeIndex,
+    element: Element,
+  ): Effect.fn.Return<Rows, ImportRefused | UnmodeledVocabulary> {
+    const entry = nodes.get(element);
+    if (entry === undefined) {
+      return rows;
+    }
+
+    return yield* includeRows(rows, nodes, yield* parseInclude(element, { path: [] }), entry);
+  },
+);
 
 /**
  * Write the arm of the processing root the caller supplied: a template processing with the item it
@@ -1508,7 +1533,7 @@ export const processingRows = Effect.fn("import.processingRows")(function* proce
 
   for (const node of tree.includes) {
     const entry = input.nodes.get(node.element);
-    built = entry === undefined ? built : yield* includeRows(built, input, node, entry);
+    built = entry === undefined ? built : yield* includeRows(built, input.nodes, node, entry);
   }
 
   const root = input.nodes.get(input.root);
