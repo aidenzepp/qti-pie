@@ -3,11 +3,12 @@
  * records, a Vitest JSON report and the test sources.
  *
  * {@link decodeReport} reads a report that `vp test run --reporter=json` wrote, keeping only each
- * test's full name, file and state. {@link ledger} is pure: it takes every input in memory, the test
- * sources as text, and reads no file. A row's state is derived, never written by hand: `excluded`
- * when the features file excludes it, else `limited` when a claim names it, else `covered` when a
- * passing test carries its tag, else `unsupported-with-notice`. Beside the rows, the ledger shows
- * each engine of each browser run with the browser results it passed and failed.
+ * test's full name, the titles of the `describe` blocks around it, its file and its state.
+ * {@link ledger} is pure: it takes every input in memory, the test sources as text, and reads no
+ * file. A row's state is derived, never written by hand: `excluded` when the features file excludes
+ * it, else `limited` when a claim names it, else `covered` when a passing test carries its tag,
+ * else `unsupported-with-notice`. Beside the rows, the ledger shows each engine of each browser run
+ * with the browser results it passed and failed.
  *
  * @module
  */
@@ -26,13 +27,18 @@ export const testStates = ["disabled", "failed", "passed", "pending", "skipped",
 
 /**
  * The Schema of the part of a Vitest JSON report the ledger reads: each file's path and, for each
- * of its tests, the full name and state. Every other key is ignored.
+ * of its tests, the titles of the `describe` blocks around it, the full name and the state. Every
+ * other key is ignored.
  */
 const VitestReport = Schema.Struct({
   testResults: Schema.Array(
     Schema.Struct({
       assertionResults: Schema.Array(
-        Schema.Struct({ fullName: Schema.String, status: Schema.Literals(testStates) }),
+        Schema.Struct({
+          ancestorTitles: Schema.Array(Schema.String),
+          fullName: Schema.String,
+          status: Schema.Literals(testStates),
+        }),
       ),
       name: Schema.String,
     }),
@@ -43,6 +49,12 @@ const VitestReport = Schema.Struct({
  * One test's result, as the ledger reads it.
  */
 export interface TestResult {
+  /**
+   * The titles of the `describe` blocks around the test, the outermost first; empty for a test at
+   * its file's top level.
+   */
+  readonly ancestorTitles: readonly string[];
+
   /**
    * The test file's path relative to the package directory, with `/` separators, such as
    * `src/validate/open.test.ts`.
@@ -88,9 +100,9 @@ const decodeVitestReport = Schema.decodeUnknownEffect(Schema.fromJsonString(Vite
  * @param text The report's text, as `vp test run --reporter=json` wrote it.
  * @param root The package directory Vitest ran in, which every test file's path is made relative
  *   to.
- * @returns Every test's file, full name and state, in the report's order; a `SchemaError` when the
- *   text is not JSON of a Vitest report's shape, and {@link ReportOutsideRoot} when a test file
- *   lies outside `root`.
+ * @returns Every test's file, `describe` titles, full name and state, in the report's order; a
+ *   `SchemaError` when the text is not JSON of a Vitest report's shape, and
+ *   {@link ReportOutsideRoot} when a test file lies outside `root`.
  */
 export const decodeReport = Effect.fn("decodeReport")(function* decodeReport(
   text: string,
@@ -109,7 +121,12 @@ export const decodeReport = Effect.fn("decodeReport")(function* decodeReport(
     const file = relative.split(path.sep).join("/");
 
     for (const test of testFile.assertionResults) {
-      results.push({ file, fullName: test.fullName, state: test.status });
+      results.push({
+        ancestorTitles: test.ancestorTitles,
+        file,
+        fullName: test.fullName,
+        state: test.status,
+      });
     }
   }
 
@@ -511,10 +528,9 @@ const interactionColumns = (
  * failed.
  *
  * A browser file registers each case under a `describe` named for its engine (`eachEngine` in
- * `src/test/browsers.ts`), the outermost of the case's titles, and Vitest's full name joins a
- * case's titles with spaces, so a browser result ran in an engine when its full name starts with
- * the engine's name and a space. A result in any other file is not a browser result; a skipped or
- * pending one counts as neither passed nor failed.
+ * `src/test/browsers.ts`), the outermost of the case's `describe` blocks, so a browser result ran
+ * in an engine when its first ancestor title is the engine's name. A result in any other file is
+ * not a browser result; a skipped or pending one counts as neither passed nor failed.
  *
  * @param runs The browser runs.
  * @param results The test results.
@@ -529,7 +545,7 @@ const browserRunRows = (
   return runs.flatMap((run) =>
     run.engines.map((engine): BrowserRunRow => {
       const states = browserResults
-        .filter((result) => result.fullName.startsWith(`${engine.engine} `))
+        .filter((result) => result.ancestorTitles[0] === engine.engine)
         .map((result) => result.state);
 
       return {

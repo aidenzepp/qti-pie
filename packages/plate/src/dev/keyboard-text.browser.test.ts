@@ -1,24 +1,36 @@
 import { assert } from "@effect/vitest";
-import { ConfigProvider, Effect, Layer, Option, Predicate } from "effect";
+import { Effect, Option } from "effect";
 import type { Locator, Page } from "playwright-core";
-import { openMember } from "#plate/dev/listing.ts";
-import { h } from "#plate/emit/node.ts";
-import type { Element, Node } from "#plate/emit/node.ts";
+import type { Element } from "#plate/emit/node.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { message } from "#plate/messages.ts";
-import { interactionsIn } from "#plate/model/interactions.ts";
 import { attribute } from "#plate/test/accessibility.ts";
 import {
-  Playground,
-  WalkCorpus,
   eachEngine,
+  nextControlKey,
   playgroundLayer,
-  walkCorpusLayer,
+  walkPlaygroundLayer,
   withPage,
 } from "#plate/test/browsers.ts";
-import type { EngineName } from "#plate/test/browsers.ts";
+import type { NextControlKey } from "#plate/test/browsers.ts";
 import { tabOrder } from "#plate/test/keyboard.ts";
-import { parseHtml } from "#plate/test/round-trip.ts";
+import {
+  count,
+  elementStops,
+  elementsOf,
+  formStops,
+  inStatus,
+  instanceOf,
+  isFocused,
+  itemFormOf,
+  openItem,
+  press,
+  stopsToSubmit,
+  submitBy,
+  submitButton,
+  tabUntil,
+  textEntryOf,
+} from "#plate/test/playground-page.ts";
 
 /**
  * The example corpus's text items the keys answer: BG010's Text Entry, scored by `map_response`
@@ -124,131 +136,6 @@ const patternProbes: readonly PatternProbe[] = [
 ];
 
 /**
- * Where one press of the next-control key left focus, as the page in the browser holds it.
- */
-interface Stop {
-  /**
-   * Whether the focused element is in the item form.
-   */
-  readonly inForm: boolean;
-  /**
-   * The focused element's key, {@link keyOf}'s, empty when nothing is focused.
-   */
-  readonly key: string;
-  /**
-   * Whether the focused element is a link.
-   */
-  readonly link: boolean;
-  /**
-   * Whether the focused element is a `video` or `audio` that shows the engine's native controls,
-   * which take stops of their own inside it.
-   */
-  readonly media: boolean;
-  /**
-   * Whether the focused element is the item form's Submit button.
-   */
-  readonly submit: boolean;
-}
-
-/**
- * Collect every element of a tree, each before its descendants.
- *
- * @param nodes The tree's top-level nodes.
- * @returns The elements in document order.
- */
-const elementsOf = (nodes: readonly Node[]): readonly Element[] =>
-  nodes.flatMap((node) => (node.kind === "element" ? [node, ...elementsOf(node.children)] : []));
-
-/**
- * Identify an element as the tab-order comparison matches it: by its `id`, else by its `name` and
- * `value`, an attribute that is missing reading as empty.
- *
- * @param attributes The element's `id`, `name` and `value`.
- * @param attributes.id The `id`.
- * @param attributes.name The `name`.
- * @param attributes.value The `value`.
- * @returns The key.
- */
-const keyOf = (attributes: {
-  readonly id: string | null | undefined;
-  readonly name: string | null | undefined;
-  readonly value: string | null | undefined;
-}): string =>
-  attributes.id !== null && attributes.id !== undefined && attributes.id !== ""
-    ? `id=${attributes.id}`
-    : `name=${attributes.name ?? ""} value=${attributes.value ?? ""}`;
-
-/**
- * Open an item page of the playground in a page, and read the HTML it answered as a tree.
- *
- * @param page The page.
- * @param corpusPath The item's path in the playground's corpus.
- * @returns The page's nodes under one root, which `tabOrder` reads.
- */
-const openItem = Effect.fn("openItem")(function* openItem(page: Page, corpusPath: string) {
-  const { origin } = yield* Playground;
-  const query = new URLSearchParams({ path: corpusPath }).toString();
-  const response = yield* Effect.promise(() => page.goto(`${origin}/item?${query}`));
-
-  assert.isNotNull(response);
-  assert.strictEqual(response.status(), 200, corpusPath);
-
-  return h("body", {}, [...parseHtml(yield* Effect.promise(() => response.text()))]);
-});
-
-/**
- * Whether a form's `action` posts to the item page, which makes it the item form.
- *
- * @param action The form's `action`.
- * @returns Whether it names `/item`.
- */
-const isItemAction = (action: string): boolean => action.startsWith("/item?");
-
-/**
- * Find the item form of an item page.
- *
- * @param tree The item page's tree.
- * @returns The form; the test fails when the page has none.
- */
-const itemFormOf = (tree: Element): Element =>
-  elementsOf([tree]).find(
-    (element) => element.tag === "form" && isItemAction(attribute(element, "action") ?? ""),
-  ) ?? assert.fail("the item page has an item form");
-
-/**
- * Read the instance token the item form posts under, from its `action`.
- *
- * @param tree The item page's tree.
- * @returns The token; the test fails when the action names none.
- */
-const instanceOf = (tree: Element): string =>
-  new URL(
-    attribute(itemFormOf(tree), "action") ?? "",
-    "http://playground.invalid",
-  ).searchParams.get("instance") ?? assert.fail("the item form's action names its instance");
-
-/**
- * List the keys of the item form's tab stops, in the order the Node walk's `tabOrder` gives for
- * the whole page.
- *
- * @param tree The item page's tree.
- * @returns Each stop's key, {@link keyOf}'s, from the form's first control to its Submit.
- */
-const formStops = (tree: Element): readonly string[] => {
-  const inForm = new Set(elementsOf([itemFormOf(tree)]));
-
-  return tabOrder(tree)
-    .filter((element) => inForm.has(element))
-    .map((element) =>
-      keyOf({
-        id: attribute(element, "id"),
-        name: attribute(element, "name"),
-        value: attribute(element, "value"),
-      }),
-    );
-};
-
-/**
  * List the item form's textareas, in document order.
  *
  * @param tree The item page's tree.
@@ -256,74 +143,6 @@ const formStops = (tree: Element): readonly string[] => {
  */
 const textareasOf = (tree: Element): readonly Element[] =>
   elementsOf([itemFormOf(tree)]).filter((element) => element.tag === "textarea");
-
-/**
- * Open a walk-corpus probe and find its one Text Entry, from the item `open` accepted.
- *
- * @param directory The walk corpus's folder.
- * @param member The probe's path in the walk corpus.
- * @returns The Text Entry; the test fails when the probe is not accepted or holds another count.
- */
-const textEntryOf = Effect.fn("textEntryOf")(function* textEntryOf(
-  directory: string,
-  member: string,
-) {
-  const verdict = yield* openMember(member).pipe(
-    Effect.provide(
-      ConfigProvider.layer(ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: directory })),
-    ),
-  );
-  if (verdict.verdict === "refused" || verdict.verdict === "unchecked") {
-    return assert.fail(`${member} is ${verdict.verdict}, not accepted`);
-  }
-
-  const entries = interactionsIn(verdict.accepted.item.body).flatMap((interaction) =>
-    interaction.kind === "text-entry" ? [interaction] : [],
-  );
-  const [entry] = entries;
-
-  assert.strictEqual(entries.length, 1, `${member} holds one Text Entry`);
-  assert.isDefined(entry);
-
-  return entry;
-});
-
-/**
- * Locate the item form's Submit button by its role and name.
- *
- * @param page The page.
- * @returns The locator.
- */
-const submitButton = (page: Page): Locator =>
-  page.getByRole("button", { exact: true, name: message("en", "submit") });
-
-/**
- * Count the elements a locator matches.
- *
- * @param locator The locator.
- * @returns How many elements it matches now.
- */
-const count = (locator: Locator) => Effect.promise(() => locator.count());
-
-/**
- * Whether the element a locator matches holds keyboard focus.
- *
- * @param page The page.
- * @param target The locator.
- * @returns Whether a focused element is among its matches.
- */
-const isFocused = Effect.fn("isFocused")(function* isFocused(page: Page, target: Locator) {
-  return (yield* count(target.and(page.locator(":focus")))) > 0;
-});
-
-/**
- * Press a key on the page's keyboard.
- *
- * @param page The page.
- * @param key The key, as Playwright names it.
- * @returns Once the key is up.
- */
-const press = (page: Page, key: string) => Effect.promise(() => page.keyboard.press(key));
 
 /**
  * Type text into the focused element, a key press for each character.
@@ -343,32 +162,6 @@ const type = (page: Page, text: string) => Effect.promise(() => page.keyboard.ty
 const valueOf = (target: Locator) => Effect.promise(() => target.inputValue());
 
 /**
- * Submit the item form by a key press and wait for the page that answers the post, whose URL
- * names the instance.
- *
- * @param page The page.
- * @param key The key that submits, pressed on the focused element.
- * @returns Once the answering page has loaded.
- */
-const submitBy = (page: Page, key: string) =>
-  Effect.promise(() =>
-    Promise.all([
-      page.waitForURL((url) => url.searchParams.has("instance")),
-      page.keyboard.press(key),
-    ]),
-  );
-
-/**
- * Count the elements of the Status region whose text is exactly the given text.
- *
- * @param page The page after a submit.
- * @param text The text.
- * @returns How many elements of the region, read through its role `status`, hold it.
- */
-const inStatus = (page: Page, text: string) =>
-  count(page.getByRole("status").getByText(text, { exact: true }));
-
-/**
  * Count the Status region's headings that name an after-submit state.
  *
  * @param page The page after a submit.
@@ -379,187 +172,21 @@ const statusHeadings = (page: Page, state: "notAccepted" | "responseRecorded") =
   count(page.getByRole("status").getByRole("heading", { exact: true, name: message("en", state) }));
 
 /**
- * Give the key that moves focus to the next control of any kind in an engine on this platform.
+ * Press the next-control key through an item's page to its Submit, and compare the elements it
+ * visits inside the item form ({@link elementStops}) with the Node walk's `tabOrder` for that
+ * form.
  *
- * WebKit on macOS keeps Safari's split by default: Tab highlights only fields and pop-up menus,
- * and Option+Tab (Alt+Tab) highlights clickable items too, the buttons among them. Elsewhere Tab
- * reaches every control.
- *
- * @param name The engine.
- * @returns `Alt+Tab` for WebKit on macOS, else `Tab`.
- * @see https://support.apple.com/guide/safari/cpsh003/mac (Safari's keyboard shortcuts: Tab and Option-Tab, and the setting that swaps them)
- */
-const nextControlKey = (name: EngineName): string =>
-  name === "webkit" && process.platform === "darwin" ? "Alt+Tab" : "Tab";
-
-/**
- * Press the engine's next-control key until the focused element is one the target matches.
- *
- * @param page The page.
- * @param key The key, {@link nextControlKey}'s.
- * @param target The elements to reach.
- * @param most The most presses to make before the test fails.
- * @returns How many presses it took.
- */
-const tabUntil = Effect.fn("tabUntil")(function* tabUntil(
-  page: Page,
-  key: string,
-  target: Locator,
-  most: number,
-) {
-  for (let pressed = 1; pressed <= most; pressed += 1) {
-    yield* press(page, key);
-    if (yield* isFocused(page, target)) {
-      return pressed;
-    }
-  }
-
-  return assert.fail(`${String(most)} presses of ${key} never reached the target`);
-});
-
-/**
- * Write a script expression over the page's active element, `document.activeElement`, which is
- * the media element itself while focus is inside its native controls.
- *
- * @param expression The expression, which reads the element as `active`, never null there.
- * @returns The script, which gives the expression's value, or null when nothing is active.
- */
-const onActive = (expression: string): string =>
-  `(() => { const active = document.activeElement; return active === null ? null : ${expression}; })()`;
-
-/**
- * Whether the page's active element meets a condition.
- *
- * @param page The page.
- * @param condition The condition, a script expression over `active`.
- * @returns Whether it gives `true`; false when nothing is active.
- */
-const activeHolds = (page: Page, condition: string) =>
-  Effect.promise(async () => (await page.evaluate(onActive(condition))) === true);
-
-/**
- * Read an attribute of the page's active element.
- *
- * @param page The page.
- * @param name The attribute.
- * @returns Its value, or null when the element does not carry it or nothing is active.
- */
-const activeAttribute = (page: Page, name: "id" | "name" | "value") =>
-  Effect.promise(async () => {
-    const read: unknown = await page.evaluate(
-      onActive(`active.getAttribute(${JSON.stringify(name)})`),
-    );
-
-    return Predicate.isString(read) ? read : null;
-  });
-
-/**
- * Read where focus is, as a {@link Stop}.
- *
- * Inside a media element's native controls, Chromium keeps focus in the element's user-agent
- * shadow tree, where `:focus` matches no element of the document; the stop is then read from the
- * active element, the media element itself.
- *
- * @param page The page.
- * @returns The focused element's key and what it is; an empty key when nothing is focused.
- */
-const focusedStop = Effect.fn("focusedStop")(function* focusedStop(page: Page) {
-  const media = yield* activeHolds(
-    page,
-    `(active.localName === "video" || active.localName === "audio") && active.hasAttribute("controls")`,
-  );
-  const focused = page.locator(":focus");
-  if ((yield* count(focused)) === 0) {
-    return media
-      ? ({
-          inForm: yield* activeHolds(page, `active.closest('form[action^="/item?"]') !== null`),
-          key: keyOf({
-            id: yield* activeAttribute(page, "id"),
-            name: yield* activeAttribute(page, "name"),
-            value: yield* activeAttribute(page, "value"),
-          }),
-          link: false,
-          media,
-          submit: false,
-        } satisfies Stop)
-      : ({ inForm: false, key: "", link: false, media, submit: false } satisfies Stop);
-  }
-
-  const read = (name: string) => Effect.promise(() => focused.getAttribute(name));
-
-  return {
-    inForm: (yield* count(page.locator('form[action^="/item?"] :focus'))) > 0,
-    key: keyOf({ id: yield* read("id"), name: yield* read("name"), value: yield* read("value") }),
-    link: (yield* count(page.locator("a:focus"))) > 0,
-    media,
-    submit: yield* isFocused(page, submitButton(page)),
-  } satisfies Stop;
-});
-
-/**
- * Read the stops as the elements Tab visits: a run of stops on one media element, the element and
- * then its native controls, is one visit to that element, as the Node walk lists it.
- *
- * Chromium stops on a `video` with controls and then on each of its controls; WebKit stops on it
- * twice. The Node walk models the document, where the controls are not elements.
- *
- * @param stops The stops, in the order the presses reached them.
- * @returns The stops with each run on one media element kept as its first.
- */
-const elementStops = (stops: readonly Stop[]): readonly Stop[] =>
-  stops.filter((stop, index) => {
-    const previous = stops[index - 1];
-
-    return !(stop.media && previous?.media === true && previous.key === stop.key);
-  });
-
-/**
- * Press the engine's next-control key from the page's start until focus reaches the item form's
- * Submit, reading each stop.
- *
- * @param page The page, freshly loaded, with nothing focused.
- * @param key The key, {@link nextControlKey}'s.
- * @param most The most presses to make before the test fails.
- * @returns Every stop, in the order the presses reached them, the Submit last.
- */
-const stopsToSubmit = Effect.fn("stopsToSubmit")(function* stopsToSubmit(
-  page: Page,
-  key: string,
-  most: number,
-) {
-  const stops: Stop[] = [];
-  for (let pressed = 1; pressed <= most; pressed += 1) {
-    yield* press(page, key);
-
-    const stop = yield* focusedStop(page);
-    stops.push(stop);
-    if (stop.submit) {
-      return stops;
-    }
-  }
-
-  return assert.fail(`${String(most)} presses of ${key} never reached the item form's Submit`);
-});
-
-/**
- * Press the engine's next-control key through an item's page to its Submit, and compare the
- * elements it visits inside the item form ({@link elementStops}) with the Node walk's `tabOrder`
- * for that form.
- *
- * @param page The page.
- * @param name The engine.
+ * @param page The page, fresh: the key is probed on it first.
  * @param corpusPath The item's path in the playground's corpus.
- * @returns What the presses did beside the compared order: how many of the page's links they
- *   stopped on before the item form, and how many presses the form's media elements took.
+ * @returns What the presses did beside the compared order: the key pressed, how many of the page's
+ *   links they stopped on before the item form, and how many presses the form's media elements
+ *   took.
  */
-const tabOrderOf = Effect.fn("tabOrderOf")(function* tabOrderOf(
-  page: Page,
-  name: EngineName,
-  corpusPath: string,
-) {
+const tabOrderOf = Effect.fn("tabOrderOf")(function* tabOrderOf(page: Page, corpusPath: string) {
+  const key = yield* nextControlKey(page);
   const tree = yield* openItem(page, corpusPath);
   // Room for a media element's native controls, which the Node walk counts as one stop.
-  const stops = yield* stopsToSubmit(page, nextControlKey(name), 4 * tabOrder(tree).length);
+  const stops = yield* stopsToSubmit(page, key, 4 * tabOrder(tree).length);
   const first = stops.findIndex((stop) => stop.inForm);
 
   assert.isAtLeast(first, 0, "a press reached the item form");
@@ -569,6 +196,7 @@ const tabOrderOf = Effect.fn("tabOrderOf")(function* tabOrderOf(
   );
 
   return {
+    key,
     links: stops.slice(0, first).filter((stop) => stop.link).length,
     media: stops.slice(first).filter((stop) => stop.media).length,
   };
@@ -578,36 +206,24 @@ const tabOrderOf = Effect.fn("tabOrderOf")(function* tabOrderOf(
  * Describe what the presses did beside the compared order, for a test's annotation.
  *
  * @param seen What {@link tabOrderOf} returned.
+ * @param seen.key The next-control key pressed.
  * @param seen.links How many of the page's links the presses stopped on before the item form.
  * @param seen.media How many presses the item form's media elements took.
+ * @param label The item, as the test's title names it.
  * @returns The phrase.
  */
-const observed = (seen: { readonly links: number; readonly media: number }): string =>
-  [
+const observed = (
+  seen: { readonly key: NextControlKey; readonly links: number; readonly media: number },
+  label: string,
+): string =>
+  `${seen.key}: before ${label}'s item form, ${[
     seen.links > 0
       ? `stopped on ${String(seen.links)} of the page's links`
       : "stopped on none of the page's links",
     ...(seen.media > 0 ? [`the form's media elements took ${String(seen.media)} presses`] : []),
-  ].join("; ");
-
-/**
- * The walk corpus, and a playground over it whose configuration turns on `validateResponses`, so
- * a `pattern-mask` is checked.
- */
-const walkPlayground = Layer.unwrap(
-  Effect.gen(function* overWalkCorpus() {
-    const { directory } = yield* WalkCorpus;
-
-    return playgroundLayer({
-      configuration: { validateResponses: true },
-      provider: ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: directory }),
-    });
-  }),
-).pipe(Layer.provideMerge(walkCorpusLayer));
+  ].join("; ")}`;
 
 eachEngine((it, name) => {
-  const key = nextControlKey(name);
-
   it.layer(playgroundLayer({}))("the keyboard, text", (keys) => {
     for (const [label, corpusPath, tag] of [
       ["BG010", items.bg010, "[Q-20]"],
@@ -619,11 +235,9 @@ eachEngine((it, name) => {
         (context) =>
           withPage({ javaScriptEnabled: false }, (page) =>
             Effect.gen(function* tabOrderMatches() {
-              const seen = yield* tabOrderOf(page, name, corpusPath);
+              const seen = yield* tabOrderOf(page, corpusPath);
 
-              yield* Effect.promise(() =>
-                context.annotate(`${name}, ${key}: before ${label}'s item form, ${observed(seen)}`),
-              );
+              yield* Effect.promise(() => context.annotate(`${name}, ${observed(seen, label)}`));
             }),
           ),
       );
@@ -634,6 +248,7 @@ eachEngine((it, name) => {
       () =>
         withPage({ javaScriptEnabled: false }, (page) =>
           Effect.gen(function* answerYork() {
+            const key = yield* nextControlKey(page);
             const tree = yield* openItem(page, items.bg010);
             const entry = entryName(instanceOf(tree), responseId);
 
@@ -657,6 +272,7 @@ eachEngine((it, name) => {
         () =>
           withPage({ javaScriptEnabled: false }, (page) =>
             Effect.gen(function* answerEssay() {
+              const key = yield* nextControlKey(page);
               const tree = yield* openItem(page, essay.item);
               const chosen =
                 textareasOf(tree).find(
@@ -685,18 +301,16 @@ eachEngine((it, name) => {
     }
   });
 
-  it.layer(walkPlayground)("the keyboard, text, over the walk corpus", (walk) => {
+  it.layer(walkPlaygroundLayer)("the keyboard, text, over the walk corpus", (walk) => {
     walk.effect(
       "[Q-5] [keyboard] Tab order: ordered.xml's item form, from its first control to its Submit, is the Node walk's tabOrder",
       (context) =>
         withPage({ javaScriptEnabled: false }, (page) =>
           Effect.gen(function* orderedTabOrder() {
-            const seen = yield* tabOrderOf(page, name, orderedItem);
+            const seen = yield* tabOrderOf(page, orderedItem);
 
             yield* Effect.promise(() =>
-              context.annotate(
-                `${name}, ${key}: before ordered.xml's item form, ${observed(seen)}`,
-              ),
+              context.annotate(`${name}, ${observed(seen, "ordered.xml")}`),
             );
           }),
         ),
@@ -707,6 +321,7 @@ eachEngine((it, name) => {
       () =>
         withPage({ javaScriptEnabled: false }, (page) =>
           Effect.gen(function* answerOrdered() {
+            const key = yield* nextControlKey(page);
             const tree = yield* openItem(page, orderedItem);
             const entry = entryName(instanceOf(tree), responseId);
             const controls = page.locator(`textarea[name="${entry}"]`);
@@ -754,14 +369,14 @@ eachEngine((it, name) => {
         `[Q-20] [keyboard] pattern-mask: ${probe.label} refuses "${probe.mismatch}" typed by keys with its pattern message`,
         () =>
           Effect.gen(function* refused() {
-            const { directory } = yield* WalkCorpus;
-            const interaction = yield* textEntryOf(directory, probe.item);
+            const interaction = yield* textEntryOf(probe.item);
             const expected = Option.getOrElse(interaction.patternMaskMessage, () =>
               message("en", "patternMismatch"),
             );
 
             yield* withPage({ javaScriptEnabled: false }, (page) =>
               Effect.gen(function* typeMismatch() {
+                const key = yield* nextControlKey(page);
                 const tree = yield* openItem(page, probe.item);
                 const entry = entryName(instanceOf(tree), interaction.response);
 
@@ -785,14 +400,14 @@ eachEngine((it, name) => {
         `[Q-20] [keyboard] pattern-mask: ${probe.label} accepts "${probe.match}" typed by keys`,
         () =>
           Effect.gen(function* accepted() {
-            const { directory } = yield* WalkCorpus;
-            const interaction = yield* textEntryOf(directory, probe.item);
+            const interaction = yield* textEntryOf(probe.item);
             const expected = Option.getOrElse(interaction.patternMaskMessage, () =>
               message("en", "patternMismatch"),
             );
 
             yield* withPage({ javaScriptEnabled: false }, (page) =>
               Effect.gen(function* typeMatch() {
+                const key = yield* nextControlKey(page);
                 const tree = yield* openItem(page, probe.item);
                 const entry = entryName(instanceOf(tree), interaction.response);
 

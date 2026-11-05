@@ -15,9 +15,10 @@ import { Schema } from "effect";
 
 /**
  * An ISO 8601 date, `YYYY-MM-DD`, optionally followed by a time and a zone, such as
- * `2026-11-05T14:30:00Z`, read as `passes.ts` reads a record's date.
+ * `2026-11-05T14:30:00Z`: the date of a browser-run record here, and of each record `passes.ts`
+ * holds.
  */
-const isoDate = Schema.String.check(
+export const isoDate = Schema.String.check(
   Schema.isPattern(
     /^[0-9]{4}-[0-9]{2}-[0-9]{2}(?:T[0-9]{2}:[0-9]{2}(?::[0-9]{2}(?:\.[0-9]+)?)?(?:Z|[+-][0-9]{2}:[0-9]{2})?)?$/u,
   ),

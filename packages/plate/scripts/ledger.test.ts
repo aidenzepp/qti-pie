@@ -102,21 +102,32 @@ const posting = "styles.css [Q-2] posts the choice";
 const browserFile = "src/dev/walk.browser.test.ts";
 
 /**
+ * One test as a fixture report lists it: the titles of the `describe` blocks around it (none by
+ * default), its full name and its state.
+ */
+interface ReportedTest {
+  readonly ancestorTitles?: readonly string[];
+  readonly fullName: string;
+  readonly status: string;
+}
+
+/**
  * Write a Vitest JSON report with one test file, as `vp test run --reporter=json` writes it.
  *
- * @param tests Each test's full name and state.
+ * @param tests Each test's `describe` titles, full name and state.
  * @param file The test file, by its path under {@link scratch}: {@link testFile} by default.
  * @returns The report's text.
  */
-const report = (
-  tests: readonly { fullName: string; status: string }[],
-  file: string = testFile,
-): string =>
+const report = (tests: readonly ReportedTest[], file: string = testFile): string =>
   JSON.stringify({
     numFailedTests: tests.filter((test) => test.status === "failed").length,
     testResults: [
       {
-        assertionResults: tests.map((test) => ({ ...test, title: test.fullName })),
+        assertionResults: tests.map((test) => ({
+          ancestorTitles: [],
+          ...test,
+          title: test.fullName,
+        })),
         name: path.join(scratch, file),
         status: "passed",
       },
@@ -124,12 +135,27 @@ const report = (
   });
 
 /**
+ * One browser test as a fixture report lists it: under the `describe` named for its engine, as
+ * `eachEngine` registers it.
+ *
+ * @param engine The engine.
+ * @param title The test's own title.
+ * @param status How it ended.
+ * @returns The test.
+ */
+const inEngine = (engine: string, title: string, status: string): ReportedTest => ({
+  ancestorTitles: [engine],
+  fullName: `${engine} ${title}`,
+  status,
+});
+
+/**
  * The browser run's report when each engine passed one untagged test.
  */
 const browserPassing = report(
   [
-    { fullName: "chromium answers the item", status: "passed" },
-    { fullName: "webkit answers the item", status: "passed" },
+    inEngine("chromium", "answers the item", "passed"),
+    inEngine("webkit", "answers the item", "passed"),
   ],
   browserFile,
 );
@@ -447,13 +473,10 @@ describe("scripts/ledger.ts", () => {
           unitPassing,
           report(
             [
-              {
-                fullName: "chromium [Q-2] [keyboard] answers the Choice by keys",
-                status: "passed",
-              },
-              { fullName: "chromium answers the item", status: "passed" },
-              { fullName: "webkit answers the item", status: "passed" },
-              { fullName: "webkit reads the item", status: "skipped" },
+              inEngine("chromium", "[Q-2] [keyboard] answers the Choice by keys", "passed"),
+              inEngine("chromium", "answers the item", "passed"),
+              inEngine("webkit", "answers the item", "passed"),
+              inEngine("webkit", "reads the item", "skipped"),
             ],
             browserFile,
           ),
@@ -507,17 +530,11 @@ describe("scripts/ledger.ts", () => {
 
   it.effect("exits non-zero when a browser test failed, and counts it under its engine", () =>
     Effect.gen(function* failingBrowser() {
-      const failing = "webkit answers the item";
+      const failing = inEngine("webkit", "answers the item", "failed");
       const output = outputWith(
         "browser-failing",
         unitPassing,
-        report(
-          [
-            { fullName: "chromium answers the item", status: "passed" },
-            { fullName: failing, status: "failed" },
-          ],
-          browserFile,
-        ),
+        report([inEngine("chromium", "answers the item", "passed"), failing], browserFile),
       );
       const outcome = yield* build(fixture(output, 0, 1));
 
@@ -525,7 +542,7 @@ describe("scripts/ledger.ts", () => {
       assert.strictEqual(outcome.exitCode, 1);
       assert.deepStrictEqual(
         outcome.failed.map((test) => [test.file, test.fullName]),
-        [[browserFile, failing]],
+        [[browserFile, failing.fullName]],
       );
       assert.deepStrictEqual(
         outcome.ledger.browserRuns.map((row) => [row.engine, row.passed, row.failed]),
@@ -534,7 +551,7 @@ describe("scripts/ledger.ts", () => {
           ["webkit", 0, 1],
         ],
       );
-      assert.include(summary(outcome), failing);
+      assert.include(summary(outcome), failing.fullName);
     }),
   );
 

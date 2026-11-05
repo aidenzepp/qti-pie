@@ -5,8 +5,8 @@ import { defineConfig } from "vite-plus";
  * one worker. The unit run (`vite.config.ts`) excludes them.
  *
  * `globalSetup` (`src/test/browser-setup.ts`) runs before any file: it refuses the run while the
- * 1-minute load average is at the cap or above, or while an engine's executable is missing, so no
- * engine launches.
+ * 1-minute load average is at the cap or above, so no engine launches, and while an engine is not
+ * installed, so no test runs.
  */
 export default defineConfig({
   test: {

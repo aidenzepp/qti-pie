@@ -14,13 +14,14 @@ import { ConfigProvider, Effect, Option, Schema } from "effect";
 import type { Locator, Page } from "playwright-core";
 import { verdictCache } from "#plate/dev/listing.ts";
 import { corpusDocuments } from "#plate/document/corpus.ts";
-import type { Element, Node } from "#plate/emit/node.ts";
+import type { Element } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
 import type { Ledger } from "#plate/ledger/report.ts";
 import { ledgerHtml, verdictTable } from "#plate/ledger/view.ts";
 import { message } from "#plate/messages.ts";
 import { attribute, textOf } from "#plate/test/accessibility.ts";
 import { Playground, eachEngine, playgroundLayer, withPage } from "#plate/test/browsers.ts";
+import { elementsOf, itemTarget } from "#plate/test/playground-page.ts";
 import type { Accepted, Verdict } from "#plate/validate/verdict.ts";
 
 /**
@@ -161,24 +162,6 @@ beforeAll(async () => {
 afterAll(() => {
   rmSync(scratch, { force: true, recursive: true });
 });
-
-/**
- * Give the target of the item page for a corpus path.
- *
- * @param corpusPath The document's corpus path.
- * @returns `/item?path=…`.
- */
-const itemTarget = (corpusPath: string): string =>
-  `/item?${new URLSearchParams({ path: corpusPath }).toString()}`;
-
-/**
- * Collect every element of a tree, each before its descendants.
- *
- * @param nodes The tree's top-level nodes.
- * @returns The elements in document order.
- */
-const elementsOf = (nodes: readonly Node[]): readonly Element[] =>
-  nodes.flatMap((node) => (node.kind === "element" ? [node, ...elementsOf(node.children)] : []));
 
 /**
  * Give the children of an element that are elements.

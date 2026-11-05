@@ -13,7 +13,6 @@ import { pathToFileURL } from "node:url";
 import { assert } from "@effect/vitest";
 import type { Frame, Page } from "playwright-core";
 import { ConfigProvider, Effect, Option, Predicate } from "effect";
-import type { Element, Node } from "#plate/emit/node.ts";
 import { textOf } from "#plate/test/accessibility.ts";
 import {
   Engine,
@@ -24,6 +23,7 @@ import {
   walkCorpusLayer,
   withPage,
 } from "#plate/test/browsers.ts";
+import { elementsOf, itemTarget } from "#plate/test/playground-page.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 
 /**
@@ -108,24 +108,6 @@ interface Reached {
   readonly frame: Frame;
   readonly via: "contentFrame()" | "frame URL";
 }
-
-/**
- * Give the target of the item page for a corpus path.
- *
- * @param corpusPath The document's corpus path.
- * @returns `/item?path=…`.
- */
-const itemTarget = (corpusPath: string): string =>
-  `/item?${new URLSearchParams({ path: corpusPath }).toString()}`;
-
-/**
- * Collect every element of a tree, each before its descendants.
- *
- * @param nodes The tree's top-level nodes.
- * @returns The elements in document order.
- */
-const elementsOf = (nodes: readonly Node[]): readonly Element[] =>
-  nodes.flatMap((node) => (node.kind === "element" ? [node, ...elementsOf(node.children)] : []));
 
 /**
  * Read the `object` elements of a page the playground answered, as a reader of its HTML would.

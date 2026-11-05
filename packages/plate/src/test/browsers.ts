@@ -1,7 +1,8 @@
 /**
  * The browser harness: Chromium and WebKit from `playwright-core`, headless; the dev playground on
- * a port the system chooses; the walk corpus in a scratch folder; and the two guards every browser
- * run passes, the load cap and the reserved ports.
+ * a port the system chooses; the walk corpus in a scratch folder; the key that moves focus to the
+ * next control in each engine; and the two guards every browser run passes, the load cap and the
+ * reserved ports.
  *
  * A browser test lives in a `src/**\/*.browser.test.ts` file, which only `test:browser`
  * (`vite.browser.config.ts`) selects, and registers its cases through {@link eachEngine}, so each
@@ -13,15 +14,13 @@
  */
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 import { randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import { access, rm } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { rm } from "node:fs/promises";
 import path from "node:path";
 import { layer } from "@effect/vitest";
 import type { Vitest } from "@effect/vitest";
 import { chromium, webkit } from "playwright-core";
 import type { Browser, BrowserType, Page } from "playwright-core";
-import { ConfigProvider, Context, Effect, Layer, Predicate, Result, Schema, pipe } from "effect";
+import { ConfigProvider, Context, Effect, Layer, Result, Schema } from "effect";
 import type { Config, Scope } from "effect";
 import { listen } from "#plate/dev/listen.ts";
 import type { ListenFailed } from "#plate/dev/listen.ts";
@@ -93,7 +92,8 @@ export class ReservedPort extends Schema.TaggedError<ReservedPort>()("ReservedPo
 }
 
 /**
- * The failure of an engine whose executable is missing or cannot be run.
+ * The failure of an engine whose executable is not installed: Playwright's launch found no file at
+ * the path it runs, under `PLAYWRIGHT_BROWSERS_PATH`.
  */
 export class BrowsersMissing extends Schema.TaggedError<BrowsersMissing>()("BrowsersMissing", {
   engine: Schema.Literals(engineNames),
@@ -103,7 +103,7 @@ export class BrowsersMissing extends Schema.TaggedError<BrowsersMissing>()("Brow
    * What failed and what to change.
    */
   override get message(): string {
-    return `The ${this.engine} executable ${this.executable} is missing or cannot be run. Run the browser tests through \`pnpm --filter @qti-pie/plate test:browser\`, which reads the engines from ~/.cache/gr8des/ms-playwright, and download them there once with \`${browsersCommand}\`.`;
+    return `The ${this.engine} executable is missing: Playwright looked for it at ${this.executable}. Run the browser tests through \`pnpm --filter @qti-pie/plate test:browser\`, which reads the engines from ~/.cache/gr8des/ms-playwright, and download them there once with \`${browsersCommand}\`.`;
   }
 }
 
@@ -119,22 +119,6 @@ export class LaunchFailed extends Schema.TaggedError<LaunchFailed>()("LaunchFail
    */
   override get message(): string {
     return `Cannot launch ${this.engine}: ${this.detail}. Download the engines again with \`${browsersCommand}\` if the install is damaged, or free memory and processes if the system refused the launch.`;
-  }
-}
-
-/**
- * The failure of reading, from Playwright's browser registry, the executable a headless launch
- * runs.
- */
-export class RegistryUnreadable extends Schema.TaggedError<RegistryUnreadable>()(
-  "RegistryUnreadable",
-  { detail: Schema.String },
-) {
-  /**
-   * What failed and what to change.
-   */
-  override get message(): string {
-    return `Cannot read the executable a headless launch runs from playwright-core's browser registry: ${this.detail}. The harness reads it from \`playwright-core/lib/coreBundle\`; check that module's layout against the installed playwright-core.`;
   }
 }
 
@@ -191,158 +175,47 @@ export class WalkCorpus extends Context.Service<WalkCorpus, { readonly directory
 const browserTypes = { chromium, webkit } as const satisfies Record<EngineName, BrowserType>;
 
 /**
- * The name Playwright's browser registry gives the executable a headless launch of each engine
- * runs. A headless Chromium launch runs the headless shell (`chromium-headless-shell`), the only
- * Chromium `browsers` downloads (`--only-shell`); a WebKit launch runs `webkit`.
+ * The text Playwright's launch error carries when the engine's executable is not installed, with
+ * the path it looked for after it.
  *
- * @see https://github.com/microsoft/playwright/blob/v1.64.1/packages/playwright-core/src/server/chromium/chromium.ts (`getExecutableName`: headless picks `chromium-headless-shell`)
+ * @see https://github.com/microsoft/playwright/blob/v1.64.1/packages/playwright-core/src/server/registry/index.ts (`executablePathOrDie`: "Executable doesn't exist at …")
  */
-const executableNames = {
-  chromium: "chromium-headless-shell",
-  webkit: "webkit",
-} as const satisfies Record<EngineName, string>;
+const missingExecutable = /Executable doesn't exist at (?<executable>[^\r\n]+)/u;
 
 /**
- * Node's `require`, which loads `playwright-core/lib/coreBundle`. That module is in
- * `playwright-core`'s `exports` map but ships no types, so it is loaded here and read as
- * `unknown`; `playwright-core`'s own entry loads the same module, so its registry is the one a
- * launch reads.
- */
-const requireModule = createRequire(import.meta.url);
-
-/**
- * Read a property of a value from Playwright's untyped bundle.
- *
- * @param target The value.
- * @param key The property's name.
- * @returns The property's value, or {@link RegistryUnreadable} when the value has no such property.
- */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- The registry comes from an untyped CommonJS bundle, so each step reads an unknown value and checks it.
-const member = (target: unknown, key: string): Result.Result<unknown, RegistryUnreadable> =>
-  Predicate.hasProperty(target, key)
-    ? Result.succeed(target[key])
-    : Result.fail(new RegistryUnreadable({ detail: `it has no ${key}` }));
-
-/**
- * The part of a registry executable the harness reads, as Playwright's registry declares it:
- * `executablePath` gives the path the executable runs from under `PLAYWRIGHT_BROWSERS_PATH`,
- * whether or not anything is installed there, or `undefined` on a platform it does not support.
- * The bundle is untyped, so {@link executableOf} checks each value it reads again.
- */
-interface RegistryExecutable {
-  readonly executablePath: () => string | undefined;
-}
-
-/**
- * The part of Playwright's browser registry the harness reads, as the registry declares it:
- * `findExecutable` gives the executable registered under a name, or `undefined` for a name it does
- * not know. Each method is called on its object, which it reads as `this`.
- */
-interface BrowserRegistry {
-  readonly findExecutable: (name: string) => RegistryExecutable | undefined;
-}
-
-/**
- * Whether a value from Playwright's untyped bundle is a {@link BrowserRegistry}.
- *
- * @param value The value.
- * @returns Whether it has a `findExecutable` function.
- */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- The registry comes from an untyped CommonJS bundle, so each step reads an unknown value and checks it.
-const isBrowserRegistry = (value: unknown): value is BrowserRegistry =>
-  Predicate.hasProperty(value, "findExecutable") && Predicate.isFunction(value.findExecutable);
-
-/**
- * Whether a value from Playwright's untyped bundle is a {@link RegistryExecutable}.
- *
- * @param value The value.
- * @returns Whether it has an `executablePath` function.
- */
-// oxlint-disable-next-line anti-slop/no-unknown-parameters -- The registry comes from an untyped CommonJS bundle, so each step reads an unknown value and checks it.
-const isRegistryExecutable = (value: unknown): value is RegistryExecutable =>
-  Predicate.hasProperty(value, "executablePath") && Predicate.isFunction(value.executablePath);
-
-/**
- * Find the executable a headless launch of the engine runs, as Playwright's browser registry
- * resolves it under `PLAYWRIGHT_BROWSERS_PATH`.
- *
- * `BrowserType.executablePath()` names Chromium's full browser, which `browsers` does not
- * download, not the headless shell a headless launch runs, so the path comes from the registry,
- * where the launch itself reads it.
+ * Read a failed launch: {@link BrowsersMissing} when Playwright found no executable to run, else
+ * {@link LaunchFailed}.
  *
  * @param name The engine.
- * @returns The executable's path, which may not exist; {@link RegistryUnreadable} when the registry
- *   does not have the layout this reads.
- * @see https://github.com/microsoft/playwright/blob/v1.64.1/packages/playwright-core/src/server/registry/index.ts (`Registry.findExecutable`, `executablePath`)
+ * @param detail The launch error's message.
+ * @returns The failure.
  */
-export const executableOf = (name: EngineName): Result.Result<string, RegistryUnreadable> =>
-  pipe(
-    member(requireModule("playwright-core/lib/coreBundle"), "registry"),
-    Result.flatMap((module) => member(module, "registry")),
-    Result.flatMap((registry) =>
-      isBrowserRegistry(registry)
-        ? Result.succeed(registry.findExecutable(executableNames[name]))
-        : Result.fail(new RegistryUnreadable({ detail: "its registry has no findExecutable" })),
-    ),
-    Result.flatMap((executable) =>
-      isRegistryExecutable(executable)
-        ? Result.succeed(executable.executablePath())
-        : Result.fail(
-            new RegistryUnreadable({ detail: `it registers no ${executableNames[name]}` }),
-          ),
-    ),
-    Result.flatMap((found) =>
-      Predicate.isString(found) && found !== ""
-        ? Result.succeed(found)
-        : Result.fail(
-            new RegistryUnreadable({ detail: `it names no ${executableNames[name]} executable` }),
-          ),
-    ),
-  );
+const launchFailure = (name: EngineName, detail: string): BrowsersMissing | LaunchFailed => {
+  const executable = missingExecutable.exec(detail)?.groups?.["executable"];
 
-/**
- * Require the executable a headless launch of the engine runs to exist and be executable.
- *
- * @param name The engine.
- * @returns The executable's path; {@link BrowsersMissing} when it is missing or cannot be run.
- */
-export const requireExecutable = Effect.fn("requireExecutable")(function* requireExecutable(
-  name: EngineName,
-): Effect.fn.Return<string, BrowsersMissing | RegistryUnreadable> {
-  const executable = yield* Effect.fromResult(executableOf(name));
-
-  yield* Effect.tryPromise({
-    catch: () => new BrowsersMissing({ engine: name, executable }),
-    try: () => access(executable, constants.X_OK),
-  });
-
-  return executable;
-});
+  return executable === undefined
+    ? new LaunchFailed({ detail, engine: name })
+    : new BrowsersMissing({ engine: name, executable: executable.trim() });
+};
 
 /**
  * Launch the engine headless and provide it as {@link Engine}; releasing the layer closes the
  * browser and every context it holds.
  *
  * @param name The engine.
- * @returns The layer; it fails with {@link BrowsersMissing} when the executable is missing, with
- *   {@link LaunchFailed} when it is there but does not launch, and with {@link RegistryUnreadable}
- *   when Playwright's registry cannot say where the executable is.
+ * @returns The layer; it fails with {@link BrowsersMissing} when the executable is not installed,
+ *   and with {@link LaunchFailed} when it is there but does not launch.
  */
 export const engineLayer = (
   name: EngineName,
-): Layer.Layer<Engine, BrowsersMissing | LaunchFailed | RegistryUnreadable> =>
+): Layer.Layer<Engine, BrowsersMissing | LaunchFailed> =>
   Layer.effect(
     Engine,
     Effect.gen(function* launch() {
-      yield* requireExecutable(name);
-
       const browser = yield* Effect.acquireRelease(
         Effect.tryPromise({
           catch: (cause) =>
-            new LaunchFailed({
-              detail: cause instanceof Error ? cause.message : String(cause),
-              engine: name,
-            }),
+            launchFailure(name, cause instanceof Error ? cause.message : String(cause)),
           try: () => browserTypes[name].launch({ headless: true }),
         }),
         (launched) => Effect.promise(() => launched.close()),
@@ -411,6 +284,31 @@ export const walkCorpusLayer: Layer.Layer<
 );
 
 /**
+ * The walk corpus, and a playground over it whose configuration turns on `validateResponses`, so a
+ * post's entry is checked against its `pattern-mask`; it provides both {@link WalkCorpus} and
+ * {@link Playground}.
+ */
+export const walkPlaygroundLayer: Layer.Layer<
+  Playground | WalkCorpus,
+  | CorpusFileUnreadable
+  | CorpusMissing
+  | Config.ConfigError
+  | ListenFailed
+  | ProbeUnderivable
+  | ProbeUnwritable
+  | ReservedPort
+> = Layer.unwrap(
+  Effect.gen(function* overWalkCorpus() {
+    const { directory } = yield* WalkCorpus;
+
+    return playgroundLayer({
+      configuration: { validateResponses: true },
+      provider: ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: directory }),
+    });
+  }),
+).pipe(Layer.provideMerge(walkCorpusLayer));
+
+/**
  * Open one page in a new browser context of the {@link Engine} and use it; the page and its context
  * are closed when `use` ends, however it ends.
  *
@@ -439,6 +337,47 @@ export const withPage = <A, E, R>(
       return yield* use(page);
     }),
   );
+
+/**
+ * A key that moves focus to the next control: Tab, or Option-Tab, which Playwright names
+ * `Alt+Tab`.
+ */
+export type NextControlKey = "Alt+Tab" | "Tab";
+
+/**
+ * The document {@link nextControlKey} probes with: one button, a control Tab skips where it moves
+ * only between text fields.
+ */
+const keyProbe = '<!doctype html><title>Key probe</title><button type="button">Probe</button>';
+
+/**
+ * Find the key that moves focus to the next control of any kind, text field or not, in the page's
+ * engine as it is set up.
+ *
+ * WebKit on macOS keeps Safari's split by default: Tab highlights only text fields and pop-up
+ * menus, and Option-Tab highlights clickable items too, the radios, checkboxes and buttons among
+ * them; with Safari's "Press Tab to highlight each item" on, Tab highlights every item. Elsewhere
+ * Tab reaches every control. So the key is probed, not assumed: the page loads a document of one
+ * button and Tab is pressed once from its start; when focus lands on the button the key is Tab,
+ * else Option-Tab.
+ *
+ * Call it once on a fresh page, before the page opens what the test reads: the probe replaces the
+ * page's document, and the test's next navigation replaces the probe.
+ *
+ * @param page The page.
+ * @returns `Tab` when Tab reaches the button, else `Alt+Tab`.
+ * @see https://support.apple.com/guide/safari/cpsh003/mac (Safari's keyboard shortcuts: Tab and Option-Tab, and the setting that swaps them)
+ */
+export const nextControlKey = Effect.fn("nextControlKey")(function* nextControlKey(
+  page: Page,
+): Effect.fn.Return<NextControlKey> {
+  yield* Effect.promise(() => page.setContent(keyProbe));
+  yield* Effect.promise(() => page.keyboard.press("Tab"));
+
+  const reached = yield* Effect.promise(() => page.locator("button:focus").count());
+
+  return reached > 0 ? "Tab" : "Alt+Tab";
+});
 
 /**
  * Register a file's browser tests once per engine: for each of {@link engineNames}, a `describe`

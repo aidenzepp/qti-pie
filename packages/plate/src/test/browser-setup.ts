@@ -2,10 +2,11 @@
  * The browser run's global setup, which `vite.browser.config.ts` registers as `globalSetup`.
  *
  * Before any browser file loads, it refuses the run while the 1-minute load average is at the cap
- * or above, and while an engine's executable is missing, so a refused run launches no engine.
- * Once both checks pass, it launches each engine headless, reads the version the browser reports,
- * closes it, and writes the browser-run record (`#plate/ledger/runs.ts`) to the ledger's folder,
- * so the ledger can say which engines, at which versions, the browser tests ran in.
+ * or above, so a refused run launches no engine. Then it launches each engine headless, reads the
+ * version the browser reports, closes it, and writes the browser-run record
+ * (`#plate/ledger/runs.ts`) to the ledger's folder, so the ledger can say which engines, at which
+ * versions, the browser tests ran in. An engine that is not installed fails its launch with
+ * `BrowsersMissing`, whose message says how to download it, and the run stops before any test.
  */
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -16,13 +17,7 @@ import { DateTime, Effect, Schema } from "effect";
 import { ledgerDirectory } from "#plate/ledger/directory.ts";
 import { BrowserRun, browserRunFile } from "#plate/ledger/runs.ts";
 import type { EngineRun } from "#plate/ledger/runs.ts";
-import {
-  Engine,
-  engineLayer,
-  engineNames,
-  refuseLoad,
-  requireExecutable,
-} from "#plate/test/browsers.ts";
+import { Engine, engineLayer, engineNames, refuseLoad } from "#plate/test/browsers.ts";
 import type { EngineName } from "#plate/test/browsers.ts";
 
 /**
@@ -124,7 +119,7 @@ const launchedRun = (name: EngineName) =>
 /**
  * Launch each engine in turn, then write the record of the run to {@link browserRunFile} in the
  * ledger's folder, `PLATE_LEDGER_DIR` (`work/ledger` in the package by default), creating the
- * folder when it is missing.
+ * folder when it is missing. An engine that is not installed fails with `BrowsersMissing`.
  */
 const recordRun = Effect.gen(function* recordRun() {
   const date = DateTime.formatIso(yield* DateTime.now);
@@ -145,14 +140,13 @@ const recordRun = Effect.gen(function* recordRun() {
 }).pipe(Effect.withSpan("browserRunRecord"));
 
 /**
- * The checks a browser run passes before any engine launches, the load cap and then each engine's
- * executable, followed by the record of the engines the run launches.
+ * The load cap, checked before any engine launches, followed by the record of the engines the run
+ * launches.
  */
 const ready = Effect.gen(function* ready() {
   const [load = Number.NaN] = os.loadavg();
 
   yield* Effect.fromResult(refuseLoad(load));
-  yield* Effect.forEach(engineNames, (name) => requireExecutable(name), { discard: true });
   yield* recordRun;
 }).pipe(Effect.withSpan("browserSetup"));
 
