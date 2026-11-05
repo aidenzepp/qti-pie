@@ -508,8 +508,29 @@ const promptedEssay: ExtendedTextInteraction = {
 const authorNamedEssay: ExtendedTextInteraction = { ...promptedEssay, prompt: Option.none() };
 
 /**
+ * The prompted Extended Text in the `xhtml` format, whose Control carries `data-format`.
+ */
+const xhtmlEssay: ExtendedTextInteraction = { ...promptedEssay, format: "xhtml" };
+
+/**
+ * The prompted Extended Text bound to an `ordered` response of at most three strings: three
+ * Controls in a Root that is a group its Prompt names.
+ */
+const groupedEssay: ExtendedTextInteraction = {
+  ...promptedEssay,
+  cardinality: "ordered",
+  maxStrings: Option.some(3n),
+};
+
+/**
+ * The grouped Extended Text with no Prompt, its group named by the author's `aria-label` and
+ * `aria-labelledby`.
+ */
+const authorNamedGroup: ExtendedTextInteraction = { ...groupedEssay, prompt: Option.none() };
+
+/**
  * Construct an item whose body holds one interaction, bound to a response of its base type and
- * cardinality, and a Notice for an unsupported part.
+ * cardinality (a Text Entry's is single), and a Notice for an unsupported part.
  *
  * @param interaction The interaction.
  * @returns The item.
@@ -552,7 +573,7 @@ const itemOf = (
       {
         areaMapping: Option.none(),
         baseType: interaction.kind === "choice" ? "identifier" : interaction.baseType,
-        cardinality: interaction.kind === "choice" ? interaction.cardinality : "single",
+        cardinality: interaction.kind === "text-entry" ? "single" : interaction.cardinality,
         correct: Option.none(),
         defaultValue: Option.none(),
         identifier: interaction.response,
@@ -620,6 +641,9 @@ describe("the merged column", () => {
           { interaction: textEntry, posted: ["1066"] },
           { interaction: promptedEssay, posted: ["A day."] },
           { interaction: authorNamedEssay, posted: ["A day."] },
+          { interaction: xhtmlEssay, posted: ["A <b>day</b>."] },
+          { interaction: groupedEssay, posted: ["A day.", "Another."] },
+          { interaction: authorNamedGroup, posted: ["A day."] },
         ];
         const rendered = [
           ...items.map(({ interaction, posted }) =>
