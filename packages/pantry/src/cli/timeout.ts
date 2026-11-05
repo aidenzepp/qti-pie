@@ -93,10 +93,10 @@ export const withTimeout = <Name extends string, Input, ContextInput, E, R>(
   self: CommandType.Command<Name, Input, ContextInput, E, R>,
 ) => {
   // SAFETY: `Command` has no public way to wrap a handler: `withHandler` replaces one, and
-  // `mapHandler` (`effect/src/cli/Command.ts:2566`), which wraps one, is not exported. Every
+  // `mapHandler` (`effect/src/cli/Command.ts:2580`), which wraps one, is not exported. Every
   // command it builds carries its handler as `handle(input, commandPath)`, which `Command.run`
-  // itself calls with `[name]` for the root (`Command.ts:3465`). The type is the one
-  // `CommandInternal.handle` declares (`effect/src/cli/internal/command.ts:46-49`). Effect 4.0.7:
+  // itself calls with `[name]` for the root (`Command.ts:3488`). The type is the one
+  // `CommandInternal.handle` declares (`effect/src/cli/internal/command.ts:46-49`). Effect 4.1.2:
   // an upgrade re-reads these three places.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
   const handle = (Predicate.hasProperty(self, "handle") ? self.handle : undefined) as
