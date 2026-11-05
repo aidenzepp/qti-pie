@@ -1,9 +1,9 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceChild, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { runAttempt } from "#plate/engine/attempt.ts";
-import { OutcomeMismatchError } from "#plate/engine/evaluate.ts";
+import { UnknownIdentifierError } from "#plate/engine/evaluate.ts";
 import { buildItem } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
@@ -365,20 +365,30 @@ describe("runAttempt", () => {
 
   it.effect("returns the evaluator's failure and leaves the record it was given unchanged", () =>
     Effect.gen(function* returnsFailure() {
-      const item = yield* buildItem(
-        itemDocument(
-          trueFalse,
-          declaration("qti-outcome-declaration", "SCORE", "integer"),
-          template("match_correct"),
-        ),
-      );
-      const record = fresh(item, instance);
+      // The model keeps only rules whose needs the item meets, so the failure comes from the
+      // record the host hands back: this one holds no value of the RESPONSE match_correct reads.
+      const item = yield* buildItem(bg007);
+      const record: ItemRecord = { ...fresh(item, instance), responses: {} };
       const before = structuredClone(record);
 
-      const failure = failureOf(runAttempt(item, record, { RESPONSE: identifierValue("true") }));
+      const failure = failureOf(runAttempt(item, record, {}));
 
-      assert.instanceOf(failure, OutcomeMismatchError);
-      assert.strictEqual(failure._tag, "OutcomeMismatchError");
+      assert.isTrue(Option.isSome(item.processing));
+      assert.instanceOf(failure, UnknownIdentifierError);
+      assert.deepStrictEqual(
+        {
+          _tag: failure._tag,
+          holder: failure.holder,
+          identifier: failure.identifier,
+          role: failure.role,
+        },
+        {
+          _tag: "UnknownIdentifierError",
+          holder: "record",
+          identifier: "RESPONSE",
+          role: "variable",
+        },
+      );
       assert.deepStrictEqual(record, before);
     }),
   );

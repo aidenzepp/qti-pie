@@ -1025,7 +1025,7 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "[I-9b] marks processing that reads an area mapping with a % coordinate area-coords-percent",
+    "marks processing that reads an area mapping with a % coordinate area-coords-percent",
     () =>
       Effect.gen(function* marksPercentCoords() {
         const inline = el(
@@ -1163,7 +1163,7 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "[I-9b] marks CC2_map_response and CC2_match_basic on an item with no MAXSCORE variable:MAXSCORE, and refuses neither",
+    "marks CC2_map_response and CC2_match_basic on an item with no MAXSCORE variable:MAXSCORE, and refuses neither",
     () =>
       Effect.gen(function* marksMissingMaxScore() {
         for (const name of ["CC2_map_response", "CC2_match_basic"]) {
@@ -1985,7 +1985,7 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "[I-9b] gives no processing for a template outside the built-ins or an element outside the engine",
+    "gives no processing for a template outside the built-ins or an element outside the engine",
     () =>
       Effect.gen(function* unsupportedProcessing() {
         const declarations = [
