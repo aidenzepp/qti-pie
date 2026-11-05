@@ -276,11 +276,6 @@ export const renders = {
   engine,
   marks: [
     {
-      feature: 'shuffle="true"',
-      on: ["qti-choice-interaction"],
-      when: { kind: "attribute-true", name: "shuffle" },
-    },
-    {
       feature: "string-identifier",
       on: textInteractions,
       when: { kind: "attribute", name: "string-identifier" },

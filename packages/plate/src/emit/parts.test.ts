@@ -424,8 +424,8 @@ const legendChoice: ChoiceInteraction = {
   ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
-    { content: [words("Red")], identifier: "A" },
-    { content: [words("Blue")], identifier: "B" },
+    { content: [words("Red")], fixed: false, identifier: "A" },
+    { content: [words("Blue")], fixed: false, identifier: "B" },
   ],
   class: "swatches",
   kind: "choice",

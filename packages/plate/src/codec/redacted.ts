@@ -57,6 +57,7 @@ interface BodyTextJson {
  */
 interface SimpleChoiceJson {
   readonly content: readonly BodyNodeJson[];
+  readonly fixed: boolean;
   readonly identifier: string;
 }
 
@@ -202,7 +203,9 @@ const BodyNodeSchema = Schema.Union([
     ariaLabel: OptionalText,
     ariaLabelledby: OptionalText,
     cardinality: Schema.Literals(["multiple", "single"]),
-    choices: Schema.Array(Schema.Struct({ content: BodyNodes, identifier: Schema.String })),
+    choices: Schema.Array(
+      Schema.Struct({ content: BodyNodes, fixed: Schema.Boolean, identifier: Schema.String }),
+    ),
     class: Schema.String,
     kind: Schema.Literal("choice"),
     maxChoices: ChoiceCount,

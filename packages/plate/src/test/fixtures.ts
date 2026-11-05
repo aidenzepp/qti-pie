@@ -35,7 +35,7 @@ export const float = (value: number): Value => ({
 
 /**
  * A BG007-shaped item, built by hand: an identifier `RESPONSE`, a float `SCORE` with default 1,
- * outcomes with no default of each kind, one notice and one mark.
+ * outcomes with no default of each kind, and one notice.
  */
 export const bg007Item: Item = {
   body: [],
@@ -105,11 +105,6 @@ export const bg007Item: Item = {
       feature: "qti-hotspot-interaction",
       path: "qti-assessment-item/qti-item-body/qti-hotspot-interaction",
       shown: "notice",
-    },
-    {
-      feature: 'shuffle="true"',
-      path: "qti-assessment-item/qti-item-body/qti-choice-interaction",
-      shown: "mark",
     },
   ],
 };

@@ -89,8 +89,8 @@ const choice: ChoiceInteraction = {
   ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
-    { content: [text("Paris")], identifier: "A" },
-    { content: [text("Lyon")], identifier: "B" },
+    { content: [text("Paris")], fixed: false, identifier: "A" },
+    { content: [text("Lyon")], fixed: false, identifier: "B" },
   ],
   class: "stacked",
   kind: "choice",
