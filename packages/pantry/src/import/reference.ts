@@ -9,6 +9,7 @@
  */
 import type { Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
+import * as patterns from "#pantry/schema/patterns.ts";
 import { typedValues } from "#pantry/schema/attribute-homes.ts";
 import { resolvePackageReference } from "#pantry/import/package-reference.ts";
 import { reachOf } from "#pantry/import/reach.ts";
@@ -16,15 +17,22 @@ import type { StructureDocument } from "#pantry/import/reach.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { attributeReader } from "#pantry/import/interactions.ts";
 import { requiredAttribute } from "#pantry/import/required.ts";
-import { Rows, withParents } from "#pantry/import/tree.ts";
-import type { ItemRefusal, NodeIndex } from "#pantry/import/tree.ts";
+import { ItemRefusal, Rows, withParents } from "#pantry/import/tree.ts";
+import type { NodeIndex } from "#pantry/import/tree.ts";
 import {
   MappedVariableName,
   PackagePath,
   TestStructureIdentifier,
 } from "#pantry/schema/contracts.ts";
 import { NodeXmlBase } from "#pantry/schema/attributes.ts";
+import { Declaration, TypedDeclaration } from "#pantry/schema/declaration.ts";
 import { Document } from "#pantry/schema/document.ts";
+import {
+  FeedbackBlock,
+  FeedbackInline,
+  ModalFeedback,
+  TemplateFeedbackBlock,
+} from "#pantry/schema/feedback.ts";
 import { Edge, Node } from "#pantry/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle } from "#pantry/schema/node.ts";
 import { File, Resource, ResourceHref } from "#pantry/schema/package.ts";
@@ -37,6 +45,12 @@ import {
   StimulusRefResolution,
 } from "#pantry/schema/reference.ts";
 import { ItemStimulusRef } from "#pantry/schema/stimulus.ts";
+import { PrintedVariable, PrintedVariableIndex } from "#pantry/schema/template.ts";
+import {
+  SectionFeedbackOutcomeRef,
+  SectionPrintedVariableRef,
+  SectionPrintedVariableVarRef,
+} from "#pantry/schema/test/content.ts";
 import { TemplateDefault, VariableMapping } from "#pantry/schema/test/rules.ts";
 import {
   ItemRef,
@@ -424,6 +438,157 @@ const reachRows = Effect.fn("import.reachRows")(function* reachRows(
   );
 });
 
+const integerPattern = new RegExp(patterns.xsInteger, "u");
+
+const integerOrVariablePattern = new RegExp(patterns.integerOrVariableString, "u");
+
+/**
+ * The variable a printed variable's `base` or `index` names, as the item pass reads it: a value the
+ * integer member admits names none, and one the variable member admits names that variable.
+ */
+const namedVariable = (spelling: string): Option.Option<string> =>
+  !integerPattern.test(spelling) && integerOrVariablePattern.test(spelling)
+    ? Option.some(spelling)
+    : Option.none();
+
+/**
+ * The refusal of a section document's rubric that names a variable a reaching test does not
+ * declare, with the type a binding copies.
+ */
+const undeclaredInTest = (
+  test: Fact<typeof Document>,
+  node: string,
+  attribute: string,
+  identifier: string,
+) =>
+  new ItemRefusal({
+    detail: `The ${node} in a rubric of a section document names the variable "${identifier}" in its ${attribute}, which the test ${test.path} that reaches the section does not declare with a base-type and a cardinality. Declare it in ${test.path}, or correct the ${attribute}.`,
+    rule: "binding-declared",
+  });
+
+/**
+ * The twins of a section document's rubric bindings, once for each test that reaches the section:
+ * `SectionPrintedVariableRef` and `SectionPrintedVariableVarRef` for each printed variable and
+ * `SectionFeedbackOutcomeRef` for each feedback, with the type each copies from the reaching
+ * test's own declaration, as an item and a test copy it from their own.
+ */
+const sectionBindingRows = Effect.fn("import.sectionBindingRows")(function* sectionBindingRows(
+  context: Context,
+  rows: Rows,
+): Effect.fn.Return<Rows, ItemRefusal> {
+  const sections = new Set(
+    [...context.documents.values()]
+      .filter((found) => found.root === "section")
+      .map((found) => found.id),
+  );
+  const trees = new Map<string, string>(
+    Rows.of(rows, Node)
+      .filter((found) => sections.has(found.tree))
+      .map((found): [string, string] => [found.id, found.tree]),
+  );
+  const declared = new Map(
+    Rows.of(rows, Declaration).map((found) => [`${found.document}\n${found.identifier}`, found]),
+  );
+  const typed = new Map(
+    Rows.of(rows, TypedDeclaration).map((found) => [
+      `${found.document}\n${found.identifier}`,
+      found,
+    ]),
+  );
+  const indexes = new Map(
+    Rows.of(rows, PrintedVariableIndex).map((found) => [found.node, found.value]),
+  );
+  const feedback = [
+    ...Rows.of(rows, FeedbackBlock),
+    ...Rows.of(rows, FeedbackInline),
+    ...Rows.of(rows, ModalFeedback),
+    ...Rows.of(rows, TemplateFeedbackBlock),
+  ].filter((found) => trees.has(found.id));
+  const printed = Rows.of(rows, PrintedVariable).filter((found) => trees.has(found.id));
+  let built = rows;
+  for (const reach of Rows.of(rows, TestDocument)) {
+    const test = context.documents.get(reach.test);
+    if (test === undefined || !sections.has(reach.document)) {
+      continue;
+    }
+
+    const typedIn = (identifier: string) => typed.get(`${test.id}\n${identifier}`);
+    for (const found of feedback.filter((one) => trees.get(one.id) === reach.document)) {
+      const type = typedIn(found.outcomeIdentifier);
+      if (type === undefined) {
+        return yield* undeclaredInTest(
+          test,
+          "feedback",
+          "outcome-identifier",
+          found.outcomeIdentifier,
+        );
+      }
+
+      built = Rows.add(built, SectionFeedbackOutcomeRef, [
+        {
+          baseType: type.baseType,
+          cardinality: type.cardinality,
+          document: reach.document,
+          identifier: found.outcomeIdentifier,
+          node: found.id,
+          test: test.id,
+        },
+      ]);
+    }
+
+    for (const found of printed.filter((one) => trees.get(one.id) === reach.document)) {
+      const declaration = declared.get(`${test.id}\n${found.identifier}`);
+      if (declaration === undefined) {
+        return yield* undeclaredInTest(
+          test,
+          "qti-printed-variable",
+          "identifier",
+          found.identifier,
+        );
+      }
+
+      built = Rows.add(built, SectionPrintedVariableRef, [
+        {
+          document: reach.document,
+          identifier: found.identifier,
+          kind: declaration.kind,
+          node: found.id,
+          test: test.id,
+        },
+      ]);
+      const named = [
+        { attribute: "base" as const, variable: namedVariable(found.base) },
+        { attribute: "index" as const, variable: namedVariable(indexes.get(found.id) ?? "") },
+      ];
+      for (const { attribute, variable } of named) {
+        if (Option.isNone(variable)) {
+          continue;
+        }
+
+        const type = typedIn(variable.value);
+        if (type === undefined) {
+          return yield* undeclaredInTest(test, "qti-printed-variable", attribute, variable.value);
+        }
+
+        built = Rows.add(built, SectionPrintedVariableVarRef, [
+          {
+            attribute,
+            baseType: type.baseType,
+            cardinality: type.cardinality,
+            document: reach.document,
+            identifier: variable.value,
+            kind: type.kind,
+            node: found.id,
+            test: test.id,
+          },
+        ]);
+      }
+    }
+  }
+
+  return built;
+});
+
 /**
  * The element each element of the tree under `root` sits directly under.
  */
@@ -519,8 +684,10 @@ const ruleArmRows = Effect.fn("import.ruleArmRows")(function* ruleArmRows(
  * Writes `ItemRefResolution` with its `ItemRefDocument` or `ItemRefLti` arm, `SectionRefResolution`
  * and `StimulusRefResolution` for each reference whose `href` names a document or an LTI resource
  * of the package; `AttributeFileReference` for each in-package value of a census attribute;
- * `TestReach` and `TestDocument` for each test; and, for the `documents` given, the
- * `VariableMapping` and `TemplateDefault` arms of the mappings and template defaults they hold.
+ * `TestReach` and `TestDocument` for each test; for each section document's rubric, the
+ * `SectionPrintedVariableRef`, `SectionPrintedVariableVarRef` and `SectionFeedbackOutcomeRef` rows
+ * of each test that reaches it; and, for the `documents` given, the `VariableMapping` and
+ * `TemplateDefault` arms of the mappings and template defaults they hold.
  * A reference that names nothing of the package has no row.
  *
  * @param rows - The rows of the whole package.
@@ -528,7 +695,8 @@ const ruleArmRows = Effect.fn("import.ruleArmRows")(function* ruleArmRows(
  *   element's attributes.
  * @returns The rows with the stage's added; `ImportRefused` (`section-ref-cycle`) when section
  *   documents refer to each other in a cycle, and `ItemRefusal` (`required-attribute`) for a
- *   mapping or template default that omits a required attribute.
+ *   mapping or template default that omits a required attribute, and (`binding-declared`) for a
+ *   section rubric's feedback or printed variable that a reaching test does not declare.
  */
 export const packageStage = Effect.fn("import.packageStage")(function* packageStage(
   rows: Rows,
@@ -542,6 +710,7 @@ export const packageStage = Effect.fn("import.packageStage")(function* packageSt
   const resolved = documentRefRows(context, itemRefRows(context, rows));
   const referenced = fileReferenceRows(context, resolved);
   const reached = yield* reachRows(context, referenced);
+  const bound = yield* sectionBindingRows(context, reached);
 
-  return yield* ruleArmRows(documents, reached);
+  return yield* ruleArmRows(documents, bound);
 });
