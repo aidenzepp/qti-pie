@@ -8,7 +8,7 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
-import { changeSetOf, importPackage, readRows, retrySchedule } from "#pantry/import/package.ts";
+import { applyRows, importPackage, readRows, retrySchedule } from "#pantry/import/package.ts";
 import { ImportRefused, isMappedLaw, refusalOfLaw, ruleOfLaw } from "#pantry/import/refusal.ts";
 import type { ImportLaw, ImportWitness, Rule } from "#pantry/import/refusal.ts";
 import type { Rows } from "#pantry/import/tree.ts";
@@ -640,9 +640,9 @@ const applyDraft = (draft: Draft) =>
   Effect.gen(function* applyChanges() {
     const db = yield* Db.open(AuthorApp.roles.author, {});
 
-    return yield* db
-      .apply(changeSetOf(draft), {})
-      .pipe(Effect.retry({ schedule: retrySchedule, while: (e) => e._tag === "TransientFailure" }));
+    return yield* applyRows(db, draft).pipe(
+      Effect.retry({ schedule: retrySchedule, while: (e) => e._tag === "TransientFailure" }),
+    );
   });
 
 /**

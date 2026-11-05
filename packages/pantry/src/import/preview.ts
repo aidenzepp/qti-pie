@@ -22,7 +22,7 @@ const isReadRefusal = <E extends { readonly _tag: string }>(
  */
 export interface Preview {
   /**
-   * The relations that hold at least one fact, as `changeSetOf` counts them.
+   * The relations that hold at least one fact, the ones the import program receives facts for.
    */
   readonly relations: number;
   /**

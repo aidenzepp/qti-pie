@@ -9,7 +9,7 @@ import { describe, inject, test } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { itemRows } from "#pantry/import/item.ts";
 import { manifestRows } from "#pantry/import/manifest.ts";
-import { changeSetOf, retrySchedule } from "#pantry/import/package.ts";
+import { applyRows, retrySchedule } from "#pantry/import/package.ts";
 import { isMappedLaw, ruleOfLaw } from "#pantry/import/refusal.ts";
 import type { Rule } from "#pantry/import/refusal.ts";
 import { Rows } from "#pantry/import/tree.ts";
@@ -411,9 +411,9 @@ const apply = (draft: Draft) =>
   Effect.gen(function* applyDraft() {
     const db = yield* Db.open(AuthorApp.roles.author, {});
 
-    return yield* db
-      .apply(changeSetOf(draft), {})
-      .pipe(Effect.retry({ schedule: retrySchedule, while: (e) => e._tag === "TransientFailure" }));
+    return yield* applyRows(db, draft).pipe(
+      Effect.retry({ schedule: retrySchedule, while: (e) => e._tag === "TransientFailure" }),
+    );
   });
 
 /**

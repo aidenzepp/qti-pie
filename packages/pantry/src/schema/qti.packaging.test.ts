@@ -2,8 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { Schema } from "effect";
-import { changeSetOf } from "#pantry/import/package.ts";
-import type { Rows } from "#pantry/import/tree.ts";
+import { importRows } from "#pantry/import/program.ts";
 import * as csmd from "#pantry/schema/kinds/csmd.ts";
 import * as ud from "#pantry/schema/kinds/ud.ts";
 import { AuthorApp, authorWork } from "#pantry/schema/logins.ts";
@@ -118,13 +117,11 @@ describe("qti packaging composition", () => {
     }
   });
 
-  it("declares the export workload alone, so the import call inserts every relation its rows hold", () => {
+  it("declares one workload whose import program inserts every relation the author role writes", () => {
     assert.deepStrictEqual(AuthorApp.workload, [authorWork]);
 
     const written = stored().filter(([name]) => !seeded.has(name));
-    const rows: Rows = new Map(written.map(([, relation]) => [relation, [{}]]));
-    const changes = changeSetOf(rows);
-    const described: unknown = "desc" in changes ? changes.desc : undefined;
+    const described: unknown = "desc" in importRows ? importRows.desc : undefined;
     const { strata } = Schema.decodeUnknownSync(Description)(described);
     assert.deepStrictEqual(
       strata

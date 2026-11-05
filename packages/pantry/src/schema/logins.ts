@@ -1,14 +1,10 @@
 /**
- * The logins that open a connection: the author application, with the export queries in its
- * workload.
- *
- * The import is not a program of the workload. One `ChangeSet` over `Author` with a relation
- * parameter for each of the relations the author role writes compiles to a statement larger than a
- * program may hold: 1,608,527 bytes against the 1,048,576 `Db.open` allows, which `grizzle
- * generate` does not check. `importPackage` applies an ad hoc `ChangeSet` instead.
+ * The logins that open a connection: the author application, with the export queries and the
+ * import program in its workload.
  */
 import { login, workload } from "@bjornpagen/grizzle";
 import { documentIdsOf, nodesOf, treeOf } from "#pantry/export/queries.ts";
+import { importRows } from "#pantry/import/program.ts";
 import type { LooseQuery } from "#pantry/export/queries.ts";
 import { Qti } from "#pantry/schema/qti.ts";
 import { Author } from "#pantry/schema/roles.ts";
@@ -21,11 +17,12 @@ import { Author } from "#pantry/schema/roles.ts";
 const asProgram = (loose: LooseQuery) => loose as unknown as typeof documentIdsOf;
 
 /**
- * The export queries: the documents of a package, the `Tree` row with its fidelity rows, and the
- * nodes of a tree with everything they own.
+ * The export queries (the documents of a package, the `Tree` row with its fidelity rows, and the
+ * nodes of a tree with everything they own) and the import program.
  */
 export const authorWork = workload(Author, {
   documentIdsOf,
+  importRows,
   nodesOf: asProgram(nodesOf),
   treeOf: asProgram(treeOf),
 });

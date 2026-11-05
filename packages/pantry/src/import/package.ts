@@ -3,11 +3,11 @@
  * refusal.
  *
  * The package is read whole into rows in memory (manifest, then each document the manifest lists),
- * judged by the guards, and written as one `ChangeSet` applied once, so the database holds either
- * the whole package or nothing of it.
+ * judged by the guards, and written by the author workload's import program applied once, so the
+ * database holds either the whole package or nothing of it.
  */
-import { ChangeSet, Db } from "@bjornpagen/grizzle";
-import type { ApplyError, DbLayer, Fact, OpenError, Uuid } from "@bjornpagen/grizzle";
+import { Db } from "@bjornpagen/grizzle";
+import type { ApplyError, DbLayer, OpenError, Uuid } from "@bjornpagen/grizzle";
 import { Clock, Duration, Effect, Option, Random, Ref, Schedule } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { externalRows } from "#pantry/import/external.ts";
@@ -15,6 +15,7 @@ import { guards } from "#pantry/import/guards.ts";
 import { itemRows } from "#pantry/import/item.ts";
 import { manifestRows } from "#pantry/import/manifest.ts";
 import { outcomeRows } from "#pantry/import/outcome.ts";
+import { importParameters } from "#pantry/import/program.ts";
 import type { ImportLaw, ImportRefused, ImportWitness } from "#pantry/import/refusal.ts";
 import { refusalOfLaw, ruleOfError } from "#pantry/import/refusal.ts";
 import { rptemplateRows } from "#pantry/import/rptemplate.ts";
@@ -25,7 +26,7 @@ import { ResourceLomGeneral } from "#pantry/schema/lang.ts";
 import { AuthorApp } from "#pantry/schema/logins.ts";
 import type { RootKindHandle, SchemaVersionHandle } from "#pantry/schema/node.ts";
 import { Package } from "#pantry/schema/package.ts";
-import { Author } from "#pantry/schema/roles.ts";
+import type { Author } from "#pantry/schema/roles.ts";
 import { rootOfType } from "#pantry/schema/seed/root-of-type.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
@@ -261,32 +262,36 @@ export const readRows = Effect.fn("import.readRows")(function* readRows(dir: str
 });
 
 /**
- * One `ChangeSet` inserting every row of `rows`, relation by relation, the package's own first.
+ * The database of the author role, as `Db.open` opens it with the author application's workload.
  */
-export const changeSetOf = (rows: Rows) => {
-  let changes = ChangeSet.empty(Author).insert(Package, Rows.of(rows, Package));
+type AuthorDb = Effect.Success<ReturnType<typeof openAuthor>>;
 
-  for (const [relation, facts] of rows) {
-    if (relation !== Package && facts.length > 0) {
-      // SAFETY: `Rows` holds each relation's own facts under that relation, and every relation it holds is one the author role writes, but a map keyed by `AnyRelation` cannot say so to `insert`'s per-relation write check; `Package` stands for any of them, and `insert` reads only the relation's name and the facts at run time.
-      changes = changes.insert(
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-        relation as typeof Package,
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-        facts as readonly Fact<typeof Package>[],
-      );
-    }
-  }
+/**
+ * Open the database of the author role.
+ */
+const openAuthor = () => Db.open(AuthorApp.roles.author, {});
 
-  return changes;
-};
+/**
+ * Apply the import program to `rows` through `db`: every relation's facts, the package's own
+ * among them, in one transaction.
+ *
+ * @param db - An opened database of the author role.
+ * @param rows - The rows an import built.
+ * @returns The program's outcome, as `apply` answers it.
+ */
+export const applyRows = (db: AuthorDb, rows: Rows) =>
+  db.workload.importRows.apply(
+    // SAFETY: the program's static type states only its `Package` parameter (`#pantry/import/program.ts`); every other relation's parameter is its own name, which `importParameters` fills with that relation's facts.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+    importParameters(rows) as Parameters<AuthorDb["workload"]["importRows"]["apply"]>[0],
+  );
 
 /**
  * Import the package at `dir`.
  *
  * Reads `imsmanifest.xml` and every QTI document it lists, judges the rows with the tree, manifest,
- * item, content, processing and usage guards, and applies them in one `ChangeSet` through the
- * author role. `Db.open` and `db.apply` are retried on a transient refusal and on nothing else.
+ * item, content, processing and usage guards, and applies them with the author workload's import
+ * program. `Db.open` and `db.apply` are retried on a transient refusal and on nothing else.
  * When the commit's outcome is unknown the package row is read back by its id: present, the import
  * was accepted; absent, the error is the answer.
  *
@@ -310,9 +315,8 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   const { packageId, rows } = yield* readRows(dir).pipe(
     Effect.catchIf(isReadRefusal, (error) => Effect.fail(ruleOfError(error))),
   );
-  const changes = changeSetOf(rows);
-  const db = yield* retried("Db.open", Db.open(AuthorApp.roles.author, {}), schedule);
-  const outcome = yield* retried("db.apply", wrap(db.apply(changes, {})), schedule).pipe(
+  const db = yield* retried("Db.open", openAuthor(), schedule);
+  const outcome = yield* retried("db.apply", wrap(applyRows(db, rows)), schedule).pipe(
     Effect.catchTag("CommitUnknown", (unknown) =>
       Effect.gen(function* readBack() {
         const found = yield* db

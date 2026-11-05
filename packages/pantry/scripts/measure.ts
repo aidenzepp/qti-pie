@@ -100,7 +100,7 @@ const LIMIT: Readonly<Record<Budget, number>> = {
  * One `ChangeSet` with a member for each of the relations the author writes from `from` up to but
  * not including `to`, each an empty array, so what compiles is the program of an import that takes
  * the rows of each relation as a parameter. The first relation of the roster is always the first
- * member, as in `changeSetOf`.
+ * member, as in the import program (`src/import/program.ts`).
  */
 const importChanges = (from: number, to: number) => {
   let changes = ChangeSet.empty(Author).insert(Package, []);
@@ -108,7 +108,7 @@ const importChanges = (from: number, to: number) => {
     .slice(from, to)
     .map((name) => Author.relations[name]);
   for (const relation of members.filter((member) => member !== Package)) {
-    // SAFETY: the same erased insert as `changeSetOf`: the member is the relation's own name and an empty array, and `insert` reads no more at run time.
+    // SAFETY: the same erased insert as the import program's: the member is the relation's own name and an empty array, and `insert` reads no more at run time.
     changes = changes.insert(
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
       relation as typeof Package,

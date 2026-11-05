@@ -4,7 +4,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { describe, inject } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { changeSetOf, readRows, retrySchedule } from "#pantry/import/package.ts";
+import { applyRows, readRows, retrySchedule } from "#pantry/import/package.ts";
 import { isMappedLaw, refusalOfLaw, ruleOfLaw } from "#pantry/import/refusal.ts";
 import type { ImportLaw } from "#pantry/import/refusal.ts";
 import { Rows } from "#pantry/import/tree.ts";
@@ -37,7 +37,7 @@ describe.skipIf(!hasLease)("the database refusal of a mismatched cp:schemaversio
             })),
           );
           const db = yield* Db.open(AuthorApp.roles.author, {});
-          const outcome = yield* db.apply(changeSetOf(changed), {}).pipe(
+          const outcome = yield* applyRows(db, changed).pipe(
             Effect.retry({
               schedule: retrySchedule,
               while: (e) => e._tag === "TransientFailure",
