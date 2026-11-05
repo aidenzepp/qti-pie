@@ -4,6 +4,8 @@ import { Predicate } from "effect";
 import { inspect } from "node:util";
 import * as rosters from "#pantry/schema/content/rosters.ts";
 import * as contracts from "#pantry/schema/contracts.ts";
+import * as document from "#pantry/schema/document.ts";
+import * as pkg from "#pantry/schema/package.ts";
 import * as test from "#pantry/schema/kinds/test.ts";
 import * as node from "#pantry/schema/node.ts";
 import { Author } from "#pantry/schema/roles.ts";
@@ -283,8 +285,14 @@ describe("the test control laws", () => {
   it("builds the probe over node, structure and control without refusal", () => {
     const built = schema(
       "QtiControlProbe",
-      { ...node.relations, ...structure.relations, ...control.relations },
-      [...node.rules, ...structure.rules, ...control.rules],
+      {
+        ...node.relations,
+        ...document.relations,
+        ...pkg.relations,
+        ...structure.relations,
+        ...control.relations,
+      },
+      [...node.rules, ...pkg.rules, ...document.rules, ...structure.rules, ...control.rules],
     );
     assert.include(Object.keys(built.relations), "SelectionBounded");
   });
