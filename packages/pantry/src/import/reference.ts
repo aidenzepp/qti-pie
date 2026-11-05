@@ -21,7 +21,7 @@ import { attributeReader } from "#pantry/import/interactions.ts";
 import { requiredAttribute } from "#pantry/import/required.ts";
 import { ItemRefusal, Rows, withParents } from "#pantry/import/tree.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#pantry/import/tree.ts";
-import { environmentOf, withReach } from "#pantry/processing/env.ts";
+import { emptyEnvironment, environmentOf, withReach } from "#pantry/processing/env.ts";
 import type { Environment, ItemRefScope, ReachEntry } from "#pantry/processing/env.ts";
 import {
   MappedVariableName,
@@ -683,9 +683,9 @@ const ruleArmRows = Effect.fn("import.ruleArmRows")(function* ruleArmRows(
 });
 
 /**
- * The processing roots of a test document, each with the language it is read in: the outcome
- * processing, and the one-expression holders of a pre-condition, a branch rule and a template
- * default.
+ * The processing roots of a test or section document, each with the language it is read in: the
+ * outcome processing, and the one-expression holders of a pre-condition, a branch rule and a
+ * template default.
  */
 const testRoots: ReadonlyMap<NodeKindHandle, "expression" | "outcome"> = new Map([
   ["qti-branch-rule", "expression"],
@@ -695,24 +695,43 @@ const testRoots: ReadonlyMap<NodeKindHandle, "expression" | "outcome"> = new Map
 ]);
 
 /**
- * What the stage knows of one test document: its id and the identifiers its reach holds.
+ * What the stage knows of one test document: its id and identifier as written, its environment
+ * without the reach, and the identifiers its reach holds, as the structure and as the entries a
+ * prefixed name resolves against.
  */
 interface TestSite {
   readonly environment: Environment;
   readonly id: Uuid;
+  readonly name: string;
+  readonly reach: ReadonlyMap<string, ReachEntry>;
   readonly structure: ReadonlyMap<string, StructureEntry>;
 }
 
 /**
- * The processing rows of each test document: its outcome processing, and each pre-condition,
- * branch rule and template default under it, checked in the test's own environment.
+ * One processing root of a document: its element, the node it became, the language it is read in,
+ * and the item reference's scope when it is a template default under one.
+ */
+interface ProcessingRoot {
+  readonly element: Element;
+  readonly holder: ItemRefScope | undefined;
+  readonly language: "expression" | "outcome";
+  readonly node: { readonly id: Uuid; readonly kind: NodeKindHandle };
+}
+
+/**
+ * The processing rows of each test document and of each section document: a test's outcome
+ * processing, and each pre-condition, branch rule and template default under it or under a section
+ * document, checked in the environment of the test.
  *
  * The environment is built from the documents, not from rows: the test's declarations, then its
  * reach, where an item reference is the declarations of the item it resolved to, the targets of
  * its variable mappings typed as the outcomes they map from, and whether the item is time
  * dependent (spec 4.9). An item reference that resolved to no item document names nothing, so a
  * prefixed name that begins with it is refused. The rows come from `processingRows`, which writes
- * a prefixed name's per-test rows against the test's own reach.
+ * a prefixed name's per-test rows against the test's own reach. A section document is judged once
+ * under each test that reaches it and written once, with one row for each such test where a
+ * reference or a `section-identifier` is resolved (reading 5); one that no test reaches writes its
+ * arms alone.
  */
 const testProcessingRows = Effect.fn("import.testProcessingRows")(function* testProcessingRows(
   context: Context,
@@ -722,7 +741,10 @@ const testProcessingRows = Effect.fn("import.testProcessingRows")(function* test
   const roots = new Map(
     Rows.of(rows, Node)
       .filter(
-        (found) => found.kind === "qti-assessment-item" || found.kind === "qti-assessment-test",
+        (found) =>
+          found.kind === "qti-assessment-item" ||
+          found.kind === "qti-assessment-section" ||
+          found.kind === "qti-assessment-test",
       )
       .map((found): [Uuid, Uuid] => [found.id, found.tree]),
   );
@@ -765,11 +787,11 @@ const testProcessingRows = Effect.fn("import.testProcessingRows")(function* test
     return scopes.get(itemRef);
   };
   const reaches = Map.groupBy(Rows.of(rows, TestReach), (row) => row.test);
-  let built = rows;
-  for (const [id, found] of staged) {
-    const document = context.documents.get(id);
-    if (document?.root !== "test") {
-      continue;
+  const sites = new Map<Uuid, TestSite>();
+  const siteOf = (id: Uuid, found: StagedDocument): TestSite => {
+    const known = sites.get(id);
+    if (known !== undefined) {
+      return known;
     }
 
     const reach = new Map<string, ReachEntry>();
@@ -789,37 +811,92 @@ const testProcessingRows = Effect.fn("import.testProcessingRows")(function* test
       }
     }
 
-    const site: TestSite = { environment: environmentOf(found.doc, "test"), id, structure };
-    for (const [element, parent] of withParents(found.doc.root, Option.none())) {
+    const site: TestSite = {
+      environment: environmentOf(found.doc, "test"),
+      id,
+      name:
+        found.doc.root.attributes.find((one) => one.namespace === "" && one.local === "identifier")
+          ?.value ?? id,
+      reach,
+      structure,
+    };
+    sites.set(id, site);
+
+    return site;
+  };
+  const rootsOf = (found: StagedDocument): readonly ProcessingRoot[] =>
+    [...withParents(found.doc.root, Option.none())].flatMap(([element, parent]) => {
       const node = found.nodes.get(element);
       const language = node === undefined ? undefined : testRoots.get(node.kind);
       if (node === undefined || language === undefined) {
-        continue;
+        return [];
       }
 
       const holder = Option.flatMapNullishOr(parent, (above) => found.nodes.get(above)).pipe(
         Option.filter((above) => above.kind === "qti-assessment-item-ref"),
         Option.flatMapNullishOr((above) => scopeOf(above.id)),
       );
-      built = yield* processingRows(
-        {
-          document: site.id,
-          env: withReach(
-            site.environment,
-            reach,
-            node.kind === "qti-template-default" ? Option.getOrUndefined(holder) : undefined,
-          ),
-          language,
-          mode: "test",
-          nodes: found.nodes,
-          root: element,
-          rootKind: "test",
-          test: { structure: site.structure, test: site.id },
-          tree: site.id,
-          version: document.version,
-        },
-        built,
-      );
+
+      return [{ element, holder: Option.getOrUndefined(holder), language, node }];
+    });
+  const reachedBy = Map.groupBy(Rows.of(rows, TestDocument), (row) => row.document);
+  let built = rows;
+  for (const [id, found] of staged) {
+    const document = context.documents.get(id);
+    if (document?.root === "test") {
+      const site = siteOf(id, found);
+      for (const root of rootsOf(found)) {
+        built = yield* processingRows(
+          {
+            document: site.id,
+            env: withReach(
+              site.environment,
+              site.reach,
+              root.node.kind === "qti-template-default" ? root.holder : undefined,
+            ),
+            language: root.language,
+            mode: "test",
+            nodes: found.nodes,
+            root: root.element,
+            rootKind: "test",
+            test: { structure: site.structure, test: site.id },
+            tree: site.id,
+            version: document.version,
+          },
+          built,
+        );
+      }
+    } else if (document?.root === "section") {
+      const reaching = (reachedBy.get(id) ?? []).flatMap((row) => {
+        const test = staged.get(row.test);
+
+        return test === undefined ? [] : [siteOf(row.test, test)];
+      });
+      for (const root of rootsOf(found)) {
+        built = yield* processingRows(
+          {
+            document: id,
+            env: emptyEnvironment("test"),
+            language: root.language,
+            mode: "test",
+            nodes: found.nodes,
+            root: root.element,
+            rootKind: "section",
+            tests: reaching.map((site) => ({
+              env: withReach(
+                site.environment,
+                site.reach,
+                root.node.kind === "qti-template-default" ? root.holder : undefined,
+              ),
+              name: site.name,
+              scope: { structure: site.structure, test: site.id },
+            })),
+            tree: id,
+            version: document.version,
+          },
+          built,
+        );
+      }
     }
   }
 

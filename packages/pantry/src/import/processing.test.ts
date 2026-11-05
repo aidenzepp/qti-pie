@@ -2,14 +2,14 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Option } from "effect";
 import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { ProcessingGuardRefusal, processingGuards } from "#pantry/import/guards/processing.ts";
 import { itemRows } from "#pantry/import/item.ts";
 import { documentRows, readRows } from "#pantry/import/package.ts";
 import { manifestRows } from "#pantry/import/manifest.ts";
 import { ProcessingRefused, processingRows } from "#pantry/import/processing.ts";
-import type { ProcessingInput } from "#pantry/import/processing.ts";
+import type { ProcessingInput, SectionTest, StructureEntry } from "#pantry/import/processing.ts";
 import { packageStage } from "#pantry/import/reference.ts";
 import type { StagedDocument } from "#pantry/import/reference.ts";
 import { ImportRefused, ruleOfError } from "#pantry/import/refusal.ts";
@@ -2229,6 +2229,236 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             rule,
             name,
           );
+        }
+      }),
+    );
+  },
+);
+
+/**
+ * A structure entry of a section with `identifier`, as a test's reach holds it.
+ */
+const sectionHolder = (identifier: string): [string, StructureEntry] => [
+  identifier,
+  { holder: crypto.randomUUID(), holderKind: "section", itemDocument: Option.none() },
+];
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "import/processing.ts a section document's rows",
+  (suite) => {
+    suite.effect(
+      "writes one as-written arm per reference and one resolution per reaching test",
+      () =>
+        Effect.gen(function* sectionRows() {
+          const { rows } = yield* rowsOfFixture("test-section-ref");
+          const shared = documentAt(rows, "sections/shared.xml");
+          const lonely = documentAt(rows, "sections/lonely.xml");
+          const first = documentAt(rows, "rtest01.xml").id;
+          const second = documentAt(rows, "test-b.xml").id;
+          const refs = of(rows, processing.SectionVariableRef).filter(
+            (ref) => ref.document === shared.id,
+          );
+          const refOf = (identifier: string) =>
+            refs.find((ref) => ref.identifier === identifier) ?? assert.fail(identifier);
+          const resolutions = (identifier: string) =>
+            of(rows, processing.SectionVariableResolution)
+              .filter((row) => row.ref === refOf(identifier).id)
+              .toSorted((a, b) => a.test.localeCompare(b.test));
+          const targets = (identifier: string) =>
+            resolutions(identifier).map((row) => [row.test, row.target] as const);
+          const forTests = (target: string) =>
+            [first, second].toSorted().map((test) => [test, target] as const);
+
+          assert.deepStrictEqual(refs.map((ref) => ref.identifier).toSorted(), [
+            "COUNT",
+            "I2.SCORE",
+            "ITEMREF.SCORE",
+            "PART.duration",
+            "SCORE",
+          ]);
+          for (const ref of refs) {
+            assert.strictEqual(ref.root, "section");
+            assert.deepStrictEqual(
+              of(rows, processing.VariableRef)
+                .filter((found) => found.id === ref.id)
+                .map((found) => [found.kind, found.document]),
+              [["sectionVariable", shared.id]],
+            );
+          }
+
+          const asWritten = new Set(refs.map((ref) => ref.id));
+          for (const prefixed of [
+            of(rows, processing.ItemVariableRef),
+            of(rows, processing.ItemInstanceVariableRef),
+            of(rows, processing.SectionDurationRef),
+          ]) {
+            assert.isFalse(prefixed.some((found) => asWritten.has(found.id)));
+          }
+
+          // The unprefixed `SCORE` is declared whole by both tests.
+          assert.deepStrictEqual(targets("SCORE"), forTests("declared"));
+          assert.deepStrictEqual(
+            of(rows, processing.SectionVariableDeclared)
+              .filter((row) => row.ref === refOf("SCORE").id)
+              .map((row) => [row.test, row.identifier, row.declarationKind])
+              .toSorted(byText),
+            forTests("SCORE")
+              .map(([test]) => [test, "SCORE", "outcome"])
+              .toSorted(byText),
+          );
+
+          // `I2.SCORE` is declared whole by the first test and prefixed in the second.
+          assert.deepStrictEqual(
+            resolutions("I2.SCORE")
+              .map((row) => [row.test, row.target])
+              .toSorted(byText),
+            [
+              [first, "declared"],
+              [second, "prefixed"],
+            ].toSorted(byText),
+          );
+
+          const i2 = refOf("I2.SCORE").id;
+          assert.deepStrictEqual(
+            of(rows, processing.PrefixedVariableSource)
+              .filter((hub) => hub.ref === i2)
+              .map((hub) => [hub.test, hub.prefix, hub.refKind, hub.source]),
+            [[second, "I2", "sectionVariable", "declared"]],
+          );
+
+          // `ITEMREF.SCORE` is prefixed in each test: one hub, one source and one thin row per test.
+          const itemRef = refOf("ITEMREF.SCORE").id;
+          assert.deepStrictEqual(targets("ITEMREF.SCORE"), forTests("prefixed"));
+
+          const hubs = of(rows, processing.PrefixedVariableSource)
+            .filter((hub) => hub.ref === itemRef)
+            .toSorted((a, b) => a.test.localeCompare(b.test));
+          assert.deepStrictEqual(
+            hubs.map((hub) => [hub.test, hub.document, hub.prefix, hub.refKind, hub.source]),
+            [first, second]
+              .toSorted()
+              .map((test) => [test, shared.id, "ITEMREF", "sectionVariable", "declared"]),
+          );
+          for (const hub of hubs) {
+            const holder = itemRefOf(rows, hub.test, "ITEMREF");
+            assert.strictEqual(hub.itemRef, holder.id);
+            assert.deepStrictEqual(
+              of(rows, processing.PrefixedDeclared).filter(
+                (row) => row.ref === itemRef && row.test === hub.test,
+              ),
+              [{ itemDocument: hub.itemDocument, ref: itemRef, test: hub.test, variable: "SCORE" }],
+            );
+          }
+
+          assert.deepStrictEqual(
+            idsOfRefs(of(rows, processing.SectionVariablePrefixed)),
+            [itemRef, itemRef, i2].toSorted(),
+          );
+
+          // `PART.duration` names the part's duration in each test.
+          const duration = refOf("PART.duration").id;
+          assert.deepStrictEqual(targets("PART.duration"), forTests("duration"));
+          assert.deepStrictEqual(
+            of(rows, processing.SectionVariableDuration)
+              .filter((row) => row.ref === duration)
+              .map((row) => row.test)
+              .toSorted(),
+            [first, second].toSorted(),
+          );
+          for (const target of of(rows, processing.SectionDurationTarget)) {
+            assert.strictEqual(target.ref, duration);
+            assert.strictEqual(target.refKind, "sectionVariable");
+            assert.strictEqual(target.prefix, "PART");
+            assert.strictEqual(target.holderKind, "part");
+            assert.strictEqual(target.document, shared.id);
+          }
+          assert.strictEqual(of(rows, processing.SectionDurationTarget).length, 2);
+
+          // The section no test reaches writes its arm alone.
+          const unreached = of(rows, processing.SectionVariableRef).filter(
+            (ref) => ref.document === lonely.id,
+          );
+          assert.deepStrictEqual(
+            unreached.map((ref) => ref.identifier),
+            ["ITEMREF.SCORE"],
+          );
+
+          const lonelyRef = unreached[0]?.id ?? assert.fail("no lonely reference");
+          for (const family of [
+            of(rows, processing.SectionVariableResolution),
+            of(rows, processing.SectionVariableDeclared),
+            of(rows, processing.SectionVariablePrefixed),
+            of(rows, processing.SectionVariableDuration),
+            of(rows, processing.PrefixedVariableSource),
+            of(rows, processing.SectionDurationTarget),
+          ]) {
+            assert.isFalse(family.some((row) => "ref" in row && row.ref === lonelyRef));
+          }
+        }),
+    );
+
+    suite.effect("writes a section identifier target once per reaching test, over hand rows", () =>
+      Effect.gen(function* handRows() {
+        const testOf = (name: string, held: readonly string[]): SectionTest => ({
+          env: outcomesDeclared,
+          name,
+          scope: { structure: new Map(held.map(sectionHolder)), test: crypto.randomUUID() },
+        });
+        const tests = [testOf("T1", ["sec"]), testOf("T2", ["sec", "other"]), testOf("T3", ["x"])];
+        const prepared = yield* prepareBody(
+          '<qti-set-outcome-value identifier="SCORE"><qti-sum><qti-test-variables variable-identifier="SCORE" section-identifier="sec"/></qti-sum></qti-set-outcome-value>',
+          { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "section" },
+        );
+        const rows = yield* processed({ ...prepared, input: { ...prepared.input, tests } });
+        const targets = of(rows, expression.SectionIdentifierTarget);
+
+        assert.deepStrictEqual(
+          targets.map((row) => row.test).toSorted((a, b) => a.localeCompare(b)),
+          [tests[0]?.scope.test, tests[1]?.scope.test].toSorted((a, b) =>
+            (a ?? "").localeCompare(b ?? ""),
+          ),
+        );
+        assert.deepStrictEqual(
+          targets.map((row) => [row.identifier, row.holderKind]),
+          [
+            ["sec", "section"],
+            ["sec", "section"],
+          ],
+        );
+      }),
+    );
+
+    suite.effect("refuses what the second test cannot resolve and names that test", () =>
+      Effect.gen(function* unresolved() {
+        // `section-unprefixed-undeclared` is first refused by the section's printed variable, a
+        // binding the stage judges before processing; the third case takes the printed variable
+        // out so that the pre-condition's `SCORE` is what no test declares.
+        const base = specOf("section-unprefixed-undeclared");
+        const unprinted = yield* materializeSpec({
+          ...base,
+          edits: [
+            ...base.edits,
+            {
+              _tag: "ReplaceText",
+              file: "sections/shared.xml",
+              replacement: "<p>Score</p>",
+              search: '<p>Score <qti-printed-variable identifier="SCORE" base="COUNT"/></p>',
+            },
+          ],
+          name: "p5-46-unprinted",
+        });
+        const refused = [
+          [yield* materialize("section-prefixed-unresolved"), "prefixed-ref", "TEST-B"],
+          [yield* materialize("section-unprefixed-undeclared"), "binding-declared", "test-b.xml"],
+          [unprinted, "P8", "TEST-B"],
+        ] as const;
+        for (const [dir, rule, naming] of refused) {
+          const failure = yield* Effect.flip(readRows(dir));
+          const { detail, rule: found } =
+            failure._tag === "PlatformError" ? assert.fail(dir) : ruleOfError(failure);
+
+          assert.strictEqual(found, rule, dir);
+          assert.include(detail, naming, dir);
         }
       }),
     );
