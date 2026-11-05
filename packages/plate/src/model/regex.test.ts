@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 import { Result } from "effect";
-import { translate } from "#plate/model/regex.ts";
-import type { RegexRefused } from "#plate/model/regex.ts";
+import { compile, matches, maximumStates, translate } from "#plate/model/regex.ts";
+import type { Matcher, RegexRefused } from "#plate/model/regex.ts";
 import { checkAllowlist, sourceModules } from "#plate/test/imports.ts";
 
 /**
@@ -20,21 +20,43 @@ const accepted = (pattern: string): RegExp => {
 };
 
 /**
- * Translate a pattern the translator must refuse, failing the test when it accepts it.
+ * Compile a pattern the matcher must accept, failing the test when it refuses it.
  *
  * @param pattern The XSD pattern.
- * @returns The refusal.
+ * @returns Its matcher.
+ */
+const compiled = (pattern: string): Matcher => {
+  const result = compile(pattern);
+
+  assert.isTrue(Result.isSuccess(result), `${JSON.stringify(pattern)} was refused`);
+
+  return Result.getOrThrow(result);
+};
+
+/**
+ * Read a pattern that both the translator and the matcher must refuse, failing the test when
+ * either accepts it or they refuse it differently.
+ *
+ * @param pattern The XSD pattern.
+ * @returns The translator's refusal.
  */
 const refused = (pattern: string): RegexRefused | undefined => {
   const result = translate(pattern);
+  const matcher = compile(pattern);
 
   assert.isTrue(Result.isFailure(result), `${JSON.stringify(pattern)} was accepted`);
+  assert.isTrue(Result.isFailure(matcher), `${JSON.stringify(pattern)} was compiled`);
+  assert.deepStrictEqual(
+    Result.isFailure(matcher) ? matcher.failure.position : undefined,
+    Result.isFailure(result) ? result.failure.position : undefined,
+  );
 
   return Result.isFailure(result) ? result.failure : undefined;
 };
 
 /**
- * Assert that a pattern takes one text and refuses another.
+ * Assert that a pattern takes one text and refuses another, through the translator's expression
+ * and through the matcher alike.
  *
  * @param pattern The XSD pattern.
  * @param match A text it takes.
@@ -42,15 +64,23 @@ const refused = (pattern: string): RegexRefused | undefined => {
  */
 const holds = (pattern: string, match: string, nonMatch: string): void => {
   const expression = accepted(pattern);
+  const matcher = compiled(pattern);
 
-  assert.isTrue(
-    expression.test(match),
-    `${JSON.stringify(pattern)} refuses ${JSON.stringify(match)}`,
-  );
-  assert.isFalse(
-    expression.test(nonMatch),
-    `${JSON.stringify(pattern)} takes ${JSON.stringify(nonMatch)}`,
-  );
+  for (const [text, expected] of [
+    [match, true],
+    [nonMatch, false],
+  ] as const) {
+    assert.strictEqual(
+      expression.test(text),
+      expected,
+      `${JSON.stringify(pattern)} against ${JSON.stringify(text)}`,
+    );
+    assert.strictEqual(
+      matches(matcher, text),
+      expected,
+      `the matcher of ${JSON.stringify(pattern)} against ${JSON.stringify(text)}`,
+    );
+  }
 };
 
 /**
@@ -58,14 +88,152 @@ const holds = (pattern: string, match: string, nonMatch: string): void => {
  *
  * @param pattern The XSD pattern.
  * @param position The index, in UTF-16 code units, the refusal names.
+ * @returns The refusal.
  */
-const refusedAt = (pattern: string, position: number): void => {
+const refusedAt = (pattern: string, position: number): RegexRefused | undefined => {
   const refusal = refused(pattern);
 
   assert.strictEqual(refusal?._tag, "RegexRefused");
   assert.strictEqual(refusal?.pattern, pattern);
   assert.strictEqual(refusal?.position, position);
+
+  return refusal;
 };
+
+/**
+ * Every pattern this file reads, and automata with loops, empty groups and branches, nested
+ * quantifiers and characters outside the Basic Multilingual Plane.
+ */
+const patterns: readonly string[] = [
+  "([0-9.]{0,6})",
+  String.raw`([0-9.\\-]{0,10})`,
+  String.raw`[0-9\.]+`,
+  "abc",
+  "^a$",
+  "a",
+  ".",
+  String.raw`\s`,
+  String.raw`\S`,
+  String.raw`\d`,
+  String.raw`\D`,
+  String.raw`\w`,
+  String.raw`\W`,
+  String.raw`\i\c*`,
+  String.raw`\I`,
+  String.raw`\C`,
+  String.raw`\p{Lu}`,
+  String.raw`\P{Lu}`,
+  String.raw`\p{N}+`,
+  "[a-z-[aeiou]]",
+  "[^a-z-[aeiou]]",
+  "[^a-z]",
+  "[-a]+",
+  String.raw`[\d\s]+`,
+  String.raw`[\^\[\]]+`,
+  "x{2,3}",
+  "x{2}",
+  "x{2,}",
+  "(ab)+|c?",
+  String.raw`\p{IsBasicLatin}+`,
+  String.raw`\P{IsBasicLatin}`,
+  String.raw`\p{IsLatin-1Supplement}`,
+  String.raw`\p{IsSpecials}`,
+  String.raw`\P{IsSpecials}`,
+  String.raw`[\p{IsBasicLatin}-[a-z]]`,
+  String.raw`[^\p{IsBasicLatin}]`,
+  String.raw`[\P{IsBasicLatin}\d]+`,
+  String.raw`[a-zé-[\p{IsBasicLatin}]]`,
+  `${"(".repeat(100)}a${")".repeat(100)}`,
+  `[b${"-[a".repeat(99)}${"]".repeat(100)}`,
+  "(a+)+b",
+  "(a|a)*b",
+  "(a|ab)*c",
+  "(a*)*",
+  "()",
+  "(|a)+",
+  "a|",
+  "|",
+  "a{0}",
+  "x{0,3}y",
+  "x{3,}",
+  "(ab|a)(bc|c)",
+  "(a|b)*abb",
+  "(x{0,2}){2,3}",
+  "😀+",
+  ".😀.",
+];
+
+/**
+ * Texts to match every pattern against: empty, short runs, the texts this file's cases use, line
+ * breaks, digits of other scripts, characters outside the Basic Multilingual Plane and a lone
+ * surrogate.
+ */
+const samples: readonly string[] = [
+  "",
+  "a",
+  "aa",
+  "aaa",
+  "ab",
+  "abab",
+  "aba",
+  "abb",
+  "aabb",
+  "babb",
+  "abbc",
+  "abc",
+  "abcbc",
+  "ac",
+  "aac",
+  "b",
+  "c",
+  "xabcx",
+  "^a$",
+  "x",
+  "xx",
+  "xxx",
+  "xxxx",
+  "xxxxx",
+  "xxxxxxx",
+  "y",
+  "xy",
+  "xxxy",
+  "xxxxy",
+  "12.5",
+  "1234567",
+  "-3.5",
+  "3.5e1",
+  "\\",
+  "3.14",
+  "\n",
+  "\r",
+  "\t",
+  " ",
+  "1 2",
+  "٣",
+  "1٣",
+  "A",
+  "B",
+  "AB",
+  "é",
+  "e",
+  "é1",
+  "a.b-c",
+  ":a:b",
+  "1a",
+  "a b",
+  ".",
+  "-a",
+  "^[]",
+  "\uFEFF",
+  "\uFEFE",
+  "\uFF01",
+  "\uFFF0",
+  "\uFFFD",
+  "😀",
+  "😀😀",
+  "a😀b",
+  "\uD83D",
+];
 
 describe("translate", () => {
   it("reads the corpus's three patterns", () => {
@@ -195,5 +363,66 @@ describe("translate", () => {
     const modules = new Map([...sourceModules(), ["src/model/blocks.generated.json", table]]);
 
     assert.deepStrictEqual(checkAllowlist(modules, ["src/model/regex.ts"]), []);
+  });
+});
+
+describe("compile and matches", () => {
+  it("agree with the translator's expression on every pattern and sample", () => {
+    for (const pattern of patterns) {
+      const expression = accepted(pattern);
+      const matcher = compiled(pattern);
+
+      for (const sample of samples) {
+        assert.strictEqual(
+          matches(matcher, sample),
+          expression.test(sample),
+          `${JSON.stringify(pattern)} against ${JSON.stringify(sample)}`,
+        );
+      }
+    }
+  });
+
+  it("answers (a+)+b, (a|a)*b and (a|ab)*c against 100,000 characters without backtracking", () => {
+    const as = "a".repeat(100_000);
+
+    for (const pattern of ["(a+)+b", "(a|a)*b", "(a|ab)*c"]) {
+      assert.isFalse(matches(compiled(pattern), as), pattern);
+    }
+
+    assert.isTrue(matches(compiled("(a+)+b"), `${as}b`));
+    assert.isTrue(matches(compiled("(a|a)*b"), `${as}b`));
+    assert.isTrue(matches(compiled("(a|ab)*c"), `${"ab".repeat(50_000)}c`));
+  });
+
+  it("compiles a pattern of exactly maximumStates states, and refuses one state more at its count, naming the limit", () => {
+    // `a{n}` takes n states and the accepting one.
+    assert.strictEqual(compiled(`a{${maximumStates - 1}}`).states, maximumStates);
+
+    const refusal = refusedAt(`a{${maximumStates}}`, 1);
+
+    assert.include(refusal?.reason ?? "", String(maximumStates));
+  });
+
+  it("counts optional copies, loops, branches and groups as it builds them", () => {
+    // 63 optional copies of two states each, sharing one class, and the accepting state.
+    const digits = compiled("[0-9]{0,63}");
+
+    assert.strictEqual(digits.states, 127);
+    assert.strictEqual(digits.classes.length, 1);
+    assert.isTrue(matches(digits, "1".repeat(63)));
+    assert.isFalse(matches(digits, "1".repeat(64)));
+    refusedAt("[0-9]{0,64}", 5);
+    // Two copies, the last looping back through one choice.
+    assert.strictEqual(compiled("x{2,}").states, 4);
+    // Three characters and two choices among them.
+    assert.strictEqual(compiled("(a|b|c)").states, 6);
+    // 12 copies of 12 states pass the limit at the outer count.
+    refusedAt("(a{12}){12}", 7);
+    // Each count fits, and the second takes the running count past the limit.
+    refusedAt("a{100}b{100}", 7);
+    // 130 branches: the choice before the 65th takes the count past the limit, at its |.
+    refusedAt(Array.from({ length: 130 }, () => "a").join("|"), 127);
+    // A count too large for any number type is refused, not expanded.
+    refusedAt("a{99999999999999999999999}", 1);
   });
 });
