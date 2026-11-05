@@ -49,9 +49,9 @@ const colours: ChoiceInteraction = {
   ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
-    { content: [words("Red")], identifier: "A" },
-    { content: [words("Green")], identifier: "B" },
-    { content: [words("Blue")], identifier: "C" },
+    { content: [words("Red")], fixed: false, identifier: "A" },
+    { content: [words("Green")], fixed: false, identifier: "B" },
+    { content: [words("Blue")], fixed: false, identifier: "C" },
   ],
   class: "swatches",
   kind: "choice",
@@ -326,13 +326,14 @@ const decorative = (source: string): BodyNode => contentElement("img", { alt: ""
 const swatches: ChoiceInteraction = {
   ...colours,
   choices: [
-    { content: [words("Red")], identifier: "A" },
-    { content: [decorative("images/green.png")], identifier: "B" },
+    { content: [words("Red")], fixed: false, identifier: "A" },
+    { content: [decorative("images/green.png")], fixed: false, identifier: "B" },
     {
       content: [contentElement("img", { alt: "A blue swatch", src: "images/blue.png" })],
+      fixed: false,
       identifier: "C",
     },
-    { content: [words("Yellow")], identifier: "D" },
+    { content: [words("Yellow")], fixed: false, identifier: "D" },
   ],
 };
 
@@ -741,6 +742,7 @@ describe("renderChoice", () => {
                   tag: "h1",
                 },
               ],
+              fixed: false,
               identifier: "A",
             },
             ...colours.choices.slice(1),
@@ -801,6 +803,7 @@ describe("renderChoice", () => {
         choices: [
           {
             content: [contentElement("span", { "aria-label": "A green swatch", role: "img" })],
+            fixed: false,
             identifier: "B",
           },
         ],
@@ -824,6 +827,7 @@ describe("renderChoice", () => {
           choices: [
             {
               content: [words(" \n\t"), contentElement("img", { alt: " ", src: "images/red.png" })],
+              fixed: false,
               identifier: "A",
             },
             {
@@ -831,6 +835,7 @@ describe("renderChoice", () => {
                 contentElement("span", { "aria-hidden": "true" }, [words("Green")]),
                 decorative("images/green.png"),
               ],
+              fixed: false,
               identifier: "B",
             },
             {
@@ -841,6 +846,7 @@ describe("renderChoice", () => {
                   path: `${choicePath}/qti-printed-variable`,
                 },
               ],
+              fixed: false,
               identifier: "C",
             },
           ],
@@ -869,6 +875,7 @@ describe("renderChoice", () => {
           ...swatches,
           choices: ["red", "green", "blue"].map((colour, index) => ({
             content: [decorative(`images/${colour}.png`)],
+            fixed: false,
             identifier: ["A", "B", "C"][index] ?? "",
           })),
           shuffle: true,
@@ -910,6 +917,7 @@ describe("renderChoice", () => {
                   tag: "label",
                 },
               ],
+              fixed: false,
               identifier: "A",
             },
             ...colours.choices.slice(1),

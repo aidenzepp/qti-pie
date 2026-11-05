@@ -122,9 +122,9 @@ const choice: ChoiceInteraction = {
   ariaLabelledby: Option.none(),
   cardinality: "multiple",
   choices: [
-    { content: [words("2")], identifier: "TWO" },
-    { content: [words("3")], identifier: "THREE" },
-    { content: [words("4")], identifier: "FOUR" },
+    { content: [words("2")], fixed: false, identifier: "TWO" },
+    { content: [words("3")], fixed: false, identifier: "THREE" },
+    { content: [words("4")], fixed: false, identifier: "FOUR" },
   ],
   class: "",
   kind: "choice",
@@ -568,6 +568,29 @@ describe('the verdict and the codec on pattern-mask and format="xhtml"', () => {
       () => acceptedAndRoundTripped(name, textItemBytes(body), unsupported),
     );
   }
+});
+
+describe("the verdict and the codec on shuffle and fixed", () => {
+  it.effect(
+    '[Q-2] a shuffled Choice with fixed="true" and unmarked choices: is accepted, naming nothing unsupported, and round-trips fixed through JSON text',
+    () =>
+      Effect.gen(function* shuffledRoundTrip() {
+        const bytes = new TextEncoder().encode(
+          '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="shuffled" title="Shuffled" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-item-body><qti-choice-interaction response-identifier="RESPONSE" shuffle="true"><qti-simple-choice identifier="A">Ant</qti-simple-choice><qti-simple-choice identifier="B" fixed="true">Bee</qti-simple-choice><qti-simple-choice identifier="C">Cat</qti-simple-choice></qti-choice-interaction></qti-item-body></qti-assessment-item>',
+        );
+
+        yield* acceptedAndRoundTripped("a shuffled Choice", bytes, []);
+
+        const verdict = yield* open("items/shuffled.xml", bytes);
+        const accepted =
+          verdict.verdict === "accepted" ? verdict.accepted : assert.fail(verdict.verdict);
+        const text = JSON.stringify(Result.getOrThrow(encodeRedacted(redact(accepted))));
+
+        assert.include(text, '"fixed":true,"identifier":"B"');
+        assert.include(text, '"fixed":false,"identifier":"A"');
+        assert.include(text, '"shuffle":true');
+      }),
+  );
 });
 
 describe("the verdict and the codec on Extended Text containers", () => {

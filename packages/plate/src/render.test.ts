@@ -63,9 +63,9 @@ const choice: ChoiceInteraction = {
   ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
-    { content: [words("Paris")], identifier: "A" },
-    { content: [words("Lyon")], identifier: "B" },
-    { content: [words("Nice")], identifier: "C" },
+    { content: [words("Paris")], fixed: false, identifier: "A" },
+    { content: [words("Lyon")], fixed: false, identifier: "B" },
+    { content: [words("Nice")], fixed: false, identifier: "C" },
   ],
   class: "",
   kind: "choice",

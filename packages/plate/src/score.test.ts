@@ -48,6 +48,7 @@ const choiceOf = (
   cardinality,
   choices: choices.map((identifier) => ({
     content: [{ kind: "text", text: identifier }],
+    fixed: false,
     identifier,
   })),
   class: "",

@@ -500,7 +500,7 @@ describe("check", () => {
     ]);
   });
 
-  it("marks shuffle on the verdict with no notice in the body", () => {
+  it("[Q-2] accepts a shuffled Choice naming no unsupported feature, with no notice in the body", () => {
     const accepted = acceptedOf(
       verdictOf(
         item([
@@ -508,12 +508,10 @@ describe("check", () => {
           body([choiceInteraction([attr("shuffle", "true")])]),
         ]),
       ),
-      "accepted-with-unsupported",
+      "accepted",
     );
 
-    assert.deepStrictEqual(accepted.unsupported, [
-      { feature: 'shuffle="true"', path: `${bodyPath}/qti-choice-interaction`, shown: "mark" },
-    ]);
+    assert.deepStrictEqual(accepted.unsupported, []);
     assert.deepStrictEqual(outline(accepted.item.body), ["choice"]);
   });
 

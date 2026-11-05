@@ -41,9 +41,9 @@ const colours: ChoiceInteraction = {
   ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
-    { content: [words("Red")], identifier: "A" },
-    { content: [words("Green")], identifier: "B" },
-    { content: [words("Blue")], identifier: "C" },
+    { content: [words("Red")], fixed: false, identifier: "A" },
+    { content: [words("Green")], fixed: false, identifier: "B" },
+    { content: [words("Blue")], fixed: false, identifier: "C" },
   ],
   class: "",
   kind: "choice",

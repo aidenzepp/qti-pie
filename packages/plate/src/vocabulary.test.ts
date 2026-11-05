@@ -201,7 +201,6 @@ describe("the closed value sets", () => {
         "marks",
         renders.marks.map((mark) => mark.feature),
         [
-          'shuffle="true"',
           "string-identifier",
           'adaptive="true"',
           "qti-template-declaration",

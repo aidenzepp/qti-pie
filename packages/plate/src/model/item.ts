@@ -179,10 +179,15 @@ export interface BodyText {
 }
 
 /**
- * A `qti-simple-choice`: its identifier and its content.
+ * A `qti-simple-choice`: its identifier, its content, and whether it is fixed.
  */
 export interface SimpleChoice {
   readonly content: readonly BodyNode[];
+  /**
+   * `fixed`, an `xs:boolean`, false when absent: a fixed choice keeps its document position when
+   * its Choice is shuffled.
+   */
+  readonly fixed: boolean;
   readonly identifier: string;
 }
 
@@ -1535,8 +1540,9 @@ const choiceInteraction = (
           markElement(build, choice, true);
 
           const identifier = yield* identifierAttribute(build, choice, "identifier");
+          const fixed = yield* xsBoolean(build, choice, "fixed", false);
 
-          return { content: yield* bodyNodes(build, choice), identifier };
+          return { content: yield* bodyNodes(build, choice), fixed, identifier };
         }),
     );
 

@@ -1321,40 +1321,129 @@ describe("buildItem", () => {
     }),
   );
 
-  it.effect('[Q-2] marks shuffle="true" and keeps the choices in document order', () =>
-    Effect.gen(function* shuffleIsMark() {
-      const built = yield* buildItem(
-        item({
-          body: [
-            el(
-              "qti-choice-interaction",
-              [attr("response-identifier", "RESPONSE"), attr("shuffle", "true")],
-              [choice("C", "Cat"), choice("A", "Ant"), choice("B", "Bee")],
-            ),
-          ],
-          declarations: [
-            declaration("qti-response-declaration", "RESPONSE", "identifier", "multiple"),
-          ],
-        }),
-      );
-      const interaction = choiceIn(built.body);
+  it.effect(
+    '[Q-2] builds shuffle="true" with no unsupported feature and keeps the choices in document order',
+    () =>
+      Effect.gen(function* shuffleIsModelled() {
+        const built = yield* buildItem(
+          item({
+            body: [
+              el(
+                "qti-choice-interaction",
+                [attr("response-identifier", "RESPONSE"), attr("shuffle", "true")],
+                [choice("C", "Cat"), choice("A", "Ant"), choice("B", "Bee")],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "identifier", "multiple"),
+            ],
+          }),
+        );
+        const interaction = choiceIn(built.body);
 
-      assert.deepStrictEqual(
-        interaction.choices.map((option) => option.identifier),
-        ["C", "A", "B"],
+        assert.deepStrictEqual(
+          interaction.choices.map((option) => option.identifier),
+          ["C", "A", "B"],
+        );
+        assert.strictEqual(interaction.shuffle, true);
+        assert.strictEqual(interaction.cardinality, "multiple");
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    '[Q-2] reads each choice\'s fixed as an xs:boolean: true for "true" and "1", false for "false", "0" and none',
+    () =>
+      Effect.gen(function* fixedChoices() {
+        const built = yield* buildItem(
+          item({
+            body: [
+              el(
+                "qti-choice-interaction",
+                [attr("response-identifier", "RESPONSE"), attr("shuffle", "true")],
+                [
+                  el(
+                    "qti-simple-choice",
+                    [attr("fixed", "true"), attr("identifier", "T")],
+                    [text("True")],
+                  ),
+                  el(
+                    "qti-simple-choice",
+                    [attr("fixed", "1"), attr("identifier", "O")],
+                    [text("One")],
+                  ),
+                  el(
+                    "qti-simple-choice",
+                    [attr("fixed", "false"), attr("identifier", "F")],
+                    [text("False")],
+                  ),
+                  el(
+                    "qti-simple-choice",
+                    [attr("fixed", " 0 "), attr("identifier", "Z")],
+                    [text("Zero")],
+                  ),
+                  choice("N", "None"),
+                ],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(
+          choiceIn(built.body).choices.map((option) => [option.identifier, option.fixed]),
+          [
+            ["T", true],
+            ["O", true],
+            ["F", false],
+            ["Z", false],
+            ["N", false],
+          ],
+        );
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect('[Q-2] refuses fixed="yes" on a choice with value-type, naming the attribute', () =>
+    Effect.gen(function* refusesFixed() {
+      const refusal = yield* Effect.flip(
+        buildItem(
+          item({
+            body: [
+              el(
+                "qti-choice-interaction",
+                [attr("response-identifier", "RESPONSE")],
+                [
+                  el(
+                    "qti-simple-choice",
+                    [attr("fixed", "yes"), attr("identifier", "A")],
+                    [text("Ant")],
+                  ),
+                ],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+            ],
+          }),
+        ),
       );
-      assert.strictEqual(interaction.shuffle, true);
-      assert.strictEqual(interaction.cardinality, "multiple");
-      assert.deepStrictEqual(built.unsupported, [
-        { feature: 'shuffle="true"', path: `${body}/qti-choice-interaction`, shown: "mark" },
-      ]);
+
+      assert.strictEqual(refusal.rule, "value-type");
+      assert.deepStrictEqual(refusal.location, {
+        kind: "path",
+        path: `${body}/qti-choice-interaction/qti-simple-choice/@fixed`,
+      });
+      assert.deepStrictEqual(refusal.detail, { baseType: "boolean", lexical: "yes" });
     }),
   );
 
   it.effect(
-    "[I-0] [Q-2] marks adaptive and shuffle when true or 1, and neither when false or 0",
+    "[I-0] [Q-2] reads adaptive and shuffle as true for true or 1 and false for false or 0, marking only adaptive",
     () =>
-      Effect.gen(function* booleanMarks() {
+      Effect.gen(function* booleanAttributes() {
         const cases = [
           ["true", true],
           ["1", true],
@@ -1383,16 +1472,7 @@ describe("buildItem", () => {
           assert.strictEqual(choiceIn(built.body).shuffle, on, written);
           assert.deepStrictEqual(
             built.unsupported,
-            on
-              ? [
-                  { feature: 'adaptive="true"', path: root, shown: "mark" },
-                  {
-                    feature: 'shuffle="true"',
-                    path: `${body}/qti-choice-interaction`,
-                    shown: "mark",
-                  },
-                ]
-              : [],
+            on ? [{ feature: 'adaptive="true"', path: root, shown: "mark" }] : [],
             written,
           );
         }
