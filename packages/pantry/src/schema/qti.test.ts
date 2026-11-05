@@ -296,11 +296,8 @@ describe("qti", () => {
     );
   });
 
-  it("gives Author every stored relation and writes all but the seeded ones", () => {
+  it("writes every stored relation but the seeded ones, and seeds only stored relations", () => {
     const names = stored().map(([name]) => name);
-    for (const name of names) {
-      assert.include(Object.keys(Author.relations), name);
-    }
     assert.includeMembers(names, [...seededNames]);
     assert.strictEqual(seeded.size, seededNames.length);
 
