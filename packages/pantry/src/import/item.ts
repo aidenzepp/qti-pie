@@ -24,10 +24,8 @@ import type { ProcessingRefused } from "#pantry/import/processing.ts";
 import { requiredAttribute } from "#pantry/import/required.ts";
 import {
   closedOf,
-  collapse,
   ItemRefusal,
   kindOf,
-  replace,
   Rows,
   spelledInteger,
   treeRows,
@@ -36,7 +34,9 @@ import {
   valueText,
   withParents,
 } from "#pantry/import/tree.ts";
-import type { NodeIndex, WhiteSpace } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
+import type { NodeIndex } from "#pantry/import/tree.ts";
 import { environmentOf } from "#pantry/processing/env.ts";
 import {
   BaseType,

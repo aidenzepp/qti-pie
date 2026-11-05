@@ -13,14 +13,8 @@ import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { attributeRows } from "#pantry/import/attributes.ts";
-import {
-  closedOf,
-  collapse,
-  replace,
-  Rows,
-  treeRows,
-  typedAttribute,
-} from "#pantry/import/tree.ts";
+import { closedOf, Rows, treeRows, typedAttribute } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#pantry/import/tree.ts";
 import { classed, contentOf, elementChildren, qmdLeafRows } from "#pantry/import/leaf.ts";
 import { recordFile, recordTypes, soleFileTypes } from "#pantry/import/record.ts";

@@ -443,6 +443,7 @@ const checkRules = new Map<string, Rule>([
   ["TemplateParameterRoot", "P13"],
   ["VariableWeightInTest", "P12"],
   ["VariantNotSelf", "variant-target"],
+  ["XsiNilUndeclared", "xsi-nil"],
 ]);
 
 /**

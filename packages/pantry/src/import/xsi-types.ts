@@ -39,8 +39,8 @@
  */
 import { Option } from "effect";
 import type { Element } from "@qti-pie/crust/tree.ts";
-import { collapse, replace } from "#pantry/import/tree.ts";
-import type { WhiteSpace } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import {
   anyUri,
   ncNameContinuation,
