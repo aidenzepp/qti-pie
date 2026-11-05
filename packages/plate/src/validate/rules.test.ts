@@ -843,6 +843,58 @@ describe("checkRules", () => {
       );
     });
 
+    it("refuses no CC2_* template whose tree needs what the item does not provide (Q6)", () => {
+      const correct = values("qti-correct-response", "A");
+      const cases = [
+        {
+          declarations: [
+            response("RESPONSE", "single", "identifier", [correct]),
+            outcome("SCORE"),
+            outcome("MAXSCORE"),
+            outcome("FEEDBACK", "identifier"),
+          ],
+          template: "CC2_map_response",
+          unmet: "RESPONSE's qti-mapping",
+        },
+        {
+          declarations: [
+            response("RESPONSE", "single", "identifier", [correct, mapping("A")]),
+            outcome("SCORE", "integer"),
+            outcome("MAXSCORE"),
+            outcome("FEEDBACK", "identifier"),
+          ],
+          template: "CC2_map_response",
+          unmet: "a float SCORE",
+        },
+        {
+          declarations: [
+            response("RESPONSE", "single", "identifier", [correct]),
+            outcome("SCORE", "integer"),
+          ],
+          template: "CC2_match",
+          unmet: "a float SCORE",
+        },
+        {
+          declarations: [
+            response("RESPONSE", "single", "identifier", [correct]),
+            outcome("SCORE"),
+            outcome("MAXSCORE", "integer"),
+            outcome("FEEDBACKBASIC", "identifier"),
+          ],
+          template: "CC2_match_basic",
+          unmet: "a SCORE of MAXSCORE's type",
+        },
+      ] as const;
+
+      for (const { declarations, template, unmet } of cases) {
+        assert.deepStrictEqual(
+          judged(item(declarations, [choice("RESPONSE")], [processing(template)])),
+          [],
+          `${template}, lacking ${unmet}`,
+        );
+      }
+    });
+
     it("refuses an inline qti-map-response of a response with no qti-mapping, at its path", () => {
       assert.deepStrictEqual(
         judged(

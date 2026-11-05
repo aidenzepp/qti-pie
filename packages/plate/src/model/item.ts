@@ -2055,7 +2055,9 @@ const matchCorrect: readonly Rule[] = [
  * `FEEDBACKBASIC` to `incorrect`; and `CC2_map_response` is `map_response`, then sets `FEEDBACK` to
  * `correct` when `MAXSCORE` and `SCORE` are equal in `exact` mode, else to `incorrect`. A
  * template's tree goes through the check inline rules do ({@link runnable}), so one that names a
- * variable the item does not declare, such as `MAXSCORE`, is marked and never refused.
+ * variable the item does not declare, such as `MAXSCORE`, is marked and never refused, and so is a
+ * `CC2_*` template that needs a declaration the item does not provide, such as a `qti-mapping` or
+ * a float `SCORE`.
  */
 const templates = {
   CC2_map_response: [
@@ -2118,6 +2120,17 @@ const templates = {
 } satisfies Record<TemplateName, readonly Rule[]>;
 
 /**
+ * A response processing's rule tree, and the built-in template it is.
+ */
+interface ProcessingTree {
+  /**
+   * The built-in template the tree is, none for inline rules.
+   */
+  readonly template: Option.Option<TemplateName>;
+  readonly tree: readonly Rule[];
+}
+
+/**
  * Read a `qti-response-processing`.
  *
  * Inline rules take precedence over a template, as the information model says. A built-in
@@ -2126,12 +2139,12 @@ const templates = {
  *
  * @param build The build.
  * @param processing The processing element.
- * @returns The rule tree, none when phase 1 cannot run it, or a refusal.
+ * @returns The rule tree with the template it is, none when phase 1 cannot run it, or a refusal.
  */
 const processingOf = (
   build: Build,
   processing: SourceElement,
-): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> => {
+): Effect.Effect<Option.Option<ProcessingTree>, Refusal> => {
   const uri = valueOf(processing, "template");
   const builtIn = uri.pipe(Option.flatMap(templateName));
   if (Option.isSome(uri) && Option.isNone(builtIn)) {
@@ -2144,10 +2157,15 @@ const processingOf = (
 
   const inline = elementsOf(processing);
   if (inline.length > 0 || Option.isNone(uri)) {
-    return rules(build, inline);
+    return Effect.map(
+      rules(build, inline),
+      Option.map((tree) => ({ template: Option.none(), tree })),
+    );
   }
 
-  return Effect.succeed(builtIn.pipe(Option.map((name) => templates[name])));
+  return Effect.succeed(
+    builtIn.pipe(Option.map((name) => ({ template: Option.some(name), tree: templates[name] }))),
+  );
 };
 
 /**
@@ -2374,9 +2392,188 @@ const readsPercentArea = (
   );
 
 /**
+ * The base type and cardinality of a value: what `qti-set-outcome-value` compares against the
+ * outcome's declaration.
+ */
+type ValueType = Pick<Value, "baseType" | "cardinality">;
+
+/**
+ * Construct the `single` type of a base type.
+ *
+ * @param baseType The base type.
+ * @returns The type.
+ */
+const singleType = (baseType: ModelledBaseType): ValueType => ({ baseType, cardinality: "single" });
+
+/**
+ * Give the type of every value an expression gives, as the evaluator gives it
+ * (`evaluateExpression` in `#plate/engine/evaluate.ts`).
+ *
+ * A `qti-variable` has the type of the response or the outcome it names, else of the built-in it
+ * names: the one built-in the engine holds, `numAttempts` ({@link heldBuiltIns}), is a single
+ * integer. A `qti-correct` has its response's type, a `qti-base-value` its own, `qti-match`,
+ * `qti-equal` and `qti-is-null` are a single boolean, and `qti-map-response` and
+ * `qti-map-response-point` a single float. A NULL keeps the type of the expression that gave it,
+ * and the session record holds each variable at its declared type, so the type holds for every
+ * value the expression gives.
+ *
+ * @param operand The expression.
+ * @param responses The responses the model holds.
+ * @param outcomes The outcomes the model holds.
+ * @param builtIns The built-in variables the engine holds for this item.
+ * @returns Its type, none when it names an identifier the engine does not hold.
+ */
+const typeOf = (
+  operand: Expression,
+  responses: ReadonlyMap<string, ResponseDeclaration>,
+  outcomes: ReadonlyMap<string, OutcomeDeclaration>,
+  builtIns: ReadonlySet<string>,
+): Option.Option<ValueType> => {
+  switch (operand.kind) {
+    case "variable": {
+      const ofDeclaration: ValueType | undefined =
+        responses.get(operand.identifier) ?? outcomes.get(operand.identifier);
+
+      return Option.fromUndefinedOr(ofDeclaration).pipe(
+        Option.orElse(() =>
+          builtIns.has(operand.identifier) ? Option.some(singleType("integer")) : Option.none(),
+        ),
+      );
+    }
+    case "correct": {
+      const ofDeclaration: ValueType | undefined = responses.get(operand.identifier);
+
+      return Option.fromUndefinedOr(ofDeclaration);
+    }
+    case "base-value": {
+      return Option.some(operand.value);
+    }
+    case "match":
+    case "equal":
+    case "is-null": {
+      return Option.some(singleType("boolean"));
+    }
+    case "map-response":
+    case "map-response-point": {
+      return Option.some(singleType("float"));
+    }
+    default: {
+      return operand satisfies never;
+    }
+  }
+};
+
+/**
+ * The built-in templates whose needs no prose rule judges: `template-requirements` judges the
+ * canonical three and leaves the `CC2_*` templates alone (Q6), so {@link runnable} judges what
+ * their trees need ({@link unmetNeeds}).
+ */
+const unjudgedTemplates: ReadonlySet<TemplateName> = new Set([
+  "CC2_map_response",
+  "CC2_match",
+  "CC2_match_basic",
+]);
+
+/**
+ * Give each declaration a rule tree needs and the item does not provide, as the mark that names
+ * it, once, in the order the tree first needs it.
+ *
+ * The evaluator returns `UnmappedResponseError` for a `qti-map-response` of a response with no
+ * `qti-mapping` and for a `qti-map-response-point` of one with no `qti-area-mapping`, which only a
+ * `point` declaration holds, and `OutcomeMismatchError` for a `qti-set-outcome-value` whose
+ * expression's type ({@link typeOf}) is not the outcome's (`#plate/engine/evaluate.ts`). The prose
+ * rules refuse inline rules that need these and judge what a canonical template needs of
+ * `RESPONSE` and `SCORE` (`template-requirements` and `expression-type` in
+ * `#plate/validate/rules.ts`), but leave the `CC2_*` templates alone (Q6), so {@link runnable}
+ * runs no `CC2_*` tree this walk finds a need in, and those failures stay unreachable from one.
+ * The marks name what is missing: `mapping:<identifier>` and `area-mapping:<identifier>` for the
+ * response's mapping and area mapping, and `outcome-type:<identifier>` for an outcome a rule sets
+ * to a value of another base type or cardinality. An identifier the engine does not hold is
+ * {@link unheldIdentifiers}'s mark, and no need is judged of it.
+ *
+ * @param tree The rule tree.
+ * @param responses The responses the model holds.
+ * @param outcomes The outcomes the model holds.
+ * @param builtIns The built-in variables the engine holds for this item ({@link heldBuiltIns}).
+ * @returns The marks, empty when every need is met.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_SetValue
+ */
+const unmetNeeds = (
+  tree: readonly Rule[],
+  responses: ReadonlyMap<string, ResponseDeclaration>,
+  outcomes: ReadonlyMap<string, OutcomeDeclaration>,
+  builtIns: ReadonlySet<string>,
+): readonly string[] => {
+  const unmet = new Set<string>();
+
+  /**
+   * Add the mark of each mapping an expression and its operands read that their response lacks.
+   *
+   * @param operand The expression.
+   */
+  const read = (operand: Expression): void => {
+    if (operand.kind === "map-response" || operand.kind === "map-response-point") {
+      const response = responses.get(operand.identifier);
+      const point = operand.kind === "map-response-point";
+      const lacking =
+        response !== undefined &&
+        (point ? Option.isNone(response.areaMapping) : Option.isNone(response.mapping));
+      if (lacking) {
+        unmet.add(`${point ? "area-mapping" : "mapping"}:${operand.identifier}`);
+      }
+    } else if (operand.kind === "is-null") {
+      read(operand.operand);
+    } else if (operand.kind === "match" || operand.kind === "equal") {
+      for (const each of operand.operands) {
+        read(each);
+      }
+    }
+  };
+
+  /**
+   * Add the marks of a rule sequence, nested branches included: each mapping its expressions read
+   * that their response lacks, and each outcome it sets to a value of another type.
+   *
+   * @param sequence The rules, in order.
+   */
+  const run = (sequence: readonly Rule[]): void => {
+    for (const each of sequence) {
+      if (each.kind === "set-outcome") {
+        read(each.expression);
+
+        const outcome = outcomes.get(each.identifier);
+        const given = typeOf(each.expression, responses, outcomes, builtIns);
+        if (
+          outcome !== undefined &&
+          Option.exists(
+            given,
+            (type) =>
+              type.baseType !== outcome.baseType || type.cardinality !== outcome.cardinality,
+          )
+        ) {
+          unmet.add(`outcome-type:${each.identifier}`);
+        }
+      } else {
+        for (const { then, when } of each.branches) {
+          read(when);
+          run(then);
+        }
+        if (Option.isSome(each.otherwise)) {
+          run(each.otherwise.value);
+        }
+      }
+    }
+  };
+  run(tree);
+
+  return [...unmet];
+};
+
+/**
  * A response processing read into a rule tree, with where its marks go.
  */
-interface ReadProcessing {
+interface ReadProcessing extends ProcessingTree {
   /**
    * The number of marks recorded when the processing element was read, so the marks it gains later
    * keep document order.
@@ -2386,21 +2583,24 @@ interface ReadProcessing {
    * The `qti-response-processing` element's path.
    */
   readonly path: string;
-  readonly tree: readonly Rule[];
 }
 
 /**
  * Keep a rule tree the engine can run. Each identifier {@link unheldIdentifiers} finds is the mark
- * `variable:<identifier>` at the processing element's path, and a tree that maps a point through an
- * area mapping with a `%` coordinate ({@link readsPercentArea}) is the mark `area-coords-percent`
- * there. The marks are placed among the others in document order, and the tree is then none.
+ * `variable:<identifier>` at the processing element's path, each need {@link unmetNeeds} finds in a
+ * `CC2_*` template's tree is its mark there (`mapping:<identifier>`, `area-mapping:<identifier>`
+ * or `outcome-type:<identifier>`), and a tree that maps a point through an area mapping with a `%`
+ * coordinate ({@link readsPercentArea}) is the mark `area-coords-percent` there. The marks are
+ * placed among the others in document order, and the tree is then none. So a `CC2_*` template the
+ * item does not provide for is marked and does not run, as Q6 has it, and is never refused.
  *
  * @param build The build.
  * @param read The processing as read.
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
- * @returns The tree, or none when it names an identifier the engine does not hold or reads an
- *   area mapping with a `%` coordinate.
+ * @returns The tree, or none when it names an identifier the engine does not hold, is a `CC2_*`
+ *   template that needs a declaration the item does not provide, or reads an area mapping with a
+ *   `%` coordinate.
  */
 const runnable = (
   build: Build,
@@ -2408,12 +2608,15 @@ const runnable = (
   responses: ReadonlyMap<string, ResponseDeclaration>,
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
 ): Option.Option<readonly Rule[]> => {
-  const features = unheldIdentifiers(
-    read.tree,
-    responses,
-    outcomes,
-    heldBuiltIns(build.document.root),
-  ).map((identifier) => `variable:${identifier}`);
+  const builtIns = heldBuiltIns(build.document.root);
+  const features = [
+    ...unheldIdentifiers(read.tree, responses, outcomes, builtIns).map(
+      (identifier) => `variable:${identifier}`,
+    ),
+    ...(Option.exists(read.template, (name) => unjudgedTemplates.has(name))
+      ? unmetNeeds(read.tree, responses, outcomes, builtIns)
+      : []),
+  ];
   if (readsPercentArea(read.tree, responses)) {
     features.push("area-coords-percent");
   }
@@ -2465,10 +2668,12 @@ const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceEle
  * an unsupported feature, and so does each `qti-*` element outside the body that the model does
  * not read. Response processing is a rule tree: a built-in template resolves to the tree its text
  * gives, and inline rules become their tree when every element is in the engine. The tree is kept
- * only when the engine holds every identifier it names and maps no point through an area mapping
- * with a `%` coordinate; each identifier it does not hold is the mark `variable:<identifier>` at
- * the processing element's path, such a point mapping the mark `area-coords-percent` there, and
- * the processing is then none. An
+ * only when the engine holds every identifier it names, the item provides every declaration a
+ * `CC2_*` template's tree needs, and it maps no point through an area mapping with a `%`
+ * coordinate; each identifier it does not hold is the mark `variable:<identifier>` at the
+ * processing element's path, each such need unmet its mark there (`mapping:<identifier>`,
+ * `area-mapping:<identifier>` or `outcome-type:<identifier>`), such a point mapping the mark
+ * `area-coords-percent` there, and the processing is then none. An
  * item whose root has a `qti-template-processing` child keeps that element's mark and has no
  * processing, whatever the tree: template processing may set a template variable, a default value
  * or a correct response, and phase 1 runs none of it, so a score computed without it could be
@@ -2509,7 +2714,11 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
 
         const parsed = yield* processingOf(build, part);
         processing = parsed.pipe(
-          Option.map((tree) => ({ at: build.unsupported.length, path: pathOf(build, part), tree })),
+          Option.map((read) => ({
+            ...read,
+            at: build.unsupported.length,
+            path: pathOf(build, part),
+          })),
         );
       } else if (part.local === "qti-response-declaration") {
         markElement(build, part, false);

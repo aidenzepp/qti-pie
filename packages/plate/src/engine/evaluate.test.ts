@@ -621,7 +621,7 @@ describe("runRules", () => {
     assert.deepStrictEqual(after.outcomes["SCORE"], floatValue(1));
   });
 
-  it("[I-9b] set-outcome writes a float and leaves the responses as they were", () => {
+  it("set-outcome writes a float and leaves the responses as they were", () => {
     const before = variablesOf(identifierValue("false"));
     const after = Result.getOrThrow(
       runRules([setOutcome("SCORE", base(floatValue(2.5)))], item, before),
@@ -631,7 +631,7 @@ describe("runRules", () => {
     assert.deepStrictEqual(after.responses, before.responses);
   });
 
-  it("[I-9b] an else-if branch runs when the first fails", () => {
+  it("an else-if branch runs when the first fails", () => {
     const answered = (choice: string): Expression => ({
       kind: "match",
       operands: [variable("RESPONSE"), base(identifierValue(choice))],
@@ -650,7 +650,7 @@ describe("runRules", () => {
     assert.deepStrictEqual(after.outcomes["SCORE"], floatValue(0.5));
   });
 
-  it("[I-9b] a rule reads the outcome an earlier rule set", () => {
+  it("a rule reads the outcome an earlier rule set", () => {
     const rules = [
       setOutcome("EMPTY", { kind: "is-null", operand: variable("RESPONSE") }),
       condition([branchOf(variable("EMPTY"), [setOutcome("SCORE", base(floatValue(0.5)))])]),
@@ -663,7 +663,7 @@ describe("runRules", () => {
     assert.deepStrictEqual(after.outcomes["SCORE"], floatValue(0.5));
   });
 
-  it("[I-9b] a condition with no true branch and no else changes nothing", () => {
+  it("a condition with no true branch and no else changes nothing", () => {
     const rules = [
       condition([branchOf(variable("EMPTY"), [setOutcome("SCORE", base(floatValue(1)))])]),
     ];
