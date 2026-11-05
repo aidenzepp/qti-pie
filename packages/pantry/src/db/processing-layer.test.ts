@@ -7,6 +7,7 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import * as asi from "#pantry/schema/kinds/asi.ts";
 import * as xi from "#pantry/schema/kinds/xi.ts";
 import { AuthorApp } from "#pantry/schema/logins.ts";
+import * as seed from "#pantry/schema/seed/admission.ts";
 import { AttributeAdmission } from "#pantry/schema/attributes.ts";
 import { Admission } from "#pantry/schema/node.ts";
 import type { AttributeNameHandle } from "#pantry/schema/node.ts";
@@ -221,19 +222,17 @@ describe.skipIf(!hasLease)(
               );
             }
 
-            // Nothing the processing hosts own is missing, and nothing under them is extra.
+            // Every installed row under a processing host is a kinds-file row or a row the composed
+            // seed holds (its derived wildcard rows), and every such seed row is installed.
+            const underProcessingHosts = (row: {
+              readonly child: string;
+              readonly parent: string;
+              readonly version: string;
+            }) => processingHosts.has(row.parent) && !expectedKeys.has(keyOf(row));
+
             assert.deepStrictEqual(
-              rows
-                .filter((row) => processingHosts.has(row.parent) && !expectedKeys.has(keyOf(row)))
-                .map(keyOf),
-              rows
-                .filter(
-                  (row) =>
-                    row.parent === "qti-response-processing" &&
-                    generic.includes(row.child) &&
-                    !expectedKeys.has(keyOf(row)),
-                )
-                .map(keyOf),
+              rows.filter(underProcessingHosts).map(keyOf).toSorted(),
+              seed.admission.filter(underProcessingHosts).map(keyOf).toSorted(),
             );
             assert.isTrue([...hosts].every((host) => rows.some((row) => row.parent === host)));
           }),
