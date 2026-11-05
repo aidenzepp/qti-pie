@@ -753,7 +753,7 @@ describe("validateTextEntry", () => {
   );
 
   it.effect(
-    "[Q-20] gives a string's file malformedFile and its second entry malformedSingleMany, and an integer's file malformedNumber",
+    "[Q-20] gives a string's file malformedFile and its second entry malformedSingleMany, and an integer's file malformedFile",
     () =>
       Effect.gen(function* stringRefusals() {
         const configuration = yield* configure({});
@@ -781,7 +781,7 @@ describe("validateTextEntry", () => {
             yield* decoded(counted, [[name, new Blob(["3"])]]),
             configuration,
           ),
-          [{ response, text: message("en", "malformedNumber") }],
+          [{ response, text: message("en", "malformedFile") }],
         );
       }),
   );
