@@ -13,7 +13,8 @@ is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (private), the remo
 
 - Node 24 or later runs TypeScript source directly. There is no build step.
 - pnpm workspace. Effect is pinned to `4.0.7`, and the workspace must keep exactly one copy (`pnpm why effect -r`).
-- grizzle `1.0.0-beta.0` is vendored as tarballs; see `vendor/README.md`.
+- grizzle trunk at commit `a1d5af1` (`a1d5af193cee117ab481f5897edd41101ff5d679`) is vendored as tarballs; see
+  `vendor/README.md`.
 - Git LFS holds every `packages/*/migrations/**/snapshot.json` (`.gitattributes`). Install `git-lfs` before cloning;
   without it the snapshot checks out as a pointer file and grizzle refuses it.
 - Vite+ (`vp`) formats, lints and runs tests. TypeScript `7.0.2` typechecks under the strict settings in `tsconfig.json`.
@@ -67,12 +68,17 @@ reads `grizzle.config.ts` from there.
   and types") include no JSON or XML type. Model within them.
 - When grizzle behaves wrongly or a limit blocks a correct model, record it in `docs/grizzle-findings.md` with the
   smallest reproduction. That record is a deliverable of this project, not a side note.
-- grizzle is a very new beta, so expect real defects, and prove each one before blaming grizzle. Triage every
+- grizzle is new, so expect real defects, and prove each one before blaming grizzle. Triage every
   finding against grizzle's source, the clone at `~/Documents/dev/workspaces/personal/grizzle` checked out at the
   vendored commit (`vendor/README.md`), and classify it as one of: our misuse (fix it here, record nothing), a
   documented limit (record it as a limit), or a grizzle defect (record the cause with `file:line` anchors and a minimal
   reproduction that does not need this repository). A workaround in our code does not close a finding: record the
   workaround beside the cause. A confirmed grizzle defect becomes a GitHub issue on `bjornpagen/grizzle`.
+- **Pull first.** Before treating anything as a grizzle defect, fetch trunk in `~/.cache/gr8des/grizzle-trunk`,
+  re-run the minimal reproduction on the newest `main`, and take the six-step gate below only if it still fails. Record
+  the commit checked in `docs/grizzle-findings.md`.
+- **Re-pinning.** Move the vendored grizzle one exact commit at a time, never floating, as a small gate pull request
+  with the full checks.
 
 ### Filing grizzle issues
 
@@ -108,8 +114,8 @@ cover, read `node_modules/effect/src` of the installed version.
 
 Use the skills in `.agents/skills/`:
 
-- `effect-design`: Effect code, services, layers and configuration. Its Alchemy and Cloudflare examples do not apply
-  here; its native-capability review does.
+- `effect-design`: the native-capability review and this repository's local Effect rulings. Effect structure and style
+  stay with the installed Effect guide above.
 - `trace-effect`: effectful operations and their observability.
 - `error-messages`: caller-facing errors.
 - `document-code`: writing or reviewing code.
@@ -135,6 +141,15 @@ Read environment-backed settings with Effect `Config`, with constraints and defa
 
 Tests use `@effect/vitest` (`it.effect`, `layer`) and sit beside the code they test. A test that needs the database
 uses the local cluster through a login's `DbLayer`, never a mock.
+
+The corpus verdict file, `packages/pantry/verdicts/<corpus tarball basename>.tsv` (today `qti-examples-0a92fbb.tsv`),
+records what the importer did with each 1EdTech example zip. It is TSV with LF line ends and the columns `file`,
+`verdict` (`accepted` or `refused`) and `rule` (the refusal rule, empty when accepted), sorted by `file`, one row per
+corpus zip keyed by its tarball member. It holds no 1EdTech content, only member paths, verdicts and rule names. To
+regenerate it, run the corpus witness under a lease (`GR8DES_CORPUS=1 GR8DES_PG_DATABASE=<database> pnpm
+--fail-if-no-match --filter @qti-pie/pantry run test src/cli.corpus.db.test.ts`), then run the `cp` its failure message
+prints to adopt `packages/pantry/work/verdicts/<name>.tsv`. A stale file fails that corpus run; a renamed rule or a
+corpus zip without a row fails `src/test/verdicts.committed.test.ts`, which needs no lease.
 
 ## Planning and building with shipyard
 

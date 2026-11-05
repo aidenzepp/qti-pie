@@ -10,7 +10,7 @@
  * and attribute-reference rows; the kind-specific arms and typed attribute columns belong to the
  * modules that read the {@link NodeIndex} it returns.
  */
-import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
+import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import type { Rule } from "#pantry/import/refusal.ts";
@@ -114,7 +114,7 @@ export const Rows = {
  */
 export interface IndexedNode {
   readonly ancestry: AncestryHandle;
-  readonly id: string;
+  readonly id: Uuid;
   readonly kind: NodeKindHandle;
 }
 
@@ -131,7 +131,7 @@ export type NodeIndex = ReadonlyMap<Element, IndexedNode>;
  */
 export interface TreeInput {
   readonly charset: string;
-  readonly id: string;
+  readonly id: Uuid;
   readonly kind: "document" | "manifest";
   readonly root: RootKindHandle;
   readonly version: SchemaVersionHandle;
@@ -252,7 +252,7 @@ const processed = (lexical: string, whiteSpace: WhiteSpace): string => {
  */
 export const typedAttribute = (
   rows: Rows,
-  node: string,
+  node: Uuid,
   kind: NodeKindHandle,
   name: AttributeNameHandle,
   lexical: string,
@@ -375,7 +375,7 @@ export const integerOf = (
  */
 export const spelledInteger = (
   rows: Rows,
-  node: string,
+  node: Uuid,
   kind: NodeKindHandle,
   name: AttributeNameHandle,
   text: string,
@@ -577,7 +577,7 @@ const walk = (
   parent: Option.Option<{
     readonly ancestry: AncestryHandle;
     readonly flags: readonly Flag[];
-    readonly id: string;
+    readonly id: Uuid;
     readonly kind: NodeKindHandle;
   }>,
   position: number,

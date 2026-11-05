@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
+import type { Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import { attributeRows } from "#pantry/import/attributes.ts";
 import { kindOf, Rows, treeRows } from "#pantry/import/tree.ts";
@@ -11,7 +12,7 @@ import type { NodeKindHandle, RootKindHandle } from "#pantry/schema/node.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
-const documentId = "11111111-1111-4111-8111-111111111111";
+const documentId: Uuid = "11111111-1111-4111-8111-111111111111";
 
 const itemNamespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 
@@ -22,7 +23,7 @@ const lomNamespace = "http://ltsc.ieee.org/xsd/LOM";
 const item = (body: string, rootAttributes = ""): string =>
   `<qti-assessment-item xmlns="${itemNamespace}" identifier="i" title="t" adaptive="false" time-dependent="false" ${rootAttributes}><qti-item-body>${body}</qti-item-body></qti-assessment-item>`;
 
-const idOf = (nodes: NodeIndex, kind: string): string =>
+const idOf = (nodes: NodeIndex, kind: string): Uuid =>
   Option.getOrThrow(
     Option.fromNullishOr([...nodes.values()].find((found) => found.kind === kind)?.id),
   );

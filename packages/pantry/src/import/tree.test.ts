@@ -1,6 +1,7 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The tests spell the XML encoding labels (`UTF-8`) the declarations under test carry. */
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import type { Uuid } from "@bjornpagen/grizzle";
 import { assert, it, layer } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option } from "effect";
 import { inject } from "vitest";
@@ -60,7 +61,7 @@ const treeId = "11111111-1111-4111-8111-111111111111";
  * The id of the node of `kind` an index holds; the tests' documents hold one of each kind they ask
  * for.
  */
-const idOf = (nodes: NodeIndex, kind: string): string =>
+const idOf = (nodes: NodeIndex, kind: string): Uuid =>
   Option.getOrThrow(
     Option.fromNullishOr([...nodes.values()].find((found) => found.kind === kind)?.id),
   );

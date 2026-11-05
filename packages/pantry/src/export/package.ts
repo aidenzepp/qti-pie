@@ -3,7 +3,7 @@
  * imported from, and every other file of the package written from its stored bytes.
  */
 import { Db, query, uuid, v } from "@bjornpagen/grizzle";
-import type { DbLayer, OpenError, ReadError } from "@bjornpagen/grizzle";
+import type { DbLayer, OpenError, ReadError, Uuid } from "@bjornpagen/grizzle";
 import { Effect, FileSystem, Option, Path, Schema } from "effect";
 import type { PlatformError } from "effect";
 import { readTree, treesOf } from "#pantry/export/read.ts";
@@ -29,7 +29,7 @@ const MANIFEST_PATH = "imsmanifest.xml";
  * The entry path of the document whose tree is `id`.
  */
 const documentPathOf = query(Author).rule((r) => {
-  const { path } = v(Document);
+  const { path } = v(Document, "document");
 
   return r.match(Document, { id: r.param("id", uuid), path }).find({ path });
 });
@@ -38,7 +38,7 @@ const documentPathOf = query(Author).rule((r) => {
  * The manifest `identifier` of the package whose id is `id`; no row when no package has that id.
  */
 const packageOf = query(Author).rule((r) => {
-  const { identifier } = v(Package);
+  const { identifier } = v(Package, "package");
 
   return r.match(Package, { id: r.param("id", uuid), identifier }).find({ identifier });
 });
@@ -47,7 +47,7 @@ const packageOf = query(Author).rule((r) => {
  * The path and base64 content of every stored file of a package.
  */
 const contentsOf = query(Author).rule((r) => {
-  const { content, path } = v(FileContent);
+  const { content, path } = v(FileContent, "fileContent");
 
   return r.match(FileContent, { content, package: r.param("package", uuid), path }).find({
     content,
@@ -109,7 +109,7 @@ const declaring = (doc: XmlDocument, label: string): XmlDocument => ({
  *   or `PackageNotFound`, every one an export raises before it writes.
  */
 export const exportEntries = Effect.fn("export.exportEntries")(function* exportEntries(
-  packageId: string,
+  packageId: Uuid,
 ): Effect.fn.Return<
   readonly ZipEntry[],
   OpenError | ReadError | PackageNotFound | EncodeError,
@@ -165,7 +165,7 @@ export const exportEntries = Effect.fn("export.exportEntries")(function* exportE
  * @returns Nothing. Fails with the database's, the encoder's or the file system's error.
  */
 export const exportPackage = Effect.fn("export.exportPackage")(function* exportPackage(
-  packageId: string,
+  packageId: Uuid,
   target: string,
 ): Effect.fn.Return<void, ExportError, DbLayer<typeof Author> | FileSystem.FileSystem | Path.Path> {
   yield* Effect.annotateCurrentSpan({ packageId, target });

@@ -30,6 +30,7 @@ import {
 } from "#pantry/schema/interaction.ts";
 import { AttributeLexical } from "#pantry/schema/node.ts";
 import type { NodeKindHandle } from "#pantry/schema/node.ts";
+import { uuidOf } from "#pantry/test/fixtures.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";
@@ -66,14 +67,14 @@ const indexed = (entries: readonly (readonly [Element, NodeKindHandle])[]): Node
   new Map<Element, IndexedNode>(
     entries.map(([found, kind], position) => [
       found,
-      { ancestry: "root", id: `node-${position}`, kind },
+      { ancestry: "root", id: uuidOf(`node-${position}`), kind },
     ]),
   );
 
 const typedChoice: DeclaredVariable = {
   baseType: Option.some("identifier"),
   cardinality: Option.some("multiple"),
-  id: "decl-1",
+  id: uuidOf("decl-1"),
   shape: "typed",
 };
 
@@ -250,13 +251,19 @@ describe("nearestInteraction", () => {
   it("returns the hottext interaction for a hottext under its prompt", () => {
     const found = nearestInteraction(nodes, hottext);
 
-    assert.deepStrictEqual(found, Option.some({ id: "node-2", kind: "qti-hottext-interaction" }));
+    assert.deepStrictEqual(
+      found,
+      Option.some({ id: uuidOf("node-2"), kind: "qti-hottext-interaction" }),
+    );
   });
 
   it("returns the choice interaction for a hottext inside its prompt", () => {
     const found = nearestInteraction(nodes, inChoicePrompt);
 
-    assert.deepStrictEqual(found, Option.some({ id: "node-6", kind: "qti-choice-interaction" }));
+    assert.deepStrictEqual(
+      found,
+      Option.some({ id: uuidOf("node-6"), kind: "qti-choice-interaction" }),
+    );
   });
 
   it("returns None for a hottext directly under the item body", () => {
@@ -284,7 +291,7 @@ describe("nearestInteraction", () => {
 
     assert.deepStrictEqual(
       nearestInteraction(tree, inner),
-      Option.some({ id: "node-1", kind: "qti-text-entry-interaction" }),
+      Option.some({ id: uuidOf("node-1"), kind: "qti-text-entry-interaction" }),
     );
   });
 });
@@ -341,7 +348,7 @@ describe("bindingRows", () => {
         Option.some({
           baseType: Option.none(),
           cardinality: Option.none(),
-          id: "decl-2",
+          id: uuidOf("decl-2"),
           shape: "record",
         }),
         "root",
@@ -402,7 +409,7 @@ describe("gapMatchBindingRow", () => {
     const rows = gapMatchBindingRow(Rows.empty(), nodeId, {
       baseType: Option.none(),
       cardinality: Option.none(),
-      id: "decl-3",
+      id: uuidOf("decl-3"),
       shape: "record",
     });
 
@@ -417,7 +424,7 @@ describe("templateRef", () => {
       {
         baseType: Option.some("identifier"),
         cardinality: Option.some("single"),
-        id: "decl-4",
+        id: uuidOf("decl-4"),
         shape: "typed",
       },
     ],

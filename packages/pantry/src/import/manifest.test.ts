@@ -42,7 +42,7 @@ import {
   Resource,
   ResourceHref,
 } from "#pantry/schema/package.ts";
-import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
+import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { materialize, materializePackage } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
@@ -505,7 +505,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
           return assert.fail("simple holds a QtiMetadata and a TreeRoot");
         }
 
-        const node = (id: string, kind: Fact<typeof Node>["kind"]): Fact<typeof Node> => ({
+        const node = (id: Uuid, kind: Fact<typeof Node>["kind"]): Fact<typeof Node> => ({
           // No qmd kind enters an Ancestry flag, so every node here stays at `root`.
           ancestry: "root",
           id,
@@ -516,9 +516,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts", (
           version: "3.0.0",
         });
         const edge = (
-          parent: string,
+          parent: Uuid,
           parentKind: Fact<typeof Edge>["parentKind"],
-          child: string,
+          child: Uuid,
           childKind: Fact<typeof Edge>["childKind"],
         ): Fact<typeof Edge> => ({
           child,

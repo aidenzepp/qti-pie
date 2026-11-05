@@ -4,7 +4,7 @@
  * The item guards: the facts about an item's rows that no single relation can state, judged over
  * the rows an import built before any of them is written.
  */
-import type { AnyRelation } from "@bjornpagen/grizzle";
+import type { AnyRelation, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option, Predicate, Schema } from "effect";
 import { standardTemplate } from "#pantry/import/item.ts";
 import { collapse, replace, Rows, valueText } from "#pantry/import/tree.ts";
@@ -104,9 +104,22 @@ const valueArms: readonly AnyRelation[] = Object.values<unknown>(values.relation
 /**
  * What an arm row holds: the node's id and the value copied from its text.
  */
-const ArmRow = Schema.Struct({ id: Schema.String, value: Schema.String });
+export const ArmRow = Schema.Struct({
+  id: Schema.TemplateLiteral([
+    Schema.String,
+    "-",
+    Schema.String,
+    "-",
+    Schema.String,
+    "-",
+    Schema.String,
+    "-",
+    Schema.String,
+  ]),
+  value: Schema.String,
+});
 
-const isArmRow = Schema.is(ArmRow);
+export const isArmRow = Schema.is(ArmRow);
 
 /**
  * The attribute names each element kind's registry carries.
@@ -140,8 +153,8 @@ interface Index {
     string,
     readonly { readonly child: string; readonly childKind: string }[]
   >;
-  readonly itemTrees: ReadonlySet<string>;
-  readonly nodes: ReadonlyMap<string, { readonly kind: string; readonly tree: string }>;
+  readonly itemTrees: ReadonlySet<Uuid>;
+  readonly nodes: ReadonlyMap<string, { readonly kind: string; readonly tree: Uuid }>;
   readonly pieces: ReadonlyMap<string, string>;
 }
 

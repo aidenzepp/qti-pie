@@ -26,13 +26,14 @@ export const hasLease = Option.isSome(settings.leaseDatabase);
 /**
  * The timeout, in milliseconds, for each test of a lease suite that writes.
  *
- * The first law-checked write of a pool pays the backend's first call of the
- * schema's law functions, measured at 5.4 to 5.7 s with 85 armed handles (the
- * `repair1-21` row of `docs/grizzle-findings.md`), past vitest's 5 s default.
- * Raise it only on a measurement recorded in that row, never to make a run
- * pass. A lease suite that only reads keeps vitest's default.
+ * The longest lease test on trunk a1d5af1 is the export round trip, at 24,095 ms
+ * (gt-w3, 2026-11-04: 21,385, 22,160 and 24,095 ms in three runs of the lease
+ * files, load 6.5 to 132). The value is twice that, rounded up to the next 1,000,
+ * the rule `authorLayerHookTimeoutMs` uses. Raise it only on a new measurement
+ * recorded here, never to make a run pass. A lease suite that only reads keeps
+ * vitest's default.
  */
-export const leaseTestTimeoutMs = 60_000;
+export const leaseTestTimeoutMs = 49_000;
 
 /**
  * The timeout, in milliseconds, for the `layer` hook that builds `AuthorAppLayer`.

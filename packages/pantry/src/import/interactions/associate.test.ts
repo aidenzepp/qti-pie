@@ -1,4 +1,5 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the column the hotspot and `Coords` rows name; it is a geometric shape here, not a structure. */
+import type { Uuid } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option } from "effect";
 import {
@@ -47,6 +48,7 @@ import {
 import { InteractionBinding, TypedBinding } from "#pantry/schema/interaction.ts";
 import { AttributeLexical, AttributeSpelling, NodeKind } from "#pantry/schema/node.ts";
 import { Coords, CoordsCircle } from "#pantry/schema/shapes.ts";
+import { uuidOf } from "#pantry/test/fixtures.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";
@@ -83,7 +85,7 @@ const indexTree = (root: Element): NodeIndex => {
   const visit = (found: Element): void => {
     const kind = NodeKind.handles.find((handle) => handle === found.local);
     if (kind !== undefined) {
-      index.set(found, { ancestry: "root", id: `node-${index.size}`, kind });
+      index.set(found, { ancestry: "root", id: uuidOf(`node-${index.size}`), kind });
     }
 
     for (const child of found.children) {
@@ -111,7 +113,7 @@ const shared: Shared = {
 };
 
 const variable = (
-  id: string,
+  id: Uuid,
   baseType: NonNullable<DeclaredVariable["baseType"] extends Option.Option<infer B> ? B : never>,
   cardinality: "multiple" | "ordered" | "single",
 ): DeclaredVariable => ({
@@ -149,7 +151,7 @@ const matchItem = (): Element =>
     element("qti-simple-match-set", {}, [choice("X"), choice("Y"), choice("Z")]),
   ]);
 
-const pairs = new Map([["RESPONSE", variable("decl-1", "directedPair", "multiple")]]);
+const pairs = new Map([["RESPONSE", variable(uuidOf("decl-1"), "directedPair", "multiple")]]);
 
 const refusalRuleOf = (exit: Exit.Exit<Rows, unknown>): string => {
   const failure = Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
@@ -167,7 +169,7 @@ describe("associateRows on a match interaction", () => {
       const interaction = Rows.of(built, MatchInteraction);
       assert.deepStrictEqual(interaction, [
         {
-          id: "node-2",
+          id: uuidOf("node-2"),
           maxAssociationsN: 1n,
           minAssociationsN: 0n,
           responseIdentifier: "RESPONSE",
@@ -175,12 +177,15 @@ describe("associateRows on a match interaction", () => {
           shuffle: "false",
         },
       ]);
-      assert.deepStrictEqual(Rows.of(built, SimpleMatchSet), [{ id: "node-3" }, { id: "node-6" }]);
+      assert.deepStrictEqual(Rows.of(built, SimpleMatchSet), [
+        { id: uuidOf("node-3") },
+        { id: uuidOf("node-6") },
+      ]);
 
       const choices = Rows.of(built, SimpleAssociableChoice);
       assert.deepStrictEqual(
         choices.map((row) => [row.identifier, row.interaction, row.matchMaxN, row.matchMinN]),
-        ["A", "B", "X", "Y", "Z"].map((identifier) => [identifier, "node-2", 1n, 0n]),
+        ["A", "B", "X", "Y", "Z"].map((identifier) => [identifier, uuidOf("node-2"), 1n, 0n]),
       );
       assert.deepStrictEqual(
         Rows.of(built, SimpleAssociableChoiceMatchSet).map((row) => [
@@ -189,11 +194,11 @@ describe("associateRows on a match interaction", () => {
           row.interaction,
         ]),
         [
-          ["node-4", "node-3", "node-2"],
-          ["node-5", "node-3", "node-2"],
-          ["node-7", "node-6", "node-2"],
-          ["node-8", "node-6", "node-2"],
-          ["node-9", "node-6", "node-2"],
+          [uuidOf("node-4"), uuidOf("node-3"), uuidOf("node-2")],
+          [uuidOf("node-5"), uuidOf("node-3"), uuidOf("node-2")],
+          [uuidOf("node-7"), uuidOf("node-6"), uuidOf("node-2")],
+          [uuidOf("node-8"), uuidOf("node-6"), uuidOf("node-2")],
+          [uuidOf("node-9"), uuidOf("node-6"), uuidOf("node-2")],
         ],
       );
       assert.deepStrictEqual(Rows.of(built, TypedBinding), [
@@ -203,7 +208,7 @@ describe("associateRows on a match interaction", () => {
           document: documentId,
           interactionKind: "qti-match-interaction",
           maxCount: 1n,
-          node: "node-2",
+          node: uuidOf("node-2"),
           responseIdentifier: "RESPONSE",
         },
       ]);
@@ -266,21 +271,21 @@ describe("associateRows on a match interaction", () => {
         assert.strictEqual(Rows.of(built, MatchInteraction)[0]?.maxAssociationsN, 0n);
         assert.strictEqual(Rows.of(built, MatchInteraction)[0]?.shuffle, "true");
         assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 0n);
-        assert.deepStrictEqual(Rows.of(built, DeclaredMatchShuffle), [{ node: "node-2" }]);
+        assert.deepStrictEqual(Rows.of(built, DeclaredMatchShuffle), [{ node: uuidOf("node-2") }]);
         assert.deepStrictEqual(Rows.of(built, MatchMaxSelectionsMessage), [
-          { node: "node-2", value: "too many" },
+          { node: uuidOf("node-2"), value: "too many" },
         ]);
         assert.deepStrictEqual(Rows.of(built, MatchMinSelectionsMessage), [
-          { node: "node-2", value: "too few" },
+          { node: uuidOf("node-2"), value: "too few" },
         ]);
         assert.deepStrictEqual(Rows.of(built, MatchFirstColumnHeader), [
-          { node: "node-2", value: "Item" },
+          { node: uuidOf("node-2"), value: "Item" },
         ]);
         assert.deepStrictEqual(Rows.of(built, AttributeLexical), [
           {
             attribute: "data-max-selections-message",
             kind: "qti-match-interaction",
-            node: "node-2",
+            node: uuidOf("node-2"),
             value: "too\tmany",
           },
         ]);
@@ -327,8 +332,8 @@ const writtenAssociate = (): Element =>
   );
 
 const associateDeclarations = new Map([
-  ["RESPONSE", variable("decl-1", "pair", "multiple")],
-  ["TPL", variable("decl-2", "identifier", "single")],
+  ["RESPONSE", variable(uuidOf("decl-1"), "pair", "multiple")],
+  ["TPL", variable(uuidOf("decl-2"), "identifier", "single")],
 ]);
 
 describe("associateRows on an associate interaction", () => {
@@ -340,7 +345,7 @@ describe("associateRows on an associate interaction", () => {
 
       assert.deepStrictEqual(Rows.of(built, AssociateInteraction), [
         {
-          id: "node-2",
+          id: uuidOf("node-2"),
           maxAssociationsN: 3n,
           minAssociationsN: 1n,
           responseIdentifier: "RESPONSE",
@@ -353,7 +358,7 @@ describe("associateRows on an associate interaction", () => {
         DeclaredAssociateMaxAssociations,
         DeclaredAssociateMinAssociations,
       ] as const) {
-        assert.deepStrictEqual(Rows.of(built, marker), [{ node: "node-2" }], marker.name);
+        assert.deepStrictEqual(Rows.of(built, marker), [{ node: uuidOf("node-2") }], marker.name);
       }
 
       assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 3n);
@@ -370,20 +375,22 @@ describe("associateRows on an associate interaction", () => {
       assert.deepStrictEqual(
         rows.map((row) => [row.identifier, row.interaction, row.matchMaxN, row.matchMinN]),
         [
-          ["A", "node-2", 2n, 1n],
-          ["B", "node-2", 1n, 0n],
+          ["A", uuidOf("node-2"), 2n, 1n],
+          ["B", uuidOf("node-2"), 1n, 0n],
         ],
       );
       assert.strictEqual(Rows.of(built, SimpleAssociableChoiceMatchSet).length, 0);
       assert.deepStrictEqual(Rows.of(built, SimpleAssociableChoiceFixed), [
-        { node: "node-3", value: "true" },
+        { node: uuidOf("node-3"), value: "true" },
       ]);
       assert.deepStrictEqual(Rows.of(built, SimpleAssociableChoiceShowHide), [
-        { node: "node-3", value: "hide" },
+        { node: uuidOf("node-3"), value: "hide" },
       ]);
-      assert.deepStrictEqual(Rows.of(built, SimpleAssociableChoiceMatchMin), [{ node: "node-3" }]);
+      assert.deepStrictEqual(Rows.of(built, SimpleAssociableChoiceMatchMin), [
+        { node: uuidOf("node-3") },
+      ]);
       assert.deepStrictEqual(Rows.of(built, MatchGroup), [
-        { node: "node-3", value: MatchGroupList("g1 g2") },
+        { node: uuidOf("node-3"), value: MatchGroupList("g1 g2") },
       ]);
       assert.deepStrictEqual(Rows.of(built, ChoiceTemplateRef), [
         {
@@ -391,7 +398,7 @@ describe("associateRows on an associate interaction", () => {
           cardinality: "single",
           document: documentId,
           identifier: "TPL",
-          node: "node-4",
+          node: uuidOf("node-4"),
         },
       ]);
     }),
@@ -401,7 +408,7 @@ describe("associateRows on an associate interaction", () => {
     Effect.gen(function* template() {
       const ctx = contextOf(
         [writtenAssociate()],
-        new Map([["RESPONSE", variable("decl-1", "pair", "multiple")]]),
+        new Map([["RESPONSE", variable(uuidOf("decl-1"), "pair", "multiple")]]),
       );
 
       const exit = yield* Effect.exit(associateRows(ctx, Rows.empty()));
@@ -440,7 +447,7 @@ const graphicItem = (more: Readonly<Record<string, string>> = {}): Element =>
     }),
   ]);
 
-const graphicDeclarations = new Map([["RESPONSE", variable("decl-1", "pair", "multiple")]]);
+const graphicDeclarations = new Map([["RESPONSE", variable(uuidOf("decl-1"), "pair", "multiple")]]);
 
 describe("associateRows on a graphic associate interaction", () => {
   it.effect("writes a hotspot's show-hide and marks the one the source wrote", () =>
@@ -477,7 +484,7 @@ describe("associateRows on a graphic associate interaction", () => {
         ],
       );
       assert.deepStrictEqual(Rows.of(built, DeclaredAssociableHotspotShowHide), [
-        { node: "node-4" },
+        { node: uuidOf("node-4") },
       ]);
     }),
   );
@@ -490,7 +497,7 @@ describe("associateRows on a graphic associate interaction", () => {
 
       assert.deepStrictEqual(Rows.of(built, GraphicAssociateInteraction), [
         {
-          id: "node-2",
+          id: uuidOf("node-2"),
           maxAssociationsN: 1n,
           minAssociationsN: 0n,
           responseIdentifier: "RESPONSE",
@@ -511,23 +518,39 @@ describe("associateRows on a graphic associate interaction", () => {
           row.matchMinN,
         ]),
         [
-          ["node-4", "H1", "node-2", "qti-graphic-associate-interaction", "circle", 1n, 0n],
-          ["node-5", "H2", "node-2", "qti-graphic-associate-interaction", "circle", 2n, 1n],
+          [
+            uuidOf("node-4"),
+            "H1",
+            uuidOf("node-2"),
+            "qti-graphic-associate-interaction",
+            "circle",
+            1n,
+            0n,
+          ],
+          [
+            uuidOf("node-5"),
+            "H2",
+            uuidOf("node-2"),
+            "qti-graphic-associate-interaction",
+            "circle",
+            2n,
+            1n,
+          ],
         ],
       );
       assert.deepStrictEqual(
         Rows.of(built, Coords).map((row) => [row.node, row.ownerKind, row.shape, row.value]),
         [
-          ["node-4", "qti-associable-hotspot", "circle", "10,10,5"],
-          ["node-5", "qti-associable-hotspot", "circle", "40,40,5"],
+          [uuidOf("node-4"), "qti-associable-hotspot", "circle", "10,10,5"],
+          [uuidOf("node-5"), "qti-associable-hotspot", "circle", "40,40,5"],
         ],
       );
       assert.deepStrictEqual(
         Rows.of(built, CoordsCircle).map((row) => row.node),
-        ["node-4", "node-5"],
+        [uuidOf("node-4"), uuidOf("node-5")],
       );
       assert.deepStrictEqual(Rows.of(built, AssociableHotspotLabel), [
-        { node: "node-5", value: "north" },
+        { node: uuidOf("node-5"), value: "north" },
       ]);
     }),
   );
@@ -558,7 +581,9 @@ describe("associateRows on a graphic associate interaction", () => {
 
       const built = yield* associateRows(ctx, Rows.empty());
 
-      assert.deepStrictEqual(Rows.of(built, AssociableHotspotMatchMin), [{ node: "node-4" }]);
+      assert.deepStrictEqual(Rows.of(built, AssociableHotspotMatchMin), [
+        { node: uuidOf("node-4") },
+      ]);
       assert.deepStrictEqual(
         Rows.of(built, AssociableHotspot).map((row) => [row.identifier, row.matchMinN]),
         [
@@ -580,10 +605,12 @@ describe("associateRows on a graphic associate interaction", () => {
 
       assert.strictEqual(Rows.of(built, GraphicAssociateInteraction)[0]?.maxAssociationsN, 4n);
       assert.deepStrictEqual(Rows.of(built, DeclaredGraphicAssociateMaxAssociations), [
-        { node: "node-2" },
+        { node: uuidOf("node-2") },
       ]);
       assert.strictEqual(Rows.of(built, GraphicAssociateInteraction)[0]?.minAssociationsN, 1n);
-      assert.deepStrictEqual(Rows.of(built, GraphicAssociateMinAssociations), [{ node: "node-2" }]);
+      assert.deepStrictEqual(Rows.of(built, GraphicAssociateMinAssociations), [
+        { node: uuidOf("node-2") },
+      ]);
       assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 4n);
     }),
   );
@@ -630,7 +657,7 @@ describe("associateRows on a graphic associate interaction", () => {
 
       assert.deepStrictEqual(
         Rows.of(built, AssociableHotspot).map((row) => [row.interaction, row.parentKind]),
-        [["node-2", "qti-graphic-gap-match-interaction"]],
+        [[uuidOf("node-2"), "qti-graphic-gap-match-interaction"]],
       );
       assert.strictEqual(Rows.of(built, GraphicAssociateInteraction).length, 0);
     }),
@@ -663,7 +690,7 @@ describe("associateRows on a tree with no associate interaction", () => {
   it.effect("returns the rows it was given", () =>
     Effect.gen(function* untouched() {
       const ctx = contextOf([]);
-      const rows = Rows.add(Rows.empty(), DeclaredMatchShuffle, [{ node: "node-9" }]);
+      const rows = Rows.add(Rows.empty(), DeclaredMatchShuffle, [{ node: uuidOf("node-9") }]);
 
       assert.strictEqual(yield* associateRows(ctx, rows), rows);
     }),
@@ -802,7 +829,7 @@ describe("associateRows on a non-canonical integer spelling", () => {
         {
           attribute: "match-max",
           kind: "qti-simple-associable-choice",
-          node: "node-3",
+          node: uuidOf("node-3"),
           value: "+2",
         },
       ]);
@@ -817,7 +844,12 @@ describe("associateRows on a non-canonical integer spelling", () => {
 
       assert.strictEqual(Rows.of(built, AssociableHotspot)[0]?.matchMinN, 3n);
       assert.deepStrictEqual(Rows.of(built, AttributeSpelling), [
-        { attribute: "match-min", kind: "qti-associable-hotspot", node: "node-4", value: "03" },
+        {
+          attribute: "match-min",
+          kind: "qti-associable-hotspot",
+          node: uuidOf("node-4"),
+          value: "03",
+        },
       ]);
     }),
   );

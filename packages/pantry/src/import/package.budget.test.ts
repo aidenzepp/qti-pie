@@ -15,26 +15,27 @@ import { hasLease, leaseTestTimeoutMs, settings } from "#pantry/test/settings.ts
 
 /**
  * The per-package program gate: the import of one package compiles to a program of at most this
- * many SQL bytes, 800 KiB, which is 80 percent of the compiler's ceiling of 1,048,576 (decisions 69
- * and 72).
+ * many SQL bytes, 943,718, which is 90 percent of the compiler's ceiling of 1,048,576 (decisions 69
+ * and 72, with decision 134 amended by decision 211 on the trunk upgrade). Trunk qualifies builtin
+ * names with `pg_catalog`, so the same program is about 15 to 18 percent larger in bytes; the
+ * program does the same work, and the gate is re-expressed in trunk's bytes (research a39e6a25).
  *
  * The gate is per package, not per roster: a package's import is one `ChangeSet` with a member for
  * each relation the package has facts in, so what grows the program is the roster of relations a
  * package reaches, and the schema's growth shows in the largest admitted package. The whole-roster
  * worst case is `scripts/measure.ts --programs`, reported and not gated here.
  */
-const PROGRAM_BYTES_MAX = 819_200;
+const PROGRAM_BYTES_MAX = 943_718;
 
 /**
- * The processing fixtures whose program is reported, not gated (decision 134): `processing-item`,
- * `padded-reference`, `padded-literal` and `template-item` compile above `PROGRAM_BYTES_MAX` and
- * below the compiler's ceiling. Each prints a `program_report_only:` line and still fails past the
- * ceiling or a refusal. The list is re-measured at the regenerate (`p13-t40`'s merge) and at the
- * freeze; nothing fails when a member falls under the gate.
+ * The processing fixtures whose program is reported, not gated (decision 134, amended by decision
+ * 211): `processing-item`, `padded-literal` and `template-item` compile above `PROGRAM_BYTES_MAX`
+ * and below the compiler's ceiling. Each prints a `program_report_only:` line and still fails past
+ * the ceiling or a refusal. The list is re-measured at the regenerate (`p13-t40`'s merge) and at
+ * the freeze; nothing fails when a member falls under the gate.
  */
 const REPORT_ONLY: ReadonlySet<ProcessingFixtureName> = new Set([
   "padded-literal",
-  "padded-reference",
   "processing-item",
   "template-item",
 ]);
@@ -186,11 +187,11 @@ const judge = (subject: Subject) =>
 
 describe("import/package.budget.test.ts, the verdict", () => {
   plain("a listed package over the gate is reported", () => {
-    assert.strictEqual(verdictOf(true, 854_795), "reported");
+    assert.strictEqual(verdictOf(true, 1_005_240), "reported");
   });
 
   plain("an unlisted package over the gate is over-gate", () => {
-    assert.strictEqual(verdictOf(false, 854_795), "over-gate");
+    assert.strictEqual(verdictOf(false, 1_005_240), "over-gate");
   });
 
   plain("any package over the ceiling is over-cap", () => {
@@ -199,12 +200,12 @@ describe("import/package.budget.test.ts, the verdict", () => {
   });
 
   plain("the gate's edge holds", () => {
-    assert.strictEqual(verdictOf(false, 819_200), "within");
-    assert.strictEqual(verdictOf(false, 819_201), "over-gate");
+    assert.strictEqual(verdictOf(false, 943_718), "within");
+    assert.strictEqual(verdictOf(false, 943_719), "over-gate");
   });
 
-  plain("the report-only list holds the four processing fixtures", () => {
-    assert.strictEqual(REPORT_ONLY.size, 4);
+  plain("the report-only list holds the three processing fixtures", () => {
+    assert.strictEqual(REPORT_ONLY.size, 3);
     for (const name of REPORT_ONLY) {
       assert.include(processingFixtureNames, name);
     }

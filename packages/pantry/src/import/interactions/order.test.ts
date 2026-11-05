@@ -44,7 +44,7 @@ import {
   OrderOrientation,
 } from "#pantry/schema/interactions/order.ts";
 import { AttributeLexical, AttributeSpelling, NodeKind } from "#pantry/schema/node.ts";
-import { materialize } from "#pantry/test/fixtures.ts";
+import { materialize, uuidOf } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
@@ -82,7 +82,7 @@ const indexTree = (root: Element): NodeIndex => {
   const visit = (found: Element): void => {
     const kind = NodeKind.handles.find((handle) => handle === found.local);
     if (kind !== undefined) {
-      index.set(found, { ancestry: "root", id: `node-${index.size}`, kind });
+      index.set(found, { ancestry: "root", id: uuidOf(`node-${index.size}`), kind });
     }
 
     for (const child of found.children) {
@@ -112,7 +112,7 @@ const shared: Shared = {
 const ordered: DeclaredVariable = {
   baseType: Option.some("identifier"),
   cardinality: Option.some("ordered"),
-  id: "decl-1",
+  id: uuidOf("decl-1"),
   shape: "typed",
 };
 
@@ -163,7 +163,7 @@ describe("orderRows on an order interaction", () => {
 
       assert.deepStrictEqual(Rows.of(built, OrderInteraction), [
         {
-          id: "node-2",
+          id: uuidOf("node-2"),
           maxBound: "unlimited",
           maxChoicesN: 0n,
           minChoicesN: 0n,
@@ -178,7 +178,7 @@ describe("orderRows on an order interaction", () => {
           ancestry: "root",
           document: documentId,
           interactionKind: "qti-order-interaction",
-          node: "node-2",
+          node: uuidOf("node-2"),
           responseIdentifier: "RESPONSE",
           shape: "typed",
         },
@@ -190,23 +190,23 @@ describe("orderRows on an order interaction", () => {
           document: documentId,
           interactionKind: "qti-order-interaction",
           maxCount: 1n,
-          node: "node-2",
+          node: uuidOf("node-2"),
           responseIdentifier: "RESPONSE",
         },
       ]);
       assert.deepStrictEqual(Rows.of(built, SimpleChoice), [
         {
           fixed: "false",
-          id: "node-3",
+          id: uuidOf("node-3"),
           identifier: ChoiceIdentifier("A"),
-          interaction: "node-2",
+          interaction: uuidOf("node-2"),
           showHide: "show",
         },
         {
           fixed: "false",
-          id: "node-4",
+          id: uuidOf("node-4"),
           identifier: ChoiceIdentifier("B"),
-          interaction: "node-2",
+          interaction: uuidOf("node-2"),
           showHide: "show",
         },
       ]);
@@ -263,20 +263,24 @@ describe("orderRows on an order interaction", () => {
         ]),
         [["bounded", 3n, 2n, "true"]],
       );
-      assert.deepStrictEqual(Rows.of(built, DeclaredOrderShuffle), [{ node: "node-2" }]);
-      assert.deepStrictEqual(Rows.of(built, OrderMaxChoicesN), [{ node: "node-2", value: 3n }]);
-      assert.deepStrictEqual(Rows.of(built, OrderMinChoicesN), [{ node: "node-2", value: 2n }]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredOrderShuffle), [{ node: uuidOf("node-2") }]);
+      assert.deepStrictEqual(Rows.of(built, OrderMaxChoicesN), [
+        { node: uuidOf("node-2"), value: 3n },
+      ]);
+      assert.deepStrictEqual(Rows.of(built, OrderMinChoicesN), [
+        { node: uuidOf("node-2"), value: 2n },
+      ]);
       assert.deepStrictEqual(Rows.of(built, OrderOrientation), [
-        { node: "node-2", value: "horizontal" },
+        { node: uuidOf("node-2"), value: "horizontal" },
       ]);
       assert.deepStrictEqual(Rows.of(built, OrderMinSelectionsMessage), [
-        { node: "node-2", value: "too few" },
+        { node: uuidOf("node-2"), value: "too few" },
       ]);
       assert.deepStrictEqual(Rows.of(built, OrderMaxSelectionsMessage), [
-        { node: "node-2", value: "too many" },
+        { node: uuidOf("node-2"), value: "too many" },
       ]);
       assert.deepStrictEqual(Rows.of(built, OrderChoicesContainerWidth), [
-        { node: "node-2", value: ContainerWidth("300") },
+        { node: uuidOf("node-2"), value: ContainerWidth("300") },
       ]);
       assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 1n);
       assert.deepStrictEqual(
@@ -287,10 +291,10 @@ describe("orderRows on an order interaction", () => {
           ["C", "false", "show"],
         ],
       );
-      assert.deepStrictEqual(Rows.of(built, DeclaredFixed), [{ node: "node-3" }]);
-      assert.deepStrictEqual(Rows.of(built, DeclaredShowHide), [{ node: "node-3" }]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredFixed), [{ node: uuidOf("node-3") }]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredShowHide), [{ node: uuidOf("node-3") }]);
       assert.deepStrictEqual(Rows.of(built, SimpleChoiceTemplateIdentifier), [
-        { node: "node-3", value: VariableReference("T") },
+        { node: uuidOf("node-3"), value: VariableReference("T") },
       ]);
     }),
   );
@@ -307,7 +311,7 @@ describe("orderRows on an order interaction", () => {
         Rows.of(written, OrderInteraction).map((row) => row.shuffle),
         ["false"],
       );
-      assert.deepStrictEqual(Rows.of(written, DeclaredOrderShuffle), [{ node: "node-2" }]);
+      assert.deepStrictEqual(Rows.of(written, DeclaredOrderShuffle), [{ node: uuidOf("node-2") }]);
       assert.deepStrictEqual(
         Rows.of(omitted, OrderInteraction).map((row) => row.shuffle),
         ["false"],
@@ -330,7 +334,9 @@ describe("orderRows on an order interaction", () => {
         ]),
         [["unlimited", 0n, 0n]],
       );
-      assert.deepStrictEqual(Rows.of(built, OrderMaxChoicesN), [{ node: "node-2", value: 0n }]);
+      assert.deepStrictEqual(Rows.of(built, OrderMaxChoicesN), [
+        { node: uuidOf("node-2"), value: 0n },
+      ]);
       assert.strictEqual(Rows.of(built, OrderMinChoicesN).length, 0);
     }),
   );
@@ -373,7 +379,7 @@ describe("orderRows on a graphic order interaction", () => {
 
       assert.deepStrictEqual(Rows.of(built, GraphicOrderInteraction), [
         {
-          id: "node-2",
+          id: uuidOf("node-2"),
           maxBound: "unlimited",
           maxChoicesN: 0n,
           minChoicesN: 0n,
@@ -409,10 +415,10 @@ describe("orderRows on a graphic order interaction", () => {
         [["bounded", 4n, 1n]],
       );
       assert.deepStrictEqual(Rows.of(built, GraphicOrderMaxChoicesN), [
-        { node: "node-2", value: 4n },
+        { node: uuidOf("node-2"), value: 4n },
       ]);
       assert.deepStrictEqual(Rows.of(built, GraphicOrderMinChoicesN), [
-        { node: "node-2", value: 1n },
+        { node: uuidOf("node-2"), value: 1n },
       ]);
     }),
   );
@@ -510,9 +516,16 @@ describe("orderRows on a non-canonical integer spelling", () => {
 
       const built = yield* orderRows(ctx, Rows.empty());
 
-      assert.deepStrictEqual(Rows.of(built, OrderMinChoicesN), [{ node: "node-2", value: 2n }]);
+      assert.deepStrictEqual(Rows.of(built, OrderMinChoicesN), [
+        { node: uuidOf("node-2"), value: 2n },
+      ]);
       assert.deepStrictEqual(Rows.of(built, AttributeSpelling), [
-        { attribute: "min-choices", kind: "qti-order-interaction", node: "node-2", value: "+2" },
+        {
+          attribute: "min-choices",
+          kind: "qti-order-interaction",
+          node: uuidOf("node-2"),
+          value: "+2",
+        },
       ]);
     }),
   );
@@ -524,7 +537,7 @@ describe("orderRows on a non-canonical integer spelling", () => {
       const built = yield* orderRows(ctx, Rows.empty());
 
       assert.deepStrictEqual(Rows.of(built, GraphicOrderMaxChoicesN), [
-        { node: "node-2", value: 4n },
+        { node: uuidOf("node-2"), value: 4n },
       ]);
       assert.deepStrictEqual(
         Rows.of(built, AttributeSpelling).map((row) => [row.attribute, row.value]),

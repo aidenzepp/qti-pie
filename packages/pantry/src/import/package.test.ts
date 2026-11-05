@@ -8,6 +8,7 @@ import {
   uuid,
   v,
 } from "@bjornpagen/grizzle";
+import type { Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, it as plainIt, layer } from "@effect/vitest";
 import { Clock, Effect, Fiber, Layer, Ref, Result, Schedule, Schema } from "effect";
@@ -34,19 +35,19 @@ const fixtures = inject("fixtures");
  * The package ids a document's trees are, beside the manifest's tree, which is the package id.
  */
 const documentsOf = query(Author).rule((r) => {
-  const { id } = v(Document);
+  const { id } = v(Document, "document");
 
   return r.match(Document, { id, package: r.param("package", uuid) }).find({ id });
 });
 
 const charsetsOf = query(Author).rule((r) => {
-  const { label } = v(TreeExportCharset);
+  const { label } = v(TreeExportCharset, "treeExportCharset");
 
   return r.match(TreeExportCharset, { label, tree: r.param("tree", uuid) }).find({ label });
 });
 
 const lexicalsOf = query(Author).rule((r) => {
-  const { attribute, node } = v(AttributeLexical);
+  const { attribute, node } = v(AttributeLexical, "attributeLexical");
 
   return r
     .match(Node, { id: node, tree: r.param("tree", uuid) })
@@ -55,7 +56,7 @@ const lexicalsOf = query(Author).rule((r) => {
 });
 
 const packageRows = query(Author).rule((r) => {
-  const { id } = v(Package);
+  const { id } = v(Package, "package");
 
   return r
     .match(Package, { id })
@@ -67,7 +68,7 @@ const packageRows = query(Author).rule((r) => {
  * Every tree an imported package holds: the manifest's, whose id is the package id, and its
  * documents'.
  */
-const treesOf = (packageId: string) =>
+const treesOf = (packageId: Uuid) =>
   Effect.gen(function* treesOfPackage() {
     const db = yield* Db.open(AuthorApp.roles.author, {});
     const documents = yield* (yield* db.execute(documentsOf, { package: packageId })).collect;
@@ -78,7 +79,7 @@ const treesOf = (packageId: string) =>
 /**
  * The export charsets of every tree of a package, by label.
  */
-const charsetsOfPackage = (packageId: string) =>
+const charsetsOfPackage = (packageId: Uuid) =>
   Effect.gen(function* charsetsOfTrees() {
     const db = yield* Db.open(AuthorApp.roles.author, {});
     const trees = yield* treesOf(packageId);
@@ -94,7 +95,7 @@ const charsetsOfPackage = (packageId: string) =>
 /**
  * The `AttributeLexical` rows of every tree of a package.
  */
-const lexicalsOfPackage = (packageId: string) =>
+const lexicalsOfPackage = (packageId: Uuid) =>
   Effect.gen(function* lexicalsOfTrees() {
     const db = yield* Db.open(AuthorApp.roles.author, {});
     const trees = yield* treesOf(packageId);

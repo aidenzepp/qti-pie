@@ -301,6 +301,7 @@ export type ImportLaw =
   | { readonly field: string; readonly kind: "alternatives"; readonly relation: string }
   | { readonly from: LawSide; readonly kind: "capacity"; readonly target: LawSide }
   | { readonly contract: string; readonly kind: "contract" }
+  | { readonly field: string; readonly kind: "numericBound"; readonly relation: string }
   | { readonly flags: "su" | "u"; readonly kind: "pattern"; readonly source: string };
 
 /**
@@ -322,7 +323,7 @@ const nearest = (law: ImportLaw): Mapped => {
     return { mapped: false, rule: "document-key" };
   }
 
-  if (law.kind === "check" || law.kind === "capacity") {
+  if (law.kind === "check" || law.kind === "numericBound" || law.kind === "capacity") {
     return { mapped: false, rule: "binding-max" };
   }
 
@@ -1362,6 +1363,10 @@ const lawText = (law: ImportLaw): string => {
 
   if (law.kind === "contract") {
     return `contract ${law.contract}`;
+  }
+
+  if (law.kind === "numericBound") {
+    return `numeric bound ${law.relation}.${law.field}`;
   }
 
   return `pattern ${law.source} (flags ${law.flags})`;

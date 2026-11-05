@@ -8,10 +8,10 @@
  * attribute pass.
  */
 import { judgedLater } from "#pantry/import/judged.ts";
-import type { AnyRelation, Fact, Relation, uuid } from "@bjornpagen/grizzle";
+import type { AnyRelation, Fact, Relation, uuid, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import { attributeReader } from "#pantry/import/interactions.ts";
-import type { AttributeReader, NodeRef } from "#pantry/import/interactions.ts";
+import type { AttributeReader } from "#pantry/import/interactions.ts";
 import { requiredAttribute } from "#pantry/import/required.ts";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import {
@@ -21,7 +21,7 @@ import {
   UnmodeledVocabulary,
   withParents,
 } from "#pantry/import/tree.ts";
-import type { ItemRefusal, NodeIndex, WhiteSpace } from "#pantry/import/tree.ts";
+import type { IndexedNode, ItemRefusal, NodeIndex, WhiteSpace } from "#pantry/import/tree.ts";
 import {
   CellAlign,
   CellScope,
@@ -57,8 +57,8 @@ import type { Element } from "@qti-pie/crust/tree.ts";
 interface Subject {
   readonly attributes: AttributeReader;
   readonly element: Element;
-  readonly node: NodeRef;
-  readonly parent: NodeRef;
+  readonly node: IndexedNode;
+  readonly parent: IndexedNode;
   readonly version: SchemaVersionHandle;
 }
 
@@ -90,7 +90,7 @@ type ThinRelation = Relation<string, { readonly id: typeof uuid }, readonly ["id
  * by schema version, that version.
  */
 interface ValueRow {
-  readonly node: string;
+  readonly node: Uuid;
   readonly value: string;
   readonly version?: SchemaVersionHandle;
 }
