@@ -1324,14 +1324,16 @@ describe.skipIf(!existsSync(cacheDirectory))(
       sameRows("attributeExclusion", seed.attributeExclusion.map(pairKey), expected);
     });
 
-    it("wildcardAttributeAdmission is xml:lang and xml:base on every attribute wildcard host and foreign", () => {
+    it("wildcardAttributeAdmission is xml:lang, xml:base, xml:space and xml:id on every attribute wildcard host and foreign", () => {
       const kinds = [...derivedAttributeRows().map((row) => row.host), "foreign"];
 
       sameRows(
         "wildcardAttributeAdmission",
         seed.wildcardAttributeAdmission.map((row) => `${row.kind}|${row.attribute}`),
         kinds.flatMap((kind) =>
-          ["xml:lang", "xml:base"].map((attribute) => `${kind}|${attribute}`),
+          ["xml:lang", "xml:base", "xml:space", "xml:id"].map(
+            (attribute) => `${kind}|${attribute}`,
+          ),
         ),
       );
     });
@@ -1414,6 +1416,30 @@ describe.skipIf(!existsSync(cacheDirectory))(
           rosters.XlinkShowValue.handles.length +
           rosters.XlinkActuateValue.handles.length,
         label: "xlink roster handles",
+      });
+    });
+
+    it("the XmlSpace roster is w3/xml.xsd's space enumeration", () => {
+      const schema = required(
+        derived()
+          .closures.flatMap((closure) => closure.model.schemas)
+          .find((candidate) => candidate.file === "w3/xml.xsd"),
+        "a closure reaches w3/xml.xsd",
+      );
+      const declaration = required(
+        childElements(schema.root).find(
+          (candidate) => isXs(candidate, "attribute") && attributeOf(candidate, "name") === "space",
+        ),
+        "w3/xml.xsd declares no attribute space",
+      );
+      const values = descendants(declaration)
+        .filter((candidate) => isXs(candidate, "enumeration"))
+        .map((candidate) => attributeOf(candidate, "value") ?? "");
+
+      assert.deepStrictEqual(values, [...rosters.XmlSpace.handles]);
+      reported.push({
+        compared: rosters.XmlSpace.handles.length,
+        label: "XmlSpace roster handles",
       });
     });
 
