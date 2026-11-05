@@ -6,33 +6,44 @@
 
 Read and write XML exactly as it was written.
 
-## Modules
+crust turns bytes into an immutable XML tree and a tree back into bytes. It is the shared reader and writer for the
+other packages in [qti-pie](../../README.md). It does not know QTI, and it has no database or grizzle dependency:
+its dependencies are `effect` and `saxes`.
 
-Each is a file in `src/` and an entry in the `"exports"` map.
+## Install
 
-- `read.ts`: `readXml`, bytes to an `XmlDocument`.
-- `tree.ts`: the immutable `XmlDocument` shape every other module reads and writes.
-- `errors.ts`: the tagged errors, `WellFormednessError`, `ReaderRefusal` and `EncodeError`.
-- `canonical.ts`: `canonicalize`, a document's canonical bytes.
-- `charset.ts`: how a label's characters become bytes, and which labels can be written.
-- `encode.ts`: one encoder per charset class.
-- `write.ts`: `writeXml`, an `XmlDocument` back to bytes.
-
-## Use
-
-In the consumer's `package.json`:
+crust is a private workspace package. In a sibling package's `package.json`:
 
 ```json
 "dependencies": { "@qti-pie/crust": "workspace:*" }
 ```
 
+Then run `pnpm install` from the repository root.
+
+## Start
+
 ```ts
 import { readXml } from "@qti-pie/crust/read.ts";
+import { writeXml } from "@qti-pie/crust/write.ts";
 ```
 
-A file the `"exports"` map does not list, such as `@qti-pie/crust/decode.ts`, fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`.
+`readXml` takes bytes and returns an `XmlDocument`. `writeXml` takes an `XmlDocument` and returns bytes. Each lists
+its failures as tagged errors in `errors.ts`.
 
-## Dependencies
+Import only the files listed in the `"exports"` map of `package.json`. Any other path, such as
+`@qti-pie/crust/decode.ts`, fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`.
 
-crust depends on `effect` and `saxes` and nothing else, so grizzle and any database client stay out of whatever depends
-on it.
+## Development
+
+From the repository root:
+
+```bash
+pnpm check
+pnpm --filter @qti-pie/crust test
+```
+
+Tests sit beside the code they test. Agents start at [`AGENTS.md`](../../AGENTS.md).
+
+## License
+
+MIT
