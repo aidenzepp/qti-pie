@@ -75,6 +75,7 @@ const textEntry = (response: string): TextEntryInteraction => ({
   expectedLength: Option.none(),
   kind: "text-entry",
   path: `qti-assessment-item/qti-item-body/p[2]/qti-text-entry-interaction[${response}]`,
+  patternMask: Option.none(),
   patternMaskMessage: Option.none(),
   placeholder: Option.none(),
   response,
@@ -655,6 +656,22 @@ describe("payload", () => {
     };
 
     assert.strictEqual(textFor(payload(redactItem(hexItem), view), "HEX").restore, "ff");
+  });
+
+  it('[Q-5] carries an Extended Text\'s format, format="xhtml" included', () => {
+    const xhtml: Item = {
+      ...item,
+      body: item.body.map((node) =>
+        node.kind === "extended-text" ? { ...node, format: "xhtml" } : node,
+      ),
+    };
+    const essayPayload = textFor(payload(redactItem(xhtml), answering), "ESSAY");
+
+    assert.strictEqual(essayPayload.kind, "extended-text");
+    assert.strictEqual(
+      essayPayload.kind === "extended-text" ? essayPayload.format : undefined,
+      "xhtml",
+    );
   });
 
   it("[Q-20] [Q-5] numbers the text controls with no authored name and no Prompt", () => {

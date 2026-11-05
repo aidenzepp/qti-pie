@@ -190,13 +190,7 @@ describe("the closed value sets", () => {
       [
         "notices",
         renders.notices.map((notice) => notice.feature),
-        [
-          "pattern-mask",
-          'format="xhtml"',
-          'cardinality="record"',
-          'cardinality="multiple"',
-          'cardinality="ordered"',
-        ],
+        ["pattern-mask", 'cardinality="record"', 'cardinality="multiple"', 'cardinality="ordered"'],
       ],
       [
         "marks",
@@ -267,7 +261,16 @@ describe("the closed value sets", () => {
     }
     assert.sameMembers(
       [...renders.bindings["qti-extended-text-interaction"].formats],
-      ["plain", "preformatted"],
+      ["plain", "preformatted", "xhtml"],
+    );
+  });
+
+  it("shows pattern-mask as a notice only for a pattern the translator refuses", () => {
+    const patternMask = renders.notices.filter((notice) => notice.feature === "pattern-mask");
+
+    assert.deepStrictEqual(
+      patternMask.map((notice) => notice.when),
+      [{ kind: "refused-pattern", name: "pattern-mask" }],
     );
   });
 

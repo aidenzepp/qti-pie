@@ -60,6 +60,7 @@ const essay: ExtendedTextInteraction = {
   format: "plain",
   kind: "extended-text",
   path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
+  patternMask: Option.none(),
   patternMaskMessage: Option.none(),
   placeholder: Option.none(),
   prompt: Option.some([words("Describe your day.")]),
@@ -623,9 +624,9 @@ const declaration = (identifier: string, baseType: string): SourceElement =>
 
 describe("an Extended Text the renderer does not support", () => {
   it.effect(
-    '[Q-5] builds format="xhtml" beside a Choice as a notice in its place, and a walk still posts the Choice',
+    '[Q-5] builds an Extended Text whose pattern-mask="[0-9" the translator refuses beside a Choice as a notice in its place, and a walk still posts the Choice',
     () =>
-      Effect.gen(function* xhtmlNotice() {
+      Effect.gen(function* refusedPatternNotice() {
         const item = yield* buildItem(
           doc(
             "items/mixed.xml",
@@ -650,7 +651,7 @@ describe("an Extended Text the renderer does not support", () => {
                     ),
                     el(
                       "qti-extended-text-interaction",
-                      [attr("format", "xhtml"), attr("response-identifier", response)],
+                      [attr("pattern-mask", "[0-9"), attr("response-identifier", response)],
                       [el("qti-prompt", [], [sourceText("Describe your day.")])],
                     ),
                   ],
@@ -662,12 +663,12 @@ describe("an Extended Text the renderer does not support", () => {
         const path = "qti-assessment-item/qti-item-body/qti-extended-text-interaction";
 
         assert.deepStrictEqual(item.body[1], {
-          feature: 'format="xhtml"',
+          feature: "pattern-mask",
           kind: "unsupported",
           path,
         });
         assert.deepStrictEqual(item.unsupported, [
-          { feature: 'format="xhtml"', path, shown: "notice" },
+          { feature: "pattern-mask", path, shown: "notice" },
         ]);
 
         const built = payload(redactItem(item), answering);

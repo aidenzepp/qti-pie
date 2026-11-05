@@ -91,6 +91,7 @@ const city: TextEntryInteraction = {
   expectedLength: Option.none(),
   kind: "text-entry",
   path: "qti-assessment-item/qti-item-body/p[2]/qti-text-entry-interaction",
+  patternMask: Option.none(),
   patternMaskMessage: Option.none(),
   placeholder: Option.none(),
   response: "CITY",

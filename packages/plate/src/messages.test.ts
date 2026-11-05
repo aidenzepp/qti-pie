@@ -29,6 +29,7 @@ const english = {
   malformedSingleMany: "Enter one answer.",
   notAccepted: "Not accepted",
   notice: "Not supported here: pattern-mask",
+  patternMismatch: "Enter an answer in the form this question asks for.",
   responseRecorded: "Response recorded",
   score: "Score: 3",
   scored: "Scored",
@@ -69,6 +70,13 @@ describe("message", () => {
 
   it("writes choiceOf with its n and count", () => {
     assert.strictEqual(message("en", "choiceOf", { count: "4", n: "2" }), "Choice 2 of 4");
+  });
+
+  it("writes patternMismatch, the pattern-mask message a locale gives", () => {
+    assert.strictEqual(
+      message("en", "patternMismatch"),
+      "Enter an answer in the form this question asks for.",
+    );
   });
 
   it("writes a key with no placeholder without params", () => {

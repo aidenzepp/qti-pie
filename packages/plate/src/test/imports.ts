@@ -720,16 +720,21 @@ export const checkAllowlist = (
   });
 
 /**
- * Read the package's TypeScript sources, tests included, from disk.
+ * Read the package's modules, tests included, from disk: its TypeScript sources and its JSON files,
+ * which a source imports `with { type: "json" }`, as `model/blocks.ts` imports the block table.
  *
- * @returns Each `.ts` file under `src/`, by path under the package (`src/<x>`), in path order.
+ * A JSON module reads as a module with no import declarations, so a walk reaches it and stops
+ * there, and a `#plate/` import of one is not a missing module.
+ *
+ * @returns Each `.ts` and `.json` file under `src/`, by path under the package (`src/<x>`), in path
+ *   order.
  */
 export const sourceModules = (): ReadonlyMap<string, string> => {
   const root = new URL("../", import.meta.url);
 
   return new Map(
     readdirSync(root, { encoding: "utf-8", recursive: true })
-      .filter((file) => file.endsWith(".ts"))
+      .filter((file) => file.endsWith(".ts") || file.endsWith(".json"))
       .toSorted()
       .map((file) => [
         `src/${file.split(path.sep).join("/")}`,

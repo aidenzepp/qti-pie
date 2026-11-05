@@ -17,6 +17,7 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
+import { translate } from "#plate/model/regex.ts";
 import { isModelled, parseElementText, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
 import type { InvalidValue, ModelledBaseType, Single, Value } from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
@@ -251,6 +252,12 @@ export interface TextEntryInteraction {
   readonly kind: "text-entry";
   readonly path: string;
   /**
+   * `pattern-mask`, as written: an XML Schema regular expression the response must match, which
+   * the translator takes. An interaction whose pattern the translator refuses is not built; it is
+   * the notice `pattern-mask`.
+   */
+  readonly patternMask: Option.Option<string>;
+  /**
    * The author's replacement for the pattern-mask message, `data-patternmask-message`.
    */
   readonly patternMaskMessage: Option.Option<string>;
@@ -266,14 +273,14 @@ export interface TextEntryInteraction {
 
 /**
  * A `qti-extended-text-interaction` (Q-5): a Text Entry's fields, its prompt, `expected-lines`, and
- * a `format` of `plain` (the default) or `preformatted`.
+ * a `format` of `plain` (the default), `preformatted` or `xhtml`.
  */
 export interface ExtendedTextInteraction extends Omit<TextEntryInteraction, "kind"> {
   /**
    * `expected-lines`: a count, held exactly, with no upper bound.
    */
   readonly expectedLines: Option.Option<bigint>;
-  readonly format: "plain" | "preformatted";
+  readonly format: "plain" | "preformatted" | "xhtml";
   readonly kind: "extended-text";
   readonly prompt: Option.Option<readonly BodyNode[]>;
 }
@@ -1012,6 +1019,12 @@ const holds = (build: Build, condition: Condition, element: SourceElement): bool
     );
   }
 
+  if (condition.kind === "refused-pattern") {
+    return Option.exists(valueOf(element, condition.name), (pattern) =>
+      Result.isFailure(translate(pattern)),
+    );
+  }
+
   if (condition.kind === "cardinality") {
     return (
       Option.getOrUndefined(
@@ -1459,6 +1472,7 @@ const textFields = (
       class: Option.getOrElse(valueOf(interaction, "class"), () => ""),
       expectedLength: yield* countAttribute(build, interaction, "expected-length"),
       path: pathOf(build, interaction),
+      patternMask: valueOf(interaction, "pattern-mask"),
       patternMaskMessage: valueOf(interaction, "data-patternmask-message"),
       placeholder: valueOf(interaction, "placeholder-text"),
       response: yield* identifierAttribute(build, interaction, "response-identifier"),

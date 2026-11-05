@@ -1426,6 +1426,7 @@ describe("buildItem", () => {
         expectedLength: Option.some(12n),
         kind: "text-entry",
         path: `${body}/p/qti-text-entry-interaction`,
+        patternMask: Option.none(),
         patternMaskMessage: Option.none(),
         placeholder: Option.some("a city"),
         response: "RESPONSE",
@@ -1438,34 +1439,63 @@ describe("buildItem", () => {
     }),
   );
 
-  it.effect("[Q-20] shows a Text Entry with pattern-mask as the notice pattern-mask", () =>
-    Effect.gen(function* patternMaskIsNotice() {
-      const built = yield* buildItem(
-        item({
-          body: [
-            el(
-              "p",
-              [],
-              [
-                el("qti-text-entry-interaction", [
-                  attr("pattern-mask", "[A-Z]+"),
-                  attr("response-identifier", "RESPONSE"),
-                ]),
-              ],
-            ),
-          ],
-          declarations: [declaration("qti-response-declaration", "RESPONSE", "string", "single")],
-        }),
-      );
-      const path = `${body}/p/qti-text-entry-interaction`;
+  it.effect(
+    '[Q-20] builds a Text Entry with pattern-mask="[0-9]+" holding its pattern, with no notice',
+    () =>
+      Effect.gen(function* patternMaskIsModelled() {
+        const built = yield* buildItem(textEntryItem([attr("pattern-mask", "[0-9]+")]));
+        const [entry] = childrenOf(built.body[0]);
 
-      assert.deepStrictEqual(childrenOf(built.body[0]), [
-        { feature: "pattern-mask", kind: "unsupported", path },
-      ]);
-      assert.deepStrictEqual(built.unsupported, [
-        { feature: "pattern-mask", path, shown: "notice" },
-      ]);
-    }),
+        assert.strictEqual(entry?.kind, "text-entry");
+        assert.deepStrictEqual(
+          entry?.kind === "text-entry" ? entry.patternMask : Option.none(),
+          Option.some("[0-9]+"),
+        );
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    '[Q-20] keeps the notice pattern-mask on a pattern the translator refuses, pattern-mask="[0-9", and builds the item',
+    () =>
+      Effect.gen(function* refusedPatternIsNotice() {
+        const built = yield* buildItem(textEntryItem([attr("pattern-mask", "[0-9")]));
+        const path = `${body}/p/qti-text-entry-interaction`;
+
+        assert.deepStrictEqual(childrenOf(built.body[0]), [
+          { feature: "pattern-mask", kind: "unsupported", path },
+        ]);
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: "pattern-mask", path, shown: "notice" },
+        ]);
+      }),
+  );
+
+  it.effect(
+    '[Q-5] builds an Extended Text with format="xhtml" and its pattern-mask, with no notice',
+    () =>
+      Effect.gen(function* xhtmlIsModelled() {
+        const built = yield* buildItem(
+          item({
+            body: [
+              el("qti-extended-text-interaction", [
+                attr("format", "xhtml"),
+                attr("pattern-mask", "[^<>]*"),
+                attr("response-identifier", "RESPONSE"),
+              ]),
+            ],
+            declarations: [declaration("qti-response-declaration", "RESPONSE", "string", "single")],
+          }),
+        );
+        const [node] = built.body;
+
+        assert.strictEqual(node?.kind, "extended-text");
+        assert.deepStrictEqual(
+          node?.kind === "extended-text" ? [node.format, node.patternMask] : [],
+          ["xhtml", Option.some("[^<>]*")],
+        );
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
   );
 
   it.effect("[Q-5] builds an Extended Text with its prompt and format", () =>

@@ -138,6 +138,9 @@ export interface FormattedBinding extends Binding {
  * - `attribute-true`: the element's `xs:boolean` attribute `name` is true: `true` or `1` once its
  *   outer whitespace goes, as XSD reads it (reading Q8).
  * - `cardinality`: the response declaration the interaction binds has this cardinality.
+ * - `refused-pattern`: the element carries the attribute `name`, and the translator refuses its value
+ *   as an XML Schema regular expression (`translate` in `#plate/model/regex.ts`), so the pattern
+ *   cannot be checked.
  * - `template`: the element's `template` URI resolves to this built-in ({@link templateName}).
  * - `untyped`: the declaration carries no `base-type` and its cardinality is not `record`, the one
  *   cardinality that has none.
@@ -148,6 +151,7 @@ export type Condition =
   | { readonly kind: "attribute-value"; readonly name: string; readonly value: string }
   | { readonly kind: "attribute-true"; readonly name: string }
   | { readonly cardinality: Cardinality; readonly kind: "cardinality" }
+  | { readonly kind: "refused-pattern"; readonly name: string }
   | { readonly kind: "template"; readonly name: TemplateName }
   | { readonly kind: "untyped" };
 
@@ -218,7 +222,7 @@ export const renders = {
     "qti-extended-text-interaction": {
       baseTypes: ["string", "integer", "float"],
       cardinalities: ["single"],
-      formats: ["plain", "preformatted"],
+      formats: ["plain", "preformatted", "xhtml"],
     },
     "qti-text-entry-interaction": {
       baseTypes: ["string", "integer", "float"],
@@ -296,15 +300,13 @@ export const renders = {
     { feature: "data-ssml", on: "body", when: { kind: "attribute", name: "data-ssml" } },
   ],
   notices: [
+    // A pattern the translator takes is checked. One it refuses keeps this notice and the item stays
+    // accepted: the schema types pattern-mask as xs:string, so such a pattern is unsupported, not
+    // invalid.
     {
       feature: "pattern-mask",
       on: textInteractions,
-      when: { kind: "attribute", name: "pattern-mask" },
-    },
-    {
-      feature: 'format="xhtml"',
-      on: ["qti-extended-text-interaction"],
-      when: { kind: "attribute-value", name: "format", value: "xhtml" },
+      when: { kind: "refused-pattern", name: "pattern-mask" },
     },
     {
       feature: 'cardinality="record"',
