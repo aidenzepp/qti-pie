@@ -18,7 +18,7 @@ to npm.
 
 ## Install
 
-Requires Node 24 or later, pnpm and [Git LFS](https://git-lfs.com). Install Git LFS before cloning, or the migration
+Requires Node 26 or later, pnpm and [Git LFS](https://git-lfs.com). Install Git LFS before cloning, or the migration
 snapshots check out as pointer files.
 
 ```bash
