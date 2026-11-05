@@ -8,7 +8,8 @@
  * file. A row's state is derived, never written by hand: `excluded` when the features file excludes
  * it, else `limited` when a claim names it, else `covered` when a passing test carries its tag,
  * else `unsupported-with-notice`. Beside the rows, the ledger shows each engine of each browser run
- * with the browser results it passed and failed.
+ * with the browser results it passed and failed, and OD-14 (e)'s result in that engine: `passed`
+ * only when its control (a) and its proof (b) both passed there.
  *
  * @module
  */
@@ -242,9 +243,33 @@ const StateCounts = Schema.Struct({
 });
 
 /**
+ * The Schema of how one part of OD-14 (e) ended in an engine: its test's state, or `absent` when
+ * the engine has no result for it.
+ */
+const Od14Part = Schema.Literals(["absent", ...testStates]);
+
+/**
+ * The Schema of OD-14 (e)'s result in one engine, derived from the browser results: how its control
+ * (a) and its proof (b) ended there, and `passed` only when both passed, else `failed`. It is the
+ * gate's evidence in place of a sitting's entry (rule c8a113fd).
+ */
+// oxlint-disable-next-line eslint/no-redeclare -- `Od14Result` is the Schema and the type of a result under one name, so a decoder and a signature read as one thing.
+export const Od14Result = Schema.Struct({
+  control: Od14Part,
+  proof: Od14Part,
+  result: Schema.Literals(["failed", "passed"]),
+});
+
+/**
+ * OD-14 (e)'s result in one engine.
+ */
+export type Od14Result = typeof Od14Result.Type;
+
+/**
  * The Schema of one engine's entry in a browser run as the ledger shows it: the engine, its
  * version and, on WebKit's entry only, `standsInFor: "Safari"`, as the run recorded them, beside
- * the run's date and Playwright version and how many browser results the engine passed and failed.
+ * the run's date and Playwright version, how many browser results the engine passed and failed,
+ * and OD-14 (e)'s result in it.
  */
 // oxlint-disable-next-line eslint/no-redeclare -- `BrowserRunRow` is the Schema and the type of an entry under one name, so a decoder and a signature read as one thing.
 export const BrowserRunRow = EngineRun.mapMembers(
@@ -252,6 +277,7 @@ export const BrowserRunRow = EngineRun.mapMembers(
     Schema.fieldsAssign({
       date: BrowserRun.fields.date,
       failed: Schema.Int,
+      od14: Od14Result,
       passed: Schema.Int,
       playwright: Schema.String,
     }),
@@ -523,9 +549,69 @@ const interactionColumns = (
 };
 
 /**
+ * The OD-14 (e) browser file, whose control (a) and proof (b) run in each engine.
+ */
+const od14File = "src/dev/od14.browser.test.ts";
+
+/**
+ * The title of the `describe` block that holds OD-14 (e)'s control and proof inside each engine's.
+ */
+const od14Suite = "OD-14 (e)";
+
+/**
+ * Give how one part of OD-14 (e) ended in an engine.
+ *
+ * The part's test is in {@link od14File}, under the engine's `describe` and the one titled
+ * {@link od14Suite}, and its own title opens with the part's label, as the file registers it, so a
+ * test of the same words in another file or outside that `describe` is not the part.
+ *
+ * @param results The browser results.
+ * @param engine The engine.
+ * @param label The part's label: `(a)` for the control, `(b)` for the proof.
+ * @returns `passed` when the engine has the part's test and it passed, the first other state of
+ *   such a test, or `absent` when the engine has none.
+ */
+const od14Part = (
+  results: readonly TestResult[],
+  engine: string,
+  label: string,
+): Od14Result["control"] => {
+  const states = results
+    .filter(
+      (result) =>
+        result.file === od14File &&
+        result.ancestorTitles.length === 2 &&
+        result.ancestorTitles[0] === engine &&
+        result.ancestorTitles[1] === od14Suite &&
+        result.fullName.startsWith(`${engine} ${od14Suite} ${label} `),
+    )
+    .map((result) => result.state);
+
+  return states.find((state) => state !== "passed") ?? (states.length === 0 ? "absent" : "passed");
+};
+
+/**
+ * Give OD-14 (e)'s result in an engine.
+ *
+ * @param results The browser results.
+ * @param engine The engine.
+ * @returns How its control (a) and its proof (b) ended there, and `passed` only when both passed.
+ */
+const od14Of = (results: readonly TestResult[], engine: string): Od14Result => {
+  const control = od14Part(results, engine, "(a)");
+  const proof = od14Part(results, engine, "(b)");
+
+  return {
+    control,
+    proof,
+    result: control === "passed" && proof === "passed" ? "passed" : "failed",
+  };
+};
+
+/**
  * Give each engine of each browser run its row: the engine's entry as the run recorded it, the
- * run's date and Playwright version, and how many browser results ran in the engine and passed or
- * failed.
+ * run's date and Playwright version, how many browser results ran in the engine and passed or
+ * failed, and OD-14 (e)'s result in it.
  *
  * A browser file registers each case under a `describe` named for its engine (`eachEngine` in
  * `src/test/browsers.ts`), the outermost of the case's `describe` blocks, so a browser result ran
@@ -552,6 +638,7 @@ const browserRunRows = (
         ...engine,
         date: run.date,
         failed: states.filter((state) => state === "failed").length,
+        od14: od14Of(browserResults, engine.engine),
         passed: states.filter((state) => state === "passed").length,
         playwright: run.playwright,
       };
@@ -570,7 +657,7 @@ const browserRunRows = (
  * in a sweep. An interaction (Q) row also lists its keyboard proofs, their composition and its
  * latest screen-reader pass that ran. A keyboard proof in a browser file is composed in the dev
  * playground in a browser. Each engine of each browser run counts the browser results it passed
- * and failed.
+ * and failed, and gives OD-14 (e)'s result in it.
  *
  * @param input The features, exclusions, claims, records, browser runs, results, sources and
  *   corpus.

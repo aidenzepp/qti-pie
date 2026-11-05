@@ -1,16 +1,20 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { assert, describe, it } from "@effect/vitest";
 
 /**
- * The tests that walk an item by keys, by file under `src/`, each title as written, a `${…}`
- * placeholder included. A walk is `keyboardWalk` in Node, directly or through a helper that walks,
- * such as `src/vertical.test.ts`'s `complete`, or Playwright's keyboard in a browser test. Each one
- * carries the `[keyboard]` token after its last ID token (spec §4.10).
+ * The tests that walk an item by keys, by test file relative to the package directory, each title
+ * as written, a `${…}` placeholder included. A walk is `keyboardWalk` in Node, directly or through
+ * a helper that walks, such as `src/vertical.test.ts`'s `complete`, or Playwright's keyboard in a
+ * browser test. Each one carries the `[keyboard]` token after its last ID token (spec §4.10), and
+ * no other test or `describe` block in any test file carries it, so the ledger lists only these as
+ * keyboard tests.
  */
 /* oxlint-disable eslint/no-template-curly-in-string -- a browser test's title is a template literal, and this list holds it as written, so its `${…}` placeholders are text to match, never to interpolate. */
 const walks: ReadonlyMap<string, readonly string[]> = new Map([
   [
-    "dev/keyboard-choice.browser.test.ts",
+    "src/dev/keyboard-choice.browser.test.ts",
     [
       "[Q-2] [keyboard] Tab order: ${label}'s item form, from its first control to its Submit, is the Node walk's tabOrder",
       "[Q-2] [keyboard] Arrows: in ${label}'s radio group, ArrowDown and ArrowRight check the next radio, and ArrowUp and ArrowLeft the previous one",
@@ -22,7 +26,7 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
     ],
   ],
   [
-    "dev/keyboard-text.browser.test.ts",
+    "src/dev/keyboard-text.browser.test.ts",
     [
       "${tag} [keyboard] Tab order: ${label}'s item form, from its first control to its Submit, is the Node walk's tabOrder",
       "[Q-20] [keyboard] BG010 answered by keys: Tab to the Text Entry, type York, Enter submits the form and scores 1",
@@ -34,7 +38,7 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
     ],
   ],
   [
-    "dev/page.test.ts",
+    "src/dev/page.test.ts",
     [
       "[Q-2] [keyboard] BG007 completes in the playground: its form walked by keys, posted, and scored 1",
       "[Q-20] [keyboard] BG010 completes in the playground: York typed, posted, and scored 1",
@@ -42,13 +46,13 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
     ],
   ],
   [
-    "dev/walk.browser.test.ts",
+    "src/dev/walk.browser.test.ts",
     [
       "[Q-2] [keyboard] BG007 by keys alone: Tab into the group, Space on True, Tab to Submit, Enter, scores 1",
     ],
   ],
   [
-    "interactions/choice.test.ts",
+    "src/interactions/choice.test.ts",
     [
       "[Q-2] [keyboard] names every Control by the payload's form name, the author's when given",
       "[Q-2] [keyboard] a radio walk (Tab, ArrowDown, Tab, Enter) posts the second choice",
@@ -57,7 +61,7 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
     ],
   ],
   [
-    "interactions/extended-text.test.ts",
+    "src/interactions/extended-text.test.ts",
     [
       "[Q-5] [keyboard] writes the Control's id, rows from expected-lines, placeholder and the payload's form name, the author's when given",
       String.raw`[Q-5] [keyboard] a keyboard walk in a test-built form posts multi-line text, "a\\r\\nb", which decode turns into "a\\nb"`,
@@ -68,20 +72,20 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
     ],
   ],
   [
-    "interactions/text-entry.test.ts",
+    "src/interactions/text-entry.test.ts",
     [
       "[Q-20] [keyboard] a keyboard walk (Tab, type York, Enter) posts York under the Control's name",
       "[Q-20] [keyboard] names the Control by the author's form name when names gives one",
     ],
   ],
   [
-    "render.test.ts",
+    "src/render.test.ts",
     [
       "[Q-2] [keyboard] a radio walk (Tab, ArrowDown, Tab, Enter) posts the presented second choice",
     ],
   ],
   [
-    "vertical.test.ts",
+    "src/vertical.test.ts",
     [
       "[Q-2] [I-9b] [keyboard] BG007 by keyboard: true scores 1, false 0, none 0",
       "[Q-20] [I-9b] [keyboard] BG010 by keyboard: YORK and york give 0.5, Paris and none 0",
@@ -90,7 +94,7 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
     ],
   ],
   [
-    "witness.test.ts",
+    "src/witness.test.ts",
     [
       "[Q-20] [keyboard] a Text Entry's pattern-mask refuses a mismatching entry with the author's message, and a matching one is accepted and scores 1",
       "[Q-5] [keyboard] Item_QTI3_WritingPostcard_02 posts the text typed into each xhtml Extended Text, as typed",
@@ -104,23 +108,42 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
 /* oxlint-enable eslint/no-template-curly-in-string */
 
 /**
- * A test's title: the string literal that opens an `it(…)` or `test(…)` call, or an `.effect(…)`
- * call on the `it` an `it.layer(…)` scope hands its callback (`walk.effect(…)` in a browser test),
- * modifiers included.
+ * A test's title: the string literal that opens a `describe(…)`, `it(…)` or `test(…)` call, or an
+ * `.effect(…)` call on the `it` an `it.layer(…)` scope hands its callback (`walk.effect(…)` in a
+ * browser test), modifiers included. A `describe` title counts because the ledger reads the token
+ * in a test's full name, which holds the titles of the `describe` blocks around it.
  */
 const titlePattern =
-  /\b(?:it|test|[a-z][A-Za-z]*(?=\.effect\b))(?:\.[A-Za-z]+)*\(\s*(?<quote>["'`])(?<title>(?:\\.|(?!\k<quote>)[^\\])*)\k<quote>/gu;
+  /\b(?:describe|it|test|[a-z][A-Za-z]*(?=\.effect\b))(?:\.[A-Za-z]+)*\(\s*(?<quote>["'`])(?<title>(?:\\.|(?!\k<quote>)[^\\])*)\k<quote>/gu;
 
 /**
- * The titles of every test in `file`, a path under `src/`, read as text.
+ * The package directory, `packages/plate`.
+ */
+const packageDirectory = fileURLToPath(new URL("../", import.meta.resolve("#plate/index.ts")));
+
+/**
+ * Every test file the package's tests run, under `src/` and `scripts/`, browser files included,
+ * relative to the package directory with `/` separators, sorted.
+ */
+const testFiles: readonly string[] = ["scripts", "src"]
+  .flatMap((folder) =>
+    readdirSync(path.join(packageDirectory, folder), { recursive: true })
+      .map((entry) => `${folder}/${String(entry).split(path.sep).join("/")}`)
+      .filter((file) => file.endsWith(".test.ts")),
+  )
+  .toSorted();
+
+/**
+ * The titles of every test and `describe` block in `file`, a path relative to the package
+ * directory, read as text.
  */
 const titlesIn = (file: string): readonly string[] =>
   Array.from(
-    readFileSync(new URL(import.meta.resolve(`#plate/${file}`)), "utf-8").matchAll(titlePattern),
+    readFileSync(path.join(packageDirectory, file), "utf-8").matchAll(titlePattern),
     (match) => match.groups?.["title"] ?? "",
   );
 
-describe("the [keyboard] token", () => {
+describe("the keyboard token", () => {
   it("is on every test listed as walking an item by keys", () => {
     for (const [file, listed] of walks) {
       const titles = titlesIn(file);
@@ -132,11 +155,12 @@ describe("the [keyboard] token", () => {
     }
   });
 
-  it("is on no test the list does not name", () => {
-    for (const [file, listed] of walks) {
+  it("is on no test or describe block the list does not name, in any test file under src/ or scripts/", () => {
+    assert.includeMembers([...testFiles], [...walks.keys()], "every listed file is a test file");
+    for (const file of testFiles) {
       assert.deepStrictEqual(
         titlesIn(file).filter((title) => title.includes("[keyboard]")),
-        listed,
+        walks.get(file) ?? [],
         `${file}: the tagged titles are the listed ones, in order`,
       );
     }

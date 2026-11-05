@@ -330,6 +330,51 @@ const browserLedger = Effect.all([
 );
 
 /**
+ * The OD-14 (e) browser file, whose control (a) and proof (b) run in each engine.
+ */
+const od14File = "src/dev/od14.browser.test.ts";
+
+/**
+ * Build one OD-14 (e) result as the reporter reads it: under the engine's `describe` and the one
+ * named `OD-14 (e)`, as the browser file registers it.
+ *
+ * @param engine The engine.
+ * @param title The test's own title.
+ * @param state How it ended.
+ * @param file The test file; the OD-14 (e) file when absent.
+ * @returns The result.
+ */
+const od14Result = (
+  engine: string,
+  title: string,
+  state: TestResult["state"],
+  file = od14File,
+): TestResult => ({
+  ancestorTitles: [engine, "OD-14 (e)"],
+  file,
+  fullName: `${engine} OD-14 (e) ${title}`,
+  state,
+});
+
+/**
+ * Derive a ledger over the fixture browser run from browser results alone.
+ *
+ * @param results The browser results.
+ * @returns The ledger.
+ */
+const runLedger = (results: readonly TestResult[]): Ledger =>
+  ledger({
+    browserRuns: [browserRun],
+    claims,
+    corpus,
+    exclusions,
+    features,
+    records,
+    results,
+    sources,
+  });
+
+/**
  * Find a row of the ledger by its ID.
  *
  * @param built The ledger.
@@ -486,7 +531,7 @@ describe("ledger/report.ts", () => {
       }),
   );
 
-  it.effect("Keyboard lists the passing tagged tests that carry [keyboard]", () =>
+  it.effect("Keyboard lists the passing tagged tests that carry the keyboard token", () =>
     Effect.gen(function* keyboard() {
       const built = yield* fixtureLedger;
 
@@ -560,7 +605,7 @@ describe("ledger/report.ts", () => {
   );
 
   it.effect(
-    "a passing [Q-2] [keyboard] test in a browser file gives Q-2 the composition dev playground in a browser",
+    "a passing Q-2 keyboard test in a browser file gives Q-2 the composition dev playground in a browser",
     () =>
       Effect.gen(function* browserComposition() {
         const built = yield* browserLedger;
@@ -595,7 +640,13 @@ describe("ledger/report.ts", () => {
     () =>
       Effect.gen(function* browserCounts() {
         const built = yield* browserLedger;
-        const common = { date: browserRun.date, failed: 1, passed: 1, playwright: "1.64.1" };
+        const common = {
+          date: browserRun.date,
+          failed: 1,
+          od14: { control: "absent", proof: "absent", result: "failed" },
+          passed: 1,
+          playwright: "1.64.1",
+        } as const;
 
         assert.deepStrictEqual(built.browserRuns, [
           { ...common, engine: "chromium", version: "156.0.8078.4" },
@@ -604,6 +655,50 @@ describe("ledger/report.ts", () => {
         assert.strictEqual(standsInForSafari, "WebKit stands in for Safari until safaridriver");
       }),
   );
+
+  it("each engine's OD-14 (e) result is passed only when its control (a) and its proof (b) both passed in it", () => {
+    const built = runLedger([
+      od14Result("chromium", "(a) the control: each probe document runs its script", "passed"),
+      od14Result("chromium", "(b) the proof: embedded, neither document runs its script", "passed"),
+      od14Result("webkit", "(a) the control: each probe document runs its script", "passed"),
+      od14Result("webkit", "(b) the proof: embedded, neither document runs its script", "failed"),
+    ]);
+
+    assert.deepStrictEqual(
+      built.browserRuns.map((run) => [run.engine, run.od14]),
+      [
+        ["chromium", { control: "passed", proof: "passed", result: "passed" }],
+        ["webkit", { control: "passed", proof: "failed", result: "failed" }],
+      ],
+    );
+  });
+
+  it("an engine without both OD-14 (e) parts has failed it, naming the part that has no result", () => {
+    const built = runLedger([
+      od14Result("chromium", "(a) the control: each probe document runs its script", "passed"),
+      od14Result("webkit", "(a) the control: each probe document runs its script", "skipped"),
+      od14Result(
+        "webkit",
+        "(b) the proof: in another file",
+        "passed",
+        "src/dev/walk.browser.test.ts",
+      ),
+      {
+        ancestorTitles: ["webkit"],
+        file: od14File,
+        fullName: "webkit (b) the proof: outside the OD-14 (e) describe",
+        state: "passed",
+      },
+    ]);
+
+    assert.deepStrictEqual(
+      built.browserRuns.map((run) => [run.engine, run.od14]),
+      [
+        ["chromium", { control: "passed", proof: "absent", result: "failed" }],
+        ["webkit", { control: "skipped", proof: "absent", result: "failed" }],
+      ],
+    );
+  });
 
   it.effect("a ledger with no browser run records none", () =>
     Effect.gen(function* noBrowserRun() {
