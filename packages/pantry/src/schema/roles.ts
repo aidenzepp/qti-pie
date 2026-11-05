@@ -11,7 +11,11 @@ export const seededNames = [
   "Admission",
   "AncestryStep",
   "AttributeAdmission",
+  "AttributeExclusion",
+  "AttributeWildcard",
   "BindingFit",
+  "GlobalAttribute",
+  "GlobalElement",
   "MappableBaseType",
   "OperatorArity",
   "OperatorArityMax",
@@ -19,6 +23,9 @@ export const seededNames = [
   "RecordBindingFit",
   "ResourceTypeOf",
   "RootOfType",
+  "RootSchemaSet",
+  "WildcardExclusion",
+  "WildcardHost",
 ] as const;
 
 const seeded: ReadonlySet<string> = new Set(seededNames);
