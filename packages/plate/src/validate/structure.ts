@@ -7,13 +7,18 @@
  * first, so the verdict can collect them beside the prose rules'. Apart from the readings below, it
  * never refuses what the XSD admits (reading 1): namespace declarations, `xsi:schemaLocation` and
  * `xsi:noNamespaceSchemaLocation`, whitespace between elements, entity references and whatever a
- * wildcard matches all pass. An element a wildcard admits, and an element in another namespace such
- * as MathML, is kept and not walked. On every element it walks it judges `xsi:type` and `xsi:nil`
- * as XML Schema judges them (reading 47), and no attribute wildcard admits either: a type is valid
- * when it names the element's declared type or a type derived from it, and `xsi:nil` never is,
- * because the XSD declares no element nillable. After a valid `xsi:type` naming one of QTI's types,
- * that type's own table governs the element's attributes, text and children in place of its name's
- * (AD-9); {@link governingTables} gives the table that governs each element the walk checks.
+ * wildcard matches all pass. An element in another namespace that its parent's table names, such as
+ * MathML, is kept and not walked, and so is what a `strict` or `skip` element wildcard admits. What
+ * a `lax` element wildcard admits is walked as XML Schema assesses it (rule `5b8ee08b`): a global
+ * QTI element is checked by its table, a nested QTI root is kept as foreign content (reading 6),
+ * foreign content whose `xsi:type` names a type the tables or XML Schema define is kept unchecked
+ * (reading 50), and any other element is passed over while its children are admitted laxly in turn.
+ * On every element it walks it judges `xsi:type` and `xsi:nil` as XML Schema judges them (reading
+ * 47), and no attribute wildcard admits either: a type is valid when it names the element's
+ * declared type or a type derived from it, and `xsi:nil` never is, because the XSD declares no
+ * element nillable. After a valid `xsi:type` naming one of QTI's types, that type's own table
+ * governs the element's attributes, text and children in place of its name's (AD-9);
+ * {@link governingTables} gives the table that governs each element the walk checks.
  *
  * Over the XSD's rules it applies the shared readings that set the XSD aside where the walk can see
  * them, each a row of {@link readingRows}: attributes narrowed or retyped, `data-*` names,
@@ -1008,6 +1013,58 @@ const describeInstanceTypes = (table: ElementTable): string => {
 };
 
 /**
+ * The QTI roots reading 6 keeps as foreign content when lax wildcard content holds one: the item,
+ * test, section and stimulus roots and the two processing roots, by local name.
+ */
+const nestedRoots: ReadonlySet<string> = new Set([
+  "qti-assessment-item",
+  "qti-assessment-section",
+  "qti-assessment-stimulus",
+  "qti-assessment-test",
+  "qti-outcome-processing",
+  "qti-response-processing",
+]);
+
+/**
+ * Report whether an element in lax wildcard content carries an `xsi:type` that governs it beyond
+ * what the walk checks (reading 50).
+ *
+ * Such content is assessed against the named type, which the walk does not do, so it is kept
+ * unchecked with everything below it. That is a type in `tables.types`, or one of XML Schema's
+ * built-in simple types, under which no element child is valid anyway. A value holding an
+ * unexpanded entity reference is unknown and counts too, so it is never refused.
+ * `xs:anyType` does not count: assessing against it is the lax walk itself. A name that resolves to
+ * no type leaves the element laxly assessed (XML Schema Part 1, section 3.3.4, Schema-Validity
+ * Assessment (Element), clause 2).
+ *
+ * @param element The element.
+ * @param parents Each walked element's parent, for the namespace declarations in scope.
+ * @param tables The tables.
+ * @returns Whether the element's `xsi:type` names a type the walk does not check it against.
+ */
+const isForeignTyped = (
+  element: SourceElement,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+  tables: Tables,
+): boolean => {
+  const written = element.attributes.find(
+    (attribute) => attribute.namespace === xsiNamespace && attribute.local === "type",
+  );
+  if (written === undefined) {
+    return false;
+  }
+
+  return (
+    written.references.length > 0 ||
+    Option.exists(resolveQName(written.value, element, parents), (type) =>
+      type.namespace === qtiNamespace
+        ? Object.hasOwn(tables.types, type.local)
+        : type.namespace === xsdNamespace && builtinBases.has(type.local),
+    )
+  );
+};
+
+/**
  * Look up an element's table, only among the tables' own keys.
  *
  * @param tables The tables.
@@ -1544,29 +1601,66 @@ const checkElement = (
 
 /**
  * How the walk treats one element: check it against its name's table, refuse it as
- * `unknown-element`, or pass over it and its subtree.
+ * `unknown-element`, pass over it and admit its children laxly, or pass over it and its subtree.
  */
 type Admission =
   | { readonly kind: "check"; readonly table: ElementTable }
   | { readonly kind: "unknown" }
+  | { readonly kind: "lax" }
   | { readonly kind: "pass" };
+
+/**
+ * Decide how the walk treats an element in lax wildcard content, as XML Schema assesses an element
+ * a `lax` wildcard matches (Part 1, section 3.10.4, and section 3.3.4, Schema-Validity Assessment
+ * (Element)): by its declaration where one is found, and laxly otherwise.
+ *
+ * A QTI root reading 6 names is passed over with everything below it, as foreign content. Any other
+ * QTI-namespace element whose name is declared globally is checked by its table, its children
+ * following that table (rule `5b8ee08b`). An element {@link isForeignTyped} names is passed over
+ * with everything below it (reading 50). Any other element, a QTI element declared only locally or
+ * an element in another namespace, is passed over, and each of its children admitted laxly in turn.
+ *
+ * @param element The element.
+ * @param parents Each walked element's parent, for the namespace declarations in scope.
+ * @param tables The tables.
+ * @returns How to treat the element.
+ */
+const admitLaxly = (
+  element: SourceElement,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+  tables: Tables,
+): Admission => {
+  if (element.namespace === qtiNamespace) {
+    if (nestedRoots.has(element.local)) {
+      return { kind: "pass" };
+    }
+
+    const table = tableOf(tables, element.local);
+    if (Option.isSome(table) && table.value.global) {
+      return { kind: "check", table: table.value };
+    }
+  }
+
+  return isForeignTyped(element, parents, tables) ? { kind: "pass" } : { kind: "lax" };
+};
 
 /**
  * Decide how the walk treats an element, from the table that governs its parent.
  *
  * The root is checked when it is a QTI-namespace element with a table; a root in another namespace
  * is the verdict's `not-qti-root`, so it is passed over. A child of an element the walk did not
- * check is passed over. A child its parent's table names is checked when it is in the QTI namespace
+ * check is passed over, unless the walk passed over the parent laxly: then it is admitted laxly, by
+ * {@link admitLaxly}. A child its parent's table names is checked when it is in the QTI namespace
  * and has a table, refused when it is in the QTI namespace and has none, and passed over in any
- * other namespace. A child only the parent's element wildcard matches is passed over, and so is
- * everything below it: phase 1 skips wildcard content, an interim, not a reading. Reading 6 covers
- * only a nested QTI root, and rule `5b8ee08b` validates a known QTI element inside lax wildcard
- * content as QTI, so M1-R validates it here and in the prose rules (the ledger's lax-wildcard
- * deferral). Any other child is refused.
+ * other namespace. A child only the parent's element wildcard matches is admitted laxly when the
+ * wildcard is `lax`, and passed over with everything below it when it is `strict` or `skip`. Any
+ * other child is refused.
  *
  * @param element The element.
  * @param parent Its parent, none for the root.
  * @param checked The table that governs each element the walk has checked so far.
+ * @param laxed Each element the walk has passed over so far while admitting its children laxly.
+ * @param parents Each walked element's parent, for the namespace declarations in scope.
  * @param tables The tables.
  * @returns How to treat the element.
  */
@@ -1574,6 +1668,8 @@ const admit = (
   element: SourceElement,
   parent: Option.Option<SourceElement>,
   checked: ReadonlyMap<SourceElement, ContentTable>,
+  laxed: ReadonlySet<SourceElement>,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
   tables: Tables,
 ): Admission => {
   /**
@@ -1594,7 +1690,7 @@ const admit = (
 
   const parentTable = checked.get(parent.value);
   if (parentTable === undefined) {
-    return { kind: "pass" };
+    return laxed.has(parent.value) ? admitLaxly(element, parents, tables) : { kind: "pass" };
   }
 
   const named = parentTable.children.some(
@@ -1605,10 +1701,11 @@ const admit = (
   }
 
   const wildcard = parentTable.anyElement;
+  if (wildcard === undefined || !wildcardAdmits(wildcard, element.namespace)) {
+    return { kind: "unknown" };
+  }
 
-  return wildcard !== undefined && wildcardAdmits(wildcard, element.namespace)
-    ? { kind: "pass" }
-    : { kind: "unknown" };
+  return wildcard.process === "lax" ? admitLaxly(element, parents, tables) : { kind: "pass" };
 };
 
 /**
@@ -1636,7 +1733,8 @@ interface Walked {
 /**
  * Walk a document once from its root, deciding how each element is treated and, for each element
  * it checks, which table governs it: its name's, or the table of the QTI type a valid `xsi:type`
- * names. An element's children are admitted by the table that governs it.
+ * names. An element's children are admitted by the table that governs it, or laxly when the walk
+ * passed over it in lax wildcard content.
  *
  * @param source The document.
  * @param tables The tables.
@@ -1645,6 +1743,7 @@ interface Walked {
 const walkTables = (source: SourceDocument, tables: Tables): Walked => {
   const parents = new Map<SourceElement, SourceElement>();
   const governing = new Map<SourceElement, ContentTable>();
+  const laxed = new Set<SourceElement>();
   const steps: Step[] = [];
 
   for (const visit of walk(source)) {
@@ -1653,8 +1752,10 @@ const walkTables = (source: SourceDocument, tables: Tables): Walked => {
       parents.set(element, parent.value);
     }
 
-    const admission = admit(element, parent, governing, tables);
-    if (admission.kind === "unknown") {
+    const admission = admit(element, parent, governing, laxed, parents, tables);
+    if (admission.kind === "lax") {
+      laxed.add(element);
+    } else if (admission.kind === "unknown") {
       steps.push({ kind: "unknown", visit });
     } else if (admission.kind === "check") {
       const name = admission.table;
@@ -1675,9 +1776,9 @@ const walkTables = (source: SourceDocument, tables: Tables): Walked => {
  *
  * That is the element's name's table, or, after a valid `xsi:type` naming one of QTI's types, that
  * type's own entry in `tables.types`: for a name declared with several types, the named type's
- * table, not the union. A type of XML Schema's leaves the name's table in force. An element the
- * walk passes over or refuses has no entry. {@link checkStructure} walks by the same tables, so the
- * two cannot drift.
+ * table, not the union. A type of XML Schema's leaves the name's table in force. The elements the
+ * walk checks in lax wildcard content are among them. An element the walk passes over or refuses
+ * has no entry. {@link checkStructure} walks by the same tables, so the two cannot drift.
  *
  * @param source The document, as the reader adapter built it.
  * @param tables The tables generated from the QTI XSD.
@@ -1692,13 +1793,13 @@ export const governingTables = (
 /**
  * Check a document against the XSD's tables, every structural rule at once.
  *
- * The walk starts at the root and enters every QTI-namespace element the tables admit. It refuses
- * `unknown-element`, `unknown-attribute`, `missing-attribute`, `attribute-type`, `padded-attribute`
- * and `text-not-allowed`, and the readings' `misplaced-element`, `child-count` and `count-range`,
- * each at the path of the element or attribute at fault. Each element is checked by the table
- * {@link governingTables} gives it. It does not enter an element it refuses as unknown, and does
- * enter a misplaced one. A document whose root is outside the QTI namespace yields nothing here:
- * that is the verdict's `not-qti-root`.
+ * The walk starts at the root and enters every QTI-namespace element the tables admit, lax wildcard
+ * content included. It refuses `unknown-element`, `unknown-attribute`, `missing-attribute`,
+ * `attribute-type`, `padded-attribute` and `text-not-allowed`, and the readings'
+ * `misplaced-element`, `child-count` and `count-range`, each at the path of the element or
+ * attribute at fault. Each element is checked by the table {@link governingTables} gives it. It
+ * does not enter an element it refuses as unknown, and does enter a misplaced one. A document whose
+ * root is outside the QTI namespace yields nothing here: that is the verdict's `not-qti-root`.
  *
  * @param source The document, as the reader adapter built it.
  * @param tables The tables generated from the QTI XSD.

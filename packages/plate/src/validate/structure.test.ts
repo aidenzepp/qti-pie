@@ -781,6 +781,129 @@ const elementAt = (source: SourceDocument, path: string): SourceElement =>
   [...walkDocument(source)].find((visit) => visit.path === path)?.element ??
   assert.fail(`No element at ${path}.`);
 
+/**
+ * Construct an item, valid by the committed tables, whose body holds one child.
+ *
+ * @param child The body's child.
+ * @returns The item as a source document.
+ */
+const committedBody = (child: SourceChild): SourceDocument =>
+  doc(
+    location,
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "item"), attr("time-dependent", "false"), attr("title", "Lax")],
+      [el("qti-item-body", [], [child])],
+    ),
+  );
+
+/**
+ * Construct an item whose body holds one custom interaction, whose `##any` `lax` element wildcard
+ * admits the given children.
+ *
+ * @param children The custom interaction's children.
+ * @returns The item as a source document.
+ */
+const customized = (...children: readonly SourceChild[]): SourceDocument =>
+  committedBody(el("qti-custom-interaction", [attr("response-identifier", "RESPONSE")], children));
+
+/**
+ * The path of the custom interaction {@link customized} builds.
+ */
+const custom = "qti-assessment-item/qti-item-body/qti-custom-interaction";
+
+/**
+ * Construct an item whose body holds one PCI whose markup holds a `template`, whose `##any` `lax`
+ * element wildcard admits the given children.
+ *
+ * @param children The template's children.
+ * @returns The item as a source document.
+ */
+const templated = (...children: readonly SourceChild[]): SourceDocument =>
+  committedBody(
+    el(
+      "qti-portable-custom-interaction",
+      [
+        attr("custom-interaction-type-identifier", "urn:example:pci"),
+        attr("response-identifier", "RESPONSE"),
+      ],
+      [el("qti-interaction-markup", [], [el("template", [], children)])],
+    ),
+  );
+
+/**
+ * The path of the template {@link templated} builds.
+ */
+const markupTemplate =
+  "qti-assessment-item/qti-item-body/qti-portable-custom-interaction/qti-interaction-markup/template";
+
+/**
+ * Construct a test whose one section's `qti-ordering`, with its `##other` `lax` element wildcard,
+ * holds the given children.
+ *
+ * @param children The ordering's children.
+ * @returns The test as a source document.
+ */
+const ordered = (...children: readonly SourceChild[]): SourceDocument =>
+  doc(
+    location,
+    el(
+      "qti-assessment-test",
+      [attr("identifier", "test"), attr("title", "Lax")],
+      [
+        el(
+          "qti-test-part",
+          [
+            attr("identifier", "part"),
+            attr("navigation-mode", "linear"),
+            attr("submission-mode", "individual"),
+          ],
+          [
+            el(
+              "qti-assessment-section",
+              [attr("identifier", "section"), attr("title", "Section"), attr("visible", "true")],
+              [el("qti-ordering", [], children)],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+/**
+ * The path of the ordering {@link ordered} builds.
+ */
+const ordering = "qti-assessment-test/qti-test-part/qti-assessment-section/qti-ordering";
+
+/**
+ * An `id` that is no `NCName`, which every table under test declares as one.
+ */
+const badId = attr("id", "1x");
+
+/**
+ * A `div` whose `id` is no `NCName`.
+ */
+const badDiv = el("div", [badId]);
+
+/**
+ * A simple choice, which `div`'s table neither names nor admits by a wildcard.
+ */
+const looseChoice = el("qti-simple-choice", [attr("identifier", "A")], [text("A")]);
+
+/**
+ * Report whether a committed element table declares `id` as an `NCName`.
+ *
+ * @param local The element's local name.
+ * @returns Whether its table declares `id` with that type.
+ */
+const declaresNcNameId = (local: string): boolean =>
+  generatedTables.elements[local]?.attributes.some(
+    (attribute) =>
+      attribute.local === "id" &&
+      attribute.type.kind === "builtin" &&
+      attribute.type.name === "NCName",
+  ) ?? false;
+
 describe("checkStructure", () => {
   describe("the six rules", () => {
     it("[I-0] refuses an element its parent's table does not admit as unknown-element", () => {
@@ -2088,6 +2211,129 @@ describe("checkStructure", () => {
         ["text-not-allowed", at("probe")],
         ["unknown-element", at("probe/leaf")],
       ]);
+    });
+  });
+
+  describe("lax wildcard content, walked as XML Schema assesses it (rule 5b8ee08b, reading 6)", () => {
+    it("relies on the committed tables: lax wildcards, global names and the faults' declarations", () => {
+      const lax: Wildcard = { namespace: "##any", process: "lax" };
+
+      assert.deepStrictEqual(generatedTables.elements["qti-custom-interaction"]?.anyElement, lax);
+      assert.deepStrictEqual(generatedTables.elements["template"]?.anyElement, lax);
+      assert.deepStrictEqual(generatedTables.elements["qti-ordering"]?.anyElement, {
+        namespace: "##other",
+        process: "lax",
+      });
+      for (const local of ["div", "p", "qti-assessment-item"]) {
+        assert.isTrue(generatedTables.elements[local]?.global, local);
+      }
+      for (const local of ["qti-choice-interaction", "qti-simple-choice"]) {
+        assert.isFalse(generatedTables.elements[local]?.global, local);
+      }
+      for (const local of ["div", "p", "qti-choice-interaction"]) {
+        assert.isTrue(declaresNcNameId(local), local);
+      }
+      assert.isUndefined(generatedTables.elements["div"]?.anyElement);
+      assert.isFalse(
+        generatedTables.elements["div"]?.children.some(
+          (child) => child.local === "qti-simple-choice",
+        ) ?? true,
+      );
+    });
+
+    it("[I-8] checks a global QTI element a lax wildcard admits by its table, in a custom interaction and in a template", () => {
+      assert.deepStrictEqual(found(customized(badDiv), generatedTables), [
+        ["attribute-type", at(`${custom}/div/@id`)],
+      ]);
+      assert.deepStrictEqual(found(customized(el("div", [], [looseChoice])), generatedTables), [
+        ["unknown-element", at(`${custom}/div/qti-simple-choice`)],
+      ]);
+      assert.deepStrictEqual(found(templated(badDiv), generatedTables), [
+        ["attribute-type", at(`${markupTemplate}/div/@id`)],
+      ]);
+      assert.deepStrictEqual(found(templated(el("div", [], [looseChoice])), generatedTables), [
+        ["unknown-element", at(`${markupTemplate}/div/qti-simple-choice`)],
+      ]);
+    });
+
+    it("[I-8] passes over a QTI element declared only locally, and admits its children laxly", () => {
+      const choice = (...children: readonly SourceChild[]) =>
+        customized(
+          el("qti-choice-interaction", [attr("response-identifier", "RESPONSE"), badId], children),
+        );
+
+      assert.deepStrictEqual(found(choice(), generatedTables), []);
+      assert.deepStrictEqual(found(choice(el("p")), generatedTables), []);
+      assert.deepStrictEqual(found(choice(el("p", [badId])), generatedTables), [
+        ["attribute-type", at(`${custom}/qti-choice-interaction/p/@id`)],
+      ]);
+    });
+
+    it("[I-8] passes over a QTI root nested in lax content with everything below it (reading 6)", () => {
+      const nested = el(
+        "qti-assessment-item",
+        [attr("identifier", "1x"), attr("time-dependent", "false"), attr("title", "Nested")],
+        [badDiv],
+      );
+
+      assert.deepStrictEqual(found(customized(nested), generatedTables), []);
+    });
+
+    it("[I-8] admits laxly the children of an element in another namespace, under ##any and under ##other", () => {
+      const widget = el("widget", [], [badDiv], otherNamespace);
+
+      assert.deepStrictEqual(found(customized(widget), generatedTables), [
+        ["attribute-type", at(`${custom}/{${otherNamespace}}widget/div/@id`)],
+      ]);
+      assert.deepStrictEqual(found(ordered(widget), generatedTables), [
+        ["attribute-type", at(`${ordering}/{${otherNamespace}}widget/div/@id`)],
+      ]);
+    });
+
+    it("[I-8] accepts foreign content whose xsi:type names a resolved complex type without checking it (reading 50)", () => {
+      const widget = (written: string) =>
+        el(
+          "widget",
+          [...declarations, attr("type", written, xsiNamespace)],
+          [badDiv],
+          otherNamespace,
+        );
+      const fault = ["attribute-type", at(`${custom}/{${otherNamespace}}widget/div/@id`)] as const;
+
+      // WeightDType requires `identifier` and `value` and admits no child, so it would refuse this.
+      assert.deepStrictEqual(found(customized(widget("q:WeightDType")), generatedTables), []);
+      assert.deepStrictEqual(found(customized(widget("xs:anyType")), generatedTables), [fault]);
+      assert.deepStrictEqual(found(customized(widget("z:WeightDType")), generatedTables), [fault]);
+    });
+
+    it("governingTables gives the lax-checked elements, and not the ones passed over", () => {
+      const checkedDiv = customized(badDiv);
+      const choice = customized(
+        el("qti-choice-interaction", [attr("response-identifier", "RESPONSE")], [el("p")]),
+      );
+      const nested = customized(
+        el(
+          "qti-assessment-item",
+          [attr("identifier", "item"), attr("time-dependent", "false"), attr("title", "Nested")],
+          [badDiv],
+        ),
+      );
+      const choicePath = `${custom}/qti-choice-interaction`;
+
+      assert.strictEqual(
+        governingTables(checkedDiv, generatedTables).get(elementAt(checkedDiv, `${custom}/div`)),
+        generatedTables.elements["div"],
+      );
+      assert.strictEqual(
+        governingTables(choice, generatedTables).get(elementAt(choice, `${choicePath}/p`)),
+        generatedTables.elements["p"],
+      );
+      assert.isFalse(governingTables(choice, generatedTables).has(elementAt(choice, choicePath)));
+      assert.isFalse(
+        governingTables(nested, generatedTables).has(
+          elementAt(nested, `${custom}/qti-assessment-item`),
+        ),
+      );
     });
   });
 
