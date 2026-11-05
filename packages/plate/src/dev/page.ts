@@ -3,7 +3,8 @@
  * author would compose them, behind one Fetch handler.
  *
  * The library decides no form, submit control, flow or attempt limit (rule `a9d04969`), so this
- * module owns them all: it lists four corpus documents, opens one with `open`, keeps the
+ * module owns them all: it lists every member of the corpus's document set under the verdict
+ * `open` gives it, opens any member through the verdict cache of `#plate/dev/listing.ts`, keeps the
  * `Accepted` item and the stored record on the server, and sends only the HTML of
  * `render(redact(…))` inside its own native form. A post is partitioned and decoded on the server,
  * checked with `checkResponses`, scored with `score`, and answered with the page after a submit
@@ -25,6 +26,8 @@ import { fileURLToPath } from "node:url";
 import { ConfigProvider, Effect, Option, Ref, Result, Schema } from "effect";
 import type { Config } from "effect";
 import { decodeStoredFloat } from "#plate/codec/values.ts";
+import { groupVerdicts, verdictCache } from "#plate/dev/listing.ts";
+import type { OpenFailure, VerdictCache, VerdictGroup } from "#plate/dev/listing.ts";
 import { emptyTheme, parseTheme, themeCss, themeText } from "#plate/dev/theme.ts";
 import type { Theme, ThemeRefused } from "#plate/dev/theme.ts";
 import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
@@ -39,7 +42,6 @@ import {
   entryName,
   h,
   Malformed,
-  open,
   partition,
   redact,
   render,
@@ -75,48 +77,17 @@ export type Handler = (request: Request) => Promise<Response>;
  * The settings of one playground, each optional.
  *
  * `configuration` is the input `configure` decodes, every default when absent; `provider` is where
- * `readCorpusFile` reads `PLATE_CORPUS_DIR` and `HOME`, the process environment when absent.
+ * `readCorpusFile` reads `PLATE_CORPUS_DIR` and `HOME`, the process environment when absent;
+ * `verdicts` is the cache that opens and keeps the corpus's members, a new one over `openMember`
+ * when absent. Handlers given one cache share its opens, and a test counts them through the
+ * cache's opener; the cache reads the corpus root of the first handler that asks, so share one
+ * only between handlers over the same root.
  */
 export interface PlaygroundSettings {
   readonly configuration?: Partial<Configuration>;
   readonly provider?: ConfigProvider.ConfigProvider;
+  readonly verdicts?: VerdictCache;
 }
-
-/**
- * A corpus document the listing names: its short label, what it shows, and its corpus path.
- */
-export interface ListedDocument {
-  readonly label: string;
-  readonly path: string;
-  readonly shows: string;
-}
-
-/**
- * The documents the listing names, in order: phase 1's three accepted fixtures and the refused
- * CAT test.
- */
-export const documents: readonly ListedDocument[] = [
-  {
-    label: "BG007",
-    path: "QTI3_BPIG_Examples/items/BG007.xml",
-    shows: "a Choice, true or false, scored by match_correct",
-  },
-  {
-    label: "BG010",
-    path: "QTI3_BPIG_Examples/items/BG010.xml",
-    shows: "a Text Entry in a quotation, scored by map_response",
-  },
-  {
-    label: "BG011",
-    path: "QTI3_BeginnersGuide_Examples/items/BG011.xml",
-    shows: "an Extended Text below an image and a video, with no response processing",
-  },
-  {
-    label: "CAT",
-    path: "qtiv3-examples/CAT/test.xml",
-    shows: "a test document, which open refuses",
-  },
-];
 
 /**
  * The most sessions a playground keeps; the oldest is evicted first (OD-10's placeholder).
@@ -236,13 +207,14 @@ interface Appearance {
 }
 
 /**
- * A playground's state and settings: its theme box's appearance, its sessions, oldest first, and
- * its configuration input.
+ * A playground's state and settings: its theme box's appearance, its sessions, oldest first, its
+ * configuration input, and the verdicts of the corpus's members.
  */
 interface Playground {
   readonly appearance: Ref.Ref<Appearance>;
   readonly configuration: Partial<Configuration>;
   readonly sessions: Map<string, Session>;
+  readonly verdicts: VerdictCache;
 }
 
 /**
@@ -547,27 +519,52 @@ const remember = (playground: Playground, instance: string, session: Session): v
 };
 
 /**
- * Construct the listing page: the four documents, each a link to its item page.
+ * Give the heading of a top folder of the corpus: its name, or `Corpus root` for members at the
+ * root.
  *
+ * @param folder The folder, `.` for the root.
+ * @returns The heading's text.
+ */
+const folderHeading = (folder: string): string => (folder === "." ? "Corpus root" : folder);
+
+/**
+ * Construct the listing page: the playground's reports in a `nav`, then one region per verdict,
+ * named by its heading with the verdict and its count, holding a heading per top folder and a list
+ * of its members, each a link to its item page whose text is its corpus path.
+ *
+ * @param groups The members, grouped by verdict and then by top folder.
  * @returns The page.
  */
-const listing = (): Page =>
+const listing = (groups: readonly VerdictGroup[]): Page =>
   page(200, "en", "plate dev playground", [
     h("h1", {}, [text("plate dev playground")]),
     h("p", {}, [
       text(
-        "Open a document, answer it with the keyboard or the mouse, and submit the form. The server scores the answer; no script runs.",
+        "Every document of the example corpus, by its verdict and then by its top folder. Open one, answer it with the keyboard or the mouse, and submit the form. The server scores the answer; no script runs.",
       ),
     ]),
-    h(
-      "ul",
-      {},
-      documents.map((entry) =>
-        h("li", {}, [
-          h("a", { href: itemTarget(entry.path) }, [text(entry.label)]),
-          text(`: ${entry.shows} (${entry.path})`),
+    h("nav", {}, [
+      h("ul", {}, [
+        h("li", {}, [h("a", { href: "/verdicts" }, [text("Verdicts")])]),
+        h("li", {}, [h("a", { href: "/ledger" }, [text("Ledger")])]),
+      ]),
+    ]),
+    ...groups.map(({ count, folders, verdict }) =>
+      h("section", { "aria-labelledby": `verdict-${verdict}`, "data-verdict": verdict }, [
+        h("h2", { "data-count": String(count), id: `verdict-${verdict}` }, [
+          text(`${verdict} (${String(count)})`),
         ]),
-      ),
+        ...folders.flatMap(({ folder, members }) => [
+          h("h3", {}, [text(folderHeading(folder))]),
+          h(
+            "ul",
+            {},
+            members.map((member) =>
+              h("li", {}, [h("a", { href: itemTarget(member) }, [text(member)])]),
+            ),
+          ),
+        ]),
+      ]),
     ),
   ]);
 
@@ -867,7 +864,8 @@ const routeFailure = (
 ): Page => (error._tag === "CorpusFileUnreadable" ? notFound() : failurePage(error));
 
 /**
- * Open a document and answer with its item page, or with its refusals or unchecked reasons.
+ * Answer a member of the document set with its item page, or with its refusals or unchecked
+ * reasons, from its cached verdict; a path that names no member is not found.
  *
  * @param playground The playground.
  * @param corpusPath The document's corpus path, as the request named it.
@@ -876,22 +874,19 @@ const routeFailure = (
 const openItem = Effect.fn("playground.openItem")(function* openItem(
   playground: Playground,
   corpusPath: string,
-): Effect.fn.Return<
-  Page,
-  Config.ConfigError | CorpusFileUnreadable | CorpusMissing | InvalidConfiguration
-> {
-  const relative = joinedSegments(corpusPath.split("/"));
-  if (Option.isNone(relative)) {
+): Effect.fn.Return<Page, InvalidConfiguration | OpenFailure> {
+  const member = yield* playground.verdicts.verdictOf(corpusPath);
+  if (Option.isNone(member)) {
     return notFound();
   }
 
   const configuration = yield* configure(playground.configuration);
-  const verdict = yield* open(relative.value, yield* readCorpusFile(relative.value));
+  const verdict = member.value;
 
   switch (verdict.verdict) {
     case "refused": {
       return verdictPage(
-        relative.value,
+        corpusPath,
         "Refused",
         verdict.refusals.map((refusal) => [
           { "data-rule": refusal.rule },
@@ -901,7 +896,7 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
     }
     case "unchecked": {
       return verdictPage(
-        relative.value,
+        corpusPath,
         "Unchecked",
         verdict.reasons.map((reason) => [
           { "data-reason": reason.reason },
@@ -916,11 +911,11 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
         accepted: verdict.accepted,
         attempts: 0,
         last: Option.none(),
-        path: relative.value,
+        path: corpusPath,
         record: Option.none(),
       });
 
-      return itemPage(verdict.accepted, { instance, path: relative.value }, configuration, {
+      return itemPage(verdict.accepted, { instance, path: corpusPath }, configuration, {
         disabled: false,
         options: {},
         state: "answering",
@@ -1209,7 +1204,8 @@ const postTheme = Effect.fn("playground.postTheme")(function* postTheme(
 
 /**
  * Route one request: the listing, an item page, a post, an asset, a stylesheet, or a theme box
- * post; anything else is a 404, and a method a route does not take is a 405.
+ * post; anything else is a 404, and a method a route does not take is a 405. A member the listing
+ * cannot read is a developer error there, since the listing's own address exists.
  *
  * @param playground The playground.
  * @param request The request.
@@ -1228,7 +1224,14 @@ const route = (
   );
 
   if (url.pathname === "/") {
-    return request.method === "GET" ? Effect.succeed(listing()) : refusedMethod;
+    return request.method === "GET"
+      ? playground.verdicts.verdicts.pipe(
+          Effect.map((verdicts) => listing(groupVerdicts(verdicts))),
+          Effect.catchTag("CorpusFileUnreadable", (unreadable) =>
+            Effect.succeed(failurePage(unreadable)),
+          ),
+        )
+      : refusedMethod;
   }
 
   if (url.pathname === "/item") {
@@ -1309,7 +1312,8 @@ const answer = (
       );
 
 /**
- * Construct a playground's Fetch handler, with its own sessions, theme and dark flag.
+ * Construct a playground's Fetch handler, with its own sessions, theme and dark flag, and its own
+ * verdict cache unless the settings give one: each member is opened once for the handler's life.
  *
  * It runs `open`, `configure` and the corpus read with `Effect.runPromise`; `render`,
  * `renderStatus`, `decode`, `checkResponses` and `score` are plain functions. A failure the
@@ -1329,6 +1333,7 @@ export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
     appearance: Ref.makeUnsafe<Appearance>({ dark: false, theme: emptyTheme }),
     configuration: settings.configuration ?? {},
     sessions: new Map(),
+    verdicts: settings.verdicts ?? Effect.runSync(verdictCache()),
   };
   const provided = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
     settings.provider === undefined
