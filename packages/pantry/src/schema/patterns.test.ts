@@ -316,11 +316,46 @@ describe("patterns", () => {
       "ok/path?q#f",
       "https://x/y.png",
       "images/sign.png",
-      "a#[x]",
+      "http://[::1]/",
+      "http://a:/",
+      "",
+      "#",
+      "?",
+      "urn:isbn:0451450523",
+      "http://example.com/a%20b",
+      "http://example.com/ä",
+      "http://example.com/a b",
+      "mailto:a@b.example",
+      "http://[v1.fe]/",
+      "http://192.0.2.16:80/",
+      "http://[2001:db8::7]/c=GB",
+      "../a/./b",
+      "a{b}|c",
+      "http://usér@höst/",
+      "x:'quoted'",
+      "%41",
     ]) {
       assert.isTrue(admits(anyUri, "u", value), value);
     }
-    for (const value of ["a%zz", "http://[::1", "1a:b", "a?[", " a:b"]) {
+    for (const value of [
+      "a%zz",
+      "http://[::1",
+      "1a:b",
+      "a?[",
+      " a:b",
+      "http://[zz]/",
+      "a#[x]",
+      "a%",
+      "a%4",
+      "http://[::1]x/",
+      "http://a:b/",
+      "a:b#c#d",
+      "http://[1:2:3:4:5:6:7:8:9]/",
+      "http://[v.x]/",
+      "a[b",
+      "/a]b",
+      "%zz",
+    ]) {
       assert.isFalse(admits(anyUri, "u", value), value);
     }
   });
