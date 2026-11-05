@@ -59,6 +59,8 @@ import {
 import * as patterns from "#pantry/schema/patterns.ts";
 import { FLAGS, handleOf, KindEnters } from "#pantry/schema/seed/ancestry.ts";
 import type { Flag } from "#pantry/schema/seed/ancestry.ts";
+import { classifyAttribute, classifyElement, scopeOf } from "#pantry/import/wildcard.ts";
+import type { Scope } from "#pantry/import/wildcard.ts";
 import { exportCharset } from "@qti-pie/crust/charset.ts";
 import type { Child, Element, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
 
@@ -393,8 +395,6 @@ export const spelledInteger = (
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
-const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
-
 const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
 
 /**
@@ -484,18 +484,31 @@ export const kindOf = (
 };
 
 /**
- * The first element or attribute of `element`'s subtree that no registry models, in document order.
- * An attribute in the XML namespace is modeled when its kind's registry lists its prefixed name
- * (`xml:lang`, `xml:base`); any other `xml:` name is not.
+ * The kind an element is under a parent of kind `parent`: `kindOf`'s answer, or inside wildcard
+ * content the classification of `wildcard.ts`.
+ */
+const classified = (
+  scope: Scope,
+  element: Element,
+  parent: Option.Option<NodeKindHandle>,
+): Option.Option<NodeKindHandle> =>
+  classifyElement(scope, element, parent, kindOf(element, parent));
+
+/**
+ * The first element or attribute of `element`'s subtree that no registry models and no wildcard
+ * admits, in document order. An attribute in the XML namespace is modeled when its kind's registry
+ * lists its prefixed name (`xml:lang`, `xml:base`); inside wildcard content an attribute is
+ * classified by `wildcard.ts`.
  * An element whose ancestry no `Ancestry` handle names is refused as an element: it sits inside a
  * combination of flags the model cannot hold.
  */
 const firstUnmodeled = (
+  scope: Scope,
   element: Element,
   parent: Option.Option<{ readonly kind: NodeKindHandle; readonly name: string }>,
   flags: readonly Flag[],
 ): Option.Option<UnmodeledVocabulary> => {
-  const kind = kindOf(element, parent.pipe(Option.map((above) => above.kind)));
+  const kind = classified(scope, element, parent.pipe(Option.map((above) => above.kind)));
   if (Option.isNone(kind) || Option.isNone(ancestryOf(flags))) {
     return Option.some(
       new UnmodeledVocabulary({
@@ -507,13 +520,11 @@ const firstUnmodeled = (
   }
 
   const own = new Set(rowsByHandle.get(kind.value)?.attributes);
-  const stray = element.attributes.find(
-    (attribute) =>
-      attribute.namespace !== xmlnsNamespace &&
-      !(attribute.namespace === xsiNamespace && attribute.local === "schemaLocation") &&
-      !(attribute.namespace === "" && own.has(attribute.local)) &&
-      !(attribute.namespace === xmlNamespace && own.has(`xml:${attribute.local}`)),
-  );
+  const stray = element.attributes.find((attribute) => {
+    const judged = classifyAttribute(scope, attribute, kind.value, own);
+
+    return judged === "stray" || (judged === "declared" && attribute.local !== "schemaLocation");
+  });
   if (stray !== undefined) {
     return Option.some(
       new UnmodeledVocabulary({
@@ -528,7 +539,7 @@ const firstUnmodeled = (
   const inside = enteredBy(flags, kind.value);
   for (const child of element.children) {
     if (child.kind === "element") {
-      const found = firstUnmodeled(child, here, inside);
+      const found = firstUnmodeled(scope, child, here, inside);
       if (Option.isSome(found)) {
         return found;
       }
@@ -566,9 +577,12 @@ const isWhitespaceRun = (value: string): value is Fact<typeof Ws>["value"] =>
  * Write the rows of one child of an element, or of the root, and for an element everything under it
  * in document order.
  *
- * The caller has checked the whole tree against the registries, so every element has a kind; one
- * that does not is a bug in that check, and is skipped here along with its subtree rather than
- * given a row.
+ * The caller has checked the whole tree against the registries and the wildcards, so every element
+ * has a kind; one that does not is a bug in that check, and is skipped here along with its subtree
+ * rather than given a row. An element inside wildcard content that no registry names is a `foreign`
+ * node: it gets the `Node` and `Edge` rows every element gets, under its prefix as written and its
+ * parent's ancestry, since `foreign` enters no flag, and stays in the node index for the modules
+ * that write its arm.
  */
 const walk = (
   child: Child,
@@ -580,6 +594,7 @@ const walk = (
   }>,
   position: number,
   input: TreeInput,
+  scope: Scope,
   walked: Walked,
   index: Map<Element, IndexedNode>,
 ): void => {
@@ -599,7 +614,7 @@ const walk = (
   let prefix = "";
 
   if (child.kind === "element") {
-    const found = kindOf(child, parent.pipe(Option.map((above) => above.kind)));
+    const found = classified(scope, child, parent.pipe(Option.map((above) => above.kind)));
     if (Option.isNone(found)) {
       return;
     }
@@ -679,7 +694,7 @@ const walk = (
 
   const here = Option.some({ ancestry, flags: enteredBy(flags, kind), id, kind });
   for (const [childPosition, grandchild] of child.children.entries()) {
-    walk(grandchild, here, childPosition, input, walked, index);
+    walk(grandchild, here, childPosition, input, scope, walked, index);
   }
 };
 
@@ -722,7 +737,8 @@ export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
   input: TreeInput,
   rows: Rows,
 ): Effect.fn.Return<{ rows: Rows; nodes: NodeIndex }, ImportRefused | UnmodeledVocabulary> {
-  const refusal = firstUnmodeled(doc.root, Option.none(), []);
+  const scope = scopeOf(input.root, input.version);
+  const refusal = firstUnmodeled(scope, doc.root, Option.none(), []);
   if (Option.isSome(refusal)) {
     return yield* refusal.value;
   }
@@ -801,7 +817,7 @@ export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
     whitespace: [],
   };
   const nodes = new Map<Element, IndexedNode>();
-  walk(doc.root, Option.none(), 0, input, walked, nodes);
+  walk(doc.root, Option.none(), 0, input, scope, walked, nodes);
 
   const rootNode = nodes.get(doc.root);
 
