@@ -162,19 +162,19 @@ const itemXml = (
   ].join("");
 
 /**
- * Write the text of a hand-built test: one nonlinear, individual part with one section that refers
- * to each item at `<identifier>.xml`.
+ * Write the text of a hand-built test: one nonlinear, individual part with one section that holds
+ * each item ref.
  *
  * @param identifier The test's identifier.
- * @param refs The item refs' identifiers, in document order.
+ * @param refs Each item ref's identifier with its `href`, in document order.
  * @returns The test's text.
  */
-const testXml = (identifier: string, refs: readonly string[]): string =>
+const testXml = (identifier: string, refs: readonly (readonly [string, string])[]): string =>
   [
     `<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}">`,
     '<qti-test-part identifier="part" navigation-mode="nonlinear" submission-mode="individual">',
     '<qti-assessment-section identifier="section" title="Section" visible="true">',
-    ...refs.map((ref) => `<qti-assessment-item-ref identifier="${ref}" href="${ref}.xml"/>`),
+    ...refs.map(([ref, href]) => `<qti-assessment-item-ref identifier="${ref}" href="${href}"/>`),
     "</qti-assessment-section></qti-test-part></qti-assessment-test>",
   ].join("");
 
@@ -196,7 +196,7 @@ const builtDelivery = Effect.fnUntraced(function* builtDelivery(
     encoder.encode(
       testXml(
         identifier,
-        items.map(([ref]) => ref),
+        items.map(([ref]) => [ref, `${ref}.xml`] as const),
       ),
     ),
   );
@@ -206,6 +206,33 @@ const builtDelivery = Effect.fnUntraced(function* builtDelivery(
   }
 
   return { items: accepted, test } satisfies Delivery;
+});
+
+/**
+ * Start a session of a one-item test whose item ref `first` has an `href` given, with an item
+ * opened at a location given under the key `first`.
+ *
+ * @param testLocation The test's location.
+ * @param href The item ref's `href`.
+ * @param itemLocation The item's location.
+ * @returns What `startTest` returned.
+ */
+const startedWith = Effect.fnUntraced(function* startedWith(
+  testLocation: string,
+  href: string,
+  itemLocation: string,
+) {
+  const encoder = new TextEncoder();
+  const test = yield* openTest(testLocation, encoder.encode(testXml("hrefs", [["first", href]])));
+  const item = yield* openItem(
+    itemLocation,
+    encoder.encode(itemXml("first", { choices: ["A", "B"], defaultValue: false, shuffle: false })),
+  );
+
+  return startTest(test, new Map([["first", item]]), yield* configure({}), {
+    instance,
+    now: startedAt,
+  });
 });
 
 /**
@@ -378,30 +405,66 @@ describe("startTest", () => {
     "resolves an item ref's href against the test's location, so ../ names a document above it",
     () =>
       Effect.gen(function* dottedHref() {
-        const encoder = new TextEncoder();
-        const test = yield* openTest(
-          "tests/nested/up.xml",
-          encoder.encode(
-            testXml("up", ["first"]).replace('href="first.xml"', 'href="../first.xml"'),
+        assert.isTrue(
+          Result.isSuccess(
+            yield* startedWith("tests/nested/up.xml", "../first.xml", "tests/first.xml"),
           ),
         );
-        const xml = itemXml("first", { choices: ["A", "B"], defaultValue: false, shuffle: false });
-        const above = yield* openItem("tests/first.xml", encoder.encode(xml));
-        const beside = yield* openItem("tests/nested/first.xml", encoder.encode(xml));
-        const configuration = yield* configure({});
-        const context = { instance, now: startedAt };
-
-        assert.isTrue(
-          Result.isSuccess(startTest(test, new Map([["first", above]]), configuration, context)),
-        );
-        assert.deepStrictEqual(
+        assert.strictEqual(
           failureTagged(
-            startTest(test, new Map([["first", beside]]), configuration, context),
+            yield* startedWith("tests/nested/up.xml", "../first.xml", "tests/nested/first.xml"),
             "TestNotDeliverable",
           ).expected,
           "tests/first.xml",
         );
       }),
+  );
+
+  it.effect(
+    "decodes an href's percent escapes as the manifest does, so a%20b.xml finds the file a b.xml",
+    () =>
+      Effect.gen(function* escapedHref() {
+        assert.isTrue(
+          Result.isSuccess(yield* startedWith("tests/hrefs.xml", "a%20b.xml", "tests/a b.xml")),
+        );
+        assert.strictEqual(
+          failureTagged(
+            yield* startedWith("tests/hrefs.xml", "a%20b.xml", "tests/a%20b.xml"),
+            "TestNotDeliverable",
+          ).expected,
+          "tests/a b.xml",
+        );
+      }),
+  );
+
+  it.effect("sets an href's fragment and query aside", () =>
+    Effect.gen(function* fragmentHref() {
+      assert.isTrue(
+        Result.isSuccess(
+          yield* startedWith("tests/hrefs.xml", "first.xml#part", "tests/first.xml"),
+        ),
+      );
+      assert.isTrue(
+        Result.isSuccess(yield* startedWith("tests/hrefs.xml", "first.xml?v=1", "tests/first.xml")),
+      );
+    }),
+  );
+
+  it.effect("leaves a segment with a malformed escape as written, as the manifest does", () =>
+    Effect.gen(function* malformedHref() {
+      assert.isTrue(
+        Result.isSuccess(
+          yield* startedWith("tests/hrefs.xml", "a%20b%zz.xml", "tests/a%20b%zz.xml"),
+        ),
+      );
+      assert.strictEqual(
+        failureTagged(
+          yield* startedWith("tests/hrefs.xml", "a%20b%zz.xml", "tests/a b%zz.xml"),
+          "TestNotDeliverable",
+        ).expected,
+        "tests/a%20b%zz.xml",
+      );
+    }),
   );
 
   it.effect("refuses a session instance checkInstance refuses, and an invalid now", () =>

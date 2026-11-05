@@ -253,13 +253,13 @@ const placeOf = (test: Test, ref: string): Result.Result<Place, UnknownItemRef> 
   );
 
 /**
- * The parts of a URI reference (RFC 3986 §3), each absent when the reference does not have it.
+ * The parts of a URI reference (RFC 3986 §3) that locate a document: its scheme and authority,
+ * each absent when the reference does not have it, and its path. A query and a fragment locate
+ * nothing in a document's location, so they are set aside.
  */
 interface Reference {
   readonly authority: string | undefined;
-  readonly fragment: string | undefined;
   readonly path: string;
-  readonly query: string | undefined;
   readonly scheme: string | undefined;
 }
 
@@ -269,58 +269,65 @@ interface Reference {
  * @see https://www.rfc-editor.org/rfc/rfc3986#appendix-B
  */
 const referenceParts =
-  /^(?:(?<scheme>[^:/?#]+):)?(?:\/\/(?<authority>[^/?#]*))?(?<path>[^?#]*)(?:\?(?<query>[^#]*))?(?:#(?<fragment>.*))?$/su;
+  /^(?:(?<scheme>[^:/?#]+):)?(?:\/\/(?<authority>[^/?#]*))?(?<path>[^?#]*)(?:\?[^#]*)?(?:#.*)?$/su;
 
 /**
- * Split a URI reference into its parts.
+ * Split a URI reference into the parts that locate a document.
  *
  * @param value The reference.
- * @returns Its parts.
+ * @returns Its scheme, authority and path; its query and fragment are dropped.
  */
 const parseReference = (value: string): Reference => {
   const parts = referenceParts.exec(value)?.groups ?? {};
 
-  return {
-    authority: parts["authority"],
-    fragment: parts["fragment"],
-    path: parts["path"] ?? "",
-    query: parts["query"],
-    scheme: parts["scheme"],
-  };
+  return { authority: parts["authority"], path: parts["path"] ?? "", scheme: parts["scheme"] };
 };
 
 /**
- * Remove the `.` and `..` segments of a path (RFC 3986 §5.2.4).
+ * Decode a path segment's percent escapes, leaving a segment whose escapes are malformed as it is
+ * written, as the manifest reader decodes a file's `href`.
+ *
+ * @param segment The segment.
+ * @returns The segment decoded.
+ */
+const decodeSegment = (segment: string): string =>
+  Result.getOrElse(
+    Result.try(() => decodeURIComponent(segment)),
+    () => segment,
+  );
+
+/**
+ * Remove the `.` and `..` segments of a path (RFC 3986 §5.2.4), each segment read through a
+ * decoding first.
  *
  * A host may name a document by a relative path, such as `tests/a.xml`, which RFC 3986 never gives
  * a base. Such a path is read as though it began at a root, so a `..` that would rise above its
- * first segment is dropped, as one rising above a root is, and the result stays relative.
+ * first segment is dropped, as one rising above a root is, and the result stays relative. Segments
+ * are decoded before the dot segments are removed, as the manifest reader does, so `%2E%2E` climbs
+ * as `..` does on both sides.
  *
  * @param path The path.
- * @returns The path without dot segments.
+ * @param decode How each segment is read.
+ * @returns The path without dot segments, its segments decoded.
  * @see https://www.rfc-editor.org/rfc/rfc3986#section-5.2.4
  */
-const removeDotSegments = (path: string): string => {
+const removeDotSegments = (path: string, decode: (segment: string) => string): string => {
   const rooted = path.startsWith("/");
+  const written = (rooted ? path.slice(1) : path).split("/").map(decode);
   const output: string[] = [];
-  let input = rooted ? path : `/${path}`;
-  while (input !== "") {
-    if (input.startsWith("/./") || input === "/.") {
-      input = `/${input.slice(3)}`;
-    } else if (input.startsWith("/../") || input === "/..") {
-      input = `/${input.slice(4)}`;
+  for (const [index, segment] of written.entries()) {
+    if (segment === "..") {
       output.pop();
-    } else {
-      const end = input.indexOf("/", 1);
-      const segment = end === -1 ? input : input.slice(0, end);
+    }
+
+    if (segment !== "." && segment !== "..") {
       output.push(segment);
-      input = input.slice(segment.length);
+    } else if (index === written.length - 1) {
+      output.push("");
     }
   }
 
-  const joined = output.join("");
-
-  return rooted ? joined : joined.slice(1);
+  return `${rooted ? "/" : ""}${output.join("/")}`;
 };
 
 /**
@@ -336,22 +343,8 @@ const mergePaths = (base: Reference, path: string): string =>
     : `${base.path.slice(0, base.path.lastIndexOf("/") + 1)}${path}`;
 
 /**
- * Write a reference's parts back as one string (RFC 3986 §5.3).
- *
- * @param reference The parts.
- * @returns The reference.
- */
-const recompose = (reference: Reference): string =>
-  [
-    reference.scheme === undefined ? "" : `${reference.scheme}:`,
-    reference.authority === undefined ? "" : `//${reference.authority}`,
-    reference.path,
-    reference.query === undefined ? "" : `?${reference.query}`,
-    reference.fragment === undefined ? "" : `#${reference.fragment}`,
-  ].join("");
-
-/**
- * Resolve a reference against a base (RFC 3986 §5.2.2), without normalising either.
+ * Resolve a reference against a base (RFC 3986 §5.2.2), its path merged and not yet free of dot
+ * segments.
  *
  * @param base The base.
  * @param reference The reference.
@@ -360,41 +353,46 @@ const recompose = (reference: Reference): string =>
  */
 const resolve = (base: Reference, reference: Reference): Reference => {
   if (reference.scheme !== undefined) {
-    return { ...reference, path: removeDotSegments(reference.path) };
+    return reference;
   }
 
   if (reference.authority !== undefined) {
-    return { ...reference, path: removeDotSegments(reference.path), scheme: base.scheme };
+    return { ...reference, scheme: base.scheme };
   }
 
-  if (reference.path === "") {
-    return { ...base, fragment: reference.fragment, query: reference.query ?? base.query };
+  if (reference.path === "" || reference.path.startsWith("/")) {
+    return { ...base, path: reference.path === "" ? base.path : reference.path };
   }
 
-  return {
-    ...base,
-    fragment: reference.fragment,
-    path: removeDotSegments(
-      reference.path.startsWith("/") ? reference.path : mergePaths(base, reference.path),
-    ),
-    query: reference.query,
-  };
+  return { ...base, path: mergePaths(base, reference.path) };
 };
 
 /**
- * Give the document an item ref names: its `href` resolved against the test document's location,
- * as RFC 3986 resolves a reference against its base.
+ * Give the document an item ref names: its `href` resolved against the test document's location
+ * as RFC 3986 §5.2 resolves a reference against its base, with its query and fragment set aside.
  *
- * A package names each document by the package's location, a `/` and the document's path in the
- * package, so an item ref's document there is the item file's location. Neither side is
- * percent-decoded: an `href` names the document whose location is written the same way.
+ * A package keys each file by its real name and names its document by the package's location, a
+ * `/` and that name, and its manifest reader decodes each segment of a file's `href`, so
+ * `items/a%20b.xml` names the file `items/a b.xml`. A target without a scheme or an authority is
+ * such a location, so each of its path segments is decoded the same way, a segment with a
+ * malformed escape left as written. A target with a scheme or an authority is a URI, kept as
+ * written, as the manifest reader keeps an absolute `href`.
  *
  * @param test The test.
  * @param ref The item ref.
  * @returns The location of the document the ref names.
  */
-const namedDocument = (test: Test, ref: ItemRef): string =>
-  recompose(resolve(parseReference(test.document), parseReference(ref.href)));
+const namedDocument = (test: Test, ref: ItemRef): string => {
+  const target = resolve(parseReference(test.document), parseReference(ref.href));
+  const isLocation = target.scheme === undefined && target.authority === undefined;
+  const path = removeDotSegments(target.path, isLocation ? decodeSegment : (segment) => segment);
+
+  return [
+    target.scheme === undefined ? "" : `${target.scheme}:`,
+    target.authority === undefined ? "" : `//${target.authority}`,
+    path,
+  ].join("");
+};
 
 /**
  * Find the accepted item the host passed for an item ref, and check it is the ref's.
