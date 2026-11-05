@@ -8,10 +8,10 @@ import {
   uuid,
   v,
 } from "@bjornpagen/grizzle";
-import type { Uuid } from "@bjornpagen/grizzle";
+import type { SerializationFailure, ServerError, Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, it as plainIt, layer } from "@effect/vitest";
-import { Clock, Effect, Fiber, Layer, Ref, Result, Schedule, Schema } from "effect";
+import { Clock, Effect, Fiber, Layer, Ref, Result, Schedule } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, inject } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
@@ -155,33 +155,53 @@ const accepted = (dir: string) =>
 
 const fixture = (name: FixtureName) => materialize(name);
 
+const serializationReason = {
+  _tag: "SerializationFailure",
+  message: "PostgreSQL found no serial order of this transaction and a concurrent one",
+};
+
+// SAFETY: Grizzle exports `SerializationFailure` as a type only (`adapter/public/errors.ts:57`;
+// findings row 21), so no public constructor builds one, and a constructor checks nothing its type
+// does not. The plain fields of the class at `adapter/errors/failures.ts:544-547` stand for it:
+// `TransientFailure` reads its reason only through `_tag` and `message`.
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+const serializationReasonAsType = serializationReason as SerializationFailure;
+
+const serverReport = {
+  _tag: "ServerError",
+  column: undefined,
+  constraint: undefined,
+  dataType: undefined,
+  detail: undefined,
+  hint: undefined,
+  message: "could not serialize access due to concurrent update",
+  schema: undefined,
+  sqlstate: "40001",
+  table: undefined,
+};
+
+// SAFETY: Grizzle exports `ServerError` as a type only (`adapter/public/errors.ts:58`; findings
+// row 21), and its `sqlstate` is a branded `Sqlstate` with no public parse
+// (`engine/src/core/sqlstate.ts:5`). The plain fields of the class at
+// `adapter/errors/failures.ts:34-44` stand for it: the code under test reads only `_tag`.
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+const serverReportAsType = serverReport as ServerError;
+
 /**
- * Grizzle exports a `TransientFailure`'s reason and server report as types only, so the failure a
- * serializable transaction meets is built by decoding its fields.
+ * The failure a serializable transaction meets: a `TransientFailure` built with `new` over a
+ * `SerializationFailure` reason and a `ServerError` report, each asserted above from its plain
+ * fields.
  */
-const serializationFailure = Schema.decodeUnknownSync(TransientFailure)({
-  _tag: "TransientFailure",
-  error: {
-    _tag: "ServerError",
-    column: undefined,
-    constraint: undefined,
-    dataType: undefined,
-    detail: undefined,
-    hint: undefined,
-    message: "could not serialize access due to concurrent update",
-    schema: undefined,
-    sqlstate: "40001",
-    table: undefined,
-  },
-  reason: { _tag: "SerializationFailure" },
+const serializationFailure = new TransientFailure({
+  error: serverReportAsType,
+  reason: serializationReasonAsType,
 });
 
 /**
- * The failure grizzle's compiler gives a program over its `sqlBytes` budget, built by decoding a
- * `CompileError` the engine made, since the reason's schema refuses an object literal.
+ * The failure grizzle's compiler gives a program over its `sqlBytes` budget: an `ExecutionFailure`
+ * built with `new` over a `CompileError` the engine's own factory made.
  */
-const budgetFailure = Schema.decodeUnknownSync(ExecutionFailure)({
-  _tag: "ExecutionFailure",
+const budgetFailure = new ExecutionFailure({
   reason: CompileError.make({
     _tag: "ResourceBound",
     at: { label: "ChangeSet", path: [], site: undefined },

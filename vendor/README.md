@@ -3,7 +3,7 @@
 The two [grizzle](https://github.com/bjornpagen/grizzle) tarballs `@qti-pie/pantry` depends on.
 
 grizzle is not on npm yet. These tarballs come from `pnpm pack` on a local clone of the repository, built from trunk
-commit `a1d5af193cee117ab481f5897edd41101ff5d679`, so the package installs as the npm release will.
+commit `ee3b5fca4b5b72bb042c6ce56d31d5ed4c70759b`, so the package installs as the npm release will.
 
 grizzle is Bjorn Pagen's. Its repository licenses it under 0BSD (`LICENSE`: "Permission to use, copy, modify,
 and/or distribute this software for any purpose with or without fee is hereby granted"), and the tarballs are
@@ -11,8 +11,8 @@ redistributed here under that license, with the author's agreement. The rest of 
 
 | Tarball                                      | Package                      | Source                          |
 | -------------------------------------------- | ---------------------------- | ------------------------------- |
-| `bjornpagen-grizzle-1.0.0-beta.0.tgz`        | `@bjornpagen/grizzle`        | `packages/grizzle` at `a1d5af1` |
-| `bjornpagen-grizzle-engine-1.0.0-beta.0.tgz` | `@bjornpagen/grizzle-engine` | `packages/engine` at `a1d5af1`  |
+| `bjornpagen-grizzle-1.0.0-beta.0.tgz`        | `@bjornpagen/grizzle`        | `packages/grizzle` at `ee3b5fc` |
+| `bjornpagen-grizzle-engine-1.0.0-beta.0.tgz` | `@bjornpagen/grizzle-engine` | `packages/engine` at `ee3b5fc`  |
 
 `packages/pantry` depends on the grizzle tarball by path. The grizzle tarball depends on the engine by version, and
 `pnpm-workspace.yaml` overrides that version to the engine tarball.

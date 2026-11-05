@@ -39,7 +39,7 @@ every item and test; they are stored and round-tripped, never run.
   modeled as tightly as the QTI elements themselves, as relations and rules, rather than refused or stored as opaque
   text. Content that is not valid QTI 3.0 is still refused.
 - **Local only.** Node on the local grizzle cluster. No Cloudflare, no deploy.
-- **Toolchain.** pnpm, Effect `4.0.7`, Vite+, and the lint, format and TypeScript rules carried over from the
+- **Toolchain.** pnpm, Effect `4.1.2`, Vite+, and the lint, format and TypeScript rules carried over from the
   Cloudflare monorepo template. See [AGENTS.md](../AGENTS.md).
 - **Location.** `packages/pantry` in this workspace, as `@qti-pie/pantry`.
 
