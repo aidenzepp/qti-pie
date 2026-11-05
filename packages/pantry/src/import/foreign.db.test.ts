@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Result } from "effect";
+import { Effect, FileSystem, Layer, Option, Result, Schema } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
@@ -49,27 +49,15 @@ const refused: readonly (readonly [FixtureName, Rule])[] = [
 ];
 
 /**
- * The rows an apply added to one relation.
+ * An accepted apply's answer: the rows added to each relation. The apply reports each count as a
+ * `bigint`.
  */
-interface Count {
-  readonly added: number;
-  readonly relation: string;
-}
+const Accepted = Schema.Struct({
+  counts: Schema.Array(Schema.Struct({ added: Schema.BigInt, relation: Schema.String })),
+  kind: Schema.Literal("accepted"),
+});
 
-/**
- * Whether an apply's answer is `accepted`, which carries the rows added per relation.
- *
- * @param outcome - What `db.apply` answered.
- * @returns True for `accepted`.
- */
-const isAccepted = (
-  outcome: unknown,
-): outcome is { readonly counts: readonly Count[]; readonly kind: "accepted" } =>
-  typeof outcome === "object" &&
-  outcome !== null &&
-  "kind" in outcome &&
-  outcome.kind === "accepted" &&
-  "counts" in outcome;
+const decodeAccepted = Schema.decodeUnknownOption(Accepted);
 
 /**
  * Import a fixture, count the foreign rows its apply added, export it to `work/export/foreign/`
@@ -84,17 +72,19 @@ const roundTrip = (name: FixtureName) =>
     const fs = yield* FileSystem.FileSystem;
     const source = yield* materialize(name);
     const { rows } = yield* readRows(source);
-    const added = new Map<string, number>();
+    const added = new Map<string, bigint>();
     const id = yield* importPackage(source, {
       wrapApply: (apply) =>
         apply.pipe(
           Effect.tap((outcome) =>
-            Effect.sync(() => {
-              if (isAccepted(outcome)) {
-                for (const count of outcome.counts) {
-                  added.set(count.relation, (added.get(count.relation) ?? 0) + count.added);
-                }
-              }
+            Option.match(decodeAccepted(outcome), {
+              onNone: () => Effect.void,
+              onSome: ({ counts }) =>
+                Effect.sync(() => {
+                  for (const count of counts) {
+                    added.set(count.relation, (added.get(count.relation) ?? 0n) + count.added);
+                  }
+                }),
             }),
           ),
         ),
@@ -133,8 +123,8 @@ describe.skipIf(!hasLease)(
                 expected.attributes,
                 `${name}: ForeignAttribute rows`,
               );
-              assert.strictEqual(added.get("ForeignElement") ?? 0, elements);
-              assert.strictEqual(added.get("ForeignAttribute") ?? 0, attributes);
+              assert.strictEqual(added.get("ForeignElement") ?? 0n, BigInt(elements));
+              assert.strictEqual(added.get("ForeignAttribute") ?? 0n, BigInt(attributes));
               assert.isAbove(report.length, 0);
               assert.strictEqual(
                 report.filter((item) => item.outcome.kind === "differs").length,
