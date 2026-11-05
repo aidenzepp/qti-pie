@@ -1052,9 +1052,18 @@ const variablePattern = new RegExp(patterns.integerOrVariableString, "u");
 
 /**
  * `varref-copy`: a `PrintedVariableVarRef` row exists exactly for a `base` or `index` whose value
- * is a variable name and not an integer, and names that variable.
+ * is a variable name and not an integer, and names that variable. Only item and test roots are
+ * read: a section or stimulus root writes no such rows.
  */
 const varrefCopy = (rows: Rows): Finding => {
+  const roots = new Map(Rows.of(rows, Document).map((document) => [document.id, document.root]));
+  const trees = new Map(Rows.of(rows, Node).map((node) => [node.id, node.tree]));
+  const read = (node: Uuid): boolean => {
+    const tree = trees.get(node);
+    const root = tree === undefined ? undefined : roots.get(tree);
+
+    return root === undefined || root === "item" || root === "test";
+  };
   const spellings: readonly {
     readonly attribute: string;
     readonly node: string;
@@ -1070,17 +1079,16 @@ const varrefCopy = (rows: Rows): Finding => {
       node: row.node,
       value: row.value,
     })),
-  ];
+  ].filter(({ node }) => read(node));
   const named = new Map(
     spellings
       .filter(({ value }) => !integerPattern.test(value) && variablePattern.test(value))
       .map(({ attribute, node, value }) => [`${node} ${attribute}`, value]),
   );
   const references = new Map(
-    Rows.of(rows, PrintedVariableVarRef).map((row) => [
-      `${row.node} ${row.attribute}`,
-      row.identifier,
-    ]),
+    Rows.of(rows, PrintedVariableVarRef)
+      .filter((row) => read(row.node))
+      .map((row) => [`${row.node} ${row.attribute}`, row.identifier]),
   );
   for (const [key, identifier] of named) {
     if (references.get(key) !== identifier) {

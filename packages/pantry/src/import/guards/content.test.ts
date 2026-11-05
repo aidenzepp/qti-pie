@@ -607,6 +607,34 @@ describe("contentGuards varref-copy", () => {
   );
 });
 
+const asRoot = (rows: Rows, root: "section" | "stimulus") =>
+  edited(rows, Document, (facts) => facts.map((fact) => ({ ...fact, root })));
+
+describe("contentGuards varref-copy by root", () => {
+  const body = `<p><qti-printed-variable identifier="VAR" base="VAR"/></p>`;
+
+  it.effect("reads no printed variable under a section or stimulus root", () =>
+    Effect.gen(function* otherRoots() {
+      const rows = yield* rowsOf("3.0.1", body);
+      const bare = edited(rows, PrintedVariableVarRef, () => []);
+      for (const root of ["section", "stimulus"] as const) {
+        yield* contentGuards(asRoot(bare, root));
+      }
+    }),
+  );
+
+  it.effect("still refuses the same printed variable under an item root", () =>
+    Effect.gen(function* itemRoot() {
+      const rows = yield* rowsOf("3.0.1", body);
+      yield* refusalOfRows(
+        "varref-copy",
+        edited(rows, PrintedVariableVarRef, () => []),
+        "VAR",
+      );
+    }),
+  );
+});
+
 describe("contentGuards on a test root", () => {
   it.effect("refuses a test document with no title as an item's guards do", () =>
     Effect.gen(function* testRequired() {
