@@ -3,6 +3,7 @@ import { Effect, Option, Result } from "effect";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
+import type { PartRow } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 
 /**
@@ -184,6 +185,55 @@ describe("applyPart, I1", () => {
         ),
       );
       assert.isFalse(Object.hasOwn(result.attrs, "class"));
+    }),
+  );
+});
+
+/**
+ * A test-only row of a `button` part whose `type` is defaulted to `button` and never merged, as a
+ * navigation part's is: the Notice's row with a `button` element any tag may replace.
+ */
+const buttonRow: PartRow = {
+  ...rowFor("item", "notice"),
+  defaults: { type: "button" },
+  element: "button",
+  merged: ["disabled"],
+  tagClass: "any",
+};
+
+/**
+ * The button row's attributes, as a connect function computes them: its marker only.
+ */
+const buttonProps: Attributes = { "data-slot": buttonRow.slot };
+
+describe("applyPart, a row's defaults", () => {
+  it.effect("writes a default onto the default element on the fast path", () =>
+    Effect.gen(function* defaultsOnFastPath() {
+      const result = yield* Effect.fromResult(applyPart(buttonRow, buttonProps, [text("Next")]));
+      assert.strictEqual(result.tag, "button");
+      assert.deepStrictEqual(result.attrs, { "data-slot": buttonRow.slot, type: "button" });
+    }),
+  );
+
+  it.effect(
+    "keeps a replacement's own attributes over the defaults, and writes the props over both",
+    () =>
+      Effect.gen(function* replacementOverDefaults() {
+        const replacement = returning(h("button", { name: "n", type: "submit", value: "v" }));
+        const result = yield* Effect.fromResult(applyPart(buttonRow, buttonProps, [], replacement));
+        assert.deepStrictEqual(result.attrs, {
+          "data-slot": buttonRow.slot,
+          name: "n",
+          type: "submit",
+          value: "v",
+        });
+      }),
+  );
+
+  it.effect("writes a default a replacement leaves out", () =>
+    Effect.gen(function* defaultUnderReplacement() {
+      const result = yield* Effect.fromResult(applyPart(buttonRow, buttonProps, [], as("button")));
+      assert.deepStrictEqual(result.attrs, { "data-slot": buttonRow.slot, type: "button" });
     }),
   );
 });

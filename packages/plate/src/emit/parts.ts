@@ -79,6 +79,15 @@ export type TagClass =
  */
 export interface PartRow {
   /**
+   * The attributes the part carries unless something sets them: written onto the default element,
+   * and under a replacement's own attributes on a swap, so a replacement may override each one
+   * (`type="button"` on a navigation button).
+   *
+   * A default is never in {@link merged}, which I1 writes over a replacement's; `parts.test.ts`
+   * holds the two apart.
+   */
+  readonly defaults: Readonly<Record<string, string>>;
+  /**
    * The default element's local name.
    */
   readonly element: string;
@@ -371,6 +380,7 @@ const admits = {
  */
 const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
   {
+    defaults: {},
     element: "qti-assessment-item",
     interaction: "item",
     listOwner: false,
@@ -379,6 +389,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "flow-container",
   },
   {
+    defaults: {},
     element: "section",
     interaction: "item",
     listOwner: false,
@@ -387,6 +398,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "flow-container",
   },
   {
+    defaults: {},
     element: "h1",
     interaction: "item",
     listOwner: false,
@@ -395,6 +407,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "heading",
   },
   {
+    defaults: {},
     element: "ul",
     interaction: "item",
     listOwner: false,
@@ -403,6 +416,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "list",
   },
   {
+    defaults: {},
     element: "li",
     interaction: "item",
     listOwner: false,
@@ -411,6 +425,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "li",
   },
   {
+    defaults: {},
     element: "span",
     interaction: "item",
     listOwner: false,
@@ -419,6 +434,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "phrasing-container",
   },
   {
+    defaults: {},
     element: "fieldset",
     interaction: "choice-interaction",
     listOwner: false,
@@ -427,6 +443,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "fieldset",
   },
   {
+    defaults: {},
     element: "qti-prompt",
     interaction: "choice-interaction",
     listOwner: false,
@@ -435,6 +452,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "prompt",
   },
   {
+    defaults: {},
     element: "ul",
     interaction: "choice-interaction",
     listOwner: true,
@@ -443,6 +461,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "choice-list",
   },
   {
+    defaults: {},
     element: "li",
     interaction: "choice-interaction",
     listOwner: false,
@@ -451,6 +470,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "choice-item",
   },
   {
+    defaults: {},
     element: "input",
     interaction: "choice-interaction",
     listOwner: false,
@@ -470,6 +490,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "native-input",
   },
   {
+    defaults: {},
     element: "span",
     interaction: "choice-interaction",
     listOwner: false,
@@ -478,6 +499,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "any",
   },
   {
+    defaults: {},
     element: "label",
     interaction: "choice-interaction",
     listOwner: false,
@@ -486,6 +508,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "any",
   },
   {
+    defaults: {},
     element: "qti-text-entry-interaction",
     interaction: "text-entry-interaction",
     listOwner: false,
@@ -494,6 +517,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "phrasing-container",
   },
   {
+    defaults: {},
     element: "input",
     interaction: "text-entry-interaction",
     listOwner: false,
@@ -516,6 +540,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "text-input",
   },
   {
+    defaults: {},
     element: "qti-extended-text-interaction",
     interaction: "extended-text-interaction",
     listOwner: false,
@@ -524,6 +549,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "flow-container",
   },
   {
+    defaults: {},
     element: "qti-prompt",
     interaction: "extended-text-interaction",
     listOwner: false,
@@ -532,6 +558,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "prompt",
   },
   {
+    defaults: {},
     element: "textarea",
     interaction: "extended-text-interaction",
     listOwner: false,
