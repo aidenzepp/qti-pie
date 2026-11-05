@@ -16,7 +16,7 @@ import { trimXmlSpace } from "#plate/model/values.ts";
 /**
  * The eleven QTI base types, as the `base-type` attribute spells them.
  *
- * Phase 1 models eight of them; a declaration of `point`, `duration` or `file` is a mark (see
+ * The value model holds nine of them; a declaration of `duration` or `file` is a mark (see
  * {@link renders}).
  */
 export const baseTypes = [
@@ -171,7 +171,7 @@ export interface Renders {
   readonly engine: readonly string[];
   /**
    * The features recorded on the verdict with no body notice. A declaration the model does not hold
-   * carries one: its base type (`point`, `duration`, `file`, or `base-type=""` when it has none) or
+   * carries one: its base type (`duration`, `file`, or `base-type=""` when it has none) or
    * `cardinality="record"`. Beyond these, a `qti-*` element outside the item body and outside
    * `elements` is a mark keyed by its own name, response processing by a template URI outside the
    * built-ins is a mark keyed `template="<uri>"`, and inline response processing with an element
@@ -245,11 +245,6 @@ export const renders = {
       feature: "qti-template-declaration",
       on: ["qti-template-declaration"],
       when: { kind: "element" },
-    },
-    {
-      feature: 'base-type="point"',
-      on: declarations,
-      when: { kind: "attribute-value", name: "base-type", value: "point" },
     },
     {
       feature: 'base-type="duration"',
