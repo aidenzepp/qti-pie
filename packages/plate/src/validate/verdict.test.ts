@@ -6,6 +6,7 @@ import {
   el,
   entity,
   mathmlNamespace,
+  qtiNamespace,
   text,
   xincludeNamespace,
   xmlNamespace,
@@ -381,10 +382,9 @@ describe("check", () => {
     }
   });
 
-  // An interim, not a reading: reading 6 covers only a nested QTI root, and rule `5b8ee08b`
-  // validates a known QTI element inside lax wildcard content as QTI. M1-R judges this Choice in
-  // the structural walk and the prose rules (the ledger's lax-wildcard deferral).
-  it("accepts a Choice inside a custom interaction, unsupported: phase 1 skips wildcard content", () => {
+  // A Choice is declared only locally in the XSD, so the custom interaction's lax wildcard passes
+  // over it: neither the walk nor the prose rules judge it, and its undeclared response is no fault.
+  it("accepts a Choice directly in a custom interaction, unsupported: the walk does not check it", () => {
     const vendor = el(
       "qti-choice-interaction",
       [attr("response-identifier", "VENDOR")],
@@ -401,6 +401,39 @@ describe("check", () => {
     );
 
     assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+  });
+
+  it("refuses a Choice in a div in a custom interaction bound to an undeclared response, at the path the walk names", () => {
+    const vendor = el(
+      "qti-choice-interaction",
+      [attr("response-identifier", "VENDOR")],
+      [
+        el("qti-simple-choice", [attr("identifier", "A")], [text("Yes")]),
+        el("qti-simple-choice", [attr("identifier", "B")], [text("No")]),
+      ],
+    );
+    const verdict = verdictOf(
+      item([
+        response("identifier", "single"),
+        body([
+          el(
+            "qti-custom-interaction",
+            [attr("response-identifier", "RESPONSE")],
+            [el("div", [], [vendor])],
+          ),
+        ]),
+      ]),
+    );
+
+    assert.deepStrictEqual(refusalsOf(verdict), [
+      {
+        location: {
+          kind: "path",
+          path: `${bodyPath}/qti-custom-interaction/div/qti-choice-interaction/@response-identifier`,
+        },
+        rule: "undeclared-response",
+      },
+    ]);
   });
 
   it("leaves an entity reference unchecked, in text and in an attribute value", () => {
@@ -467,7 +500,7 @@ describe("check", () => {
     ]);
   });
 
-  it("marks shuffle on the verdict with no notice in the body", () => {
+  it("[Q-2] accepts a shuffled Choice naming no unsupported feature, with no notice in the body", () => {
     const accepted = acceptedOf(
       verdictOf(
         item([
@@ -475,12 +508,10 @@ describe("check", () => {
           body([choiceInteraction([attr("shuffle", "true")])]),
         ]),
       ),
-      "accepted-with-unsupported",
+      "accepted",
     );
 
-    assert.deepStrictEqual(accepted.unsupported, [
-      { feature: 'shuffle="true"', path: `${bodyPath}/qti-choice-interaction`, shown: "mark" },
-    ]);
+    assert.deepStrictEqual(accepted.unsupported, []);
     assert.deepStrictEqual(outline(accepted.item.body), ["choice"]);
   });
 
@@ -627,6 +658,64 @@ describe("check, E3: attributes only a wildcard admits", () => {
     assert.deepStrictEqual(refusalsOf(refused), [
       { location: { kind: "path", path: `${bodyPath}/p/A` }, rule: "unknown-element" },
     ]);
+  });
+});
+
+/**
+ * Construct an `xsi:type` naming a QTI type through the prefix `q`.
+ *
+ * @param local The type's local name.
+ * @returns The attribute.
+ */
+const xsiType = (local: string): SourceAttribute => attr("type", `q:${local}`, xsiNamespace);
+
+describe("check, reading 47: xsi:type", () => {
+  it("accepts an item carrying valid xsi:type attributes, with no attribute: mark for them", () => {
+    const accepted = acceptedOf(
+      verdictOf(
+        item(
+          [body([el("p", [xsiType("HTMLTextDType")], [text("Hi")])], [xsiType("ItemBodyDType")])],
+          [attr("q", qtiNamespace, xmlnsNamespace), xsiType("AssessmentItemDType")],
+        ),
+      ),
+      "accepted",
+    );
+
+    assert.deepStrictEqual(accepted.unsupported, []);
+    assert.deepStrictEqual(outline(accepted.item.body), [{ p: ["Hi"] }]);
+  });
+
+  it("keeps what the governing type declares: a qti-null typed WeightDType earns no attribute: mark (AD-9)", () => {
+    const weighted = el("qti-null", [
+      xsiType("WeightDType"),
+      attr("identifier", "W"),
+      attr("value", "1"),
+    ]);
+    const verdict = verdictOf(
+      item(
+        [
+          score(),
+          body([el("p", [], [text("Hi")])]),
+          el(
+            "qti-response-processing",
+            [],
+            [el("qti-set-outcome-value", [attr("identifier", "SCORE")], [weighted])],
+          ),
+        ],
+        [attr("q", qtiNamespace, xmlnsNamespace)],
+      ),
+    );
+    // A qti-null is outside M1's engine, so the processing may earn its own marks; only the
+    // attribute marks are asserted.
+    const unsupported =
+      verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
+        ? verdict.accepted.unsupported
+        : assert.fail(`The verdict is ${verdict.verdict}, not an accepting one.`);
+
+    assert.deepStrictEqual(
+      unsupported.filter((mark) => mark.feature.startsWith("attribute:")),
+      [],
+    );
   });
 });
 
@@ -782,11 +871,11 @@ describe("check, the URL pass", () => {
 });
 
 describe("check, processing the model does not hold", () => {
-  it("accepts a point response's match_correct with a variable mark, not a refusal", () => {
+  it("accepts a duration response's match_correct with a variable mark, not a refusal", () => {
     const accepted = acceptedOf(
       verdictOf(
         item([
-          response("point", "single", [correct("10 10")]),
+          response("duration", "single", [correct("PT1M")]),
           score(),
           body([el("p", [], [text("Click the city.")])]),
           el("qti-response-processing", [
@@ -828,6 +917,30 @@ describe("acceptForTest", () => {
 });
 
 /**
+ * Construct a refusal of a named document at a location.
+ *
+ * @param rule The rule it breaks.
+ * @param document The document it refuses.
+ * @param location Where in the document it points.
+ * @param detail The facts its wording reads.
+ * @returns The refusal.
+ */
+const refusalAt = (
+  rule: RefusalRule,
+  document: string,
+  location: Location,
+  detail: Readonly<Record<string, string>> = {},
+): Refusal =>
+  new Refusal({
+    detail,
+    document,
+    location,
+    readerRule: Option.none(),
+    rule,
+    suggestion: Option.none(),
+  });
+
+/**
  * Construct a refusal of `item.xml` at the item root.
  *
  * @param rule The rule it breaks.
@@ -835,14 +948,7 @@ describe("acceptForTest", () => {
  * @returns The refusal.
  */
 const refusalOf = (rule: RefusalRule, detail: Readonly<Record<string, string>>): Refusal =>
-  new Refusal({
-    detail,
-    document: "item.xml",
-    location: { kind: "path", path: root },
-    readerRule: Option.none(),
-    rule,
-    suggestion: Option.none(),
-  });
+  refusalAt(rule, "item.xml", { kind: "path", path: root }, detail);
 
 /**
  * What remains of a Markdown sentence once its code spans are removed, and the spans' contents.
@@ -920,6 +1026,45 @@ describe("describeRefusal", () => {
     assert.include(spans, escapingValue);
   });
 
+  it("keeps the document, the path, the parser's message and the reader's detail inside code spans, whole", () => {
+    const sentences = {
+      "document as a whole": describeRefusal(
+        refusalAt("unknown-element", escapingValue, { kind: "document" }),
+      ),
+      "document at a path": describeRefusal(
+        refusalAt("unknown-element", escapingValue, { kind: "path", path: root }),
+      ),
+      "document at a position": describeRefusal(
+        refusalAt("unknown-element", escapingValue, { column: 3, kind: "position", line: 2 }),
+      ),
+      "document not QTI": describeRefusal(
+        refusalAt("not-qti-root", escapingValue, { kind: "document" }),
+      ),
+      "not-well-formed message": describeRefusal(
+        refusalAt(
+          "not-well-formed",
+          "item.xml",
+          { column: 3, kind: "position", line: 2 },
+          { message: escapingValue },
+        ),
+      ),
+      path: describeRefusal(
+        refusalAt("unknown-element", "item.xml", { kind: "path", path: escapingValue }),
+      ),
+      "reader-refused detail": describeRefusal(
+        refusalAt("reader-refused", "item.xml", { kind: "document" }, { detail: escapingValue }),
+      ),
+    };
+
+    for (const [where, sentence] of Object.entries(sentences)) {
+      const { outside, spans } = codeSpans(sentence);
+
+      assert.notInclude(outside, "![", where);
+      assert.notInclude(outside, "](", where);
+      assert.include(spans, escapingValue, where);
+    }
+  });
+
   it("keeps a value of spaces and other whitespace whole inside its code span", () => {
     for (const lexical of [" \t ", "  \t\t  ", " \u00A0 ", " \t", "\t ", "\t", "   "]) {
       const { spans } = codeSpans(
@@ -940,6 +1085,35 @@ describe("describeRefusal", () => {
 
     assert.notMatch(sentence, /[\n\r]/u);
     assert.notInclude(codeSpans(sentence).outside, "![");
+  });
+
+  it("cites the reading that refuses a child, and names QTI 3.0's schema only when none does", () => {
+    const cited = describeRefusal(
+      refusalOf("unknown-element", { element: "b", parent: "data", reading: "60" }),
+    );
+    const schema = describeRefusal(refusalOf("unknown-element", { element: "b", parent: "p" }));
+
+    assert.include(
+      cited,
+      "`data` may not hold `b`; XML Schema allows no such child there (reading 60).",
+    );
+    assert.notInclude(cited, "QTI 3.0's schema");
+    assert.include(schema, "`p` may not hold `b`; QTI 3.0's schema allows no such child there.");
+  });
+
+  it("names which operand of a qti-equal is not a single integer or float", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        element: "qti-equal",
+        expressionBaseType: "string",
+        expressionCardinality: "single",
+        operand: "2",
+      }),
+    );
+
+    assert.include(sentence, "Operand 2 of `qti-equal` is a single `string` value");
+    assert.include(sentence, "a single `integer` or `float`");
+    assert.notInclude(sentence, "outcome");
   });
 
   it("names the qti-map-response that needs a mapping, not a template", () => {

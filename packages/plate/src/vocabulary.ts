@@ -11,12 +11,13 @@
  * @module
  */
 import { Array as Arr, Option } from "effect";
+import { controlCap } from "#plate/control-cap.ts";
 import { trimXmlSpace } from "#plate/model/values.ts";
 
 /**
  * The eleven QTI base types, as the `base-type` attribute spells them.
  *
- * Phase 1 models eight of them; a declaration of `point`, `duration` or `file` is a mark (see
+ * The value model holds nine of them; a declaration of `duration` or `file` is a mark (see
  * {@link renders}).
  */
 export const baseTypes = [
@@ -49,6 +50,18 @@ export const cardinalities = ["single", "multiple", "ordered", "record"] as cons
 export type Cardinality = (typeof cardinalities)[number];
 
 /**
+ * The five shapes of a `qti-area-map-entry`, as its `shape` attribute spells them.
+ */
+// oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
+export const areaShapes = ["circle", "default", "ellipse", "poly", "rect"] as const;
+
+/**
+ * The shape of an area a point response is mapped by.
+ */
+// oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
+export type AreaShape = (typeof areaShapes)[number];
+
+/**
  * The QTI names of the three interactions M1 renders: Choice (Q-2), Text Entry (Q-20) and Extended
  * Text (Q-5).
  */
@@ -75,8 +88,10 @@ const textInteractions = ["qti-text-entry-interaction", "qti-extended-text-inter
 const declarations = ["qti-response-declaration", "qti-outcome-declaration"] as const;
 
 /**
- * The response-processing elements of phase 1's engine (spec §4.12): the eight elements it
- * evaluates and the three branches of `qti-response-condition`.
+ * The response-processing elements of the engine (spec §4.12): the ten elements it evaluates and
+ * the three branches of `qti-response-condition`. `qti-equal` runs in its default `exact`
+ * tolerance mode only; one in `absolute` or `relative` mode is a mark keyed
+ * `tolerance-mode="<mode>"`.
  *
  * An inline `qti-response-processing` that uses only these becomes a rule tree; one that uses any
  * other element is a mark keyed by that element's name.
@@ -93,13 +108,16 @@ const engine = [
   "qti-base-value",
   "qti-is-null",
   "qti-map-response",
+  "qti-map-response-point",
+  "qti-equal",
 ] as const;
 
 /**
- * The declarations an interaction renders with: the response declaration it binds must have one of
- * `baseTypes` and one of `cardinalities`.
+ * The rule on the declarations an interaction renders with: the response declaration it binds must
+ * have one of `baseTypes` and one of `cardinalities`. The form encoding's public `Binding` is
+ * another thing: how one response travels through the form.
  */
-export interface Binding {
+export interface BindingRule {
   readonly baseTypes: readonly BaseType[];
   readonly cardinalities: readonly Cardinality[];
 }
@@ -108,7 +126,7 @@ export interface Binding {
  * Extended Text's binding, which also limits the `format` it renders with: one of `formats`, or
  * none, which means `plain`.
  */
-export interface FormattedBinding extends Binding {
+export interface FormattedBindingRule extends BindingRule {
   readonly formats: readonly string[];
 }
 
@@ -122,6 +140,11 @@ export interface FormattedBinding extends Binding {
  * - `attribute-true`: the element's `xs:boolean` attribute `name` is true: `true` or `1` once its
  *   outer whitespace goes, as XSD reads it (reading Q8).
  * - `cardinality`: the response declaration the interaction binds has this cardinality.
+ * - `integer-above`: the element's attribute `name`, its outer whitespace gone, reads as an integer
+ *   greater than `limit`. A value that is not an integer never is.
+ * - `refused-pattern`: the element carries the attribute `name`, and the translator refuses its value
+ *   as an XML Schema regular expression (`translate` in `#plate/model/regex.ts`), so the pattern
+ *   cannot be checked.
  * - `template`: the element's `template` URI resolves to this built-in ({@link templateName}).
  * - `untyped`: the declaration carries no `base-type` and its cardinality is not `record`, the one
  *   cardinality that has none.
@@ -132,16 +155,19 @@ export type Condition =
   | { readonly kind: "attribute-value"; readonly name: string; readonly value: string }
   | { readonly kind: "attribute-true"; readonly name: string }
   | { readonly cardinality: Cardinality; readonly kind: "cardinality" }
+  | { readonly kind: "integer-above"; readonly limit: bigint; readonly name: string }
+  | { readonly kind: "refused-pattern"; readonly name: string }
   | { readonly kind: "template"; readonly name: TemplateName }
   | { readonly kind: "untyped" };
 
 /**
- * A feature phase 1 does not render, with the key the verdict and its notice name it by.
+ * The rule that finds a feature phase 1 does not render: the key the verdict and its notice name
+ * the feature by, the elements that can carry it, and the condition under which one does.
  *
  * `on` names the elements that can carry it by their QTI local name, or is `body` for every element
  * in the item body.
  */
-export interface Feature {
+export interface FeatureRule {
   readonly feature: string;
   readonly on: "body" | readonly string[];
   readonly when: Condition;
@@ -156,10 +182,16 @@ export interface Renders {
    * The interactions phase 1 renders, each with the binding it renders with.
    */
   readonly bindings: {
-    readonly "qti-choice-interaction": Binding;
-    readonly "qti-extended-text-interaction": FormattedBinding;
-    readonly "qti-text-entry-interaction": Binding;
+    readonly "qti-choice-interaction": BindingRule;
+    readonly "qti-extended-text-interaction": FormattedBindingRule;
+    readonly "qti-text-entry-interaction": BindingRule;
   };
+  /**
+   * The features shown as a notice in place of an interaction's Controls. The interaction is still
+   * built, every field held, and its Prompt renders; only its Controls give way to the notice, and
+   * the verdict lists the feature as one shown as a notice.
+   */
+  readonly controlNotices: readonly FeatureRule[];
   /**
    * The `qti-*` elements phase 1 renders or reads, the engine's included. Every element in the QTI
    * namespace without the `qti-` prefix is HTML and renders as itself.
@@ -171,20 +203,33 @@ export interface Renders {
   readonly engine: readonly string[];
   /**
    * The features recorded on the verdict with no body notice. A declaration the model does not hold
-   * carries one: its base type (`point`, `duration`, `file`, or `base-type=""` when it has none) or
+   * carries one: its base type (`duration`, `file`, or `base-type=""` when it has none) or
    * `cardinality="record"`. Beyond these, a `qti-*` element outside the item body and outside
    * `elements` is a mark keyed by its own name, response processing by a template URI outside the
-   * built-ins is a mark keyed `template="<uri>"`, and inline response processing with an element
-   * outside `engine` is a mark keyed by that element's name.
+   * built-ins is a mark keyed `template="<uri>"`, inline response processing with an element
+   * outside `engine` is a mark keyed by that element's name, and a `qti-equal` outside its `exact`
+   * tolerance mode is a mark keyed `tolerance-mode="<mode>"`.
    */
-  readonly marks: readonly Feature[];
+  readonly marks: readonly FeatureRule[];
   /**
    * The features shown as a notice in place of their interaction. Beyond these, a `qti-*` element
    * in the item body outside `elements` is a notice keyed by its own name, which covers the custom
    * interactions (Q-31, Q-32): accepted, not launched.
    */
-  readonly notices: readonly Feature[];
+  readonly notices: readonly FeatureRule[];
 }
+
+/**
+ * The least value a count attribute reading 46 names may hold, -2^63, the low end of the signed
+ * 64-bit range a `count-range` refusal names.
+ */
+export const leastCount = -9_223_372_036_854_775_808n;
+
+/**
+ * The greatest value a count attribute reading 46 names may hold, 2^63-1: such a count holds a
+ * signed 64-bit value, read exactly, and a greater one is refused (operator ruling D, 2026-11-04).
+ */
+export const greatestCount = 9_223_372_036_854_775_807n;
 
 /**
  * What phase 1 renders, reads, shows a notice for and marks, as data (spec §4.5).
@@ -200,14 +245,15 @@ export const renders = {
     },
     "qti-extended-text-interaction": {
       baseTypes: ["string", "integer", "float"],
-      cardinalities: ["single"],
-      formats: ["plain", "preformatted"],
+      cardinalities: ["single", "multiple", "ordered"],
+      formats: ["plain", "preformatted", "xhtml"],
     },
     "qti-text-entry-interaction": {
       baseTypes: ["string", "integer", "float"],
       cardinalities: ["single"],
     },
   },
+  controlNotices: [controlCap],
   elements: [
     "qti-assessment-item",
     "qti-response-declaration",
@@ -217,6 +263,8 @@ export const renders = {
     "qti-value",
     "qti-mapping",
     "qti-map-entry",
+    "qti-area-mapping",
+    "qti-area-map-entry",
     "qti-item-body",
     "qti-response-processing",
     ...interactionNames,
@@ -226,11 +274,6 @@ export const renders = {
   ],
   engine,
   marks: [
-    {
-      feature: 'shuffle="true"',
-      on: ["qti-choice-interaction"],
-      when: { kind: "attribute-true", name: "shuffle" },
-    },
     {
       feature: "string-identifier",
       on: textInteractions,
@@ -245,11 +288,6 @@ export const renders = {
       feature: "qti-template-declaration",
       on: ["qti-template-declaration"],
       when: { kind: "element" },
-    },
-    {
-      feature: 'base-type="point"',
-      on: declarations,
-      when: { kind: "attribute-value", name: "base-type", value: "point" },
     },
     {
       feature: 'base-type="duration"',
@@ -280,37 +318,20 @@ export const renders = {
       when: { kind: "attribute", name: "data-qti-suppress-tts" },
     },
     { feature: "data-ssml", on: "body", when: { kind: "attribute", name: "data-ssml" } },
-    {
-      feature: "map_response_point",
-      on: ["qti-response-processing"],
-      when: { kind: "template", name: "map_response_point" },
-    },
   ],
   notices: [
+    // A pattern the translator takes is checked. One it refuses keeps this notice and the item stays
+    // accepted: the schema types pattern-mask as xs:string, so such a pattern is unsupported, not
+    // invalid.
     {
       feature: "pattern-mask",
       on: textInteractions,
-      when: { kind: "attribute", name: "pattern-mask" },
-    },
-    {
-      feature: 'format="xhtml"',
-      on: ["qti-extended-text-interaction"],
-      when: { kind: "attribute-value", name: "format", value: "xhtml" },
+      when: { kind: "refused-pattern", name: "pattern-mask" },
     },
     {
       feature: 'cardinality="record"',
       on: textInteractions,
       when: { cardinality: "record", kind: "cardinality" },
-    },
-    {
-      feature: 'cardinality="multiple"',
-      on: ["qti-extended-text-interaction"],
-      when: { cardinality: "multiple", kind: "cardinality" },
-    },
-    {
-      feature: 'cardinality="ordered"',
-      on: ["qti-extended-text-interaction"],
-      when: { cardinality: "ordered", kind: "cardinality" },
     },
   ],
 } as const satisfies Renders;
@@ -335,13 +356,24 @@ export const templatePrefixes = [
 ] as const;
 
 /**
- * The response-processing templates phase 1 recognises by name: `match_correct` and `map_response`
- * run, and `map_response_point` is a mark.
+ * The response-processing templates the renderer recognises by name (reading 9.23 at head-cto's
+ * pick B, reading 51), each of which runs as the rule tree its file gives: the three canonical
+ * templates `match_correct`, `map_response` and `map_response_point`, and the Common Cartridge
+ * templates `CC2_match` (the rules of `match_correct`), `CC2_match_basic` and `CC2_map_response`.
+ * A name is the URI's final path segment, with or without `.xml`, under either of
+ * {@link templatePrefixes}, as {@link templateName} resolves it.
  */
-export const templateNames = ["match_correct", "map_response", "map_response_point"] as const;
+export const templateNames = [
+  "match_correct",
+  "map_response",
+  "map_response_point",
+  "CC2_match",
+  "CC2_match_basic",
+  "CC2_map_response",
+] as const;
 
 /**
- * A response-processing template phase 1 recognises.
+ * A response-processing template the renderer recognises.
  */
 export type TemplateName = (typeof templateNames)[number];
 
@@ -360,7 +392,7 @@ const xmlWhitespaceRun = /[\t\n\r ]+/gu;
  *
  * @param uri The `template` attribute's value, as written.
  * @returns The built-in's name when the collapsed `uri` is one of {@link templatePrefixes} followed
- *   by it, with or without `.xml`; none for any other URI, the `CC2_*` templates included.
+ *   by it, with or without `.xml`; none for any other URI.
  */
 export const templateName = (uri: string): Option.Option<TemplateName> => {
   const collapsed = trimXmlSpace(uri).replaceAll(xmlWhitespaceRun, " ");

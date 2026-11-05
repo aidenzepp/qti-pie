@@ -23,6 +23,8 @@ import { isModelled, parseElementText, parseLexical, trimXmlSpace } from "#plate
 import type { InvalidValue, ModelledBaseType } from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
+import { governingTables } from "#plate/validate/structure.ts";
+import type { Tables } from "#plate/validate/xsd.ts";
 import { baseTypes, cardinalities, interactionNames, templateName } from "#plate/vocabulary.ts";
 import type { BaseType, Cardinality, InteractionName, TemplateName } from "#plate/vocabulary.ts";
 
@@ -444,8 +446,18 @@ const responseHolding = (child: string, baseType: Option.Option<BaseType>): Need
  *
  * A `qti-correct-response` child is the one need template processing can meet instead: it may set
  * the correct response, but not a mapping or an area mapping ({@link templateRequirements}).
+ *
+ * The `CC2_*` templates need nothing here: `template-requirements` judges the three canonical
+ * templates only (Q6), so a `CC2_*` template is never refused by it. What any built-in template's
+ * tree needs beyond this table and the item does not provide, a canonical template's or a `CC2_*`
+ * one's, such as a variable, a `qti-mapping`, or a `SCORE` of the cardinality as well as the base
+ * type a rule sets, the item model marks instead, and that processing does not run (`runnable` in
+ * `#plate/model/item.ts`).
  */
 const templateNeeds = {
+  CC2_map_response: [],
+  CC2_match: [],
+  CC2_match_basic: [],
   map_response: [responseHolding("qti-mapping", Option.none()), floatScore],
   map_response_point: [responseHolding("qti-area-mapping", Option.some("point")), floatScore],
   match_correct: [responseHolding("qti-correct-response", Option.none()), floatScore],
@@ -501,9 +513,11 @@ const neededDetail = (element: string, needed: Needed) => ({
  * response for `match_correct`, a `qti-mapping` for `map_response`, and a `point` base type and a
  * `qti-area-mapping` for `map_response_point`, and a declared float `SCORE`. The template is
  * resolved by the vocabulary's `templateName` from its `template` as written, as the item model
- * resolves it, so a `CC2_*` or other template is not judged. "If both embedded rules and a template
- * reference are supplied then the internal rules take precedence" (the information model), so a
- * template beside inline rules never runs and is not judged either; the inline rules are.
+ * resolves it; a `CC2_*` template needs nothing (Q6), and any other template is not judged. What a
+ * built-in template's tree needs beyond {@link templateNeeds}, the item model marks. "If both
+ * embedded rules and a template reference are supplied then the internal rules take precedence"
+ * (the information model), so a template beside inline rules never runs and is not judged either;
+ * the inline rules are.
  *
  * The correct response `match_correct` needs may also be set by template processing: "The response
  * variable to have its correct value set" is a template rule, `qti-set-correct-response` (the
@@ -605,18 +619,37 @@ const inResponseProcessing = (context: Context, element: SourceElement): boolean
 };
 
 /**
- * Apply `template-requirements` to an inline `qti-map-response`: the response it names is declared
- * with a `qti-mapping`, "the associated mapping, which must have been declared" (the information
- * model, `info-compact.txt:11438`).
+ * What each inline mapping expression needs of the response it names.
  *
- * A `qti-map-response` that names no response declaration is not judged here: an undeclared
- * variable is its own refusal, and this rule refuses only a declared response with no mapping.
+ * `qti-map-response` needs a `qti-mapping`, "the associated mapping, which must have been
+ * declared" (the information model, `info-compact.txt:11438`). `qti-map-response-point` "looks up
+ * the value of a response variable that must be of base-type point, and transforms it using the
+ * associated areaMapping" (`info-compact.txt:11437`), so it needs a `point` response holding a
+ * `qti-area-mapping`. The `identifier` here is a placeholder: each expression's own replaces it.
+ */
+const mappingNeeds = {
+  "qti-map-response": responseHolding("qti-mapping", Option.none()),
+  "qti-map-response-point": responseHolding("qti-area-mapping", Option.some("point")),
+} as const satisfies Record<string, Needed>;
+
+/**
+ * The local name of an inline mapping expression.
+ */
+type MappingExpression = keyof typeof mappingNeeds;
+
+/**
+ * Apply `template-requirements` to an inline `qti-map-response` or `qti-map-response-point`: the
+ * response it names is declared with what {@link mappingNeeds} lists for it. The qti package
+ * refuses both as P27 (`checkMapping` in `packages/pantry/src/processing/check.ts`).
+ *
+ * An expression that names no response declaration is not judged here: an undeclared variable is
+ * its own refusal, and this rule refuses only a declared response that lacks what it needs.
  *
  * @param source The document.
  * @param visit The element's visit.
  * @param context The item's declarations and the parents the walk has met.
- * @returns The refusal at the `qti-map-response`'s path when its response has no mapping; none for
- *   any other element.
+ * @returns The refusal at the expression's path when its response lacks what it needs; none for any
+ *   other element.
  */
 const mapResponseRequirements = (
   source: SourceDocument,
@@ -624,8 +657,11 @@ const mapResponseRequirements = (
   context: Context,
 ): readonly Refusal[] => {
   const attribute = attributeOf(visit.element, "identifier");
+  const expression = Arr.findFirst(Object.keys(mappingNeeds), (local): local is MappingExpression =>
+    isQti(visit.element, (name) => name === local),
+  );
   if (
-    !isQti(visit.element, (local) => local === "qti-map-response") ||
+    Option.isNone(expression) ||
     Option.isNone(attribute) ||
     !inResponseProcessing(context, visit.element)
   ) {
@@ -633,7 +669,7 @@ const mapResponseRequirements = (
   }
 
   const needed: Needed = {
-    ...responseHolding("qti-mapping", Option.none()),
+    ...mappingNeeds[expression.value],
     identifier: identifierOf(attribute.value),
   };
   const declaration = context.responses.get(needed.identifier);
@@ -653,9 +689,11 @@ const mapResponseRequirements = (
 /**
  * Give an element's `base-type` when the value model holds values of it.
  *
- * A base type the value model does not hold (`point`, `duration`, `file`) has no lexical check here
- * (the slice list's 0.11 item 3), so its values are not judged. A missing or out-of-vocabulary
- * `base-type` is the structural validator's.
+ * A base type the value model does not hold (`duration`, `file`) has no lexical check here (the
+ * slice list's 0.11 item 3), so its values are not judged. A `point` is held, so a value that is
+ * not two integers is refused, as the qti package refuses it (`value-lexical`, the `point` pattern
+ * in `packages/pantry/src/import/refusal.ts`). A missing or out-of-vocabulary `base-type` is the
+ * structural validator's.
  *
  * @param element An element with a `base-type`, such as a declaration or a `qti-base-value`.
  * @returns Its base type, none when it is absent or not modelled.
@@ -905,15 +943,16 @@ type Expected = "outcome" | "response" | "variable";
  *
  * "This expression looks up the value of an item variable that has been declared in a
  * corresponding variable declaration or is one of the built-in variables" (`qti-variable`,
- * `info-compact.txt:9286`); `qti-correct` and `qti-map-response` read a response variable
- * (`:11418`, `:11438`); `qti-set-outcome-value` sets an outcome variable (`:11770`), and so does
- * `qti-lookup-outcome-value`, whose `identifier` is "The identifier of the outcome variable to be
- * set" (`:10775`).
+ * `info-compact.txt:9286`); `qti-correct`, `qti-map-response` and `qti-map-response-point` read a
+ * response variable (`:11418`, `:11438`, `:11437`); `qti-set-outcome-value` sets an outcome
+ * variable (`:11770`), and so does `qti-lookup-outcome-value`, whose `identifier` is "The
+ * identifier of the outcome variable to be set" (`:10775`).
  */
 const referencing: ReadonlyMap<string, Expected> = new Map([
   ["qti-correct", "response"],
   ["qti-lookup-outcome-value", "outcome"],
   ["qti-map-response", "response"],
+  ["qti-map-response-point", "response"],
   ["qti-set-outcome-value", "outcome"],
   ["qti-variable", "variable"],
 ]);
@@ -1032,9 +1071,11 @@ const variableType = (
  * Apply `undeclared-variable` to an element of inline response processing.
  *
  * `qti-variable` names a response, outcome, template or context declaration of the item, or a
- * built-in variable (`info-compact.txt:9286`); `qti-correct` and `qti-map-response` name a
- * response declaration; `qti-set-outcome-value` and `qti-lookup-outcome-value` name an outcome
- * declaration or `completionStatus`. Template processing is not checked here.
+ * built-in variable (`info-compact.txt:9286`); `qti-correct`, `qti-map-response` and
+ * `qti-map-response-point` name a response declaration; `qti-set-outcome-value` and
+ * `qti-lookup-outcome-value` name an outcome declaration or `completionStatus`. Template processing
+ * is not checked here. The qti package refuses each as P8 (`reference` and `target` in
+ * `packages/pantry/src/processing/check.ts`).
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1078,14 +1119,17 @@ const operandOf = (element: SourceElement): Option.Option<SourceElement> => {
 };
 
 /**
- * Give the type of an expression built only of the eight phase-1 elements (spec §4.12), each
- * naming a declared or built-in variable.
+ * Give the type of an expression built only of the eight phase-1 elements (spec §4.12) and the two
+ * that M1-R adds, `qti-map-response-point` and `qti-equal`, each naming a declared or built-in
+ * variable.
  *
  * `qti-base-value` is a single of its `base-type`; `qti-variable` and `qti-correct` have their
- * variable's type; `qti-map-response` is a single float; `qti-match` and `qti-is-null` are a
- * single boolean. An expression that holds any other element is not typed: phase 1 marks that
- * processing and never runs it (spec Q15, ruled B, where this is the one residual difference from
- * the qti package).
+ * variable's type; `qti-map-response` and `qti-map-response-point` are a single float (the latter
+ * "similar to mapResponse", `info-compact.txt:11437`); `qti-match`, `qti-is-null` and `qti-equal`
+ * are a single boolean ("The result is a single boolean", `:11415`). An expression that holds any
+ * other element is not typed: phase 1 marks that processing and never runs it (spec Q15, ruled B,
+ * where this is the one residual difference from the qti package). The qti package types the same
+ * expressions alike (`resultType` in `packages/pantry/src/processing/types.ts`).
  *
  * @param expression The expression.
  * @param context The item's declarations.
@@ -1110,11 +1154,13 @@ const expressionType = (
     case "qti-correct": {
       return Option.flatten(variable);
     }
-    case "qti-map-response": {
+    case "qti-map-response":
+    case "qti-map-response-point": {
       return Option.as(variable, singleOf("float"));
     }
     case "qti-match":
-    case "qti-is-null": {
+    case "qti-is-null":
+    case "qti-equal": {
       return expression.children.every(
         (child) => child.kind !== "element" || Option.isSome(expressionType(child, context)),
       )
@@ -1141,7 +1187,8 @@ const baseTypeText = (type: ExpressionType): string => Option.getOrElse(type.bas
  * "Floating point values can not be assigned to integer variables and vice-versa"
  * (`info-compact.txt:11770`): the expression's base type and cardinality are the outcome's. A type
  * with no base type (a `record`) compares by cardinality alone. An outcome or an expression that
- * is not typed is not judged.
+ * is not typed is not judged. The qti package refuses the same as P20 (`typeRule` in
+ * `packages/pantry/src/processing/check.ts`).
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1275,7 +1322,8 @@ const lookupTableRequirements = (
  * `qti-match-table` (operator ruling `96840ced`, Q15 B: refused although phase 1 never runs a
  * lookup). An operand phase 1 cannot type is accepted untyped. An outcome that is undeclared or
  * holds no lookup table is not judged here: they are `undeclared-variable`'s refusal and
- * {@link lookupTableRequirements}'s.
+ * {@link lookupTableRequirements}'s. The qti package refuses the same as P22 (`checkLookup` in
+ * `packages/pantry/src/processing/check.ts`).
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1329,6 +1377,64 @@ const lookupOperandType = (
 };
 
 /**
+ * The base types a `qti-equal` operand may have: "two sub-expressions which must both have single
+ * cardinality and have a numerical base-type" (`info-compact.txt:11415`). Numerical is integer or
+ * float, never duration, as the qti package reads it.
+ */
+const equalOperands: ReadonlySet<BaseType> = new Set<BaseType>(["integer", "float"]);
+
+/**
+ * Apply `expression-type` to the operands of a `qti-equal` of inline response processing: each is
+ * a single integer or float (`info-compact.txt:11415`), so the engine never compares any other
+ * value. The qti package refuses the same as P23 (`operandRules` in
+ * `packages/pantry/src/processing/check.ts`).
+ *
+ * An operand that is not typed is not judged, and neither is one with no base type of its own
+ * whose cardinality is `single`, as {@link lookupOperandType} judges a lookup's. The detail names
+ * the operand by its position among the `qti-equal`'s child elements, from 1.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The item's declarations and the parents the walk has met.
+ * @returns One refusal at the `qti-equal`'s path per operand of another type; none for any other
+ *   element.
+ */
+const equalOperandType = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] => {
+  if (
+    !isQti(visit.element, (local) => local === "qti-equal") ||
+    !inResponseProcessing(context, visit.element)
+  ) {
+    return [];
+  }
+
+  const operands = visit.element.children.flatMap((child) =>
+    child.kind === "element" ? [child] : [],
+  );
+
+  return operands.flatMap((operand, index) =>
+    Option.match(expressionType(operand, context), {
+      onNone: () => [],
+      onSome: (type) =>
+        type.cardinality === "single" &&
+        !Option.exists(type.baseType, (baseType) => !equalOperands.has(baseType))
+          ? []
+          : [
+              refusal(source, "expression-type", visit.path, {
+                element: visit.element.local,
+                expressionBaseType: baseTypeText(type),
+                expressionCardinality: type.cardinality,
+                operand: String(index + 1),
+              }),
+            ],
+    }),
+  );
+};
+
+/**
  * The declarations whose variables a `qti-variable` may read. Where two share an identifier, the
  * later kind here wins; the duplicate is `duplicate-identifier`'s refusal.
  */
@@ -1340,70 +1446,37 @@ const variableDeclarations = [
 ] as const;
 
 /**
- * The QTI elements whose XSD content is an element wildcard of `##any` that names no child, so that
- * every element below one is wildcard content.
+ * List the elements the prose rules judge, in document order: exactly those the structural walk
+ * checks, the keys of {@link governingTables}.
  *
- * Phase 1 skips that content. The structural walk passes over a child that only its parent's
- * element wildcard admits, and over everything below it (`admit` in `src/validate/structure.ts`),
- * and the prose rules pass over it too, so a `qti-choice-interaction` inside a
- * `qti-custom-interaction` binds nothing. The skip is an interim, not a reading. Reading 6 keeps
- * only a nested QTI root, processing root or manifest global as foreign content, and rule
- * `5b8ee08b` says a known QTI element inside lax wildcard content is validated as QTI, refused only
- * where the schema or a normative rule refuses it. M1-R validates this content in both the walk
- * and the prose rules (the ledger's lax-wildcard deferral).
- *
- * The XSD's other element wildcards are `##other`, which admit no QTI element, so passing over
- * every element outside QTI's namespace already covers what they admit. The generated tables are
- * the source of this list; a test compares the two.
- */
-export const wildcardContentHolders = ["qti-custom-interaction", "template"] as const;
-
-/**
- * Report whether an element's children are wildcard content, one of {@link wildcardContentHolders}.
- *
- * @param element The element.
- * @returns Whether it is a QTI element whose every child is wildcard content.
- */
-const holdsWildcardContent = (element: SourceElement): boolean =>
-  isQti(element, (local) => wildcardContentHolders.some((holder) => holder === local));
-
-/**
- * Visit the elements the prose rules judge, in document order: those the structural walk enters.
- *
- * An element outside QTI's namespace is passed over with everything below it, and so is every
- * element below one of {@link wildcardContentHolders}, phase 1's interim skip of wildcard content
- * (see there). `walk` cannot prune, so this keeps the elements it has passed over and passes over
- * each child of one.
+ * One admission decides for both stages, so the rules never refuse what the walk does not check,
+ * nor skip what it does. An element outside QTI's namespace is not judged, nor anything below it
+ * that the walk does not reach, nor an element the walk refuses as unknown. In lax wildcard content
+ * (rule `5b8ee08b`) the rules judge what the walk checks there, a global QTI element and what its
+ * table admits below it, and not what the walk passes over: a nested QTI root (reading 6) or a QTI
+ * element the XSD declares only locally, such as a `qti-choice-interaction` directly inside a
+ * `qti-custom-interaction`.
  *
  * @param source The document.
- * @yields {Visit} Each element the rules judge, with the path and the parent `walk` gives it.
+ * @param tables The tables generated from the QTI XSD, the ones the structural walk checks it by.
+ * @returns Each element the rules judge, with the path and the parent `walk` gives it.
  */
-const judgedVisits = function* judgedVisits(
-  source: SourceDocument,
-): Generator<Visit, void, undefined> {
-  const passed = new Set<SourceElement>();
-  for (const visit of walk(source)) {
-    const passOver =
-      visit.element.namespace !== qtiNamespace ||
-      Option.exists(visit.parent, (parent) => passed.has(parent) || holdsWildcardContent(parent));
-    if (passOver) {
-      passed.add(visit.element);
-    } else {
-      yield visit;
-    }
-  }
+const judgedVisits = (source: SourceDocument, tables: Tables): readonly Visit[] => {
+  const governing = governingTables(source, tables);
+
+  return [...walk(source)].filter((visit) => governing.has(visit.element));
 };
 
 /**
  * Report whether a judged element holds an unexpanded entity reference where a rule may read it:
- * in an attribute's value, or among its children unless they are wildcard content.
+ * in an attribute's value or among its children, wildcard content included.
  *
  * @param element The element.
- * @returns Whether its attributes or its read children hold a reference whose value is unknown.
+ * @returns Whether its attributes or its children hold a reference whose value is unknown.
  */
 const holdsUnexpanded = (element: SourceElement): boolean =>
   element.attributes.some((attribute) => attribute.references.length > 0) ||
-  (!holdsWildcardContent(element) && element.children.some((child) => child.kind === "entity"));
+  element.children.some((child) => child.kind === "entity");
 
 /**
  * Collect the responses whose correct response the item's template processing sets.
@@ -1451,10 +1524,11 @@ const setCorrectResponses = (
  * Check a document against the prose rules: `undeclared-response`, `duplicate-identifier`,
  * `binding`, `template-requirements`, `value-type`, `undeclared-variable` and `expression-type`,
  * and reading 19's `max-strings` on an Extended Text bound to a container. `template-requirements`
- * judges the declarations a standard template, an inline `qti-map-response` and a
- * `qti-lookup-outcome-value` need.
+ * judges the declarations a standard template, an inline `qti-map-response` or
+ * `qti-map-response-point` and a `qti-lookup-outcome-value` need. `expression-type` judges what a
+ * `qti-set-outcome-value` sets, a lookup's operand and a `qti-equal`'s operands.
  *
- * The rules judge only what the structural walk judges, and only an item they can read whole:
+ * The rules judge exactly what the structural walk checks, and only an item they can read whole:
  *
  * - A root other than a QTI `qti-assessment-item` gives no refusal. Every rule reads an item's
  *   declarations, and phase 1 leaves any other root `unchecked` (spec §4.5).
@@ -1463,25 +1537,29 @@ const setCorrectResponses = (
  *   what another element's rule finds: `identifier="&id;"` on a declaration would make every
  *   `qti-variable` naming that identifier look undeclared. Such a document is `unchecked` unless
  *   the structural walk refuses it.
- * - An element outside QTI's namespace, and every element below it, is not visited.
- * - No element below one of {@link wildcardContentHolders} is visited. Phase 1 skips that wildcard
- *   content in the structural walk and here alike. Rule `5b8ee08b` validates a known QTI element
- *   there as QTI, so the skip is an interim until M1-R (the ledger's lax-wildcard deferral).
+ * - Only the elements the structural walk checks are visited, the keys of {@link governingTables} for
+ *   the same tables. An element outside QTI's namespace is not, nor is an element the walk refuses
+ *   as unknown. In lax wildcard content the rules judge the elements the walk checks there as they
+ *   judge them anywhere else (reading 57): an interaction there binds a declared response, its
+ *   identifiers count toward `duplicate-identifier`, and an unexpanded entity reference among a
+ *   checked element's children leaves the document to the verdict's `unchecked`.
  *
  * Every refusal is located at an element or attribute path and returned in document order; the
  * check never stops at the first. An empty list means no prose rule this module implements refuses
  * the document, not that the document is valid: the structural validator judges the XSD's rules.
  *
  * @param source The document to check.
+ * @param tables The tables generated from the QTI XSD, the ones `checkStructure` checks the
+ *   document by.
  * @returns The refusals, empty when every rule holds or the document is one the rules do not judge.
  * @see {@link Refusal} for what each refusal carries.
  */
-export const checkRules = (source: SourceDocument): readonly Refusal[] => {
+export const checkRules = (source: SourceDocument, tables: Tables): readonly Refusal[] => {
   if (!isQti(source.root, (local) => local === "qti-assessment-item")) {
     return [];
   }
 
-  const visits = [...judgedVisits(source)];
+  const visits = judgedVisits(source, tables);
   if (visits.some((visit) => holdsUnexpanded(visit.element))) {
     return [];
   }
@@ -1511,6 +1589,7 @@ export const checkRules = (source: SourceDocument): readonly Refusal[] => {
       ...setOutcomeType(source, visit, context),
       ...lookupTableRequirements(source, visit, context),
       ...lookupOperandType(source, visit, context),
+      ...equalOperandType(source, visit, context),
     );
   }
 

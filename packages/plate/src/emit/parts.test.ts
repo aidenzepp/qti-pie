@@ -19,7 +19,7 @@ import {
   resolveOverrides,
   rowFor,
   scopedId,
-  splitIdrefs,
+  splitTokens,
 } from "#plate/emit/parts.ts";
 import type { PartRow } from "#plate/emit/parts.ts";
 import type {
@@ -340,14 +340,14 @@ describe("authoredId", () => {
   });
 });
 
-describe("splitIdrefs and authoredIdrefs", () => {
+describe("splitTokens and authoredIdrefs", () => {
   it("split an IDREFS value at ASCII whitespace, dropping empty ids", () => {
-    assert.deepStrictEqual(splitIdrefs(" intro\tnote\n\fhint\r "), ["intro", "note", "hint"]);
-    assert.deepStrictEqual(splitIdrefs(""), []);
+    assert.deepStrictEqual(splitTokens(" intro\tnote\n\fhint\r "), ["intro", "note", "hint"]);
+    assert.deepStrictEqual(splitTokens(""), []);
   });
 
   it("keep a no-break space inside an id, since only ASCII whitespace separates them", () => {
-    assert.deepStrictEqual(splitIdrefs("a\u00A0b c"), ["a\u00A0b", "c"]);
+    assert.deepStrictEqual(splitTokens("a\u00A0b c"), ["a\u00A0b", "c"]);
   });
 
   it("scope every authored id of the value and join them by one space", () => {
@@ -424,8 +424,8 @@ const legendChoice: ChoiceInteraction = {
   ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
-    { content: [words("Red")], identifier: "A" },
-    { content: [words("Blue")], identifier: "B" },
+    { content: [words("Red")], fixed: false, identifier: "A" },
+    { content: [words("Blue")], fixed: false, identifier: "B" },
   ],
   class: "swatches",
   kind: "choice",
@@ -478,6 +478,7 @@ const textEntry: TextEntryInteraction = {
   expectedLength: Option.some(4n),
   kind: "text-entry",
   path: "qti-assessment-item/qti-item-body/p/qti-text-entry-interaction",
+  patternMask: Option.none(),
   patternMaskMessage: Option.none(),
   placeholder: Option.some("A year"),
   response: "RESPONSE",
@@ -490,10 +491,13 @@ const textEntry: TextEntryInteraction = {
 const promptedEssay: ExtendedTextInteraction = {
   ...textEntry,
   baseType: "string",
+  cardinality: "single",
   class: "qti-height-lines-6",
   expectedLines: Option.some(5n),
   format: "preformatted",
   kind: "extended-text",
+  maxStrings: Option.none(),
+  minStrings: 0n,
   path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
   prompt: Option.some([words("Describe your day.")]),
 };
@@ -504,8 +508,30 @@ const promptedEssay: ExtendedTextInteraction = {
 const authorNamedEssay: ExtendedTextInteraction = { ...promptedEssay, prompt: Option.none() };
 
 /**
- * Construct an item whose body holds one interaction, bound to a response of its base type and
- * cardinality, and a Notice for an unsupported part.
+ * The prompted Extended Text in the `xhtml` format, whose Control carries `data-format`.
+ */
+const xhtmlEssay: ExtendedTextInteraction = { ...promptedEssay, format: "xhtml" };
+
+/**
+ * The prompted Extended Text bound to an `ordered` response of at most three strings: three
+ * Controls in a Root that is a group its Prompt names.
+ */
+const groupedEssay: ExtendedTextInteraction = {
+  ...promptedEssay,
+  cardinality: "ordered",
+  maxStrings: Option.some(3n),
+};
+
+/**
+ * The grouped Extended Text with no Prompt, its group named by the author's `aria-label` and
+ * `aria-labelledby`.
+ */
+const authorNamedGroup: ExtendedTextInteraction = { ...groupedEssay, prompt: Option.none() };
+
+/**
+ * Construct an item whose body holds a paragraph carrying the id `intro`, which the fixtures'
+ * `aria-labelledby` names, then one interaction, bound to a response of its base type and
+ * cardinality (a Text Entry's is single), and a Notice for an unsupported part.
  *
  * @param interaction The interaction.
  * @returns The item.
@@ -514,6 +540,13 @@ const itemOf = (
   interaction: ChoiceInteraction | ExtendedTextInteraction | TextEntryInteraction,
 ): Item => ({
   body: [
+    {
+      attributes: [{ name: "id", value: "intro" }],
+      children: [words("Colours and dates.")],
+      kind: "element",
+      path: 'qti-assessment-item/qti-item-body/p[@id="intro"]',
+      tag: "p",
+    },
     interaction.kind === "text-entry"
       ? {
           attributes: [],
@@ -546,8 +579,9 @@ const itemOf = (
     [
       interaction.response,
       {
+        areaMapping: Option.none(),
         baseType: interaction.kind === "choice" ? "identifier" : interaction.baseType,
-        cardinality: interaction.kind === "choice" ? interaction.cardinality : "single",
+        cardinality: interaction.kind === "text-entry" ? "single" : interaction.cardinality,
         correct: Option.none(),
         defaultValue: Option.none(),
         identifier: interaction.response,
@@ -615,6 +649,9 @@ describe("the merged column", () => {
           { interaction: textEntry, posted: ["1066"] },
           { interaction: promptedEssay, posted: ["A day."] },
           { interaction: authorNamedEssay, posted: ["A day."] },
+          { interaction: xhtmlEssay, posted: ["A <b>day</b>."] },
+          { interaction: groupedEssay, posted: ["A day.", "Another."] },
+          { interaction: authorNamedGroup, posted: ["A day."] },
         ];
         const rendered = [
           ...items.map(({ interaction, posted }) =>

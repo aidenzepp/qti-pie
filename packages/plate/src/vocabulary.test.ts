@@ -2,6 +2,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import {
+  // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
+  areaShapes,
   baseTypes,
   behaviourClasses,
   cardinalities,
@@ -32,7 +34,7 @@ const assertDistinct = (list: readonly string[]): void => {
 const fewerSpaces = 4000;
 
 describe("templateName", () => {
-  it("[I-9b] resolves all four spellings of each built-in to its name", () => {
+  it("resolves all four spellings of each built-in to its name", () => {
     for (const name of templateNames) {
       for (const prefix of templatePrefixes) {
         for (const suffix of ["", ".xml"]) {
@@ -42,10 +44,19 @@ describe("templateName", () => {
     }
   });
 
-  it("[I-9b] resolves a CC2 template and an unknown URI to none", () => {
+  it("resolves the three CC2 templates to their names under either prefix", () => {
     for (const prefix of templatePrefixes) {
-      assert.isTrue(Option.isNone(templateName(`${prefix}CC2_match.xml`)));
-      assert.isTrue(Option.isNone(templateName(`${prefix}CC2_match_basic.xml`)));
+      for (const name of ["CC2_match", "CC2_match_basic", "CC2_map_response"] as const) {
+        assert.deepStrictEqual(templateName(`${prefix}${name}.xml`), Option.some(name));
+        assert.deepStrictEqual(templateName(`${prefix}${name}`), Option.some(name));
+      }
+    }
+  });
+
+  it("resolves an unknown URI to none", () => {
+    for (const prefix of templatePrefixes) {
+      assert.isTrue(Option.isNone(templateName(`${prefix}CC2_other.xml`)));
+      assert.isTrue(Option.isNone(templateName(`${prefix}cc2_match.xml`)));
       assert.isTrue(Option.isNone(templateName(`${prefix}match_correct.json`)));
     }
     assert.isTrue(Option.isNone(templateName("https://example.com/rptemplates/match_correct.xml")));
@@ -53,7 +64,7 @@ describe("templateName", () => {
     assert.isTrue(Option.isNone(templateName("")));
   });
 
-  it("[I-9b] resolves a built-in padded with XML whitespace to its name, as xs:anyURI collapses it", () => {
+  it("resolves a built-in padded with XML whitespace to its name, as xs:anyURI collapses it", () => {
     for (const name of templateNames) {
       for (const prefix of templatePrefixes) {
         for (const padding of [" ", "\n\t"]) {
@@ -66,14 +77,14 @@ describe("templateName", () => {
     }
   });
 
-  it("[I-9b] resolves a URI with whitespace inside its name to none", () => {
+  it("resolves a URI with whitespace inside its name to none", () => {
     for (const prefix of templatePrefixes) {
       assert.isTrue(Option.isNone(templateName(`${prefix}match_ correct`)));
       assert.isTrue(Option.isNone(templateName(`${prefix}match_\ncorrect`)));
     }
   });
 
-  it.effect("[I-9b] reads 8 times the spaces inside a URI in under 32 times the time", () =>
+  it.effect("reads 8 times the spaces inside a URI in under 32 times the time", () =>
     Effect.gen(function* readsInLinearTime() {
       const fewer = `a${" ".repeat(fewerSpaces)}b`;
       const more = `a${" ".repeat(fewerSpaces * growthFactor)}b`;
@@ -119,6 +130,13 @@ describe("the closed value sets", () => {
     assertDistinct(cardinalities);
   });
 
+  it("has exactly the five shapes of a qti-area-map-entry", () => {
+    // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
+    assert.sameMembers([...areaShapes], ["circle", "default", "ellipse", "poly", "rect"]);
+    // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
+    assertDistinct(areaShapes);
+  });
+
   it("holds exactly the members spec §4.5 names, each once", () => {
     const lists: readonly (readonly [string, readonly string[], readonly string[]])[] = [
       [
@@ -141,6 +159,8 @@ describe("the closed value sets", () => {
           "qti-base-value",
           "qti-is-null",
           "qti-map-response",
+          "qti-map-response-point",
+          "qti-equal",
         ],
       ],
       [
@@ -155,6 +175,8 @@ describe("the closed value sets", () => {
           "qti-value",
           "qti-mapping",
           "qti-map-entry",
+          "qti-area-mapping",
+          "qti-area-map-entry",
           "qti-item-body",
           "qti-response-processing",
           "qti-choice-interaction",
@@ -168,23 +190,20 @@ describe("the closed value sets", () => {
       [
         "notices",
         renders.notices.map((notice) => notice.feature),
-        [
-          "pattern-mask",
-          'format="xhtml"',
-          'cardinality="record"',
-          'cardinality="multiple"',
-          'cardinality="ordered"',
-        ],
+        ["pattern-mask", 'cardinality="record"'],
+      ],
+      [
+        "controlNotices",
+        renders.controlNotices.map((notice) => notice.feature),
+        ["min-strings>100"],
       ],
       [
         "marks",
         renders.marks.map((mark) => mark.feature),
         [
-          'shuffle="true"',
           "string-identifier",
           'adaptive="true"',
           "qti-template-declaration",
-          'base-type="point"',
           'base-type="duration"',
           'base-type="file"',
           'cardinality="record"',
@@ -193,7 +212,6 @@ describe("the closed value sets", () => {
           "data-catalog-idref",
           "data-qti-suppress-tts",
           "data-ssml",
-          "map_response_point",
         ],
       ],
       [
@@ -209,7 +227,18 @@ describe("the closed value sets", () => {
           "https://www.imsglobal.org/question/qti_v3p0/rptemplates/",
         ],
       ],
-      ["templateNames", templateNames, ["match_correct", "map_response", "map_response_point"]],
+      [
+        "templateNames",
+        templateNames,
+        [
+          "match_correct",
+          "map_response",
+          "map_response_point",
+          "CC2_match",
+          "CC2_match_basic",
+          "CC2_map_response",
+        ],
+      ],
     ];
     for (const [name, actual, expected] of lists) {
       assertDistinct(actual);
@@ -232,16 +261,42 @@ describe("the closed value sets", () => {
     );
     for (const name of ["qti-text-entry-interaction", "qti-extended-text-interaction"] as const) {
       assert.sameMembers([...renders.bindings[name].baseTypes], ["string", "integer", "float"]);
-      assert.sameMembers([...renders.bindings[name].cardinalities], ["single"]);
     }
     assert.sameMembers(
+      [...renders.bindings["qti-text-entry-interaction"].cardinalities],
+      ["single"],
+    );
+    assert.sameMembers(
+      [...renders.bindings["qti-extended-text-interaction"].cardinalities],
+      ["single", "multiple", "ordered"],
+    );
+    assert.sameMembers(
       [...renders.bindings["qti-extended-text-interaction"].formats],
-      ["plain", "preformatted"],
+      ["plain", "preformatted", "xhtml"],
     );
   });
 
+  it("shows pattern-mask as a notice only for a pattern the translator refuses", () => {
+    const patternMask = renders.notices.filter((notice) => notice.feature === "pattern-mask");
+
+    assert.deepStrictEqual(
+      patternMask.map((notice) => notice.when),
+      [{ kind: "refused-pattern", name: "pattern-mask" }],
+    );
+  });
+
+  it("shows min-strings>100 in place of an Extended Text's Controls when min-strings exceeds 100, whatever max-strings says", () => {
+    assert.deepStrictEqual(renders.controlNotices, [
+      {
+        feature: "min-strings>100",
+        on: ["qti-extended-text-interaction"],
+        when: { kind: "integer-above", limit: 100n, name: "min-strings" },
+      },
+    ]);
+  });
+
   it("puts every notice on a rendered interaction", () => {
-    for (const notice of renders.notices) {
+    for (const notice of [...renders.notices, ...renders.controlNotices]) {
       assert.includeMembers([...interactionNames], [...notice.on], notice.feature);
     }
   });
