@@ -1,17 +1,21 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
-import { ConfigProvider, Effect } from "effect";
+import { ConfigProvider, Effect, Option } from "effect";
 import { defaultTreeAdapter, parse } from "parse5";
 import type { DefaultTreeAdapterTypes } from "parse5";
-import { createHandler, documents } from "#plate/dev/page.ts";
-import type { Handler } from "#plate/dev/page.ts";
-import { readCorpusFile } from "#plate/document/corpus.ts";
+import { groupVerdicts, openMember, verdictCache, verdictOrder } from "#plate/dev/listing.ts";
+import { createHandler } from "#plate/dev/page.ts";
+import type { Handler, PlaygroundSettings } from "#plate/dev/page.ts";
+import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { message } from "#plate/messages.ts";
 import type { MessageKey } from "#plate/messages.ts";
+import { keyboardWalk } from "#plate/test/keyboard.ts";
+import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import type { Accepted, Verdict } from "#plate/validate/verdict.ts";
 
 /**
  * The origin every request is made against; the handler never opens it.
@@ -19,14 +23,39 @@ import { parseHtml } from "#plate/test/round-trip.ts";
 const origin = "http://127.0.0.1:5190";
 
 /**
- * The corpus paths of the documents the playground lists.
+ * The corpus paths of the documents these tests open: phase 1's three items, the refused CAT
+ * test, a Choice of the Common Cartridge package scored by `CC2_match`, and a QTI 2.2 item inside
+ * the CAT package.
  */
 const paths = {
   bg007: "QTI3_BPIG_Examples/items/BG007.xml",
   bg010: "QTI3_BPIG_Examples/items/BG010.xml",
   bg011: "QTI3_BeginnersGuide_Examples/items/BG011.xml",
   cat: "qtiv3-examples/CAT/test.xml",
+  ccPackage: "qtiv3-examples/packaging/ccPackage/testitems/QUE_102010.xml",
+  qti2: "qtiv3-examples/CAT/CAT_Test01_Adaptive_EchoAdapt.zip.d/items/i15211305971467662/qti.xml",
 } as const;
+
+/**
+ * Opening every member of the corpus takes a few seconds here; the bound leaves room for a slow
+ * disk without letting a hung read stall the run.
+ */
+const corpusTimeoutMs = 60_000;
+
+/**
+ * The verdict cache every handler of this file shares, so the corpus is opened once for the file.
+ */
+const verdicts = Effect.runSync(verdictCache());
+
+/**
+ * Construct a handler over the corpus that shares {@link verdicts}, with its own sessions and
+ * theme.
+ *
+ * @param settings The configuration input, each optional.
+ * @returns The handler.
+ */
+const playground = (settings: Pick<PlaygroundSettings, "configuration"> = {}): Handler =>
+  createHandler({ ...settings, verdicts });
 
 /**
  * The headers every page carries, exactly (`work/planning/mind/od14-decisions.md`, rule
@@ -65,7 +94,25 @@ const hostile = "items/hostile.xml";
 const hostileTitle = "<script>alert(1)</script>";
 
 /**
- * A handler over the scratch corpus root, which holds only {@link hostile}.
+ * The hand-built item of the scratch corpus root whose path holds a script element and whose
+ * outcome default, `<script>`, is no integer, so `open` refuses it with a sentence quoting it.
+ */
+const scriptPath = "items/<script>.xml";
+
+/**
+ * The text of {@link scriptPath}.
+ */
+const scriptItem = `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="script" title="script" adaptive="false" time-dependent="false">
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="integer">
+    <qti-default-value><qti-value>&lt;script&gt;</qti-value></qti-default-value>
+  </qti-outcome-declaration>
+  <qti-item-body><p>x</p></qti-item-body>
+</qti-assessment-item>
+`;
+
+/**
+ * A handler over the scratch corpus root, which holds only {@link hostile} and {@link scriptPath},
+ * with its own verdict cache.
  */
 const scratchHandler = createHandler({
   provider: ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: scratch }),
@@ -83,7 +130,12 @@ beforeAll(async () => {
       'title="&lt;script&gt;alert(1)&lt;/script&gt;"',
     ),
   );
+  writeFileSync(path.join(scratch, scriptPath), scriptItem);
 });
+
+beforeAll(async () => {
+  await Effect.runPromise(verdicts.verdicts);
+}, corpusTimeoutMs);
 
 afterAll(() => {
   rmSync(scratch, { force: true, recursive: true });
@@ -486,36 +538,183 @@ const assertAfterSubmit = (answer: Answer, state: State, title: string): void =>
   assert.isNull(response.headers.get("location"));
 };
 
-describe("dev/page.ts", () => {
-  it.effect("the listing has the four documents, in a main landmark under an h1", () =>
-    Effect.gen(function* listing() {
-      const { html, response } = yield* get(createHandler(), "/");
-      const hrefs = elementsOf(parseHtml(html)).flatMap((element) =>
-        element.tag === "a" ? [String(element.attrs["href"])] : [],
-      );
+/**
+ * One verdict section of the listing, as the page shows it.
+ */
+interface ListedSection {
+  /**
+   * The count its heading gives.
+   */
+  readonly count: number;
+  /**
+   * Its folder headings' text, in order.
+   */
+  readonly folders: readonly string[];
+  /**
+   * Each link's target and text, in order.
+   */
+  readonly links: readonly (readonly [href: string, text: string])[];
+  readonly verdict: string;
+}
 
-      assert.strictEqual(response.status, 200);
-      assert.match(html, /^<!doctype html><html lang="en">/u);
-      assert.strictEqual(
-        find(html, (element) => element.tag === "main").children.find(
-          (child) => child.kind === "element",
-        )?.kind,
-        "element",
-      );
-      assert.isDefined(elementsOf(parseHtml(html)).find((element) => element.tag === "h1"));
-      assert.deepStrictEqual(
-        documents.map((entry) => entry.path),
-        [paths.bg007, paths.bg010, paths.bg011, paths.cat],
-      );
-      for (const corpusPath of Object.values(paths)) {
-        assert.include(hrefs, itemTarget(corpusPath));
-      }
-    }),
+/**
+ * Read the listing's verdict sections: each `section` with its `data-verdict`, its heading's
+ * `data-count`, its `h3` folder headings and its links.
+ *
+ * @param html The listing.
+ * @returns The sections, in document order.
+ */
+const sectionsOf = (html: string): readonly ListedSection[] =>
+  elementsOf(parseHtml(html)).flatMap((section): readonly ListedSection[] => {
+    if (section.tag !== "section") {
+      return [];
+    }
+
+    const inside = elementsOf(section.children);
+    const heading = inside.find((element) => element.tag === "h2");
+
+    return [
+      {
+        count: Number(heading?.attrs["data-count"]),
+        folders: inside.flatMap((element) =>
+          element.tag === "h3" ? [textOf(element.children)] : [],
+        ),
+        links: inside.flatMap((element) =>
+          element.tag === "a"
+            ? [[String(element.attrs["href"]), textOf(element.children)] as const]
+            : [],
+        ),
+        verdict: String(section.attrs["data-verdict"]),
+      },
+    ];
+  });
+
+/**
+ * Give the accepted document of a verdict that accepts it.
+ *
+ * @param verdict The verdict.
+ * @returns Its accepted document; the test fails when `open` did not accept it.
+ */
+const acceptedOf = (verdict: Verdict): Accepted =>
+  verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
+    ? verdict.accepted
+    : assert.fail(`${verdict.document} is ${verdict.verdict}, not accepted`);
+
+/**
+ * Open a document in a playground, walk its item form by keys with `keyboardWalk`, and post the
+ * entries the walk submits to the form's action.
+ *
+ * @param handle The handler.
+ * @param corpusPath The document's corpus path.
+ * @param keys The keys pressed, which must submit the item's form.
+ * @returns The page after the submit.
+ */
+const walkAndPost = Effect.fnUntraced(function* walkAndPost(
+  handle: Handler,
+  corpusPath: string,
+  keys: readonly Key[],
+) {
+  const opened = yield* get(handle, itemTarget(corpusPath));
+  const form = find(
+    opened.html,
+    (element) => element.tag === "form" && String(element.attrs["action"]).startsWith("/item?"),
+  );
+  const entries = Option.getOrElse(keyboardWalk(form, keys), () =>
+    assert.fail("the keys never submit the item's form"),
+  );
+
+  return yield* post(handle, actionOf(opened.html), entries);
+});
+
+describe("dev/page.ts", () => {
+  it.effect(
+    "the listing names every member once, under its verdict's section and its top folder, and the counts sum to the set's size",
+    () =>
+      Effect.gen(function* listing() {
+        const members = yield* corpusDocuments;
+        const known = yield* verdicts.verdicts;
+        const { html, response } = yield* get(playground(), "/");
+        const sections = sectionsOf(html);
+        const verdictOf = new Map(known.map((verdict) => [verdict.document, verdict.verdict]));
+        const listed = sections.flatMap((section) =>
+          section.links.map(([href, text]) => ({ href, text, verdict: section.verdict })),
+        );
+        const sectionOf = (member: string) => listed.find((link) => link.text === member)?.verdict;
+        const nav = find(html, (element) => element.tag === "nav");
+        const main = find(html, (element) => element.tag === "main");
+
+        assert.strictEqual(response.status, 200);
+        assert.match(html, /^<!doctype html><html lang="en">/u);
+        assert.strictEqual(main.children.find((child) => child.kind === "element")?.tag, "h1");
+        assert.deepStrictEqual(
+          elementsOf(nav.children).flatMap((element) =>
+            element.tag === "a" ? [element.attrs["href"]] : [],
+          ),
+          ["/verdicts", "/ledger"],
+        );
+        assert.deepStrictEqual(
+          sections.map((section) => section.verdict),
+          [...verdictOrder],
+        );
+        assert.strictEqual(
+          sections.reduce((sum, section) => sum + section.count, 0),
+          members.length,
+        );
+        assert.deepStrictEqual(
+          listed.map((link) => link.text).toSorted(),
+          members.toSorted(),
+          "each member once",
+        );
+        for (const section of sections) {
+          assert.lengthOf(section.links, section.count, section.verdict);
+        }
+        for (const link of listed) {
+          assert.strictEqual(link.href, itemTarget(link.text));
+          assert.strictEqual(link.verdict, verdictOf.get(link.text), link.text);
+        }
+        assert.deepStrictEqual(
+          sections.map((section) => section.folders),
+          groupVerdicts(known).map((group) =>
+            group.folders.map(({ folder }) => (folder === "." ? "Corpus root" : folder)),
+          ),
+        );
+        assert.strictEqual(sectionOf(paths.bg007), "accepted");
+        assert.strictEqual(sectionOf(paths.cat), "refused");
+      }),
+    corpusTimeoutMs,
+  );
+
+  it.effect(
+    "every member is opened once over a handler's life: a second request opens no document again",
+    () =>
+      Effect.gen(function* counted() {
+        const opened: string[] = [];
+        const counting = yield* verdictCache((member) =>
+          Effect.suspend(() => {
+            opened.push(member);
+
+            return openMember(member);
+          }),
+        );
+        const handle = createHandler({ verdicts: counting });
+        const members = yield* corpusDocuments;
+        const first = yield* get(handle, "/");
+        const afterFirst = [...opened];
+        const second = yield* get(handle, "/");
+        const item = yield* get(handle, itemTarget(paths.bg007));
+
+        assert.strictEqual(first.response.status, 200);
+        assert.deepStrictEqual(afterFirst, members);
+        assert.strictEqual(second.html.length, first.html.length);
+        assert.strictEqual(item.response.status, 200);
+        assert.deepStrictEqual(opened, members);
+      }),
+    corpusTimeoutMs,
   );
 
   it.effect("CAT/test.xml shows its refusal and no item form", () =>
     Effect.gen(function* cat() {
-      const { html, response } = yield* get(createHandler(), itemTarget(paths.cat));
+      const { html, response } = yield* get(playground(), itemTarget(paths.cat));
       const elements = elementsOf(parseHtml(html));
       const rules = elements.flatMap((element) =>
         element.attrs["data-rule"] === undefined ? [] : [element.attrs["data-rule"]],
@@ -530,9 +729,57 @@ describe("dev/page.ts", () => {
     }),
   );
 
+  it.effect("a QTI 2 item inside a QTI 3 package opens to its refusal and no item form", () =>
+    Effect.gen(function* qti2() {
+      const { html, response } = yield* get(playground(), itemTarget(paths.qti2));
+      const elements = elementsOf(parseHtml(html));
+
+      assert.strictEqual(response.status, 200);
+      assert.deepStrictEqual(
+        elements.flatMap((element) =>
+          element.attrs["data-rule"] === undefined ? [] : [element.attrs["data-rule"]],
+        ),
+        ["not-qti-root"],
+      );
+      assert.isTrue(
+        elements.every((element) => element.tag !== "form" || element.attrs["action"] === "/theme"),
+      );
+    }),
+  );
+
+  it.effect(
+    "a ccPackage item opens, and a POST of its correct response shows its score, or, while CC2_match is unsupported, records it",
+    () =>
+      Effect.gen(function* ccPackage() {
+        const handle = playground();
+        const opened = yield* get(handle, itemTarget(paths.ccPackage));
+        const answered = yield* post(handle, actionOf(opened.html), [
+          [entryName(instanceOf(opened.html), "RESPONSE"), "true"],
+        ]);
+        const accepted = acceptedOf(
+          Option.getOrElse(yield* verdicts.verdictOf(paths.ccPackage), () =>
+            assert.fail("the ccPackage item is a member"),
+          ),
+        );
+        const status = find(answered.html, (element) => element.attrs["role"] === "status");
+
+        assert.strictEqual(opened.response.status, 200);
+        if (Option.isSome(accepted.item.processing)) {
+          assert.include(textOf(status.children), message("en", "score", { score: "1" }));
+          assertAfterSubmit(answered, "scored", "Question 02");
+        } else {
+          assert.include(
+            accepted.unsupported.map((entry) => entry.feature),
+            'template="https://www.imsglobal.org/question/qti_v3p0/rptemplates/CC2_match.xml"',
+          );
+          assertAfterSubmit(answered, "responseRecorded", "Question 02");
+        }
+      }),
+  );
+
   it.effect("[Q-2] [I-9b] a BG007 open, then a POST of the true choice, shows score 1", () =>
     Effect.gen(function* scored() {
-      const handle = createHandler();
+      const handle = playground();
       const opened = yield* get(handle, itemTarget(paths.bg007));
       const instance = instanceOf(opened.html);
       const answered = yield* post(handle, actionOf(opened.html), [
@@ -562,7 +809,7 @@ describe("dev/page.ts", () => {
     "[Q-2] two entries for BG007's single response are refused: atMost 1, on an invalid, focused Control, with both choices kept",
     () =>
       Effect.gen(function* overTicked() {
-        const handle = createHandler();
+        const handle = playground();
         const opened = yield* get(handle, itemTarget(paths.bg007));
         const name = entryName(instanceOf(opened.html), "RESPONSE");
         const refused = yield* post(handle, actionOf(opened.html), [
@@ -598,7 +845,7 @@ describe("dev/page.ts", () => {
 
   it.effect("[Q-5] BG011, which has no processing, records the response", () =>
     Effect.gen(function* recorded() {
-      const handle = createHandler();
+      const handle = playground();
       const opened = yield* get(handle, itemTarget(paths.bg011));
       const answered = yield* post(handle, actionOf(opened.html), [
         [entryName(instanceOf(opened.html), "RESPONSE"), "Crows clean up."],
@@ -613,7 +860,7 @@ describe("dev/page.ts", () => {
     () =>
       Effect.gen(function* attempts() {
         const submitOnce = Effect.fn("submitOnce")(function* submitOnce(maxAttempts: number) {
-          const handle = createHandler({ configuration: { maxAttempts } });
+          const handle = playground({ configuration: { maxAttempts } });
           const opened = yield* get(handle, itemTarget(paths.bg007));
           const answered = yield* post(handle, actionOf(opened.html), [
             [entryName(instanceOf(opened.html), "RESPONSE"), "false"],
@@ -639,7 +886,7 @@ describe("dev/page.ts", () => {
     "[Q-20] no answer reaches the page: BG010's mapping keys appear in no HTML the handler returns",
     () =>
       Effect.gen(function* allowlist() {
-        const handle = createHandler();
+        const handle = playground();
         const listed = yield* get(handle, "/");
         const opened = yield* get(handle, itemTarget(paths.bg010));
         const answered = yield* post(handle, actionOf(opened.html), [
@@ -654,24 +901,34 @@ describe("dev/page.ts", () => {
       }),
   );
 
-  it.effect("a document path that leaves the corpus root is refused with 404", () =>
-    Effect.gen(function* traversal() {
-      const handle = createHandler();
-      const inside = yield* get(handle, itemTarget(paths.bg007));
-      const parent = yield* get(handle, itemTarget(`../${paths.bg007}`));
-      const climbing = yield* get(handle, itemTarget(`QTI3_BPIG_Examples/../../${paths.bg007}`));
+  it.effect(
+    "a document path that leaves the corpus root, or names no member, is refused with 404",
+    () =>
+      Effect.gen(function* traversal() {
+        const handle = playground();
+        const inside = yield* get(handle, itemTarget(paths.bg007));
+        const parent = yield* get(handle, itemTarget(`../${paths.bg007}`));
+        const climbing = yield* get(handle, itemTarget(`QTI3_BPIG_Examples/../../${paths.bg007}`));
 
-      assert.strictEqual(inside.response.status, 200);
-      assert.strictEqual(parent.response.status, 404);
-      assert.strictEqual(climbing.response.status, 404);
-    }),
+        const image = yield* get(
+          handle,
+          itemTarget("QTI3_BPIG_Examples/items/images/airplane.png"),
+        );
+        const qti22 = yield* get(handle, itemTarget("qtiv2p2-examples/items/choice.xml"));
+
+        assert.strictEqual(inside.response.status, 200);
+        assert.strictEqual(parent.response.status, 404);
+        assert.strictEqual(climbing.response.status, 404);
+        assert.strictEqual(image.response.status, 404, "a file of the root outside the set");
+        assert.strictEqual(qti22.response.status, 404, "a QTI 2.2 example outside the set");
+      }),
   );
 
   it.effect(
     "an asset path holding ..%2F or %2e%2e%2f is refused with 404, where the plain path is served",
     () =>
       Effect.gen(function* assets() {
-        const handle = createHandler();
+        const handle = playground();
         const airplane = "/assets/QTI3_BPIG_Examples/items/images/airplane.png";
         const before = yield* get(handle, airplane);
         yield* get(handle, itemTarget(paths.bg007));
@@ -704,7 +961,7 @@ describe("dev/page.ts", () => {
 
   it.effect("the headers are on /, /item and /assets/*, and none allows 'unsafe-inline'", () =>
     Effect.gen(function* headers() {
-      const handle = createHandler();
+      const handle = playground();
       const pages = [
         yield* get(handle, "/"),
         yield* get(handle, itemTarget(paths.bg007)),
@@ -744,10 +1001,36 @@ describe("dev/page.ts", () => {
   );
 
   it.effect(
+    "a path and a refusal holding <script> appear escaped on the listing and the item page",
+    () =>
+      Effect.gen(function* escapedPath() {
+        const listed = yield* get(scratchHandler, "/");
+        const opened = yield* get(scratchHandler, itemTarget(scriptPath));
+        const link = find(
+          listed.html,
+          (element) => element.tag === "a" && element.attrs["href"] === itemTarget(scriptPath),
+        );
+        const refusal = find(opened.html, (element) => element.attrs["data-rule"] === "value-type");
+
+        for (const { html, response } of [listed, opened]) {
+          assert.strictEqual(response.status, 200);
+          assert.notInclude(html, "<script");
+          assert.include(html, "&lt;script&gt;");
+        }
+        assert.strictEqual(textOf(link.children), scriptPath);
+        assert.include(textOf(refusal.children), "`<script>`");
+        assert.deepStrictEqual(
+          sectionsOf(listed.html).map((section) => section.links.map(([, text]) => text)),
+          [[hostile], [], [], [scriptPath]],
+        );
+      }),
+  );
+
+  it.effect(
     "GET /styles.css and /playground.css serve their files as text/css, and they and /theme.css carry the page headers",
     () =>
       Effect.gen(function* sheets() {
-        const handle = createHandler();
+        const handle = playground();
         const listing = yield* get(handle, "/");
         const files = [
           ["/styles.css", "#plate/styles.css"],
@@ -780,7 +1063,7 @@ describe("dev/page.ts", () => {
     "POST /theme stores an accepted theme and answers 303 to its return; /theme.css then serves it",
     () =>
       Effect.gen(function* stored() {
-        const handle = createHandler();
+        const handle = playground();
         const listing = yield* get(handle, "/");
         const before = yield* themeSheet(handle);
         const target = `/item?path=${paths.bg007}`;
@@ -808,7 +1091,7 @@ describe("dev/page.ts", () => {
     "a refused theme answers 400 with its refusal escaped and the page headers, and leaves /theme.css unchanged",
     () =>
       Effect.gen(function* refused() {
-        const handle = createHandler();
+        const handle = playground();
         const listing = yield* get(handle, "/");
         yield* postTheme(handle, [["theme", acceptedTheme]]);
 
@@ -838,7 +1121,7 @@ describe("dev/page.ts", () => {
 
   it.effect("a return that leaves the origin, or whose path begins with //, redirects to /", () =>
     Effect.gen(function* offsite() {
-      const handle = createHandler();
+      const handle = playground();
       const returns = [
         "//evil.example/",
         "/\t/evil.example",
@@ -862,7 +1145,7 @@ describe("dev/page.ts", () => {
 
   it.effect("an absent or empty return redirects to /", () =>
     Effect.gen(function* fallback() {
-      const handle = createHandler();
+      const handle = playground();
       const absent = yield* postTheme(handle, [["theme", acceptedTheme]]);
       const empty = yield* postTheme(handle, [
         ["theme", acceptedTheme],
@@ -880,7 +1163,7 @@ describe("dev/page.ts", () => {
     "the listing and the BG007 item page link the three sheets in order and end main with the theme box, outside the item form",
     () =>
       Effect.gen(function* themeBox() {
-        const handle = createHandler();
+        const handle = playground();
         const listed = yield* get(handle, "/");
         const opened = yield* get(handle, itemTarget(paths.bg007));
 
@@ -897,7 +1180,7 @@ describe("dev/page.ts", () => {
     () =>
       Effect.gen(function* refusedBox() {
         const target = itemTarget(paths.bg007);
-        const answered = yield* postTheme(createHandler(), [
+        const answered = yield* postTheme(playground(), [
           ["theme", "body { color: red }"],
           ["return", target],
         ]);
@@ -912,7 +1195,7 @@ describe("dev/page.ts", () => {
     "after POST /theme with dark=on the item page's html has class dark and the box's Dark is checked; with the flag off neither",
     () =>
       Effect.gen(function* dark() {
-        const handle = createHandler();
+        const handle = playground();
         const before = yield* get(handle, itemTarget(paths.bg007));
         yield* postTheme(handle, [
           ["theme", acceptedTheme],
@@ -933,7 +1216,7 @@ describe("dev/page.ts", () => {
 
   it.effect("the box's return field holds the page's own path and query", () =>
     Effect.gen(function* returnField() {
-      const handle = createHandler();
+      const handle = playground();
       const listed = yield* get(handle, "/");
       const opened = yield* get(handle, itemTarget(paths.bg007));
       const action = actionOf(opened.html);
@@ -948,7 +1231,7 @@ describe("dev/page.ts", () => {
 
   it.effect("the box's textarea shows the stored theme's text, escaped", () =>
     Effect.gen(function* escapedTheme() {
-      const handle = createHandler();
+      const handle = playground();
       const stored = ':root {\n  --font-sans: "A&B", serif;\n}\n';
       const posted = yield* postTheme(handle, [["theme", stored]]);
       const listed = yield* get(handle, "/");
@@ -963,4 +1246,58 @@ describe("dev/page.ts", () => {
       );
     }),
   );
+
+  describe("the keyboard-only completion in the playground", () => {
+    it.effect(
+      "[Q-2] [keyboard] BG007 completes in the playground: its form walked by keys, posted, and scored 1",
+      () =>
+        Effect.gen(function* bg007() {
+          const answered = yield* walkAndPost(playground(), paths.bg007, [
+            "Tab",
+            "Space",
+            "Tab",
+            "Enter",
+          ]);
+          const status = find(answered.html, (element) => element.attrs["role"] === "status");
+
+          assert.include(textOf(status.children), message("en", "score", { score: "1" }));
+          assertAfterSubmit(answered, "scored", "BG true false example");
+        }),
+    );
+
+    it.effect(
+      "[Q-20] [keyboard] BG010 completes in the playground: York typed, posted, and scored 1",
+      () =>
+        Effect.gen(function* bg010() {
+          const answered = yield* walkAndPost(playground(), paths.bg010, [
+            "Tab",
+            { type: "York" },
+            "Enter",
+          ]);
+          const status = find(answered.html, (element) => element.attrs["role"] === "status");
+
+          assert.include(textOf(status.children), message("en", "score", { score: "1" }));
+          assertAfterSubmit(answered, "scored", "BG Missing Word example");
+        }),
+    );
+
+    it.effect(
+      "[Q-5] [keyboard] BG011 completes in the playground: past the video, its answer typed, posted, and the response recorded",
+      () =>
+        Effect.gen(function* bg011() {
+          const answer = "Crows eat insects.";
+          const answered = yield* walkAndPost(playground(), paths.bg011, [
+            "Tab",
+            "Tab",
+            { type: answer },
+            "Tab",
+            "Enter",
+          ]);
+          const textarea = find(answered.html, (element) => element.tag === "textarea");
+
+          assert.include(textOf(textarea.children), answer);
+          assertAfterSubmit(answered, "responseRecorded", "BG media example");
+        }),
+    );
+  });
 });
