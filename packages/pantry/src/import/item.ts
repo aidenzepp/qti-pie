@@ -592,24 +592,40 @@ const valueRows = Effect.fn("import.valueRows")(function* valueRows(
 });
 
 /**
- * The rows of one `qti-choice-interaction` and its binding to the response variable it names.
+ * Where a choice interaction stands: in an item, which declares the variables it binds to, or in a
+ * stimulus, which declares none.
+ */
+type BindingScope =
+  | {
+      readonly adaptive: XsBooleanHandle;
+      readonly declarations: ReadonlyMap<string, Declared>;
+      readonly documentId: Uuid;
+      readonly rootKind: "item";
+    }
+  | { readonly rootKind: "stimulus" };
+
+/**
+ * The rows of one `qti-choice-interaction` and, in an item, its binding to the response variable it
+ * names.
  *
  * No family builder of `interactions.ts` writes `ChoiceInteraction`, so this M0 builder stays and
  * the pass calls it beside them.
  *
- * @returns The rows; `ItemRefusal` for a `response-identifier` that no declaration of the document
- *   names, since no type can be copied to the binding; `ImportRefused` (`attribute-lexical`) for a
- *   `max-choices` or `min-choices` outside the non-negative integers.
+ * @param scope - Where the interaction stands. An item's scope carries its declarations, so the
+ *   interaction binds to the declaration it names. A stimulus has none: the arm keeps
+ *   `response-identifier` as written, nothing is refused for it and no binding rows are written
+ *   (GOAL 5.15).
+ * @returns The rows; `ItemRefusal` for an item's `response-identifier` that no declaration of the
+ *   document names, since no type can be copied to the binding; `ImportRefused`
+ *   (`attribute-lexical`) for a `max-choices` or `min-choices` outside the non-negative integers.
  */
 const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
   function* choiceInteractionRows(
     rows: Rows,
     element: Element,
     node: NodeEntry,
-    item: { readonly adaptive: XsBooleanHandle; readonly documentId: Uuid },
-    declarations: ReadonlyMap<string, Declared>,
+    scope: BindingScope,
   ): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
-    const { adaptive, documentId } = item;
     const attributes = reader(rows, element, node);
     const responseIdentifier = Option.getOrElse(
       attributes.read("response-identifier", "collapse"),
@@ -621,8 +637,9 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
     const orientation = attributes.read("orientation", "preserve");
     const minMessage = attributes.read("data-min-selections-message", "replace");
     const maxMessage = attributes.read("data-max-selections-message", "replace");
-    const declared = declarations.get(responseIdentifier);
-    if (declared === undefined) {
+    const declared =
+      scope.rootKind === "item" ? scope.declarations.get(responseIdentifier) : undefined;
+    if (scope.rootKind === "item" && declared === undefined) {
       return yield* new ItemRefusal({
         detail: `The choice interaction names the response variable "${responseIdentifier}", which no declaration of this item declares. Declare it with a qti-response-declaration, or correct the response-identifier.`,
         rule: "binding-declared",
@@ -672,7 +689,7 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
         minChoicesN: min.value,
         orientation: orientationHandle,
         responseIdentifier,
-        rootKind: "item",
+        rootKind: scope.rootKind,
         shuffle: shuffleHandle,
       },
     ]);
@@ -691,6 +708,11 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
       ChoiceInteractionMaxSelectionsMessage,
       written(maxMessage, (own) => ({ node: node.id, value: own })),
     );
+    if (scope.rootKind === "stimulus" || declared === undefined) {
+      return built;
+    }
+
+    const { adaptive, documentId } = scope;
     built = Rows.add(built, InteractionBinding, [
       {
         adaptive,
@@ -775,6 +797,58 @@ const choiceRows = Effect.fn("import.choiceRows")(function* choiceRows(
     SimpleChoiceTemplateIdentifier,
     written(templateIdentifier, (own) => ({ node: node.id, value: VariableReference(own) })),
   );
+});
+
+/**
+ * The rows of one `qti-prompt` under `parent`: the one writer of `Prompt`, which the item loop and
+ * {@link unboundChoiceRows} share.
+ */
+const promptRows = (rows: Rows, node: NodeEntry, parent: NodeEntry): Rows =>
+  Rows.add(rows, Prompt, [{ id: node.id, parent: parent.id }]);
+
+/**
+ * The choice interaction, simple choice and prompt rows of a tree that declares no variables.
+ *
+ * GOAL 5.15: "so a stimulus interaction's `response-identifier` is stored as a bare identifier".
+ * Each `qti-choice-interaction` is written with the stimulus scope, so it binds to nothing and
+ * refuses no identifier; each `qti-simple-choice` whose parent is a choice interaction goes through
+ * `choiceRows`; each `qti-prompt` goes through the item pass's prompt writer. The other family
+ * kinds are `unboundInteractionRows`'s.
+ *
+ * @param rows - The rows so far, holding the tree's `Node` rows.
+ * @param walked - Each element of the tree with its parent, as `withParents` yields them.
+ * @param nodes - The node index of the tree.
+ * @returns The rows with the choice arms added; `ImportRefused` (`attribute-lexical`) for a
+ *   `max-choices` or `min-choices` outside the non-negative integers. `ItemRefusal` is in the type
+ *   because the arm writer shares it with the item scope; the stimulus scope never raises it.
+ */
+export const unboundChoiceRows = Effect.fn("import.unboundChoiceRows")(function* unboundChoiceRows(
+  rows: Rows,
+  walked: readonly (readonly [Element, Option.Option<Element>])[],
+  nodes: NodeIndex,
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
+  let built = rows;
+  for (const [element, parent] of walked) {
+    const node = nodes.get(element);
+    const parentNode = Option.flatMapNullishOr(parent, (above) => nodes.get(above));
+    if (node === undefined) {
+      continue;
+    }
+
+    if (node.kind === "qti-choice-interaction") {
+      built = yield* choiceInteractionRows(built, element, node, { rootKind: "stimulus" });
+    } else if (
+      node.kind === "qti-simple-choice" &&
+      Option.isSome(parentNode) &&
+      parentNode.value.kind === "qti-choice-interaction"
+    ) {
+      built = yield* choiceRows(built, element, node, parentNode.value.id);
+    } else if (node.kind === "qti-prompt" && Option.isSome(parentNode)) {
+      built = promptRows(built, node, parentNode.value);
+    }
+  }
+
+  return built;
 });
 
 /**
@@ -909,13 +983,12 @@ export const semanticRows = Effect.fn("import.semanticRows")(function* semanticR
     } else if (node.kind === "qti-value" && Option.isSome(set)) {
       built = yield* valueRows(built, element, node, set.value, positions.get(node.id) ?? 0n);
     } else if (node.kind === "qti-choice-interaction") {
-      built = yield* choiceInteractionRows(
-        built,
-        element,
-        node,
-        { adaptive, documentId },
+      built = yield* choiceInteractionRows(built, element, node, {
+        adaptive,
         declarations,
-      );
+        documentId,
+        rootKind: "item",
+      });
     } else if (
       node.kind === "qti-simple-choice" &&
       Option.isSome(parentNode) &&
@@ -1098,7 +1171,7 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
     if (node.kind === "qti-item-body" && Option.isSome(parentNode)) {
       built = Rows.add(built, ItemBody, [{ id: node.id, item: parentNode.value.id }]);
     } else if (node.kind === "qti-prompt" && Option.isSome(parentNode)) {
-      built = Rows.add(built, Prompt, [{ id: node.id, parent: parentNode.value.id }]);
+      built = promptRows(built, node, parentNode.value);
     }
   }
 
