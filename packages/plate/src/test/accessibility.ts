@@ -289,6 +289,13 @@ const isNativeFocusable = (element: Element, parent: Element | undefined): boole
  */
 const visitsOf = (tree: Element): readonly Visit[] => {
   const visits: Visit[] = [];
+
+  /**
+   * Record an element and then, in order, every element below it.
+   *
+   * @param element The element to record.
+   * @param ancestors The elements above it, root first.
+   */
   const descend = (element: Element, ancestors: readonly Element[]): void => {
     visits.push({ ancestors, element });
 

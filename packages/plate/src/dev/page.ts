@@ -1397,6 +1397,13 @@ const route = (
   const refusedMethod = Effect.succeed(
     notePage(405, "Method not allowed", `${request.method} is not taken at ${url.pathname}.`),
   );
+  /**
+   * Answer a GET with a page built from every member's verdict, and any other method with the 405
+   * page. A member that cannot be read answers with a developer error's page.
+   *
+   * @param shown Builds the page from the verdicts, in the document set's order.
+   * @returns The page.
+   */
   const fromVerdicts = (shown: (verdicts: readonly Verdict[]) => Page) =>
     request.method === "GET"
       ? playground.verdicts.verdicts.pipe(
@@ -1503,7 +1510,8 @@ const answer = (
 
 /**
  * Construct a playground's Fetch handler, with its own sessions, theme and dark flag, and its own
- * verdict cache unless the settings give one: each member is opened once for the handler's life.
+ * verdict cache unless the settings give one: a member's verdict, once its open succeeds, is kept
+ * for the handler's life.
  *
  * It runs `open`, `configure`, the corpus read and the ledger read with `Effect.runPromise`;
  * `render`, `renderStatus`, `decode`, `checkResponses` and `score` are plain functions. A failure
@@ -1515,7 +1523,8 @@ const answer = (
  *   const response = await handle(new Request("http://127.0.0.1:5190/"));
  *   // 200, the listing
  *
- * @param settings The configuration input and the config provider, each optional.
+ * @param settings The configuration input, the config provider and the verdict cache, each
+ *   optional.
  * @returns The handler.
  */
 export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
@@ -1525,6 +1534,12 @@ export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
     sessions: new Map(),
     verdicts: settings.verdicts ?? Effect.runSync(verdictCache()),
   };
+  /**
+   * Provide the settings' config provider to an effect, or leave it on the process environment.
+   *
+   * @param effect The effect to run.
+   * @returns The effect, reading its configuration from `settings.provider` when one is given.
+   */
   const provided = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
     settings.provider === undefined
       ? effect

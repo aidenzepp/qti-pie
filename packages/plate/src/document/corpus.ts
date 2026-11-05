@@ -87,6 +87,20 @@ export class CorpusFileUnreadable extends Schema.TaggedError<CorpusFileUnreadabl
 }
 
 /**
+ * Confirm that the corpus root is a directory.
+ *
+ * @param root The directory {@link corpusRoot} resolved.
+ * @returns Nothing; {@link CorpusMissing} when it does not exist or is not a directory.
+ */
+const requireRoot = (root: string): Effect.Effect<void, CorpusMissing> => {
+  const missing = new CorpusMissing({ command: extractionCommand, root });
+
+  return Effect.tryPromise({ catch: () => missing, try: () => stat(root) }).pipe(
+    Effect.flatMap((stats) => (stats.isDirectory() ? Effect.void : Effect.fail(missing))),
+  );
+};
+
+/**
  * Read the bytes of one corpus file, named by its path relative to {@link corpusRoot}.
  *
  * A path that resolves outside the root, `..` segments or an absolute path, fails as
@@ -115,12 +129,7 @@ export const readCorpusFile = Effect.fn("readCorpusFile")(function* readCorpusFi
     });
   }
 
-  const missing = new CorpusMissing({ command: extractionCommand, root });
-  const rootStats = yield* Effect.tryPromise({ catch: () => missing, try: () => stat(root) });
-
-  if (!rootStats.isDirectory()) {
-    return yield* missing;
-  }
+  yield* requireRoot(root);
 
   return yield* Effect.tryPromise({
     catch: (cause) =>
@@ -156,12 +165,8 @@ export const corpusDocuments: Effect.Effect<
   CorpusMissing | CorpusFileUnreadable | Config.ConfigError
 > = Effect.gen(function* corpusDocuments() {
   const root = yield* corpusRoot;
-  const missing = new CorpusMissing({ command: extractionCommand, root });
-  const rootStats = yield* Effect.tryPromise({ catch: () => missing, try: () => stat(root) });
 
-  if (!rootStats.isDirectory()) {
-    return yield* missing;
-  }
+  yield* requireRoot(root);
 
   const entries = yield* Effect.tryPromise({
     catch: (cause) =>

@@ -170,17 +170,16 @@ export const groupVerdicts = (
   verdicts: readonly Pick<Verdict, "document" | "verdict">[],
 ): readonly VerdictGroup[] =>
   verdictOrder.map((name): VerdictGroup => {
-    const folders = new Map<string, string[]>();
-    for (const { document, verdict } of verdicts) {
-      if (verdict === name) {
-        const folder = topFolder(document);
-        folders.set(folder, [...(folders.get(folder) ?? []), document]);
-      }
-    }
+    const members = verdicts
+      .filter(({ verdict }) => verdict === name)
+      .map(({ document }) => document);
 
     return {
-      count: [...folders.values()].reduce((sum, members) => sum + members.length, 0),
-      folders: Array.from(folders, ([folder, members]) => ({ folder, members })),
+      count: members.length,
+      folders: Array.from(Map.groupBy(members, topFolder), ([folder, grouped]) => ({
+        folder,
+        members: grouped,
+      })),
       verdict: name,
     };
   });

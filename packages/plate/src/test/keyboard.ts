@@ -155,6 +155,13 @@ const isDisabled = (element: Element): boolean => attribute(element, "disabled")
  */
 const pageOf = (tree: Element): Page => {
   const visits: Visit[] = [];
+
+  /**
+   * Record an element and then, in order, every element below it, each with its form owner.
+   *
+   * @param element The element to record.
+   * @param form The nearest `form` above it, absent outside every form.
+   */
   const descend = (element: Element, form?: Element): void => {
     visits.push({ element, form, index: visits.length, kind: kindOf(element) });
 

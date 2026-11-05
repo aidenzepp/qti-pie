@@ -171,13 +171,25 @@ interface Derivation {
    * The copied attributes present on the interaction, by name, with their values as written.
    */
   readonly attributes: readonly (readonly [string, string])[];
+  /**
+   * The response declaration's `base-type`, as written.
+   */
   readonly baseType: string;
+  /**
+   * The response declaration's `cardinality`, as written.
+   */
   readonly cardinality: string;
+  /**
+   * The interaction's corpus document, corpus-relative.
+   */
   readonly document: string;
   /**
    * The interaction's local name.
    */
   readonly interaction: string;
+  /**
+   * The response identifier the interaction binds.
+   */
   readonly response: string;
 }
 
@@ -503,14 +515,12 @@ export const writeWalkCorpus: Effect.Effect<
     response: derivation.response,
   }));
   const od14Folder = path.join(directory, path.dirname(od14Item));
-  const controls = [
-    path.join(od14Folder, "od14-probe.html"),
-    path.join(od14Folder, "od14-probe.svg"),
-  ];
+  const od14HtmlFile = path.join(od14Folder, "od14-probe.html");
+  const od14SvgFile = path.join(od14Folder, "od14-probe.svg");
   const files: readonly (readonly [string, string])[] = [
     [path.join(directory, od14Item), od14Probe],
-    [path.join(od14Folder, "od14-probe.html"), od14Html],
-    [path.join(od14Folder, "od14-probe.svg"), od14Svg],
+    [od14HtmlFile, od14Html],
+    [od14SvgFile, od14Svg],
     [path.join(directory, patternItem), patternProbe],
     [path.join(directory, orderedItem), orderedProbe],
     ...derivations.map(
@@ -525,7 +535,7 @@ export const writeWalkCorpus: Effect.Effect<
   yield* Effect.forEach(files, ([file, text]) => writeText(file, text), { discard: true });
 
   return {
-    controls,
+    controls: [od14HtmlFile, od14SvgFile],
     derived,
     directory,
     items: [od14Item, patternItem, orderedItem, ...derived.map((probe) => probe.item)],
