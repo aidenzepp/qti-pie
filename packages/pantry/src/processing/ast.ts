@@ -59,6 +59,11 @@ export type RuleOrExpressionKind = Exclude<NodeKindHandle, "xi:include">;
 export interface ExpressionNode {
   readonly attributes: ReadonlyMap<string, AttributeValue>;
   readonly element: Element;
+  /**
+   * The `xi:include` elements inside this expression's wildcard content, in document order: the
+   * ones under its foreign children (a `qti-custom-operator`'s), never an operand.
+   */
+  readonly includes: readonly IncludeNode[];
   readonly kind: RuleOrExpressionKind;
   readonly operands: readonly ExpressionNode[];
   readonly position: Position;
@@ -98,6 +103,10 @@ export interface IncludeNode {
   readonly attributes: ReadonlyMap<string, AttributeValue>;
   readonly element: Element;
   readonly fallback: Option.Option<Element>;
+  /**
+   * The `xi:include` elements inside this include's foreign children, in document order.
+   */
+  readonly includes: readonly IncludeNode[];
   readonly kind: "xi:include";
   readonly position: Position;
 }
