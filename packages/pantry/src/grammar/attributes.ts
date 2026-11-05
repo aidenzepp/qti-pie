@@ -20,6 +20,16 @@
  *   or `IDREFS`, which the document's identity laws read. Most domains are none of them, so it is a
  *   relation of its own rather than a field.
  * - `TextDomain` is (version, kind) → domain: the domain of a simple-content kind's one text child.
+ * - `Governor` is (version, kind, type) → governor, `GovernedAttribute` is (version, governor, name)
+ *   → (domain, use, position), and `TypeText` is (version, type) → domain. An element whose
+ *   `xsi:type` names a type derived from its kind's declared one is validated against that type, so
+ *   its admitted and required attributes, their domains and its text's domain are the type's (XML
+ *   Schema 1.0 Part 1, §3.3.4, clause 5.2.1; spec reading 75), and a foreign element a simple type
+ *   governs admits the four `xsi:` names alone and holds text in the type's domain (§3.3.4, Element
+ *   Locally Valid (Type), clause 3.1; spec reading 60). The (kind, type) pair is the governor, read
+ *   in place of the kind wherever the element's attributes and text are, and the rules QTI's
+ *   readings state stay its kind's: a reading applies by the element's name, never by its type
+ *   ({@link admissionOf}, {@link textDomainOf}).
  *
  * A declaration's domain is the leaf's resolution of its XSD type (`Domain`), with a spec reading
  * applied where QTI reads the attribute otherwise ({@link specReadings}).
@@ -41,6 +51,7 @@ import type {
   Reading,
 } from "#pantry/grammar/domains.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
+import { noType } from "#pantry/grammar/xsi.ts";
 import { attributeDeclarations, openAttribute } from "#pantry/vocab/inventory/attributes.ts";
 import type { Domain, Facet, ValueType } from "#pantry/vocab/inventory/types.ts";
 
@@ -108,6 +119,54 @@ export interface Declared {
 export interface DeclaredText {
   readonly domain: Domain;
   readonly kind: string;
+  readonly type: ValueType;
+  readonly versions: readonly SchemaVersion[];
+}
+
+/**
+ * A governor: a named type an `xsi:type` may give an element of a kind in a version in place of
+ * the kind's declared type, which then governs it (XML Schema 1.0 Part 1, §3.3.4, Element Locally
+ * Valid (Element), clauses 4.3 and 5.2.1; spec reading 75), or a simple type that governs a foreign
+ * element's text (spec reading 60). `governs` is its `TypeName` handle.
+ */
+export interface Governor {
+  readonly governs: string;
+  readonly kind: string;
+  readonly version: SchemaVersion;
+}
+
+/**
+ * One attribute an element of a kind carries under a governor: the governing type's own
+ * declaration, or one the composition states for it, as {@link Declared} is for the kind.
+ */
+export interface GovernedDeclared extends Declared {
+  readonly governs: string;
+}
+
+/**
+ * Spell a governor's `Governor` handle: its kind and its governing type's `TypeName` handle, which
+ * holds no space.
+ *
+ * @param governor - The governor's kind and type.
+ * @param governor.governs - The governing type's handle.
+ * @param governor.kind - The kind.
+ * @returns The handle.
+ */
+export const governorHandle = ({
+  governs,
+  kind,
+}: {
+  readonly governs: string;
+  readonly kind: string;
+}): string => `${kind} ${governs}`;
+
+/**
+ * The text type of one named type with simple content in some schema versions: the leaf's
+ * `TypeText`, keyed by the type's `TypeName` handle.
+ */
+export interface DeclaredTypeText {
+  readonly domain: Domain;
+  readonly owner: string;
   readonly type: ValueType;
   readonly versions: readonly SchemaVersion[];
 }
@@ -233,6 +292,24 @@ const ssmlVersion = (domain: Domain): Domain => ({
 });
 
 /**
+ * An `xi:include`'s `parse`, which `XInclude.xsd` types `xi:parseType`, `xml` or `text`: spec
+ * reading 76 narrows it to `xml`, since the information model says "all included fragments must be
+ * treated as parsed xml" (§2.12, Items and Test Fragments). The type's `collapse` whitespace stays
+ * the XSD's.
+ *
+ * @param domain - The XSD's definition.
+ * @returns It with the one enumeration value.
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 | QTI 3.0 information model, 2.12 Items and Test Fragments}
+ */
+const xmlParse = (domain: Domain): Domain => ({
+  ...domain,
+  facets: [
+    ...domain.facets.filter(({ facet }) => facet !== "enumeration"),
+    { facet: "enumeration", value: "xml" },
+  ],
+});
+
+/**
  * An Extended Language Range (RFC 4647, §2.2), `(1*8ALPHA / "*") *("-" (1*8alphanum / "*"))`, as
  * an XSD pattern, but for the two values SSML 1.1 §3.2.1 disallows, `und` and `zxx`, compared
  * without regard to ASCII case (RFC 4647, §2: language ranges "are to be treated as
@@ -260,9 +337,19 @@ const languageRange = (() => {
  * disallowed" (SSML 1.1, §3.2.1): spec reading 42 gives each token of the XSD's `xs:NMTOKENS`
  * member that form, and keeps its empty-string member.
  *
+ * A value is valid only where both the Recommendation and its schema admit it: a conforming SSML
+ * document or fragment adheres to the Recommendation "including the constraints expressed in the"
+ * Core Schema of Appendix D (§2.2.1 and §2.2.2), and "This appendix is normative". That schema's
+ * `languages.datatype` is the same union (`ssml/synthesis-nonamespace.xsd` lines 338 to 340, as
+ * in the W3C's own copy), and an NMTOKEN holds no `*`, since `*` is no XML name character. So the
+ * `*` subtag an Extended Language Range allows is refused: `*`, `en-*` and `*-US` meet the range
+ * pattern and fail the token's `xs:NMTOKEN` pattern, which the union keeps.
+ *
  * @param domain - The XSD's `languages.datatype`, a union of `xs:NMTOKENS` and the empty string.
  * @returns The union with each list token narrowed.
  * @see {@link https://www.w3.org/TR/speech-synthesis11/#S3.2.1 | SSML 1.1, 3.2.1 voice Element}
+ * @see {@link https://www.w3.org/TR/speech-synthesis11/#S2.2.2 | SSML 1.1, 2.2.2 Conforming Stand-Alone Speech Synthesis Markup Language Documents}
+ * @see {@link https://www.w3.org/TR/speech-synthesis11/#AppD | SSML 1.1, Appendix D, Schema for the Speech Synthesis Markup Language}
  * @see {@link https://www.rfc-editor.org/rfc/rfc4647#section-2.2 | RFC 4647, 2.2 Extended Language Range}
  */
 const ssmlLanguages = (domain: Domain): Domain =>
@@ -298,9 +385,75 @@ const counts = [
 ] as const;
 
 /**
+ * MathML 3's notation for the three integer types (§2.1.5.1, "Syntax notation used in the MathML
+ * specification"), as XSD patterns over the value after its whitespace is collapsed:
+ *
+ * - `unsigned-integer`, "a string of decimal-digits, representing a non-negative integer";
+ * - `positive-integer`, "a string of decimal-digits, but not consisting solely of "0"s (U+0030),
+ *   representing a positive integer";
+ * - `integer`, "an optional "-" (U+002D), followed by a string of decimal digits, and representing an
+ *   integer".
+ *
+ * Spec reading 2 follows them over the XSD's types, `m:unsigned-integer`, `m:positive-integer` and
+ * `m:integer`, which are `xs:unsignedLong`, `xs:positiveInteger` and `xs:integer`
+ * (`mathml3-presentation.xsd` lines 93, 133 and 96, as the RelaxNG's `mathml3-presentation.rnc`
+ * lines 60, 75 and 61 are) and so admit a leading `+`, and `-0` for the first (spec reading 64). A
+ * value meets both the notation and its type, so the pattern narrows the type's lexical space and
+ * keeps its bounds and its `collapse`: §2.1.5.1 asks only that "leading and trailing whitespace in
+ * attribute values should be avoided".
+ *
+ * @see {@link https://www.w3.org/TR/MathML3/chapter2.html#id.2.1.5.1 | MathML 3, 2.1.5.1 Syntax notation used in the MathML specification}
+ */
+const mathmlNotations: ReadonlyMap<string, string> = new Map([
+  ["m:unsigned-integer", "[0-9]+"],
+  ["m:positive-integer", "[0-9]*[1-9][0-9]*"],
+  ["m:integer", "-?[0-9]+"],
+]);
+
+/**
+ * The MathML attributes of a notation type whose own row in the Recommendation states another
+ * notation, which spec reading 2 leaves to the type: `scriptlevel`, `( "+" | "-" )?
+ * unsigned-integer` (MathML 3 §3.3.4.2, `mstyle`'s attributes, which `math` takes too), where a
+ * sign increments or decrements the level, the language of `xs:integer` itself.
+ *
+ * @see {@link https://www.w3.org/TR/MathML3/chapter3.html#presm.mstyle.attrs | MathML 3, 3.3.4.2 Attributes (mstyle)}
+ */
+const ownNotations: ReadonlySet<string> = new Set(["scriptlevel"]);
+
+/**
+ * Spec reading 2's attribute readings: each MathML attribute of a notation type
+ * ({@link mathmlNotations}), but {@link ownNotations}, on every kind that declares it, read with
+ * the notation's pattern beside its type's.
+ */
+const mathmlNotationReadings: readonly SpecReading[] = [
+  ...Map.groupBy(
+    attributeDeclarations.filter(
+      ({ kind, name, type }) =>
+        kind.startsWith("m:") && mathmlNotations.has(type.type) && !ownNotations.has(name),
+    ),
+    ({ name, type }) => `${name} ${type.type}`,
+  ).values(),
+].flatMap((declarations) => {
+  const [first] = declarations;
+  const pattern = first === undefined ? undefined : mathmlNotations.get(first.type.type);
+
+  return first === undefined || pattern === undefined
+    ? []
+    : [
+        on(2, [...new Set(declarations.map(({ kind }) => kind))], first.name, "xsd", (domain) => ({
+          ...domain,
+          patterns: [...domain.patterns, [pattern]],
+        })),
+      ];
+});
+
+/**
  * The attribute readings of `docs/spec-readings.md`, the only places the grammar departs from the
  * XSD's declarations, each stating its reading's number:
  *
+ * - 2: a MathML attribute of an integer notation type takes the notation's pattern (MathML 3
+ *   §2.1.5.1): `length` digits only, `columnspan`, `rowspan` and `selection` digits not all zero,
+ *   `position`, `shift` and `index` an optional `-` and digits ({@link mathmlNotationReadings}).
  * - 7: a typed QTI value in an attribute is exact, outer whitespace invalid: its listed attributes
  *   read no whitespace class.
  * - 8: a match table entry's `target-value` is a value of the outcome's base type, not a base-type
@@ -309,11 +462,14 @@ const counts = [
  * - 16: `normal-maximum` is greater than zero.
  * - 18: an order or graphic-order interaction's `min-choices` is at least 1.
  * - 39: an SSML `speak/@version` is `1.1`.
- * - 42: an SSML `voice/@languages` holds language ranges, `und` and `zxx` refused.
+ * - 42: an SSML `voice/@languages` holds language ranges, `und`, `zxx` and `*` refused.
  * - 46: a count, and `figures`, is a signed 64-bit integer.
+ * - 76: an `xi:include`'s `parse` is `xml` ({@link xmlParse}).
+ * - 83: a position object interaction's `min-choices` is at least 1.
  *
  * Reading 14, restated, follows the XSD (a text-entry interaction's `response-identifier` and
- * `string-identifier` are `IDREF`s), so it states nothing here.
+ * `string-identifier` are `IDREF`s), so it states nothing here. The readings that add an attribute
+ * to a kind or take one away are {@link readingSpellings} and {@link readingRefusals}.
  */
 export const specReadings: readonly SpecReading[] = [
   on(7, ["qti-map-entry"], "map-key", "exact"),
@@ -352,6 +508,10 @@ export const specReadings: readonly SpecReading[] = [
     "xsd",
     (domain) => withFacets(domain, [{ facet: "minInclusive", value: "1" }]),
   ),
+  on(83, ["qti-position-object-interaction"], "min-choices", "xsd", (domain) =>
+    withFacets(domain, [{ facet: "minInclusive", value: "1" }]),
+  ),
+  on(76, ["xi:include"], "parse", "xsd", xmlParse),
   on(39, ["ssml:speak"], "version", "xsd", ssmlVersion),
   on(42, ["ssml:voice"], "languages", "xsd", ssmlLanguages),
   ...[...counts, "figures"].map((name): SpecReading => ({
@@ -361,6 +521,7 @@ export const specReadings: readonly SpecReading[] = [
     reading: 46,
     whiteSpace: "xsd",
   })),
+  ...mathmlNotationReadings,
 ];
 
 /**
@@ -376,6 +537,82 @@ const readingsOf = (kind: string, name: string): readonly SpecReading[] =>
       reading.name === name &&
       Option.match(reading.kinds, { onNone: () => true, onSome: (kinds) => kinds.includes(kind) }),
   );
+
+/**
+ * A second spelling a spec reading admits beside a declared attribute: the declared name, the
+ * name admitted beside it, and the reading.
+ */
+export interface ReadingSpelling {
+  readonly declared: string;
+  readonly name: string;
+  readonly reading: number;
+}
+
+/**
+ * The spellings spec readings admit beside a declared attribute, on every kind that declares it,
+ * with its type, use and versions: reading 10's `aria-keyshortcuts`, ARIA's spelling, beside the
+ * XSD's `aria-keyshorts`, which the empty element families declare. Neither document outranks the
+ * other there, so both are accepted and the one written is kept (reading 1).
+ *
+ * The admission is explicit, a closed name, rather than the open `no-namespace` name the empty
+ * families' `##any` wildcard would read it as, since spec reading 81 takes that open class away
+ * from every element the Schematron's extension rules cover, the empty families among them.
+ */
+export const readingSpellings: readonly ReadingSpelling[] = [
+  { declared: "aria-keyshorts", name: "aria-keyshortcuts", reading: 10 },
+];
+
+/**
+ * An attribute a spec reading refuses on a kind whose XSD declares it, and the reading.
+ */
+export interface ReadingRefusal {
+  readonly kind: string;
+  readonly name: string;
+  readonly reading: number;
+}
+
+/**
+ * The declared attributes spec readings refuse: reading 76's `xpointer` on `xi:include`, which
+ * `XInclude.xsd` declares and the information model forbids ("when using an XML binding, the
+ * xpointer mechanism defined by the XInclude specification MUST NOT be used", §2.12). No wildcard
+ * of `xi:include` admits a name in no namespace (`##other`), so a refused `xpointer` is refused
+ * outright, never read as an open name.
+ *
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 | QTI 3.0 information model, 2.12 Items and Test Fragments}
+ */
+export const readingRefusals: readonly ReadingRefusal[] = [
+  { kind: "xi:include", name: "xpointer", reading: 76 },
+];
+
+/**
+ * Apply the spec readings that change which attributes a kind admits to a vocabulary's
+ * declarations: drop each one {@link readingRefusals} refuses, and add each spelling
+ * {@link readingSpellings} admits beside a declaration of its declared name, as a copy of that
+ * declaration under the new name, where the kind does not declare the new name itself.
+ *
+ * @param declarations - The declarations, each of a kind of the vocabulary.
+ * @returns The declarations the attribute grammar admits, in their order, each added spelling after
+ *   the declarations.
+ */
+export const readDeclarations = <D extends Declared>(declarations: readonly D[]): readonly D[] => {
+  const kept = declarations.filter(
+    ({ kind, name }) =>
+      !readingRefusals.some((refused) => refused.kind === kind && refused.name === name),
+  );
+  const named = new Set(kept.map(({ kind, name }) => `${kind}\u0000${name}`));
+
+  return [
+    ...kept,
+    ...readingSpellings.flatMap((spelling) =>
+      kept
+        .filter(
+          ({ kind, name }) =>
+            name === spelling.declared && !named.has(`${kind}\u0000${spelling.name}`),
+        )
+        .map((declared) => ({ ...declared, name: spelling.name })),
+    ),
+  ];
+};
 
 /**
  * A declaration whose domain does not compile: the declaring kind, the attribute (empty for a
@@ -413,6 +650,18 @@ export type AttributeKey = readonly [
 ];
 
 /**
+ * The key of `GovernedAttribute`: version, governor, then attribute name, each over its roster. A
+ * governor stands for its (kind, governing type) pair ({@link governorHandle}), so the key's code
+ * spaces multiply to about as many cells as `AttributeGrammar`'s, where (kind, type) would multiply
+ * to more than one PostgreSQL bit string holds.
+ */
+export type GovernedKey = readonly [
+  IdField<"version", string>,
+  IdField<"governor", string>,
+  IdField<"name", string>,
+];
+
+/**
  * The payload of `AttributeGrammar`: the attribute's value domain, whether it is required, and its
  * position among the names its (version, kind) admits.
  */
@@ -444,9 +693,25 @@ export interface AttributeGrammar {
   readonly admission: Closed<AttributeKey, AttributePayload>;
   /**
    * The `ValueDomain` roster's domains, in code order: each at its first use, versions outermost,
-   * then the declarations in order, then the texts.
+   * then the declarations in order, then the texts, then the governed declarations and the type
+   * texts.
    */
   readonly domains: readonly ValueDomain[];
+  /**
+   * `GovernedAttribute`: each attribute an element may carry in a version under a governor, with
+   * its value domain, its use and its position among the names that governor admits there. Under a
+   * governor, the XSD-derived admission is the governing type's, and the rules spec readings state
+   * follow the element's kind (spec reading 75); an element of no governor reads `admission`.
+   */
+  readonly governed: Closed<GovernedKey, AttributePayload>;
+  /**
+   * `Governor`: the governor of each (version, kind, type) where the type governs an element of the
+   * kind in place of its declared type, or a simple type governs a foreign element's text.
+   */
+  readonly governor: Closed<
+    readonly [IdField<"version", string>, IdField<"kind", string>, IdField<"governs", string>],
+    readonly [IdField<"governor", string>]
+  >;
   /**
    * `ValueIdentity`: the identity type of each domain that has one.
    */
@@ -469,6 +734,14 @@ export interface AttributeGrammar {
     readonly [IdField<"domain", string>]
   >;
   /**
+   * `TypeText`: the value domain of the text of each named type with simple content in a version,
+   * which an element that type governs holds its text in (spec readings 60 and 75).
+   */
+  readonly typeText: Closed<
+    readonly [IdField<"version", string>, IdField<"governs", string>],
+    readonly [IdField<"domain", string>]
+  >;
+  /**
    * `ValueDomain`: each domain's primitive, pattern and residual facets.
    */
   readonly valueDomain: Closed<readonly [IdField<"domain", string>], DomainPayload>;
@@ -483,6 +756,15 @@ export interface AttributeGrammarInput {
    */
   readonly declarations: readonly Declared[];
   /**
+   * Every attribute each governor admits on its kind's elements: the governing type's
+   * declarations, read through the kind's spec readings, and those the composition states.
+   */
+  readonly governed: readonly GovernedDeclared[];
+  /**
+   * The governors, each (version, kind, type) once.
+   */
+  readonly governors: readonly Governor[];
+  /**
    * The `NodeKind` roster.
    */
   readonly kinds: Roster<string>;
@@ -494,6 +776,14 @@ export interface AttributeGrammarInput {
    * The text type of every simple-content kind of the composition.
    */
   readonly texts: readonly DeclaredText[];
+  /**
+   * The `TypeName` roster (`#pantry/grammar/xsi.ts`).
+   */
+  readonly typeName: Roster<string>;
+  /**
+   * The text type of every named type with simple content that may govern an element.
+   */
+  readonly typeTexts: readonly DeclaredTypeText[];
   /**
    * The `SchemaVersion` roster.
    */
@@ -510,19 +800,59 @@ const facetsText = (domain: CompiledDomain): string =>
   domain.facets.map(({ facet, value }) => `${facet}=${value}`).join(" ");
 
 /**
+ * The definition key of each compiled domain keyed so far ({@link definitionKey}), by the compiled
+ * domain's identity.
+ */
+const definitionKeys = new WeakMap<CompiledDomain, string>();
+
+/**
  * Key a compiled domain by its definition: two domains are one when their primitive, pattern,
  * residual facets and identity agree.
  *
  * @param domain - The compiled domain.
  * @returns The key.
  */
-const definitionKey = (domain: CompiledDomain): string =>
-  [
+const definitionKey = (domain: CompiledDomain): string => {
+  const known = definitionKeys.get(domain);
+  if (known !== undefined) {
+    return known;
+  }
+
+  const key = [
     domain.primitive,
     domain.pattern,
     facetsText(domain),
     Option.getOrElse(domain.identity, () => ""),
   ].join("\u0000");
+  definitionKeys.set(domain, key);
+
+  return key;
+};
+
+/**
+ * Each leaf domain compiled so far with no spec reading, by the domain's identity: every
+ * composition reads the one leaf, and every governor of a type reads that type's domains again, so
+ * compiling each leaf definition once keeps a composition's cost in its own rows.
+ */
+const unreadCompiled = new WeakMap<Domain, ReturnType<typeof compile>>();
+
+/**
+ * Compile a leaf domain no spec reading alters, once per domain.
+ *
+ * @param domain - The leaf's domain.
+ * @returns Its compiled form, or why it does not compile.
+ */
+const compiledUnread = (domain: Domain): ReturnType<typeof compile> => {
+  const known = unreadCompiled.get(domain);
+  if (known !== undefined) {
+    return known;
+  }
+
+  const compiled = compile(domain, "xsd");
+  unreadCompiled.set(domain, compiled);
+
+  return compiled;
+};
 
 /**
  * The `ValueDomain` roster as it grows: each definition at its first use, under the first handle no
@@ -615,7 +945,7 @@ const domainOf = (
     ? "exact"
     : "xsd";
 
-  return compile(domain, whiteSpace).pipe(
+  return (readings.length === 0 ? compiledUnread(domain) : compile(domain, whiteSpace)).pipe(
     Result.map((compiled) =>
       intern(domains, compiled, handleOf(declared.type, anonymous, readings)),
     ),
@@ -640,10 +970,13 @@ interface Admitted {
 /**
  * Generate the attribute grammar of a composition.
  *
+ * Each governor's attributes are numbered as a kind's are, from 0 in `AttributeName` code order,
+ * so an element's `attrs` is a set over its governor's positions as it is over its kind's.
+ *
  * @param input - The rosters and the declarations.
- * @returns `AttributeGrammar`, `ValueDomain`, `ValueIdentity` and `TextDomain`, with the domain and
- *   position rosters; or the first declaration whose domain does not compile, or the first relation
- *   that has no constant.
+ * @returns `AttributeGrammar`, `ValueDomain`, `ValueIdentity`, `TextDomain`, `Governor`,
+ *   `GovernedAttribute` and `TypeText`, with the domain and position rosters; or the first
+ *   declaration whose domain does not compile, or the first relation that has no constant.
  */
 export const generate = (
   input: AttributeGrammarInput,
@@ -682,6 +1015,41 @@ export const generate = (
       }
     }
 
+    // The governors' domains join the roster after every kind's, so a code the kinds' domains
+    // hold keeps its place.
+    const governed: (Admitted & { readonly governor: string })[] = [];
+    const typeTexts: {
+      readonly domain: ValueDomain;
+      readonly governs: string;
+      readonly version: SchemaVersion;
+    }[] = [];
+    for (const version of input.versions.handles) {
+      for (const declared of input.governed) {
+        if (declared.versions.includes(version)) {
+          const domain = yield* domainOf(domains, declared, `${declared.governs}@${declared.name}`);
+          governed.push({
+            domain,
+            governor: governorHandle(declared),
+            kind: declared.kind,
+            name: declared.name,
+            use: declared.use,
+            version,
+          });
+        }
+      }
+
+      for (const declared of input.typeTexts) {
+        if (declared.versions.includes(version)) {
+          const domain = yield* domainOf(
+            domains,
+            { ...declared, kind: declared.owner, name: "" },
+            `${declared.owner} text`,
+          );
+          typeTexts.push({ domain, governs: declared.owner, version });
+        }
+      }
+    }
+
     const domainRoster = yield* roster(
       "ValueDomain",
       domains.ordered.map(({ handle }) => handle),
@@ -690,22 +1058,29 @@ export const generate = (
     const kind = idField("kind", input.kinds);
     const domain = idField("domain", domainRoster);
     const byKind = Map.groupBy(admitted, (row) => `${row.version}\u0000${row.kind}`);
+    const byGovernor = Map.groupBy(governed, (row) => `${row.version}\u0000${row.governor}`);
+    const families: readonly (readonly Admitted[])[] = [...byKind.values(), ...byGovernor.values()];
     const positionOf = new Map(
-      [...byKind.values()].flatMap((rows) =>
+      families.flatMap((rows) =>
         rows
           .map((row) => ({ code: Option.getOrElse(input.names.codeOf(row.name), () => -1), row }))
           .toSorted((left, right) => left.code - right.code)
           .map(({ row }, position) => [row, position] as const),
       ),
     );
-    const positions = fin(
-      "AttributePosition",
-      Math.max(0, ...[...byKind.values()].map((rows) => rows.length)),
-    );
+    const positions = fin("AttributePosition", Math.max(0, ...families.map((rows) => rows.length)));
+    const use = idField("use", yield* roster("Use", uses));
+    const position = idField("position", positions);
+    const name = idField("name", input.names);
+    const governs = idField("governs", input.typeName);
+    const governorRoster = yield* roster("Governor", [
+      ...new Set(input.governors.map(governorHandle)),
+    ]);
+    const governorField = idField("governor", governorRoster);
     const admission = yield* closed({
-      key: [version, kind, idField("name", input.names)],
+      key: [version, kind, name],
       name: "AttributeGrammar",
-      payload: [domain, idField("use", yield* roster("Use", uses)), idField("position", positions)],
+      payload: [domain, use, position],
       rows: admitted.map((row) => ({
         domain: row.domain.handle,
         kind: row.kind,
@@ -751,47 +1126,154 @@ export const generate = (
         version: row.version,
       })),
     });
+    const governor = yield* closed({
+      key: [version, kind, governs],
+      name: "Governor",
+      payload: [governorField],
+      rows: input.governors.map((held) => ({
+        governor: governorHandle(held),
+        governs: held.governs,
+        kind: held.kind,
+        version: held.version,
+      })),
+    });
+    const governedRelation = yield* closed({
+      key: [version, governorField, name],
+      name: "GovernedAttribute",
+      payload: [domain, use, position],
+      rows: governed.map((row) => ({
+        domain: row.domain.handle,
+        governor: row.governor,
+        name: row.name,
+        position: String(positionOf.get(row) ?? 0),
+        use: row.use,
+        version: row.version,
+      })),
+    });
+    const typeText = yield* closed({
+      key: [version, governs],
+      name: "TypeText",
+      payload: [domain],
+      rows: typeTexts.map((row) => ({
+        domain: row.domain.handle,
+        governs: row.governs,
+        version: row.version,
+      })),
+    });
 
-    return { admission, domains: domains.ordered, identity, positions, text, valueDomain };
+    return {
+      admission,
+      domains: domains.ordered,
+      governed: governedRelation,
+      governor,
+      identity,
+      positions,
+      text,
+      typeText,
+      valueDomain,
+    };
   });
 
 /**
- * Read the attributes a kind admits in a version, by position: each admitted name with its domain
- * and use, positions ascending.
+ * An element's governing type and where it stands: the key an element's attributes and text are
+ * read under.
+ */
+export interface GoverningKey {
+  /**
+   * The element's governing type, `Node.governs`: a `TypeName` handle, `none` where no named type
+   * governs it.
+   */
+  readonly governs: string;
+  readonly kind: string;
+  readonly version: SchemaVersion;
+}
+
+/**
+ * Find the governor of an element: the (kind, type) pair its governing type makes it, where that
+ * type governs it in place of its kind's declared type (spec reading 75), or is a simple type that
+ * governs a foreign element's text (spec reading 60).
+ *
+ * @param grammar - The attribute grammar.
+ * @param key - The element's version, kind and governing type.
+ * @returns The `Governor` handle, or none where the element reads its kind's own rows: its
+ *   declared type governs it, or no named type, or a complex type a foreign element is not checked
+ *   against (spec reading 50).
+ */
+export const governorOf = (grammar: AttributeGrammar, key: GoverningKey): Option.Option<string> =>
+  Option.map(grammar.governor.lookup(key), ({ governor }) => governor);
+
+/**
+ * Find the row of an attribute name an element admits: its governor's, where one governs it, else
+ * its kind's.
+ *
+ * @param grammar - The attribute grammar.
+ * @param key - The element's version, kind and governing type, and the attribute's name.
+ * @returns The admitted name's domain, use and position, or none where the element does not admit
+ *   it.
+ */
+export const admissionOf = (
+  grammar: AttributeGrammar,
+  key: GoverningKey & { readonly name: string },
+): Option.Option<{ readonly domain: string; readonly position: number; readonly use: Use }> => {
+  const read = ({
+    domain,
+    position,
+    use,
+  }: {
+    readonly domain: string;
+    readonly position: string;
+    readonly use: Use;
+  }) => ({ domain, position: Number(position), use });
+
+  return Option.match(governorOf(grammar, key), {
+    onNone: () => Option.map(grammar.admission.lookup(key), read),
+    onSome: (governor) =>
+      Option.map(grammar.governed.lookup({ governor, name: key.name, version: key.version }), read),
+  });
+};
+
+/**
+ * Read the attributes an element admits, by position: each admitted name with its domain and use,
+ * positions ascending, under its governor where one governs it ({@link admissionOf}).
  *
  * @param grammar - The attribute grammar.
  * @param names - The `AttributeName` roster.
  * @param version - The version.
  * @param kind - The kind.
- * @returns The kind's admitted attributes, in position order.
+ * @param governs - The element's governing type, its kind's own rows for one that is no governor.
+ * @returns The element's admitted attributes, in position order.
  */
 export const admittedOf = (
   grammar: AttributeGrammar,
   names: Roster<string>,
   version: SchemaVersion,
   kind: string,
+  governs: string = noType,
 ): readonly {
   readonly domain: string;
   readonly name: string;
   readonly position: number;
   readonly use: Use;
 }[] =>
-  names.handles.flatMap((name) =>
-    Option.match(grammar.admission.lookup({ kind, name, version }), {
-      onNone: () => [],
-      onSome: (row) => [{ domain: row.domain, name, position: Number(row.position), use: row.use }],
-    }),
-  );
+  names.handles
+    .flatMap((name) =>
+      Option.match(admissionOf(grammar, { governs, kind, name, version }), {
+        onNone: () => [],
+        onSome: (row) => [{ ...row, name }],
+      }),
+    )
+    .toSorted((left, right) => left.position - right.position);
 
 /**
- * Read `Required`'s row for a kind in a version: the positions of the attributes an element of the
- * kind must carry, `AttributeGrammar`'s side selected by `use = required`. An element's `attrs`
- * must contain it, `bit_count(required & ~attrs) = 0` (AL3).
+ * Read `Required`'s row for an element: the positions of the attributes it must carry, the side of
+ * its governor's or its kind's admission that `use = required` selects. An element's `attrs` must
+ * contain it, `bit_count(required & ~attrs) = 0` (AL3).
  *
  * @param grammar - The attribute grammar.
  * @param names - The `AttributeName` roster.
  * @param version - The version.
  * @param kind - The kind.
+ * @param governs - The element's governing type, its kind's own rows for one that is no governor.
  * @returns The required positions.
  */
 export const requiredOf = (
@@ -799,12 +1281,28 @@ export const requiredOf = (
   names: Roster<string>,
   version: SchemaVersion,
   kind: string,
+  governs: string = noType,
 ): ReadonlySet<number> =>
   new Set(
-    admittedOf(grammar, names, version, kind)
+    admittedOf(grammar, names, version, kind, governs)
       .filter(({ use }) => use === "required")
       .map(({ position }) => position),
   );
+
+/**
+ * Find the domain an element's text is read in: its governing type's simple content, where a
+ * governor governs it, else its kind's `TextDomain`.
+ *
+ * @param grammar - The attribute grammar.
+ * @param key - The element's version, kind and governing type.
+ * @returns The `ValueDomain` handle, or none where the element's text is in no domain: its kind or
+ *   its governing type has no simple content.
+ */
+export const textDomainOf = (grammar: AttributeGrammar, key: GoverningKey): Option.Option<string> =>
+  Option.match(governorOf(grammar, key), {
+    onNone: () => Option.map(grammar.text.lookup(key), ({ domain }) => domain),
+    onSome: () => Option.map(grammar.typeText.lookup(key), ({ domain }) => domain),
+  });
 
 /**
  * A count an element's attributes must meet beside `Required`: how many of a set of names it

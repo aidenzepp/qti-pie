@@ -50,10 +50,11 @@ import type { Automaton } from "#pantry/vocab/sequencing.ts";
 /**
  * A spec reading that edits a content model where it says more than the XSD: a particle's group
  * required; a kind admitted beside another in every particle that names it; kinds that come
- * before every other element of the model and before its text that is not whitespace; or the
- * model restated whole, over the same kinds, where the language the reading follows is narrower
- * than the XSD's and no edit of a particle states it (spec reading 2, MathML's RelaxNG
- * interleaves).
+ * before every other element of the model and before its text that is not whitespace; the model
+ * restated whole, where the language the reading follows is not the XSD's and no edit of a particle
+ * states it, narrower or wider (spec reading 2, MathML's RelaxNG); or the kinds a family's last
+ * child is one of, which narrows the model's `Last` where its language is no deterministic
+ * expression's (spec reading 2, MathML's `lambda`).
  */
 export type ModelEdit =
   | {
@@ -80,15 +81,34 @@ export type ModelEdit =
       readonly parent: string;
       readonly particle: Particle;
       readonly source: string;
+    }
+  | {
+      readonly _tag: "ends";
+      readonly kinds: readonly [string, ...string[]];
+      readonly parent: string;
+      readonly source: string;
     };
 
 /**
- * A vocabulary's share of the content grammar: its spec readings' edits, and the models of kinds
- * no XSD declares (the document node, the foreign kinds).
+ * The kinds of one namespace that are its only roots: the only kinds of that namespace a wildcard
+ * admits, wherever it stands, and where it comes from (spec reading 2: MathML's one root,
+ * `m:math`).
+ */
+export interface Roots {
+  readonly kinds: readonly [string, ...string[]];
+  readonly namespace: string;
+  readonly source: string;
+}
+
+/**
+ * A vocabulary's share of the content grammar: its spec readings' edits, the models of kinds no XSD
+ * declares (the document node, the foreign kinds), and the roots of its namespace, none where a
+ * wildcard admits every kind it declares globally.
  */
 export interface ContentFacet {
   readonly edits: readonly ModelEdit[];
   readonly models: readonly ContentModel[];
+  readonly roots: readonly Roots[];
 }
 
 /**
@@ -172,6 +192,21 @@ export interface ContentGrammar {
     ],
     readonly []
   >;
+  /**
+   * `StrictlyHeld`: (version, parent, child) for each foreign kind only `strict` wildcards of the
+   * parent's model admit, each sourced to the wildcard. Such a child has no declaration its
+   * document's schema set gives it, so it stands only where its `xsi:type` names a type that set
+   * holds or a built-in, against which XML Schema assesses it (Part 1, §3.3.4 clause 1.2; spec
+   * reading 72); without one it is invalid (§3.10.4 clause 2, §3.3.5 [validity] clause 1.1.3).
+   */
+  readonly strictlyHeld: Sourced<
+    readonly [
+      IdField<"version", SchemaVersion>,
+      IdField<"parent", string>,
+      IdField<"child", string>,
+    ],
+    readonly []
+  >;
 }
 
 /**
@@ -207,9 +242,27 @@ export class UnreadEdit extends Schema.TaggedError<UnreadEdit>()("UnreadEdit", {
 }
 
 /**
+ * A spec reading's ending names some kinds of one of its model's positions and not the others, so
+ * no position state tells a family that ends there with a listed kind from one that ends with
+ * another.
+ */
+export class MixedEnding extends Schema.TaggedError<MixedEnding>()("MixedEnding", {
+  kinds: Schema.String,
+  parent: Schema.String,
+  source: Schema.String,
+}) {
+  /**
+   * The reading, the position's kinds, and the repair.
+   */
+  override get message(): string {
+    return `The spec reading ${this.source} ends ${this.parent}'s families with some of the kinds ${this.kinds}, which one position of its model names together, so the ending is not decided by the last child's position. Restate the model so that position is split, or list all its kinds or none.`;
+  }
+}
+
+/**
  * The ways the content models have no content grammar.
  */
-export type ContentError = AmbiguousModel | ClosedRelationError | UnreadEdit;
+export type ContentError = AmbiguousModel | ClosedRelationError | MixedEnding | UnreadEdit;
 
 /**
  * The kinds of character data, comments, instructions and entity references: the XDM's nodes
@@ -367,18 +420,20 @@ const edited = (particle: Particle, edit: ModelEdit): Edited => {
   }
 
   if (edit._tag === "restate") {
-    // A restatement replaces the XSD's particle only over the same element kinds and no wildcard,
-    // so it narrows the model's language and never admits a kind the XSD does not.
-    const kindsOf = (held: Particle): ReadonlySet<string> =>
-      new Set(leavesOf(held).flatMap((leaf) => (leaf._tag === "element" ? leaf.kinds : ["##any"])));
-    const before = kindsOf(particle);
-    const after = kindsOf(edit.particle);
-    const same =
-      !before.has("##any") &&
-      before.size === after.size &&
-      [...after].every((kind) => before.has(kind));
+    // A restatement is the reading's whole model: it replaces the XSD's particle, narrowing or
+    // widening its language, and the reading's own recognizer (`#pantry/test/gen/relaxng.ts`,
+    // `relaxNgModels`) is what it is checked against.
+    return { found: true, particle: edit.particle };
+  }
 
-    return { found: same, particle: same ? edit.particle : particle };
+  if (edit._tag === "ends") {
+    // An ending narrows the automaton, not the particle (`contentOf`); here it is found when the
+    // model names one of its kinds.
+    const named = new Set(
+      leavesOf(particle).flatMap((leaf) => (leaf._tag === "element" ? leaf.kinds : [])),
+    );
+
+    return { found: edit.kinds.some((kind) => named.has(kind)), particle };
   }
 
   let found = false;
@@ -466,6 +521,73 @@ const editedBy = (
 };
 
 /**
+ * Narrow an automaton by the readings' endings of its kind: a family may end only at a position
+ * whose kinds an ending lists, every ending's, and never empty. `Follow` is untouched, so the
+ * family's other children keep the model's order. A family's last state is its last child's
+ * position, so an ending is exact only where each position names kinds all of which or none of
+ * which it lists; a position it lists in part is refused as {@link MixedEnding}.
+ *
+ * An ending states a language no deterministic expression does: MathML's `lambda` is
+ * `bvar*, DomainQ, ContExp` with `interval` in both `DomainQ` and `ContExp` (spec reading 2), whose
+ * minimal automaton breaks Brüggemann-Klein and Wood's orbit property, so no particle Unique
+ * Particle Attribution keeps deterministic states it. Its restatement `bvar*, (interval |
+ * qualifier)*, other?`, ended by the content expressions, is deterministic, and its `Last` ends a
+ * family where the RelaxNG's does.
+ *
+ * @param automaton - The model's automaton.
+ * @param edits - Every reading's edits.
+ * @param kind - The model's kind.
+ * @returns The automaton, its `Last` narrowed by the kind's endings, or the first ending a position
+ *   is listed in only in part by.
+ * @see {@link https://doi.org/10.1006/inco.1997.2695 | Brüggemann-Klein and Wood, One-Unambiguous Regular Languages (Information and Computation 142(2), 1998)}
+ */
+const endedBy = (
+  automaton: Automaton,
+  edits: readonly ModelEdit[],
+  kind: string,
+): Result.Result<Automaton, MixedEnding> => {
+  const endings = edits.flatMap((edit) =>
+    edit._tag === "ends" && edit.parent === kind ? [edit] : [],
+  );
+  for (const ending of endings) {
+    const listed = new Set<string>(ending.kinds);
+    for (const { symbol } of automaton.positions) {
+      if (
+        symbol._tag === "kinds" &&
+        symbol.kinds.some((held) => listed.has(held)) &&
+        !symbol.kinds.every((held) => listed.has(held))
+      ) {
+        return Result.fail(
+          new MixedEnding({
+            kinds: symbol.kinds.join(", "),
+            parent: kind,
+            source: ending.source,
+          }),
+        );
+      }
+    }
+  }
+
+  if (endings.length === 0) {
+    return Result.succeed(automaton);
+  }
+
+  const ends = (number: number): boolean =>
+    automaton.positions.some(
+      ({ number: at, symbol }) =>
+        at === number &&
+        symbol._tag === "kinds" &&
+        endings.every(({ kinds }) => symbol.kinds.every((held) => kinds.includes(held))),
+    );
+
+  return Result.succeed({
+    ...automaton,
+    last: new Set([...automaton.last].filter(ends)),
+    nullable: false,
+  });
+};
+
+/**
  * The automaton of a content type that holds no particle: no position, and the empty family.
  */
 const noAutomaton: Automaton = {
@@ -510,6 +632,10 @@ interface Installed {
    * The model's source in its version, and each position's, position n at index n.
    */
   readonly sources: readonly [Source, ...Source[]];
+  /**
+   * The foreign kinds only `strict` wildcards of the model admit.
+   */
+  readonly strictly: readonly string[];
   readonly symbols: ReadonlyMap<string, readonly number[]>;
   readonly version: SchemaVersion;
 }
@@ -519,18 +645,23 @@ interface Installed {
  * position (plan R12, U4).
  *
  * An element particle admits its kinds. A wildcard admits, by its processing, the globally
- * declared kinds in its namespaces that no element particle of the model names, but the roots
- * reading 6 keeps foreign (`lax`, `strict`), and the foreign kinds of the namespace classes its
- * constraint admits (`lax`, `skip`). The content type admits its character data at position 0.
+ * declared kinds in its namespaces that no element particle of the model names and that the
+ * schema sets of the model's documents declare (spec reading 72), but the roots reading 6 keeps
+ * foreign and, of a namespace a facet states the roots of, every kind but those roots (`lax`,
+ * `strict`), and the foreign kinds of the namespace classes its constraint admits (`lax`, `skip`).
+ * The content type admits its character data at position 0. A reading's ending narrows the
+ * automaton's `Last` ({@link endedBy}).
  *
  * @param input - The models, the vocabularies' readings, and what a wildcard reads.
+ * @param input.globalKinds - The kinds a `lax` or `strict` wildcard of a parent reads as their
+ *   global declarations in a version: those a schema set of the parent's documents declares.
  * @returns The content grammar and the admitted triples with their positions, or the first model or
  *   reading that has none.
  */
 export const contentOf = (input: {
   readonly facets: readonly ContentFacet[];
   readonly foreignRoots: ReadonlySet<string>;
-  readonly globalKinds: (version: SchemaVersion) => readonly string[];
+  readonly globalKinds: (version: SchemaVersion, parent: string) => readonly string[];
   readonly kinds: Roster<string>;
   readonly models: readonly ContentModel[];
   readonly namespaceOf: (kind: string) => string;
@@ -544,6 +675,11 @@ export const contentOf = (input: {
 > =>
   Result.gen(function* installContent() {
     const edits = input.facets.flatMap((facet) => facet.edits);
+    const rootsOf: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+      input.facets
+        .flatMap((facet) => facet.roots)
+        .map(({ kinds, namespace }) => [namespace, new Set<string>(kinds)] as const),
+    );
     const installed: Installed[] = [];
     const used = new Set<ModelEdit>();
     for (const model of [...input.models, ...input.facets.flatMap((facet) => facet.models)]) {
@@ -554,10 +690,14 @@ export const contentOf = (input: {
         content._tag === "element-only" || content._tag === "mixed"
           ? Option.some(editedBy(content.particle, edits, model.kind, used))
           : Option.none();
-      const automaton = Option.match(particle, {
-        onNone: () => noAutomaton,
-        onSome: (held) => automatonOf(held, input.namespaceOf, own),
-      });
+      const automaton = yield* endedBy(
+        Option.match(particle, {
+          onNone: () => noAutomaton,
+          onSome: (held) => automatonOf(held, input.namespaceOf, own),
+        }),
+        edits,
+        model.kind,
+      );
       if (automaton.ambiguous.length > 0) {
         return yield* Result.fail(
           new AmbiguousModel({ kind: model.kind, versions: model.versions.join(" and ") }),
@@ -571,6 +711,11 @@ export const contentOf = (input: {
           ),
         );
         const symbols = new Map<string, number[]>();
+        // The processing of each wildcard position that admits a foreign kind.
+        const processings = new Map<string, string[]>();
+        const hold = (kind: string, processing: string) => {
+          processings.set(kind, [...(processings.get(kind) ?? []), processing]);
+        };
         const admit = (kind: string, position: number) => {
           symbols.set(kind, [...(symbols.get(kind) ?? []), position]);
         };
@@ -583,10 +728,11 @@ export const contentOf = (input: {
             }
           } else {
             if (symbol.processing !== "skip") {
-              for (const kind of input.globalKinds(version)) {
+              for (const kind of input.globalKinds(version, model.kind)) {
                 if (
                   !named.has(kind) &&
                   !input.foreignRoots.has(kind) &&
+                  (rootsOf.get(input.namespaceOf(kind))?.has(kind) ?? true) &&
                   admitsNamespace(symbol.namespace, own, input.namespaceOf(kind))
                 ) {
                   admit(kind, number);
@@ -595,11 +741,12 @@ export const contentOf = (input: {
             }
 
             // An element no declaration names is its namespace class's foreign kind, and the
-            // wildcard admits the classes its constraint does (§3.10.1), unless it is strict.
-            if (symbol.processing !== "strict") {
-              for (const namespaceClass of namespaceClassesUnder[symbol.namespace]) {
-                admit(foreignKinds[namespaceClass], number);
-              }
+            // wildcard admits the classes its constraint does (§3.10.1). Under `strict` such an
+            // element stands only with an `xsi:type` its document's schema set can resolve
+            // (§3.3.4, clause 1.2; spec reading 72), which `StrictlyHeld` marks for the reader.
+            for (const namespaceClass of namespaceClassesUnder[symbol.namespace]) {
+              admit(foreignKinds[namespaceClass], number);
+              hold(foreignKinds[namespaceClass], symbol.processing);
             }
           }
         }
@@ -625,6 +772,9 @@ export const contentOf = (input: {
             inVersion(model.sources),
             ...automaton.positions.map((held) => inVersion(held.sources)),
           ],
+          strictly: [...processings].flatMap(([kind, held]) =>
+            held.every((processing) => processing === "strict") ? [kind] : [],
+          ),
           symbols,
           version,
         });
@@ -637,6 +787,7 @@ export const contentOf = (input: {
         new UnreadEdit({
           kind: ((): string => {
             switch (unused._tag) {
+              case "ends":
               case "first": {
                 return unused.kinds.join(", ");
               }
@@ -827,6 +978,26 @@ export const contentOf = (input: {
         sharedPositions: ({ kind, parent: held, version: in_ }) =>
           shared.get(`${in_} ${held} ${kind}`)?.numbers ?? [],
         sourceOf,
+        strictlyHeld: sourced(
+          yield* closed({
+            key: [version, parent, idField("child", input.kinds)],
+            name: "StrictlyHeld",
+            payload: [],
+            rows: installed.flatMap(({ parent: held, strictly, version: in_ }) =>
+              strictly.map((child) => ({ child, parent: held, version: in_ })),
+            ),
+          }),
+          ({ child, parent: held, version: in_ }) =>
+            sourceAt({
+              parent: held,
+              position: String(
+                admitted.find(
+                  (row) => row.version === in_ && row.parent === held && row.child === child,
+                )?.position ?? 0,
+              ),
+              version: in_,
+            }),
+        ),
         symbol: sourced(
           yield* closed({
             key: [version, parent, idField("kind", input.kinds), sharedPosition],

@@ -57,8 +57,8 @@ const packageRoot = path.resolve(import.meta.dirname, "../../..");
 const absentHome = `${packageRoot}/work/vocab-derive-test-no-home`;
 
 /**
- * Why the cache-gated suite cannot run here: the cache's missing files, or `None` when all 14
- * pinned XSDs are present. Any other failure of the check fails the file's load.
+ * Why the cache-gated suite cannot run here: the cache's missing files, or `None` when every
+ * pinned XSD is present. Any other failure of the check fails the file's load.
  */
 const absence = await Effect.runPromise(
   checkCache().pipe(
@@ -69,7 +69,7 @@ const absence = await Effect.runPromise(
 );
 
 /**
- * The timeout, in milliseconds, for the hook that reads and indexes the 14 pinned XSDs.
+ * The timeout, in milliseconds, for the hook that reads and indexes the pinned XSDs.
  *
  * The two ASI XSDs are 18 MB each and take most of it. Measured on 2026-11-05 on a 10-CPU M2 Max
  * at load averages of 10 to 12, with other suites running: five builds took 2.7 to 3.0 s. The
@@ -244,7 +244,11 @@ describe("vocab/derive/sources.ts", () => {
         failure instanceof XsdSourceMissing ? failure.missing : [],
         sourcePaths.map((name) => ({ path: name, url: sources[name].url })),
       );
-      assert.include(failure.message, `14 of the 14 pinned XSDs are not in ${absentHome}/.cache`);
+      // Every pin is missing, so the count the message states is the pinned set's size, twice.
+      assert.include(
+        failure.message,
+        `${String(sourcePaths.length)} of the ${String(sourcePaths.length)} pinned XSDs are not in ${absentHome}/.cache`,
+      );
     }).pipe(
       Effect.provide(
         Layer.mergeAll(

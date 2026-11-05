@@ -49,7 +49,8 @@ const same = (left: ReadonlySet<Flag>, right: ReadonlySet<Flag>): boolean =>
 /**
  * The reference model of the flag sets, written from the QTI readings by the kinds' categories
  * rather than from `ancestry.ts`'s blocks: which flags a kind enters, which it may not sit under,
- * and which it needs.
+ * and which it needs. MathML's `m:math` enters `math` and may not sit under it: "it is an error for
+ * one math element to contain another" (MathML 3 §2.2, spec reading 2).
  *
  * @param kind - The kind.
  * @param interaction - Whether it is an interaction, by the `Interaction` set.
@@ -69,12 +70,14 @@ const referenceOf = (kind: string, interaction: boolean): FlagSets => {
       ? ["fb" as const]
       : []),
     ...(kind === "qti-rubric-block.test" || kind === "qti-test-feedback" ? ["test" as const] : []),
+    ...(kind === "m:math" ? ["math" as const] : []),
   ]);
   const banned = new Set<Flag>([
     ...(interaction ? (["int", "choice", "htx", "rubric", "tmpl", "modal", "test"] as const) : []),
     ...(kind === "qti-rubric-block" ? ["rubric" as const] : []),
     ...(kind === "qti-hottext" ? ["htx" as const] : []),
     ...(template ? ["test" as const] : []),
+    ...(kind === "m:math" ? ["math" as const] : []),
   ]);
   const needs = new Set<Flag>(kind === "qti-gap" ? ["gap"] : []);
 
@@ -128,8 +131,10 @@ const grammarAdmits = (sets: Parameters<typeof step>[0], path: readonly string[]
 };
 
 /**
- * The kinds the exhaustive search draws paths over: every kind some flag set names, and two kinds
- * no set names. The interactions are added from the composed `Interaction` set when the test runs.
+ * The 27 kinds the exhaustive search draws paths over: every kind some flag set names but the
+ * interactions, of which it holds four (the choice, gap match, portable custom and text entry
+ * interactions), and two kinds no set names, `p` and `div`. The other interactions are checked row
+ * by row, beside every other kind, by the whole-roster test below.
  */
 const flagged = [
   "p",
@@ -143,6 +148,7 @@ const flagged = [
   "qti-test-feedback",
   "qti-modal-feedback",
   "qti-feedback-block",
+  "qti-feedback-block.template",
   "qti-feedback-inline",
   "qti-template-block",
   "qti-template-inline",
@@ -151,11 +157,14 @@ const flagged = [
   "qti-choice-interaction",
   "qti-portable-custom-interaction",
   "qti-text-entry-interaction",
+  "m:math",
 ] as const;
 
 /**
- * How long the exhaustive path search may take: its 30,000-odd cases took 4.5 s up to the default
- * deadline on 2026-11-05 at a load average of about 15, so ten times that, rounded up.
+ * How long the exhaustive path search may take: ten times the 4.5 s its 16,276 cases (25 kinds)
+ * took on 2026-11-05 at a load average of about 15, rounded up. Its 18,279 cases (every path of at
+ * most 3 of 26 kinds, 1 + 26 + 26² + 26³) took 6.5 s the same day at a load average of about 40,
+ * and its 20,440 (27 kinds) are within the same bound.
  */
 const pathsTimeout = 60_000;
 
@@ -220,7 +229,7 @@ describe("the ancestry grammar against the reference model", () => {
       assert.deepStrictEqual(rowOf(ancestry.enters, "document"), new Set());
       assert.deepStrictEqual(
         [...flags],
-        ["fb", "modal", "rubric", "tmpl", "int", "gap", "choice", "htx", "test"],
+        ["fb", "modal", "rubric", "tmpl", "int", "gap", "choice", "htx", "test", "math"],
       );
     }),
   );

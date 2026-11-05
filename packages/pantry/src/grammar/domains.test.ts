@@ -1274,3 +1274,217 @@ describe("xs:anyURI", () => {
     assert.deepStrictEqual(disagreements, []);
   });
 });
+
+/**
+ * The enumeration values the box below draws from: one in each whitespace situation XML Schema
+ * Part 2 §4.3.6 tells apart, plain, inner single space, leading space, inner double space and a
+ * tab.
+ */
+const enumerationValues = ["a", "a b", " a", "a  b", "a\tb"] as const;
+
+/**
+ * Whether a value can be a value's normalized form under a whitespace class (XML Schema Part 2,
+ * §4.3.6 whiteSpace): under `preserve` every value; under `replace` none holding a tab, line feed
+ * or carriage return, which become spaces; under `collapse` neither those nor a leading, trailing
+ * or repeated space, which collapse away.
+ *
+ * @param value - The value.
+ * @param whiteSpace - The class.
+ * @returns Whether some lexical form normalizes to it.
+ */
+const normalizedForm = (
+  value: string,
+  whiteSpace: "collapse" | "preserve" | "replace",
+): boolean => {
+  switch (whiteSpace) {
+    case "preserve": {
+      return true;
+    }
+    case "replace": {
+      return !/[\t\n\r]/u.test(value);
+    }
+    case "collapse": {
+      return !/[\t\n\r]/u.test(value) && value === value.trim() && !value.includes("  ");
+    }
+    default: {
+      return whiteSpace satisfies never;
+    }
+  }
+};
+
+describe("An enumeration's reachable values", () => {
+  it("compile exactly when one value can be a normalized form, every non-empty subset of 5 values under each whitespace class", () => {
+    // Oracle: the specification as a checker, XML Schema Part 2 §4.3.6: a value no lexical form
+    // normalizes to is never the value, so an enumeration of only such values admits nothing.
+    // Bound: every non-empty subset of enumerationValues (31) under each class (3), 93 cases.
+    const disagreements: string[] = [];
+    for (const whiteSpace of ["preserve", "replace", "collapse"] as const) {
+      for (let mask = 1; mask < 2 ** enumerationValues.length; mask += 1) {
+        const values = enumerationValues.filter((_, at) => Math.floor(mask / 2 ** at) % 2 === 1);
+        const compiled = compile(
+          {
+            _tag: "atomic",
+            builtin: "string",
+            facets: [
+              { facet: "whiteSpace", value: whiteSpace },
+              ...values.map((value): Facet => ({ facet: "enumeration", value })),
+            ],
+            patterns: [],
+            primitive: "string",
+          },
+          "xsd",
+        );
+        const reachable = values.some((value) => normalizedForm(value, whiteSpace));
+        const refused = Result.isFailure(compiled)
+          ? compiled.failure._tag === "UnreadDefinition" &&
+            compiled.failure.detail.startsWith("an enumeration none of whose values")
+          : false;
+        if (refused === reachable || (Result.isFailure(compiled) && !refused)) {
+          disagreements.push(
+            `${whiteSpace} ${JSON.stringify(values)}: ${Result.isFailure(compiled) ? compiled.failure.message : "compiled"}`,
+          );
+        }
+      }
+    }
+
+    assert.deepStrictEqual(disagreements, []);
+  });
+});
+
+/**
+ * The length facets an exhaustive case states: each of `length`, `minLength` and `maxLength`
+ * absent or a count from 0 to 3, consistent or not.
+ */
+interface LengthCase {
+  readonly lengths: Readonly<Partial<Record<"length" | "maxLength" | "minLength", number>>>;
+  readonly variety: "atomic" | "list";
+}
+
+/**
+ * Whether a count is one every length facet of a case admits, as XML Schema Part 2 reads each facet
+ * on its own (4.3.1.3, 4.3.2.3 and 4.3.3.3): the length equals `length`, is at least `minLength`
+ * and at most `maxLength`.
+ *
+ * @param lengths - The case's length facets.
+ * @param count - A length, in characters or list items.
+ * @returns Whether every facet admits it.
+ */
+const lengthHolds = (lengths: LengthCase["lengths"], count: number): boolean =>
+  (lengths.length === undefined || count === lengths.length) &&
+  (lengths.minLength === undefined || count >= lengths.minLength) &&
+  (lengths.maxLength === undefined || count <= lengths.maxLength);
+
+describe("Length facets", () => {
+  it.effect(
+    "admit exactly the values of a length every length facet admits, and none where no length is admitted, never writing a quantifier whose least passes its most: every combination of length, minLength and maxLength, each absent or 0 to 3, on a string and on a list of NMTOKENs, exhausted",
+    (ctx) =>
+      // Oracle: the specification as a checker, XML Schema Part 2 4.3.1.3 to 4.3.3.3, each facet a
+      // condition on a value's length (`lengthHolds`), every facet holding; JavaScript's regular
+      // expression compiler, which refuses a quantifier such as `{3,2}`, as PostgreSQL's does.
+      // The cases need not satisfy 4.3.1.4 or 4.3.2.4: the deriver refuses those, and the compiler
+      // must read the facets it is given as the language they state, an empty one included.
+      // Bound: 5^3 combinations under each of the 2 varieties, 250 cases, each judged on every
+      // length 0 to 4.
+      searched(
+        ctx,
+        exhaust(
+          {
+            caseHang: Duration.minutes(1),
+            coverage: requiredInSpace<"admitted" | "crossed" | "list" | "length outside">([
+              "admitted",
+              "crossed",
+              "length outside",
+              "list",
+            ]),
+            generator: (source): LengthCase => {
+              const variety = source.draw(element(["atomic", "list"] as const));
+              const lengths: Partial<Record<"length" | "maxLength" | "minLength", number>> = {};
+              for (const name of ["length", "minLength", "maxLength"] as const) {
+                const count = source.draw(int(0, 4));
+                if (count > 0) {
+                  lengths[name] = count - 1;
+                }
+              }
+
+              return { lengths, variety };
+            },
+            limit: 250,
+            literal: Formatter.format,
+            suite: "grammar/domains/lengths",
+          },
+          ({ lengths, variety }, c) =>
+            Effect.sync(() => {
+              const facets = (["length", "minLength", "maxLength"] as const).flatMap(
+                (name): readonly Facet[] => {
+                  const held = lengths[name];
+
+                  return held === undefined ? [] : [{ facet: name, value: String(held) }];
+                },
+              );
+              const domain: Domain =
+                variety === "atomic"
+                  ? {
+                      _tag: "atomic",
+                      builtin: "string",
+                      facets: [{ facet: "whiteSpace", value: "preserve" }, ...facets],
+                      patterns: [],
+                      primitive: "string",
+                    }
+                  : {
+                      _tag: "list",
+                      facets: [{ facet: "whiteSpace", value: "collapse" }, ...facets],
+                      item: Result.getOrThrow(builtinDomainOf("NMTOKEN")),
+                      patterns: [],
+                    };
+              const counts = [0, 1, 2, 3, 4];
+              const admitted = counts.filter((count) => lengthHolds(lengths, count));
+              if (variety === "list") {
+                c.note("list");
+              }
+
+              if (
+                lengths.minLength !== undefined &&
+                lengths.maxLength !== undefined &&
+                lengths.minLength > lengths.maxLength
+              ) {
+                c.note("crossed");
+              }
+
+              const { length: exact, ...bounds } = lengths;
+              if (exact !== undefined && !lengthHolds(bounds, exact)) {
+                c.note("length outside");
+              }
+
+              const compiled = compile(domain, "exact");
+              if (admitted.length === 0) {
+                assert.isTrue(
+                  Result.isFailure(compiled) &&
+                    compiled.failure._tag === "UnreadDefinition" &&
+                    compiled.failure.detail.includes("holds no value"),
+                  `${Formatter.format(lengths)} admits no length, and compiled`,
+                );
+
+                return;
+              }
+
+              c.note("admitted");
+
+              const regex = new RegExp(Result.getOrThrow(compiled).pattern, patternFlags);
+
+              for (const count of counts) {
+                const value =
+                  variety === "atomic"
+                    ? "a".repeat(count)
+                    : Array.from({ length: count }, () => "a").join(" ");
+                assert.strictEqual(
+                  regex.test(value),
+                  lengthHolds(lengths, count),
+                  `${Formatter.format(lengths)} on ${JSON.stringify(value)}`,
+                );
+              }
+            }),
+        ),
+      ),
+    120_000,
+  );
+});

@@ -1,19 +1,25 @@
 /* oxlint-disable unicorn/prefer-code-point -- The oracle's byte writers need UTF-16 code units, as `encode.ts` does. */
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The tests spell the XML encoding labels (`UTF-8`) the encoder is given. */
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { drawn, exhaust, explore } from "@grizzle/testing/explore";
+import { noCoverage, required } from "@grizzle/testing/features";
+import { notesOnly } from "@grizzle/testing/sense";
+import { completeShrink } from "@grizzle/testing/shrink";
+import { searched } from "@grizzle/testing/vitest";
+import { Effect, Formatter, Option } from "effect";
 import { classify } from "#crust/charset.ts";
 import type { EncoderClass } from "#crust/charset.ts";
 import { encode } from "#crust/encode.ts";
 import { EncodeError } from "#crust/errors.ts";
 import {
-  arbitraryDocument,
-  arbitrarySwarm,
-  labelled,
-  runSeed,
+  caseHang,
+  documentSituations,
+  documentSituationsOf,
+  generatedDocument,
   GENERATED_TIMEOUT_MS,
-  seeded,
-  planeTrees,
+  labelled,
+  PLANE_TREES_TO_7,
+  planeTreeUpTo,
 } from "#crust/test/trees.ts";
 import type { Bounds } from "#crust/test/trees.ts";
 import type { Attribute, Child, XmlDeclaration, XmlDocument } from "#crust/tree.ts";
@@ -420,13 +426,14 @@ const bare = (root: XmlDocument["root"]): XmlDocument => ({
 });
 
 /**
- * The largest node count the box holds every tree tree of: the 197 ordered trees of 1 to 7 nodes.
+ * The largest node count the box holds every tree of: the 197 ordered trees of 1 to 7 nodes.
  */
 const BOX_NODES = 7;
 
 /**
- * How many random documents each run compares, and the trees' bounds: depth and width small
- * enough for the recursive oracle, nodes enough for every kind and declaration to meet.
+ * How many rotating cases each run's search compares, beside its floor and steered witnesses, and
+ * the bounds each case draws its own within: depth and width small enough for the recursive
+ * oracle, nodes enough for every kind and declaration to meet.
  */
 const CASES = 400;
 
@@ -434,34 +441,62 @@ const CASE_BOUNDS: Bounds = { depth: 12, nodes: 64, width: 6 };
 
 describe("encode gives the recursive writer's bytes", () => {
   it.effect(
-    `for every plane tree of 1 to ${BOX_NODES} nodes, labelled, under every encoder class`,
-    () =>
-      Effect.gen(function* everyPlaneTree() {
-        let compared = 0;
-        for (let nodes = 1; nodes <= BOX_NODES; nodes += 1) {
-          for (const [index, tree] of planeTrees(nodes).entries()) {
-            yield* agrees(bare(labelled(tree)), `plane tree ${index} of ${nodes} nodes`);
-            compared += 1;
-          }
-        }
-
-        assert.strictEqual(compared, 197);
-      }),
+    `for every plane tree of 1 to ${BOX_NODES} nodes, labelled, under every encoder class, exhausted`,
+    (ctx) =>
+      // Oracle: a second implementation, the recursive writer and encoder. Bound: every plane tree
+      // of 1 to 7 nodes, 197 trees, enumerated, each under every label.
+      searched(
+        ctx,
+        exhaust(
+          {
+            caseHang,
+            coverage: noCoverage,
+            generator: planeTreeUpTo(BOX_NODES),
+            limit: PLANE_TREES_TO_7,
+            literal: Formatter.format,
+            suite: "crust/write/plane-trees",
+          },
+          ({ nodes, tree }) => agrees(bare(labelled(tree)), `a plane tree of ${nodes} nodes`),
+        ),
+      ).pipe(
+        Effect.tap((done) =>
+          Effect.sync(() => {
+            assert.strictEqual(done.cases, PLANE_TREES_TO_7);
+          }),
+        ),
+      ),
     GENERATED_TIMEOUT_MS,
   );
 
   it.effect(
-    `for ${CASES} swarmed documents of at most ${CASE_BOUNDS.nodes} nodes, depth ${CASE_BOUNDS.depth} and width ${CASE_BOUNDS.width}`,
-    () =>
-      Effect.gen(function* everyCase() {
-        for (let index = 0; index < CASES; index += 1) {
-          const seed = `${runSeed}/${index}`;
-          const doc = yield* seeded(seed, (choices) =>
-            arbitraryDocument(choices, arbitrarySwarm(choices), CASE_BOUNDS),
-          );
-          yield* agrees(doc, `seed ${seed} (replay: CRUST_SEED=${runSeed})`);
-        }
-      }),
+    `for swarmed documents, each within ${CASE_BOUNDS.nodes} nodes, depth ${CASE_BOUNDS.depth} and width ${CASE_BOUNDS.width}: ${CASES} rotating cases a run beside the witnesses`,
+    (ctx) =>
+      // Oracle: a second implementation, the recursive writer and encoder. Bound: the drawn
+      // documents, each with its own swarm and bounds within CASE_BOUNDS; the witnesses reach every
+      // situation of `documentSituations`.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang,
+            concurrency: 1,
+            coverage: required(documentSituations, { cases: 200, sense: notesOnly }),
+            draw: drawn(generatedDocument(CASE_BOUNDS)),
+            kept: [],
+            literal: Formatter.format,
+            runs: CASES,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "crust/write/documents",
+          },
+          ({ document }, c) =>
+            Effect.suspend(() => {
+              c.noteAll(documentSituationsOf(document));
+
+              return agrees(document, "the drawn document");
+            }),
+        ),
+      ),
     GENERATED_TIMEOUT_MS,
   );
 });

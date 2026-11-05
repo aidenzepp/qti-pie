@@ -5,9 +5,10 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { array, element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option, Result } from "effect";
+import { admittedOf, governorOf, textDomainOf } from "#pantry/grammar/attributes.ts";
 import { roster } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
-import { schemaVersions } from "#pantry/grammar/kinds.ts";
+import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { noType, typeHandle, xsiTypesOf } from "#pantry/grammar/xsi.ts";
 import type { ContentModel, ExpandedName, TypeDerivation } from "#pantry/vocab/inventory/types.ts";
@@ -292,5 +293,114 @@ describe.skipIf(!cached)("XsiType against xmllint", () => {
         assert.deepStrictEqual(failures.slice(0, 30), []);
       }).pipe(Effect.provide(XsdOracleLayer)),
     600_000,
+  );
+});
+
+/**
+ * The `xsi:` names an element of a kind admits under a simple governing type, and the four a
+ * foreign element admits: XML Schema's instance attributes, `xsi:nil` but on a foreign element,
+ * since no pinned element declaration is nillable (XML Schema 1.0 Part 1, §3.3.4, Element Locally
+ * Valid (Type), clause 3.1.1; audit A6).
+ */
+const simpleNames = {
+  element: ["xsi:noNamespaceSchemaLocation", "xsi:schemaLocation", "xsi:type"],
+  foreign: ["xsi:nil", "xsi:noNamespaceSchemaLocation", "xsi:schemaLocation", "xsi:type"],
+} as const;
+
+describe("Governor", () => {
+  it.effect(
+    "admits exactly the xsi: names under every simple governor, every declaration and the required ones of its type under every complex one, reads each governed element's text in its type's domain, and governs no element by its declared type or by a complex type on a foreign one: every governor of production in both versions",
+    () =>
+      // Oracle: the leaf's own reading of the pinned XSDs, `typeAttributeDeclarations` and
+      // `typeTexts` (whose re-run declarations.test.ts holds byte for byte), against the
+      // composition's `Governor`, `GovernedAttribute` and `TypeText`, under XML Schema 1.0 Part 1,
+      // §3.3.4, clauses 5.2.1 and 3.1, as spec readings 60 and 75 read them.
+      // Bound: every row of `Governor` in production, exhausted.
+      Effect.gen(function* governors() {
+        const grammar = yield* Effect.fromResult(composed());
+        const { attributes } = grammar;
+        const leaf = yield* Effect.promise(() => import("#pantry/vocab/inventory/attributes.ts"));
+        const disagreements: string[] = [];
+        const governed = schemaVersions.flatMap((version) =>
+          attributes.governor.rows
+            .filter((row) => row.version === version)
+            .map(({ governs, kind }) => ({ governs, kind, version })),
+        );
+        for (const { governs, kind, version } of governed) {
+          const names = new Set(
+            admittedOf(attributes, grammar.kinds.attributeName, version, kind, governs).map(
+              ({ name }) => name,
+            ),
+          );
+          const required = new Set(
+            admittedOf(attributes, grammar.kinds.attributeName, version, kind, governs)
+              .filter(({ use }) => use === "required")
+              .map(({ name }) => name),
+          );
+          const declared = leaf.typeAttributeDeclarations.filter(
+            ({ owner, versions }) => owner === governs && versions.includes(version),
+          );
+          const complex =
+            declared.length > 0 ||
+            leaf.typeAttributeWildcards.some(
+              ({ owner, versions }) => owner === governs && versions.includes(version),
+            );
+          const where = `${version} ${kind} ${governs}`;
+          if (complex) {
+            const missing = declared.filter(({ name }) => !names.has(name)).map(({ name }) => name);
+            const expected = new Set(
+              declared.filter(({ use }) => use === "required").map(({ name }) => name),
+            );
+            if (missing.length > 0 || names.has("xsi:nil") || isForeignKind(kind)) {
+              disagreements.push(`${where}: admits ${[...names].join(" ")}`);
+            }
+
+            if (
+              required.size !== expected.size ||
+              [...expected].some((name) => !required.has(name))
+            ) {
+              disagreements.push(`${where}: requires ${[...required].join(" ")}`);
+            }
+          } else {
+            const expected = isForeignKind(kind) ? simpleNames.foreign : simpleNames.element;
+            if ([...names].toSorted().join(" ") !== expected.join(" ")) {
+              disagreements.push(`${where}: admits ${[...names].join(" ")}`);
+            }
+          }
+
+          const text = leaf.typeTexts.find(
+            ({ owner, versions }) => owner === governs && versions.includes(version),
+          );
+          const read = textDomainOf(attributes, { governs, kind, version });
+          const domain = read.pipe(
+            Option.flatMap((handle) =>
+              Option.fromNullishOr(attributes.domains.find((held) => held.handle === handle)),
+            ),
+          );
+          if (
+            Option.isSome(read) !== (text !== undefined) ||
+            (Option.isSome(read) && Option.isNone(domain))
+          ) {
+            disagreements.push(`${where}: text ${Formatter.format(read)}`);
+          }
+
+          if (governs === grammar.xsi.declaredType(version, kind)) {
+            disagreements.push(`${where}: governs by its declared type`);
+          }
+        }
+
+        for (const version of schemaVersions) {
+          for (const kind of Object.values(foreignKinds)) {
+            const anyType = typeHandle({ local: "anyType", namespace: xsNamespace });
+            if (Option.isSome(governorOf(attributes, { governs: anyType, kind, version }))) {
+              disagreements.push(`${version} ${kind}: governed by xs:anyType`);
+            }
+          }
+        }
+
+        assert.isAbove(attributes.governor.rows.length, 0);
+        assert.deepStrictEqual(disagreements, []);
+      }),
+    60_000,
   );
 });

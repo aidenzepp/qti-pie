@@ -1,15 +1,14 @@
 import path from "node:path";
 import { NodeChildProcessSpawner, NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
-import { drawn, exhaust, explore } from "@grizzle/testing/explore";
-import { noCoverage, requiredInSpace } from "@grizzle/testing/features";
-import { element, int, string, weighted } from "@grizzle/testing/gen";
+import { exhaust } from "@grizzle/testing/explore";
+import { requiredInSpace } from "@grizzle/testing/features";
+import { element, int, map, oneOf, string } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
-import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Context, Duration, Effect, Formatter, Layer, Option, Result } from "effect";
 import { Digest } from "effect/crypto";
-import { composed } from "#pantry/grammar/compose.ts";
+import { composed, coveredBy } from "#pantry/grammar/compose.ts";
 import { foreignKinds, isForeignKind, openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import {
@@ -60,7 +59,7 @@ import { dataName, foreignRoots, openClassOf } from "#pantry/vocab/open.ts";
 /**
  * The package folder, `packages/pantry`.
  */
-const packageRoot = path.resolve(import.meta.dirname, "../../..");
+const packageRoot = path.resolve(import.meta.dirname, "../..");
 
 /**
  * How long one search case may run: every case reads precomputed verdicts or classifies one name.
@@ -107,69 +106,150 @@ const specified = (
 };
 
 /**
- * A local name: any short NCName-ish spelling, often begun `data-` so both sides of reading 13's
- * pattern come up, in letters that mix cases, digits and punctuation.
+ * The letters a plain local name of the classification box is spelled in: cases, a digit,
+ * punctuation and a non-ASCII letter, none of them `d`, so no plain name begins `data-`.
  */
-const localName: Gen<string> = weighted([
-  [3, string(element(["a", "Z", "0", "-", "_", ".", "é", "x"]), { max: 6, min: 1 })],
-  [
-    3,
-    (source) =>
-      `data-${source.draw(string(element(["a", "Z", "0", "-", "_", ".", "é"]), { max: 4, min: 0 }))}`,
-  ],
-  [1, element(["lang", "space", "base", "id", "type", "nil", "schemaLocation", "data"])],
+const plainLetters = ["a", "Z", "0", "-", "_", ".", "é", "x"] as const;
+
+/**
+ * The letters after `data-` in the box: those reading 13's pattern admits (`a`, `0`, `-`, `_`,
+ * `.`) and those it refuses (`Z`, `é`).
+ */
+const dataLetters = ["a", "Z", "0", "-", "_", ".", "é"] as const;
+
+/**
+ * The names `xml.xsd` and XML Schema's instance namespace declare, and `data` itself.
+ */
+const declaredLocals = [
+  "lang",
+  "space",
+  "base",
+  "id",
+  "type",
+  "nil",
+  "schemaLocation",
+  "data",
+] as const;
+
+/**
+ * The longest plain local name of the box: two letters, since no plain name begins `data-` or is a
+ * declared name, so a longer one meets no rule a shorter one does not, and the box stays within the
+ * test's default budget at the machine's load.
+ */
+const plainMax = 2;
+
+/**
+ * The longest suffix after `data-` in the box.
+ */
+const dataMax = 2;
+
+/**
+ * A local name of the box: a plain one of 1 to {@link plainMax} letters, `data-` and 0 to
+ * {@link dataMax} more, or a declared name.
+ */
+const localName: Gen<string> = oneOf([
+  string(element(plainLetters), { max: plainMax, min: 1 }),
+  map(string(element(dataLetters), { max: dataMax, min: 0 }), (suffix) => `data-${suffix}`),
+  element(declaredLocals),
 ]);
 
 /**
  * An attribute name's namespace: none, the XML or instance namespace, or another.
  */
-const namespaceOf: Gen<string> = element(["", xmlNamespace, xsiNamespace, "urn:v", asiNamespace]);
+const namespaces = ["", xmlNamespace, xsiNamespace, "urn:v", asiNamespace] as const;
+
+/**
+ * The namespaces of the element an attribute is on.
+ */
+const hosts = [asiNamespace, mathmlNamespace, "urn:v"] as const;
+
+/**
+ * How many local names the classification box holds: the plain names of each length, the `data-`
+ * names of each suffix length, and the declared names. A case is one under each namespace, on an
+ * element of each host namespace, foreign or not.
+ */
+const classificationBox =
+  Arr.reduce(
+    Arr.makeBy(plainMax, (at) => plainLetters.length ** (at + 1)),
+    0,
+    (sum, count) => sum + count,
+  ) +
+  Arr.reduce(
+    Arr.makeBy(dataMax + 1, (at) => dataLetters.length ** at),
+    0,
+    (sum, count) => sum + count,
+  ) +
+  declaredLocals.length;
+
+/**
+ * Every class and refusal the classification box reaches.
+ */
+const classifications = [
+  "no-namespace",
+  "own-namespace",
+  "foreign",
+  "data-*",
+  "refused declared",
+  "refused data-name",
+] as const;
 
 describe("vocab/open.ts", () => {
   it.effect(
     "classifies every name by its namespace, its spelling and its element's namespace, as reading 13 and D2 say",
     (ctx) =>
-      searched(
-        ctx,
-        explore(
-          {
-            caseHang,
-            concurrency: 1,
-            coverage: noCoverage,
-            draw: drawn((source) => ({
-              foreign: source.draw(element([false, true])),
-              host: source.draw(element([asiNamespace, mathmlNamespace, "urn:v"])),
-              local: source.draw(localName),
-              namespace: source.draw(namespaceOf),
-            })),
-            kept: [],
-            literal: Formatter.format,
-            runs: 4000,
-            shrink: completeShrink,
-            steerEvery: 16,
-            suite: "vocab/open-class-of",
-          },
-          ({ foreign, host, local, namespace }) =>
-            Effect.sync(() => {
-              const read = Result.match(
-                openClassOf(
-                  { local, namespace, prefix: namespace === "" ? "" : "v", qname: local },
-                  { foreign, local: "e", namespace: host },
-                ),
-                {
-                  onFailure: (refused) => `refused ${refused.reason}`,
-                  onSuccess: (name) => name._tag,
-                },
-              );
+      // Oracle: the specification as a checker, reading 13's, D2's and XML Schema Part 1 3.2.7's
+      // decision table (`specified`), written apart from `openClassOf`.
+      // Bound: exhaustive over the box, every local name of 1 to 2 plain letters, `data-` and 0 to 2
+      // more, and each declared name, under each of 5 namespaces, on each of 3 host namespaces,
+      // foreign or not: 137 names, 4,110 cases.
+      Effect.gen(function* classification() {
+        const exhausted = yield* searched(
+          ctx,
+          exhaust(
+            {
+              caseHang,
+              coverage: requiredInSpace<(typeof classifications)[number]>(classifications),
+              generator: (source) => ({
+                foreign: source.draw(element([false, true])),
+                host: source.draw(element(hosts)),
+                local: source.draw(localName),
+                namespace: source.draw(element(namespaces)),
+              }),
+              limit: classificationBox * namespaces.length * hosts.length * 2,
+              literal: Formatter.format,
+              suite: "vocab/open-class-of",
+            },
+            ({ foreign, host, local, namespace }, c) =>
+              Effect.sync(() => {
+                const read = Result.match(
+                  openClassOf(
+                    { local, namespace, prefix: namespace === "" ? "" : "v", qname: local },
+                    { foreign, local: "e", namespace: host },
+                  ),
+                  {
+                    onFailure: (refused) => `refused ${refused.reason}`,
+                    onSuccess: (name) => name._tag,
+                  },
+                );
+                for (const situation of classifications.filter((held) => held === read)) {
+                  c.note(situation);
+                }
 
-              assert.strictEqual(read, specified(namespace, local, { foreign, namespace: host }));
-              assert.strictEqual(
-                namespace === "" && !foreign && dataName.test(local),
-                read === "data-*",
-              );
-            }),
-        ),
-      ),
+                assert.strictEqual(read, specified(namespace, local, { foreign, namespace: host }));
+                assert.strictEqual(
+                  namespace === "" && !foreign && dataName.test(local),
+                  read === "data-*",
+                );
+              }),
+          ),
+        );
+
+        assert.strictEqual(
+          exhausted.cases,
+          classificationBox * namespaces.length * hosts.length * 2,
+          "the box holds each local name under each namespace and host once",
+        );
+      }),
   );
 
   it("names an open class by a handle no kind declares, so the distinctness mask masks only them", () => {
@@ -1059,6 +1139,7 @@ describe("vocab/open.ts namespace classes against XML Schema 1.0, 3.10.4", () =>
     (ctx) =>
       Effect.gen(function* classes() {
         const grammar = yield* Effect.fromResult(composed());
+        const covered = coveredBy(grammar.kinds);
         // Q8's case 131: an ASI-namespace element, `{…imsqtiasi_v3p0}widget`, under a `##other`
         // wildcard of an ASI kind in 3.0.0, which xmllint refuses as outside the wildcard.
         const case131 = classCells.filter(
@@ -1101,12 +1182,24 @@ describe("vocab/open.ts namespace classes against XML Schema 1.0, 3.10.4", () =>
                 );
                 const wrong = namespacesAgainst(own).flatMap(([label, namespace]) => {
                   const foreign = foreignKinds[namespaceClassOf(namespace, own)];
-                  const elementSpecified = elements.some(
-                    ({ namespace: constraint, processing }) =>
-                      processing !== "strict" && constraintAdmits(constraint, own, namespace),
+                  // Every processing admits an undeclared element its constraint admits; a
+                  // `strict` one only with an xsi:type its document's schema set resolves (spec
+                  // reading 72), so `StrictlyHeld` marks a foreign kind only strict wildcards admit.
+                  // No wildcard admits one in MathML's namespace: MathML content stands only inside
+                  // m:math, and the RelaxNG's anyElement excludes MathML's own (spec reading 2).
+                  const admitting = elements.filter(
+                    ({ namespace: constraint }) =>
+                      namespace !== mathmlNamespace && constraintAdmits(constraint, own, namespace),
                   );
+                  const elementSpecified = admitting.length > 0;
+                  const strictSpecified =
+                    elementSpecified &&
+                    admitting.every(({ processing }) => processing === "strict");
                   const elementRead = Option.isSome(
                     grammar.admission.lookup({ child: foreign, parent: kind, version }),
+                  );
+                  const strictRead = Option.isSome(
+                    grammar.content.strictlyHeld.lookup({ child: foreign, parent: kind, version }),
                   );
                   const attribute = Result.getOrThrow(
                     openClassOf(
@@ -1119,10 +1212,15 @@ describe("vocab/open.ts namespace classes against XML Schema 1.0, 3.10.4", () =>
                       { foreign: isForeignKind(kind), local: kind, namespace: own },
                     ),
                   )._tag;
-                  const attributeSpecified = attributes.some(
-                    ({ namespace: constraint, processing }) =>
-                      processing !== "strict" && constraintAdmits(constraint, own, namespace),
-                  );
+                  // On an element the Schematron's extension rules cover, spec reading 81 admits no
+                  // attribute its XSD does not declare but a `data-` one, whatever its wildcard
+                  // admits, and the drawn name is no `data-` name.
+                  const attributeSpecified =
+                    !covered(version, kind) &&
+                    attributes.some(
+                      ({ namespace: constraint, processing }) =>
+                        processing !== "strict" && constraintAdmits(constraint, own, namespace),
+                    );
                   const attributeRead = Option.isSome(
                     grammar.attributes.admission.lookup({ kind, name: attribute, version }),
                   );
@@ -1136,6 +1234,11 @@ describe("vocab/open.ts namespace classes against XML Schema 1.0, 3.10.4", () =>
                       ? []
                       : [
                           `${version} ${kind}: a foreign element in the ${label} namespace (${foreign}) is ${elementRead ? "admitted" : "refused"}, and its element wildcards ${elementSpecified ? "admit" : "refuse"} it`,
+                        ]),
+                    ...(strictRead === strictSpecified
+                      ? []
+                      : [
+                          `${version} ${kind}: a foreign element in the ${label} namespace (${foreign}) is ${strictRead ? "" : "not "}strictly held, and its element wildcards are ${strictSpecified ? "" : "not "}all strict`,
                         ]),
                     ...(attributeRead === attributeSpecified
                       ? []

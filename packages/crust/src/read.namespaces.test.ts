@@ -1,15 +1,14 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { drawn, explore } from "@grizzle/testing/explore";
+import { required } from "@grizzle/testing/features";
+import { notesOnly } from "@grizzle/testing/sense";
+import { completeShrink } from "@grizzle/testing/shrink";
+import { searched } from "@grizzle/testing/vitest";
+import { Effect, Formatter, Option } from "effect";
 import { SaxesParser } from "saxes";
 import { readXml } from "#crust/read.ts";
-import {
-  arbitrarySwarm,
-  arbitraryTree,
-  runSeed,
-  GENERATED_TIMEOUT_MS,
-  seeded,
-} from "#crust/test/trees.ts";
-import type { Bounds } from "#crust/test/trees.ts";
+import { caseHang, generatedTree, GENERATED_TIMEOUT_MS, situationsOf } from "#crust/test/trees.ts";
+import type { Bounds, TreeFeature, TreeSituation } from "#crust/test/trees.ts";
 import type { Child, Element, XmlDocument } from "#crust/tree.ts";
 import { writeXml } from "#crust/write.ts";
 
@@ -144,28 +143,44 @@ const bare = (root: Element): XmlDocument => ({
 });
 
 /**
- * How many swarmed trees each run reads, and their bounds.
+ * How many rotating cases each run's search reads, beside its floor and steered witnesses, and the
+ * bounds each case draws its own within.
  */
 const CASES = 400;
 
 const CASE_BOUNDS: Bounds = { depth: 12, nodes: 64, width: 6 };
 
 /**
- * The kinds of child a tree holds, a CDATA section apart from text: what the swarm reached.
- *
- * @param root - The tree.
- * @returns Each kind once.
+ * The features the round trip draws: every one of `treeFeatures` but entity references, in an
+ * attribute value or as a child, since the reader refuses an entity the document does not declare.
  */
-const kindsOf = (root: Element): ReadonlySet<string> =>
-  new Set(
-    root.children.flatMap((child) => {
-      if (child.kind === "element") {
-        return ["element", ...kindsOf(child)];
-      }
+const roundTripFeatures = [
+  "text",
+  "element",
+  "cdata",
+  "comment",
+  "pi",
+  "attribute",
+  "declaration",
+  "wild",
+] as const satisfies readonly TreeFeature[];
 
-      return [child.kind === "text" && child.cdata ? "cdata" : child.kind];
-    }),
-  );
+/**
+ * The situations the round trip's witnesses must reach: every one of `treeSituations` but those of
+ * entity references.
+ */
+const roundTripSituations = [
+  "text",
+  "element",
+  "cdata",
+  "comment",
+  "pi",
+  "attribute",
+  "bare root",
+  "declaration",
+  "deep",
+  "wild",
+] as const satisfies readonly TreeSituation[];
 
 /**
  * Make line ends line feeds, as a parser does before it reads markup (XML 1.0 section 2.11): a
@@ -251,42 +266,43 @@ describe("readXml resolves every namespace as saxes does unseeded", () => {
   );
 
   it.effect(
-    `and reads back the tree, by the generator's namespace model and XML's information set, for ${CASES} swarmed trees of elements, text, CDATA, comments and processing instructions, at most ${CASE_BOUNDS.nodes} nodes, depth ${CASE_BOUNDS.depth} and width ${CASE_BOUNDS.width}`,
-    () =>
+    `and reads back the tree, by the generator's namespace model and XML's information set, for swarmed trees of elements, text, CDATA, comments and processing instructions, each within ${CASE_BOUNDS.nodes} nodes, depth ${CASE_BOUNDS.depth} and width ${CASE_BOUNDS.width}: ${CASES} rotating cases a run beside the witnesses`,
+    (ctx) =>
       // Oracle: a universal one, the round trip read ∘ write, each side compared in the information set's
       // form (`infosetOf`), which is the identity on an element-only tree; and saxes with nothing
       // seeded as a second implementation of the names.
-      Effect.gen(function* everyCase() {
-        const mixed = new Set<string>();
-        for (let index = 0; index < CASES; index += 1) {
-          const seed = `${runSeed}/${index}`;
-          const name = `seed ${seed} (replay: CRUST_SEED=${runSeed})`;
-          // No entity references: the reader refuses an entity the document does not declare.
-          const tree = yield* seeded(seed, (choices) => {
-            const swarm = arbitrarySwarm(choices);
+      // Bound: the drawn trees, each with its own swarm over `roundTripFeatures` and bounds within
+      // CASE_BOUNDS; the witnesses reach every situation of `roundTripSituations`.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang,
+            concurrency: 1,
+            coverage: required<TreeSituation>(roundTripSituations, {
+              cases: 200,
+              sense: notesOnly,
+            }),
+            draw: drawn(generatedTree(CASE_BOUNDS, roundTripFeatures)),
+            kept: [],
+            literal: Formatter.format,
+            runs: CASES,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "crust/read/namespaces",
+          },
+          ({ root: tree }, c) =>
+            Effect.gen(function* roundTrip() {
+              c.noteAll(situationsOf(tree));
 
-            return arbitraryTree(
-              choices,
-              { ...swarm, kinds: { ...swarm.kinds, entityRef: 0 }, references: 0 },
-              CASE_BOUNDS,
-            );
-          });
-          const text = yield* writeXml(bare(tree));
-          const doc = yield* readXml(new TextEncoder().encode(text));
-          for (const kind of kindsOf(tree)) {
-            mixed.add(kind);
-          }
+              const text = yield* writeXml(bare(tree));
+              const doc = yield* readXml(new TextEncoder().encode(text));
 
-          assert.deepStrictEqual(infosetOf(doc.root), infosetOf(tree), name);
-          assert.deepStrictEqual(unseeded(text), { kind: "names", names: namesOf(tree) }, name);
-        }
-
-        assert.deepStrictEqual(
-          [...mixed].toSorted(),
-          ["cdata", "comment", "element", "pi", "text"],
-          "the cases held every kind of child but entity references",
-        );
-      }),
+              assert.deepStrictEqual(infosetOf(doc.root), infosetOf(tree));
+              assert.deepStrictEqual(unseeded(text), { kind: "names", names: namesOf(tree) });
+            }),
+        ),
+      ),
     GENERATED_TIMEOUT_MS,
   );
 });

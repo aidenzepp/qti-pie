@@ -3,7 +3,8 @@
 How this repository reads QTI 3.0 and the languages it embeds where a specification is silent, ambiguous or split
 between its schema and its prose. Every package follows these readings: the qti package when it accepts or refuses a
 document, and the renderer when it renders one, so the two never disagree about the same file. Each reading is an
-operator ruling. A new reading lands here by pull request, and a package that needs one asks the operator first.
+operator ruling, or a decision read from the normative text under the operator's standing ruling of 2026-11-05 that
+the spec wins, recorded in the pull request that lands it. A new reading lands here by pull request.
 
 ## Validity
 
@@ -13,16 +14,45 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    that QTI's schema imports. MathML that breaks a rule of the Recommendation, such as an operator applied to the wrong
    number of arguments or a piecewise expression with two `otherwise` parts, is invalid even when the QTI XSD accepts it.
    (2026-11-02.)
-   MathML's own rules that its XSD does not state are enforced where they are unambiguous:
-   - the RelaxNG's two element interleaves, `bvar` (one annotated variable and at most one `degree`, in either order)
-     and `piecewise` (at most one `otherwise`, anywhere among its pieces), which the XSD widens to repetitions;
+   Where the RelaxNG and the XSD differ, the RelaxNG, the normative schema, is followed in both directions (2026-11-05,
+   with §2.1.5.1's notation below). The two were compared on 2026-11-05 (the RelaxNG at
+   https://www.w3.org/Math/RelaxNG/mathml3/): their attributes agree name for name, use and type, and their content
+   models differ in exactly the cases below. MathML's own rules are enforced where they are unambiguous:
+   - the RelaxNG's two element interleaves, `bvar` (one annotated variable and at most one `degree`, in either order,
+     `mathml3-content.rnc` line 23) and `piecewise` (at most one `otherwise`, anywhere among its pieces, line 60), which
+     the XSD widens to repetitions;
+   - `interval` among the qualifiers: the RelaxNG's `DomainQ` is `(domainofapplication|condition|interval|(lowlimit,
+     uplimit?))*` (line 41), and trang drops `interval` from it ("Ambiguous content model altered (interval)",
+     `mathml3-content.xsd` line 92). So in `apply` and `bind` (lines 29 and 31), `lambda` (103), `set` and `list` (230
+     and 231) and `vector`, `matrix` and `matrixrow` (325 to 327) an interval a qualifier follows is a qualifier, and an
+     interval is otherwise an argument;
+   - `annotation-xml` holds `(MathExpression|anyElement)*` (`mathml3-common.rnc` lines 59 and 61): any number of
+     children, no text, each a math expression or an element in a namespace other than MathML's. The XSD's one lax
+     element ("content model altered for libxml (annotation-xml)", `mathml3-common.xsd` line 42) is set aside. A QTI
+     element directly inside is still read by its declaration, as reading 30 reads the wildcard;
+   - `semantics` is a content expression: the RelaxNG's `ContExp` names `semantics-contexp`, whose first child is a
+     content expression (`mathml3-strict-content.rnc` lines 14 and 23), and the XSD drops it ("Ambiguous content model
+     altered (ContExp)", `mathml3-strict-content.xsd` line 8). So a `semantics` stands wherever a content expression
+     does, and there its first child is one. A bound variable's `semantics` is `semantics-ci` (line 20), whose first
+     child is `ci` or another of its own, in the XSD as in the RelaxNG;
+   - `math` is MathML's one root: the RelaxNG's only start pattern is `math` (`mathml3-common.rnc` line 15), and §2.2
+     says "All other MathML content must be contained in a math element … it is an error for one math element to
+     contain another". The XSD declares every MathML element globally, so its lax wildcards admit a bare `m:mi`. Here a
+     wildcard admits no MathML element but `math`, and no `math` sits inside another. With `anyElement`, this bars
+     MathML anywhere inside foreign content in `annotation-xml`;
+   - the notation types of §2.1.5.1 over the XSD's: `unsigned-integer` is "a string of decimal-digits",
+     `positive-integer` one "not consisting solely of "0"s", and `integer` "an optional "-" (U+002D), followed by a
+     string of decimal digits". The XSD types them `xs:unsignedLong`, `xs:positiveInteger` and `xs:integer`
+     (`mathml3-presentation.xsd` lines 93, 133 and 96), which admit a `+`, and `-0` for the first (reading 64). A value
+     meets both, so `length`, `columnspan`, `rowspan`, `selection`, `position`, `shift` and `index` take the notation's
+     lexical space within the type's bounds, whitespace collapsed as the type collapses it (§2.1.5.1 asks only that
+     outer whitespace "should be avoided"). `scriptlevel`, of the XSD's `m:integer` too, keeps its sign, because its
+     own row states `( "+" | "-" )? unsigned-integer` (§3.3.4.2). `number` is not one of the three, and stays the XSD's
+     `xs:decimal`;
    - each operator's argument count under `apply`, by its class (MathML 3 §4.1.5, §4.3.4.5 and §4.3.4.6), for an
      `apply` that holds no qualifier but its operator's own. `moment` is left out, because the Recommendation's own
      example (§4.4.8.6) applies it to five arguments.
-     Every other difference between the Recommendation and the MathML XSD is decision D12's ruled gap, and where the XSD
-     is stricter than the RelaxNG (trang's altered models: `annotation-xml`'s one child, `interval` among the
-     qualifiers), the XSD is followed until the operator rules otherwise. Whether §2.1.5.1's notation narrows the XSD's
-     number types is the operator's question B1.
+     Every other difference between the Recommendation's prose and the MathML XSD is decision D12's ruled gap.
 
 ## Scope of names and references
 
@@ -91,6 +121,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
    The Schematron's two ARIA role rules (no `role` on `source`; `h1`'s `role` limited to `heading`, `tab` or
    `presentation`) are not followed: the operator ruled on 2026-11-05 that attributes follow the XSD exactly, and those
    rules encode HTML's ARIA conformance prose, which QTI's XSD admits and does not restate.
+   The Schematron's extension-attribute lists bind, read by their intent as reading 81 states.
 10. **`aria-keyshorts` and `aria-keyshortcuts` are both accepted on empty elements.** The XSD, the information model's
     attribute table and the Schematron's allow-lists all name the attribute `aria-keyshorts` on the empty element
     families, a misspelling of ARIA's `aria-keyshortcuts`, which the information model's own description uses. A
@@ -133,11 +164,21 @@ against it. A reading that is not an information-model-over-XSD case says which 
 17. **A `view` list has at least one view.** The information model's prose requires at least one view. The XSD admits an
     empty list. This follows the information model and sets the XSD aside, with the stricter source deciding where both
     are normative. (2026-11-04.)
-18. **An order or graphic-order interaction's `min-choices` is at least 1, and `max-choices="0"` is exempt from the
-    count rule.** The information model's prose requires `min-choices` of at least 1 for these two interactions. The XSD
-    allows 0. This follows the information model and sets the XSD aside. Separately, `max-choices="0"` means unlimited
-    and is exempt from the rule that compares the counts, which is what the Schematron's rule intends, so the Schematron
-    is followed for its intent and not its text (reading 9). (2026-11-04.)
+18. **An order or graphic-order interaction's `min-choices`, where written, is from 1 to its number of choices, and a
+    `max-choices` written beside it is from `min-choices` to its number of choices.** The information model says of
+    both interactions: "If specified, min-choices must be 1 or greater but must not exceed the number of choices
+    available. If unspecified, all of the choices must be ordered and max-choices is ignored", and "Used in
+    conjunction with min-choices, if specified, max-choices must be greater than or equal to min-choices and must not
+    exceed the number of choices available" (sections 5.97.2 and 5.97.3, OrderInteraction; sections 5.61.1 and 5.61.2,
+    GraphicOrderInteraction). The XSD allows `min-choices="0"`. This follows the information model and sets the XSD
+    aside. The number of choices is the interaction's `qti-simple-choice` or `qti-hotspot-choice` children. A
+    `max-choices` with no `min-choices` beside it is ignored, so no rule reads it. Neither interaction gives `0` the
+    meaning "no restriction" that the choice interaction's `max-choices` has (section 5.30.2), so a `max-choices="0"`
+    beside a written `min-choices` is below it and is refused. The Schematron's rules for the two (5Ba and 8Ba,
+    `not(not(@max-choices=0) and @max-choices < @min-choices)`) exempt 0, and the information model outranks the XSD
+    that embeds them, so the exemption is set aside. (2026-11-04; restated 2026-11-05 under "the spec wins": the earlier
+    text exempted `max-choices="0"` by the Schematron's rule, without the information model's sentence, which has no
+    exemption, and did not bound either count by the choices.)
 19. **An extended-text interaction bound to a container has `max-strings`.** The XSD makes `max-strings` optional. The
     information model's prose requires it when the interaction is bound to a container (multiple or ordered
     cardinality). This follows the information model and sets the XSD aside, because the prose states the rule and the
@@ -263,8 +304,14 @@ against it. A reading that is not an information-model-over-XSD case says which 
 42. **An SSML `voice/@languages` holds language ranges, and `und` and `zxx` are refused.** The SSML 1.1 Recommendation
     defines the value as the empty string or a space-separated list of languages, each written `language` or
     `language:accent`, where each part is an Extended Language Range, and disallows `und` and `zxx`. The XSD types it as
-    `xs:NMTOKENS` or the empty string. This follows the SSML Recommendation, which defines the language, and sets aside
-    the XSD, which is looser than it. (2026-11-04.)
+    `xs:NMTOKENS` or the empty string. SSML's own conformance criteria make a document adhere to the Recommendation
+    "including the constraints expressed in the" schema of its Appendix D, which "is normative" (sections 2.2.1 and
+    2.2.2), and that schema's `languages.datatype` is the same union (`ssml/synthesis-nonamespace.xsd` lines 338-340,
+    as in the W3C's own copy). So a value is valid only where both admit it. The Recommendation narrows each NMTOKEN to
+    a range, compared without regard to case (RFC 4647, section 2), so `UND` and `Zxx` are refused too. The schema
+    refuses the `*` subtag an Extended Language Range allows (RFC 4647, section 2.2), since `*` is no XML name
+    character, so `*`, `en-*` and `*-US` are refused. (2026-11-04; restated 2026-11-05 under "the spec wins": the
+    earlier text said the XSD was looser than the Recommendation, which it is not for `*`.)
 43. **An SSML `voice` or `prosody` has at least one attribute that survives fragment removal.** The SSML 1.1
     Recommendation says it is an error if no attributes are specified on `voice` or `prosody`. The XSD makes every
     attribute optional. This follows the SSML Recommendation, which defines the language, and sets aside the XSD, which
@@ -328,6 +375,14 @@ against it. A reading that is not an information-model-over-XSD case says which 
     not a case of documents in conflict: the specification reserves `.` for prefixing and says nothing of splitting a
     reference at a dot, so this reading fills the gap and keeps every unambiguous reference valid, as reading 1
     requires. (2026-11-04.)
+    The unsplit reading counts among them: a test-level reference also names the test's own variable of that whole
+    identifier, declared in the test or built in, because a variable expression first "looks up the value of an item
+    variable that has been declared in a corresponding variable declaration or is one of the built-in variables", and
+    only then describes prefixing (information model, section 2.11.1.2). So in a test that declares `a.b` and holds an
+    item ref `a` whose item declares `b`, the reference `a.b` is ambiguous and is refused. Not counting it would leave
+    a test variable named `a.b`, which reading 37 admits, with no reference that reaches it. A numbered reading counts
+    only as reading 79 says, and a name a test reaches through two placements of one section document has one
+    resolution for each placement (reading 77). (Restated 2026-11-05 under "the spec wins".)
 49. **QTI and foreign elements beneath MathML and in card content are admitted wherever the schema admits them.**
     Inside `m:annotation-xml` this is reading 30. In card content (`qti-html-content` of a `qti-card` or
     `qti-card-entry`) the same basis applies: an element is accepted wherever the schema admits it and no normative text
@@ -488,22 +543,52 @@ against it. A reading that is not an information-model-over-XSD case says which 
     even-odd rule, and a point on its edge is inside (reading 52). This binds plate, which scores; pantry scores
     nothing. This is not a case of documents in conflict: QTI is silent, and HTML, where its shapes come from, decides.
     (The renderer's phase-3 default, delivery spec section 5.1, applied in plate; 2026-11-05.)
-60. **Under a `lax` wildcard, an element no global QTI declaration checks, whose `xsi:type` names a built-in simple
-    type of XML Schema, has its text accepted without a check.** This extends reading 50, which accepts such an
-    element without a check when its `xsi:type` names a complex type. XML Schema assesses an element that has no
-    declaration but carries an `xsi:type` naming a type it can resolve against that type (XML Schema Part 1, section
-    3.3.4, Schema-Validity Assessment (Element), clause 1.2). Under a simple type the element must hold no attribute
-    but the four `xsi:` ones, no element child, and text valid for the type (section 3.3.4, Element Locally Valid
-    (Type), clause 3.1). plate does not check an element's text against a simple type, so it cannot tell whether the
-    text is valid, and by reading 50's rule the text is accepted unchecked, a known limit. The attribute and child
-    rules can be checked, so they stand. `xsi:type="xs:anyType"`, and an `xsi:type` that resolves to no type, do not
-    count: XML Schema then assesses the element laxly, against the ur-type definition (section 3.3.4, Schema-Validity
-    Assessment (Element), after clause 2), which is the lax walk itself, so its children are assessed laxly in turn.
-    This binds pantry and plate alike, so the two never read the same file differently. plate is the only
-    implementation so far: it refuses element children and attributes other than the four `xsi:` ones, and accepts
-    the text unchecked. This is not a case of documents in conflict: XML Schema decides what is valid, and only the
-    text is beyond what a package here can check. (The renderer's phase-3 default, delivery spec section 5.1, applied
-    in plate, narrowed to the text by XML Schema Part 1, section 3.3.4; 2026-11-05.)
+60. **Under a `lax` or `strict` wildcard, an element no global declaration checks is judged by its `xsi:type`: a
+    simple type it names governs its text and is checked, a complex one is reading 50's limit, and a name the schemas
+    do not define leaves it to lax assessment under `lax` and makes it invalid under `strict`.** This extends reading
+    50, which accepts such an element without a check when its `xsi:type` names a complex type. XML Schema assesses an
+    element that has no declaration but carries an `xsi:type` whose value is a QName resolving to a type definition
+    strictly against that type (XML Schema Part 1, section 3.3.4, Schema-Validity Assessment (Element), clause 1.2). The
+    types it can name are XML Schema's built-ins and those of the document's schema set (reading 72). Reading 72's
+    refusal under `strict` is of an element that carries no such `xsi:type`: the wildcard requires "a top-level
+    declaration for the item available, or the item must have an xsi:type, and the item must be valid as appropriate"
+    (section 3.10.1), and an element that clause 1.2 assesses has a known validity. So:
+    - A simple type, built into XML Schema or defined by the schema set: the element holds no attribute but the four
+      `xsi:` ones, no element child, and text valid for the type (section 3.3.4, Element Locally Valid (Type), clause
+      3.1). All three are checked, the text through the type's own domain.
+    - A complex type: reading 50 holds, under `strict` as under `lax`, and the element is accepted without a check
+      against the type. `xsi:type="xs:anyType"` names the ur-type, so its element is assessed as the lax walk assesses
+      it, its children laxly in turn.
+    - A QName, with a bound prefix or none, that names no type of the schemas: clause 1.2 fails. Under `lax` the
+      element is laxly assessed against the ur-type definition (section 3.3.4, after clause 2), which is the lax walk
+      itself, so it is valid and its children are assessed laxly in turn. libxml2, whose `xmllint` is the validity
+      oracle, refuses it ("does not resolve to a type definition"); that verdict is recorded against this reading, not
+      counted as a defect. Under `strict` the element's declaration is `mustFind`, and an element of unknown validity
+      there makes its parent invalid (section 3.3.5, [validity], clause 1.1.3), so the document is refused.
+
+    A prefix that no declaration in scope binds makes the `xsi:type` attribute itself invalid (reading 74).
+
+    Two limits remain in pantry, each an exception to reading 1, stated here as a known limit:
+    - `xs:NOTATION`'s value space is "the set of QNames of notations declared in the current schema" (XML Schema Part
+      2, section 3.2.19), and no pinned XSD declares a notation, so the type holds no value and no text of an element
+      it governs is valid. The domain compiler states no empty domain, so a foreign element whose `xsi:type` names
+      `xs:NOTATION` is left ungoverned and its text unchecked, where XML Schema refuses it. It is closed when the
+      compiler states the empty domain.
+    - An element of a kind reads its `xsi:type` against every type the pinned schemas of its version define, not only
+      those of its document's schema set, because `XsiType` is keyed by version. So
+      `<qti-description xsi:type="ud:ValueDType">` in an item is accepted and governed by the usage-data type, though
+      the item's set does not import usage data and its `xsi:type` names no type there (section 3.3.4, Element Locally
+      Valid (Element), clause 4.2). This is reading 72's limit, the grammar keyed by version and not by schema set,
+      extended to the types an `xsi:type` names, and it closes with that limit.
+
+    This binds pantry and plate alike. pantry checks all of it but those two limits. plate does not yet check the text:
+    it refuses element children and attributes other than the four `xsi:` ones, and accepts the text unchecked; that is
+    plate's open limit against this reading, for plate's own goal to close, not a second reading. This is not a case of
+    documents in conflict: XML Schema decides what is valid. (The renderer's phase-3 default, delivery spec section 5.1,
+    applied in plate, narrowed to the text by XML Schema Part 1, section 3.3.4; 2026-11-05. Restated 2026-11-05 under
+    "the spec wins": the text is checked, which closes the limit the reading first recorded, and the `strict` wildcard
+    and an `xsi:type` naming no type are decided. The two limits are recorded 2026-11-05, from seat QS's findings.)
+
 61. **An element in QTI's own namespace inside `qti-ordering`'s extension slot is valid.** The information model says
     the slot's child tags "may be new tags and reused QTI ASI tags" (section 5.98.3, the `extensions` attribute of the
     Ordering class), though the XSD admits only other namespaces there. Such an element is kept as the slot's extension
@@ -681,8 +766,8 @@ against it. A reading that is not an information-model-over-XSD case says which 
     `completionStatus` and is not. The underscore in the value `not_attempted` belongs to a value of the identifier
     base type, not to a variable's name, and does not bear on it. This is not a case of documents in conflict: the
     XSD types the identifier as an `xs:NCName` and names no built-in, the information model defines the name, and
-    every other QTI 3.0 source agrees with it; one example disagrees with all of them. (Operator ruling pending;
-    proposed 2026-11-05.)
+    every other QTI 3.0 source agrees with it; one example disagrees with all of them. (Operator ruling "the spec
+    wins", 2026-11-05.)
 64. **`xs:unsignedLong`, `xs:unsignedInt`, `xs:unsignedShort` and `xs:unsignedByte` admit a sign as
     `xs:nonNegativeInteger` does: `+` before any value, `-` only before zero.** XML Schema Part 2 (W3C
     Recommendation, 28 October 2004) says each "has a lexical representation consisting of a finite-length sequence
@@ -712,14 +797,18 @@ against it. A reading that is not an information-model-over-XSD case says which 
     https://www.imsglobal.org/spec/qti/v3p0/info#Variables). Each declaration's `identifier` adds "All item
     variables declared in an item share the same namespace" (section 4.5.1, `#RootCharacteristic_OutcomeDeclaration.Attr_identifier`,
     and sections 5.34.1, 5.115.1 and 5.151.1). A response's and a context's identifier is a UniqueIdentifier,
-    "unique within the scope of the instance" (section 7.43), which the XSD types `xs:ID`. An outcome's and a
-    template's is an Identifier, which neither document makes unique. One identifier declared twice in one namespace
-    would stand for two variables, and a variable expression that names it (section 2.11.1.2) could not tell which.
-    So no two declarations of a document, of any of the four kinds, share an identifier, and a test's own
-    declarations form one namespace in the same way. This is implied, not stated: no sentence calls an outcome's or a
-    template's identifier unique. This is not a case of documents in conflict: the information model implies the
-    rule, and the XSD states it only for the two kinds it types `xs:ID`. (Draft for Sterling's review, 2026-11-05;
-    the law `Declaration key`.)
+    "unique within the scope of the instance" (sections 5.115.1, 5.34.1 and 7.43). The XSD types the response's
+    `UniqueIdentifierDType`, an `xs:ID`, and the context's `IdentifierDType`, an `xs:NCName`; the information model
+    outranks the XSD, so a context declaration's identifier is unique among its document's IDs as a response
+    declaration's is. An outcome's and a template's is an Identifier, which neither document makes unique. One
+    identifier declared twice in one namespace would stand for two variables, and a variable expression that names it
+    (section 2.11.1.2) could not tell which. So no two declarations of a document, of any of the four kinds, share an
+    identifier, and a test's own declarations form one namespace in the same way. This is implied, not stated: no
+    sentence calls an outcome's or a template's identifier unique. Across the four kinds this is not a case of
+    documents in conflict: the information model implies the rule, and the XSD states it only for the response kind,
+    which it types `xs:ID`. For a context's identifier among the document's IDs it is one, and the information model
+    is followed over the XSD. (2026-11-05; the law `Declaration key`. Restated 2026-11-05 under "the spec wins": the
+    earlier text said the XSD types a context's identifier `xs:ID`, which it does not.)
 66. **An interaction's `response-identifier` names a declared response variable.** The information model says each
     interaction "must be bound to a response variable" of the types it lists (section 2.4,
     https://www.imsglobal.org/spec/qti/v3p0/info#Main2p4; for example section 2.4.1.1, "The qti-choice-interaction
@@ -729,10 +818,11 @@ against it. A reading that is not an information-model-over-XSD case says which 
     2.2.2). So a `response-identifier` that names no response declaration binds its interaction to nothing, and the
     item is refused. The built-in response variables `numAttempts` and `duration` are "declared implicitly", and the
     delivery engine maintains them (section 2.2.2.2), so an interaction bound to one is refused too. For the text
-    entry and extended text interactions, whose references the XSD types `xs:IDREF` (reading 14), the XSD already
-    resolves the reference. This is implied: the binding sentence and the declaration sentence together state it,
-    and no single sentence does. This is not a case of documents in conflict. (Draft for Sterling's review,
-    2026-11-05; the law `Binding declared`.)
+    entry interaction, whose reference the XSD types `xs:IDREF` (reading 14), the XSD already resolves it; the
+    extended text interaction's is an `IdentifierDType`, as every other interaction's is, and this rule resolves it.
+    This is implied: the binding sentence and the declaration sentence together state it, and no single sentence does.
+    This is not a case of documents in conflict. (2026-11-05; the law `Binding declared`. Corrected 2026-11-05: the
+    earlier text called the extended text interaction's reference an IDREF.)
 67. **A least count is at most its most, unless the most is 0.** The information model states this for each pair:
     - "min-choices must be less than or equal to the limit imposed by max-choices" (section 5.30.3,
       https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ChoiceInteraction.Attr_min-choices), with "If
@@ -742,11 +832,12 @@ against it. A reading that is not an information-model-over-XSD case says which 
       interactions' `min-choices` (sections 5.66.2, 5.68.1, 5.107.2, 5.128.1), and an extended text interaction's
       `min-strings` (section 5.48.7: "min-strings must be less than or equal to the limit imposed by max-strings").
       A limit of 0 imposes none, so any least meets it, and reading 53 reads `max-strings="0"` the same way. The order
-      and graphic order interactions and the media interaction's plays have no such sentence. The Schematron states
-      each (rules 8Ba, 5Ba and 13Ba), and reading 9 reads them by intent, 13Ba with `max-plays="0"` as no limit
-      (section 5.92.3: "A value of 0 (the default) indicates that there is no limit"). This is stated, and is not a
-      case of documents in conflict. (Draft for Sterling's review, 2026-11-05; the law `Choice bounds`, whose
-      `ChoiceBound` pairs lack `min-strings` and `max-strings` today.)
+      and graphic order interactions state their own rule, with no 0 exemption, since neither gives 0 that meaning:
+      reading 18 reads it. The media interaction's plays have no such sentence. The Schematron states it (rule 13Ba),
+      and reading 9 reads it by intent, with `max-plays="0"` as no limit (section 5.92.3: "A value of 0 (the default)
+      indicates that there is no limit"). This is stated, and is not a case of documents in conflict. (2026-11-05; the
+      law `Choice bounds`. Corrected 2026-11-05: the earlier text said the order interactions have no sentence, which
+      sections 5.61.2 and 5.97.3 are.)
 68. **A feedback element names an outcome variable, and a printed variable an outcome or a template variable, the
     built-in `completionStatus` among them.** The information model states both:
     - Every feedback element's `outcome-identifier` is "The identifier of an outcome variable that must have a
@@ -758,7 +849,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
       `completionStatus` is an outcome variable "declared implicitly", "a single identifier" (section 2.2.2.3), so a
       feedback element or a printed variable may name it. A response variable, declared or built in, is refused for
       both, and so is a feedback outcome of another base type or cardinality. This is stated, and is not a case of
-      documents in conflict. (Draft for Sterling's review, 2026-11-05; the laws `Feedback reference` and `Printed
+      documents in conflict. (2026-11-05; the laws `Feedback reference` and `Printed
       variable reference`, which refused `completionStatus` until RD's patch and do not yet read the outcome's base
       type and cardinality.)
 69. **A mapping maps a base type other than `file` and `duration`, of a variable that is not a record.** The
@@ -769,7 +860,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     to responses of any base-type and cardinality" (section 2.5.1) says where the template may be used, not what a
     mapping maps, and is read with the class definition, which is the narrower and the more specific. This is stated.
     It is a sentence inside the information model read beside its class definition, not a case of documents in
-    conflict. (Draft for Sterling's review, 2026-11-05; the law `MappableBaseType`.)
+    conflict. (2026-11-05; the law `MappableBaseType`.)
 70. **A selection without replacement selects at most its section's parts.** The information model says of `select`
     "The number of children to select may exceed the number of child elements defined only if with-replacement is
     true", and "Sub-sections always count as 1, regardless of how many child elements they have and whether or not
@@ -777,16 +868,296 @@ against it. A reading that is not an information-model-over-XSD case says which 
     https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Selection.Attr_select). So a section's parts
     (item references, sections and section references) are counted once each, and `select` above their number is
     refused unless `with-replacement` is true. `with-replacement` is an `xs:boolean`, so `1` is true; reading 34
-    binds `qti-value` only. This is stated, and is not a case of documents in conflict. (Draft for Sterling's
-    review, 2026-11-05; the law `Selection bound`.)
-71. **A default hotspot is the last hotspot of its interaction, and a graphic gap match interaction has none.** The
-    information model says "The default hotspot, if defined, must appear last":
-    - in the HotspotChoice class (section 5.67, https://www.imsglobal.org/spec/qti/v3p0/info#Data_HotspotChoice);
-    - in the AssociableHotspot class (section 5.7, `#Data_AssociableHotspot`);
+    binds `qti-value` only. This is stated, and is not a case of documents in conflict. (2026-11-05; the law `Selection bound`.)
+71. **A default hotspot is the last hotspot choice of its interaction, and a graphic gap match interaction has
+    none.** The information model says "The default hotspot, if defined, must appear last":
+    - in the HotspotChoice class (section 5.67, https://www.imsglobal.org/spec/qti/v3p0/info#Data_HotspotChoice),
+      whose choices the hotspot and graphic order interactions hold;
     - in the hotspot interaction's `qti-hotspot-choice` (section 5.68.6).
       Of the graphic gap match interaction's hotspots it says "The default hotspot must not be defined" (section
       5.60.9). "Last" is last among the interaction's hotspots, which its content model places after its image, so it
       is its last element child: whitespace, comments and processing instructions after it are no hotspots and do not
-      count. This is stated, and is not a case of documents in conflict. (Draft for Sterling's review, 2026-11-05; the
-      law `default hotspot last slot`, which counted trailing whitespace and skipped associable hotspots until RD's
-      patch, and the graphic gap match ban, which no law states yet.)
+      count. Of the graphic associate interaction's `qti-associable-hotspot` children, and of the AssociableHotspot
+      class, it says no such thing (sections 5.59.4 and 5.7), so there a default hotspot may stand anywhere (reading
+      1). This is stated, and is not a case of documents in conflict. (2026-11-05; the law `default hotspot last slot`,
+      over `qti-hotspot-choice`, and `Graphic gap match default hotspot`. Corrected 2026-11-05: the earlier text cited
+      the AssociableHotspot class for the rule, which it does not state, and the law that followed it refused valid
+      graphic associate interactions.)
+72. **An element wildcard reads an element as a global declaration only where the schema set of the element's
+    document declares it, and a `strict` wildcard refuses any other element unless its `xsi:type` names a type of
+    that set or a built-in.** XML Schema 1.0 Part 1 (W3C Recommendation, 28 October 2004) defines `strict` as
+    "There must be a top-level declaration for the item available, or the item must have an xsi:type, and the item
+    must be valid as appropriate" (section 3.10.1). A `strict` wildcard's element has the context-determined
+    declaration `mustFind` (section 3.10.4, Item Valid (Wildcard), clause 2). It is assessed strictly when its name
+    resolves to a declaration in the schema the document is assessed against (section 3.3.4, Schema-Validity
+    Assessment (Element), clause 1.1.1.3.2), or when its `xsi:type` resolves to a type definition there (clause
+    1.2). A parent with a `mustFind` child that neither assesses, whose validity is unknown, is invalid (section
+    3.3.5, Assessment Outcome (Element), [validity] clause 1.1.3). Under `lax` the element is assessed only where a
+    declaration is found (section 3.10.4, clause 1), and otherwise against nothing. Which schema a document is
+    assessed against is the application's to direct (section 4.3.2: an instance's `xsi:schemaLocation` hints are used
+    "unless directed otherwise, for example by the invoking application"). QTI directs it. The full ASI XSD of the
+    document's version is the validator for every ASI file (reading 24), and a manifest's is the content-packaging
+    XSD of its version. Each XSD's `grpStrict.any` group says "the schema must be imported" (`imsqti_asiv3p0_v1p0.xsd`
+    line 23927, `imsqti_asiv3p0p1_v1p0.xsd` line 24013, the CP XSDs lines 166 and 165, both DRD XSDs line 102). So a
+    document's schema set is its root XSD and every XSD that XSD imports, transitively, and an
+    `xsi:schemaLocation` in the document adds nothing to it. The sets are four:
+    - an item, section, stimulus, test, outcome declaration or response-processing template: the ASI XSD, with
+      `xml.xsd`, XInclude, MathML 3 and SSML 1.1 (both ASI XSDs, lines 12 to 15);
+    - a manifest: the content-packaging XSD, with `xml.xsd`, LOM, the curriculum standards metadata, the QTI metadata
+      and the content-packaging extension (both CP XSDs, lines 12 to 16), which imports XLink and the AfA DRD (both
+      `cpext/` XSDs, lines 10 and 11);
+    - an external LOM metadata file (`resourcemetadata/xml`): the loose LOM binding, which imports nothing;
+    - a usage-data file (`qtiusagedata/xml`): the usage-data XSD, which imports nothing.
+
+    So beneath `qti-companion-materials-info`, whose model ends in the `strict` `##other` wildcard of
+    `grpStrict.any` (`imsqti_asiv3p0_v1p0.xsd` line 26129, `imsqti_asiv3p0p1_v1p0.xsd` line 26275), an element of
+    MathML, SSML or XInclude is assessed against its global declaration. An element of the DRD, such as
+    `drd:educationalComplexityOfAdaptation`, has no declaration there, because the ASI XSDs import no DRD, and
+    neither does one of LOM, the curriculum standards metadata, the QTI metadata, the content-packaging extension or
+    usage data. In a manifest, the `strict` wildcards of the file metadata (`imsqtiv3p0_imscpv1p2_v1p0.xsd` line 269,
+    `imsqtiv3p0p1_imscpv1p2_v1p0.xsd` line 251) and of the DRD's `accessForAllResource` (both DRD XSDs, line 409) find
+    no declaration for an element of the ASI namespace, MathML, SSML, XInclude or usage data. Under those wildcards
+    such an element, like any element no declaration of the set names, stands only with an `xsi:type` that names a
+    type of the document's set, or one of XML Schema's own (a built-in, or `xs:anyType`). It is then assessed against
+    that type, as reading 60 says. With no `xsi:type`, or with one that resolves to no type of the set, the element is
+    refused: a DRD type is no type of an item's set. libxml2 2.9.13, whose `xmllint` is the validity oracle, refuses
+    every element under a `strict` wildcard that has no declaration before it reads the `xsi:type`, so it refuses
+    `<f:x xmlns:f="urn:f" xsi:type="xs:string">a</f:x>` there, which XML Schema assesses and accepts. Its verdict is
+    recorded against this reading rather than counted as a defect. Under a `lax` wildcard, an element the
+    document's set does not declare is foreign content, assessed laxly as readings 6 and 57 say, and is not read
+    as the declaration another set gives it.
+    One limit follows from the grammar being keyed by version and not by schema set. A kind that stands in documents
+    of more than one set has one set of wildcard admissions for all of them, and its `lax` wildcards read an element as
+    its declaration when any of those sets declares it. Such kinds are LOM's, in a manifest and in an external LOM
+    file, and the foreign kinds, in every document. That keeps reading 57's walk beneath a foreign element in an item,
+    where MathML, SSML and QTI's own global elements are read and judged. It also reads, in the same places, an
+    element that the document's own set does not import. Beneath a foreign element in an item, a `lom:lom` is judged
+    as LOM, where XML Schema would assess it against nothing, and beneath a LOM element in an external LOM file, a
+    `drd:hazard` is judged as DRD's. Such an element is refused when it breaks its declaration. That is an exception
+    to reading 1, stated here as a known limit. It is closed when the grammar keys its admissions by schema set as it
+    keys them by version. This binds pantry and plate alike. This is not a case of documents in conflict: XML Schema
+    decides how a wildcard finds a declaration or a type, and QTI's XSDs and reading 24 fix the schema each document
+    is assessed against. (The DRD finding of seat QF, with QD's correction for `xsi:type` under `strict`; "the spec
+    wins", 2026-11-05.)
+
+73. **A response-processing resource's type is `imsqti_resprocessing_xmlv3p0`, as the content-packaging XSD
+    enumerates it, and the implementation guide's `imsqti_responseprocessing_xmlv3p0` is refused.** The
+    content-packaging XSD enumerates the values of a `cp:resource`'s `type`, and among them is
+    `imsqti_resprocessing_xmlv3p0` (`imsqtiv3p0_imscpv1p2_v1p0.xsd` line 400, `imsqtiv3p0p1_imscpv1p2_v1p0.xsd`
+    line 353). The implementation guide's table of resource types spells the same type
+    `imsqti_responseprocessing_xmlv3p0`, "QTI 3 ResponseProcessing" (section 6.2, `impl.txt` line 13291). The guide is
+    "an informative resource in the Document Set" that "does not include any normative requirements" (section 1.3,
+    `impl.txt` lines 818 to 821). The ASI XML binding's list of the vocabulary names neither spelling, and its section
+    says "This Section is NOT NORMATIVE" (section 8, ASI Packaging, `bind.txt` lines 434905 and 434933). The
+    information model does not speak to packaging. So the XSD is the one normative source that states the vocabulary,
+    and it decides: a resource typed `imsqti_resprocessing_xmlv3p0` is accepted, and its file is a document whose root
+    is `qti-response-processing`, as for `imsqti_rptemplate_xmlv3p0`, both paired with the guide's section 6.2.4. A
+    resource typed `imsqti_responseprocessing_xmlv3p0` is refused, because the XSD's enumeration refuses it and reading
+    1 refuses content that is not valid. This follows the XSD and sets aside the guide's table, as readings 11 and 12
+    set the guide aside where it disagrees with a normative definition. This is not an information-model-over-XSD
+    case: the information model is silent, and the conflict is between the XSD and an informative guide. ("The spec
+    wins", 2026-11-05.)
+74. **A prefix names the namespace its nearest declaration binds, in element and attribute names and in values of type
+    QName alike, and a prefix nothing binds makes the document invalid.** Namespaces in XML 1.0 (Third Edition, W3C
+    Recommendation, 8 December 2009) requires every prefix but `xml` and `xmlns` to be declared on the element that
+    uses it or on an ancestor ("Namespace constraint: Prefix Declared", section 5), scopes a declaration to its element
+    less the scope of any inner declaration of the same prefix (section 6.1), and makes conformance require both
+    (section 7). XML Schema 1.0 reads a value of type QName the same way: a prefixed value needs a namespace in its
+    element's [in-scope namespaces] with that prefix, and an unprefixed one takes the default namespace in scope, or
+    none (Part 1, section 3.15.3, QName Interpretation, clauses 1.1 and 2.2; Part 2, section 3.2.18, whose note says
+    the mapping "requires a namespace declaration to be in scope"). The values of type QName that QTI's schemas hold
+    are `xsi:type` and each item of SSML's `role`, a list of `xsd:QName` (`ssml/synthesis-nonamespace.xsd` line 308).
+    So an `xsi:type` or a `role` item whose prefix no declaration in scope binds is refused. That holds for the
+    `xsi:type` of a foreign element under a `lax` or `strict` wildcard as well: with no element declaration, XML
+    Schema still assesses the attribute against its built-in declaration (Part 1, section 3.2.4, Schema-Validity
+    Assessment (Attribute), clause 1.2, and section 3.2.7), which the ur-type's `lax` attribute wildcard lets it
+    find. Under `skip` nothing is assessed (section 3.10.1), and the value is kept as written. Every element and
+    attribute name resolves its prefix the same way, to the namespace that is the name's. pantry states each of these
+    as a law over its stored rows, the names and the QName values alike, and does not leave the names to its reader:
+    a row whose prefix resolves to no binding, or to another namespace than its name's, describes no document, and
+    the model stores nothing that no valid document is (`docs/qti-intent.md`, "Extremely tight data model"). This
+    binds pantry and plate alike in what they refuse; how each enforces it is its own. This is not a case of
+    documents in conflict: Namespaces in XML and XML Schema agree. (Operator ruling "the spec wins", 2026-11-05.)
+75. **An element is judged under its governing type for everything XML Schema decides, and under its name for every
+    rule QTI adds.** An element whose valid `xsi:type` names a type derived from its declared one is validated against
+    the named type, its "actual type definition", and not the declared one (XML Schema Part 1, section 3.3.4, Element
+    Locally Valid (Element), clauses 4 and 5.2.1; reading 47). So its admitted and required attributes, their value
+    domains, its content model, the domain of its text, and which of its values are IDs and IDREFs are the governing
+    type's. Under QTI 3.0's XSDs that reaches three groups. `qti-null`, `qti-exit-response`, `qti-exit-template` and
+    `qti-exit-test` are declared `EmptyPrimitiveTypeDType` (ASI 3.0.1 XSD line 24052, a restriction of `xs:anyType`
+    with no content), which 41 types extend, each with attributes only. `qti-description`, `qti-physical-material`
+    and `qti-minimum-length`, and the metadata's `interactionKind` and `customTypeIdentifier`, are declared
+    `xs:normalizedString` or `xs:integer`, whose restrictions an `xsi:type` may name. SSML's `speak` and `mark` each
+    admit one derived type. So `<qti-null xsi:type="VariableDType" identifier="SCORE"/>` is valid and is accepted;
+    `<qti-null xsi:type="VariableDType"/>`, without the `identifier` `VariableDType` requires, is invalid and is
+    refused; and a `qti-exit-response` typed `TrackDType` needs `TrackDType`'s required `src`. The information model's
+    own rules are stated of elements, not of types. It defines `qti-null` as the expression that "returns the NULL
+    value" (section 6.9.19), and it states each interaction's rules of its element (section 2.4, as section 2.4.1.1's
+    "The qti-choice-interaction must be bound to a response variable"). So a rule QTI adds to the XSD, stated by the
+    information model or by a reading here, follows the element's name, and a type never carries it onto another
+    element. `<qti-null xsi:type="TextEntryInteractionDType" response-identifier="R"/>` is a null expression: it binds
+    no response and no interaction rule judges it, while its `response-identifier`, an `xs:IDREF` under that type,
+    must still name an ID of its document, as XML Schema requires. This binds pantry and plate alike. This is not a
+    case of documents in conflict: XML Schema decides validity against a type, and the information model names the
+    elements its rules are about. (Operator ruling "the spec wins", 2026-11-05.)
+76. **An inclusion never reaches itself, and an included fragment is read in place, as XML, with no `xpointer`.** A
+    `qti-assessment-section-ref` "functions as a facade for the qti-assessment-section to which it refers", and the
+    document that holds it, "with the refered-to section merged in, should behave exactly the same as a document that
+    has all the same sections aggregated in one document" (information model, section 7.5, AssessmentSectionRef). An
+    `xi:include` "is treated as if it was actually an instance of the root element of the fragment referred to"
+    (section 2.12, Items and Test Fragments). A chain of section refs and includes that returns to a document already
+    on it would merge that document into itself without end, which no aggregated document is, and "unbounded
+    repetition is not supported" (section 2.8.3.2). For `xi:include` XInclude makes the same chain "a fatal error"
+    (XInclude 1.0 Second Edition, W3C Recommendation, 15 November 2006, section 4.2.7, Inclusion Loops, and the same
+    section of XInclude 1.1, the W3C Working Group Note of July 2016 that the information model cites). So a test or
+    item whose section refs and includes, in any mix, reach a document already on their chain is refused, the refusal
+    naming the chain. Two refs or includes of one document that are not nested are no loop (XInclude's own example in
+    section 4.2.7), and reading 77 says what two placements mean. Section 2.12 also says that "when using an XML
+    binding, the xpointer mechanism defined by the XInclude specification MUST NOT be used", that "all included
+    fragments must be treated as parsed xml", and that "the content of the fragment must satisfy the requirements of
+    the specification in the context of the item in which it is being included". So an `xi:include` with an
+    `xpointer` attribute, or with `parse="text"`, is refused, though the XSD admits both (`w3/XInclude.xsd` lines 22
+    to 24), and an included fragment is judged as part of the document that includes it: its interactions bind that
+    item's responses, and its identifiers count among that document's. This follows the information model and sets
+    the XSD aside where the XSD is wider. This binds pantry and plate alike. (Operator ruling "the spec wins",
+    2026-11-05.)
+77. **The identifiers of a test's parts, sections, section refs and item refs are one namespace across the assembled
+    test, and a section document a test places twice is written once.** The information model says "The identifier of
+    the section or item reference must be unique within the test and must not be the identifier of any testPart"
+    (section 4.2.1, AssessmentSection) and "The identifier of the test part must be unique within the test and must not
+    be the identifier of any qti-assessment-section or qti-assessment-item-ref" (section 5.159.1, TestPart). The XSD
+    types each `IdentifierDType`, an `xs:NCName` with no uniqueness, so this follows the information model. The test is
+    the assembled test (reading 5): the test document and every section document its section refs and includes reach
+    (reading 76). So no two of those elements written in its documents share an identifier, whatever their roles: an
+    item ref and a section named alike are refused, and so are a test part and an item ref, or a section ref and a
+    section. Of a section ref's `href` the information model says "There is no requirement that this be unique. A test
+    may refer to the same section multiple times within a test. Note however that each reference must have a unique
+    identifier" (section 7.5.3). A section document placed twice is one document, and its identifiers do not collide
+    with themselves: refusing it would refuse what section 7.5.3 calls valid (reading 1). Each placement is still an
+    instance of everything the document holds, so a reference that names an item ref or a section through such a
+    document, or one of their variables, resolves once for each placement. Reading 48 accepts a reference only when
+    exactly one reading resolves, so it is refused, its refusal naming both placements. A section ref, the facade of
+    its placement (section 7.5), keeps its own distinct identifier and names that placement as a section does. This is
+    a conflict inside the information model, between section 4.2.1's general sentence read across placements and
+    section 7.5.3's specific one, and the specific one is followed for the case it names. (Operator ruling "the spec
+    wins", 2026-11-05.)
+78. **A branch rule names a reserved exit, or a later part of its own kind in its own test part, never inside a
+    section a ref places from outside it, and never an item a replacement can repeat.** The information model says a
+    branch rule "is evaluated after the item, section or part has been presented to the candidate. If the expression
+    evaluates to 'true' the test jumps forward to the item, section or part referred to by the target identifier. In
+    the case of an item or section, the target must refer to an item or section in the same test-part that has not
+    yet been presented. For test-parts, the target must refer to another test-part" (section 5.23, BranchRule, and
+    section 2.8.3.2), and reserves `EXIT_SECTION`, `EXIT_TESTPART` and `EXIT_TEST` (section 5.23.1). Of section refs
+    it says "branching rules should treat referred sections as leaf nodes, that have no children that are amenable to
+    branching separately from their immediate parent" (section 7.5). Of selection with replacement it says it "enables
+    two or more instances of an item referred to by the same assessment-item-ref to appear in the sequence of items
+    for a test. It is therefore an error to make such an item the target of a branch-rule" (section 5.98, Ordering).
+    Read over the assembled test (reading 5), each sentence is a rule a document can be judged by:
+    - A target is one of the three reserved values, which are admitted on every branch rule, or the identifier of a
+      test part, section, section ref or item ref of the assembled test.
+    - On a test part a target names another test part, after it. On an item ref, section or section ref it names an
+      item ref, section or section ref of the same test part, after the source's end: so neither the source, nor an
+      ancestor of it, nor a descendant of it.
+    - "After" is document order, which is the test's sequence wherever no shuffle can reorder the two. Where the
+      section that orders them shuffles (`qti-ordering shuffle="true"` on their nearest common section, or on the
+      section that an invisible common section with `keep-together="false"` mixes its children into, section 5.98),
+      their order is drawn at delivery and is not judged here, in either direction. `fixed`, which holds some orders
+      under a shuffle, is not read, so a pair it would hold backward is accepted: a recorded limit, as reading 50's
+      are (decision 227).
+    - From outside a section document a ref places, no target lies inside it: the ref is the leaf. A branch rule
+      written inside that document may name what the document holds.
+    - No target is an item ref under a section whose `qti-selection` has `with-replacement` true, anywhere above it.
+    - The target names exactly one element that meets these conditions; one that two placements of a section document
+      supply twice (reading 77) is refused as ambiguous.
+
+    Pre-conditions and branch rules are ignored in nonlinear mode (section 2.8.3), but the target rules are stated
+    without that condition, so they hold in every mode. This binds pantry and plate alike. This is not a case of
+    documents in conflict. (Operator ruling "the spec wins", 2026-11-05.)
+
+79. **A numbered reference such as `Q01.2.SCORE` names an instance of an item ref that a selection with replacement can
+    repeat, and nothing else.** The information model says "In adaptive tests that contain items that are allowed to
+    be replaced (i.e. that have the with-replacement attribute set to "true"), the same item can be instantiated more
+    than once. In order to access the outcome variable values of each instantiation, a number that denotes the
+    instance's place in the sequence of the item's instantiation is inserted between the item variable identifier
+    and the item variable" (section 2.11.1.2, Variable Expression). So reading 48's numbered reading (item ref, number,
+    variable) counts only where its item ref lies under a section whose `qti-selection` has `with-replacement` true,
+    anywhere above it in the assembled test (reading 5), and where its number is all digits and at least 1, the
+    first instance being 1. No bound is set on the number: how many instances a selection draws is decided at
+    delivery, and a number beyond them names an instance that was never drawn, which no static rule refuses. Elsewhere
+    the numbered form names nothing, so a reference whose only resolving reading would be numbered names no declared
+    variable and is refused (P8). An unnumbered reference to a repeatable item ref, `Q01.SCORE`, is valid; the same
+    section says which instance's value it reads. This binds pantry and plate alike. This is not a case of documents
+    in conflict. (Operator ruling "the spec wins", 2026-11-05.)
+80. **A document whose root element is in a namespace of QTI 2 is not a QTI 3 document, and is refused as `not-qti3`
+    before any name in it is read.** QTI 3.0's schemas declare their own namespaces, each XSD's `targetNamespace`, the
+    usage data's among them: `http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0`
+    (`usagedata/imsqti_usagedatav3p0_v1p0.xsd` line 3), which the implementation guide's usage-data example writes
+    (`impl.txt` line 15614) and whose resource type `qtiusagedata/xml` it lists as "QTI 3 Usage Data" (section 6.2,
+    `impl.txt` line 13336). QTI 2's published XSDs declare others, each under `http://www.imsglobal.org/xsd/`:
+    `imsqti_v2p0`, `imsqti_v2p1` and `imsqti_v2p2` for items, sections and tests, and `imsqti_metadata_v2p1`,
+    `imsqti_metadata_v2p2`, `imsqti_result_v2p1`, `imsqti_result_v2p2`, `imsqti_usagedata_v2p1` and
+    `imsqti_usagedata_v2p2`. A document whose root is in one of these is a QTI 2 document, which no QTI 3 schema reads,
+    whatever its package's manifest declares. It is refused under `not-qti3`, the rule a package that declares a QTI 2
+    schema version is refused under, decided from the root's namespace alone, so the refusal says what the document is
+    rather than that one of its names is unknown. A root in any other namespace that QTI 3.0 does not declare is still
+    `unmodeled-vocabulary`. 1EdTech's `usageData` example package is refused this way: its manifest declares QTI 3.0.0,
+    and its three usage-data files are in `imsqti_usagedata_v2p2`. This binds pantry and plate alike, wherever each
+    reads such a document. This is not a case of documents in conflict: QTI 3.0 and QTI 2 declare disjoint namespaces.
+    (Operator ruling "the spec wins", 2026-11-05.)
+81. **On an element the Schematron's extension-attribute lists cover, an attribute its XSD does not declare is a
+    `data-` attribute, or the document is refused.** QTI's ASI binding says "5. The Schematron Rules. This Section is
+    NORMATIVE" (`bind.txt` lines 431722 to 431724), and that its section 5.2, The Constrained Namespace Extension Rule
+    Definitions, is "the set of schematron rules used to enforce the constraints on the naming convention for
+    extensions to the list of XML attributes for an element", the convention being `(data-)[a-zA-Z0-9_\-\.]+`. The
+    information model gives the same elements a `dataExtension` characteristic, "a characteristic in no namespace
+    whose name starts with the string 'data-'" (for example section 4.1.9). The rules are the
+    `RULESET_ROOTELEMENT_DATAEXTENSIONRULES`, `RULESET_GLOBALELEMENT_DATAEXTENSIONRULES` and
+    `RULESET_LOCALELEMENT_DATAEXTENSIONRULES` patterns that both ASI XSDs embed, over 127 elements in 3.0.1 (from line 130) and 126 in 3.0.0 (from line 131). Read by their intent (reading 9), they bind: on those elements every
+    attribute the XSD does not declare is an extension, and an extension is a `data-` attribute in no namespace, in
+    reading 13's form. So an undeclared attribute in no namespace (`foo="x"`, or `patternMask` for `pattern-mask`), one
+    in another namespace (`f:x`), and an `xml:` attribute the element does not declare (`xml:id`, `xml:space`) are
+    refused there, though the XSD's `##any` `lax` attribute wildcard admits them. The information model and the
+    normative binding agree, and both outrank the XSD's wildcard. Three things are no extension and are not refused:
+    XML Schema's `xsi:` attributes, which "need not be declared to be allowed in instances, but must not be declared"
+    (XML Schema Part 1, section 3.2.7) and which reading 47 governs; namespace declarations, which are not attributes;
+    and `aria-keyshortcuts` on the empty element families, which reading 10 admits. The lists' text is read by its
+    intent, not copied: they test the name as written, so they are applied to expanded names, and they test only as
+    many attribute positions as each list has names, so here every attribute is checked. On an element the lists do
+    not cover, the XSD's wildcards admit what they admit. This binds pantry and plate alike. One corpus package's
+    verdict moves: `qtiv3-examples/items/shared-vocabulary/shared-vocabulary-imsmanifest.zip`, which the oracle
+    otherwise accepts, is refused `attribute-admission`, for `object@alt` (120 occurrences; `object` declares no `alt`
+    in either ASI XSD) and `qti-extended-text-interaction@patternMask` (one, for `pattern-mask`). The committed
+    verdict file's row stays `refused`; only its rule moves, from `unmodeled-vocabulary` to `attribute-admission`.
+    (Operator ruling "the spec wins", 2026-11-05.)
+82. **No reading is advisory.** Every rule a reading here states is enforced wherever a package decides validity, as
+    every rule of the XSDs is. In pantry that is a law PostgreSQL checks over the stored rows: "Every rule QTI states
+    becomes a rule PostgreSQL enforces through grizzle, so invalid QTI cannot be stored", including "every structure
+    and rule of the languages QTI embeds" (`docs/qti-intent.md`, "Settled" and "How it gets planned and built"). So
+    the eight readings that had no law, 2 (MathML), 3 (SSML fragments), 9 (the Schematron by intent), 39, 41, 42 and
+    43 (SSML's `version`, `meta`, `voice` languages and surviving attributes) and 47 (the `xsi:` attributes), are each
+    a law, as every reading after them is. A rule a package cannot yet check is a recorded limit with its reason, as
+    readings 50, 60 and 72 record theirs, never a rule followed only where it is convenient. This rules how the
+    readings bind, not what the specification says, and it changes no verdict. (Operator ruling "the spec wins",
+    2026-11-05.)
+83. **The information model's binding and count sentences that no other reading restates hold as written.** Each is
+    stated, and each admits content the XSD accepts, so a package that lacks it under-refuses:
+    - "If max-choices is greater than 1 (or 0) then the interaction must be bound to a response with multiple
+      cardinality", of the `max-choices` of the choice (section 5.30.2), hottext (5.66.1), hotspot (5.68.2), position
+      object (5.107.3) and select point (5.128.2) interactions, and the same sentence of `max-associations` on the
+      associate (5.8.2), gap match (5.57.3), graphic associate (5.59.2), graphic gap match (5.60.2) and match (5.89.2)
+      interactions. An unwritten count is read as its XSD default.
+    - "Each response variable declared may be bound to one and only one interaction" (section 2.2.2.2): no two
+      interactions of an item, its included fragments among them (reading 76), name one response variable. "May"
+      makes the binding optional, and "one and only one" bounds it.
+    - A position object interaction's `min-choices`, where written, is at least 1: "If specified, min-choices must be
+      1 or greater" (section 5.107.2). The XSD allows 0.
+    - A PCI's `qti-context-variable` names a context variable: it "allows an item author to bind a context variable
+      to the PCI instance" (section 5.106.6), the context variables are the declared ones and the built-in
+      `QTI_CONTEXT` (section 2.2.2.1), and "All variables must be declared except for the built-in session variables"
+      (section 2.2.2). The Schematron's rule 20Ba states the same.
+
+    The other rules found with these live in the reading that states their kind: `min-strings` at most `max-strings`
+    in reading 67, a feedback outcome's base type and cardinality in reading 68, no default hotspot in a graphic gap
+    match in reading 71, the order interactions' counts against their choices in reading 18, and the XInclude rules in
+    reading 76. This binds pantry and plate alike. This is not a case of documents in conflict. (Operator ruling "the
+    spec wins", 2026-11-05.)

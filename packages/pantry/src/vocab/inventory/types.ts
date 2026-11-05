@@ -382,6 +382,44 @@ export interface TextType {
 }
 
 /**
+ * One attribute a named complex type declares, in the schema versions it holds in, for a type an
+ * `xsi:type` may name in place of a kind's declared type: an element governed by it carries the
+ * type's attributes, not its declared type's (XML Schema 1.0 Part 1, §3.3.4, Element Locally Valid
+ * (Element), clause 5.2.1; spec reading 75). It reads as {@link AttributeDeclaration} reads a
+ * kind's, keyed by the type in place of a kind.
+ */
+export interface TypeAttributeDeclaration extends Omit<AttributeDeclaration, "kind"> {
+  /**
+   * The type's `TypeName` handle, `{namespace}local`.
+   */
+  readonly owner: string;
+}
+
+/**
+ * The attribute wildcard of a named complex type an `xsi:type` may name in place of a kind's
+ * declared type, in the schema versions it holds in, as {@link AttributeWildcard} reads a kind's.
+ */
+export interface TypeAttributeWildcard extends Omit<AttributeWildcard, "kind"> {
+  /**
+   * The type's `TypeName` handle, `{namespace}local`.
+   */
+  readonly owner: string;
+}
+
+/**
+ * The simple type of a named type's text, in the schema versions it holds in: a simple type's own,
+ * or the simple content of a complex type an `xsi:type` may name in place of a kind's declared
+ * type. An element an `xsi:type` gives that type holds text valid for it (XML Schema 1.0 Part 1,
+ * §3.3.4, Element Locally Valid (Type), clause 3.1.3; spec readings 60 and 75).
+ */
+export interface TypeText extends Omit<TextType, "kind"> {
+  /**
+   * The type's `TypeName` handle, `{namespace}local`.
+   */
+  readonly owner: string;
+}
+
+/**
  * An attribute a schema declares globally, which kinds admit under its closed handle: the four
  * `xml.xsd` declares and the four XML Schema declares in its instance namespace, with the type
  * its value is read under and that type's domain.

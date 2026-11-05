@@ -17,8 +17,9 @@
  * - The document node admits its root element kinds, the doctype, comments, instructions and
  *   whitespace;
  * - A kind whose element wildcard reads globally declared elements as their kinds admits each of them
- *   in the wildcard's namespaces, but the roots spec reading 6 keeps foreign (the open vocabulary's
- *   `globalAdmission`), since that needs every vocabulary's registry;
+ *   in the wildcard's namespaces that a schema set of the kind's documents declares (spec reading
+ *   72, `open.wildcardReads`), but the roots spec reading 6 keeps foreign, since that needs every
+ *   vocabulary's registry;
  * - XML Schema's `xsi:` attributes are admitted on every element kind (spec reading 47), `xsi:nil`
  *   only on the foreign kinds, since no pinned element is nillable (audit A6); and the four `xml:`
  *   names on every kind that holds an attribute wildcard and on the foreign kinds, wherever the
@@ -27,7 +28,8 @@
  *   `skip` wildcard;
  * - The open classes (`data-*`, `foreign`, `no-namespace`, `own-namespace`) are admitted, as free
  *   text, on every kind whose attribute wildcard's namespace classes let them through, and all but
- *   `data-*` on the foreign kinds (fin.md, D2).
+ *   `data-*` on the foreign kinds (fin.md, D2). On a kind the Schematron's extension rules cover,
+ *   only `data-*` is, and no `xml:` name the kind does not declare (spec reading 81, `coveredBy`).
  *
  * Every admitted triple is stated once: a triple two sources state is a `KeyCollision`.
  */
@@ -35,11 +37,17 @@ import { Option, Result } from "effect";
 import type { Admission, AdmittedChild } from "#pantry/grammar/admission.ts";
 import { generate as generateAncestry } from "#pantry/grammar/ancestry.ts";
 import type { AncestrySets } from "#pantry/grammar/ancestry.ts";
-import { baseTypes, generate as generateAttributes } from "#pantry/grammar/attributes.ts";
+import {
+  baseTypes,
+  generate as generateAttributes,
+  readDeclarations,
+} from "#pantry/grammar/attributes.ts";
 import type {
   AttributeGrammar,
   AttributeGrammarError,
   Declared,
+  GovernedDeclared,
+  Governor,
 } from "#pantry/grammar/attributes.ts";
 import { barredByOf } from "#pantry/grammar/children.ts";
 import type { BarredBy, ChildError, LastWhere } from "#pantry/grammar/children.ts";
@@ -76,7 +84,7 @@ import { characterKinds, contentOf } from "#pantry/grammar/content.ts";
 import type { ContentError, ContentGrammar } from "#pantry/grammar/content.ts";
 import { packageGrammar } from "#pantry/grammar/package.ts";
 import { references } from "#pantry/grammar/references.ts";
-import { xsiTypesOf } from "#pantry/grammar/xsi.ts";
+import { noType, xsiTypesOf } from "#pantry/grammar/xsi.ts";
 import type { XsiTypeError, XsiTypes } from "#pantry/grammar/xsi.ts";
 import type { References } from "#pantry/grammar/references.ts";
 import type { PackageGrammar } from "#pantry/grammar/package.ts";
@@ -84,10 +92,20 @@ import {
   attributeDeclarations,
   attributeWildcards,
   textTypes,
+  typeAttributeDeclarations,
+  typeAttributeWildcards,
+  typeTexts,
 } from "#pantry/vocab/inventory/attributes.ts";
 import { contentModels, typeDerivations } from "#pantry/vocab/inventory/models.ts";
+import { coveredElements } from "#pantry/vocab/inventory/extensions.ts";
 import { globalKinds, vocabularies as rosters } from "#pantry/vocab/inventory/vocabularies.ts";
-import type { ContentModel, Source, VocabularyRoster } from "#pantry/vocab/inventory/types.ts";
+import type {
+  ContentModel,
+  Source,
+  TypeText,
+  VocabularyRoster,
+} from "#pantry/vocab/inventory/types.ts";
+import { xsNamespace } from "#pantry/vocab/namespaces.ts";
 import * as open from "#pantry/vocab/open.ts";
 
 /**
@@ -113,7 +131,8 @@ export const typedCardinalities = ["single", "multiple", "ordered"] as const;
 
 /**
  * Pair a vocabulary the pinned XSDs declare with its content models, its attribute declarations and
- * its facets: the leaves' rows of its kinds.
+ * its facets: the leaves' rows of its kinds, the declarations as the spec readings that add or
+ * remove an attribute read them (`readDeclarations`: readings 10 and 76).
  *
  * @param declared - The vocabulary's roster.
  * @returns The vocabulary as the composition reads it.
@@ -126,7 +145,7 @@ const vocabulary = <const R extends VocabularyRoster>(
   return {
     admission: [],
     attributes: declared.attributes,
-    declarations: attributeDeclarations.filter(({ kind }) => held.has(kind)),
+    declarations: readDeclarations(attributeDeclarations.filter(({ kind }) => held.has(kind))),
     facets: facets.vocabularyFacets.get(declared.name) ?? facets.noFacets,
     kinds: declared.kinds,
     models: contentModels.filter(({ kind }) => held.has(kind)),
@@ -196,13 +215,45 @@ const attributeKey = (row: {
 }): string => `${row.version}\u0000${row.kind}\u0000${row.name}`;
 
 /**
+ * Read which element kinds spec reading 81 holds to their declared attributes in each version:
+ * those whose element the Schematron's extension rules of that version cover (`coveredElements`,
+ * from the `RULESET_*_DATAEXTENSIONRULES` patterns both ASI XSDs embed), compared by expanded name,
+ * so every kind one element name resolves to is covered alike (`qti-rubric-block` and
+ * `qti-rubric-block.test`).
+ *
+ * The reading is QTI's own rule, not XML Schema's, so it follows the element's name, never the type
+ * an `xsi:type` makes it governed by (spec reading 75).
+ *
+ * @param kinds - The composition's kinds.
+ * @returns Whether a kind's element is covered in a version.
+ */
+export const coveredBy = (
+  kinds: Pick<Kinds<string, string>, "elementName">,
+): ((version: string, kind: string) => boolean) => {
+  const covered = new Set(
+    coveredElements.flatMap(({ element, versions }) =>
+      versions.map((version) => `${version} {${element.namespace}}${element.local}`),
+    ),
+  );
+
+  return (version, kind) =>
+    Option.exists(kinds.elementName.lookup({ kind }), ({ local, namespace }) =>
+      covered.has(`${version} {${namespace}}${local}`),
+    );
+};
+
+/**
  * State the document layer's attributes, each where its kind's vocabulary does not declare it:
  *
  * - The `xsi:` names on every element kind, but `xsi:nil`, which XML Schema admits only on an element
  *   declared nillable: no element of a pinned XSD is, and a foreign element, assessed laxly, may be
  *   (audit A6);
  * - On every kind of an element that holds an attribute wildcard, the `xml:` names, typed as the
- *   wildcard's processing reads them, and the open classes it admits, as free text;
+ *   wildcard's processing reads them, and the open classes it admits, as free text; but on a kind
+ *   whose element the Schematron's extension rules cover ({@link coveredBy}), only `data-*`, where
+ *   the wildcard admits it: spec reading 81 makes every attribute such an element does not declare
+ *   an extension, and an extension a `data-` name in no namespace, so no other open class and no
+ *   `xml:` name the kind does not declare is admitted there;
  * - On each foreign kind, the `xml:` names with `xml.xsd`'s types, and the open classes but `data-*`
  *   (`open.foreignAttributes`).
  *
@@ -218,6 +269,7 @@ const layerOf = (
   kinds: Kinds<string, string>,
   declared: ReadonlySet<string>,
 ): readonly Declared[] => {
+  const covered = coveredBy(kinds);
   const hosts = [
     ...attributeWildcards
       .filter(({ kind }) => kinds.nodeKind.has(kind))
@@ -225,6 +277,7 @@ const layerOf = (
         holding.flatMap((version) =>
           open
             .attributesUnder({ namespace, processing })
+            .filter(({ name }) => !covered(version, kind) || name === "data-*")
             .map((attribute) => ({ attribute, kind, version })),
         ),
       ),
@@ -265,6 +318,151 @@ const layerOf = (
         ),
     ).values(),
   ];
+};
+
+/**
+ * The built-in simple types whose texts the grammar states no domain for: `xs:NOTATION`, whose
+ * value space is the QNames of the notations the schema declares (XML Schema Part 2, 3.2.19). No
+ * pinned XSD declares one, so no text is valid for it, and the domain compiler refuses a definition
+ * whose lexical space holds no value (`#pantry/grammar/domains.ts`). A foreign element whose
+ * `xsi:type` names it is therefore not governed, and its text is not checked: a recorded limit of
+ * spec reading 60.
+ */
+const uncompiledTypes: ReadonlySet<string> = new Set([`{${xsNamespace}}NOTATION`]);
+
+/**
+ * Read the texts of the named types a composition's elements may be governed by: each leaf row of
+ * a type in XML Schema's namespace or one of the composition's vocabularies', but
+ * {@link uncompiledTypes}'. A toy composition reads the built-ins alone.
+ *
+ * @param namespaces - The namespaces of the composition's vocabularies.
+ * @returns The rows.
+ */
+const governingTextsOf = (namespaces: ReadonlySet<string>): readonly TypeText[] =>
+  typeTexts.filter(
+    ({ owner }) =>
+      !uncompiledTypes.has(owner) &&
+      [xsNamespace, ...namespaces].some((namespace) => owner.startsWith(`{${namespace}}`)),
+  );
+
+/**
+ * Group a leaf's rows keyed by a type by version and type, `version owner`.
+ *
+ * @param rows - The rows, each of a type in some versions.
+ * @returns Each (version, type)'s rows, in leaf order.
+ */
+const byOwner = <R extends { readonly owner: string; readonly versions: readonly string[] }>(
+  rows: readonly R[],
+): ReadonlyMap<string, readonly R[]> => {
+  const grouped = new Map<string, R[]>();
+  for (const row of rows) {
+    for (const version of row.versions) {
+      const key = `${version} ${row.owner}`;
+      grouped.set(key, [...(grouped.get(key) ?? []), row]);
+    }
+  }
+
+  return grouped;
+};
+
+/**
+ * The governors of a composition and the attributes each admits ({@link governedOf}), as the
+ * attribute grammar reads them.
+ */
+interface GovernedAttributes {
+  readonly governed: readonly GovernedDeclared[];
+  readonly governors: readonly Governor[];
+}
+
+/**
+ * State the governors (spec readings 60 and 75) and the attributes each admits.
+ *
+ * A governor is a (version, kind, type) where the type may govern an element of the kind in place
+ * of its declared type: each `XsiType` row whose type is not the kind's declared one, and, on each
+ * foreign kind, every named simple type of the leaf, which governs a foreign element's text. An
+ * element under a complex governing type carries that type's attributes as `layerOf` states a
+ * kind's: the type's declarations through the kind's own spec readings (`readDeclarations`), the
+ * `xml:` names and open classes the type's attribute wildcard admits, but on a kind spec reading 81
+ * covers only `data-*`, since that reading follows the element's name, and the `xsi:` names but
+ * `xsi:nil`, which no pinned element declaration makes nillable. An element under a simple type
+ * carries the `xsi:` names alone (XML Schema 1.0 Part 1, §3.3.4, Element Locally Valid (Type),
+ * clause 3.1.1), `xsi:nil` among them on a foreign element, which no declaration assesses.
+ *
+ * @param kinds - The composition's kinds.
+ * @param xsi - The `xsi:type` law's relations.
+ * @param governingTexts - The texts of the named types the composition's elements may be governed
+ *   by ({@link governingTextsOf}).
+ * @returns The governors, each once, and every attribute each admits, each name once.
+ */
+const governedOf = (
+  kinds: Kinds<string, string>,
+  xsi: XsiTypes,
+  governingTexts: readonly TypeText[],
+): GovernedAttributes => {
+  const covered = coveredBy(kinds);
+  const declaredBy = byOwner(typeAttributeDeclarations);
+  const wildcardOf = byOwner(typeAttributeWildcards);
+  const isComplex = (key: string) => declaredBy.has(key) || wildcardOf.has(key);
+  const governors: readonly Governor[] = [
+    ...xsi.xsiType.rows.flatMap(({ kind, type, version }) =>
+      type === noType || type === xsi.declaredType(version, kind)
+        ? []
+        : [{ governs: type, kind, version }],
+    ),
+    ...governingTexts.flatMap(({ owner, versions }) =>
+      versions.flatMap((version) =>
+        isComplex(`${version} ${owner}`)
+          ? []
+          : Object.values(foreignKinds).map((kind) => ({ governs: owner, kind, version })),
+      ),
+    ),
+  ];
+  const governed = governors.flatMap(({ governs, kind, version }) => {
+    const key = `${version} ${governs}`;
+    const own = readDeclarations(
+      (declaredBy.get(key) ?? []).map(({ domain, name, type, use }): Declared => ({
+        domain,
+        kind,
+        name,
+        type,
+        use,
+        versions: [version],
+      })),
+    );
+    const hosts = [
+      ...(wildcardOf.get(key) ?? []).flatMap(({ namespace, processing }) =>
+        open
+          .attributesUnder({ namespace, processing })
+          .filter(({ name }) => !covered(version, kind) || name === "data-*"),
+      ),
+      ...open.xsiAttributes.filter(({ name }) => name !== "xsi:nil" || isForeignKind(kind)),
+    ];
+    const stated = new Set(own.map(({ name }) => name));
+
+    return [
+      ...own,
+      ...new Map(
+        hosts
+          .filter(({ name }) => !stated.has(name))
+          .map(
+            ({ domain, name, type }) =>
+              [
+                name,
+                {
+                  domain,
+                  kind,
+                  name,
+                  type,
+                  use: "optional",
+                  versions: [version],
+                } satisfies Declared,
+              ] as const,
+          ),
+      ).values(),
+    ].map((row): GovernedDeclared => ({ ...row, governs }));
+  });
+
+  return { governed, governors };
 };
 
 /**
@@ -347,9 +545,13 @@ export const compose = <const V extends readonly Vocabulary[]>(
     const installed = yield* contentOf({
       facets: stated.map((facet) => facet.content),
       foreignRoots: open.foreignRoots,
-      globalKinds: (version) =>
+      globalKinds: (version, parent) =>
         globalKinds.flatMap(({ kind, versions }) =>
-          versions.includes(version) && base.nodeKind.has(kind) ? [kind] : [],
+          versions.includes(version) &&
+          base.nodeKind.has(kind) &&
+          open.wildcardReads(namespaceOf(parent), namespaceOf(kind))
+            ? [kind]
+            : [],
         ),
       kinds: base.nodeKind,
       models: list.flatMap((entry) => entry.models),
@@ -400,11 +602,23 @@ export const compose = <const V extends readonly Vocabulary[]>(
         versions.map((version) => attributeKey({ kind, name, version })),
       ),
     );
+    const xsi = yield* xsiTypesOf({
+      derivations: typeDerivations,
+      kinds: kinds.nodeKind,
+      models: list.flatMap((entry) => entry.models),
+      versions: kinds.versions,
+    });
+    const governingTexts = governingTextsOf(
+      new Set(list.flatMap(({ namespace }) => (namespace === "" ? [] : [namespace]))),
+    );
     const attributes = yield* generateAttributes({
       declarations: [...declarations, ...layerOf(kinds, declared)],
+      ...governedOf(kinds, xsi, governingTexts),
       kinds: kinds.nodeKind,
       names: kinds.attributeName,
       texts: textTypes.filter(({ kind }) => kinds.nodeKind.has(kind)),
+      typeName: xsi.typeName,
+      typeTexts: governingTexts,
       versions: kinds.versions,
     });
     const baseTypeRoster = yield* roster("BaseType", baseTypes);
@@ -447,12 +661,7 @@ export const compose = <const V extends readonly Vocabulary[]>(
         names: kinds.attributeName,
       }),
       typedCardinalities: cardinalities,
-      xsi: yield* xsiTypesOf({
-        derivations: typeDerivations,
-        kinds: kinds.nodeKind,
-        models: list.flatMap((entry) => entry.models),
-        versions: kinds.versions,
-      }),
+      xsi,
     };
   });
 

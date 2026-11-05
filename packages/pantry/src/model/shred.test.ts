@@ -14,14 +14,17 @@ import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { encode } from "@qti-pie/crust/encode.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
-import { composed } from "#pantry/grammar/compose.ts";
+import { admittedOf, governorOf, textDomainOf } from "#pantry/grammar/attributes.ts";
+import { composed, coveredBy } from "#pantry/grammar/compose.ts";
+import { patternFlags } from "#pantry/grammar/domains.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
 import { assemble } from "#pantry/model/assemble.ts";
-import { namesOf, shredGrammarOf } from "#pantry/model/composed.ts";
+import { foldGrammarOf, namesOf, shredGrammarOf } from "#pantry/model/composed.ts";
+import { fold } from "#pantry/model/folds.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { NotQti3, shred, UnmodeledVocabulary, versionOf } from "#pantry/model/shred.ts";
 import { toXmlDocument, unshred } from "#pantry/model/unshred.ts";
-import { flatten } from "#pantry/model/xdm.ts";
+import { flatten, none } from "#pantry/model/xdm.ts";
 import type { XdmAttribute, XdmChild, XdmClosedElement, XdmDocument } from "#pantry/model/xdm.ts";
 import {
   caseHang,
@@ -34,8 +37,21 @@ import {
   xdmDocument,
 } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
-import { xmlnsNamespace, xsiNamespace } from "#pantry/vocab/namespaces.ts";
-import { OracleLayer, xmllintC14n } from "#pantry/xml/oracle.ts";
+import {
+  mathmlNamespace,
+  qti2Namespaces,
+  xmlnsNamespace,
+  xsiNamespace,
+} from "#pantry/vocab/namespaces.ts";
+import { XsdOracleLayer } from "#pantry/test/gen/grammar.ts";
+import { writeXsdOracle } from "#pantry/test/xsd-catalog.ts";
+import { xsdDirectory } from "#pantry/vocab/derive/sources.ts";
+import {
+  typeAttributeDeclarations,
+  typeAttributeWildcards,
+} from "#pantry/vocab/inventory/attributes.ts";
+import { OracleLayer, xmllintC14n, xmllintValidate } from "#pantry/xml/oracle.ts";
+import type { XsdVerdict } from "#pantry/xml/oracle.ts";
 
 /**
  * The composed grammar every property draws its trees over, and reads and writes them through.
@@ -56,6 +72,19 @@ const names = namesOf(grammar);
  * The trees every property is checked over: the one generator's, over the composed grammar.
  */
 const documents = xdmDocument(grammar);
+
+/**
+ * The features xmllint cannot judge, which its suite's trees are drawn without: a doctype, whose
+ * external subset `xmllint --c14n` cannot load, and so the unexpanded entity references only a
+ * doctype admits.
+ */
+const unjudged: ReadonlySet<XdmFeature> = new Set(["doctype", "entityRef"]);
+
+/**
+ * The trees the xmllint suite is checked over: the generator's, with {@link unjudged} off, so the
+ * suite constructs what xmllint can judge rather than setting the rest aside.
+ */
+const judged = xdmDocument(grammar, unjudged);
 
 /**
  * The situations a round trip must reach beside the generator's features: a foreign element
@@ -305,9 +334,9 @@ describe("shred and unshred", { timeout: searchTimeout }, () => {
 
   it.effect("give back documents xmllint canonicalizes the same, before and after", (ctx) =>
     // Oracle: a second implementation, libxml2's `xmllint --c14n`, beside crust's canonicalizer,
-    // over a sample of the round trips above; documents with unexpanded entity references, which
-    // xmllint refuses without their declarations, are set aside.
-    // Bound: 30 generated trees.
+    // over a sample of the round trips above.
+    // Bound: 30 generated trees, drawn with no doctype and so no unexpanded entity reference
+    // ({@link unjudged}), which xmllint refuses without their declarations; none is discarded.
     searched(
       ctx,
       explore(
@@ -318,7 +347,7 @@ describe("shred and unshred", { timeout: searchTimeout }, () => {
             cases: 300,
             sense: notesOnly,
           }),
-          draw: drawn(documents),
+          draw: drawn(judged),
           kept: [],
           literal: Formatter.format,
           runs: 30,
@@ -329,7 +358,10 @@ describe("shred and unshred", { timeout: searchTimeout }, () => {
         ({ document }, c) =>
           Effect.gen(function* xmllintRoundTrip() {
             const features = featuresOf(document);
-            yield* c.assume(!features.has("entityRef") && !features.has("doctype"));
+            assert.isFalse(
+              [...unjudged].some((feature) => features.has(feature)),
+              "the generator drew a feature its swarm left off",
+            );
             c.noteAll(features);
 
             const fs = yield* FileSystem.FileSystem;
@@ -397,6 +429,8 @@ const unmodeled = [
   "data name",
   "namespace entity",
   "xml version",
+  "mathml foreign",
+  "unbound foreign type",
 ] as const;
 
 /**
@@ -411,8 +445,11 @@ describe("shred's refusals", { timeout: searchTimeout }, () => {
       // Oracle: the specification as a checker: the codec refuses exactly what has no
       // representation, an element no kind names where no foreign element is admitted, an
       // attribute its kind admits under no name or class, a declared `xsi:` name its kind does not admit, a
-      // malformed `data-` name, a namespace read through an entity, and a document not in XML 1.x.
-      // Bound: the generator's drawn bounds, one name added to a valid tree a case.
+      // malformed `data-` name, a namespace read through an entity, a document not in XML 1.x, a
+      // MathML element where only a foreign one stands (MathML 3 §2.2, law "MathML foreign
+      // element"), and a foreign element's xsi:type whose prefix nothing binds (spec reading 74).
+      // Bound: the generator's drawn bounds, one name added to a valid tree a case, on an element
+      // drawn among those the variant fits, so no case is discarded.
       searched(
         ctx,
         explore(
@@ -436,10 +473,71 @@ describe("shred's refusals", { timeout: searchTimeout }, () => {
                 assert.fail("a generated tree has a root element");
               }
 
-              const variant = c.draw(element(unmodeled));
+              // An unnamed element needs an owner no foreign element may sit under, and an
+              // unadmitted attribute one that admits no foreign attribute: each draws its target
+              // among those, and a tree that holds none draws among the other variants.
+              const hostsOf = (drawnVariant: Unmodeled): readonly number[] => {
+                switch (drawnVariant) {
+                  case "unnamed element": {
+                    return owners.filter(
+                      (number) =>
+                        !shredGrammar.admitsChild(
+                          version,
+                          elementAt(document, number).kind,
+                          "foreign-element",
+                        ),
+                    );
+                  }
+                  case "unadmitted attribute": {
+                    return owners.filter(
+                      (number) =>
+                        !shredGrammar.admitted(
+                          version,
+                          elementAt(document, number).kind,
+                          elementAt(document, number).governs,
+                          "foreign",
+                        ),
+                    );
+                  }
+                  case "mathml foreign": {
+                    return owners.filter((number) => {
+                      const { kind } = elementAt(document, number);
+
+                      return (
+                        !kind.startsWith("m:") &&
+                        shredGrammar.admitsChild(version, kind, "foreign-element") &&
+                        !shredGrammar.admitsChild(version, kind, "m:mi")
+                      );
+                    });
+                  }
+                  case "unbound foreign type": {
+                    return owners.filter((number) =>
+                      shredGrammar.admitsChild(
+                        version,
+                        elementAt(document, number).kind,
+                        "foreign-element",
+                      ),
+                    );
+                  }
+                  case "declared attribute":
+                  case "data name":
+                  case "namespace entity":
+                  case "xml version": {
+                    return owners;
+                  }
+                  default: {
+                    return drawnVariant satisfies never;
+                  }
+                }
+              };
+              const hosted = unmodeled.filter((each) => hostsOf(each).length > 0);
+              const variant = c.draw(
+                element(Arr.isReadonlyArrayNonEmpty(hosted) ? hosted : unmodeled),
+              );
               c.note(variant);
 
-              const target = c.draw(element(owners));
+              const hosts = hostsOf(variant);
+              const target = c.draw(element(Arr.isReadonlyArrayNonEmpty(hosts) ? hosts : owners));
               const owner = elementAt(document, target);
               const withAttribute = (attribute: XdmAttribute<Composed>, declared: boolean) =>
                 editElement(document, target, (at) => ({
@@ -453,10 +551,6 @@ describe("shred's refusals", { timeout: searchTimeout }, () => {
                 Effect.flip(shred(tree, version, shredGrammar));
               switch (variant) {
                 case "unnamed element": {
-                  yield* c.assume(
-                    !shredGrammar.admitsChild(version, owner.kind, "foreign-element"),
-                  );
-
                   const edited = editElement(document, target, (at) => ({
                     ...at,
                     children: [
@@ -464,6 +558,7 @@ describe("shred's refusals", { timeout: searchTimeout }, () => {
                         _tag: "foreign-element",
                         attributes: [],
                         children: [],
+                        governs: none,
                         name: { local: "nope", namespace: "urn:none" },
                         namespaces: [{ prefix: "zn", uri: "urn:none" }],
                         prefix: "zn",
@@ -484,9 +579,79 @@ describe("shred's refusals", { timeout: searchTimeout }, () => {
                   );
                   break;
                 }
-                case "unadmitted attribute": {
-                  yield* c.assume(!shredGrammar.admitted(version, owner.kind, "foreign"));
+                case "mathml foreign": {
+                  const edited = editElement(document, target, (at) => ({
+                    ...at,
+                    children: [
+                      {
+                        _tag: "foreign-element",
+                        attributes: [],
+                        children: [],
+                        governs: none,
+                        name: { local: "mi", namespace: mathmlNamespace },
+                        namespaces: [{ prefix: "zm", uri: mathmlNamespace }],
+                        prefix: "zm",
+                      },
+                      ...at.children,
+                    ],
+                  }));
+                  const refusal = yield* refusalOf(crust(edited));
 
+                  assert.deepStrictEqual(
+                    refusal,
+                    new UnmodeledVocabulary({
+                      kind: "element",
+                      name: "zm:mi",
+                      parent: Option.some(qnameOf(owner)),
+                      reason: "mathml-foreign",
+                    }),
+                  );
+                  break;
+                }
+                case "unbound foreign type": {
+                  const edited = editElement(document, target, (at) => ({
+                    ...at,
+                    children: [
+                      {
+                        _tag: "foreign-element",
+                        attributes: [
+                          {
+                            lexical: "zu:T",
+                            name: {
+                              _tag: "foreign",
+                              local: "type",
+                              prefix: "xsi",
+                              uri: xsiNamespace,
+                            },
+                            references: [],
+                          },
+                        ],
+                        children: [],
+                        governs: none,
+                        name: { local: "nope", namespace: "urn:none" },
+                        namespaces: [
+                          { prefix: "zn", uri: "urn:none" },
+                          { prefix: "xsi", uri: xsiNamespace },
+                        ],
+                        prefix: "zn",
+                      },
+                      ...at.children,
+                    ],
+                  }));
+                  const refusal = yield* refusalOf(crust(edited));
+
+                  assert.deepStrictEqual(
+                    refusal,
+                    new UnmodeledVocabulary({
+                      kind: "attribute",
+                      name: "xsi:type",
+                      parent: Option.some("zn:nope"),
+                      reason: "type-unresolved",
+                    }),
+                  );
+                  break;
+                }
+                case "unadmitted attribute": {
                   const refusal = yield* refusalOf(
                     crust(
                       withAttribute(
@@ -730,7 +895,7 @@ const typeValues = [
 
 describe("shred's governing type", () => {
   it.effect(
-    "resolves an xsi:type against the bindings in scope, refuses one that names no type, and leaves a foreign element's unread, every value of the box",
+    "resolves an xsi:type on an element of a kind against the bindings in scope, and refuses one that names no type, every value of the box",
     () =>
       Effect.gen(function* governing() {
         // Oracle: XML Schema 1.0 Part 1 §3.3.4 clause 4 and §3.15.3 as a checker: a QName after
@@ -806,20 +971,843 @@ describe("shred's governing type", () => {
         }
       }),
   );
+});
+
+/**
+ * An `xsi:type` value naming a built-in, as the box's documents bind XML Schema's namespace.
+ *
+ * @param local - The built-in's local name.
+ * @returns Its `TypeName` handle.
+ */
+const builtin = (local: string): string => `{${xs}}${local}`;
+
+/**
+ * The arms of spec reading 60's `lax` box: a foreign element under `qti-selection`'s `grpLax.any`
+ * (`##other`, `lax`), each with the governing type XML Schema gives it and the verdict the
+ * specification gives its document: `accepted`, the shred refusal's reason, or the law a simple
+ * governing type breaks (`element child`, Element Locally Valid (Type) clause 3.1.2; `text`, clause
+ * 3.1.3). `departs` marks an arm libxml2 refuses as "does not resolve to a type definition", with
+ * its follow-on "The type definition is absent.", which reading 60 records against the reading
+ * rather than counting it a defect: a name no schema of the document's set defines leaves the
+ * element to lax assessment.
+ */
+const laxArms: readonly {
+  readonly arm: string;
+  readonly child: string;
+  readonly departs?: true;
+  readonly governs: string;
+  readonly verdict: string;
+}[] = [
+  { arm: "no xsi:type", child: '<f:x f:a="1"><f:y/>t</f:x>', governs: none, verdict: "accepted" },
+  {
+    arm: "built-in simple, text in its domain",
+    child: '<f:x xsi:type="xs:integer"> -12 </f:x>',
+    governs: builtin("integer"),
+    verdict: "accepted",
+  },
+  {
+    arm: "built-in simple, text outside its domain",
+    child: '<f:x xsi:type="xs:integer">1.5</f:x>',
+    governs: builtin("integer"),
+    verdict: "text",
+  },
+  {
+    arm: "built-in simple, an element child",
+    child: '<f:x xsi:type="xs:string">a<f:y/></f:x>',
+    governs: builtin("string"),
+    verdict: "element child",
+  },
+  {
+    arm: "built-in simple, another attribute",
+    child: '<f:x xsi:type="xs:string" f:a="1">a</f:x>',
+    governs: builtin("string"),
+    verdict: "unadmitted",
+  },
+  {
+    arm: "built-in simple, xsi:nil beside it",
+    child: '<f:x xsi:type="xs:boolean" xsi:nil="false">true</f:x>',
+    governs: builtin("boolean"),
+    verdict: "accepted",
+  },
+  {
+    arm: "xs:anyType",
+    child: '<f:x xsi:type="xs:anyType" f:a="1"><f:y/>t</f:x>',
+    governs: builtin("anyType"),
+    verdict: "accepted",
+  },
+  {
+    arm: "simple type of the set, text in its domain",
+    child: '<f:x xsi:type="q:IdentifierDType">a1</f:x>',
+    governs: `{${asi}}IdentifierDType`,
+    verdict: "accepted",
+  },
+  {
+    arm: "simple type of the set, text outside its domain",
+    child: '<f:x xsi:type="q:IdentifierDType">1a</f:x>',
+    governs: `{${asi}}IdentifierDType`,
+    verdict: "text",
+  },
+  {
+    arm: "type of another set",
+    child: '<f:x xsi:type="d:ExtensionString.Type">a<f:y/></f:x>',
+    departs: true,
+    governs: none,
+    verdict: "accepted",
+  },
+  {
+    arm: "unknown type",
+    child: '<f:x xsi:type="f:NoSuchType">a<f:y/></f:x>',
+    departs: true,
+    governs: none,
+    verdict: "accepted",
+  },
+  {
+    arm: "unbound prefix",
+    child: '<f:x xsi:type="zz:T">a</f:x>',
+    governs: none,
+    verdict: "type-unresolved",
+  },
+  {
+    arm: "no QName",
+    child: '<f:x xsi:type="a:b:c">a</f:x>',
+    governs: none,
+    verdict: "type-unresolved",
+  },
+  ...(
+    [
+      ["dateTime", "2024-02-29T23:59:59.5-05:00", "2023-02-29T00:00:00"],
+      ["time", "00:00:00Z", "23:60:00"],
+      ["duration", "-P1Y2MT3.5S", "P1YT"],
+      ["gYearMonth", "2026-11", "2026-13"],
+      ["gYear", "-0044", "0000"],
+      ["gMonthDay", "--02-29", "--04-31"],
+      ["gDay", "---31", "---32"],
+      ["gMonth", "--11", "--13"],
+      ["hexBinary", "0aFF", "0aF"],
+    ] as const
+  ).flatMap(([local, valid, invalid]) => [
+    {
+      arm: `xs:${local}, text in its domain`,
+      child: `<f:x xsi:type="xs:${local}">${valid}</f:x>`,
+      governs: builtin(local),
+      verdict: "accepted",
+    },
+    {
+      arm: `xs:${local}, text outside its domain`,
+      child: `<f:x xsi:type="xs:${local}">${invalid}</f:x>`,
+      governs: builtin(local),
+      verdict: "text",
+    },
+  ]),
+];
+
+/**
+ * Write a test whose section's `qti-selection` holds one child in its `lax` `##other` wildcard,
+ * with XML Schema's, ASI's and the DRD's namespaces bound.
+ *
+ * @param child - The child as written.
+ * @returns The document.
+ */
+const laxDocument = (child: string): string =>
+  `<qti-assessment-test xmlns="${asi}" xmlns:f="urn:f" xmlns:xsi="${xsiNamespace}" xmlns:xs="${xs}" xmlns:q="${asi}" xmlns:d="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0drd_v1p0" identifier="t" title="t"><qti-test-part identifier="p" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="s" title="s" visible="true"><qti-selection select="1">${child}</qti-selection><qti-assessment-item-ref identifier="i" href="i.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>\n`;
+
+/**
+ * Judge a foreign element by its governing type as spec reading 60 does: where the type is a
+ * governor of its kind, a simple type, the element holds no element child and its text is in the
+ * type's domain (XML Schema 1.0 Part 1, §3.3.4, Element Locally Valid (Type), clauses 3.1.2 and
+ * 3.1.3), read through `Governor` and `TypeText`.
+ *
+ * @param node - The foreign element.
+ * @param version - Its document's version.
+ * @returns `accepted`, or the clause it breaks.
+ */
+const simpleVerdictOf = (node: XdmChild<Composed>, version: Composed["version"]): string => {
+  if (!("governs" in node) || node._tag === "element") {
+    return "no foreign element";
+  }
+
+  const key = { governs: node.governs, kind: node._tag, version };
+  if (Option.isNone(governorOf(grammar.attributes, key))) {
+    return "accepted";
+  }
+
+  if (node.children.some((child) => child._tag === "element" || isForeignKind(child._tag))) {
+    return "element child";
+  }
+
+  const text = node.children
+    .map((child) => (child._tag === "text" || child._tag === "ws" ? child.value : ""))
+    .join("");
+  const pattern = textDomainOf(grammar.attributes, key).pipe(
+    Option.flatMap((handle) =>
+      Option.fromNullishOr(grammar.attributes.domains.find((domain) => domain.handle === handle)),
+    ),
+    Option.map(({ pattern: source }) => new RegExp(source, patternFlags)),
+  );
+
+  return Option.exists(pattern, (regex) => regex.test(text)) ? "accepted" : "text";
+};
+
+/**
+ * Find the `qti-selection` child of a {@link laxDocument}.
+ *
+ * @param tree - The document's tree.
+ * @returns The child, none where the tree holds no such path.
+ */
+const laxChildOf = (tree: XdmDocument<Composed>): Option.Option<XdmChild<Composed>> => {
+  let node: XdmChild<Composed> = tree.root;
+  for (let depth = 0; depth < 4; depth += 1) {
+    const next: XdmChild<Composed> | undefined = "children" in node ? node.children[0] : undefined;
+    if (next === undefined) {
+      return Option.none();
+    }
+
+    node = next;
+  }
+
+  return Option.some(node);
+};
+
+describe("a foreign element's governing type (spec readings 60 and 74)", () => {
+  it.effect(
+    "resolves every foreign xsi:type under a lax wildcard, refuses an unbound prefix, judges a simple type's attributes, children and text, and xmllint agrees but where reading 60 records libxml2's departure: every arm in both versions",
+    () =>
+      // Oracle: the specification as a checker, XML Schema 1.0 Part 1 §3.3.4 (Schema-Validity
+      // Assessment (Element), clause 1.2; Element Locally Valid (Type), clause 3.1), §3.2.4 clause
+      // 1.2 and §3.15.3 as the arms' verdicts; and libxml2 over the ASI XSD as a control, with
+      // reading 60's recorded departure on the arms whose xsi:type names no type of the set.
+      // Bound: the 31 arms under qti-selection's lax wildcard in the 2 versions, exhausted.
+      Effect.gen(function* laxBox() {
+        const fs = yield* FileSystem.FileSystem;
+        const directory = path.resolve(import.meta.dirname, "..", "..", "work", "lax-wildcard");
+        const oracle = yield* writeXsdOracle(directory);
+        const cache = yield* xsdDirectory;
+        const disagreements: string[] = [];
+        let compared = 0;
+        for (const version of schemaVersions) {
+          const cases = laxArms.map((held, at) => ({
+            ...held,
+            file: `${directory}/${version}-${at}.xml`,
+            text: laxDocument(held.child),
+          }));
+          for (const { file, text } of cases) {
+            yield* fs.writeFileString(file, text);
+          }
+
+          const verdicts = yield* xmllintValidate({
+            catalog: oracle.catalog,
+            paths: cases.map(({ file }) => file),
+            schema: `${cache}/${version === "3.0.0" ? "imsqti_asiv3p0_v1p0.xsd" : "imsqti_asiv3p0p1_v1p0.xsd"}`,
+          });
+          for (const [at, { arm, departs, governs, text, verdict }] of cases.entries()) {
+            compared += 1;
+            const where = `${version} ${arm}`;
+            const result = yield* Effect.result(reread(new TextEncoder().encode(text), version));
+            const ours = Result.match(result, {
+              onFailure: (failure) =>
+                failure instanceof UnmodeledVocabulary ? failure.reason : failure._tag,
+              onSuccess: (tree) =>
+                Option.match(laxChildOf(tree), {
+                  onNone: () => "no foreign element",
+                  onSome: (child) =>
+                    "governs" in child && child.governs !== governs
+                      ? `governed by ${child.governs}`
+                      : simpleVerdictOf(child, version),
+                }),
+            });
+            if (ours !== verdict) {
+              disagreements.push(
+                `${where}: shred and the grammar ${ours}, the specification ${verdict}`,
+              );
+            }
+
+            const said = verdicts[at];
+            const expected = verdict === "accepted" && departs !== true ? "Valid" : "Invalid";
+            const departure =
+              departs === true &&
+              said?._tag === "Invalid" &&
+              said.messages.some(({ text: message }) =>
+                message.includes("does not resolve to a type definition"),
+              ) &&
+              said.messages.every(
+                ({ text: message }) =>
+                  message.includes("does not resolve to a type definition") ||
+                  message === "The type definition is absent.",
+              );
+            if (said?._tag !== expected || (departs === true && !departure)) {
+              disagreements.push(`${where}: xmllint ${Formatter.format(said)}`);
+            }
+          }
+        }
+
+        assert.strictEqual(compared, 2 * laxArms.length);
+        assert.deepStrictEqual(disagreements, []);
+      }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
+    120_000,
+  );
+});
+
+/**
+ * The roots of spec reading 80's box, each a local name in a namespace: QTI 2's nine namespaces,
+ * where every root is refused as `not-qti3` before its name is read; QTI 3.0's ASI and usage-data
+ * namespaces, where a root QTI 3 names is read; and a namespace QTI declares none of, and none,
+ * where a root no vocabulary names is `unnamed`.
+ */
+const rootNamespaces = [
+  ...qti2Namespaces,
+  asi,
+  "http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0",
+  "http://www.imsglobal.org/xsd/imslticc_v1p0",
+  "",
+] as const;
+
+/**
+ * The local names each namespace of {@link rootNamespaces} is tried with: QTI 2's item and usage
+ * data roots, QTI 3's item and usage-data roots, and a name no vocabulary has.
+ */
+const rootLocals = ["assessmentItem", "usageData", "qti-assessment-item", "x"] as const;
+
+describe("a QTI 2 root (spec reading 80)", () => {
+  it.effect(
+    "refuses a root in each of QTI 2's nine namespaces as not-qti3, reason root-namespace, before its name is read, and reads every other root by its name: every namespace with every local name, in both versions",
+    () =>
+      // Oracle: the specification as a checker, reading 80: QTI 2's XSDs' targetNamespaces, read
+      // from the published files where the cache holds them, decide the refusal, before the root's
+      // name or its attribute is read; any other root is read by its name, `unnamed` where none
+      // resolves, and its attribute no root declares refused where its kind admits no such name.
+      // Bound: the 13 namespaces by the 4 local names in the 2 versions, exhausted.
+      Effect.gen(function* qti2Roots() {
+        const fs = yield* FileSystem.FileSystem;
+        const published = path.join(
+          process.env["HOME"] ?? "",
+          ".cache",
+          "gr8des",
+          "qd",
+          "src",
+          "qti22",
+        );
+        if (yield* fs.exists(published)) {
+          const declared = new Set<string>();
+          for (const file of yield* fs.readDirectory(published)) {
+            const text = yield* fs.readFileString(path.join(published, file));
+            for (const match of text.matchAll(/targetNamespace="(?<namespace>[^"]+)"/gu)) {
+              declared.add(match.groups?.["namespace"] ?? "");
+            }
+          }
+
+          assert.deepStrictEqual([...declared].toSorted(), [...qti2Namespaces].toSorted());
+        }
+
+        const disagreements: string[] = [];
+        for (const version of schemaVersions) {
+          for (const namespace of rootNamespaces) {
+            for (const local of rootLocals) {
+              const written = namespace === "" ? "" : ` xmlns="${namespace}"`;
+              // A name no root admits: read before the root's namespace, it would be refused.
+              const bytes = new TextEncoder().encode(`<${local}${written} zz-unread="1"/>`);
+              const result = yield* Effect.result(
+                Effect.flatMap(Effect.orDie(readXml(bytes)), (read) =>
+                  shred(read, version, shredGrammar),
+                ),
+              );
+              const ours = Result.match(result, {
+                onFailure: (failure) =>
+                  failure instanceof NotQti3
+                    ? `not-qti3 ${failure.reason} ${Option.getOrElse(failure.found, () => "")}`
+                    : failure.reason,
+                onSuccess: () => "read",
+              });
+              const expected = qti2Namespaces.has(namespace)
+                ? `not-qti3 root-namespace ${namespace}`
+                : Option.match(shredGrammar.resolve(namespace, local, "document"), {
+                    onNone: () => "unnamed",
+                    onSome: (kind) =>
+                      shredGrammar.admitted(
+                        version,
+                        kind,
+                        shredGrammar.declaredType(version, kind),
+                        "no-namespace",
+                      )
+                        ? "read"
+                        : "unadmitted",
+                  });
+              if (ours !== expected) {
+                disagreements.push(
+                  `${version} {${namespace}}${local}: ${ours}, expected ${expected}`,
+                );
+              }
+            }
+          }
+        }
+
+        assert.deepStrictEqual(disagreements, []);
+      }).pipe(Effect.provide(NodeServices.layer)),
+  );
+});
+
+/**
+ * Write a response-processing template that holds one element of a governed kind: `qti-null` as
+ * the expression `qti-set-outcome-value` sets, any other as a rule of its own, with ASI's
+ * namespace bound to `q`.
+ *
+ * @param kind - The element's kind, `qti-null` or a `qti-exit-*` rule.
+ * @param written - The element as written.
+ * @returns The document.
+ */
+const governedDocument = (kind: string, written: string): string =>
+  `<qti-response-processing xmlns="${asi}" xmlns:q="${asi}" xmlns:xsi="${xsiNamespace}">${
+    kind === "qti-null"
+      ? `<qti-set-outcome-value identifier="SCORE">${written}</qti-set-outcome-value>`
+      : written
+  }</qti-response-processing>\n`;
+
+/**
+ * The attribute verdicts libxml2's messages give one document: the attributes it says are
+ * required but missing, and those it says are not allowed.
+ */
+interface AttributeVerdicts {
+  readonly missing: ReadonlySet<string>;
+  readonly unallowed: ReadonlySet<string>;
+}
+
+/**
+ * Read libxml2's attribute verdicts from its messages.
+ *
+ * @param verdict - Its verdict on one document.
+ * @returns The two sets of names.
+ */
+const attributeVerdictsOf = (verdict: XsdVerdict | undefined): AttributeVerdicts => {
+  const messages = verdict?._tag === "Invalid" ? verdict.messages.map(({ text }) => text) : [];
+  const named = (pattern: RegExp) =>
+    new Set(
+      messages.flatMap((text) =>
+        Option.toArray(Option.fromNullishOr(pattern.exec(text)?.groups?.["name"])),
+      ),
+    );
+
+  return {
+    missing: named(/The attribute '(?<name>[^']+)' is required but missing/u),
+    unallowed: named(/The attribute '(?<name>[^']+)' is not allowed/u),
+  };
+};
+
+/**
+ * Whether two sets of names hold the same names.
+ *
+ * @param left - One set.
+ * @param right - The other.
+ * @returns Whether each holds every name of the other.
+ */
+const sameNames = (left: ReadonlySet<string>, right: ReadonlySet<string>): boolean =>
+  left.size === right.size && [...left].every((name) => right.has(name));
+
+/**
+ * The kinds an `xsi:type` gives the 41 attribute-only extensions of `EmptyPrimitiveTypeDType` to
+ * (spec reading 75), each in a response-processing template ({@link governedDocument}).
+ */
+const governedKinds = ["qti-null", "qti-exit-response"] as const;
+
+describe("an element under its governing type (spec reading 75)", () => {
+  it.effect(
+    "reads qti-null typed VariableDType and qti-exit-response typed TrackDType under their types: identifier and src admitted and required, and xmllint agrees on every case",
+    () =>
+      // Oracle: XML Schema 1.0 Part 1 §3.3.4, Element Locally Valid (Element), clause 5.2.1 (the
+      // actual type definition governs), as the cases' verdicts; libxml2 over the ASI XSD as a
+      // control. The required check is AL3's own: the governor's required positions against the
+      // element's folded attrs.
+      // Bound: the 5 cases in the 2 versions.
+      Effect.gen(function* briefCases() {
+        const fs = yield* FileSystem.FileSystem;
+        const directory = path.resolve(import.meta.dirname, "..", "..", "work", "governed-type");
+        const oracle = yield* writeXsdOracle(directory);
+        const cache = yield* xsdDirectory;
+        const cases = [
+          ["qti-null", '<qti-null xsi:type="q:VariableDType" identifier="SCORE"/>', "accepted"],
+          ["qti-null", '<qti-null xsi:type="q:VariableDType"/>', "missing identifier"],
+          ["qti-null", '<qti-null identifier="SCORE"/>', "unadmitted"],
+          ["qti-exit-response", '<qti-exit-response xsi:type="q:TrackDType"/>', "missing src"],
+          [
+            "qti-exit-response",
+            '<qti-exit-response xsi:type="q:TrackDType" src="a.vtt"/>',
+            "accepted",
+          ],
+        ] as const;
+        const disagreements: string[] = [];
+        for (const version of schemaVersions) {
+          const files = cases.map((_, at) => `${directory}/${version}-${at}.xml`);
+          for (const [at, [kind, written]] of cases.entries()) {
+            yield* fs.writeFileString(files[at] ?? "", governedDocument(kind, written));
+          }
+
+          const verdicts = yield* xmllintValidate({
+            catalog: oracle.catalog,
+            paths: files,
+            schema: `${cache}/${version === "3.0.0" ? "imsqti_asiv3p0_v1p0.xsd" : "imsqti_asiv3p0p1_v1p0.xsd"}`,
+          });
+          for (const [at, [kind, written, expected]] of cases.entries()) {
+            const bytes = new TextEncoder().encode(governedDocument(kind, written));
+            const result = yield* Effect.result(reread(bytes, version));
+            const ours = yield* Result.match(result, {
+              onFailure: (failure) =>
+                Effect.succeed(
+                  failure instanceof UnmodeledVocabulary ? failure.reason : failure._tag,
+                ),
+              onSuccess: (tree) =>
+                Effect.map(
+                  Effect.orDie(Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar)))),
+                  (rows) => {
+                    const node = rows.nodes.find((row) => row.kind === kind);
+                    if (node === undefined) {
+                      return "no element";
+                    }
+
+                    const missing = admittedOf(
+                      grammar.attributes,
+                      grammar.kinds.attributeName,
+                      version,
+                      kind,
+                      node.governs,
+                    ).filter(
+                      ({ position, use }) => use === "required" && !node.attrs.has(position),
+                    );
+
+                    return missing.length === 0
+                      ? "accepted"
+                      : `missing ${missing.map(({ name }) => name).join(" ")}`;
+                  },
+                ),
+            });
+            const said = verdicts[at];
+            const named = attributeVerdictsOf(said);
+            let xmllint = `missing ${[...named.missing].join(" ")}`;
+            if (said?._tag === "Valid") {
+              xmllint = "accepted";
+            } else if (named.unallowed.size > 0) {
+              xmllint = "unadmitted";
+            }
+
+            if (ours !== expected || xmllint !== expected) {
+              disagreements.push(
+                `${version} ${written}: shred and AL3 ${ours}, xmllint ${xmllint}, expected ${expected}`,
+              );
+            }
+          }
+        }
+
+        assert.deepStrictEqual(disagreements, []);
+      }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
+    120_000,
+  );
 
   it.effect(
-    "leaves the xsi:type of a foreign element under a lax wildcard unread (readings 50 and 60)",
+    "requires exactly the governing type's required attributes and admits exactly its declared ones on every governor of qti-null and qti-exit-response, and xmllint agrees but where reading 81 follows the element's name: every governor in both versions",
     () =>
-      Effect.gen(function* laxType() {
-        const lom = "http://ltsc.ieee.org/xsd/LOM";
-        const bytes = new TextEncoder().encode(
-          `<lom xmlns="${lom}" xmlns:xsi="${xsiNamespace}"><zz:x xmlns:zz="urn:z" xsi:type="q:Unbound"/></lom>`,
-        );
-        const tree = yield* reread(bytes, "3.0.1");
-        const [child] = tree.root.children;
+      // Oracle: libxml2 over the ASI XSD, a second implementation of XML Schema's §3.3.4 clause
+      // 5.2.1 and Element Locally Valid (Complex Type) clauses 2 and 4: its "is required but
+      // missing" and "is not allowed" names against shred's admission and AL3's required set under
+      // each governor. Where the element's kind is one spec reading 81 covers, an undeclared name
+      // in no namespace that the type's attribute wildcard admits is refused by the reading, which
+      // follows the element's name (reading 75), and libxml2's admission of it is that reading's
+      // departure from the XSD.
+      // Bound: every governor of the 2 kinds in the 2 versions; each with no attribute but its
+      // xsi:type, each declared name in no namespace alone, and 3 names other governors declare.
+      Effect.gen(function* governedBox() {
+        const fs = yield* FileSystem.FileSystem;
+        const directory = path.resolve(import.meta.dirname, "..", "..", "work", "governed-box");
+        const oracle = yield* writeXsdOracle(directory);
+        const cache = yield* xsdDirectory;
+        const covered = coveredBy(grammar.kinds);
+        const disagreements: string[] = [];
+        let governors = 0;
+        for (const version of schemaVersions) {
+          const cases: {
+            readonly expect: string;
+            readonly file: string;
+            readonly kind: string;
+            readonly name: string;
+            readonly text: string;
+            readonly type: string;
+          }[] = [];
+          for (const kind of governedKinds) {
+            const types = grammar.attributes.governor.rows.filter(
+              (row) => row.version === version && row.kind === kind,
+            );
+            const declaredBy = new Map(
+              types.map(({ governs }) => [
+                governs,
+                typeAttributeDeclarations
+                  .filter(({ owner, versions }) => owner === governs && versions.includes(version))
+                  .map(({ name }) => name)
+                  .filter((name) => !name.includes(":")),
+              ]),
+            );
+            const everyName = [...new Set([...declaredBy.values()].flat())].toSorted();
+            for (const { governs } of types) {
+              governors += 1;
+              const local = governs.slice(governs.indexOf("}") + 1);
+              const own = declaredBy.get(governs) ?? [];
+              const typed = (attribute: string) =>
+                governedDocument(kind, `<${kind} xsi:type="q:${local}"${attribute}/>`);
+              const push = (name: string, expect: string, attribute: string) => {
+                const at = cases.length;
+                cases.push({
+                  expect,
+                  file: `${directory}/${version}-${at}.xml`,
+                  kind,
+                  name,
+                  text: typed(attribute),
+                  type: governs,
+                });
+              };
+              push("", "required", "");
+              for (const name of [
+                ...own,
+                ...everyName.filter((held) => !own.includes(held)).slice(0, 3),
+              ]) {
+                push(name, "admission", ` ${name}="x"`);
+              }
+            }
+          }
 
-        assert.strictEqual(child?._tag, foreignKinds.other);
-        assert.strictEqual(tree.root.governs, grammar.xsi.declaredType("3.0.1", "lom:lom"));
-      }),
+          for (const { file, text } of cases) {
+            yield* fs.writeFileString(file, text);
+          }
+
+          const verdicts = yield* xmllintValidate({
+            catalog: oracle.catalog,
+            paths: cases.map(({ file }) => file),
+            schema: `${cache}/${version === "3.0.0" ? "imsqti_asiv3p0_v1p0.xsd" : "imsqti_asiv3p0p1_v1p0.xsd"}`,
+          });
+          for (const [at, { expect, kind, name, text, type }] of cases.entries()) {
+            const said = attributeVerdictsOf(verdicts[at]);
+            const where = `${version} ${kind} ${type} ${name}`;
+            if (expect === "required") {
+              const requires = new Set(
+                admittedOf(grammar.attributes, grammar.kinds.attributeName, version, kind, type)
+                  .filter(({ use }) => use === "required")
+                  .map(({ name: held }) => held),
+              );
+              if (!sameNames(requires, said.missing)) {
+                disagreements.push(
+                  `${where}: Required ${[...requires].join(" ")}, xmllint ${[...said.missing].join(" ")}`,
+                );
+              }
+
+              continue;
+            }
+
+            const result = yield* Effect.result(reread(new TextEncoder().encode(text), version));
+            const refused =
+              Result.isFailure(result) &&
+              result.failure instanceof UnmodeledVocabulary &&
+              result.failure.reason === "unadmitted";
+            const declared = typeAttributeDeclarations.some(
+              ({ name: held, owner, versions }) =>
+                owner === type && held === name && versions.includes(version),
+            );
+            const wildcardAdmits = typeAttributeWildcards.some(
+              ({ namespace, owner, versions }) =>
+                owner === type && versions.includes(version) && namespace !== "##other",
+            );
+            const departs = covered(version, kind) && !declared && wildcardAdmits;
+            const agrees = departs
+              ? refused && !said.unallowed.has(name)
+              : refused === said.unallowed.has(name);
+            if (!agrees) {
+              disagreements.push(
+                `${where}: shred ${refused ? "refuses" : "admits"}, xmllint ${said.unallowed.has(name) ? "refuses" : "admits"}`,
+              );
+            }
+          }
+        }
+
+        assert.isAbove(governors, 0);
+        assert.deepStrictEqual(disagreements, []);
+      }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
+    300_000,
+  );
+});
+
+/**
+ * The ways an element no global declaration names stands under a `strict` wildcard, each a named
+ * arm of spec reading 72's box: an `xsi:type` naming a built-in, `xs:anyType`, or a simple type of
+ * the document's own schema set, each of which XML Schema assesses the element against (Part 1,
+ * §3.3.4 clause 1.2); and an `xsi:type` naming a type of a set the document does not use, a type no
+ * pinned schema defines, a QName whose prefix is unbound, or no `xsi:type` at all, each of which
+ * leaves the element with no type and no declaration (§3.10.4 clause 2).
+ */
+const strictArms = [
+  "built-in type",
+  "xs:anyType",
+  "type of the set",
+  "type of another set",
+  "unknown type",
+  "unbound prefix",
+  "no xsi:type",
+] as const;
+
+/**
+ * An arm of {@link strictArms}.
+ */
+type StrictArm = (typeof strictArms)[number];
+
+/**
+ * The arms XML Schema assesses the element in, so its document is valid there.
+ */
+const assessedArms: ReadonlySet<StrictArm> = new Set([
+  "built-in type",
+  "xs:anyType",
+  "type of the set",
+]);
+
+/**
+ * The refusal each arm XML Schema does not assess the element in meets, by
+ * `UnmodeledVocabulary`'s reason: a value that is no QName in scope is `type-unresolved`, and an
+ * element no declaration and no type of its set assesses is `strict-undeclared`, an `xsi:type`
+ * naming no pinned type among them (§3.3.4 clause 1.2.1.2.3).
+ */
+const strictRefusals: Readonly<Partial<Record<StrictArm, string>>> = {
+  "no xsi:type": "strict-undeclared",
+  "type of another set": "strict-undeclared",
+  "unbound prefix": "type-unresolved",
+  "unknown type": "strict-undeclared",
+};
+
+/**
+ * The `strict` wildcards of the box: `qti-companion-materials-info` in an item, whose schema set is
+ * the ASI XSD's, and a file's metadata in a manifest, whose set is the content-packaging XSD's;
+ * each with a simple type of its own set and one of the other's, the root XSD of each version, and
+ * the document around the wildcard's child.
+ */
+const strictParents = [
+  {
+    document: (child: string) =>
+      `<qti-assessment-item xmlns="${asi}" xmlns:f="urn:f" xmlns:xsi="${xsiNamespace}" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:q="${asi}" xmlns:d="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0drd_v1p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-companion-materials-info>${child}</qti-companion-materials-info></qti-assessment-item>\n`,
+    name: "qti-companion-materials-info",
+    other: "d:ExtensionString.Type",
+    own: "q:IdentifierDType",
+    roots: { "3.0.0": "imsqti_asiv3p0_v1p0.xsd", "3.0.1": "imsqti_asiv3p0p1_v1p0.xsd" },
+  },
+  {
+    document: (child: string, version: Composed["version"]) =>
+      `<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:f="urn:f" xmlns:xsi="${xsiNamespace}" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:q="${asi}" xmlns:d="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0drd_v1p0" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>${version}</schemaversion></metadata><organizations/><resources><resource identifier="R" type="webcontent" href="a.xml"><file href="a.xml"><metadata>${child}</metadata></file></resource></resources></manifest>\n`,
+    name: "cp:file metadata",
+    other: "q:IdentifierDType",
+    own: "d:ExtensionString.Type",
+    roots: {
+      "3.0.0": "imsqtiv3p0_imscpv1p2_v1p0.xsd",
+      "3.0.1": "imsqtiv3p0p1_imscpv1p2_v1p0.xsd",
+    },
+  },
+] as const;
+
+/**
+ * Write the wildcard's child of an arm: an element `f:x` in a namespace no schema names.
+ *
+ * @param arm - The arm.
+ * @param parent - The wildcard's parent, which gives its own set's type and the other's.
+ * @returns The child as written.
+ */
+const strictChild = (arm: StrictArm, parent: (typeof strictParents)[number]): string => {
+  switch (arm) {
+    case "built-in type": {
+      return `<f:x xsi:type="xs:string">a</f:x>`;
+    }
+    case "xs:anyType": {
+      return `<f:x xsi:type="xs:anyType"><f:y/></f:x>`;
+    }
+    case "type of the set": {
+      return `<f:x xsi:type="${parent.own}">a</f:x>`;
+    }
+    case "type of another set": {
+      return `<f:x xsi:type="${parent.other}">a</f:x>`;
+    }
+    case "unknown type": {
+      return `<f:x xsi:type="f:NoSuchType">a</f:x>`;
+    }
+    case "unbound prefix": {
+      return `<f:x xsi:type="zz:T">a</f:x>`;
+    }
+    case "no xsi:type": {
+      return `<f:x>a</f:x>`;
+    }
+    default: {
+      return arm satisfies never;
+    }
+  }
+};
+
+describe("a strict wildcard's undeclared element (spec reading 72)", () => {
+  it.effect(
+    "stands exactly when its xsi:type names a built-in or a type of its document's schema set, and xmllint agrees wherever libxml2 reads XML Schema's clause 1.2: every arm under both strict wildcards in both versions",
+    () =>
+      // Oracle: the specification as a checker, XML Schema 1.0 Part 1 §3.10.1 ("there must be a
+      // top-level declaration for the item available, or the item must have an xsi:type"),
+      // §3.3.4 clause 1.2 and §3.10.4 clause 2, as the arms' verdicts (`assessedArms`,
+      // `strictRefusals`); and libxml2 over each document's own root XSD as a control. libxml2
+      // 2.9.13 refuses an undeclared element under a strict wildcard before it reads xsi:type,
+      // which XML Schema assesses the element by, so on the assessed arms xmllint may refuse with
+      // "demanded by the strict wildcard" alone, and that departure is recorded against the reading.
+      // Bound: the 7 arms under the 2 wildcards in the 2 versions, 28 documents, exhausted.
+      Effect.gen(function* strictBox() {
+        const fs = yield* FileSystem.FileSystem;
+        const directory = path.resolve(import.meta.dirname, "..", "..", "work", "strict-wildcard");
+        const oracle = yield* writeXsdOracle(directory);
+        const cache = yield* xsdDirectory;
+        const disagreements: string[] = [];
+        let compared = 0;
+        for (const parent of strictParents) {
+          for (const version of schemaVersions) {
+            const cases = strictArms.map((arm) => ({
+              arm,
+              file: `${directory}/${parent.name.replaceAll(/\W/gu, "-")}-${version}-${arm.replaceAll(/\W/gu, "-")}.xml`,
+              text: parent.document(strictChild(arm, parent), version),
+            }));
+            for (const { file, text } of cases) {
+              yield* fs.writeFileString(file, text);
+            }
+
+            const verdicts = yield* xmllintValidate({
+              catalog: oracle.catalog,
+              paths: cases.map(({ file }) => file),
+              schema: `${cache}/${parent.roots[version]}`,
+            });
+            for (const [at, { arm, text }] of cases.entries()) {
+              compared += 1;
+              const where = `${parent.name} ${version} ${arm}`;
+              const result = yield* Effect.result(reread(new TextEncoder().encode(text), version));
+              const reason = Result.match(result, {
+                onFailure: (failure) =>
+                  failure instanceof UnmodeledVocabulary ? failure.reason : failure._tag,
+                onSuccess: () => "accepted",
+              });
+              const expected = strictRefusals[arm] ?? "accepted";
+              if (reason !== expected) {
+                disagreements.push(`${where}: shred ${reason}, the specification ${expected}`);
+              }
+
+              const verdict = verdicts[at];
+              const departure =
+                verdict?._tag === "Invalid" &&
+                verdict.messages.length === 1 &&
+                verdict.messages.every(({ text: said }) =>
+                  said.includes("demanded by the strict wildcard"),
+                );
+              const agrees =
+                verdict?._tag === (assessedArms.has(arm) ? "Valid" : "Invalid") ||
+                (assessedArms.has(arm) && departure);
+              if (!agrees) {
+                disagreements.push(
+                  `${where}: xmllint ${verdict?._tag ?? "gave no verdict"} ${Formatter.format(verdict)}`,
+                );
+              }
+            }
+          }
+        }
+
+        assert.strictEqual(compared, 28);
+        assert.deepStrictEqual(disagreements, []);
+      }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
+    120_000,
   );
 });

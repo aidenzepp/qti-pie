@@ -55,12 +55,14 @@ import type {
   XmlVersion,
 } from "#pantry/model/xdm.ts";
 import {
+  mathmlNamespace,
   namespaceClassOf,
+  qti2Namespaces,
   xmlNamespace,
   xmlnsNamespace,
   xsiNamespace,
 } from "#pantry/vocab/namespaces.ts";
-import { openClassOf, openClassRefusals } from "#pantry/vocab/open.ts";
+import { openClassOf, openClassRefusals, typeAvailable } from "#pantry/vocab/open.ts";
 
 /**
  * The grammar a document is shredded through, in the handle types of one {@link XdmVocabulary}:
@@ -87,16 +89,19 @@ export interface ShredGrammar<V extends XdmVocabulary> {
     child: ElementKind<V> | ForeignKind,
   ) => boolean;
   /**
-   * Whether a kind admits an attribute name: a row of `AttributeAdmission`.
+   * Whether an element admits an attribute name: a row of its governor's `GovernedAttribute`
+   * where a governor governs it, else of its kind's `AttributeAdmission` (spec reading 75).
    *
    * @param version - The version of the attribute's document.
    * @param kind - The kind of the attribute's element, a foreign kind for a foreign element.
+   * @param governs - The element's governing type, its `TypeName` handle.
    * @param name - A closed handle, or an open class.
-   * @returns Whether the kind admits an attribute of that name in that version.
+   * @returns Whether the element admits an attribute of that name in that version.
    */
   readonly admitted: (
     version: V["version"],
     kind: ElementKind<V> | ForeignKind,
+    governs: string,
     name: ClosedName<V> | OpenClass,
   ) => boolean;
   /**
@@ -130,6 +135,21 @@ export interface ShredGrammar<V extends XdmVocabulary> {
     parent: ElementKind<V> | ForeignKind | "document",
   ) => Option.Option<ElementKind<V>>;
   /**
+   * Whether only a `strict` wildcard of a parent admits a foreign kind: a row of `StrictlyHeld`.
+   * An element read as that kind there has no declaration its document's schema set gives it, so
+   * it stands only with an `xsi:type` naming a type that set holds or a built-in (spec reading 72).
+   *
+   * @param version - The version of the element's document.
+   * @param parent - The kind of the element's parent.
+   * @param kind - The foreign kind of the element's namespace class.
+   * @returns Whether the parent holds the kind strictly in that version.
+   */
+  readonly strictlyHeld: (
+    version: V["version"],
+    parent: ElementKind<V> | ForeignKind,
+    kind: ForeignKind,
+  ) => boolean;
+  /**
    * Find the type an expanded name names: the `TypeName` roster.
    *
    * @param name - The name an `xsi:type` resolves to.
@@ -151,9 +171,21 @@ export interface ShredGrammar<V extends XdmVocabulary> {
  *   13 of `docs/spec-readings.md`);
  * - `namespace-entity`: a namespace declaration whose namespace name holds an unexpanded entity
  *   reference, so no namespace name can be read from it;
- * - `type-unresolved`: an `xsi:type` on an element a declaration assesses whose value is no QName
- *   whose prefix is in scope (XML Schema 1.0 Part 1, §3.3.4 clause 4.1, §3.15.3);
- * - `type-unknown`: an `xsi:type` there whose QName names no type of the pinned schemas (clause 4.2).
+ * - `type-unresolved`: an `xsi:type` whose value is no QName whose prefix is in scope, on an element
+ *   of a kind or a foreign one alike, since XML Schema assesses the attribute against its own
+ *   declaration where no element declaration is found (XML Schema 1.0 Part 1, §3.3.4 clause 4.1,
+ *   §3.2.4 clause 1.2, §3.15.3; spec reading 74);
+ * - `type-unknown`: an `xsi:type` on an element of a kind whose QName names no type of the pinned
+ *   schemas (clause 4.2); on a foreign element such a name leaves it to lax assessment, or under
+ *   `strict` is `strict-undeclared` (spec reading 60);
+ * - `strict-undeclared`: an element a `strict` wildcard holds that no global declaration of its
+ *   document's schema set names, with no `xsi:type` naming a type of that set or a built-in, so XML
+ *   Schema cannot assess it (§3.10.4 clause 2, §3.3.4 clause 1.2; spec reading 72).
+ * - `mathml-foreign`: an element in the MathML namespace that would be read as a foreign element,
+ *   where no MathML kind its parent admits takes its name. MathML's grammar starts at `math` and
+ *   its `anyElement` excludes MathML's own namespace (MathML 3 RelaxNG, `mathml3-common.rnc` lines
+ *   15 and 61), and "all other MathML content must be contained in a math element" (MathML 3 §2.2),
+ *   so no foreign element is in that namespace (law "MathML foreign element", spec reading 2).
  *
  * `declared` and `data-name` are `openClassOf`'s own refusals (`openClassRefusals` of
  * `#pantry/vocab/open.ts`), passed through under their names.
@@ -165,6 +197,8 @@ export const unmodeledReasons = [
   "namespace-entity",
   "type-unresolved",
   "type-unknown",
+  "strict-undeclared",
+  "mathml-foreign",
 ] as const;
 
 /**
@@ -198,7 +232,11 @@ export class UnmodeledVocabulary extends Schema.TaggedError<UnmodeledVocabulary>
         'begins with "data-", and a data attribute is named "data-" then lower-case letters, digits, "_", "." or "-"',
       declared:
         "is declared by xml.xsd or XML Schema, so it is read only under its own name, which its element does not admit",
+      "mathml-foreign":
+        "is in the MathML namespace, and its parent admits no MathML element of that name, while MathML content stands only inside an m:math element (MathML 3, 2.2), so it is no foreign element either",
       "namespace-entity": "declares a namespace through an entity reference, which is never read",
+      "strict-undeclared":
+        "is held by a strict wildcard, and neither a global declaration of its document's schemas names it nor an xsi:type names one of their types or a built-in, so XML Schema cannot assess it (XML Schema 1.0 Part 1, 3.10.4 and 3.3.4)",
       "type-unknown":
         "names a type no pinned schema defines, so XML Schema refuses the element it types (cvc-elt 4.2)",
       "type-unresolved":
@@ -213,17 +251,21 @@ export class UnmodeledVocabulary extends Schema.TaggedError<UnmodeledVocabulary>
 }
 
 /**
- * Why a document is not read as QTI 3: its package declares no QTI 3 schema version, or its XML
- * declaration declares a version other than 1.x.
+ * Why a document is not read as QTI 3: its package declares no QTI 3 schema version, its XML
+ * declaration declares a version other than 1.x, or its root element is in a namespace of QTI 2
+ * (spec reading 80).
  */
-export const notQti3Reasons = ["schema-version", "xml-version"] as const;
+export const notQti3Reasons = ["schema-version", "xml-version", "root-namespace"] as const;
 
 /**
  * The document is not a QTI 3 document: its package declares a schema version the
- * `SchemaVersion` roster does not hold, or none, or its XML declaration declares a version other
- * than 1.x, which no QTI 3 document is written in.
+ * `SchemaVersion` roster does not hold, or none; its XML declaration declares a version other
+ * than 1.x, which no QTI 3 document is written in; or its root element is in a namespace one of
+ * QTI 2's XSDs declares (`qti2Namespaces` of `#pantry/vocab/namespaces.ts`), which no QTI 3 schema
+ * reads, whatever its package's manifest declares (spec reading 80).
  *
- * `found` is the version as written, none when the package declares no schema version.
+ * `found` is the version as written, none when the package declares no schema version; for
+ * `root-namespace` it is the root's namespace name.
  */
 export class NotQti3 extends Schema.TaggedError<NotQti3>()("NotQti3", {
   expected: Schema.String,
@@ -231,7 +273,7 @@ export class NotQti3 extends Schema.TaggedError<NotQti3>()("NotQti3", {
   reason: Schema.Literals(notQti3Reasons),
 }) {
   /**
-   * The version found, the versions read, and the repair.
+   * The version or namespace found, what the model reads, and the repair.
    */
   override get message(): string {
     const found = Option.match(this.found, {
@@ -239,9 +281,20 @@ export class NotQti3 extends Schema.TaggedError<NotQti3>()("NotQti3", {
       onSome: (value) => `is ${JSON.stringify(value)}`,
     });
 
-    return this.reason === "schema-version"
-      ? `The package's QTI schema version ${found}, and the model reads ${this.expected}. Import a QTI 3 package whose manifest declares one of them.`
-      : `The document's XML version ${found}, and a QTI 3 document is written in ${this.expected}. Write the document as XML 1.0.`;
+    switch (this.reason) {
+      case "schema-version": {
+        return `The package's QTI schema version ${found}, and the model reads ${this.expected}. Import a QTI 3 package whose manifest declares one of them.`;
+      }
+      case "xml-version": {
+        return `The document's XML version ${found}, and a QTI 3 document is written in ${this.expected}. Write the document as XML 1.0.`;
+      }
+      case "root-namespace": {
+        return `The document's root element is in ${Option.getOrElse(this.found, () => "no namespace")}, a namespace of QTI 2, so the document is QTI 2, and the model reads ${this.expected} documents only. Convert it to QTI 3, or remove it from the package.`;
+      }
+      default: {
+        return this.reason satisfies never;
+      }
+    }
   }
 }
 
@@ -322,7 +375,19 @@ const standalones: ReadonlyMap<string, Standalone> = new Map([
  */
 type Reading<V extends XdmVocabulary> =
   | { readonly _tag: "kind"; readonly element: Element; readonly kind: ElementKind<V> }
-  | { readonly _tag: "foreign"; readonly element: Element; readonly kind: ForeignKind };
+  | {
+      readonly _tag: "foreign";
+      readonly element: Element;
+      readonly kind: ForeignKind;
+      /**
+       * The parent, whose namespace names the schema sets the element's `xsi:type` resolves in.
+       */
+      readonly parent: Element;
+      /**
+       * Whether only a `strict` wildcard of the parent holds the element.
+       */
+      readonly strict: boolean;
+    };
 
 /**
  * How an element of a kind is read.
@@ -426,16 +491,56 @@ const scopeOf = (outer: Scope, declarations: readonly XdmNamespace[]): Scope =>
 const qNameParts = /^(?:(?<prefix>[^\s:]+):)?(?<local>[^\s:]+)$/u;
 
 /**
- * Read an element's governing type (XML Schema 1.0 Part 1, §3.3.4 clause 4): the type its
- * `xsi:type` names, resolved against the bindings in scope, as an unprefixed name takes the default
- * namespace (§3.15.3); or its declared type without one. A foreign element has no declaration and
- * is assessed laxly, so no named type governs it here (readings 50 and 60).
+ * Read an `xsi:type` value as the expanded name it is: a QName resolved against the bindings in
+ * scope, an unprefixed name taking the default namespace (XML Schema 1.0 Part 1, §3.15.3; spec
+ * reading 74).
+ *
+ * @param typed - The `xsi:type` attribute.
+ * @param element - The element that carries it.
+ * @param scope - The bindings in scope at the element.
+ * @returns The name, or `type-unresolved` for a value that is no QName, holds an entity reference,
+ *   or has a prefix no declaration in scope binds.
+ */
+const qNameOf = (
+  typed: Attribute,
+  element: Element,
+  scope: Scope,
+): Result.Result<ExpandedName, UnmodeledVocabulary> => {
+  const parts = qNameParts.exec(typed.value.replaceAll(/[\t\n\r ]+/gu, " ").trim())?.groups;
+  const namespace = scope.get(parts?.["prefix"] ?? "");
+
+  return parts === undefined || typed.references.length > 0 || namespace === undefined
+    ? Result.fail(unmodeledAttribute(typed, element, "type-unresolved"))
+    : Result.succeed({ local: parts["local"] ?? "", namespace });
+};
+
+/**
+ * Read an element's governing type, its `TypeName` handle (XML Schema 1.0 Part 1, §3.3.4).
+ *
+ * An element of a kind is governed by the type its `xsi:type` names, or by its declared type
+ * without one (clause 4); a value that is no QName in scope is `type-unresolved` (clause 4.1), and
+ * one that names no type of the pinned schemas `type-unknown` (clause 4.2).
+ *
+ * A foreign element has no declaration, and its `xsi:type` is still assessed against XML Schema's
+ * own declaration of the attribute (§3.2.4 clause 1.2, reached through the ur-type's `lax`
+ * attribute wildcard), so a value that is no QName in scope is `type-unresolved` there too (spec
+ * reading 74). A QName that names a type its document's schema set holds, or a built-in
+ * (`typeAvailable`, spec reading 72), governs the element, which is then assessed against
+ * that type (§3.3.4, Schema-Validity Assessment (Element), clause 1.2): a simple type's text is
+ * checked by the law that reads the governing type, a complex one is reading 50's unchecked limit.
+ * With no `xsi:type`, or one that names no such type, no type governs it (`none`): under `lax` it
+ * is laxly assessed against the ur-type, its children in turn, and under `strict`, whose
+ * declaration is `mustFind`, it is refused as `strict-undeclared` (§3.10.4 clause 2, §3.3.5
+ * [validity] clause 1.1.3; spec reading 60). No pinned XSD writes a `skip` element wildcard, so
+ * every foreign element stands under `lax` or `strict`.
  *
  * @param reading - How the element is read.
  * @param scope - The bindings in scope at it.
  * @param version - The version of its document.
  * @param grammar - The grammar.
- * @returns The governing type's handle, or the refusal of an `xsi:type` that names no type.
+ * @returns The governing type's handle, `none` for a foreign element no type governs; or the
+ *   refusal of an `xsi:type` that is no QName in scope, of one on an element of a kind that names
+ *   no type, or of a strictly held element no type assesses.
  */
 const governsOf = <V extends XdmVocabulary>(
   reading: Reading<V>,
@@ -443,47 +548,75 @@ const governsOf = <V extends XdmVocabulary>(
   version: V["version"],
   grammar: ShredGrammar<V>,
 ): Result.Result<string, UnmodeledVocabulary> => {
-  if (reading._tag === "foreign") {
-    return Result.succeed(none);
-  }
-
-  const { element, kind } = reading;
-  const typed = element.attributes.find(
+  const typed = reading.element.attributes.find(
     (attribute) => attribute.namespace === xsiNamespace && attribute.local === "type",
   );
-  if (typed === undefined) {
-    return Result.succeed(grammar.declaredType(version, kind));
+  if (reading._tag === "kind") {
+    return typed === undefined
+      ? Result.succeed(grammar.declaredType(version, reading.kind))
+      : Result.flatMap(qNameOf(typed, reading.element, scope), (name) =>
+          Result.fromOption(grammar.typeName(name), () =>
+            unmodeledAttribute(typed, reading.element, "type-unknown"),
+          ),
+        );
   }
 
-  const parts = qNameParts.exec(typed.value.replaceAll(/[\t\n\r ]+/gu, " ").trim())?.groups;
-  const namespace = scope.get(parts?.["prefix"] ?? "");
-  if (parts === undefined || typed.references.length > 0 || namespace === undefined) {
-    return Result.fail(unmodeledAttribute(typed, element, "type-unresolved"));
-  }
+  const { element, parent, strict } = reading;
+  const unassessed = (): Result.Result<string, UnmodeledVocabulary> =>
+    strict
+      ? Result.fail(
+          new UnmodeledVocabulary({
+            kind: "element",
+            name: element.qname,
+            parent: Option.some(parent.qname),
+            reason: "strict-undeclared",
+          }),
+        )
+      : Result.succeed(none);
 
-  return Result.fromOption(grammar.typeName({ local: parts["local"] ?? "", namespace }), () =>
-    unmodeledAttribute(typed, element, "type-unknown"),
-  );
+  return typed === undefined
+    ? unassessed()
+    : Result.flatMap(qNameOf(typed, element, scope), (name) =>
+        Option.match(
+          Option.filter(grammar.typeName(name), () =>
+            typeAvailable(parent.namespace, name.namespace),
+          ),
+          { onNone: unassessed, onSome: (handle) => Result.succeed(handle) },
+        ),
+      );
 };
 
 /**
  * Read the root element's kind: the kind its name resolves to under the document node, which
  * admits no foreign element.
  *
+ * The root's namespace is read first: one of QTI 2's makes the document a QTI 2 document, which is
+ * refused as `not-qti3` before any of its names is read, so the refusal says what the document is
+ * rather than that its root's name is unknown (spec reading 80).
+ *
  * @param element - The root element.
  * @param grammar - The grammar.
- * @returns How it is read, or its refusal.
+ * @returns How it is read; `NotQti3` for a root in a namespace of QTI 2, or the refusal of a name
+ *   no kind takes under the document node.
  */
 const rootReadingOf = <V extends XdmVocabulary>(
   element: Element,
   grammar: ShredGrammar<V>,
-): Result.Result<KindReading<V>, UnmodeledVocabulary> =>
-  Result.fromOption(
-    grammar
-      .resolve(element.namespace, element.local, "document")
-      .pipe(Option.map((kind) => ({ _tag: "kind", element, kind }) as const)),
-    () => unnamedElement(element, Option.none()),
-  );
+): Result.Result<KindReading<V>, NotQti3 | UnmodeledVocabulary> =>
+  qti2Namespaces.has(element.namespace)
+    ? Result.fail(
+        new NotQti3({
+          expected: "QTI 3",
+          found: Option.some(element.namespace),
+          reason: "root-namespace",
+        }),
+      )
+    : Result.fromOption(
+        grammar
+          .resolve(element.namespace, element.local, "document")
+          .pipe(Option.map((kind) => ({ _tag: "kind", element, kind }) as const)),
+        () => unnamedElement(element, Option.none()),
+      );
 
 /**
  * Read an element under its parent, of a kind or foreign: as the kind its name has there, or as a
@@ -501,11 +634,16 @@ const rootReadingOf = <V extends XdmVocabulary>(
  * to, which the database's admission law refuses where the parent does not admit it, and it is
  * refused here when its name resolves to none.
  *
+ * An element in the MathML namespace is never foreign: MathML's grammar starts at `math`, and its
+ * `anyElement` excludes MathML's own namespace, so where no MathML kind the parent admits takes its
+ * name it is refused, as `mathml-foreign` (law "MathML foreign element").
+ *
  * @param element - The element.
  * @param parent - How its parent is read.
  * @param version - The version of its document.
  * @param grammar - The grammar.
  * @returns How it is read, or its refusal.
+ * @see {@link https://www.w3.org/TR/MathML3/chapter2.html#fund.math | MathML 3, 2.2 The Top-Level math Element}
  */
 const childReadingOf = <V extends XdmVocabulary>(
   element: Element,
@@ -519,7 +657,22 @@ const childReadingOf = <V extends XdmVocabulary>(
     !Option.exists(resolved, (kind) => grammar.admitsChild(version, parent.kind, kind)) &&
     grammar.admitsChild(version, parent.kind, foreign)
   ) {
-    return Result.succeed({ _tag: "foreign", element, kind: foreign });
+    return element.namespace === mathmlNamespace
+      ? Result.fail(
+          new UnmodeledVocabulary({
+            kind: "element",
+            name: element.qname,
+            parent: Option.some(parent.element.qname),
+            reason: "mathml-foreign",
+          }),
+        )
+      : Result.succeed({
+          _tag: "foreign",
+          element,
+          kind: foreign,
+          parent: parent.element,
+          strict: grammar.strictlyHeld(version, parent.kind, foreign),
+        });
   }
 
   return Result.fromOption(
@@ -541,11 +694,13 @@ const spellingOf = ({ local, namespace }: Attribute): Option.Option<string> =>
     : Option.map(Option.fromNullishOr(prefixOf.get(namespace)), (prefix) => `${prefix}:${local}`);
 
 /**
- * Read one attribute of an element: under its closed handle where the element's kind admits it,
- * else under its open class where the kind admits that.
+ * Read one attribute of an element: under its closed handle where the element admits it, else
+ * under its open class where the element admits that, each under the element's governor where one
+ * governs it ({@link ShredGrammar.admitted}).
  *
  * @param attribute - The attribute, never a namespace declaration.
  * @param reading - How the element that carries it is read.
+ * @param governs - The element's governing type.
  * @param version - The version of its document.
  * @param grammar - The grammar.
  * @returns The attribute with its lexical form and entity references as read, or its refusal.
@@ -553,6 +708,7 @@ const spellingOf = ({ local, namespace }: Attribute): Option.Option<string> =>
 const attributeOf = <V extends XdmVocabulary>(
   attribute: Attribute,
   reading: Reading<V>,
+  governs: string,
   version: V["version"],
   grammar: ShredGrammar<V>,
 ): Result.Result<XdmAttribute<V>, UnmodeledVocabulary> => {
@@ -564,7 +720,7 @@ const attributeOf = <V extends XdmVocabulary>(
   });
   const closed = spellingOf(attribute).pipe(
     Option.flatMap(grammar.closedName),
-    Option.filter((handle) => grammar.admitted(version, kind, handle)),
+    Option.filter((handle) => grammar.admitted(version, kind, governs, handle)),
   );
   if (Option.isSome(closed)) {
     return Result.succeed(read({ _tag: "closed", handle: closed.value }));
@@ -576,7 +732,7 @@ const attributeOf = <V extends XdmVocabulary>(
   return Result.match(openClassOf(attribute, host), {
     onFailure: ({ reason }) => Result.fail(unmodeledAttribute(attribute, reading.element, reason)),
     onSuccess: (name) =>
-      grammar.admitted(version, kind, name._tag)
+      grammar.admitted(version, kind, governs, name._tag)
         ? Result.succeed(read(name))
         : Result.fail(unmodeledAttribute(attribute, reading.element, "unadmitted")),
   });
@@ -586,19 +742,21 @@ const attributeOf = <V extends XdmVocabulary>(
  * Read an element's attributes, in source order, its namespace declarations left out.
  *
  * @param reading - How the element is read.
+ * @param governs - The element's governing type.
  * @param version - The version of its document.
  * @param grammar - The grammar.
  * @returns The attributes, or the refusal of the first that has no representation there.
  */
 const attributesOf = <V extends XdmVocabulary>(
   reading: Reading<V>,
+  governs: string,
   version: V["version"],
   grammar: ShredGrammar<V>,
 ): Result.Result<readonly XdmAttribute<V>[], UnmodeledVocabulary> =>
   Result.all(
     reading.element.attributes
       .filter((attribute) => attribute.namespace !== xmlnsNamespace)
-      .map((attribute) => attributeOf(attribute, reading, version, grammar)),
+      .map((attribute) => attributeOf(attribute, reading, governs, version, grammar)),
   );
 
 /**
@@ -680,8 +838,11 @@ interface Opened<V extends XdmVocabulary> {
 }
 
 /**
- * Read what every element holds but its children: its namespace declarations, then its
- * attributes, once its kind is known, the order in which each binds or names the next.
+ * Read what every element holds but its children: its namespace declarations, then its governing
+ * type, then its attributes, once its kind is known, the order in which each binds or names the
+ * next. The namespace declarations bind the `xsi:type` QName, and the governing type decides which
+ * attributes the element admits (spec reading 75), so an attribute its declared type does not
+ * declare but its governing type does is read, and one its governing type does not declare is not.
  *
  * @param reading - How the element is read.
  * @param version - The version of its document.
@@ -703,8 +864,8 @@ const contentOf = <V extends XdmVocabulary>(
   Result.gen(function* elementContent() {
     const namespaces = yield* namespacesOf(reading.element);
     const scope = scopeOf(outer, namespaces);
-    const attributes = yield* attributesOf(reading, version, grammar);
     const governs = yield* governsOf(reading, scope, version, grammar);
+    const attributes = yield* attributesOf(reading, governs, version, grammar);
 
     return { attributes, governs, namespaces, prefix: reading.element.prefix, scope };
   });
@@ -746,6 +907,7 @@ const open = <V extends XdmVocabulary>(
               _tag: reading.kind,
               attributes,
               children,
+              governs,
               name: { local, namespace },
               namespaces,
               prefix,
@@ -824,14 +986,14 @@ const openInto = <V extends XdmVocabulary>(
  * @param root - The root element as crust read it.
  * @param version - The version of the document.
  * @param grammar - The grammar.
- * @returns The root element in the tree, or the refusal of the first element or attribute in
- *   document order that has no representation.
+ * @returns The root element in the tree; `NotQti3` for a root in a namespace of QTI 2, or the
+ *   refusal of the first element or attribute in document order that has no representation.
  */
 const rootOf = <V extends XdmVocabulary>(
   root: Element,
   version: V["version"],
   grammar: ShredGrammar<V>,
-): Result.Result<XdmClosedElement<V>, UnmodeledVocabulary> =>
+): Result.Result<XdmClosedElement<V>, NotQti3 | UnmodeledVocabulary> =>
   Result.gen(function* readRoot() {
     const reading = yield* rootReadingOf(root, grammar);
     const children: XdmChild<V>[] = [];
@@ -926,9 +1088,9 @@ const declarationOf = Effect.fnUntraced(function* declarationOf(
  * @param document - The document as crust's reader gave it.
  * @param version - The version its package declares, decoded by {@link versionOf}.
  * @param grammar - The grammar it is read through.
- * @returns The tree; `NotQti3` for an XML version other than 1.x, and `UnmodeledVocabulary` for the
- *   first element or attribute in document order that has no representation. Dies on a
- *   `standalone` crust's reader refuses.
+ * @returns The tree; `NotQti3` for an XML version other than 1.x or a root in a namespace of QTI 2,
+ *   and `UnmodeledVocabulary` for the first element or attribute in document order that has no
+ *   representation. Dies on a `standalone` crust's reader refuses.
  */
 export const shred = Effect.fn("model.shred")(function* shred<V extends XdmVocabulary>(
   document: XmlDocument,

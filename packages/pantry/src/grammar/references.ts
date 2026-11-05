@@ -1,7 +1,7 @@
 /**
  * The closed relations of variables and the references to them: `DeclarationKind`, `Declares`,
- * `BuiltInVariable`, `VariableReference`, `ContentReference`, `ChoiceBound` and `SectionPart`
- * (fin.md §14, §17; review R9).
+ * `BuiltInVariable`, `VariableReference`, `ContentReference`, `ChoiceBound`, `ChoiceCount` and
+ * `SectionPart` (fin.md §14, §17; review R9).
  *
  * Each is a priori, a fact of QTI's vocabulary, so it is a closed relation. The rows are a
  * vocabulary's facet ({@link ReferenceFacet}), and {@link references} codes the facets of a
@@ -73,22 +73,50 @@ export interface BuiltInRow {
 }
 
 /**
- * One kind's bound on a count: the attribute of the least count and the attribute of the most.
+ * What a most of 0 means in a count bound, in code order: the `BoundZero` roster's handles.
+ *
+ * - `unbounded`: a most of 0 imposes no limit, so any least meets it (spec readings 53 and 67: "If
+ *   max-choices is 0 then there is no restriction", information model §5.30.2).
+ * - `counted`: 0 is a count like any other, below every least of at least 1, and the pair binds only
+ *   where the least is written (spec reading 18: the order interactions give 0 no meaning of its
+ *   own, and "If unspecified, all of the choices must be ordered and max-choices is ignored").
+ */
+export const boundZeros = ["unbounded", "counted"] as const;
+
+/**
+ * A `BoundZero` handle.
+ */
+export type BoundZero = (typeof boundZeros)[number];
+
+/**
+ * One kind's bound on a count: the attribute of the least count, the attribute of the most, and
+ * what a most of 0 means there.
  */
 export interface BoundRow {
   readonly kind: string;
   readonly max: string;
   readonly min: string;
+  readonly zero: BoundZero;
+}
+
+/**
+ * One kind whose counts its choices bound: the kind, and the kind of the children it counts as its
+ * choices. Where its least is written, both its least and its most are at most that many.
+ */
+export interface ChoiceCountRow {
+  readonly choice: string;
+  readonly kind: string;
 }
 
 /**
  * A vocabulary's share of the reference relations: its declaration kinds, its built-in variables,
- * its references, its count bounds and the kinds a section of it holds as parts. A vocabulary with
- * none of these states {@link noReferences}.
+ * its references, its count bounds, the kinds whose choices bound their counts, and the kinds a
+ * section of it holds as parts. A vocabulary with none of these states {@link noReferences}.
  */
 export interface ReferenceFacet {
   readonly builtIns: readonly BuiltInRow[];
   readonly choiceBounds: readonly BoundRow[];
+  readonly choiceCounts: readonly ChoiceCountRow[];
   readonly declarations: readonly string[];
   readonly references: readonly ReferenceRow[];
   readonly sectionParts: readonly string[];
@@ -100,6 +128,7 @@ export interface ReferenceFacet {
 export const noReferences: ReferenceFacet = {
   builtIns: [],
   choiceBounds: [],
+  choiceCounts: [],
   declarations: [],
   references: [],
   sectionParts: [],
@@ -223,20 +252,37 @@ const printing: ReadonlyMap<
 ]);
 
 /**
- * The pairs of count attributes whose least may not exceed their most, unless the most is 0, which
- * bounds nothing: the choices, the associations, a choice's matches, a medium's plays and an
- * extended text's strings (information model, each interaction's and choice's `min-*` and `max-*`,
- * `match-min` and `match-max`, and §5.48.7's `min-strings`; spec readings 18 and 53 for the 0
- * exemption, and 67; the rule `choice-bounds`). The kinds that carry a pair are the XSD's: every
- * kind declaring both.
+ * The pairs of count attributes whose least may not exceed their most: the choices, the
+ * associations, a choice's matches, a medium's plays and an extended text's strings (information
+ * model, each interaction's and choice's `min-*` and `max-*`, `match-min` and `match-max`, and
+ * §5.48.7's `min-strings`; spec readings 53 and 67; the rule `choice-bounds`). The kinds that carry
+ * a pair are the XSD's: every kind declaring both. A most of 0 bounds nothing there, but on the
+ * kinds {@link orderedChoices} names.
  */
-const boundPairs: readonly Omit<BoundRow, "kind">[] = [
+const boundPairs: readonly Omit<BoundRow, "kind" | "zero">[] = [
   { max: "max-choices", min: "min-choices" },
   { max: "max-associations", min: "min-associations" },
   { max: "match-max", min: "match-min" },
   { max: "max-plays", min: "min-plays" },
   { max: "max-strings", min: "min-strings" },
 ];
+
+/**
+ * The order interactions, each with the kind of its choices: spec reading 18, from the information
+ * model's "If specified, min-choices must be 1 or greater but must not exceed the number of choices
+ * available. If unspecified, all of the choices must be ordered and max-choices is ignored" and
+ * "Used in conjunction with min-choices, if specified, max-choices must be greater than or equal to
+ * min-choices and must not exceed the number of choices available" (§5.97.2 and §5.97.3,
+ * OrderInteraction; §5.61.1 and §5.61.2, GraphicOrderInteraction). Neither gives a `max-choices` of
+ * 0 a meaning of its own, so their bound is `counted`, and their choices bound both counts. The
+ * number of choices is the interaction's `qti-simple-choice` or `qti-hotspot-choice` children.
+ *
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_OrderInteraction.Attr_min-choices | QTI 3.0 information model, 5.97.2 OrderInteraction min-choices}
+ */
+const orderedChoices: ReadonlyMap<string, string> = new Map([
+  ["qti-order-interaction", "qti-simple-choice"],
+  ["qti-graphic-order-interaction", "qti-hotspot-choice"],
+]);
 
 /**
  * The kind whose parts a selection selects among: the assessment section (information model,
@@ -384,7 +430,8 @@ const declarationsIn = (declarations: readonly AttributeDeclaration[]): readonly
 
 /**
  * Read the count bounds: each kind and pair of {@link boundPairs} where the kind declares both
- * attributes of the pair.
+ * attributes of the pair, `counted` on the kinds {@link orderedChoices} names and `unbounded`
+ * elsewhere.
  *
  * @param declarations - The attribute declarations.
  * @returns The bounds, in declaration order of the kinds.
@@ -398,7 +445,11 @@ const boundsIn = (declarations: readonly AttributeDeclaration[]): readonly Bound
   return [...declared].flatMap(([kind, names]) =>
     boundPairs
       .filter(({ max, min }) => names.has(min) && names.has(max))
-      .map((pair) => ({ ...pair, kind })),
+      .map((pair): BoundRow => ({
+        ...pair,
+        kind,
+        zero: orderedChoices.has(kind) ? "counted" : "unbounded",
+      })),
   );
 };
 
@@ -483,7 +534,7 @@ const reachedFrom = (
  * @param models - The content-model IR.
  * @returns The parts, each once, in the model's order.
  */
-const sectionPartsIn = (models: readonly ContentModel[]): readonly string[] => [
+export const sectionPartsIn = (models: readonly ContentModel[]): readonly string[] => [
   ...new Set(
     models
       .filter(({ kind }) => kind === sectionKind)
@@ -514,11 +565,13 @@ const itemContentKinds: ReadonlySet<string> = new Set(
 /**
  * The ASI vocabulary's facet, derived from the XSDs' attribute declarations and content models: its
  * four declaration kinds, the built-in variables, the references processing and an item's content
- * make, the interactions' and choices' count bounds, and the kinds a section holds as parts.
+ * make, the interactions' and choices' count bounds, the order interactions' choices, and the kinds
+ * a section holds as parts.
  */
 export const asiReferences: ReferenceFacet = {
   builtIns,
   choiceBounds: boundsIn(attributeDeclarations),
+  choiceCounts: Array.from(orderedChoices, ([kind, choice]) => ({ choice, kind })),
   declarations: declarationsIn(attributeDeclarations),
   references: [
     ...processingReferences(attributeDeclarations, processingKinds),
@@ -557,13 +610,18 @@ export interface References {
    */
   readonly builtInVariable: Roster<string>;
   /**
-   * `ChoiceBound`: kind → (min, max), the attributes of the least and the most count a kind's
-   * element bounds, where a most of 0 bounds nothing.
+   * `ChoiceBound`: kind → (min, max, zero), the attributes of the least and the most count a kind's
+   * element bounds, and what a most of 0 means there ({@link boundZeros}).
    */
   readonly choiceBound: Closed<
     readonly [KindField],
-    readonly [AttributeField<"min">, AttributeField<"max">]
+    readonly [AttributeField<"min">, AttributeField<"max">, IdField<"zero", BoundZero>]
   >;
+  /**
+   * `ChoiceCount`: kind → choice, the kind of the children whose number bounds both of the kind's
+   * counts where its least is written (spec reading 18).
+   */
+  readonly choiceCount: Closed<readonly [KindField], readonly [IdField<"choice", string>]>;
   /**
    * `ContentReference`: the set of (kind, attribute, declaration kind) where an item's content
    * names, by that attribute of an element of that kind, a declaration of that kind. Its (kind,
@@ -661,8 +719,18 @@ export const references = (input: {
       choiceBound: yield* closed({
         key: [kind],
         name: "ChoiceBound",
-        payload: [idField("min", input.names), idField("max", input.names)],
+        payload: [
+          idField("min", input.names),
+          idField("max", input.names),
+          idField("zero", yield* roster("BoundZero", boundZeros)),
+        ],
         rows: facets.flatMap((facet) => facet.choiceBounds),
+      }),
+      choiceCount: yield* closed({
+        key: [kind],
+        name: "ChoiceCount",
+        payload: [idField("choice", input.kinds)],
+        rows: facets.flatMap((facet) => facet.choiceCounts),
       }),
       contentReference: yield* closed({
         key: [kind, attribute, declaration],

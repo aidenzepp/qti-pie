@@ -22,7 +22,11 @@
  * - `attribute:undeclared`, per admitted (version, kind, name) no declaration and no wildcard of the
  *   kind explains;
  * - `attribute:wildcard`, per (version, kind) whose attribute wildcard admits the XML namespace:
- *   `xml.xsd`'s four global attributes admitted;
+ *   `xml.xsd`'s four global attributes admitted, but on a kind the Schematron's extension rules
+ *   cover, where spec reading 81 admits none the kind does not declare;
+ * - `attribute:extension`, per (version, kind) the Schematron's extension rules cover: no name
+ *   admitted but a declared one, `data-*`, an `xsi:` name and a reading's second spelling (spec
+ *   readings 81 and 10);
  * - `text:domain`, per simple-content (version, kind): `TextDomain`'s row;
  * - `reading`, per spec reading of `docs/spec-readings.md`, with the status the alignment audit gives
  *   it after the operator's rulings.
@@ -35,7 +39,9 @@
  * enumerations are `lexical.oracle.test.ts`'s, against `xmllint`.
  */
 import { Option } from "effect";
+import { readingRefusals, readingSpellings } from "#pantry/grammar/attributes.ts";
 import type { Use, ValueDomain } from "#pantry/grammar/attributes.ts";
+import { coveredBy } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { foreignKinds, isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
@@ -101,10 +107,10 @@ interface ReadingEntry {
 /**
  * Every spec reading's status and owner. Reading 14 is restated to follow the XSD (the text-entry
  * references are IDREFs), so the Idref family owns it; D4 is closed by the Glushkov ruling, so the
- * ruled gaps are D12 (reading 2's unknown rest) and reading 50, with reading 60, which extends
- * reading 50's limit to a simple `xsi:type`'s text. Readings 51 to 55, 58 and 59 bind plate, which
- * delivers and scores; pantry's part is to store the values they read as written, which the codec
- * does.
+ * ruled gaps are D12 (reading 2's unknown rest) and reading 50; reading 60, restated, checks a
+ * simple `xsi:type`'s text and leaves a complex one reading 50's. Readings 51 to 55, 58 and 59 bind
+ * plate, which delivers and scores; pantry's part is to store the values they read as written,
+ * which the codec does.
  */
 export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, ReadingEntry>([
   [1, { owner: "every law", status: "meta" }],
@@ -112,7 +118,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     2,
     {
       owner:
-        "the automaton's restated `m:bvar` and `m:piecewise` (the RelaxNG's interleaves) and the MathML arity law; D12 for the rest, Sterling's B1 open",
+        "the automaton's restated models (`m:bvar`, `m:piecewise`, the `interval` qualifier's eight, `m:annotation-xml`, `m:lambda`'s ending), `m:semantics.contexp` beside `m:ci`, MathML's root (`roots`), the `math` ancestry flag, the notation domains (`mathmlNotationReadings`) and the MathML arity law; the MathML foreign element law (QS); D12 for the Recommendation's other prose",
       status: "R",
     },
   ],
@@ -133,11 +139,18 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     9,
     {
       owner:
-        "the Schematron the ASI XSDs embed, each rule to its law (docs/research/unowned-readings.md §9); mastery-range, string-identifier-distinct and reading 23 in W5",
+        "the Schematron the ASI XSDs embed, each rule to its law (docs/research/unowned-readings.md §9), its extension-attribute lists to reading 81's AL1 rows; mastery-range, string-identifier-distinct and reading 23 in W5",
       status: "P",
     },
   ],
-  [10, { owner: "AL1, AL4", status: "G" }],
+  [
+    10,
+    {
+      owner:
+        "AL1: `aria-keyshortcuts` admitted closed beside `aria-keyshorts` (`readingSpellings` of attributes.ts)",
+      status: "G",
+    },
+  ],
   [11, { owner: "codec", status: "G" }],
   [12, { owner: "admission, TextDomain", status: "G" }],
   [13, { owner: "shred (`open.ts` `dataName`)", status: "G" }],
@@ -145,7 +158,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
   [15, { owner: "AttributeAdmission's domain, a kind reading (A5)", status: "X" }],
   [16, { owner: "AL1 (`positiveDouble`)", status: "G" }],
   [17, { owner: "AL1 (`viewList`)", status: "G" }],
-  [18, { owner: "Q5.09 O3", status: "P" }],
+  [
+    18,
+    {
+      owner:
+        "AL1 (`min-choices` at least 1); Choice bounds over ChoiceBound's `counted` zero and ChoiceCount (references.ts)",
+      status: "G",
+    },
+  ],
   [19, { owner: "Q5.09 O3", status: "P" }],
   [20, { owner: "the automaton's model edit (`require`), Q1", status: "P" }],
   [21, { owner: "O4 arity", status: "G" }],
@@ -178,7 +198,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     47,
     {
       owner:
-        "`xsi:nil` admitted only on the foreign kinds (A6); XsiType derived (Q11's `XsiType`); the governing type's content and attributes wait on Sterling's B4 and B5",
+        "`xsi:nil` admitted only on the foreign kinds (A6); XsiType derived (Q11's `XsiType`); the governing type's attributes and text under reading 75 (Governor, GovernedAttribute, TypeText)",
       status: "P",
     },
   ],
@@ -194,7 +214,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
   [57, { owner: "the W5 overlays over every node the walk checks (Q5.09)", status: "P" }],
   [58, { owner: "plate checks the pattern; pantry stores `pattern-mask` as written", status: "G" }],
   [59, { owner: "plate scores; pantry stores `coords` as written", status: "G" }],
-  [60, { owner: "a known limit beside reading 50: the text is accepted unchecked", status: "R" }],
+  [
+    60,
+    {
+      owner:
+        "the foreign governor laws: shred's foreign governs (type-unresolved, strict-undeclared), Governor's four xsi: names, TypeText under TextDomain, and Foreign simple content (Q4)",
+      status: "P",
+    },
+  ],
   [
     61,
     {
@@ -214,7 +241,74 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
   ],
   [69, { owner: "MappableBaseType", status: "G" }],
   [70, { owner: "Selection bound", status: "G" }],
-  [71, { owner: "default hotspot last slot, Graphic gap match default hotspot", status: "G" }],
+  [
+    71,
+    {
+      owner:
+        "default hotspot last slot (`qti-hotspot-choice` only), Graphic gap match default hotspot",
+      status: "G",
+    },
+  ],
+  [
+    72,
+    {
+      owner:
+        "Admission under a wildcard by the document's schema set (`open.wildcardReads`), `StrictlyHeld` and shred's `strict-undeclared`; the version-keyed admissions of LOM's and the foreign kinds are its stated limit",
+      status: "G",
+    },
+  ],
+  [
+    73,
+    {
+      owner:
+        "ResourceTypeOf and RootOfType (facets.ts `package.roots`): `imsqti_resprocessing_xmlv3p0` admitted, the guide's spelling refused",
+      status: "G",
+    },
+  ],
+  [
+    74,
+    {
+      owner:
+        "shred's `type-unresolved` over foreign `xsi:type` and SSML `role` values (B2); Q5.03 and Q5.04's `Binding` family",
+      status: "P",
+    },
+  ],
+  [
+    75,
+    {
+      owner: "Q5.05's AttributeGrammar keyed by the governing type; Q5.03's `Node.governs`",
+      status: "P",
+    },
+  ],
+  [
+    76,
+    {
+      owner:
+        "AL1 (`xi:include` `parse` is `xml` and `xpointer` refused, attributes.ts); the oracle's Inclusion cycle over a package; Q5.13's `Instance` tree, item-level includes among it",
+      status: "P",
+    },
+  ],
+  [77, { owner: "Q5.13's `TestName`; the oracle's test name key", status: "P" }],
+  [78, { owner: "Q5.13's branch targets over `Instance`", status: "P" }],
+  [79, { owner: "Q5.13's `Reading` family, with `replaceable` from the instance", status: "P" }],
+  [80, { owner: "shred's `root-namespace` reason of `not-qti3`", status: "P" }],
+  [
+    81,
+    {
+      owner:
+        "AL1: the composition's `coveredBy` over the Schematron's extension rules (`src/vocab/inventory/extensions.ts`)",
+      status: "G",
+    },
+  ],
+  [82, { owner: "every reading's law, or its recorded limit", status: "meta" }],
+  [
+    83,
+    {
+      owner:
+        "AL1 (a position object's `min-choices` at least 1); Context variable reference (ContentReference); the oracle's Binding cardinality and Binding unique, Q5.09",
+      status: "P",
+    },
+  ],
 ]);
 
 /**
@@ -230,10 +324,52 @@ const readingOmissions: ReadonlyMap<string, number> = new Map([
 ]);
 
 /**
+ * The admissions a spec reading adds to a model: (parent, child) pairs the XSD does not admit and
+ * the grammar admits on purpose. Spec reading 2 follows the MathML 3 RelaxNG: its `ContExp` holds
+ * `semantics-contexp` (`mathml3-strict-content.rnc` line 14), the kind `m:semantics.contexp`, under
+ * every model that reads `ContExp`; and `annotation-xml`'s `MathExpression` holds `m:semantics`
+ * (`mathml3-common.rnc` line 59), which no XSD declares globally, so its lax wildcard never admits
+ * it.
+ */
+const readingAdmissions: ReadonlyMap<string, number> = new Map([
+  ...[
+    "m:apply",
+    "m:bind",
+    "m:lambda",
+    "m:set",
+    "m:list",
+    "m:vector",
+    "m:matrix",
+    "m:matrixrow",
+    "m:semantics.contexp",
+    "m:cerror",
+    "m:domainofapplication",
+    "m:condition",
+    "m:uplimit",
+    "m:lowlimit",
+    "m:degree",
+    "m:momentabout",
+    "m:logbase",
+    "m:piece",
+    "m:otherwise",
+    "m:reln",
+    "m:fn",
+    "m:declare",
+    "m:interval",
+  ].map((parent): readonly [string, number] => [`${parent} m:semantics.contexp`, 2]),
+  ["m:annotation-xml m:semantics", 2],
+]);
+
+/**
  * The attribute rules a spec reading departs from the XSD in, by `family parent subject`.
  */
 const readingDepartures: ReadonlyMap<string, number> = new Map([
   ["attribute:type qti-match-table-entry target-value", 8],
+  ["attribute:type xi:include parse", 76],
+  ...readingRefusals.map(({ kind, name, reading }): readonly [string, number] => [
+    `attribute:admission ${kind} ${name}`,
+    reading,
+  ]),
 ]);
 
 /**
@@ -542,13 +678,16 @@ const modelRules = (index: Index, model: ContentModel, version: SchemaVersion): 
   );
   const missing = [...new Set(kinds)].filter((kind) => !held.has(kind));
   const unread = missing.filter((kind) => !readingOmissions.has(`${parent} ${kind}`));
-  const extra = elementChildren.filter((kind) => !explained(kind));
+  const added = elementChildren.filter(
+    (kind) => !explained(kind) && readingAdmissions.has(`${parent} ${kind}`),
+  );
+  const extra = elementChildren.filter((kind) => !explained(kind) && !added.includes(kind));
   const admission = ((): Status => {
     if (unread.length > 0 || extra.length > 0) {
       return "X";
     }
 
-    return missing.length > 0 ? "reading" : "G";
+    return missing.length > 0 || added.length > 0 ? "reading" : "G";
   })();
   const wantsText = model.content._tag === "mixed" || model.content._tag === "simple";
   const base = { parent, subject: parent, version };
@@ -557,7 +696,7 @@ const modelRules = (index: Index, model: ContentModel, version: SchemaVersion): 
   return [
     {
       ...base,
-      detail: `refused [${unread.join(" ")}]; by reading [${missing.filter((kind) => !unread.includes(kind)).join(" ")}]; unexplained [${extra.join(" ")}]`,
+      detail: `refused [${unread.join(" ")}]; by reading [${missing.filter((kind) => !unread.includes(kind)).join(" ")}]; added by reading [${added.join(" ")}]; unexplained [${extra.join(" ")}]`,
       family: "content:admission",
       owner: "Admission",
       status: admission,
@@ -733,12 +872,16 @@ const attributeRules = (
 ): readonly Rule[] => {
   const held = index.admitted.get(`${version} ${row.kind} ${row.name}`);
   const base = { parent: row.kind, subject: row.name, version };
+  const refused = readingDepartures.get(`attribute:admission ${row.kind} ${row.name}`);
   const admission: Rule = {
     ...base,
-    detail: held === undefined ? "not admitted" : `domain ${held.domain}`,
+    detail:
+      held === undefined
+        ? `not admitted${refused === undefined ? "" : `; reading ${String(refused)}`}`
+        : `domain ${held.domain}`,
     family: "attribute:admission",
     owner: "AttributeAdmission",
-    status: held === undefined ? "X" : "G",
+    status: typeStatus(held !== undefined, refused),
   };
   if (held === undefined) {
     return [admission];
@@ -769,20 +912,44 @@ const attributeRules = (
 };
 
 /**
+ * The spelling a spec reading admits an attribute under beside a declared one, with its reading:
+ * reading 10's `aria-keyshortcuts` beside `aria-keyshorts`.
+ *
+ * @param declared - The declared `version kind name` keys.
+ * @param row - An admitted attribute.
+ * @param row.kind - Its kind.
+ * @param row.name - Its name.
+ * @param row.version - Its version.
+ * @returns The reading that admits it beside a name its kind declares, if one does.
+ */
+const spelledBy = (
+  declared: ReadonlySet<string>,
+  row: { readonly kind: string; readonly name: string; readonly version: string },
+): number | undefined =>
+  readingSpellings.find(
+    (spelling) =>
+      spelling.name === row.name && declared.has(`${row.version} ${row.kind} ${spelling.declared}`),
+  )?.reading;
+
+/**
  * The attributes the grammar admits that no declaration states and no wildcard of the kind admits,
- * the document layer's names aside.
+ * the document layer's names aside: contradicted, or by a reading where a reading's second
+ * spelling of a declared name explains it. On a kind the Schematron's extension rules cover, a
+ * wildcard explains no name but the layer's `data-*` (spec reading 81).
  *
  * @param grammar - The grammar.
  * @param index - Its index.
  * @param declared - The declared `version kind name` keys.
- * @returns One contradicted rule per such attribute.
+ * @returns One rule per such attribute.
  */
 const undeclaredRules = (
   grammar: ComposedGrammar,
   index: Index,
   declared: ReadonlySet<string>,
-): readonly Rule[] =>
-  grammar.attributes.admission.rows.flatMap((row): readonly Rule[] => {
+): readonly Rule[] => {
+  const covered = coveredBy(grammar.kinds);
+
+  return grammar.attributes.admission.rows.flatMap((row): readonly Rule[] => {
     const { version } = row;
     if (!grammar.kinds.versions.has(version)) {
       return [];
@@ -794,6 +961,7 @@ const undeclaredRules = (
     const namespace = row.name.startsWith("xlink:") ? "http://www.w3.org/1999/xlink" : "";
     const viaWildcard =
       wildcard !== undefined &&
+      !covered(version, row.kind) &&
       admits(wildcard.namespace, namespace, index.namespaces.get(row.kind) ?? "");
     if (
       declared.has(`${row.version} ${row.kind} ${row.name}`) ||
@@ -803,18 +971,21 @@ const undeclaredRules = (
       return [];
     }
 
+    const reading = spelledBy(declared, row);
+
     return [
       {
-        detail: `domain ${row.domain}`,
+        detail: `domain ${row.domain}${reading === undefined ? "" : `; reading ${String(reading)}`}`,
         family: "attribute:undeclared",
         owner: "AttributeAdmission",
         parent: row.kind,
-        status: "X",
+        status: reading === undefined ? "X" : "reading",
         subject: row.name,
         version,
       },
     ];
   });
+};
 
 /**
  * The namespace of XML's own attributes, which `xml.xsd` declares globally.
@@ -830,24 +1001,44 @@ const xmlGlobals = ["xml:base", "xml:id", "xml:lang", "xml:space"] as const;
 /**
  * The census of the attribute wildcards that admit the XML namespace: each admits `xml.xsd`'s four
  * global attributes on its kind (validated against their declarations under `lax` and `strict`,
- * unvalidated under `skip`), so `AttributeAdmission` must hold each.
+ * unvalidated under `skip`), so `AttributeAdmission` must hold each; but on a kind the
+ * Schematron's extension rules cover, spec reading 81 admits only those the kind declares, so a
+ * name it does not declare is held by the reading when the grammar refuses it.
  *
- * @param index - The grammar's index.
+ * @param grammar - The grammar.
+ * @param index - Its index.
+ * @param declared - The declared `version kind name` keys.
  * @returns One rule per (version, kind, name).
  */
-const wildcardXmlRules = (index: Index): readonly Rule[] =>
-  attributeWildcards.flatMap((wildcard) =>
+const wildcardXmlRules = (
+  grammar: ComposedGrammar,
+  index: Index,
+  declared: ReadonlySet<string>,
+): readonly Rule[] => {
+  const covered = coveredBy(grammar.kinds);
+
+  return attributeWildcards.flatMap((wildcard) =>
     admits(wildcard.namespace, xmlNamespace, index.namespaces.get(wildcard.kind) ?? "")
       ? wildcard.versions.flatMap((version) =>
           xmlGlobals.map((name): Rule => {
             const held = index.admitted.has(`${version} ${wildcard.kind} ${name}`);
+            const refused =
+              covered(version, wildcard.kind) &&
+              !declared.has(`${version} ${wildcard.kind} ${name}`);
+            const status = ((): Status => {
+              if (refused) {
+                return held ? "X" : "reading";
+              }
+
+              return held ? "G" : "X";
+            })();
 
             return {
-              detail: `${wildcard.namespace} ${wildcard.processing}; ${held ? "admitted" : "not admitted"}`,
+              detail: `${wildcard.namespace} ${wildcard.processing}; ${held ? "admitted" : "not admitted"}${refused ? "; reading 81" : ""}`,
               family: "attribute:wildcard",
               owner: "AttributeAdmission (the document layer's xml: names)",
               parent: wildcard.kind,
-              status: held ? "G" : "X",
+              status,
               subject: name,
               version,
             };
@@ -855,6 +1046,57 @@ const wildcardXmlRules = (index: Index): readonly Rule[] =>
         )
       : [],
   );
+};
+
+/**
+ * The census of spec reading 81 on each (version, kind) the Schematron's extension rules cover:
+ * every name `AttributeAdmission` holds there is one the kind declares, `data-*`, an `xsi:` name,
+ * or a reading's second spelling of a declared name (reading 10). Any other is a name the reading
+ * refuses that the grammar admits.
+ *
+ * @param grammar - The grammar.
+ * @param declared - The declared `version kind name` keys.
+ * @returns One rule per covered (version, kind).
+ */
+const extensionRules = (
+  grammar: ComposedGrammar,
+  declared: ReadonlySet<string>,
+): readonly Rule[] => {
+  const covered = coveredBy(grammar.kinds);
+  const byKind = Map.groupBy(
+    grammar.attributes.admission.rows.filter(({ kind, version }) => covered(version, kind)),
+    ({ kind, version }) => `${version} ${kind}`,
+  );
+
+  return [...byKind.values()].flatMap((rows): readonly Rule[] => {
+    const [first] = rows;
+    if (first === undefined || !grammar.kinds.versions.has(first.version)) {
+      return [];
+    }
+
+    const extra = rows
+      .filter(
+        (row) =>
+          !declared.has(`${row.version} ${row.kind} ${row.name}`) &&
+          row.name !== "data-*" &&
+          !row.name.startsWith("xsi:") &&
+          spelledBy(declared, row) === undefined,
+      )
+      .map(({ name }) => name);
+
+    return [
+      {
+        detail: `${String(rows.length)} names; beyond the reading [${extra.join(" ")}]`,
+        family: "attribute:extension",
+        owner: "AttributeAdmission (reading 81, compose.ts coveredBy)",
+        parent: first.kind,
+        status: extra.length === 0 ? "G" : "X",
+        subject: first.kind,
+        version: first.version,
+      },
+    ];
+  });
+};
 
 /**
  * The census of the spec readings: each reading's entry, reading 15's status read from the grammar
@@ -905,7 +1147,8 @@ export const census = (grammar: ComposedGrammar): readonly Rule[] => {
       row.versions.flatMap((version) => attributeRules(index, row, version)),
     ),
     ...undeclaredRules(grammar, index, declared),
-    ...wildcardXmlRules(index),
+    ...wildcardXmlRules(grammar, index, declared),
+    ...extensionRules(grammar, declared),
     ...textTypes.flatMap((row) =>
       row.versions.map((version): Rule => {
         const held = index.texts.has(`${version} ${row.kind}`);

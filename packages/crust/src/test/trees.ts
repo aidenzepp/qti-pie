@@ -1,73 +1,40 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The trees carry XML encoding labels (`UTF-8`) as documents spell them. */
-import { Array as Arr, Config, Effect, Option, Random } from "effect";
+/**
+ * The one generator of crust's trees and documents, on `@grizzle/testing`'s choice stream (doctrine
+ * rules 4, 7 and 10): every case is a tape of bounded choices, so one generator is searched at
+ * random, enumerated, replayed from `TEST_REPLAY` and shrunk by editing its tape.
+ *
+ * A generated tree is one crust's types admit by construction: each element's namespace and each
+ * prefixed attribute's namespace is the one its scope binds, as the reader resolves them. Adjacent
+ * text runs are not merged and an empty text run may occur, which the reader never produces but
+ * every writer must handle. Each case draws its own swarm over {@link treeFeatures}, and its own
+ * bounds within the suite's, so different cases explore different lopsided corners and a bound
+ * that bites only at scale is met small.
+ */
+import { Array as Arr, Duration, Option } from "effect";
+import { array, boolean, constant, element, int } from "@grizzle/testing/gen";
+import type { Gen } from "@grizzle/testing/gen";
+import { keep, swarm, swarmChoice } from "@grizzle/testing/swarm";
+import type { Swarm } from "@grizzle/testing/swarm";
 import type { Attribute, Child, Element, Misc, XmlDocument } from "#crust/tree.ts";
 
 /**
- * A seeded source of choices: the `Random` service a case runs under, read synchronously, so one
- * seed always builds the same value.
+ * How long one generated case may run before its search reports it hung: a case is one tree of at
+ * most a few hundred nodes, written and read a few times, which takes milliseconds.
  */
-export type Choices = Random.Random;
+export const caseHang = Duration.seconds(30);
 
 /**
- * Draw a whole number from zero up to, not including, `bound`.
- *
- * @param choices - The case's choices.
- * @param bound - One past the largest number drawn.
- * @returns The number drawn.
+ * The timeout, in milliseconds, for each test that searches generated cases or exhausts a box. The
+ * slowest, the writer's search over swarmed documents (400 rotating cases, a floor of 100 and no
+ * steered case), took 1,568 ms beside crust's other suites (2026-11-05, Node 26.13.0, load
+ * average 54). The reader's 400 swarmed trees before the search took 5,115 ms at load average 48,
+ * so a search of 500 such cases may take some 6.4 s there. The budget is twice that, rounded up to
+ * the next 1,000; a search that nears it reports what it found before its test fails, its
+ * deadline being the test's. Raise it only on a new measurement recorded here, never to make a run
+ * pass.
  */
-export const below = (choices: Choices, bound: number): number =>
-  Math.floor(choices.nextDoubleUnsafe() * bound);
-
-/**
- * Draw whether an event of `probability` happens.
- *
- * @param choices - The case's choices.
- * @param probability - The event's chance, from 0 (never) to 1 (always).
- * @returns Whether it happens.
- */
-const chance = (choices: Choices, probability: number): boolean =>
-  choices.nextDoubleUnsafe() < probability;
-
-/**
- * Draw one of `items`, each as likely as the others.
- *
- * @param choices - The case's choices.
- * @param items - What to draw from, at least one.
- * @returns The item drawn.
- */
-const pick = <A>(choices: Choices, items: Arr.NonEmptyReadonlyArray<A>): A =>
-  Arr.getUnsafe(items, below(choices, items.length));
-
-/**
- * Build a value from the choices `seed` gives, so a failing case replays from its seed.
- *
- * @param seed - The case's seed.
- * @param build - Builds the value from the choices.
- * @returns The value built.
- */
-export const seeded = <A>(seed: string, build: (choices: Choices) => A): Effect.Effect<A> =>
-  Effect.gen(function* buildSeeded() {
-    const choices = yield* Random.Random;
-
-    return build(choices);
-  }).pipe(Random.withSeed(seed));
-
-/**
- * The run's base seed: `CRUST_SEED` when it is set, so a reported failure replays, and a fresh one
- * otherwise, so each run searches its own corner of the space.
- */
-export const runSeed: string = Effect.runSync(
-  Config.String("CRUST_SEED").pipe(Config.withDefault(globalThis.crypto.randomUUID())),
-);
-
-/**
- * The timeout, in milliseconds, for each test that runs generated cases. The slowest, the reader's
- * 400 swarmed element trees, takes under 1 s alone, and took 5,115 ms with the scale tests running
- * beside it in the same suite run (2026-11-05, Node 26.13.0, load average 48), past vitest's
- * default of 5,000 ms. The budget is twice that, rounded up to the next 1,000. Raise it only on a
- * new measurement recorded here, never to make a run pass.
- */
-export const GENERATED_TIMEOUT_MS = 11_000;
+export const GENERATED_TIMEOUT_MS = 13_000;
 
 /**
  * The namespace name every namespace declaration's attribute is in.
@@ -89,9 +56,10 @@ const ROOT_SCOPE: Scope = new Map([
 ]);
 
 /**
- * The kinds of child a generated element holds, `cdata` being a text run written as CDATA.
+ * The kinds of child a generated element holds, `cdata` being a text run written as CDATA, the
+ * simplest first, which a swarm with every kind off falls back to.
  */
-const CHILD_KINDS = ["element", "text", "cdata", "comment", "pi", "entityRef"] as const;
+const CHILD_KINDS = ["text", "element", "cdata", "comment", "pi", "entityRef"] as const;
 
 /**
  * One kind of child.
@@ -99,64 +67,23 @@ const CHILD_KINDS = ["element", "text", "cdata", "comment", "pi", "entityRef"] a
 type ChildKind = (typeof CHILD_KINDS)[number];
 
 /**
- * One case's feature weights, drawn per case so that each case explores its own lopsided corner
- * (a swarm). A probability or a weight of 0 is drawn on purpose: it switches the feature off.
+ * The features a case's swarm weighs (doctrine rule 7): each kind of child, an attribute in each
+ * of an element's three slots, an element's own namespace declarations, an unexpanded entity
+ * reference in an attribute value, and a character or a name drawn from the wild pool, the one
+ * every escape, every encoder threshold and every unwritable construct turns on.
  */
-export interface Swarm {
-  /**
-   * The chance each of an element's three attribute slots is filled.
-   */
-  readonly attributes: number;
-  /**
-   * The chance an element declares namespaces.
-   */
-  readonly declarations: number;
-  /**
-   * The weight of each child kind. When every weight is 0 no element gets a child, so the tree is
-   * the bare root: a corner of its own, not a draw to repair.
-   */
-  readonly kinds: Readonly<Record<ChildKind, number>>;
-  /**
-   * The chance a piece of an attribute value is an unexpanded entity reference.
-   */
-  readonly references: number;
-  /**
-   * The chance a character or a name is drawn from the wild pool: the characters every escape,
-   * every encoder threshold and every unwritable construct turn on.
-   */
-  readonly wild: number;
-}
+export const treeFeatures = [
+  ...CHILD_KINDS,
+  "attribute",
+  "declaration",
+  "reference",
+  "wild",
+] as const;
 
 /**
- * The probabilities a swarm feature is drawn from.
+ * A feature of {@link treeFeatures}.
  */
-const PROBABILITIES = [0, 0.25, 0.5, 0.9] as const;
-
-/**
- * The weights a child kind is drawn from.
- */
-const WEIGHTS = [0, 1, 3] as const;
-
-/**
- * Draw one case's feature weights.
- *
- * @param choices - The case's choices.
- * @returns The case's swarm.
- */
-export const arbitrarySwarm = (choices: Choices): Swarm => ({
-  attributes: pick(choices, PROBABILITIES),
-  declarations: pick(choices, PROBABILITIES),
-  kinds: {
-    cdata: pick(choices, WEIGHTS),
-    comment: pick(choices, WEIGHTS),
-    element: pick(choices, WEIGHTS),
-    entityRef: pick(choices, WEIGHTS),
-    pi: pick(choices, WEIGHTS),
-    text: pick(choices, WEIGHTS),
-  },
-  references: pick(choices, PROBABILITIES),
-  wild: pick(choices, PROBABILITIES),
-});
+export type TreeFeature = (typeof treeFeatures)[number];
 
 /**
  * The limits of a generated tree. Each is the largest value a case may reach, not one it must.
@@ -210,93 +137,113 @@ const NAMES = ["a", "b", "c"] as const;
 const WILD_NAMES = ["é", "ā"] as const;
 
 /**
- * Draw a run of up to `most` pieces of text.
+ * Draw a case's bounds within a suite's, each from its least to the suite's, so a case meets a
+ * bound small as often as large (doctrine rule 10).
  *
- * @param choices - The case's choices.
- * @param swarm - The case's swarm.
- * @param most - The most pieces.
- * @returns The text.
+ * @param most - The suite's bounds.
+ * @returns The generator of the case's.
  */
-const arbitraryText = (choices: Choices, swarm: Swarm, most: number): string => {
-  let text = "";
-  for (let count = below(choices, most + 1); count > 0; count -= 1) {
-    text += chance(choices, swarm.wild) ? pick(choices, WILD) : pick(choices, PLAIN);
-  }
-
-  return text;
-};
+const boundsWithin =
+  (most: Bounds): Gen<Bounds> =>
+  (source) => ({
+    depth: source.draw(int(1, most.depth)),
+    nodes: source.draw(int(1, most.nodes)),
+    width: source.draw(int(0, most.width)),
+  });
 
 /**
- * Draw a name, wild with the swarm's chance.
+ * Draw a run of up to `most` pieces of text.
  *
- * @param choices - The case's choices.
- * @param swarm - The case's swarm.
- * @returns The name.
+ * @param drawn - The case's swarm.
+ * @param most - The most pieces.
+ * @returns The generator of the text.
  */
-const arbitraryName = (choices: Choices, swarm: Swarm): string =>
-  chance(choices, swarm.wild) ? pick(choices, WILD_NAMES) : pick(choices, NAMES);
+const textOf =
+  (drawn: Swarm<TreeFeature>, most: number): Gen<string> =>
+  (source) => {
+    let text = "";
+    for (let count = source.draw(int(0, most)); count > 0; count -= 1) {
+      text += source.draw(keep(drawn, "wild"))
+        ? source.draw(element(WILD))
+        : source.draw(element(PLAIN));
+    }
+
+    return text;
+  };
+
+/**
+ * Draw a name, wild where the swarm keeps it.
+ *
+ * @param drawn - The case's swarm.
+ * @returns The generator of the name.
+ */
+const nameOf =
+  (drawn: Swarm<TreeFeature>): Gen<string> =>
+  (source) =>
+    source.draw(keep(drawn, "wild"))
+      ? source.draw(element(WILD_NAMES))
+      : source.draw(element(NAMES));
 
 /**
  * Draw an attribute value and the offset of each unexpanded entity reference in it, built
  * together so each offset names the `&` of a reference.
  *
- * @param choices - The case's choices.
- * @param swarm - The case's swarm.
- * @returns The value and its references.
+ * @param drawn - The case's swarm.
+ * @returns The generator of the value and its references.
  */
-const arbitraryValue = (
-  choices: Choices,
-  swarm: Swarm,
-): Pick<Attribute, "references" | "value"> => {
-  const references: { name: string; offset: number }[] = [];
-  let value = "";
-  for (let count = below(choices, 4); count > 0; count -= 1) {
-    if (chance(choices, swarm.references)) {
-      const name = arbitraryName(choices, swarm);
-      references.push({ name, offset: value.length });
-      value += `&${name};`;
-    } else {
-      value += arbitraryText(choices, swarm, 2);
+const valueOf =
+  (drawn: Swarm<TreeFeature>): Gen<Pick<Attribute, "references" | "value">> =>
+  (source) => {
+    const references: { name: string; offset: number }[] = [];
+    let value = "";
+    for (let count = source.draw(int(0, 3)); count > 0; count -= 1) {
+      if (source.draw(keep(drawn, "reference"))) {
+        const name = source.draw(nameOf(drawn));
+        references.push({ name, offset: value.length });
+        value += `&${name};`;
+      } else {
+        value += source.draw(textOf(drawn, 2));
+      }
     }
-  }
 
-  return { references, value };
-};
+    return { references, value };
+  };
 
 /**
- * Draw an element's own namespace declarations: each of the default and the prefixes `p` and `q`
- * may be declared, the default possibly to no namespace.
+ * Draw an element's own namespace declarations: where the swarm keeps them, each of the default
+ * and the prefixes `p` and `q` may be declared, the default possibly to no namespace.
  *
- * @param choices - The case's choices.
- * @param swarm - The case's swarm.
- * @returns The declarations, as the attributes the reader gives them.
+ * @param drawn - The case's swarm.
+ * @returns The generator of the declarations, as the attributes the reader gives them.
  */
-const arbitraryDeclarations = (choices: Choices, swarm: Swarm): readonly Attribute[] => {
-  if (!chance(choices, swarm.declarations)) {
-    return [];
-  }
-
-  return ["", "p", "q"].flatMap((prefix): readonly Attribute[] => {
-    if (!chance(choices, 0.5)) {
+const declarationsOf =
+  (drawn: Swarm<TreeFeature>): Gen<readonly Attribute[]> =>
+  (source) => {
+    if (!source.draw(keep(drawn, "declaration"))) {
       return [];
     }
 
-    const value = pick(choices, ["urn:a", "urn:b", prefix === "" ? "" : "urn:c"]);
+    return ["", "p", "q"].flatMap((prefix): readonly Attribute[] => {
+      if (!source.draw(boolean)) {
+        return [];
+      }
 
-    return [
-      prefix === ""
-        ? { local: "xmlns", namespace: XMLNS, prefix: "", qname: "xmlns", references: [], value }
-        : {
-            local: prefix,
-            namespace: XMLNS,
-            prefix: "xmlns",
-            qname: `xmlns:${prefix}`,
-            references: [],
-            value,
-          },
-    ];
-  });
-};
+      const value = source.draw(element(["urn:a", "urn:b", prefix === "" ? "" : "urn:c"]));
+
+      return [
+        prefix === ""
+          ? { local: "xmlns", namespace: XMLNS, prefix: "", qname: "xmlns", references: [], value }
+          : {
+              local: prefix,
+              namespace: XMLNS,
+              prefix: "xmlns",
+              qname: `xmlns:${prefix}`,
+              references: [],
+              value,
+            },
+      ];
+    });
+  };
 
 /**
  * The scope `declarations` make on top of `parent`.
@@ -315,14 +262,13 @@ const scopeOf = (parent: Scope, declarations: readonly Attribute[]): Scope =>
   ]);
 
 /**
- * A prefix bound in `scope` to a namespace, or the empty prefix.
+ * Draw a prefix bound in `scope` to a namespace, or the empty prefix.
  *
- * @param choices - The case's choices.
  * @param scope - The bindings in scope.
- * @returns The prefix drawn.
+ * @returns The generator of the prefix.
  */
-const arbitraryPrefix = (choices: Choices, scope: Scope): string =>
-  pick(choices, [
+const prefixIn = (scope: Scope): Gen<string> =>
+  element([
     "",
     ...[...scope].flatMap(([prefix, name]) => (prefix === "" || name === "" ? [] : [prefix])),
   ]);
@@ -338,113 +284,88 @@ interface Drawn {
 /**
  * Draw an element under `parent`'s scope whose children list is `children`, which the caller fills.
  *
- * @param choices - The case's choices.
- * @param swarm - The case's swarm.
+ * @param drawn - The case's swarm.
  * @param parent - The scope of the element's parent.
  * @param children - The element's children list.
- * @returns The element, and the scope it makes for its children.
+ * @returns The generator of the element, and the scope it makes for its children.
  */
-const arbitraryElement = (
-  choices: Choices,
-  swarm: Swarm,
-  parent: Scope,
-  children: Child[],
-): Drawn => {
-  const declarations = arbitraryDeclarations(choices, swarm);
-  const scope = scopeOf(parent, declarations);
-  const prefix = arbitraryPrefix(choices, scope);
-  const local = arbitraryName(choices, swarm);
-  const attributes = [0, 1, 2].flatMap((slot): readonly Attribute[] => {
-    if (!chance(choices, swarm.attributes)) {
-      return [];
-    }
+const elementOf =
+  (drawn: Swarm<TreeFeature>, parent: Scope, children: Child[]): Gen<Drawn> =>
+  (source) => {
+    const declarations = source.draw(declarationsOf(drawn));
+    const scope = scopeOf(parent, declarations);
+    const prefix = source.draw(prefixIn(scope));
+    const local = source.draw(nameOf(drawn));
+    const attributes = [0, 1, 2].flatMap((slot): readonly Attribute[] => {
+      if (!source.draw(keep(drawn, "attribute"))) {
+        return [];
+      }
 
-    const attributePrefix = arbitraryPrefix(choices, scope);
-    const attributeLocal = `${arbitraryName(choices, swarm)}${slot}`;
+      const attributePrefix = source.draw(prefixIn(scope));
+      const attributeLocal = `${source.draw(nameOf(drawn))}${slot}`;
 
-    return [
-      {
-        ...arbitraryValue(choices, swarm),
-        local: attributeLocal,
-        namespace: attributePrefix === "" ? "" : (scope.get(attributePrefix) ?? ""),
-        prefix: attributePrefix,
-        qname: attributePrefix === "" ? attributeLocal : `${attributePrefix}:${attributeLocal}`,
+      return [
+        {
+          ...source.draw(valueOf(drawn)),
+          local: attributeLocal,
+          namespace: attributePrefix === "" ? "" : (scope.get(attributePrefix) ?? ""),
+          prefix: attributePrefix,
+          qname: attributePrefix === "" ? attributeLocal : `${attributePrefix}:${attributeLocal}`,
+        },
+      ];
+    });
+
+    return {
+      element: {
+        attributes: source.draw(boolean)
+          ? [...declarations, ...attributes]
+          : [...attributes, ...declarations],
+        children,
+        kind: "element",
+        local,
+        namespace: scope.get(prefix) ?? "",
+        prefix,
+        qname: prefix === "" ? local : `${prefix}:${local}`,
       },
-    ];
-  });
-
-  return {
-    element: {
-      attributes: chance(choices, 0.5)
-        ? [...declarations, ...attributes]
-        : [...attributes, ...declarations],
-      children,
-      kind: "element",
-      local,
-      namespace: scope.get(prefix) ?? "",
-      prefix,
-      qname: prefix === "" ? local : `${prefix}:${local}`,
-    },
-    scope,
+      scope,
+    };
   };
-};
 
 /**
  * Draw a child of a kind that holds no other node.
  *
- * @param choices - The case's choices.
- * @param swarm - The case's swarm.
+ * @param drawn - The case's swarm.
  * @param kind - The kind to draw.
- * @returns The child.
+ * @returns The generator of the child.
  */
-const arbitraryLeaf = (
-  choices: Choices,
-  swarm: Swarm,
-  kind: Exclude<ChildKind, "element">,
-): Child => {
-  switch (kind) {
-    case "text": {
-      return { cdata: false, kind: "text", value: arbitraryText(choices, swarm, 4) };
+const leafOf =
+  (drawn: Swarm<TreeFeature>, kind: Exclude<ChildKind, "element">): Gen<Child> =>
+  (source) => {
+    switch (kind) {
+      case "text": {
+        return { cdata: false, kind: "text", value: source.draw(textOf(drawn, 4)) };
+      }
+      case "cdata": {
+        return { cdata: true, kind: "text", value: source.draw(textOf(drawn, 4)) };
+      }
+      case "comment": {
+        return { kind: "comment", text: source.draw(textOf(drawn, 3)) };
+      }
+      case "pi": {
+        return {
+          data: source.draw(textOf(drawn, 3)),
+          kind: "pi",
+          target: source.draw(nameOf(drawn)),
+        };
+      }
+      case "entityRef": {
+        return { kind: "entityRef", name: source.draw(nameOf(drawn)) };
+      }
+      default: {
+        return kind satisfies never;
+      }
     }
-    case "cdata": {
-      return { cdata: true, kind: "text", value: arbitraryText(choices, swarm, 4) };
-    }
-    case "comment": {
-      return { kind: "comment", text: arbitraryText(choices, swarm, 3) };
-    }
-    case "pi": {
-      return {
-        data: arbitraryText(choices, swarm, 3),
-        kind: "pi",
-        target: arbitraryName(choices, swarm),
-      };
-    }
-    case "entityRef": {
-      return { kind: "entityRef", name: arbitraryName(choices, swarm) };
-    }
-    default: {
-      return kind satisfies never;
-    }
-  }
-};
-
-/**
- * Draw a child kind by the swarm's weights.
- *
- * @param choices - The case's choices.
- * @param swarm - The case's swarm.
- * @returns The kind, or `None` when every weight is 0.
- */
-const arbitraryKind = (choices: Choices, swarm: Swarm): Option.Option<ChildKind> => {
-  const total = CHILD_KINDS.reduce((sum, kind) => sum + swarm.kinds[kind], 0);
-  let point = choices.nextDoubleUnsafe() * total;
-
-  return Arr.findFirst(CHILD_KINDS, (kind) => {
-    point -= swarm.kinds[kind];
-
-    return swarm.kinds[kind] > 0 && point < 0;
-  });
-};
+  };
 
 /**
  * One element whose children are still to draw: its children list, its depth and its scope.
@@ -458,95 +379,276 @@ interface Open {
 /**
  * Draw a root element and its tree within `bounds`, by construction a tree crust's types admit.
  *
- * Each element's namespace and each prefixed attribute's namespace is the one its scope binds, as
- * the reader resolves them. Adjacent text runs are not merged and an empty text run may occur,
- * which the reader never produces but every writer must handle.
- *
- * @param choices - The case's choices.
- * @param swarm - The case's swarm.
+ * @param drawn - The case's swarm.
  * @param bounds - The tree's limits.
- * @returns The root element.
+ * @param kinds - The child kinds a suite admits, among which the swarm chooses; the first stands
+ *   in where the swarm turns every one off.
+ * @returns The generator of the root element.
  */
-export const arbitraryTree = (choices: Choices, swarm: Swarm, bounds: Bounds): Element => {
-  const children: Child[] = [];
-  const { element: root, scope } = arbitraryElement(choices, swarm, ROOT_SCOPE, children);
-  let budget = bounds.nodes - 1;
-  const open: Open[] = [{ depth: 1, into: children, scope }];
-  for (let next = open.pop(); next !== undefined; next = open.pop()) {
-    const width = next.depth < bounds.depth ? below(choices, bounds.width + 1) : 0;
-    for (let count = 0; count < width && budget > 0; count += 1) {
-      const kind = arbitraryKind(choices, swarm);
-      if (Option.isNone(kind)) {
-        break;
-      }
-
-      budget -= 1;
-      if (kind.value === "element") {
-        const inner: Child[] = [];
-        const made = arbitraryElement(choices, swarm, next.scope, inner);
-        next.into.push(made.element);
-        open.push({ depth: next.depth + 1, into: inner, scope: made.scope });
-      } else {
-        next.into.push(arbitraryLeaf(choices, swarm, kind.value));
+const rootOf =
+  (
+    drawn: Swarm<TreeFeature>,
+    bounds: Bounds,
+    kinds: Arr.NonEmptyReadonlyArray<ChildKind>,
+  ): Gen<Element> =>
+  (source) => {
+    const children: Child[] = [];
+    const { element: root, scope } = source.draw(elementOf(drawn, ROOT_SCOPE, children));
+    let budget = bounds.nodes - 1;
+    const open: Open[] = [{ depth: 1, into: children, scope }];
+    for (let next = open.pop(); next !== undefined; next = open.pop()) {
+      const width = next.depth < bounds.depth ? source.draw(int(0, bounds.width)) : 0;
+      for (let count = 0; count < width && budget > 0; count += 1) {
+        const kind = source.draw(swarmChoice(drawn, kinds));
+        budget -= 1;
+        if (kind === "element") {
+          const inner: Child[] = [];
+          const made = source.draw(elementOf(drawn, next.scope, inner));
+          next.into.push(made.element);
+          open.push({ depth: next.depth + 1, into: inner, scope: made.scope });
+        } else {
+          next.into.push(source.draw(leafOf(drawn, kind)));
+        }
       }
     }
-  }
 
-  return root;
-};
+    return root;
+  };
+
+/**
+ * A generated tree: the root element, and the bounds and swarm it was drawn under.
+ */
+export interface GeneratedTree {
+  readonly bounds: Bounds;
+  readonly root: Element;
+  readonly swarm: Swarm<TreeFeature>;
+}
+
+/**
+ * Draw a tree: a swarm over a suite's features, bounds within the suite's, and a root within them.
+ *
+ * @param most - The suite's bounds.
+ * @param features - The features the suite admits, every one by default; a suite that leaves out
+ *   a child kind or `reference` draws no such node.
+ * @returns The generator of the case.
+ */
+export const generatedTree =
+  (
+    most: Bounds,
+    features: Arr.NonEmptyReadonlyArray<TreeFeature> = treeFeatures,
+  ): Gen<GeneratedTree> =>
+  (source) => {
+    const drawn = source.draw(swarm(features));
+    const bounds = source.draw(boundsWithin(most));
+    const kinds = CHILD_KINDS.filter((kind) => features.includes(kind));
+
+    return {
+      bounds,
+      root: source.draw(
+        rootOf(drawn, bounds, Arr.isReadonlyArrayNonEmpty(kinds) ? kinds : ["text"]),
+      ),
+      swarm: drawn,
+    };
+  };
 
 /**
  * Draw a comment or a processing instruction for the prolog or the epilog.
  *
- * @param choices - The case's choices.
- * @param swarm - The case's swarm.
- * @returns The item.
+ * @param drawn - The case's swarm.
+ * @returns The generator of the item.
  */
-const arbitraryMisc = (choices: Choices, swarm: Swarm): Misc =>
-  chance(choices, 0.5)
-    ? { kind: "comment", text: arbitraryText(choices, swarm, 3) }
-    : { data: arbitraryText(choices, swarm, 3), kind: "pi", target: arbitraryName(choices, swarm) };
+const miscOf =
+  (drawn: Swarm<TreeFeature>): Gen<Misc> =>
+  (source) =>
+    source.draw(boolean)
+      ? { kind: "comment", text: source.draw(textOf(drawn, 3)) }
+      : { data: source.draw(textOf(drawn, 3)), kind: "pi", target: source.draw(nameOf(drawn)) };
 
 /**
- * Draw up to two prolog or epilog items.
+ * Draw an option of a value, none first, so a case shrinks toward leaving it out.
  *
- * @param choices - The case's choices.
- * @param swarm - The case's swarm.
- * @returns The items.
+ * @param generator - The value's generator.
+ * @returns The generator of the option.
  */
-const arbitraryMiscs = (choices: Choices, swarm: Swarm): readonly Misc[] =>
-  Array.from({ length: below(choices, 3) }, () => arbitraryMisc(choices, swarm));
+const maybe =
+  <A>(generator: Gen<A>): Gen<Option.Option<A>> =>
+  (source) =>
+    source.draw(boolean) ? Option.some(source.draw(generator)) : Option.none();
+
+/**
+ * A generated document: the document, and the bounds and swarm its tree was drawn under.
+ */
+export interface GeneratedDocument {
+  readonly bounds: Bounds;
+  readonly document: XmlDocument;
+  readonly swarm: Swarm<TreeFeature>;
+}
 
 /**
  * Draw a whole document: an optional declaration and doctype, the prolog, the tree and the epilog.
  *
- * @param choices - The case's choices.
- * @param swarm - The case's swarm.
- * @param bounds - The tree's limits.
- * @returns The document.
+ * @param most - The suite's bounds.
+ * @returns The generator of the case.
  */
-export const arbitraryDocument = (choices: Choices, swarm: Swarm, bounds: Bounds): XmlDocument => ({
-  charset: "UTF-8",
-  declaration: chance(choices, 0.5)
-    ? Option.some({
-        encoding: chance(choices, 0.5)
-          ? Option.some(pick(choices, ["UTF-8", "US-ASCII"]))
-          : Option.none(),
-        standalone: chance(choices, 0.5)
-          ? Option.some(pick(choices, ["yes", "no"]))
-          : Option.none(),
-        version: "1.0",
-      })
-    : Option.none(),
-  doctype: chance(choices, 0.5)
-    ? Option.some(
-        `<!DOCTYPE ${arbitraryName(choices, swarm)} SYSTEM "${arbitraryText(choices, swarm, 2)}">`,
-      )
-    : Option.none(),
-  epilog: arbitraryMiscs(choices, swarm),
-  prolog: arbitraryMiscs(choices, swarm),
-  root: arbitraryTree(choices, swarm, bounds),
-});
+export const generatedDocument =
+  (most: Bounds): Gen<GeneratedDocument> =>
+  (source) => {
+    const tree = source.draw(generatedTree(most));
+    const drawn = tree.swarm;
+
+    return {
+      bounds: tree.bounds,
+      document: {
+        charset: "UTF-8",
+        declaration: source.draw(
+          maybe((inner) => ({
+            encoding: inner.draw(maybe(element(["UTF-8", "US-ASCII"]))),
+            standalone: inner.draw(maybe(element(["yes", "no"]))),
+            version: "1.0",
+          })),
+        ),
+        doctype: source.draw(
+          maybe(
+            (inner) =>
+              `<!DOCTYPE ${inner.draw(nameOf(drawn))} SYSTEM "${inner.draw(textOf(drawn, 2))}">`,
+          ),
+        ),
+        epilog: source.draw(array(miscOf(drawn), { max: 2, min: 0 })),
+        prolog: source.draw(array(miscOf(drawn), { max: 2, min: 0 })),
+        root: tree.root,
+      },
+      swarm: drawn,
+    };
+  };
+
+/**
+ * The situations a generated tree reached, read off the value, never the swarm it was drawn under
+ * (doctrine rule 8): each kind of child it holds, an attribute, a namespace declaration, an
+ * unexpanded entity reference in a value, a wild character, a bare root, and a tree three or more
+ * elements deep.
+ */
+export const treeSituations = [
+  ...CHILD_KINDS,
+  "attribute",
+  "bare root",
+  "declaration",
+  "deep",
+  "reference",
+  "wild",
+] as const;
+
+/**
+ * A situation of {@link treeSituations}.
+ */
+export type TreeSituation = (typeof treeSituations)[number];
+
+/**
+ * The situations a generated document reached: its tree's, and its XML declaration, doctype,
+ * prolog and epilog.
+ */
+export const documentSituations = [
+  ...treeSituations,
+  "doctype",
+  "epilog",
+  "prolog",
+  "xml declaration",
+] as const;
+
+/**
+ * A situation of {@link documentSituations}.
+ */
+export type DocumentSituation = (typeof documentSituations)[number];
+
+/**
+ * Whether a text holds a character of the wild pool.
+ *
+ * @param text - The text.
+ * @returns Whether a wild character occurs in it.
+ */
+const isWild = (text: string): boolean => WILD.some((wild) => text.includes(wild));
+
+/**
+ * Read the situations a tree reached.
+ *
+ * @param root - The root element.
+ * @returns The situations, each once.
+ */
+export const situationsOf = (root: Element): ReadonlySet<TreeSituation> => {
+  const reached = new Set<TreeSituation>(root.children.length === 0 ? ["bare root"] : []);
+  const stack: (readonly [Element, number])[] = [[root, 1]];
+  for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
+    const [held, depth] = next;
+    if (depth >= 3) {
+      reached.add("deep");
+    }
+
+    if ([held.local, ...held.attributes.map(({ local }) => local)].some(isWild)) {
+      reached.add("wild");
+    }
+
+    for (const attribute of held.attributes) {
+      reached.add(attribute.namespace === XMLNS ? "declaration" : "attribute");
+      if (attribute.references.length > 0) {
+        reached.add("reference");
+      }
+
+      if (isWild(attribute.value)) {
+        reached.add("wild");
+      }
+    }
+
+    for (const child of held.children) {
+      switch (child.kind) {
+        case "element": {
+          reached.add("element");
+          stack.push([child, depth + 1]);
+          break;
+        }
+        case "text": {
+          reached.add(child.cdata ? "cdata" : "text");
+          if (isWild(child.value)) {
+            reached.add("wild");
+          }
+
+          break;
+        }
+        case "comment": {
+          reached.add("comment");
+          break;
+        }
+        case "pi": {
+          reached.add("pi");
+          break;
+        }
+        case "entityRef": {
+          reached.add("entityRef");
+          break;
+        }
+        default: {
+          return child satisfies never;
+        }
+      }
+    }
+  }
+
+  return reached;
+};
+
+/**
+ * Read the situations a document reached: its tree's, and its declaration, doctype, prolog and
+ * epilog.
+ *
+ * @param document - The document.
+ * @returns The situations, each once.
+ */
+export const documentSituationsOf = (document: XmlDocument): ReadonlySet<DocumentSituation> =>
+  new Set<DocumentSituation>([
+    ...situationsOf(document.root),
+    ...(Option.isSome(document.declaration) ? (["xml declaration"] as const) : []),
+    ...(Option.isSome(document.doctype) ? (["doctype"] as const) : []),
+    ...(document.prolog.length > 0 ? (["prolog"] as const) : []),
+    ...(document.epilog.length > 0 ? (["epilog"] as const) : []),
+  ]);
 
 /**
  * An ordered tree with no content, a plane tree: a node and its children, in order.
@@ -556,27 +658,60 @@ export interface PlaneTree {
 }
 
 /**
- * Every ordered sequence of trees with `nodes` nodes in all.
+ * Draw an ordered sequence of trees with `nodes` nodes in all: the first tree's size, the tree,
+ * then the rest, so every sequence is one tape and enumeration yields each once.
  *
  * @param nodes - The node count.
- * @returns The forests.
+ * @returns The generator of the forest.
  */
-const forests = (nodes: number): readonly (readonly PlaneTree[])[] =>
-  nodes === 0
-    ? [[]]
-    : Array.from({ length: nodes }, (_, at) => at + 1).flatMap((first) =>
-        // oxlint-disable-next-line typescript/no-use-before-define -- Forests and trees are defined by each other.
-        planeTrees(first).flatMap((tree) => forests(nodes - first).map((rest) => [tree, ...rest])),
-      );
+const forestOf =
+  (nodes: number): Gen<readonly PlaneTree[]> =>
+  (source) => {
+    if (nodes === 0) {
+      return [];
+    }
+
+    const first = source.draw(int(1, nodes));
+    // oxlint-disable-next-line typescript/no-use-before-define -- Forests and trees are defined by each other.
+    const tree = source.draw(planeTreeOf(first));
+
+    return [tree, ...source.draw(forestOf(nodes - first))];
+  };
 
 /**
- * Every plane tree with exactly `nodes` nodes: the Catalan number C(nodes - 1) of them.
+ * Draw a plane tree of exactly `nodes` nodes: its root and a forest of the rest. Enumerated, it
+ * yields every one of the Catalan number C(nodes - 1) of them, each once.
  *
  * @param nodes - The node count, at least 1.
- * @returns The plane trees.
+ * @returns The generator of the tree.
  */
-export const planeTrees = (nodes: number): readonly PlaneTree[] =>
-  forests(nodes - 1).map((children) => ({ children }));
+export const planeTreeOf =
+  (nodes: number): Gen<PlaneTree> =>
+  (source) => ({ children: source.draw(forestOf(nodes - 1)) });
+
+/**
+ * Draw a plane tree of 1 to `most` nodes: its size, then a tree of that size. Enumerated, it
+ * yields every plane tree of that many nodes or fewer, each once, smallest first.
+ *
+ * @param most - The most nodes.
+ * @returns The generator of the size and the tree.
+ */
+export const planeTreeUpTo = (
+  most: number,
+): Gen<{ readonly nodes: number; readonly tree: PlaneTree }> => {
+  const sizes = Arr.makeBy(most, (at) => at + 1);
+
+  return (source) => {
+    const nodes = source.draw(Arr.isReadonlyArrayNonEmpty(sizes) ? element(sizes) : constant(1));
+
+    return { nodes, tree: source.draw(planeTreeOf(nodes)) };
+  };
+};
+
+/**
+ * The plane trees of 1 to 7 nodes, the Catalan numbers' sum: 1 + 1 + 2 + 5 + 14 + 42 + 132.
+ */
+export const PLANE_TREES_TO_7 = 197;
 
 /**
  * Give a leaf numbered `at` content of `kind`, with `wild` in it.
@@ -610,6 +745,12 @@ const labelledLeaf = (kind: Exclude<ChildKind, "element">, at: number, wild: str
 };
 
 /**
+ * The child kinds a labelled leaf takes in turn by its number, in the order they were labelled
+ * before the swarm's fallback order put `text` first.
+ */
+const LABEL_KINDS = ["element", "text", "cdata", "comment", "pi", "entityRef"] as const;
+
+/**
  * Give `tree` content that makes every node distinct and every walk's choices visible, numbering
  * the nodes in document order.
  *
@@ -625,7 +766,7 @@ const labelledLeaf = (kind: Exclude<ChildKind, "element">, at: number, wild: str
 export const labelled = (tree: PlaneTree): Element => {
   // The root is node 0, so the first child is node 1.
   let number = 1;
-  const element = (node: PlaneTree, at: number, parent: Scope): Element => {
+  const labelledElement = (node: PlaneTree, at: number, parent: Scope): Element => {
     const declarations: Attribute[] = [];
     if (at % 3 === 1) {
       declarations.push({
@@ -678,12 +819,12 @@ export const labelled = (tree: PlaneTree): Element => {
     const at = number;
     number += 1;
     const kind =
-      node.children.length > 0 ? "element" : Arr.getUnsafe(CHILD_KINDS, at % CHILD_KINDS.length);
+      node.children.length > 0 ? "element" : Arr.getUnsafe(LABEL_KINDS, at % LABEL_KINDS.length);
 
     return kind === "element"
-      ? element(node, at, parent)
+      ? labelledElement(node, at, parent)
       : labelledLeaf(kind, at, at % 2 === 0 ? "é" : "ā");
   };
 
-  return element(tree, 0, ROOT_SCOPE);
+  return labelledElement(tree, 0, ROOT_SCOPE);
 };

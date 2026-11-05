@@ -7,7 +7,9 @@
  *   exactly those, with the XSD's use, beside the document layer's names.
  * - **The spec readings' text.** Each reading of `docs/spec-readings.md` that narrows a value is
  *   checked on every attribute it names, and the XSD's own reading of the same type is checked
- *   everywhere else.
+ *   everywhere else; readings 10 and 76, which add and take away an attribute, are restated beside
+ *   the XSD reading, and reading 81 beside the document layer's `xml:` names, its covered elements
+ *   from the Schematron's leaf, which its own test reads against the XSDs' raw text.
  * - **The XSD's values, for the departures of the old grammar.** Each value the XSD admits and the
  *   old grammar refused is admitted, read from the leaf's own resolution of the XSD.
  * - **Structural laws:** positions a bijection onto 0..n−1 in `AttributeName` order; `TextDomain` a
@@ -25,6 +27,7 @@ import { composed } from "#pantry/grammar/compose.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
+import { noType } from "#pantry/grammar/xsi.ts";
 import { loadXsd, XsdOracleLayer, xsdContents } from "#pantry/test/gen/grammar.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
@@ -35,6 +38,7 @@ import {
   globalAttributes,
   textTypes,
 } from "#pantry/vocab/inventory/attributes.ts";
+import { coveredElements } from "#pantry/vocab/inventory/extensions.ts";
 import type { Domain } from "#pantry/vocab/inventory/types.ts";
 import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
 
@@ -58,11 +62,22 @@ const rosters = {
 } as const;
 
 /**
+ * The inputs of a grammar no `xsi:type` governs: no governor, and a `TypeName` roster of the null
+ * type alone.
+ */
+const ungoverned = {
+  governed: [],
+  governors: [],
+  typeName: Result.getOrThrow(roster("TypeName", [noType])),
+  typeTexts: [],
+} as const;
+
+/**
  * The attribute grammar of the whole leaf, no document layer: every declaration the pinned XSDs
  * state, and every text type.
  */
 const leafGrammar: AttributeGrammar = Result.getOrThrow(
-  generate({ declarations: attributeDeclarations, texts: textTypes, ...rosters }),
+  generate({ declarations: attributeDeclarations, texts: textTypes, ...rosters, ...ungoverned }),
 );
 
 /**
@@ -322,13 +337,48 @@ describe("The spec readings", () => {
     }
   });
 
-  it("read 18: an order or graphic-order interaction's min-choices is at least 1, every other kind's at least 0", () => {
+  it("read 18 and 83: an order, graphic-order or position object interaction's min-choices is at least 1, every other kind's at least 0", () => {
+    // Reading 18: "If specified, min-choices must be 1 or greater" of the order interactions
+    // (§5.97.2, §5.61.1); reading 83: the same sentence of the position object (§5.107.2).
+    const floored = new Set([
+      "qti-order-interaction",
+      "qti-graphic-order-interaction",
+      "qti-position-object-interaction",
+    ]);
     for (const { kind, version } of declarersOf("min-choices")) {
       const domain = Option.getOrThrow(domainAt(version, kind, "min-choices"));
-      const ordered = kind === "qti-order-interaction" || kind === "qti-graphic-order-interaction";
 
-      assert.strictEqual(matches(domain, "0"), !ordered, kind);
+      assert.strictEqual(matches(domain, "0"), !floored.has(kind), kind);
+      assert.strictEqual(matches(domain, "+0"), !floored.has(kind), kind);
       assert.isTrue(matches(domain, " 1 "), kind);
+    }
+  });
+
+  it("read 42, restated: a voice's languages are ranges both SSML's prose and its normative schema admit, so * is refused", () => {
+    // SSML 1.1 §3.2.1 (each token an Extended Language Range, `und` and `zxx` disallowed) beside
+    // Appendix D's `xs:NMTOKENS` (§2.2.2: conformance includes "the constraints expressed in the
+    // Core Schema"); `*` is a range subtag of RFC 4647 §2.2 and no XML name character.
+    for (const version of schemaVersions) {
+      const domain = Option.getOrThrow(domainAt(version, "ssml:voice", "languages"));
+
+      for (const value of ["", "en", "en-US", "en-GB:en-US", "fr ja", "x-klingon"]) {
+        assert.isTrue(matches(domain, value), `${version} ${value}`);
+      }
+
+      for (const value of ["*", "en-*", "*-US", "en:*", "und", "ZXX", "en und"]) {
+        assert.isFalse(matches(domain, value), `${version} ${value}`);
+      }
+    }
+  });
+
+  it("read 76: an xi:include's parse is xml alone, its whitespace collapsed as the XSD's token", () => {
+    // Information model §2.12: "all included fragments must be treated as parsed xml"; the XSD's
+    // `xi:parseType` admits `xml` and `text` (`w3/XInclude.xsd` lines 31 to 36).
+    for (const version of schemaVersions) {
+      const domain = Option.getOrThrow(domainAt(version, "xi:include", "parse"));
+
+      assert.isTrue(matches(domain, "xml") && matches(domain, " xml "), version);
+      assert.isFalse(matches(domain, "text") || matches(domain, "XML"), version);
     }
   });
 
@@ -386,6 +436,72 @@ const identityOf = (domain: Domain): Option.Option<string> => {
     ? Option.some("IDREFS")
     : Option.none();
 };
+
+/**
+ * The spec readings that apply to a kind's attribute, by number: those naming the attribute on
+ * every kind that declares it, or on this kind.
+ *
+ * @param kind - The kind.
+ * @param name - The attribute.
+ * @returns The readings' numbers, ascending.
+ */
+const readingNumbersOf = (kind: string, name: string): readonly number[] =>
+  [
+    ...new Set(
+      specReadings
+        .filter(
+          (reading) =>
+            reading.name === name &&
+            Option.match(reading.kinds, { onNone: () => true, onSome: (on) => on.includes(kind) }),
+        )
+        .map(({ reading }) => reading),
+    ),
+  ].toSorted((left, right) => left - right);
+
+/**
+ * The readings a domain's handle names: the numbers in its ` (reading …)` part, none without one.
+ *
+ * @param handle - The handle.
+ * @returns The numbers, ascending.
+ */
+const readingsNamed = (handle: string): readonly number[] =>
+  Option.match(Option.fromNullishOr(/ \(reading (?<numbers>[\d, ]+)\)/u.exec(handle)?.groups), {
+    onNone: () => [],
+    onSome: ({ numbers = "" }) => numbers.split(", ").map(Number),
+  }).toSorted((left, right) => left - right);
+
+describe("The value domains' names", () => {
+  it("name the spec readings of an attribute each was compiled for, and only those, every domain of the leaf", () => {
+    // Oracle: the specification as a checker, the roster's naming rule: a domain is named after
+    // the type it was first compiled from, a reading's with the reading, so its handle's readings
+    // are exactly those that apply to some attribute it is the domain of, and a handle naming none
+    // is some unread attribute's or text's domain.
+    const readingsOfDomain = new Map<string, Set<string>>();
+    const add = (domain: string, readings: readonly number[]) => {
+      readingsOfDomain.set(
+        domain,
+        (readingsOfDomain.get(domain) ?? new Set<string>()).add(readings.join(", ")),
+      );
+    };
+    for (const { domain, kind, name } of leafGrammar.admission.rows) {
+      add(domain, readingNumbersOf(kind, name));
+    }
+
+    for (const { domain } of leafGrammar.text.rows) {
+      add(domain, []);
+    }
+
+    assert.deepStrictEqual(
+      leafGrammar.domains
+        .filter(
+          ({ handle }) =>
+            !(readingsOfDomain.get(handle) ?? new Set()).has(readingsNamed(handle).join(", ")),
+        )
+        .map(({ handle }) => [handle, [...(readingsOfDomain.get(handle) ?? [])]]),
+      [],
+    );
+  });
+});
 
 describe("The attribute grammar's structure", () => {
   it("numbers each (version, kind)'s admitted names 0 to n − 1 in AttributeName code order, a bijection", () => {
@@ -517,6 +633,7 @@ const toyGenerate = (declarations: readonly Declared[], kinds: Roster<string>) =
     names: Result.getOrThrow(roster("AttributeName", ["a", "b"])),
     texts: [],
     versions: rosters.versions,
+    ...ungoverned,
   });
 
 describe("The attribute grammar's refusals", () => {
@@ -626,6 +743,17 @@ describe.skipIf(!cached)("The XSD's attribute uses", () => {
               }
             }
 
+            // Spec reading 10: ARIA's `aria-keyshortcuts` beside the XSD's `aria-keyshorts`, with
+            // its use; spec reading 76: an `xi:include` carries no `xpointer` (§2.12).
+            const misspelled = expected.get("aria-keyshorts");
+            if (misspelled !== undefined) {
+              expected.set("aria-keyshortcuts", misspelled);
+            }
+
+            if (kind === "xi:include") {
+              expected.delete("xpointer");
+            }
+
             const admitted = new Map(
               attributes.admission.rows
                 .filter(
@@ -683,10 +811,22 @@ describe.skipIf(!cached)("The document layer", () => {
     "admits xml.xsd's four globals under their own domains on every kind whose lax or strict attribute wildcard admits the XML namespace, and under the open domain where it skips",
     () =>
       Effect.gen(function* layerFollowsTheWildcards() {
-        const { attributes } = yield* Effect.fromResult(composed());
+        const { attributes, kinds } = yield* Effect.fromResult(composed());
         const byHandle = new Map(attributes.domains.map((domain) => [domain.handle, domain]));
+        // Spec reading 81: on an element the Schematron's extension rules cover, an `xml:` name
+        // the kind does not declare is no `data-` extension, so it is refused there.
+        const covered = new Set(
+          coveredElements.flatMap(({ element, versions }) =>
+            versions.map((version) => `${version} {${element.namespace}}${element.local}`),
+          ),
+        );
+        const coveredAt = (version: SchemaVersion, kind: string): boolean =>
+          Option.exists(kinds.elementName.lookup({ kind }), ({ local, namespace }) =>
+            covered.has(`${version} {${namespace}}${local}`),
+          );
         const missing: string[] = [];
         let checked = 0;
+        let refused = 0;
         for (const wildcard of attributeWildcards.filter(
           ({ namespace }) => namespace !== "##local",
         )) {
@@ -702,7 +842,14 @@ describe.skipIf(!cached)("The document layer", () => {
                   kind === wildcard.kind && name === global.name && versions.includes(version),
               );
               checked += 1;
-              if (Option.isNone(row)) {
+              if (!declared && coveredAt(version, wildcard.kind)) {
+                refused += 1;
+                if (Option.isSome(row)) {
+                  missing.push(
+                    `${version} ${wildcard.kind}@${global.name} is admitted, though reading 81 refuses it`,
+                  );
+                }
+              } else if (Option.isNone(row)) {
                 missing.push(`${version} ${wildcard.kind}@${global.name}`);
               } else if (!declared) {
                 const domain = byHandle.get(row.value.domain);
@@ -725,6 +872,7 @@ describe.skipIf(!cached)("The document layer", () => {
         }
 
         assert.isAbove(checked, 1000);
+        assert.isAbove(refused, 0);
         assert.deepStrictEqual(missing, []);
         for (const version of schemaVersions) {
           const lang = Option.getOrThrow(

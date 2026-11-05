@@ -6,7 +6,8 @@
  *   (`#pantry/test/gen/grammar.ts` for kinds, attributes and particles,
  *   `#pantry/test/gen/references.ts` for attribute types), never through the inventory leaves the
  *   relations derive from, and the readings are restated here from the information model. The bound
- *   is the whole XSD: `DeclarationKind` and `ChoiceBound` over every kind the walk reaches, the
+ *   is the whole XSD: `DeclarationKind` and `ChoiceBound` over every kind the walk reaches,
+ *   `ChoiceCount`'s choices among the children each order interaction's model admits, the
  *   references over what the three processing roots reach (processing) and what an item reaches
  *   besides (an item's content), and `SectionPart` over the section's model. Skipped, with its
  *   reason, without the pinned cache.
@@ -14,7 +15,7 @@
  *   target and built-in is a declaration kind, and every built-in is an NCName, the XML Names
  *   production a reference spells.
  * - **A naive model of the coding.** Over toy rosters of 4 kinds and 3 attribute names, the relations
- *   answer every point of their key space as the facets' rows say, and each of the 8 named faults
+ *   answer every point of their key space as the facets' rows say, and each of the 9 named faults
  *   meets its refusal; every fault and `valid` is a required situation of the search.
  */
 import { NodeServices } from "@effect/platform-node";
@@ -27,13 +28,26 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effect";
 import { roster } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
-import { asiReferences, references, spellings } from "#pantry/grammar/references.ts";
+import { schemaVersions } from "#pantry/grammar/kinds.ts";
+import {
+  asiReferences,
+  references,
+  sectionPartsIn,
+  spellings,
+} from "#pantry/grammar/references.ts";
 import type { Spelling } from "#pantry/grammar/references.ts";
 import { ncName } from "#pantry/schema/patterns.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import { asiNamespace } from "#pantry/vocab/namespaces.ts";
-import { elementsOf, loadXsd, XsdOracleLayer, xsdContents } from "#pantry/test/gen/grammar.ts";
+import {
+  elementsOf,
+  loadXsd,
+  toySources,
+  XsdOracleLayer,
+  xsdContents,
+} from "#pantry/test/gen/grammar.ts";
+import type { Particle as IrParticle } from "#pantry/vocab/inventory/types.ts";
 import type { Content, Particle } from "#pantry/test/gen/grammar.ts";
 import {
   faults,
@@ -132,6 +146,13 @@ const reading = {
   ]),
   declaring: "cardinality",
   itemRoot: "qti-assessment-item",
+  // Spec reading 18: the order interactions' `min-choices` "must not exceed the number of choices
+  // available", and so must a `max-choices` beside it, with no 0 exemption (information model
+  // §5.97.2 and §5.97.3, §5.61.1 and §5.61.2); their choices are their simple or hotspot choices.
+  ordered: new Map([
+    ["qti-order-interaction", "qti-simple-choice"],
+    ["qti-graphic-order-interaction", "qti-hotspot-choice"],
+  ]),
   printed: [
     {
       declarations: ["qti-outcome-declaration", "qti-template-declaration"],
@@ -278,9 +299,20 @@ describe.skipIf(!cached)("the reference relations against the XSD", () => {
 
               return reading.boundPairs
                 .filter(([min, max]) => names.has(min) && names.has(max))
-                .map(([min, max]) => keyed(kind, min, max));
+                .map(([min, max]) =>
+                  keyed(kind, min, max, reading.ordered.has(kind) ? "counted" : "unbounded"),
+                );
             }),
-            relations.choiceBound.rows.map(({ kind, max, min }) => keyed(kind, min, max)),
+            relations.choiceBound.rows.map(({ kind, max, min, zero }) =>
+              keyed(kind, min, max, zero),
+            ),
+          );
+          compare(
+            "ChoiceCount",
+            [...reading.ordered]
+              .filter(([kind, choice]) => childrenOf(kind).some((child) => child === choice))
+              .map(([kind, choice]) => keyed(kind, choice)),
+            relations.choiceCount.rows.map(({ choice, kind }) => keyed(kind, choice)),
           );
 
           const stated: string[] = [];
@@ -382,6 +414,71 @@ describe("the reference relations of production", () => {
   );
 
   it.effect(
+    "count each order interaction's choices among the children it admits, beside a counted bound",
+    () =>
+      // Oracle: the specification as a checker, spec reading 18: a kind whose choices bound its
+      // counts gives a most of 0 no meaning of its own, and its choices are children its content
+      // model admits in every version that holds it (`Admission`).
+      Effect.gen(function* countsAreChildren() {
+        const relations = yield* production;
+        const { admission } = yield* grammar;
+        const parents = new Map<string, Set<string>>();
+        for (const { child, parent, version } of admission.rows) {
+          const key = keyed(version, parent);
+          parents.set(key, (parents.get(key) ?? new Set()).add(child));
+        }
+
+        assert.isNotEmpty(relations.choiceCount.rows);
+        assert.deepStrictEqual(
+          relations.choiceCount.rows.flatMap(({ choice, kind }) => [
+            ...(Option.exists(
+              relations.choiceBound.lookup({ kind }),
+              ({ zero }) => zero === "counted",
+            )
+              ? []
+              : [`${kind} has no counted bound`]),
+            ...schemaVersions
+              .filter((version) => parents.has(keyed(version, kind)))
+              .filter((version) => !(parents.get(keyed(version, kind))?.has(choice) ?? false))
+              .map((version) => `${version} ${kind} admits no ${choice}`),
+          ]),
+          [],
+        );
+        assert.deepStrictEqual(
+          relations.choiceBound.rows
+            .filter(({ zero }) => zero === "counted")
+            .map(({ kind }) => kind)
+            .filter((kind) => Option.isNone(relations.choiceCount.lookup({ kind }))),
+          [],
+        );
+      }),
+    composeTimeout,
+  );
+
+  it.effect(
+    "hold exactly the information model's built-in variables, each as the declaration kind it stands as",
+    () =>
+      // Oracle: the specification as a checker, the information model's §2.2.2 (Item Variables):
+      // "There is one built-in context variable: 'QTI_CONTEXT'" (§2.2.2.1), "There are two
+      // built-in response variables: 'numAttempts' and 'duration'" (§2.2.2.2), and "There is one
+      // built-in outcome variable, 'completionStatus'" (§2.2.2.3).
+      Effect.gen(function* builtInsAreTheSpecs() {
+        const { builtIn } = yield* production;
+
+        assert.deepStrictEqual(
+          new Set(builtIn.rows.map(({ declaration, variable }) => keyed(variable, declaration))),
+          new Set([
+            keyed("QTI_CONTEXT", "qti-context-declaration"),
+            keyed("numAttempts", "qti-response-declaration"),
+            keyed("duration", "qti-response-declaration"),
+            keyed("completionStatus", "qti-outcome-declaration"),
+          ]),
+        );
+      }),
+    composeTimeout,
+  );
+
+  it.effect(
     "name each built-in variable by an identifier a reference can spell",
     () =>
       Effect.gen(function* builtInsAreIdentifiers() {
@@ -396,6 +493,62 @@ describe("the reference relations of production", () => {
       }),
     composeTimeout,
   );
+});
+
+/**
+ * An element particle of a toy section model.
+ *
+ * @param kind - The kind it names.
+ * @returns The particle, occurring once.
+ */
+const toyElement = (kind: string): IrParticle => ({
+  _tag: "element",
+  kinds: [kind],
+  occurs: { max: Option.some(1), min: 1 },
+  sources: toySources(schemaVersions),
+});
+
+/**
+ * A group of a toy section model, repeated without bound.
+ *
+ * @param compositor - Its compositor.
+ * @param particles - Its particles.
+ * @returns The group.
+ */
+const toyRepeated = (
+  compositor: "choice" | "sequence",
+  particles: readonly IrParticle[],
+): IrParticle => ({
+  _tag: "group",
+  compositor,
+  occurs: { max: Option.none(), min: 0 },
+  particles,
+  sources: toySources(schemaVersions),
+});
+
+describe("SectionPart's reading of a section's model", () => {
+  it("takes the alternatives of a repeated choice, never the other kinds of a repeated sequence around it", () => {
+    // Oracle: the specification as a checker: a section's parts are the alternatives of its
+    // model's repeated choice, the XSD's spelling of the information model's `sectionPart`
+    // (§6.46). The production model holds no repeated sequence, so a toy holds one.
+    const parts = sectionPartsIn([
+      {
+        content: {
+          _tag: "element-only",
+          particle: toyRepeated("sequence", [
+            toyElement("e1"),
+            toyRepeated("choice", [toyElement("e2"), toyElement("e3")]),
+          ]),
+        },
+        kind: reading.section,
+        sources: toySources(schemaVersions),
+        type: Option.none(),
+        versions: schemaVersions,
+      },
+    ]);
+
+    assert.deepStrictEqual(new Set(parts), new Set(["e2", "e3"]));
+  });
 });
 
 /**
@@ -443,6 +596,7 @@ describe("references", () => {
               const declarations = facets.flatMap((facet) => facet.declarations);
               const builtIns = facets.flatMap((facet) => facet.builtIns);
               const bounds = facets.flatMap((facet) => facet.choiceBounds);
+              const counts = facets.flatMap((facet) => facet.choiceCounts);
               const parts = new Set(facets.flatMap((facet) => facet.sectionParts));
 
               assert.deepStrictEqual(relations.declarationKind.handles, declarations);
@@ -468,12 +622,19 @@ describe("references", () => {
                   parts.has(kind),
                 );
                 assert.deepStrictEqual(
-                  Option.map(relations.choiceBound.lookup({ kind }), ({ max, min }) =>
-                    keyed(min, max),
+                  Option.map(relations.choiceBound.lookup({ kind }), ({ max, min, zero }) =>
+                    keyed(min, max, zero),
                   ),
                   Option.map(
                     Arr.findFirst(bounds, (bound) => bound.kind === kind),
-                    ({ max, min }) => keyed(min, max),
+                    ({ max, min, zero }) => keyed(min, max, zero),
+                  ),
+                );
+                assert.deepStrictEqual(
+                  Option.map(relations.choiceCount.lookup({ kind }), ({ choice }) => choice),
+                  Option.map(
+                    Arr.findFirst(counts, (count) => count.kind === kind),
+                    ({ choice }) => choice,
                   ),
                 );
                 for (const attribute of toyNames) {

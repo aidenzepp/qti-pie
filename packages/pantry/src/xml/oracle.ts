@@ -223,7 +223,7 @@ const statusLine = /^(?<path>.+) (?<status>validates|fails to validate)$/u;
  * @returns Each file's verdict, in `paths` order; an {@link OracleUnreadable} for a line before any
  *   message, or for a file with neither a status nor a message.
  */
-const verdictsOf = (
+export const verdictsOf = (
   paths: readonly string[],
   report: string,
 ): Effect.Effect<readonly XsdVerdict[], OracleUnreadable> =>

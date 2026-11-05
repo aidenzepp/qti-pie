@@ -3,11 +3,11 @@
  * stated as data and kept out of the generators, so that every generator is a function of the
  * vocabulary list it composes (plan §1.1, R4 of the W1 to W4 review).
  *
- * A vocabulary's facets are its interactions; its ancestry blocks; its content-model edits and
- * count laws; its barrings and last-slot rules; its expression arities and response bindings; its
- * package relations; and its references. Each fact belongs to the vocabulary of the parent kind it
- * is stated under, or of the kind it is about. A vocabulary with no fact of a facet states it
- * empty, so every vocabulary states every facet.
+ * A vocabulary's facets are its interactions; its ancestry blocks; its content-model edits, count
+ * laws and namespace roots; its barrings and last-slot rules; its expression arities and response
+ * bindings; its package relations; and its references. Each fact belongs to the vocabulary of the
+ * parent kind it is stated under, or of the kind it is about. A vocabulary with no fact of a facet
+ * states it empty, so every vocabulary states every facet.
  *
  * A class a law reads is projected from the XSDs' IR (the content models and attribute declarations
  * of `src/vocab/inventory/`), never listed by hand: the interactions, the expression kinds and
@@ -17,7 +17,7 @@
 import { Array as Arr, Option, pipe } from "effect";
 import type { AncestryFacet, Block } from "#pantry/grammar/ancestry.ts";
 import type { ChildFacet } from "#pantry/grammar/children.ts";
-import type { ContentFacet } from "#pantry/grammar/content.ts";
+import type { ContentFacet, ModelEdit } from "#pantry/grammar/content.ts";
 import { aritiesOf } from "#pantry/grammar/expression.ts";
 import type { ExpressionFacet } from "#pantry/grammar/expression.ts";
 import { foreignKinds, schemaVersions } from "#pantry/grammar/kinds.ts";
@@ -34,6 +34,7 @@ import type {
   Source,
   Sources,
 } from "#pantry/vocab/inventory/types.ts";
+import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
  * Everything the generators read about one vocabulary.
@@ -58,7 +59,7 @@ export interface Facets {
 export const noFacets: Facets = {
   ancestry: { banning: [], entering: [], needing: [] },
   children: { barrings: [], lastWhere: [] },
-  content: { edits: [], models: [] },
+  content: { edits: [], models: [], roots: [] },
   expression: { arities: [], recordFits: [], typedFits: [] },
   interactions: [],
   package: { resourceTypes: [], roots: [] },
@@ -262,6 +263,10 @@ export const asi: Facets = {
         versions: schemaVersions,
       },
     ],
+    // Spec reading 71: only a hotspot choice's default must appear last. The AssociableHotspot
+    // class and the graphic associate interaction's hotspots (§5.7, §5.59.4) state no such rule, so
+    // a `qti-associable-hotspot` default stands anywhere; the graphic gap match interaction's ban on
+    // any default (§5.60.9) is a law of its own.
     lastWhere: [
       {
         attribute: "shape",
@@ -269,15 +274,6 @@ export const asi: Facets = {
         parents: ["qti-graphic-order-interaction", "qti-hotspot-interaction"],
         source:
           "information model §5.67, HotspotChoice, and §5.68.6: 'The default hotspot, if defined, must appear last'",
-        value: "default",
-        versions: schemaVersions,
-      },
-      {
-        attribute: "shape",
-        kind: "qti-associable-hotspot",
-        parents: ["qti-graphic-associate-interaction", "qti-graphic-gap-match-interaction"],
-        source:
-          "information model §5.7, AssociableHotspot: 'The default hotspot, if defined, must appear last'",
         value: "default",
         versions: schemaVersions,
       },
@@ -293,6 +289,7 @@ export const asi: Facets = {
       },
     ],
     models: [],
+    roots: [],
   },
   expression: {
     arities: aritiesOf(contentModels, expressionsIn(contentModels)),
@@ -440,21 +437,32 @@ export const ssml: Facets = {
       },
     ],
     models: [],
+    roots: [],
   },
 };
 
 /**
- * Where a restated MathML model comes from: spec reading 2 and the MathML 3 RelaxNG line it reads,
- * once per version.
+ * Cite a MathML rule spec reading 2 states: the MathML 3 RelaxNG file and line it reads, and the
+ * Recommendation's section that says the same.
  *
- * @param line - The line of `mathml3-content.rnc` (https://www.w3.org/Math/RelaxNG/mathml3/).
- * @param section - The Recommendation's section whose syntax table and prose state the same.
+ * @param file - The RelaxNG file, of https://www.w3.org/Math/RelaxNG/mathml3/.
+ * @param line - Its line.
+ * @param section - The Recommendation's section whose syntax table or prose states the same.
+ * @returns The citation.
+ */
+const relaxNgCite = (file: string, line: number, section: string): string =>
+  `spec reading 2: MathML 3 RelaxNG, ${file} line ${String(line)}; MathML 3 ${section}`;
+
+/**
+ * Where a restated MathML model comes from, once per version ({@link relaxNgCite}).
+ *
+ * @param file - The RelaxNG file.
+ * @param line - Its line.
+ * @param section - The Recommendation's section that states the same.
  * @returns The source, once per version.
  */
-const relaxNg = (line: number, section: string): Sources =>
-  cited(
-    `spec reading 2: MathML 3 RelaxNG, mathml3-content.rnc line ${String(line)}; MathML 3 ${section}`,
-  );
+const relaxNg = (file: string, line: number, section: string): Sources =>
+  cited(relaxNgCite(file, line, section));
 
 /**
  * One element particle of a restated MathML model.
@@ -493,18 +501,119 @@ const mathGroup = (
 });
 
 /**
- * `bvar = element bvar {CommonAtt, ((ci | semantics-ci) & degree?)}` (line 23): one annotated
- * variable and at most one degree, in either order, which the XSD's trang translation widens to
- * `(ci | semantics | degree)*` (`mathml3-content.xsd` lines 46-57). Restated as the interleave's
- * language, `(ci | semantics) degree? | degree (ci | semantics)`, which Unique Particle Attribution
- * keeps deterministic: the first child chooses the branch.
+ * Occur a restated particle any number of times, none included.
+ *
+ * @param held - The particle.
+ * @returns It, occurring `0..n`.
+ */
+const anyNumber = (held: Particle): Particle => ({
+  ...held,
+  occurs: { max: Option.none(), min: 0 },
+});
+
+/**
+ * The kinds a model's element particles name, each once, in document order.
+ *
+ * @param node - The model's particle.
+ * @returns The kinds.
+ */
+const kindsIn = (node: Particle): readonly string[] => {
+  switch (node._tag) {
+    case "element": {
+      return node.kinds;
+    }
+    case "any": {
+      return [];
+    }
+    case "group": {
+      return [...new Set(node.particles.flatMap(kindsIn))];
+    }
+    default: {
+      return node satisfies never;
+    }
+  }
+};
+
+/**
+ * Hold kinds a reading needs at least one of, or fail as the defect a reading over no kind is.
+ *
+ * @param kinds - The kinds.
+ * @param defect - What it means that there are none.
+ * @returns The kinds, at least one.
+ */
+const someKinds = (kinds: readonly string[], defect: string): readonly [string, ...string[]] =>
+  Option.getOrThrowWith(
+    Arr.isReadonlyArrayNonEmpty(kinds) ? Option.some(kinds) : Option.none(),
+    () => new Error(defect),
+  );
+
+/**
+ * Read a class the MathML XSD states as the one group a kind's model holds, as its kinds.
+ *
+ * @param kind - The kind whose model is the class.
+ * @param name - The class's name, for the defect a missing model is.
+ * @returns The kinds, each once, in document order.
+ */
+const classOf = (kind: string, name: string): readonly [string, ...string[]] =>
+  someKinds(
+    [
+      ...new Set(
+        contentModels
+          .filter((model) => model.kind === kind)
+          .flatMap(({ content }) =>
+            content._tag === "element-only" || content._tag === "mixed"
+              ? kindsIn(content.particle)
+              : [],
+          ),
+      ),
+    ],
+    `The MathML XSD gives ${kind} no model naming ${name}, which reading 2 reads.`,
+  );
+
+/**
+ * The content expressions the RelaxNG names, `ContExp` (`mathml3-strict-content.rnc` line 14): the
+ * XSD's group, as `m:condition`'s model holds it (`mathml3-strict-content.xsd` line 6), and
+ * `semantics-contexp`, which the RelaxNG names first and the XSD drops ("Ambiguous content model
+ * altered (ContExp)", line 8), the kind `m:semantics.contexp`.
+ */
+const contentExpressions: readonly [string, ...string[]] = [
+  ...classOf("m:condition", "ContExp"),
+  "m:semantics.contexp",
+];
+
+/**
+ * The content expressions but `interval`, which the RelaxNG's `DomainQ` names as well
+ * (`mathml3-content.rnc` line 41): an argument that ends a model's qualifiers.
+ */
+const nonIntervals = someKinds(
+  contentExpressions.filter((kind) => kind !== "m:interval"),
+  "The MathML content expressions hold no kind but m:interval.",
+);
+
+/**
+ * The math expressions, MathML's `MathExpression`, as `m:mrow`'s model names them
+ * (`mathml3-strict-content.xsd` line 179): the content and presentation expressions and
+ * `m:semantics`, whose first child is any math expression. That `semantics` is the widest of the
+ * three, so where a math expression stands, the element is read as it, and `m:semantics.contexp`
+ * is not named beside it.
+ */
+const mathExpressions = classOf("m:mrow", "MathExpression");
+
+/**
+ * `bvar = element bvar {CommonAtt, ((ci | semantics-ci) & degree?)}` (`mathml3-content.rnc` line
+ * 23): one annotated variable and at most one degree, in either order, which the XSD's trang
+ * translation widens to `(ci | semantics-ci | degree)*` (`mathml3-content.xsd` lines 46-57).
+ * Restated as the interleave's language, `(ci | semantics-ci) degree? | degree (ci |
+ * semantics-ci)`, which Unique Particle Attribution keeps deterministic: the first child chooses
+ * the branch. A bound variable's `semantics-ci` is the kind `m:semantics.ci`.
  */
 const bvarModel = (() => {
   const sources = relaxNg(
+    "mathml3-content.rnc",
     23,
     "§4.2.6.2 Bound Variables (Content: `(ci | semantics-ci), degree? | degree?, (ci | semantics-ci)`)",
   );
-  const variable = mathParticle(["m:ci", "m:semantics"], 1, Option.some(1), sources);
+  const variable = mathParticle(["m:ci", "m:semantics.ci"], 1, Option.some(1), sources);
 
   return mathGroup(
     "choice",
@@ -531,7 +640,7 @@ const bvarModel = (() => {
  * (`mathml3-content.xsd` lines 158-167). Restated as `piece* (otherwise piece*)?`.
  */
 const piecewiseModel = (() => {
-  const sources = relaxNg(60, "§4.4.1.9 Piecewise declaration");
+  const sources = relaxNg("mathml3-content.rnc", 60, "§4.4.1.9 Piecewise declaration");
 
   return mathGroup("sequence", sources, mathParticle(["m:piece"], 0, Option.none(), sources), {
     ...mathGroup(
@@ -545,22 +654,276 @@ const piecewiseModel = (() => {
 })();
 
 /**
- * MathML's facets: spec reading 2's two content models the MathML 3 RelaxNG schema states as
- * interleaves (`&`), which an XSD cannot, restated whole (`content.ts`, the `restate` edit).
+ * A model's qualifiers and their arguments as the RelaxNG states them, with `interval` among the
+ * qualifiers: `DomainQ = (domainofapplication|condition|interval|(lowlimit,uplimit?))*`
+ * (`mathml3-content.rnc` line 41), the XSD's `DomainQ` without `interval` ("Ambiguous content model
+ * altered (interval)", `mathml3-content.xsd` line 92), then any content expressions.
+ *
+ * An interval is a content expression too, so it is a qualifier when a qualifier follows it and an
+ * argument otherwise: `(interval | qualifier)*, (other, interval*)*`, `other` a content expression
+ * that is no interval, which ends the qualifiers. Each step is one position, so Unique Particle
+ * Attribution keeps it deterministic, and its language is the RelaxNG's.
+ *
+ * @param sources - Where the model comes from.
+ * @param extra - The qualifiers beyond `DomainQ` the model admits: `apply`'s `degree`,
+ *   `momentabout` and `logbase` (`Qualifier`, line 47), none for the constructors.
+ * @param arguments_ - How the arguments end the model: any number, or, for `lambda`, at most the
+ *   one other, which its ending completes.
+ * @returns The qualifiers' and the arguments' particles.
+ */
+const qualified = (
+  sources: Sources,
+  extra: readonly string[],
+  arguments_: "many" | "one",
+): readonly Particle[] => {
+  const once = Option.some(1);
+  const interval = mathParticle(["m:interval"], 1, once, sources);
+  const other = mathParticle(nonIntervals, 1, once, sources);
+
+  return [
+    anyNumber(
+      mathGroup(
+        "choice",
+        sources,
+        interval,
+        mathParticle(["m:domainofapplication"], 1, once, sources),
+        mathParticle(["m:condition"], 1, once, sources),
+        mathGroup(
+          "sequence",
+          sources,
+          mathParticle(["m:lowlimit"], 1, once, sources),
+          mathParticle(["m:uplimit"], 0, once, sources),
+        ),
+        ...extra.map((kind) => mathParticle([kind], 1, once, sources)),
+      ),
+    ),
+    arguments_ === "many"
+      ? anyNumber(mathGroup("sequence", sources, other, anyNumber(interval)))
+      : { ...other, occurs: { max: once, min: 0 } },
+  ];
+};
+
+/**
+ * The bound variables a model opens with, any number (`BvarQ = bvar*`,
+ * `mathml3-strict-content.rnc` line 38).
+ *
+ * @param sources - Where the model comes from.
+ * @returns The particle.
+ */
+const boundVariables = (sources: Sources): Particle =>
+  mathParticle(["m:bvar"], 0, Option.none(), sources);
+
+/**
+ * `apply.content = ContExp+ | (ContExp, BvarQ, Qualifier*, ContExp*)` (`mathml3-content.rnc` line
+ * 29), `bind.content` the same (line 31), with `Qualifier = DomainQ|degree|momentabout|logbase`
+ * (line 47): `ContExp, bvar*, (interval | qualifier)*, (other, interval*)*` ({@link qualified}).
+ * The first alternative is the second's with no bound variable and no qualifier.
+ *
+ * @param line - The line of the kind's model.
+ * @returns The restated model.
+ */
+const applyModel = (line: number): Particle => {
+  const sources = relaxNg(
+    "mathml3-content.rnc",
+    line,
+    "§4.2.5 Function Application and §4.3.3 Qualifiers",
+  );
+
+  return mathGroup(
+    "sequence",
+    sources,
+    mathParticle(contentExpressions, 1, Option.some(1), sources),
+    boundVariables(sources),
+    ...qualified(sources, ["m:degree", "m:momentabout", "m:logbase"], "many"),
+  );
+};
+
+/**
+ * `lambda = element lambda {CommonAtt, DefEncAtt, BvarQ, DomainQ, ContExp}` (`mathml3-content.rnc`
+ * line 103): `bvar*, (interval | qualifier)*, other?`, which {@link lambdaEnding} ends with a
+ * content expression. The RelaxNG's language, `bvar* (interval | qualifier)* (interval | other)`,
+ * has no deterministic expression (`content.ts`, `endedBy`).
+ */
+const lambdaModel = (() => {
+  const sources = relaxNg("mathml3-content.rnc", 103, "§4.4.1.3 Lambda");
+
+  return mathGroup("sequence", sources, boundVariables(sources), ...qualified(sources, [], "one"));
+})();
+
+/**
+ * `lambda`'s last child is its body, a content expression (`mathml3-content.rnc` line 103).
+ */
+const lambdaEnding = relaxNgCite("mathml3-content.rnc", 103, "§4.4.1.3 Lambda");
+
+/**
+ * The constructors' model, `bvar*, DomainQ, ContExp*` (`vector`, `matrix` and `matrixrow`,
+ * `mathml3-content.rnc` lines 325-327), and `set` and `list`'s `BvarQ*, DomainQ*, ContExp*` (lines
+ * 230 and 231), the same language: `bvar*, (interval | qualifier)*, (other, interval*)*`
+ * ({@link qualified}).
+ *
+ * @param line - The line of the kind's model.
+ * @param section - The Recommendation's section of the kind.
+ * @returns The restated model.
+ */
+const constructorModel = (line: number, section: string): Particle => {
+  const sources = relaxNg("mathml3-content.rnc", line, section);
+
+  return mathGroup("sequence", sources, boundVariables(sources), ...qualified(sources, [], "many"));
+};
+
+/**
+ * `annotation-xml.model = (MathExpression|anyElement)*` (`mathml3-common.rnc` line 59), with
+ * `anyElement = element (* - m:*) {...}` (line 61): any number of math expressions and of elements
+ * in any namespace but MathML's, and no text. The XSD alters it to one lax element of any namespace
+ * ("content model altered for libxml (annotation-xml)", `mathml3-common.xsd` line 42), so it holds
+ * exactly one child, and that child may be any MathML element.
+ *
+ * Restated as `(MathExpression | ##other | ##local)*`: the namespaces of the XSD's own `anyElement`
+ * group (lines 46-51), lax as spec reading 30 reads the XSD's wildcard, so a QTI element directly
+ * inside is read by its global declaration. A MathML element that is no math expression (`m:bvar`,
+ * `m:math`, an undeclared `m:` name) is refused. That no MathML element stands anywhere inside
+ * such an element is the root and ancestry rule of {@link mathml}.
+ */
+const annotationXmlModel = (() => {
+  const sources = relaxNg("mathml3-common.rnc", 59, "§5.2.3 The annotation-xml element");
+  const lax = (namespace: "##local" | "##other"): Particle => ({
+    _tag: "any",
+    namespace,
+    occurs: { max: Option.some(1), min: 1 },
+    processing: "lax",
+    sources: relaxNg("mathml3-common.rnc", 61, "§5.2.3 The annotation-xml element"),
+  });
+
+  return anyNumber(
+    mathGroup(
+      "choice",
+      sources,
+      mathParticle(mathExpressions, 1, Option.some(1), sources),
+      lax("##other"),
+      lax("##local"),
+    ),
+  );
+})();
+
+/**
+ * The models whose content expressions the RelaxNG reads as `ContExp`, `semantics-contexp` among
+ * them, and the XSD reads without it, each with its line in the RelaxNG, the restated models aside:
+ * `semantics-contexp` itself (`mathml3-strict-content.rnc` line 23), `cerror` (line 50), and in
+ * `mathml3-content.rnc` the qualifiers (lines 42 to 50), `piece` (62), `otherwise` (64), `reln`
+ * (70), `fn` (71), `declare` (72) and `interval` (84). A spec reading admits `m:semantics.contexp`
+ * beside `m:ci` in each.
+ */
+const contentExpressionParents: readonly (readonly [kind: string, file: string, line: number])[] = [
+  ["m:semantics.contexp", "mathml3-strict-content.rnc", 23],
+  ["m:cerror", "mathml3-strict-content.rnc", 50],
+  ["m:domainofapplication", "mathml3-content.rnc", 42],
+  ["m:condition", "mathml3-content.rnc", 43],
+  ["m:uplimit", "mathml3-content.rnc", 44],
+  ["m:lowlimit", "mathml3-content.rnc", 45],
+  ["m:degree", "mathml3-content.rnc", 48],
+  ["m:momentabout", "mathml3-content.rnc", 49],
+  ["m:logbase", "mathml3-content.rnc", 50],
+  ["m:piece", "mathml3-content.rnc", 62],
+  ["m:otherwise", "mathml3-content.rnc", 64],
+  ["m:reln", "mathml3-content.rnc", 70],
+  ["m:fn", "mathml3-content.rnc", 71],
+  ["m:declare", "mathml3-content.rnc", 72],
+  ["m:interval", "mathml3-content.rnc", 84],
+];
+
+/**
+ * MathML's facets, spec reading 2, where the MathML 3 RelaxNG schema and the Recommendation's prose
+ * state a rule the XSD does not:
+ *
+ * - The models restated whole: the two interleaves (`&`) an XSD cannot state, `m:bvar` and
+ *   `m:piecewise`; the models whose qualifiers hold `interval`, `m:apply`, `m:bind`, `m:lambda`,
+ *   `m:set`, `m:list`, `m:vector`, `m:matrix` and `m:matrixrow`, `m:lambda` ended by a content
+ *   expression; and `m:annotation-xml`'s `(MathExpression|anyElement)*`.
+ * - `semantics-contexp` among the content expressions, `m:semantics.contexp` beside `m:ci`.
+ * - MathML's one root: a wildcard admits `m:math` of MathML's kinds and no other (the RelaxNG's
+ *   `start = math`, `mathml3-common.rnc` line 15; §2.2, "All other MathML content must be contained
+ *   in a math element").
+ * - No `m:math` inside another: `m:math` enters `math` and may not sit under it (§2.2: "it is an
+ *   error for one math element to contain another"). With the root rule, no MathML element stands
+ *   inside an element `annotation-xml` admits by `anyElement`, whose content the RelaxNG bars from
+ *   MathML (line 61).
  */
 export const mathml: Facets = {
   ...noFacets,
+  ancestry: {
+    banning: [{ flags: ["math"], kinds: ["m:math"] }],
+    entering: [{ flags: ["math"], kinds: ["m:math"] }],
+    needing: [],
+  },
   content: {
     edits: [
-      { _tag: "restate", parent: "m:bvar", particle: bvarModel, source: "spec reading 2" },
+      {
+        _tag: "restate",
+        parent: "m:bvar",
+        particle: bvarModel,
+        source: relaxNgCite("mathml3-content.rnc", 23, "§4.2.6.2 Bound Variables"),
+      },
       {
         _tag: "restate",
         parent: "m:piecewise",
         particle: piecewiseModel,
-        source: "spec reading 2",
+        source: relaxNgCite("mathml3-content.rnc", 60, "§4.4.1.9 Piecewise declaration"),
       },
+      {
+        _tag: "restate",
+        parent: "m:apply",
+        particle: applyModel(29),
+        source: relaxNgCite("mathml3-content.rnc", 29, "§4.2.5 Function Application"),
+      },
+      {
+        _tag: "restate",
+        parent: "m:bind",
+        particle: applyModel(31),
+        source: relaxNgCite("mathml3-content.rnc", 31, "§4.2.6.1 Bindings"),
+      },
+      {
+        _tag: "restate",
+        parent: "m:lambda",
+        particle: lambdaModel,
+        source: lambdaEnding,
+      },
+      { _tag: "ends", kinds: contentExpressions, parent: "m:lambda", source: lambdaEnding },
+      ...(
+        [
+          ["m:set", 230, "§4.4.5.1 Set"],
+          ["m:list", 231, "§4.4.5.2 List"],
+          ["m:vector", 325, "§4.4.9.1 Vector"],
+          ["m:matrix", 326, "§4.4.9.2 Matrix"],
+          ["m:matrixrow", 327, "§4.4.9.3 Matrix row"],
+        ] as const
+      ).map(([parent, line, section]): ModelEdit => ({
+        _tag: "restate",
+        parent,
+        particle: constructorModel(line, section),
+        source: relaxNgCite("mathml3-content.rnc", line, section),
+      })),
+      {
+        _tag: "restate",
+        parent: "m:annotation-xml",
+        particle: annotationXmlModel,
+        source: relaxNgCite("mathml3-common.rnc", 59, "§5.2.3 The annotation-xml element"),
+      },
+      ...contentExpressionParents.map(([parent, file, line]): ModelEdit => ({
+        _tag: "beside",
+        kind: "m:semantics.contexp",
+        parent,
+        source: relaxNgCite(file, line, "§4.2.8 Attribution via semantics"),
+        with: "m:ci",
+      })),
     ],
     models: [],
+    roots: [
+      {
+        kinds: ["m:math"],
+        namespace: mathmlNamespace,
+        source: relaxNgCite("mathml3-common.rnc", 15, "§2.2 The Top-Level <math> Element"),
+      },
+    ],
   },
 };
 
@@ -632,6 +995,7 @@ export const documentLayer: Facets = {
         versions: schemaVersions,
       },
     ],
+    roots: [],
   },
 };
 
@@ -671,5 +1035,6 @@ export const openVocabulary: Facets = {
       type: Option.none(),
       versions: schemaVersions,
     })),
+    roots: [],
   },
 };

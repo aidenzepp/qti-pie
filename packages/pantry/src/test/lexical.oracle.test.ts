@@ -46,6 +46,7 @@ import type { ProbeDeclaration, XsdOracle } from "#pantry/test/xsd-catalog.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import { attributeDeclarations, textTypes } from "#pantry/vocab/inventory/attributes.ts";
+import { globalKinds } from "#pantry/vocab/inventory/vocabularies.ts";
 import type { Domain, ValueType } from "#pantry/vocab/inventory/types.ts";
 import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
 import type { XsdMessage } from "#pantry/xml/oracle.ts";
@@ -226,6 +227,35 @@ const recorded: readonly Recorded[] = [
     xsd: "valid",
   },
   {
+    domain: /\(reading [^)]*\b76\b/u,
+    reason: {
+      _tag: "reading",
+      reading: 76,
+      why: "an xi:include's parse is xml: every included fragment is treated as parsed XML (information model §2.12)",
+    },
+    value: /^text$/u,
+    xsd: "valid",
+  },
+  {
+    domain: /\(reading [^)]*\b39\b/u,
+    reason: {
+      _tag: "reading",
+      reading: 39,
+      why: 'SSML 1.1 says speak\'s version "must have the value "1.1"", where the XSD types it xs:NMTOKEN, so every other NMTOKEN is refused',
+    },
+    value: /^(?![\t\n\r ]*1\.1[\t\n\r ]*$)/u,
+    xsd: "valid",
+  },
+  {
+    domain: /\(reading [^)]*\b42\b/u,
+    reason: {
+      _tag: "reading",
+      reading: 42,
+      why: "SSML 1.1 makes each of voice's languages an Extended Language Range (RFC 4647, 2.2), where the XSD types the list xs:NMTOKENS, so an NMTOKEN that is no such range is refused",
+    },
+    xsd: "valid",
+  },
+  {
     domain: /\(reading [^)]*\b46\b/u,
     reason: { _tag: "reading", reading: 46, why: "a count is a signed 64-bit integer" },
     value: /^9{20,}$/u,
@@ -305,14 +335,14 @@ const recorded: readonly Recorded[] = [
     xsd: "valid",
   },
   {
-    domain: /unsigned-integer/u,
+    domain: /\(reading [^)]*\b2\b/u,
     reason: {
       _tag: "reading",
-      reading: 64,
-      why: "xs:unsignedLong and its three unsigned subtypes admit + before any value and - only before zero, by the XML Schema 1.0 derivation from xs:nonNegativeInteger and Datatype Valid; libxml2 2.9.13 follows the uncorrected prose, which gives digits only",
+      reading: 2,
+      why: 'MathML 3 §2.1.5.1 writes positive-integer as "a string of decimal-digits" and integer as "an optional "-" ... followed by a string of decimal digits", with no +, which xs:positiveInteger and xs:integer admit; unsigned-integer\'s + and -0, which reading 64 would admit, libxml2 2.9.13 refuses too, so it records no difference',
     },
-    value: /^(?:\+|-0+$)/u,
-    xsd: "invalid",
+    value: /^[\t\n\r ]*\+/u,
+    xsd: "valid",
   },
 ];
 
@@ -993,6 +1023,18 @@ const targetsOf = Effect.fn("lexical.targetsOf")(function* targetsOf(
   );
   const globals = new Map<string, XsdName>();
   const contents = new Map<string, { readonly type: string; readonly name: XsdName }[]>();
+  // A global declaration's kind is the one `globalKinds` lists under its name in the version, not
+  // one read off where a wildcard admits it: spec reading 2 lets a wildcard admit MathML's root
+  // alone, and every MathML global still declares its kind's attributes and text.
+  const globalKindOf = new Map<string, string>(
+    globalKinds
+      .filter(({ versions }) => versions.includes(version))
+      .flatMap(({ kind }) =>
+        Option.toArray(grammar.kinds.elementName.lookup({ kind })).map(
+          ({ local, namespace }) => [`{${namespace}}${local}`, kind] as const,
+        ),
+      ),
+  );
 
   for (const root of rootsOf(version)) {
     const { set } = yield* loadXsd(root);
@@ -1001,7 +1043,7 @@ const targetsOf = Effect.fn("lexical.targetsOf")(function* targetsOf(
         local: key.slice(key.indexOf("}") + 1),
         namespace: key.slice(1, key.indexOf("}")),
       };
-      for (const kind of Option.toArray(resolve(name.namespace, name.local, "document"))) {
+      for (const kind of Option.toArray(Option.fromNullishOr(globalKindOf.get(key)))) {
         globals.set(kind, name);
       }
     }

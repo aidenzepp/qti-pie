@@ -13,7 +13,7 @@ import { Array as Arr, Option } from "effect";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import { element, int, shuffled, subarray, weighted } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
-import { spellings } from "#pantry/grammar/references.ts";
+import { boundZeros, spellings } from "#pantry/grammar/references.ts";
 import type { Names, ReferenceFacet, ReferenceRow } from "#pantry/grammar/references.ts";
 import { nameKey } from "#pantry/test/gen/grammar.ts";
 import type { XsdSet } from "#pantry/test/gen/grammar.ts";
@@ -257,6 +257,7 @@ export const faults = [
   "target-outside",
   "repeated-reference",
   "repeated-bound",
+  "repeated-count",
   "repeated-part",
 ] as const;
 
@@ -273,6 +274,7 @@ export const refusalOf = {
   "kind-outside": "OutsideCodeSpace",
   "repeated-bound": "KeyCollision",
   "repeated-built-in": "RepeatedValue",
+  "repeated-count": "KeyCollision",
   "repeated-declaration": "RepeatedValue",
   "repeated-part": "KeyCollision",
   "repeated-reference": "KeyCollision",
@@ -316,10 +318,11 @@ const namesGen = (kinds: readonly string[]): Gen<Names> =>
 /**
  * Draw one facet's rows, valid by construction: distinct declaration kinds, built-ins of them,
  * references at distinct (kind, attribute) pairs naming any variable or some declaration kinds, one
- * bound per kind and distinct section parts.
+ * bound per kind with either meaning of a most of 0, one choice count per kind, and distinct
+ * section parts.
  *
- * @param least - Whether to draw at least one declaration, built-in, reference, bound and part,
- *   so that a fault that repeats a row has one to repeat.
+ * @param least - Whether to draw at least one declaration, built-in, reference, bound, choice count
+ *   and part, so that a fault that repeats a row has one to repeat.
  * @returns The generator.
  */
 const facetGen =
@@ -347,7 +350,11 @@ const facetGen =
         kind,
         max: source.draw(element(toyNames)),
         min: source.draw(element(toyNames)),
+        zero: source.draw(element(boundZeros)),
       })),
+      choiceCounts: source
+        .draw(shuffled(toyKinds, { max: 2, min: floor }))
+        .map((kind) => ({ choice: source.draw(element(toyKinds)), kind })),
       declarations,
       references,
       sectionParts: source.draw(shuffled(toyKinds, { max: 3, min: floor })),
@@ -371,6 +378,7 @@ const split =
     };
     const builtIns = at(facet.builtIns);
     const choiceBounds = at(facet.choiceBounds);
+    const choiceCounts = at(facet.choiceCounts);
     const declarations = at(facet.declarations);
     const references = at(facet.references);
     const sectionParts = at(facet.sectionParts);
@@ -378,6 +386,7 @@ const split =
     return [0, 1].map((side) => ({
       builtIns: Arr.getUnsafe(builtIns, side),
       choiceBounds: Arr.getUnsafe(choiceBounds, side),
+      choiceCounts: Arr.getUnsafe(choiceCounts, side),
       declarations: Arr.getUnsafe(declarations, side),
       references: Arr.getUnsafe(references, side),
       sectionParts: Arr.getUnsafe(sectionParts, side),
@@ -422,7 +431,12 @@ const withFault =
           element<ReferenceFacet>([
             { ...facet, declarations: [...facet.declarations, outside] },
             { ...facet, sectionParts: [...facet.sectionParts, outside] },
-            { ...facet, choiceBounds: [{ kind: outside, max: "a0", min: "a0" }] },
+            {
+              ...facet,
+              choiceBounds: [{ kind: outside, max: "a0", min: "a0", zero: "unbounded" }],
+            },
+            { ...facet, choiceCounts: [{ choice: "k0", kind: outside }] },
+            { ...facet, choiceCounts: [{ choice: outside, kind: "k0" }] },
             {
               ...facet,
               references: [
@@ -436,7 +450,10 @@ const withFault =
       case "attribute-outside": {
         return source.draw(
           element<ReferenceFacet>([
-            { ...facet, choiceBounds: [{ kind: "k0", max: outside, min: "a0" }] },
+            {
+              ...facet,
+              choiceBounds: [{ kind: "k0", max: outside, min: "a0", zero: "counted" }],
+            },
             {
               ...facet,
               references: [
@@ -469,6 +486,9 @@ const withFault =
       }
       case "repeated-bound": {
         return { ...facet, choiceBounds: again(facet.choiceBounds) };
+      }
+      case "repeated-count": {
+        return { ...facet, choiceCounts: again(facet.choiceCounts) };
       }
       case "repeated-part": {
         return { ...facet, sectionParts: again(facet.sectionParts) };

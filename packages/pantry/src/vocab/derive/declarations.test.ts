@@ -24,6 +24,7 @@ import {
   attributeDeclarationsOf,
   attributeWildcardsOf,
   globalKindsOf,
+  governingRowsOf,
   loadDeclarations,
   loadGlobalAttributes,
   renderAttributes,
@@ -414,6 +415,7 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/declarations.ts over the p
                 attributeWildcardsOf(readings),
                 textTypesOf(readings),
                 yield* loadGlobalAttributes(),
+                governingRowsOf(readings),
               ),
             ],
           ] as const;

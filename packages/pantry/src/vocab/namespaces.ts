@@ -97,6 +97,29 @@ export const cpNamespace = vocabularyNamespaces.cp.namespace;
 export const qtiMetadataNamespace = vocabularyNamespaces.qmd.namespace;
 
 /**
+ * The namespaces QTI 2's published XSDs declare, each the `targetNamespace` of one of them: items,
+ * sections and tests in `imsqti_v2p0`, `imsqti_v2p1` and `imsqti_v2p2`, then the 2.1 and 2.2
+ * metadata, results reporting and usage data. A document whose root is in one is a QTI 2 document,
+ * which no QTI 3 schema reads, so shred refuses it as `not-qti3` before it reads a name (spec
+ * reading 80). QTI 3.0's own namespaces are disjoint from these; a root in any other namespace QTI
+ * 3.0 does not declare is not QTI 2 and is refused as an unknown name.
+ *
+ * @see {@link https://www.imsglobal.org/xsd/imsqti_v2p2.xsd | QTI 2.2 ASI XSD, `targetNamespace` (line 3)}
+ * @see {@link https://www.imsglobal.org/xsd/imsqti_usagedata_v2p2.xsd | QTI 2.2 usage data XSD, `targetNamespace` (line 3)}
+ */
+export const qti2Namespaces: ReadonlySet<string> = new Set([
+  "http://www.imsglobal.org/xsd/imsqti_v2p0",
+  "http://www.imsglobal.org/xsd/imsqti_v2p1",
+  "http://www.imsglobal.org/xsd/imsqti_v2p2",
+  "http://www.imsglobal.org/xsd/imsqti_metadata_v2p1",
+  "http://www.imsglobal.org/xsd/imsqti_metadata_v2p2",
+  "http://www.imsglobal.org/xsd/imsqti_result_v2p1",
+  "http://www.imsglobal.org/xsd/imsqti_result_v2p2",
+  "http://www.imsglobal.org/xsd/imsqti_usagedata_v2p1",
+  "http://www.imsglobal.org/xsd/imsqti_usagedata_v2p2",
+]);
+
+/**
  * The handle prefix of each namespace a vocabulary is in.
  */
 const prefixes: ReadonlyMap<string, string> = new Map(

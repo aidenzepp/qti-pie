@@ -1,13 +1,16 @@
+import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option, Result } from "effect";
+import { Effect, FileSystem, Formatter, Option, Result } from "effect";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import { fin, roster } from "#pantry/grammar/closed.ts";
 import { cp, documentRoots, lom, manifestRoot, asi, ud } from "#pantry/grammar/facets.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { packageGrammar } from "#pantry/grammar/package.ts";
-import { checkCache } from "#pantry/vocab/derive/sources.ts";
+import { checkCache, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import { loadXsd, XsdOracleLayer } from "#pantry/test/gen/grammar.ts";
+import { writeXsdOracle } from "#pantry/test/xsd-catalog.ts";
+import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
  * Whether every pinned XSD is in the cache; without them the XSD read is skipped.
@@ -113,18 +116,61 @@ describe.skipIf(!cached)("ResourceTypeOf against the content-packaging XSDs", ()
   );
 });
 
+/**
+ * The resource types whose files are documents the composition reads, each with the root element
+ * its file holds, read off the QTI 3.0 Best Practice and Implementation Guide independently of the
+ * facets: §6.2's table of resource types, whose descriptions name the class each file holds ("QTI 3
+ * AssessmentTest", ...); §6.3's external metadata file, whose example's root is LOM's `lom`; and
+ * §6.5's usage-data file, whose root is `usageData`. The guide's table spells the response
+ * processing type `imsqti_responseprocessing_xmlv3p0`; the content-packaging XSDs, which
+ * `ResourceTypeOf` follows, enumerate `imsqti_resprocessing_xmlv3p0`, so it is written as the XSD
+ * spells it (spec reading 73). The table's other types (a fragment, web content, LTI links, PLS
+ * lexicons, control files, non-IMS metadata, stylesheets) are no document of the composition.
+ */
+const statedRoots: readonly { readonly root: string; readonly type: string }[] = [
+  { root: "qti-assessment-test", type: "imsqti_test_xmlv3p0" },
+  { root: "qti-assessment-section", type: "imsqti_section_xmlv3p0" },
+  { root: "qti-assessment-item", type: "imsqti_item_xmlv3p0" },
+  { root: "qti-outcome-declaration", type: "imsqti_outcomes_xmlv3p0" },
+  { root: "qti-response-processing", type: "imsqti_resprocessing_xmlv3p0" },
+  { root: "qti-assessment-stimulus", type: "imsqti_stimulus_xmlv3p0" },
+  { root: "qti-response-processing", type: "imsqti_rptemplate_xmlv3p0" },
+  { root: "lom:lom", type: "resourcemetadata/xml" },
+  { root: "ud:usageData", type: "qtiusagedata/xml" },
+];
+
+/**
+ * The manifest's root, which no resource type lists: the guide's §6.1.1, a package's
+ * `imsmanifest.xml`, whose root is content packaging's `manifest`.
+ */
+const statedManifest = "cp:manifest";
+
+/**
+ * Write a (type, root) pair as one comparable string.
+ *
+ * @param row - The pair.
+ * @param row.root - The root kind.
+ * @param row.type - The resource type.
+ * @returns The two, space-separated.
+ */
+const pair = ({ root, type }: { readonly root: string; readonly type: string }): string =>
+  `${type} ${root}`;
+
 describe("RootOfType", () => {
   it.effect(
-    "is a function into the document roots, and the roots are the manifest's and its payload's",
+    "holds exactly the (type, root) pairs the implementation guide states, and the document roots are the manifest's and theirs",
     () =>
+      // Oracle: the specification as a checker, the guide's resource types and their files' roots,
+      // stated above. Set equality, so a pair dropped, added or re-rooted fails, as does a document
+      // root no stated file holds.
       Effect.gen(function* roots() {
         const { rootOfType } = yield* relations;
-        const types = rootOfType.rows.map(({ type }) => type);
 
-        assert.strictEqual(new Set(types).size, types.length);
+        assert.deepStrictEqual(new Set(rootOfType.rows.map(pair)), new Set(statedRoots.map(pair)));
+        assert.strictEqual(manifestRoot, statedManifest);
         assert.deepStrictEqual(
           new Set(documentRoots),
-          new Set([manifestRoot, ...rootOfType.rows.map(({ root }) => root)]),
+          new Set([statedManifest, ...statedRoots.map(({ root }) => root)]),
         );
       }),
   );
@@ -139,4 +185,98 @@ describe("RootOfType", () => {
       "OutsideCodeSpace",
     );
   });
+});
+
+/**
+ * The resource types of the implementation guide's §6.2 table, as the guide spells them, read off
+ * `impl.txt` lines 13275 to 13355, and the content-packaging XSDs' spelling of the one the guide
+ * spells otherwise, `imsqti_resprocessing_xmlv3p0` (spec reading 73).
+ */
+const guideTypes = [
+  "imsqti_test_xmlv3p0",
+  "imsqti_section_xmlv3p0",
+  "imsqti_item_xmlv3p0",
+  "imsqti_outcomes_xmlv3p0",
+  "imsqti_responseprocessing_xmlv3p0",
+  "imsqti_resprocessing_xmlv3p0",
+  "imsqti_stimulus_xmlv3p0",
+  "imsqti_fragment_xmlv3p0",
+  "imsqti_rptemplate_xmlv3p0",
+  "associatedcontent/learning-application-resource",
+  "webcontent",
+  "imslti_xmlv1p1",
+  "imsltia_xmlv1p0",
+  "controlfile",
+  "resourcemetadata/xml",
+  "resourceextmetadata/xml",
+  "qtiusagedata/xml",
+  "pls",
+  "css2",
+  "css3",
+  "extension",
+] as const;
+
+/**
+ * A manifest of a version whose one resource has a type, and nothing else the content-packaging
+ * XSD does not require.
+ *
+ * @param version - The version, which its `schemaversion` names.
+ * @param type - The resource's type, as written.
+ * @returns The manifest's text.
+ */
+const manifestOfType = (version: string, type: string): string =>
+  `<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>${version}</schemaversion></metadata><organizations/><resources><resource identifier="R" type="${type}" href="a.xml"><file href="a.xml"/></resource></resources></manifest>\n`;
+
+describe.skipIf(!cached)("ResourceTypeOf against xmllint", () => {
+  it.effect(
+    "admits each type of the guide's table, and the XSD's imsqti_resprocessing_xmlv3p0, in a version exactly when xmllint accepts a manifest whose resource carries it: every type in both versions",
+    () =>
+      // Oracle: libxml2 over each version's content-packaging XSD, the normative source of the
+      // vocabulary (spec reading 73): the guide is informative, so a spelling only it gives, such as
+      // `imsqti_responseprocessing_xmlv3p0`, is refused where the XSD refuses it.
+      // Bound: the guide's 20 types and the XSD's spelling of the 21st, in both versions, 42
+      // manifests.
+      Effect.gen(function* againstXmllint() {
+        const fs = yield* FileSystem.FileSystem;
+        const { resourceTypeOf } = yield* relations;
+        const directory = path.resolve(import.meta.dirname, "..", "..", "work", "resource-types");
+        const oracle = yield* writeXsdOracle(directory);
+        const cache = yield* xsdDirectory;
+        const disagreements: string[] = [];
+        for (const [root, version] of [
+          ["imsqtiv3p0_imscpv1p2_v1p0.xsd", "3.0.0"],
+          ["imsqtiv3p0p1_imscpv1p2_v1p0.xsd", "3.0.1"],
+        ] as const) {
+          const files = guideTypes.map(
+            (type) => `${directory}/${version}-${type.replaceAll("/", "-")}.xml`,
+          );
+          for (const [at, type] of guideTypes.entries()) {
+            yield* fs.writeFileString(files[at] ?? "", manifestOfType(version, type));
+          }
+
+          const verdicts = yield* xmllintValidate({
+            catalog: oracle.catalog,
+            paths: files,
+            schema: `${cache}/${root}`,
+          });
+          for (const [at, type] of guideTypes.entries()) {
+            const valid = verdicts[at]?._tag === "Valid";
+            const admitted = Option.isSome(resourceTypeOf.lookup({ type, version }));
+            if (valid !== admitted) {
+              disagreements.push(
+                `${version} ${type}: ResourceTypeOf ${admitted ? "admits" : "refuses"} it, xmllint ${valid ? "accepts" : "refuses"} ${Formatter.format(verdicts[at])}`,
+              );
+            }
+          }
+        }
+
+        assert.isFalse(
+          Option.isSome(
+            resourceTypeOf.lookup({ type: "imsqti_responseprocessing_xmlv3p0", version: "3.0.1" }),
+          ),
+        );
+        assert.deepStrictEqual(disagreements, []);
+      }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
+    120_000,
+  );
 });

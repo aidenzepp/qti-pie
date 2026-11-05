@@ -23,13 +23,14 @@
  * - **The kinds.** Every element declaration of those schemas, global or local, that is not abstract
  *   is a kind of the vocabulary of its namespace: its handle prefix and local name
  *   (`namespaces.ts`), unless the element is declared with several types, when its type's naming
- *   decision names it (`naming.ts`). An element of several types with an undecided type is
- *   refused.
+ *   decision names it (`naming.ts`). An element of several types with an undecided type is refused.
+ *   An anonymous type is told apart by the top-level group it is written in, as MathML's three
+ *   `semantics` declarations are ({@link declaredOf}).
  * - **A kind's model.** A declaration of a named or anonymous complex type reads that type; of a
  *   simple type, `simple`; of no type, its substitution group head's, else `xs:anyType`'s, which is
  *   mixed content of one lax `##any` wildcard, any number of times. A kind declared more than once
- *   in a version, as `m:semantics` is in three MathML groups, reads the declaration whose model
- *   names every kind the others name; declarations with no such widest one are refused.
+ *   in a version has one model; declarations of one kind with two models are refused, since a
+ *   naming decision then names each.
  * - **Empty content.** A model group that is empty content by XML Schema 1.0 Part 1, §3.4.2, clause
  *   2.1 (an empty `xs:sequence` or `xs:all`, an empty optional `xs:choice`, any group of
  *   `maxOccurs` 0) adds no particle, and a type left with none is `empty`, unless it is mixed.
@@ -220,6 +221,50 @@ export type Declared =
 const anonymous = "anonymous";
 
 /**
+ * Whether an element of a schema document is, or holds, another, by identity.
+ *
+ * @param node - The element searched.
+ * @param target - The element sought.
+ * @returns Whether `target` is `node` or one of its descendants.
+ */
+const holds = (node: Element, target: Element): boolean =>
+  node === target || elementsOf(node).some((child) => holds(child, target));
+
+/**
+ * Name the anonymous complex type of a local declaration: `anonymous`, or, for an element a naming
+ * decision names, `anonymous in group <name>` after the top-level group the declaration is written
+ * in.
+ *
+ * The group is what tells such an element's types apart: MathML declares `semantics` three times
+ * with three anonymous types, in the groups `semantics`, `semantics-ci` and `semantics-contexp`
+ * (`mathml3-common.xsd` line 72, `mathml3-strict-content.xsd` lines 65 and 84), so each is a kind
+ * of its own (`naming.ts`). An element no decision names keeps `anonymous`, so its handle stays its
+ * local name whatever group it sits in.
+ *
+ * @param view - The schema the declaration is in.
+ * @param declaration - The `xs:element` declaration.
+ * @returns The name its type goes by in a naming decision.
+ */
+const anonymousNameOf = (view: SchemaView, declaration: Element): string => {
+  const { schema } = view;
+  const form = Option.getOrElse(attributeOf(declaration, "form"), () =>
+    schema.qualified ? "qualified" : "unqualified",
+  );
+  const namespace = form === "qualified" ? schema.targetNamespace : "";
+  const decided = Option.exists(attributeOf(declaration, "name"), (local) =>
+    isDecided(namespace, local),
+  );
+  const within = decided
+    ? Arr.findFirst([...schema.groups], ([, group]) => holds(group, declaration))
+    : Option.none();
+
+  return Option.match(within, {
+    onNone: () => anonymous,
+    onSome: ([group]) => `${anonymous} in group ${group}`,
+  });
+};
+
+/**
  * Read what a declaration declares its element with.
  *
  * @param view - The schema the declaration is in.
@@ -237,7 +282,7 @@ export const declaredOf = (
       return {
         _tag: "complex",
         definition: inPlace.value,
-        name: anonymous,
+        name: anonymousNameOf(view, declaration),
         named: Option.none(),
       } as const;
     }
@@ -666,33 +711,6 @@ export const contentTypeOf = (
   });
 
 /**
- * The kinds a model's element particles stand for, each once.
- *
- * @param content - The model.
- * @returns The kinds.
- */
-const namedKindsOf = (content: ContentType): ReadonlySet<string> => {
-  const found = new Set<string>();
-  const visit = (particle: Particle): void => {
-    if (particle._tag === "element") {
-      for (const kind of particle.kinds) {
-        found.add(kind);
-      }
-    } else if (particle._tag === "group") {
-      for (const inner of particle.particles) {
-        visit(inner);
-      }
-    }
-  };
-
-  if (content._tag === "element-only" || content._tag === "mixed") {
-    visit(content.particle);
-  }
-
-  return found;
-};
-
-/**
  * A kind's model in one version, and where the version states it: its type's `xs:complexType`, or
  * its element's `xs:element` for a type with no complex definition.
  */
@@ -781,35 +799,6 @@ const joinedContent = (left: ContentType, right: ContentType): ContentType =>
     : left;
 
 /**
- * The widest of a kind's models: the one whose element particles name every kind the others name,
- * with the same content type tag.
- *
- * @param kind - The kind.
- * @param models - Its declarations' models, in reading order.
- * @returns The first widest, or an {@link XsdReadingError} when none is.
- */
-const widestOf = (
-  kind: string,
-  models: readonly Modeled[],
-): Result.Result<Modeled, XsdReadingError> =>
-  Option.match(
-    Arr.findFirst(models, (wide) =>
-      models.every(
-        (narrow) =>
-          narrow.content._tag === wide.content._tag &&
-          [...namedKindsOf(narrow.content)].every((name) => namedKindsOf(wide.content).has(name)),
-      ),
-    ),
-    {
-      onNone: () =>
-        refuse(
-          `the kind ${kind} is declared ${models.length} times, and no declaration names every kind the others name`,
-        ),
-      onSome: Result.succeed,
-    },
-  );
-
-/**
  * Whether a model holds an element wildcard.
  *
  * @param content - The model.
@@ -842,7 +831,7 @@ export const modelsOf = (
   documents: readonly (readonly [SchemaView, XmlDocument])[],
 ): Result.Result<ReadonlyMap<string, Modeled>, XsdReadingError> =>
   Result.gen(function* modelsOfBody() {
-    const declared = new Map<string, Modeled[]>();
+    const models = new Map<string, Modeled>();
 
     for (const [view, document] of documents) {
       for (const { declaration, local, namespace, type } of yield* declarationsIn(
@@ -862,22 +851,19 @@ export const modelsOf = (
         }
 
         const kind = yield* handleOf(namespace, local, typeNameOf(type));
-        const known = declared.get(kind) ?? [];
+        const known = Option.fromNullishOr(models.get(kind));
         const source = yield* view.sourceOf(
           type._tag === "complex" ? type.definition : declaration,
         );
-        const structure = structureOf(content);
 
-        if (!known.some((other) => structureOf(other.content) === structure)) {
-          declared.set(kind, [...known, { content, source, type: declaredNameOf(type) }]);
+        if (Option.isNone(known)) {
+          models.set(kind, { content, source, type: declaredNameOf(type) });
+        } else if (structureOf(known.value.content) !== structureOf(content)) {
+          return yield* refuse(
+            `the kind ${kind} is declared with two content models; name each of its types in src/vocab/derive/naming.ts`,
+          );
         }
       }
-    }
-
-    const models = new Map<string, Modeled>();
-
-    for (const [kind, held] of declared) {
-      models.set(kind, yield* widestOf(kind, held));
     }
 
     return models;

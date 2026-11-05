@@ -786,7 +786,13 @@ const builtOf = <V extends XdmVocabulary>(
       return {
         _tag: "element",
         children,
-        node: { _tag: kind, ...content, children, name: { local, namespace } },
+        node: {
+          _tag: kind,
+          ...content,
+          children,
+          governs: row.governs,
+          name: { local, namespace },
+        },
       } as const;
     }
 

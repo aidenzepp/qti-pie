@@ -8,6 +8,7 @@
  * own, so the importer, the export and every test read a document through the same relations.
  */
 import { Array as Arr, Option, Result } from "effect";
+import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar, Kind, Name } from "#pantry/grammar/compose.ts";
 import { contentStep } from "#pantry/grammar/content.ts";
 import { typeHandle } from "#pantry/grammar/xsi.ts";
@@ -71,7 +72,7 @@ const closedNameOf = (name: Name): Option.Option<ClosedName<Composed>> =>
 /**
  * Read the composed grammar as shred reads a grammar: its kind resolution, the `AttributeName`
  * roster's closed handles, `Order`'s key set as the children each kind admits,
- * `AttributeAdmission`, and the `TypeName` roster with each kind's declared type.
+ * `AttributeAdmission`, `StrictlyHeld`, and the `TypeName` roster with each kind's declared type.
  *
  * @param grammar - The composed grammar.
  * @returns The grammar shred reads documents through.
@@ -79,13 +80,15 @@ const closedNameOf = (name: Name): Option.Option<ClosedName<Composed>> =>
 export const shredGrammarOf = (grammar: ComposedGrammar): ShredGrammar<Composed> => ({
   admitsChild: (version, parent, child) =>
     Option.isSome(grammar.admission.lookup({ child, parent, version })),
-  admitted: (version, kind, name) =>
-    Option.isSome(grammar.attributes.admission.lookup({ kind, name, version })),
+  admitted: (version, kind, governs, name) =>
+    Option.isSome(admissionOf(grammar.attributes, { governs, kind, name, version })),
   closedName: (spelling) =>
     grammar.kinds.attributeName.has(spelling) ? closedNameOf(spelling) : Option.none(),
   declaredType: (version, kind) => grammar.xsi.declaredType(version, kind),
   resolve: (namespace, local, parent) =>
     grammar.kinds.resolve(namespace, local, parent).pipe(Option.flatMap(elementKindOf)),
+  strictlyHeld: (version, parent, kind) =>
+    Option.isSome(grammar.content.strictlyHeld.lookup({ child: kind, parent, version })),
   typeName: (name) => {
     const handle = typeHandle(name);
 
@@ -112,7 +115,7 @@ export const foldGrammarOf = (grammar: ComposedGrammar): FoldGrammar<Composed> =
   return {
     ancestry: grammar.ancestry,
     attributePosition: (key) =>
-      Option.map(grammar.attributes.admission.lookup(key), ({ position }) => Number(position)),
+      Option.map(admissionOf(grammar.attributes, key), ({ position }) => position),
     interaction: grammar.kinds.interaction,
     isElement: grammar.kinds.isElement,
     state: (key, was) =>

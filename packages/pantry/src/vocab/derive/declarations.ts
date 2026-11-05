@@ -7,7 +7,11 @@
  *   namespace, its kinds in the order the XSDs first declare them, and the kinds a schema declares
  *   globally;
  * - `attributes`, `src/vocab/inventory/attributes.ts`: each kind's attribute declarations, its
- *   attribute wildcard and its text's simple type, each stated once for the versions it holds in.
+ *   attribute wildcard and its text's simple type, each stated once for the versions it holds in;
+ *   and beside them the governing types an `xsi:type` may give an element (spec readings 60 and 75,
+ *   {@link governingRowsOf}): the attribute declarations and wildcard of each complex type derived
+ *   from a type some element is declared with, and the text of every named simple type, the
+ *   built-ins' included.
  *
  * Run it from `packages/pantry` as `node src/vocab/derive/declarations.ts <target>`; it reads only
  * the files `sources.ts` pins, touches no database, and imports nothing that reads the leaves:
@@ -36,9 +40,10 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Array as Arr, Console, Effect, Equal, Layer, Match, Option, Order, Result } from "effect";
 import { Argument, Command } from "effect/cli";
 import { Digest } from "effect/crypto";
-import type { Element } from "@qti-pie/crust/tree.ts";
+import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
+import { typeHandle } from "#pantry/grammar/xsi.ts";
 import {
   attributeNameDirective,
   attributeOf,
@@ -46,19 +51,23 @@ import {
   declaredType,
   entryOfType,
   firstXs,
+  qualify,
   refuse,
   valueTypeOf,
   XsdReadingError,
 } from "#pantry/vocab/derive/derive.ts";
-import type { AttributeRow } from "#pantry/vocab/derive/derive.ts";
-import { valueDomainOf } from "#pantry/vocab/derive/domains.ts";
+import type { AttributeRow, KindSpec, XsdSchema } from "#pantry/vocab/derive/derive.ts";
+import { builtinBases, valueDomainOf } from "#pantry/vocab/derive/domains.ts";
+import type { DomainError } from "#pantry/vocab/derive/domains.ts";
 import {
   declarationsIn,
+  derivationsOf,
   handleOf,
   loadWorld,
   sourcesWriter,
   typeNameOf,
 } from "#pantry/vocab/derive/models.ts";
+import { redefinitionKey } from "#pantry/vocab/derive/ssml.ts";
 import type { Declaration, SchemaView, World } from "#pantry/vocab/derive/models.ts";
 import type {
   AttributeDeclaration,
@@ -70,11 +79,14 @@ import type {
   Source,
   Sources,
   TextType,
+  TypeAttributeDeclaration,
+  TypeAttributeWildcard,
   TypeReading,
+  TypeText,
   ValueType,
   VocabularyRoster,
 } from "#pantry/vocab/inventory/types.ts";
-import { vocabularyNamespaces, xmlNamespace } from "#pantry/vocab/namespaces.ts";
+import { vocabularyNamespaces, xmlNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
  * What one version's XSDs declare about one kind: its attributes, its attribute wildcard and its
@@ -121,7 +133,7 @@ const xmlPrefix = "xml:";
 export const globalAttributeOf = (
   world: World,
   name: string,
-): Result.Result<GlobalAttributeDeclaration, XsdReadingError> =>
+): Result.Result<GlobalAttributeDeclaration, DomainError> =>
   Result.gen(function* globalAttributeOfBody() {
     const local = name.slice(xmlPrefix.length);
     const view = Option.fromNullishOr(world.get(xmlNamespace));
@@ -135,7 +147,11 @@ export const globalAttributeOf = (
 
     const type = yield* declaredType(view.value.schema, declaration.value);
 
-    return { domain: yield* valueDomainOf(view.value.schema, type), name, type };
+    return {
+      domain: yield* valueDomainOf(view.value.schema, type, `attribute ${name}`),
+      name,
+      type,
+    };
   });
 
 /**
@@ -194,7 +210,9 @@ export const loadGlobalAttributes = Effect.fn("vocab.loadGlobalAttributes")(
 
     for (const [name, type] of instanceAttributes) {
       globals.push({
-        domain: yield* Effect.fromResult(valueDomainOf(xml.value.schema, type)),
+        domain: yield* Effect.fromResult(
+          valueDomainOf(xml.value.schema, type, `attribute ${name}`),
+        ),
         name,
         type,
       });
@@ -203,13 +221,76 @@ export const loadGlobalAttributes = Effect.fn("vocab.loadGlobalAttributes")(
     return {
       globals,
       open: {
-        domain: yield* Effect.fromResult(valueDomainOf(xml.value.schema, openType)),
+        domain: yield* Effect.fromResult(
+          valueDomainOf(xml.value.schema, openType, "an open attribute name"),
+        ),
         name: "xs:anySimpleType",
         type: openType,
       } satisfies GlobalAttributeDeclaration,
     };
   },
 );
+
+/**
+ * Read what a complex type declares about the elements it governs: its attributes, its base
+ * types' first, each name once, its complete attribute wildcard, and its simple content's type.
+ *
+ * @param world - The version's schemas.
+ * @param view - The schema the type is in.
+ * @param owner - What the type is read for, a kind's handle or a type's, which a refusal names it
+ *   by.
+ * @param spec - The kind's handle and element, and the name the entry records for its type.
+ * @param definition - The `xs:complexType` element, named or anonymous.
+ * @returns The reading, or a {@link DomainError}.
+ */
+const complexReadingOf = (
+  world: World,
+  view: SchemaView,
+  owner: string,
+  spec: KindSpec,
+  definition: Element,
+): Result.Result<KindReading, DomainError> =>
+  Result.gen(function* complexReadingOfBody() {
+    const entry = yield* entryOfType(view.schema, spec, definition);
+    const wildcard = yield* attributeWildcardOf(view.schema, definition);
+    const attributes: (AttributeRow & { readonly domain: Domain; readonly source: Source })[] = [];
+
+    for (const row of lastOfEach(entry.attributes)) {
+      const source = yield* view.sourceOf(row.declaration);
+
+      if (row.name.startsWith(xmlPrefix)) {
+        const global = yield* globalAttributeOf(world, row.name);
+
+        attributes.push({ ...row, ...global.type, domain: global.domain, source });
+      } else {
+        attributes.push({
+          ...row,
+          domain: yield* valueDomainOf(view.schema, row, `attribute ${row.name} of ${owner}`),
+          source,
+        });
+      }
+    }
+
+    const text: Option.Option<ValueType> =
+      entry.content._tag === "text"
+        ? Option.some({
+            inline: entry.content.inline,
+            type: entry.content.type,
+            whiteSpace: entry.content.whiteSpace,
+          })
+        : Option.none();
+
+    return {
+      attributes,
+      text: Option.isSome(text)
+        ? Option.some({
+            domain: yield* valueDomainOf(view.schema, text.value, `the text of ${owner}`),
+            type: text.value,
+          })
+        : Option.none(),
+      wildcard,
+    };
+  });
 
 /**
  * Read what one declaration declares about its kind.
@@ -221,14 +302,15 @@ export const loadGlobalAttributes = Effect.fn("vocab.loadGlobalAttributes")(
  * @param view - The schema the declaration is in.
  * @param kind - The kind's handle.
  * @param declared - The declaration.
- * @returns The reading, or an {@link XsdReadingError}.
+ * @returns The reading, or a {@link DomainError}: an {@link XsdReadingError}, or an invalid
+ *   type's length facets.
  */
 const readingOf = (
   world: World,
   view: SchemaView,
   kind: string,
   declared: Declaration,
-): Result.Result<KindReading, XsdReadingError> =>
+): Result.Result<KindReading, DomainError> =>
   Result.gen(function* readingOfBody() {
     const { type } = declared;
 
@@ -249,57 +331,33 @@ const readingOf = (
 
       return {
         attributes: [],
-        text: Option.some({ domain: yield* valueDomainOf(view.schema, text), type: text }),
+        text: Option.some({
+          domain: yield* valueDomainOf(view.schema, text, `the text of ${kind}`),
+          type: text,
+        }),
         wildcard: Option.none(),
       };
     }
 
-    const entry = yield* entryOfType(
-      view.schema,
+    return yield* complexReadingOf(
+      world,
+      view,
+      kind,
       { element: declared.local, handle: kind, type: type.name },
       type.definition,
     );
-    const wildcard = yield* attributeWildcardOf(view.schema, type.definition);
-    const attributes: (AttributeRow & { readonly domain: Domain; readonly source: Source })[] = [];
-
-    for (const row of lastOfEach(entry.attributes)) {
-      const source = yield* view.sourceOf(row.declaration);
-
-      if (row.name.startsWith(xmlPrefix)) {
-        const global = yield* globalAttributeOf(world, row.name);
-
-        attributes.push({ ...row, ...global.type, domain: global.domain, source });
-      } else {
-        attributes.push({ ...row, domain: yield* valueDomainOf(view.schema, row), source });
-      }
-    }
-
-    const text: Option.Option<ValueType> =
-      entry.content._tag === "text"
-        ? Option.some({
-            inline: entry.content.inline,
-            type: entry.content.type,
-            whiteSpace: entry.content.whiteSpace,
-          })
-        : Option.none();
-
-    return {
-      attributes,
-      text: Option.isSome(text)
-        ? Option.some({ domain: yield* valueDomainOf(view.schema, text.value), type: text.value })
-        : Option.none(),
-      wildcard,
-    };
   });
 
 /**
  * What one version's XSDs declare: each kind's reading, by kind in first-declaration order, the
- * kinds declared globally, and each roster's kinds by namespace.
+ * kinds declared globally, each roster's kinds by namespace, and the named types an `xsi:type` may
+ * give an element ({@link GoverningReading}).
  */
 interface VersionReading {
   readonly globals: ReadonlySet<string>;
   readonly kinds: ReadonlyMap<string, KindReading>;
   readonly rosters: ReadonlyMap<string, ReadonlyMap<string, string>>;
+  readonly types: GoverningReading;
 }
 
 /**
@@ -307,12 +365,12 @@ interface VersionReading {
  *
  * @param world - The version's schemas.
  * @param documents - Every document of the version's schemas, each with its schema.
- * @returns The reading, or an {@link XsdReadingError}.
+ * @returns The reading, or a {@link DomainError}.
  */
 const versionReadingOf = (
   world: World,
   documents: readonly (readonly [SchemaView, { readonly root: Element }])[],
-): Result.Result<VersionReading, XsdReadingError> =>
+): Result.Result<Omit<VersionReading, "types">, DomainError> =>
   Result.gen(function* versionReadingOfBody() {
     const kinds = new Map<string, KindReading>();
     const globals = new Set<string>();
@@ -350,6 +408,127 @@ const versionReadingOf = (
   });
 
 /**
+ * What one version's XSDs declare about the named types an `xsi:type` may give an element, by each
+ * type's `TypeName` handle (`typeHandle` of `#pantry/grammar/xsi.ts`):
+ *
+ * - `governors`: each named complex type validly derived from a named type some element is declared
+ *   with, other than that type itself (`derivationsOf`). An `xsi:type` on such an element may name
+ *   it, and it then governs the element in place of its declared type (XML Schema 1.0 Part 1,
+ *   §3.3.4, Element Locally Valid (Element), clauses 4.3 and 5.2.1; spec reading 75), so its
+ *   attributes, attribute wildcard and simple content are read as a kind's are.
+ * - `simple`: the text of every named simple type of the version's schemas and of every built-in but
+ *   `xs:anyType`. An `xsi:type` on a foreign element may name any of them, which then governs its
+ *   text (§3.3.4, Element Locally Valid (Type), clause 3.1.3; spec reading 60), and one on a
+ *   simple-content element may name one derived from its declared type (reading 75).
+ */
+interface GoverningReading {
+  readonly governors: ReadonlyMap<string, KindReading>;
+  readonly simple: ReadonlyMap<string, { readonly domain: Domain; readonly type: ValueType }>;
+}
+
+/**
+ * Read one version's governing types.
+ *
+ * @param world - The version's schemas.
+ * @param documents - Every document of those schemas, each with its schema.
+ * @returns The reading, or a {@link DomainError}.
+ */
+const governingReadingOf = (
+  world: World,
+  documents: readonly (readonly [SchemaView, XmlDocument])[],
+): Result.Result<GoverningReading, DomainError> =>
+  Result.gen(function* governingReadingOfBody() {
+    const derivations = yield* derivationsOf(world, documents);
+    const declared = new Set<string>();
+
+    for (const [view, document] of documents) {
+      for (const { type } of yield* declarationsIn(view, document.root)) {
+        if (type._tag !== "anyType") {
+          for (const name of Option.toArray(type.named)) {
+            declared.add(typeHandle(name));
+          }
+        }
+      }
+    }
+
+    const governors = new Map<string, KindReading>();
+
+    for (const handle of declared) {
+      for (const name of derivations.get(handle)?.derived.slice(1) ?? []) {
+        const owner = typeHandle(name);
+        const view = world.get(name.namespace);
+        const definition = Option.flatMap(Option.fromNullishOr(view), (held) =>
+          Option.fromNullishOr(
+            held.schema.complexTypes.get(
+              held.redefined.has(name.local) ? redefinitionKey(name.local) : name.local,
+            ),
+          ),
+        );
+
+        if (view !== undefined && Option.isSome(definition) && !governors.has(owner)) {
+          governors.set(
+            owner,
+            yield* complexReadingOf(
+              world,
+              view,
+              owner,
+              { element: name.local, handle: owner, type: name.local },
+              definition.value,
+            ),
+          );
+        }
+      }
+    }
+
+    const simple = new Map<string, { readonly domain: Domain; readonly type: ValueType }>();
+    const views = [...new Set(world.values())];
+    const xsPrefixed = Arr.findFirst(views, ({ schema }) =>
+      Arr.findFirst([...schema.namespaces], ([, namespace]) => namespace === xsNamespace).pipe(
+        Option.map(([prefix]) => [schema, prefix] as const),
+      ),
+    );
+
+    if (Option.isNone(xsPrefixed)) {
+      return yield* refuse("no schema of the version binds a prefix to XML Schema's namespace");
+    }
+
+    const [xsSchema, xsPrefix] = xsPrefixed.value;
+    const read = (schema: XsdSchema, lexical: string, owner: string) =>
+      Result.gen(function* readSimple() {
+        const type = yield* valueTypeOf(schema, { _tag: "Named", lexical });
+
+        simple.set(owner, {
+          domain: yield* valueDomainOf(schema, type, `the simple type ${owner}`),
+          type,
+        });
+      });
+
+    for (const local of builtinBases.keys()) {
+      if (local !== "anyType") {
+        yield* read(
+          xsSchema,
+          `${xsPrefix}:${local}`,
+          typeHandle({ local, namespace: xsNamespace }),
+        );
+      }
+    }
+
+    for (const { schema } of views) {
+      for (const local of schema.simpleTypes.keys()) {
+        if (!local.endsWith(redefinitionKey(""))) {
+          yield* read(
+            schema,
+            qualify(schema, local),
+            typeHandle({ local, namespace: schema.targetNamespace }),
+          );
+        }
+      }
+    }
+
+    return { governors, simple };
+  });
+
+/**
  * Read every version's declarations.
  *
  * @returns Each version's reading, in roster order.
@@ -360,7 +539,13 @@ export const loadDeclarations = Effect.fn("vocab.loadDeclarations")(function* lo
   for (const version of schemaVersions) {
     const { documents, world } = yield* loadWorld(version);
 
-    readings.push([version, yield* Effect.fromResult(versionReadingOf(world, documents))]);
+    readings.push([
+      version,
+      {
+        ...(yield* Effect.fromResult(versionReadingOf(world, documents))),
+        types: yield* Effect.fromResult(governingReadingOf(world, documents)),
+      },
+    ]);
   }
 
   return readings;
@@ -508,7 +693,7 @@ export const globalKindsOf = (
  * @returns The rows, in first-declaration order.
  */
 export const attributeDeclarationsOf = (
-  readings: readonly (readonly [SchemaVersion, VersionReading])[],
+  readings: readonly (readonly [SchemaVersion, Pick<VersionReading, "kinds">])[],
 ): readonly AttributeDeclaration[] =>
   mergedWithSources(
     readings.map(([version, { kinds }]) => [
@@ -544,7 +729,7 @@ export const attributeDeclarationsOf = (
  * @returns The rows, in first-declaration order.
  */
 export const attributeWildcardsOf = (
-  readings: readonly (readonly [SchemaVersion, VersionReading])[],
+  readings: readonly (readonly [SchemaVersion, Pick<VersionReading, "kinds">])[],
 ): readonly AttributeWildcard[] =>
   merged(
     readings.map(([version, { kinds }]) => [
@@ -576,6 +761,57 @@ export const textTypesOf = (
       ),
     ]),
   ).map(({ row, versions }) => ({ ...row, versions }));
+
+/**
+ * The governing types' rows, each type's once for the versions that agree on it: the attribute
+ * declarations and the attribute wildcard of each complex type that may govern an element in place
+ * of its declared type, and the text of each named simple type and of each such complex type with
+ * simple content.
+ */
+export interface GoverningRows {
+  readonly declarations: readonly TypeAttributeDeclaration[];
+  readonly texts: readonly TypeText[];
+  readonly wildcards: readonly TypeAttributeWildcard[];
+}
+
+/**
+ * State the governing types' rows, each type's once for the versions that agree on it.
+ *
+ * @param readings - Each version's reading.
+ * @returns The rows, the declarations and wildcards in the order the types are first read, the
+ *   texts each version's simple types first, then its governors'.
+ */
+export const governingRowsOf = (
+  readings: readonly (readonly [SchemaVersion, VersionReading])[],
+): GoverningRows => {
+  const governors = readings.map(
+    ([version, { types }]) => [version, { kinds: types.governors }] as const,
+  );
+
+  return {
+    declarations: attributeDeclarationsOf(governors).map(({ kind, ...row }) => ({
+      ...row,
+      owner: kind,
+    })),
+    texts: merged(
+      readings.map(([version, { types }]) => [
+        version,
+        new Map(
+          [
+            ...types.simple,
+            ...[...types.governors].flatMap(([owner, { text }]) =>
+              Option.toArray(text).map((held) => [owner, held] as const),
+            ),
+          ].map(([owner, { domain, type }]) => [owner, { domain, owner, type }] as const),
+        ),
+      ]),
+    ).map(({ row, versions }) => ({ ...row, versions })),
+    wildcards: attributeWildcardsOf(governors).map(({ kind, ...row }) => ({
+      ...row,
+      owner: kind,
+    })),
+  };
+};
 
 /**
  * The lines of a JSDoc comment; `vp fmt` wraps them.
@@ -852,6 +1088,8 @@ const facetsExpression = (facets: readonly Facet[]): string =>
  * @param wildcards - The attribute wildcards.
  * @param texts - The text types.
  * @param globals - The global attributes every schema processor knows, and the open names' type.
+ * @param governing - The governing types' rows ({@link governingRowsOf}), stated after every
+ *   kind's.
  * @returns The module text, without a final line break.
  */
 export const renderAttributes = (
@@ -862,6 +1100,7 @@ export const renderAttributes = (
     readonly globals: readonly GlobalAttributeDeclaration[];
     readonly open: GlobalAttributeDeclaration;
   },
+  governing: GoverningRows,
 ): string => {
   const typeNames = new Map<string, string>();
   const taken = new Set<string>();
@@ -944,18 +1183,23 @@ export const renderAttributes = (
     { kind: string; rows: string[]; versions: readonly SchemaVersion[] }
   >();
 
-  for (const row of declarations) {
-    const key = `${row.kind} ${row.versions.join(" ")}`;
+  const writtenOf = (row: Omit<AttributeDeclaration, "kind">): string => {
     const stem = Option.isSome(row.type.inline) ? row.name : row.type.type;
     const type = typeOf(row.type, stem);
     const domain = domainOfRow(row.domain, stem);
     const sources = writer.expression(row.sources);
-    const written = Option.match(row.default, {
+
+    return Option.match(row.default, {
       onNone: () =>
         `attribute(${JSON.stringify(row.name)}, ${JSON.stringify(row.use)}, ${type}, ${domain}, ${sources})`,
       onSome: (value) =>
         `defaulted(${JSON.stringify(row.name)}, ${JSON.stringify(row.use)}, ${type}, ${domain}, ${sources}, ${JSON.stringify(value)})`,
     });
+  };
+
+  for (const row of declarations) {
+    const key = `${row.kind} ${row.versions.join(" ")}`;
+    const written = writtenOf(row);
     const group = groups.get(key) ?? { kind: row.kind, rows: [], versions: row.versions };
 
     group.rows.push(written);
@@ -1007,6 +1251,31 @@ export const renderAttributes = (
     ({ domain, kind, type, versions }) =>
       `  text(${JSON.stringify(kind)}, ${versionsExpression(versions)}, ${typeOf(type, `${kind} text`)}, ${domainOfRow(domain, `${kind} text`)}),`,
   );
+  const ownerGroups = new Map<
+    string,
+    { owner: string; rows: string[]; versions: readonly SchemaVersion[] }
+  >();
+
+  for (const row of governing.declarations) {
+    const key = `${row.owner} ${row.versions.join(" ")}`;
+    const group = ownerGroups.get(key) ?? { owner: row.owner, rows: [], versions: row.versions };
+
+    group.rows.push(writtenOf(row));
+    ownerGroups.set(key, group);
+  }
+
+  const typeDeclares = [...ownerGroups.values()].map(
+    ({ owner, rows, versions }) =>
+      `  ...typeDeclares(${JSON.stringify(owner)}, ${versionsExpression(versions)}, ${listNames.get(rows.join("\n")) ?? `[${rows.join(", ")}]`}),`,
+  );
+  const typeWildcardRows = governing.wildcards.map(
+    ({ namespace, owner, processing, versions }) =>
+      `  typeWildcard(${JSON.stringify(owner)}, ${versionsExpression(versions)}, ${JSON.stringify(namespace)}, ${JSON.stringify(processing)}),`,
+  );
+  const typeTextRows = governing.texts.map(
+    ({ domain, owner, type, versions }) =>
+      `  typeText(${JSON.stringify(owner)}, ${versionsExpression(versions)}, ${typeOf(type, type.type)}, ${domainOfRow(domain, type.type)}),`,
+  );
   const imports = Arr.sort(
     Arr.dedupe([
       "AttributeDeclaration",
@@ -1021,6 +1290,9 @@ export const renderAttributes = (
       "Source",
       "Sources",
       "TextType",
+      "TypeAttributeDeclaration",
+      "TypeAttributeWildcard",
+      "TypeText",
       "ValueType",
       ...(builders.has("inlineType") ? ["InlineType", "TypeReading"] : []),
       ...(builders.has("restriction") ? ["FacetName"] : []),
@@ -1033,6 +1305,9 @@ export const renderAttributes = (
     ...commentOf([
       [
         `The attribute declarations, attribute wildcards and text types the pinned XSDs give every kind: ${declarations.length} declarations, ${wildcards.length} wildcards and ${texts.length} text types, each stated once for the schema versions it holds in.`,
+      ],
+      [
+        `Beside them, the governing types an \`xsi:type\` may give an element (spec readings 60 and 75): ${governing.declarations.length} attribute declarations and ${governing.wildcards.length} wildcards of the complex types that may govern an element in place of its declared type, and the texts of ${governing.texts.length} named types with simple content.`,
       ],
       [
         "Generated by `node src/vocab/derive/declarations.ts attributes` and formatted with `vp fmt`; `src/vocab/derive/declarations.test.ts` checks that a re-run reproduces this file byte for byte.",
@@ -1249,6 +1524,78 @@ export const renderAttributes = (
       ],
     ]),
     openRow,
+    "",
+    ...commentOf([
+      ["A governing type's declarations in some versions."],
+      [
+        "@param owner - The type's `TypeName` handle.",
+        "@param versions - The versions.",
+        "@param attributes - Its attributes.",
+        "@returns The rows.",
+      ],
+    ]),
+    "const typeDeclares = (",
+    "  owner: string,",
+    "  versions: readonly [SchemaVersion, ...SchemaVersion[]],",
+    '  attributes: readonly Omit<AttributeDeclaration, "kind" | "versions">[],',
+    "): readonly TypeAttributeDeclaration[] => attributes.map((declared) => ({ ...declared, owner, versions }));",
+    "",
+    ...commentOf([
+      ["A governing type's attribute wildcard."],
+      [
+        "@param owner - The type's `TypeName` handle.",
+        "@param versions - The versions.",
+        "@param namespace - Its namespace constraint.",
+        "@param processing - Its processing.",
+        "@returns The row.",
+      ],
+    ]),
+    "const typeWildcard = (",
+    "  owner: string,",
+    "  versions: readonly [SchemaVersion, ...SchemaVersion[]],",
+    "  namespace: NamespaceConstraint,",
+    "  processing: Processing,",
+    "): TypeAttributeWildcard => ({ namespace, owner, processing, versions });",
+    "",
+    ...commentOf([
+      ["A named type's text type."],
+      [
+        "@param owner - The type's `TypeName` handle.",
+        "@param versions - The versions.",
+        "@param type - Its simple type.",
+        "@param domain - Its simple type's domain.",
+        "@returns The row.",
+      ],
+    ]),
+    "const typeText = (",
+    "  owner: string,",
+    "  versions: readonly [SchemaVersion, ...SchemaVersion[]],",
+    "  type: ValueType,",
+    "  domain: Domain,",
+    "): TypeText => ({ domain, owner, type, versions });",
+    "",
+    ...commentOf([
+      [
+        "The attribute declarations of every complex type an `xsi:type` may name in place of a kind's declared type, which an element it governs carries in place of its declared type's (spec reading 75).",
+      ],
+    ]),
+    "export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [",
+    ...typeDeclares,
+    "];",
+    "",
+    ...commentOf([["The attribute wildcard of every such complex type."]]),
+    "export const typeAttributeWildcards: readonly TypeAttributeWildcard[] = [",
+    ...typeWildcardRows,
+    "];",
+    "",
+    ...commentOf([
+      [
+        "The text type of every named simple type of the pinned XSDs and every built-in but `xs:anyType`, and of every such complex type with simple content: the text of an element an `xsi:type` gives that type (spec readings 60 and 75).",
+      ],
+    ]),
+    "export const typeTexts: readonly TypeText[] = [",
+    ...typeTextRows,
+    "];",
   ].join("\n");
 };
 
@@ -1274,6 +1621,7 @@ const command = Command.make(
             attributeWildcardsOf(readings),
             textTypesOf(readings),
             yield* loadGlobalAttributes(),
+            governingRowsOf(readings),
           ),
     );
   }),

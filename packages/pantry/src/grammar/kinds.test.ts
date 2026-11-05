@@ -1,8 +1,9 @@
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, explore } from "@grizzle/testing/explore";
-import { noCoverage } from "@grizzle/testing/features";
+import { required } from "@grizzle/testing/features";
 import { array, element, int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
+import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option, Result } from "effect";
@@ -16,12 +17,11 @@ import {
 import type { Vocabulary } from "#pantry/grammar/kinds.ts";
 
 /**
- * The search budget of every exploration here.
+ * The search budget of every exploration here; each states its own coverage.
  */
 const budget = {
   caseHang: Duration.minutes(1),
   concurrency: 1,
-  coverage: noCoverage,
   kept: [],
   literal: Formatter.format,
   shrink: completeShrink,
@@ -92,6 +92,35 @@ const drawnList: Gen<{
 };
 
 /**
+ * What a model case reaches: each refusal the model predicts, or a generated grammar; and the
+ * situations the generator is built to put in front of it, a local name two kinds share, a kind of
+ * character data, an attribute name that spells an open class and a vocabulary listed twice.
+ */
+type KindsFeature =
+  | "KeyCollision"
+  | "OutsideCodeSpace"
+  | "RepeatedValue"
+  | "character data"
+  | "generated"
+  | "open-class spelling"
+  | "shared local"
+  | "vocabulary twice";
+
+/**
+ * Every feature a model case must reach.
+ */
+const kindsFeatures = [
+  "KeyCollision",
+  "OutsideCodeSpace",
+  "RepeatedValue",
+  "character data",
+  "generated",
+  "open-class spelling",
+  "shared local",
+  "vocabulary twice",
+] as const satisfies readonly KindsFeature[];
+
+/**
  * A toy vocabulary of plain element kinds, each named as its handle, with one attribute name.
  *
  * @param prefix - Its handles' prefix.
@@ -111,11 +140,21 @@ describe("the kinds generator against a naive model", () => {
   it.effect(
     "refuses exactly what the model refuses, and otherwise codes, sets and resolves as the model does",
     (ctx) =>
+      // Oracle: a second implementation, a naive model of the rosters, the element set and the
+      // resolution.
+      // Bound: up to 3 vocabularies of up to 3 kinds over 3 local names, 2 attribute names each
+      // and 2 interactions.
       searched(
         ctx,
         explore(
-          { ...budget, draw: drawn(drawnList), runs: 600, suite: "grammar/kinds/model" },
-          (list) =>
+          {
+            ...budget,
+            coverage: required<KindsFeature>(kindsFeatures, { cases: 300, sense: notesOnly }),
+            draw: drawn(drawnList),
+            runs: 600,
+            suite: "grammar/kinds/model",
+          },
+          (list, c) =>
             Effect.sync(() => {
               const vocabularies: readonly Vocabulary[] = list.kinds.map((kinds, at) => ({
                 attributes: [...new Set(list.attributes[at])],
@@ -127,7 +166,7 @@ describe("the kinds generator against a naive model", () => {
               const elements = all.filter(({ local }) => local !== "");
               const names = [...openClasses, ...new Set(list.attributes.flat())];
               // The model: each reason a roster or relation has no constant.
-              const reasons = new Set<string>();
+              const reasons = new Set<KindsFeature>();
               if (
                 new Set(handles).size !== handles.length ||
                 new Set(names).size !== names.length
@@ -151,6 +190,27 @@ describe("the kinds generator against a naive model", () => {
                 list.interactions.some((kind) => !roster.has(kind))
               ) {
                 reasons.add("OutsideCodeSpace");
+              }
+
+              c.noteAll(reasons.size > 0 ? reasons : ["generated"]);
+
+              const locals = elements.map(({ local }) => local);
+              if (new Set(locals).size < locals.length) {
+                c.note("shared local");
+              }
+
+              if (all.some(({ local }) => local === "")) {
+                c.note("character data");
+              }
+
+              if (
+                list.attributes.flat().some((name) => openClasses.some((open) => open === name))
+              ) {
+                c.note("open-class spelling");
+              }
+
+              if (new Set(list.kinds).size < list.kinds.length) {
+                c.note("vocabulary twice");
               }
 
               const result = Result.flatMap(
@@ -201,17 +261,35 @@ describe("the kinds generator against a naive model", () => {
   );
 
   it.effect("leaves every earlier code where it was when a vocabulary is appended", (ctx) =>
+    // Oracle: a metamorphic relation: a composition's codes are a prefix of a longer one's.
+    // Bound: two vocabularies of 0 to 3 kinds.
     searched(
       ctx,
       explore(
         {
           ...budget,
+          coverage: required<"empty first" | "empty second" | "both held">(
+            ["empty first", "empty second", "both held"],
+            { cases: 100, sense: notesOnly },
+          ),
           draw: drawn((source) => [source.draw(int(0, 3)), source.draw(int(0, 3))] as const),
           runs: 100,
           suite: "grammar/kinds/append-only",
         },
-        ([first, second]) =>
+        ([first, second], c) =>
           Effect.sync(() => {
+            if (first === 0) {
+              c.note("empty first");
+            }
+
+            if (second === 0) {
+              c.note("empty second");
+            }
+
+            if (first > 0 && second > 0) {
+              c.note("both held");
+            }
+
             const shorter = generate({
               interactions: [],
               layer: ["xsi:type"],

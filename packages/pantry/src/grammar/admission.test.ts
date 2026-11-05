@@ -1,9 +1,10 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, explore } from "@grizzle/testing/explore";
-import { noCoverage } from "@grizzle/testing/features";
+import { required } from "@grizzle/testing/features";
 import { array, element, int, weighted } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
+import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option, Result } from "effect";
@@ -28,6 +29,12 @@ import {
   xsdContents,
 } from "#pantry/test/gen/grammar.ts";
 import type { Content } from "#pantry/test/gen/grammar.ts";
+import {
+  contentExpressionParents,
+  mathmlNamespace,
+  mathmlRoot,
+  semanticsContexp,
+} from "#pantry/test/gen/relaxng.ts";
 
 /**
  * The composed grammar of production, failing the test that reads it when a generator refuses.
@@ -132,7 +139,10 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
                 : Option.exists(namespaceOf(child), (namespace) =>
                     wildcards.some((wildcard) => wildcardAdmits(wildcard, namespace)),
                   );
-              if (!named.has(child) && !byWildcard) {
+              // Spec reading 2: the RelaxNG's `ContExp` holds `semantics-contexp`, which the XSD's
+              // drops (`mathml3-strict-content.rnc` line 14).
+              const readingTwo = child === semanticsContexp && contentExpressionParents.has(parent);
+              if (!named.has(child) && !byWildcard && !readingTwo) {
                 differences.push(
                   `${root} ${version} ${parent} admits ${child}, which its model does not name`,
                 );
@@ -164,13 +174,16 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
   );
 
   it.effect(
-    "resolves every element name under every parent by locality, as the XSD reads it: a local declaration, else a global one a wildcard finds, else none",
+    "resolves every element name under every parent by locality, as the XSD reads it: a local declaration, else a global one a wildcard finds in the schema set of the parent's document, else none",
     () =>
       // Oracle: XML Schema Part 1 §3.3.2 and §3.10.4 over the tests' own reading of the XSDs: a
       // parent's model declares a name by an element particle, and a wildcard admitting the name's
-      // namespace finds its top-level declaration, but for reading 6's roots, which stay foreign;
-      // any other name is undeclared there. The document node declares the roots its model (R5)
-      // names. The box is every parent the walks reach, in either version, by every element name.
+      // namespace finds its top-level declaration in the schema set the parent was read from, its
+      // root XSD and what that imports (spec reading 72), but for reading 6's roots, which stay
+      // foreign; any other name is undeclared there. A parent read from several roots finds a
+      // declaration any of their sets holds, as reading 72's limit says. The document node
+      // declares the roots its model (R5) names. The box is every parent the walks reach, in
+      // either version, by every element name.
       Effect.gen(function* locality() {
         const { kinds } = yield* grammar;
         const names = kinds.elementName.rows.map(({ local, namespace }) => ({ local, namespace }));
@@ -192,7 +205,6 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
           read.push({ contents: xsdContents(set, resolverOf(kinds)).contents, set });
         }
 
-        const globals = new Set(read.flatMap(({ set }) => [...set.elements.keys()]));
         const kept = new Set(
           [...open.foreignRoots].flatMap((root) =>
             Option.toArray(kinds.elementName.lookup({ kind: root })).map(
@@ -200,7 +212,29 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
             ),
           ),
         );
-        for (const { contents } of read) {
+        for (const { contents, set } of read) {
+          // Spec reading 2, from the MathML 3 RelaxNG: `annotation-xml` holds the math expressions,
+          // what `m:mrow` names (`MathExpression`), and elements of other namespaces
+          // (`mathml3-common.rnc` lines 59 and 61); a wildcard finds no MathML element but the
+          // root, `math` (line 15); and `semantics` stands where `ContExp` does
+          // (`mathml3-strict-content.rnc` line 14).
+          const rootName = Option.match(kinds.elementName.lookup({ kind: mathmlRoot }), {
+            onNone: () => "",
+            onSome: ({ local, namespace }) => `{${namespace}}${local}`,
+          });
+          const foundByWildcard = (parent: string, key: string, namespace: string): boolean =>
+            namespace !== mathmlNamespace || (parent !== "m:annotation-xml" && key === rootName);
+          for (const { name } of (contents.get("m:mrow") ?? [])
+            .flatMap(({ particle }) => Option.toArray(particle))
+            .flatMap(elementsOf)
+            .flatMap(({ members }) => members)) {
+            declared.add(`m:annotation-xml {${name.namespace}}${name.local}`);
+          }
+
+          for (const parent of contentExpressionParents) {
+            declared.add(`${parent} {${mathmlNamespace}}semantics`);
+          }
+
           for (const [parent, models] of contents) {
             parents.add(parent);
             for (const particle of models.flatMap((model) => Option.toArray(model.particle))) {
@@ -214,9 +248,10 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
                 for (const name of names) {
                   const key = `{${name.namespace}}${name.local}`;
                   if (
-                    globals.has(key) &&
+                    set.elements.has(key) &&
                     !kept.has(key) &&
-                    wildcardAdmits(wildcard, name.namespace)
+                    wildcardAdmits(wildcard, name.namespace) &&
+                    foundByWildcard(parent, key, name.namespace)
                   ) {
                     declared.add(`${parent} ${key}`);
                   }
@@ -380,17 +415,90 @@ const mayHold = (particle: Particle): readonly string[] => {
   }
 };
 
+/**
+ * The situations a projection case reaches: an element particle that never occurs, one that may
+ * occur inside a group that never does, a group inside a group, an empty group, and each
+ * compositor.
+ */
+type ProjectionFeature =
+  | "all"
+  | "choice"
+  | "empty group"
+  | "excluded by its group"
+  | "maxOccurs 0 element"
+  | "nested group"
+  | "sequence";
+
+/**
+ * Every situation a projection search must reach.
+ */
+const projectionFeatures = [
+  "all",
+  "choice",
+  "empty group",
+  "excluded by its group",
+  "maxOccurs 0 element",
+  "nested group",
+  "sequence",
+] as const satisfies readonly ProjectionFeature[];
+
+/**
+ * The situations a particle holds.
+ *
+ * @param particle - The particle.
+ * @param excluded - Whether an enclosing group never occurs.
+ * @param nested - Whether it sits inside a group.
+ * @returns Its situations.
+ */
+const projectionFeaturesOf = (
+  particle: Particle,
+  excluded: boolean,
+  nested: boolean,
+): readonly ProjectionFeature[] => {
+  const never = Option.contains(particle.occurs.max, 0);
+  switch (particle._tag) {
+    case "element": {
+      if (never) {
+        return ["maxOccurs 0 element"];
+      }
+
+      return excluded ? ["excluded by its group"] : [];
+    }
+    case "any": {
+      return [];
+    }
+    case "group": {
+      return [
+        particle.compositor,
+        ...(nested ? (["nested group"] as const) : []),
+        ...(particle.particles.length === 0 ? (["empty group"] as const) : []),
+        ...particle.particles.flatMap((inner) =>
+          projectionFeaturesOf(inner, excluded || never, true),
+        ),
+      ];
+    }
+    default: {
+      return particle satisfies never;
+    }
+  }
+};
+
 describe("Admission projected from content models", () => {
   it.effect(
     "admits exactly the elements a particle that may occur names, and never a maxOccurs 0 particle's, through compose",
     (ctx) =>
+      // Oracle: a second implementation, XML Schema Part 1's rule as a naive walk (`mayHold`).
+      // Bound: particle trees of depth 2, groups of up to 3 particles.
       searched(
         ctx,
         explore(
           {
             caseHang: Duration.minutes(1),
             concurrency: 1,
-            coverage: noCoverage,
+            coverage: required<ProjectionFeature>(projectionFeatures, {
+              cases: 300,
+              sense: notesOnly,
+            }),
             draw: drawn((source) => numbered(source.draw(treeGen(2)))),
             kept: [],
             literal: Formatter.format,
@@ -399,8 +507,10 @@ describe("Admission projected from content models", () => {
             steerEvery: 16,
             suite: "grammar/admission/projection",
           },
-          (particle) =>
+          (particle, c) =>
             Effect.sync(() => {
+              c.noteAll(projectionFeaturesOf(particle, false, false));
+
               const model: ContentModel = {
                 content: {
                   _tag: "element-only",
@@ -452,13 +562,19 @@ const restatedKinds = ["e1", "e2", "e3", "e4"] as const;
 
 describe("Admission through compose", () => {
   it.effect("refuses a triple two vocabularies both state, and keeps one stated once", (ctx) =>
+    // Oracle: the specification as a checker: a closed relation's key (E4) holds one row per
+    // (version, parent, child), whichever vocabulary states it.
+    // Bound: up to 6 rows over 4 kinds, one restated.
     searched(
       ctx,
       explore(
         {
           caseHang: Duration.minutes(1),
           concurrency: 1,
-          coverage: noCoverage,
+          coverage: required<"restated" | "stated once">(["restated", "stated once"], {
+            cases: 200,
+            sense: notesOnly,
+          }),
           draw: drawn((source) => ({
             restated: source.draw(int(0, 1)) === 1,
             rows: source.draw(
@@ -478,8 +594,10 @@ describe("Admission through compose", () => {
           steerEvery: 16,
           suite: "grammar/admission/restated",
         },
-        ({ restated, rows }) =>
+        ({ restated, rows }, c) =>
           Effect.sync(() => {
+            c.note(restated ? "restated" : "stated once");
+
             const triples = [
               ...new Map(
                 rows.map((row) => [

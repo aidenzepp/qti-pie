@@ -8,15 +8,7 @@
  * reads, so what is admitted and where it stands are one fact.
  */
 import { Schema } from "effect";
-import type { Result } from "effect";
-import { closed, idField } from "#pantry/grammar/closed.ts";
-import type {
-  Closed,
-  ClosedRelationError,
-  IdField,
-  Roster,
-  Sourced,
-} from "#pantry/grammar/closed.ts";
+import type { IdField, Sourced } from "#pantry/grammar/closed.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 
 /**
@@ -36,11 +28,6 @@ export type AdmissionKey = readonly [
   IdField<"parent", string>,
   IdField<"child", string>,
 ];
-
-/**
- * `Admission`'s key set: the admitted triples alone.
- */
-export type AdmissionKeys = Closed<AdmissionKey, readonly []>;
 
 /**
  * The payload of `Admission`: the child's position in its parent's content model (`content.ts`), 0
@@ -69,29 +56,3 @@ export class UnadmittedChild extends Schema.TaggedError<UnadmittedChild>()("Unad
     return `${this.source} names ${this.child} under ${this.parent} in ${this.versions}, which ${this.parent} does not admit there, so the law states nothing about it. Correct the kind, admit ${this.child} under ${this.parent}, or drop the versions it is not admitted in.`;
   }
 }
-
-/**
- * Construct `Admission`'s key set from every vocabulary's admitted triples. A triple two
- * vocabularies both state is a `KeyCollision`: each fact has one statement.
- *
- * @param input - The rosters and the triples.
- * @param input.versions - The `SchemaVersion` roster.
- * @param input.kinds - The `NodeKind` roster, for both parent and child.
- * @param input.rows - The triples.
- * @returns The key set, or the first triple no constant can hold.
- */
-export const admissionKeysOf = (input: {
-  readonly kinds: Roster<string>;
-  readonly rows: readonly AdmittedChild[];
-  readonly versions: Roster<SchemaVersion>;
-}): Result.Result<AdmissionKeys, ClosedRelationError> =>
-  closed({
-    key: [
-      idField("version", input.versions),
-      idField("parent", input.kinds),
-      idField("child", input.kinds),
-    ],
-    name: "Admission",
-    payload: [],
-    rows: input.rows,
-  });

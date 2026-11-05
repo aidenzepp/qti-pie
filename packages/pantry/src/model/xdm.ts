@@ -255,6 +255,15 @@ export interface XdmForeignElement<V extends XdmVocabulary> {
   readonly _tag: ForeignKind;
   readonly attributes: readonly XdmAttribute<V>[];
   readonly children: readonly XdmChild<V>[];
+  /**
+   * The element's governing type, a `TypeName` handle of `#pantry/grammar/xsi.ts`: the type its
+   * `xsi:type` names, where that resolves to a type its document's schema set holds or a built-in,
+   * and `none` otherwise. No declaration assesses a foreign element, so its `xsi:type` alone gives
+   * it a type, against which XML Schema then assesses it (XML Schema 1.0 Part 1, §3.3.4,
+   * Schema-Validity Assessment (Element), clause 1.2; spec reading 60): a simple type's text is
+   * checked, a complex one's is reading 50's limit.
+   */
+  readonly governs: string;
   readonly name: ExpandedName;
   readonly namespaces: readonly XdmNamespace[];
   /**
@@ -445,8 +454,8 @@ export interface NodeRow<V extends XdmVocabulary> {
   readonly at: bigint;
   readonly end: bigint;
   /**
-   * The element's governing type ({@link XdmClosedElement}'s), and {@link none} for a node that is
-   * no element of a kind, which no named type governs.
+   * The element's governing type ({@link XdmClosedElement}'s or {@link XdmForeignElement}'s), and
+   * {@link none} for a node that is no element, which no named type governs.
    */
   readonly governs: string;
   readonly id: NodeId;
@@ -760,7 +769,7 @@ export const flatten = <V extends XdmVocabulary>(
       case "no-namespace-element":
       case "own-namespace-element": {
         openElementNames.push({ local: node.name.local, namespace: node.name.namespace, node: id });
-        element(node, { ...row, kind: node._tag, prefix: node.prefix });
+        element(node, { ...row, governs: node.governs, kind: node._tag, prefix: node.prefix });
         break;
       }
       case "pi": {

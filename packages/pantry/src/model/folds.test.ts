@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, explore } from "@grizzle/testing/explore";
-import { required } from "@grizzle/testing/features";
+import { rating, required } from "@grizzle/testing/features";
 import type { Pending } from "@grizzle/testing/features";
 import { element, int, shuffled } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
@@ -8,6 +8,7 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Effect, Formatter, Option, Result } from "effect";
 import { rowOf } from "#pantry/grammar/ancestry.ts";
+import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { Ancestry } from "#pantry/grammar/ancestry.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
@@ -16,6 +17,7 @@ import { foldGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
+import { none } from "#pantry/model/xdm.ts";
 import type {
   ClosedName,
   ElementKind,
@@ -31,15 +33,25 @@ import {
   corrupt,
   corruption,
   editElement,
+  familiesOf,
   featuresOf,
   idOf,
   invalidVariants,
   lawOf,
+  situationsOf,
+  variantFields,
   xdmDocument,
 } from "#pantry/test/gen/xdm.ts";
-import type { GeneratedXdm, InvalidVariant, XdmFeature } from "#pantry/test/gen/xdm.ts";
-import { documentBreaches, lawsOf, nodeLawNames } from "#pantry/test/oracle.ts";
-import type { NodeLawName } from "#pantry/test/oracle.ts";
+import type {
+  GeneratedXdm,
+  InvalidVariant,
+  VariantField,
+  VariantTarget,
+  XdmFamily,
+  XdmFeature,
+} from "#pantry/test/gen/xdm.ts";
+import { documentBreaches, lawNames, lawsOf } from "#pantry/test/oracle.ts";
+import type { LawName } from "#pantry/test/oracle.ts";
 
 /**
  * The composed grammar every property draws its trees over and folds them under.
@@ -62,9 +74,21 @@ const laws = lawsOf(grammar);
 const documents = xdmDocument(grammar);
 
 /**
+ * A law's verdict on a case, `law refuses`: noted for each law a case's rows break, so a search
+ * counts the laws it reached as well as the trees it built.
+ */
+type LawVerdict = `${LawName} refuses`;
+
+/**
+ * What a search over generated trees notes: the generator's features, the (parent kind, child
+ * kind) pairs a tree holds, and each law its rows break.
+ */
+type Situation = XdmFeature | XdmFamily | LawVerdict;
+
+/**
  * The features a search over generated trees must reach on its witnesses.
  */
-const reached = required<XdmFeature>(
+const reached = required<Situation>(
   [
     "element",
     "wildcard",
@@ -75,6 +99,7 @@ const reached = required<XdmFeature>(
     "entityRef",
     "attribute",
     "openName",
+    "repeatedOpenClass",
     "doctype",
   ],
   { cases: 300, sense: notesOnly },
@@ -151,6 +176,7 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
         explore(over("model/folds-node-invariants"), ({ document, model }, c) =>
           Effect.gen(function* nodeInvariants() {
             c.noteAll(featuresOf(document));
+            c.noteAll(familiesOf(model));
 
             const rows = yield* foldedOf(document);
             const sentinel = nodeAt(rows, 0);
@@ -202,9 +228,10 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
       // Bound: the generator's drawn bounds.
       searched(
         ctx,
-        explore(over("model/folds-identities"), ({ document }, c) =>
+        explore(over("model/folds-identities"), ({ document, model }, c) =>
           Effect.gen(function* identities() {
             c.noteAll(featuresOf(document));
+            c.noteAll(familiesOf(model));
 
             const rows = yield* foldedOf(document);
             const sentinel = nodeAt(rows, 0);
@@ -218,7 +245,7 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
             }
 
             for (const attribute of rows.attributes.filter(({ at }) => at === 0n)) {
-              assert.deepStrictEqual(sorted(attribute.attrsWas), []);
+              assert.deepStrictEqual(sorted(attribute.attrsWas), [], attribute.id);
             }
 
             assert.deepStrictEqual(
@@ -253,15 +280,17 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
     // `parentStart` as the parent's start, `nearest` as the nearest interaction among the
     // ancestors, `stringValue` as the characters of the node's text, whitespace and entity rows,
     // `parentAncestry` as the flags they enter; a node's state as its own `Admission` position, or
-    // for a kind several positions name one `Symbol` gives it, or for character data the state of
-    // the nearest element before it (0 when none is); a family's end state as its last child's; its
-    // element count; and `attrs` as its attributes' positions.
+    // for a kind several positions name the one of its `Symbol` positions `Follow` allows after its
+    // predecessor's state, walked here from the family's start (Unique Particle Attribution makes
+    // it one), or for character data its predecessor's state (0 for a first child); a family's end
+    // state as its last child's; its element count; and `attrs` as its attributes' positions.
     // Bound: the generator's drawn bounds.
     searched(
       ctx,
-      explore(over("model/folds-naive"), ({ document }, c) =>
+      explore(over("model/folds-naive"), ({ document, model }, c) =>
         Effect.gen(function* naive() {
           c.noteAll(featuresOf(document));
+          c.noteAll(familiesOf(model));
 
           const rows = yield* foldedOf(document);
           const byId = new Map(rows.nodes.map((node) => [node.id, node]));
@@ -286,26 +315,46 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
               parent: node.kind,
               version: node.version,
             });
+            const walked = new Map<FoldedNode<Composed>, number>();
             const stateOf = (child: FoldedNode<Composed>): number => {
+              const known = walked.get(child);
+              if (known !== undefined) {
+                return known;
+              }
+
+              const before = family.findLast(({ at }) => at < child.at);
+              const was = before === undefined ? 0 : stateOf(before);
               const position = Option.match(grammar.admission.lookup(key(child)), {
                 onNone: () => -1,
                 onSome: ({ position: cell }) => Number(cell),
               });
-              const before = family.findLast(({ at }) => at < child.at);
-              if (position !== 0) {
-                return position;
-              }
-
-              const shared = grammar.content.symbol.lookup({
-                ...key(child),
+              const shared = grammar.content.sharedPositions({
                 kind: child.kind,
-                position: String(child.derived.state),
+                parent: node.kind,
+                version: node.version,
               });
-              if (Option.isSome(shared)) {
-                return child.derived.state;
+              const followed = shared.filter((to) =>
+                Option.isSome(
+                  grammar.content.follow.lookup({
+                    from: String(was),
+                    parent: node.kind,
+                    to: String(to),
+                    version: node.version,
+                  }),
+                ),
+              );
+              // Character data leaves the state as it was; a kind several positions name takes the
+              // one position `Follow` allows, and no state where none or several are allowed.
+              let state = position;
+              if (position === 0 && !Arr.isReadonlyArrayNonEmpty(shared)) {
+                state = was;
+              } else if (position === 0) {
+                state = followed.length === 1 ? (followed[0] ?? -1) : -1;
               }
 
-              return before === undefined ? 0 : stateOf(before);
+              walked.set(child, state);
+
+              return state;
             };
             const nearest = above.find(({ kind }) => isInteraction(kind)) ?? nodeAt(rows, 0);
             const entered: Ancestry = new Set(
@@ -315,12 +364,13 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
               .filter((attribute) => attribute.node === node.id)
               .map(({ name }) =>
                 Option.match(
-                  grammar.attributes.admission.lookup({
+                  admissionOf(grammar.attributes, {
+                    governs: node.governs,
                     kind: node.kind,
                     name,
                     version: node.version,
                   }),
-                  { onNone: () => -1, onSome: ({ position }) => Number(position) },
+                  { onNone: () => -1, onSome: ({ position }) => position },
                 ),
               );
 
@@ -508,6 +558,14 @@ describe("fold's refusals", { timeout: searchTimeout }, () => {
               const owner = model[target] ?? assert.fail("no owner");
               const { kind } = owner;
               const { version } = document;
+              let governs = none;
+
+              editElement(document, target, (held) => {
+                ({ governs } = held);
+
+                return held;
+              });
+
               const kinds = grammar.kinds.nodeKind.handles.filter(
                 (child): child is ElementKind<Composed> =>
                   !isForeignKind(child) &&
@@ -519,11 +577,12 @@ describe("fold's refusals", { timeout: searchTimeout }, () => {
               const names = grammar.kinds.attributeName.handles.filter(
                 (name): name is ClosedName<Composed> =>
                   !openClasses.some((open) => open === name) &&
-                  Option.isNone(grammar.attributes.admission.lookup({ kind, name, version })),
+                  Option.isNone(admissionOf(grammar.attributes, { governs, kind, name, version })),
               );
               const added = c.draw(element(["child", "attribute"] as const));
-              c.note(added);
               if (added === "child" && Arr.isReadonlyArrayNonEmpty(kinds)) {
+                c.note("child");
+
                 const child = c.draw(element(kinds));
                 const edited = editElement(document, target, (held) => ({
                   ...held,
@@ -554,6 +613,8 @@ describe("fold's refusals", { timeout: searchTimeout }, () => {
                   ["ChildUnadmitted", idOf(target + 1), child, "unadmitted"],
                 );
               } else if (Arr.isReadonlyArrayNonEmpty(names)) {
+                c.note("attribute");
+
                 const name = c.draw(element(names));
                 const edited = editElement(document, target, (held) => ({
                   ...held,
@@ -578,26 +639,71 @@ describe("fold's refusals", { timeout: searchTimeout }, () => {
 });
 
 /**
- * The node laws a generated tree is built to meet: every law of the document layer but the
- * ancestry bans, the required attributes, the default hotspot's place, the counts of 2…n the
- * content automaton relaxes, and the children an attribute bars, which the generator does not
- * construct.
+ * The laws a generated tree is not built to meet, each with its reason: the generator constructs
+ * the tree's shape, its order and its names, and leaves to fall where they fall the laws over what
+ * it draws without reading (its lexical forms, identifiers and counts), and a package's laws, which
+ * a document's breaches never evaluate. Every other law of the oracle holds on every generated
+ * tree, a law added to the oracle included.
  */
-const constructed: ReadonlySet<string> = new Set<NodeLawName>(
-  nodeLawNames.filter(
-    (law) =>
-      law !== "N6 ancestry" &&
-      law !== "AL3 required" &&
-      law !== "default hotspot last slot" &&
-      law !== "N7 Counted" &&
-      law !== "N7 barred by",
-  ),
+const unconstructed = {
+  "AL3 required": "the required attributes, which the generator draws a subset of",
+  "AL5 attribute count": "spec readings 41 and 43's attribute counts",
+  Arity: "an operator's arity, a count of children the content automaton relaxes",
+  "Binding cardinality": "a response binding, over identifiers drawn without reading",
+  "Binding declared": "a response binding, over identifiers drawn without reading",
+  BindingFit: "a response binding, over identifiers drawn without reading",
+  "Choice bounds": "an interaction's choice counts, values drawn without reading",
+  "Context variable reference": "a reference, over identifiers drawn without reading",
+  "Declaration key": "a declaration's identifier, a value drawn without reading",
+  "Document entry": "a package's law",
+  "DocumentId key": "an ID's uniqueness, over values drawn without reading",
+  "Feedback outcome type": "a reference, over identifiers drawn without reading",
+  "Feedback reference": "a reference, over identifiers drawn without reading",
+  "File listed": "a package's law",
+  "Graphic gap match default hotspot": "the default hotspot's place among its siblings",
+  "Href listed": "a package's law",
+  "Idref target": "an IDREF's target, over values drawn without reading",
+  LomObjectIdentifier: "a package's law",
+  "Manifest id space": "a package's law",
+  MappableBaseType: "a declaration's base type, a value drawn without reading",
+  "MathML arity": "an operator's arity, a count of children the content automaton relaxes",
+  "N6 ancestry":
+    "the ancestry bans, which the generator does not read; a search of its own judges N6",
+  "N7 Counted": "the counts of 2…n the content automaton relaxes",
+  "N7 barred by": "the children an attribute bars",
+  "Printed variable reference": "a reference, over identifiers drawn without reading",
+  RecordBindingFit: "a response binding, over identifiers drawn without reading",
+  ResourceTypeOf: "a package's law",
+  RootOfType: "a package's law",
+  "SSML lexicon reference": "a reference, over identifiers drawn without reading",
+  "SSML trim mark": "a mark's name, a value drawn without reading",
+  "Selection bound": "a selection's count, a value drawn without reading",
+  "Slider bounds": "a slider's bounds, values drawn without reading",
+  "Template reference": "a reference, over identifiers drawn without reading",
+  TextDomain: "an element's value domain, over text drawn without reading",
+  "Variable declared": "a reference, over identifiers drawn without reading",
+  "default hotspot last slot": "the default hotspot's place among its siblings",
+  "value domain": "an attribute's value domain, over lexical forms drawn without reading",
+} as const satisfies Partial<Readonly<Record<LawName, string>>>;
+
+/**
+ * The laws a generated tree is built to meet: every law of the oracle (`lawNames`), its node,
+ * attribute, character-data and overlay laws, but those {@link unconstructed} names.
+ */
+const constructed: ReadonlySet<LawName> = new Set(
+  lawNames.filter((law) => !Object.hasOwn(unconstructed, law)),
 );
 
 /**
- * The variants a case draws among: under steering, the pending ones its tree admits, so a variant
- * only a rare tree admits is drawn whenever such a tree comes; otherwise, and when none of them is
- * pending, every variant.
+ * What a search over the variants notes: each variant, the field it edits, the kind of its target,
+ * and each law the corrupted rows break.
+ */
+type VariantSituation = InvalidVariant | VariantField | VariantTarget | LawVerdict;
+
+/**
+ * The variants a case draws among: under steering, the pending ones its tree admits, a variant
+ * pending where it or one of the fields it edits is, so a variant only a rare tree admits is drawn
+ * whenever such a tree comes; otherwise, and when none of them is pending, every variant.
  *
  * @param generated - The case's tree.
  * @param steering - The case's steering, none for a plain draw.
@@ -605,61 +711,217 @@ const constructed: ReadonlySet<string> = new Set<NodeLawName>(
  */
 const steeredVariants = (
   generated: GeneratedXdm,
-  steering: Option.Option<Pending<InvalidVariant>>,
+  steering: Option.Option<Pending<VariantSituation>>,
 ): Arr.NonEmptyReadonlyArray<InvalidVariant> => {
   const pending = Option.match(steering, {
     onNone: () => [],
     onSome: (pendingNow) =>
-      admissibleVariants(generated).filter((variant) => pendingNow.has(variant)),
+      admissibleVariants(generated).filter(
+        (variant) =>
+          pendingNow.has(variant) ||
+          variantFields.some((field) => field.startsWith(`${variant} `) && pendingNow.has(field)),
+      ),
   });
 
   return Arr.isReadonlyArrayNonEmpty(pending) ? pending : invalidVariants;
 };
 
+/**
+ * What the N6 search notes: whether a case's tree breaks N6 anywhere, and whether it was built
+ * with a banned child.
+ */
+type N6Situation = "N6 holds" | "N6 refuses" | "banned child";
+
+/**
+ * Whether a kind is an element of a kind: neither a kind the XDM fixes nor a foreign one.
+ *
+ * @param kind - A `NodeKind` handle.
+ * @returns Whether it is.
+ */
+const isClosedKind = (kind: string): kind is ElementKind<Composed> =>
+  !isForeignKind(kind) &&
+  !["document", "doctype", "text", "ws", "comment", "pi", "entityRef"].includes(kind);
+
+/**
+ * Each (version, parent kind)'s element children that take a position of their own, which a fold
+ * places without reading `Follow`, so one added first in a family still folds.
+ */
+const placedAlone: ReadonlyMap<string, readonly ElementKind<Composed>[]> = new Map(
+  [
+    ...Map.groupBy(
+      grammar.admission.rows.filter(({ position }) => position !== "0"),
+      ({ parent, version }) => `${version} ${parent}`,
+    ),
+  ].map(([key, held]) => [key, held.flatMap(({ child }) => (isClosedKind(child) ? [child] : []))]),
+);
+
 describe("the host's law model over folded rows", { timeout: searchTimeout }, () => {
   it.effect("holds every law a generated tree is built to meet", (ctx) =>
     // Oracle: the specification as a checker, the host's law model (`#pantry/test/oracle.ts`),
-    // over the rows fold writes for trees built to meet those laws.
+    // over the rows fold writes for trees built to meet those laws: every law of the oracle but
+    // those `unconstructed` names, AL2's distinctness among them over elements that carry two
+    // names of one open class.
     // Bound: the generator's drawn bounds.
     searched(
       ctx,
-      explore(over("model/folds-laws-valid"), ({ document }, c) =>
+      explore(over("model/folds-laws-valid"), ({ document, model }, c) =>
         Effect.gen(function* valid() {
           c.noteAll(featuresOf(document));
+          c.noteAll(familiesOf(model));
 
           const rows = yield* foldedOf(document);
-          const broken = documentBreaches("generated.xml", rows, laws).filter(({ law }) =>
-            constructed.has(law),
-          );
+          const breaches = documentBreaches("generated.xml", rows, laws);
+          c.noteAll(breaches.map(({ law }): LawVerdict => `${law} refuses`));
 
-          assert.deepStrictEqual(broken, []);
+          assert.deepStrictEqual(
+            breaches.filter(({ law }) => constructed.has(law)),
+            [],
+          );
         }),
       ),
     ),
   );
 
+  it.effect(
+    "breaks N6 exactly at the nodes whose ancestors enter a flag their kind is banned under or miss one it needs",
+    (ctx) =>
+      // Oracle: a second implementation, N6 read off the whole tree: a node's ancestry as the flags
+      // every ancestor's kind enters, walked up its parents (plan §1.3's N6), against its kind's
+      // `Banned` and `Needs` rows. The oracle's N6 reads the copy of the parent's ancestry
+      // instead, so a law that read the node's own ancestry, which holds the flags its own kind
+      // enters, refuses every interaction, banned under the `int` it enters.
+      // Bound: the generator's drawn bounds. The generator reads no ban, and a tree it draws breaks
+      // one about once in 450 (11 of 5,000 measured), so the `banned child` arm builds one where
+      // the tree has room: it adds a child of a kind its element admits at a position of its own,
+      // which a fold places without reading `Follow`, under a flag that kind is banned under. Few
+      // trees have room (an element under a flag that admits a kind banned there), so the search
+      // rates both, and the witnesses must reach both.
+      searched(
+        ctx,
+        explore(
+          {
+            ...over("model/folds-n6-naive"),
+            coverage: rating(
+              required<N6Situation>(["N6 holds", "N6 refuses", "banned child"], {
+                cases: 300,
+                sense: notesOnly,
+              }),
+              ["banned child", "N6 refuses"],
+            ),
+          },
+          ({ document, model }, c) =>
+            Effect.gen(function* bans() {
+              const { version } = document;
+              const enteredAt = (number: number): ReadonlySet<string> => {
+                const entered = new Set<string>();
+                for (
+                  let at: number | undefined = number;
+                  at !== undefined;
+                  at = at === 0 ? undefined : model[at]?.parent
+                ) {
+                  for (const flag of rowOf(grammar.ancestry.enters, model[at]?.kind ?? "")) {
+                    entered.add(flag);
+                  }
+                }
+
+                return entered;
+              };
+              const bannedChildren = closedElements(model).flatMap((number) => {
+                const owner = model[number]?.kind ?? "";
+                const entered = enteredAt(number);
+
+                return (placedAlone.get(`${version} ${owner}`) ?? [])
+                  .filter((child) =>
+                    [...rowOf(grammar.ancestry.banned, child)].some((flag) => entered.has(flag)),
+                  )
+                  .map((child) => ({ child, number }));
+              });
+              const arm = c.draw(element(["as drawn", "banned child"] as const));
+              let tree = document;
+              if (arm === "banned child" && Arr.isReadonlyArrayNonEmpty(bannedChildren)) {
+                c.note("banned child");
+
+                const { child, number } = c.draw(element(bannedChildren));
+                tree = editElement(document, number, (held) => ({
+                  ...held,
+                  children: [
+                    {
+                      _tag: "element",
+                      attributes: [],
+                      children: [],
+                      governs: grammar.xsi.declaredType(version, child),
+                      kind: child,
+                      namespaces: [],
+                      prefix: "",
+                    },
+                    ...held.children,
+                  ],
+                }));
+              }
+
+              const rows = yield* foldedOf(tree);
+              const byId = new Map(rows.nodes.map((node) => [node.id, node]));
+              const self = rows.document.node;
+              const walked = rows.nodes.filter((node) => {
+                const entered = new Set<string>();
+                for (
+                  let at = node.id === self ? undefined : byId.get(node.parent);
+                  at !== undefined;
+                  at = at.id === self ? undefined : byId.get(at.parent)
+                ) {
+                  for (const flag of rowOf(grammar.ancestry.enters, at.kind)) {
+                    entered.add(flag);
+                  }
+                }
+
+                return (
+                  [...rowOf(grammar.ancestry.banned, node.kind)].some((flag) =>
+                    entered.has(flag),
+                  ) ||
+                  [...rowOf(grammar.ancestry.needs, node.kind)].some((flag) => !entered.has(flag))
+                );
+              });
+              const refused = documentBreaches("generated.xml", rows, laws).filter(
+                ({ law }) => law === "N6 ancestry",
+              );
+              c.note(walked.length > 0 ? "N6 refuses" : "N6 holds");
+
+              assert.deepStrictEqual(
+                refused.map(({ keys }) => keys["id"] ?? "").toSorted(),
+                walked.map(({ id }) => id).toSorted(),
+              );
+            }),
+        ),
+      ),
+  );
+
   it.effect("refuses every named invalid variant by its law", (ctx) =>
     // Oracle: the specification as a checker, the host's law model, which must name each variant's
     // law (`lawOf`); PostgreSQL's laws meet the same variants at W5.
-    // Bound: the generator's drawn bounds, every variant a tree admits; a steered case draws among
-    // the pending variants its tree admits, since some need a rare tree (a foreign element, which
-    // `wrongClass` needs, is in about one tree in ten).
+    // Bound: the generator's drawn bounds, every variant a tree admits and every field of each
+    // copy and accumulator variant; a steered case draws among the pending variants its tree
+    // admits, since some need a rare tree (a foreign element, which `wrongClass` needs, is in
+    // about one tree in ten).
     searched(
       ctx,
       explore(
         {
           ...over("model/folds-laws-variants"),
-          coverage: required<InvalidVariant>(invalidVariants, { cases: 400, sense: notesOnly }),
+          coverage: required<VariantSituation>([...invalidVariants, ...variantFields], {
+            cases: 400,
+            sense: notesOnly,
+          }),
         },
         (generated: GeneratedXdm, c) =>
           Effect.gen(function* variants() {
             const variant = c.draw(corruption(generated, steeredVariants(generated, c.steering)));
-            c.note(variant._tag);
+            c.noteAll(situationsOf(generated, variant));
 
             const rows = corrupt(yield* foldedOf(generated.document), variant);
             const broken = new Set(
               documentBreaches("generated.xml", rows, laws).map(({ law }) => law),
             );
+            c.noteAll([...broken].map((law): LawVerdict => `${law} refuses`));
 
             assert.isTrue(
               broken.has(lawOf[variant._tag]),

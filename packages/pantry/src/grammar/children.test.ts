@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
+import { vocabularyFacets } from "#pantry/grammar/facets.ts";
 import { toyFacets, toyGrammar, toySources, toyVocabulary } from "#pantry/test/gen/grammar.ts";
 
 /**
@@ -97,6 +98,25 @@ describe("ChildBarredBy", () => {
     }),
   );
 
+  it.effect("cites each row's own barring as its source, every barring of every vocabulary", () =>
+    // Oracle: the specification as a checker: a closed relation's row carries the source of the
+    // fact it states (fin.md §17, provenance), here the barring the vocabulary's facet states.
+    Effect.gen(function* provenance() {
+      const { barredBy } = yield* grammar;
+      const stated = [...vocabularyFacets.values()].flatMap(({ children }) =>
+        children.barrings.flatMap(({ parents, source, versions }) =>
+          versions.flatMap((version) => parents.map((parent) => ({ parent, source, version }))),
+        ),
+      );
+
+      assert.isNotEmpty(stated);
+      assert.deepStrictEqual(
+        stated.map(({ parent, version }) => barredBy.sourceOf({ parent, version })),
+        stated.map(({ source }) => Option.some({ _tag: "spec", cite: source })),
+      );
+    }),
+  );
+
   it("refuses each named invalid barring: an unadmitted kind, kinds at two positions, a second attribute", () => {
     const tagOf = (result: ReturnType<typeof barredToy>) =>
       Result.isFailure(result) ? result.failure._tag : "composed";
@@ -135,5 +155,30 @@ describe("LastWhere", () => {
         [],
       );
     }),
+  );
+
+  it.effect(
+    "puts last only a hotspot choice's default, under the hotspot and graphic order interactions, never an associable hotspot's (spec reading 71)",
+    () =>
+      // Oracle: the specification as a checker. "The default hotspot, if defined, must appear
+      // last" is said of the HotspotChoice class (§5.67), whose choices the hotspot and graphic
+      // order interactions hold, and of the hotspot interaction's choices (§5.68.6); the
+      // AssociableHotspot class (§5.7) and the graphic associate interaction's hotspots (§5.59.4)
+      // say nothing of a default, so a rule over `qti-associable-hotspot` refuses valid content.
+      Effect.gen(function* readingSeventyOne() {
+        const { lastWhere } = yield* grammar;
+
+        assert.deepStrictEqual(
+          new Set(
+            lastWhere.flatMap(({ attribute, kind, parents, value }) =>
+              parents.map((parent) => `${parent} ${kind} ${attribute}=${value}`),
+            ),
+          ),
+          new Set([
+            "qti-hotspot-interaction qti-hotspot-choice shape=default",
+            "qti-graphic-order-interaction qti-hotspot-choice shape=default",
+          ]),
+        );
+      }),
   );
 });

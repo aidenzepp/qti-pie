@@ -739,9 +739,12 @@ const alt = (...arms: readonly Regex[]): Regex => {
 };
 
 /**
- * A repetition, simplified where its shape allows: at most zero times is the empty string, exactly
- * once is its body, a body of no word is the empty string or nothing, and an optional run of one or
- * more is a run of zero or more.
+ * A repetition, simplified where its shape allows: more times than the most is {@link nothing},
+ * at most zero times is the empty string, exactly once is its body, a body of no word is the empty
+ * string or nothing, and an optional run of one or more is a run of zero or more.
+ *
+ * No tree repeats more times at least than at most, so no pattern is written with a quantifier
+ * such as `{3,2}`, which both PostgreSQL and JavaScript refuse to compile.
  *
  * @param body - What repeats.
  * @param min - The fewest times.
@@ -749,6 +752,10 @@ const alt = (...arms: readonly Regex[]): Regex => {
  * @returns The tree.
  */
 const repeat = (body: Regex, min: number, max: Option.Option<number>): Regex => {
+  if (Option.exists(max, (most) => most < min)) {
+    return nothing;
+  }
+
   if (Option.contains(max, 0) || isNothing(body)) {
     return min === 0 ? seq() : nothing;
   }
@@ -1316,84 +1323,231 @@ const base64Lexical = ((): Regex => {
 })();
 
 /**
+ * Two characters, each of an ASCII class.
+ *
+ * @param first - The first character's class.
+ * @param second - The second character's class.
+ * @returns The tree.
+ */
+const twoOf = (first: string, second: string): Regex => seq(cls(first), cls(second));
+
+/**
+ * A year of the date and time types' lexical spaces: four or more digits, with no leading zero
+ * beyond four, and no year 0000 (XML Schema Part 2, 3.2.7.1 and D.3.2).
+ */
+const yearLexical = alt(
+  seq(cls("1-9"), repeat(digit, 3, Option.none())),
+  seq(
+    literal("0"),
+    alt(
+      seq(cls("1-9"), digit, digit),
+      seq(literal("0"), cls("1-9"), digit),
+      seq(literal("00"), cls("1-9")),
+    ),
+  ),
+);
+
+/**
+ * A leap year of {@link yearLexical}'s: divisible by 4 and not by 100, or by 400 (XML Schema Part
+ * 2, 3.2.7.1, the Gregorian calendar).
+ */
+const leapYearLexical = ((): Regex => {
+  const leapTail = alt(twoOf("0", "48"), twoOf("2468", "048"), twoOf("13579", "26"));
+
+  return alt(
+    seq(alt(seq(cls("1-9"), repeat(digit, 2, Option.none())), seq(digit, digit)), leapTail),
+    seq(alt(twoOf("0", "48"), twoOf("2468", "048"), twoOf("13579", "26")), literal("00")),
+    seq(
+      cls("1-9"),
+      star(digit),
+      alt(twoOf("0", "048"), twoOf("2468", "048"), twoOf("13579", "26")),
+      literal("00"),
+    ),
+  );
+})();
+
+/**
+ * A month, `01` to `12`.
+ */
+const monthLexical = alt(twoOf("0", "1-9"), twoOf("1", "0-2"));
+
+/**
+ * A month and a day valid for it in every year: 29 February is a leap year's alone, and is left
+ * out.
+ */
+const monthDayLexical = alt(
+  seq(
+    alt(twoOf("0", "13578"), twoOf("1", "02")),
+    literal("-"),
+    alt(twoOf("0", "1-9"), twoOf("12", "0-9"), twoOf("3", "01")),
+  ),
+  seq(
+    alt(twoOf("0", "469"), literal("11")),
+    literal("-"),
+    alt(twoOf("0", "1-9"), twoOf("12", "0-9"), literal("30")),
+  ),
+  seq(literal("02-"), alt(twoOf("0", "1-9"), twoOf("1", "0-9"), twoOf("2", "0-8"))),
+);
+
+/**
+ * A timezone: `Z`, or a sign and `hh:mm` from `-14:00` to `+14:00` (XML Schema Part 2, 3.2.7.3).
+ */
+const timezoneLexical = alt(
+  literal("Z"),
+  seq(
+    chars(charactersOf("+-")),
+    alt(
+      seq(alt(twoOf("0", "0-9"), twoOf("1", "0-3")), literal(":"), twoOf("0-5", "0-9")),
+      literal("14:00"),
+    ),
+  ),
+);
+
+/**
+ * A date, a year with a month and a day valid for that month: 29 February only in a leap year.
+ */
+const datePart = seq(
+  opt(literal("-")),
+  alt(seq(yearLexical, literal("-"), monthDayLexical), seq(leapYearLexical, literal("-02-29"))),
+);
+
+/**
+ * A time of day, `hh:mm:ss` with an optional fraction of a second: hours `00` to `23`, or
+ * `24:00:00` with no fraction or a zero one, the first instant of the next day (XML Schema Part 2,
+ * 3.2.7.1).
+ */
+const timeOfDay = alt(
+  seq(
+    alt(twoOf("01", "0-9"), twoOf("2", "0-3")),
+    literal(":"),
+    twoOf("0-5", "0-9"),
+    literal(":"),
+    twoOf("0-5", "0-9"),
+    opt(seq(literal("."), plus(digit))),
+  ),
+  seq(literal("24:00:00"), opt(seq(literal("."), plus(literal("0"))))),
+);
+
+/**
  * `xs:date`'s lexical space: a year of four or more digits (no year 0000), a month and a day valid
  * for that month, 29 February only in a leap year, and an optional timezone (XML Schema Part 2,
  * 3.2.9.1 and D.3.2).
  */
-const dateLexical = ((): Regex => {
-  const two = (first: string, second: string): Regex => seq(cls(first), cls(second));
-  const year = alt(
-    seq(cls("1-9"), repeat(digit, 3, Option.none())),
-    seq(
-      literal("0"),
-      alt(
-        seq(cls("1-9"), digit, digit),
-        seq(literal("0"), cls("1-9"), digit),
-        seq(literal("00"), cls("1-9")),
-      ),
+const dateLexical = seq(datePart, opt(timezoneLexical));
+
+/**
+ * `xs:dateTime`'s lexical space: a date, `T`, a time of day, and an optional timezone (XML Schema
+ * Part 2, 3.2.7.1).
+ */
+const dateTimeLexical = seq(datePart, literal("T"), timeOfDay, opt(timezoneLexical));
+
+/**
+ * `xs:time`'s lexical space: a time of day and an optional timezone (XML Schema Part 2, 3.2.8.1).
+ */
+const timeLexical = seq(timeOfDay, opt(timezoneLexical));
+
+/**
+ * `xs:gYearMonth`'s lexical space: a year and a month (XML Schema Part 2, 3.2.10.1).
+ */
+const gYearMonthLexical = seq(
+  opt(literal("-")),
+  yearLexical,
+  literal("-"),
+  monthLexical,
+  opt(timezoneLexical),
+);
+
+/**
+ * `xs:gYear`'s lexical space: a year (XML Schema Part 2, 3.2.11.1).
+ */
+const gYearLexical = seq(opt(literal("-")), yearLexical, opt(timezoneLexical));
+
+/**
+ * `xs:gMonthDay`'s lexical space: `--`, a month and a day valid for it in some year, 29 February
+ * included (XML Schema Part 2, 3.2.12.1).
+ */
+const gMonthDayLexical = seq(
+  literal("--"),
+  alt(monthDayLexical, literal("02-29")),
+  opt(timezoneLexical),
+);
+
+/**
+ * `xs:gDay`'s lexical space: `---` and a day, `01` to `31` (XML Schema Part 2, 3.2.13.1).
+ */
+const gDayLexical = seq(
+  literal("---"),
+  alt(twoOf("0", "1-9"), twoOf("12", "0-9"), twoOf("3", "01")),
+  opt(timezoneLexical),
+);
+
+/**
+ * `xs:gMonth`'s lexical space: `--` and a month, the Second Edition's form, which corrects the
+ * First Edition's `--MM--` (XML Schema Part 2, 3.2.14.1).
+ */
+const gMonthLexical = seq(literal("--"), monthLexical, opt(timezoneLexical));
+
+/**
+ * `xs:duration`'s lexical space, `PnYnMnDTnHnMnS`: an optional `-`, `P`, then at least one
+ * component, in that order, each a count and its designator, the seconds' count with an optional
+ * fraction, and `T` exactly when an hour, minute or second follows (XML Schema Part 2, 3.2.6.1).
+ */
+const durationLexical = ((): Regex => {
+  const count = plus(digit);
+  const seconds = seq(count, opt(seq(literal("."), plus(digit))), literal("S"));
+  const time = seq(
+    literal("T"),
+    alt(
+      seq(count, literal("H"), opt(seq(count, literal("M"))), opt(seconds)),
+      seq(count, literal("M"), opt(seconds)),
+      seconds,
     ),
   );
-  const leapTail = alt(two("0", "48"), two("2468", "048"), two("13579", "26"));
-  const leapYear = alt(
-    seq(alt(seq(cls("1-9"), repeat(digit, 2, Option.none())), seq(digit, digit)), leapTail),
-    seq(alt(two("0", "48"), two("2468", "048"), two("13579", "26")), literal("00")),
-    seq(
-      cls("1-9"),
-      star(digit),
-      alt(two("0", "048"), two("2468", "048"), two("13579", "26")),
-      literal("00"),
-    ),
-  );
-  const monthDay = alt(
-    seq(
-      alt(two("0", "13578"), two("1", "02")),
-      literal("-"),
-      alt(two("0", "1-9"), two("12", "0-9"), two("3", "01")),
-    ),
-    seq(
-      alt(two("0", "469"), literal("11")),
-      literal("-"),
-      alt(two("0", "1-9"), two("12", "0-9"), literal("30")),
-    ),
-    seq(literal("02-"), alt(two("0", "1-9"), two("1", "0-9"), two("2", "0-8"))),
-  );
-  const timezone = alt(
-    literal("Z"),
-    seq(
-      chars(charactersOf("+-")),
-      alt(
-        seq(alt(two("0", "0-9"), two("1", "0-3")), literal(":"), two("0-5", "0-9")),
-        literal("14:00"),
-      ),
-    ),
+  const date = alt(
+    seq(count, literal("Y"), opt(seq(count, literal("M"))), opt(seq(count, literal("D")))),
+    seq(count, literal("M"), opt(seq(count, literal("D")))),
+    seq(count, literal("D")),
   );
 
-  return seq(
-    opt(literal("-")),
-    alt(seq(year, literal("-"), monthDay), seq(leapYear, literal("-02-29"))),
-    opt(timezone),
-  );
+  return seq(opt(literal("-")), literal("P"), alt(seq(date, opt(time)), time));
 })();
+
+/**
+ * `xs:hexBinary`'s lexical space: pairs of hexadecimal digits, either case (XML Schema Part 2,
+ * 3.2.15).
+ */
+const hexBinaryLexical = star(twoOf("0-9A-Fa-f", "0-9A-Fa-f"));
 
 /**
  * The lexical space of each XSD primitive this compiler reads, in the form XSD reads it after the
  * primitive's whitespace class. `anyURI`'s is every string here: its lexical space (spec reading
  * 61, XML Schema 1.0's RFC 2396 as RFC 2732 amends it, after XLink's escaping) is the pattern the
- * leaf states of the built-in, which the compiler reads like any other. A primitive not listed
- * (`duration`, the time and `g` types, `hexBinary`, `NOTATION`) is refused by name, since no pinned
- * type restricts it.
+ * leaf states of the built-in, which the compiler reads like any other. `NOTATION`'s value space is
+ * the QNames of the notations the schema declares (XML Schema Part 2, 3.2.19), and no pinned XSD
+ * declares one, so it is empty: an `xsi:type` may name the built-in (spec reading 60), and no text
+ * is valid for it.
  */
 const primitives: Partial<Readonly<Record<Primitive, Regex>>> = {
+  NOTATION: nothing,
   QName: qNameLexical,
   anySimpleType: anything,
   anyURI: anything,
   base64Binary: base64Lexical,
   boolean: booleanLexical,
   date: dateLexical,
+  dateTime: dateTimeLexical,
   decimal: decimalLexical,
   double: doubleLexical,
+  duration: durationLexical,
   float: doubleLexical,
+  gDay: gDayLexical,
+  gMonth: gMonthLexical,
+  gMonthDay: gMonthDayLexical,
+  gYear: gYearLexical,
+  gYearMonth: gYearMonthLexical,
+  hexBinary: hexBinaryLexical,
   string: anything,
+  time: timeLexical,
 };
 
 /**
@@ -1859,6 +2013,41 @@ const isAnything = (tree: Regex): boolean =>
   sameSet(tree.body.set, xmlChar);
 
 /**
+ * The least and the most length a definition's length facets admit together, the most none for no
+ * bound, and whether it states any length facet.
+ */
+interface LengthBounds {
+  readonly max: Option.Option<number>;
+  readonly min: number;
+  readonly stated: boolean;
+}
+
+/**
+ * The lengths every length facet a definition states admits together: at least the greatest of its
+ * `length` and `minLength`, and at most the least of its `length` and `maxLength`, none for no
+ * bound (XML Schema Part 2, 4.3.1.3 to 4.3.3.3, each facet a constraint every value meets).
+ *
+ * A definition the deriver gives satisfies 4.3.1.4 and 4.3.2.4, so its `length` lies within its
+ * other lengths, and the bounds are its `length` where it states one. Any other definition's bounds
+ * may cross, which {@link repeat} reads as no value.
+ *
+ * @param facets - The definition's facets.
+ * @returns The least and the most length, and whether any length facet is stated.
+ */
+const lengthBounds = (facets: readonly Facet[]): LengthBounds => {
+  const read = (name: FacetName) => valueOf(facets, name).pipe(Option.map(Number));
+  const exact = read("length");
+  const least = [...Option.toArray(exact), ...Option.toArray(read("minLength"))];
+  const most = [...Option.toArray(exact), ...Option.toArray(read("maxLength"))];
+
+  return {
+    max: Arr.isReadonlyArrayNonEmpty(most) ? Option.some(Math.min(...most)) : Option.none(),
+    min: Math.max(0, ...least),
+    stated: least.length > 0 || most.length > 0,
+  };
+};
+
+/**
  * The lexical part of an atomic definition, before its whitespace class is folded in and before its
  * enumeration narrows it: its lexical space ({@link lexicalOf}) intersected with each pattern set
  * nothing else implies, then with its lengths.
@@ -1898,19 +2087,8 @@ const atomicCore = (
     );
     const implied = isAnything(lexical.tree) && kept.length > 0;
     const constraints = [...(implied ? [] : [lexical.tree]), ...kept];
-    const exact = valueOf(facets, "length").pipe(Option.map(Number));
-    const min = Option.orElse(exact, () => valueOf(facets, "minLength").pipe(Option.map(Number)));
-    const max = Option.orElse(exact, () => valueOf(facets, "maxLength").pipe(Option.map(Number)));
-    const lengths =
-      Option.isSome(min) || Option.isSome(max)
-        ? [
-            repeat(
-              chars(xmlChar),
-              Option.getOrElse(min, () => 0),
-              max,
-            ),
-          ]
-        : [];
+    const { max, min, stated } = lengthBounds(facets);
+    const lengths = stated ? [repeat(chars(xmlChar), min, max)] : [];
     const arms = [
       ...constraints.filter((tree) => !(lengths.length > 0 && isAnything(tree))),
       ...lengths,
@@ -2626,19 +2804,13 @@ const compileIn = (
       return yield* refuse("a value bound on a list's item, which no one law column reads");
     }
 
-    const exact = valueOf(domain.facets, "length").pipe(Option.map(Number));
-    const min = Option.getOrElse(
-      Option.orElse(exact, () => valueOf(domain.facets, "minLength").pipe(Option.map(Number))),
-      () => 0,
-    );
-    const max = Option.orElse(exact, () =>
-      valueOf(domain.facets, "maxLength").pipe(Option.map(Number)),
-    );
+    const { max, min } = lengthBounds(domain.facets);
     const separator = plus(whitespaceChar);
     const more = (least: number) =>
       repeat(seq(separator, item.tree), least, max.pipe(Option.map((most) => most - 1)));
-    const some = min === 0 ? opt(seq(item.tree, more(0))) : seq(item.tree, more(min - 1));
-    const items = Option.contains(max, 0) ? empty : some;
+    // A most of 0 leaves `more` nothing, so `items` is the empty list, and a most below the least
+    // leaves the list nothing (`repeat`).
+    const items = min === 0 ? opt(seq(item.tree, more(0))) : seq(item.tree, more(min - 1));
 
     return { facets: [], tree: context.exact ? items : seq(anyWhitespace, items, anyWhitespace) };
   });

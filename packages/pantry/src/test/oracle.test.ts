@@ -1,6 +1,11 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option, Result } from "effect";
+import { exhaust } from "@grizzle/testing/explore";
+import { requiredInSpace } from "@grizzle/testing/features";
+import { boolean, element, int } from "@grizzle/testing/gen";
+import type { Gen } from "@grizzle/testing/gen";
+import { searched } from "@grizzle/testing/vitest";
+import { Duration, Effect, Formatter, Option, Result } from "effect";
 import { inject } from "vitest";
 import { composed } from "#pantry/grammar/compose.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
@@ -12,7 +17,7 @@ import type { NodeId } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import {
-  contentLaws,
+  contentLawOf,
   documentBreaches,
   explain,
   facetsBroken,
@@ -24,6 +29,7 @@ import {
   verdictOf,
 } from "#pantry/test/oracle.ts";
 import type { Breach, Judgment, LawName, OracleRule } from "#pantry/test/oracle.ts";
+import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
@@ -487,6 +493,182 @@ const hotspots = (choices: string) =>
     `<qti-hotspot-interaction response-identifier="RESPONSE" max-choices="1"><object data="a.png" type="image/png"/>${choices}</qti-hotspot-interaction>`,
   );
 
+/**
+ * Judge the base item edited, and decide whether a law refuses it.
+ *
+ * @param law - The law.
+ * @param edits - Each passage of the base item and its replacement, applied in order.
+ * @returns Whether a breach of the law is among the judgment's, with every breach for a message.
+ */
+const refusedBy = (law: LawName, ...edits: readonly (readonly [string, string])[]) =>
+  Effect.gen(function* refused() {
+    let text = item;
+    for (const [passage, replacement] of edits) {
+      text = edit(text, passage, replacement);
+    }
+
+    const files = { ...base, "item.xml": text };
+    const breaches = breachesOf(yield* judged(files));
+
+    return { breaches: shown(breaches), held: breaches.some((breach) => breach.law === law) };
+  });
+
+/**
+ * The base item's choice interaction, as written.
+ */
+const choiceInteraction = `<qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
+      <qti-simple-choice identifier="A">A</qti-simple-choice>
+      <qti-simple-choice identifier="B">B</qti-simple-choice>
+    </qti-choice-interaction>`;
+
+/**
+ * A graphic gap match interaction over an image, with one associable hotspot.
+ *
+ * @param area - The hotspot's `shape` and `coords`, as written.
+ * @returns The interaction.
+ */
+const graphicGapMatch = (area: string): string =>
+  `<qti-graphic-gap-match-interaction response-identifier="RESPONSE"><object data="a.png" type="image/png"/><qti-gap-img identifier="G" match-max="1"><object data="g.png" type="image/png"/></qti-gap-img><qti-associable-hotspot identifier="H" match-max="1" ${area}/></qti-graphic-gap-match-interaction>`;
+
+/**
+ * A portable custom interaction that reads one context variable.
+ *
+ * @param identifier - The context variable it names.
+ * @returns The interaction.
+ */
+const contextPci = (identifier: string): string =>
+  `<qti-portable-custom-interaction response-identifier="RESPONSE" module="m" custom-interaction-type-identifier="t"><qti-interaction-modules><qti-interaction-module id="m" primary-path="m.js"/></qti-interaction-modules><qti-context-variable identifier="${identifier}"/><qti-interaction-markup/></qti-portable-custom-interaction>`;
+
+/**
+ * The base item's paragraph with inline feedback on an outcome.
+ *
+ * @param outcome - The outcome the feedback names.
+ * @returns The paragraph.
+ */
+const feedback = (outcome: string): string =>
+  `<p id="intro">Pick <qti-feedback-inline outcome-identifier="${outcome}" identifier="F" show-hide="show">well</qti-feedback-inline>.</p>`;
+
+/**
+ * The base item's paragraph followed by an extended text interaction bound to `TEXT`.
+ *
+ * @param bounds - The interaction's `min-strings` and `max-strings`, as written.
+ * @returns The content.
+ */
+const extended = (bounds: string): string =>
+  `<p id="intro">Pick one.</p><qti-extended-text-interaction response-identifier="TEXT" ${bounds}/>`;
+
+describe("the information model's rules RD found unowned (unowned-readings.md §13)", () => {
+  it.effect(
+    "Binding cardinality: a most of 2 or 0 binds a multiple response, and a single one breaks it",
+    () =>
+      Effect.gen(function* bindingCardinality() {
+        const two = yield* refusedBy("Binding cardinality", [`max-choices="1"`, `max-choices="2"`]);
+        const zero = yield* refusedBy("Binding cardinality", [
+          `max-choices="1"`,
+          `max-choices="0"`,
+        ]);
+        const multiple = yield* refusedBy(
+          "Binding cardinality",
+          [`max-choices="1"`, `max-choices="2"`],
+          [
+            `cardinality="single" base-type="identifier"`,
+            `cardinality="multiple" base-type="identifier"`,
+          ],
+        );
+        const one = yield* refusedBy("Binding cardinality");
+
+        assert.isTrue(two.held, two.breaches);
+        assert.isTrue(zero.held, zero.breaches);
+        assert.isFalse(multiple.held, multiple.breaches);
+        assert.isFalse(one.held, one.breaches);
+      }),
+  );
+
+  it.effect("Feedback outcome type: a feedback element names an identifier outcome", () =>
+    Effect.gen(function* feedbackType() {
+      const float = yield* refusedBy("Feedback outcome type", [
+        `<p id="intro">Pick one.</p>`,
+        feedback("SCORE"),
+      ]);
+      const identifier = yield* refusedBy(
+        "Feedback outcome type",
+        [`<p id="intro">Pick one.</p>`, feedback("FEEDBACK")],
+        [
+          `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>`,
+          `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>`,
+        ],
+      );
+      const builtIn = yield* refusedBy("Feedback outcome type", [
+        `<p id="intro">Pick one.</p>`,
+        feedback("completionStatus"),
+      ]);
+
+      assert.isTrue(float.held, float.breaches);
+      assert.isFalse(identifier.held, identifier.breaches);
+      assert.isFalse(builtIn.held, builtIn.breaches);
+    }),
+  );
+
+  it.effect(
+    "Choice bounds: min-strings above a non-zero max-strings breaks it, and 0 bounds nothing",
+    () =>
+      Effect.gen(function* strings() {
+        const declared = [
+          `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>`,
+          `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-response-declaration identifier="TEXT" cardinality="multiple" base-type="string"/>`,
+        ] as const;
+        const above = yield* refusedBy("Choice bounds", declared, [
+          `<p id="intro">Pick one.</p>`,
+          extended(`max-strings="2" min-strings="3"`),
+        ]);
+        const unbounded = yield* refusedBy("Choice bounds", declared, [
+          `<p id="intro">Pick one.</p>`,
+          extended(`max-strings="0" min-strings="3"`),
+        ]);
+        const within = yield* refusedBy("Choice bounds", declared, [
+          `<p id="intro">Pick one.</p>`,
+          extended(`max-strings="3" min-strings="2"`),
+        ]);
+
+        assert.isTrue(above.held, above.breaches);
+        assert.isFalse(unbounded.held, unbounded.breaches);
+        assert.isFalse(within.held, within.breaches);
+      }),
+  );
+
+  it.effect("Graphic gap match default hotspot: its hotspots have no default", () =>
+    Effect.gen(function* graphicDefault() {
+      const fallback = yield* refusedBy("Graphic gap match default hotspot", [
+        choiceInteraction,
+        graphicGapMatch(`shape="default"`),
+      ]);
+      const rect = yield* refusedBy("Graphic gap match default hotspot", [
+        choiceInteraction,
+        graphicGapMatch(`shape="rect" coords="0,0,1,1"`),
+      ]);
+
+      assert.isTrue(fallback.held, fallback.breaches);
+      assert.isFalse(rect.held, rect.breaches);
+    }),
+  );
+
+  it.effect("Context variable reference: a PCI reads QTI_CONTEXT or a declared context", () =>
+    Effect.gen(function* contextVariable() {
+      const nowhere = yield* refusedBy("Context variable reference", [
+        choiceInteraction,
+        contextPci("NOWHERE"),
+      ]);
+      const context = yield* refusedBy("Context variable reference", [
+        choiceInteraction,
+        contextPci("QTI_CONTEXT"),
+      ]);
+
+      assert.isTrue(nowhere.held, nowhere.breaches);
+      assert.isFalse(context.held, context.breaches);
+    }),
+  );
+});
+
 describe("each law, on a package that breaks it", () => {
   for (const { files, law, name, rule } of [...lawCases, ...overlayCases]) {
     it.effect(`${law} refuses ${name} under ${rule}`, () =>
@@ -513,45 +695,92 @@ describe("each law, on a package that breaks it", () => {
       }),
   );
 
-  it.effect("the default hotspot law reads the last slot as stated, whitespace included", () =>
-    Effect.gen(function* defaultHotspot() {
-      const last = breachesOf(
-        yield* judged(
-          hotspots(
-            `<qti-hotspot-choice identifier="A" shape="rect" coords="0,0,1,1"/><qti-hotspot-choice identifier="B" shape="default"/>`,
+  it.effect(
+    "the default hotspot law reads the last element: whitespace after it does not count",
+    () =>
+      Effect.gen(function* defaultHotspot() {
+        const last = breachesOf(
+          yield* judged(
+            hotspots(
+              `<qti-hotspot-choice identifier="A" shape="rect" coords="0,0,1,1"/><qti-hotspot-choice identifier="B" shape="default"/>`,
+            ),
           ),
-        ),
-      );
-      const spaced = breachesOf(
-        yield* judged(
-          hotspots(
-            `<qti-hotspot-choice identifier="A" shape="rect" coords="0,0,1,1"/><qti-hotspot-choice identifier="B" shape="default"/>\n`,
+        );
+        const spaced = breachesOf(
+          yield* judged(
+            hotspots(
+              `<qti-hotspot-choice identifier="A" shape="rect" coords="0,0,1,1"/><qti-hotspot-choice identifier="B" shape="default"/>\n`,
+            ),
           ),
-        ),
-      );
-      const first = breachesOf(
-        yield* judged(
-          hotspots(
-            `<qti-hotspot-choice identifier="B" shape="default"/><qti-hotspot-choice identifier="A" shape="rect" coords="0,0,1,1"/>`,
+        );
+        const first = breachesOf(
+          yield* judged(
+            hotspots(
+              `<qti-hotspot-choice identifier="B" shape="default"/><qti-hotspot-choice identifier="A" shape="rect" coords="0,0,1,1"/>`,
+            ),
           ),
-        ),
-      );
+        );
 
-      assert.isFalse(
-        last.some(({ law }) => law === "default hotspot last slot"),
-        shown(last),
-      );
-      assert.isTrue(
-        spaced.some(({ law }) => law === "default hotspot last slot"),
-        shown(spaced),
-      );
-      assert.isTrue(
-        first.some(
-          ({ law }) => law === "default hotspot last slot" && ruleOf(law) === "hotspot-default",
-        ),
-        shown(first),
-      );
-    }),
+        assert.isFalse(
+          last.some(({ law }) => law === "default hotspot last slot"),
+          shown(last),
+        );
+        assert.isFalse(
+          spaced.some(({ law }) => law === "default hotspot last slot"),
+          shown(spaced),
+        );
+        assert.isTrue(
+          first.some(
+            ({ law }) => law === "default hotspot last slot" && ruleOf(law) === "hotspot-default",
+          ),
+          shown(first),
+        );
+      }),
+  );
+
+  it.effect(
+    "Declaration key: two declarations without an identifier share none, and AL3 refuses each",
+    () =>
+      Effect.gen(function* unnamedDeclarations() {
+        const breaches = breachesOf(
+          yield* judged(
+            withItem(
+              `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>`,
+              `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-outcome-declaration cardinality="single" base-type="float"/><qti-outcome-declaration cardinality="single" base-type="float"/>`,
+            ),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          breaches.map(({ keys, law }) => [law, keys["kind"]]),
+          [
+            ["AL3 required", "qti-outcome-declaration"],
+            ["AL3 required", "qti-outcome-declaration"],
+          ],
+          shown(breaches),
+        );
+      }),
+  );
+
+  it.effect(
+    "DocumentId key: two ids outside their domain are no ids, and only the value domain refuses each",
+    () =>
+      Effect.gen(function* invalidIds() {
+        const breaches = breachesOf(
+          yield* judged(
+            withItem(`<p id="intro">Pick one.</p>`, `<p id="">Pick one.</p><p id="">Twice.</p>`),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          breaches.map(({ keys, law }) => [law, keys["name"]]),
+          [
+            ["value domain", "id"],
+            ["value domain", "id"],
+          ],
+          shown(breaches),
+        );
+      }),
   );
 });
 
@@ -791,7 +1020,7 @@ describe("the content references", () => {
     const unruled = [
       ...new Set(
         grammar.references.contentReference.rows
-          .filter(({ attribute }) => !contentLaws.has(attribute))
+          .filter(({ attribute, kind }) => Option.isNone(contentLawOf(kind, attribute)))
           .map(({ attribute, kind }) => `${kind}@${attribute}`),
       ),
     ];
@@ -1265,6 +1494,87 @@ describe("the fold laws, on rows the folds did not write", () => {
     }),
   );
 
+  it.effect("T3: each field of the merged parent copy that is not the parent's", () =>
+    Effect.gen(function* parentCopy() {
+      const rows = yield* foldedItem;
+      const target = rows.nodes.find(
+        (node) => node.start > 0n && node.at > 0n && node.parent !== rows.document.node,
+      );
+      const other: NodeId = "00000000-0000-4000-8000-0000000fffff";
+      const copies: readonly (readonly [
+        string,
+        (node: FoldedNode<Composed>) => FoldedNode<Composed>,
+      ])[] = [
+        ["document", (node) => ({ ...node, document: other })],
+        ["version", (node) => ({ ...node, version: node.version === "3.0.0" ? "3.0.1" : "3.0.0" })],
+        ["parentKind", (node) => ({ ...node, parentKind: "qti-item-body" })],
+        ["parentStart", (node) => ({ ...node, parentStart: node.parentStart + 1n })],
+        [
+          "parentAncestry",
+          (node) => ({
+            ...node,
+            parentAncestry: node.parentAncestry.union(new Set(["test"] as const)),
+          }),
+        ],
+        ["parentNearest", (node) => ({ ...node, parentNearest: other })],
+        [
+          "parentNearestKind",
+          (node) => ({
+            ...node,
+            parentNearestKind:
+              node.parentNearestKind === "qti-item-body" ? "qti-assessment-item" : "qti-item-body",
+          }),
+        ],
+      ];
+
+      assert.isDefined(target, "the item has a later child below its root");
+      for (const [field, change] of copies) {
+        assert.include(
+          lawsBroken(tamperNodes(rows, (node) => (node === target ? change(node) : node))),
+          "T3 first child",
+          field,
+        );
+      }
+    }),
+  );
+
+  it.effect("AL1: each field of the owner copy that is not the owner's", () =>
+    Effect.gen(function* ownerCopy() {
+      const rows = yield* foldedItem;
+      const target = rows.attributes.at(0);
+      const copies: readonly (readonly [
+        string,
+        (attribute: FoldedAttribute<Composed>) => FoldedAttribute<Composed>,
+      ])[] = [
+        ["kind", (attribute) => ({ ...attribute, kind: "qti-item-body" })],
+        [
+          "version",
+          (attribute) => ({
+            ...attribute,
+            version: attribute.version === "3.0.0" ? "3.0.1" : "3.0.0",
+          }),
+        ],
+        [
+          "document",
+          (attribute) => ({ ...attribute, document: "00000000-0000-4000-8000-0000000fffff" }),
+        ],
+      ];
+
+      assert.isDefined(target, "the item carries an attribute");
+      for (const [field, change] of copies) {
+        assert.include(
+          lawsBroken(
+            tamperAttributes(rows, (attribute) =>
+              attribute === target ? change(attribute) : attribute,
+            ),
+          ),
+          "AL1 owner",
+          field,
+        );
+      }
+    }),
+  );
+
   it.effect("every fold's first slot is its monoid's identity", () =>
     Effect.gen(function* identity() {
       const rows = yield* foldedItem;
@@ -1382,6 +1692,52 @@ describe("the fold laws, on rows the folds did not write", () => {
   );
 });
 
+/**
+ * The base item with a MathML expression in its paragraph whose annotation holds one foreign
+ * element, `{urn:w}widget`, under `annotation-xml`'s lax wildcard.
+ */
+const annotatedItem = edit(
+  item,
+  `<p id="intro">Pick one.</p>`,
+  `<p id="intro">Pick <math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation-xml encoding="application/x-widget"><widget xmlns="urn:w"/></annotation-xml></semantics></math>.</p>`,
+);
+
+describe("MathML foreign element, on rows the codec did not write", () => {
+  it.effect(
+    "a foreign element named in the MathML namespace breaks it, and an m:mi inside m:math does not",
+    () =>
+      Effect.gen(function* mathmlForeign() {
+        const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(annotatedItem)));
+        const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
+        const rows = yield* Effect.orDie(
+          Effect.fromResult(
+            fold(
+              tree,
+              (index): NodeId => `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
+              foldGrammarOf(grammar),
+            ),
+          ),
+        );
+        const renamed: FoldedRows<Composed> = {
+          ...rows,
+          openElementNames: rows.openElementNames.map((row) => ({
+            ...row,
+            local: "mi",
+            namespace: mathmlNamespace,
+          })),
+        };
+
+        assert.deepStrictEqual(lawsBroken(rows), [], "m:mi inside m:math, and the widget");
+        assert.strictEqual(
+          rows.openElementNames.length,
+          1,
+          "the widget is the one foreign element",
+        );
+        assert.include(lawsBroken(renamed), "MathML foreign element", "the widget named m:mi");
+      }),
+  );
+});
+
 describe("the fixtures the importer accepts today", () => {
   it.effect("simple breaks no law", () =>
     Effect.gen(function* simple() {
@@ -1452,5 +1808,1059 @@ describe("reading 14: text-entry references are IDREFs, response identifiers IDs
         shown(breaches),
       );
     }),
+  );
+});
+
+/**
+ * The SSML namespace's declaration, which the SSML cases write on each `speak`.
+ */
+const ssmlNamespace = `xmlns:ssml="http://www.w3.org/2001/10/synthesis"`;
+
+/**
+ * The MathML namespace's declaration, which the MathML cases write on each `math`.
+ */
+const mathNamespace = `xmlns:m="http://www.w3.org/1998/Math/MathML"`;
+
+/**
+ * The XML Schema instance namespace's declaration, which the `xsi:type` cases write in place.
+ */
+const xsiNamespace = `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"`;
+
+/**
+ * Place SSML in the base item's body: one `speak` fragment, or several, after its paragraph.
+ *
+ * @param fragments - Each fragment's attributes beyond `version` and `xml:lang`, and its content.
+ * @returns The base package with the item edited.
+ */
+const withSpeech = (...fragments: readonly (readonly [string, string])[]) =>
+  withItem(
+    `<p id="intro">Pick one.</p>`,
+    `<p id="intro">Pick one.</p>${fragments
+      .map(
+        ([attributes, content]) =>
+          `<p><ssml:speak ${ssmlNamespace} version="1.1" xml:lang="en"${attributes}>${content}</ssml:speak></p>`,
+      )
+      .join("")}`,
+  );
+
+/**
+ * Place MathML in the base item's body, after its paragraph.
+ *
+ * @param content - The `math` element's content.
+ * @returns The base package with the item edited.
+ */
+const withMath = (content: string) =>
+  withItem(
+    `<p id="intro">Pick one.</p>`,
+    `<p id="intro">Pick one.</p><p><m:math ${mathNamespace}>${content}</m:math></p>`,
+  );
+
+/**
+ * Replace the base item's response processing's score with an expression.
+ *
+ * @param expression - The expression, as written.
+ * @returns The base package with the item edited.
+ */
+const withScore = (expression: string) =>
+  withItem(`<qti-base-value base-type="float">1</qti-base-value>`, expression);
+
+/**
+ * Packages valid under readings 2, 3, 9, 39, 41, 42, 43 and 47, each of which the readings' laws
+ * must leave alone: the base package with one valid use of what a law judges.
+ */
+const unownedValid: readonly {
+  readonly files: Readonly<Record<string, string>>;
+  readonly name: string;
+}[] = [
+  { files: withSpeech(["", "hi"]), name: "reading 39: speak version 1.1" },
+  {
+    files: withItem(
+      `<p id="intro">Pick one.</p>`,
+      `<p id="intro">Pick one.</p><p><ssml:speak ${ssmlNamespace} version=" 1.1 " xml:lang="en">hi</ssml:speak></p>`,
+    ),
+    name: "reading 39: version 1.1 with outer whitespace, which NMTOKEN's collapse reads as 1.1",
+  },
+  {
+    files: withSpeech(["", `<ssml:meta name="seeAlso" content="x"/>hi`]),
+    name: "reading 41: meta with name",
+  },
+  {
+    files: withSpeech(["", `<ssml:meta http-equiv="Cache-Control" content="no-cache"/>hi`]),
+    name: "reading 41: meta with http-equiv",
+  },
+  {
+    files: withSpeech(["", `<ssml:voice gender="female">hi</ssml:voice>`]),
+    name: "reading 43: voice with an SSML attribute",
+  },
+  {
+    files: withSpeech(["", `<ssml:voice xml:lang="en">hi</ssml:voice>`]),
+    name: "reading 43: voice with only xml:lang, which fragment removal keeps",
+  },
+  {
+    files: withSpeech(["", `<ssml:prosody rate="slow">hi</ssml:prosody>`]),
+    name: "reading 43: prosody with rate",
+  },
+  {
+    files: withSpeech(["", `<ssml:voice languages="en-US fr:ca">hi</ssml:voice>`]),
+    name: "reading 42: language ranges with an accent",
+  },
+  {
+    files: withSpeech(["", `<ssml:voice languages="">hi</ssml:voice>`]),
+    name: "reading 42: the empty string",
+  },
+  {
+    files: withSpeech(["", `<ssml:voice languages="und-Latn zxxa un ux">hi</ssml:voice>`]),
+    name: "reading 42: ranges that only begin like und or zxx",
+  },
+  {
+    files: withSpeech(["", `<ssml:mark name="a"/>x<ssml:mark name="a"/>`]),
+    name: "reading 3: one mark name twice, which no trim names",
+  },
+  {
+    files: withSpeech([` startmark="a"`, `x<ssml:mark name="a"/>y`]),
+    name: "reading 3: startmark naming the fragment's one mark of its name",
+  },
+  {
+    files: withSpeech(
+      [` endmark="a"`, `<ssml:mark name="a"/>x`],
+      [` startmark=" a "`, `<ssml:mark name="a"/>y`],
+    ),
+    name: "reading 3: two fragments each with mark a, each trimmed at its own",
+  },
+  {
+    files: withSpeech([
+      "",
+      `<ssml:lexicon uri="a.pls" xml:id="L"/><ssml:lookup ref="L">y</ssml:lookup>`,
+    ]),
+    name: "reading 3: lookup naming its fragment's lexicon",
+  },
+  {
+    files: withMath(
+      `<m:piecewise><m:piece><m:cn>1</m:cn><m:true/></m:piece><m:otherwise><m:cn>2</m:cn></m:otherwise><m:piece><m:cn>3</m:cn><m:false/></m:piece></m:piecewise>`,
+    ),
+    name: "reading 2: one otherwise between pieces (the RelaxNG's interleave)",
+  },
+  { files: withMath(`<m:piecewise/>`), name: "reading 2: an empty piecewise" },
+  {
+    files: withMath(
+      `<m:apply><m:diff/><m:bvar><m:degree><m:cn>2</m:cn></m:degree><m:ci>x</m:ci></m:bvar><m:ci>f</m:ci></m:apply>`,
+    ),
+    name: "reading 2: bvar with its degree first",
+  },
+  {
+    files: withMath(
+      `<m:apply><m:sin/><m:ci>x</m:ci></m:apply><m:apply><m:minus/><m:ci>x</m:ci></m:apply><m:apply><m:minus/><m:ci>x</m:ci><m:ci>y</m:ci></m:apply><m:apply><m:root/><m:degree><m:cn>3</m:cn></m:degree><m:ci>x</m:ci></m:apply>`,
+    ),
+    name: "reading 2: unary sin, minus of one and of two, root with its degree",
+  },
+  {
+    files: withMath(
+      `<m:apply><m:grad/><m:bvar><m:ci>x</m:ci></m:bvar><m:bvar><m:ci>y</m:ci></m:bvar><m:apply><m:times/><m:ci>x</m:ci><m:ci>y</m:ci></m:apply></m:apply>`,
+    ),
+    name: "reading 2: grad with bound variables, as MathML 3 §4.4.4.5's example writes it",
+  },
+  {
+    files: withMath(
+      `<m:apply><m:moment/><m:degree><m:cn>3</m:cn></m:degree><m:momentabout><m:mean/></m:momentabout><m:cn>6</m:cn><m:cn>4</m:cn><m:cn>2</m:cn><m:cn>2</m:cn><m:cn>5</m:cn></m:apply>`,
+    ),
+    name: "reading 2: moment of five arguments, as MathML 3 §4.4.8.6's example writes it",
+  },
+  {
+    files: {
+      ...base,
+      "item.xml": edit(
+        edit(
+          item,
+          `<qti-outcome-declaration identifier="SCORE"`,
+          `<qti-response-declaration identifier="SLIDER" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="SCORE"`,
+        ),
+        `<p id="intro">Pick one.</p>`,
+        `<p id="intro">Pick one.</p><qti-slider-interaction response-identifier="SLIDER" lower-bound="0" upper-bound="10"/>`,
+      ),
+    },
+    name: "reading 9: a slider whose bounds are in order",
+  },
+  {
+    files: withScore(`<qti-null ${xsiNamespace} xsi:type="EmptyPrimitiveTypeDType"/>`),
+    name: "reading 47: xsi:type naming the declared type",
+  },
+  {
+    files: withScore(
+      `<qti-null ${xsiNamespace} xmlns:q="${asi}" xsi:type="q:EmptyPrimitiveTypeDType"/>`,
+    ),
+    name: "reading 47: xsi:type naming the declared type through a bound prefix",
+  },
+];
+
+/**
+ * Packages that break readings 2, 3, 9, 39, 41, 42, 43 and 47, each named by the law that refuses
+ * it and the rule that law keeps.
+ */
+const unownedBroken: readonly LawCase[] = [
+  {
+    files: withItem(
+      `<p id="intro">Pick one.</p>`,
+      `<p id="intro">Pick one.</p><p><ssml:speak ${ssmlNamespace} version="1.0" xml:lang="en">hi</ssml:speak></p>`,
+    ),
+    law: "value domain",
+    name: "reading 39: speak version 1.0",
+    rule: "attribute-lexical",
+  },
+  {
+    files: withSpeech(["", `<ssml:meta name="seeAlso" http-equiv="Cache-Control" content="x"/>hi`]),
+    law: "AL5 attribute count",
+    name: "reading 41: meta with both name and http-equiv",
+    rule: "attribute-count",
+  },
+  {
+    files: withSpeech(["", `<ssml:meta content="x"/>hi`]),
+    law: "AL5 attribute count",
+    name: "reading 41: meta with neither",
+    rule: "attribute-count",
+  },
+  {
+    files: withSpeech(["", `<ssml:voice>hi</ssml:voice>`]),
+    law: "AL5 attribute count",
+    name: "reading 43: a bare voice",
+    rule: "attribute-count",
+  },
+  {
+    files: withSpeech(["", `<ssml:prosody>hi</ssml:prosody>`]),
+    law: "AL5 attribute count",
+    name: "reading 43: a bare prosody",
+    rule: "attribute-count",
+  },
+  {
+    files: withSpeech(["", `<ssml:voice xmlns:f="urn:f" f:x="1">hi</ssml:voice>`]),
+    law: "AL5 attribute count",
+    name: "reading 43: a voice whose one attribute fragment removal drops",
+    rule: "attribute-count",
+  },
+  {
+    files: withSpeech(["", `<ssml:voice languages="und">hi</ssml:voice>`]),
+    law: "value domain",
+    name: "reading 42: und",
+    rule: "attribute-lexical",
+  },
+  {
+    files: withSpeech(["", `<ssml:voice languages="en ZXX">hi</ssml:voice>`]),
+    law: "value domain",
+    name: "reading 42: zxx in any case",
+    rule: "attribute-lexical",
+  },
+  {
+    files: withSpeech(["", `<ssml:voice languages="en:und">hi</ssml:voice>`]),
+    law: "value domain",
+    name: "reading 42: und as an accent",
+    rule: "attribute-lexical",
+  },
+  {
+    files: withSpeech(["", `<ssml:voice languages="en_US">hi</ssml:voice>`]),
+    law: "value domain",
+    name: "reading 42: a token that is no language range",
+    rule: "attribute-lexical",
+  },
+  {
+    files: withSpeech(["", `<ssml:voice languages="abcdefghi">hi</ssml:voice>`]),
+    law: "value domain",
+    name: "reading 42: a first subtag of nine letters",
+    rule: "attribute-lexical",
+  },
+  {
+    files: withSpeech([` startmark="b"`, `x<ssml:mark name="a"/>`]),
+    law: "SSML trim mark",
+    name: "reading 3: startmark naming no mark",
+    rule: "ssml-fragment",
+  },
+  {
+    files: withSpeech([` endmark="a"`, `<ssml:mark name="a"/>x<ssml:mark name="a"/>`]),
+    law: "SSML trim mark",
+    name: "reading 3: endmark naming a mark defined twice",
+    rule: "ssml-fragment",
+  },
+  {
+    files: withSpeech(["", `<ssml:mark name="a"/>x`], [` startmark="a"`, "y"]),
+    law: "SSML trim mark",
+    name: "reading 3: startmark naming another fragment's mark",
+    rule: "ssml-fragment",
+  },
+  {
+    files: withSpeech(
+      ["", `<ssml:lexicon uri="a.pls" xml:id="L"/>x`],
+      ["", `<ssml:lookup ref="L">y</ssml:lookup>`],
+    ),
+    law: "SSML lexicon reference",
+    name: "reading 3: lookup naming another fragment's lexicon",
+    rule: "ssml-fragment",
+  },
+  {
+    files: withSpeech(["", `<ssml:p xml:id="P">x</ssml:p><ssml:lookup ref="P">y</ssml:lookup>`]),
+    law: "SSML lexicon reference",
+    name: "reading 3: lookup naming an id that is no lexicon's",
+    rule: "ssml-fragment",
+  },
+  {
+    files: withMath(
+      `<m:piecewise><m:otherwise><m:cn>1</m:cn></m:otherwise><m:otherwise><m:cn>2</m:cn></m:otherwise></m:piecewise>`,
+    ),
+    law: "N5 Follow",
+    name: "reading 2: piecewise with two otherwise",
+    rule: "ordering",
+  },
+  {
+    files: withMath(`<m:apply><m:forall/><m:bvar/><m:ci>x</m:ci></m:apply>`),
+    law: "N7 Last",
+    name: "reading 2: an empty bvar",
+    rule: "child-set",
+  },
+  {
+    files: withMath(
+      `<m:apply><m:forall/><m:bvar><m:ci>x</m:ci><m:ci>y</m:ci></m:bvar><m:ci>x</m:ci></m:apply>`,
+    ),
+    law: "N5 Follow",
+    name: "reading 2: bvar with two variables",
+    rule: "ordering",
+  },
+  {
+    files: withMath(
+      `<m:apply><m:diff/><m:bvar><m:ci>x</m:ci><m:degree><m:cn>2</m:cn></m:degree><m:degree><m:cn>3</m:cn></m:degree></m:bvar><m:ci>f</m:ci></m:apply>`,
+    ),
+    law: "N5 Follow",
+    name: "reading 2: bvar with two degrees",
+    rule: "ordering",
+  },
+  {
+    files: withMath(`<m:apply><m:sin/><m:cn>1</m:cn><m:cn>2</m:cn></m:apply>`),
+    law: "MathML arity",
+    name: "reading 2: sin of two arguments",
+    rule: "math-arity",
+  },
+  {
+    files: withMath(`<m:apply><m:sin/></m:apply>`),
+    law: "MathML arity",
+    name: "reading 2: sin of none",
+    rule: "math-arity",
+  },
+  {
+    files: withMath(`<m:apply><m:divide/><m:ci>x</m:ci></m:apply>`),
+    law: "MathML arity",
+    name: "reading 2: divide of one",
+    rule: "math-arity",
+  },
+  {
+    files: withMath(`<m:apply><m:minus/><m:ci>x</m:ci><m:ci>y</m:ci><m:ci>z</m:ci></m:apply>`),
+    law: "MathML arity",
+    name: "reading 2: minus of three",
+    rule: "math-arity",
+  },
+  {
+    files: withScore(
+      `<qti-null ${xsiNamespace} xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:anyType"/>`,
+    ),
+    law: "XsiType derived",
+    name: "reading 47: xsi:type naming a base of the declared type",
+    rule: "xsi-type",
+  },
+  {
+    files: withScore(`<qti-null ${xsiNamespace} xsi:type="ValueDType"/>`),
+    law: "XsiType derived",
+    name: "reading 47: xsi:type naming a type not derived from the declared one",
+    rule: "xsi-type",
+  },
+  {
+    files: {
+      ...base,
+      "item.xml": edit(
+        edit(
+          item,
+          `<qti-outcome-declaration identifier="SCORE"`,
+          `<qti-response-declaration identifier="SLIDER" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="SCORE"`,
+        ),
+        `<p id="intro">Pick one.</p>`,
+        `<p id="intro">Pick one.</p><qti-slider-interaction response-identifier="SLIDER" lower-bound="10" upper-bound="0"/>`,
+      ),
+    },
+    law: "Slider bounds",
+    name: "reading 9: a slider whose upper bound is below its lower",
+    rule: "slider-bounds",
+  },
+];
+
+/**
+ * Packages whose `xsi:type` breaks XML Schema's clause 4.1 or 4.2 (a value that is no QName in
+ * scope, or one that names no type), which shred cannot represent: the codec refuses them before
+ * any law reads a row (shred's `type-unresolved` and `type-unknown`).
+ */
+const unownedCodec: readonly {
+  readonly files: Readonly<Record<string, string>>;
+  readonly name: string;
+}[] = [
+  {
+    files: withScore(`<qti-null ${xsiNamespace} xsi:type="NoSuchDType"/>`),
+    name: "reading 47: xsi:type naming no type",
+  },
+  {
+    files: withScore(`<qti-null ${xsiNamespace} xsi:type="q:EmptyPrimitiveTypeDType"/>`),
+    name: "reading 47: xsi:type whose prefix is unbound",
+  },
+  {
+    files: {
+      ...base,
+      "imsmanifest.xml": edit(
+        manifestOf(itemResource),
+        "<schemaversion>3.0.1</schemaversion>",
+        `<schemaversion ${xsiNamespace} xsi:type="v">3.0.1</schemaversion>`,
+      ),
+    },
+    name: "reading 47: xsi:type on an element of an anonymous type, naming no type (case 130)",
+  },
+];
+
+describe("the unowned readings 2, 3, 9, 39, 41, 42, 43 and 47", () => {
+  for (const { files, name } of unownedValid) {
+    it.effect(`no law refuses ${name}`, () =>
+      Effect.gen(function* valid() {
+        const breaches = breachesOf(yield* judged(files));
+
+        assert.deepStrictEqual(breaches, [], shown(breaches));
+      }),
+    );
+  }
+
+  for (const { files, name } of unownedCodec) {
+    it.effect(`the codec refuses ${name} under unmodeled-vocabulary`, () =>
+      Effect.gen(function* codec() {
+        assert.deepStrictEqual(verdictOf(yield* judged(files)), {
+          rule: "unmodeled-vocabulary",
+          verdict: "refused",
+        });
+      }),
+    );
+  }
+
+  for (const { files, law, name, rule } of unownedBroken) {
+    it.effect(`${law} refuses ${name} under ${rule}`, () =>
+      Effect.gen(function* broken() {
+        const breaches = breachesOf(yield* judged(files));
+
+        assert.isTrue(
+          breaches.some((breach) => breach.law === law && ruleOf(breach.law) === rule),
+          shown(breaches),
+        );
+      }),
+    );
+  }
+});
+
+describe("the laws the information model states, read as it states them (readings 65 to 71)", () => {
+  it.effect(
+    "a default hotspot followed by whitespace or a comment is last among its elements",
+    () =>
+      Effect.gen(function* lastElement() {
+        for (const after of ["\n", "<!-- c -->"]) {
+          const breaches = breachesOf(
+            yield* judged(
+              hotspots(
+                `<qti-hotspot-choice identifier="A" shape="rect" coords="0,0,1,1"/><qti-hotspot-choice identifier="B" shape="default" coords="0,0,1,1"/>${after}`,
+              ),
+            ),
+          );
+
+          assert.isFalse(
+            breaches.some(({ law }) => law === "default hotspot last slot"),
+            shown(breaches),
+          );
+        }
+      }),
+  );
+
+  it.effect("feedback and a printed variable may name the built-in outcome completionStatus", () =>
+    Effect.gen(function* builtIn() {
+      const breaches = breachesOf(
+        yield* judged(
+          withItem(
+            `<p id="intro">Pick one.</p>`,
+            `<p id="intro">Pick one. <qti-feedback-inline outcome-identifier="completionStatus" identifier="completed" show-hide="show">Done</qti-feedback-inline> <qti-printed-variable identifier="completionStatus"/></p>`,
+          ),
+        ),
+      );
+
+      assert.deepStrictEqual(breaches, [], shown(breaches));
+    }),
+  );
+
+  it.effect("a printed variable may not name a built-in response variable", () =>
+    Effect.gen(function* responseBuiltIn() {
+      const breaches = breachesOf(
+        yield* judged(
+          withItem(
+            `<p id="intro">Pick one.</p>`,
+            `<p id="intro">Pick one. <qti-printed-variable identifier="numAttempts"/></p>`,
+          ),
+        ),
+      );
+
+      assert.isTrue(
+        breaches.some(({ law }) => law === "Printed variable reference"),
+        shown(breaches),
+      );
+    }),
+  );
+});
+
+/**
+ * How long one case of the generated laws below may run: one package judged.
+ */
+const lawCaseHang = Duration.seconds(30);
+
+/**
+ * Write an item whose body holds the given interactions after the given declarations, with no
+ * processing.
+ *
+ * @param declarations - The declarations, as written.
+ * @param body - The item body's content, as written.
+ * @returns The package of the item and its manifest.
+ */
+const itemWith = (declarations: string, body: string) => ({
+  "imsmanifest.xml": manifestOf(itemResource),
+  "item.xml": `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" time-dependent="false">${declarations}<qti-item-body>${body}</qti-item-body></qti-assessment-item>`,
+});
+
+/**
+ * Select the breaches of one law.
+ *
+ * @param breaches - The breaches.
+ * @param law - The law.
+ * @returns Those of the law.
+ */
+const ofLaw = (breaches: readonly Breach[], law: LawName): readonly Breach[] =>
+  breaches.filter((breach) => breach.law === law);
+
+/**
+ * One case of reading 18's and 67's bounds: an interaction kind, its number of choices, and its
+ * `min-choices` and `max-choices`, each unwritten or a count.
+ */
+interface BoundCase {
+  readonly choices: number;
+  readonly kind:
+    | "qti-choice-interaction"
+    | "qti-graphic-order-interaction"
+    | "qti-order-interaction";
+  readonly max: number | undefined;
+  readonly min: number | undefined;
+}
+
+/**
+ * Draw a count attribute: unwritten, or 0 to 4.
+ */
+const countGen: Gen<number | undefined> = (source) =>
+  source.draw(boolean) ? source.draw(int(0, 4)) : undefined;
+
+/**
+ * Draw a bound case: every kind, 1 to 3 choices, and every pair of counts, a space of 3 × 3 × 6 ×
+ * 6 = 324 cases.
+ */
+const boundCase: Gen<BoundCase> = (source) => ({
+  choices: source.draw(int(1, 3)),
+  kind: source.draw(
+    element([
+      "qti-order-interaction",
+      "qti-graphic-order-interaction",
+      "qti-choice-interaction",
+    ] as const),
+  ),
+  max: source.draw(countGen),
+  min: source.draw(countGen),
+});
+
+/**
+ * Write a bound case as an item: the interaction bound to an ordered or multiple identifier
+ * response, its choices, and its counts.
+ *
+ * @param bound - The case.
+ * @returns The package.
+ */
+const boundItem = ({ choices, kind, max, min }: BoundCase) => {
+  const counts = [
+    ...(min === undefined ? [] : [`min-choices="${String(min)}"`]),
+    ...(max === undefined ? [] : [`max-choices="${String(max)}"`]),
+  ].join(" ");
+  const ids = Array.from({ length: choices }, (_, at) => `C${String(at)}`);
+  const inner =
+    kind === "qti-graphic-order-interaction"
+      ? `<object data="a.png" type="image/png"/>${ids.map((id) => `<qti-hotspot-choice identifier="${id}" shape="rect" coords="0,0,1,1"/>`).join("")}`
+      : ids.map((id) => `<qti-simple-choice identifier="${id}">${id}</qti-simple-choice>`).join("");
+  const cardinality = kind === "qti-choice-interaction" ? "multiple" : "ordered";
+
+  return itemWith(
+    `<qti-response-declaration identifier="RESPONSE" cardinality="${cardinality}" base-type="identifier"/>`,
+    `<${kind} response-identifier="RESPONSE" ${counts}>${inner}</${kind}>`,
+  );
+};
+
+/**
+ * Reading 18's and 67's bounds, restated from the information model: an order interaction's
+ * counts bind only where `min-choices` is written, and then `min-choices` is at most the choices
+ * and a written `max-choices` from `min-choices` to the choices, 0 a count like any other
+ * (§5.97.2, §5.97.3, §5.61.1, §5.61.2); a choice interaction's `min-choices` is at most a
+ * `max-choices` that is not 0, which "imposes no restriction" (§5.30.2, §5.30.3), each unwritten
+ * count read as its XSD default (0 and 1), and its choices bound nothing.
+ *
+ * @param bound - The case.
+ * @returns How many of its counts break the bounds.
+ */
+const boundsBroken = ({ choices, kind, max, min }: BoundCase): number => {
+  if (kind === "qti-choice-interaction") {
+    // An unwritten count reads its XSD default: `min-choices` 0, `max-choices` 1.
+    const most = max ?? 1;
+
+    return most !== 0 && (min ?? 0) > most ? 1 : 0;
+  }
+
+  if (min === undefined) {
+    return 0;
+  }
+
+  return [max !== undefined && min > max, min > choices, max !== undefined && max > choices].filter(
+    Boolean,
+  ).length;
+};
+
+/**
+ * Write a manifest resource that lists one file as its href.
+ *
+ * @param identifier - The resource's identifier.
+ * @param type - Its type.
+ * @param href - The file.
+ * @returns The resource, as written.
+ */
+const resourceOf = (identifier: string, type: string, href: string): string =>
+  `<resource identifier="${identifier}" type="${type}" href="${href}"><file href="${href}"/></resource>`;
+
+/**
+ * Write a package whose test holds one section that includes `s.xml` with the given attributes on
+ * its `xi:include`, beside its one item ref.
+ *
+ * @param attributes - The include's attributes beside `href`, as written.
+ * @returns The package.
+ */
+const includingTest = (attributes: string) => ({
+  "imsmanifest.xml": manifestOf(
+    `${resourceOf("RT", "imsqti_test_xmlv3p0", "test.xml")}${itemResource}`,
+  ),
+  "item.xml": `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" time-dependent="false"/>`,
+  "test.xml": `<qti-assessment-test xmlns="${asi}" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="T" title="Test"><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="S" title="Section" visible="true"><qti-assessment-item-ref identifier="I" href="item.xml"/><xi:include href="s.xml" ${attributes}/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+});
+
+describe("the laws readings 18, 65, 76 and 83 state, over generated packages", () => {
+  it.effect(
+    "Choice bounds: an order interaction's counts as reading 18 bounds them, a choice interaction's as reading 67 does",
+    (ctx) =>
+      searched(
+        ctx,
+        exhaust(
+          {
+            caseHang: lawCaseHang,
+            coverage: requiredInSpace<"held" | "broken" | "zero most" | "beyond choices">([
+              "held",
+              "broken",
+              "zero most",
+              "beyond choices",
+            ]),
+            generator: boundCase,
+            limit: 324,
+            literal: Formatter.format,
+            suite: "oracle/choice-bounds-reading-18",
+          },
+          (bound, c) =>
+            Effect.gen(function* bounds() {
+              const expected = boundsBroken(bound);
+              c.note(expected === 0 ? "held" : "broken");
+              if (bound.max === 0 && bound.min !== undefined) {
+                c.note("zero most");
+              }
+
+              if (Math.max(bound.min ?? 0, bound.max ?? 0) > bound.choices) {
+                c.note("beyond choices");
+              }
+
+              const breaches = ofLaw(breachesOf(yield* judged(boundItem(bound))), "Choice bounds");
+
+              assert.strictEqual(breaches.length, expected, shown(breaches));
+            }),
+        ),
+      ),
+    120_000,
+  );
+
+  it.effect(
+    "Binding unique: an item breaks it exactly once for each interaction past the first that binds a response",
+    (ctx) =>
+      searched(
+        ctx,
+        exhaust(
+          {
+            caseHang: lawCaseHang,
+            coverage: requiredInSpace<"unique" | "shared" | "undeclared shared">([
+              "unique",
+              "shared",
+              "undeclared shared",
+            ]),
+            // Each of up to three interactions binds one of two responses, R0 declared and R1 not.
+            generator: (source) =>
+              Array.from({ length: source.draw(int(1, 3)) }, () => source.draw(int(0, 1))),
+            limit: 20,
+            literal: Formatter.format,
+            suite: "oracle/binding-unique",
+          },
+          (bound, c) =>
+            Effect.gen(function* unique() {
+              const counts = [0, 1].map((at) => bound.filter((held) => held === at).length);
+              const expected = counts.reduce((sum, count) => sum + Math.max(0, count - 1), 0);
+              c.note(expected === 0 ? "unique" : "shared");
+              if ((counts[1] ?? 0) > 1) {
+                c.note("undeclared shared");
+              }
+
+              const body = bound
+                .map(
+                  (at) =>
+                    `<qti-choice-interaction response-identifier="R${String(at)}" max-choices="1"><qti-simple-choice identifier="A">A</qti-simple-choice></qti-choice-interaction>`,
+                )
+                .join("");
+              const breaches = ofLaw(
+                breachesOf(
+                  yield* judged(
+                    itemWith(
+                      `<qti-response-declaration identifier="R0" cardinality="single" base-type="identifier"/>`,
+                      body,
+                    ),
+                  ),
+                ),
+                "Binding unique",
+              );
+
+              // Oracle: reading 83, "Each response variable declared may be bound to one and only
+              // one interaction" (§2.2.2.2): a response named by n interactions breaks it n − 1
+              // times, declared or not.
+              assert.strictEqual(breaches.length, expected, shown(breaches));
+            }),
+        ),
+      ),
+    120_000,
+  );
+
+  it.effect(
+    "Binding cardinality: a select point interaction whose max-choices, or its default 0, is not 1 binds a multiple response",
+    (ctx) =>
+      searched(
+        ctx,
+        exhaust(
+          {
+            caseHang: lawCaseHang,
+            coverage: requiredInSpace<"bound" | "unbound" | "default">([
+              "bound",
+              "unbound",
+              "default",
+            ]),
+            generator: (source) => ({
+              cardinality: source.draw(element(["single", "multiple"] as const)),
+              max: source.draw(element([undefined, 0, 1, 2] as const)),
+            }),
+            limit: 8,
+            literal: Formatter.format,
+            suite: "oracle/binding-cardinality-select-point",
+          },
+          ({ cardinality, max }, c) =>
+            Effect.gen(function* selectPoint() {
+              // Oracle: reading 83, §5.128.2: "If max-choices is greater than 1 (or 0) then the
+              // interaction must be bound to a response with multiple cardinality", an unwritten
+              // max-choices read as its XSD default, 0.
+              const most = max ?? 0;
+              const broken = (most === 0 || most > 1) && cardinality === "single";
+              c.note(broken ? "bound" : "unbound");
+              if (max === undefined) {
+                c.note("default");
+              }
+
+              const breaches = ofLaw(
+                breachesOf(
+                  yield* judged(
+                    itemWith(
+                      `<qti-response-declaration identifier="R" cardinality="${cardinality}" base-type="point"/>`,
+                      `<qti-select-point-interaction response-identifier="R"${max === undefined ? "" : ` max-choices="${String(max)}"`}><object data="a.png" type="image/png"/></qti-select-point-interaction>`,
+                    ),
+                  ),
+                ),
+                "Binding cardinality",
+              );
+
+              assert.strictEqual(breaches.length, broken ? 1 : 0, shown(breaches));
+            }),
+        ),
+      ),
+    120_000,
+  );
+
+  it.effect(
+    "DocumentId key: a context declaration's identifier is one of its document's IDs (reading 65)",
+    (ctx) =>
+      searched(
+        ctx,
+        exhaust(
+          {
+            caseHang: lawCaseHang,
+            coverage: requiredInSpace<"distinct" | "element id" | "response id">([
+              "distinct",
+              "element id",
+              "response id",
+            ]),
+            generator: (source) => source.draw(element(["X", "intro", "RESPONSE"] as const)),
+            limit: 3,
+            literal: Formatter.format,
+            suite: "oracle/document-id-context",
+          },
+          (context, c) =>
+            Effect.gen(function* contextIds() {
+              // Oracle: reading 65: a context's identifier is a UniqueIdentifier, "unique within
+              // the scope of the instance" (§5.34.1, §7.43), so it shares no value with an element
+              // id or a response declaration's identifier, each an xs:ID.
+              const situations = {
+                RESPONSE: "response id",
+                X: "distinct",
+                intro: "element id",
+              } as const;
+              c.note(situations[context]);
+
+              const breaches = ofLaw(
+                breachesOf(
+                  yield* judged(
+                    itemWith(
+                      `<qti-context-declaration identifier="${context}" cardinality="single" base-type="identifier"/><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/>`,
+                      `<p id="intro">Pick one.</p><qti-choice-interaction response-identifier="RESPONSE" max-choices="1"><qti-simple-choice identifier="A">A</qti-simple-choice></qti-choice-interaction>`,
+                    ),
+                  ),
+                ),
+                "DocumentId key",
+              );
+
+              assert.strictEqual(breaches.length, context === "X" ? 0 : 1, shown(breaches));
+            }),
+        ),
+      ),
+    120_000,
+  );
+
+  it.effect(
+    "Inclusion cycle: a package breaks it exactly when its section refs and includes lead some document back to itself",
+    (ctx) =>
+      searched(
+        ctx,
+        exhaust(
+          {
+            caseHang: lawCaseHang,
+            coverage: requiredInSpace<"acyclic" | "cyclic" | "self" | "shared target" | "include">([
+              "acyclic",
+              "cyclic",
+              "self",
+              "shared target",
+              "include",
+            ]),
+            // A test and two section documents; each of the three may reference each section,
+            // through a section ref or an include: 3^6 = 729 graphs, each edge absent, a ref or
+            // an include.
+            generator: (source) => Array.from({ length: 6 }, () => source.draw(int(0, 2))),
+            limit: 729,
+            literal: Formatter.format,
+            suite: "oracle/inclusion-cycle",
+          },
+          (edges, c) =>
+            Effect.gen(function* cycles() {
+              const documents = ["test.xml", "s0.xml", "s1.xml"] as const;
+              const targets = ["s0.xml", "s1.xml"] as const;
+              const from = (at: number) => documents[Math.floor(at / 2)] ?? "";
+              const to = (at: number) => targets[at % 2] ?? "";
+              const held = edges.flatMap((kind, at) => (kind === 0 ? [] : [{ at, kind }]));
+              // Oracle: the reading's rule turned into a checker, a naive reachability: some
+              // document reaches itself through one or more references.
+              const targetsOf = (path: string) =>
+                held.filter(({ at }) => from(at) === path).map(({ at }) => to(at));
+              const reaches = (start: string): boolean => {
+                const seen = new Set<string>();
+                const pending = targetsOf(start);
+                for (let at = pending.pop(); at !== undefined; at = pending.pop()) {
+                  if (at === start) {
+                    return true;
+                  }
+
+                  if (!seen.has(at)) {
+                    seen.add(at);
+                    pending.push(...targetsOf(at));
+                  }
+                }
+
+                return false;
+              };
+              const cyclic = documents.some(reaches);
+              c.note(cyclic ? "cyclic" : "acyclic");
+              if (held.some(({ at }) => from(at) === to(at))) {
+                c.note("self");
+              }
+
+              if (new Set(held.map(({ at }) => to(at))).size < held.length) {
+                c.note("shared target");
+              }
+
+              if (held.some(({ kind }) => kind === 2)) {
+                c.note("include");
+              }
+
+              const parts = (path: string) =>
+                held
+                  .filter(({ at }) => from(at) === path)
+                  .map(({ at, kind }) =>
+                    kind === 1
+                      ? `<qti-assessment-section-ref identifier="ref${String(at)}" href="${to(at)}"/>`
+                      : `<xi:include href="${to(at)}"/>`,
+                  )
+                  .join("");
+              const section = (path: string, identifier: string) =>
+                `<qti-assessment-section xmlns="${asi}" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="${identifier}" title="Section" visible="true"><qti-assessment-item-ref identifier="I${identifier}" href="item.xml"/>${parts(path)}</qti-assessment-section>`;
+              const breaches = ofLaw(
+                breachesOf(
+                  yield* judged({
+                    "imsmanifest.xml": manifestOf(
+                      [
+                        resourceOf("RT", "imsqti_test_xmlv3p0", "test.xml"),
+                        resourceOf("R0", "imsqti_section_xmlv3p0", "s0.xml"),
+                        resourceOf("R1", "imsqti_section_xmlv3p0", "s1.xml"),
+                        itemResource,
+                      ].join(""),
+                    ),
+                    "item.xml": `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" time-dependent="false"/>`,
+                    "s0.xml": section("s0.xml", "S0"),
+                    "s1.xml": section("s1.xml", "S1"),
+                    "test.xml": `<qti-assessment-test xmlns="${asi}" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="T" title="Test"><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="S" title="Section" visible="true"><qti-assessment-item-ref identifier="IT" href="item.xml"/>${parts("test.xml")}</qti-assessment-section></qti-test-part></qti-assessment-test>`,
+                  }),
+                ),
+                "Inclusion cycle",
+              );
+
+              assert.strictEqual(breaches.length > 0, cyclic, shown(breaches));
+              // Each reported chain is a cycle of the graph: every step a reference, and the last
+              // leading back to the first.
+              for (const breach of breaches) {
+                const chain = (breach.keys["chain"] ?? "").split(" ");
+                for (const [at, path] of chain.entries()) {
+                  assert.include(targetsOf(path), chain[(at + 1) % chain.length], shown([breach]));
+                }
+              }
+            }),
+        ),
+      ),
+    600_000,
+  );
+
+  it.effect(
+    "default hotspot last slot: a hotspot choice's default stands last, an associable hotspot's anywhere (reading 71)",
+    (ctx) =>
+      searched(
+        ctx,
+        exhaust(
+          {
+            caseHang: lawCaseHang,
+            coverage: requiredInSpace<"last" | "not last" | "associable" | "none">([
+              "last",
+              "not last",
+              "associable",
+              "none",
+            ]),
+            generator: (source) => {
+              const count = source.draw(int(1, 3));
+
+              return {
+                at: source.draw(int(-1, count - 1)),
+                count,
+                kind: source.draw(
+                  element([
+                    "qti-hotspot-interaction",
+                    "qti-graphic-order-interaction",
+                    "qti-graphic-associate-interaction",
+                  ] as const),
+                ),
+              };
+            },
+            limit: 27,
+            literal: Formatter.format,
+            suite: "oracle/default-hotspot-reading-71",
+          },
+          ({ at, count, kind }, c) =>
+            Effect.gen(function* defaultHotspot() {
+              // Oracle: reading 71: "The default hotspot, if defined, must appear last" of the
+              // HotspotChoice class and the hotspot interaction's choices (§5.67, §5.68.6), and
+              // nothing of the AssociableHotspot class (§5.7, §5.59.4).
+              const associable = kind === "qti-graphic-associate-interaction";
+              const broken = !associable && at >= 0 && at !== count - 1;
+              if (at < 0) {
+                c.note("none");
+              } else if (associable) {
+                c.note("associable");
+              } else {
+                c.note(broken ? "not last" : "last");
+              }
+
+              const choice = associable ? "qti-associable-hotspot" : "qti-hotspot-choice";
+              const spots = Array.from(
+                { length: count },
+                (_, held) =>
+                  `<${choice} identifier="H${String(held)}" ${held === at ? `shape="default"` : `shape="rect" coords="0,0,1,1"`}${associable ? ` match-max="1"` : ""}/>`,
+              ).join("");
+              const cardinality = {
+                "qti-graphic-associate-interaction": "multiple",
+                "qti-graphic-order-interaction": "ordered",
+                "qti-hotspot-interaction": "single",
+              }[kind];
+              const breaches = ofLaw(
+                breachesOf(
+                  yield* judged(
+                    itemWith(
+                      `<qti-response-declaration identifier="R" cardinality="${cardinality}" base-type="${associable ? "pair" : "identifier"}"/>`,
+                      `<${kind} response-identifier="R"><object data="a.png" type="image/png"/>${spots}</${kind}>`,
+                    ),
+                  ),
+                ),
+                "default hotspot last slot",
+              );
+
+              assert.strictEqual(breaches.length, broken ? 1 : 0, shown(breaches));
+            }),
+        ),
+      ),
+    120_000,
+  );
+
+  it.effect(
+    'reading 76: an xi:include\'s xpointer is refused by the codec, and parse="text" by its value domain',
+    () =>
+      Effect.gen(function* xpointer() {
+        const pointed = yield* judged(includingTest(`xpointer="element(/1)"`));
+        const text = breachesOf(yield* judged(includingTest(`parse="text"`)));
+        const plain = breachesOf(yield* judged(includingTest(`parse="xml"`)));
+
+        assert.deepInclude(
+          pointed._tag === "CodecRefusal"
+            ? [pointed.rule]
+            : breachesOf(pointed).map(({ law }) => law),
+          "attribute-admission",
+        );
+        assert.isTrue(
+          text.some(({ keys, law }) => law === "value domain" && keys["name"] === "parse"),
+          shown(text),
+        );
+        assert.isFalse(
+          plain.some(({ keys, law }) => law === "value domain" && keys["name"] === "parse"),
+          shown(plain),
+        );
+      }),
   );
 });

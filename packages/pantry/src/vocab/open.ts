@@ -53,8 +53,10 @@ import type {
 import {
   namespaceClassesUnder,
   namespaceClassOf,
+  vocabularyNamespaces,
   xmlNamespace,
   xsiNamespace,
+  xsNamespace,
 } from "#pantry/vocab/namespaces.ts";
 import type { NamespaceClass } from "#pantry/vocab/namespaces.ts";
 
@@ -123,6 +125,101 @@ export const foreignRoots: ReadonlySet<string> = new Set([
   "qti-outcome-processing",
   "qti-response-processing",
 ]);
+
+/**
+ * The schema sets QTI 3.0 validates its documents against (spec reading 72), each by the
+ * vocabularies, named as `src/vocab/inventory/vocabularies.ts` names them, whose global element
+ * declarations it holds: its root XSD's and those of every XSD that one imports, transitively.
+ *
+ * - `asi`: an item, section, stimulus or test, an outcome declaration and a response-processing
+ *   template, each validated against the full ASI XSD of its version (spec reading 24), which
+ *   imports `xml.xsd`, XInclude, MathML 3 and SSML 1.1 (`imsqti_asiv3p0_v1p0.xsd` and
+ *   `imsqti_asiv3p0p1_v1p0.xsd`, lines 12 to 15).
+ * - `cp`: a manifest, validated against the content-packaging XSD of its version, which imports
+ *   `xml.xsd`, LOM, the curriculum standards metadata, the QTI metadata and the content-packaging
+ *   extension (`imsqtiv3p0_imscpv1p2_v1p0.xsd` and `imsqtiv3p0p1_imscpv1p2_v1p0.xsd`, lines 12 to
+ *   16), which imports XLink and the AfA DRD (`cpext/` lines 10 and 11).
+ * - `lom`: an external LOM metadata file (`resourcemetadata/xml`), validated against the loose LOM
+ *   binding, which imports nothing.
+ * - `ud`: a usage-data file (`qtiusagedata/xml`), validated against the usage-data XSD, which imports
+ *   nothing.
+ *
+ * `xml.xsd` and XLink declare attributes only, so no set lists them.
+ */
+export const schemaSets = {
+  asi: ["asi", "mathml", "ssml", "xi"],
+  cp: ["cp", "cpx", "csmd", "drd", "lom", "qmd"],
+  lom: ["lom"],
+  ud: ["ud"],
+} as const satisfies Readonly<Record<string, readonly string[]>>;
+
+/**
+ * Each vocabulary's name, by its namespace.
+ */
+const vocabularyOf: ReadonlyMap<string, string> = new Map(
+  Object.entries(vocabularyNamespaces).map(([name, { namespace }]) => [namespace, name] as const),
+);
+
+/**
+ * Whether the schema set of every document an element of `parent`'s namespace stands in may hold
+ * a component of `child`'s namespace: some set lists both vocabularies. An element of no
+ * vocabulary's namespace, a foreign element, stands in documents of every set (spec reading 72).
+ *
+ * @param parent - The element's namespace.
+ * @param child - The component's namespace.
+ * @returns Whether a set the element's documents are assessed against lists the component's
+ *   vocabulary.
+ */
+const sharesSet = (parent: string, child: string): boolean => {
+  const held = vocabularyOf.get(parent);
+  const other = vocabularyOf.get(child);
+
+  return (
+    other !== undefined &&
+    Object.values(schemaSets).some(
+      (set: readonly string[]) => set.includes(other) && (held === undefined || set.includes(held)),
+    )
+  );
+};
+
+/**
+ * Whether a `lax` or `strict` element wildcard of a kind reads an element another vocabulary
+ * declares globally as that declaration (spec reading 72): when a schema set a document holding the
+ * kind is validated against holds the declaration. XML Schema finds a wildcard's element by its
+ * top-level declaration in the schema the document is assessed against, and only there (Part 1,
+ * section 3.10.4, Item Valid (Wildcard), clauses 1 and 2; section 3.3.4, Schema-Validity
+ * Assessment (Element), clause 1.1.1.3.2). So under a `lax` wildcard an element whose declaration
+ * the set lacks is a foreign element, and under a `strict` one it stands only as
+ * {@link typeAvailable} says.
+ *
+ * A kind of a vocabulary stands in the documents of every set that lists its vocabulary, LOM's in
+ * a manifest and in an external LOM file, and a kind of none, a foreign element, in documents of
+ * every set. One grammar serves all of a kind's documents, so its wildcards read a declaration any
+ * of those sets holds: reading 72 states that limit.
+ *
+ * @param parent - The namespace of the wildcard's kind, empty for a kind of no vocabulary.
+ * @param child - The namespace of the globally declared element.
+ * @returns Whether the wildcard reads the element as its declaration.
+ * @see {@link https://www.w3.org/TR/2004/REC-xmlschema-1-20041028/#cvc-wildcard | XML Schema Part 1, 3.10.4 Item Valid (Wildcard)}
+ */
+export const wildcardReads = (parent: string, child: string): boolean => sharesSet(parent, child);
+
+/**
+ * Whether an element a `lax` or `strict` wildcard holds with no global declaration of its
+ * document's schema set may be assessed against the type its `xsi:type` names (spec readings 60
+ * and 72): XML Schema's own types, built-in and `xs:anyType`, and the types of a schema set its
+ * parent's documents are assessed against. XML Schema assesses such an element strictly against
+ * that type (Part 1, section 3.3.4, Schema-Validity Assessment (Element), clause 1.2; section
+ * 3.10.1, `strict`: "or the item must have an xsi:type"). Where the `xsi:type` resolves to no type
+ * there, a `strict` wildcard refuses the element and a `lax` one assesses it against nothing.
+ *
+ * @param parent - The namespace of the wildcard's kind.
+ * @param type - The namespace of the type the `xsi:type` names.
+ * @returns Whether the type is one the element's document is assessed against.
+ * @see {@link https://www.w3.org/TR/2004/REC-xmlschema-1-20041028/#cvc-assess-elt | XML Schema Part 1, 3.3.4 Schema-Validity Assessment (Element)}
+ */
+export const typeAvailable = (parent: string, type: string): boolean =>
+  type === xsNamespace || sharesSet(parent, type);
 
 /**
  * One attribute a schema declares globally, which a kind admits under its closed handle: its

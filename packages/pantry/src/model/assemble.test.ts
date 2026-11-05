@@ -22,17 +22,23 @@ import {
   searchTimeout,
   corrupt,
   corruption,
+  familiesOf,
   featuresOf,
   idOf,
+  isRowCorruption,
   rowVariants,
   scrambledIdOf,
+  situationsOf,
   xdmDocument,
 } from "#pantry/test/gen/xdm.ts";
 import type {
-  Corruption,
   GeneratedXdm,
+  InvalidVariant,
   Placed,
-  RowVariant,
+  RowCorruption,
+  VariantField,
+  VariantTarget,
+  XdmFamily,
   XdmFeature,
 } from "#pantry/test/gen/xdm.ts";
 
@@ -213,7 +219,9 @@ const leafKinds: ReadonlySet<string> = new Set([
  * - A slot out of order fails the slot check at the node itself.
  * - A second row of an id over a start of its own is a repeated id, and a start taken from the node
  *   before collides where the rows are placed by start.
- * - A second root or a cycle names a parent that is not open at the node's start.
+ * - A second root, a cycle or an orphan names a parent that is not open at the node's start.
+ * - A doctype after the root element sits at a slot of the document node other than its first, where
+ *   XML's `document` production places none.
  * - A wrong size moves every later start on, so the last node starts past the document's last start;
  *   when the node is itself the last, the document node's interval grows past `[0, N)`.
  * - A predecessor that overlaps its successor is an oversized leaf when it is one, and otherwise an
@@ -229,7 +237,7 @@ const leafKinds: ReadonlySet<string> = new Set([
  */
 const expectedFor = (
   model: readonly Placed[],
-  variant: Extract<Corruption, { readonly _tag: RowVariant }>,
+  variant: RowCorruption,
 ): readonly (readonly [AssembleError["_tag"], number])[] => {
   const numbered = model.map((placed, number) => ({ ...placed, number }));
   const childrenOf = Map.groupBy(numbered.slice(1), ({ parent }) => parent);
@@ -254,8 +262,12 @@ const expectedFor = (
       ];
     }
     case "secondRoot":
-    case "cycle": {
+    case "cycle":
+    case "orphan": {
       return [["ParentNotOpen", variant.node]];
+    }
+    case "doctypeNotFirst": {
+      return [["NodeMisplaced", variant.node]];
     }
     case "wrongSize": {
       return variant.node === model.length - 1
@@ -288,17 +300,6 @@ const expectedFor = (
   }
 };
 
-/**
- * Test whether a corruption is a row variant, which assembly meets.
- *
- * @param variant - The corruption.
- * @returns Whether its tag is one of {@link rowVariants}.
- */
-const isRowVariant = (
-  variant: Corruption,
-): variant is Extract<Corruption, { readonly _tag: RowVariant }> =>
-  rowVariants.some((tag) => tag === variant._tag);
-
 describe("assemble", { timeout: searchTimeout }, () => {
   it.effect(
     "gives back every generated tree from its rows, under ids in any order and every list in any order, to the same canonical bytes",
@@ -312,7 +313,7 @@ describe("assemble", { timeout: searchTimeout }, () => {
           {
             caseHang,
             concurrency: 1,
-            coverage: required<XdmFeature>(
+            coverage: required<XdmFeature | XdmFamily>(
               [
                 "element",
                 "wildcard",
@@ -323,6 +324,7 @@ describe("assemble", { timeout: searchTimeout }, () => {
                 "entityRef",
                 "attribute",
                 "openName",
+                "repeatedOpenClass",
                 "doctype",
               ],
               { cases: 300, sense: notesOnly },
@@ -338,6 +340,7 @@ describe("assemble", { timeout: searchTimeout }, () => {
           (generated, c) =>
             Effect.gen(function* roundTrip() {
               c.noteAll(featuresOf(generated.document));
+              c.noteAll(familiesOf(generated.model));
 
               const ids = c.draw(element([idOf, scrambledIdOf]));
               const rows = c.draw(shuffledRows(flatten(generated.document, ids)));
@@ -368,7 +371,10 @@ describe("assemble", { timeout: searchTimeout }, () => {
           {
             caseHang,
             concurrency: 1,
-            coverage: required<RowVariant>(rowVariants, { cases: 400, sense: notesOnly }),
+            coverage: required<InvalidVariant | VariantField | VariantTarget>(rowVariants, {
+              cases: 400,
+              sense: notesOnly,
+            }),
             draw: drawn(documents),
             kept: [],
             literal: Formatter.format,
@@ -380,11 +386,11 @@ describe("assemble", { timeout: searchTimeout }, () => {
           (generated, c) =>
             Effect.gen(function* rowVariant() {
               const variant = c.draw(corruption(generated, rowVariants));
-              if (!isRowVariant(variant)) {
+              if (!isRowCorruption(variant)) {
                 assert.fail(`drew ${variant._tag}, which is no row variant`);
               }
 
-              c.note(variant._tag);
+              c.noteAll(situationsOf(generated, variant));
 
               const rows = yield* foldedOf(generated);
               const refusal = yield* refusalOf(c.draw(shuffledRows(corrupt(rows, variant))));

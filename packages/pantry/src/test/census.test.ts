@@ -12,49 +12,58 @@ import { census, censusOf, qtiMigrations } from "#pantry/test/census.ts";
 import type { Census, FunctionKind, LawFamily, MigrationFile } from "#pantry/test/census.ts";
 
 /**
- * The census of the committed migrations, as grizzle `48256f8` generates them from the schema the
- * cutover starts from. It is a ratchet: a change that moves a count records the new one here.
+ * The census targets of the cutover (fin.md §13 and its exit, "the census is a test, and it meets
+ * §13's targets"; plan-qti-pie Q6.02), each as the predicate over a census that states it: no enum
+ * types, no seeded tables or seed rows, no law functions or constraint triggers, no always-true
+ * policies, no two domains with one definition, and a table count in [80, 120].
  */
-const committed: Census = {
-  domains: { distinct: 56, repeatedBytes: 184_947, total: 176 },
-  enums: 70,
-  foreignKeys: { composite: 944, total: 1389, widest: 4 },
-  functions: { constant: 0, decode: 0, law: 1168, names: 0, other: 3 },
-  laws: {
-    byFamily: { alternatives: 19, capacity: 74, mirror: 0, other: 9, selectedSource: 414 },
-    constraintTriggers: 1168,
-    total: 516,
-    validateFiles: 516,
-  },
-  policies: { alwaysTrue: 847, total: 847 },
-  seed: {
-    admission: { inEveryVersion: 8830, pairs: 8831 },
-    folders: 1,
-    inserts: 52,
-    rows: {
-      admission: 17_661,
-      ancestry_step: 18_924,
-      attribute_admission: 6788,
-      binding_fit: 40,
-      mappable_base_type: 9,
-      operator_arity: 64,
-      operator_arity_max: 50,
-      operator_arity_unbounded: 14,
-      record_binding_fit: 2,
-      resource_type_of: 39,
-      root_of_type: 9,
-    },
-  },
-  tables: {
-    byColumns: { 1: 234, 2: 344, 3: 103, 4: 96, 5: 42, 6: 24, 7: 13, 8: 1, 9: 1 },
-    declaredMarkers: 81,
-    lexicalOrSpelling: 2,
-    optionalValues: 214,
-    total: 858,
-  },
-  uniques: { superkeys: 105, total: 1072 },
-  views: 858,
-};
+const targets = {
+  "a table count in [80, 120]": (held: Census) =>
+    held.tables.total >= 80 && held.tables.total <= 120,
+  "no always-true policies": (held: Census) => held.policies.alwaysTrue === 0,
+  "no enum types": (held: Census) => held.enums === 0,
+  "no law functions or constraint triggers": (held: Census) =>
+    held.functions.law === 0 && held.laws.constraintTriggers === 0,
+  "no seeded tables or seed rows": (held: Census) =>
+    held.seed.folders === 0 && held.seed.inserts === 0 && Object.keys(held.seed.rows).length === 0,
+  "no two domains with one definition": (held: Census) =>
+    held.domains.distinct === held.domains.total,
+} as const satisfies Readonly<Record<string, (held: Census) => boolean>>;
+
+/**
+ * A census target's name.
+ */
+type Target = keyof typeof targets;
+
+/**
+ * Every target's name, in the order {@link targets} states them.
+ */
+const targetNames = Object.keys(targets).filter((name): name is Target => name in targets);
+
+/**
+ * The targets the committed migrations do not meet yet: the cutover's work still to land, named and
+ * never counted, so no count of today's migrations is a golden here. When a migration meets one,
+ * the test of migrations/qti fails until the target leaves this set, and from then on it is held.
+ *
+ * Today's migrations/qti (`20261105144420_init` and `20261105144516_seed`) meets none of them.
+ */
+const pending: ReadonlySet<Target> = new Set<Target>([
+  "a table count in [80, 120]",
+  "no always-true policies",
+  "no enum types",
+  "no law functions or constraint triggers",
+  "no seeded tables or seed rows",
+  "no two domains with one definition",
+]);
+
+/**
+ * The targets a census meets.
+ *
+ * @param held - The census.
+ * @returns The names of the targets whose predicate holds of it, in {@link targets}' order.
+ */
+const metBy = (held: Census): readonly Target[] =>
+  targetNames.filter((name) => targets[name](held));
 
 /**
  * One statement form the census counts, as a generated migration holds it. The census parses the
@@ -230,12 +239,12 @@ const statementOf: Gen<Statement> = (source) => {
 };
 
 describe("census of migrations/qti", () => {
-  it.effect("holds the counts the cutover starts from", () =>
-    Effect.gen(function* committedCensus() {
+  it.effect("meets every census target the cutover has reached, and no pending one", () =>
+    Effect.gen(function* committedTargets() {
       assert.deepStrictEqual(
-        yield* censusOf(qtiMigrations),
-        committed,
-        "The census of migrations/qti moved. If the change meant to move it, record the new counts in census.test.ts.",
+        metBy(yield* censusOf(qtiMigrations)),
+        targetNames.filter((name) => !pending.has(name)),
+        "migrations/qti meets a census target listed as pending, or no longer meets a reached one. Move a target that is now met out of `pending` in census.test.ts; a reached target that broke is a regression.",
       );
     }).pipe(Effect.provide(NodeFileSystem.layer)),
   );
@@ -356,6 +365,36 @@ const modelOf = (statements: readonly Statement[]): Census => {
   };
 };
 
+/**
+ * The targets a generated migration meets, read from its statements rather than its census: a
+ * second reading of each target, against which {@link metBy} is checked.
+ *
+ * @param statements - The migration's statements.
+ * @returns The names of the targets it meets, in {@link targets}' order.
+ */
+const targetsOf = (statements: readonly Statement[]): readonly Target[] => {
+  const definitions = statements.flatMap((statement) =>
+    statement.form === "domain" ? [`${statement.definition};`] : [],
+  );
+  const tables = countOf(statements, (statement) => statement.form === "table");
+  const meets: Readonly<Record<Target, boolean>> = {
+    "a table count in [80, 120]": tables >= 80 && tables <= 120,
+    "no always-true policies": statements.every(
+      (statement) => statement.form !== "policy" || !statement.alwaysTrue,
+    ),
+    "no enum types": statements.every((statement) => statement.form !== "enum"),
+    "no law functions or constraint triggers": statements.every(
+      (statement) =>
+        !(statement.form === "function" && statement.kind === "law") &&
+        !(statement.form === "law" && statement.trigger),
+    ),
+    "no seeded tables or seed rows": statements.every((statement) => statement.form !== "insert"),
+    "no two domains with one definition": new Set(definitions).size === definitions.length,
+  };
+
+  return targetNames.filter((name) => meets[name]);
+};
+
 describe("census", () => {
   it.effect("reports for every generated migration the counts of the statements it holds", (ctx) =>
     searched(
@@ -390,6 +429,11 @@ describe("census", () => {
           Effect.sync(() => {
             c.noteAll(statements.map((statement) => statement.form));
             assert.deepStrictEqual(census(filesOf(statements)), modelOf(statements));
+            assert.deepStrictEqual(
+              metBy(census(filesOf(statements))),
+              targetsOf(statements),
+              "each census target holds exactly when the statements hold none of what it bars",
+            );
           }),
       ),
     ),

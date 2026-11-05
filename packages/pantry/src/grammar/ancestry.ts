@@ -2,24 +2,25 @@
  * The ancestry grammar as three closed sets over kind × flag: `Enters`, `Banned` and `Needs`
  * (fin.md §13 P3, §16).
  *
- * An ancestry is the set of flags a node's ancestors enter, one `bit(9)` on `Node`. A node hands
+ * An ancestry is the set of flags a node's ancestors enter, one `bit(10)` on `Node`. A node hands
  * its children `ancestry = parentAncestry | Enters[kind]`, and a node of kind k may sit in its
  * parent's ancestry when that ancestry holds no flag of `Banned[k]` and every flag of `Needs[k]`.
  * The flags are independent, so these three constants replace the product automaton `AncestryStep`,
  * 56 states × 363 kinds written out as 18,924 rows.
  *
- * Each set is keyed by (kind, flag), kind first, so kind k's row is the 9 cells from k·9,
- * `substring(S FROM k·9 + 1 FOR 9)`: a `bit(9)` laid out as an ancestry is, `fb` leftmost.
+ * Each set is keyed by (kind, flag), kind first, so kind k's row is the 10 cells from k·10,
+ * `substring(S FROM k·10 + 1 FOR 10)`: a `bit(10)` laid out as an ancestry is, `fb` leftmost.
  */
 import { Option, Result } from "effect";
 import { closed, idField, roster } from "#pantry/grammar/closed.ts";
 import type { Closed, ClosedRelationError, IdField, Roster } from "#pantry/grammar/closed.ts";
 
 /**
- * The ancestry flags in code order. A flag's code is its bit's position in the `bit(9)`, the first
+ * The ancestry flags in code order. A flag's code is its bit's position in the `bit(10)`, the first
  * flag leftmost, so a kind's row of each set reads as an ancestry does. Codes are append-only:
- * `test`, the content of a test's rubric block or feedback, is last, after the eight an item's
- * kinds enter.
+ * `test`, the content of a test's rubric block or feedback, comes after the eight an item's kinds
+ * enter, and `math`, the content of a MathML `m:math`, after it (spec reading 2: one `m:math` may
+ * not contain another, MathML 3 §2.2).
  */
 export const flags = [
   "fb",
@@ -31,6 +32,7 @@ export const flags = [
   "choice",
   "htx",
   "test",
+  "math",
 ] as const;
 
 /**
@@ -39,7 +41,7 @@ export const flags = [
 export type Flag = (typeof flags)[number];
 
 /**
- * An ancestry as the host shows a `bit(9)`: the flags it holds.
+ * An ancestry as the host shows a `bit(10)`: the flags it holds.
  */
 export type Ancestry = ReadonlySet<Flag>;
 
@@ -165,7 +167,7 @@ export const generate = (vocabulary: {
   });
 
 /**
- * Read a kind's row of a kind × flag set, the `bit(9)` as the host shows it.
+ * Read a kind's row of a kind × flag set, the `bit(10)` as the host shows it.
  *
  * @param set - The set.
  * @param kind - The `NodeKind` handle.

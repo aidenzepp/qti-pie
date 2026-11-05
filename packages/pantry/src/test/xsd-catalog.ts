@@ -12,16 +12,23 @@
  * catalog does not map, so a schema that reaches an unpinned file fails loudly rather than
  * validating against part of itself.
  *
- * A driver is a schema in a namespace of its own that imports every pinned vocabulary's namespace
- * at the URL the XSDs themselves import it from. A document of any pinned vocabulary is validated
- * against its root's global declaration, an item, a test, a manifest and a usage data document
- * alike. A driver also declares `batch`, whose content is a lax `##any` wildcard, so one document
+ * A driver is a schema in a namespace of its own that imports pinned vocabularies' namespaces at
+ * the URLs the XSDs themselves import them from. A version's union driver imports every pinned
+ * vocabulary. It also declares `batch`, whose content is a lax `##any` wildcard, so one document
  * can hold many probes, each assessed against its own global declaration; and it may declare
  * probe elements, each a global element of a named type, so a value can be judged against a type
  * whose elements are only ever declared locally.
+ *
+ * A root driver imports one vocabulary, the one whose XSD declares a document's root, so the
+ * schema a document is assessed against is its root's schema set (spec reading 72): that XSD and
+ * every XSD it imports, transitively, as the XSDs' own `xs:import`s state it ({@link schemaSetOf}).
+ * Under the union driver a `strict` wildcard would find a declaration no XSD of the document's
+ * set imports, as a DRD element under an item's `qti-companion-materials-info`.
  */
 import path from "node:path";
 import { Array as Arr, Effect, FileSystem, Option } from "effect";
+import { readXml } from "@qti-pie/crust/read.ts";
+import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import {
   checkCache,
@@ -116,12 +123,28 @@ export interface ProbeDeclaration {
 }
 
 /**
- * What {@link writeXsdOracle} wrote: the catalog, and each version's driver schema.
+ * What {@link writeXsdOracle} wrote: the catalog, each version's union driver, and each version's
+ * root drivers by the namespace of the root they validate.
  */
 export interface XsdOracle {
   readonly catalog: string;
   readonly drivers: Readonly<Record<SchemaVersion, string>>;
+  readonly roots: Readonly<Record<SchemaVersion, ReadonlyMap<string, string>>>;
 }
+
+/**
+ * The driver a document is validated with: its root namespace's root driver, so it is assessed
+ * against its root's schema set, or the union driver for a root no pinned vocabulary declares,
+ * whose `xmllint` verdict is the same either way (no global declaration for the root).
+ *
+ * @param oracle - What {@link writeXsdOracle} wrote.
+ * @param version - The schema version.
+ * @param namespace - The namespace of the document's root, empty for none or for a document that
+ *   does not parse.
+ * @returns The driver's path.
+ */
+export const driverFor = (oracle: XsdOracle, version: SchemaVersion, namespace: string): string =>
+  oracle.roots[version].get(namespace) ?? oracle.drivers[version];
 
 /**
  * Escape a value for an XML attribute written between double quotes.
@@ -157,13 +180,19 @@ export const catalogText = (directory: string): string =>
   ].join("\n");
 
 /**
- * Write a version's driver schema: its imports, then its probe elements.
+ * Write a driver schema of a version: its imports, then its probe elements.
  *
  * @param version - The schema version.
  * @param probes - The probe elements it declares, none for a plain driver.
+ * @param imports - The namespaces it imports with their pins, every one of the version's when not
+ *   given.
  * @returns The schema's text.
  */
-export const driverText = (version: SchemaVersion, probes: readonly ProbeDeclaration[]): string => {
+export const driverText = (
+  version: SchemaVersion,
+  probes: readonly ProbeDeclaration[],
+  imports: readonly (readonly [namespace: string, source: SourcePath])[] = driverImports[version],
+): string => {
   const namespaces = [...new Set(probes.map(({ namespace }) => namespace))];
 
   return [
@@ -171,7 +200,7 @@ export const driverText = (version: SchemaVersion, probes: readonly ProbeDeclara
     `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="${driverNamespace}"${namespaces
       .map((namespace, at) => ` xmlns:t${String(at)}="${attributeText(namespace)}"`)
       .join("")}>`,
-    ...driverImports[version].map(
+    ...imports.map(
       ([namespace, source]) =>
         `  <xs:import namespace="${namespace}" schemaLocation="${attributeText(sources[source].url)}"/>`,
     ),
@@ -186,8 +215,21 @@ export const driverText = (version: SchemaVersion, probes: readonly ProbeDeclara
 };
 
 /**
- * Check every pinned XSD in the cache against its pin, then write the catalog and both versions'
- * drivers into a directory.
+ * Each root driver of a version, one per namespace the version imports, with its path, named by
+ * its place in {@link driverImports}.
+ *
+ * @param directory - The oracle's directory.
+ * @param version - The schema version.
+ * @returns Each import the driver holds alone, with the driver's path.
+ */
+const rootDriversOf = (directory: string, version: SchemaVersion) =>
+  driverImports[version].map(
+    (held, at) => [held, `${directory}/root-${version}-${String(at)}.xsd`] as const,
+  );
+
+/**
+ * Check every pinned XSD in the cache against its pin, then write the catalog, both versions'
+ * union drivers and their root drivers into a directory.
  *
  * @param directory - Where to write them, under the package's `work/`.
  * @param probes - Each version's probe elements, none when not given.
@@ -218,11 +260,118 @@ export const writeXsdOracle = Effect.fn("test.writeXsdOracle")(function* writeXs
     "3.0.1": `${directory}/driver-3.0.1.xsd`,
   } as const satisfies Record<SchemaVersion, string>;
 
+  const roots = {
+    "3.0.0": rootDriversOf(directory, "3.0.0"),
+    "3.0.1": rootDriversOf(directory, "3.0.1"),
+  } as const;
+
   yield* fs.writeFileString(catalog, catalogText(cache));
   yield* fs.writeFileString(drivers["3.0.0"], driverText("3.0.0", probes["3.0.0"] ?? []));
   yield* fs.writeFileString(drivers["3.0.1"], driverText("3.0.1", probes["3.0.1"] ?? []));
+  yield* Effect.forEach(
+    schemaVersions.flatMap((version) =>
+      roots[version].map(([held, file]) => [version, held, file] as const),
+    ),
+    ([version, held, file]) => fs.writeFileString(file, driverText(version, [], [held])),
+    { discard: true },
+  );
 
-  return { catalog, drivers } satisfies XsdOracle;
+  return {
+    catalog,
+    drivers,
+    roots: {
+      "3.0.0": new Map(roots["3.0.0"].map(([[namespace], file]) => [namespace, file])),
+      "3.0.1": new Map(roots["3.0.1"].map(([[namespace], file]) => [namespace, file])),
+    },
+  } satisfies XsdOracle;
+});
+
+/**
+ * The XML Schema namespace, of `xs:import`, `xs:include` and `xs:redefine`.
+ */
+const xsNamespace = "http://www.w3.org/2001/XMLSchema";
+
+/**
+ * Each pin by its URL, the location an `xs:import`, `xs:include` or `xs:redefine` names it at.
+ */
+const sourceByUrl: ReadonlyMap<string, SourcePath> = new Map(
+  sourcePaths.map((source) => [sources[source].url, source]),
+);
+
+/**
+ * The schema sets read so far, by `version namespace`: a set depends on the pins alone, and the
+ * root XSDs it parses are large, so each is read once per run.
+ */
+const readSets = new Map<string, ReadonlySet<string>>();
+
+/**
+ * Read a document's schema set from the pinned XSDs (spec reading 72): the XSD of a version that
+ * declares a namespace, and every XSD it imports, includes or redefines, transitively, each
+ * `schemaLocation` resolved against the URL of the XSD that names it and read from its pin. The
+ * set is the target namespaces of those XSDs, read once per (version, namespace) a run asks for.
+ *
+ * @param version - The schema version.
+ * @param namespace - The root's namespace.
+ * @returns The namespaces of the set, none for a namespace no pin of the version declares; dies
+ *   when an XSD names a location no pin holds, which the catalog would refuse too.
+ */
+export const schemaSetOf = Effect.fn("test.schemaSetOf")(function* schemaSetOf(
+  version: SchemaVersion,
+  namespace: string,
+) {
+  const known = readSets.get(`${version} ${namespace}`);
+  if (known !== undefined) {
+    return known;
+  }
+
+  const fs = yield* FileSystem.FileSystem;
+  const cache = yield* xsdDirectory;
+  const root = driverImports[version].find(([held]) => held === namespace);
+  const reached = new Set<SourcePath>();
+  const namespaces = new Set<string>();
+  const pending: SourcePath[] = root === undefined ? [] : [root[1]];
+
+  for (let source = pending.pop(); source !== undefined; source = pending.pop()) {
+    if (reached.has(source)) {
+      continue;
+    }
+
+    reached.add(source);
+
+    const schema = yield* readXml(yield* fs.readFile(`${cache}/${source}`)).pipe(Effect.orDie);
+    const base = sources[source].url;
+    const target = schema.root.attributes.find(
+      ({ local, namespace: held }) => local === "targetNamespace" && held === "",
+    );
+    if (target !== undefined) {
+      namespaces.add(target.value);
+    }
+
+    for (const child of schema.root.children) {
+      if (
+        child.kind === "element" &&
+        child.namespace === xsNamespace &&
+        ["import", "include", "redefine"].includes(child.local)
+      ) {
+        const location = child.attributes.find(
+          ({ local, namespace: held }) => local === "schemaLocation" && held === "",
+        );
+        if (location !== undefined) {
+          const url = new URL(location.value, base).href;
+          const next = sourceByUrl.get(url);
+          if (next === undefined) {
+            return yield* Effect.die(new Error(`${source} names ${url}, which no pin holds`));
+          }
+
+          pending.push(next);
+        }
+      }
+    }
+  }
+
+  readSets.set(`${version} ${namespace}`, namespaces);
+
+  return namespaces satisfies ReadonlySet<string>;
 });
 
 /**
@@ -273,7 +422,8 @@ const ncName = /^[\p{L}_][\p{L}\p{N}._-]*$/u;
 
 /**
  * Read the class of a parser message: none for a warning, `attribute-value` for libxml2's own
- * `xml:id` check (the xml:id Recommendation's, of the value, not of the document's form), and
+ * `xml:id` check of a value (the xml:id Recommendation's, of the value, not of the document's
+ * form), `identity` for its check that an ID is held once (`ID … already defined`), and
  * `well-formed` for every other error.
  *
  * @param text - The message.
@@ -284,8 +434,12 @@ const parserClassOf = (text: string): Option.Option<RefusalClass> => {
     return Option.none();
   }
 
+  if (text.startsWith("validity error : xml:id :")) {
+    return Option.some("attribute-value");
+  }
+
   return Option.some(
-    text.startsWith("validity error : xml:id :") ? "attribute-value" : "well-formed",
+    /validity error : ID [\s\S]* already defined/u.test(text) ? "identity" : "well-formed",
   );
 };
 

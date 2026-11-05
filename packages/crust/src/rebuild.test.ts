@@ -1,15 +1,21 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { drawn, exhaust, explore } from "@grizzle/testing/explore";
+import { noCoverage, required } from "@grizzle/testing/features";
+import { notesOnly } from "@grizzle/testing/sense";
+import { completeShrink } from "@grizzle/testing/shrink";
+import { searched } from "@grizzle/testing/vitest";
+import { Effect, Formatter } from "effect";
 import { rebuild } from "#crust/rebuild.ts";
 import type { Leaf } from "#crust/rebuild.ts";
 import {
-  arbitrarySwarm,
-  arbitraryTree,
-  labelled,
-  runSeed,
+  caseHang,
+  generatedTree,
   GENERATED_TIMEOUT_MS,
-  seeded,
-  planeTrees,
+  labelled,
+  PLANE_TREES_TO_7,
+  planeTreeUpTo,
+  situationsOf,
+  treeSituations,
 } from "#crust/test/trees.ts";
 import type { Bounds } from "#crust/test/trees.ts";
 import type { Attribute, Child, Element } from "#crust/tree.ts";
@@ -100,13 +106,14 @@ const agrees = (root: Element, name: string): void => {
 };
 
 /**
- * The largest node count the box holds every tree tree of: the 197 ordered trees of 1 to 7 nodes.
+ * The largest node count the box holds every tree of: the 197 ordered trees of 1 to 7 nodes.
  */
 const BOX_NODES = 7;
 
 /**
- * How many random trees each run compares, and their bounds: depth and width small enough for the
- * recursive oracle.
+ * How many rotating cases each run's search compares, beside its floor and steered witnesses, and
+ * the bounds each case draws its own within: depth and width small enough for the recursive
+ * oracle.
  */
 const CASES = 400;
 
@@ -114,34 +121,64 @@ const CASE_BOUNDS: Bounds = { depth: 12, nodes: 64, width: 6 };
 
 describe("rebuild gives the recursive rebuild's tree", () => {
   it.effect(
-    `for every plane tree of 1 to ${BOX_NODES} nodes, labelled`,
-    () =>
-      Effect.sync(() => {
-        let compared = 0;
-        for (let nodes = 1; nodes <= BOX_NODES; nodes += 1) {
-          for (const [index, tree] of planeTrees(nodes).entries()) {
-            agrees(labelled(tree), `plane tree ${index} of ${nodes} nodes`);
-            compared += 1;
-          }
-        }
-
-        assert.strictEqual(compared, 197);
-      }),
+    `for every plane tree of 1 to ${BOX_NODES} nodes, labelled, exhausted`,
+    (ctx) =>
+      // Oracle: a second implementation, the recursive rebuild. Bound: every plane tree of 1 to 7
+      // nodes, 197 trees, enumerated.
+      searched(
+        ctx,
+        exhaust(
+          {
+            caseHang,
+            coverage: noCoverage,
+            generator: planeTreeUpTo(BOX_NODES),
+            limit: PLANE_TREES_TO_7,
+            literal: Formatter.format,
+            suite: "crust/rebuild/plane-trees",
+          },
+          ({ nodes, tree }) =>
+            Effect.sync(() => {
+              agrees(labelled(tree), `a plane tree of ${nodes} nodes`);
+            }),
+        ),
+      ).pipe(
+        Effect.tap((done) =>
+          Effect.sync(() => {
+            assert.strictEqual(done.cases, PLANE_TREES_TO_7);
+          }),
+        ),
+      ),
     GENERATED_TIMEOUT_MS,
   );
 
   it.effect(
-    `for ${CASES} swarmed trees of at most ${CASE_BOUNDS.nodes} nodes, depth ${CASE_BOUNDS.depth} and width ${CASE_BOUNDS.width}`,
-    () =>
-      Effect.gen(function* everyCase() {
-        for (let index = 0; index < CASES; index += 1) {
-          const seed = `${runSeed}/${index}`;
-          const root = yield* seeded(seed, (choices) =>
-            arbitraryTree(choices, arbitrarySwarm(choices), CASE_BOUNDS),
-          );
-          agrees(root, `seed ${seed} (replay: CRUST_SEED=${runSeed})`);
-        }
-      }),
+    `for swarmed trees, each within ${CASE_BOUNDS.nodes} nodes, depth ${CASE_BOUNDS.depth} and width ${CASE_BOUNDS.width}: ${CASES} rotating cases a run beside the witnesses`,
+    (ctx) =>
+      // Oracle: a second implementation, the recursive rebuild. Bound: the drawn trees, each with
+      // its own swarm and bounds within CASE_BOUNDS; the witnesses reach every situation of
+      // `treeSituations`.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang,
+            concurrency: 1,
+            coverage: required(treeSituations, { cases: 200, sense: notesOnly }),
+            draw: drawn(generatedTree(CASE_BOUNDS)),
+            kept: [],
+            literal: Formatter.format,
+            runs: CASES,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "crust/rebuild/trees",
+          },
+          ({ root }, c) =>
+            Effect.sync(() => {
+              c.noteAll(situationsOf(root));
+              agrees(root, "the drawn tree");
+            }),
+        ),
+      ),
     GENERATED_TIMEOUT_MS,
   );
 });

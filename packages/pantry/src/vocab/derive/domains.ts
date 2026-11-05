@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 /**
  * The value-domain reading: every simple type the vocabularies' attributes and texts are read
  * under, resolved through its derivation to the XSD primitive it restricts and the facets in force
@@ -20,7 +21,7 @@
  * @see {@link https://www.w3.org/TR/xmlschema-2/#built-in-derived | XML Schema Part 2, Derived datatypes}
  * @see {@link https://www.w3.org/TR/xmlschema-2/#rf-pattern | XML Schema Part 2, pattern}
  */
-import { Array as Arr, Match, Option, Result } from "effect";
+import { Array as Arr, Match, Option, Result, Schema } from "effect";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import {
   attributeOf,
@@ -242,26 +243,293 @@ const primitiveWhiteSpace = (primitive: Primitive): string =>
   primitive === "string" || primitive === "anySimpleType" ? "preserve" : "collapse";
 
 /**
+ * The length facets of XML Schema Part 2, 4.3.1 to 4.3.3, each a count of its type's units of
+ * length: characters, octets or list items.
+ */
+const lengthFacets = ["length", "minLength", "maxLength"] as const;
+
+/**
+ * A length facet.
+ */
+type LengthFacet = (typeof lengthFacets)[number];
+
+/**
+ * The rules XML Schema 1.0 Part 2 sets on a simple type's length facets, each as the Recommendation
+ * names it: one value per facet a step (4.1.3, Single Facet Value), a `nonNegativeInteger` value
+ * (the XML representations, 4.3.1.2, 4.3.2.2 and 4.3.3.2), and the schema component constraints of
+ * 4.3.1.4, 4.3.2.4 and 4.3.3.4.
+ */
+export const lengthRules = [
+  "Single Facet Value",
+  "value is a nonNegativeInteger",
+  "length valid restriction",
+  "minLength valid restriction",
+  "maxLength valid restriction",
+  "minLength <= maxLength",
+  "length and minLength or maxLength",
+] as const;
+
+/**
+ * A rule of {@link lengthRules}.
+ */
+export type LengthRule = (typeof lengthRules)[number];
+
+/**
+ * The section of XML Schema 1.0 Part 2 that states each length rule.
+ */
+const lengthRuleSections: Readonly<Record<LengthRule, string>> = {
+  "Single Facet Value": "4.1.3",
+  "length and minLength or maxLength": "4.3.1.4",
+  "length valid restriction": "4.3.1.4",
+  "maxLength valid restriction": "4.3.3.4",
+  "minLength <= maxLength": "4.3.2.4",
+  "minLength valid restriction": "4.3.2.4",
+  "value is a nonNegativeInteger": "4.3.1.2, 4.3.2.2 and 4.3.3.2",
+};
+
+/**
+ * Spell a facet as a refusal names it: its name and its value as written, quoted.
+ *
+ * @param held - The facet, none for no facet.
+ * @returns The spelling, empty for none.
+ */
+const spellFacet = (held: { readonly facet: string; readonly value: string } | undefined): string =>
+  held === undefined ? "" : `${held.facet} ${JSON.stringify(held.value)}`;
+
+/**
+ * The XSD states a simple type whose length facets XML Schema 1.0 Part 2 makes an error, so the
+ * schema is invalid and no domain, and no pattern, is derived for the type.
+ *
+ * `type` names the simple type, `rule` the rule it breaks, and `facets` the facets that break it
+ * as the derivation states them: the two in conflict, the step's first where one is the step's and
+ * the other its base's, or the one whose value is no `nonNegativeInteger`.
+ */
+export class InvalidLengthFacets extends Schema.TaggedError<InvalidLengthFacets>()(
+  "InvalidLengthFacets",
+  {
+    facets: Schema.Array(
+      Schema.Struct({ facet: Schema.Literals(lengthFacets), value: Schema.String }),
+    ),
+    rule: Schema.Literals(lengthRules),
+    type: Schema.String,
+  },
+) {
+  /**
+   * The type, the facets and the rule they break, and what to change.
+   */
+  override get message(): string {
+    const [first, second] = this.facets;
+    const stated = ((): string => {
+      switch (this.rule) {
+        case "Single Facet Value": {
+          return `${spellFacet(first)} and ${spellFacet(second)} in one restriction step`;
+        }
+        case "value is a nonNegativeInteger": {
+          return `${spellFacet(first)}, which is no nonNegativeInteger`;
+        }
+        case "length valid restriction":
+        case "maxLength valid restriction":
+        case "minLength valid restriction": {
+          return `${spellFacet(first)} where its base type states ${spellFacet(second)}`;
+        }
+        case "length and minLength or maxLength":
+        case "minLength <= maxLength": {
+          return `${spellFacet(first)} beside ${spellFacet(second)}`;
+        }
+        default: {
+          return this.rule satisfies never;
+        }
+      }
+    })();
+
+    return `The XSD is invalid: the simple type ${this.type} states ${stated}, which XML Schema 1.0 Part 2 forbids (${this.rule}, section ${lengthRuleSections[this.rule]}). Correct the type's facets in the XSD; the deriver derives domains from valid schemas only.`;
+  }
+}
+
+/**
+ * A length facet as a restriction states it, with the count its value reads as.
+ */
+interface StatedLength {
+  readonly count: bigint;
+  readonly facet: Facet & { readonly facet: LengthFacet };
+}
+
+/**
+ * The length facets one list of facets states, each at most once.
+ */
+type Lengths = Readonly<Partial<Record<LengthFacet, StatedLength>>>;
+
+/**
+ * `xs:nonNegativeInteger`'s lexical space after the `collapse` its `whiteSpace` applies: `+`
+ * before any digits and `-` before zero only (spec reading 64).
+ */
+const nonNegativeInteger = /^[\t\n\r ]*(?:\+?\d+|-0+)[\t\n\r ]*$/u;
+
+/**
+ * A length rule broken, and the facets that break it, before the type is named.
+ */
+interface Broken {
+  readonly facets: readonly (Facet & { readonly facet: LengthFacet })[];
+  readonly rule: LengthRule;
+}
+
+/**
+ * Whether a facet is a length facet.
+ *
+ * @param held - The facet.
+ * @returns Whether it is `length`, `minLength` or `maxLength`.
+ */
+const isLength = (held: Facet): held is Facet & { readonly facet: LengthFacet } =>
+  held.facet === "length" || held.facet === "minLength" || held.facet === "maxLength";
+
+/**
+ * Read the length facets of a list of facets that states each at most once.
+ *
+ * @param facets - The facets.
+ * @returns Each length facet with its count, or the rule a facet breaks: a facet stated twice, or a
+ *   value that is no `nonNegativeInteger`.
+ */
+const lengthsOf = (facets: readonly Facet[]): Result.Result<Lengths, Broken> => {
+  const lengths: Partial<Record<LengthFacet, StatedLength>> = {};
+  for (const stated of facets.filter(isLength)) {
+    const held = lengths[stated.facet];
+    if (held !== undefined) {
+      return Result.fail({ facets: [held.facet, stated], rule: "Single Facet Value" });
+    }
+
+    if (!nonNegativeInteger.test(stated.value)) {
+      return Result.fail({ facets: [stated], rule: "value is a nonNegativeInteger" });
+    }
+
+    lengths[stated.facet] = { count: BigInt(stated.value.trim()), facet: stated };
+  }
+
+  return Result.succeed(lengths);
+};
+
+/**
+ * Name a rule two facets break.
+ *
+ * @param rule - The rule.
+ * @param first - The facet the step states, or the first of the pair.
+ * @param second - The other.
+ * @returns The broken rule.
+ */
+const brokenPair = (rule: LengthRule, first: StatedLength, second: StatedLength): Broken => ({
+  facets: [first.facet, second.facet],
+  rule,
+});
+
+/**
+ * The first schema component constraint of Part 2, 4.3.1.4 to 4.3.3.4, a step's length facets
+ * break against its base's, as {@link lengthsHold} reads them.
+ *
+ * @param inherited - The base's length facets.
+ * @param stated - The step's.
+ * @returns The rule broken and its facets, none when every constraint holds.
+ */
+const firstBroken = (inherited: Lengths, stated: Lengths): Option.Option<Broken> => {
+  const restriction = [
+    ["length", "length valid restriction", (held: bigint, was: bigint) => held === was],
+    ["minLength", "minLength valid restriction", (held: bigint, was: bigint) => held >= was],
+    ["maxLength", "maxLength valid restriction", (held: bigint, was: bigint) => held <= was],
+  ] as const;
+  for (const [name, rule, holds] of restriction) {
+    const held = stated[name];
+    const was = inherited[name];
+    if (held !== undefined && was !== undefined && !holds(held.count, was.count)) {
+      return Option.some(brokenPair(rule, held, was));
+    }
+  }
+
+  const { length, maxLength, minLength } = { ...inherited, ...stated };
+  if (minLength !== undefined && maxLength !== undefined && minLength.count > maxLength.count) {
+    return Option.some(brokenPair("minLength <= maxLength", minLength, maxLength));
+  }
+
+  if (
+    length !== undefined &&
+    minLength !== undefined &&
+    !(minLength.count <= length.count && inherited.minLength?.count === minLength.count)
+  ) {
+    return Option.some(brokenPair("length and minLength or maxLength", length, minLength));
+  }
+
+  if (
+    length !== undefined &&
+    maxLength !== undefined &&
+    !(length.count <= maxLength.count && inherited.maxLength?.count === maxLength.count)
+  ) {
+    return Option.some(brokenPair("length and minLength or maxLength", length, maxLength));
+  }
+
+  return Option.none();
+};
+
+/**
+ * Check one restriction step's length facets against its base's, as XML Schema 1.0 Part 2 rules
+ * them: one value each (4.1.3), a `nonNegativeInteger` value, and the schema component constraints
+ * of 4.3.1.4, 4.3.2.4 and 4.3.3.4 over the derived type's facets, which are the step's and, for
+ * each facet it does not state, its base's.
+ *
+ * Clauses 1.2 and 2.2 of "length and minLength or maxLength" admit a `minLength` (`maxLength`)
+ * beside `length` only where some type the derived one restricts states the same `minLength`
+ * (`maxLength`) and no `length`. Every base this function is given passed the same check, so along
+ * its derivation `minLength` never falls and `maxLength` never rises, and that ancestor exists
+ * exactly when the base itself states the same value: an ancestor that states no `length` has it
+ * then, and one that states `length` keeps it from an ancestor that does not.
+ *
+ * @param base - The base's facets, valid by this check.
+ * @param step - The step's facets.
+ * @returns Nothing, or the first rule the step breaks, with its facets.
+ * @see {@link https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/#length-coss | XML Schema Part 2, 4.3.1.4 Constraints on length Schema Components}
+ * @see {@link https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/#minLength-coss | XML Schema Part 2, 4.3.2.4 Constraints on minLength Schema Components}
+ * @see {@link https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/#maxLength-coss | XML Schema Part 2, 4.3.3.4 Constraints on maxLength Schema Components}
+ */
+const lengthsHold = (base: readonly Facet[], step: readonly Facet[]): Result.Result<void, Broken> =>
+  Result.flatMap(Result.all([lengthsOf(base), lengthsOf(step)]), ([inherited, stated]) =>
+    Option.match(firstBroken(inherited, stated), {
+      onNone: () => Result.void,
+      onSome: (broken) => Result.fail(broken),
+    }),
+  );
+
+/**
  * Restrict a domain by one derivation step's facets.
  *
  * @param domain - The base's domain.
  * @param facets - The step's facets, in document order.
+ * @param type - The simple type the step defines, as a refusal names it: its QName as the schema
+ *   writes it, or where an anonymous type stands.
  * @returns The restricted domain: the step's patterns one more required set, its enumeration in
- *   place of the base's, and each other facet it states in place of the base's of the same name.
+ *   place of the base's, and each other facet it states in place of the base's of the same name;
+ *   or an {@link InvalidLengthFacets} when its length facets break a rule of XML Schema Part 2.
  */
-export const restricted = (domain: Domain, facets: readonly Facet[]): Domain => {
-  const patterns = facets.filter(({ facet: name }) => name === "pattern").map(({ value }) => value);
-  const stated = new Set(
-    facets.filter(({ facet: name }) => name !== "pattern").map(({ facet: name }) => name),
-  );
-  const kept = domain.facets.filter(({ facet: name }) => !stated.has(name));
+export const restricted = (
+  domain: Domain,
+  facets: readonly Facet[],
+  type: string,
+): Result.Result<Domain, InvalidLengthFacets> =>
+  Result.gen(function* restrictedBody() {
+    yield* Result.mapError(
+      lengthsHold(domain.facets, facets),
+      (broken) => new InvalidLengthFacets({ ...broken, type }),
+    );
 
-  return {
-    ...domain,
-    facets: [...kept, ...facets.filter(({ facet: name }) => name !== "pattern")],
-    patterns: patterns.length === 0 ? domain.patterns : [...domain.patterns, patterns],
-  };
-};
+    const patterns = facets
+      .filter(({ facet: name }) => name === "pattern")
+      .map(({ value }) => value);
+    const stated = new Set(
+      facets.filter(({ facet: name }) => name !== "pattern").map(({ facet: name }) => name),
+    );
+    const kept = domain.facets.filter(({ facet: name }) => !stated.has(name));
+
+    return {
+      ...domain,
+      facets: [...kept, ...facets.filter(({ facet: name }) => name !== "pattern")],
+      patterns: patterns.length === 0 ? domain.patterns : [...domain.patterns, patterns],
+    };
+  });
 
 /**
  * The domain of a primitive: no facet but its `whiteSpace`.
@@ -286,12 +554,18 @@ const primitiveDomain = (primitive: Primitive): Domain => ({
 const isBuiltin = (local: string): local is XsdBuiltin => isPrimitive(local) || builtins.has(local);
 
 /**
+ * The ways a simple type has no domain: the deriver does not read its shape, or its facets make the
+ * schema invalid.
+ */
+export type DomainError = InvalidLengthFacets | XsdReadingError;
+
+/**
  * Resolve a built-in type's domain.
  *
  * @param local - Its local name in the XML Schema namespace.
  * @returns Its domain, or an {@link XsdReadingError} for a name no built-in has.
  */
-export const builtinDomainOf = (local: string): Result.Result<Domain, XsdReadingError> => {
+export const builtinDomainOf = (local: string): Result.Result<Domain, DomainError> => {
   if (!isBuiltin(local)) {
     return refuse(`xs:${local} is no built-in simple type`);
   }
@@ -315,11 +589,11 @@ export const builtinDomainOf = (local: string): Result.Result<Domain, XsdReading
         item,
         patterns: [],
       }))
-    : Result.map(builtinDomainOf(derivation.base), (base) => {
-        const domain = restricted(base, derivation.facets);
-
-        return domain._tag === "atomic" ? { ...domain, builtin: local } : domain;
-      });
+    : Result.flatMap(builtinDomainOf(derivation.base), (base) =>
+        Result.map(restricted(base, derivation.facets, `xs:${local}`), (domain) =>
+          domain._tag === "atomic" ? { ...domain, builtin: local } : domain,
+        ),
+      );
 };
 
 /**
@@ -370,24 +644,37 @@ const facetsOf = (step: Element): Result.Result<readonly Facet[], XsdReadingErro
  * Resolve a simple type's domain, by name or as a definition in place.
  *
  * @param schema - The schema the reference is written in.
- * @param ref - The type: a QName as written, or an `xs:simpleType` element.
+ * @param ref - The type: a QName as written, or an `xs:simpleType` element with the words a
+ *   refusal names it by, its QName for a named type's definition and where it stands for an
+ *   anonymous one.
  * @param seen - The named types being resolved around this one, so a circular derivation, which
  *   XML Schema forbids, is refused rather than followed.
- * @returns Its domain, or an {@link XsdReadingError} for a type the reading does not resolve.
+ * @returns Its domain, an {@link XsdReadingError} for a type the reading does not resolve, or an
+ *   {@link InvalidLengthFacets} for a type whose length facets make the schema invalid.
  */
 export const domainOf = (
   schema: XsdSchema,
   ref:
-    | { readonly _tag: "Anonymous"; readonly definition: Element }
+    | { readonly _tag: "Anonymous"; readonly definition: Element; readonly name: string }
     | { readonly _tag: "Named"; readonly lexical: string },
   seen: ReadonlySet<string> = new Set(),
-): Result.Result<Domain, XsdReadingError> => {
-  const typed = (holder: Element, attribute: string): Result.Result<Domain, XsdReadingError> =>
+): Result.Result<Domain, DomainError> => {
+  const here = ref._tag === "Named" ? ref.lexical : ref.name;
+  const typed = (holder: Element, attribute: string): Result.Result<Domain, DomainError> =>
     Option.match(attributeOf(holder, attribute), {
       onNone: () =>
         Option.match(firstXs(holder, "simpleType"), {
           onNone: () => refuse(`an ${holder.qname} names no type`),
-          onSome: (definition) => domainOf(schema, { _tag: "Anonymous", definition }, seen),
+          onSome: (definition) =>
+            domainOf(
+              schema,
+              {
+                _tag: "Anonymous",
+                definition,
+                name: `the anonymous ${attribute === "base" ? "base" : "item"} type of ${here}`,
+              },
+              seen,
+            ),
         }),
       onSome: (lexical) => domainOf(schema, { _tag: "Named", lexical }, seen),
     });
@@ -413,7 +700,11 @@ export const domainOf = (
         ref.lexical,
       );
 
-      return yield* domainOf(schema, { _tag: "Anonymous", definition }, new Set([...seen, key]));
+      return yield* domainOf(
+        schema,
+        { _tag: "Anonymous", definition, name: ref.lexical },
+        new Set([...seen, key]),
+      );
     }
 
     const variety = Arr.findFirst(elementsOf(ref.definition), (node) =>
@@ -446,13 +737,19 @@ export const domainOf = (
       }
 
       for (const definition of xsChildren(step, "simpleType")) {
-        members.push(yield* domainOf(schema, { _tag: "Anonymous", definition }, seen));
+        members.push(
+          yield* domainOf(
+            schema,
+            { _tag: "Anonymous", definition, name: `an anonymous member type of ${here}` },
+            seen,
+          ),
+        );
       }
 
       return { _tag: "union", facets: [], members, patterns: [] } as const;
     }
 
-    return restricted(yield* typed(step, "base"), yield* facetsOf(step));
+    return yield* restricted(yield* typed(step, "base"), yield* facetsOf(step), here);
   });
 };
 
@@ -462,29 +759,35 @@ export const domainOf = (
  *
  * @param schema - The schema the reading was made in, whose prefixes its names are written with.
  * @param type - The reading.
+ * @param name - The words a refusal names an anonymous definition by: where it stands.
  * @returns Its domain.
  */
 const readingDomainOf = (
   schema: XsdSchema,
   type: TypeReading,
-): Result.Result<Domain, XsdReadingError> =>
+  name: string,
+): Result.Result<Domain, DomainError> =>
   Match.valueTags(type, {
     list: ({ item }) =>
-      Result.map(readingDomainOf(schema, item), (domain) => ({
+      Result.map(readingDomainOf(schema, item, `the item type of ${name}`), (domain) => ({
         _tag: "list" as const,
         facets: [facet("whiteSpace", "collapse")],
         item: domain,
         patterns: [],
       })),
-    named: ({ name }) =>
-      name.startsWith("xs:")
-        ? builtinDomainOf(name.slice("xs:".length))
-        : domainOf(schema, { _tag: "Named", lexical: name }),
+    named: ({ name: lexical }) =>
+      lexical.startsWith("xs:")
+        ? builtinDomainOf(lexical.slice("xs:".length))
+        : domainOf(schema, { _tag: "Named", lexical }),
     restriction: ({ base, facets }) =>
-      Result.map(readingDomainOf(schema, base), (domain) => restricted(domain, facets)),
+      Result.flatMap(readingDomainOf(schema, base, `the base type of ${name}`), (domain) =>
+        restricted(domain, facets, name),
+      ),
     union: ({ members }) =>
       Result.map(
-        Result.all(members.map((member) => readingDomainOf(schema, member))),
+        Result.all(
+          members.map((member) => readingDomainOf(schema, member, `a member type of ${name}`)),
+        ),
         (domains) => ({ _tag: "union" as const, facets: [], members: domains, patterns: [] }),
       ),
   });
@@ -494,15 +797,19 @@ const readingDomainOf = (
  *
  * @param schema - The schema it was read in.
  * @param type - The value type.
- * @returns Its domain: its anonymous definition's, or its named type's.
+ * @param owner - What the type is read for, such as `attribute max-choices of
+ *   qti-choice-interaction`, which a refusal names an anonymous definition by.
+ * @returns Its domain: its anonymous definition's, or its named type's; or a {@link DomainError}.
  */
 export const valueDomainOf = (
   schema: XsdSchema,
   type: ValueType,
-): Result.Result<Domain, XsdReadingError> =>
+  owner: string,
+): Result.Result<Domain, DomainError> =>
   Option.match(type.inline, {
-    onNone: () => readingDomainOf(schema, { _tag: "named", name: type.type }),
-    onSome: (definition) => readingDomainOf(schema, definition),
+    onNone: () => readingDomainOf(schema, { _tag: "named", name: type.type }, type.type),
+    onSome: (definition) =>
+      readingDomainOf(schema, definition, `the anonymous simple type of ${owner}`),
   });
 
 /**

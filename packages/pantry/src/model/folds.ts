@@ -25,7 +25,7 @@
  *
  * Beside those, a node carries its family counts (`children`, `attributes`, `namespaces`) and
  * `attrs`, the end value of its attribute family (AL2), where each attribute copies its owner's
- * `kind`, `version` and `document` and its predecessor's `attrs` as `attrsWas`.
+ * `kind`, `governs`, `version` and `document` and its predecessor's `attrs` as `attrsWas`.
  *
  * A node's `state`, `ancestry` and `elements`, and an attribute's `attrs`, are fields closed
  * relations determine from the row's own fields, so PostgreSQL derives them (fin.md
@@ -96,10 +96,12 @@ export interface ChildKey<V extends XdmVocabulary> {
 }
 
 /**
- * An attribute's name under its element's kind in one schema version: the key of
- * `AttributeAdmission`.
+ * An attribute's name under its element's kind and governing type in one schema version: the key
+ * an attribute's position is read under, `GovernedAttribute`'s where the element's governing type
+ * is a governor of its kind, else `AttributeAdmission`'s (spec reading 75).
  */
 export interface AttributeKey<V extends XdmVocabulary> {
+  readonly governs: string;
   readonly kind: XdmKind<V>;
   readonly name: NameHandle<V>;
   readonly version: V["version"];
@@ -132,11 +134,13 @@ export interface FoldGrammar<V extends XdmVocabulary> {
    */
   readonly ancestry: AncestrySets;
   /**
-   * `AttributeAdmission`'s position, from `#pantry/grammar/attributes.ts`: the coordinate an
-   * attribute's name holds in its element's `attrs` (D8).
+   * The position of an attribute's name in its element's `attrs` (D8), from
+   * `#pantry/grammar/attributes.ts`: its governor's `GovernedAttribute` position where one governs
+   * the element, else its kind's `AttributeAdmission` position (`admissionOf`).
    *
-   * @param key - The version, the element's kind and the attribute's name handle.
-   * @returns The position, or none when the kind does not admit the name.
+   * @param key - The version, the element's kind and governing type, and the attribute's name
+   *   handle.
+   * @returns The position, or none when the element does not admit the name.
    */
   readonly attributePosition: (key: AttributeKey<V>) => Option.Option<number>;
   /**
@@ -302,8 +306,8 @@ export interface FoldedNode<V extends XdmVocabulary> extends NodeRow<V> {
 }
 
 /**
- * An attribute's `Attribute` row with every field the host writes: its owner's `kind`, `version`
- * and `document`, and its predecessor's `attrs`.
+ * An attribute's `Attribute` row with every field the host writes: its owner's `kind`, `governs`,
+ * `version` and `document`, and its predecessor's `attrs`.
  */
 export interface FoldedAttribute<V extends XdmVocabulary> extends AttributeRow<V> {
   /**
@@ -316,6 +320,11 @@ export interface FoldedAttribute<V extends XdmVocabulary> extends AttributeRow<V
    */
   readonly derived: { readonly attrs: Positions };
   readonly document: NodeId;
+  /**
+   * The owner's governing type, which with its kind decides the attribute's position and domain
+   * (spec reading 75).
+   */
+  readonly governs: string;
   readonly kind: XdmKind<V>;
   readonly version: V["version"];
 }
@@ -646,7 +655,12 @@ export const fold = <V extends XdmVocabulary>(
         ) {
           const { at, name } = row;
           const position = yield* Result.fromOption(
-            grammar.attributePosition({ kind: head.kind, name, version: head.version }),
+            grammar.attributePosition({
+              governs: head.governs,
+              kind: head.kind,
+              name,
+              version: head.version,
+            }),
             () =>
               new AttributeUnadmitted({
                 at,
@@ -662,6 +676,7 @@ export const fold = <V extends XdmVocabulary>(
             attrsWas: attrs,
             derived: { attrs: next },
             document: head.document,
+            governs: head.governs,
             kind: head.kind,
             version: head.version,
           });

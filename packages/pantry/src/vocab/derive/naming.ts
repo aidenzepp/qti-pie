@@ -7,7 +7,9 @@
  * stands for follows the type the particle declares, never the parent it sits under: a kind is
  * its element and its type. The handle names the element and, after a dot, its type in lower camel
  * case, shortened (`qti-content-body.rubric` is `RubricBlockContentBodyDType`); one type of an
- * element may keep the plain handle (`qti-feedback-block` is `FeedbackBlockDType`).
+ * element may keep the plain handle (`qti-feedback-block` is `FeedbackBlockDType`). An anonymous
+ * type goes by `anonymous in group <name>`, after the top-level group its declaration is written in
+ * (`models.ts`, `declaredOf`), and its handle's suffix names that group.
  *
  * A type is named as each version's XSD names it: the 3.0 content-packaging XSD writes
  * `FileMetadata.Type` where 3.0.1 writes `FileMetadataDType`, and both are `cp:metadata.file`.
@@ -90,6 +92,17 @@ export const typedHandles: readonly TypedHandle[] = [
     "lom:entry.langString": ["entry", "LangString.Type"],
     "lom:source": ["source", "CharacterString.Type"],
     "lom:source.langString": ["source", "LangString.Type"],
+  }),
+  // MathML's `semantics` in its three groups: `semantics`, a math expression's, whose first child is
+  // any math expression (`mathml3-common.xsd` line 72); `semantics-ci`, a bound variable's, whose
+  // first child is `ci` or another of its own (`mathml3-strict-content.xsd` line 65); and
+  // `semantics-contexp`, a content expression's, whose first child is a content expression (line
+  // 84, the MathML 3 RelaxNG's `semantics-contexp`, `mathml3-strict-content.rnc` lines 14 and 23,
+  // which spec reading 2 admits wherever a content expression stands).
+  ...decided(vocabularyNamespaces.mathml.namespace, {
+    "m:semantics": ["semantics", "anonymous in group semantics"],
+    "m:semantics.ci": ["semantics", "anonymous in group semantics-ci"],
+    "m:semantics.contexp": ["semantics", "anonymous in group semantics-contexp"],
   }),
 ];
 

@@ -11,8 +11,17 @@
  * §3.3.4 Element Locally Valid (Element), clause 4; derivation by §3.4.6 and §3.14.6). The codec
  * resolves the QName against the element's in-scope namespaces, and the law reads this set. An
  * element of an anonymous declared type admits no named type, since none derives from an anonymous
- * one: its only row is {@link noType}, its own type with no `xsi:type`. A foreign element has no
- * declaration and is assessed laxly, so the law selects it out (readings 50 and 60).
+ * one: its only row is {@link noType}, its own type with no `xsi:type`.
+ *
+ * A foreign element has no declaration, so no derivation constrains its `xsi:type`, and this law
+ * selects it out. Its `xsi:type` still governs it where the QName resolves to a type its document's
+ * schema set holds or a built-in (§3.3.4, Schema-Validity Assessment (Element), clause 1.2; spec
+ * reading 60): the codec writes that type to `Node.governs`, and `none` for a name no such type
+ * has, which leaves the element to lax assessment. The foreign governor laws judge it where the
+ * type is simple, through the attribute grammar's `Governor` (`#pantry/grammar/attributes.ts`): it
+ * admits the four `xsi:` names alone (Element Locally Valid (Type), clause 3.1.1), holds no element
+ * child (clause 3.1.2, law "Foreign simple content") and holds text in the type's `TypeText`
+ * domain (clause 3.1.3, `TextDomain`). A complex type is spec reading 50's unchecked limit.
  */
 import { Option, Result, Schema } from "effect";
 import { closed, idField, roster, sourced } from "#pantry/grammar/closed.ts";
@@ -28,8 +37,8 @@ import type {
 
 /**
  * The null object of a node's governing type: the `TypeName` handle of no named type, which an
- * anonymous declared type, a foreign element and a node that is no element take. No type's handle
- * is spelled so, since every other one opens with `{`.
+ * anonymous declared type, a foreign element whose `xsi:type` gives it no type, and a node that is
+ * no element take. No type's handle is spelled so, since every other one opens with `{`.
  */
 export const noType = "none";
 

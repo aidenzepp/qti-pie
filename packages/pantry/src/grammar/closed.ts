@@ -260,7 +260,7 @@ export const int8Max = 9_223_372_036_854_775_807n;
  * `src/include/utils/varbit.h:83`). A closed relation's constant is one bit string, so no relation
  * exceeds it, and every index below it is an exact JavaScript integer.
  */
-const maxBits = 2_147_483_647 - 7;
+export const varbitMaxBits = 2_147_483_647 - 7;
 
 /**
  * The bytes PostgreSQL stores before a bit string's bits: the 4-byte varlena header and the 4-byte
@@ -322,13 +322,14 @@ export class RepeatedValue extends Schema.TaggedError<RepeatedValue>()("Repeated
  */
 export class BeyondConstant extends Schema.TaggedError<BeyondConstant>()("BeyondConstant", {
   bits: Schema.Number,
+  max: Schema.Number,
   relation: Schema.String,
 }) {
   /**
    * The relation, the bits it needs against the cap, and the repair.
    */
   override get message(): string {
-    return `${this.relation} needs ${this.bits} bits, and one PostgreSQL bit string holds at most ${maxBits}. Give its key denser coordinates, so that its code spaces multiply to fewer cells.`;
+    return `${this.relation} needs ${this.bits} bits, and one PostgreSQL bit string holds at most ${this.max}. Give its key denser coordinates, so that its code spaces multiply to fewer cells.`;
   }
 }
 
@@ -587,65 +588,70 @@ const layoutOf = (key: readonly AnyKeyField[]): Layout => {
 };
 
 /**
- * Construct a closed relation from rows of handles and values, refusing the rows no constant can
- * hold.
+ * Construct closed relations whose string of cells may hold at most `maxBits` bits: production's
+ * cap is {@link varbitMaxBits}, which {@link closed} applies; a test gives a small one, so the edge
+ * lies within the relations it can draw.
  *
  * Every value must lie in its field's code space, no two rows may share a key (E4), and the string
- * of cells must fit one PostgreSQL bit string.
+ * of cells must fit the cap.
  *
- * @param relation - The relation as a generator states it.
- * @param relation.name - The relation's name, as its laws and its failures name it.
- * @param relation.key - The key's fields in index order, the first the most significant digit.
- * @param relation.payload - The fields outside the key, none for a set.
- * @param relation.rows - The rows.
- * @returns The relation, or the first reason it has no constant.
+ * @param maxBits - The most bits a relation's string may hold.
+ * @returns The constructor: from the relation as a generator states it (its name, as its laws and
+ *   its failures name it; its key's fields in index order, the first the most significant digit;
+ *   the fields outside the key, none for a set; and its rows), the relation, or the first reason
+ *   it has no constant.
  */
-export const closed = <
-  const Key extends readonly AnyKeyField[],
-  const Payload extends readonly AnyField[],
->(relation: {
-  readonly key: Key;
-  readonly name: string;
-  readonly payload: Payload;
-  readonly rows: readonly Row<Key, Payload>[];
-}): Result.Result<Closed<Key, Payload>, ClosedRelationError> =>
-  Result.gen(function* parseClosed() {
-    const { key, name, payload, rows } = relation;
-    const layout = layoutOf(key);
-    const { cells } = layout;
-    const width = pointsOf(payload).toString(2).length;
-    const bits = cells * width;
+export const closedWithin =
+  (maxBits: number) =>
+  <const Key extends readonly AnyKeyField[], const Payload extends readonly AnyField[]>(relation: {
+    readonly key: Key;
+    readonly name: string;
+    readonly payload: Payload;
+    readonly rows: readonly Row<Key, Payload>[];
+  }): Result.Result<Closed<Key, Payload>, ClosedRelationError> =>
+    Result.gen(function* parseClosed() {
+      const { key, name, payload, rows } = relation;
+      const layout = layoutOf(key);
+      const { cells } = layout;
+      const width = pointsOf(payload).toString(2).length;
+      const bits = cells * width;
 
-    if (bits > maxBits) {
-      return yield* Result.fail(new BeyondConstant({ bits, relation: name }));
-    }
-
-    const byIndex = new Map<number, Row<Key, Payload>>();
-    const outside = (row: AnyRow) => (field: AnyField | DependentField<string>) =>
-      new OutsideCodeSpace({ field: field.name, relation: name, value: String(row[field.name]) });
-
-    for (const row of rows) {
-      const index = yield* Result.mapError(layout.indexOf(row), outside(row));
-      yield* Result.mapError(indexIn(payload, row), outside(row));
-
-      if (byIndex.has(index)) {
-        return yield* Result.fail(new KeyCollision({ key: spell(key, row), relation: name }));
+      if (bits > maxBits) {
+        return yield* Result.fail(new BeyondConstant({ bits, max: maxBits, relation: name }));
       }
 
-      byIndex.set(index, row);
-    }
+      const byIndex = new Map<number, Row<Key, Payload>>();
+      const outside = (row: AnyRow) => (field: AnyField | DependentField<string>) =>
+        new OutsideCodeSpace({ field: field.name, relation: name, value: String(row[field.name]) });
 
-    return {
-      bytes: Math.ceil(bits / 8) + bitStringHeader,
-      cells,
-      key,
-      lookup: (at) =>
-        Result.getSuccess(layout.indexOf(at)).pipe(
-          Option.flatMap((index) => Option.fromNullishOr(byIndex.get(index))),
-        ),
-      name,
-      payload,
-      rows,
-      width,
-    };
-  });
+      for (const row of rows) {
+        const index = yield* Result.mapError(layout.indexOf(row), outside(row));
+        yield* Result.mapError(indexIn(payload, row), outside(row));
+
+        if (byIndex.has(index)) {
+          return yield* Result.fail(new KeyCollision({ key: spell(key, row), relation: name }));
+        }
+
+        byIndex.set(index, row);
+      }
+
+      return {
+        bytes: Math.ceil(bits / 8) + bitStringHeader,
+        cells,
+        key,
+        lookup: (at) =>
+          Result.getSuccess(layout.indexOf(at)).pipe(
+            Option.flatMap((index) => Option.fromNullishOr(byIndex.get(index))),
+          ),
+        name,
+        payload,
+        rows,
+        width,
+      };
+    });
+
+/**
+ * Construct a closed relation from rows of handles and values, refusing the rows no constant can
+ * hold: {@link closedWithin} under one PostgreSQL bit string's cap, {@link varbitMaxBits}.
+ */
+export const closed = closedWithin(varbitMaxBits);
