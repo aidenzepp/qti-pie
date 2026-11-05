@@ -546,6 +546,7 @@ const itemOf = (
     [
       interaction.response,
       {
+        areaMapping: Option.none(),
         baseType: interaction.kind === "choice" ? "identifier" : interaction.baseType,
         cardinality: interaction.kind === "choice" ? interaction.cardinality : "single",
         correct: Option.none(),

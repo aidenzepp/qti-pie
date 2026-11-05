@@ -264,6 +264,7 @@ const rivers: Item = {
     ["CITY", "RIVER"].map((identifier) => [
       identifier,
       {
+        areaMapping: Option.none(),
         baseType: "string",
         cardinality: "single",
         correct: Option.none(),

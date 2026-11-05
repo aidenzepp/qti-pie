@@ -22,13 +22,16 @@ import type { InvalidValue, ModelledBaseType, Single, Value } from "#plate/model
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import {
+  // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
+  areaShapes,
   baseTypes,
   cardinalities,
   interactionNames,
   renders,
   templateName,
 } from "#plate/vocabulary.ts";
-import type { Condition, Feature, InteractionName } from "#plate/vocabulary.ts";
+// oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
+import type { AreaShape, Condition, Feature, InteractionName } from "#plate/vocabulary.ts";
 
 /**
  * A feature the item holds and phase 1 does not render, where it is, and how it is shown: a
@@ -71,9 +74,47 @@ export interface Mapping {
 }
 
 /**
+ * One `qti-area-map-entry`: an area of the coordinate space and the value a point inside it maps
+ * to.
+ */
+export interface AreaMapEntry {
+  /**
+   * The `coords`, in written order. A coordinate written with `%` holds its number without the
+   * sign; the mapping's `percent` records that one was.
+   */
+  readonly coords: readonly number[];
+  readonly mappedValue: number;
+  // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
+  readonly shape: AreaShape;
+}
+
+/**
+ * A point response's `qti-area-mapping`, its entries in document order.
+ */
+export interface AreaMapping {
+  /**
+   * The value of a point no area maps; 0 when `default-value` is absent.
+   */
+  readonly defaultValue: number;
+  readonly entries: readonly AreaMapEntry[];
+  readonly lowerBound: Option.Option<number>;
+  /**
+   * Whether any coordinate of any entry is written with `%`. What a percentage means in scoring is
+   * open (9.15) and the corpus has none, so the model only records it.
+   */
+  readonly percent: boolean;
+  readonly upperBound: Option.Option<number>;
+}
+
+/**
  * A `qti-response-declaration` of a modelled base type and cardinality (I-1).
  */
 export interface ResponseDeclaration {
+  /**
+   * The `qti-area-mapping` of a `point` declaration, when it has one; none for every other base
+   * type.
+   */
+  readonly areaMapping: Option.Option<AreaMapping>;
   readonly baseType: ModelledBaseType;
   readonly cardinality: Value["cardinality"];
   /**
@@ -648,6 +689,37 @@ const identifierAttribute = (
   Effect.map(requiredAttribute(build, element, name), (attribute) => identifierOf(attribute.value));
 
 /**
+ * Read an attribute the element carries whose value is one of a closed list.
+ *
+ * @param build The build.
+ * @param element The element.
+ * @param name The attribute's name.
+ * @param attribute The attribute.
+ * @param allowed The values it may take.
+ * @returns The value, or the refusal `attribute-type` when it is outside `allowed`.
+ */
+const listed = <const T extends string>(
+  build: Build,
+  element: SourceElement,
+  name: string,
+  attribute: SourceAttribute,
+  allowed: readonly T[],
+): Effect.Effect<T, Refusal> =>
+  Option.match(
+    Arr.findFirst(allowed, (value) => value === attribute.value),
+    {
+      onNone: () =>
+        Effect.fail(
+          refusal(build, "attribute-type", attributePath(pathOf(build, element), attribute), {
+            attribute: name,
+            value: attribute.value,
+          }),
+        ),
+      onSome: (value) => Effect.succeed(value),
+    },
+  );
+
+/**
  * Read an attribute whose value is one of a closed list, such as `cardinality`.
  *
  * @param build The build.
@@ -665,19 +737,7 @@ const enumerated = <const T extends string>(
 ): Effect.Effect<Option.Option<T>, Refusal> =>
   Effect.transposeOption(
     Option.map(attributeOf(element, name), (attribute) =>
-      Option.match(
-        Arr.findFirst(allowed, (value) => value === attribute.value),
-        {
-          onNone: () =>
-            Effect.fail(
-              refusal(build, "attribute-type", attributePath(pathOf(build, element), attribute), {
-                attribute: name,
-                value: attribute.value,
-              }),
-            ),
-          onSome: (value) => Effect.succeed(value),
-        },
-      ),
+      listed(build, element, name, attribute, allowed),
     ),
   );
 
@@ -1116,6 +1176,98 @@ const mappingOf = (
   });
 
 /**
+ * One coordinate as `CoordsDType` writes it: decimal digits, then `%` or nothing.
+ */
+const coordinate = /^(?<digits>[0-9]+)%?$/u;
+
+/**
+ * Read a `qti-area-map-entry`'s `coords`, each coordinate's digits as `xs:double` reads them. How
+ * many coordinates a value holds is the structure check's, which admits only `CoordsDType`.
+ *
+ * @param build The build.
+ * @param entry The entry.
+ * @returns Each coordinate's number and whether it is written with `%`, in written order, or the
+ *   refusal `attribute-type` when a coordinate is outside `CoordsDType`.
+ */
+const coordsOf = (
+  build: Build,
+  entry: SourceElement,
+): Effect.Effect<readonly (readonly [number, boolean])[], Refusal> =>
+  Effect.flatMap(requiredAttribute(build, entry, "coords"), (attribute) => {
+    const path = attributePath(pathOf(build, entry), attribute);
+
+    return Effect.forEach(attribute.value.split(","), (written) => {
+      const digits = coordinate.exec(written)?.groups?.["digits"];
+
+      return digits === undefined
+        ? Effect.fail(
+            refusal(build, "attribute-type", path, { attribute: "coords", value: attribute.value }),
+          )
+        : Effect.map(
+            typed(build, path, parseLexical("float", digits)),
+            (single) => [floatOf(single), written.endsWith("%")] as const,
+          );
+    });
+  });
+
+/* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure. */
+/**
+ * Read a `qti-area-map-entry`.
+ *
+ * @param build The build.
+ * @param entry The entry.
+ * @returns The entry and whether a coordinate of it is written with `%`, or the refusal at its
+ *   first attribute outside its type.
+ */
+const areaEntryOf = (
+  build: Build,
+  entry: SourceElement,
+): Effect.Effect<{ readonly entry: AreaMapEntry; readonly percent: boolean }, Refusal> =>
+  Effect.gen(function* readAreaEntry() {
+    const shape = yield* Effect.flatMap(requiredAttribute(build, entry, "shape"), (attribute) =>
+      listed(build, entry, "shape", attribute, areaShapes),
+    );
+    const coords = yield* coordsOf(build, entry);
+    const value = yield* requiredAttribute(build, entry, "mapped-value");
+    const path = attributePath(pathOf(build, entry), value);
+
+    return {
+      entry: {
+        coords: coords.map(([number]) => number),
+        mappedValue: floatOf(yield* typed(build, path, parseLexical("float", value.value))),
+        shape,
+      },
+      percent: coords.some(([, percent]) => percent),
+    };
+  });
+/* oxlint-enable anti-slop/no-shape-in-symbol-names */
+
+/**
+ * Read a point response's `qti-area-mapping`.
+ *
+ * @param build The build.
+ * @param mapping The mapping element.
+ * @returns The mapping, or the refusal at the first attribute outside its type.
+ */
+const areaMappingOf = (build: Build, mapping: SourceElement): Effect.Effect<AreaMapping, Refusal> =>
+  Effect.gen(function* readAreaMapping() {
+    const defaultValue = yield* floatAttribute(build, mapping, "default-value");
+    const lowerBound = yield* floatAttribute(build, mapping, "lower-bound");
+    const upperBound = yield* floatAttribute(build, mapping, "upper-bound");
+    const read = yield* Effect.forEach(childrenNamed(mapping, "qti-area-map-entry"), (entry) =>
+      areaEntryOf(build, entry),
+    );
+
+    return {
+      defaultValue: Option.getOrElse(defaultValue, () => 0),
+      entries: read.map(({ entry }) => entry),
+      lowerBound,
+      percent: read.some(({ percent }) => percent),
+      upperBound,
+    };
+  });
+
+/**
  * Read a `qti-response-declaration`.
  *
  * @param build The build.
@@ -1139,8 +1291,15 @@ const responseDeclaration = (
         mappingOf(build, element, read.value.baseType),
       ),
     );
+    const areaMapping = yield* Effect.transposeOption(
+      pipe(
+        Arr.head(childrenNamed(declaration, "qti-area-mapping")),
+        Option.filter(() => read.value.baseType === "point"),
+        Option.map((element) => areaMappingOf(build, element)),
+      ),
+    );
 
-    return Option.some({ ...read.value, correct, defaultValue, mapping });
+    return Option.some({ ...read.value, areaMapping, correct, defaultValue, mapping });
   });
 
 /**

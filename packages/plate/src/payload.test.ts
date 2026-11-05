@@ -213,6 +213,7 @@ const item: Item = {
     [
       "CAPITAL",
       {
+        areaMapping: Option.none(),
         baseType: "identifier",
         cardinality: "single",
         correct: Option.some(one({ baseType: "identifier", value: "MarkerCorrectChoice" })),
@@ -235,6 +236,7 @@ const item: Item = {
     [
       "FIRST",
       {
+        areaMapping: Option.none(),
         baseType: "string",
         cardinality: "single",
         correct: Option.some(one({ baseType: "string", value: "MarkerCorrectText" })),
@@ -248,6 +250,7 @@ const item: Item = {
         [
           identifier,
           {
+            areaMapping: Option.none(),
             baseType: "string",
             cardinality: "single",
             correct: Option.none(),
@@ -635,6 +638,7 @@ describe("payload", () => {
         [
           "HEX",
           {
+            areaMapping: Option.none(),
             baseType: "integer",
             cardinality: "single",
             correct: Option.none(),

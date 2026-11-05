@@ -116,6 +116,7 @@ const itemOf = (
     interactions.map((interaction) => [
       interaction.response,
       {
+        areaMapping: Option.none(),
         baseType: interaction.baseType,
         cardinality: "single",
         correct: Option.none(),

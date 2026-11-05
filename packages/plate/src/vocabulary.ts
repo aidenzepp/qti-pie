@@ -49,6 +49,18 @@ export const cardinalities = ["single", "multiple", "ordered", "record"] as cons
 export type Cardinality = (typeof cardinalities)[number];
 
 /**
+ * The five shapes of a `qti-area-map-entry`, as its `shape` attribute spells them.
+ */
+// oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
+export const areaShapes = ["circle", "default", "ellipse", "poly", "rect"] as const;
+
+/**
+ * The shape of an area a point response is mapped by.
+ */
+// oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
+export type AreaShape = (typeof areaShapes)[number];
+
+/**
  * The QTI names of the three interactions M1 renders: Choice (Q-2), Text Entry (Q-20) and Extended
  * Text (Q-5).
  */
@@ -217,6 +229,8 @@ export const renders = {
     "qti-value",
     "qti-mapping",
     "qti-map-entry",
+    "qti-area-mapping",
+    "qti-area-map-entry",
     "qti-item-body",
     "qti-response-processing",
     ...interactionNames,

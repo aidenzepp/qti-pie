@@ -85,6 +85,7 @@ export const bg007Item: Item = {
     [
       "RESPONSE",
       {
+        areaMapping: Option.none(),
         baseType: "identifier",
         cardinality: "single",
         correct: Option.some<Value>({
