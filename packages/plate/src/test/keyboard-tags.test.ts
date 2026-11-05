@@ -2,17 +2,49 @@ import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 
 /**
- * The tests that complete an item through `keyboardWalk`, by file under `src/`, each title as
- * written: a walk directly, or a helper that walks, such as `src/vertical.test.ts`'s `complete`.
- * Each one carries the `[keyboard]` token after its last ID token (spec §4.10).
+ * The tests that walk an item by keys, by file under `src/`, each title as written, a `${…}`
+ * placeholder included. A walk is `keyboardWalk` in Node, directly or through a helper that walks,
+ * such as `src/vertical.test.ts`'s `complete`, or Playwright's keyboard in a browser test. Each one
+ * carries the `[keyboard]` token after its last ID token (spec §4.10).
  */
+/* oxlint-disable eslint/no-template-curly-in-string -- a browser test's title is a template literal, and this list holds it as written, so its `${…}` placeholders are text to match, never to interpolate. */
 const walks: ReadonlyMap<string, readonly string[]> = new Map([
+  [
+    "dev/keyboard-choice.browser.test.ts",
+    [
+      "[Q-2] [keyboard] Tab order: ${label}'s item form, from its first control to its Submit, is the Node walk's tabOrder",
+      "[Q-2] [keyboard] Arrows: in ${label}'s radio group, ArrowDown and ArrowRight check the next radio, and ArrowUp and ArrowLeft the previous one",
+      "[Q-2] [keyboard] Space checks ${label}'s focused radio",
+      "[Q-2] [keyboard] ${label} answered by keys: its correct radio checked, Enter on Submit, scores 1",
+      "[Q-2] [keyboard] Space ticks and unticks BG008's focused checkbox",
+      "[Q-2] [keyboard] BG008 answered by keys: its correct choices ticked, Enter on Submit, scores 1",
+      "[Q-2] [keyboard] BG008 over-ticked by keys: four of five ticked against max-choices 3, Enter on Submit, says at most 3",
+    ],
+  ],
+  [
+    "dev/keyboard-text.browser.test.ts",
+    [
+      "${tag} [keyboard] Tab order: ${label}'s item form, from its first control to its Submit, is the Node walk's tabOrder",
+      "[Q-20] [keyboard] BG010 answered by keys: Tab to the Text Entry, type York, Enter submits the form and scores 1",
+      "[Q-5] [keyboard] ${essay.label} answered by keys: a line, Enter, a second line, Tab to Submit and Enter record the response, and the restored textarea holds both lines",
+      "[Q-5] [keyboard] Tab order: ordered.xml's item form, from its first control to its Submit, is the Node walk's tabOrder",
+      "[Q-5] [keyboard] ordered.xml answered by keys: Tab moves through its three Controls in order, two filled, Enter on Submit records the response, and the restored Controls hold the two in order",
+      '[Q-20] [keyboard] pattern-mask: ${probe.label} refuses "${probe.mismatch}" typed by keys with its pattern message',
+      '[Q-20] [keyboard] pattern-mask: ${probe.label} accepts "${probe.match}" typed by keys',
+    ],
+  ],
   [
     "dev/page.test.ts",
     [
       "[Q-2] [keyboard] BG007 completes in the playground: its form walked by keys, posted, and scored 1",
       "[Q-20] [keyboard] BG010 completes in the playground: York typed, posted, and scored 1",
       "[Q-5] [keyboard] BG011 completes in the playground: past the video, its answer typed, posted, and the response recorded",
+    ],
+  ],
+  [
+    "dev/walk.browser.test.ts",
+    [
+      "[Q-2] [keyboard] BG007 by keys alone: Tab into the group, Space on True, Tab to Submit, Enter, scores 1",
     ],
   ],
   [
@@ -69,12 +101,15 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
     ],
   ],
 ]);
+/* oxlint-enable eslint/no-template-curly-in-string */
 
 /**
- * A test's title: the string literal that opens an `it(…)` or `test(…)` call, modifiers included.
+ * A test's title: the string literal that opens an `it(…)` or `test(…)` call, or an `.effect(…)`
+ * call on the `it` an `it.layer(…)` scope hands its callback (`walk.effect(…)` in a browser test),
+ * modifiers included.
  */
 const titlePattern =
-  /\b(?:it|test)(?:\.[A-Za-z]+)*\(\s*(?<quote>["'`])(?<title>(?:\\.|(?!\k<quote>)[^\\])*)\k<quote>/gu;
+  /\b(?:it|test|[a-z][A-Za-z]*(?=\.effect\b))(?:\.[A-Za-z]+)*\(\s*(?<quote>["'`])(?<title>(?:\\.|(?!\k<quote>)[^\\])*)\k<quote>/gu;
 
 /**
  * The titles of every test in `file`, a path under `src/`, read as text.
@@ -86,7 +121,7 @@ const titlesIn = (file: string): readonly string[] =>
   );
 
 describe("the [keyboard] token", () => {
-  it("is on every test listed as completing an item through keyboardWalk", () => {
+  it("is on every test listed as walking an item by keys", () => {
     for (const [file, listed] of walks) {
       const titles = titlesIn(file);
 
