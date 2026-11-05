@@ -172,8 +172,10 @@ const generic = ["ws", "comment", "pi"];
 
 /**
  * The children each host admits, from the content models of `imsqti_asiv3p0p1_v1p0.xsd` (the
- * spec's 3.4); every list is the same in both versions. `xi:include` is absent from the section
- * and the stimulus body: p5-22 adds it, p5-32 adds the 3.0.1 stimulus body's attributes.
+ * spec's 3.4); every list is the same in both versions, except that `xi:include` is also a child of
+ * `qti-stimulus-body` in 3.0.1 only (`StimulusBodyDType` has no 3.0.0 counterpart). `xi:include`
+ * is a child of the section and of the two test content bodies in both versions (p5-22); p5-32
+ * adds the 3.0.1 stimulus body's attributes.
  */
 const expected: Readonly<Record<(typeof handles)[number], readonly string[]>> = {
   "qti-adaptive-engine-ref": ["comment", "pi"],
@@ -208,6 +210,7 @@ const expected: Readonly<Record<(typeof handles)[number], readonly string[]>> = 
     "qti-assessment-item-ref",
     "qti-assessment-section",
     "qti-assessment-section-ref",
+    "xi:include",
   ],
   "qti-assessment-section-ref": ["comment", "pi"],
   "qti-assessment-stimulus": [
@@ -229,8 +232,8 @@ const expected: Readonly<Record<(typeof handles)[number], readonly string[]>> = 
     "qti-test-feedback",
   ],
   "qti-branch-rule": [...generic, ...expressionKinds],
-  "qti-content-body.testFeedback": [...mixed, ...flow],
-  "qti-content-body.testRubric": [...mixed, ...flow],
+  "qti-content-body.testFeedback": [...mixed, ...flow, "xi:include"],
+  "qti-content-body.testRubric": [...mixed, ...flow, "xi:include"],
   "qti-item-session-control": ["comment", "pi"],
   "qti-metadata-ref": ["comment", "pi"],
   "qti-ordering": ["comment", "pi"],
@@ -400,9 +403,10 @@ describe("the test kinds", () => {
   it("admits per host exactly the children of the XSD content models, in both versions", () => {
     for (const version of ["3.0.0", "3.0.1"]) {
       for (const handle of handles) {
+        const stimulusOnly = version === "3.0.1" && handle === "qti-stimulus-body";
         assert.deepStrictEqual(
           childrenOf(version, handle),
-          expected[handle].toSorted(),
+          (stimulusOnly ? [...expected[handle], "xi:include"] : expected[handle]).toSorted(),
           `${version} ${handle}`,
         );
       }
@@ -431,11 +435,13 @@ describe("the test kinds", () => {
     }
   });
 
-  it("gives the stimulus body the same element children in both versions", () => {
+  it("gives the stimulus body the same element children in both versions but xi:include, in 3.0.1 only", () => {
     assert.deepStrictEqual(
+      childrenOf("3.0.1", "qti-stimulus-body").filter((child) => child !== "xi:include"),
       childrenOf("3.0.0", "qti-stimulus-body"),
-      childrenOf("3.0.1", "qti-stimulus-body"),
     );
+    assert.notInclude(childrenOf("3.0.0", "qti-stimulus-body"), "xi:include");
+    assert.include(childrenOf("3.0.1", "qti-stimulus-body"), "xi:include");
   });
 
   it("admits the item's qti-assessment-stimulus-ref in both versions", () => {

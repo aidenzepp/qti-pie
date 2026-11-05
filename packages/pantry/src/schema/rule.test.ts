@@ -392,27 +392,98 @@ describe("kinds/xi", () => {
     ]);
   });
 
-  it("admits exactly the 16 pairs of each version, by name", () => {
+  it("admits exactly the 78 pairs of 3.0.0 and the 79 of 3.0.1, by name", () => {
     const mixed = ["comment", "entityRef", "pi", "text", "ws"];
-    const expected = [
+    const hosts = [
+      "a",
+      "abbr",
+      "acronym",
+      "address",
+      "article",
+      "aside",
+      "b",
+      "big",
+      "caption",
+      "cite",
+      "code",
+      "dd",
+      "dfn",
+      "div",
+      "dt",
+      "em",
+      "figcaption",
+      "footer",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "header",
+      "i",
+      "kbd",
+      "label",
+      "li",
+      "nav",
+      "object",
+      "p",
+      "pre",
+      "q",
+      "qti-assessment-section",
+      "qti-content-body.feedback",
+      "qti-content-body.modal",
+      "qti-content-body.rubric",
+      "qti-content-body.rubricTemplate",
+      "qti-content-body.template",
+      "qti-content-body.testFeedback",
+      "qti-content-body.testRubric",
+      "qti-feedback-inline",
+      "qti-gap-match-interaction",
+      "qti-gap-text",
+      "qti-hottext",
+      "qti-hottext-interaction",
+      "qti-inline-choice",
+      "qti-item-body",
+      "qti-label",
+      "qti-prompt",
+      "qti-simple-associable-choice",
+      "qti-simple-choice",
+      "qti-template-inline",
+      "qti-template-inline.rubric",
+      "samp",
+      "section",
+      "small",
+      "span",
+      "strong",
+      "sub",
+      "sup",
+      "td",
+      "th",
+      "tt",
+      "var",
+    ];
+    const shared = [
       "xi:include>xi:fallback",
       "xi:fallback>xi:include",
-      "qti-item-body>xi:include",
-      "qti-prompt>xi:include",
-      "qti-simple-choice>xi:include",
-      "p>xi:include",
+      ...hosts.map((host) => `${host}>xi:include`),
       ...mixed.map((child) => `xi:include>${child}`),
       ...mixed.map((child) => `xi:fallback>${child}`),
-    ].toSorted();
-    for (const version of ["3.0.0", "3.0.1"]) {
+    ];
+    const expected = {
+      "3.0.0": shared.toSorted(),
+      "3.0.1": [...shared, "qti-stimulus-body>xi:include"].toSorted(),
+    };
+    for (const version of ["3.0.0", "3.0.1"] as const) {
       const found = xi.admission
         .filter((row) => row.version === version)
         .map((row) => `${row.parent}>${row.child}`)
         .toSorted();
-      assert.deepStrictEqual(found, expected, version);
+      assert.deepStrictEqual(found, expected[version], version);
     }
-    assert.strictEqual(expected.length, 16);
-    assert.strictEqual(xi.admission.length, 32);
+    assert.strictEqual(hosts.length, 66);
+    assert.strictEqual(expected["3.0.0"].length, 78);
+    assert.strictEqual(expected["3.0.1"].length, 79);
+    assert.strictEqual(xi.admission.length, 157);
   });
 
   it("names the six XInclude attributes on xi:include", () => {
