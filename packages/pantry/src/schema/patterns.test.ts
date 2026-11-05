@@ -1029,6 +1029,31 @@ describe("processing patterns", () => {
     });
   }
 
+  it("mathmlUnsignedInteger admits leading zeros of any count and bounds the significant digits", () => {
+    const { mathmlUnsignedInteger } = patterns;
+    const admitted = [
+      `${"0".repeat(21)}5`,
+      "0000018446744073709551615",
+      `-${"0".repeat(25)}`,
+      "-0",
+    ];
+    for (const value of admitted) {
+      assert.isTrue(admits(mathmlUnsignedInteger, "u", value), value);
+    }
+    const refused = [
+      "18446744073709551616",
+      "000018446744073709551616",
+      "+5",
+      "-1",
+      "-01",
+      "-",
+      "",
+    ];
+    for (const value of refused) {
+      assert.isFalse(admits(mathmlUnsignedInteger, "u", value), value);
+    }
+  });
+
   it("mathmlUnsignedInteger bounds its value at 18446744073709551615 and no further", () => {
     const { mathmlUnsignedInteger } = patterns;
     const bound = 18_446_744_073_709_551_615n;

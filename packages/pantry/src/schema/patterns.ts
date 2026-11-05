@@ -605,13 +605,13 @@ export const mathmlNumber = "^-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)$" as const;
  * `m:unsigned-integer` (`mathml3-presentation.xsd` line 93, restricting `xs:unsignedLong`):
  * `xs:unsignedLong`'s lexical space without a leading plus sign, and its range
  * (`maxInclusive` 18446744073709551615, XSD 1.0 Part 2 section 3.3.21) written in the pattern:
- * one to nineteen digits, twenty digits bounded digit by digit, or a minus sign and zeros (the XSD
- * admits `-0`, whose value is zero). `m:msline/@length`. Judged on the collapsed value. A value
- * spelled with more than twenty digits (leading zeros) is outside it, a recorded gap beside
- * `xsInt`'s: a pattern cannot bound the text without bounding its digits.
+ * leading zeros of any count, then one to nineteen significant digits or twenty bounded digit by
+ * digit, or a minus sign and zeros (the XSD admits `-0`, whose value is zero, spelled with any
+ * number of zeros). The bound is on the significant digits only: leading zeros are admitted, since
+ * neither the XSD nor the REC bans them. `m:msline/@length`. Judged on the collapsed value.
  */
 export const mathmlUnsignedInteger =
-  "^(?:-0{1,20}|[0-9]{1,19}|0[0-9]{19}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]|1844674407370955161[0-4]|18446744073709551615)$" as const;
+  "^(?:-0+|0*(?:[0-9]{1,19}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]|1844674407370955161[0-4]|18446744073709551615))$" as const;
 
 /**
  * `xs:integer` lexical space without a leading plus sign: the contract base of `position`, `shift`
