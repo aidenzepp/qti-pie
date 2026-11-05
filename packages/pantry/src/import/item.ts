@@ -10,6 +10,7 @@
  * `processingRows` over the {@link NodeIndex} this module's tree rows built, once the declaration
  * and body rows are in.
  */
+import { includeRows } from "#pantry/import/include.ts";
 import { judgedLater } from "#pantry/import/judged.ts";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { Effect, Option } from "effect";
@@ -21,7 +22,6 @@ import { interactionRows } from "#pantry/import/interactions.ts";
 import { mappingRows } from "#pantry/import/mapping.ts";
 import { processingRows as processingTreeRows } from "#pantry/import/processing.ts";
 import type { ProcessingRefused } from "#pantry/import/processing.ts";
-import { requiredAttribute } from "#pantry/import/required.ts";
 import {
   closedOf,
   collapse,
@@ -58,8 +58,6 @@ import {
 } from "#pantry/schema/declaration.ts";
 import {
   ChoiceIdentifier,
-  EmbedSourceUri,
-  LongDescriptionUri,
   LongInterpretationUri,
   ManifestIdentifier,
   OutcomeScaleValue,
@@ -84,7 +82,6 @@ import {
   DocumentIdentifier,
   DocumentTitle,
 } from "#pantry/schema/document.ts";
-import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#pantry/schema/html.ts";
 import {
   ChoiceInteraction,
   ChoiceInteractionMaxSelectionsMessage,
@@ -935,19 +932,20 @@ export const semanticRows = Effect.fn("import.semanticRows")(function* semanticR
 
 /**
  * Write the rows of an item document: its tree, its `Document` row with the identifier and title
- * rows, the item root and the body, prompt, paragraph and image rows under it, and, after those,
+ * rows, the item root and the body, prompt rows under it, and, after those,
  * the rows of its response and template processing trees.
  *
  * Every attribute passes through `typedAttribute` with its whitespace class: `identifier`,
- * `adaptive`, `time-dependent`, `src` and `longdesc` collapse, `title` replaces, and `alt`,
- * `height` and `width` are kept as read. `adaptive` takes its XSD default `false` when absent. A
- * root may not omit the required `time-dependent`: a stored `false` would be indistinguishable
- * from a present one, so the importer refuses the item as `typed-copy`.
+ * `adaptive` and `time-dependent` collapse and `title` replaces; the HTML pass applies the classes
+ * of the `img` attributes. `adaptive` takes its XSD default `false` when absent. A root may not
+ * omit the required `time-dependent`: a stored `false` would be indistinguishable from a present
+ * one, so the importer refuses the item as `typed-copy`.
  *
  * After the M0 rows, the M1 builders run in a fixed order, each on the rows so far: the attributes,
- * the HTML profile, the interactions, the content models and the mappings. `attributeRows` reads
- * the root kind from the `Tree` row `treeRows` wrote and fails without it, so it runs on rows that
- * hold `treeRows`'s output, never on `Rows.empty()` and never before `treeRows`.
+ * the HTML profile (every HTML arm, `p` and `img` included), the includes, the interactions, the
+ * content models and the mappings. `attributeRows` reads the root kind from the `Tree` row
+ * `treeRows` wrote and fails without it, so it runs on rows that hold `treeRows`'s output, never on
+ * `Rows.empty()` and never before `treeRows`.
  *
  * @param input - The decoded item and where its package lists it.
  * @param rows - The rows so far.
@@ -1101,47 +1099,12 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
       built = Rows.add(built, ItemBody, [{ id: node.id, item: parentNode.value.id }]);
     } else if (node.kind === "qti-prompt" && Option.isSome(parentNode)) {
       built = Rows.add(built, Prompt, [{ id: node.id, parent: parentNode.value.id }]);
-    } else if (node.kind === "p") {
-      built = Rows.add(built, P, [{ id: node.id }]);
-    } else if (node.kind === "img") {
-      const src = attributeOf(built, element, node, "src", "collapse");
-      built = src.rows;
-      const longdesc = attributeOf(built, element, node, "longdesc", "collapse");
-      built = longdesc.rows;
-      const height = lexicalOf(element, "height");
-      const width = lexicalOf(element, "width");
-      const alt = yield* requiredAttribute(element, "alt", lexicalOf(element, "alt"));
-      const imgSrc = yield* requiredAttribute(element, "src", src.value);
-      built = Rows.add(built, Img, [{ alt, id: node.id, src: EmbedSourceUri(imgSrc) }]);
-      built = Rows.add(
-        built,
-        ImgLongdesc,
-        Option.match(longdesc.value, {
-          onNone: () => [],
-          onSome: (value) => [{ node: node.id, value: LongDescriptionUri(value) }],
-        }),
-      );
-      built = Rows.add(
-        built,
-        ImgHeight,
-        Option.match(height, {
-          onNone: () => [],
-          onSome: (value) => [{ node: node.id, value: judgedLater(value) }],
-        }),
-      );
-      built = Rows.add(
-        built,
-        ImgWidth,
-        Option.match(width, {
-          onNone: () => [],
-          onSome: (value) => [{ node: node.id, value: judgedLater(value) }],
-        }),
-      );
     }
   }
 
   built = yield* attributeRows(root, nodes, documentId, built);
   built = yield* htmlRows(root, nodes, built);
+  built = yield* includeRows(root, nodes, built);
   built = yield* interactionRows(
     root,
     nodes,

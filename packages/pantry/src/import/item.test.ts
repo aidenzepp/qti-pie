@@ -42,6 +42,7 @@ import {
   PackagePath,
   TemplateUri,
   ToolName,
+  XIncludeUri,
 } from "#pantry/schema/contracts.ts";
 import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#pantry/schema/html.ts";
 import {
@@ -87,6 +88,7 @@ import {
   ResponseProcessingTemplate,
   StandardTemplateReference,
 } from "#pantry/schema/processing.ts";
+import { XInclude, XIncludeHref, XIncludeParse } from "#pantry/schema/rule.ts";
 import * as value from "#pantry/schema/value.ts";
 import { listPackage, readEntry } from "#pantry/package/read.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
@@ -314,6 +316,29 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
         assert.deepStrictEqual(Rows.of(rows, ImgHeight), []);
         assert.deepStrictEqual(Rows.of(rows, ImgWidth), []);
         assert.deepStrictEqual(Rows.of(rows, AttributeLexical), []);
+      }),
+  );
+
+  suite.effect(
+    "an include in a paragraph of the body writes one XInclude row with its attributes",
+    () =>
+      Effect.gen(function* includeItem() {
+        const doc = yield* readChoice(yield* materialize("simple"), (text) =>
+          text
+            .replace(
+              "<qti-assessment-item",
+              '<qti-assessment-item xmlns:xi="http://www.w3.org/2001/XInclude"',
+            )
+            .replace("<p>", '<p><xi:include href="f.xml" parse="xml"/>'),
+        );
+        const { nodes, rows } = yield* itemOf(doc);
+        const include = onlyId(nodes, "xi:include");
+
+        assert.deepStrictEqual(Rows.of(rows, XInclude), [{ id: include }]);
+        assert.deepStrictEqual(Rows.of(rows, XIncludeHref), [
+          { node: include, value: XIncludeUri("f.xml") },
+        ]);
+        assert.deepStrictEqual(Rows.of(rows, XIncludeParse), [{ node: include, value: "xml" }]);
       }),
   );
 
