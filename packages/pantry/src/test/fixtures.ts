@@ -684,10 +684,12 @@ const bodyRow = "<tbody><tr><td>cell</td></tr></tbody>";
  *
  * @param element - The element the fixture exercises.
  * @param use - The text that replaces the item body's first paragraph.
+ * @param files - The files the item names that its package does not hold, added before the cut.
  * @returns The spec, named `html-<element>`.
  */
-const htmlItem = (element: string, use: string): FixtureSpec => ({
+const htmlItem = (element: string, use: string, files: readonly FileEdit[] = []): FixtureSpec => ({
   edits: [
+    ...files,
     replaceIn(bgChoiceItem, bgChoiceQuestion, use),
     { _tag: "cut", item: bgChoiceItem, schemaversion: "3.0.1" },
   ],
@@ -710,6 +712,13 @@ const htmlSpecs: Record<`html-${(typeof htmlElements)[number]}`, FixtureSpec> = 
   "html-audio": htmlItem(
     "audio",
     `${bgChoiceQuestion}<audio controls="controls"><source src="audio/clip.mp3" type="audio/mpeg"/></audio>`,
+    [
+      {
+        _tag: "addFile",
+        path: "items/audio/clip.mp3",
+        source: { member: "qtiv3-examples/packaging/items/tree.mp3" },
+      },
+    ],
   ),
   "html-bdi": htmlItem("bdi", "<p>This is a True/False question? <bdi>isolated</bdi></p>"),
   "html-big": htmlItem("big", "<p>This is a True/False question? <big>big</big></p>"),
@@ -742,7 +751,7 @@ const htmlSpecs: Record<`html-${(typeof htmlElements)[number]}`, FixtureSpec> = 
   "html-ol": htmlItem("ol", `${bgChoiceQuestion}<ol><li>One</li></ol>`),
   "html-param": htmlItem(
     "param",
-    `<p>This is a True/False question? <object data="images/x.png" type="image/png"><param name="n" value="v" valuetype="DATA"/></object></p>`,
+    `<p>This is a True/False question? <object data="images/train.png" type="image/png"><param name="n" value="v" valuetype="DATA"/></object></p>`,
   ),
   "html-pre": htmlItem("pre", `${bgChoiceQuestion}<pre>a  b</pre>`),
   "html-q": htmlItem("q", "<p>This is a True/False question? <q>quoted</q></p>"),
@@ -1499,6 +1508,11 @@ const copySpecs: Record<(typeof copyNames)[number], FixtureSpec> = {
   ]),
   "controls-3-0-0": {
     edits: [
+      {
+        _tag: "addFile",
+        path: "id-1ccd6e04685f/video/clip.mp4",
+        source: { member: "QTI3_BPIG_Examples/items/images/bubble.mp4" },
+      },
       replaceIn(
         bbqExtendedTextItem,
         "<p><br/>Here is a sample response:</p>",
