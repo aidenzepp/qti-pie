@@ -31,6 +31,7 @@ import { attribute, checkTree, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
  * A case reads at most a few corpus documents, and the Extended Text case lists the corpus once,
@@ -136,11 +137,11 @@ interface Opened {
  */
 const openAccepted = Effect.fnUntraced(function* openAccepted(location: string, bytes: Uint8Array) {
   const verdict = yield* open(location, bytes);
-  if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") {
-    return { accepted: verdict.accepted, redacted: redact(verdict.accepted) };
-  }
+  const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`${location} is ${verdict.verdict}, not accepted`),
+  );
 
-  return assert.fail(`${location} is ${verdict.verdict}, not accepted`);
+  return { accepted, redacted: redact(accepted) };
 });
 
 /**

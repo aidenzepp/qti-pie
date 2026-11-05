@@ -35,6 +35,7 @@ import { checkTree, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml, roundTrips } from "#plate/test/round-trip.ts";
+import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
  * The fixtures, by their path under the corpus root, which `open` takes as their location.
@@ -81,11 +82,11 @@ const openFixture = Effect.fnUntraced(function* openFixture(location: string) {
 const acceptFixture = Effect.fnUntraced(function* acceptFixture(location: string) {
   const { bytes, verdict } = yield* openFixture(location);
   const source = yield* readSource(location, bytes);
-  if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") {
-    return { accepted: verdict.accepted, source };
-  }
+  const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`${location} is ${verdict.verdict}, not accepted`),
+  );
 
-  return assert.fail(`${location} is ${verdict.verdict}, not accepted`);
+  return { accepted, source };
 });
 
 /**
@@ -632,10 +633,12 @@ describe("an item whose template processing sets its correct response", () => {
       Effect.gen(function* templateDigging() {
         const location = "QTI3_BPIG_Examples/items/template_digging.xml";
         const { verdict } = yield* openFixture(location);
-        const accepted =
-          verdict.verdict === "accepted-with-unsupported"
-            ? verdict.accepted
-            : assert.fail(`${location} is ${verdict.verdict}, not accepted-with-unsupported`);
+        const accepted = acceptedItem(verdict).pipe(
+          Option.filter(() => verdict.verdict === "accepted-with-unsupported"),
+          Option.getOrElse(() =>
+            assert.fail(`${location} is ${verdict.verdict}, not accepted-with-unsupported`),
+          ),
+        );
         const fifteen = yield* Effect.fromResult(score(accepted, { RESPONSE: floatAnswer(15) }));
         const twenty = yield* Effect.fromResult(score(accepted, { RESPONSE: floatAnswer(20) }));
 

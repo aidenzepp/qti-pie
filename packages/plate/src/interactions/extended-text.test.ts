@@ -31,7 +31,7 @@ import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
 import { tables } from "#plate/validate/tables.ts";
-import { check } from "#plate/validate/verdict.ts";
+import { acceptedItem, check } from "#plate/validate/verdict.ts";
 
 /**
  * The item instance every payload here is built for.
@@ -1513,10 +1513,12 @@ describe("an Extended Text the renderer does not support", () => {
           ),
           tables,
         );
-        const accepted =
-          verdict.verdict === "accepted-with-unsupported"
-            ? verdict.accepted
-            : assert.fail(`The item is ${verdict.verdict}, not accepted-with-unsupported.`);
+        const accepted = acceptedItem(verdict).pipe(
+          Option.filter(() => verdict.verdict === "accepted-with-unsupported"),
+          Option.getOrElse(() =>
+            assert.fail(`The item is ${verdict.verdict}, not accepted-with-unsupported.`),
+          ),
+        );
         const lenient = yield* configure({});
         const strict = yield* configure({ validateResponses: true });
 

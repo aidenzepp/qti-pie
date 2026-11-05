@@ -6,6 +6,7 @@ import type { Value } from "#plate/model/values.ts";
 import { restore } from "#plate/restore.ts";
 import { score } from "#plate/score.ts";
 import { open } from "#plate/validate/open.ts";
+import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
  * BG007, a true-or-false Choice bound to the single identifier response `RESPONSE`, by its path
@@ -29,11 +30,11 @@ const chosen: Value = {
  */
 const scoredRecord = Effect.fnUntraced(function* scoredRecord() {
   const verdict = yield* open(bg007, yield* readCorpusFile(bg007));
-  if (verdict.verdict !== "accepted" && verdict.verdict !== "accepted-with-unsupported") {
-    return assert.fail(`${bg007} is ${verdict.verdict}, not accepted`);
-  }
+  const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`${bg007} is ${verdict.verdict}, not accepted`),
+  );
 
-  return yield* Effect.fromResult(score(verdict.accepted, { RESPONSE: chosen }));
+  return yield* Effect.fromResult(score(accepted, { RESPONSE: chosen }));
 });
 
 /**
