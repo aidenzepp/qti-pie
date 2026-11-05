@@ -904,6 +904,103 @@ const declaresNcNameId = (local: string): boolean =>
       attribute.type.name === "NCName",
   ) ?? false;
 
+/**
+ * The namespace of the hand-built tables {@link xTables} give another schema.
+ */
+const xNamespace = "urn:x";
+
+/**
+ * Name an element or a type in {@link xNamespace}.
+ *
+ * @param local Its local name.
+ * @returns Its name.
+ */
+const xName = (local: string): ChildName => ({ local, namespace: xNamespace });
+
+/**
+ * Name an element of {@link xNamespace} as its path step does.
+ *
+ * @param local The element's local name.
+ * @returns Its step.
+ */
+const xStep = (local: string): string => `{${xNamespace}}${local}`;
+
+/**
+ * What a `box` and its type `BoxType` admit: a required `name`, the child `part`, and the elements
+ * of every namespace but {@link xNamespace} laxly.
+ */
+const boxContent = {
+  anyElement: otherLax,
+  attributes: [required("name", ncName)],
+  children: [xName("part")],
+  text: false,
+};
+
+/**
+ * Hand-built tables for {@link xNamespace}: a global `box` declared with `BoxType`; a `part`,
+ * declared only locally, with an optional `size` and text; a global `tag` with a lax attribute
+ * wildcard and a declared `max-choices`; and `WideBoxType`, which extends `BoxType` with a `width`.
+ */
+const xTables: Tables = {
+  elements: {
+    box: element({ ...boxContent, global: true, types: [xName("BoxType")] }),
+    part: element({ attributes: [optional("size", nonNegative)], text: true }),
+    tag: element({
+      anyAttribute: anyLax,
+      attributes: [optional("max-choices", nonNegative)],
+      global: true,
+    }),
+  },
+  types: {
+    BoxType: { ...boxContent, base: xsdType("anyType"), derivation: "restriction" },
+    WideBoxType: {
+      ...boxContent,
+      attributes: [required("name", ncName), optional("width", nonNegative)],
+      base: xName("BoxType"),
+      derivation: "extension",
+    },
+  },
+};
+
+/**
+ * The tables of other namespaces the walk is given: {@link xTables} for {@link xNamespace}.
+ */
+const others: ReadonlyMap<string, Tables> = new Map([[xNamespace, xTables]]);
+
+/**
+ * Check a document against QTI's tables and {@link others}, and keep each refusal's rule and
+ * location.
+ *
+ * @param source The document.
+ * @param against QTI's tables.
+ * @returns The refusals' rules and locations, in the order they were found.
+ */
+const foundWith = (
+  source: SourceDocument,
+  against: Tables = tables,
+): readonly (readonly [RefusalRule, Location])[] =>
+  checkStructure(source, against, others).map(
+    (refusal) => [refusal.rule, refusal.location] as const,
+  );
+
+/**
+ * Construct a document whose root is a `box` of {@link xNamespace} named `b`, with `x` bound to
+ * that namespace and {@link declarations} bound too.
+ *
+ * @param attributes The root's other attributes.
+ * @returns The document.
+ */
+const xBox = (...attributes: readonly SourceAttribute[]): SourceDocument =>
+  doc(
+    location,
+    el(
+      "box",
+      [attr("x", xNamespace, xmlnsNamespace), ...declarations, attr("name", "b"), ...attributes],
+      [],
+      xNamespace,
+    ),
+  );
+
 describe("checkStructure", () => {
   describe("the six rules", () => {
     it("[I-0] refuses an element its parent's table does not admit as unknown-element", () => {
@@ -2477,6 +2574,129 @@ describe("checkStructure", () => {
 
       assert.notInclude(walk, "readDouble");
       assert.notInclude(walk, "Number(");
+    });
+  });
+
+  describe("other namespaces' tables", () => {
+    it("checks an element of another namespace its parent's table names by that namespace's table, and passes over it without them", () => {
+      const named: Tables = {
+        elements: {
+          ...tables.elements,
+          "qti-item-body": element({ children: [xName("box"), ...qti("p")] }),
+        },
+        types: {},
+      };
+      const source = body(
+        el(
+          "box",
+          [attr("name", "b")],
+          [
+            el("part", [attr("size", "x")], [text("1")], xNamespace),
+            el("stray", [], [], xNamespace),
+          ],
+          xNamespace,
+        ),
+      );
+      const box = `qti-assessment-item/qti-item-body/${xStep("box")}`;
+
+      assert.deepStrictEqual(foundWith(source, named), [
+        ["attribute-type", at(`${box}/${xStep("part")}/@size`)],
+        ["unknown-element", at(`${box}/${xStep("stray")}`)],
+      ]);
+      assert.deepStrictEqual(found(source, named), []);
+    });
+
+    it("checks a root in another namespace by its own table, and leaves it to the verdict without them", () => {
+      const nameless = doc(
+        location,
+        el("box", [], [el("part", [], [text("1")], xNamespace)], xNamespace),
+      );
+      const crate = doc(location, el("crate", [], [], xNamespace));
+
+      assert.deepStrictEqual(foundWith(nameless), [["missing-attribute", at(xStep("box"))]]);
+      assert.deepStrictEqual(foundWith(crate), [["unknown-element", at(xStep("crate"))]]);
+      assert.deepStrictEqual(found(nameless), []);
+      assert.deepStrictEqual(found(crate), []);
+    });
+
+    it("reads ##other in another namespace's table as any namespace but that one, QTI's included", () => {
+      const source = doc(
+        location,
+        el(
+          "box",
+          [attr("name", "b")],
+          [
+            badDiv,
+            el("loose", [], [], ""),
+            el("stray", [], [], xNamespace),
+            el("widget", [], [badDiv], otherNamespace),
+          ],
+          xNamespace,
+        ),
+      );
+      const box = xStep("box");
+
+      assert.deepStrictEqual(foundWith(source, generatedTables), [
+        ["attribute-type", at(`${box}/div/@id`)],
+        ["unknown-element", at(`${box}/{}loose`)],
+        ["unknown-element", at(`${box}/${xStep("stray")}`)],
+        ["attribute-type", at(`${box}/{${otherNamespace}}widget/div/@id`)],
+      ]);
+    });
+
+    it("passes over a global element of another namespace nested in lax wildcard content, as reading 6 passes over QTI's roots", () => {
+      const nested = customized(el("box", [], [badDiv], xNamespace));
+      const local = customized(el("part", [], [badDiv], xNamespace));
+
+      assert.deepStrictEqual(foundWith(nested, generatedTables), []);
+      assert.deepStrictEqual(found(nested, generatedTables), [
+        ["attribute-type", at(`${custom}/${xStep("box")}/div/@id`)],
+      ]);
+      assert.deepStrictEqual(foundWith(local, generatedTables), [
+        ["attribute-type", at(`${custom}/${xStep("part")}/div/@id`)],
+      ]);
+      assert.isFalse(
+        governingTables(nested, generatedTables, others).has(
+          elementAt(nested, `${custom}/${xStep("box")}`),
+        ),
+      );
+    });
+
+    it("judges xsi:type and xsi:nil on another namespace's element, and lets a type its tables derive govern it", () => {
+      const wide = xBox(attr("type", "x:WideBoxType", xsiNamespace), attr("width", "3"));
+      const plain = xBox(attr("width", "3"));
+      const root = xStep("box");
+
+      assert.deepStrictEqual(foundWith(wide), []);
+      assert.deepStrictEqual(foundWith(plain), [["unknown-attribute", at(`${root}/@width`)]]);
+      assert.deepStrictEqual(foundWith(xBox(attr("type", "xs:string", xsiNamespace))), [
+        ["attribute-type", at(typePath(root))],
+      ]);
+      assert.deepStrictEqual(foundWith(xBox(attr("nil", "true", xsiNamespace))), [
+        ["unknown-attribute", at(`${root}/@{${xsiNamespace}}nil`)],
+      ]);
+      assert.strictEqual(
+        governingTables(wide, tables, others).get(wide.root),
+        xTables.types["WideBoxType"],
+      );
+      assert.strictEqual(
+        governingTables(plain, tables, others).get(plain.root),
+        xTables.elements["box"],
+      );
+    });
+
+    it("applies none of QTI's readings to another namespace's elements", () => {
+      const source = doc(
+        location,
+        el(
+          "tag",
+          [attr("data-Foo", "1"), attr("max-choices", "9223372036854775808")],
+          [],
+          xNamespace,
+        ),
+      );
+
+      assert.deepStrictEqual(foundWith(source), []);
     });
   });
 });
