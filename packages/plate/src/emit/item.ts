@@ -83,29 +83,45 @@ export const emitItem = (
   );
 
 /**
- * What the author passes to the Status part (spec §4.1): the instance, the after-submit state its
- * heading names, and what the region shows under the heading.
+ * The data the results box shows after a submit (spec §4.1): the instance, the after-submit state
+ * its heading names, and what the region shows under the heading.
  *
- * The region shows the score when `score` is set; else one Message per entry of `messages`, when
- * there are any; else nothing under the heading, which names the state on its own.
- * `autofocus` is the author's focus choice: the region carries `autofocus` exactly when it is true.
+ * Plate keeps the results box as a part: `renderStatus` emits the Status region from this input,
+ * and the author places it and feeds it what `score` or `checkResponses` gave. The part has no
+ * submit semantics, owns no state and moves no focus. The region shows the score when `score` is
+ * set; else one Message per entry of `messages`, when there are any; else nothing under the
+ * heading, which names the state on its own.
+ *
+ * To build your own results box, read the same input and do what {@link emitStatus} does: a region
+ * with `role="status"`, named by its heading through `aria-labelledby`, with `tabindex="-1"`, and
+ * with `autofocus` when the author moves focus there after a submit. Each Message carries the id
+ * the Controls' `aria-describedby` already names when `render` was given the same `messages`:
+ * `<instance>-<response>-message-<n>`, where `n` counts the earlier messages for the same response
+ * from 0 ({@link identifyMessages}).
  */
 export interface StatusInput {
+  /**
+   * The author's focus choice: the region carries `autofocus` exactly when it is true.
+   */
   readonly autofocus?: boolean;
   /**
-   * The after-submit state, as `messages.ts` keys it.
+   * The after-submit state, as `messages.ts` keys it; the heading shows its text in the
+   * configuration's locale.
    */
   readonly heading: "notAccepted" | "responseRecorded" | "scored";
   /**
-   * The item instance key, which scopes the region's ids and its Messages' ids.
+   * The item instance key `render` used, which scopes the region's ids and its Messages' ids.
    */
   readonly instance: string;
   /**
-   * The messages of a refused post, in the order validation gave them.
+   * The messages of a refused post, in the order validation gave them: what `checkResponses`
+   * returns, or the `messages` of the `ResponsesRefused` that `score` fails with.
    */
   readonly messages?: readonly ValidationMessage[];
   /**
-   * The score, already written as the candidate reads it.
+   * The score, already written as the candidate reads it. plate does not write it: the author does,
+   * for example from the `SCORE` outcome of the record `score` returns. The region shows it in the
+   * locale's score text, such as `Score: 1`.
    */
   readonly score?: string;
 }
