@@ -16,6 +16,7 @@ import type {
 import * as asi from "#pantry/schema/kinds/asi.ts";
 import * as xi from "#pantry/schema/kinds/xi.ts";
 import { ncName, xsDouble, xsInteger } from "#pantry/schema/patterns.ts";
+import { attributeWildcard, wildcardHost } from "#pantry/schema/seed/wildcard.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
@@ -282,6 +283,26 @@ const asiNamespace = asi.registry["qti-response-processing"].namespace;
 const xIncludeNamespace = xi.registry["xi:include"].namespace;
 
 /**
+ * The kinds this parser classifies that carry a wildcard, read from the seed rows rather than
+ * listed: the ones whose attribute wildcard and whose element wildcard admit foreign content.
+ */
+const wildcardKinds = ["qti-custom-operator", "xi:fallback", "xi:include"] as const;
+
+const attributeWildcardHosts: ReadonlySet<string> = new Set(
+  attributeWildcard.map((row) => row.host).filter((host) => wildcardKinds.some((k) => k === host)),
+);
+
+const elementWildcardHosts: ReadonlySet<string> = new Set(
+  wildcardHost.map((row) => row.host).filter((host) => wildcardKinds.some((k) => k === host)),
+);
+
+/**
+ * The XSD names the processing vocabulary refuses on every element: the `xsi` attributes whose
+ * judgment is the tree walk's, `xsi:type`, `xsi:nil` and `xsi:noNamespaceSchemaLocation`.
+ */
+const refusedXsiNames: ReadonlySet<string> = new Set(["nil", "noNamespaceSchemaLocation", "type"]);
+
+/**
  * The element children of `element`, in document order, each with its index among them.
  */
 const elementChildren = (
@@ -336,11 +357,15 @@ const applyWhiteSpace = (lexical: string, whiteSpace: WhiteSpace): string => {
  * Read an element's attributes, each in both forms and under its `whiteSpace` class.
  *
  * Namespace declarations and `xsi:schemaLocation` are admitted on every element and are not
- * attributes of the kind; any other attribute outside `allowed` is refused, naming the first.
+ * attributes of the kind; any other attribute outside `allowed` is refused, naming the first. On
+ * a host of an attribute wildcard, an attribute with a namespace (but `xsi:type`, `xsi:nil` and
+ * `xsi:noNamespaceSchemaLocation`) is wildcard content: it is passed over, not read, and the tree
+ * walk judges it.
  */
 const readAttributes = (
   element: Element,
   allowed: readonly string[],
+  kind: string,
 ): Effect.Effect<ReadonlyMap<string, AttributeValue>, UnmodeledVocabulary> =>
   Effect.gen(function* readAttributeValues() {
     const read = new Map<string, AttributeValue>();
@@ -350,6 +375,14 @@ const readAttributes = (
       }
 
       if (attribute.namespace === xsiNamespace && attribute.local === "schemaLocation") {
+        continue;
+      }
+
+      if (
+        attribute.namespace !== "" &&
+        attributeWildcardHosts.has(kind) &&
+        (attribute.namespace !== xsiNamespace || !refusedXsiNames.has(attribute.local))
+      ) {
         continue;
       }
 
@@ -407,11 +440,15 @@ const parseExpression = (
   position: Position,
 ): Effect.Effect<ExpressionNode, UnmodeledVocabulary> =>
   Effect.gen(function* parseExpressionElement() {
-    const attributes = yield* readAttributes(element, entry.attributes);
+    const attributes = yield* readAttributes(element, entry.attributes, entry.kind);
     const operands: ExpressionNode[] = [];
     for (const { child, index } of elementChildren(element)) {
       const classified = classify(child);
       if (Option.isNone(classified) || classified.value._tag !== "expression") {
+        if (elementWildcardHosts.has(entry.kind)) {
+          continue;
+        }
+
         return yield* refuseElement(child, element);
       }
 
@@ -439,10 +476,14 @@ const parseInclude = (
   position: Position,
 ): Effect.Effect<IncludeNode, UnmodeledVocabulary> =>
   Effect.gen(function* parseIncludeElement() {
-    const attributes = yield* readAttributes(element, includeAttributes);
+    const attributes = yield* readAttributes(element, includeAttributes, "xi:include");
     let fallback: Option.Option<Element> = Option.none();
     for (const { child } of elementChildren(element)) {
       const classified = classify(child);
+      if (elementWildcardHosts.has("xi:include") && child.namespace !== xIncludeNamespace) {
+        continue;
+      }
+
       if (
         Option.isNone(classified) ||
         classified.value._tag !== "fallback" ||
@@ -451,7 +492,7 @@ const parseInclude = (
         return yield* refuseElement(child, element);
       }
 
-      yield* readAttributes(child, []);
+      yield* readAttributes(child, [], "xi:fallback");
       fallback = Option.some(child);
     }
 
@@ -509,7 +550,7 @@ const parseHost = (
   position: Position,
 ): Effect.Effect<RuleNode, UnmodeledVocabulary> =>
   Effect.gen(function* parseRuleElement() {
-    const attributes = yield* readAttributes(element, entry.attributes);
+    const attributes = yield* readAttributes(element, entry.attributes, entry.kind);
     const branches: RuleNode[] = [];
     const statements: (IncludeNode | RuleNode)[] = [];
     let expression: Option.Option<ExpressionNode> = Option.none();
