@@ -6,9 +6,9 @@
  * whose bindings do not hold together, the walk that pairs every element with its parent, and the
  * whitespace helpers every typed attribute passes through.
  *
- * {@link treeRows} also walks the root and writes every tree's node, edge, generic-arm, namespace
- * and attribute-reference rows; the kind-specific arms and typed attribute columns belong to the
- * modules that read the {@link NodeIndex} it returns.
+ * {@link treeRows} also walks the root and writes every tree's node, edge, generic-arm, namespace,
+ * attribute-reference and foreign rows; the kind-specific arms and typed attribute columns belong
+ * to the modules that read the {@link NodeIndex} it returns.
  */
 import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
@@ -17,6 +17,7 @@ import type { Rule } from "#pantry/import/refusal.ts";
 import type { BaseType } from "#pantry/schema/declaration.ts";
 import { YesNo } from "#pantry/schema/content/rosters.ts";
 import type { YesNoHandle } from "#pantry/schema/content/rosters.ts";
+import { ForeignAttribute, ForeignElement } from "#pantry/schema/foreign.ts";
 import type { RegistryRow } from "#pantry/schema/kinds/generic.ts";
 import {
   Ancestry,
@@ -59,6 +60,7 @@ import {
 import * as patterns from "#pantry/schema/patterns.ts";
 import { FLAGS, handleOf, KindEnters } from "#pantry/schema/seed/ancestry.ts";
 import type { Flag } from "#pantry/schema/seed/ancestry.ts";
+import { foreignRows } from "#pantry/import/foreign.ts";
 import { classifyAttribute, classifyElement, scopeOf } from "#pantry/import/wildcard.ts";
 import type { Scope } from "#pantry/import/wildcard.ts";
 import { exportCharset } from "@qti-pie/crust/charset.ts";
@@ -727,10 +729,12 @@ const miscRow = (item: Misc): { kind: "comment" | "pi"; text: string } =>
  * @param input - What the caller decides about the tree.
  * @param rows - The rows so far.
  * @returns The rows with this tree's added, and the node index holding every element; the node,
- *   edge and generic-arm rows, `TreeRoot`, the namespace declarations, the `xsi:schemaLocation` and
- *   the attribute entity references are among them; `UnmodeledVocabulary` for the first element or
- *   attribute no registry names, `ImportRefused` for a `standalone` that is neither `yes` nor `no`.
- *   The XML-namespace names a kind's registry lists are modeled; their rows are `attributeRows`'s.
+ *   edge and generic-arm rows, `TreeRoot`, the namespace declarations, the `xsi:schemaLocation`,
+ *   the attribute entity references and the `ForeignElement` and `ForeignAttribute` rows
+ *   ({@link foreignRows}, written once here for every tree) are among them; `UnmodeledVocabulary`
+ *   for the first element or attribute no registry names, `ImportRefused` for a `standalone` that
+ *   is neither `yes` nor `no`. The XML-namespace names a kind's registry lists are modeled; their
+ *   rows are `attributeRows`'s.
  */
 export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
   doc: XmlDocument,
@@ -835,7 +839,14 @@ export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
   );
   const withNamespaces = Rows.add(withRoot, NamespaceDeclaration, walked.namespaces);
   const withSchemaLocations = Rows.add(withNamespaces, SchemaLocation, walked.schemaLocations);
-  const built = Rows.add(withSchemaLocations, AttributeEntityReference, walked.attributeReferences);
+  const withReferences = Rows.add(
+    withSchemaLocations,
+    AttributeEntityReference,
+    walked.attributeReferences,
+  );
+  const foreign = foreignRows(doc.root, nodes, input);
+  const withForeignElements = Rows.add(withReferences, ForeignElement, foreign.elements);
+  const built = Rows.add(withForeignElements, ForeignAttribute, foreign.attributes);
 
   return { nodes, rows: built };
 });
