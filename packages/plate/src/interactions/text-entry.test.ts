@@ -8,9 +8,15 @@ import { authoredId, partForSlot, resolveOverrides, rowFor } from "#plate/emit/p
 import type { PartOf } from "#plate/emit/parts.ts";
 import { Malformed, decode, entryName } from "#plate/form/encoding.ts";
 import type { Entry } from "#plate/form/encoding.ts";
+import { renderExtendedText } from "#plate/interactions/extended-text.ts";
 import { renderTextEntry, validateTextEntry } from "#plate/interactions/text-entry.ts";
 import { message } from "#plate/messages.ts";
-import type { BodyNode, Item, TextEntryInteraction } from "#plate/model/item.ts";
+import type {
+  BodyNode,
+  ExtendedTextInteraction,
+  Item,
+  TextEntryInteraction,
+} from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import { payload, redactItem } from "#plate/payload.ts";
 import type { EmitState, Payload, View } from "#plate/payload.ts";
@@ -147,6 +153,57 @@ const itemOf = (
 });
 
 /**
+ * An Extended Text bound to an ordered list `RIVERS` of at most three strings, so it renders three
+ * Controls in a group its Prompt names.
+ */
+const rivers: ExtendedTextInteraction = {
+  ...city,
+  cardinality: "ordered",
+  class: "",
+  expectedLength: Option.none(),
+  expectedLines: Option.none(),
+  format: "plain",
+  kind: "extended-text",
+  maxStrings: Option.some(3n),
+  minStrings: 0n,
+  path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
+  placeholder: Option.none(),
+  prompt: Option.some([words("Name three rivers.")]),
+  response: "RIVERS",
+};
+
+/**
+ * Construct an item whose body is an Extended Text, then the paragraph of {@link itemOf} holding
+ * {@link city}.
+ *
+ * @param group The Extended Text.
+ * @returns The item.
+ */
+const besideGroup = (group: ExtendedTextInteraction): Item => {
+  const alone = itemOf([city]);
+
+  return {
+    ...alone,
+    body: [group, ...alone.body],
+    responses: new Map([
+      ...alone.responses,
+      [
+        group.response,
+        {
+          areaMapping: Option.none(),
+          baseType: group.baseType,
+          cardinality: group.cardinality,
+          correct: Option.none(),
+          defaultValue: Option.none(),
+          identifier: group.response,
+          mapping: Option.none(),
+        },
+      ],
+    ]),
+  };
+};
+
+/**
  * The view of a first render: no messages, nothing posted, no values and no author's names.
  */
 const answering: View = {
@@ -187,9 +244,9 @@ const emitState: Effect.Effect<EmitState> = Effect.fromResult(resolveOverrides()
 );
 
 /**
- * Render a payload's body, each Text Entry through {@link renderTextEntry}, and place it in a
- * minimal item: a Root carrying `lang`, and a plain `form`, as an author composes it, holding the
- * body and a submit button after it.
+ * Render a payload's body, each Text Entry through {@link renderTextEntry} and each Extended Text
+ * through {@link renderExtendedText}, and place it in a minimal item: a Root carrying `lang`, and a
+ * plain `form`, as an author composes it, holding the body and a submit button after it.
  *
  * @param built The payload.
  * @returns The item's root.
@@ -199,11 +256,22 @@ const page = (built: Payload): Effect.Effect<Element> =>
     const state = yield* emitState;
     const body = yield* Effect.orDie(
       Effect.fromResult(
-        emitBody(built, state, (interaction) =>
-          interaction.kind === "text-entry"
-            ? renderTextEntry(interaction, built, state)
-            : assert.fail(`This test renders Text Entries only, not ${interaction.kind}.`),
-        ),
+        emitBody(built, state, (interaction) => {
+          switch (interaction.kind) {
+            case "text-entry": {
+              return renderTextEntry(interaction, built, state);
+            }
+            case "extended-text": {
+              return renderExtendedText(interaction, built, state);
+            }
+            case "choice": {
+              return assert.fail("This test renders no Choice.");
+            }
+            default: {
+              return interaction satisfies never;
+            }
+          }
+        }),
       ),
     );
 
@@ -529,6 +597,31 @@ describe("renderTextEntry", () => {
       assert.isUndefined(control.attrs["aria-invalid"]);
       assert.isTrue(elementsIn(tree).every((element) => element.attrs["autofocus"] === undefined));
     }),
+  );
+
+  it.effect(
+    '[Q-20] [Q-5] names the Control "Answer" beside an Extended Text group its Prompt or its author names, whose Controls the group numbers',
+    () =>
+      Effect.gen(function* besideNamedGroup() {
+        const authored: ExtendedTextInteraction = {
+          ...rivers,
+          ariaLabel: Option.some("Rivers"),
+          prompt: Option.none(),
+        };
+
+        for (const group of [rivers, authored]) {
+          const tree = yield* page(payload(redactItem(besideGroup(group)), answering));
+          const textareas = elementsIn(tree).filter((element) => element.tag === "textarea");
+
+          assert.strictEqual(nameOf(onlyPart(tree, "control"), tree), message("en", "answer"));
+          assert.deepStrictEqual(
+            textareas.map((control) => nameOf(control, tree)),
+            ["1", "2", "3"].map((n) => message("en", "answerOf", { count: "3", n })),
+          );
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+          assert.isTrue(roundTrips(tree));
+        }
+      }),
   );
 
   it.effect("[Q-20] passes checkTree inside a p, and the tree round-trips", () =>

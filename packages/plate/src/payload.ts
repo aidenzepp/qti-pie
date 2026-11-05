@@ -201,17 +201,29 @@ export interface ChoicePayload extends ValidationPayload {
 }
 
 /**
+ * Where a text control's first Control stands among the Controls the renderer names (Q10): `n`,
+ * from 1, among the `count` of the item.
+ */
+export interface UnnamedPosition {
+  readonly count: number;
+  readonly n: number;
+}
+
+/**
  * How a text control is named (§4.8, Q10).
  *
  * `ariaLabel` and `ariaLabelledby` are the author's, the ids unscoped. `unnamed` is set exactly
- * when the control has neither of them nor a Prompt, an `ariaLabelledby` that names no id
- * counting as none: its position `n`, from 1, among the `count` such controls of the item, in
- * document order.
+ * when the renderer names the control's Controls: it has neither of them nor a Prompt, an
+ * `ariaLabelledby` that names no id counting as none, and it renders at least one Control. Every
+ * Control the renderer names counts once, in document order across the item, which is the order
+ * the Controls are emitted in: a Text Entry's one Control and each Control of an Extended Text. `n`
+ * is the position of the control's first Control, an Extended Text's others following at `n + 1`
+ * onwards, and `count` is how many there are.
  */
 export interface TextName {
   readonly ariaLabel: Option.Option<string>;
   readonly ariaLabelledby: Option.Option<string>;
-  readonly unnamed: Option.Option<{ readonly count: number; readonly n: number }>;
+  readonly unnamed: Option.Option<UnnamedPosition>;
 }
 
 /**
@@ -404,9 +416,10 @@ interface Build {
    */
   readonly seed: string;
   /**
-   * The text controls with no authored name and no Prompt, in document order.
+   * Each text control the renderer names, with where its first Control stands among the Controls
+   * the renderer names ({@link TextName}).
    */
-  readonly unnamed: readonly Interaction[];
+  readonly unnamed: ReadonlyMap<Interaction, UnnamedPosition>;
   readonly values: View["values"];
 }
 
@@ -488,7 +501,7 @@ export const identifyMessages = (
  * @param response The response identifier.
  * @returns Its values, none when it is NULL or the view gives none.
  */
-const shown = (build: Build, response: string): readonly Single[] =>
+const shown = (build: Pick<Build, "values">, response: string): readonly Single[] =>
   build.values.get(response)?.values ?? [];
 
 /**
@@ -615,35 +628,28 @@ const choicePayload = (interaction: ChoiceInteraction, build: Build): ChoicePayl
 const textControlPayload = (
   interaction: ExtendedTextInteraction | TextEntryInteraction,
   build: Build,
-): TextControlPayload => {
-  const position = build.unnamed.indexOf(interaction);
-
-  return {
-    ...validationOf(interaction, build),
-    base: interaction.base,
-    baseType: interaction.baseType,
-    class: interaction.class,
-    formName: formNameOf(build, interaction.response),
-    name: {
-      ariaLabel: interaction.ariaLabel,
-      ariaLabelledby: interaction.ariaLabelledby,
-      unnamed:
-        position === -1
-          ? Option.none()
-          : Option.some({ count: build.unnamed.length, n: position + 1 }),
-    },
-    placeholder: interaction.placeholder,
-    response: interaction.response,
-    restore: Option.match(build.posted, {
-      onNone: () =>
-        Option.match(Arr.head(shown(build, interaction.response)), {
-          onNone: () => "",
-          onSome: (single) => writeIn(single, interaction.base),
-        }),
-      onSome: (posted) => posted.get(interaction.response)?.[0] ?? "",
-    }),
-  };
-};
+): TextControlPayload => ({
+  ...validationOf(interaction, build),
+  base: interaction.base,
+  baseType: interaction.baseType,
+  class: interaction.class,
+  formName: formNameOf(build, interaction.response),
+  name: {
+    ariaLabel: interaction.ariaLabel,
+    ariaLabelledby: interaction.ariaLabelledby,
+    unnamed: Option.fromNullishOr(build.unnamed.get(interaction)),
+  },
+  placeholder: interaction.placeholder,
+  response: interaction.response,
+  restore: Option.match(build.posted, {
+    onNone: () =>
+      Option.match(Arr.head(shown(build, interaction.response)), {
+        onNone: () => "",
+        onSome: (single) => writeIn(single, interaction.base),
+      }),
+    onSome: (posted) => posted.get(interaction.response)?.[0] ?? "",
+  }),
+});
 
 /**
  * The number of Controls a container renders when `max-strings` does not fix it (Q9).
@@ -717,6 +723,24 @@ const controlsOf = (interaction: ExtendedTextInteraction, members: number): Cont
 };
 
 /**
+ * Give the texts an Extended Text's Controls restore: the strings posted when the view has
+ * messages, else the view's values, each written in the control's `base`.
+ *
+ * @param interaction The Extended Text.
+ * @param build The build, which gives the posted strings and the values.
+ * @returns The texts, in order; none for NULL or an empty post.
+ */
+const entriesOf = (
+  interaction: ExtendedTextInteraction,
+  build: Pick<Build, "posted" | "values">,
+): readonly string[] =>
+  Option.match(build.posted, {
+    onNone: () =>
+      shown(build, interaction.response).map((single) => writeIn(single, interaction.base)),
+    onSome: (posted) => posted.get(interaction.response) ?? [],
+  });
+
+/**
  * Copy an Extended Text into its payload.
  *
  * @param interaction The Extended Text.
@@ -728,11 +752,7 @@ const extendedTextPayload = (
   interaction: ExtendedTextInteraction,
   build: Build,
 ): ExtendedTextPayload => {
-  const entries = Option.match(build.posted, {
-    onNone: () =>
-      shown(build, interaction.response).map((single) => writeIn(single, interaction.base)),
-    onSome: (posted) => posted.get(interaction.response) ?? [],
-  });
+  const entries = entriesOf(interaction, build);
   const { n, overCap } = controlsOf(interaction, entries.length);
 
   return {
@@ -746,6 +766,35 @@ const extendedTextPayload = (
     prompt: interaction.prompt.pipe(Option.map((prompt) => copyNodes(prompt, build))),
     restores: Array.from({ length: n }, (_, index) => entries[index] ?? ""),
   };
+};
+
+/**
+ * Number the Controls the renderer names (Q10), in document order across the item: a Text Entry's
+ * one Control and each Control of an Extended Text, for each text control with no authored name
+ * and no Prompt. An Extended Text that renders no Control, over the cap, takes no position.
+ *
+ * @param interactions The item's interactions, in document order.
+ * @param build The build's posted strings and values, which give an Extended Text its Controls.
+ * @returns Each text control the renderer names, with where its first Control stands.
+ */
+const unnamedPositions = (
+  interactions: readonly Interaction[],
+  build: Pick<Build, "posted" | "values">,
+): ReadonlyMap<Interaction, UnnamedPosition> => {
+  const firsts: (readonly [Interaction, number])[] = [];
+  let next = 1;
+  for (const interaction of interactions.filter(isUnnamed)) {
+    const controls =
+      interaction.kind === "extended-text"
+        ? controlsOf(interaction, entriesOf(interaction, build).length).n
+        : 1;
+    if (controls > 0) {
+      firsts.push([interaction, next]);
+      next += controls;
+    }
+  }
+
+  return new Map(firsts.map(([interaction, n]) => [interaction, { count: next - 1, n }]));
 };
 
 /**
@@ -830,17 +879,20 @@ export const redactItem = (item: Item): Redacted =>
 export const payload = (redacted: Redacted, view: View): Payload => {
   const messages = identifyMessages(view.instance, view.messages);
   const interactions = interactionsIn(redacted.body);
+  const restoring = {
+    posted: messages.length > 0 ? view.posted : Option.none(),
+    values: view.values,
+  };
   const build: Build = {
+    ...restoring,
     autofocus: Arr.findFirst(interactions, (interaction) =>
       messages.some((entry) => entry.response === interaction.response),
     ),
     instance: view.instance,
     messages,
     names: view.names,
-    posted: messages.length > 0 ? view.posted : Option.none(),
     seed: view.seed === undefined ? "" : String(view.seed),
-    unnamed: interactions.filter(isUnnamed),
-    values: view.values,
+    unnamed: unnamedPositions(interactions, restoring),
   };
 
   return {

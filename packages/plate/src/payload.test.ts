@@ -502,6 +502,24 @@ const listOf = (maxStrings: Option.Option<bigint>, minStrings: bigint): Redacted
   });
 
 /**
+ * Construct {@link item} with its Extended Text bound to an ordered list and stripped of its
+ * Prompt, so the renderer names its Controls beside the two unnamed Text Entries.
+ *
+ * @param maxStrings `max-strings`, none when absent.
+ * @param minStrings `min-strings`.
+ * @returns The item, redacted.
+ */
+const unpromptedOf = (maxStrings: Option.Option<bigint>, minStrings: bigint): Redacted =>
+  redactItem({
+    ...item,
+    body: item.body.map((node) =>
+      node.kind === "extended-text"
+        ? { ...node, cardinality: "ordered", maxStrings, minStrings, prompt: Option.none() }
+        : node,
+    ),
+  });
+
+/**
  * Name the stages of a list, `stage 1` onwards.
  *
  * @param count How many.
@@ -857,6 +875,40 @@ describe("payload", () => {
 
     assert.deepStrictEqual(textFor(built, "FIRST").name.unnamed, Option.some({ count: 3, n: 1 }));
     assert.deepStrictEqual(textFor(built, "NAMED").name.unnamed, Option.some({ count: 3, n: 3 }));
+  });
+
+  it("[Q-20] [Q-5] numbers each Control of an unnamed Extended Text group in one sequence with the unnamed Text Entries", () => {
+    const built = payload(unpromptedOf(Option.some(3n), 0n), answering);
+
+    assert.strictEqual(extendedTextFor(built, "ESSAY").n, 3);
+    assert.deepStrictEqual(textFor(built, "FIRST").name.unnamed, Option.some({ count: 5, n: 1 }));
+    assert.deepStrictEqual(textFor(built, "SECOND").name.unnamed, Option.some({ count: 5, n: 2 }));
+    assert.deepStrictEqual(textFor(built, "NAMED").name.unnamed, Option.none());
+    assert.deepStrictEqual(textFor(built, "ESSAY").name.unnamed, Option.some({ count: 5, n: 3 }));
+  });
+
+  it("[Q-20] [Q-5] counts the Controls a restored value adds to an unnamed Extended Text, and none of one over the cap", () => {
+    const restoring = payload(unpromptedOf(Option.none(), 0n), {
+      ...answering,
+      values: new Map([["ESSAY", orderedOf(stages(12))]]),
+    });
+
+    assert.strictEqual(extendedTextFor(restoring, "ESSAY").n, 12);
+    assert.deepStrictEqual(
+      textFor(restoring, "SECOND").name.unnamed,
+      Option.some({ count: 14, n: 2 }),
+    );
+    assert.deepStrictEqual(
+      textFor(restoring, "ESSAY").name.unnamed,
+      Option.some({ count: 14, n: 3 }),
+    );
+
+    const over = payload(unpromptedOf(Option.none(), 101n), answering);
+
+    assert.strictEqual(extendedTextFor(over, "ESSAY").n, 0);
+    assert.deepStrictEqual(textFor(over, "FIRST").name.unnamed, Option.some({ count: 2, n: 1 }));
+    assert.deepStrictEqual(textFor(over, "SECOND").name.unnamed, Option.some({ count: 2, n: 2 }));
+    assert.deepStrictEqual(textFor(over, "ESSAY").name.unnamed, Option.none());
   });
 
   it("[Q-5] gives a single Extended Text one Control, restoring the text its control shows", () => {

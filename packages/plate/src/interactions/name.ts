@@ -5,12 +5,14 @@
  * A Choice, a Text Entry and an Extended Text each read the author's `aria-label` and
  * `aria-labelledby` here, so every interaction scopes the author's ids the same way.
  *
- * The renderer names a control only when the author gave it no name, by Q10's rule: a text control
- * with no Prompt and no `aria-label` or `aria-labelledby` is "Answer", or "Answer n of count"
- * ({@link textControlName}); a Choice whose content gives no text is "Choice n of count", `n` its
- * position among the Choices as emitted and `count` their number ({@link choiceControlName}). A
- * Choice's content gives text when its text nodes, an `img`'s `alt`, an element's `aria-label` or a
- * notice hold anything but whitespace, `aria-hidden="true"` content left out ({@link givesText}).
+ * The renderer names a control only when the author gave it no name, by Q10's rule: each Control
+ * of a text control with no Prompt and no `aria-label` or `aria-labelledby` is "Answer", or
+ * "Answer n of count", `n` its position among every Control the renderer names in the item and
+ * `count` their number ({@link textControlName}); a Choice whose content gives no text is "Choice n
+ * of count", `n` its position among the Choices as emitted and `count` their number
+ * ({@link choiceControlName}). A Choice's content gives text when its text nodes, an `img`'s
+ * `alt`, an element's `aria-label` or a notice hold anything but whitespace, `aria-hidden="true"`
+ * content left out ({@link givesText}).
  *
  * @module
  */
@@ -130,18 +132,25 @@ export const authorsName = (
 });
 
 /**
- * Name a text control that no Prompt names (§4.8, Q10).
+ * Name a Control of a text control that no Prompt names (§4.8, Q10).
  *
  * The author's `aria-label` and `aria-labelledby` win ({@link authorsName}). A control with
  * neither, an `aria-labelledby` that names no id counting as none, is named by the renderer:
- * "Answer", or "Answer n of count" when the item holds more than one such control.
+ * "Answer", or "Answer n of count" when the item holds more than one Control the renderer names,
+ * `n` the Control's position among them ({@link TextName}).
  *
  * @param name How the control is named, from the payload.
  * @param instance The item instance key, which scopes the author's ids.
  * @param locale The locale of the renderer's own text.
+ * @param index The Control's index, from 0, among its text control's Controls: 0 for a Text Entry.
  * @returns The naming attributes.
  */
-export const textControlName = (name: TextName, instance: string, locale: Locale): Attributes => {
+export const textControlName = (
+  name: TextName,
+  instance: string,
+  locale: Locale,
+  index = 0,
+): Attributes => {
   if (Option.isSome(name.ariaLabel) || Option.isSome(authorsLabelledby(name, instance))) {
     return authorsName(name, instance);
   }
@@ -152,7 +161,7 @@ export const textControlName = (name: TextName, instance: string, locale: Locale
       onSome: (position) =>
         message(locale, "answerOf", {
           count: numeral(locale, position.count),
-          n: numeral(locale, position.n),
+          n: numeral(locale, position.n + index),
         }),
     }),
   };
