@@ -340,3 +340,153 @@ against it. A reading that is not an information-model-over-XSD case says which 
     and section 3.14.4 (String Valid, clause 2.1) holds the declared-entity-name constraint on `ENTITY`, defined
     just after it as "declared entity name". This is not a case of documents in conflict: the XML Schema Recommendation
     decides what is valid, and what it requires is beyond what this package can read. (Decision 227, 2026-11-05.)
+51. **The six response-processing templates the information model publishes are built in, named by file name under
+    either published prefix.** The information model lists six standard templates (section 2.5.1, Response Processing
+    Templates): `match_correct`, `map_response` and `map_response_point`, and the Common Cartridge templates
+    `CC2_match`, `CC2_match_basic` and `CC2_map_response`, each with its full URL under
+    `https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/`. It says an engine that does not run general response
+    processing can implement these templates instead. The implementation guide's examples address them under
+    `https://www.imsglobal.org/question/qti_v3p0/rptemplates/`. A `template` URI names a built-in template when, with
+    its whitespace collapsed (the XSD types it `xs:anyURI`, whose whitespace facet is `collapse`: XML Schema Part 2,
+    section 4.3.6), it is one of those two prefixes followed by the template's name, with or without `.xml`. plate
+    holds each template's rules, taken from its published file, and never fetches the URI. Any other `template` URI
+    names no built-in template: the item is accepted and its response processing is marked unsupported, so its outcomes
+    keep their defaults. This binds plate, which runs response processing. pantry runs none: it records which published
+    template a `template` URI names, and it already names the same six under the same two prefixes, so the two agree.
+    This is not a case of documents in conflict: the information model names the templates, and the guide's examples
+    use a second spelling of their address. (The renderer's phase-3 default, delivery spec section 5.1, applied in
+    plate; 2026-11-04.)
+52. **An area mapping holds a point on a shape's boundary, maps a point by the first area listed that holds it, maps
+    each area once, and adds `default-value` once for each distinct point in no area.** The information model says
+    `qti-map-response-point` tests the points "against each area in turn" and that, when mapping containers, "each area
+    can be mapped once only" (section 2.11.1.6, Map Response Point Expression), and that areas listed first take
+    priority where areas overlap and a point falls in the intersection (section 5.5.4, the `qti-area-map-entry`
+    attribute of AreaMapping). An area mapping's attributes mean what a mapping's do (section 5.5), and a mapping's
+    `default-value` is used "when no explicit mapping for a source value is given" (section 5.88.3). The information
+    model says nothing of a point on an area's edge, nor of how often a point in no area adds `default-value`. This
+    reading fills both. A point on the boundary of a `rect`, `circle`, `ellipse` or `poly` is inside it, and `default`
+    holds every point, as "the entire area of the associated image" (section 8.29, ShapeEnum). Areas are tried in
+    document order, the first that holds a point maps it, and each area is mapped at most once. Each distinct point
+    that falls in no area adds `default-value` once, as `qti-map-response` counts a repeated value once (section
+    2.11.1.5). The sum is then held to `lower-bound` and `upper-bound`, and a NULL response maps to 0 before the bounds
+    apply. This binds plate, which scores; pantry scores nothing. This is not a case of documents in conflict: the
+    information model is silent on these points, and no other document speaks to them. (The renderer's phase-3
+    default, delivery spec section 5.1, applied in plate; 2026-11-04.)
+53. **`max-strings="0"` places no limit on the number of strings.** For an extended-text interaction bound to a
+    container, the information model says a delivery engine "must use the value of this attribute to control the
+    maximum number of separate strings accepted from the candidate" (section 5.48.6), and gives `0` no meaning. The
+    XSD types `max-strings` as `xs:nonNegativeInteger`, so `0` is valid. Read literally, `0` accepts no string and
+    leaves an interaction no candidate can answer. The information model's other counts read `0` as no restriction:
+    "If max-choices is 0 then there is no restriction" (section 5.30.2), and `max-associations` (section 5.8.2) and
+    `match-max` (section 5.7.8) say the same. This reading reads `max-strings` the same way, so a response is never
+    refused for the number of its strings when `max-strings` is `0`. This binds plate, which delivers; pantry stores
+    `max-strings` as written and delivers nothing. This is not a case of documents in conflict: the information model
+    is silent on `0` here, and this follows its own reading of `0` for every other count. (The renderer's phase-3
+    default, delivery spec section 5.1, applied in plate; 2026-11-04.)
+54. **A `pattern-mask` on an `integer` or `float` binding is matched against the value, written in one form, not the
+    text as typed.** The information model says the mask "specifies a regular expression that the candidate's response
+    must match in order to be considered valid" (sections 5.48.4 and 5.162.5), and does not say whether, for a numeric
+    response, that is the text the candidate typed or the number it names. This reading matches the number: the posted
+    text is read as the binding's base type, written back in one form, and that form is matched. An integer is written
+    as its decimal digits, with `-` for a negative and no `+` or leading zero, which is XML Schema's canonical integer
+    form (Part 2, section 3.3.13.2). A float is written as the shortest decimal that reads back to the same double, as
+    JavaScript writes a number (`1.5`, `100`, `1e+21`), with `INF`, `-INF` and `NaN` by name. That is not XML
+    Schema's canonical double form (section 3.2.5.2), which writes `1.0E2`. A `string` binding is matched as the
+    candidate typed it, its line breaks made LF, and each member of a container is matched on its own. The form is
+    weaker than an author's mask in one direction and stricter in the other. On a `float` binding `1e2` is matched as
+    `100` and `+5` as `5`, so a mask that forbids `e` and `+` admits both. On an `integer` binding `007` is matched as
+    `7`, so `[0-9]{3}` refuses what the candidate typed. This binds plate, which checks responses; pantry stores
+    `pattern-mask` as written and checks no response. This is not a case of documents in conflict: the information
+    model leaves the matched text open. (The renderer's phase-3 default, delivery spec section 5.1, applied in plate;
+    2026-11-04.)
+55. **In a `pattern-mask`, a category escape follows the Unicode version the engine ships, and `\i` and `\c` follow
+    XML 1.0 Fifth Edition's name characters.** The information model takes `pattern-mask`'s language from Appendix F of
+    XML Schema Part 2 (sections 5.48.4 and 5.162.5). In XML Schema Part 2 (W3C Recommendation, 28 October 2004),
+    Appendix F defines `\p{X}` and `\P{X}` by the Unicode Database's General Category property (section F.1.1,
+    production [25]), and `\d` and `\w` through them; its normative reference is the Unicode Character Database 3.1.
+    It says a minimally conforming processor must support the version current when it became a Recommendation, and
+    "implementors are encouraged to support the character properties defined in any future version". It defines `\i`
+    as the characters matched by `Letter | '_' | ':'` and `\c` as those matched by `NameChar`, the productions of XML
+    1.0 Second Edition, its normative reference. XML 1.0 Fifth Edition replaced those with `NameStartChar` and
+    `NameChar` (productions [4] and [4a]) and left the old character classes orphaned (Appendix B). This reading takes
+    the later version of each: a category escape follows the Unicode version of the JavaScript engine plate runs on,
+    `\i` is Fifth Edition's `NameStartChar` and `\c` its `NameChar`. A block escape (`\p{IsBasicLatin}`) keeps Part 2's
+    own block table, and `\s` keeps its four characters. This binds plate, which checks responses against
+    `pattern-mask`; pantry stores the pattern as written and checks none. This is not a case of documents in conflict:
+    XML Schema encourages the later Unicode version, and XML 1.0's current edition defines the name characters. (The
+    renderer's phase-3 default, delivery spec section 5.1, applied in plate; 2026-11-04.)
+56. **An `xs:double` literal beyond the largest finite double names the largest finite double of its sign; only `INF`
+    and `-INF` name the infinities.** XML Schema Part 2 says a literal representing a decimal number d "maps to the
+    normalized value in the value space of double that is closest to d" (section 3.2.5), and gives the infinities the
+    lexical representations `INF` and `-INF` (section 3.2.5.1). The value closest to `1e400` is the largest finite
+    double, about 1.8 × 10^308, so `1e400` names it, and `-1e400` names its negative. JavaScript's `Number` reads
+    `1e400` as an infinity, so a package that reads some doubles with it and others by XML Schema's mapping reads one
+    literal two ways; this reading picks XML Schema's. It holds wherever a package reads an `xs:double` literal: an
+    attribute the XSD types `xs:double`, such as `normal-maximum`, and a value of base type float, which both packages
+    read in `xs:double`'s lexical space. It agrees with reading 45, under which an integer beyond the largest finite
+    float becomes the largest finite float of its sign. This binds pantry and plate alike, so the two never read the
+    same file differently; plate is the only implementation so far. This is not a case of documents in conflict: XML
+    Schema decides how its own literal maps to a value. (The renderer's phase-3 default, delivery spec section 5.1,
+    applied in plate; 2026-11-04.)
+57. **In lax wildcard content, every prose rule judges the QTI elements the structural walk checks there, as it judges
+    them anywhere else.** Under a `lax` element wildcard, such as the content of `qti-custom-interaction`, XML Schema
+    assesses an element against its declaration when one is found, and only then (XML Schema Part 1, section 3.10.1,
+    the Wildcard Schema Component's `{process contents}`, and section 3.10.4, Item Valid (Wildcard), clause 1). A QTI
+    element with a global declaration there is checked as QTI, except a nested QTI root, which stays foreign content
+    (reading 6). A QTI element declared only locally, such as `qti-choice-interaction`, has no declaration lax
+    processing can find, so it is passed over and its children are assessed in turn, as reading 30 says of
+    `qti-printed-variable` in `annotation-xml`. The information model does not say whether the rules it states in
+    prose, beyond the XSD, reach the elements lax content checks, in particular whether the item-wide rules reach into
+    a custom interaction's content. This reading says they do: the prose rules judge exactly the elements the walk
+    checks, no more and no fewer. An interaction checked there must bind a declared response of a fitting type, its
+    identifiers count toward the item's unique identifiers, and every other rule applies as it does anywhere in the
+    item. Content the walk passes over is not judged. Rendering does not change: a custom interaction's content is
+    still not rendered. This binds pantry and plate alike, so the two never judge the same file differently; plate is
+    the only implementation so far. This is not a case of documents in conflict: XML Schema decides which elements
+    lax content checks, and the information model's rules for a QTI element do not depend on where it sits. (The
+    renderer's phase-3 default, delivery spec section 5.1, applied in plate; 2026-11-04.)
+58. **In a `pattern-mask`, a `{` or `}` that does not open or close a repetition count is not a regular expression;
+    the author writes `\{` or `\}`.** The information model takes `pattern-mask`'s language from Appendix F of XML
+    Schema Part 2 (sections 5.48.4 and 5.162.5). Appendix F defines a metacharacter as one of `.`, `\`, `?`, `*`, `+`,
+    `{`, `}`, `(`, `)`, `[` or `]`, and a normal character as any XML character that is not a metacharacter. Its
+    production [10] `Char`, `[^.\?*+()|#x5B#x5D]`, leaves `{` and `}` out of the characters it excludes, so the
+    definition refuses a lone `{` and the production admits it. This follows the definition, as XML Schema 1.1 does:
+    its Part 2 (W3C Recommendation, 5 April 2012) excludes `{` and `}` in production [73] `NormalChar` (Appendix G.3).
+    Production [24] `SingleCharEsc` lets `\{` and `\}` stand for the characters themselves. A pattern this refuses
+    does not make the document invalid, because the XSD types `pattern-mask` as `xs:string`: plate keeps the
+    interaction and shows its `pattern-mask` notice in place of checking responses against the pattern. This binds
+    pantry and plate alike, so the two never read the same pattern differently; plate is the only implementation so
+    far, because pantry stores `pattern-mask` as written and checks no pattern. This is a conflict inside one
+    document, XML Schema 1.0's Appendix F, and that document's next version settles it. (The renderer's phase-3
+    default, delivery spec section 5.1, applied in plate; 2026-11-05.)
+59. **An area's `coords` that do not fit its shape are read as the HTML Standard's image-map processing reads an
+    `area`'s.** The information model gives each shape's coordinates (section 7.9, Coords, and section 8.29,
+    ShapeEnum): `rect` is left-x, top-y, right-x, bottom-y; `circle` is center-x, center-y, radius; `poly` is x1, y1
+    to xN, yN, closed when its last pair differs from its first; `ellipse` is center-x, center-y, h-radius, v-radius,
+    and is deprecated "as it is not defined by XHTML"; and `default` takes none. It takes the lengths from XHTML 1.1.
+    The XSD requires `coords` on every area and admits three, four, or an even number of six or more non-negative
+    integers or percentages (`CoordsDType`), whatever the shape, and nothing says what an area means whose
+    coordinates do not fit it. This reading follows the HTML Standard's image-map processing model (section 4.8.14.2,
+    Processing model). An area with fewer coordinates than its shape needs (four for `rect`, three for `circle`, six
+    for `poly`, and four for `ellipse`) holds no point. Coordinates beyond those are ignored, a `default` area's among
+    them, and a `poly` with an odd count drops its last. A `rect`'s corners may come in either order. A `circle`
+    whose radius is 0 holds no point, and so does an `ellipse` with either radius 0. A `poly` is filled by the
+    even-odd rule, and a point on its edge is inside (reading 52). This binds plate, which scores; pantry scores
+    nothing. This is not a case of documents in conflict: QTI is silent, and HTML, where its shapes come from, decides.
+    (The renderer's phase-3 default, delivery spec section 5.1, applied in plate; 2026-11-05.)
+60. **Under a `lax` wildcard, an element no global QTI declaration checks, whose `xsi:type` names a built-in simple
+    type of XML Schema, has its text accepted without a check.** This extends reading 50, which accepts such an
+    element without a check when its `xsi:type` names a complex type. XML Schema assesses an element that has no
+    declaration but carries an `xsi:type` naming a type it can resolve against that type (XML Schema Part 1, section
+    3.3.4, Schema-Validity Assessment (Element), clause 1.2). Under a simple type the element must hold no attribute
+    but the four `xsi:` ones, no element child, and text valid for the type (section 3.3.4, Element Locally Valid
+    (Type), clause 3.1). plate does not check an element's text against a simple type, so it cannot tell whether the
+    text is valid, and by reading 50's rule the text is accepted unchecked, a known limit. The attribute and child
+    rules can be checked, so they stand. `xsi:type="xs:anyType"`, and an `xsi:type` that resolves to no type, do not
+    count: XML Schema then assesses the element laxly, against the ur-type definition (section 3.3.4, Schema-Validity
+    Assessment (Element), after clause 2), which is the lax walk itself, so its children are assessed laxly in turn.
+    This binds pantry and plate alike, so the two never read the same file differently. plate is the only
+    implementation so far, and it still keeps such an element unchecked with everything below it, attributes and
+    children included. This is not a case of documents in conflict: XML Schema decides what is valid, and only the
+    text is beyond what a package here can check. (The renderer's phase-3 default, delivery spec section 5.1, applied
+    in plate, narrowed to the text by XML Schema Part 1, section 3.3.4; 2026-11-05.)

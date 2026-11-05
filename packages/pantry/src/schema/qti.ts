@@ -9,7 +9,6 @@
  * and leave the containments into `Node` to it.
  */
 import { alternatives, contained, mirrors, on, schema, select } from "@bjornpagen/grizzle";
-import type { Alternatives, Capacity, Check, Containment, Key, Mirrors } from "@bjornpagen/grizzle";
 import * as ancestry from "#pantry/schema/ancestry.ts";
 import * as attributes from "#pantry/schema/attributes.ts";
 import * as choices from "#pantry/schema/choices.ts";
@@ -90,25 +89,6 @@ export const nodeArms = {
   ...lang.arms,
 };
 
-/**
- * A statement whose relations the type of `Qti` does not check: its shape kept, its relations
- * `unknown`. grizzle checks every relation such a statement names when the schema is built
- * (`StatementsWithin` skips it, `types/schema/schema.ts:84-86`).
- */
-type Unchecked =
-  | Alternatives<unknown, string, unknown, unknown>
-  | Capacity
-  | Check<string, unknown>
-  | Containment
-  | Key<unknown, readonly string[]>
-  | Mirrors;
-
-/**
- * `metadata.ts`'s statements, checked when the schema is built and not by `tsc`: the composed
- * schema's statements, every one checked by type, exceed TypeScript's instantiation depth (TS2589).
- */
-const metadataRules: readonly Unchecked[] = metadata.rules;
-
 export const Qti = schema(
   "Qti",
   {
@@ -158,7 +138,7 @@ export const Qti = schema(
     ...node.rules,
     ...pkg.rules,
     ...document.rules,
-    ...metadataRules,
+    ...metadata.rules,
     ...declaration.rules,
     ...value.rules,
     ...interaction.rules,

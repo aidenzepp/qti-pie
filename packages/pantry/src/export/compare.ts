@@ -10,7 +10,7 @@ import { rootOfType } from "#pantry/schema/seed/root-of-type.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import { xmllintC14n } from "#pantry/xml/oracle.ts";
-import type { OracleError } from "#pantry/xml/oracle.ts";
+import type { OracleError, OracleUnavailable } from "#pantry/xml/oracle.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
@@ -34,13 +34,14 @@ export type Report = readonly { path: string; outcome: Outcome }[];
 
 /**
  * What can stop a comparison: a directory that is not a package, a file that cannot be read, an
- * XML file that cannot be parsed, or the oracle refusing a file.
+ * XML file that cannot be parsed, the oracle refusing a file, or an oracle that does not start.
  */
 type CompareError =
   | PackageReadError
   | ZipRefusal
   | PlatformError.PlatformError
   | OracleError
+  | OracleUnavailable
   | WellFormednessError
   | ReaderRefusal;
 
