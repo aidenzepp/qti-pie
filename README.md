@@ -7,18 +7,17 @@
 A pnpm workspace for working with IMS QTI 3.0 assessments.
 
 It reads QTI XML, stores QTI 3.0 packages in PostgreSQL and exports them back, and renders QTI 3.0. It runs on one
-machine and has no deploy target. The code is pre-release and private to its own packages: nothing here is published
-to npm.
+machine and has no deploy target. The code is pre-release, and nothing here is published to npm.
 
-| Package                       | Does                                                                |
-| ----------------------------- | ------------------------------------------------------------------- |
-| [`crust`](packages/crust)     | Reads and writes XML, bytes to a tree and back.                     |
-| [`pantry`](packages/pantry)   | Imports QTI 3.0 packages into a strict PostgreSQL model, exports them. |
-| [`plate`](packages/plate)     | Renders QTI 3.0.                                                    |
+| Package                     | Does                                                                   |
+| --------------------------- | ---------------------------------------------------------------------- |
+| [`crust`](packages/crust)   | Reads and writes XML, bytes to a tree and back.                        |
+| [`pantry`](packages/pantry) | Imports QTI 3.0 packages into a strict PostgreSQL model, exports them. |
+| [`plate`](packages/plate)   | Renders QTI 3.0.                                                       |
 
 ## Install
 
-Requires Node 24 or later, pnpm and [Git LFS](https://git-lfs.com). Install Git LFS before cloning, or the migration
+Requires Node 26 or later, pnpm and [Git LFS](https://git-lfs.com). Install Git LFS before cloning, or the migration
 snapshots check out as pointer files.
 
 ```bash

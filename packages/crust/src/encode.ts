@@ -1,9 +1,42 @@
+/* oxlint-disable unicorn/prefer-code-point -- The writers need UTF-16 code units, not code points: `codePointAt` joins a surrogate pair into one value, which one unit-wise write cannot carry. */
 import { Effect } from "effect";
 import type { EncoderClass } from "#crust/charset.ts";
 import { classify } from "#crust/charset.ts";
 import { EncodeError } from "#crust/errors.ts";
 import type { XmlDocument } from "#crust/tree.ts";
 import { writeXml } from "#crust/write.ts";
+
+/**
+ * Write `text` as one byte per UTF-16 code unit.
+ *
+ * `writeXml` has already written every code point above the class's threshold as a character
+ * reference or failed, so each code unit fits one byte. It walks code units by index: a code point
+ * walk would drop the second half of a surrogate pair.
+ */
+const singleBytes = (text: string): Uint8Array => {
+  const bytes = new Uint8Array(text.length);
+  for (let index = 0; index < text.length; index += 1) {
+    bytes[index] = text.charCodeAt(index);
+  }
+
+  return bytes;
+};
+
+/**
+ * Write `text` as UTF-16 in the given byte order, led by its byte order mark.
+ *
+ * Each code unit is written as it is, so a surrogate pair becomes its two units in that order.
+ */
+const utf16Bytes = (text: string, littleEndian: boolean): Uint8Array => {
+  const bytes = new Uint8Array(2 + 2 * text.length);
+  const view = new DataView(bytes.buffer);
+  view.setUint16(0, 0xfe_ff, littleEndian);
+  for (let index = 0; index < text.length; index += 1) {
+    view.setUint16(2 + 2 * index, text.charCodeAt(index), littleEndian);
+  }
+
+  return bytes;
+};
 
 /**
  * The one writer of each encoder class, so a class added to `EncoderClass` is a type error here
@@ -13,17 +46,11 @@ const encoders: Record<
   EncoderClass,
   (doc: XmlDocument, label: string) => Effect.Effect<Uint8Array, EncodeError>
 > = {
-  ascii: (doc) =>
-    Effect.map(writeXml(doc, { threshold: 0x7f }), (text) => Buffer.from(text, "latin1")),
+  ascii: (doc) => Effect.map(writeXml(doc, { threshold: 0x7f }), singleBytes),
   "decode-only": () => Effect.fail(new EncodeError({ codePoint: 0, threshold: 0, where: "label" })),
-  latin1: (doc) =>
-    Effect.map(writeXml(doc, { threshold: 0xff }), (text) => Buffer.from(text, "latin1")),
+  latin1: (doc) => Effect.map(writeXml(doc, { threshold: 0xff }), singleBytes),
   utf16: (doc, label) =>
-    Effect.map(writeXml(doc), (text) =>
-      classify(label).canonical === "UTF-16BE"
-        ? Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(text, "utf16le").swap16()])
-        : Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, "utf16le")]),
-    ),
+    Effect.map(writeXml(doc), (text) => utf16Bytes(text, classify(label).canonical !== "UTF-16BE")),
   utf8: (doc) => Effect.map(writeXml(doc), (text) => new TextEncoder().encode(text)),
 };
 
@@ -33,10 +60,10 @@ const encoders: Record<
  * The label's encoder class sets the form. `utf8` writes the text through `TextEncoder`. `utf16`
  * writes the byte order the label names, whatever byte order the document was read in: `UTF-16BE`
  * gets `FE FF` and the text big-endian, and `UTF-16` and `UTF-16LE` get `FF FE` and the text
- * little-endian. `latin1` and `ascii` write each code point above the class's threshold as a
- * numeric character reference, where one is possible, and the text as single bytes. The declaration
- * is written as the document carries it, so a caller that exports under another label sets
- * `declaration.encoding` first.
+ * little-endian, each code unit through a `DataView`. `latin1` and `ascii` write each code point
+ * above the class's threshold as a numeric character reference, where one is possible, and the text
+ * as single bytes. The declaration is written as the document carries it, so a caller that exports
+ * under another label sets `declaration.encoding` first.
  *
  * @param doc - The tree to encode.
  * @param label - The label to encode in, as `exportCharset` decided it at import.
