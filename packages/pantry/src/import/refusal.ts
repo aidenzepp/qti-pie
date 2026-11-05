@@ -205,6 +205,8 @@ export const ImportRule = Schema.Literals([
   "wildcard-namespace",
   "wildcard-declared",
   "wildcard-attribute",
+  "xsi-type",
+  "xsi-nil",
 ]);
 
 /**
