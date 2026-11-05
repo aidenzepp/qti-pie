@@ -449,9 +449,9 @@ interface Build {
    */
   readonly posted: Option.Option<ReadonlyMap<string, readonly string[]>>;
   /**
-   * The view's seed written with `String`, the empty string when the view has none.
+   * The view's seed, none when the view has none.
    */
-  readonly seed: string;
+  readonly seed: Option.Option<number>;
   /**
    * Each text control the renderer names, with where its first Control stands among the Controls
    * the renderer names ({@link TextName}).
@@ -608,25 +608,62 @@ const copyNodes = (nodes: readonly BodyNode[], build: Build): readonly PayloadNo
 const keySeparator = "\u001F";
 
 /**
- * Give a Choice's choices in the order they are presented.
+ * Give the identifiers of a Choice's choices in the order a render presents them.
  *
  * A Choice with `shuffle` true is presented in {@link shuffleOrder}'s order under the key
- * `<seed>\u001F<instance>\u001F<response>`: its non-fixed choices are permuted among the non-fixed
- * positions, and each fixed choice keeps its document position. Any other Choice keeps document
- * order. The order is presentation only: scores, records and validation read identifiers, never
- * positions.
+ * `<seed>\u001F<instance>\u001F<response>`, where the seed is written with `String` and an absent
+ * seed is the empty string: its non-fixed choices are permuted among the non-fixed positions, and
+ * each fixed choice keeps its document position. Any other Choice keeps document order. The same
+ * Choice, seed and instance always give the same order, the one `render` presents, so a host can
+ * report it, such as a result's `choiceSequence`. The order is presentation only: scores, records
+ * and validation read identifiers, never positions.
+ *
+ * @example
+ *   // A shuffled Choice of choices A, B and C, none fixed, bound to RESPONSE:
+ *   choiceOrder(interaction, Option.some(7), "_r_1_"); // ["B", "A", "C"]
+ *   choiceOrder(interaction, Option.none(), "_r_1_"); // ["A", "C", "B"]
+ *
+ * @param interaction The Choice.
+ * @param seed The configuration's `seed`, none when it has none.
+ * @param instance The item instance key the Choice is rendered under.
+ * @returns The choice identifiers, in presented order.
+ */
+export const choiceOrder = (
+  interaction: ChoiceInteraction,
+  seed: Option.Option<number>,
+  instance: string,
+): readonly string[] =>
+  interaction.shuffle
+    ? shuffleOrder(
+        [
+          Option.match(seed, { onNone: () => "", onSome: String }),
+          instance,
+          interaction.response,
+        ].join(keySeparator),
+        interaction.choices.map((choice) => choice.fixed),
+      ).flatMap((index) => interaction.choices[index]?.identifier ?? [])
+    : interaction.choices.map((choice) => choice.identifier);
+
+/**
+ * Give a Choice's choices in the order they are presented, {@link choiceOrder}'s.
+ *
+ * A checked Choice's choice identifiers are unique (`duplicate-identifier`, info.txt:42411), so
+ * each identifier names exactly one choice.
  *
  * @param interaction The Choice.
  * @param build The build, which gives the seed and the instance.
  * @returns The choices, in presented order.
  */
-const presentedChoices = (interaction: ChoiceInteraction, build: Build): readonly SimpleChoice[] =>
-  interaction.shuffle
-    ? shuffleOrder(
-        [build.seed, build.instance, interaction.response].join(keySeparator),
-        interaction.choices.map((choice) => choice.fixed),
-      ).flatMap((index) => interaction.choices[index] ?? [])
-    : interaction.choices;
+const presentedChoices = (
+  interaction: ChoiceInteraction,
+  build: Build,
+): readonly SimpleChoice[] => {
+  const byIdentifier = new Map(interaction.choices.map((choice) => [choice.identifier, choice]));
+
+  return choiceOrder(interaction, build.seed, build.instance).flatMap(
+    (identifier) => byIdentifier.get(identifier) ?? [],
+  );
+};
 
 /**
  * Copy a Choice into its payload.
@@ -947,7 +984,7 @@ export const payload = (redacted: Redacted, view: View): Payload => {
     instance: view.instance,
     messages,
     names: view.names,
-    seed: view.seed === undefined ? "" : String(view.seed),
+    seed: Option.fromUndefinedOr(view.seed),
     unnamed: unnamedPositions(interactions, restoring),
   };
 

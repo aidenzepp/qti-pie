@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option, Predicate } from "effect";
+import { Effect, Option, Predicate } from "effect";
+import { configure } from "#plate/configuration.ts";
+import type { Element, Node } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import type {
@@ -10,7 +12,7 @@ import type {
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
-import { identifyMessages, payload, redactItem } from "#plate/payload.ts";
+import { choiceOrder, identifyMessages, payload, redactItem } from "#plate/payload.ts";
 import type {
   ChoicePayload,
   ExtendedTextPayload,
@@ -21,6 +23,9 @@ import type {
   TextEntryPayload,
   View,
 } from "#plate/payload.ts";
+import { redact, render } from "#plate/render.ts";
+import { parseHtml } from "#plate/test/round-trip.ts";
+import { acceptForTest } from "#plate/validate/verdict.ts";
 
 /**
  * The strings only the hidden parts of {@link item} hold: its correct responses, a mapping key, a
@@ -1237,5 +1242,116 @@ describe("payload", () => {
       "",
     ]);
     assert.deepStrictEqual(extendedTextFor(posted, "LIST").restores, ["rain", "", "rivers"]);
+  });
+});
+
+/**
+ * Collect every element of some nodes, each before its descendants.
+ *
+ * @param nodes The nodes.
+ * @returns Each element, in document order.
+ */
+const elementsOf = (nodes: readonly Node[]): readonly Element[] =>
+  nodes.flatMap((node) => (node.kind === "element" ? [node, ...elementsOf(node.children)] : []));
+
+/**
+ * The shuffled {@link planets} as the one interaction of an accepted item, redacted for `render`.
+ */
+const planetsRedacted = redact(
+  acceptForTest({
+    ...item,
+    body: [planets],
+    processing: Option.none(),
+    responses: new Map([
+      [
+        "PLANET",
+        {
+          areaMapping: Option.none(),
+          baseType: "identifier",
+          cardinality: "single",
+          correct: Option.none(),
+          defaultValue: Option.none(),
+          identifier: "PLANET",
+          mapping: Option.none(),
+        },
+      ],
+    ]),
+  }),
+);
+
+/**
+ * Render {@link planetsRedacted} and give the choices its HTML presents: the values of the Controls
+ * posting under `PLANET`'s entry name, in the order the HTML emits them.
+ *
+ * @param seed The configuration's seed, none for a configuration without one.
+ * @param token The render's instance.
+ * @returns Each Control's value, in emitted order.
+ */
+const renderedOrder = Effect.fn(function* renderedOrder(
+  seed: Option.Option<number>,
+  token: string,
+) {
+  const configuration = yield* configure(
+    Option.match(seed, { onNone: () => ({}), onSome: (value) => ({ seed: value }) }),
+  );
+  const rendered = yield* Effect.fromResult(
+    render(planetsRedacted, configuration, { instance: token }),
+  );
+
+  return elementsOf(parseHtml(rendered.html))
+    .filter((element) => element.attrs["name"] === entryName(token, "PLANET"))
+    .map((control) => {
+      const { value } = control.attrs;
+
+      return value === undefined || value === true ? assert.fail("A Control has no value.") : value;
+    });
+});
+
+/**
+ * The seeds the order is checked under: none, and two others.
+ */
+const seeds: readonly Option.Option<number>[] = [Option.none(), Option.some(7), Option.some(11)];
+
+/**
+ * The instances the order is checked under.
+ */
+const instances: readonly string[] = [instance, "q1"];
+
+describe("choiceOrder", () => {
+  it.effect(
+    "gives the order render presents for a shuffled Choice, under two seeds, no seed and two instances",
+    () =>
+      Effect.gen(function* presentedOrders() {
+        const orders: string[] = [];
+        for (const seed of seeds) {
+          for (const token of instances) {
+            const presented = yield* renderedOrder(seed, token);
+
+            assert.lengthOf(presented, planets.choices.length);
+            assert.deepStrictEqual(choiceOrder(planets, seed, token), presented);
+            orders.push(presented.join(" "));
+          }
+        }
+
+        assert.isAbove(new Set(orders).size, 1);
+      }),
+  );
+
+  it("keeps a fixed choice at its document index in a shuffled Choice", () => {
+    for (const seed of seeds) {
+      for (const token of instances) {
+        assert.strictEqual(choiceOrder(planets, seed, token)[2], "P2");
+      }
+    }
+  });
+
+  it("keeps document order for a Choice that is not shuffled, whatever the seed and instance", () => {
+    const ordered = { ...planets, shuffle: false };
+
+    for (const seed of seeds) {
+      for (const token of instances) {
+        assert.deepStrictEqual(choiceOrder(ordered, seed, token), ["P0", "P1", "P2", "P3", "P4"]);
+      }
+    }
   });
 });
