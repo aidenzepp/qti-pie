@@ -555,6 +555,7 @@ export const Author = role(
     ManifestMetadata: Qti.relations.ManifestMetadata,
     ManifestSchema: Qti.relations.ManifestSchema,
     ManifestSchemaVersion: Qti.relations.ManifestSchemaVersion,
+    ManifestXmlId: Qti.relations.ManifestXmlId,
     MapEntry: Qti.relations.MapEntry,
     MapEntryBoolean: Qti.relations.MapEntryBoolean,
     MapEntryDirectedPair: Qti.relations.MapEntryDirectedPair,

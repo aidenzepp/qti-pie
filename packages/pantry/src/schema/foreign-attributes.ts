@@ -4,8 +4,9 @@
  *
  * `NodeXmlSpace` is a family relation like `NodeXmlBase`: an optional value keyed by its node,
  * contained into `Node` and into the admission rows. `DocumentXmlId` is declared in `document.ts`
- * beside `HtmlId`, because the schemas that compose `document.relations` and `declaration.rules`
- * must find the holder the `DocumentId` alternatives name; the statements that read
+ * beside `HtmlId`, and `ManifestXmlId` in `package.ts` beside the other `ManifestId` arms, because
+ * the schemas that compose those modules must find the holder their alternatives name; the
+ * statements that read
  * `AttributeAdmission` are here, as `HtmlId`'s are in `attributes.ts`. The importer writes both
  * relations; the seed writes neither.
  */
@@ -14,6 +15,7 @@ import { XmlSpace } from "#pantry/schema/content/rosters.ts";
 import { AttributeAdmission } from "#pantry/schema/attributes.ts";
 import { DocumentXmlId } from "#pantry/schema/document.ts";
 import { AttributeName, Node, NodeKind } from "#pantry/schema/node.ts";
+import { ManifestXmlId } from "#pantry/schema/package.ts";
 
 /**
  * The `xml:space` of a node: `default` or `preserve`, with the kind of the node that holds it.
@@ -52,4 +54,6 @@ export const rules = [
   check("NodeXmlSpaceAttribute", NodeXmlSpace, (row) => row.eq(row.attribute, "xml:space")),
   contained(on(DocumentXmlId, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
   check("DocumentXmlIdAttribute", DocumentXmlId, (row) => row.eq(row.attribute, "xml:id")),
+  contained(on(ManifestXmlId, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
+  check("ManifestXmlIdAttribute", ManifestXmlId, (row) => row.eq(row.attribute, "xml:id")),
 ] as const;

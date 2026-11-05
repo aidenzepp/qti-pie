@@ -1194,7 +1194,7 @@ export const shared: readonly Own[] = [
       column(R.PrintedVariableId, "id", "node"),
     ),
   ],
-  ["xml:id", first(column(R.DocumentXmlId, "id", "node"))],
+  ["xml:id", first(column(R.DocumentXmlId, "id", "node"), column(R.ManifestXmlId, "id", "node"))],
   ...aria,
   ...IdrefAttribute.handles.map((name): Own => [name, tokens(name)]),
 ];
