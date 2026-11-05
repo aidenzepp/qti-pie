@@ -563,11 +563,13 @@ export type CpVersion = (typeof cpVersions)[number];
 
 /**
  * The resource types each profile version admits on a manifest's `resource`, as its XSD's `type`
- * enumeration spells them (`imsqtiv3p0_imscpv1p2_v1p0.xsd:397-411`,
- * `imsqtiv3p0p1_imscpv1p2_v1p0.xsd:350-365`).
+ * enumeration spells them, in its order (`imsqtiv3p0_imscpv1p2_v1p0.xsd:397-415`,
+ * `imsqtiv3p0p1_imscpv1p2_v1p0.xsd:350-369`).
  *
- * Both versions list the same eight QTI types (`imsqti_*`). They differ in LTI: 3.0.0 lists
- * `imsbasiclti_xmlv1p3`, and 3.0.1 lists `imslti_xmlv1p1` and `imsltia_xmlv1p0` in its place.
+ * Both versions list the same eight QTI types (`imsqti_*`) and the same packaging types, `pls`,
+ * `css2`, `css3` and `extension` among them. They differ in LTI: 3.0.0 lists
+ * `imsbasiclti_xmlv1p3`, and 3.0.1 lists `imslti_xmlv1p1` and `imsltia_xmlv1p0` in its place. The
+ * test holds each list equal to the enumeration in the committed package tables.
  */
 export const resourceTypes = {
   "3.0.0": [
@@ -586,6 +588,10 @@ export const resourceTypes = {
     "resourcemetadata/xml",
     "resourceextmetadata/xml",
     "qtiusagedata/xml",
+    "pls",
+    "css2",
+    "css3",
+    "extension",
   ],
   "3.0.1": [
     "imsqti_test_xmlv3p0",
@@ -604,6 +610,10 @@ export const resourceTypes = {
     "resourcemetadata/xml",
     "resourceextmetadata/xml",
     "qtiusagedata/xml",
+    "pls",
+    "css2",
+    "css3",
+    "extension",
   ],
 } as const satisfies Readonly<Record<CpVersion, readonly string[]>>;
 

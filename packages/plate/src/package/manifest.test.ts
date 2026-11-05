@@ -70,6 +70,15 @@ const itemXml = (identifier: string, inner = ""): string =>
   `<resource identifier="${identifier}" type="imsqti_item_xmlv3p0" href="items/${identifier}.xml"><file href="items/${identifier}.xml"/>${inner}</resource>`;
 
 /**
+ * Write a 3.0.0 manifest whose root holds the given content after its metadata.
+ *
+ * @param content What the root holds after `metadata`.
+ * @returns The manifest's text.
+ */
+const rootXml = (content: string): string =>
+  `<manifest xmlns="${manifestNamespace}" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.0</schemaversion></metadata>${content}</manifest>`;
+
+/**
  * Take the manifest of a reading; the test fails when it is refused.
  *
  * @param reading The reading.
@@ -375,6 +384,92 @@ describe("package/manifest.ts", () => {
             ["unknown-attribute", "dependency-unresolved"],
           );
           assert.strictEqual(refusals[0]?.detail["schemaversion"], "3.0.0");
+        }),
+    );
+  });
+
+  describe("the child counts", () => {
+    it.effect("a manifest with no resources is refused child-count at its root", () =>
+      Effect.gen(function* noResources() {
+        const refusals = refusalsOf(yield* readXml(rootXml("<organizations/>")));
+
+        assert.deepStrictEqual(
+          refusals.map((refusal) => refusal.rule),
+          ["child-count"],
+        );
+        assert.strictEqual(pathOf(refusals[0]), `${cp}manifest`);
+        assert.deepStrictEqual(refusals[0]?.detail, {
+          child: `${cp}resources`,
+          element: `${cp}manifest`,
+          required: "exactly one",
+          schemaversion: "3.0.0",
+          source: "QTI 3.0 content packaging profile 3.0.0",
+        });
+      }),
+    );
+
+    it.effect("a manifest with no organizations is refused child-count at its root", () =>
+      Effect.gen(function* noOrganizations() {
+        const refusals = refusalsOf(
+          yield* readXml(rootXml(`<resources>${itemXml("a")}</resources>`)),
+        );
+
+        assert.deepStrictEqual(
+          refusals.map((refusal) => [refusal.rule, refusal.detail["child"]]),
+          [["child-count", `${cp}organizations`]],
+        );
+        assert.strictEqual(pathOf(refusals[0]), `${cp}manifest`);
+      }),
+    );
+
+    it.effect(
+      "a manifest with two resources lists is refused child-count, its greatest count one",
+      () =>
+        Effect.gen(function* twoResources() {
+          const refusals = refusalsOf(
+            yield* readXml(rootXml("<organizations/><resources/><resources/>")),
+          );
+
+          assert.deepStrictEqual(
+            refusals.map((refusal) => [
+              refusal.rule,
+              refusal.detail["child"],
+              refusal.detail["required"],
+            ]),
+            [["child-count", `${cp}resources`, "exactly one"]],
+          );
+        }),
+    );
+
+    it.effect("a resource with no file entry is refused child-count, needing at least one", () =>
+      Effect.gen(function* noFile() {
+        const refusals = refusalsOf(
+          yield* readXml(manifestXml("3.0.0", '<resource identifier="a" type="webcontent"/>')),
+        );
+
+        assert.deepStrictEqual(
+          refusals.map((refusal) => [
+            refusal.rule,
+            refusal.detail["child"],
+            refusal.detail["required"],
+          ]),
+          [["child-count", `${cp}file`, "at least one"]],
+        );
+        assert.strictEqual(pathOf(refusals[0]), `${cp}manifest/${cp}resources/${cp}resource`);
+      }),
+    );
+
+    it.effect(
+      "a manifest holding each required child once, its resources each with a file, passes the counts",
+      () =>
+        Effect.gen(function* counted() {
+          const manifest = manifestOf(
+            yield* readXml(
+              rootXml(`<organizations/><resources>${itemXml("a")}${itemXml("b")}</resources>`),
+            ),
+          );
+
+          assert.lengthOf(manifest.resources, 2);
         }),
     );
   });

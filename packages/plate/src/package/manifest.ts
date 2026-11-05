@@ -7,11 +7,14 @@
  * or `3.0.1`, and any other value, or none, is `package-profile`, alone. The manifest is then
  * walked against that profile's tables (`packageTables`), every namespace its imports reach
  * included, so LOM, QTI metadata, curriculum standards and the CP extension are checked inside
- * `metadata` as XML Schema assesses them (Q6), and the manifest's own rules follow: a resource's
- * `href` references one of its `file` entries, a `dependency` names a resource, and every `href`
- * stays inside the package's root. The walk's refusals and the rules' are reported together, in
- * that order. What needs the package's files or documents, which files exist and what each
- * document's root is, belongs to the package reader.
+ * `metadata` as XML Schema assesses them (Q6). Each element of the manifest's namespace the walk
+ * checks then holds each child its profile names as many times as the profile's occurrences admit,
+ * which the walk leaves alone: the root's `organizations` and `resources` once each, a resource's
+ * `file` at least once. The manifest's own rules follow: a resource's `href` references one of its
+ * `file` entries, a `dependency` names a resource, and every `href` stays inside the package's
+ * root. The walk's refusals, the counts' and the rules' are reported together, in that order. What
+ * needs the package's files or documents, which files exist and what each document's root is,
+ * belongs to the package reader.
  *
  * The readings the manifest binds: `qtiMetadata` is admitted as a `cp:metadata` child or inside
  * `lom` (reading 32), a `controlfile` resource and a packaged XSD listed as a file are admitted
@@ -29,11 +32,11 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
-import { packageTables } from "#plate/package/tables.ts";
+import { packageOccurrences, packageTables } from "#plate/package/tables.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
-import { checkStructure } from "#plate/validate/structure.ts";
-import type { Tables } from "#plate/validate/xsd.ts";
+import { checkStructure, governingTables } from "#plate/validate/structure.ts";
+import type { ChildOccurrence, ContentTable, Occurrences, Tables } from "#plate/validate/xsd.ts";
 import { cpVersions } from "#plate/vocabulary.ts";
 import type { CpVersion } from "#plate/vocabulary.ts";
 
@@ -328,6 +331,127 @@ const refuse = (
 const elementName = (element: SourceElement): string => `{${element.namespace}}${element.local}`;
 
 /**
+ * Write a child count as a refusal's `required` phrase spells it: `one` for 1, the digits
+ * otherwise.
+ *
+ * @param count The count.
+ * @returns Its word.
+ */
+const countWord = (count: bigint): string => (count === 1n ? "one" : count.toString());
+
+/**
+ * Write the counts a child is admitted with as a refusal's `required` phrase.
+ *
+ * @param least The least count.
+ * @param greatest The greatest count, none when it is unbounded.
+ * @returns `no`, `exactly one`, `at least one`, `at most one` or `from 2 to 3`, as the counts give.
+ */
+const requiredText = (least: bigint, greatest: Option.Option<bigint>): string => {
+  if (Option.isNone(greatest)) {
+    return `at least ${countWord(least)}`;
+  }
+
+  const most = greatest.value;
+  if (most === 0n) {
+    return "no";
+  }
+
+  if (least === most) {
+    return `exactly ${countWord(most)}`;
+  }
+
+  return least === 0n
+    ? `at most ${countWord(most)}`
+    : `from ${countWord(least)} to ${countWord(most)}`;
+};
+
+/**
+ * Find the occurrences of the table that governs an element of the manifest's namespace: its
+ * name's, or, when a valid `xsi:type` names one of the namespace's types, that type's.
+ *
+ * @param tables The manifest namespace's tables.
+ * @param occurrences The manifest namespace's occurrences.
+ * @param element The element.
+ * @param table The table that governs it, as `governingTables` gives it, never a copy.
+ * @returns The counts of each child the table names; none for a table of another namespace.
+ */
+const occurrencesOf = (
+  tables: Tables,
+  occurrences: Occurrences,
+  element: SourceElement,
+  table: ContentTable,
+): readonly ChildOccurrence[] => {
+  if (Object.hasOwn(tables.elements, element.local) && tables.elements[element.local] === table) {
+    return occurrences.elements[element.local] ?? [];
+  }
+
+  const type = Object.entries(tables.types).find(([, entry]) => entry === table);
+
+  return type === undefined ? [] : (occurrences.types[type[0]] ?? []);
+};
+
+/**
+ * Check the child counts of every element of the manifest's namespace the walk checks, against
+ * its profile's occurrences: each child the governing table names is held at least its
+ * `minOccurs` and at most its `maxOccurs` times, or the element is refused `child-count` as the
+ * walk refuses one, its detail naming the child, the counts and the profile.
+ *
+ * The walk checks no XSD counts, so this is where a manifest without `organizations` or
+ * `resources`, or a resource without a `file`, is refused. An element the walk passes over, such
+ * as a manifest nested in LOM's lax content (reading 6), is not counted.
+ *
+ * @param source The manifest.
+ * @param version The profile its `schemaversion` names.
+ * @param paths Each element's path, as the walk spells it.
+ * @returns The refusals, in document order of the elements.
+ */
+const checkCounts = (
+  source: SourceDocument,
+  version: CpVersion,
+  paths: ReadonlyMap<SourceElement, string>,
+): readonly Refusal[] => {
+  const others = packageTables.get(version) ?? new Map<string, Tables>();
+  const tables = others.get(manifestNamespace) ?? noQtiTables;
+  const occurrences = packageOccurrences.get(version)?.get(manifestNamespace) ?? {
+    elements: {},
+    types: {},
+  };
+
+  return [...governingTables(source, noQtiTables, others)].flatMap(([element, table]) =>
+    element.namespace === manifestNamespace
+      ? occurrencesOf(tables, occurrences, element, table).flatMap((child) => {
+          const count = BigInt(
+            element.children.filter(
+              (held) =>
+                held.kind === "element" &&
+                held.namespace === child.namespace &&
+                held.local === child.local,
+            ).length,
+          );
+          const least = BigInt(child.minOccurs);
+          const greatest =
+            child.maxOccurs === "unbounded" ? Option.none() : Option.some(BigInt(child.maxOccurs));
+          const within =
+            count >= least &&
+            Option.match(greatest, { onNone: () => true, onSome: (most) => count <= most });
+
+          return within
+            ? []
+            : [
+                refuse(source, "child-count", paths.get(element) ?? "", {
+                  child: `{${child.namespace}}${child.local}`,
+                  element: elementName(element),
+                  required: requiredText(least, greatest),
+                  schemaversion: version,
+                  source: `QTI 3.0 content packaging profile ${version}`,
+                }),
+              ];
+        })
+      : [],
+  );
+};
+
+/**
  * One `href` attribute with its target and the path of the attribute.
  */
 interface Located {
@@ -535,9 +659,11 @@ const profileOf = (
  * A root outside {@link manifestNamespace} is refused `not-qti3-package` alone, and a
  * `schemaversion` other than `3.0.0` or `3.0.1`, or none, `package-profile` alone. Otherwise the
  * manifest is walked against its profile's tables with `checkStructure`, each refusal of the walk
- * carrying the profile it was judged against as `schemaversion` in its detail, and then checked by
- * the manifest's own rules: `package-path-outside`, `child-count` for a resource whose `href` no
- * `file` entry references, and `dependency-unresolved`. Both sets are reported, the walk's first.
+ * carrying the profile it was judged against as `schemaversion` in its detail; its elements'
+ * child counts are checked against the profile's occurrences (`child-count`, also carrying
+ * `schemaversion`); and it is checked by the manifest's own rules: `package-path-outside`,
+ * `child-count` for a resource whose `href` no `file` entry references, and
+ * `dependency-unresolved`. All are reported, in that order.
  * Nothing is read or fetched beyond the document given.
  *
  * @param source The manifest, as the reader adapter built it, whose location every refusal carries.
@@ -577,7 +703,11 @@ export const readManifest = (
       }),
   );
   const entries = resourcesOf(root, paths);
-  const [first, ...rest] = [...walked, ...checkResources(source, entries)];
+  const [first, ...rest] = [
+    ...walked,
+    ...checkCounts(source, version, paths),
+    ...checkResources(source, entries),
+  ];
   if (first !== undefined) {
     return Result.fail([first, ...rest]);
   }
