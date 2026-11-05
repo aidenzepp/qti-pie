@@ -3,7 +3,7 @@
  * statistics under it with their target objects, and the value of an ordinary statistic or the
  * mapping of a categorized one.
  */
-import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
+import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import { contentOf, elementChildren } from "#pantry/import/leaf.ts";
 import { NotQti3 } from "#pantry/import/manifest.ts";
@@ -50,7 +50,7 @@ const usageNamespace = "http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0";
  * that names it and that resource's type, and the schema version of the package.
  */
 export interface UsageInput {
-  readonly package: string;
+  readonly package: Uuid;
   readonly path: string;
   readonly resource: string;
   readonly resourceType: string;
@@ -76,7 +76,7 @@ const judgedLater = <T extends string>(value: string): T =>
  */
 const typedArmRows: Record<
   Exclude<BaseTypeHandle, "boolean">,
-  (rows: Rows, id: string, text: string) => Rows
+  (rows: Rows, id: Uuid, text: string) => Rows
 > = {
   directedPair: (rows, id, text) =>
     Rows.add(rows, ud.relations.UsageTypedValueDirectedPair, [{ id, value: judgedLater(text) }]),
@@ -255,7 +255,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
     element: Element,
     name: AttributeNameHandle,
     whiteSpace: WhiteSpace,
-    make: (node: string, value: string) => Fact<R>,
+    make: (node: Uuid, value: string) => Fact<R>,
   ): void => {
     const value = read(element, name, whiteSpace);
     const node = nodes.get(element);
@@ -263,9 +263,9 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
       add(relation, [make(node.id, value.value)]);
     }
   };
-  const positionOf = (id: string): bigint => positions.get(id) ?? 0n;
+  const positionOf = (id: Uuid): bigint => positions.get(id) ?? 0n;
 
-  const targetObjectRows = (element: Element, statistic: string): void => {
+  const targetObjectRows = (element: Element, statistic: Uuid): void => {
     const node = nodes.get(element);
     if (node === undefined) {
       return;
@@ -297,7 +297,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
 
   const valueRows = Effect.fn("import.usage.valueRows")(function* valueRows(
     element: Element,
-    statistic: string,
+    statistic: Uuid,
   ): Effect.fn.Return<void, ImportRefused> {
     const node = nodes.get(element);
     if (node === undefined) {
@@ -342,7 +342,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
 
   const mappingRows = Effect.fn("import.usage.mappingRows")(function* mappingRows(
     element: Element,
-    statistic: string,
+    statistic: Uuid,
   ): Effect.fn.Return<void, ImportRefused> {
     const node = nodes.get(element);
     if (node === undefined) {
@@ -407,7 +407,7 @@ export const usageRows = Effect.fn("import.usageRows")(function* usageRows(
 
   const statisticRows = Effect.fn("import.usage.statisticRows")(function* statisticRows(
     element: Element,
-    usageData: string,
+    usageData: Uuid,
   ): Effect.fn.Return<void, ImportRefused> {
     const node = nodes.get(element);
     if (node === undefined) {

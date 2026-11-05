@@ -39,6 +39,7 @@ import {
 } from "#pantry/schema/interactions/other.ts";
 import { AttributeLexical, AttributeSpelling } from "#pantry/schema/node.ts";
 import type { NodeKindHandle } from "#pantry/schema/node.ts";
+import { uuidOf } from "#pantry/test/fixtures.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";
@@ -74,14 +75,14 @@ const indexed = (entries: readonly (readonly [Element, NodeKindHandle])[]): Node
   new Map<Element, IndexedNode>(
     entries.map(([found, kind], position) => [
       found,
-      { ancestry: "root", id: `${kind}-${position}`, kind },
+      { ancestry: "root", id: uuidOf(`${kind}-${position}`), kind },
     ]),
   );
 
 const stringSingle: DeclaredVariable = {
   baseType: Option.some("string"),
   cardinality: Option.some("single"),
-  id: "decl-response",
+  id: uuidOf("decl-response"),
   shape: "typed",
 };
 
@@ -124,7 +125,7 @@ const run = (ctx: InteractionContext) => otherRows(ctx, Rows.empty());
 const booleanSingle: DeclaredVariable = {
   baseType: Option.some("boolean"),
   cardinality: Option.some("single"),
-  id: "decl-bool",
+  id: uuidOf("decl-bool"),
   shape: "typed",
 };
 
@@ -136,7 +137,10 @@ const one = (
 ) => {
   const found = element(local, attributes);
 
-  return { ctx: contextOf([found], [[found, kind]], [["RESPONSE", variable]]), id: `${kind}-2` };
+  return {
+    ctx: contextOf([found], [[found, kind]], [["RESPONSE", variable]]),
+    id: uuidOf(`${kind}-2`),
+  };
 };
 
 /**

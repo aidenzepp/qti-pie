@@ -1,5 +1,6 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import type { Uuid } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { renderRegistry, renderTree } from "#pantry/export/render.ts";
@@ -52,7 +53,7 @@ const importFixture = (name: FixtureName) =>
     const manifest = yield* readXml(yield* fs.readFile(path.join(dir, "imsmanifest.xml")));
     const imported = yield* manifestRows(dir, entries, manifest, Rows.empty());
     let { rows } = imported;
-    const items: (readonly [path: string, treeId: string])[] = [];
+    const items: (readonly [path: string, treeId: Uuid])[] = [];
 
     for (const document of imported.documents) {
       const doc = yield* readXml(yield* fs.readFile(path.join(dir, document.path)));
@@ -89,7 +90,7 @@ const importFixture = (name: FixtureName) =>
  */
 const disagreements = (
   imported: { readonly dir: string; readonly rows: Parameters<typeof renderTree>[0] },
-  trees: readonly (readonly [file: string, treeId: string])[],
+  trees: readonly (readonly [file: string, treeId: Uuid])[],
 ) =>
   Effect.gen(function* compared() {
     const found: string[] = [];
@@ -119,7 +120,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           "example/hotspot.xml",
         ]);
 
-        const trees: readonly (readonly [string, string])[] = [
+        const trees: readonly (readonly [string, Uuid])[] = [
           ["imsmanifest.xml", packageId],
           ...items,
         ];
@@ -714,7 +715,11 @@ const usageOf = (name: FixtureName) =>
     );
     const [document] = Rows.of(built.rows, Document);
 
-    return { expected, id: document?.id ?? "", rows: built.rows };
+    return {
+      expected,
+      id: (document ?? assert.fail("the extmeta record has a document")).id,
+      rows: built.rows,
+    };
   });
 
 /**
@@ -888,7 +893,14 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         const [document] = Rows.of(built.rows, Document);
 
         assert.strictEqual(
-          new TextDecoder().decode(canonicalize(renderTree(built.rows, document?.id ?? ""))),
+          new TextDecoder().decode(
+            canonicalize(
+              renderTree(
+                built.rows,
+                (document ?? assert.fail("the extmeta record has a document")).id,
+              ),
+            ),
+          ),
           expected,
         );
       }),

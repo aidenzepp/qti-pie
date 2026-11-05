@@ -17,6 +17,7 @@ import { judgedLater } from "#pantry/import/judged.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import type { Rule } from "#pantry/import/refusal.ts";
 import { Effect, Option } from "effect";
+import type { Uuid } from "@bjornpagen/grizzle";
 import { attributeReader, coordsRows, markers } from "#pantry/import/interactions.ts";
 import type { DeclaredVariable, NodeRef } from "#pantry/import/interactions.ts";
 import { closedOf, ItemRefusal, Rows, typedAttribute, withParents } from "#pantry/import/tree.ts";
@@ -114,9 +115,9 @@ const valueOf = Effect.fn("import.valueOf")(function* valueOf(
  */
 type ArmWriter = Record<
   Exclude<BaseTypeHandle, "boolean">,
-  (rows: Rows, id: string, text: string) => Rows
+  (rows: Rows, id: Uuid, text: string) => Rows
 > & {
-  readonly boolean: (rows: Rows, id: string, text: string) => Effect.Effect<Rows, ImportRefused>;
+  readonly boolean: (rows: Rows, id: Uuid, text: string) => Effect.Effect<Rows, ImportRefused>;
 };
 
 /**
@@ -128,7 +129,7 @@ const armRows = (
   writer: ArmWriter,
   baseType: BaseTypeHandle,
   rows: Rows,
-  id: string,
+  id: Uuid,
   text: string,
 ): Effect.Effect<Rows, ImportRefused> =>
   baseType === "boolean"
@@ -389,7 +390,7 @@ const interpolationDefaultArms: ArmWriter = {
  */
 interface Holder {
   readonly baseType: BaseTypeHandle;
-  readonly declaration: string;
+  readonly declaration: Uuid;
 }
 
 /**
@@ -397,7 +398,7 @@ interface Holder {
  * holder node became, and the document.
  */
 interface Pass {
-  readonly documentId: string;
+  readonly documentId: Uuid;
   readonly holders: Map<string, Holder>;
   readonly positions: ReadonlyMap<string, bigint>;
 }
@@ -479,7 +480,7 @@ const mapEntryElement = Effect.fn("import.mapEntryElement")(function* mapEntryEl
   rows: Rows,
   element: Element,
   node: NodeRef,
-  holderId: string,
+  holderId: Uuid,
 ): Effect.fn.Return<Rows, ImportRefused> {
   const holder = pass.holders.get(holderId);
   if (holder === undefined) {
@@ -541,7 +542,7 @@ const areaMappingElement = Effect.fn("import.areaMappingElement")(function* area
   rows: Rows,
   element: Element,
   node: NodeRef,
-  declaration: string,
+  declaration: Uuid,
 ): Effect.fn.Return<Rows, ImportRefused> {
   yield* exactOf(
     element,
@@ -605,7 +606,7 @@ const areaMapEntryElement = Effect.fn("import.areaMapEntryElement")(function* ar
   rows: Rows,
   element: Element,
   node: NodeRef,
-  areaMapping: string,
+  areaMapping: Uuid,
 ): Effect.fn.Return<Rows, ItemRefusal | ImportRefused> {
   const shapeText = lexicalOf(element, "shape");
   const shape = Option.flatMapNullishOr(shapeText, (known) =>
@@ -709,7 +710,7 @@ const tableEntryElement = Effect.fn("import.tableEntryElement")(function* tableE
   rows: Rows,
   element: Element,
   node: NodeRef,
-  tableId: string,
+  tableId: Uuid,
 ): Effect.fn.Return<Rows, ImportRefused> {
   const holder = pass.holders.get(tableId);
   if (holder === undefined) {
@@ -793,7 +794,7 @@ const tableEntryElement = Effect.fn("import.tableEntryElement")(function* tableE
 export const mappingRows = Effect.fn("import.mappingRows")(function* mappingRows(
   root: Element,
   nodes: NodeIndex,
-  documentId: string,
+  documentId: Uuid,
   declarations: ReadonlyMap<string, DeclaredVariable>,
   rows: Rows,
 ): Effect.fn.Return<Rows, ItemRefusal | ImportRefused> {

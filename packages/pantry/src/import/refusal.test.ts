@@ -60,6 +60,16 @@ it("sends a contract no row names to value-lexical, unmapped", () => {
   assert.isFalse(isMappedLaw(law));
 });
 
+it("sends a numericBound law to the check nearest rule, unmapped", () => {
+  const law: ImportLaw = { field: "position", kind: "numericBound", relation: "Edge" };
+
+  assert.isFalse(isMappedLaw(law));
+  assert.strictEqual(
+    ruleOfLaw(law),
+    ruleOfLaw({ kind: "check", name: "NoSuchCheck", relation: "Edge" }),
+  );
+});
+
 it("passes an ImportRefused through ruleOfError as itself", () => {
   const refused = new ImportRefused({
     detail: "the max-choices attribute of qti-choice-interaction is not a non-negative integer",

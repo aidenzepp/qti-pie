@@ -174,19 +174,24 @@ export class BadPackageId extends Schema.TaggedError<BadPackageId>()("BadPackage
   }
 }
 
-const isUuid = Schema.is(Schema.String.check(Schema.isUUID()));
-
 /**
- * Refuse a package id that is not a UUID, before anything opens the database.
+ * Parse the package id the person named, once, before anything opens the database. The engine
+ * loads here, as it does in the handler, so the command line's static graph reaches none of it.
  *
  * @param packageId - The id the person named.
+ * @returns The id as a `Uuid`. Fails with `BadPackageId` when the text is not a UUID.
  */
 export const requirePackageId = Effect.fn("cli.requirePackageId")(function* requirePackageId(
   packageId: string,
 ) {
-  if (!isUuid(packageId)) {
-    yield* new BadPackageId({ packageId });
+  const { Uuid } = yield* Effect.promise(() => import("@bjornpagen/grizzle"));
+  const id = Uuid.parse(packageId);
+
+  if (!id.ok) {
+    return yield* new BadPackageId({ packageId });
   }
+
+  return id.value;
 });
 
 /**

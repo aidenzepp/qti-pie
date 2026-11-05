@@ -7,7 +7,7 @@
  * the whole package or nothing of it.
  */
 import { ChangeSet, Db } from "@bjornpagen/grizzle";
-import type { ApplyError, DbLayer, Fact, OpenError } from "@bjornpagen/grizzle";
+import type { ApplyError, DbLayer, Fact, OpenError, Uuid } from "@bjornpagen/grizzle";
 import { Clock, Duration, Effect, Option, Random, Ref, Schedule } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { externalRows } from "#pantry/import/external.ts";
@@ -153,7 +153,7 @@ const rootKindOfType = (type: string): RootKindHandle | undefined =>
  */
 export interface DocumentInput {
   readonly doc: XmlDocument;
-  readonly packageId: string;
+  readonly packageId: Uuid;
   readonly path: string;
   readonly resource: string;
   /**
@@ -363,7 +363,7 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   dir: string,
   options: ImportOptions = {},
 ): Effect.fn.Return<
-  string,
+  Uuid,
   ImportRefused | PlatformError.PlatformError | ApplyError | OpenError,
   FileSystem.FileSystem | DbLayer<typeof Author>
 > {

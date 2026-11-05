@@ -506,11 +506,9 @@ export const relations = {
  * reference is a node of its document's tree with a declared, a built-in or a template-parameter
  * arm, each naming the kind of node that refers.
  *
- * The row checks name root kinds and node kinds as literals: `RootKind.handle("item")` is typed
- * exactly `"item"`, and a comparison against a `closedId` field takes the field's own type, so the
- * handle term is refused there. The declared and built-in checks list the allowed pairs and
- * refuse every other referring kind, so they are also the check that the kind is one of the ten
- * that refer; the template-parameter arm has a check of its own for that.
+ * The declared and built-in checks list the allowed pairs and refuse every other referring kind, so
+ * they are also the check that the kind is one of the ten that refer; the template-parameter arm
+ * has a check of its own for that.
  */
 export const rules = [
   contained(on(ResponseProcessing, "id", "rootKind"), on(node.Node, "id", "rootKind")),

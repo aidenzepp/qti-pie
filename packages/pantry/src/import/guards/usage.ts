@@ -4,6 +4,7 @@
  * The usage guards: the facts about a usage-data document's rows that no single relation can
  * state, judged over the rows an import built before any of them is written.
  */
+import type { Uuid } from "@bjornpagen/grizzle";
 import { Effect, Predicate, Schema } from "effect";
 import { collapse, replace, Rows, valueText } from "#pantry/import/tree.ts";
 import type { WhiteSpace } from "#pantry/import/tree.ts";
@@ -388,7 +389,7 @@ const typedCopy = (rows: Rows): Finding => {
   const baseTypes = new Map(Rows.of(rows, ud.UsageTypedValue).map((row) => [row.id, row.baseType]));
   const held: readonly {
     readonly name: string;
-    readonly id: string;
+    readonly id: Uuid;
     readonly value: string;
     readonly arm: boolean;
   }[] = [

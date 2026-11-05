@@ -9,7 +9,7 @@
  * top of the node index it returns, the LOM and QTI-metadata rows among them. The manifest guards
  * belong to another module.
  */
-import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
+import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { attributeRows } from "#pantry/import/attributes.ts";
@@ -173,7 +173,7 @@ export type PackagePathText = ReturnType<typeof PackagePath>;
  */
 interface LomResource {
   readonly identifier: ManifestIdentifierText;
-  readonly node: string;
+  readonly node: Uuid;
   readonly type: string;
 }
 
@@ -183,7 +183,7 @@ interface LomResource {
  * whether the record holds any identifier or title at all.
  */
 interface LomFindings {
-  readonly entries: { collapsed: string; identifier: string; position: bigint }[];
+  readonly entries: { collapsed: string; identifier: Uuid; position: bigint }[];
   hasGeneral: boolean;
   hasIdentifier: boolean;
   hasTitle: boolean;
@@ -211,10 +211,10 @@ interface LomContext {
   readonly element: Element;
   readonly findings: LomFindings;
   readonly grandparentKind: NodeKindHandle | undefined;
-  readonly id: string;
-  readonly lom: string;
+  readonly id: Uuid;
+  readonly lom: Uuid;
   readonly owner: "external" | "file" | "manifest" | "resource";
-  readonly parent: string;
+  readonly parent: Uuid;
   readonly parentKind: NodeKindHandle;
   readonly parentPosition: bigint;
   readonly position: bigint;
@@ -227,7 +227,7 @@ interface LomContext {
 export interface ManifestDocument {
   readonly path: PackagePathText;
   readonly resource: ManifestIdentifierText;
-  readonly resourceId: string;
+  readonly resourceId: Uuid;
   readonly type: string;
 }
 
@@ -358,7 +358,7 @@ const typedValue = (
  */
 export interface LomAbove {
   readonly grandparentKind: NodeKindHandle | undefined;
-  readonly id: string;
+  readonly id: Uuid;
   readonly kind: NodeKindHandle;
   readonly position: bigint;
 }
@@ -782,7 +782,7 @@ export const lomSubtreeRows = (
  *   resource or a file, or a `lom:lom`.
  * @returns The rows with the set's added.
  */
-export const csmSetRows = (rows: Rows, nodes: NodeIndex, set: Element, host: string): Rows => {
+export const csmSetRows = (rows: Rows, nodes: NodeIndex, set: Element, host: Uuid): Rows => {
   let built = rows;
   const add = <R extends AnyRelation>(relation: R, facts: readonly Fact<R>[]): void => {
     built = Rows.add(built, relation, facts);
@@ -806,7 +806,7 @@ export const csmSetRows = (rows: Rows, nodes: NodeIndex, set: Element, host: str
     const processed = typedAttribute(built, node.id, node.kind, name, lexical.value, "replace");
     built = Rows.add(processed.rows, relation, [{ node: node.id, value: processed.value }]);
   };
-  const leaves = (labelled: Element, labelledGuid: string): void => {
+  const leaves = (labelled: Element, labelledGuid: Uuid): void => {
     for (const leaf of elementChildren(labelled)) {
       const node = nodes.get(leaf);
       if (node === undefined) {
@@ -825,7 +825,7 @@ export const csmSetRows = (rows: Rows, nodes: NodeIndex, set: Element, host: str
       }
     }
   };
-  const nodeOf = (element: Element, kind: NodeKindHandle): string | undefined => {
+  const nodeOf = (element: Element, kind: NodeKindHandle): Uuid | undefined => {
     const node = nodes.get(element);
 
     return node?.kind === kind ? node.id : undefined;
@@ -902,7 +902,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
   {
     documents: readonly ManifestDocument[];
     nodes: NodeIndex;
-    packageId: string;
+    packageId: Uuid;
     rows: Rows;
     version: SchemaVersionHandle;
   },
@@ -939,7 +939,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
 
     return processed.value;
   };
-  const kindIs = (element: Element, kind: NodeKindHandle): string | undefined => {
+  const kindIs = (element: Element, kind: NodeKindHandle): Uuid | undefined => {
     const node = nodes.get(element);
 
     return node?.kind === kind ? node.id : undefined;
@@ -955,8 +955,8 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
   const qmdRows = (
     qmd: Element,
     host:
-      | { readonly metadata: string; readonly tag: "metadata" }
-      | { readonly lom: string; readonly tag: "resourceLom" },
+      | { readonly metadata: Uuid; readonly tag: "metadata" }
+      | { readonly lom: Uuid; readonly tag: "resourceLom" },
     resource: LomResource,
   ): void => {
     const node = nodes.get(qmd);
@@ -996,7 +996,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
    */
   const lomRows = (
     lom: Element,
-    metadataNode: { readonly id: string; readonly kind: NodeKindHandle },
+    metadataNode: { readonly id: Uuid; readonly kind: NodeKindHandle },
     resource: LomResource | null,
   ): void => {
     const node = nodes.get(lom);
@@ -1100,7 +1100,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
 
   const metadataChildren = (
     parent: Element,
-    metadataNode: { readonly id: string; readonly kind: NodeKindHandle },
+    metadataNode: { readonly id: Uuid; readonly kind: NodeKindHandle },
     resource: LomResource | null,
   ): void => {
     for (const child of elementChildren(parent)) {
@@ -1121,7 +1121,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
    * outside the object identifier and title rows of a resource's, and a `qtiMetadata` beside them
    * gets no record row, only its leaves' arms, so the database refuses it at commit.
    */
-  const fileMetadataRows = (file: Element, fileId: string): void => {
+  const fileMetadataRows = (file: Element, fileId: Uuid): void => {
     for (const metadataElement of childrenNamed(file, "metadata")) {
       const metadataId = kindIs(metadataElement, "cp:metadata.file");
       if (metadataId === undefined) {
@@ -1207,8 +1207,8 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
    */
   const variantRows = Effect.fn("import.manifest.variantRows")(function* variantRows(
     variant: Element,
-    id: string,
-    resource: { readonly identifier: ManifestIdentifierText; readonly node: string },
+    id: Uuid,
+    resource: { readonly identifier: ManifestIdentifierText; readonly node: Uuid },
   ): Effect.fn.Return<void, ImportRefused> {
     const identifier = ManifestIdentifier(typed(variant, "identifier", "collapse"));
     add(Variant, [
@@ -1268,7 +1268,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
   const hrefless: {
     readonly files: readonly PackagePathText[];
     readonly identifier: ManifestIdentifierText;
-    readonly resourceId: string;
+    readonly resourceId: Uuid;
     readonly type: string;
   }[] = [];
 
