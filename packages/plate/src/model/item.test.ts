@@ -1188,6 +1188,68 @@ describe("buildItem", () => {
   );
 
   it.effect(
+    "marks a CC2_* template that needs what the item does not provide, once per need in the order its tree needs it, judges no need of a variable it does not hold, and runs none of it",
+    () =>
+      Effect.gen(function* marksUnmetNeeds() {
+        const processing = `${root}/qti-response-processing`;
+        const unmapped = declaration(
+          "qti-response-declaration",
+          "RESPONSE",
+          "identifier",
+          "single",
+        );
+        const cases = [
+          {
+            // CC2_map_response sets SCORE to the float 0 before it maps RESPONSE.
+            declarations: [
+              unmapped,
+              declaration("qti-outcome-declaration", "SCORE", "integer", "single"),
+              declaration("qti-outcome-declaration", "MAXSCORE", "float", "single"),
+              declaration("qti-outcome-declaration", "FEEDBACK", "identifier", "single"),
+            ],
+            features: ["outcome-type:SCORE", "mapping:RESPONSE"],
+            template: "CC2_map_response",
+          },
+          {
+            declarations: [
+              unmapped,
+              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+              declaration("qti-outcome-declaration", "FEEDBACK", "identifier", "single"),
+            ],
+            features: ["variable:MAXSCORE", "mapping:RESPONSE"],
+            template: "CC2_map_response",
+          },
+          {
+            // The SCORE it sets to MAXSCORE is not judged, for MAXSCORE has no type here.
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "identifier", "single", [
+                values("qti-correct-response", "A"),
+              ]),
+              declaration("qti-outcome-declaration", "SCORE", "integer", "single"),
+              declaration("qti-outcome-declaration", "FEEDBACKBASIC", "identifier", "single"),
+            ],
+            features: ["variable:MAXSCORE"],
+            template: "CC2_match_basic",
+          },
+        ] as const;
+
+        for (const [index, { declarations, features, template: name }] of cases.entries()) {
+          const source = item({ after: [template(name)], body: [], declarations });
+          const built = yield* buildItem(source);
+          const label = `case ${index + 1}, ${name}`;
+
+          assert.deepStrictEqual(checkRules(source, tables), [], label);
+          assert.deepStrictEqual(built.processing, Option.none(), label);
+          assert.deepStrictEqual(
+            built.unsupported,
+            features.map((feature) => ({ feature, path: processing, shown: "mark" })),
+            label,
+          );
+        }
+      }),
+  );
+
+  it.effect(
     "reads an inline qti-equal in exact mode, written or by default, into the rule tree",
     () =>
       Effect.gen(function* readsEqual() {
@@ -2157,7 +2219,7 @@ describe("buildItem", () => {
       }),
   );
 
-  it.effect("[I-9b] marks inline rules that read the built-in duration as variable:duration", () =>
+  it.effect("marks inline rules that read the built-in duration as variable:duration", () =>
     Effect.gen(function* marksBuiltInDuration() {
       const built = yield* buildItem(
         item({
@@ -2318,7 +2380,7 @@ describe("buildItem", () => {
       }),
   );
 
-  it.effect("[I-9b] marks inline rules that read a template variable as variable:T", () =>
+  it.effect("marks inline rules that read a template variable as variable:T", () =>
     Effect.gen(function* marksTemplateVariable() {
       const built = yield* buildItem(
         item({
@@ -2369,7 +2431,7 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "[I-9b] runs no processing for an item with template processing, and marks qti-template-processing",
+    "runs no processing for an item with template processing, and marks qti-template-processing",
     () =>
       Effect.gen(function* templatedRunsNone() {
         const built = yield* buildItem(floatMatchCorrect([setsCorrectResponse]));
@@ -2386,7 +2448,7 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "[I-9b] gives equal outcomes for the correct value and another on an item with template processing",
+    "gives equal outcomes for the correct value and another on an item with template processing",
     () =>
       Effect.gen(function* templatedScoresNone() {
         const built = yield* buildItem(floatMatchCorrect([setsCorrectResponse]));
@@ -2534,7 +2596,7 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "[I-9b] reads padded identifiers in inline processing as the declarations they name, with no mark",
+    "reads padded identifiers in inline processing as the declarations they name, with no mark",
     () =>
       Effect.gen(function* readsPaddedProcessing() {
         const built = yield* buildItem(

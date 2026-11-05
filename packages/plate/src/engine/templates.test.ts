@@ -229,6 +229,149 @@ const pointOutside = (mapping: AreaMapping): readonly [bigint, bigint] => {
   return [beyond, beyond];
 };
 
+/**
+ * The path of a hand-built item's response processing, where its processing marks sit.
+ */
+const processingPath = "qti-assessment-item/qti-response-processing";
+
+/**
+ * Write a single outcome declaration.
+ *
+ * @param identifier Its `identifier`.
+ * @param baseType Its `base-type`.
+ * @param initial Its `qti-default-value`'s text, none for no default.
+ * @returns The declaration's XML.
+ */
+const outcomeXml = (identifier: string, baseType: string, initial?: string): string =>
+  `<qti-outcome-declaration identifier="${identifier}" cardinality="single" base-type="${baseType}">${
+    initial === undefined
+      ? ""
+      : `<qti-default-value><qti-value>${initial}</qti-value></qti-default-value>`
+  }</qti-outcome-declaration>`;
+
+/**
+ * Write a hand-built item a `CC2_*` template processes, as the bytes a host reads: a single
+ * identifier `RESPONSE` whose correct response is `A`, with a `qti-mapping` of `A` to 1 when asked,
+ * a Choice of `A` and `B` bound to it, and the outcomes given.
+ *
+ * @param template The template's name.
+ * @param mapped Whether `RESPONSE` holds a `qti-mapping`.
+ * @param outcomes The outcome declarations' XML, in document order.
+ * @returns The document's bytes.
+ */
+const cc2Bytes = (template: string, mapped: boolean, outcomes: readonly string[]): Uint8Array =>
+  new TextEncoder().encode(
+    [
+      `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="cc2" title="CC2" adaptive="false" time-dependent="false">`,
+      `<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">`,
+      `<qti-correct-response><qti-value>A</qti-value></qti-correct-response>`,
+      mapped
+        ? `<qti-mapping default-value="0"><qti-map-entry map-key="A" mapped-value="1"/></qti-mapping>`
+        : "",
+      `</qti-response-declaration>`,
+      ...outcomes,
+      `<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" max-choices="1">`,
+      `<qti-simple-choice identifier="A">A</qti-simple-choice><qti-simple-choice identifier="B">B</qti-simple-choice>`,
+      `</qti-choice-interaction></qti-item-body>`,
+      `<qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/${template}.xml"/>`,
+      `</qti-assessment-item>`,
+    ].join(""),
+  );
+
+/**
+ * A single identifier response of one choice.
+ *
+ * @param identifier The choice's identifier.
+ * @returns The value.
+ */
+const chosen = (identifier: string): Value => ({
+  baseType: "identifier",
+  cardinality: "single",
+  values: [{ baseType: "identifier", value: identifier }],
+});
+
+/**
+ * Open a hand-built item whose template needs a declaration the item does not provide, and require
+ * the template marked and not run: the verdict is `accepted-with-unsupported`, the one processing
+ * feature is the mark given at the processing element, the item has no processing, and `score`
+ * returns a record, never an engine failure, with the same outcomes for the correct response, a
+ * wrong one and none.
+ *
+ * @param bytes The item's bytes.
+ * @param feature The mark that names what the item does not provide.
+ * @returns Nothing; it fails the test on the first broken requirement.
+ */
+const markedNotRun = Effect.fnUntraced(function* markedNotRun(bytes: Uint8Array, feature: string) {
+  const verdict = yield* open("items/cc2.xml", bytes);
+  const accepted =
+    verdict.verdict === "accepted-with-unsupported"
+      ? verdict.accepted
+      : assert.fail(`the item is ${verdict.verdict}, not accepted-with-unsupported`);
+  const right = outcomesAfter(accepted, { [response]: chosen("A") });
+  const wrong = outcomesAfter(accepted, { [response]: chosen("B") });
+  const none = outcomesAfter(accepted, {});
+
+  assert.deepStrictEqual(accepted.unsupported.filter(namesProcessing), [
+    { feature, path: processingPath, shown: "mark" },
+  ]);
+  assert.isTrue(Option.isNone(accepted.item.processing));
+  assert.deepStrictEqual(right, none);
+  assert.deepStrictEqual(wrong, none);
+});
+
+describe("a CC2_* template whose needs the item does not meet (Q6: marked, never refused)", () => {
+  it.effect(
+    "CC2_map_response is marked mapping:RESPONSE when RESPONSE has no qti-mapping, outcome-type:SCORE when SCORE is an integer, and score runs neither",
+    () =>
+      Effect.gen(function* cc2MapResponseUnmet() {
+        const feedback = outcomeXml("FEEDBACK", "identifier");
+
+        yield* markedNotRun(
+          cc2Bytes("CC2_map_response", false, [
+            outcomeXml("SCORE", "float"),
+            outcomeXml("MAXSCORE", "float", "1"),
+            feedback,
+          ]),
+          "mapping:RESPONSE",
+        );
+        yield* markedNotRun(
+          cc2Bytes("CC2_map_response", true, [
+            outcomeXml("SCORE", "integer"),
+            outcomeXml("MAXSCORE", "float", "1"),
+            feedback,
+          ]),
+          "outcome-type:SCORE",
+        );
+      }),
+  );
+
+  it.effect(
+    "CC2_match is marked outcome-type:SCORE when SCORE is an integer, and score does not run it",
+    () =>
+      Effect.gen(function* cc2MatchUnmet() {
+        yield* markedNotRun(
+          cc2Bytes("CC2_match", false, [outcomeXml("SCORE", "integer")]),
+          "outcome-type:SCORE",
+        );
+      }),
+  );
+
+  it.effect(
+    "CC2_match_basic is marked outcome-type:SCORE when MAXSCORE is an integer and SCORE a float, and score does not run it",
+    () =>
+      Effect.gen(function* cc2MatchBasicUnmet() {
+        yield* markedNotRun(
+          cc2Bytes("CC2_match_basic", false, [
+            outcomeXml("SCORE", "float"),
+            outcomeXml("MAXSCORE", "integer", "1"),
+            outcomeXml("FEEDBACKBASIC", "identifier"),
+          ]),
+          "outcome-type:SCORE",
+        );
+      }),
+  );
+});
+
 describe("the built-in templates over named corpus items", () => {
   for (const location of cc2MatchItems) {
     it.effect(
