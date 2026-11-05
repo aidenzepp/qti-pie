@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { locales, message } from "#plate/messages.ts";
+import { locales, message, numeral } from "#plate/messages.ts";
 import type { MessageKey } from "#plate/messages.ts";
 
 /**
@@ -113,6 +113,18 @@ describe("message", () => {
     assert.strictEqual(message("en", "answerOf"), "Answer {n} of {count}");
     // @ts-expect-error: answerOf's params need count beside n.
     assert.strictEqual(message("en", "answerOf", { n: "1" }), "Answer 1 of {count}");
+  });
+});
+
+describe("numeral", () => {
+  it("writes a number and a bigint as the locale writes numbers", () => {
+    assert.strictEqual(numeral("en", 3), "3");
+    assert.strictEqual(numeral("en", 12_000), "12,000");
+    assert.strictEqual(numeral("en", 12_000n), "12,000");
+  });
+
+  it("writes a bigint beyond 2^53 exactly", () => {
+    assert.strictEqual(numeral("en", 9_007_199_254_740_993n), "9,007,199,254,740,993");
   });
 });
 

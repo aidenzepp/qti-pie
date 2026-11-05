@@ -88,7 +88,7 @@ export const emitItem = (
  * The data the results box shows after a submit (spec §4.1): the instance, the after-submit state
  * its heading names, and what the region shows under the heading.
  *
- * Plate keeps the results box as a part: `renderStatus` emits the Status region from this input,
+ * The results box is a part plate keeps: `renderStatus` emits the Status region from this input,
  * and the author places it and feeds it what `score` or `checkResponses` gave. The part has no
  * submit semantics, owns no state and moves no focus. The region shows the score when `score` is
  * set; else one Message per entry of `messages`, when there are any; else nothing under the
@@ -128,8 +128,8 @@ export interface StatusInput {
    */
   readonly messages?: readonly ValidationMessage[];
   /**
-   * The score, already written as the candidate reads it. plate does not write it: the author does,
-   * for example from the `SCORE` outcome of the record `score` returns. The region shows it in the
+   * The score, already written as the candidate reads it. The author writes it, not plate, for
+   * example from the `SCORE` outcome of the record `score` returns. The region shows it in the
    * locale's score text, such as `Score: 1`.
    */
   readonly score?: string;

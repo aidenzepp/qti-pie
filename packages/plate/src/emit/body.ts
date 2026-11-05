@@ -735,10 +735,16 @@ const headingLevelsIn = (nodes: readonly PayloadNode[]): readonly number[] =>
 
 /**
  * The level of each payload body's shallowest written heading, kept from the first walk over the
- * body for every later one. One render starts a walk for the body and one for each Prompt and each
- * choice's content, and each reads this level; reading the whole body again for each of them made
- * a render's time grow with the square of its choices and Prompts. Keyed weakly, so an entry goes
- * with its body.
+ * body for every later one.
+ *
+ * One render starts a walk for the body and one for each Prompt and each choice's content, and
+ * each needs this level. Reading the whole body for each walk would make a render's time grow with
+ * the square of its choices and Prompts, so the body is read once.
+ *
+ * An entry never goes stale. It is keyed by the body array's identity, and a body never changes
+ * once built: `payload` builds a fresh body for every render, every payload field is `readonly`,
+ * and the emitter writes to none of them. So the level read from a body stays that body's level
+ * for as long as the body lives, and the weak key lets the entry go with it.
  */
 const shallowestLevels = new WeakMap<readonly PayloadNode[], number>();
 

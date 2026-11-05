@@ -15,6 +15,7 @@
  */
 import { Array as Arr, Option } from "effect";
 import type { Brand } from "effect";
+import { controlCap, exceedsControlCap } from "#plate/control-cap.ts";
 import { scopedId, splitTokens } from "#plate/emit/parts.ts";
 import type { Resolved } from "#plate/emit/parts.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
@@ -32,7 +33,6 @@ import type {
 } from "#plate/model/item.ts";
 import { format } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
-import { controlCap } from "#plate/vocabulary.ts";
 
 /**
  * A message response validation gives one response, in the locale's text or the author's.
@@ -677,8 +677,7 @@ interface Controls {
  * @returns The count, from 0 to 100, and whether the cap's notice shows.
  */
 const controlsOf = (interaction: ExtendedTextInteraction, members: number): Controls => {
-  const cap = controlCap.when.limit;
-  if (interaction.minStrings > cap) {
+  if (exceedsControlCap(interaction.minStrings)) {
     return { n: 0, overCap: true };
   }
 
@@ -695,6 +694,7 @@ const controlsOf = (interaction: ExtendedTextInteraction, members: number): Cont
     onNone: () => BigInt(members),
     onSome: (maxStrings) => smaller(BigInt(members), maxStrings),
   });
+  const cap = controlCap.when.limit;
 
   return { n: Number(larger(asked, smaller(held, cap))), overCap: held > cap };
 };

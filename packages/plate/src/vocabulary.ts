@@ -11,6 +11,7 @@
  * @module
  */
 import { Array as Arr, Option } from "effect";
+import { controlCap } from "#plate/control-cap.ts";
 import { trimXmlSpace } from "#plate/model/values.ts";
 
 /**
@@ -229,22 +230,6 @@ export const leastCount = -9_223_372_036_854_775_808n;
  * signed 64-bit value, read exactly, and a greater one is refused (operator ruling D, 2026-11-04).
  */
 export const greatestCount = 9_223_372_036_854_775_807n;
-
-/**
- * The cap on an Extended Text's Controls (Q23): at most 100. One whose `min-strings` exceeds 100
- * asks for more strings than 100 Controls hold, so it shows the notice `min-strings>100` in place
- * of its Controls, whatever `max-strings` says; the verdict is then `accepted-with-unsupported`,
- * never a refusal, as the item is valid.
- *
- * The cap bounds a rendered item's tab stops and markup, so one authored attribute cannot exhaust a
- * host that renders it. The payload reads `limit` and `feature` from here, and shows the same
- * notice beside the first 100 Controls when a value it restores holds more members than they do.
- */
-export const controlCap = {
-  feature: "min-strings>100",
-  on: ["qti-extended-text-interaction"],
-  when: { kind: "integer-above", limit: 100n, name: "min-strings" },
-} as const satisfies FeatureRule;
 
 /**
  * What phase 1 renders, reads, shows a notice for and marks, as data (spec §4.5).

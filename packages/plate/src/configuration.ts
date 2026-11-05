@@ -12,14 +12,14 @@ import { locales } from "#plate/messages.ts";
  * The Schema of the renderer's configuration, which owns every field's constraint and default.
  *
  * Every key is optional in the input and takes its default when left out, so `{}` decodes to the
- * whole default configuration. The seven session-control fields are QTI's `qti-item-session-
- * control` settings; `maxAttempts` 0 means unlimited. `headingLevel` is the level the item's
- * shallowest heading takes, every other heading keeping its distance from it, capped at `h6`; it
- * starts at 2 because the host owns `h1`. `assetBase` `""` resolves asset URLs relative to the
- * package. `seed` keys a shuffled Choice's order with the instance and the response; an absent seed
- * is keyed as the empty string, so the order then follows the instance alone. Plate never draws a
- * seed, so an order is random by default only through a drawn instance, whose order no one can
- * recover.
+ * whole default configuration. The seven session-control fields are QTI's
+ * `qti-item-session-control` settings; `maxAttempts` 0 means unlimited. `headingLevel` is the level
+ * the item's shallowest heading takes, every other heading keeping its distance from it, capped at
+ * `h6`; it starts at 2 because the host owns `h1`. `assetBase` `""` resolves asset URLs relative to
+ * the package. `seed` keys a shuffled Choice's order with the instance and the response; an absent
+ * seed is keyed as the empty string, so the order then follows the instance alone. Since plate
+ * never draws a seed, an order is random by default only through a drawn instance, whose order no
+ * one can recover.
  */
 // oxlint-disable-next-line eslint/no-redeclare -- `Configuration` is the Schema and the type of a configuration under one name, the interface the phase's slice list fixes, so a decoder and a signature read as one thing.
 export const Configuration = Schema.Struct({
