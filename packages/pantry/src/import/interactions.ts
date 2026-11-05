@@ -7,7 +7,7 @@
  * The family builders of `interactions/*.ts` read the elements of one item and write the arm rows
  * of the interaction kinds they own; each takes an {@link InteractionContext} and the rows so far.
  */
-import type { Relation, uuid } from "@bjornpagen/grizzle";
+import type { Relation, Uuid, uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import { associateRows } from "#pantry/import/interactions/associate.ts";
 import { gapRows } from "#pantry/import/interactions/gap.ts";
@@ -47,7 +47,7 @@ import type { Element } from "@qti-pie/crust/tree.ts";
 export interface DeclaredVariable {
   readonly baseType: Option.Option<(typeof BaseType.handles)[number]>;
   readonly cardinality: Option.Option<(typeof TypedCardinality.handles)[number]>;
-  readonly id: string;
+  readonly id: Uuid;
   readonly shape: (typeof DeclarationShape.handles)[number];
 }
 
@@ -63,7 +63,7 @@ export interface ItemFacts {
  * The identity of an element of the tree: its node id and its kind.
  */
 export interface NodeRef {
-  readonly id: string;
+  readonly id: Uuid;
   readonly kind: NodeKindHandle;
 }
 
@@ -96,7 +96,7 @@ export interface InteractionContext {
   /**
    * The id of the item's document, which is also its tree's id.
    */
-  readonly documentId: string;
+  readonly documentId: Uuid;
   readonly item: ItemFacts;
   /**
    * The node each element of the tree became.
@@ -271,7 +271,7 @@ export const maxCountDefault = (
 export const markers = (
   rows: Rows,
   relationByName: Readonly<Record<string, MarkerRelation>>,
-  node: string,
+  node: Uuid,
   present: ReadonlySet<string>,
 ): Rows => {
   let built = rows;
@@ -297,7 +297,7 @@ export const markers = (
  */
 export const coordsRows = (
   rows: Rows,
-  node: string,
+  node: Uuid,
   ownerKind: NodeKindHandle,
   shape: ShapeHandle,
   lexical: string,
@@ -411,8 +411,8 @@ export const nearestInteraction = (nodes: NodeIndex, node: Element): Option.Opti
  */
 export const bindingRows = Effect.fn("import.bindingRows")(function* bindingRows(
   rows: Rows,
-  node: string,
-  document: string,
+  node: Uuid,
+  document: Uuid,
   kind: NodeKindHandle,
   responseIdentifier: string,
   declaration: Option.Option<DeclaredVariable>,
@@ -467,11 +467,7 @@ export const bindingRows = Effect.fn("import.bindingRows")(function* bindingRows
  * @returns The rows with the `GapMatchBinding` holding the variable's cardinality; unchanged for a
  *   record variable and for one with no cardinality, which have no typed binding to bound.
  */
-export const gapMatchBindingRow = (
-  rows: Rows,
-  node: string,
-  declaration: DeclaredVariable,
-): Rows =>
+export const gapMatchBindingRow = (rows: Rows, node: Uuid, declaration: DeclaredVariable): Rows =>
   declaration.shape === "typed" && Option.isSome(declaration.cardinality)
     ? Rows.add(rows, GapMatchBinding, [{ cardinality: declaration.cardinality.value, node }])
     : rows;
@@ -490,8 +486,8 @@ export const gapMatchBindingRow = (
  */
 export const templateRef = Effect.fn("import.templateRef")(function* templateRef(
   rows: Rows,
-  node: string,
-  document: string,
+  node: Uuid,
+  document: Uuid,
   identifier: string,
   declarations: ReadonlyMap<string, DeclaredVariable>,
 ): Effect.fn.Return<Rows, ItemRefusal> {
@@ -550,7 +546,7 @@ const shared: Shared = {
 export const interactionRows = Effect.fn("import.interactionRows")(function* interactionRows(
   root: Element,
   nodes: NodeIndex,
-  documentId: string,
+  documentId: Uuid,
   declarations: ReadonlyMap<string, DeclaredVariable>,
   item: ItemFacts,
   rows: Rows,

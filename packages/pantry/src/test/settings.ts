@@ -26,13 +26,14 @@ export const hasLease = Option.isSome(settings.leaseDatabase);
 /**
  * The timeout, in milliseconds, for each test of a lease suite that writes.
  *
- * The first law-checked write of a pool pays the backend's first call of the
- * schema's law functions, measured at 5.4 to 5.7 s with 85 armed handles (the
- * `repair1-21` row of `docs/grizzle-findings.md`), past vitest's 5 s default.
- * Raise it only on a measurement recorded in that row, never to make a run
- * pass. A lease suite that only reads keeps vitest's default.
+ * The longest lease test on trunk a1d5af1 is the export round trip, at 24,095 ms
+ * (gt-w3, 2026-11-04: 21,385, 22,160 and 24,095 ms in three runs of the lease
+ * files, load 6.5 to 132). The value is twice that, rounded up to the next 1,000,
+ * the rule `authorLayerHookTimeoutMs` uses. Raise it only on a new measurement
+ * recorded here, never to make a run pass. A lease suite that only reads keeps
+ * vitest's default.
  */
-export const leaseTestTimeoutMs = 60_000;
+export const leaseTestTimeoutMs = 49_000;
 
 /**
  * The timeout, in milliseconds, for the `layer` hook that builds `AuthorAppLayer`.
@@ -86,15 +87,19 @@ export const cliProcessTestTimeoutMs = 10_000;
  * Since `p14-u2a` the command handlers import the engine (`#pantry/db/layer.ts` and the import and
  * export modules) when they run, about 5.3 s alone, and vitest's 10 s `hookTimeout` is not enough
  * beside the parallel CLI set: 13 concurrent loads took 15.5 to 15.8 s at load averages of 9 to 26.
- * Measured on 2026-11-03 at `fd586ee`, from `packages/pantry`: thirteen concurrent runs (vitest's
- * default worker count on 14 CPUs, `availableParallelism() - 1`) of one process that imports the
- * six modules `preloadEngine` imports took 12412, 12548, 12579, 12583, 12583, 12606, 12607, 12619,
- * 12559, 12673, 12703, 12741 and 12644 ms, a maximum of 12741 ms, at a one-minute load average of
- * 27.9 before and 30.4 after. The budget is the larger of twice that maximum (25.5 s) and 20 s,
- * rounded up to the next second.
+ * Measured on 2026-11-04 at `0f3e8e4` (grizzle trunk), from `packages/pantry`: three batches of
+ * thirteen concurrent runs (vitest's default worker count on 14 CPUs, `availableParallelism() - 1`)
+ * of one process that imports the six modules `preloadEngine` imports. Batch 1 took 22328, 22477,
+ * 22507, 22925, 22874, 22928, 22735, 22402, 22445, 23119, 22230, 22696 and 22438 ms at a one-minute
+ * load average of 119.6 before and 105.7 after. Batch 2 took 26114, 26314, 26108, 26539, 26527,
+ * 26273, 26278, 26006, 26575, 26013, 25572, 26055 and 25194 ms at 105.7 before and 107.2 after.
+ * Batch 3 took 26744, 26963, 26263, 26243, 26812, 26878, 26923, 26880, 26130, 26925, 26937, 26081
+ * and 27104 ms at 107.2 before and 102.5 after. The maximum is 27104 ms. A batch at the lowest load
+ * sampled (21.1 in 20 minutes; the batch started at 25.8 and ended at 28.1) took 8137 to 8343 ms.
+ * The budget is the larger of twice the maximum (54.2 s) and 20 s, rounded up to the next second.
  * Raise it only on a new measurement recorded here, never to make a run pass.
  */
-export const engineLoadHookTimeoutMs = 26_000;
+export const engineLoadHookTimeoutMs = 55_000;
 
 /**
  * The timeout, in milliseconds, for the one test that materializes the 19 `cut-*` fixtures and

@@ -22,7 +22,7 @@ const database = { exitCode: 1, kind: "database" };
 /**
  * What the password reader of `AuthorAppLayer` fails with when the password file is missing.
  */
-const credential = CredentialError.make({ cause: new Error("ENOENT") });
+const credential = new CredentialError({ cause: new Error("ENOENT") });
 
 describe("describeFailure, the local set-up", () => {
   it("a ClusterConfigError exits 78 as config", () => {
@@ -55,14 +55,14 @@ describe("describeFailure, the local set-up", () => {
   );
 
   it("an OpenError or a TransportFailure carrying a CredentialError exits 78 as config", () => {
-    assert.deepStrictEqual(identity(OpenError.make({ reason: credential })), config);
-    assert.deepStrictEqual(identity(TransportFailure.make({ reason: credential })), config);
+    assert.deepStrictEqual(identity(new OpenError({ reason: credential })), config);
+    assert.deepStrictEqual(identity(new TransportFailure({ reason: credential })), config);
   });
 
   it("an OpenError with another reason stays database", () => {
-    const other = TokenError.make({ cause: new Error("refused") });
+    const other = new TokenError({ cause: new Error("refused") });
 
-    assert.deepStrictEqual(identity(OpenError.make({ reason: other })), database);
+    assert.deepStrictEqual(identity(new OpenError({ reason: other })), database);
   });
 
   it("a TransportFailure with another reason, or none, stays database", () => {

@@ -1,99 +1,32 @@
 ---
 name: effect-design
-description: Write or review Effect code in this repository, especially native Alchemy/Cloudflare integrations, streaming, service dependencies, resource lifecycles, boundary schemas, typed HTTP errors, and readable composition.
+description: Apply this repository's native-capability review and local Effect rulings. Use when writing or reviewing Effect code in crust, pantry or plate, including services, layers, configuration, streams, resource lifecycles, grizzle integration or a custom adapter. Effect structure and style come from the installed Effect guide, not from this skill.
 ---
 
-# Effect Design
+# Effect design
 
-Maximize use of Effect's supported capabilities while maintaining readability. Prefer native Effect and Alchemy APIs over custom equivalents. Check the installed version's documentation and source before assuming a capability is unavailable or inventing an adapter.
+Before writing or reviewing Effect code:
 
-Before implementation or review, read [references/examples.md](references/examples.md). Its POSITIVE and NEGATIVE labels define decision boundaries, not mandatory syntax templates.
+1. Read `node_modules/effect/AGENTS.md` in the package you are changing (for example `packages/pantry/node_modules/effect/AGENTS.md`) and the `ai-docs` example it links for the API you are changing. When that example has a `fixtures` directory, follow those files for directory roles and code shape. Name directories and files in kebab-case. For an API the guide does not cover, read the matching source in `node_modules/effect/src` at the pinned version. When this skill and that guide disagree about Effect style, follow the installed guide.
+2. Run the native-capability review.
+3. Apply the local rulings. Effect's guide does not make them.
 
 ## Native capability review
 
-Apply this review before implementing effectful operations, including small platform calls wrapped in `Effect.sync`, `Effect.try`, `Effect.promise`, or `Effect.tryPromise`. These constructors integrate APIs; they do not establish that the owning capability is absent from Effect. Keep discovery proportional to the operation, but do not skip it because the wrapper is only one line.
+Apply this review before implementing an effectful operation, including a one-line `Effect.sync`, `Effect.try`, `Effect.promise`, or `Effect.tryPromise`. Those constructors integrate an API. They do not show that Effect, grizzle or the platform lacks the operation.
 
 1. State the contract: accepted input, output, failures, limits, lifecycle, and guarantees.
-2. Inspect the owning repository patterns and pinned dependency versions.
-3. Check Alchemy's documented resource and runtime integration, installed Effect core APIs and relevant companion packages, and the underlying Cloudflare/platform API. Use Alchemy's supported resource, binding, and provider integration wherever it satisfies the requirement; use Effect for application composition and lifecycle. These are discovery steps, not a requirement to force every operation through Alchemy.
-4. Read the relevant API documentation and source for the installed version. Search neighboring APIs too; failing to find one guessed symbol does not establish that the capability is absent.
-5. Select the supported primitive or integration that satisfies the contract with the clearest implementation. Check runtime compatibility, streaming behavior, cancellation, typed failures, and lifecycle guarantees before adapting it. If custom glue remains necessary, identify the specific missing capability and document the constraint at its owning boundary.
-6. Review the final implementation for recreated framework behavior. In the handoff, name the selected native capabilities and their role; for custom glue, name the documentation/source checked, the verified gap, and why the adaptation is necessary. Keep this explanation proportional to the change.
+2. Inspect the owning code and the versions pinned in `package.json` (Effect `4.1.2`; grizzle at the commit `vendor/README.md` names).
+3. Check the installed Effect module and its neighbors, `@effect/platform-node`, grizzle's README and agent skill (`.agents/skills/grizzle/SKILL.md`), and the Node or browser API. One missed symbol is not a gap.
+4. Use the Effect, grizzle or platform API that meets the contract. Preserve streaming limits, cancellation, the error channel, and resource lifetime.
+5. When custom glue remains, name the API you checked and the requirement it does not meet. "I did not find an API" without that evidence is not a gap. Put the same rationale in the implementation handoff.
 
-Do not claim that a native capability is unavailable without checking. Do not upgrade dependencies or add a package merely to make an example convenient. Explain material findings in the work update; this review does not require a new report file.
+For a pull stream, consume each element's nested content before advancing. Collecting handles and reading them later drops that content.
 
-## Capabilities to inspect
+## Local rulings
 
-- Console and standard I/O: `Console` for console output and `Stdio` for streams,
-  sinks, and typed I/O failures before wrapping `console` or `process.stdout`.
-  Distinguish machine-readable output from diagnostic `Effect.log` records.
-  Verify exact bytes, newline handling, output destination, and failure behavior
-  when replacing an output boundary; use existing subprocess tests when they
-  already assert the contract.
-- Platform and everyday utilities: `FileSystem`, `Path`, `effect/process`, `Clock`,
-  `DateTime`, `Duration`, `Random`, and `effect/encoding` before direct host APIs or custom
-  equivalents. Check runtime-specific platform layers and installed module
-  documentation for the required operation.
-- Infrastructure and bindings: Alchemy's supported resources, Outputs, providers,
-  runtime clients, and test harness before direct control-plane API calls or custom
-  binding injection. Infrastructure providers and request-time binding layers have
-  different roles; preserve the construction/request boundary.
-- Streaming: `Stream`, `Sink`, `Channel`, HTTP body helpers, and `Multipart` before
-  custom read loops, mutable collection, or whole-body buffering. Prefer a supported
-  collector when bounded collection is intended; stream operators alone do not
-  establish size limits or guarantee the intended consumption order.
-- Service dependencies: `Context.Service` and `Layer` before custom dependency
-  containers, singleton registries, or manual service construction at every call.
-  Use the platform-specific layers and adapters supported by the Worker runtime.
-- Cleanup and lifetime: `Scope`, scoped layers, and acquire/release primitives before
-  ad hoc finalizer bookkeeping. Preserve interruption and release guarantees.
-- HTTP, validation, and configuration: `HttpClient`, `HttpApi`, `Schema`, and `Config`
-  before bespoke transport wrappers, routing, input parsers, or environment parsing.
-- Concurrency, retries, and coordination: Effect's bounded concurrency, `Schedule`,
-  `Queue`, and `PubSub` before promise orchestration, retry timers, or custom queues.
-
-These are search starting points, not mandatory APIs for every function. Explore
-neighboring modules and supported companion integrations as the contract requires.
-A relevant companion package may be a better fit than custom code; verify its
-compatibility and propose any dependency change explicitly within the chosen scope.
-Use a Cloudflare-native API through the smallest Effect adaptation when no supported
-integration covers the requirement. Prefer plain control flow when no framework
-capability adds a useful guarantee; native-first does not mean decorative combinators.
-
-## Readability review process
-
-Use this process for new code and refactors:
-
-1. Identify the responsibilities: reading transport data, decoding schemas, application behavior, error translation, and resource lifecycle. Separate responsibilities when it helps a reader; do not make a helper for every expression.
-2. Look for nested generators/callbacks, mutable accumulation, repeated validation, manual parsing, and success wrapping. Ask which installed primitive already owns that responsibility.
-3. Prefer a main operation that reads as a short sequence of meaningful steps. Use named `Effect.fn` / `Effect.fnUntraced` helpers for coherent effectful operations and native stream operators for stream transformations.
-4. Put invariants in Schema where supported. Use native exhaustive matching when it makes error classification clearer and verifies all supported cases.
-5. Check that the abstraction preserves execution order, bounded memory, cancellation, cleanup, and typed failures. A shorter pipeline is wrong if it skips file streams, buffers unbounded attachments, or loses failure information.
-6. Compare the result for readability and behavior. Native capabilities are preferred while readable; plain `if`, ternaries, and `??` remain valid. Avoid trading understandable control flow for decorative combinators.
-7. Verify with the repository's normal checks and relevant boundary tests. Check emitted error bodies and generated contracts when affected.
-
-Read [references/readable-decoding.md](references/readable-decoding.md) when reviewing nested decoding or stream code. It contains self-contained positive and negative examples; application files are optional navigation, never the definition of correctness.
-
-## Boundary schemas and errors
-
-- Decode untrusted input with Schema into useful types. Keep validation rules in a schema rather than scattered manual conversions and predicates.
-- Use schema-backed tagged errors and declare them in the endpoint contract. Give callers stable tags, specific messages, and safe structured facts. Apply the local `error-messages` skill when writing or changing errors.
-- Prefer endpoint parameter, header, query, and payload schemas for request validation; the shared router boundary renders their default issues consistently. Keep handler errors for application failures rather than replacing ordinary schema failures with bespoke validation tags.
-- Verify the actual response body. Schema validation does not automatically guarantee a descriptive HTTP response: Effect's default validation response may be empty. Map validation failures explicitly when the caller needs an explanation.
-- Keep provider causes in internal observability; expose curated messages. Do not promise that data was preserved unless the failure boundary proves it.
-
-## Readable Effect
-
-Use Effect broadly for schemas, errors, composition, resources, tracing, concurrency, and available native integrations. This is a positive preference, not a restriction to a small set of guarantees.
-
-Choose Effect-native formulations when equally clear. Do not replace concise `if`, `??`, or ternary expressions with longer combinator chains unless the change provides a concrete safety, type-safety, resource, or behavioral advantage that justifies the readability cost. `Effect.gen` with ordinary control flow is idiomatic Effect.
-
-## Derive shared choices
-
-Define a shared fact at its owning boundary and compose descendants from it. Route prefixes belong to parent composition; parameter schemas inherit parent validation; infrastructure consumers reference the shared project configuration. Changes to a parent should propagate without editing repeated literals.
-
-Keep dependencies acyclic: parent API assembly imports children, while child parameter schemas import parent parameter schemas in separate modules. Do not add a registry or generic abstraction when native composition suffices. A new abstraction should answer a present requirement.
-
-## Verification
-
-Follow repository checks and the Alchemy/Bun test harness. Verify boundary failures as well as success, generated contracts, and relevant cascade behavior. Keep dependency versions pinned and keep application-specific features out of unrelated template work.
+- Directories and files use kebab-case, as the repository already does. Effect fixtures use PascalCase file names such as `Api.ts` and `Users.ts`; this repository uses `api.ts` and `users.ts`.
+- Inside a generator, keep `if`, `??`, or a ternary for a value check when a combinator would add no typed failure, resource, span, or dependency. Effect's guide still decides how to attach those four.
+- Caller-facing errors follow `.agents/skills/error-messages/SKILL.md`: name the specific failure and the repair, and keep internal causes internal.
+- Browser modules of `plate` (the emitter, the engine, and later the runtime) and `crust`'s read path import only `Option`, `Array`, `pipe`, `Data` and `Result` from `effect`: no `Schema`, Effect runtime or `Brand` (ruling OD-6, held by a bundle-size test). Effect, `Schema` included, belongs at the server and service boundary.
+- Functions an author calls stay callable from plain, non-Effect code (the renderer's composition ruling).

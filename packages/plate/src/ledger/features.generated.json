@@ -1,0 +1,1052 @@
+[
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-1",
+    "level": "basic",
+    "name": "Alternate text for graphics"
+  },
+  {
+    "elevated": true,
+    "family": "A",
+    "id": "A-2a",
+    "level": "elevated",
+    "name": "ARIA Subset"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-2b",
+    "level": "elective",
+    "name": "ARIA Full"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-3a",
+    "level": "elective",
+    "name": "Inline Namespaced SSML"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-3b",
+    "level": "elective",
+    "name": "Inline SSML using JSON markup"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-4a",
+    "level": "elective",
+    "name": "Internationalization (bi-directional text)"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-4b",
+    "level": "elective",
+    "name": "Internationalization (Ruby)"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-5",
+    "level": "elective",
+    "name": "additional-directions"
+  },
+  {
+    "elevated": true,
+    "family": "A",
+    "id": "A-6",
+    "level": "elevated",
+    "name": "additional-testing-time"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-7",
+    "level": "elective",
+    "name": "alternative-text (PNP assignment)"
+  },
+  {
+    "elevated": true,
+    "family": "A",
+    "id": "A-8",
+    "level": "elevated",
+    "name": "answer-masking"
+  },
+  {
+    "elevated": true,
+    "family": "A",
+    "id": "A-9",
+    "level": "elevated",
+    "name": "audio-description"
+  },
+  {
+    "elevated": true,
+    "family": "A",
+    "id": "A-10a",
+    "level": "elevated",
+    "name": "braille"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-10b",
+    "level": "elective",
+    "name": "braille preferences (delivery-mode, grade, braille-type, math-type)"
+  },
+  {
+    "elevated": true,
+    "family": "A",
+    "id": "A-11",
+    "level": "elevated",
+    "name": "breaks"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-12",
+    "level": "elective",
+    "name": "calculator-on-screen"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-13a",
+    "level": "elective",
+    "name": "Captions: PNP"
+  },
+  {
+    "elevated": true,
+    "family": "A",
+    "id": "A-13b",
+    "level": "advanced",
+    "name": "Captions: track"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-15",
+    "level": "advanced",
+    "name": "Glossary (on-screen)"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-16",
+    "level": "elective",
+    "name": "hazard-avoidance"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-17",
+    "level": "elective",
+    "name": "high-contrast"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-18",
+    "level": "elective",
+    "name": "Homophone-checker (on-screen)"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-19",
+    "level": "elective",
+    "name": "input-requirements"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-20",
+    "level": "elective",
+    "name": "invert-display-polarity"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-21",
+    "level": "elective",
+    "name": "item-translation"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-22",
+    "level": "elective",
+    "name": "keyboard-directions"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-23",
+    "level": "elective",
+    "name": "keyword-emphasis"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-24",
+    "level": "elective",
+    "name": "keyword-translation"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-25",
+    "level": "elective",
+    "name": "language-of-interface"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-26",
+    "level": "elective",
+    "name": "layout-single-column"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-27",
+    "level": "elective",
+    "name": "line-reader"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-28",
+    "level": "elective",
+    "name": "linguistic-guidance"
+  },
+  {
+    "elevated": true,
+    "family": "A",
+    "id": "A-29",
+    "level": "elevated",
+    "name": "long-description"
+  },
+  {
+    "elevated": true,
+    "family": "A",
+    "id": "A-30a",
+    "level": "advanced",
+    "name": "Magnification"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-30b",
+    "level": "elective",
+    "name": "Magnification Zoom-amount"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-31",
+    "level": "elective",
+    "name": "Note-taking (on-screen)"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-32",
+    "level": "elective",
+    "name": "outliner-on-screen"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-33",
+    "level": "elective",
+    "name": "Peer-interaction (on-screen)"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-34",
+    "level": "elective",
+    "name": "Prohibit set"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-35",
+    "level": "elective",
+    "name": "Pronunciation Lexicon Specification (PLS)"
+  },
+  {
+    "elevated": true,
+    "family": "A",
+    "id": "A-36",
+    "level": "elevated",
+    "name": "sign-language"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-37",
+    "level": "elective",
+    "name": "simplified-graphics"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-38",
+    "level": "elective",
+    "name": "simplified-language-portions"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-39",
+    "level": "elective",
+    "name": "Spell-checker (on-screen)"
+  },
+  {
+    "elevated": true,
+    "family": "A",
+    "id": "A-40a",
+    "level": "elevated",
+    "name": "Spoken (reading-type = screen-reader)"
+  },
+  {
+    "elevated": true,
+    "family": "A",
+    "id": "A-40b",
+    "level": "elevated",
+    "name": "Spoken (reading-type = computer-read-aloud)"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-40c",
+    "level": "elective",
+    "name": "Spoken Restriction Type"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-40d",
+    "level": "elective",
+    "name": "Spoken, user preferences for speech-rate, pitch, volume, and link-indication"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-40e",
+    "level": "elective",
+    "name": "Spoken (typing-echo)"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-40f",
+    "level": "elective",
+    "name": "Text-to-Speech Suppression"
+  },
+  {
+    "elevated": true,
+    "family": "A",
+    "id": "A-41",
+    "level": "elevated",
+    "name": "Tactile"
+  },
+  {
+    "elevated": true,
+    "family": "A",
+    "id": "A-42a",
+    "level": "advanced",
+    "name": "Text-appearance, text and background color"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-42b",
+    "level": "elective",
+    "name": "Text-appearance, other"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-43",
+    "level": "elective",
+    "name": "Thesaurus (on-screen)"
+  },
+  {
+    "elevated": true,
+    "family": "A",
+    "id": "A-44",
+    "level": "elevated",
+    "name": "transcript"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-45",
+    "level": "elective",
+    "name": "Visual-organizer (on-screen)"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-46",
+    "level": "elective",
+    "name": "Activate-as-option"
+  },
+  {
+    "elevated": false,
+    "family": "A",
+    "id": "A-47",
+    "level": "elective",
+    "name": "Activate-at-initialization"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-0",
+    "level": "basic",
+    "name": "Assessment Item Root"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-1",
+    "level": "basic",
+    "name": "Response Declaration"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-2",
+    "level": "basic",
+    "name": "Outcome Declaration"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-3",
+    "level": "elective",
+    "name": "Template Declaration"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-4",
+    "level": "advanced",
+    "name": "Shared Stimulus reference"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-5",
+    "level": "elective",
+    "name": "Template Processing"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-6",
+    "level": "elective",
+    "name": "stylesheet"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-7",
+    "level": "basic",
+    "name": "Item Body"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-8",
+    "level": "basic",
+    "name": "HTML5 (QTI Subset)"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-9a",
+    "level": "advanced",
+    "name": "Response Processing: Full"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-9b",
+    "level": "basic",
+    "name": "Response Processing: Fixed-Template"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-10",
+    "level": "elective",
+    "name": "Modal Feedback"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-11",
+    "level": "advanced",
+    "name": "Rubric Block"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-12",
+    "level": "elective",
+    "name": "Item Include"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-13",
+    "level": "elective",
+    "name": "Companion Materials"
+  },
+  {
+    "elevated": true,
+    "family": "I",
+    "id": "I-14",
+    "level": "advanced",
+    "name": "Catalog Resources"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-15",
+    "level": "elective",
+    "name": "Context Declarations"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-16",
+    "level": "elective",
+    "name": "Time Limits"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-17",
+    "level": "advanced",
+    "name": "Composite Items"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-18",
+    "level": "advanced",
+    "name": "MathML"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-19",
+    "level": "basic",
+    "name": "QTI Shared Interaction Vocabulary Subset"
+  },
+  {
+    "elevated": false,
+    "family": "I",
+    "id": "I-20",
+    "level": "advanced",
+    "name": "QTI Shared CSS Classes"
+  },
+  {
+    "elevated": false,
+    "family": "M",
+    "id": "M-1",
+    "level": "elective",
+    "name": "Item Template"
+  },
+  {
+    "elevated": false,
+    "family": "M",
+    "id": "M-2",
+    "level": "elective",
+    "name": "Time Dependent"
+  },
+  {
+    "elevated": false,
+    "family": "M",
+    "id": "M-3",
+    "level": "elective",
+    "name": "Composite"
+  },
+  {
+    "elevated": false,
+    "family": "M",
+    "id": "M-4",
+    "level": "elective",
+    "name": "Interaction Type"
+  },
+  {
+    "elevated": false,
+    "family": "M",
+    "id": "M-5",
+    "level": "elective",
+    "name": "Feedback Type"
+  },
+  {
+    "elevated": false,
+    "family": "M",
+    "id": "M-6",
+    "level": "elective",
+    "name": "Solution Available"
+  },
+  {
+    "elevated": false,
+    "family": "M",
+    "id": "M-7",
+    "level": "elective",
+    "name": "Tool Name"
+  },
+  {
+    "elevated": false,
+    "family": "M",
+    "id": "M-8",
+    "level": "elective",
+    "name": "Tool Version"
+  },
+  {
+    "elevated": false,
+    "family": "M",
+    "id": "M-9",
+    "level": "elective",
+    "name": "Tool Vendor"
+  },
+  {
+    "elevated": false,
+    "family": "M",
+    "id": "M-10",
+    "level": "elective",
+    "name": "Scoring Mode"
+  },
+  {
+    "elevated": false,
+    "family": "P",
+    "id": "P-1",
+    "level": "basic",
+    "name": "Test Instances"
+  },
+  {
+    "elevated": false,
+    "family": "P",
+    "id": "P-2",
+    "level": "elective",
+    "name": "Nested Section Instances"
+  },
+  {
+    "elevated": false,
+    "family": "P",
+    "id": "P-3",
+    "level": "elective",
+    "name": "Item Banks"
+  },
+  {
+    "elevated": false,
+    "family": "P",
+    "id": "P-4",
+    "level": "basic",
+    "name": "Item Instances"
+  },
+  {
+    "elevated": false,
+    "family": "P",
+    "id": "P-5",
+    "level": "elective",
+    "name": "Manifest Metadata (LOM)"
+  },
+  {
+    "elevated": false,
+    "family": "P",
+    "id": "P-6",
+    "level": "elective",
+    "name": "Resource Metadata (LOM)"
+  },
+  {
+    "elevated": false,
+    "family": "P",
+    "id": "P-7",
+    "level": "advanced",
+    "name": "Resource Metadata (QTI)"
+  },
+  {
+    "elevated": false,
+    "family": "P",
+    "id": "P-8",
+    "level": "elective",
+    "name": "Curriculum Standards Metadata"
+  },
+  {
+    "elevated": false,
+    "family": "P",
+    "id": "P-9",
+    "level": "elective",
+    "name": "External Metadata"
+  },
+  {
+    "elevated": false,
+    "family": "P",
+    "id": "P-10",
+    "level": "elective",
+    "name": "Learning Tools Interoperability v1.1"
+  },
+  {
+    "elevated": false,
+    "family": "P",
+    "id": "P-11",
+    "level": "advanced",
+    "name": "Stimulus Instances"
+  },
+  {
+    "elevated": false,
+    "family": "P",
+    "id": "P-12",
+    "level": "elective",
+    "name": "Variant"
+  },
+  {
+    "elevated": false,
+    "family": "P",
+    "id": "P-13",
+    "level": "elective",
+    "name": "CASE"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-1",
+    "level": "elective",
+    "name": "Associate Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-2",
+    "level": "basic",
+    "name": "Choice Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-3",
+    "level": "elective",
+    "name": "Drawing Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-4",
+    "level": "elective",
+    "name": "End Attempt Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-5",
+    "level": "basic",
+    "name": "Extended Text Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-6",
+    "level": "advanced",
+    "name": "Gap Match Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-7",
+    "level": "elective",
+    "name": "Graphic Associate Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-8",
+    "level": "advanced",
+    "name": "Graphic Gap Match Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-9",
+    "level": "elective",
+    "name": "Graphic Order Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-10",
+    "level": "advanced",
+    "name": "Hot-spot Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-11",
+    "level": "advanced",
+    "name": "Hot-text Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-12",
+    "level": "advanced",
+    "name": "Inline Choice Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-13",
+    "level": "advanced",
+    "name": "Match Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-14",
+    "level": "elective",
+    "name": "Media Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-15",
+    "level": "elective",
+    "name": "Order Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-16",
+    "level": "elective",
+    "name": "Portable Custom Interaction (PCI)"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-17",
+    "level": "elective",
+    "name": "Position Object Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-18",
+    "level": "elective",
+    "name": "Selection Point Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-19",
+    "level": "elective",
+    "name": "Slider Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-20",
+    "level": "basic",
+    "name": "Text Entry Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-21",
+    "level": "elective",
+    "name": "Upload Interaction"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-31",
+    "level": "elective",
+    "name": "Custom Interaction (proprietary)"
+  },
+  {
+    "elevated": false,
+    "family": "Q",
+    "id": "Q-32",
+    "level": "elective",
+    "name": "Custom Interaction (LTI)"
+  },
+  {
+    "elevated": false,
+    "family": "S",
+    "id": "S-0",
+    "level": "basic",
+    "name": "Section Root"
+  },
+  {
+    "elevated": false,
+    "family": "S",
+    "id": "S-1",
+    "level": "elective",
+    "name": "Item Session Control"
+  },
+  {
+    "elevated": false,
+    "family": "S",
+    "id": "S-2",
+    "level": "advanced",
+    "name": "Time Limits Section Level"
+  },
+  {
+    "elevated": false,
+    "family": "S",
+    "id": "S-3",
+    "level": "advanced",
+    "name": "Selection"
+  },
+  {
+    "elevated": false,
+    "family": "S",
+    "id": "S-4",
+    "level": "advanced",
+    "name": "Ordering"
+  },
+  {
+    "elevated": false,
+    "family": "S",
+    "id": "S-5",
+    "level": "advanced",
+    "name": "Rubric Block"
+  },
+  {
+    "elevated": false,
+    "family": "S",
+    "id": "S-6",
+    "level": "elective",
+    "name": "Section Include"
+  },
+  {
+    "elevated": false,
+    "family": "S",
+    "id": "S-7",
+    "level": "basic",
+    "name": "Items"
+  },
+  {
+    "elevated": false,
+    "family": "S",
+    "id": "S-8",
+    "level": "elective",
+    "name": "Nested Sections"
+  },
+  {
+    "elevated": false,
+    "family": "S",
+    "id": "S-9",
+    "level": "advanced",
+    "name": "Section References"
+  },
+  {
+    "elevated": false,
+    "family": "T",
+    "id": "T-1",
+    "level": "advanced",
+    "name": "Outcome Declaration"
+  },
+  {
+    "elevated": false,
+    "family": "T",
+    "id": "T-2",
+    "level": "advanced",
+    "name": "Assessment Time Limits"
+  },
+  {
+    "elevated": false,
+    "family": "T",
+    "id": "T-3",
+    "level": "elective",
+    "name": "Stylesheet"
+  },
+  {
+    "elevated": false,
+    "family": "T",
+    "id": "T-4",
+    "level": "basic",
+    "name": "Test Part"
+  },
+  {
+    "elevated": false,
+    "family": "T",
+    "id": "T-5",
+    "level": "advanced",
+    "name": "Item Session Control (ISC) in Test Part"
+  },
+  {
+    "elevated": false,
+    "family": "T",
+    "id": "T-6",
+    "level": "elective",
+    "name": "ISC Time Limits in Test Part"
+  },
+  {
+    "elevated": false,
+    "family": "T",
+    "id": "T-7",
+    "level": "basic",
+    "name": "Sections in TestPart"
+  },
+  {
+    "elevated": false,
+    "family": "T",
+    "id": "T-8",
+    "level": "elective",
+    "name": "Test Feedback in TestPart"
+  },
+  {
+    "elevated": false,
+    "family": "T",
+    "id": "T-9",
+    "level": "advanced",
+    "name": "Outcomes Processing for Test"
+  },
+  {
+    "elevated": false,
+    "family": "T",
+    "id": "T-10",
+    "level": "elective",
+    "name": "Test Feedback (test-level)"
+  },
+  {
+    "elevated": false,
+    "family": "T",
+    "id": "T-11",
+    "level": "elective",
+    "name": "Multiple Test Parts"
+  },
+  {
+    "elevated": false,
+    "family": "T",
+    "id": "T-12",
+    "level": "advanced",
+    "name": "Multiple Sections in TestPart"
+  },
+  {
+    "elevated": false,
+    "family": "T",
+    "id": "T-13",
+    "level": "advanced",
+    "name": "Rubric Block for AssessmentTest"
+  },
+  {
+    "elevated": false,
+    "family": "T",
+    "id": "T-14",
+    "level": "basic",
+    "name": "Record and Restore Responses"
+  }
+]

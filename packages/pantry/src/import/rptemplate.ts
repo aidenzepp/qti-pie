@@ -15,6 +15,7 @@
  * @module
  */
 import { Effect, Option } from "effect";
+import type { Uuid } from "@bjornpagen/grizzle";
 import { processingRows } from "#pantry/import/processing.ts";
 import type { ProcessingRefused } from "#pantry/import/processing.ts";
 import {
@@ -48,7 +49,7 @@ import type { XmlDocument } from "@qti-pie/crust/tree.ts";
  */
 export interface RptemplateInput {
   readonly doc: XmlDocument;
-  readonly packageId: string;
+  readonly packageId: Uuid;
   readonly path: string;
   readonly resource: string;
   readonly resourceType: string;
@@ -75,7 +76,7 @@ export const rptemplateRows = Effect.fn("import.rptemplateRows")(function* rptem
   input: RptemplateInput,
   rows: Rows,
 ): Effect.fn.Return<
-  { rows: Rows; nodes: NodeIndex; documentId: string },
+  { rows: Rows; nodes: NodeIndex; documentId: Uuid },
   ImportRefused | ProcessingRefused | UnmodeledVocabulary
 > {
   const { doc, packageId, version } = input;

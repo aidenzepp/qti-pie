@@ -6,6 +6,7 @@
  */
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { Effect, Predicate, Schema } from "effect";
+import { isArmRow } from "#pantry/import/guards/item.ts";
 import { Rows, valueText } from "#pantry/import/tree.ts";
 import { expressionKinds } from "#pantry/schema/kinds/asi.ts";
 import { Edge, EntityReference, Node, TextNode, vocabularies, Ws } from "#pantry/schema/node.ts";
@@ -278,13 +279,6 @@ const operandRows = (rows: Rows): Finding => {
 
   return undefined;
 };
-
-/**
- * What an arm row holds: the node's id and the value copied from its text.
- */
-const ArmRow = Schema.Struct({ id: Schema.String, value: Schema.String });
-
-const isArmRow = Schema.is(ArmRow);
 
 /**
  * The `qti-base-value` arms: each holds the id of its node and the text it copies.

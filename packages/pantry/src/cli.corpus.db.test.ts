@@ -10,8 +10,10 @@ import { comparePackage } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { spawnCli } from "#pantry/test/cli.ts";
-import { materializeCorpus } from "#pantry/test/fixtures.ts";
+import { examplesTarball, materializeCorpus } from "#pantry/test/fixtures.ts";
 import { hasLease, settings } from "#pantry/test/settings.ts";
+import { renderVerdicts, verdictsPath } from "#pantry/test/verdicts.ts";
+import type { VerdictRow } from "#pantry/test/verdicts.ts";
 
 /**
  * The timeout, in milliseconds, for one corpus package: an import and an export in process, then
@@ -65,6 +67,12 @@ const isUuid = Schema.is(Schema.String.check(Schema.isUUID()));
 const refusals: { readonly name: string; readonly rule: string }[] = [];
 
 /**
+ * The verdict of every package the cases judged, keyed to the tarball member it came from; the last
+ * case renders them as the verdict file.
+ */
+const verdicts: VerdictRow[] = [];
+
+/**
  * What the cases so far found, kept in the file's scope: vitest runs a file's cases in order, and
  * the last case reads this.
  */
@@ -88,6 +96,7 @@ const errorObjectsOf = (stderr: string) =>
  */
 const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
   readonly dir: string;
+  readonly member: string;
   readonly name: string;
 }) {
   const fs = yield* FileSystem.FileSystem;
@@ -153,6 +162,7 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
       assert.strictEqual(errors[0]?.kind, "roundtrip-differs", `${entry.name}: the CLI's kind`);
     }
 
+    verdicts.push({ file: entry.member, rule: "", verdict: "accepted" });
     tally.accepted += 1;
     tally.equalEntries += report.length - differing;
   } else {
@@ -162,6 +172,7 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
     assert.strictEqual(errors.length, 1, `${entry.name}: one ErrorObject line on stderr`);
     assert.strictEqual(errors[0]?.kind, "import-refused", `${entry.name}: the CLI's kind`);
     assert.strictEqual(errors[0]?.rule, rule, `${entry.name}: the CLI names the importer's rule`);
+    verdicts.push({ file: entry.member, rule, verdict: "refused" });
     tally.refused.push({ name: entry.name, rule });
   }
 });
@@ -193,6 +204,35 @@ describe.skipIf(!hasLease)("cli.corpus.db.test.ts, on the lease", () => {
           tally.accepted + tally.refused.length,
           corpus.length,
           "every package is accepted or refused",
+        );
+
+        const fs = yield* FileSystem.FileSystem;
+        const tarball = yield* examplesTarball;
+        const committed = verdictsPath(tarball);
+        const fresh = path.resolve(
+          import.meta.dirname,
+          "..",
+          "work",
+          "verdicts",
+          path.basename(committed),
+        );
+
+        yield* fs.makeDirectory(path.dirname(fresh), { recursive: true });
+
+        const rendered = yield* renderVerdicts(verdicts);
+
+        yield* fs.writeFileString(fresh, rendered);
+
+        const expected = yield* fs.readFileString(committed).pipe(Effect.option);
+
+        assert.isTrue(
+          Option.isSome(expected),
+          `no committed verdict file at ${committed}; adopt the fresh one at ${fresh} with: cp ${fresh} ${committed}`,
+        );
+        assert.strictEqual(
+          rendered,
+          Option.getOrThrow(expected),
+          `the verdicts differ from ${committed}; to adopt ${fresh}, run: cp ${fresh} ${committed}`,
         );
       }),
     );

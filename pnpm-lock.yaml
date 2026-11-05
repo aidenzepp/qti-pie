@@ -195,18 +195,18 @@ importers:
   packages/crust:
     dependencies:
       effect:
-        specifier: 4.0.7
-        version: 4.0.7
+        specifier: 4.1.2
+        version: 4.1.2
       saxes:
         specifier: 6.0.0
         version: 6.0.0
     devDependencies:
       '@effect/platform-node':
-        specifier: 4.0.7
-        version: 4.0.7(effect@4.0.7)(redis@6.3.0)
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0)
       '@effect/vitest':
-        specifier: 4.0.7
-        version: 4.0.7(effect@4.0.7)(vitest@5.0.1)
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.1)
       vitest:
         specifier: 5.0.1
         version: 5.0.1(@types/node@26.6.4)(@vitest/browser-preview@5.0.1)(@vitest/ui@5.0.1)(@voidzero-dev/vite-plus-core@1.0.0(@types/node@26.6.4)(typescript@7.0.2)(yaml@2.9.1))
@@ -215,20 +215,39 @@ importers:
     dependencies:
       '@bjornpagen/grizzle':
         specifier: file:../../vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz
-        version: file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz(effect@4.0.7)(redis@6.3.0)
+        version: file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz(effect@4.1.2)(redis@6.3.0)
       '@effect/platform-node':
-        specifier: 4.0.7
-        version: 4.0.7(effect@4.0.7)(redis@6.3.0)
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(redis@6.3.0)
       '@qti-pie/crust':
         specifier: workspace:*
         version: link:../crust
       effect:
-        specifier: 4.0.7
-        version: 4.0.7
+        specifier: 4.1.2
+        version: 4.1.2
     devDependencies:
       '@effect/vitest':
-        specifier: 4.0.7
-        version: 4.0.7(effect@4.0.7)(vitest@5.0.1)
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.1)
+      vitest:
+        specifier: 5.0.1
+        version: 5.0.1(@types/node@26.6.4)(@vitest/browser-preview@5.0.1)(@vitest/ui@5.0.1)(@voidzero-dev/vite-plus-core@1.0.0(@types/node@26.6.4)(typescript@7.0.2)(yaml@2.9.1))
+
+  packages/plate:
+    dependencies:
+      '@qti-pie/crust':
+        specifier: workspace:*
+        version: link:../crust
+      effect:
+        specifier: 4.1.2
+        version: 4.1.2
+    devDependencies:
+      '@effect/vitest':
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.1)
+      parse5:
+        specifier: 8.0.1
+        version: 8.0.1
       vitest:
         specifier: 5.0.1
         version: 5.0.1(@types/node@26.6.4)(@vitest/browser-preview@5.0.1)(@vitest/ui@5.0.1)(@voidzero-dev/vite-plus-core@1.0.0(@types/node@26.6.4)(typescript@7.0.2)(yaml@2.9.1))
@@ -264,19 +283,19 @@ packages:
     engines: {node: '>=6.9.0'}
 
   '@bjornpagen/grizzle-engine@file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz':
-    resolution: {integrity: sha512-ZGn8WG66/iyFSK+ZFfT43TzeluF3mzE7yygxnhv43W6tghKUPuJ+3Jt4Jo071CYe/K1nB8DVr28OZDD2Tl5vBg==, tarball: file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz}
+    resolution: {integrity: sha512-5sOYGEjt5GVZHbu1XnVNSDC47LrKWlwSwPaYAwbvNAXjUCaC9V+oFnkp3OjWJn2XWkQ3TfNhPdIfQzKv2UsP6Q==, tarball: file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz}
     version: 1.0.0-beta.0
-    engines: {node: '>=24'}
+    engines: {node: '>=26'}
     peerDependencies:
-      effect: ^4.0.5
+      effect: ^4.1.2
 
   '@bjornpagen/grizzle@file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz':
-    resolution: {integrity: sha512-RqK+V1ePjxh7uwcNsJyrafgv4gznT51k9cnSneBIZl24RACIa++gPF5e6fusbF+YpG/iI03vrI7vz5F7APu2xg==, tarball: file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz}
+    resolution: {integrity: sha512-zsYn550w0aCBX65/oyqoWdvHOVU3/cYeeVu6MmJYOtqZIA1BsUCh7yRFhLzk95mJS8rszXwUQhagpHTVsenaaA==, tarball: file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz}
     version: 1.0.0-beta.0
-    engines: {node: '>=24'}
+    engines: {node: '>=26'}
     hasBin: true
     peerDependencies:
-      effect: ^4.0.5
+      effect: ^4.1.2
 
   '@blazediff/core@1.10.0':
     resolution: {integrity: sha512-AOQff0zgR7cGsZL+4E7hVkmujoPUpm0J9xzWGWZj5wCjd3gmxESXAPfKyuzs93VdpQNFhHlBhfOjrcZ+XTERtQ==}
@@ -295,23 +314,23 @@ packages:
     resolution: {integrity: sha512-dlT1m5e/0yUL0kRNcQn7yGLVThkgbB0Ga/1AmfDDC/8ik6AIiSf2QLQO2zPYvefsHP0aFgxO93cVLCCfDp7kzQ==}
     engines: {node: '>= 20.12.0'}
 
-  '@effect/platform-node-shared@4.0.7':
-    resolution: {integrity: sha512-uCeBJ00hliKQsb7gMfvyEXUL1XmUKQcRzKi1X8ISG0UxTDMAdPRigOyKDnKxUTxE5PoT4kxLHQvOxo6U405FGg==}
-    engines: {node: '>=18.0.0'}
+  '@effect/platform-node-shared@4.1.2':
+    resolution: {integrity: sha512-wSwl9A/G1hcVvF8nLI+YfB3EyOIDvWS6+lsTZBkmgDnPBL7m8YWZF+1HD+mdEsb52SUGfukip46Q3gRwSdk3QA==}
+    engines: {node: '>=22.19.0'}
     peerDependencies:
-      effect: ^4.0.7
+      effect: ^4.1.2
 
-  '@effect/platform-node@4.0.7':
-    resolution: {integrity: sha512-YXUh0A4ZjuPAONt/yXb5zBM7zPR6eUPYUBtyj1374zq0P5SUpdcz8Lf54JSavXb8mdrc1glsXWHFVINpJyrlWA==}
-    engines: {node: '>=18.0.0'}
+  '@effect/platform-node@4.1.2':
+    resolution: {integrity: sha512-ye0UjxORdd5Qu3paZ1LljgGOALWHt7muP9VTpjUSCNfcesiB/Hm7wPJIvZeu4gnwpTe5BtEnO1VHngWqjJp8mA==}
+    engines: {node: '>=22.19.0'}
     peerDependencies:
-      effect: ^4.0.7
-      redis: '>=5.0.0 <7.0.0'
+      effect: ^4.1.2
+      redis: '>=5.1.0 <7.0.0'
 
-  '@effect/vitest@4.0.7':
-    resolution: {integrity: sha512-WdF1w9K65ZyjeDAUfUxDOCBSEgVjUtJfM+G83KAE3mKoZcO6aGgrRoKgwiDKsACAmVWT3zG5hDhwNH3GQg++FQ==}
+  '@effect/vitest@4.1.2':
+    resolution: {integrity: sha512-JJPwAHkJHxvM/woW9mMW/khjasAHcmwWdOMAgMy16rfqsxcVhFDnrRsvN9VI2+kMv8zDCCyBE2q1n5hzZlfE0w==}
     peerDependencies:
-      effect: ^4.0.7
+      effect: ^4.1.2
       vitest: '>=5.0.0 <6.0.0'
 
   '@eslint-community/eslint-utils@4.10.1':
@@ -1313,12 +1332,16 @@ packages:
   dom-accessibility-api@0.5.16:
     resolution: {integrity: sha512-X7BJ2yElsnOJ30pZF4uIIDfBEVgF4XEBxL9Bxhy6dnrm5hkzqmsWHGTiHqRiITNhMyFLyAiWndIJP7Z1NTteDg==}
 
-  effect@4.0.7:
-    resolution: {integrity: sha512-47CiUzNAmeLr40pDT9vKMxxtB8o3bdpZEKU4IUM3fVxsK2GYzPsV7fQoZP0I41A308BZd71nMxqJ0KRh3s9u2g==}
+  effect@4.1.2:
+    resolution: {integrity: sha512-d3Oah1WyKxFLFh19yWheS5IXIVaITzxZ71JkE1rkUozq/6EcJSU5nPk5bF2QrSygZ3SQoiNQB8TsxFriyMeMaQ==}
 
   empathic@2.1.0:
     resolution: {integrity: sha512-AnfC1ATldl49/cvZdLPDjBfrRNwbDO05aibiOtzQu3qtlbJtomNLhF30HEtn/7iBz50dlMECqATo3fG0LrdEgw==}
     engines: {node: '>=14'}
+
+  entities@8.1.0:
+    resolution: {integrity: sha512-kxL7msIffSuh9aaFAMD7rxAIuTRMAHMeBtgHW2yUdWw732ZNh4MehkF2gdjvtdmikkaIP9bFDDJOPlsvm7avrA==}
+    engines: {node: '>=20.19.0'}
 
   environment@1.1.0:
     resolution: {integrity: sha512-xUtoPkMggbz0MPyPiIWr1Kp4aeWJjDZ6SMvURhimjdZgsRuDplF5/s9hcgGhyXMhs+6vpnuoiZ2kFiu3FMnS8Q==}
@@ -1867,6 +1890,9 @@ packages:
     resolution: {integrity: sha512-TXfryirbmq34y8QBwgqCVLi+8oA3oWx2eAnSn62ITyEhEYaWRlVZ2DvMM9eZbMs/RfxPu/PK/aBLyGj4IrqMHw==}
     engines: {node: '>=18'}
 
+  parse5@8.0.1:
+    resolution: {integrity: sha512-z1e/HMG90obSGeidlli3hj7cbocou0/wa5HacvI3ASx34PecNjNQeaHNo5WIZpWofN9kgkqV1q5YvXe3F0FoPw==}
+
   path-exists@4.0.0:
     resolution: {integrity: sha512-ak9Qy5Q7jYb2Wwcey5Fpvg2KoAc/ZIhLSLOSBmRmygPsGwkVVt0fZa0qrtMz+m6tJTAHfZQ8FnmB4MG4LWy7/w==}
     engines: {node: '>=8'}
@@ -2231,6 +2257,18 @@ packages:
       utf-8-validate:
         optional: true
 
+  ws@8.22.1:
+    resolution: {integrity: sha512-oyL6OPYme/CmiFvNuGzeoxCJ4nOrZE2O1FwM9MWM1AsGri6nLXB2pg+lNA8aLeXMSav0J6eIVS1j6vUPzUtK9g==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   xmlchars@2.2.0:
     resolution: {integrity: sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==}
 
@@ -2288,16 +2326,16 @@ snapshots:
       '@babel/helper-string-parser': 7.29.11
       '@babel/helper-validator-identifier': 7.29.7
 
-  '@bjornpagen/grizzle-engine@file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz(effect@4.0.7)':
+  '@bjornpagen/grizzle-engine@file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz(effect@4.1.2)':
     dependencies:
       arkregex: 0.0.14
-      effect: 4.0.7
+      effect: 4.1.2
 
-  '@bjornpagen/grizzle@file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz(effect@4.0.7)(redis@6.3.0)':
+  '@bjornpagen/grizzle@file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz(effect@4.1.2)(redis@6.3.0)':
     dependencies:
-      '@bjornpagen/grizzle-engine': file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz(effect@4.0.7)
-      '@effect/platform-node': 4.0.7(effect@4.0.7)(redis@6.3.0)
-      effect: 4.0.7
+      '@bjornpagen/grizzle-engine': file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz(effect@4.1.2)
+      '@effect/platform-node': 4.1.2(effect@4.1.2)(redis@6.3.0)
+      effect: 4.1.2
       pg: 8.23.1
     transitivePeerDependencies:
       - bufferutil
@@ -2331,28 +2369,28 @@ snapshots:
       fast-wrap-ansi: 0.2.2
       sisteransi: 1.0.5
 
-  '@effect/platform-node-shared@4.0.7(effect@4.0.7)':
+  '@effect/platform-node-shared@4.1.2(effect@4.1.2)':
     dependencies:
       '@types/ws': 8.18.2
-      effect: 4.0.7
-      ws: 8.22.0
+      effect: 4.1.2
+      ws: 8.22.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node@4.0.7(effect@4.0.7)(redis@6.3.0)':
+  '@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.3.0)':
     dependencies:
-      '@effect/platform-node-shared': 4.0.7(effect@4.0.7)
-      effect: 4.0.7
+      '@effect/platform-node-shared': 4.1.2(effect@4.1.2)
+      effect: 4.1.2
       redis: 6.3.0
       undici: 8.12.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/vitest@4.0.7(effect@4.0.7)(vitest@5.0.1)':
+  '@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.1)':
     dependencies:
-      effect: 4.0.7
+      effect: 4.1.2
       vitest: 5.0.1(@types/node@26.6.4)(@vitest/browser-preview@5.0.1)(@vitest/ui@5.0.1)(@voidzero-dev/vite-plus-core@1.0.0(@types/node@26.6.4)(typescript@7.0.2)(yaml@2.9.1))
 
   '@eslint-community/eslint-utils@4.10.1(eslint@10.13.0)':
@@ -2986,9 +3024,11 @@ snapshots:
 
   dom-accessibility-api@0.5.16: {}
 
-  effect@4.0.7: {}
+  effect@4.1.2: {}
 
   empathic@2.1.0: {}
+
+  entities@8.1.0: {}
 
   environment@1.1.0: {}
 
@@ -3421,6 +3461,10 @@ snapshots:
 
   parse-ms@4.0.0: {}
 
+  parse5@8.0.1:
+    dependencies:
+      entities: 8.1.0
+
   path-exists@4.0.0: {}
 
   path-key@3.1.1: {}
@@ -3769,6 +3813,8 @@ snapshots:
       string-width: 8.3.0
 
   ws@8.22.0: {}
+
+  ws@8.22.1: {}
 
   xmlchars@2.2.0: {}
 

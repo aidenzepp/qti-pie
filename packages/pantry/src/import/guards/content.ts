@@ -9,7 +9,7 @@
  * conditioned-optional, same-table and `q` classes read the rows the passes wrote beside them
  * (spec 4.11, bin 2).
  */
-import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
+import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import { collapse, replace, Rows } from "#pantry/import/tree.ts";
 import type { WhiteSpace } from "#pantry/import/tree.ts";
@@ -747,7 +747,7 @@ const familyValues = (rows: Rows): ReadonlyMap<string, Written> =>
 const lexicalCopy = (rows: Rows): Finding => {
   const typed = familyValues(rows);
   const value = typedValues(rows);
-  const columnOf = (node: string, kind: string, attribute: string): string | undefined =>
+  const columnOf = (node: Uuid, kind: string, attribute: string): string | undefined =>
     typed.get(attribute)?.get(node) ?? value(node, kind, attribute);
 
   const spellings = new Map<string, string>();

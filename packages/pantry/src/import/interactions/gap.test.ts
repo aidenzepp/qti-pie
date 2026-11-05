@@ -1,4 +1,5 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the typed-or-record column of a declared variable the context holds, not a structure. */
+import type { Uuid } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option } from "effect";
 import {
@@ -46,6 +47,7 @@ import {
 } from "#pantry/schema/interactions/gap.ts";
 import { GapMatchBinding, InteractionBinding, TypedBinding } from "#pantry/schema/interaction.ts";
 import { AttributeLexical, AttributeSpelling, NodeKind } from "#pantry/schema/node.ts";
+import { uuidOf } from "#pantry/test/fixtures.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";
@@ -82,7 +84,7 @@ const indexTree = (root: Element): NodeIndex => {
   const visit = (found: Element): void => {
     const kind = NodeKind.handles.find((handle) => handle === found.local);
     if (kind !== undefined) {
-      index.set(found, { ancestry: "root", id: `node-${index.size}`, kind });
+      index.set(found, { ancestry: "root", id: uuidOf(`node-${index.size}`), kind });
     }
 
     for (const child of found.children) {
@@ -109,10 +111,7 @@ const shared: Shared = {
   typedCopy,
 };
 
-const variable = (
-  id: string,
-  cardinality: "multiple" | "ordered" | "single",
-): DeclaredVariable => ({
+const variable = (id: Uuid, cardinality: "multiple" | "ordered" | "single"): DeclaredVariable => ({
   baseType: Option.some("directedPair"),
   cardinality: Option.some(cardinality),
   id,
@@ -135,7 +134,7 @@ const contextOf = (
   };
 };
 
-const pairs = new Map([["RESPONSE", variable("decl-1", "multiple")]]);
+const pairs = new Map([["RESPONSE", variable(uuidOf("decl-1"), "multiple")]]);
 
 const gapText = (identifier: string, more: Readonly<Record<string, string>> = {}): Element =>
   element("qti-gap-text", { identifier, "match-max": "1", ...more });
@@ -193,9 +192,11 @@ describe("gapRows on a gap-match interaction", () => {
         ],
       );
       assert.deepStrictEqual(Rows.of(built, DeclaredGapTextShowHide), [
-        { node: texts[0]?.id ?? "" },
+        { node: texts[0]?.id ?? uuidOf("missing") },
       ]);
-      assert.deepStrictEqual(Rows.of(built, DeclaredGapShowHide), [{ node: gaps[0]?.id ?? "" }]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredGapShowHide), [
+        { node: gaps[0]?.id ?? uuidOf("missing") },
+      ]);
     }),
   );
 
@@ -207,7 +208,7 @@ describe("gapRows on a gap-match interaction", () => {
 
       assert.deepStrictEqual(Rows.of(built, GapMatchInteraction), [
         {
-          id: "node-2",
+          id: uuidOf("node-2"),
           maxAssociationsN: 1n,
           minAssociationsN: 0n,
           responseIdentifier: "RESPONSE",
@@ -216,7 +217,7 @@ describe("gapRows on a gap-match interaction", () => {
         },
       ]);
       assert.deepStrictEqual(Rows.of(built, GapMatchBinding), [
-        { cardinality: "multiple", node: "node-2" },
+        { cardinality: "multiple", node: uuidOf("node-2") },
       ]);
       assert.deepStrictEqual(Rows.of(built, TypedBinding), [
         {
@@ -225,7 +226,7 @@ describe("gapRows on a gap-match interaction", () => {
           document: documentId,
           interactionKind: "qti-gap-match-interaction",
           maxCount: 1n,
-          node: "node-2",
+          node: uuidOf("node-2"),
           responseIdentifier: "RESPONSE",
         },
       ]);
@@ -239,15 +240,15 @@ describe("gapRows on a gap-match interaction", () => {
           row.matchMinN,
         ]),
         [
-          ["node-3", "A", "node-2", 1n, 0n],
-          ["node-4", "B", "node-2", 1n, 0n],
+          [uuidOf("node-3"), "A", uuidOf("node-2"), 1n, 0n],
+          [uuidOf("node-4"), "B", uuidOf("node-2"), 1n, 0n],
         ],
       );
       assert.deepStrictEqual(
         Rows.of(built, Gap).map((row) => [row.id, row.identifier, row.interaction, row.required]),
         [
-          ["node-6", "G1", "node-2", "false"],
-          ["node-8", "G2", "node-2", "false"],
+          [uuidOf("node-6"), "G1", uuidOf("node-2"), "false"],
+          [uuidOf("node-8"), "G2", uuidOf("node-2"), "false"],
         ],
       );
     }),
@@ -313,21 +314,23 @@ describe("gapRows on a gap-match interaction", () => {
         [[4n, 2n, "true"]],
       );
       assert.strictEqual(Rows.of(built, TypedBinding)[0]?.maxCount, 4n);
-      assert.deepStrictEqual(Rows.of(built, GapMatchMinAssociations), [{ node: "node-2" }]);
+      assert.deepStrictEqual(Rows.of(built, GapMatchMinAssociations), [{ node: uuidOf("node-2") }]);
       assert.deepStrictEqual(Rows.of(built, GapMatchMinSelectionsMessage), [
-        { node: "node-2", value: "too few" },
+        { node: uuidOf("node-2"), value: "too few" },
       ]);
       assert.deepStrictEqual(Rows.of(built, GapMatchMaxSelectionsMessage), [
-        { node: "node-2", value: "too many" },
+        { node: uuidOf("node-2"), value: "too many" },
       ]);
       assert.deepStrictEqual(Rows.of(built, GapMatchChoicesContainerWidth), [
-        { node: "node-2", value: ContainerWidth("300") },
+        { node: uuidOf("node-2"), value: ContainerWidth("300") },
       ]);
-      assert.deepStrictEqual(Rows.of(built, DeclaredGapMatchShuffle), [{ node: "node-2" }]);
-      assert.deepStrictEqual(Rows.of(built, DeclaredGapMatchMaxAssociations), [{ node: "node-2" }]);
-      assert.deepStrictEqual(Rows.of(built, GapTextMatchMin), [{ node: "node-3" }]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredGapMatchShuffle), [{ node: uuidOf("node-2") }]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredGapMatchMaxAssociations), [
+        { node: uuidOf("node-2") },
+      ]);
+      assert.deepStrictEqual(Rows.of(built, GapTextMatchMin), [{ node: uuidOf("node-3") }]);
       assert.deepStrictEqual(Rows.of(built, MatchGroup), [
-        { node: "node-3", value: MatchGroupList("G1 G2") },
+        { node: uuidOf("node-3"), value: MatchGroupList("G1 G2") },
       ]);
       assert.deepStrictEqual(
         Rows.of(built, GapText).map((row) => row.matchMinN),
@@ -337,7 +340,7 @@ describe("gapRows on a gap-match interaction", () => {
         Rows.of(built, Gap).map((row) => row.required),
         ["true"],
       );
-      assert.deepStrictEqual(Rows.of(built, DeclaredGapRequired), [{ node: "node-5" }]);
+      assert.deepStrictEqual(Rows.of(built, DeclaredGapRequired), [{ node: uuidOf("node-5") }]);
     }),
   );
 
@@ -346,7 +349,7 @@ describe("gapRows on a gap-match interaction", () => {
       const declared = new Map(pairs).set("TMPL", {
         baseType: Option.some("identifier" as const),
         cardinality: Option.some("single" as const),
-        id: "decl-2",
+        id: uuidOf("decl-2"),
         shape: "typed" as const,
       });
       const ctx = contextOf(
@@ -364,8 +367,8 @@ describe("gapRows on a gap-match interaction", () => {
       assert.deepStrictEqual(
         Rows.of(built, ChoiceTemplateRef).map((row) => [row.node, row.identifier]),
         [
-          ["node-3", "TMPL"],
-          ["node-5", "TMPL"],
+          [uuidOf("node-3"), "TMPL"],
+          [uuidOf("node-5"), "TMPL"],
         ],
       );
     }),
@@ -437,7 +440,7 @@ describe("gapRows on a graphic gap-match interaction", () => {
         ],
       );
       assert.deepStrictEqual(Rows.of(built, DeclaredGapImgShowHide), [
-        { node: images[0]?.id ?? "" },
+        { node: images[0]?.id ?? uuidOf("missing") },
       ]);
     }),
   );
@@ -450,7 +453,7 @@ describe("gapRows on a graphic gap-match interaction", () => {
 
         assert.deepStrictEqual(Rows.of(built, GraphicGapMatchInteraction), [
           {
-            id: "node-2",
+            id: uuidOf("node-2"),
             maxAssociationsN: 1n,
             minAssociationsN: 0n,
             responseIdentifier: "RESPONSE",
@@ -467,11 +470,11 @@ describe("gapRows on a graphic gap-match interaction", () => {
             row.matchMaxN,
             row.matchMinN,
           ]),
-          [["node-4", "I1", "node-2", 2n, 0n]],
+          [[uuidOf("node-4"), "I1", uuidOf("node-2"), 2n, 0n]],
         );
         assert.deepStrictEqual(
           Rows.of(built, GapText).map((row) => [row.id, row.interaction]),
-          [["node-6", "node-2"]],
+          [[uuidOf("node-6"), uuidOf("node-2")]],
         );
         for (const relation of [
           GapImgObjectLabel,
@@ -522,16 +525,20 @@ describe("gapRows on a graphic gap-match interaction", () => {
         ]),
         [[3n, 1n]],
       );
-      assert.deepStrictEqual(Rows.of(built, GraphicGapMatchMinAssociations), [{ node: "node-2" }]);
+      assert.deepStrictEqual(Rows.of(built, GraphicGapMatchMinAssociations), [
+        { node: uuidOf("node-2") },
+      ]);
       assert.deepStrictEqual(Rows.of(built, DeclaredGraphicGapMatchMaxAssociations), [
-        { node: "node-2" },
+        { node: uuidOf("node-2") },
       ]);
-      assert.deepStrictEqual(Rows.of(built, GapImgMatchMin), [{ node: "node-3" }]);
+      assert.deepStrictEqual(Rows.of(built, GapImgMatchMin), [{ node: uuidOf("node-3") }]);
       assert.deepStrictEqual(Rows.of(built, GapImgObjectLabel), [
-        { node: "node-3", value: "Label" },
+        { node: uuidOf("node-3"), value: "Label" },
       ]);
-      assert.deepStrictEqual(Rows.of(built, GapImgTop), [{ node: "node-3", value: "3" }]);
-      assert.deepStrictEqual(Rows.of(built, GapImgLeft), [{ node: "node-3", value: "1 2" }]);
+      assert.deepStrictEqual(Rows.of(built, GapImgTop), [{ node: uuidOf("node-3"), value: "3" }]);
+      assert.deepStrictEqual(Rows.of(built, GapImgLeft), [
+        { node: uuidOf("node-3"), value: "1 2" },
+      ]);
     }),
   );
 
@@ -669,7 +676,7 @@ describe("gapRows on a non-canonical integer spelling", () => {
         {
           attribute: "max-associations",
           kind: "qti-gap-match-interaction",
-          node: "node-2",
+          node: uuidOf("node-2"),
           value: "+3",
         },
       ]);

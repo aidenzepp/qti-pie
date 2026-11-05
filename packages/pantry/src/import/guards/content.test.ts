@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import type { AnyRelation, Fact } from "@bjornpagen/grizzle";
+import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
 import { ContentGuardRefusal, contentGuards } from "#pantry/import/guards/content.ts";
 import { itemRows } from "#pantry/import/item.ts";
@@ -255,7 +255,7 @@ const edited = <R extends AnyRelation>(
 /**
  * The id of the `index`th node of `kind`, in the order the rows hold them.
  */
-const nodeId = (rows: Rows, kind: string, index = 0): string => {
+const nodeId = (rows: Rows, kind: string, index = 0): Uuid => {
   const found = Rows.of(rows, Node).filter((node) => node.kind === kind)[index];
   assert.isDefined(found, `no ${kind} node ${index}`);
 

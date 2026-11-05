@@ -4,7 +4,7 @@
  * The manifest guards: the facts about a manifest's rows that no single relation can state, judged
  * over the rows an import built before any of them is written.
  */
-import type { AnyRelation } from "@bjornpagen/grizzle";
+import type { AnyRelation, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option, Predicate, Schema } from "effect";
 import { collapse, replace, Rows } from "#pantry/import/tree.ts";
 import type { WhiteSpace } from "#pantry/import/tree.ts";
@@ -244,7 +244,7 @@ interface Index {
     string,
     readonly { readonly child: string; readonly childKind: string }[]
   >;
-  readonly nodes: ReadonlyMap<string, { readonly kind: string; readonly tree: string }>;
+  readonly nodes: ReadonlyMap<string, { readonly kind: string; readonly tree: Uuid }>;
   readonly pieces: ReadonlyMap<string, string>;
   readonly texts: ReadonlyMap<string, string>;
 }
