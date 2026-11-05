@@ -2,8 +2,10 @@ import { readFile } from "node:fs/promises";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { h, text } from "#plate/emit/node.ts";
-import type { Element, Node } from "#plate/emit/node.ts";
+import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
+import type { PartOf } from "#plate/emit/parts.ts";
+import { applyPart } from "#plate/emit/swap.ts";
 import { isPosted } from "#plate/form/encoding.ts";
 import {
   checkResponses,
@@ -499,6 +501,46 @@ const rendersOf = Effect.fnUntraced(function* rendersOf(
   return { messages, trees: rendered.flatMap((entry) => parseHtml(entry.html)) };
 });
 
+/**
+ * Construct a navigation part on its default element, through its row and `applyPart`'s default
+ * path, carrying its marker and the given attributes.
+ *
+ * @param part The navigation part.
+ * @param props The attributes beside the marker.
+ * @param children The nodes the part holds.
+ * @returns The part's root element.
+ */
+const navigationPart = (
+  part: PartOf<"test-navigation">,
+  props: Attributes,
+  children: readonly Node[],
+) => {
+  const row = rowFor("test-navigation", part);
+
+  return Effect.fromResult(applyPart(row, { "data-slot": row.slot, ...props }, children));
+};
+
+/**
+ * Construct a stand-in for the test navigation's markup, until the navigation renderer emits it:
+ * the eight parts on their default elements, built through the part table, each button disabled.
+ *
+ * @returns The navigation Root, holding Previous, Next, the item list with one item, Submit and
+ *   End.
+ */
+const navigationStandIn = Effect.fnUntraced(function* navigationStandIn() {
+  const button = (part: PartOf<"test-navigation">, label: string) =>
+    navigationPart(part, { disabled: true }, [text(label)]);
+  const itemButton = yield* button("itemButton", "Item 1 of 1");
+  const item = yield* navigationPart("item", {}, [itemButton]);
+  const items = yield* navigationPart("items", {}, [item]);
+  const previous = yield* button("previous", "Previous item");
+  const next = yield* button("next", "Next item");
+  const submit = yield* button("submit", "Submit answer");
+  const end = yield* button("end", "End part");
+
+  return yield* navigationPart("root", {}, [previous, next, items, submit, end]);
+});
+
 describe("styles.css over emitted markup", () => {
   it.effect("every compound of every selector names something the emitted markup holds", () =>
     Effect.gen(function* witness() {
@@ -511,9 +553,11 @@ describe("styles.css over emitted markup", () => {
           renderStatus({ heading: "notAccepted", instance, messages }, configuration),
         ]),
       );
+      const navigation = yield* navigationStandIn();
       const trees = [
         ...renders.flatMap((entry) => entry.trees),
         ...status.flatMap((entry) => parseHtml(entry.html)),
+        navigation,
       ];
       const sheet = yield* scanSheet(
         yield* Effect.tryPromise(() =>

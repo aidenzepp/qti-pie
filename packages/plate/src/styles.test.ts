@@ -35,6 +35,20 @@ const marker = {
 const textControls: readonly string[] = [marker.textEntryControl, marker.extendedTextControl];
 
 /**
+ * The navigation parts' markers, every row of the `test-navigation` component.
+ */
+const navigationMarkers: readonly string[] = partTable
+  .filter((row) => row.interaction === "test-navigation")
+  .map((row) => row.slot);
+
+/**
+ * The navigation buttons' markers: Previous, Next, an item's button, Submit and End.
+ */
+const navigationButtons: readonly string[] = (
+  ["previous", "next", "itemButton", "submit", "end"] as const
+).map((part) => rowFor("test-navigation", part).slot);
+
+/**
  * The line that opens the base section, the QTI vocabulary classes.
  */
 const baseLine = "/* == base: QTI vocabulary classes == */";
@@ -633,6 +647,47 @@ const unfocusedControls = (sheet: Sheet, slots: readonly string[]): readonly str
   );
 
 /**
+ * Find the parts no rule dims when disabled: no rule whose subject compound holds both the part's
+ * marker and `:disabled` declares an `opacity`.
+ *
+ * @param sheet The scanned sheet.
+ * @param slots The parts' markers.
+ * @returns Each marker left without a disabled look.
+ */
+const undimmedParts = (sheet: Sheet, slots: readonly string[]): readonly string[] =>
+  slots.filter(
+    (slot) =>
+      !sheet.rules.some(
+        (rule) =>
+          Option.isSome(declared(rule, "opacity")) &&
+          rule.selectors.some((selector) =>
+            subjectCompounds(selector).some(
+              (compound) => holdsSlot(compound, slot) && holdsPseudoClass(compound, "disabled"),
+            ),
+          ),
+      ),
+  );
+
+/**
+ * Find the selectors that name a navigation marker and test `type` anywhere, so a button a host
+ * swaps to `type="submit"` would lose the default look (rule `9af3809b`).
+ *
+ * @param sheet The scanned sheet.
+ * @returns Each offending selector.
+ */
+const typedNavigationSelectors = (sheet: Sheet): readonly string[] =>
+  sheet.rules
+    .flatMap((rule) => rule.selectors)
+    .filter((selector) => {
+      const all = compoundsDeep(selector);
+
+      return (
+        all.some((compound) => navigationMarkers.some((slot) => holdsSlot(compound, slot))) &&
+        all.some((compound) => compound.attributes.some((test) => test.name === "type"))
+      );
+    });
+
+/**
  * Find the rules that give the Status region the refused look, `--destructive`, without keying it
  * on the region holding Messages: a subject compound holds the Status marker but no `:has()` whose
  * argument holds the Message marker.
@@ -1167,6 +1222,57 @@ layer(Stylesheet.layer)("styles.css", (test) => {
     }),
   );
 
+  test.effect("lays out the navigation Root, and its item list without list markers", () =>
+    Effect.gen(function* navigationLayout() {
+      const { sheet } = yield* Stylesheet;
+      const [root, items] = [
+        rowFor("test-navigation", "root").slot,
+        rowFor("test-navigation", "items").slot,
+      ];
+
+      assert.isTrue(
+        sheet.rules.some((rule) => reaches(rule, root) && declares(rule, "display", "flex")),
+        "the Root, a flex row",
+      );
+      assert.isTrue(
+        sheet.rules.some((rule) => reaches(rule, items) && declares(rule, "list-style", "none")),
+        "the item list, no markers",
+      );
+    }),
+  );
+
+  test.effect("gives each navigation button a surface and a text colour", () =>
+    Effect.gen(function* navigationColours() {
+      const { sheet } = yield* Stylesheet;
+
+      assert.deepStrictEqual(uncolouredControls(sheet, navigationButtons), []);
+    }),
+  );
+
+  test.effect("shows focus on each navigation button", () =>
+    Effect.gen(function* navigationFocus() {
+      const { sheet } = yield* Stylesheet;
+
+      assert.deepStrictEqual(unfocusedControls(sheet, navigationButtons), []);
+    }),
+  );
+
+  test.effect("dims each navigation button when it is disabled", () =>
+    Effect.gen(function* navigationDisabled() {
+      const { sheet } = yield* Stylesheet;
+
+      assert.deepStrictEqual(undimmedParts(sheet, navigationButtons), []);
+    }),
+  );
+
+  test.effect("keys no selector over a navigation marker on type", () =>
+    Effect.gen(function* navigationUntyped() {
+      const { sheet } = yield* Stylesheet;
+
+      assert.deepStrictEqual(typedNavigationSelectors(sheet), []);
+    }),
+  );
+
   test.effect("names every part marker of the part table in some selector", () =>
     Effect.gen(function* markers() {
       const { sheet } = yield* Stylesheet;
@@ -1371,6 +1477,21 @@ describe("styles.css predicates, on negative controls", () => {
 
         assert.deepStrictEqual(lowNoticePairs(bare), ["fallbacks, in --muted: 4.34:1"]);
         assert.deepStrictEqual(lowNoticePairs(painted), []);
+      }),
+  );
+
+  it.effect(
+    "a navigation button keyed on its type is reported, and one keyed on its marker is not",
+    () =>
+      Effect.gen(function* typedButton() {
+        const [next] = navigationButtons;
+        const typed = `:where([data-slot="${next ?? ""}"][type="submit"])`;
+        const bare = `:where([data-slot="${next ?? ""}"])`;
+        const sheet = yield* scanSheet(
+          `${typed} {\n  opacity: 0.5;\n}\n\n${bare} {\n  opacity: 0.5;\n}\n`,
+        );
+
+        assert.deepStrictEqual(typedNavigationSelectors(sheet), [typed]);
       }),
   );
 

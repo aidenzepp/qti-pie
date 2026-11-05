@@ -238,6 +238,62 @@ describe("applyPart, a row's defaults", () => {
   );
 });
 
+/**
+ * The navigation Next button's row, a plain button whose `type` is a default.
+ */
+const nextRow = rowFor("test-navigation", "next");
+
+/**
+ * The Next button's attributes, as the navigation parts compute them for a disabled Next.
+ */
+const nextProps: Attributes = { "data-intent": "next", "data-slot": nextRow.slot, disabled: true };
+
+describe("applyPart, the navigation Next button", () => {
+  it.effect("writes type button onto the default button on the fast path", () =>
+    Effect.gen(function* nextFastPath() {
+      const result = yield* Effect.fromResult(applyPart(nextRow, nextProps, [text("Next item")]));
+      assert.strictEqual(result.tag, "button");
+      assert.deepStrictEqual(result.attrs, { ...nextProps, type: "button" });
+    }),
+  );
+
+  it.effect(
+    "keeps a host submit button's type, name and value, and writes the props over them",
+    () =>
+      Effect.gen(function* nextSubmitSwap() {
+        const replacement = returning(
+          h("button", { "data-slot": "host-button", name: "n", type: "submit", value: "v" }),
+        );
+        const result = yield* Effect.fromResult(applyPart(nextRow, nextProps, [], replacement));
+        assert.deepStrictEqual(result.attrs, {
+          ...nextProps,
+          name: "n",
+          type: "submit",
+          value: "v",
+        });
+      }),
+  );
+
+  it.effect("writes type button onto a replacement button that names no type", () =>
+    Effect.gen(function* nextUntypedSwap() {
+      const result = yield* Effect.fromResult(applyPart(nextRow, nextProps, [], as("button")));
+      assert.deepStrictEqual(result.attrs, { ...nextProps, type: "button" });
+    }),
+  );
+
+  it.effect("refuses a div for the Next button as root-not-allowed", () =>
+    Effect.gen(function* nextNotButton() {
+      const error = yield* Effect.flip(
+        Effect.fromResult(applyPart(nextRow, nextProps, [], as("div"))),
+      );
+      assert.strictEqual(error._tag, "PartSwapRefused");
+      assert.strictEqual(error.cause, "root-not-allowed");
+      assert.strictEqual(error.interaction, "test-navigation");
+      assert.strictEqual(error.part, "next");
+    }),
+  );
+});
+
 describe("applyPart, I2", () => {
   it.effect("accepts a wrapper between the root and the children it was handed", () =>
     Effect.gen(function* wrapperAccepted() {

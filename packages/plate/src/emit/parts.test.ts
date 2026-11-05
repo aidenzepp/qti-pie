@@ -62,6 +62,50 @@ const specRows = [
   ],
   ["extended-text-interaction", "prompt", "extended-text-interaction-prompt", "qti-prompt"],
   ["extended-text-interaction", "control", "extended-text-interaction-control", "textarea"],
+  ["test-navigation", "root", "test-navigation", "nav"],
+  ["test-navigation", "previous", "test-navigation-previous", "button"],
+  ["test-navigation", "next", "test-navigation-next", "button"],
+  ["test-navigation", "items", "test-navigation-items", "ol"],
+  ["test-navigation", "item", "test-navigation-item", "li"],
+  ["test-navigation", "itemButton", "test-navigation-item-button", "button"],
+  ["test-navigation", "submit", "test-navigation-submit", "button"],
+  ["test-navigation", "end", "test-navigation-end", "button"],
+] as const;
+
+/**
+ * The navigation parts, in spec §4.10's order: the Root, the five buttons, the item list and its
+ * items.
+ */
+const navigationParts = [
+  "root",
+  "previous",
+  "next",
+  "items",
+  "item",
+  "itemButton",
+  "submit",
+  "end",
+] as const;
+
+/**
+ * The navigation buttons, each a plain `button` whose `type` is a default a replacement may set.
+ */
+const navigationButtons = ["previous", "next", "itemButton", "submit", "end"] as const;
+
+/**
+ * The attributes that give a button submit semantics, none of which a navigation row merges, so a
+ * host's replacement can give its own (rule `9af3809b`).
+ */
+const submitSemantics = [
+  "type",
+  "name",
+  "value",
+  "form",
+  "formaction",
+  "formmethod",
+  "formenctype",
+  "formtarget",
+  "formnovalidate",
 ] as const;
 
 /**
@@ -157,6 +201,106 @@ describe("partTable", () => {
       "aria-describedby",
       "autofocus",
     ]);
+  });
+});
+
+describe("the test-navigation rows", () => {
+  it("resolves each navigation part by rowFor, and its marker back to it through the table", () => {
+    for (const part of navigationParts) {
+      const row = rowFor("test-navigation", part);
+      assert.strictEqual(row.interaction, "test-navigation", part);
+      assert.strictEqual(row.part, part);
+      assert.deepStrictEqual(Option.getOrUndefined(partForSlot(row.slot)), {
+        interaction: "test-navigation",
+        part,
+      });
+    }
+  });
+
+  it("gives the Root the component's marker and every other part its own", () => {
+    const root = rowFor("test-navigation", "root").slot;
+    assert.strictEqual(root, "test-navigation");
+    for (const part of navigationParts.filter((name) => name !== "root")) {
+      assert.isTrue(rowFor("test-navigation", part).slot.startsWith(`${root}-`), part);
+    }
+  });
+
+  it("defaults the five buttons to type button and no other row of the table", () => {
+    for (const part of navigationButtons) {
+      assert.deepStrictEqual(rowFor("test-navigation", part).defaults, { type: "button" }, part);
+    }
+
+    const defaulted = partTable
+      .filter((row) => Object.keys(row.defaults).length > 0)
+      .map((row) => `${row.interaction} ${row.part}`);
+    assert.deepStrictEqual(
+      defaulted,
+      navigationButtons.map((part) => `test-navigation ${part}`),
+    );
+  });
+
+  it("merges no attribute of submit semantics on any navigation row", () => {
+    for (const part of navigationParts) {
+      const { merged } = rowFor("test-navigation", part);
+      const met = submitSemantics.filter((name) => merged.includes(name));
+      assert.deepStrictEqual(met, [], part);
+    }
+  });
+
+  it("merges the Root's name and modes, and each button's state and intent", () => {
+    assert.deepStrictEqual(rowFor("test-navigation", "root").merged, [
+      "aria-label",
+      "data-navigation",
+      "data-submission",
+    ]);
+    for (const part of ["previous", "next", "submit", "end"] as const) {
+      assert.deepStrictEqual(rowFor("test-navigation", part).merged, ["disabled", "data-intent"]);
+    }
+
+    assert.deepStrictEqual(rowFor("test-navigation", "itemButton").merged, [
+      "disabled",
+      "data-intent",
+      "aria-current",
+    ]);
+    assert.deepStrictEqual(rowFor("test-navigation", "items").merged, []);
+    assert.deepStrictEqual(rowFor("test-navigation", "item").merged, []);
+  });
+
+  it("lets a button become only a button, the Items a list, the Item an li, the Root no control", () => {
+    for (const part of navigationButtons) {
+      const row = rowFor("test-navigation", part);
+      assert.isTrue(allows(row, h("button", {})), part);
+      for (const tag of ["div", "input", "a", "span", "my-button"]) {
+        assert.isFalse(allows(row, h(tag, {})), `${part} ${tag}`);
+      }
+    }
+
+    const root = rowFor("test-navigation", "root");
+    assert.isTrue(allows(root, h("nav", {})));
+    assert.isTrue(allows(root, h("div", {})));
+    for (const tag of [...controls, ...links, ...lists]) {
+      assert.isFalse(allows(root, h(tag, {})), tag);
+    }
+
+    const items = rowFor("test-navigation", "items");
+    assert.isTrue(allows(items, h("ul", {})));
+    assert.isFalse(allows(items, h("div", {})));
+    assert.isTrue(allows(rowFor("test-navigation", "item"), h("li", {})));
+    assert.isFalse(allows(rowFor("test-navigation", "item"), h("div", {})));
+  });
+
+  it("owns no list joint rule, as the item chrome's Messages own none", () => {
+    for (const part of navigationParts) {
+      assert.isFalse(rowFor("test-navigation", part).listOwner, part);
+    }
+  });
+});
+
+describe("autocomplete on the Controls", () => {
+  it("is merged on the two text Controls and never on the Choice Control", () => {
+    assert.include(rowFor("text-entry-interaction", "control").merged, "autocomplete");
+    assert.include(rowFor("extended-text-interaction", "control").merged, "autocomplete");
+    assert.notInclude(rowFor("choice-interaction", "control").merged, "autocomplete");
   });
 });
 
@@ -422,6 +566,17 @@ const instance = "merged-0";
 const markerAndState: ReadonlySet<string> = new Set(["data-disabled", "data-mode", "data-slot"]);
 
 /**
+ * The merged attributes no connect function writes yet, by marker: the two text Controls'
+ * `autocomplete`, which the Text Entry and Extended Text connect functions write in M2's render
+ * modes. The merged column may hold them before any render does; it never holds an attribute a
+ * render writes and the column lacks.
+ */
+const notYetComputed: ReadonlyMap<string, readonly string[]> = new Map([
+  [rowFor("text-entry-interaction", "control").slot, ["autocomplete"]],
+  [rowFor("extended-text-interaction", "control").slot, ["autocomplete"]],
+]);
+
+/**
  * Construct a text node of the body.
  *
  * @param value The text.
@@ -652,7 +807,7 @@ const rowKey = (row: PartRow): string =>
 
 describe("the merged column", () => {
   it.effect(
-    "records, for every row, exactly the attributes its connect function computes beyond the marker and the Root state",
+    "records, for every row render emits, the attributes its connect function computes beyond the marker and the Root state",
     () =>
       Effect.gen(function* mergedColumn() {
         const configuration = yield* configure({});
@@ -707,18 +862,19 @@ describe("the merged column", () => {
         }
 
         const rows = [
-          ...partTable,
+          ...partTable.filter((row) => row.interaction !== "test-navigation"),
           rowFor("item", "notice", { position: "flow" }),
           rowFor("choice-interaction", "prompt", { promptMarkup: "legend" }),
           rowFor("choice-interaction", "root", { promptMarkup: "legend" }),
         ];
         for (const row of rows) {
           const names = observed.get(rowKey(row));
+          const pending = notYetComputed.get(row.slot) ?? [];
 
           assert.isDefined(names, `${rowKey(row)} was never rendered`);
           assert.deepStrictEqual(
             [...(names ?? [])].toSorted(),
-            [...row.merged].toSorted(),
+            row.merged.filter((name) => !pending.includes(name) || names?.has(name)).toSorted(),
             rowKey(row),
           );
         }
