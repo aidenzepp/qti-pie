@@ -1,6 +1,6 @@
 /**
- * The import's guards, run as one: the tree, manifest, item, content, processing and usage
- * checks a built `Rows` must pass before anything is written.
+ * The import's guards, run as one: the tree, manifest, item, content, processing, usage and
+ * wildcard checks a built `Rows` must pass before anything is written.
  *
  * @module
  */
@@ -15,19 +15,21 @@ import { manifestGuards } from "#pantry/import/guards/manifest.ts";
 import type { ManifestGuardRefusal } from "#pantry/import/guards/manifest.ts";
 import { processingGuards } from "#pantry/import/guards/processing.ts";
 import type { ProcessingGuardRefusal } from "#pantry/import/guards/processing.ts";
+import { wildcardGuards } from "#pantry/import/guards/wildcard.ts";
+import type { WildcardGuardRefusal } from "#pantry/import/guards/wildcard.ts";
 import { treeGuards } from "#pantry/import/guards/tree.ts";
 import type { GuardRefusal } from "#pantry/import/guards/tree.ts";
 import type { Rows } from "#pantry/import/tree.ts";
 import type { Entry } from "#pantry/package/read.ts";
 
 /**
- * Run the tree, manifest, item, content, processing and usage guards in that order over the rows
- * an import built.
+ * Run the tree, manifest, item, content, processing, usage and wildcard guards in that order over
+ * the rows an import built. The wildcard guard runs last, so every other refusal still comes first.
  *
  * @param rows - The rows the import built.
  * @param entries - The package's entries, as `listPackage` returns them.
  * @returns Nothing when every guard passes; fails with the first refusal, in the order tree,
- *   manifest, item, content, processing, usage.
+ *   manifest, item, content, processing, usage, wildcard.
  */
 export const guards = Effect.fn("guards")(function* guards(
   rows: Rows,
@@ -40,6 +42,7 @@ export const guards = Effect.fn("guards")(function* guards(
   | ContentGuardRefusal
   | ProcessingGuardRefusal
   | UsageGuardRefusal
+  | WildcardGuardRefusal
 > {
   yield* treeGuards(rows);
   yield* manifestGuards(rows, entries);
@@ -47,4 +50,5 @@ export const guards = Effect.fn("guards")(function* guards(
   yield* contentGuards(rows);
   yield* processingGuards(rows);
   yield* usageGuards(rows);
+  yield* wildcardGuards(rows);
 });

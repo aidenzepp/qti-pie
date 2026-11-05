@@ -15,6 +15,7 @@ import type { ManifestGuardRefusal } from "#pantry/import/guards/manifest.ts";
 import type { ProcessingGuardRefusal } from "#pantry/import/guards/processing.ts";
 import type { GuardRefusal } from "#pantry/import/guards/tree.ts";
 import type { UsageGuardRefusal } from "#pantry/import/guards/usage.ts";
+import type { WildcardGuardRefusal } from "#pantry/import/guards/wildcard.ts";
 import type { NotQti3 } from "#pantry/import/manifest.ts";
 import type { ProcessingRefused } from "#pantry/import/processing.ts";
 import type { ExternalRefusal } from "#pantry/import/record.ts";
@@ -465,7 +466,6 @@ const checkRuleByForm = (relation: string, name: string): Rule | undefined => {
 const capacityRules = new Map<string, Rule>([
   ["AreaMapEntry<Coords", "coords-owner"],
   ["AssociableHotspot<Coords", "coords-owner"],
-  ["AttributeExclusion<ForeignAttribute", "wildcard-namespace"],
   ["ChoiceInteraction<SimpleChoice", "choice-present"],
   ["ColgroupSpan<Edge", "colgroup-span"],
   ["Details<Edge", "details-summary"],
@@ -475,8 +475,6 @@ const capacityRules = new Map<string, Rule>([
   ["Expression<Operand", "P2"],
   ["ExpressionMax<Operand", "P2"],
   ["GapMatchBinding<Gap", "gap-multiple"],
-  ["GlobalAttribute<ForeignAttribute", "wildcard-declared"],
-  ["GlobalElement<ForeignElement", "wildcard-declared"],
   ["GraphicOrderInteraction<HotspotChoice", "order-choice-count"],
   ["HotspotChoice<Coords", "coords-owner"],
   ["Index<IndexNRef", "P32"],
@@ -500,7 +498,6 @@ const capacityRules = new Map<string, Rule>([
   ["Table<Edge", "table-parts"],
   ["TypedValueSet<DeclaredValue", "value-single"],
   ["ValueSet<DeclaredValue", "value-present"],
-  ["WildcardExclusion<ForeignElement", "wildcard-namespace"],
 ]);
 
 /**
@@ -1437,6 +1434,7 @@ export type ReadRefusal =
   | UnmodeledVocabulary
   | UsageGuardRefusal
   | WellFormednessError
+  | WildcardGuardRefusal
   | ZipRefusal;
 
 /**
@@ -1486,6 +1484,7 @@ export const ruleOfError = (e: ContentGuardRefusal | ReadRefusal): ImportRefused
           detail: `${g.message} at line ${g.line}, column ${g.column}`,
           rule: "well-formedness",
         }),
+      WildcardGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ZipRefusal: (g) => new ImportRefused({ detail: `${g.entry}: ${g.feature}`, rule: g.rule }),
     }),
   );
