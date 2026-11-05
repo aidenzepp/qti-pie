@@ -64,6 +64,34 @@ const fields = [
   ["coordsPoly", () => str.regex(patterns.coordsPoly)],
   ["coordsAny", () => str.regex(patterns.coordsAny)],
   ["ariaRelevantList", () => str.regex(patterns.ariaRelevantList)],
+  ["mathmlAlign", () => str.regex(patterns.mathmlAlign)],
+  ["mathmlAlignmentscope", () => str.regex(patterns.mathmlAlignmentscope)],
+  ["mathmlAltimgValign", () => str.regex(patterns.mathmlAltimgValign)],
+  ["mathmlBackground", () => str.regex(patterns.mathmlBackground)],
+  ["mathmlCharacter", () => str.regex(patterns.mathmlCharacter)],
+  ["mathmlCharspacing", () => str.regex(patterns.mathmlCharspacing)],
+  ["mathmlClass", () => str.regex(patterns.mathmlClass)],
+  ["mathmlColor", () => str.regex(patterns.mathmlColor)],
+  ["mathmlColumnalign", () => str.regex(patterns.mathmlColumnalign)],
+  ["mathmlColumnwidth", () => str.regex(patterns.mathmlColumnwidth)],
+  ["mathmlCrossout", () => str.regex(patterns.mathmlCrossout)],
+  ["mathmlFramespacing", () => str.regex(patterns.mathmlFramespacing)],
+  ["mathmlGroupAlignmentList", () => str.regex(patterns.mathmlGroupAlignmentList)],
+  ["mathmlGroupAlignmentListList", () => str.regex(patterns.mathmlGroupAlignmentListList)],
+  ["mathmlIndentshiftLine", () => str.regex(patterns.mathmlIndentshiftLine)],
+  ["mathmlInteger", () => str.regex(patterns.mathmlInteger)],
+  ["mathmlLength", () => str.regex(patterns.mathmlLength)],
+  ["mathmlLengthList", () => str.regex(patterns.mathmlLengthList)],
+  ["mathmlLineThickness", () => str.regex(patterns.mathmlLineThickness)],
+  ["mathmlLinestyleList", () => str.regex(patterns.mathmlLinestyleList)],
+  ["mathmlMathsize", () => str.regex(patterns.mathmlMathsize)],
+  ["mathmlMaxsize", () => str.regex(patterns.mathmlMaxsize)],
+  ["mathmlMpaddedLength", () => str.regex(patterns.mathmlMpaddedLength)],
+  ["mathmlNumber", () => str.regex(patterns.mathmlNumber)],
+  ["mathmlPositiveInteger", () => str.regex(patterns.mathmlPositiveInteger)],
+  ["mathmlRowalign", () => str.regex(patterns.mathmlRowalign)],
+  ["mathmlTableWidth", () => str.regex(patterns.mathmlTableWidth)],
+  ["mathmlUnsignedInteger", () => str.regex(patterns.mathmlUnsignedInteger)],
 ] as const;
 
 /**
@@ -71,6 +99,12 @@ const fields = [
  */
 const admits = (source: string, flags: string, value: string): boolean =>
   new RegExp(source, flags).test(value);
+
+/**
+ * An XML `collapse`: runs of XML space become one space, and the ends are trimmed.
+ */
+const collapse = (value: string): string =>
+  value.replaceAll(/[ \t\n\r]+/gu, " ").replaceAll(/^ | $/gu, "");
 
 /**
  * `count` segments of `length` `a`, joined by `/`.
@@ -90,8 +124,8 @@ const subtagTag = (subtags: number): string => `en-${dashed(subtags - 1, "a1")}`
 
 /**
  * Every export of `patterns.ts`, sorted: the 53 open, 2 list and 11 media-extension patterns of the
- * closed-vocabulary classification, `nonCanonicalInteger`, and the `*Flags` constants. A pattern
- * that a roster replaced is not among them.
+ * closed-vocabulary classification, `nonCanonicalInteger`, the 28 MathML patterns, and the `*Flags`
+ * constants. A pattern that a roster replaced is not among them.
  */
 const exportNames = [
   "anyUri",
@@ -127,6 +161,34 @@ const exportNames = [
   "integerOrVariableRef",
   "integerOrVariableString",
   "lengthDType",
+  "mathmlAlign",
+  "mathmlAlignmentscope",
+  "mathmlAltimgValign",
+  "mathmlBackground",
+  "mathmlCharacter",
+  "mathmlCharspacing",
+  "mathmlClass",
+  "mathmlColor",
+  "mathmlColumnalign",
+  "mathmlColumnwidth",
+  "mathmlCrossout",
+  "mathmlFramespacing",
+  "mathmlGroupAlignmentList",
+  "mathmlGroupAlignmentListList",
+  "mathmlIndentshiftLine",
+  "mathmlInteger",
+  "mathmlLength",
+  "mathmlLengthList",
+  "mathmlLineThickness",
+  "mathmlLinestyleList",
+  "mathmlMathsize",
+  "mathmlMaxsize",
+  "mathmlMpaddedLength",
+  "mathmlNumber",
+  "mathmlPositiveInteger",
+  "mathmlRowalign",
+  "mathmlTableWidth",
+  "mathmlUnsignedInteger",
   "mimeType",
   "mimeTypeList",
   "ncName",
@@ -637,5 +699,393 @@ describe("processing patterns", () => {
       assert.isTrue(admits(intOrIdentifier, "u", value), value);
     }
     assert.isFalse(admits(intOrIdentifier, "u", "1.5"));
+  });
+
+  /**
+   * The MathML patterns' sampled cases: the values each admits and refuses, as the pattern is
+   * judged. A pattern whose XSD type is a list, an integer or a decimal judges the collapsed value
+   * (`collapses` is true, and the sample is collapsed before the test); an `xs:string`-based
+   * pattern and a union judge the value as read and carry their own space.
+   *
+   * Every sample's verdict was checked once against the XSD: each value was written as the
+   * attribute of one MathML element in a QTI item (`m:mspace/@width` for `length`, `m:mstyle` for
+   * most, `m:mtable` for the table lists, `m:mfrac/@linethickness`, `m:maction/@selection`, and so
+   * on), and `xmllint` judged the item against the 3.0.1 ASI schema, whose MathML types are the
+   * XSD's. The command, one item per pattern, each sample on its own line so an error names it:
+   *
+   *     XML_CATALOG_FILES=~/.cache/gr8des/qti3/oracle/catalog.xml \
+   *       xmllint --nonet --noout \
+   *       --schema ~/.cache/gr8des/qti3/oracle/xsd/imsqti_asiv3p0p1_v1p0.xsd probe.xml
+   *
+   * Its verdicts against the patterns', per pattern (every admitted sample validated, every refused
+   * one failed to validate, except the five below):
+   *
+   *     mathmlLength: 18/18 agree
+   *     mathmlMpaddedLength: 14/14 agree
+   *     mathmlColor: 13/13 agree
+   *     mathmlCharacter: 8/8 agree
+   *     mathmlAlign: 9/9 agree
+   *     mathmlClass: 11/11 agree
+   *     mathmlNumber: 13/13 agree
+   *     mathmlUnsignedInteger: 19/19 agree
+   *     mathmlInteger: 9/9 agree
+   *     mathmlPositiveInteger: 10/10 agree
+   *     mathmlMathsize: 12/12 agree
+   *     mathmlIndentshiftLine: 8/8 agree
+   *     mathmlLineThickness: 12/12 agree
+   *     mathmlCharspacing: 10/10 agree
+   *     mathmlMaxsize: 7/7 agree
+   *     mathmlAltimgValign: 9/9 agree
+   *     mathmlTableWidth: 7/7 agree
+   *     mathmlBackground: 10/10 agree
+   *     mathmlLinestyleList: 7/7 agree
+   *     mathmlLengthList: 7/7 agree
+   *     mathmlColumnalign: 6/6 agree
+   *     mathmlRowalign: 6/6 agree
+   *     mathmlCrossout: 8/8 agree
+   *     mathmlAlignmentscope: 6/6 agree
+   *     mathmlColumnwidth: 9/9 agree
+   *     mathmlFramespacing: 7/7 agree
+   *     mathmlGroupAlignmentList: 6/6 agree
+   *     mathmlGroupAlignmentListList: 13/13 agree
+   *     ALL AGREE
+   *
+   * Five samples validate under `xmllint` and are refused here on purpose, each a reading, not a
+   * defect. A leading plus sign: `+0.5` (`number`), `+3` (`unsigned-integer`), `+1`
+   * (`mathmlInteger`) and `+2` (`mathmlPositiveInteger`) are XSD-valid and refused, because the
+   * Recommendation's syntax does not list the sign (E A1, decision 109). The empty `class`: the
+   * XSD's `xs:NMTOKENS` carries a `minLength` of one (XSD 1.0 Part 2, section 3.2.9) and libxml2
+   * does not enforce it on an empty list, so the pattern follows the XSD text and refuses it.
+   */
+  const mathmlSamples = [
+    [
+      "mathmlLength",
+      patterns.mathmlLength,
+      false,
+      [
+        "1em",
+        " -0.5ex ",
+        "thinmathspace",
+        "2",
+        ".5",
+        "3.",
+        "10%",
+        "negativeverythickmathspace",
+        "1px",
+        "-1in",
+        "\t1em\n",
+      ],
+      ["1 em", "em", "", "+1em", "1.2.3", "verythickmathspaces", "1 %"],
+    ],
+    [
+      "mathmlMpaddedLength",
+      patterns.mathmlMpaddedLength,
+      false,
+      ["1", "+1.5 em", "-.5", "10% height", "100%", "2 width", "1 thinmathspace", " 3px ", "1 %"],
+      ["", "em", "1 2", "1 widthh", "--1"],
+    ],
+    [
+      "mathmlColor",
+      patterns.mathmlColor,
+      false,
+      ["#fff", "Teal", "#a1B2c3", " RED ", "YELLOW", "aqua"],
+      ["#ff", "#ffff", "#fffffff", "orange", "tea l", "", "#ggg"],
+    ],
+    [
+      "mathmlCharacter",
+      patterns.mathmlCharacter,
+      false,
+      [".", " , ", "x", "é"],
+      ["", "ab", " ", "\t"],
+    ],
+    [
+      "mathmlAlign",
+      patterns.mathmlAlign,
+      false,
+      ["top", "top 2", " axis -1 ", "baseline\n3"],
+      ["", "top 2 3", "middle", "top +2", "top1"],
+    ],
+    [
+      "mathmlClass",
+      patterns.mathmlClass,
+      true,
+      ["a", "a b", "a-b.c_d:e", "x1  y2", " a ", "a\tb"],
+      ["a,b", "a;b", "a/b", "×", ""],
+    ],
+    [
+      "mathmlNumber",
+      patterns.mathmlNumber,
+      true,
+      ["-0.5", ".5", "0", "12", "3.", "-.5", " 1 "],
+      ["", ".", "1e3", "--1", "1.2.3", "+0.5"],
+    ],
+    [
+      "mathmlUnsignedInteger",
+      patterns.mathmlUnsignedInteger,
+      true,
+      [
+        "3",
+        "0",
+        "-0",
+        "-000",
+        "18446744073709551615",
+        "18446744073709551614",
+        "00000000000000000003",
+        "09999999999999999999",
+        " 7 ",
+        "1844674407370955161",
+        "10000000000000000000",
+      ],
+      [
+        "-1",
+        "-01",
+        "18446744073709551616",
+        "18446744073709551620",
+        "99999999999999999999",
+        "",
+        "1.5",
+        "+3",
+      ],
+    ],
+    [
+      "mathmlInteger",
+      patterns.mathmlInteger,
+      true,
+      ["-1", "0", "7", "007", " 3 "],
+      ["", "1.5", "--1", "+1"],
+    ],
+    [
+      "mathmlPositiveInteger",
+      patterns.mathmlPositiveInteger,
+      true,
+      ["2", "10", "007", " 3 "],
+      ["0", "000", "-1", "", "1.5", "+2"],
+    ],
+    [
+      "mathmlMathsize",
+      patterns.mathmlMathsize,
+      false,
+      ["small", " normal ", "big", "1em", " -0.5ex ", "thinmathspace", "2"],
+      ["smal", "small big", "", "1 em", "huge"],
+    ],
+    [
+      "mathmlIndentshiftLine",
+      patterns.mathmlIndentshiftLine,
+      false,
+      ["indentshift", " indentshift ", "1em", "-2"],
+      ["indent", "indentshift 1", "", "1 em"],
+    ],
+    [
+      "mathmlLineThickness",
+      patterns.mathmlLineThickness,
+      false,
+      ["thin", "medium", "thick", " thick ", "1px", "thinmathspace", "mediummathspace", "0"],
+      ["thinn", "thin thick", "", "1 px"],
+    ],
+    [
+      "mathmlCharspacing",
+      patterns.mathmlCharspacing,
+      false,
+      ["loose", "medium", "tight", " tight ", "2em", "thickmathspace"],
+      ["thin", "loose tight", "", "1 em"],
+    ],
+    [
+      "mathmlMaxsize",
+      patterns.mathmlMaxsize,
+      false,
+      ["infinity", " infinity ", "10px", "1"],
+      ["infinite", "", "infinity 1"],
+    ],
+    [
+      "mathmlAltimgValign",
+      patterns.mathmlAltimgValign,
+      false,
+      ["top", "middle", "bottom", " middle ", "-2px", "0"],
+      ["center", "", "top bottom"],
+    ],
+    [
+      "mathmlTableWidth",
+      patterns.mathmlTableWidth,
+      false,
+      ["auto", " auto ", "100%", "2em"],
+      ["fit", "", "auto 1"],
+    ],
+    [
+      "mathmlBackground",
+      patterns.mathmlBackground,
+      false,
+      ["transparent", " transparent ", "#fff", "Teal", " Red "],
+      ["transparentt", "", "#ff", "orange", "red blue"],
+    ],
+    [
+      "mathmlLinestyleList",
+      patterns.mathmlLinestyleList,
+      true,
+      ["none", "solid dashed", " solid  none dashed ", "dashed\nsolid"],
+      ["", "solid dotted", "solid,none"],
+    ],
+    [
+      "mathmlLengthList",
+      patterns.mathmlLengthList,
+      true,
+      ["1em", "1em 2px", " thinmathspace   3% ", "0 0 0"],
+      ["", "1 em", "1em, 2px"],
+    ],
+    [
+      "mathmlColumnalign",
+      patterns.mathmlColumnalign,
+      true,
+      ["left", "left center right", " center  right "],
+      ["", "top", "left,right"],
+    ],
+    [
+      "mathmlRowalign",
+      patterns.mathmlRowalign,
+      true,
+      ["top", "axis baseline", " center  bottom "],
+      ["", "left", "top,bottom"],
+    ],
+    [
+      "mathmlCrossout",
+      patterns.mathmlCrossout,
+      true,
+      [
+        "none",
+        "updiagonalstrike downdiagonalstrike",
+        "",
+        " verticalstrike  horizontalstrike ",
+        "   ",
+      ],
+      ["strike", "none box", "none,none"],
+    ],
+    [
+      "mathmlAlignmentscope",
+      patterns.mathmlAlignmentscope,
+      true,
+      ["true", "false true", " true  false "],
+      ["", "yes", "true,false"],
+    ],
+    [
+      "mathmlColumnwidth",
+      patterns.mathmlColumnwidth,
+      true,
+      ["auto", "fit", "1em auto fit", " 10% 2px ", "thinmathspace"],
+      ["", "wide", "auto,fit", "1 em"],
+    ],
+    [
+      "mathmlFramespacing",
+      patterns.mathmlFramespacing,
+      true,
+      ["1em 2px", " 0  0 ", "thinmathspace 10%"],
+      ["", "1em", "1em 2px 3px", "1 em 2px"],
+    ],
+    [
+      "mathmlGroupAlignmentList",
+      patterns.mathmlGroupAlignmentList,
+      true,
+      ["left", "left decimalpoint center", " right  right "],
+      ["", "top", "left,right"],
+    ],
+    [
+      "mathmlGroupAlignmentListList",
+      patterns.mathmlGroupAlignmentListList,
+      false,
+      [
+        "",
+        " ",
+        "{left}",
+        "{left right} {center}",
+        " {left  decimalpoint} {right}",
+        "{left}{right}",
+      ],
+      ["left", "{}", "{top}", "{left right", "{left,right}", "{ }", "{ left }"],
+    ],
+  ] as const;
+
+  it("every MathML pattern has a sampled case, and no sample names another", () => {
+    assert.deepStrictEqual(
+      mathmlSamples.map(([name]) => name).toSorted(),
+      Object.keys(patterns)
+        .filter((name) => name.startsWith("mathml"))
+        .toSorted(),
+    );
+    assert.strictEqual(mathmlSamples.length, 28);
+  });
+
+  for (const [name, source, collapses, admitted, refused] of mathmlSamples) {
+    it(`${name} admits and refuses its samples`, () => {
+      for (const value of admitted) {
+        assert.isTrue(
+          admits(source, "u", collapses ? collapse(value) : value),
+          JSON.stringify(value),
+        );
+      }
+      for (const value of refused) {
+        assert.isFalse(
+          admits(source, "u", collapses ? collapse(value) : value),
+          JSON.stringify(value),
+        );
+      }
+    });
+  }
+
+  it("mathmlUnsignedInteger admits leading zeros of any count and bounds the significant digits", () => {
+    const { mathmlUnsignedInteger } = patterns;
+    const admitted = [
+      `${"0".repeat(21)}5`,
+      "0000018446744073709551615",
+      `-${"0".repeat(25)}`,
+      "-0",
+    ];
+    for (const value of admitted) {
+      assert.isTrue(admits(mathmlUnsignedInteger, "u", value), value);
+    }
+    const refused = [
+      "18446744073709551616",
+      "000018446744073709551616",
+      "+5",
+      "-1",
+      "-01",
+      "-",
+      "",
+    ];
+    for (const value of refused) {
+      assert.isFalse(admits(mathmlUnsignedInteger, "u", value), value);
+    }
+  });
+
+  it("mathmlUnsignedInteger bounds its value at 18446744073709551615 and no further", () => {
+    const { mathmlUnsignedInteger } = patterns;
+    const bound = 18_446_744_073_709_551_615n;
+    const near = [0n, 1n, 9n, 10n, 99_999n, bound / 2n, bound - 1000n, bound - 1n, bound];
+    for (const value of near) {
+      assert.isTrue(admits(mathmlUnsignedInteger, "u", value.toString()), value.toString());
+      assert.isTrue(admits(mathmlUnsignedInteger, "u", value.toString().padStart(20, "0")));
+    }
+    const beyond = [bound + 1n, bound + 2n, bound + 1000n, 2n * bound, 10n ** 20n - 1n];
+    for (const value of beyond) {
+      assert.isFalse(admits(mathmlUnsignedInteger, "u", value.toString()), value.toString());
+    }
+    // Every twenty-digit value's verdict is its value's: the digit-by-digit bound has no hole.
+    for (let digit = 0; digit < 20; digit += 1) {
+      const shift = 10n ** BigInt(19 - digit);
+      for (const step of [-1n, 0n, 1n]) {
+        const value = (bound / shift) * shift + step * shift;
+        if (value < 0n) {
+          continue;
+        }
+
+        assert.strictEqual(
+          admits(mathmlUnsignedInteger, "u", value.toString().padStart(20, "0")),
+          value <= bound,
+          value.toString(),
+        );
+      }
+    }
+  });
+
+  it("xsInteger still admits a leading plus sign, which mathmlInteger refuses", () => {
+    assert.isTrue(admits(patterns.xsInteger, "u", "+1"));
+    assert.isFalse(admits(patterns.mathmlInteger, "u", "+1"));
   });
 });

@@ -523,3 +523,236 @@ export const drdHazard =
  * February and leap-day validity, which `xs:date` requires, is a guard's, not the pattern's.
  */
 export const usageDate = "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$" as const;
+
+/**
+ * The XSD's `\s` for a MathML pattern: the four XML space characters, as a class, because XSD's
+ * `\s` is `[ \t\n\r]` and JavaScript's is wider. A MathML pattern whose XSD type is
+ * `xs:string`-based keeps its own whitespace, so it carries this class where the XSD writes `\s*`.
+ */
+const mathmlSpace = "[ \\t\\n\\r]" as const;
+
+/**
+ * The `m:length` pattern of `mathml3-common.xsd` (line 96) without its anchors or its `\s*` ends:
+ * a number with an optional unit, or a named math space. A list or union member holds this body
+ * once the whitespace around it is gone.
+ */
+const mathmlLengthBody =
+  "(?:-?[0-9]*(?:[0-9]\\.?|\\.[0-9])[0-9]*(?:e[mx]|in|cm|mm|p[xtc]|%)?|(?:negative)?(?:(?:very){0,2}thi(?:n|ck)|medium)mathspace)" as const;
+
+/**
+ * `m:length` (`mathml3-common.xsd` line 94, an `xs:string` restricted by the pattern at line 96):
+ * a number with an optional unit (`em ex in cm mm px pt pc %`) or a named math space, with its own
+ * leading and trailing space. The one concept of 26 attributes, as a pattern: the whitespace
+ * class is `preserve`, so the space is the pattern's.
+ */
+export const mathmlLength = `^${mathmlSpace}*${mathmlLengthBody}${mathmlSpace}*$` as const;
+
+/**
+ * `m:mpadded-length` (`mathml3-presentation.xsd` line 46, an `xs:string` restricted by the pattern
+ * at line 48): a number with an optional sign, then optionally a percent sign and a pseudo-unit
+ * (`height depth width`), a unit or a named math space, with its own leading and trailing space.
+ */
+export const mathmlMpaddedLength =
+  `^${mathmlSpace}*[+\\-]?[0-9]*(?:[0-9]\\.?|\\.[0-9])[0-9]*${mathmlSpace}*(?:(?:%?${mathmlSpace}*(?:height|depth|width)?)|e[mx]|in|cm|mm|p[xtc]|(?:(?:negative)?(?:(?:very){0,2}thi(?:n|ck)|medium)mathspace))?${mathmlSpace}*$` as const;
+
+/**
+ * The `m:color` pattern of `mathml3-presentation.xsd` (line 109) without its anchors or its `\s*`
+ * ends: `#` and three or six hexadecimal digits, or one of the sixteen HTML color names in any
+ * case (the XSD spells each letter as a two-case class).
+ */
+const mathmlColorBody =
+  "(?:#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?|[aA][qQ][uU][aA]|[bB][lL][aA][cC][kK]|[bB][lL][uU][eE]|[fF][uU][cC][hH][sS][iI][aA]|[gG][rR][aA][yY]|[gG][rR][eE][eE][nN]|[lL][iI][mM][eE]|[mM][aA][rR][oO][oO][nN]|[nN][aA][vV][yY]|[oO][lL][iI][vV][eE]|[pP][uU][rR][pP][lL][eE]|[rR][eE][dD]|[sS][iI][lL][vV][eE][rR]|[tT][eE][aA][lL]|[wW][hH][iI][tT][eE]|[yY][eE][lL][lL][oO][wW])" as const;
+
+/**
+ * `m:color` (`mathml3-presentation.xsd` line 107, an `xs:string` restricted by the pattern at line
+ * 109): a hexadecimal color or a named color, with its own leading and trailing space. The one
+ * concept of `color` and `mathcolor`.
+ */
+export const mathmlColor = `^${mathmlSpace}*${mathmlColorBody}${mathmlSpace}*$` as const;
+
+/**
+ * `m:character` (`mathml3-presentation.xsd` line 102, an `xs:string` restricted by the pattern
+ * `\s*\S\s*` at line 104): one character that is not an XML space character, with its own leading
+ * and trailing space. `m:math/@decimalpoint` and `m:mstyle/@decimalpoint`.
+ */
+export const mathmlCharacter = `^${mathmlSpace}*[^ \\t\\n\\r]${mathmlSpace}*$` as const;
+
+/**
+ * The `align` of `m:mstack` and `m:mtable` (`mathml3-presentation.xsd` line 1710, an `xs:string`
+ * restricted by a pattern in the attribute): a vertical alignment and an optional row number, with
+ * its own leading and trailing space. Not an enumeration: the row number makes it open.
+ */
+export const mathmlAlign =
+  `^${mathmlSpace}*(?:top|bottom|center|baseline|axis)(?:${mathmlSpace}+-?[0-9]+)?${mathmlSpace}*$` as const;
+
+/**
+ * `xs:NMTOKENS` (the `class` of `mathml3-common.xsd` line 18): one or more NMTOKENs, each one or
+ * more XML NameChars, separated by single spaces. Judged on the collapsed value, so the empty
+ * string is outside it (the built-in `minLength` is one). A NameChar is an NCName continuation
+ * character or a colon.
+ */
+export const mathmlClass = `^[${ncNameContinuation}:]+(?: [${ncNameContinuation}:]+)*$` as const;
+
+/**
+ * `m:number` (`mathml3-presentation.xsd` line 99, restricting `xs:decimal`) as the REC states it:
+ * `xs:decimal`'s lexical space without a leading plus sign (E A1: an explicit plus sign is not
+ * allowed unless the syntax lists it). The `scriptsizemultiplier` value. `xsDecimal` stays ARIA's.
+ * Judged on the collapsed value.
+ */
+export const mathmlNumber = "^-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)$" as const;
+
+/**
+ * `m:unsigned-integer` (`mathml3-presentation.xsd` line 93, restricting `xs:unsignedLong`):
+ * `xs:unsignedLong`'s lexical space without a leading plus sign, and its range
+ * (`maxInclusive` 18446744073709551615, XSD 1.0 Part 2 section 3.3.21) written in the pattern:
+ * leading zeros of any count, then one to nineteen significant digits or twenty bounded digit by
+ * digit, or a minus sign and zeros (the XSD admits `-0`, whose value is zero, spelled with any
+ * number of zeros). The bound is on the significant digits only: leading zeros are admitted, since
+ * neither the XSD nor the REC bans them. `m:msline/@length`. Judged on the collapsed value.
+ */
+export const mathmlUnsignedInteger =
+  "^(?:-0+|0*(?:[0-9]{1,19}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]|1844674407370955161[0-4]|18446744073709551615))$" as const;
+
+/**
+ * `xs:integer` lexical space without a leading plus sign: the contract base of `position`, `shift`
+ * and `index` (E A1, D6; the REC's integer is an optional minus and digits). `scriptlevel` keeps
+ * `xsInteger`, whose REC syntax lists the sign.
+ */
+export const mathmlInteger = "^-?[0-9]+$" as const;
+
+/**
+ * `xs:positiveInteger` lexical space without a leading plus sign: digits with at least one
+ * non-zero digit, so the value is at least one. The contract base of `selection`, `base` and the
+ * spans (E A1, D6).
+ */
+export const mathmlPositiveInteger = "^0*[1-9][0-9]*$" as const;
+
+/**
+ * `mathsize` (`mathml3-presentation.xsd` line 489): a union of `m:length` and the tokens `small`,
+ * `normal` and `big`. As one pattern: the length member with its own space, a token member with the
+ * space its collapse removes.
+ */
+export const mathmlMathsize =
+  `^${mathmlSpace}*(?:${mathmlLengthBody}|small|normal|big)${mathmlSpace}*$` as const;
+
+/**
+ * `indentshiftfirst` and `indentshiftlast` (`mathml3-presentation.xsd` lines 305 and 328): a union
+ * of `m:length` and the token `indentshift`, each member with the space its type gives it.
+ */
+export const mathmlIndentshiftLine =
+  `^${mathmlSpace}*(?:${mathmlLengthBody}|indentshift)${mathmlSpace}*$` as const;
+
+/**
+ * `linethickness` and `mslinethickness` (`mathml3-presentation.xsd` lines 734 and 524): a union of
+ * `m:length` and the tokens `thin`, `medium` and `thick`, each member with the space its type
+ * gives it.
+ */
+export const mathmlLineThickness =
+  `^${mathmlSpace}*(?:${mathmlLengthBody}|thin|medium|thick)${mathmlSpace}*$` as const;
+
+/**
+ * `charspacing` (`mathml3-presentation.xsd` line 907): a union of `m:length` and the tokens
+ * `loose`, `medium` and `tight`, each member with the space its type gives it.
+ */
+export const mathmlCharspacing =
+  `^${mathmlSpace}*(?:${mathmlLengthBody}|loose|medium|tight)${mathmlSpace}*$` as const;
+
+/**
+ * `maxsize` (`mathml3-presentation.xsd` line 221): a union of `m:length` and the token `infinity`,
+ * each member with the space its type gives it.
+ */
+export const mathmlMaxsize =
+  `^${mathmlSpace}*(?:${mathmlLengthBody}|infinity)${mathmlSpace}*$` as const;
+
+/**
+ * `altimg-valign` of `m:math` (`mathml3-presentation.xsd` line 1444): a union of `m:length` and the
+ * tokens `top`, `middle` and `bottom`, each member with the space its type gives it.
+ */
+export const mathmlAltimgValign =
+  `^${mathmlSpace}*(?:${mathmlLengthBody}|top|middle|bottom)${mathmlSpace}*$` as const;
+
+/**
+ * `width` of `m:mtable` (`mathml3-presentation.xsd` line 1780): a union of `m:length` and the token
+ * `auto`, each member with the space its type gives it.
+ */
+export const mathmlTableWidth =
+  `^${mathmlSpace}*(?:${mathmlLengthBody}|auto)${mathmlSpace}*$` as const;
+
+/**
+ * `background` and `mathbackground` (`mathml3-presentation.xsd` lines 654 and 566): a union of
+ * `m:color` and the token `transparent`, each member with the space its type gives it.
+ */
+export const mathmlBackground =
+  `^${mathmlSpace}*(?:${mathmlColorBody}|transparent)${mathmlSpace}*$` as const;
+
+/**
+ * `columnlines` and `rowlines` (`mathml3-presentation.xsd` lines 939 and 1331): an `xs:list` of
+ * `m:linestyle` (`none solid dashed`) with `minLength` one. Judged on the collapsed value.
+ */
+export const mathmlLinestyleList = "^(?:none|solid|dashed)(?: (?:none|solid|dashed))*$" as const;
+
+/**
+ * `columnspacing` and `rowspacing` (`mathml3-presentation.xsd` lines 949 and 1341): an `xs:list` of
+ * `m:length` with `minLength` one. Judged on the collapsed value, so an item holds no space of its
+ * own.
+ */
+export const mathmlLengthList = `^${mathmlLengthBody}(?: ${mathmlLengthBody})*$` as const;
+
+/**
+ * `columnalign` of `m:math`, `m:mlabeledtr`, `m:mstyle` and `m:mtable`
+ * (`mathml3-presentation.xsd` line 929): an `xs:list` of `m:columnalignstyle` (`left center
+ * right`) with `minLength` one. Judged on the collapsed value.
+ */
+export const mathmlColumnalign = "^(?:left|center|right)(?: (?:left|center|right))*$" as const;
+
+/**
+ * `rowalign` of `m:math`, `m:mstyle` and `m:mtable` (`mathml3-presentation.xsd` line 1321): an
+ * `xs:list` of `m:verticalalign` (`top bottom center baseline axis`) with `minLength` one. Judged
+ * on the collapsed value.
+ */
+export const mathmlRowalign =
+  "^(?:top|bottom|center|baseline|axis)(?: (?:top|bottom|center|baseline|axis))*$" as const;
+
+/**
+ * `crossout` (`mathml3-presentation.xsd` line 985): an `xs:list` of the tokens `none`,
+ * `updiagonalstrike`, `downdiagonalstrike`, `verticalstrike` and `horizontalstrike`, with no
+ * `minLength`, so the empty list is admitted (campaign decision 22). Judged on the collapsed
+ * value.
+ */
+export const mathmlCrossout =
+  "^(?:(?:none|updiagonalstrike|downdiagonalstrike|verticalstrike|horizontalstrike)(?: (?:none|updiagonalstrike|downdiagonalstrike|verticalstrike|horizontalstrike))*)?$" as const;
+
+/**
+ * `alignmentscope` (`mathml3-presentation.xsd` line 873): an `xs:list` of `true` and `false` with
+ * `minLength` one. Judged on the collapsed value.
+ */
+export const mathmlAlignmentscope = "^(?:true|false)(?: (?:true|false))*$" as const;
+
+/**
+ * `columnwidth` (`mathml3-presentation.xsd` line 960): an `xs:list`, with `minLength` one, of a
+ * union of `m:length` and the tokens `auto` and `fit`. Judged on the collapsed value.
+ */
+export const mathmlColumnwidth =
+  `^(?:${mathmlLengthBody}|auto|fit)(?: (?:${mathmlLengthBody}|auto|fit))*$` as const;
+
+/**
+ * `framespacing` (`mathml3-presentation.xsd` line 1060): an `xs:list` of exactly two `m:length`
+ * values. Judged on the collapsed value.
+ */
+export const mathmlFramespacing = `^${mathmlLengthBody} ${mathmlLengthBody}$` as const;
+
+/**
+ * `m:group-alignment-list` (`mathml3-presentation.xsd` line 120): an `xs:list` of
+ * `m:group-alignment` (`left center right decimalpoint`) with `minLength` one, the `groupalign` of
+ * `m:mtd`. Judged on the collapsed value.
+ */
+export const mathmlGroupAlignmentList =
+  "^(?:left|center|right|decimalpoint)(?: (?:left|center|right|decimalpoint))*$" as const;
+
+/**
+ * `m:group-alignment-list-list` (`mathml3-presentation.xsd` line 128, an `xs:string` restricted by
+ * the pattern at line 130): braced lists of group alignments, with its own space between and
+ * around them. The empty string and a space-only string are admitted.
+ */
+export const mathmlGroupAlignmentListList =
+  `^(?:${mathmlSpace}*\\{${mathmlSpace}*(?:left|center|right|decimalpoint)(?:${mathmlSpace}+(?:left|center|right|decimalpoint))*\\})*${mathmlSpace}*$` as const;
