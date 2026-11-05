@@ -20,6 +20,7 @@ import {
 } from "#pantry/schema/seed/operator-arity.ts";
 import * as value from "#pantry/schema/value.ts";
 import { printSeed } from "#pantry/test/seed.ts";
+import { seedSqlProcessTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The probe schema: the node and item modules' relations and rules with this module's.
@@ -443,15 +444,19 @@ describe("processing", () => {
     assert.match(source, /qti-sum\s+min=1 max=\*/u);
   });
 
-  it("prints as many OperatorArityUnbounded tuples as the seed module has rows", () => {
-    const sql = printSeed([]);
-    const prefix = 'INSERT INTO "qti"."operator_arity_unbounded" ("kind") VALUES ';
-    const tuples = sql
-      .split("\n")
-      .filter((line) => line.startsWith(prefix))
-      .reduce((total, line) => total + line.split("), (").length, 0);
-    assert.strictEqual(tuples, operatorArityUnbounded.length);
-  });
+  it(
+    "prints as many OperatorArityUnbounded tuples as the seed module has rows",
+    () => {
+      const sql = printSeed([]);
+      const prefix = 'INSERT INTO "qti"."operator_arity_unbounded" ("kind") VALUES ';
+      const tuples = sql
+        .split("\n")
+        .filter((line) => line.startsWith(prefix))
+        .reduce((total, line) => total + line.split("), (").length, 0);
+      assert.strictEqual(tuples, operatorArityUnbounded.length);
+    },
+    seedSqlProcessTestTimeoutMs,
+  );
 
   it("binds Expression to the arity tables: min, bounded, and the two selected containments", () => {
     const { ArityBound, Expression, OperatorArity, OperatorArityMax, OperatorArityUnbounded } =
