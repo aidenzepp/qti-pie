@@ -1,5 +1,3 @@
-/* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the tool column the rows carry; the shape here is which of the two tool attributes the root wrote, not a structure. */
-
 /**
  * The test and section documents' rows: the document itself and its root, the test's tool and
  * outcome declaration rows, the structure (test, part, section, section ref and item ref arms, the
@@ -18,6 +16,7 @@ import { attributeRows } from "#pantry/import/attributes.ts";
 import { contentRows } from "#pantry/import/content.ts";
 import { htmlRows } from "#pantry/import/html.ts";
 import { includeRows } from "#pantry/import/include.ts";
+import { toolRows } from "#pantry/import/tool.ts";
 import { attributeReader, markers } from "#pantry/import/interactions.ts";
 import type { AttributeReader, MarkerRelation } from "#pantry/import/interactions.ts";
 import { judgedLater } from "#pantry/import/judged.ts";
@@ -57,8 +56,6 @@ import {
   ShowHideIdentifier,
   TestStructureIdentifier,
   TimeLimitSeconds,
-  ToolName,
-  ToolVersion,
   VariableReference,
   WeightReference,
   WeightValue,
@@ -66,7 +63,6 @@ import {
 import type { BaseType, TypedCardinality } from "#pantry/schema/declaration.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/document.ts";
 import { FeedbackOutcomeRef } from "#pantry/schema/feedback.ts";
-import { ItemTool, ItemToolBoth, ItemToolName, ItemToolVersion } from "#pantry/schema/item.ts";
 import { Edge } from "#pantry/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle } from "#pantry/schema/node.ts";
 import {
@@ -803,41 +799,6 @@ const bodyRows =
     Rows.add(site.rows, arm, [{ id: site.node.id }]);
 
 /**
- * The tool row of a test root and the arm that holds the strings it wrote, as the attribute reader
- * read them; none when it wrote neither `tool-name` nor `tool-version`.
- */
-const toolRows = (
-  rows: Rows,
-  tree: Uuid,
-  name: Option.Option<string>,
-  version: Option.Option<string>,
-): Rows => {
-  if (Option.isSome(name) && Option.isSome(version)) {
-    return Rows.add(
-      Rows.add(rows, ItemTool, [{ root: "test", shape: "both", tree }]),
-      ItemToolBoth,
-      [{ toolName: ToolName(name.value), toolVersion: ToolVersion(version.value), tree }],
-    );
-  }
-
-  if (Option.isSome(name)) {
-    return Rows.add(
-      Rows.add(rows, ItemTool, [{ root: "test", shape: "nameOnly", tree }]),
-      ItemToolName,
-      [{ toolName: ToolName(name.value), tree }],
-    );
-  }
-
-  return Option.isSome(version)
-    ? Rows.add(
-        Rows.add(rows, ItemTool, [{ root: "test", shape: "versionOnly", tree }]),
-        ItemToolVersion,
-        [{ toolVersion: ToolVersion(version.value), tree }],
-      )
-    : rows;
-};
-
-/**
  * The builder of each kind that is not the document's root, which write the rows of one element.
  */
 const builders: ReadonlyMap<
@@ -1081,6 +1042,7 @@ export const testRows = Effect.fn("import.testRows")(function* testRows(
     const toolVersion = attributes.read("tool-version");
     built = toolRows(
       Rows.add(attributes.rows(), AssessmentTest, [{ id: rootNode.id }]),
+      "test",
       documentId,
       toolName,
       toolVersion,
