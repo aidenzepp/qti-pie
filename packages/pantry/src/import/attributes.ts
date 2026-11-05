@@ -344,6 +344,11 @@ const writeIdrefs = (
 };
 
 /**
+ * The root kinds whose `label` is `AssessmentItemLabel`'s, not a `NodeLabel` row.
+ */
+const labelRoots: ReadonlySet<string> = new Set(["qti-assessment-item", "qti-assessment-stimulus"]);
+
+/**
  * Write the rows of one element's shared attributes into `written`.
  *
  * @returns Nothing; `ImportRefused` for a closed value outside its roster.
@@ -363,7 +368,7 @@ const writeElement = (
         attribute === undefined ||
         Option.isNone(whiteSpace) ||
         !isShared(name) ||
-        (name === "label" && kind === "qti-assessment-item");
+        (name === "label" && labelRoots.has(kind));
       if (!skipped) {
         const typed = typedAttribute(
           Rows.empty(),
