@@ -11,7 +11,18 @@
  * names, because the declaration they name is another module's: they join phase 13's blocked
  * component through `Declaration.(document, identifier)`.
  */
-import { closedId, key, relation, str, uuid } from "@bjornpagen/grizzle";
+import {
+  alternatives,
+  check,
+  closedId,
+  contained,
+  key,
+  on,
+  relation,
+  select,
+  str,
+  uuid,
+} from "@bjornpagen/grizzle";
 import { BranchExit, BranchTarget, StructureHolder } from "#pantry/schema/content/rosters.ts";
 import {
   MappedVariableName,
@@ -19,7 +30,17 @@ import {
   WeightReference,
   WeightValue,
 } from "#pantry/schema/contracts.ts";
+import { Declaration } from "#pantry/schema/declaration.ts";
+import { Edge } from "#pantry/schema/node.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
+import { ItemRefDocument } from "#pantry/schema/reference.ts";
+import { RuleOperand } from "#pantry/schema/rule.ts";
+import {
+  AssessmentSection,
+  ItemRef,
+  TestIdentifier,
+  TestPart,
+} from "#pantry/schema/test/structure.ts";
 
 const ncName = str.regex(patterns.ncName);
 
@@ -133,8 +154,77 @@ export const relations = {
 } as const;
 
 /**
- * The statements this module declares: the candidate key a later containment targets. A mapping's
- * `target` names one variable of its item reference (row 44), so `(itemRef, target)` is unique,
- * and `PrefixedMapped` contains into it.
+ * The holder kinds that hold a branch rule, each with the arm its `owner` is contained into. A
+ * section reference holds no rule.
  */
-export const rules = [key(VariableMapping, ["itemRef", "target"])] as const;
+const owners = [
+  ["part", TestPart],
+  ["section", AssessmentSection],
+  ["itemRef", ItemRef],
+] as const;
+
+/**
+ * The statements this module declares: the candidate key a later containment targets, and the laws
+ * of 4.8 and 4.9.
+ *
+ * A mapping's `target` names one variable of its item reference (row 44), so `(itemRef, target)`
+ * is unique, and `PrefixedMapped` contains into it.
+ *
+ * A branch rule's `owner` is its parent node, `(id, owner)` into `Edge.(child, parent)` with
+ * neither side selected, and one containment per owner kind, from the `ownerKind` selection into
+ * that kind's arm. Its target is an exit keyword or a structure identifier, and both handles are
+ * armed. A target identifier is contained into the identifiers of the rule's own document (S-R35)
+ * with the holder kind it names, and the rule's owner kind it carries is the rule's own; a
+ * misspelled exit is an NCName target that no `TestIdentifier` holds, so the containment refuses it
+ * (`branch-target`). A part's rule targets a part and no other rule does (S-R32, S-R33).
+ *
+ * `PreCondition`, `BranchRule` and `TemplateDefault` each hold exactly one expression, a
+ * `RuleOperand` row keyed by the rule. A mapping, a weight and a template default are edges of
+ * their item reference; the mapping's source is an outcome and the template default's name a
+ * template variable of the item the reference resolves to (rows 25 and 26).
+ */
+export const rules = [
+  key(VariableMapping, ["itemRef", "target"]),
+  contained(on(BranchRule, "id", "owner"), on(Edge, "child", "parent")),
+  ...owners.map(([ownerKind, arm]) =>
+    contained(on(select(BranchRule, { ownerKind }), "owner"), on(arm, "id")),
+  ),
+  alternatives(BranchRule, "targetKind", BranchTarget, {
+    exit: BranchRuleExit,
+    ref: BranchRuleTarget,
+  }),
+  contained(
+    on(BranchRuleTarget, "scope", "identifier", "holderKind"),
+    on(TestIdentifier, "scope", "identifier", "holderKind"),
+  ),
+  contained(on(BranchRuleTarget, "rule", "scope"), on(BranchRule, "id", "document")),
+  contained(on(BranchRuleTarget, "rule", "ownerKind"), on(BranchRule, "id", "ownerKind")),
+  check("BranchTargetKind", BranchRuleTarget, (t) =>
+    t.or(
+      t.and(t.eq(t.ownerKind, "part"), t.eq(t.holderKind, "part")),
+      t.and(t.ne(t.ownerKind, "part"), t.ne(t.holderKind, "part")),
+    ),
+  ),
+  contained(on(PreCondition, "id"), on(RuleOperand, "rule")),
+  contained(on(BranchRule, "id"), on(RuleOperand, "rule")),
+  contained(on(TemplateDefault, "id"), on(RuleOperand, "rule")),
+  contained(on(VariableMapping, "id", "itemRef"), on(Edge, "child", "parent")),
+  contained(
+    on(VariableMapping, "itemRef", "itemDocument"),
+    on(ItemRefDocument, "itemRef", "document"),
+  ),
+  contained(
+    on(VariableMapping, "itemDocument", "source"),
+    on(select(Declaration, { kind: "outcome" }), "document", "identifier"),
+  ),
+  contained(on(Weight, "id", "itemRef"), on(Edge, "child", "parent")),
+  contained(on(TemplateDefault, "id", "itemRef"), on(Edge, "child", "parent")),
+  contained(
+    on(TemplateDefault, "itemRef", "itemDocument"),
+    on(ItemRefDocument, "itemRef", "document"),
+  ),
+  contained(
+    on(TemplateDefault, "itemDocument", "templateIdentifier"),
+    on(select(Declaration, { kind: "template" }), "document", "identifier"),
+  ),
+] as const;
