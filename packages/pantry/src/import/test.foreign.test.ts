@@ -12,7 +12,7 @@ import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Uuid } from "@bjornpagen/grizzle";
-import { readRows } from "#pantry/import/package.ts";
+import { readRows } from "#pantry/import/preview.ts";
 import { wildcardGuards } from "#pantry/import/guards/wildcard.ts";
 import { ruleOfError } from "#pantry/import/refusal.ts";
 import { testRows } from "#pantry/import/test.ts";

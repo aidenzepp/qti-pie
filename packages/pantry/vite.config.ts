@@ -18,7 +18,8 @@ const databaseFiles = globSync("src/**/*.test.ts", { cwd: import.meta.dirname })
 // GR8DES_CORPUS=1 run in 1408 s; one-pool runs failed at 6, 4 and 3 workers (40001, timeouts).
 export default defineConfig({
   test: {
-    globalSetup: ["./src/test/global-setup.ts"],
+    // @grizzle/testing's setup draws the run seed every searched() test reads, or replays a given one.
+    globalSetup: ["@grizzle/testing/vitest/global-setup", "./src/test/global-setup.ts"],
     projects: [
       {
         extends: true,

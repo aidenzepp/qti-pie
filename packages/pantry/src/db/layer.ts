@@ -4,7 +4,6 @@ import { CredentialError, DbLayer } from "@bjornpagen/grizzle";
 import { NodeFileSystem } from "@effect/platform-node";
 import { Config, Effect, FileSystem, Layer, Option, Redacted, Schema } from "effect";
 import { fileURLToPath } from "node:url";
-import { AuthorApp } from "#pantry/schema/logins.ts";
 
 /**
  * The migrations snapshot could not be read from disk or is not a JSON object with a `fingerprint`.
@@ -66,6 +65,11 @@ const localCluster = Config.all({
  * The author application's pool on the local cluster: verify-full TLS against grizzle's development
  * CA, and the password scripts/db.sh gave the login, read on each connection attempt.
  *
+ * The login (`#pantry/schema/logins.ts`) is a resource of this layer, loaded once the settings, the
+ * CA and the snapshot are read: grizzle builds its workload when that module is evaluated, so a
+ * build that fails on its settings never pays for the workload. Nothing this module imports
+ * statically may reach the login (`src/cli/startup.test.ts`).
+ *
  * Building the layer fails with Effect's `ConfigError` for a missing or malformed setting, with a
  * {@link ClusterConfigError} when the CA is unreadable, and with a {@link SnapshotLoadError} when
  * the snapshot is. A missing password file is not found here: it fails each connection attempt
@@ -101,6 +105,7 @@ export const AuthorAppLayer = Layer.unwrap(
       Effect.map((text) => Redacted.make(text.trim())),
       Effect.mapError((cause) => new CredentialError({ cause })),
     );
+    const { AuthorApp } = yield* Effect.promise(() => import("#pantry/schema/logins.ts"));
 
     return DbLayer.make({
       database: cluster.database,

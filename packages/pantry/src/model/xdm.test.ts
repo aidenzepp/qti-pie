@@ -1,552 +1,440 @@
+/* oxlint-disable unicorn/text-encoding-identifier-case -- The tests spell the XML encoding labels (`UTF-8`) as crust's reader reports them. */
 import { assert, describe, it } from "@effect/vitest";
-import { flatten, none } from "#pantry/model/xdm.ts";
+import { drawn, explore } from "@grizzle/testing/explore";
+import { required } from "@grizzle/testing/features";
+import { notesOnly } from "@grizzle/testing/sense";
+import { completeShrink } from "@grizzle/testing/shrink";
+import { searched } from "@grizzle/testing/vitest";
+import { Effect, Formatter, Option, Result } from "effect";
+import { composed } from "#pantry/grammar/compose.ts";
+import { foreignKinds } from "#pantry/grammar/kinds.ts";
+import type { ForeignKind } from "#pantry/grammar/kinds.ts";
+import { assemble } from "#pantry/model/assemble.ts";
+import { foldGrammarOf, namesOf } from "#pantry/model/composed.ts";
+import type { Composed } from "#pantry/model/composed.ts";
+import { fold } from "#pantry/model/folds.ts";
+import { toXmlDocument } from "#pantry/model/unshred.ts";
+import { flatten } from "#pantry/model/xdm.ts";
 import type {
   FixedKind,
   FlatRows,
-  NodeId,
   OpenClass,
-  XdmAttribute,
   XdmAttributeName,
   XdmChild,
+  XdmClosedElement,
   XdmDocument,
-  XdmDocumentChild,
   XdmElement,
+  XdmMisc,
   XdmVocabulary,
 } from "#pantry/model/xdm.ts";
+import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
+import type { Placed, XdmFeature } from "#pantry/test/gen/xdm.ts";
+import { canonicalize } from "@qti-pie/crust/canonical.ts";
+import type { Child } from "@qti-pie/crust/tree.ts";
 
 /**
- * A vocabulary of a few handles, so a small generated tree reaches every arm.
+ * A vocabulary of literal handles, over which the tree's types state their contracts: they are
+ * generic in the vocabulary, so one with literal handles shows each.
  */
-interface Toy extends XdmVocabulary {
-  readonly domain: "identifier" | "language" | "string";
-  readonly kind: FixedKind | "body" | "item" | "p";
-  readonly name: OpenClass | "identifier" | "title" | "xml:lang";
-  readonly version: "3.0.0" | "3.0.1";
+interface Literal extends XdmVocabulary {
+  readonly domain: "string";
+  readonly kind: FixedKind | ForeignKind | "p";
+  readonly name: OpenClass | "id";
+  readonly version: "3.0.1";
 }
 
 /**
- * Give the node numbered `index` a uuid that spells its number, so a row names its node legibly.
- *
- * @param index - The node's number in document order.
- * @returns A uuid whose last group is the number in hexadecimal.
+ * The composed grammar every property draws its trees over.
  */
-const idOf = (index: number): NodeId =>
-  `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`;
+const grammar = Result.getOrThrow(composed());
 
 /**
- * Draws a whole number below `bound`.
- *
- * @param bound - One more than the largest number it may draw.
- * @returns The number drawn.
+ * The trees every property is checked over: the one generator's, over the composed grammar.
  */
-type Draw = (bound: number) => number;
+const documents = xdmDocument(grammar);
 
 /**
- * Make a seeded Park-Miller generator, so a failing tree is rebuilt from its seed.
- *
- * @param seed - The generator's seed, from 1 to 2,147,483,646.
- * @returns A draw over the generator's sequence.
+ * The features a search over generated trees must reach on its witnesses: each kind of node, open
+ * names, a doctype, and a foreign element under a wildcard.
  */
-const seeded = (seed: number): Draw => {
-  let state = seed;
+const reached = required<XdmFeature>(
+  [
+    "element",
+    "wildcard",
+    "text",
+    "ws",
+    "comment",
+    "pi",
+    "entityRef",
+    "attribute",
+    "openName",
+    "doctype",
+  ],
+  { cases: 300, sense: notesOnly },
+);
 
-  return (bound) => {
-    state = (state * 48_271) % 2_147_483_647;
+/**
+ * Number a tree's model in pre-order from each node's parent and slot alone: an independent
+ * numbering, which reads none of the intervals the generator or `flatten` writes.
+ *
+ * @param model - The generator's model, the document node 0, its own parent.
+ * @returns For each model number, its children by slot, its place in pre-order, and the number of
+ *   nodes its subtree holds, itself included.
+ */
+const preorderOf = (model: readonly Placed[]) => {
+  const childrenOf: number[][] = model.map(() => []);
+  for (const [number, placed] of model.entries()) {
+    if (number > 0) {
+      childrenOf[placed.parent]?.push(number);
+    }
+  }
 
-    return state % bound;
-  };
+  for (const family of childrenOf) {
+    family.sort((left, right) => (model[left]?.at ?? 0) - (model[right]?.at ?? 0));
+  }
+
+  const order: number[] = [];
+  const stack = [0];
+  for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
+    order.push(next);
+    stack.push(...(childrenOf[next] ?? []).toReversed());
+  }
+
+  const index: number[] = model.map(() => -1);
+  for (const [place, number] of order.entries()) {
+    index[number] = place;
+  }
+
+  const size: number[] = model.map(() => 1);
+  for (const number of order.toReversed()) {
+    const parent = model[number]?.parent ?? 0;
+    if (number > 0) {
+      size[parent] = (size[parent] ?? 0) + (size[number] ?? 0);
+    }
+  }
+
+  return { childrenOf, index, size };
 };
 
-/**
- * Draw one item of a non-empty list.
- *
- * @param draw - The generator to draw with.
- * @param items - The items to choose from.
- * @returns The item drawn.
- */
-const pick = <T>(draw: Draw, items: readonly [T, ...T[]]): T =>
-  items[draw(items.length)] ?? items[0];
+describe("flatten", { timeout: searchTimeout }, () => {
+  it.effect(
+    "writes each node's row where the generator's model of the tree places it, in document order",
+    (ctx) =>
+      // Oracle: a second implementation, the model the generator writes as it places each node and
+      // closes each subtree.
+      // Bound: the generator's drawn bounds, up to 200 nodes and depth 7 a tree.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang,
+            concurrency: 1,
+            coverage: reached,
+            draw: drawn(documents),
+            kept: [],
+            literal: Formatter.format,
+            runs: 300,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "model/xdm-flatten-model",
+          },
+          ({ document, model }, c) =>
+            Effect.sync(() => {
+              c.noteAll(featuresOf(document));
 
-/**
- * The attribute names a generated attribute takes: two closed names and one of each open class.
- */
-const names: readonly [XdmAttributeName<Toy>, ...XdmAttributeName<Toy>[]] = [
-  { _tag: "closed", handle: "identifier" },
-  { _tag: "closed", handle: "title" },
-  { _tag: "data-*", local: "data-x" },
-  { _tag: "foreign", local: "foo", prefix: "m", uri: "urn:m" },
-  { _tag: "lax", local: "patternMask" },
-];
+              const rows = flatten(document, idOf);
 
-/**
- * Generate an attribute, holding an unexpanded entity reference about half the time.
- *
- * @param draw - The generator to draw with.
- * @returns The attribute.
- */
-const attribute = (draw: Draw): XdmAttribute<Toy> => {
-  const referenced = draw(2) === 0;
+              assert.deepStrictEqual(
+                rows.nodes.map(({ at, end, id, kind, parent, start, version }) => ({
+                  at,
+                  end,
+                  id,
+                  kind,
+                  parent,
+                  start,
+                  version,
+                })),
+                model.map((placed, number) => ({
+                  at: BigInt(placed.at),
+                  end: BigInt(placed.end),
+                  id: idOf(number),
+                  kind: placed.kind,
+                  parent: idOf(placed.parent),
+                  start: BigInt(placed.start),
+                  version: document.version,
+                })),
+              );
+            }),
+        ),
+      ),
+  );
 
-  return {
-    domain: pick(draw, ["identifier", "language", "string"]),
-    lexical: referenced ? "&ent;v" : "v",
-    name: pick(draw, names),
-    references: referenced ? [{ name: "ent", offset: 0 }] : [],
-  };
-};
+  it.effect(
+    "draws each node's interval as its pre-order numbering: start its index, end − start its subtree's size, containment its descendants, siblings tiling their parent, and the document node over [0, N)",
+    (ctx) =>
+      // Oracle: a second implementation, a pre-order numbering of the generator's model from each
+      // node's parent and slot alone, its subtree sizes summed bottom-up, and descent read off
+      // parent chains; none of it reads an interval.
+      // Bound: the generator's drawn bounds, up to 200 nodes and depth 7 a tree; containment over
+      // every ordered pair of nodes.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang,
+            concurrency: 1,
+            coverage: reached,
+            draw: drawn(documents),
+            kept: [],
+            literal: Formatter.format,
+            runs: 300,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "model/xdm-flatten-intervals",
+          },
+          ({ document, model }, c) =>
+            Effect.sync(() => {
+              c.noteAll(featuresOf(document));
 
-/**
- * Generate an element and its subtree, each child an element or any kind of character data.
- *
- * @param draw - The generator to draw with.
- * @param depth - How many levels of elements may sit below it.
- * @returns The element.
- */
-const element = (draw: Draw, depth: number): XdmElement<Toy> => ({
-  _tag: "element",
-  attributes: Array.from({ length: draw(4) }, () => attribute(draw)),
-  children: Array.from({ length: depth === 0 ? 0 : draw(5) }, () =>
-    pick<() => XdmChild<Toy>>(draw, [
-      () => element(draw, depth - 1),
-      () => ({ _tag: "text", value: "t" }),
-      () => ({ _tag: "ws", value: " " }),
-      () => ({ _tag: "comment", value: "c" }),
-      () => ({ _tag: "pi", data: "d", target: "t" }),
-      () => ({ _tag: "entityRef", name: "e" }),
-    ])(),
-  ),
-  kind: pick(draw, ["body", "item", "p"]),
-  namespaces: Array.from({ length: draw(3) }, (_, at) => ({
-    prefix: at === 0 ? "" : `n${String(at)}`,
-    uri: `urn:n${String(at)}`,
-  })),
-  prefix: pick(draw, ["", "q"]),
+              const rows = flatten(document, idOf);
+              const { childrenOf, index, size } = preorderOf(model);
+              const row = (number: number) =>
+                rows.nodes[number] ?? assert.fail(`no node numbered ${String(number)}`);
+              const above = (number: number): ReadonlySet<number> => {
+                const chain = new Set<number>();
+                for (let at = number; at !== 0; at = model[at]?.parent ?? 0) {
+                  chain.add(model[at]?.parent ?? 0);
+                }
+
+                return chain;
+              };
+
+              assert.deepStrictEqual(
+                rows.nodes.map(({ end, start }) => [start, end - start]),
+                model.map((_, number) => [BigInt(index[number] ?? -1), BigInt(size[number] ?? -1)]),
+              );
+              assert.deepStrictEqual([row(0).start, row(0).end], [0n, BigInt(model.length)]);
+              for (const number of model.keys()) {
+                const ancestors = above(number);
+                for (const other of model.keys()) {
+                  const outer = row(other);
+                  const inner = row(number);
+
+                  assert.strictEqual(
+                    other !== number && outer.start < inner.start && inner.end <= outer.end,
+                    ancestors.has(other),
+                    `${String(other)} above ${String(number)}`,
+                  );
+                }
+
+                const family = childrenOf[number] ?? [];
+                const starts = family.map((child) => row(child).start);
+                const ends = family.map((child) => row(child).end);
+
+                assert.deepStrictEqual(
+                  [row(number).start + 1n, ...ends],
+                  [...starts, row(number).end],
+                  `${String(number)}'s children tile its interior`,
+                );
+              }
+            }),
+        ),
+      ),
+  );
+
+  it.effect(
+    "writes rows that hold Node(parent, at)'s invariants: one self-parented sentinel, each family's slots 0 to n − 1, one row per node, and each attribute its own id, which its open name and references name",
+    (ctx) =>
+      // Oracle: the specification as a checker, plan §1.3's N1 and N2 and Node's key, and the
+      // attribute ids flatten's contract numbers after the nodes.
+      // Bound: the generator's drawn bounds.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang,
+            concurrency: 1,
+            coverage: reached,
+            draw: drawn(documents),
+            kept: [],
+            literal: Formatter.format,
+            runs: 300,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "model/xdm-flatten-invariants",
+          },
+          ({ document }, c) =>
+            Effect.sync(() => {
+              c.noteAll(featuresOf(document));
+
+              const rows: FlatRows<Composed> = flatten(document, idOf);
+              const self = rows.document.node;
+              const sentinels = rows.nodes.filter(({ parent, id }) => parent === id);
+              const families = Map.groupBy(
+                rows.nodes.filter(({ id }) => id !== self),
+                ({ parent }) => parent,
+              );
+
+              assert.deepStrictEqual(
+                sentinels.map(({ at, id, kind }) => ({ at, id, kind })),
+                [{ at: 0n, id: self, kind: "document" }],
+              );
+              assert.strictEqual(rows.nodes.filter(({ kind }) => kind === "document").length, 1);
+              assert.strictEqual(new Set(rows.nodes.map(({ id }) => id)).size, rows.nodes.length);
+              assert.deepStrictEqual(
+                rows.attributes.map(({ id }) => id),
+                rows.attributes.map((_, index) => idOf(rows.nodes.length + index)),
+              );
+              assert.isTrue(
+                [...rows.openNames, ...rows.attributeEntities].every(({ attribute }) =>
+                  rows.attributes.some(({ id }) => id === attribute),
+                ),
+              );
+              for (const family of families.values()) {
+                assert.deepStrictEqual(
+                  family.map(({ at }) => at).toSorted((left, right) => Number(left - right)),
+                  family.map((_, at) => BigInt(at)),
+                );
+              }
+            }),
+        ),
+      ),
+  );
+
+  it("cannot hold what XML does not: an open class as a closed name, character data beside the root, a nameless foreign element, or a named closed one", () => {
+    const content = { attributes: [], children: [], namespaces: [], prefix: "" } as const;
+    const name = { local: "p", namespace: "" };
+    const closedP = { _tag: "element", ...content, kind: "p" } as const;
+    // @ts-expect-error -- `data-*` is an open class, so an attribute under it carries its exact name.
+    const openClosed: XdmAttributeName<Literal> = { _tag: "closed", handle: "data-*" };
+    // @ts-expect-error -- XML holds no character data outside the root element.
+    const textBesideRoot: XdmMisc = { _tag: "text", value: "x" };
+    // @ts-expect-error -- One kind stands for every foreign element, so each carries its name.
+    const nameless: XdmElement<Literal> = { _tag: foreignKinds.other, ...content };
+    // @ts-expect-error -- A closed kind stands for its element's name, so the element keeps none.
+    const named: XdmElement<Literal> = { ...closedP, name };
+
+    assert.lengthOf([openClosed, textBesideRoot, nameless, named], 4);
+  });
 });
 
 /**
- * Generate a document: an optional doctype, a prolog, a root element up to four levels deep and an
- * epilog, and a declaration whose fields agree on whether it exists.
+ * The size of the trees the walks are checked at: past any engine's call stack, so a walk that
+ * recursed once per level or per child would overflow.
+ */
+const extent = 100_000;
+
+/**
+ * Build a document around a body: an item whose item body holds it.
  *
- * @param seed - The seed the document is rebuilt from.
+ * @param body - The item body's one child.
  * @returns The document.
  */
-const generated = (seed: number): XdmDocument<Toy> => {
-  const draw = seeded(seed);
-  const misc = (): readonly XdmDocumentChild<Toy>[] =>
-    Array.from({ length: draw(3) }, () =>
-      pick<XdmDocumentChild<Toy>>(draw, [
-        { _tag: "comment", value: "m" },
-        { _tag: "pi", data: "", target: "m" },
-      ]),
-    );
-  const doctype: readonly XdmDocumentChild<Toy>[] =
-    draw(2) === 0 ? [] : [{ _tag: "doctype", value: "<!DOCTYPE item>" }];
-  const declared = draw(2) === 0;
-
-  return {
-    _tag: "document",
-    charset: "utf-8",
-    children: [...doctype, ...misc(), element(draw, 4), ...misc()],
-    encoding: declared ? pick(draw, ["", "utf-8"]) : "",
-    exportCharset: "utf-8",
-    standalone: declared ? pick(draw, [none, "yes", "no"]) : none,
-    version: pick(draw, ["3.0.0", "3.0.1"]),
-    xmlVersion: declared ? "1.0" : none,
-  };
-};
+const itemAround = (body: XdmClosedElement<Composed>): XdmDocument<Composed> => ({
+  _tag: "document",
+  charset: "UTF-8",
+  declaration: Option.none(),
+  doctype: Option.none(),
+  epilog: [],
+  exportCharset: "UTF-8",
+  prolog: [],
+  root: {
+    _tag: "element",
+    attributes: [],
+    children: [
+      {
+        _tag: "element",
+        attributes: [],
+        children: [body],
+        governs: grammar.xsi.declaredType("3.0.1", "qti-item-body"),
+        kind: "qti-item-body",
+        namespaces: [],
+        prefix: "",
+      },
+    ],
+    governs: grammar.xsi.declaredType("3.0.1", "qti-assessment-item"),
+    kind: "qti-assessment-item",
+    namespaces: [],
+    prefix: "",
+  },
+  version: "3.0.1",
+});
 
 /**
- * Count a subtree's nodes.
+ * A `div` holding children.
  *
- * @param node - The subtree's root.
- * @returns The root and every node below it.
+ * @param children - Its children.
+ * @returns The element.
  */
-const count = (node: XdmChild<Toy> | XdmDocumentChild<Toy>): number =>
-  node._tag === "element" ? 1 + node.children.reduce((total, below) => total + count(below), 0) : 1;
+const div = (children: readonly XdmChild<Composed>[]): XdmClosedElement<Composed> => ({
+  _tag: "element",
+  attributes: [],
+  children,
+  governs: grammar.xsi.declaredType("3.0.1", "div"),
+  kind: "div",
+  namespaces: [],
+  prefix: "",
+});
 
 /**
- * The kinds of character data, whose nodes have no children and no prefix.
- */
-const characterKinds: ReadonlySet<string> = new Set<FixedKind>([
-  "text",
-  "ws",
-  "comment",
-  "pi",
-  "entityRef",
-  "doctype",
-]);
-
-/**
- * The open classes, the attribute name handles that carry an exact name beside them.
- */
-const openClasses: ReadonlySet<string> = new Set<OpenClass>(["data-*", "foreign", "lax"]);
-
-/**
- * The seeds every law below is checked over.
- */
-const seeds = Array.from({ length: 200 }, (_, index) => index + 1);
-
-/**
- * Flatten each seed's document with {@link idOf}.
+ * Count the elements down a crust tree's first-child chain, without recursion.
  *
- * @returns Each document beside its rows.
+ * @param root - The root element.
+ * @returns How many elements the chain holds.
  */
-const flattened = (): readonly (readonly [XdmDocument<Toy>, FlatRows<Toy>])[] =>
-  seeds.map((seed) => {
-    const document = generated(seed);
-
-    return [document, flatten(document, idOf)];
-  });
-
-/**
- * Group rows' slots by their owner.
- *
- * @param rows - Each row's owner and slot.
- * @returns Each owner's slots, in row order.
- */
-const slotsByOwner = (
-  rows: readonly { readonly at: bigint; readonly owner: string }[],
-): ReadonlyMap<string, readonly bigint[]> => {
-  const slots = new Map<string, bigint[]>();
-  for (const { at, owner } of rows) {
-    slots.set(owner, [...(slots.get(owner) ?? []), at]);
+const chainLength = (root: Child): number => {
+  let length = 0;
+  for (let below: Child | undefined = root; below?.kind === "element"; [below] = below.children) {
+    length += 1;
   }
 
-  return slots;
+  return length;
 };
 
-/**
- * Test that each owner's slots run from 0 with no gap and no repeat.
- *
- * @param rows - Each row's owner and slot.
- * @returns Whether every owner's slots, sorted, are 0 to one less than their count.
- */
-const indexedFromZero = (
-  rows: readonly { readonly at: bigint; readonly owner: string }[],
-): boolean =>
-  [...slotsByOwner(rows).values()].every((slots) =>
-    slots.toSorted((a, b) => Number(a - b)).every((at, index) => at === BigInt(index)),
-  );
+describe("the model's walks", { timeout: searchTimeout }, () => {
+  it.effect(
+    "flatten, assemble, fold and convert a tree 100,000 elements deep and one 100,000 children wide, without recursion, to the same canonical bytes",
+    () =>
+      Effect.gen(function* walks() {
+        let deep = div([]);
+        for (let level = 1; level < extent; level += 1) {
+          deep = div([deep]);
+        }
 
-/**
- * The key of an attribute row, by its element and its slot.
- *
- * @param row - An attribute-keyed row.
- * @param row.at - The attribute's slot.
- * @param row.node - The attribute's element.
- * @returns The key as one string.
- */
-const attributeKey = ({ at, node }: { readonly at: bigint; readonly node: NodeId }): string =>
-  `${node}/${String(at)}`;
-
-describe("flatten", () => {
-  it("writes a document's rows exactly", () => {
-    const document: XdmDocument<Toy> = {
-      _tag: "document",
-      charset: "utf-8",
-      children: [
-        { _tag: "doctype", value: "<!DOCTYPE item>" },
-        { _tag: "comment", value: " prolog " },
-        {
-          _tag: "element",
-          attributes: [
-            {
-              domain: "identifier",
-              lexical: "i1",
-              name: { _tag: "closed", handle: "identifier" },
-              references: [],
-            },
-            {
-              domain: "string",
-              lexical: "&ent;y",
-              name: { _tag: "data-*", local: "data-x" },
-              references: [{ name: "ent", offset: 0 }],
-            },
-            {
-              domain: "string",
-              lexical: "bar",
-              name: { _tag: "foreign", local: "foo", prefix: "m", uri: "urn:m" },
-              references: [],
-            },
-            {
-              domain: "string",
-              lexical: "z",
-              name: { _tag: "lax", local: "patternMask" },
-              references: [],
-            },
-          ],
-          children: [
-            { _tag: "ws", value: "\n  " },
-            {
-              _tag: "element",
-              attributes: [
-                {
-                  domain: "language",
-                  lexical: "en",
-                  name: { _tag: "closed", handle: "xml:lang" },
-                  references: [],
-                },
-              ],
-              children: [
-                { _tag: "text", value: "Hi " },
-                { _tag: "entityRef", name: "ent" },
-                { _tag: "pi", data: "d", target: "t" },
-                { _tag: "comment", value: "c" },
-              ],
-              kind: "body",
-              namespaces: [],
-              prefix: "m",
-            },
-            { _tag: "ws", value: "\n" },
-          ],
-          kind: "item",
-          namespaces: [
-            { prefix: "", uri: "urn:qti" },
-            { prefix: "m", uri: "urn:m" },
-          ],
-          prefix: "",
-        },
-        { _tag: "pi", data: "", target: "end" },
-      ],
-      encoding: "",
-      exportCharset: "utf-8",
-      standalone: none,
-      version: "3.0.1",
-      xmlVersion: "1.0",
-    };
-    const version = "3.0.1";
-    const expected: FlatRows<Toy> = {
-      attributeEntities: [{ at: 1n, name: "ent", node: idOf(3), offset: 0n }],
-      attributes: [
-        { at: 0n, domain: "identifier", name: "identifier", node: idOf(3) },
-        { at: 1n, domain: "string", name: "data-*", node: idOf(3) },
-        { at: 2n, domain: "string", name: "foreign", node: idOf(3) },
-        { at: 3n, domain: "string", name: "lax", node: idOf(3) },
-        { at: 0n, domain: "language", name: "xml:lang", node: idOf(5) },
-      ],
-      comments: [
-        { node: idOf(2), value: " prolog " },
-        { node: idOf(9), value: "c" },
-      ],
-      doctypes: [{ node: idOf(1), value: "<!DOCTYPE item>" }],
-      document: {
-        charset: "utf-8",
-        encoding: "",
-        exportCharset: "utf-8",
-        node: idOf(0),
-        standalone: none,
-        xmlVersion: "1.0",
-      },
-      entityRefs: [{ name: "ent", node: idOf(7) }],
-      lexicals: [
-        { at: 0n, lexical: "i1", node: idOf(3) },
-        { at: 1n, lexical: "&ent;y", node: idOf(3) },
-        { at: 2n, lexical: "bar", node: idOf(3) },
-        { at: 3n, lexical: "z", node: idOf(3) },
-        { at: 0n, lexical: "en", node: idOf(5) },
-      ],
-      namespaces: [
-        { at: 0n, node: idOf(3), prefix: "", uri: "urn:qti" },
-        { at: 1n, node: idOf(3), prefix: "m", uri: "urn:m" },
-      ],
-      nodes: [
-        { at: 0n, id: idOf(0), kind: "document", parent: idOf(0), prefix: "", version },
-        { at: 0n, id: idOf(1), kind: "doctype", parent: idOf(0), prefix: "", version },
-        { at: 1n, id: idOf(2), kind: "comment", parent: idOf(0), prefix: "", version },
-        { at: 2n, id: idOf(3), kind: "item", parent: idOf(0), prefix: "", version },
-        { at: 0n, id: idOf(4), kind: "ws", parent: idOf(3), prefix: "", version },
-        { at: 1n, id: idOf(5), kind: "body", parent: idOf(3), prefix: "m", version },
-        { at: 0n, id: idOf(6), kind: "text", parent: idOf(5), prefix: "", version },
-        { at: 1n, id: idOf(7), kind: "entityRef", parent: idOf(5), prefix: "", version },
-        { at: 2n, id: idOf(8), kind: "pi", parent: idOf(5), prefix: "", version },
-        { at: 3n, id: idOf(9), kind: "comment", parent: idOf(5), prefix: "", version },
-        { at: 2n, id: idOf(10), kind: "ws", parent: idOf(3), prefix: "", version },
-        { at: 3n, id: idOf(11), kind: "pi", parent: idOf(0), prefix: "", version },
-      ],
-      openNames: [
-        { at: 1n, local: "data-x", node: idOf(3), prefix: "", uri: "" },
-        { at: 2n, local: "foo", node: idOf(3), prefix: "m", uri: "urn:m" },
-        { at: 3n, local: "patternMask", node: idOf(3), prefix: "", uri: "" },
-      ],
-      pis: [
-        { data: "d", node: idOf(8), target: "t" },
-        { data: "", node: idOf(11), target: "end" },
-      ],
-      texts: [{ node: idOf(6), value: "Hi " }],
-      whitespace: [
-        { node: idOf(4), value: "\n  " },
-        { node: idOf(10), value: "\n" },
-      ],
-    };
-
-    assert.deepStrictEqual(flatten(document, idOf), expected);
-  });
-
-  it("selects the document node out: the only document-kind node, its own parent at slot 0", () => {
-    for (const [document, rows] of flattened()) {
-      const [first, ...rest] = rows.nodes;
-
-      assert.deepStrictEqual(first, {
-        at: 0n,
-        id: idOf(0),
-        kind: "document",
-        parent: idOf(0),
-        prefix: "",
-        version: document.version,
-      });
-      assert.isTrue(rest.every((row) => row.kind !== "document" && row.parent !== row.id));
-      assert.strictEqual(rows.document.node, idOf(0));
-    }
-  });
-
-  it("writes one node row per node, numbered in document order", () => {
-    for (const [document, rows] of flattened()) {
-      const total = 1 + document.children.reduce((sum, below) => sum + count(below), 0);
-
-      assert.strictEqual(rows.nodes.length, total);
-      assert.deepStrictEqual(
-        rows.nodes.map(({ id }) => id),
-        rows.nodes.map((_, index) => idOf(index)),
-      );
-    }
-  });
-
-  it("gives every node its parent's earlier number, and an element or the document as its parent", () => {
-    for (const [, rows] of flattened()) {
-      const numbers = new Map(rows.nodes.map(({ id }, index) => [id, index]));
-      const owners = new Set(
-        rows.nodes
-          .filter(({ kind }) => kind === "document" || !characterKinds.has(kind))
-          .map(({ id }) => id),
-      );
-
-      assert.isTrue(
-        rows.nodes
-          .slice(1)
-          .every(
-            ({ id, parent }) =>
-              owners.has(parent) && (numbers.get(parent) ?? Infinity) < (numbers.get(id) ?? 0),
+        const wide = div(
+          Array.from({ length: extent }, (_, at): XdmChild<Composed> =>
+            at % 2 === 0 ? div([]) : { _tag: "text", value: "t" },
           ),
-      );
-    }
-  });
-
-  it("indexes the children, the attributes and the namespaces of each owner from 0, without gaps", () => {
-    for (const [, rows] of flattened()) {
-      assert.isTrue(
-        indexedFromZero(rows.nodes.slice(1).map(({ at, parent }) => ({ at, owner: parent }))),
-      );
-      assert.isTrue(indexedFromZero(rows.attributes.map(({ at, node }) => ({ at, owner: node }))));
-      assert.isTrue(indexedFromZero(rows.namespaces.map(({ at, node }) => ({ at, owner: node }))));
-    }
-  });
-
-  it("gives each character-data node one row of its kind, and each such row a node of that kind", () => {
-    for (const [, rows] of flattened()) {
-      const arms = {
-        comment: rows.comments,
-        doctype: rows.doctypes,
-        entityRef: rows.entityRefs,
-        pi: rows.pis,
-        text: rows.texts,
-        ws: rows.whitespace,
-      };
-      for (const [kind, arm] of Object.entries(arms)) {
-        assert.deepStrictEqual(
-          arm.map(({ node }) => node),
-          rows.nodes.filter((row) => row.kind === kind).map(({ id }) => id),
         );
-      }
-    }
-  });
+        for (const [layout, document] of [
+          ["deep", itemAround(deep)],
+          ["wide", itemAround(wide)],
+        ] as const) {
+          const rows = flatten(document, idOf);
+          const folded = yield* Effect.fromResult(fold(document, idOf, foldGrammarOf(grammar)));
+          const assembled = yield* Effect.fromResult(assemble(rows));
+          const tree = toXmlDocument(document, namesOf(grammar));
 
-  it("gives each attribute one lexical form, and one open name exactly when an open class names it", () => {
-    for (const [, rows] of flattened()) {
-      const keys = rows.attributes.map(attributeKey);
-      const elements = new Set(
-        rows.nodes
-          .filter(({ kind }) => kind !== "document" && !characterKinds.has(kind))
-          .map(({ id }) => id),
-      );
-
-      assert.deepStrictEqual(rows.lexicals.map(attributeKey), keys);
-      assert.deepStrictEqual(
-        rows.openNames.map(attributeKey),
-        rows.attributes.filter(({ name }) => openClasses.has(name)).map(attributeKey),
-      );
-      assert.isTrue(rows.attributeEntities.every((row) => keys.includes(attributeKey(row))));
-      assert.isTrue(rows.attributes.every(({ node }) => elements.has(node)));
-      assert.isTrue(rows.namespaces.every(({ node }) => elements.has(node)));
-    }
-  });
-
-  it("copies the document's version to every node, and the empty prefix to every node but elements", () => {
-    for (const [document, rows] of flattened()) {
-      assert.isTrue(rows.nodes.every(({ version }) => version === document.version));
-      assert.isTrue(
-        rows.nodes
-          .filter(({ kind }) => kind === "document" || characterKinds.has(kind))
-          .every(({ prefix }) => prefix === ""),
-      );
-    }
-  });
-
-  it("writes a tree 100,000 elements deep, and an element 100,000 children wide", () => {
-    const leaf: XdmElement<Toy> = {
-      _tag: "element",
-      attributes: [],
-      children: [],
-      kind: "p",
-      namespaces: [],
-      prefix: "",
-    };
-    const depth = 100_000;
-    let deep = leaf;
-    for (let level = 1; level < depth; level += 1) {
-      deep = { ...leaf, children: [deep] };
-    }
-
-    const wide: XdmElement<Toy> = {
-      ...leaf,
-      children: Array.from({ length: depth }, (): XdmChild<Toy> => ({ _tag: "text", value: "t" })),
-    };
-    const of = (root: XdmElement<Toy>): FlatRows<Toy> =>
-      flatten(
-        {
-          _tag: "document",
-          charset: "utf-8",
-          children: [root],
-          encoding: "",
-          exportCharset: "utf-8",
-          standalone: none,
-          version: "3.0.0",
-          xmlVersion: none,
-        },
-        idOf,
-      );
-    const deepRows = of(deep).nodes;
-    const wideRows = of(wide).nodes;
-
-    assert.strictEqual(deepRows.length, depth + 1);
-    assert.isTrue(
-      deepRows.every(
-        ({ at, parent }, index) => at === 0n && parent === idOf(Math.max(index - 1, 0)),
-      ),
-    );
-    assert.strictEqual(wideRows.length, depth + 2);
-    assert.isTrue(
-      wideRows
-        .slice(2)
-        .every(({ at, parent }, index) => at === BigInt(index) && parent === idOf(1)),
-    );
-  });
-
-  it("cannot write an open class as a closed name, nor text beside the root element", () => {
-    // @ts-expect-error -- `data-*` is an open class, so an attribute under it carries its exact name.
-    const closed: XdmAttributeName<Toy> = { _tag: "closed", handle: "data-*" };
-    // @ts-expect-error -- XML holds no character data outside the root element.
-    const prolog: XdmDocumentChild<Toy> = { _tag: "text", value: "x" };
-
-    assert.deepStrictEqual([closed._tag, prolog._tag], ["closed", "text"]);
-  });
+          assert.strictEqual(rows.nodes.length, extent + (layout === "deep" ? 3 : 4), layout);
+          assert.deepStrictEqual(
+            [rows.nodes[0]?.start, rows.nodes[0]?.end],
+            [0n, BigInt(rows.nodes.length)],
+            layout,
+          );
+          assert.deepStrictEqual(
+            canonicalize(toXmlDocument(assembled, namesOf(grammar))),
+            canonicalize(tree),
+            layout,
+          );
+          assert.strictEqual(folded.nodes.length, rows.nodes.length, layout);
+          // A deep comparison recurses once per level, so the trees are compared through their rows:
+          // flatten writes every field of every node, so equal rows are equal trees.
+          assert.deepStrictEqual(flatten(assembled, idOf), rows, layout);
+          assert.strictEqual(chainLength(tree.root), layout === "deep" ? extent + 2 : 4, layout);
+        }
+      }),
+    // Two trees of 100,000 nodes through four walks take about 10 s on an idle laptop: the timeout
+    // leaves room for a busy one.
+    120_000,
+  );
 });

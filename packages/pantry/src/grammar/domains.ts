@@ -1,0 +1,2839 @@
+/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
+/**
+ * Value domains as data (review U1; fin.md §16, §17): each simple type an attribute's value or a
+ * simple-content kind's text is read under, compiled from its resolved XSD definition (the leaf's
+ * `Domain`, `src/vocab/inventory/types.ts`) into one pattern over the lexical form as written.
+ *
+ * The database holds an attribute's lexical form exactly as the document spells it, and one CHECK,
+ * `lexical ~ pattern`, decides it. XML Schema normalizes a value's whitespace before its facets
+ * read it (Part 2, 4.3.6), and a CHECK has no normalization step, so each pattern absorbs its
+ * type's `whiteSpace` class itself (spec-alignment §9.6):
+ *
+ * - `preserve`: the pattern is the type's language.
+ * - `replace`: every character the language admits a space at also admits a tab, line feed or
+ *   carriage return, and no other position admits them (replace maps each to a space, one for
+ *   one).
+ * - `collapse`: any run of XML whitespace at either end, and a run wherever the language admits a
+ *   space; no tab, line feed or carriage return otherwise. Where a word may begin or end with a
+ *   space, which collapsing never yields, the core must also begin and end with a character that is
+ *   not whitespace (`" ?q"` is an RFC 2396 URI reference and `"?q"` is not). The result is exact
+ *   when merging two spaces that stand together keeps a word in the language, which {@link compile}
+ *   proves of each language by Glushkov's follow sets before it folds it, and refuses otherwise.
+ *
+ * The rest of a type's facets fold into the same pattern where they are lexical: its primitive's
+ * lexical space, its `pattern` facets (one set per derivation step, each set an alternation, every
+ * set holding), its enumeration, its lengths, and an integer type's bounds, which are a set of
+ * digit strings. A bound on a float, double or non-integer decimal needs the typed value, so it
+ * stays data, the domain's residual `facets`, which a law column per primitive reads.
+ *
+ * The pattern is written in the syntax PostgreSQL's advanced regular expressions and JavaScript's
+ * `u`-flag regular expressions share: bracket expressions of code points, non-capturing groups,
+ * bounded quantifiers of at most 255 (PostgreSQL's `RE_DUP_MAX`), lookahead, and lookbehind of one
+ * character (PostgreSQL has read lookbehind since 9.6). XSD's own regex
+ * dialect (`\i`, `\c`, block and category escapes, class subtraction) is translated, never passed
+ * through.
+ *
+ * @see {@link https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace | XML Schema Part 2, 4.3.6 whiteSpace}
+ * @see {@link https://www.w3.org/TR/xmlschema-2/#regexs | XML Schema Part 2, Appendix F, Regular Expressions}
+ * @see {@link https://www.postgresql.org/docs/current/functions-matching.html#POSIX-SYNTAX-DETAILS | PostgreSQL, Regular Expression Details}
+ */
+import { Array as Arr, Option, Result, Schema } from "effect";
+import type { Domain, Facet, FacetName, Primitive } from "#pantry/vocab/inventory/types.ts";
+
+/**
+ * A run of code points, both ends included.
+ */
+export type CodeRange = readonly [lo: number, hi: number];
+
+/**
+ * A set of code points: disjoint runs, ascending, no two adjacent.
+ */
+export type CodeSet = readonly CodeRange[];
+
+/**
+ * Normalize runs into a {@link CodeSet}: sorted, empty runs dropped, overlapping and adjacent runs
+ * merged.
+ *
+ * @param ranges - Any runs.
+ * @returns The set they cover.
+ */
+const setOf = (ranges: Iterable<CodeRange>): CodeSet => {
+  const merged: [number, number][] = [];
+  for (const [lo, hi] of [...ranges]
+    .filter(([from, to]) => from <= to)
+    .toSorted(([a], [b]) => a - b)) {
+    const last = merged.at(-1);
+    if (last !== undefined && lo <= last[1] + 1) {
+      last[1] = Math.max(last[1], hi);
+    } else {
+      merged.push([lo, hi]);
+    }
+  }
+
+  return merged;
+};
+
+/**
+ * The union of sets.
+ *
+ * @param sets - The sets.
+ * @returns Every code point one of them holds.
+ */
+const union = (...sets: readonly CodeSet[]): CodeSet => setOf(sets.flat());
+
+/**
+ * The intersection of two sets.
+ *
+ * @param left - A set.
+ * @param right - A set.
+ * @returns The code points both hold.
+ */
+const intersect = (left: CodeSet, right: CodeSet): CodeSet => {
+  const runs: CodeRange[] = [];
+  let at = 0;
+  let other = 0;
+  while (at < left.length && other < right.length) {
+    const [lo, hi] = left[at] ?? [0, -1];
+    const [from, to] = right[other] ?? [0, -1];
+    if (Math.max(lo, from) <= Math.min(hi, to)) {
+      runs.push([Math.max(lo, from), Math.min(hi, to)]);
+    }
+
+    if (hi < to) {
+      at += 1;
+    } else {
+      other += 1;
+    }
+  }
+
+  return runs;
+};
+
+/**
+ * The code points of one set that another does not hold.
+ *
+ * @param left - The set.
+ * @param right - The code points taken away.
+ * @returns `left` without `right`.
+ */
+const subtract = (left: CodeSet, right: CodeSet): CodeSet => {
+  const gaps: CodeRange[] = [];
+  let next = 0;
+  for (const [lo, hi] of right) {
+    gaps.push([next, lo - 1]);
+    next = hi + 1;
+  }
+  gaps.push([next, 0x10_ff_ff]);
+
+  return intersect(left, setOf(gaps));
+};
+
+/**
+ * Whether a set holds a code point.
+ *
+ * @param set - The set.
+ * @param point - The code point.
+ * @returns Whether it is in one of the set's runs.
+ */
+const holds = (set: CodeSet, point: number): boolean =>
+  set.some(([lo, hi]) => lo <= point && point <= hi);
+
+/**
+ * Whether two sets hold the same code points.
+ *
+ * @param left - A set.
+ * @param right - A set.
+ * @returns Whether their runs agree.
+ */
+const sameSet = (left: CodeSet, right: CodeSet): boolean =>
+  left.length === right.length &&
+  left.every(([lo, hi], index) => right[index]?.[0] === lo && right[index]?.[1] === hi);
+
+/**
+ * The set of the characters of a string.
+ *
+ * @param characters - The characters.
+ * @returns Their code points.
+ */
+const charactersOf = (characters: string): CodeSet =>
+  setOf(
+    Array.from(characters, (character): CodeRange => {
+      const point = character.codePointAt(0) ?? 0;
+
+      return [point, point];
+    }),
+  );
+
+/**
+ * The set of ASCII runs written as `a-zA-Z0-9`: each pair around a hyphen a run, any other
+ * character itself.
+ *
+ * @param spec - The runs, ASCII only, no escapes.
+ * @returns The set.
+ */
+const ascii = (spec: string): CodeSet => {
+  const runs: CodeRange[] = [];
+  for (let at = 0; at < spec.length; at += 1) {
+    const lo = spec.codePointAt(at) ?? 0;
+    if (spec[at + 1] === "-" && at + 2 < spec.length) {
+      runs.push([lo, spec.codePointAt(at + 2) ?? 0]);
+      at += 2;
+    } else {
+      runs.push([lo, lo]);
+    }
+  }
+
+  return setOf(runs);
+};
+
+/**
+ * XML 1.0's `Char`: every character a document may hold. Every set a pattern reads is within it, so
+ * a complement never admits a character no attribute value can carry.
+ *
+ * @see {@link https://www.w3.org/TR/xml/#NT-Char | XML 1.0, Char}
+ */
+const xmlChar: CodeSet = [
+  [0x9, 0xa],
+  [0xd, 0xd],
+  [0x20, 0xd7_ff],
+  [0xe0_00, 0xff_fd],
+  [0x1_00_00, 0x10_ff_ff],
+];
+
+/**
+ * XML's four whitespace characters: space, tab, line feed and carriage return (XML 1.0, `S`).
+ */
+const whitespace: CodeSet = [
+  [0x9, 0xa],
+  [0xd, 0xd],
+  [0x20, 0x20],
+];
+
+/**
+ * The three whitespace characters `replace` and `collapse` turn into spaces.
+ */
+const breaks: CodeSet = [
+  [0x9, 0xa],
+  [0xd, 0xd],
+];
+
+/**
+ * The space character.
+ */
+const spacePoint = 0x20;
+
+/**
+ * XML 1.0 (Second Edition)'s `BaseChar` (Appendix B, production 85), as the specification lists it.
+ */
+export const baseChar: readonly CodeRange[] = [
+  [0x41, 0x5a],
+  [0x61, 0x7a],
+  [0xc0, 0xd6],
+  [0xd8, 0xf6],
+  [0xf8, 0xff],
+  [0x1_00, 0x1_31],
+  [0x1_34, 0x1_3e],
+  [0x1_41, 0x1_48],
+  [0x1_4a, 0x1_7e],
+  [0x1_80, 0x1_c3],
+  [0x1_cd, 0x1_f0],
+  [0x1_f4, 0x1_f5],
+  [0x1_fa, 0x2_17],
+  [0x2_50, 0x2_a8],
+  [0x2_bb, 0x2_c1],
+  [0x3_86, 0x3_86],
+  [0x3_88, 0x3_8a],
+  [0x3_8c, 0x3_8c],
+  [0x3_8e, 0x3_a1],
+  [0x3_a3, 0x3_ce],
+  [0x3_d0, 0x3_d6],
+  [0x3_da, 0x3_da],
+  [0x3_dc, 0x3_dc],
+  [0x3_de, 0x3_de],
+  [0x3_e0, 0x3_e0],
+  [0x3_e2, 0x3_f3],
+  [0x4_01, 0x4_0c],
+  [0x4_0e, 0x4_4f],
+  [0x4_51, 0x4_5c],
+  [0x4_5e, 0x4_81],
+  [0x4_90, 0x4_c4],
+  [0x4_c7, 0x4_c8],
+  [0x4_cb, 0x4_cc],
+  [0x4_d0, 0x4_eb],
+  [0x4_ee, 0x4_f5],
+  [0x4_f8, 0x4_f9],
+  [0x5_31, 0x5_56],
+  [0x5_59, 0x5_59],
+  [0x5_61, 0x5_86],
+  [0x5_d0, 0x5_ea],
+  [0x5_f0, 0x5_f2],
+  [0x6_21, 0x6_3a],
+  [0x6_41, 0x6_4a],
+  [0x6_71, 0x6_b7],
+  [0x6_ba, 0x6_be],
+  [0x6_c0, 0x6_ce],
+  [0x6_d0, 0x6_d3],
+  [0x6_d5, 0x6_d5],
+  [0x6_e5, 0x6_e6],
+  [0x9_05, 0x9_39],
+  [0x9_3d, 0x9_3d],
+  [0x9_58, 0x9_61],
+  [0x9_85, 0x9_8c],
+  [0x9_8f, 0x9_90],
+  [0x9_93, 0x9_a8],
+  [0x9_aa, 0x9_b0],
+  [0x9_b2, 0x9_b2],
+  [0x9_b6, 0x9_b9],
+  [0x9_dc, 0x9_dd],
+  [0x9_df, 0x9_e1],
+  [0x9_f0, 0x9_f1],
+  [0xa_05, 0xa_0a],
+  [0xa_0f, 0xa_10],
+  [0xa_13, 0xa_28],
+  [0xa_2a, 0xa_30],
+  [0xa_32, 0xa_33],
+  [0xa_35, 0xa_36],
+  [0xa_38, 0xa_39],
+  [0xa_59, 0xa_5c],
+  [0xa_5e, 0xa_5e],
+  [0xa_72, 0xa_74],
+  [0xa_85, 0xa_8b],
+  [0xa_8d, 0xa_8d],
+  [0xa_8f, 0xa_91],
+  [0xa_93, 0xa_a8],
+  [0xa_aa, 0xa_b0],
+  [0xa_b2, 0xa_b3],
+  [0xa_b5, 0xa_b9],
+  [0xa_bd, 0xa_bd],
+  [0xa_e0, 0xa_e0],
+  [0xb_05, 0xb_0c],
+  [0xb_0f, 0xb_10],
+  [0xb_13, 0xb_28],
+  [0xb_2a, 0xb_30],
+  [0xb_32, 0xb_33],
+  [0xb_36, 0xb_39],
+  [0xb_3d, 0xb_3d],
+  [0xb_5c, 0xb_5d],
+  [0xb_5f, 0xb_61],
+  [0xb_85, 0xb_8a],
+  [0xb_8e, 0xb_90],
+  [0xb_92, 0xb_95],
+  [0xb_99, 0xb_9a],
+  [0xb_9c, 0xb_9c],
+  [0xb_9e, 0xb_9f],
+  [0xb_a3, 0xb_a4],
+  [0xb_a8, 0xb_aa],
+  [0xb_ae, 0xb_b5],
+  [0xb_b7, 0xb_b9],
+  [0xc_05, 0xc_0c],
+  [0xc_0e, 0xc_10],
+  [0xc_12, 0xc_28],
+  [0xc_2a, 0xc_33],
+  [0xc_35, 0xc_39],
+  [0xc_60, 0xc_61],
+  [0xc_85, 0xc_8c],
+  [0xc_8e, 0xc_90],
+  [0xc_92, 0xc_a8],
+  [0xc_aa, 0xc_b3],
+  [0xc_b5, 0xc_b9],
+  [0xc_de, 0xc_de],
+  [0xc_e0, 0xc_e1],
+  [0xd_05, 0xd_0c],
+  [0xd_0e, 0xd_10],
+  [0xd_12, 0xd_28],
+  [0xd_2a, 0xd_39],
+  [0xd_60, 0xd_61],
+  [0xe_01, 0xe_2e],
+  [0xe_30, 0xe_30],
+  [0xe_32, 0xe_33],
+  [0xe_40, 0xe_45],
+  [0xe_81, 0xe_82],
+  [0xe_84, 0xe_84],
+  [0xe_87, 0xe_88],
+  [0xe_8a, 0xe_8a],
+  [0xe_8d, 0xe_8d],
+  [0xe_94, 0xe_97],
+  [0xe_99, 0xe_9f],
+  [0xe_a1, 0xe_a3],
+  [0xe_a5, 0xe_a5],
+  [0xe_a7, 0xe_a7],
+  [0xe_aa, 0xe_ab],
+  [0xe_ad, 0xe_ae],
+  [0xe_b0, 0xe_b0],
+  [0xe_b2, 0xe_b3],
+  [0xe_bd, 0xe_bd],
+  [0xe_c0, 0xe_c4],
+  [0xf_40, 0xf_47],
+  [0xf_49, 0xf_69],
+  [0x10_a0, 0x10_c5],
+  [0x10_d0, 0x10_f6],
+  [0x11_00, 0x11_00],
+  [0x11_02, 0x11_03],
+  [0x11_05, 0x11_07],
+  [0x11_09, 0x11_09],
+  [0x11_0b, 0x11_0c],
+  [0x11_0e, 0x11_12],
+  [0x11_3c, 0x11_3c],
+  [0x11_3e, 0x11_3e],
+  [0x11_40, 0x11_40],
+  [0x11_4c, 0x11_4c],
+  [0x11_4e, 0x11_4e],
+  [0x11_50, 0x11_50],
+  [0x11_54, 0x11_55],
+  [0x11_59, 0x11_59],
+  [0x11_5f, 0x11_61],
+  [0x11_63, 0x11_63],
+  [0x11_65, 0x11_65],
+  [0x11_67, 0x11_67],
+  [0x11_69, 0x11_69],
+  [0x11_6d, 0x11_6e],
+  [0x11_72, 0x11_73],
+  [0x11_75, 0x11_75],
+  [0x11_9e, 0x11_9e],
+  [0x11_a8, 0x11_a8],
+  [0x11_ab, 0x11_ab],
+  [0x11_ae, 0x11_af],
+  [0x11_b7, 0x11_b8],
+  [0x11_ba, 0x11_ba],
+  [0x11_bc, 0x11_c2],
+  [0x11_eb, 0x11_eb],
+  [0x11_f0, 0x11_f0],
+  [0x11_f9, 0x11_f9],
+  [0x1e_00, 0x1e_9b],
+  [0x1e_a0, 0x1e_f9],
+  [0x1f_00, 0x1f_15],
+  [0x1f_18, 0x1f_1d],
+  [0x1f_20, 0x1f_45],
+  [0x1f_48, 0x1f_4d],
+  [0x1f_50, 0x1f_57],
+  [0x1f_59, 0x1f_59],
+  [0x1f_5b, 0x1f_5b],
+  [0x1f_5d, 0x1f_5d],
+  [0x1f_5f, 0x1f_7d],
+  [0x1f_80, 0x1f_b4],
+  [0x1f_b6, 0x1f_bc],
+  [0x1f_be, 0x1f_be],
+  [0x1f_c2, 0x1f_c4],
+  [0x1f_c6, 0x1f_cc],
+  [0x1f_d0, 0x1f_d3],
+  [0x1f_d6, 0x1f_db],
+  [0x1f_e0, 0x1f_ec],
+  [0x1f_f2, 0x1f_f4],
+  [0x1f_f6, 0x1f_fc],
+  [0x21_26, 0x21_26],
+  [0x21_2a, 0x21_2b],
+  [0x21_2e, 0x21_2e],
+  [0x21_80, 0x21_82],
+  [0x30_41, 0x30_94],
+  [0x30_a1, 0x30_fa],
+  [0x31_05, 0x31_2c],
+  [0xac_00, 0xd7_a3],
+];
+
+/**
+ * XML 1.0 (Second Edition)'s `Ideographic` (production 86).
+ */
+export const ideographic: readonly CodeRange[] = [
+  [0x4e_00, 0x9f_a5],
+  [0x30_07, 0x30_07],
+  [0x30_21, 0x30_29],
+];
+
+/**
+ * XML 1.0 (Second Edition)'s `CombiningChar` (production 87).
+ */
+export const combiningChar: readonly CodeRange[] = [
+  [0x3_00, 0x3_45],
+  [0x3_60, 0x3_61],
+  [0x4_83, 0x4_86],
+  [0x5_91, 0x5_a1],
+  [0x5_a3, 0x5_b9],
+  [0x5_bb, 0x5_bd],
+  [0x5_bf, 0x5_bf],
+  [0x5_c1, 0x5_c2],
+  [0x5_c4, 0x5_c4],
+  [0x6_4b, 0x6_52],
+  [0x6_70, 0x6_70],
+  [0x6_d6, 0x6_dc],
+  [0x6_dd, 0x6_df],
+  [0x6_e0, 0x6_e4],
+  [0x6_e7, 0x6_e8],
+  [0x6_ea, 0x6_ed],
+  [0x9_01, 0x9_03],
+  [0x9_3c, 0x9_3c],
+  [0x9_3e, 0x9_4c],
+  [0x9_4d, 0x9_4d],
+  [0x9_51, 0x9_54],
+  [0x9_62, 0x9_63],
+  [0x9_81, 0x9_83],
+  [0x9_bc, 0x9_bc],
+  [0x9_be, 0x9_be],
+  [0x9_bf, 0x9_bf],
+  [0x9_c0, 0x9_c4],
+  [0x9_c7, 0x9_c8],
+  [0x9_cb, 0x9_cd],
+  [0x9_d7, 0x9_d7],
+  [0x9_e2, 0x9_e3],
+  [0xa_02, 0xa_02],
+  [0xa_3c, 0xa_3c],
+  [0xa_3e, 0xa_3e],
+  [0xa_3f, 0xa_3f],
+  [0xa_40, 0xa_42],
+  [0xa_47, 0xa_48],
+  [0xa_4b, 0xa_4d],
+  [0xa_70, 0xa_71],
+  [0xa_81, 0xa_83],
+  [0xa_bc, 0xa_bc],
+  [0xa_be, 0xa_c5],
+  [0xa_c7, 0xa_c9],
+  [0xa_cb, 0xa_cd],
+  [0xb_01, 0xb_03],
+  [0xb_3c, 0xb_3c],
+  [0xb_3e, 0xb_43],
+  [0xb_47, 0xb_48],
+  [0xb_4b, 0xb_4d],
+  [0xb_56, 0xb_57],
+  [0xb_82, 0xb_83],
+  [0xb_be, 0xb_c2],
+  [0xb_c6, 0xb_c8],
+  [0xb_ca, 0xb_cd],
+  [0xb_d7, 0xb_d7],
+  [0xc_01, 0xc_03],
+  [0xc_3e, 0xc_44],
+  [0xc_46, 0xc_48],
+  [0xc_4a, 0xc_4d],
+  [0xc_55, 0xc_56],
+  [0xc_82, 0xc_83],
+  [0xc_be, 0xc_c4],
+  [0xc_c6, 0xc_c8],
+  [0xc_ca, 0xc_cd],
+  [0xc_d5, 0xc_d6],
+  [0xd_02, 0xd_03],
+  [0xd_3e, 0xd_43],
+  [0xd_46, 0xd_48],
+  [0xd_4a, 0xd_4d],
+  [0xd_57, 0xd_57],
+  [0xe_31, 0xe_31],
+  [0xe_34, 0xe_3a],
+  [0xe_47, 0xe_4e],
+  [0xe_b1, 0xe_b1],
+  [0xe_b4, 0xe_b9],
+  [0xe_bb, 0xe_bc],
+  [0xe_c8, 0xe_cd],
+  [0xf_18, 0xf_19],
+  [0xf_35, 0xf_35],
+  [0xf_37, 0xf_37],
+  [0xf_39, 0xf_39],
+  [0xf_3e, 0xf_3e],
+  [0xf_3f, 0xf_3f],
+  [0xf_71, 0xf_84],
+  [0xf_86, 0xf_8b],
+  [0xf_90, 0xf_95],
+  [0xf_97, 0xf_97],
+  [0xf_99, 0xf_ad],
+  [0xf_b1, 0xf_b7],
+  [0xf_b9, 0xf_b9],
+  [0x20_d0, 0x20_dc],
+  [0x20_e1, 0x20_e1],
+  [0x30_2a, 0x30_2f],
+  [0x30_99, 0x30_99],
+  [0x30_9a, 0x30_9a],
+];
+
+/**
+ * XML 1.0 (Second Edition)'s `Digit` (production 88).
+ */
+export const xmlDigit: readonly CodeRange[] = [
+  [0x30, 0x39],
+  [0x6_60, 0x6_69],
+  [0x6_f0, 0x6_f9],
+  [0x9_66, 0x9_6f],
+  [0x9_e6, 0x9_ef],
+  [0xa_66, 0xa_6f],
+  [0xa_e6, 0xa_ef],
+  [0xb_66, 0xb_6f],
+  [0xb_e7, 0xb_ef],
+  [0xc_66, 0xc_6f],
+  [0xc_e6, 0xc_ef],
+  [0xd_66, 0xd_6f],
+  [0xe_50, 0xe_59],
+  [0xe_d0, 0xe_d9],
+  [0xf_20, 0xf_29],
+];
+
+/**
+ * XML 1.0 (Second Edition)'s `Extender` (production 89).
+ */
+export const extender: readonly CodeRange[] = [
+  [0xb7, 0xb7],
+  [0x2_d0, 0x2_d0],
+  [0x2_d1, 0x2_d1],
+  [0x3_87, 0x3_87],
+  [0x6_40, 0x6_40],
+  [0xe_46, 0xe_46],
+  [0xe_c6, 0xe_c6],
+  [0x30_05, 0x30_05],
+  [0x30_31, 0x30_35],
+  [0x30_9d, 0x30_9e],
+  [0x30_fc, 0x30_fe],
+];
+
+/**
+ * XSD's `\i`, `Letter`, `_` and `:`, and the tables {@link nameChar} reads. XML Schema 1.0 defines
+ * `\i` as the characters XML 1.0's `Letter`, `_` and `:` match, and `\c` as those its `NameChar`
+ * matches (Part 2, F.1.1), citing XML 1.0 (Second Edition), whose `Letter` is `BaseChar |
+ * Ideographic` (Appendix B). They are stated here as that edition lists them; the Fifth Edition's
+ * wider `NameStartChar` ranges, which an element's own name is read under, are not XSD's, and
+ * `xmllint` refuses an `xs:NCName` value outside these tables. `domains.test.ts` reads each table
+ * from the cached specification.
+ *
+ * @see {@link https://www.w3.org/TR/2000/REC-xml-20001006#CharClasses | XML 1.0 (Second Edition), Appendix B}
+ */
+const nameStart: CodeSet = setOf([...baseChar, ...ideographic, [0x3a, 0x3a], [0x5f, 0x5f]]);
+
+/**
+ * XSD's `\c`: XML 1.0 (Second Edition)'s `NameChar`, `Letter | Digit | '.' | '-' | '_' | ':' |
+ * CombiningChar | Extender` (production 4).
+ */
+const nameChar: CodeSet = union(
+  nameStart,
+  setOf([...xmlDigit, ...combiningChar, ...extender, [0x2d, 0x2e]]),
+);
+
+/**
+ * The Unicode blocks XSD's `\p{Is…}` escapes name that the pinned XSDs use, by XSD's block name.
+ * A block not listed is refused by name ({@link UnreadPattern}), never guessed.
+ *
+ * @see {@link https://www.w3.org/TR/xmlschema-2/#nt-IsBlock | XML Schema Part 2, F.1.1 Character class escapes}
+ */
+const blocks = new Map<string, CodeSet>([
+  ["BasicLatin", [[0x0, 0x7f]]],
+  ["Latin-1Supplement", [[0x80, 0xff]]],
+]);
+
+/**
+ * The code points of Unicode general categories, by XSD's category name, read once from the
+ * runtime's own Unicode tables (`\p{…}` of a `u`-flag regular expression) and kept.
+ */
+const categoryCache = new Map<string, CodeSet>();
+
+/**
+ * The general category names XSD's `\p{…}` reads (XML Schema Part 2, F.1.1).
+ */
+const categoryNames: ReadonlySet<string> = new Set(
+  "L Lu Ll Lt Lm Lo M Mn Mc Me N Nd Nl No P Pc Pd Ps Pe Pi Pf Po Z Zs Zl Zp S Sm Sc Sk So C Cc Cf Co Cn".split(
+    " ",
+  ),
+);
+
+/**
+ * Read a general category's code points, within XML's `Char`.
+ *
+ * @param name - The category, such as `Nd`.
+ * @returns Its set.
+ */
+const categoryOf = (name: string): CodeSet => {
+  const known = categoryCache.get(name);
+  if (known !== undefined) {
+    return known;
+  }
+
+  const test = new RegExp(`^\\p{gc=${name}}$`, "u");
+  const runs: CodeRange[] = [];
+  for (const [lo, hi] of xmlChar) {
+    for (let point = lo; point <= hi; point += 1) {
+      if (test.test(String.fromCodePoint(point))) {
+        runs.push([point, point]);
+      }
+    }
+  }
+
+  const set = setOf(runs);
+  categoryCache.set(name, set);
+
+  return set;
+};
+
+/**
+ * A regular language as a tree, the form every lexical space is built and folded in before it is
+ * written as a pattern.
+ *
+ * - `chars`: one character of a set.
+ * - `seq`: its parts in order; none is the empty string.
+ * - `alt`: one of its arms.
+ * - `repeat`: its body `min` to `max` times, `max` none for unbounded.
+ * - `edge`: no character, where the character after it (`start`) or before it (`end`) is not XML
+ *   whitespace: a collapsed value's core begins and ends so.
+ * - `and`: every arm over the same span, the intersection of their languages. `boundary` says what
+ *   ends the span: the end of the value, or the end of a list item's token.
+ */
+export type Regex =
+  | { readonly _tag: "alt"; readonly arms: readonly Regex[] }
+  | { readonly _tag: "and"; readonly arms: readonly Regex[]; readonly boundary: Boundary }
+  | { readonly _tag: "chars"; readonly set: CodeSet }
+  | {
+      readonly _tag: "repeat";
+      readonly body: Regex;
+      readonly max: Option.Option<number>;
+      readonly min: number;
+    }
+  | { readonly _tag: "edge"; readonly side: "end" | "start" }
+  | { readonly _tag: "seq"; readonly parts: readonly Regex[] };
+
+/**
+ * What ends the span an intersection's arms each match: the end of the whole value, or the end of
+ * a whitespace-free list item.
+ */
+export type Boundary = "end" | "token";
+
+/**
+ * The language with no word: what a set with no character leaves, and what an intersection or a
+ * sequence holding it is.
+ */
+const nothing: Regex = { _tag: "alt", arms: [] };
+
+/**
+ * Whether a tree is {@link nothing}.
+ *
+ * @param tree - The tree.
+ * @returns Whether its language is empty by construction.
+ */
+const isNothing = (tree: Regex): boolean => tree._tag === "alt" && tree.arms.length === 0;
+
+/**
+ * One character of a set, or {@link nothing} for the empty set.
+ *
+ * @param set - The set.
+ * @returns The tree.
+ */
+const chars = (set: CodeSet): Regex => (set.length === 0 ? nothing : { _tag: "chars", set });
+
+/**
+ * A sequence: nested sequences flattened, one part standing alone, and {@link nothing} where a part
+ * is.
+ *
+ * @param parts - Its parts.
+ * @returns The tree.
+ */
+const seq = (...parts: readonly Regex[]): Regex => {
+  const flat = parts.flatMap((part) => (part._tag === "seq" ? part.parts : [part]));
+  const [only] = flat;
+  if (flat.some(isNothing)) {
+    return nothing;
+  }
+
+  return flat.length === 1 && only !== undefined ? only : { _tag: "seq", parts: flat };
+};
+
+/**
+ * An alternation: nested alternations flattened, arms of no word dropped, one arm standing alone.
+ *
+ * @param arms - Its arms.
+ * @returns The tree.
+ */
+const alt = (...arms: readonly Regex[]): Regex => {
+  const flat = arms.flatMap((arm) => (arm._tag === "alt" ? arm.arms : [arm]));
+  const [only] = flat;
+
+  return flat.length === 1 && only !== undefined ? only : { _tag: "alt", arms: flat };
+};
+
+/**
+ * A repetition, simplified where its shape allows: at most zero times is the empty string, exactly
+ * once is its body, a body of no word is the empty string or nothing, and an optional run of one or
+ * more is a run of zero or more.
+ *
+ * @param body - What repeats.
+ * @param min - The fewest times.
+ * @param max - The most, none for unbounded.
+ * @returns The tree.
+ */
+const repeat = (body: Regex, min: number, max: Option.Option<number>): Regex => {
+  if (Option.contains(max, 0) || isNothing(body)) {
+    return min === 0 ? seq() : nothing;
+  }
+
+  if (min === 1 && Option.contains(max, 1)) {
+    return body;
+  }
+
+  if (
+    min === 0 &&
+    Option.contains(max, 1) &&
+    body._tag === "repeat" &&
+    body.min === 1 &&
+    Option.isNone(body.max)
+  ) {
+    return { _tag: "repeat", body: body.body, max: Option.none(), min: 0 };
+  }
+
+  return { _tag: "repeat", body, max, min };
+};
+
+/**
+ * A zero-width assertion that the character after (`start`) or before (`end`) is not XML
+ * whitespace.
+ *
+ * @param side - Which character it reads.
+ * @returns The tree.
+ */
+const edge = (side: "end" | "start"): Regex => ({ _tag: "edge", side });
+
+/**
+ * An intersection: {@link nothing} where an arm is, the one arm where only one is left.
+ *
+ * @param arms - Its arms.
+ * @param boundary - What ends the span they each match.
+ * @returns The tree.
+ */
+const both = (arms: readonly Regex[], boundary: Boundary): Regex => {
+  const [only] = arms;
+  if (arms.some(isNothing)) {
+    return nothing;
+  }
+
+  return arms.length === 1 && only !== undefined ? only : { _tag: "and", arms, boundary };
+};
+
+/**
+ * Zero or more.
+ *
+ * @param body - What repeats.
+ * @returns The tree.
+ */
+const star = (body: Regex): Regex => repeat(body, 0, Option.none());
+
+/**
+ * One or more.
+ *
+ * @param body - What repeats.
+ * @returns The tree.
+ */
+const plus = (body: Regex): Regex => repeat(body, 1, Option.none());
+
+/**
+ * Zero or one.
+ *
+ * @param body - What may stand.
+ * @returns The tree.
+ */
+const opt = (body: Regex): Regex => repeat(body, 0, Option.some(1));
+
+/**
+ * The empty string.
+ */
+const empty: Regex = seq();
+
+/**
+ * A string, character by character.
+ *
+ * @param text - The string.
+ * @returns The tree.
+ */
+const literal = (text: string): Regex =>
+  seq(...Array.from(text, (character) => chars(charactersOf(character))));
+
+/**
+ * One ASCII character of a set written as {@link ascii} reads it.
+ *
+ * @param spec - The runs.
+ * @returns The tree.
+ */
+const cls = (spec: string): Regex => chars(ascii(spec));
+
+/**
+ * One whitespace character.
+ */
+const whitespaceChar = chars(whitespace);
+
+/**
+ * A run of XML whitespace, possibly empty: what a collapsed value may carry at either end.
+ */
+const anyWhitespace = star(whitespaceChar);
+
+/**
+ * Any value: a string of XML characters, the language of `xs:string` and `xs:anySimpleType`.
+ */
+const anything = star(chars(xmlChar));
+
+/**
+ * A pattern facet XSD's regular expression grammar does not read, or one this reader does not
+ * translate, such as a block it has no range for.
+ */
+export class UnreadPattern extends Schema.TaggedError<UnreadPattern>()("UnreadPattern", {
+  at: Schema.Number,
+  detail: Schema.String,
+  pattern: Schema.String,
+}) {
+  /**
+   * The pattern, where it stops being read, and the repair.
+   */
+  override get message(): string {
+    return `The XSD pattern ${JSON.stringify(this.pattern)} is not read at character ${this.at}: ${this.detail}. Correct the pattern, or extend the attribute grammar's reader of XSD regular expressions.`;
+  }
+}
+
+/**
+ * A resolved definition whose facets the compiler does not fold into a pattern, or whose language
+ * the whitespace fold cannot state exactly.
+ */
+export class UnreadDefinition extends Schema.TaggedError<UnreadDefinition>()("UnreadDefinition", {
+  detail: Schema.String,
+}) {
+  /**
+   * What is not read, and the repair.
+   */
+  override get message(): string {
+    return `A value domain is not compiled: ${this.detail}. Give the attribute a reading in the attribute grammar, or extend the domain compiler to this definition.`;
+  }
+}
+
+/**
+ * The ways a resolved definition has no compiled domain.
+ */
+export type CompileError = UnreadDefinition | UnreadPattern;
+
+/**
+ * The single-character escapes of XSD's regex grammar, by the character after the backslash
+ * (XML Schema Part 2, F.1.1, `SingleCharEsc`).
+ */
+const singleEscapes: ReadonlyMap<string, number> = new Map([
+  ["n", 0xa],
+  ["r", 0xd],
+  ["t", 0x9],
+  ...Array.from("\\|.?*+(){}-[]^", (character): [string, number] => [
+    character,
+    character.codePointAt(0) ?? 0,
+  ]),
+]);
+
+/**
+ * XSD's `\w`: every character but the punctuation, separators and other characters of Unicode
+ * (XML Schema Part 2, F.1.1).
+ *
+ * @returns The set.
+ */
+const wordCharacters = (): CodeSet =>
+  subtract(xmlChar, union(categoryOf("P"), categoryOf("Z"), categoryOf("C")));
+
+/**
+ * The sets of the lower-case multi-character escapes, each read when an escape names it.
+ */
+const multiEscapes = new Map<string, () => CodeSet>([
+  ["c", () => nameChar],
+  ["d", () => categoryOf("Nd")],
+  ["i", () => nameStart],
+  ["s", () => whitespace],
+  ["w", wordCharacters],
+]);
+
+/**
+ * The multi-character escapes of XSD's regex grammar, by letter (XML Schema Part 2, F.1.1,
+ * `MultiCharEsc`): their sets within XML's `Char`, the upper case each lower case's complement.
+ *
+ * @param letter - The escape's letter.
+ * @returns Its set, or none for a letter that is no multi-character escape.
+ */
+const multiEscape = (letter: string): Option.Option<CodeSet> => {
+  const lower = letter.toLowerCase();
+  const read = Option.fromNullishOr(multiEscapes.get(lower));
+
+  return read.pipe(
+    Option.map((set) => (letter === lower ? intersect(set(), xmlChar) : subtract(xmlChar, set()))),
+  );
+};
+
+/**
+ * A reader over one XSD pattern's code points.
+ */
+interface Cursor {
+  at: number;
+  readonly points: readonly string[];
+  readonly source: string;
+}
+
+/**
+ * Refuse a pattern where the cursor stands.
+ *
+ * @param cursor - The cursor.
+ * @param detail - What is wrong there.
+ * @returns The failure.
+ */
+const unread = (cursor: Cursor, detail: string): Result.Result<never, UnreadPattern> =>
+  Result.fail(new UnreadPattern({ at: cursor.at, detail, pattern: cursor.source }));
+
+/**
+ * The character the cursor stands on, or none at the end.
+ *
+ * @param cursor - The cursor.
+ * @param ahead - How many characters past it.
+ * @returns The character.
+ */
+const peek = (cursor: Cursor, ahead = 0): string | undefined => cursor.points[cursor.at + ahead];
+
+/**
+ * Read a category or block escape's braces, `{Name}`, after `\p` or `\P`.
+ *
+ * @param cursor - The cursor, on the `{`.
+ * @param complement - Whether the escape is `\P`.
+ * @returns The escape's set.
+ */
+const readProperty = (
+  cursor: Cursor,
+  complement: boolean,
+): Result.Result<CodeSet, UnreadPattern> => {
+  if (peek(cursor) !== "{") {
+    return unread(cursor, "a \\p or \\P without its braces");
+  }
+
+  const close = cursor.points.indexOf("}", cursor.at);
+  if (close === -1) {
+    return unread(cursor, "a \\p{ without its closing brace");
+  }
+
+  const name = cursor.points.slice(cursor.at + 1, close).join("");
+  cursor.at = close + 1;
+  const category = categoryNames.has(name) ? Option.some(categoryOf(name)) : Option.none();
+  const set = name.startsWith("Is") ? Option.fromNullishOr(blocks.get(name.slice(2))) : category;
+
+  return Option.match(set, {
+    onNone: () => unread(cursor, `the property ${name}, which this reader has no range for`),
+    onSome: (held) =>
+      Result.succeed(complement ? subtract(xmlChar, held) : intersect(held, xmlChar)),
+  });
+};
+
+/**
+ * Read an escape after its backslash: a single character, a multi-character set, or a category or
+ * block.
+ *
+ * @param cursor - The cursor, past the backslash.
+ * @returns The set it stands for, and whether it is one character (which may end a range).
+ */
+const readEscape = (
+  cursor: Cursor,
+): Result.Result<{ readonly set: CodeSet; readonly single: boolean }, UnreadPattern> => {
+  const letter = peek(cursor);
+  if (letter === undefined) {
+    return unread(cursor, "a backslash at the end");
+  }
+
+  cursor.at += 1;
+  const single = singleEscapes.get(letter);
+  if (single !== undefined) {
+    return Result.succeed({ set: [[single, single]], single: true });
+  }
+
+  if (letter === "p" || letter === "P") {
+    return Result.map(readProperty(cursor, letter === "P"), (set) => ({ set, single: false }));
+  }
+
+  return Option.match(multiEscape(letter), {
+    onNone: () => unread(cursor, `the escape \\${letter}, which XSD does not define`),
+    onSome: (set) => Result.succeed({ set, single: false }),
+  });
+};
+
+/**
+ * Read one item of a class's group: a character or a single-character escape, alone or as the
+ * start of a range to another, or a multi-character, category or block escape.
+ *
+ * @param cursor - The cursor, on the item.
+ * @param character - The character it stands on.
+ * @returns The item's set.
+ */
+const readClassItem = (cursor: Cursor, character: string): Result.Result<CodeSet, UnreadPattern> =>
+  Result.gen(function* readClassItemBody() {
+    cursor.at += 1;
+    const start =
+      character === "\\"
+        ? yield* readEscape(cursor)
+        : { set: charactersOf(character), single: true };
+    const dash = peek(cursor) === "-" && peek(cursor, 1) !== "]" && peek(cursor, 1) !== "[";
+    if (!start.single || !dash) {
+      return start.set;
+    }
+
+    cursor.at += 1;
+    const endCharacter = peek(cursor);
+    if (endCharacter === undefined) {
+      return yield* unread(cursor, "a range without its end");
+    }
+
+    cursor.at += 1;
+    const end =
+      endCharacter === "\\"
+        ? yield* readEscape(cursor)
+        : { set: charactersOf(endCharacter), single: true };
+    const [lo] = start.set[0] ?? [0];
+    const [hi] = end.set[0] ?? [0];
+    if (!end.single || hi < lo) {
+      return yield* unread(cursor, "a range whose end is not one character after its start");
+    }
+
+    const range: CodeSet = [[lo, hi]];
+
+    return range;
+  });
+
+/**
+ * Read a character class after its `[`: a positive or negated group, then an optional subtraction
+ * `-[…]`, then the `]`.
+ *
+ * @param cursor - The cursor, past the `[`.
+ * @returns The class's set within XML's `Char`.
+ */
+const readClass = (cursor: Cursor): Result.Result<CodeSet, UnreadPattern> =>
+  Result.gen(function* readClassBody() {
+    const negated = peek(cursor) === "^";
+    if (negated) {
+      cursor.at += 1;
+    }
+
+    const runs: CodeRange[] = [];
+    let subtracted: CodeSet = [];
+    for (;;) {
+      const character = peek(cursor);
+      if (character === undefined) {
+        return yield* unread(cursor, "a class without its closing bracket");
+      }
+
+      if (character === "]") {
+        if (runs.length === 0) {
+          return yield* unread(cursor, "an empty class");
+        }
+
+        cursor.at += 1;
+        break;
+      }
+
+      if (character === "-" && peek(cursor, 1) === "[") {
+        cursor.at += 2;
+        subtracted = yield* readClass(cursor);
+        if (peek(cursor) !== "]") {
+          return yield* unread(cursor, "a subtraction that is not the class's last part");
+        }
+
+        cursor.at += 1;
+        break;
+      }
+
+      if (character === "[") {
+        return yield* unread(cursor, "an unescaped [ inside a class");
+      }
+
+      runs.push(...(yield* readClassItem(cursor, character)));
+    }
+
+    const group = intersect(setOf(runs), xmlChar);
+
+    return subtract(negated ? subtract(xmlChar, group) : group, subtracted);
+  });
+
+/**
+ * Read a quantifier's braces after `{`: `{n}`, `{n,}` or `{n,m}`.
+ *
+ * @param cursor - The cursor, past the `{`.
+ * @returns The bounds.
+ */
+const readBraces = (
+  cursor: Cursor,
+): Result.Result<{ readonly max: Option.Option<number>; readonly min: number }, UnreadPattern> => {
+  const close = cursor.points.indexOf("}", cursor.at);
+  const body = close === -1 ? "" : cursor.points.slice(cursor.at, close).join("");
+  const match = /^(?<min>[0-9]+)(?<comma>,(?<max>[0-9]*))?$/u.exec(body)?.groups;
+  if (match === undefined) {
+    return unread(cursor, "a { that opens no quantity");
+  }
+
+  cursor.at = close + 1;
+  const min = Number(match["min"]);
+  const greatest = match["max"] === "" ? Option.none() : Option.some(Number(match["max"]));
+  const max = match["comma"] === undefined ? Option.some(min) : greatest;
+
+  return Option.exists(max, (most) => most < min)
+    ? unread(cursor, "a quantity whose most is below its least")
+    : Result.succeed({ max, min });
+};
+
+/**
+ * Read an alternation of branches up to a `)` or the end.
+ *
+ * @param cursor - The cursor.
+ * @returns The tree.
+ */
+const readAlternation = (cursor: Cursor): Result.Result<Regex, UnreadPattern> =>
+  Result.gen(function* readAlternationBody() {
+    const arms: Regex[] = [];
+    for (;;) {
+      const parts: Regex[] = [];
+      for (;;) {
+        const character = peek(cursor);
+        if (character === undefined || character === "|" || character === ")") {
+          break;
+        }
+
+        cursor.at += 1;
+        let atom: Regex;
+        if (character === "(") {
+          atom = yield* readAlternation(cursor);
+          if (peek(cursor) !== ")") {
+            return yield* unread(cursor, "a group without its closing parenthesis");
+          }
+
+          cursor.at += 1;
+        } else if (character === "[") {
+          atom = chars(yield* readClass(cursor));
+        } else if (character === "\\") {
+          atom = chars((yield* readEscape(cursor)).set);
+        } else if (character === ".") {
+          atom = chars(subtract(xmlChar, charactersOf("\n\r")));
+        } else if ("?*+{}]".includes(character)) {
+          return yield* unread(cursor, `a ${character} with nothing to quantify`);
+        } else {
+          atom = chars(charactersOf(character));
+        }
+
+        const quantifier = peek(cursor);
+        if (quantifier === "?") {
+          cursor.at += 1;
+          atom = opt(atom);
+        } else if (quantifier === "*") {
+          cursor.at += 1;
+          atom = star(atom);
+        } else if (quantifier === "+") {
+          cursor.at += 1;
+          atom = plus(atom);
+        } else if (quantifier === "{") {
+          cursor.at += 1;
+          const { max, min } = yield* readBraces(cursor);
+          atom = repeat(atom, min, max);
+        }
+
+        parts.push(atom);
+      }
+
+      arms.push(seq(...parts));
+      if (peek(cursor) !== "|") {
+        break;
+      }
+
+      cursor.at += 1;
+    }
+
+    return alt(...arms);
+  });
+
+/**
+ * Translate an XSD `pattern` facet into a tree. XSD's regexes match the whole value, so the tree is
+ * implicitly anchored at both ends; `^` and `$` are ordinary characters in XSD's dialect.
+ *
+ * @param source - The pattern as the XSD writes it.
+ * @returns The tree, or an {@link UnreadPattern}.
+ * @see {@link https://www.w3.org/TR/xmlschema-2/#regexs | XML Schema Part 2, Appendix F}
+ */
+const readPattern = (source: string): Result.Result<Regex, UnreadPattern> =>
+  Result.gen(function* readPatternBody() {
+    const cursor: Cursor = { at: 0, points: Array.from(source, String), source };
+    const tree = yield* readAlternation(cursor);
+    if (cursor.at < cursor.points.length) {
+      return yield* unread(cursor, "a ) that closes no group");
+    }
+
+    return tree;
+  });
+
+/**
+ * One decimal digit.
+ */
+const digit = cls("0-9");
+
+/**
+ * An optional sign.
+ */
+const sign = opt(chars(charactersOf("+-")));
+
+/**
+ * `xs:decimal`'s lexical space: an optional sign, then digits with an optional point and
+ * fraction, or a point and a fraction (XML Schema Part 2, 3.2.3.1).
+ */
+const decimalLexical = seq(
+  sign,
+  alt(seq(plus(digit), opt(seq(literal("."), star(digit)))), seq(literal("."), plus(digit))),
+);
+
+/**
+ * `xs:double`'s and `xs:float`'s lexical space: a decimal mantissa, an optional exponent, and the
+ * special values `INF`, `-INF` and `NaN` (XML Schema Part 2, 3.2.4.1 and 3.2.5.1; `+INF` is XSD
+ * 1.1's and not admitted).
+ */
+const doubleLexical = alt(
+  seq(decimalLexical, opt(seq(cls("Ee"), sign, plus(digit)))),
+  seq(opt(literal("-")), literal("INF")),
+  literal("NaN"),
+);
+
+/**
+ * An `NCName`: a name start character other than the colon, then name characters other than the
+ * colon (Namespaces in XML, `NCName`).
+ */
+const ncName = seq(
+  chars(subtract(nameStart, charactersOf(":"))),
+  star(chars(subtract(nameChar, charactersOf(":")))),
+);
+
+/**
+ * `xs:QName`'s lexical space: an NCName, with an NCName prefix and a colon before it or not
+ * (XML Schema Part 2, 3.2.18).
+ */
+const qNameLexical = seq(opt(seq(ncName, literal(":"))), ncName);
+
+/**
+ * `xs:boolean`'s lexical space (XML Schema Part 2, 3.2.2.1).
+ */
+const booleanLexical = alt(literal("true"), literal("false"), literal("1"), literal("0"));
+
+/**
+ * `xs:base64Binary`'s lexical space, the Second Edition's grammar: groups of four base64
+ * characters, each optionally followed by one space, ending in a full group or one padded with
+ * `=` (XML Schema Part 2, 3.2.16).
+ */
+const base64Lexical = ((): Regex => {
+  const spaced = (set: string): Regex => seq(cls(set), opt(literal(" ")));
+  const b64 = "A-Za-z0-9+/";
+  const b64s = spaced(b64);
+
+  return opt(
+    seq(
+      star(seq(b64s, b64s, b64s, b64s)),
+      alt(
+        seq(b64s, b64s, b64s, cls(b64)),
+        seq(b64s, b64s, spaced("AEIMQUYcgkosw048"), literal("=")),
+        seq(b64s, spaced("AQgw"), literal("="), opt(literal(" ")), literal("=")),
+      ),
+    ),
+  );
+})();
+
+/**
+ * `xs:date`'s lexical space: a year of four or more digits (no year 0000), a month and a day valid
+ * for that month, 29 February only in a leap year, and an optional timezone (XML Schema Part 2,
+ * 3.2.9.1 and D.3.2).
+ */
+const dateLexical = ((): Regex => {
+  const two = (first: string, second: string): Regex => seq(cls(first), cls(second));
+  const year = alt(
+    seq(cls("1-9"), repeat(digit, 3, Option.none())),
+    seq(
+      literal("0"),
+      alt(
+        seq(cls("1-9"), digit, digit),
+        seq(literal("0"), cls("1-9"), digit),
+        seq(literal("00"), cls("1-9")),
+      ),
+    ),
+  );
+  const leapTail = alt(two("0", "48"), two("2468", "048"), two("13579", "26"));
+  const leapYear = alt(
+    seq(alt(seq(cls("1-9"), repeat(digit, 2, Option.none())), seq(digit, digit)), leapTail),
+    seq(alt(two("0", "48"), two("2468", "048"), two("13579", "26")), literal("00")),
+    seq(
+      cls("1-9"),
+      star(digit),
+      alt(two("0", "048"), two("2468", "048"), two("13579", "26")),
+      literal("00"),
+    ),
+  );
+  const monthDay = alt(
+    seq(
+      alt(two("0", "13578"), two("1", "02")),
+      literal("-"),
+      alt(two("0", "1-9"), two("12", "0-9"), two("3", "01")),
+    ),
+    seq(
+      alt(two("0", "469"), literal("11")),
+      literal("-"),
+      alt(two("0", "1-9"), two("12", "0-9"), literal("30")),
+    ),
+    seq(literal("02-"), alt(two("0", "1-9"), two("1", "0-9"), two("2", "0-8"))),
+  );
+  const timezone = alt(
+    literal("Z"),
+    seq(
+      chars(charactersOf("+-")),
+      alt(
+        seq(alt(two("0", "0-9"), two("1", "0-3")), literal(":"), two("0-5", "0-9")),
+        literal("14:00"),
+      ),
+    ),
+  );
+
+  return seq(
+    opt(literal("-")),
+    alt(seq(year, literal("-"), monthDay), seq(leapYear, literal("-02-29"))),
+    opt(timezone),
+  );
+})();
+
+/**
+ * The lexical space of each XSD primitive this compiler reads, in the form XSD reads it after the
+ * primitive's whitespace class. `anyURI`'s is every string here: its lexical space (spec reading
+ * 61, XML Schema 1.0's RFC 2396 as RFC 2732 amends it, after XLink's escaping) is the pattern the
+ * leaf states of the built-in, which the compiler reads like any other. A primitive not listed
+ * (`duration`, the time and `g` types, `hexBinary`, `NOTATION`) is refused by name, since no pinned
+ * type restricts it.
+ */
+const primitives: Partial<Readonly<Record<Primitive, Regex>>> = {
+  QName: qNameLexical,
+  anySimpleType: anything,
+  anyURI: anything,
+  base64Binary: base64Lexical,
+  boolean: booleanLexical,
+  date: dateLexical,
+  decimal: decimalLexical,
+  double: doubleLexical,
+  float: doubleLexical,
+  string: anything,
+};
+
+/**
+ * The whole numbers of an interval as digit strings with no leading zero ("0" for zero): the
+ * strings of each length between the bounds', each length's run written digit by digit.
+ *
+ * @param lo - The least, at least zero.
+ * @param hi - The greatest, none for unbounded.
+ * @returns The tree, or none for an empty interval.
+ */
+const digitsIn = (lo: bigint, hi: Option.Option<bigint>): Option.Option<Regex> => {
+  const sameLength = (from: string, to: string): Regex => {
+    if (from.length === 0) {
+      return empty;
+    }
+
+    const [a = "0", ...aRest] = from;
+    const [b = "0", ...bRest] = to;
+    if (a === b) {
+      return seq(literal(a), sameLength(aRest.join(""), bRest.join("")));
+    }
+
+    const rest = from.length - 1;
+    const lowFull = aRest.every((d) => d === "0");
+    const highFull = bRest.every((d) => d === "9");
+    const midFrom = Number(a) + (lowFull ? 0 : 1);
+    const midTo = Number(b) - (highFull ? 0 : 1);
+
+    return alt(
+      ...(lowFull ? [] : [seq(literal(a), sameLength(aRest.join(""), "9".repeat(rest)))]),
+      ...(midFrom <= midTo
+        ? [
+            seq(
+              cls(`${midFrom}-${midTo}`),
+              ...(rest === 0 ? [] : [repeat(digit, rest, Option.some(rest))]),
+            ),
+          ]
+        : []),
+      ...(highFull ? [] : [seq(literal(b), sameLength("0".repeat(rest), bRest.join("")))]),
+    );
+  };
+  if (Option.exists(hi, (most) => most < lo)) {
+    return Option.none();
+  }
+
+  const lowLength = String(lo).length;
+  const top = Option.getOrElse(hi.pipe(Option.map((most) => String(most).length)), () => lowLength);
+  const arms: Regex[] = [];
+  let full: Option.Option<readonly [number, number]> = Option.none();
+  const flush = () => {
+    for (const [from, to] of Option.toArray(full)) {
+      arms.push(seq(cls("1-9"), repeat(digit, from - 1, Option.some(to - 1))));
+    }
+
+    full = Option.none();
+  };
+  for (let length = lowLength; length <= top; length += 1) {
+    const floor = 10n ** BigInt(length - 1);
+    const ceiling = 10n ** BigInt(length) - 1n;
+    const from = length === lowLength && lo > floor ? lo : floor;
+    const to = length === top ? Option.getOrElse(hi, () => ceiling) : ceiling;
+    if (from === floor && to === ceiling) {
+      full = Option.some([
+        Option.match(full, { onNone: () => length, onSome: ([first]) => first }),
+        length,
+      ]);
+    } else {
+      flush();
+      arms.push(sameLength(String(from), String(to)));
+    }
+  }
+
+  if (Option.isNone(hi)) {
+    const first = Option.match(full, { onNone: () => top + 1, onSome: ([held]) => held });
+    full = Option.none();
+    arms.push(seq(cls("1-9"), repeat(digit, first - 1, Option.none())));
+  }
+
+  flush();
+
+  return Option.some(alt(...arms));
+};
+
+/**
+ * The lexical forms of the whole numbers of an interval, as `xs:integer` writes them: an optional
+ * sign, leading zeros, and the digits; zero with either sign.
+ *
+ * @param lo - The least, none for unbounded.
+ * @param hi - The greatest, none for unbounded.
+ * @returns The tree, or none for an empty interval.
+ */
+const integerIn = (lo: Option.Option<bigint>, hi: Option.Option<bigint>): Option.Option<Regex> => {
+  const has = (value: bigint) =>
+    Option.getOrElse(lo.pipe(Option.map((least) => least <= value)), () => true) &&
+    Option.getOrElse(hi.pipe(Option.map((most) => value <= most)), () => true);
+  const zeros = plus(literal("0"));
+  const positive = Option.getOrElse(hi.pipe(Option.map((most) => most >= 1n)), () => true)
+    ? digitsIn(
+        Option.getOrElse(lo.pipe(Option.map((least) => (least > 1n ? least : 1n))), () => 1n),
+        hi,
+      )
+    : Option.none();
+  const negative = Option.getOrElse(lo.pipe(Option.map((least) => least <= -1n)), () => true)
+    ? digitsIn(
+        Option.getOrElse(hi.pipe(Option.map((most) => (most < -1n ? -most : 1n))), () => 1n),
+        lo.pipe(Option.map((least) => -least)),
+      )
+    : Option.none();
+  const arms = [
+    ...(has(0n) ? [seq(sign, zeros)] : []),
+    ...Option.toArray(
+      positive.pipe(Option.map((body) => seq(opt(literal("+")), star(literal("0")), body))),
+    ),
+    ...Option.toArray(
+      negative.pipe(Option.map((body) => seq(literal("-"), star(literal("0")), body))),
+    ),
+  ];
+
+  return arms.length === 0 ? Option.none() : Option.some(alt(...arms));
+};
+
+/**
+ * `xs:decimal`'s lexical forms of values of zero or more: an unsigned decimal, or zero after a
+ * minus.
+ */
+const nonNegativeDecimal = alt(
+  seq(
+    opt(literal("+")),
+    alt(seq(plus(digit), opt(seq(literal("."), star(digit)))), seq(literal("."), plus(digit))),
+  ),
+  seq(
+    literal("-"),
+    alt(
+      seq(plus(literal("0")), opt(seq(literal("."), star(literal("0"))))),
+      seq(literal("."), plus(literal("0"))),
+    ),
+  ),
+);
+
+/**
+ * A facet on a typed value that no pattern states, so a law column per primitive reads it: a bound
+ * on a float, a double or a non-integer decimal.
+ */
+export interface ValueFacet {
+  readonly facet: "maxExclusive" | "maxInclusive" | "minExclusive" | "minInclusive";
+  readonly value: string;
+}
+
+/**
+ * The `ValueDomain` primitive of a compiled domain: an atomic domain's XSD primitive, or `list` or
+ * `union` for the other varieties, whose values no one primitive types.
+ */
+export type DomainPrimitive = Primitive | "list" | "union";
+
+/**
+ * The `DomainPrimitive` roster, in code order: XML Schema Part 2's primitives in its section order,
+ * `anySimpleType`, then the two varieties.
+ */
+export const domainPrimitives = [
+  "string",
+  "boolean",
+  "decimal",
+  "float",
+  "double",
+  "duration",
+  "dateTime",
+  "time",
+  "date",
+  "gYearMonth",
+  "gYear",
+  "gMonthDay",
+  "gDay",
+  "gMonth",
+  "hexBinary",
+  "base64Binary",
+  "anyURI",
+  "QName",
+  "NOTATION",
+  "anySimpleType",
+  "list",
+  "union",
+] as const satisfies readonly DomainPrimitive[];
+
+/**
+ * XML Schema's identity types a value may be (Part 1, 3.3.4 and the ID/IDREF table): an `ID` that
+ * names its element, or one `IDREF` or a list of them that each name one.
+ */
+export type Identity = "ID" | "IDREF" | "IDREFS";
+
+/**
+ * The `Identity` roster, in code order.
+ */
+export const identities = ["ID", "IDREF", "IDREFS"] as const satisfies readonly Identity[];
+
+/**
+ * A compiled value domain: the pattern its lexical forms match as written, the primitive its typed
+ * value is derived in, the facets a typed-value law reads, and the identity type it is, if any.
+ */
+export interface CompiledDomain {
+  readonly facets: readonly ValueFacet[];
+  readonly identity: Option.Option<Identity>;
+  readonly pattern: string;
+  readonly primitive: DomainPrimitive;
+}
+
+/**
+ * The values a definition states of one facet.
+ *
+ * @param facets - The facets in force.
+ * @param name - The facet's name.
+ * @returns Each value, in order.
+ */
+const valuesOf = (facets: readonly Facet[], name: FacetName): readonly string[] =>
+  facets.flatMap(({ facet, value }) => (facet === name ? [value] : []));
+
+/**
+ * The one value a definition states of a facet, if it states it.
+ *
+ * @param facets - The facets in force.
+ * @param name - The facet's name.
+ * @returns Its value.
+ */
+const valueOf = (facets: readonly Facet[], name: FacetName): Option.Option<string> =>
+  Arr.head(valuesOf(facets, name));
+
+/**
+ * Refuse a definition.
+ *
+ * @param detail - What is not read.
+ * @returns The failure.
+ */
+const refuse = (detail: string): Result.Result<never, UnreadDefinition> =>
+  Result.fail(new UnreadDefinition({ detail }));
+
+/**
+ * The whitespace class a definition states.
+ *
+ * @param facets - Its facets.
+ * @returns `preserve`, `replace` or `collapse`.
+ */
+const classOf = (
+  facets: readonly Facet[],
+): Result.Result<"collapse" | "preserve" | "replace", UnreadDefinition> =>
+  Option.match(valueOf(facets, "whiteSpace"), {
+    onNone: () => refuse("an atomic or list definition with no whiteSpace facet"),
+    onSome: (value) =>
+      value === "preserve" || value === "replace" || value === "collapse"
+        ? Result.succeed(value)
+        : refuse(`the whiteSpace value ${value}`),
+  });
+
+/**
+ * Whether a tree's language is included in another's, by their shapes alone: sound, never
+ * complete, so a pattern set is dropped only where another provably implies it.
+ *
+ * @param big - The tree that may include.
+ * @param small - The tree that may be included.
+ * @returns Whether every word of `small` is a word of `big`, as far as the shapes show.
+ */
+const includes = (big: Regex, small: Regex): boolean => {
+  if (small._tag === "alt") {
+    return small.arms.every((arm) => includes(big, arm));
+  }
+
+  if (big._tag === "alt") {
+    return big.arms.some((arm) => includes(arm, small));
+  }
+
+  if (big._tag === "chars" && small._tag === "chars") {
+    return sameSet(intersect(big.set, small.set), small.set);
+  }
+
+  if (big._tag === "seq" && small._tag === "seq") {
+    return (
+      big.parts.length === small.parts.length &&
+      big.parts.every((part, index) => {
+        const other = small.parts[index];
+
+        return other !== undefined && includes(part, other);
+      })
+    );
+  }
+
+  if (big._tag === "repeat" && small._tag === "repeat") {
+    return (
+      small.min >= big.min &&
+      Option.match(big.max, {
+        onNone: () => true,
+        onSome: (most) => Option.exists(small.max, (other) => other <= most),
+      }) &&
+      includes(big.body, small.body)
+    );
+  }
+
+  return false;
+};
+
+/**
+ * The integer built-in's `pattern` facet, `[\-+]?[0-9]+` (XML Schema Part 2, 3.3.13), which an
+ * integer's interval regex implies.
+ */
+const integerPattern = String.raw`[\-+]?[0-9]+`;
+
+/**
+ * Combine two optional bounds of one side into the tighter, either where only one is stated.
+ *
+ * @param left - A bound.
+ * @param right - A bound of the same side.
+ * @param pick - The tighter of two stated bounds.
+ * @returns The tighter bound.
+ */
+const tighter = (
+  left: Option.Option<bigint>,
+  right: Option.Option<bigint>,
+  pick: (a: bigint, b: bigint) => bigint,
+): Option.Option<bigint> =>
+  Option.match(left, {
+    onNone: () => right,
+    onSome: (held) =>
+      Option.some(
+        Option.match(right, { onNone: () => held, onSome: (other) => pick(held, other) }),
+      ),
+  });
+
+/**
+ * Read an integer definition's bounds as the least and greatest whole numbers they admit, an
+ * exclusive bound moved one step inward.
+ *
+ * @param facets - Its facets.
+ * @returns The interval, each end none where unbounded.
+ */
+const integerBounds = (
+  facets: readonly Facet[],
+): Result.Result<
+  { readonly hi: Option.Option<bigint>; readonly lo: Option.Option<bigint> },
+  UnreadDefinition
+> =>
+  Result.gen(function* integerBoundsBody() {
+    const ends: Option.Option<bigint>[] = [];
+    for (const [name, shift] of [
+      ["minInclusive", 0n],
+      ["minExclusive", 1n],
+      ["maxInclusive", 0n],
+      ["maxExclusive", -1n],
+    ] as const) {
+      const value = valueOf(facets, name);
+      if (Option.isSome(value) && !/^[+-]?[0-9]+$/u.test(value.value)) {
+        return yield* refuse(`the integer bound ${name}="${value.value}"`);
+      }
+
+      ends.push(value.pipe(Option.map((bound) => BigInt(bound) + shift)));
+    }
+
+    const [
+      lo = Option.none(),
+      loExclusive = Option.none(),
+      hi = Option.none(),
+      hiExclusive = Option.none(),
+    ] = ends;
+
+    return {
+      hi: tighter(hi, hiExclusive, (a, b) => (a < b ? a : b)),
+      lo: tighter(lo, loExclusive, (a, b) => (a > b ? a : b)),
+    };
+  });
+
+/**
+ * Whether a pattern set is the integer built-in's own, which an integer's interval implies.
+ *
+ * @param set - The set.
+ * @returns Whether it is `[\-+]?[0-9]+` alone.
+ */
+const isIntegerPattern = (set: readonly string[]): boolean =>
+  set.length === 1 && set[0] === integerPattern;
+
+/**
+ * The bounds a definition states, as residual facets.
+ *
+ * @param facets - Its facets.
+ * @returns Each bound.
+ */
+const boundsOf = (facets: readonly Facet[]): readonly ValueFacet[] =>
+  facets.flatMap(({ facet, value }): ValueFacet[] =>
+    facet === "maxExclusive" ||
+    facet === "maxInclusive" ||
+    facet === "minExclusive" ||
+    facet === "minInclusive"
+      ? [{ facet, value }]
+      : [],
+  );
+
+/**
+ * The lexical space an atomic definition's primitive and bounds give it: an integer's interval for
+ * an `xs:integer`, the non-negative decimals for a decimal of `minInclusive="0"`, else the
+ * primitive's lexical space with its bounds left to the typed value.
+ *
+ * @param domain - The atomic definition.
+ * @returns The language, and the bounds it does not state.
+ */
+const lexicalOf = (
+  domain: Extract<Domain, { readonly _tag: "atomic" }>,
+): Result.Result<
+  { readonly facets: readonly ValueFacet[]; readonly tree: Regex },
+  UnreadDefinition
+> =>
+  Result.gen(function* lexicalOfBody() {
+    const { facets, patterns, primitive } = domain;
+    const bounds = boundsOf(facets);
+    const fraction = valueOf(facets, "fractionDigits");
+    if (valueOf(facets, "totalDigits").pipe(Option.isSome)) {
+      return yield* refuse(`totalDigits on ${primitive}`);
+    }
+
+    if (Option.isSome(fraction)) {
+      if (primitive !== "decimal" || fraction.value !== "0" || !patterns.some(isIntegerPattern)) {
+        return yield* refuse(
+          `fractionDigits="${fraction.value}" on a ${primitive} that is not an xs:integer`,
+        );
+      }
+
+      const { hi, lo } = yield* integerBounds(facets);
+
+      return yield* Option.match(integerIn(lo, hi), {
+        onNone: () => refuse("an integer interval with no member"),
+        onSome: (tree) => Result.succeed({ facets: [], tree }),
+      });
+    }
+
+    const lexical = Option.fromNullishOr(primitives[primitive]);
+    if (Option.isNone(lexical)) {
+      return yield* refuse(`the primitive ${primitive}, which no pinned type restricts`);
+    }
+
+    if (bounds.length === 0) {
+      return { facets: [], tree: lexical.value };
+    }
+
+    if (
+      primitive === "decimal" &&
+      bounds.length === 1 &&
+      bounds[0]?.facet === "minInclusive" &&
+      Number(bounds[0].value) === 0
+    ) {
+      return { facets: [], tree: nonNegativeDecimal };
+    }
+
+    return primitive === "decimal" || primitive === "double" || primitive === "float"
+      ? { facets: bounds, tree: lexical.value }
+      : yield* refuse(`a bound on ${primitive}`);
+  });
+
+/**
+ * Whether a tree is the language of every value, `[Char]*`.
+ *
+ * @param tree - The tree.
+ * @returns Whether it is.
+ */
+const isAnything = (tree: Regex): boolean =>
+  tree._tag === "repeat" &&
+  tree.min === 0 &&
+  Option.isNone(tree.max) &&
+  tree.body._tag === "chars" &&
+  sameSet(tree.body.set, xmlChar);
+
+/**
+ * The lexical part of an atomic definition, before its whitespace class is folded in and before its
+ * enumeration narrows it: its lexical space ({@link lexicalOf}) intersected with each pattern set
+ * nothing else implies, then with its lengths.
+ *
+ * A string's or `anySimpleType`'s lexical space holds every value, so a pattern set implies it. A
+ * set another set's shape includes is implied by it (`\i\c*` by `[\i-[:]][\c-[:]]*`), and an
+ * integer's interval implies the integer built-in's own set.
+ *
+ * @param domain - The atomic definition, its enumeration aside.
+ * @param boundary - What ends the value's span, for an intersection.
+ * @returns The tree and the residual facets.
+ */
+const atomicCore = (
+  domain: Extract<Domain, { readonly _tag: "atomic" }>,
+  boundary: Boundary,
+): Result.Result<{ readonly facets: readonly ValueFacet[]; readonly tree: Regex }, CompileError> =>
+  Result.gen(function* atomicCoreBody() {
+    const { facets } = domain;
+    const lexical = yield* lexicalOf(domain);
+    const integer = Option.isSome(valueOf(facets, "fractionDigits"));
+    const sets: Regex[] = [];
+    for (const set of domain.patterns.filter((held) => !(integer && isIntegerPattern(held)))) {
+      const arms: Regex[] = [];
+      for (const source of set) {
+        arms.push(yield* readPattern(source));
+      }
+
+      sets.push(alt(...arms));
+    }
+
+    const kept = sets.filter(
+      (set, index) =>
+        !sets.some(
+          (other, at) =>
+            at !== index && includes(set, other) && (!includes(other, set) || at < index),
+        ),
+    );
+    const implied = isAnything(lexical.tree) && kept.length > 0;
+    const constraints = [...(implied ? [] : [lexical.tree]), ...kept];
+    const exact = valueOf(facets, "length").pipe(Option.map(Number));
+    const min = Option.orElse(exact, () => valueOf(facets, "minLength").pipe(Option.map(Number)));
+    const max = Option.orElse(exact, () => valueOf(facets, "maxLength").pipe(Option.map(Number)));
+    const lengths =
+      Option.isSome(min) || Option.isSome(max)
+        ? [
+            repeat(
+              chars(xmlChar),
+              Option.getOrElse(min, () => 0),
+              max,
+            ),
+          ]
+        : [];
+    const arms = [
+      ...constraints.filter((tree) => !(lengths.length > 0 && isAnything(tree))),
+      ...lengths,
+    ];
+
+    return { facets: lexical.facets, tree: both(arms, boundary) };
+  });
+
+/**
+ * Map every character set of a tree.
+ *
+ * @param tree - The tree.
+ * @param map - What each set becomes: a set, or a tree in its place.
+ * @returns The tree, each set replaced.
+ */
+const mapSets = (tree: Regex, map: (set: CodeSet) => Regex): Regex => {
+  switch (tree._tag) {
+    case "chars": {
+      return map(tree.set);
+    }
+    case "seq": {
+      return seq(...tree.parts.map((part) => mapSets(part, map)));
+    }
+    case "alt": {
+      return alt(...tree.arms.map((arm) => mapSets(arm, map)));
+    }
+    case "repeat": {
+      return repeat(mapSets(tree.body, map), tree.min, tree.max);
+    }
+    case "and": {
+      return both(
+        tree.arms.map((arm) => mapSets(arm, map)),
+        tree.boundary,
+      );
+    }
+    case "edge": {
+      return tree;
+    }
+    default: {
+      return tree satisfies never;
+    }
+  }
+};
+
+/**
+ * Fold `replace` into a tree: a set that holds the space also holds tab, line feed and carriage
+ * return, and a set that does not holds none of them.
+ *
+ * @param tree - The language after normalization.
+ * @returns The language as written.
+ */
+const foldReplace = (tree: Regex): Regex =>
+  mapSets(tree, (set) =>
+    chars(holds(set, spacePoint) ? union(set, breaks) : subtract(set, breaks)),
+  );
+
+/**
+ * What the collapse fold needs to know of a language: whether a word may be empty, begin or end
+ * with a space, or hold two spaces together.
+ */
+interface Spaces {
+  readonly doubled: boolean;
+  readonly first: boolean;
+  readonly last: boolean;
+  readonly nullable: boolean;
+}
+
+/**
+ * Read where a tree's words may hold a space, by Glushkov's first, last and follow sets: sound, so
+ * a `false` is a proof.
+ *
+ * @param tree - The tree, its sets free of tab, line feed and carriage return.
+ * @returns What its words may do.
+ */
+const spacesOf = (tree: Regex): Spaces => {
+  switch (tree._tag) {
+    case "chars": {
+      const space = holds(tree.set, spacePoint);
+
+      return { doubled: false, first: space, last: space, nullable: false };
+    }
+    case "seq": {
+      let left: Spaces = { doubled: false, first: false, last: false, nullable: true };
+      for (const right of tree.parts.map(spacesOf)) {
+        left = {
+          doubled: left.doubled || right.doubled || (left.last && right.first),
+          first: left.first || (left.nullable && right.first),
+          last: right.last || (right.nullable && left.last),
+          nullable: left.nullable && right.nullable,
+        };
+      }
+
+      return left;
+    }
+    case "alt": {
+      const arms = tree.arms.map(spacesOf);
+
+      return {
+        doubled: arms.some(({ doubled }) => doubled),
+        first: arms.some(({ first }) => first),
+        last: arms.some(({ last }) => last),
+        nullable: arms.some(({ nullable }) => nullable),
+      };
+    }
+    case "repeat": {
+      const body = spacesOf(tree.body);
+      const loops = Option.getOrElse(tree.max, () => 2) >= 2;
+
+      return {
+        doubled: body.doubled || (loops && body.last && body.first),
+        first: body.first,
+        last: body.last,
+        nullable: tree.min === 0 || body.nullable,
+      };
+    }
+    case "and": {
+      const arms = tree.arms.map(spacesOf);
+
+      return {
+        doubled: arms.every(({ doubled }) => doubled),
+        first: arms.every(({ first }) => first),
+        last: arms.every(({ last }) => last),
+        nullable: arms.every(({ nullable }) => nullable),
+      };
+    }
+    case "edge": {
+      return { doubled: false, first: false, last: false, nullable: true };
+    }
+    default: {
+      return tree satisfies never;
+    }
+  }
+};
+
+/**
+ * Turn each space a tree admits into a run of whitespace, the image of the language under
+ * collapsing's inverse inside a value. A set that holds the space and is one whole iteration of an
+ * unbounded repetition whose least count is at most 1 (reached through alternations alone) admits
+ * any whitespace character in its place, since each is then an iteration of its own; any other
+ * admits a run of whitespace in its place. So no run is repeated inside a repetition, which a
+ * backtracking host would read in exponential time.
+ *
+ * @param tree - The tree, its sets free of tab, line feed and carriage return.
+ * @param inRun - Whether the tree is one whole iteration of such a repetition.
+ * @returns The tree as written.
+ */
+const spacesToRuns = (tree: Regex, inRun = false): Regex => {
+  switch (tree._tag) {
+    case "chars": {
+      if (!holds(tree.set, spacePoint)) {
+        return tree;
+      }
+
+      if (inRun) {
+        return chars(union(tree.set, whitespace));
+      }
+
+      const rest = subtract(tree.set, whitespace);
+
+      return rest.length === 0 ? plus(whitespaceChar) : alt(plus(whitespaceChar), chars(rest));
+    }
+    case "edge": {
+      return tree;
+    }
+    case "seq": {
+      return seq(...tree.parts.map((part) => spacesToRuns(part)));
+    }
+    case "alt": {
+      return alt(...tree.arms.map((arm) => spacesToRuns(arm, inRun)));
+    }
+    case "repeat": {
+      return repeat(
+        spacesToRuns(tree.body, Option.isNone(tree.max) && tree.min <= 1),
+        tree.min,
+        tree.max,
+      );
+    }
+    case "and": {
+      return both(
+        tree.arms.map((arm) => spacesToRuns(arm)),
+        tree.boundary,
+      );
+    }
+    default: {
+      return tree satisfies never;
+    }
+  }
+};
+
+/**
+ * An unbounded repetition a position is one whole iteration of, and its least count.
+ */
+interface Run {
+  readonly min: number;
+}
+
+/**
+ * One character position of a tree, as Glushkov's construction numbers them: whether its set holds
+ * the space, and the unbounded repetition it is one whole iteration of, if any (reached through
+ * alternations alone), so that a word may hold one iteration fewer.
+ */
+interface SpacePosition {
+  readonly run: Option.Option<Run>;
+  readonly space: boolean;
+}
+
+/**
+ * Glushkov's sets of a tree over its positions: whether it is nullable, its first and last
+ * positions, and the pairs of positions one of its words may hold one after the other.
+ */
+interface Glushkov {
+  readonly first: readonly SpacePosition[];
+  readonly follow: readonly (readonly [SpacePosition, SpacePosition])[];
+  readonly last: readonly SpacePosition[];
+  readonly nullable: boolean;
+}
+
+/**
+ * Compute Glushkov's sets of a tree.
+ *
+ * @param tree - The tree.
+ * @param run - The unbounded repetition whose one iteration the tree is, through alternations.
+ * @returns Its sets.
+ */
+const glushkovOf = (tree: Regex, run: Option.Option<Run> = Option.none()): Glushkov => {
+  switch (tree._tag) {
+    case "chars": {
+      const position: SpacePosition = { run, space: holds(tree.set, spacePoint) };
+
+      return { first: [position], follow: [], last: [position], nullable: false };
+    }
+    case "edge": {
+      return { first: [], follow: [], last: [], nullable: true };
+    }
+    case "seq": {
+      let left: Glushkov = { first: [], follow: [], last: [], nullable: true };
+      for (const right of tree.parts.map((part) => glushkovOf(part))) {
+        left = {
+          first: left.nullable ? [...left.first, ...right.first] : left.first,
+          follow: [
+            ...left.follow,
+            ...right.follow,
+            ...left.last.flatMap((from) => right.first.map((to) => [from, to] as const)),
+          ],
+          last: right.nullable ? [...left.last, ...right.last] : right.last,
+          nullable: left.nullable && right.nullable,
+        };
+      }
+
+      return left;
+    }
+    case "alt":
+    case "and": {
+      const arms = tree.arms.map((arm) =>
+        glushkovOf(arm, tree._tag === "alt" ? run : Option.none()),
+      );
+
+      return {
+        first: arms.flatMap(({ first }) => first),
+        follow: arms.flatMap(({ follow }) => follow),
+        last: arms.flatMap(({ last }) => last),
+        nullable:
+          tree._tag === "alt"
+            ? arms.some(({ nullable }) => nullable)
+            : arms.every(({ nullable }) => nullable),
+      };
+    }
+    case "repeat": {
+      const own: Option.Option<Run> = Option.isNone(tree.max)
+        ? Option.some({ min: tree.min })
+        : Option.none();
+      const inner = glushkovOf(tree.body, own);
+      const loops = Option.getOrElse(tree.max, () => 2) >= 2;
+
+      return {
+        first: inner.first,
+        follow: [
+          ...inner.follow,
+          ...(loops
+            ? inner.last.flatMap((from) => inner.first.map((to) => [from, to] as const))
+            : []),
+        ],
+        last: inner.last,
+        nullable: tree.min === 0 || inner.nullable,
+      };
+    }
+    default: {
+      return tree satisfies never;
+    }
+  }
+};
+
+/**
+ * Whether a position is a whole iteration of a repetition that may run zero times, so a word may
+ * give it up.
+ *
+ * @param position - The position.
+ * @returns Whether it may be dropped.
+ */
+const droppable = (position: SpacePosition): boolean =>
+  Option.exists(position.run, ({ min }) => min === 0);
+
+/**
+ * Whether merging two spaces that stand together keeps a word in a tree's language, by its shape.
+ * Two space positions may stand together safely when both are whole iterations of one unbounded
+ * repetition whose least count is at most 1 (two adjacent iterations become one, which the count
+ * still allows), or when either is a whole iteration of a repetition whose least count is 0 (it
+ * gives up that iteration). Sound, so a `true` is a proof; an intersection's arms count as one
+ * language, every pair of each checked.
+ *
+ * @param tree - The tree, its sets free of tab, line feed and carriage return.
+ * @returns Whether every word's spaces may be merged.
+ */
+const mergeSafe = (tree: Regex): boolean =>
+  glushkovOf(tree).follow.every(([from, to]) => {
+    const sameRun =
+      Option.isSome(from.run) &&
+      Option.isSome(to.run) &&
+      from.run.value === to.run.value &&
+      from.run.value.min <= 1;
+
+    return !from.space || !to.space || sameRun || droppable(from) || droppable(to);
+  });
+
+/**
+ * Fold `collapse` into a tree: whitespace at either end, a run wherever a word holds a space, and
+ * no tab, line feed or carriage return elsewhere.
+ *
+ * Where no word may begin or end with a space or hold two together, that is the whole fold. Where
+ * one may, a raw form's core must also begin and end with a character that is not whitespace,
+ * since collapsing removes every space at an edge, so a word that holds one there is never what a
+ * collapse yields (`" ?q"` is a URI reference by RFC 2396, `"?q"` is not); and where two spaces
+ * may stand together, merging them must keep the word in the language, which {@link mergeSafe}
+ * proves of the tree or the definition is refused. A value of whitespace alone collapses to the
+ * empty word.
+ *
+ * @param tree - The language after collapsing.
+ * @returns The language as written, or an {@link UnreadDefinition} when merging two spaces may
+ *   leave the language.
+ */
+const foldCollapse = (tree: Regex): Result.Result<Regex, UnreadDefinition> => {
+  if (isAnything(tree)) {
+    return Result.succeed(anything);
+  }
+
+  const collapsed = mapSets(tree, (set) => chars(subtract(set, breaks)));
+  const spaces = spacesOf(collapsed);
+  if (spaces.doubled && !mergeSafe(collapsed)) {
+    return refuse("a collapsed language whose words may hold two spaces that do not merge");
+  }
+
+  if (!spaces.first && !spaces.last) {
+    return Result.succeed(seq(anyWhitespace, spacesToRuns(collapsed), anyWhitespace));
+  }
+
+  const core = seq(edge("start"), spacesToRuns(collapsed), edge("end"));
+
+  return Result.succeed(
+    alt(seq(anyWhitespace, core, anyWhitespace), ...(spaces.nullable ? [anyWhitespace] : [])),
+  );
+};
+
+/**
+ * Whether a tree's language holds the empty word.
+ *
+ * @param tree - The tree.
+ * @returns Whether it is nullable.
+ */
+const spacesNullable = (tree: Regex): boolean => spacesOf(tree).nullable;
+
+/**
+ * Narrow a tree to the words a list item may be: no whitespace, and not empty.
+ *
+ * @param tree - The item type's language.
+ * @returns The language of its tokens.
+ */
+const asToken = (tree: Regex): Regex => {
+  const bare = mapSets(tree, (set) => chars(subtract(set, whitespace)));
+  if (!spacesNullable(bare)) {
+    return bare;
+  }
+
+  if (bare._tag === "repeat" && bare.min === 0 && !spacesNullable(bare.body)) {
+    return repeat(bare.body, 1, bare.max);
+  }
+
+  return both([plus(chars(subtract(xmlChar, whitespace))), bare], "token");
+};
+
+/**
+ * The characters a pattern escapes outside a bracket expression: the metacharacters both dialects
+ * read.
+ */
+const outsideMeta: ReadonlySet<string> = new Set("\\^$.|?*+()[]{}");
+
+/**
+ * The characters a pattern escapes inside a bracket expression.
+ */
+const insideMeta: ReadonlySet<string> = new Set("\\]^-[");
+
+/**
+ * The code points both dialects write as a letter escape: tab, line feed and carriage return.
+ */
+const pointEscapes = new Map<number, string>([
+  [0x9, String.raw`\t`],
+  [0xa, String.raw`\n`],
+  [0xd, String.raw`\r`],
+]);
+
+/**
+ * Write one code point as both dialects read it: tab, line feed and carriage return as their
+ * escapes, printable ASCII as itself (escaped where it is a metacharacter), any other character of
+ * the Basic Multilingual Plane as `\uXXXX`, and a supplementary character as itself.
+ *
+ * @param point - The code point.
+ * @param meta - The metacharacters of the place it is written in.
+ * @returns Its spelling.
+ */
+const spellPoint = (point: number, meta: ReadonlySet<string>): string => {
+  const named = pointEscapes.get(point);
+  if (named !== undefined) {
+    return named;
+  }
+
+  const character = String.fromCodePoint(point);
+  if (point >= 0x20 && point < 0x7f) {
+    return meta.has(character) ? `\\${character}` : character;
+  }
+
+  return point <= 0xff_ff ? `\\u${point.toString(16).toUpperCase().padStart(4, "0")}` : character;
+};
+
+/**
+ * Write a character set: one character as itself, any other as a bracket expression of its runs.
+ *
+ * @param set - The set.
+ * @returns The pattern.
+ */
+const spellSet = (set: CodeSet): string => {
+  const [only] = set;
+  if (set.length === 1 && only !== undefined && only[0] === only[1]) {
+    return spellPoint(only[0], outsideMeta);
+  }
+
+  return `[${set
+    .map(([lo, hi]) => {
+      if (lo === hi) {
+        return spellPoint(lo, insideMeta);
+      }
+
+      return hi === lo + 1
+        ? `${spellPoint(lo, insideMeta)}${spellPoint(hi, insideMeta)}`
+        : `${spellPoint(lo, insideMeta)}-${spellPoint(hi, insideMeta)}`;
+    })
+    .join("")}]`;
+};
+
+/**
+ * PostgreSQL's largest repetition count, `RE_DUP_MAX` (19rc1, `src/include/regex/regex.h`): a
+ * bound above it is written as several repetitions.
+ */
+const repetitionLimit = 255;
+
+/**
+ * Whether a written tree is one atom a quantifier may follow without a group.
+ *
+ * @param tree - The tree.
+ * @returns Whether it is a single set.
+ */
+const isAtom = (tree: Regex): boolean => tree._tag === "chars";
+
+/**
+ * Write a repetition's quantifier, splitting a bound above {@link repetitionLimit}.
+ *
+ * @param body - The written body, an atom or a group.
+ * @param min - The fewest times.
+ * @param max - The most, none for unbounded.
+ * @returns The pattern.
+ */
+const spellRepeat = (body: string, min: number, max: Option.Option<number>): string => {
+  if (min > repetitionLimit) {
+    return `${body}{${repetitionLimit}}${spellRepeat(body, min - repetitionLimit, max.pipe(Option.map((most) => most - repetitionLimit)))}`;
+  }
+
+  return Option.match(max, {
+    onNone: () => {
+      if (min === 0) {
+        return `${body}*`;
+      }
+
+      return min === 1 ? `${body}+` : `${body}{${min},}`;
+    },
+    onSome: (most) => {
+      if (most > repetitionLimit) {
+        return `${body}{${min},${repetitionLimit}}${spellRepeat(body, 0, Option.some(most - repetitionLimit))}`;
+      }
+
+      if (min === 0 && most === 1) {
+        return `${body}?`;
+      }
+
+      return min === most ? `${body}{${min}}` : `${body}{${min},${most}}`;
+    },
+  });
+};
+
+/**
+ * Write a tree as a pattern, each intersection's arms lookaheads that must reach the span's end:
+ * the rest of the value for an `end` boundary, or the next whitespace or the value's end for a
+ * `token` boundary.
+ *
+ * @param tree - The tree.
+ * @param rest - The pattern that must match after it, to the value's end.
+ * @returns The pattern.
+ */
+const emit = (tree: Regex, rest: string): string => {
+  switch (tree._tag) {
+    case "chars": {
+      return spellSet(tree.set);
+    }
+    case "seq": {
+      let written = "";
+      for (const part of tree.parts.toReversed()) {
+        const spelled = emit(part, `${written}${rest}`);
+        written = `${part._tag === "alt" ? `(?:${spelled})` : spelled}${written}`;
+      }
+
+      return written;
+    }
+    case "alt": {
+      return tree.arms.map((arm) => emit(arm, rest)).join("|");
+    }
+    case "repeat": {
+      const body = emit(tree.body, rest);
+
+      return spellRepeat(isAtom(tree.body) ? body : `(?:${body})`, tree.min, tree.max);
+    }
+    case "and": {
+      const follow = tree.boundary === "token" ? "(?![^ \\t\\n\\r])" : rest;
+      const [last, ...ahead] = tree.arms.toReversed();
+
+      return `${ahead
+        .toReversed()
+        .map((arm) => `(?=(?:${emit(arm, follow)})${follow})`)
+        .join("")}${last === undefined ? "" : `(?:${emit(last, follow)})`}`;
+    }
+    case "edge": {
+      return tree.side === "start" ? "(?=[^ \\t\\n\\r])" : "(?<=[^ \\t\\n\\r])";
+    }
+    default: {
+      return tree satisfies never;
+    }
+  }
+};
+
+/**
+ * Write a tree as the anchored pattern of a whole value.
+ *
+ * @param tree - The tree.
+ * @returns `^…$`.
+ */
+const emitWhole = (tree: Regex): string => `^(?:${emit(tree, "$")})$`;
+
+/**
+ * Keep the enumeration values a context can reach, and match them.
+ *
+ * @param values - The values, as the definition states them.
+ * @param reachable - Whether a value can be the normalized form in this context.
+ * @param rest - The definition's other constraints, as a host regex, which each value must also
+ *   meet.
+ * @returns The alternation of the kept values.
+ */
+const enumerationOf = (
+  values: readonly string[],
+  reachable: (value: string) => boolean,
+  rest: RegExp,
+): Result.Result<Regex, UnreadDefinition> => {
+  const kept = values.filter((value) => reachable(value) && rest.test(value));
+
+  return kept.length === 0
+    ? refuse("an enumeration none of whose values the context can reach")
+    : Result.succeed(alt(...kept.map(literal)));
+};
+
+/**
+ * Whether a value is a collapsed one: no tab, line feed or carriage return, no space at either end
+ * and no two together.
+ *
+ * @param value - The value.
+ * @returns Whether collapsing leaves it unchanged.
+ */
+const isCollapsed = (value: string): boolean => !/[\t\n\r]|^ | $| {2}/u.test(value);
+
+/**
+ * The whitespace context a definition is compiled in: the whole value under the definition's own
+ * class, or a whitespace-free list item.
+ */
+type Context = { readonly _tag: "token" } | { readonly _tag: "value"; readonly exact: boolean };
+
+/**
+ * Compile an atomic definition in a context.
+ *
+ * @param domain - The definition.
+ * @param context - Where its value stands.
+ * @returns The tree as written, and its residual facets.
+ */
+const compileAtomic = (
+  domain: Extract<Domain, { readonly _tag: "atomic" }>,
+  context: Context,
+): Result.Result<{ readonly facets: readonly ValueFacet[]; readonly tree: Regex }, CompileError> =>
+  Result.gen(function* compileAtomicBody() {
+    const whiteSpace = yield* classOf(domain.facets);
+    const boundary: Boundary = context._tag === "token" ? "token" : "end";
+    const values = valuesOf(domain.facets, "enumeration");
+    const withoutEnumeration = {
+      ...domain,
+      facets: domain.facets.filter(({ facet }) => facet !== "enumeration"),
+    };
+    const core = yield* atomicCore(withoutEnumeration, boundary);
+    let { tree } = core;
+    if (values.length > 0) {
+      if (domain.primitive !== "string" && domain.primitive !== "anySimpleType") {
+        return yield* refuse(
+          `an enumeration over ${domain.primitive}, whose values are not its lexical forms`,
+        );
+      }
+
+      const rest = new RegExp(emitWhole(tree), "u");
+      const reachable = (value: string): boolean => {
+        if (context._tag === "token") {
+          return value !== "" && !/[ \t\n\r]/u.test(value);
+        }
+
+        if (context.exact || whiteSpace === "preserve") {
+          return true;
+        }
+
+        return whiteSpace === "replace" ? !/[\t\n\r]/u.test(value) : isCollapsed(value);
+      };
+      tree = yield* enumerationOf(values, reachable, rest);
+    }
+
+    if (context._tag === "token") {
+      return { facets: core.facets, tree: asToken(tree) };
+    }
+
+    if (context.exact || whiteSpace === "preserve") {
+      return { facets: core.facets, tree };
+    }
+
+    if (whiteSpace === "replace") {
+      return { facets: core.facets, tree: foldReplace(tree) };
+    }
+
+    return { facets: core.facets, tree: yield* foldCollapse(tree) };
+  });
+
+/**
+ * The facets a list or union definition may state of itself: its whitespace class, and a list's
+ * lengths.
+ */
+const varietyFacets: ReadonlySet<FacetName> = new Set([
+  "length",
+  "maxLength",
+  "minLength",
+  "whiteSpace",
+]);
+
+/**
+ * Compile a definition in a context: an atomic one by its facets, a list as whitespace-separated
+ * tokens of its item, a union as the alternation of its members, each in its own class.
+ *
+ * @param domain - The definition.
+ * @param context - Where its value stands.
+ * @returns The tree as written, and its residual facets.
+ */
+const compileIn = (
+  domain: Domain,
+  context: Context,
+): Result.Result<{ readonly facets: readonly ValueFacet[]; readonly tree: Regex }, CompileError> =>
+  Result.gen(function* compileInBody() {
+    if (domain._tag === "atomic") {
+      return yield* compileAtomic(domain, context);
+    }
+
+    if (
+      domain.patterns.length > 0 ||
+      domain.facets.some(({ facet }) => !varietyFacets.has(facet))
+    ) {
+      return yield* refuse(`a ${domain._tag} that states facets of its own beyond its lengths`);
+    }
+
+    if (domain._tag === "union") {
+      const arms: Regex[] = [];
+      for (const member of domain.members) {
+        const compiled = yield* compileIn(member, context);
+        if (compiled.facets.length > 0) {
+          return yield* refuse("a value bound inside a union, which no one law column reads");
+        }
+
+        arms.push(compiled.tree);
+      }
+
+      return { facets: [], tree: alt(...arms) };
+    }
+
+    if (context._tag === "token") {
+      return yield* refuse("a list inside a list");
+    }
+
+    const item = yield* compileIn(domain.item, { _tag: "token" });
+    if (item.facets.length > 0) {
+      return yield* refuse("a value bound on a list's item, which no one law column reads");
+    }
+
+    const exact = valueOf(domain.facets, "length").pipe(Option.map(Number));
+    const min = Option.getOrElse(
+      Option.orElse(exact, () => valueOf(domain.facets, "minLength").pipe(Option.map(Number))),
+      () => 0,
+    );
+    const max = Option.orElse(exact, () =>
+      valueOf(domain.facets, "maxLength").pipe(Option.map(Number)),
+    );
+    const separator = plus(whitespaceChar);
+    const more = (least: number) =>
+      repeat(seq(separator, item.tree), least, max.pipe(Option.map((most) => most - 1)));
+    const some = min === 0 ? opt(seq(item.tree, more(0))) : seq(item.tree, more(min - 1));
+    const items = Option.contains(max, 0) ? empty : some;
+
+    return { facets: [], tree: context.exact ? items : seq(anyWhitespace, items, anyWhitespace) };
+  });
+
+/**
+ * The identity type a definition is: an atomic `ID` or `IDREF`, or a list of `IDREF`s.
+ *
+ * @param domain - The definition.
+ * @returns Its identity type, or none.
+ */
+const identityOf = (domain: Domain): Option.Option<Identity> => {
+  if (domain._tag === "atomic") {
+    return domain.builtin === "ID" || domain.builtin === "IDREF"
+      ? Option.some(domain.builtin)
+      : Option.none();
+  }
+
+  return domain._tag === "list" && domain.item._tag === "atomic" && domain.item.builtin === "IDREF"
+    ? Option.some("IDREFS")
+    : Option.none();
+};
+
+/**
+ * Whether a definition holds an identity type anywhere but at its top or as a list's item, where no
+ * reference law reads it.
+ *
+ * @param domain - The definition.
+ * @returns Whether an `ID` or `IDREF` hides in a union.
+ */
+const hidesIdentity = (domain: Domain): boolean =>
+  domain._tag === "union" &&
+  domain.members.some((member) => Option.isSome(identityOf(member)) || hidesIdentity(member));
+
+/**
+ * How a value's whitespace is read: as its type's class says, or exactly, as spec reading 7 reads
+ * a typed QTI value in an attribute, where outer whitespace makes the value invalid.
+ */
+export type Reading = "exact" | "xsd";
+
+/**
+ * The compiled domains of the definitions compiled so far, by definition and reading. The leaf
+ * states each distinct definition once and its declarations share it, so most declarations find
+ * their domain here.
+ */
+const compiledCache = new WeakMap<
+  Domain,
+  Map<Reading, Result.Result<CompiledDomain, CompileError>>
+>();
+
+/**
+ * Compile a definition, uncached ({@link compile}).
+ *
+ * @param domain - The definition.
+ * @param reading - How its whitespace is read.
+ * @returns The compiled domain, or why it has none.
+ */
+const compileUncached = (
+  domain: Domain,
+  reading: Reading,
+): Result.Result<CompiledDomain, CompileError> =>
+  Result.gen(function* compileBody() {
+    if (hidesIdentity(domain)) {
+      return yield* refuse("an ID or IDREF member of a union");
+    }
+
+    const { facets, tree } = yield* compileIn(domain, {
+      _tag: "value",
+      exact: reading === "exact",
+    });
+    if (isNothing(tree)) {
+      return yield* refuse("a definition whose lexical space holds no value");
+    }
+
+    return {
+      facets,
+      identity: identityOf(domain),
+      pattern: emitWhole(tree),
+      primitive: domain._tag === "atomic" ? domain.primitive : domain._tag,
+    };
+  });
+
+/**
+ * Compile a resolved definition into its value domain.
+ *
+ * @param domain - The definition, as the leaf resolves it.
+ * @param reading - How its whitespace is read.
+ * @returns The compiled domain, or why it has none.
+ */
+export const compile = (
+  domain: Domain,
+  reading: Reading,
+): Result.Result<CompiledDomain, CompileError> => {
+  const byReading =
+    compiledCache.get(domain) ?? new Map<Reading, Result.Result<CompiledDomain, CompileError>>();
+  const known = byReading.get(reading);
+  if (known !== undefined) {
+    return known;
+  }
+
+  const compiled = compileUncached(domain, reading);
+  byReading.set(reading, compiled);
+  compiledCache.set(domain, byReading);
+
+  return compiled;
+};
+
+/**
+ * The flags a compiled pattern is read with by a JavaScript host: `u`, so its `\u` escapes and
+ * supplementary characters read as code points, as PostgreSQL reads them.
+ */
+export const patternFlags = "u";
+
+/**
+ * The compiled domain of `xs:anySimpleType`, every value with its whitespace preserved: the domain
+ * an open name's value is read under, which a declaration of that type compiles to alike.
+ */
+export const openCompiled: CompiledDomain = {
+  facets: [],
+  identity: Option.none(),
+  pattern: emitWhole(anything),
+  primitive: "anySimpleType",
+};
+
+/**
+ * The language a definition's lexical forms take once its whitespace is normalized, as the tree
+ * its exact pattern is written from: what a generator draws a definition's valid forms from.
+ *
+ * @param domain - The definition.
+ * @returns The tree, or why the definition has none.
+ */
+export const languageOf = (domain: Domain): Result.Result<Regex, CompileError> =>
+  Result.map(compileIn(domain, { _tag: "value", exact: true }), ({ tree }) => tree);
+
+/**
+ * One `%` escape: `escaped`'s `"%" hex hex`.
+ */
+const escape = "%[0-9A-Fa-f]{2}";
+
+/**
+ * A character of a class, or an escape: each class is every character but the delimiters it
+ * lists, since XLink's escaping lets a character outside RFC 2396's set stand wherever `escaped`
+ * does.
+ *
+ * @param excluded - The delimiters the class leaves out, as a character class's body.
+ * @returns The alternative.
+ */
+const charOrEscape = (excluded: string): string => `([^${excluded}%]|${escape})`;
+
+/**
+ * The parts of `xs:anyURI`'s grammar, each named for its production in RFC 2396 Appendix A as
+ * RFC 2732, section 3, amends it, written as XML Schema regular expressions.
+ */
+const uri = (() => {
+  const segment = charOrEscape("/?#\\[\\]");
+  const relSegment = charOrEscape("/?#\\[\\]:");
+  const userinfo = charOrEscape("/?#\\[\\]@");
+  const uric = charOrEscape("#");
+  const uricNoSlash = charOrEscape("/#\\[\\]");
+  const scheme = "[A-Za-z][A-Za-z0-9+\\-.]*";
+  const hex4 = "[0-9A-Fa-f]{1,4}";
+  const hexSeq = `${hex4}(:${hex4})*`;
+  const ipv4 = "[0-9]{1,3}(\\.[0-9]{1,3}){3}";
+  const octet = "(25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])";
+  const ipv6 = `((${hexSeq}(::(${hexSeq})?)?|::(${hexSeq})?)(:${ipv4})?|(${hex4}(:${hex4}){0,4})?::${octet}\\.${octet}\\.${octet}\\.${octet})`;
+  const absPath = `(/${segment}*)`;
+  const ipv6Authority = `(${userinfo}*@)?\\[${ipv6}\\](:[0-9]*)?`;
+  const path = `(${absPath}+|//${ipv6Authority}${absPath}*)`;
+  const query = `(\\?${uric}*)`;
+  const fragment = `(#${uric}*)`;
+
+  return `(${scheme}:${uricNoSlash}${uric}*|(${scheme}:)?${path}${query}?|${relSegment}+${absPath}*${query}?)?${fragment}?`;
+})();
+
+/**
+ * `xs:anyURI`'s lexical space as XML Schema 1.0 defines it (spec reading 61), as an XML Schema
+ * regular expression matched against the collapsed value: a string that, once XLink 1.0, section
+ * 5.4, escapes its disallowed characters, is RFC 2396's `URI-reference` as RFC 2732 amends it, the
+ * IPv6 address of RFC 2373's Appendix B or its section 2.2 text forms.
+ *
+ * The pattern judges the collapsed value, so it never allows whitespace at its ends: a leading
+ * space would read as a `rel_segment` character and admit `" ?q"`, whose collapsed form `?q` is no
+ * URI reference. A raw-form law adds the `whiteSpace` class around it.
+ *
+ * @see {@link https://www.w3.org/TR/xmlschema-2/#anyURI | XML Schema Part 2, 3.2.17 anyURI}
+ * @see {@link https://www.rfc-editor.org/rfc/rfc2396#appendix-A | RFC 2396, Appendix A}
+ * @see {@link https://www.rfc-editor.org/rfc/rfc2732#section-3 | RFC 2732, section 3}
+ */
+export const anyUriPattern = uri;
+
+/**
+ * Translate one XSD `pattern` facet into the pattern of the whole value both dialects read: the
+ * one translation of XSD's regular expressions every domain's pattern is built with.
+ *
+ * @param source - The pattern as the XSD writes it.
+ * @returns The anchored pattern, or an {@link UnreadPattern}.
+ */
+export const translatePattern = (source: string): Result.Result<string, UnreadPattern> =>
+  Result.map(readPattern(source), emitWhole);

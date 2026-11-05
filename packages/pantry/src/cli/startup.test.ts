@@ -11,13 +11,25 @@ const sourceRoot = path.resolve(import.meta.dirname, "..");
  * The prefixes and package that a module the command line starts with must never import, so that
  * `--help` does not pay for the database, the importer, the exporter or grizzle (spec D7).
  */
-const forbidden = [
+const startupForbidden = [
   "#pantry/db/",
   "#pantry/import/",
   "#pantry/export/",
   "#pantry/schema/",
   "@bjornpagen/grizzle",
 ];
+
+/**
+ * The author login, whose workload (the import program and the export queries) grizzle's builders
+ * build when the module is evaluated: the dry run never needs it, and the database layer loads it
+ * only once its settings resolve, so neither may reach it statically.
+ */
+const loginForbidden = ["#pantry/schema/logins.ts"];
+
+/**
+ * Read a module's text from the tree.
+ */
+const readSource = (file: string): string => readFileSync(file, "utf-8");
 
 /**
  * One import or re-export of a source module, as it is written.
@@ -58,11 +70,13 @@ export const staticImports = (source: string): readonly StaticImport[] => {
  * forbidden module.
  *
  * @param entry - The absolute path of the module to start from.
+ * @param forbidden - The specifier prefixes no module of the graph may import.
  * @param read - Reads a module's text.
  * @returns Each offending module and import, as `module: import`.
  */
 export const forbiddenImports = (
   entry: string,
+  forbidden: readonly string[],
   read: (file: string) => string,
 ): readonly string[] => {
   const seen = new Set<string>();
@@ -156,6 +170,7 @@ describe("forbiddenImports", () => {
     };
     const offences = forbiddenImports(
       path.join(sourceRoot, "a.ts"),
+      ["@bjornpagen/grizzle"],
       (file) => Object.entries(files).find(([name]) => name === file)?.[1] ?? "",
     );
 
@@ -167,8 +182,32 @@ describe("forbiddenImports", () => {
 
 describe("the command line's startup graph", () => {
   it("reaches no database, importer, exporter, schema or grizzle module statically", () => {
-    const offences = forbiddenImports(path.join(sourceRoot, "cli.ts"), (file) =>
-      readFileSync(file, "utf-8"),
+    const offences = forbiddenImports(
+      path.join(sourceRoot, "cli.ts"),
+      startupForbidden,
+      readSource,
+    );
+
+    assert.deepStrictEqual(offences, []);
+  });
+});
+
+describe("the author login's place in the graph", () => {
+  it("is not reached statically from the dry run's read", () => {
+    const offences = forbiddenImports(
+      path.join(sourceRoot, "import", "preview.ts"),
+      loginForbidden,
+      readSource,
+    );
+
+    assert.deepStrictEqual(offences, []);
+  });
+
+  it("is not reached statically from the database layer, which loads it once its settings resolve", () => {
+    const offences = forbiddenImports(
+      path.join(sourceRoot, "db", "layer.ts"),
+      loginForbidden,
+      readSource,
     );
 
     assert.deepStrictEqual(offences, []);

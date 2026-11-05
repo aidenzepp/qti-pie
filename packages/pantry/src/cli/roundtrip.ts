@@ -10,6 +10,7 @@ import {
   yesFlag,
   zipFlag,
 } from "#pantry/cli/args.ts";
+import { withAuthorApp } from "#pantry/cli/engine.ts";
 import { RoundtripDiffers } from "#pantry/cli/errors.ts";
 import { emitSuccess, outputMode } from "#pantry/cli/output.ts";
 import type { Outcome } from "#pantry/export/compare.ts";
@@ -89,7 +90,9 @@ export const RoundtripData = Schema.Union([RoundtripReport, RoundtripPreview]);
  * would replace one, and writes nothing. Every refusal of the real run before its first write is
  * raised too: an earlier export without `--yes`, and a protected target.
  *
- * The engine loads when the handler runs, so `--help` and a usage error never pay for it.
+ * The engine loads when the handler runs, so `--help` and a usage error never pay for it, and the
+ * importer and the exporter load inside the database's pool (`withAuthorApp`), so neither does a
+ * run that cannot reach the database.
  */
 export const roundtripCommand = Command.make(
   "roundtrip",
@@ -129,18 +132,21 @@ export const roundtripCommand = Command.make(
       return;
     }
 
-    const { AuthorAppLayer } = yield* Effect.promise(() => import("#pantry/db/layer.ts"));
+    const packageId = yield* withAuthorApp(
+      () => import("#pantry/import/package.ts"),
+      ({ importPackage }) => importPackage(dir),
+    );
+
+    yield* replaceWith(exportDir, (written) =>
+      withAuthorApp(
+        () => import("#pantry/export/package.ts"),
+        ({ exportPackage }) => exportPackage(packageId, written),
+      ),
+    );
+
     const { comparePackage, renderReport } = yield* Effect.promise(
       () => import("#pantry/export/compare.ts"),
     );
-    const { exportPackage } = yield* Effect.promise(() => import("#pantry/export/package.ts"));
-    const { importPackage } = yield* Effect.promise(() => import("#pantry/import/package.ts"));
-    const packageId = yield* importPackage(dir).pipe(Effect.provide(AuthorAppLayer));
-
-    yield* replaceWith(exportDir, (written) =>
-      exportPackage(packageId, written).pipe(Effect.provide(AuthorAppLayer)),
-    );
-
     const report = yield* comparePackage(dir, exportDir);
     const differing = report.filter(({ outcome }) => outcome.kind === "differs").length;
 

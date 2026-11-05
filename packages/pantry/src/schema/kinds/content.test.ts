@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 
 import { hostAdditions } from "#pantry/schema/content/sets.ts";
-import { entryOf, inventory } from "#pantry/schema/content/xsd-inventory.ts";
+import { characterKinds, entryOf, inventory } from "#pantry/schema/content/xsd-inventory.ts";
 import * as asi from "#pantry/schema/kinds/asi.ts";
 import * as cp from "#pantry/schema/kinds/cp.ts";
 import * as cpx from "#pantry/schema/kinds/cpx.ts";
@@ -110,18 +110,15 @@ describe("the M1 Admission rows", () => {
     }
   });
 
-  it("admits comments and instructions under every element host, and text under every mixed host", () => {
+  it("admits under every host the character kinds its content class admits", () => {
     for (const version of versions) {
       for (const entry of Object.values(inventory)) {
         if (entry.handle === "template") {
           continue;
         }
 
-        assert.isTrue(admits(version, entry.handle, "comment"), `${entry.handle} comment`);
-        assert.isTrue(admits(version, entry.handle, "pi"), `${entry.handle} pi`);
-        if (entry.mixed) {
-          assert.isTrue(admits(version, entry.handle, "text"), `${entry.handle} text`);
-          assert.isTrue(admits(version, entry.handle, "entityRef"), `${entry.handle} entityRef`);
+        for (const kind of characterKinds[entry.content._tag]) {
+          assert.isTrue(admits(version, entry.handle, kind), `${entry.handle} ${kind}`);
         }
       }
     }

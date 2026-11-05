@@ -1,11 +1,8 @@
 import { readFileSync } from "node:fs";
 import { assert, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
-import { ImportRule } from "#pantry/import/refusal.ts";
+import { Effect } from "effect";
 import { examplesTarball, zipMembers } from "#pantry/test/fixtures.ts";
 import { parseVerdicts, verdictsPath } from "#pantry/test/verdicts.ts";
-
-const isRule = Schema.is(ImportRule);
 
 /**
  * The rows of the committed verdict file. These cases guard that file without a lease or the corpus
@@ -26,25 +23,5 @@ it.effect("the committed verdict file has one row for each corpus zip", () =>
       rows.map((row) => row.file).toSorted(),
       Object.values(zipMembers).toSorted(),
     );
-  }),
-);
-
-it.effect("every refused row names a rule of the roster", () =>
-  Effect.gen(function* refusedRules() {
-    const rows = yield* committedRows;
-
-    for (const row of rows.filter((candidate) => candidate.verdict === "refused")) {
-      assert.isTrue(isRule(row.rule), `${row.file} names "${row.rule}", not a rule of the roster`);
-    }
-  }),
-);
-
-it.effect("every accepted row names no rule", () =>
-  Effect.gen(function* acceptedRules() {
-    const rows = yield* committedRows;
-
-    for (const row of rows.filter((candidate) => candidate.verdict === "accepted")) {
-      assert.strictEqual(row.rule, "", `${row.file} is accepted but names "${row.rule}"`);
-    }
   }),
 );

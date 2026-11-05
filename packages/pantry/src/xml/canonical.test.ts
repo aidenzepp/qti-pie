@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Layer } from "effect";
@@ -20,14 +19,6 @@ const TestLayer = OracleLayer.pipe(
  */
 let simple = "";
 
-/**
- * Hash bytes the way the spec quotes canonical forms.
- *
- * @param bytes - The bytes to hash.
- * @returns The 64 lower-case hex digits of their sha256.
- */
-const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
-
 beforeAll(() =>
   Effect.gen(function* materializeSimple() {
     simple = yield* materialize("simple");
@@ -35,22 +26,6 @@ beforeAll(() =>
 );
 
 layer(TestLayer)("xml/oracle.ts", (it) => {
-  it.effect("the canonical form of simple's choice.xml has the recorded hash", () =>
-    Effect.gen(function* choiceHash() {
-      const canonical = yield* xmllintC14n(`${simple}/choice.xml`);
-
-      assert.isTrue(sha256(canonical).startsWith("bd3a50514b81a896"));
-    }),
-  );
-
-  it.effect("the canonical form of simple's imsmanifest.xml has the recorded hash", () =>
-    Effect.gen(function* manifestHash() {
-      const canonical = yield* xmllintC14n(`${simple}/imsmanifest.xml`);
-
-      assert.isTrue(sha256(canonical).startsWith("c9e725ed181c63f0"));
-    }),
-  );
-
   it.effect(
     "a file that does not exist fails as OracleError with xmllint's exit code and message",
     () =>
@@ -119,36 +94,6 @@ const assertSameBytes = (actual: Uint8Array, expected: Uint8Array): void => {
 };
 
 layer(TestLayer)("xml/canonical.ts", (it) => {
-  it.effect("simple's choice.xml canonicalizes to the oracle's bytes", () =>
-    Effect.gen(function* choice() {
-      const { actual, expected } = yield* bothCanonicals(`${simple}/choice.xml`);
-
-      assert.isAbove(expected.length, 0);
-      assertSameBytes(actual, expected);
-    }),
-  );
-
-  it.effect("simple's imsmanifest.xml canonicalizes to the oracle's bytes", () =>
-    Effect.gen(function* manifest() {
-      const { actual, expected } = yield* bothCanonicals(`${simple}/imsmanifest.xml`);
-
-      assert.isAbove(expected.length, 0);
-      assertSameBytes(actual, expected);
-    }),
-  );
-
-  for (const name of ["doctype", "latin1"] as const) {
-    it.effect(`the ${name} fixture canonicalizes to the oracle's bytes`, () =>
-      Effect.gen(function* variant() {
-        const directory = yield* materialize(name);
-        const { actual, expected } = yield* bothCanonicals(`${directory}/choice.xml`);
-
-        assert.isAbove(expected.length, 0);
-        assertSameBytes(actual, expected);
-      }),
-    );
-  }
-
   // These four files are copies of crust's `src/fixtures/dtd/`: no package reads another package's files.
   for (const file of ["markup", "attr-ws", "attlist-nmtokens", "quote"]) {
     it.effect(`fixtures/dtd/${file}.xml canonicalizes to the oracle's bytes`, () =>

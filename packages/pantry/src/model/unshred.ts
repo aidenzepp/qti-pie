@@ -3,15 +3,17 @@
  * writes.
  *
  * Shred reads a crust tree into an {@link XdmDocument} through the vocabulary's kind and attribute
- * resolution; unshred runs it backwards through the vocabulary's names ({@link XdmNames}) and
- * hands the tree to crust's encoder. Every value is written as the tree records it: attributes in
- * source order with their lexical forms verbatim, each recorded entity reference as `&name;`,
- * namespace declarations as written, and character data, comments and processing instructions as
- * read.
+ * resolution; unshred runs it backwards through the vocabulary's names ({@link XdmNames}), writes
+ * each name no handle stands for as the exact name the tree keeps, and hands the tree to crust's
+ * encoder. Every value is written as the tree records it: attributes in source order with their
+ * lexical forms verbatim, each recorded entity reference as `&name;`, namespace declarations as
+ * written, and character data, comments and processing instructions as read.
  *
  * What the tree does not record, the bytes cannot repeat, and canonical XML erases each of these:
  * a CDATA section is written as escaped text, the namespace declarations are written before the
- * attributes, and the doctype is written first in the prolog, where crust's tree holds it.
+ * attributes, and the doctype is written first in the prolog, where crust's tree holds it. The
+ * tree's document node holds its children by their place in XML's `document` production, as
+ * crust's tree does, so every tree converts.
  *
  * @see {@link https://www.w3.org/TR/xml-c14n/ | Canonical XML 1.0}
  */
@@ -19,31 +21,21 @@ import { Effect, Option } from "effect";
 import { encode } from "@qti-pie/crust/encode.ts";
 import type { EncodeError } from "@qti-pie/crust/errors.ts";
 import type { Attribute, Child, Element, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
-import { none } from "#pantry/model/xdm.ts";
 import type {
   ClosedName,
   ElementKind,
+  ExpandedName,
   XdmAttribute,
   XdmAttributeName,
+  XdmCharacter,
   XdmChild,
-  XdmComment,
   XdmDocument,
   XdmElement,
+  XdmMisc,
   XdmNamespace,
-  XdmPi,
   XdmVocabulary,
 } from "#pantry/model/xdm.ts";
-
-/**
- * A name as a namespace-aware reader resolves it: its local name and the namespace name it is in,
- * empty when it is in none.
- *
- * @see {@link https://www.w3.org/TR/xml-names/#dt-expname | Namespaces in XML 1.0, expanded name}
- */
-export interface ExpandedName {
-  readonly local: string;
-  readonly namespace: string;
-}
+import { xmlnsNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
  * An attribute's name as written and as resolved: the prefix it is written with, empty when it has
@@ -57,7 +49,8 @@ export interface QualifiedName extends ExpandedName {
  * The names a vocabulary writes its handles under: the inverse of the kind and attribute
  * resolution shred reads a document through, so a handle unshreds to the name it was read from.
  *
- * Open names need no entry: an open attribute carries its exact name in the tree.
+ * Open names need no entry: an open attribute and a foreign element carry their exact names in the
+ * tree.
  */
 export interface XdmNames<V extends XdmVocabulary> {
   /**
@@ -76,13 +69,6 @@ export interface XdmNames<V extends XdmVocabulary> {
    */
   readonly element: (kind: ElementKind<V>) => ExpandedName;
 }
-
-/**
- * The namespace name every namespace declaration's attribute is in, as crust's reader resolves it.
- *
- * @see {@link https://www.w3.org/TR/xml-names/#xmlReserved | Namespaces in XML 1.0, reserved prefixes}
- */
-const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
 /**
  * Spell a qualified name from its prefix and local name.
@@ -132,8 +118,8 @@ const declarationOf = ({ prefix, uri }: XdmNamespace): Attribute =>
  *
  * @param name - The attribute's name in the tree.
  * @param names - The vocabulary's names.
- * @returns The attribute's prefix, local name and namespace name. A `data-*` or `lax` name is in no
- *   namespace and has no prefix.
+ * @returns The attribute's prefix, local name and namespace name. A name of a no-namespace class is
+ *   in no namespace and has no prefix.
  */
 const attributeName = <V extends XdmVocabulary>(
   name: XdmAttributeName<V>,
@@ -144,9 +130,10 @@ const attributeName = <V extends XdmVocabulary>(
       return names.attribute(name.handle);
     }
     case "data-*":
-    case "lax": {
+    case "no-namespace": {
       return { local: name.local, namespace: "", prefix: "" };
     }
+    case "own-namespace":
     case "foreign": {
       return { local: name.local, namespace: name.uri, prefix: name.prefix };
     }
@@ -186,14 +173,16 @@ const attributeOf = <V extends XdmVocabulary>(
  * @param element - The element in the tree.
  * @param names - The vocabulary's names.
  * @param children - The list the element's children are appended to, in document order.
- * @returns The element: its namespace declarations, then its attributes, each in source order.
+ * @returns The element, named by its kind through the vocabulary, or by its own name when it is
+ *   foreign: its namespace declarations, then its attributes, each in source order.
  */
 const elementOf = <V extends XdmVocabulary>(
   element: XdmElement<V>,
   names: XdmNames<V>,
   children: readonly Child[],
 ): Element => {
-  const { local, namespace } = names.element(element.kind);
+  const { local, namespace } =
+    element._tag === "element" ? names.element(element.kind) : element.name;
 
   return {
     attributes: [
@@ -215,7 +204,7 @@ const elementOf = <V extends XdmVocabulary>(
  * @param node - The node in the tree.
  * @returns The comment or processing instruction, its text as read.
  */
-const miscOf = (node: XdmComment | XdmPi): Misc =>
+const miscOf = (node: XdmMisc): Misc =>
   node._tag === "comment"
     ? { kind: "comment", text: node.value }
     : { data: node.data, kind: "pi", target: node.target };
@@ -227,7 +216,7 @@ const miscOf = (node: XdmComment | XdmPi): Misc =>
  * @returns A text run for text and whitespace, which crust's tree does not tell apart; the comment,
  *   processing instruction or entity reference otherwise.
  */
-const characterOf = <V extends XdmVocabulary>(node: Exclude<XdmChild<V>, XdmElement<V>>): Child => {
+const characterOf = (node: XdmCharacter): Child => {
   switch (node._tag) {
     case "text":
     case "ws": {
@@ -314,41 +303,32 @@ const rootOf = <V extends XdmVocabulary>(root: XdmElement<V>, names: XdmNames<V>
   pushChildren(stack, root.children, children);
   for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
     const { into, node } = next;
-    if (node._tag === "element") {
-      const below: Child[] = [];
-      into.push(elementOf(node, names, below));
-      pushChildren(stack, node.children, below);
-    } else {
-      append(into, characterOf(node));
+    switch (node._tag) {
+      case "element":
+      case "foreign-element":
+      case "no-namespace-element":
+      case "own-namespace-element": {
+        const below: Child[] = [];
+        into.push(elementOf(node, names, below));
+        pushChildren(stack, node.children, below);
+        break;
+      }
+      case "text":
+      case "ws":
+      case "comment":
+      case "pi":
+      case "entityRef": {
+        append(into, characterOf(node));
+        break;
+      }
+      default: {
+        return node satisfies never;
+      }
     }
   }
 
   return element;
 };
-
-/**
- * The content model of the document node, as XML's `document` and `prolog` productions state it,
- * for the defect a tree outside it raises.
- *
- * @see {@link https://www.w3.org/TR/xml/#NT-document | XML 1.0, document}
- */
-const documentModel = "(comment | pi)* (doctype (comment | pi)*)? element (comment | pi)*";
-
-/**
- * Die on a document node whose children break its content model.
- *
- * The document kind's laws admit no such tree, and shred and assemble build none, so this is a
- * defect in whatever built the tree, not a document to refuse.
- *
- * @param what - What breaks the model, and where.
- * @returns A defect naming the break and the model.
- */
-const outsideModel = (what: string): Effect.Effect<never> =>
-  Effect.die(
-    new Error(
-      `The document node holds ${what}, outside its content model ${documentModel}. Unshred a tree that shred or assemble built from rows the document laws admit.`,
-    ),
-  );
 
 /**
  * Convert a tree to the crust tree its document was read as.
@@ -363,56 +343,18 @@ const outsideModel = (what: string): Effect.Effect<never> =>
  * @param names - The vocabulary's names, for every kind and closed attribute name the tree holds.
  * @returns The crust tree: the charset as read, the declaration when the document has one, the
  *   doctype, the comments and processing instructions before and after the root element, and the
- *   root element. Dies when the document node's children break its content model.
+ *   root element.
  */
-export const toXmlDocument = Effect.fnUntraced(function* toXmlDocument<V extends XdmVocabulary>(
+export const toXmlDocument = <V extends XdmVocabulary>(
   document: XdmDocument<V>,
   names: XdmNames<V>,
-): Effect.fn.Return<XmlDocument> {
-  const prolog: Misc[] = [];
-  const epilog: Misc[] = [];
-  let doctype: Option.Option<string> = Option.none();
-  let root: Option.Option<XdmElement<V>> = Option.none();
-  for (const [at, child] of document.children.entries()) {
-    if (child._tag === "element") {
-      if (Option.isSome(root)) {
-        return yield* outsideModel(`a second element at slot ${at}`);
-      }
-
-      root = Option.some(child);
-    } else if (child._tag === "doctype") {
-      if (Option.isSome(root) || Option.isSome(doctype)) {
-        return yield* outsideModel(
-          `a doctype at slot ${at} after its ${Option.isSome(root) ? "element" : "doctype"}`,
-        );
-      }
-
-      doctype = Option.some(child.value);
-    } else {
-      (Option.isSome(root) ? epilog : prolog).push(miscOf(child));
-    }
-  }
-
-  if (Option.isNone(root)) {
-    return yield* outsideModel("no element");
-  }
-
-  return {
-    charset: document.charset,
-    declaration:
-      document.xmlVersion === none
-        ? Option.none()
-        : Option.some({
-            encoding: document.encoding === "" ? Option.none() : Option.some(document.encoding),
-            standalone:
-              document.standalone === none ? Option.none() : Option.some(document.standalone),
-            version: document.xmlVersion,
-          }),
-    doctype,
-    epilog,
-    prolog,
-    root: rootOf(root.value, names),
-  };
+): XmlDocument => ({
+  charset: document.charset,
+  declaration: document.declaration,
+  doctype: document.doctype,
+  epilog: document.epilog.map(miscOf),
+  prolog: document.prolog.map(miscOf),
+  root: rootOf(document.root, names),
 });
 
 /**
@@ -427,7 +369,7 @@ export const toXmlDocument = Effect.fnUntraced(function* toXmlDocument<V extends
  * @param names - The vocabulary's names, for every kind and closed attribute name the tree holds.
  * @returns The bytes, or crust's `EncodeError` when `exportCharset` has no encoder, or a comment,
  *   processing instruction, name or the doctype holds a character the label cannot carry and no
- *   character reference can write. Dies when the document node's children break its content model.
+ *   character reference can write.
  * @see {@link encode}
  */
 export const unshred = Effect.fn("model.unshred")(function* unshred<V extends XdmVocabulary>(
@@ -437,7 +379,7 @@ export const unshred = Effect.fn("model.unshred")(function* unshred<V extends Xd
   const { charset, exportCharset } = document;
   yield* Effect.annotateCurrentSpan({ charset, exportCharset });
 
-  const tree = yield* toXmlDocument(document, names);
+  const tree = toXmlDocument(document, names);
   const relabelled = tree.declaration.pipe(
     Option.map((declaration) => ({ ...declaration, encoding: Option.some(exportCharset) })),
   );

@@ -2,39 +2,38 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
-import { ConfigProvider, Context, Effect, FileSystem, Layer, Option, Result, Stream } from "effect";
+import { ConfigProvider, Context, Effect, FileSystem, Layer, Match, Option, Result } from "effect";
 import { Digest } from "effect/crypto";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { readXml } from "@qti-pie/crust/read.ts";
-import type { XmlDocument } from "@qti-pie/crust/tree.ts";
+import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 import { HBLOCK, HFLOW, HINL, PHR } from "#pantry/schema/content/sets.ts";
 import {
   operatorArity,
   operatorArityMax,
   operatorArityUnbounded,
 } from "#pantry/schema/seed/operator-arity.ts";
+import { vpFmt } from "#pantry/test/vp-fmt.ts";
 import {
   arityOf,
+  attributeOf,
   contentOf,
   contentSetsOf,
+  elementsOf,
   entriesOf,
+  entryOf,
   hostsOf,
   htmlNamesOf,
   includesOf,
   indexSchema,
   indexSchemas,
+  isXs,
   leafSpecOf,
   leaves,
-  loadSchemaSet,
-  mathmlEntriesOf,
-  mathmlKindsOf,
-  mathmlLeaf,
-  mathmlReadingsOf,
   mathmlSource,
   printArity,
   renderLeaf,
 } from "#pantry/vocab/derive/derive.ts";
-import type { Entry, SchemaSet, XsdSchema } from "#pantry/vocab/derive/derive.ts";
+import type { AttributeRow, Content, Entry, XsdSchema } from "#pantry/vocab/derive/derive.ts";
 import {
   checkCache,
   readSource,
@@ -45,6 +44,7 @@ import {
   XsdSourceMissing,
 } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
+import type { InlineType, TypeReading, WhiteSpace } from "#pantry/vocab/inventory/types.ts";
 
 /**
  * The package folder, `packages/pantry`, which the committed files and `vp fmt` are relative to.
@@ -97,13 +97,11 @@ class Schemas extends Context.Service<
     readonly asi300: XsdSchema;
     readonly asi301: XsdSchema;
     readonly documents: ReadonlyMap<SourcePath, XmlDocument>;
-    readonly mathml: SchemaSet;
   }
 >()("vocab/derive.test/Schemas") {}
 
 /**
- * Read every pinned XSD through its digest check, index the two ASI schemas, and read the MathML
- * schema from its entry document.
+ * Read every pinned XSD through its digest check, and index the two ASI schemas.
  */
 const SchemasLayer = Layer.effect(
   Schemas,
@@ -123,47 +121,9 @@ const SchemasLayer = Layer.effect(
       asi300: yield* indexed("imsqti_asiv3p0_v1p0.xsd"),
       asi301: yield* indexed("imsqti_asiv3p0p1_v1p0.xsd"),
       documents,
-      mathml: yield* loadSchemaSet(mathmlSource),
     });
   }),
 );
-
-/**
- * Format TypeScript text with `vp fmt`, as the committed files are formatted.
- *
- * `vp` is on `PATH` whenever the suite runs through pnpm. The text is read from standard input,
- * and `filepath` only chooses the parser and the configuration, so nothing is written.
- *
- * @param text - The unformatted module.
- * @param filepath - The path, relative to `packages/pantry`, the text stands for.
- * @returns What `vp fmt` printed.
- */
-const vpFmt = Effect.fn("test.vpFmt")(function* vpFmt(text: string, filepath: string) {
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-
-  return yield* Effect.scoped(
-    Effect.gen(function* collectFormatted() {
-      const handle = yield* spawner.spawn(
-        ChildProcess.make("vp", ["fmt", `--stdin-filepath=${filepath}`], {
-          cwd: packageRoot,
-          stdin: Stream.make(new TextEncoder().encode(text)),
-        }),
-      );
-      const { code, stderr, stdout } = yield* Effect.all(
-        {
-          code: handle.exitCode,
-          stderr: Stream.mkString(Stream.decodeText(handle.stderr)),
-          stdout: Stream.mkString(Stream.decodeText(handle.stdout)),
-        },
-        { concurrency: "unbounded" },
-      );
-
-      assert.strictEqual(code, ChildProcessSpawner.ExitCode(0), `vp fmt failed: ${stderr}`);
-
-      return stdout;
-    }),
-  );
-});
 
 /**
  * The lines of the fenced `text` block in a module comment, without their ` * ` prefix.
@@ -236,15 +196,15 @@ const contentOfType = (schema: XsdSchema, type: string) =>
   });
 
 /**
- * The MathML entry of a kind, failing the test when the MathML reading has none.
+ * The entry of a kind among derived entries, failing the test when they hold none.
  *
- * @param entries - The MathML entries.
+ * @param entries - The entries.
  * @param handle - The kind.
  * @returns Its entry.
  */
-const mathmlEntry = (entries: readonly Entry[], handle: string): Entry =>
+const entryNamed = (entries: readonly Entry[], handle: string): Entry =>
   Option.getOrElse(Option.fromNullishOr(entries.find((entry) => entry.handle === handle)), () =>
-    assert.fail(`no MathML entry ${handle}`),
+    assert.fail(`no entry ${handle}`),
   );
 
 /**
@@ -295,6 +255,175 @@ describe("vocab/derive/sources.ts", () => {
     ),
   );
 });
+
+/**
+ * Read the entry of one complex type of an inline schema in the namespace `urn:t`, as a kind of
+ * the type's name.
+ *
+ * @param schema - The schema, which binds `t` to its target namespace.
+ * @param type - The type's local name.
+ * @returns The entry.
+ */
+const entryOfType = (schema: XsdSchema, type: string): Entry =>
+  valueOf(entryOf(schema, { element: type, handle: type, type: `t:${type}` }));
+
+/**
+ * The attribute row of one name in an entry, failing the test when the entry has none.
+ *
+ * @param entry - The entry.
+ * @param name - The attribute's name.
+ * @returns The row.
+ */
+const rowOf = (entry: Entry, name: string): AttributeRow =>
+  Option.getOrElse(Option.fromNullishOr(entry.attributes.find((row) => row.name === name)), () =>
+    assert.fail(`${entry.handle} has no attribute ${name}`),
+  );
+
+/**
+ * The enumeration values a type reading states, in document order: a restriction's base's, then
+ * its own; a list's item type's; each union member's in turn; none for a named type.
+ *
+ * @param type - The type reading.
+ * @returns The values.
+ */
+const enumerationsOf = (type: TypeReading): readonly string[] =>
+  Match.valueTags(type, {
+    list: ({ item }) => enumerationsOf(item),
+    named: () => [],
+    restriction: ({ base, facets }) => [
+      ...enumerationsOf(base),
+      ...facets.flatMap(({ facet, value }) => (facet === "enumeration" ? [value] : [])),
+    ],
+    union: ({ members }) => members.flatMap(enumerationsOf),
+  });
+
+/**
+ * A reference to a named type, as the deriver reads one.
+ *
+ * @param name - The type's QName.
+ * @returns The reference.
+ */
+const named = (name: string): TypeReading => ({ _tag: "named", name });
+
+/**
+ * The content class of text of a named type.
+ *
+ * @param type - The type's designator.
+ * @param whiteSpace - Its class.
+ * @returns The `text` class.
+ */
+const textOf = (type: string, whiteSpace: WhiteSpace): Content => ({
+  _tag: "text",
+  inline: Option.none(),
+  type,
+  whiteSpace,
+});
+
+/**
+ * An anonymous restriction of a named type by enumeration, as the deriver reads one.
+ *
+ * @param base - The restricted type's QName.
+ * @param values - The enumeration values.
+ * @returns The definition.
+ */
+const enumeration = (base: string, values: readonly string[]): InlineType => ({
+  _tag: "restriction",
+  base: named(base),
+  facets: values.map((value) => ({ facet: "enumeration", value })),
+});
+
+/**
+ * Every element under a schema element, at any depth.
+ *
+ * @param node - The element to search.
+ * @returns The elements, in document order.
+ */
+const under = (node: Element): readonly Element[] =>
+  elementsOf(node).flatMap((child) => [child, ...under(child)]);
+
+/**
+ * What one XSD's attribute declarations say about their types, by attribute name: for each
+ * declaration that names its attribute, the `xs:enumeration` values under it in document order
+ * when its type is anonymous, `None` when it names a type.
+ *
+ * @param root - The `xs:schema` element.
+ * @returns The declarations by name, in document order.
+ */
+const declaredTypesOf = (
+  root: Element,
+): ReadonlyMap<string, readonly Option.Option<string[]>[]> => {
+  const found = new Map<string, Option.Option<string[]>[]>();
+
+  for (const declaration of under(root).filter((node) => isXs(node, "attribute"))) {
+    const name = attributeOf(declaration, "name");
+
+    if (Option.isSome(name)) {
+      const anonymous = elementsOf(declaration).some((child) => isXs(child, "simpleType"));
+      const values = under(declaration)
+        .filter((node) => isXs(node, "enumeration"))
+        .flatMap((node) => Option.toArray(attributeOf(node, "value")));
+
+      found.set(name.value, [
+        ...(found.get(name.value) ?? []),
+        anonymous ? Option.some(values) : Option.none(),
+      ]);
+    }
+  }
+
+  return found;
+};
+
+/**
+ * Check entries' attribute types against the declarations of the XSD they were read from.
+ *
+ * A row of a name the XSD declares only with anonymous types keeps an anonymous definition, a row
+ * of a name it declares only with named types keeps none, and every definition kept states the
+ * enumeration values of one of the name's anonymous declarations.
+ *
+ * @param entries - The entries.
+ * @param roots - The `xs:schema` elements of the documents the entries were read from.
+ * @returns How many rows kept an anonymous definition.
+ */
+const checkInlineTypes = (entries: readonly Entry[], roots: readonly Element[]): number => {
+  const declared = new Map<string, readonly Option.Option<string[]>[]>();
+
+  for (const root of roots) {
+    for (const [name, types] of declaredTypesOf(root)) {
+      declared.set(name, [...(declared.get(name) ?? []), ...types]);
+    }
+  }
+
+  let kept = 0;
+
+  for (const entry of entries) {
+    for (const row of entry.attributes) {
+      const types = declared.get(row.name) ?? [];
+      const where = `${entry.handle} ${row.name}`;
+
+      if (types.length > 0 && types.every(Option.isSome)) {
+        assert.isTrue(Option.isSome(row.inline), `${where} keeps its anonymous type`);
+      }
+
+      if (types.every(Option.isNone)) {
+        assert.isTrue(Option.isNone(row.inline), `${where} has a named type`);
+      }
+
+      if (Option.isSome(row.inline)) {
+        const values = enumerationsOf(row.inline.value);
+
+        kept += 1;
+        assert.isTrue(
+          types.some((type) =>
+            Option.exists(type, (stated) => stated.join(" ") === values.join(" ")),
+          ),
+          `${where} states the values ${values.join(" ")}, which no declaration of it does`,
+        );
+      }
+    }
+  }
+
+  return kept;
+};
 
 describe("vocab/derive/derive.ts over inline schemas", () => {
   it.effect(
@@ -387,6 +516,107 @@ describe("vocab/derive/derive.ts over inline schemas", () => {
           { name: "t:d", occurs: one },
         ]);
       }),
+  );
+
+  it.effect("keeps an anonymous type's definition and spells each built-in xs:", () =>
+    Effect.gen(function* inlineTypes() {
+      const schema = valueOf(
+        indexSchema(
+          yield* parse(
+            `<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" targetNamespace="urn:t" elementFormDefault="qualified">` +
+              `<xsd:simpleType name="length"><xsd:restriction base="xsd:string"/></xsd:simpleType>` +
+              `<xsd:complexType name="Holder">` +
+              `<xsd:attribute name="named" type="xsd:token"/>` +
+              `<xsd:attribute name="pick" default="b"><xsd:simpleType><xsd:restriction base="xsd:token"><xsd:enumeration value="a"/><xsd:enumeration value="b"/></xsd:restriction></xsd:simpleType></xsd:attribute>` +
+              `<xsd:attribute name="sizes"><xsd:simpleType><xsd:restriction><xsd:simpleType><xsd:list itemType="t:length"/></xsd:simpleType><xsd:minLength value="1"/></xsd:restriction></xsd:simpleType></xsd:attribute>` +
+              `<xsd:attribute name="size"><xsd:simpleType><xsd:union memberTypes="t:length"><xsd:simpleType><xsd:restriction base="xsd:token"><xsd:enumeration value="auto"/></xsd:restriction></xsd:simpleType></xsd:union></xsd:simpleType></xsd:attribute>` +
+              `</xsd:complexType></xsd:schema>`,
+          ),
+        ),
+      );
+      const entry = entryOfType(schema, "Holder");
+      const typed = (name: string) => {
+        const { inline, type, whiteSpace } = rowOf(entry, name);
+
+        return { inline: Option.getOrNull(inline), type, whiteSpace };
+      };
+
+      assert.deepStrictEqual(typed("named"), {
+        inline: null,
+        type: "xs:token",
+        whiteSpace: "collapse",
+      });
+      assert.deepStrictEqual(typed("pick"), {
+        inline: enumeration("xs:token", ["a", "b"]),
+        type: "xs:token",
+        whiteSpace: "collapse",
+      });
+      assert.deepStrictEqual(rowOf(entry, "pick").default, Option.some("b"));
+      assert.deepStrictEqual(typed("sizes"), {
+        inline: {
+          _tag: "restriction",
+          base: { _tag: "list", item: named("t:length") },
+          facets: [{ facet: "minLength", value: "1" }],
+        },
+        type: "list",
+        whiteSpace: "collapse",
+      });
+      assert.deepStrictEqual(typed("size"), {
+        inline: { _tag: "union", members: [named("t:length"), enumeration("xs:token", ["auto"])] },
+        type: "union",
+        whiteSpace: "union",
+      });
+    }),
+  );
+
+  it.effect("refuses an anonymous restriction that holds an element no facet is", () =>
+    Effect.gen(function* notAFacet() {
+      const schema = valueOf(
+        indexSchema(
+          yield* parse(
+            `${schemaTag()}<xs:complexType name="Holder"><xs:attribute name="a"><xs:simpleType><xs:restriction base="xs:string"><xs:assertion test="true()"/></xs:restriction></xs:simpleType></xs:attribute></xs:complexType></xs:schema>`,
+          ),
+        ),
+      );
+
+      assert.include(
+        failureOf(entryOf(schema, { element: "Holder", handle: "Holder", type: "t:Holder" })),
+        "an xs:restriction holds an xs:assertion, which is no XSD facet",
+      );
+    }),
+  );
+
+  it.effect("classes content as text, mixed, element, wildcard or empty", () =>
+    Effect.gen(function* contentClasses() {
+      const schema = valueOf(
+        indexSchema(
+          yield* parse(
+            `${schemaTag()}<xs:complexType name="Text"><xs:simpleContent><xs:extension base="xs:normalizedString"><xs:attribute name="a" type="xs:string"/></xs:extension></xs:simpleContent></xs:complexType>` +
+              `<xs:complexType name="Inherited"><xs:simpleContent><xs:extension base="t:Text"/></xs:simpleContent></xs:complexType>` +
+              `<xs:complexType name="Mixed" mixed="true"><xs:sequence><xs:element name="e"/></xs:sequence></xs:complexType>` +
+              `<xs:complexType name="Elements"><xs:sequence><xs:element name="e"/><xs:any namespace="##other"/></xs:sequence></xs:complexType>` +
+              `<xs:complexType name="Wild"><xs:sequence><xs:any namespace="##other" maxOccurs="unbounded"/></xs:sequence></xs:complexType>` +
+              `<xs:complexType name="Empty"><xs:attribute name="a" type="xs:string"/></xs:complexType>` +
+              `</xs:schema>`,
+          ),
+        ),
+      );
+      const text = textOf("xs:normalizedString", "replace");
+
+      assert.deepStrictEqual(
+        ["Text", "Inherited", "Mixed", "Elements", "Wild", "Empty"].map(
+          (type) => entryOfType(schema, type).content,
+        ),
+        [
+          text,
+          text,
+          { _tag: "mixed" },
+          { _tag: "element" },
+          { _tag: "wildcard" },
+          { _tag: "empty" },
+        ],
+      );
+    }),
   );
 });
 
@@ -483,91 +713,51 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/derive.ts over the pinned 
       }),
     );
 
-    cached.effect(
-      "reads mathml3.xsd and the four documents it includes, each once, depth first",
-      () =>
-        Effect.gen(function* mathmlDocuments() {
-          const { mathml } = yield* Schemas;
-
-          assert.deepStrictEqual([...mathml.documents.keys()], mathmlLeaf.sources);
-          assert.strictEqual(mathml.schema.targetPrefix, "m");
-        }),
-    );
-
-    cached.effect(
-      "regenerates src/vocab/inventory/mathml.ts byte for byte after vp fmt",
-      () =>
-        Effect.gen(function* regenerateMathml() {
-          const fs = yield* FileSystem.FileSystem;
-          const { mathml } = yield* Schemas;
-          const file = "src/vocab/inventory/mathml.ts";
-          const entries = valueOf(mathmlEntriesOf(mathml)).toSorted((left, right) =>
-            left.handle < right.handle ? -1 : 1,
-          );
-          const derived = yield* vpFmt(renderLeaf(mathmlLeaf, entries), file);
-
-          assert.strictEqual(derived, yield* fs.readFileString(`${packageRoot}/${file}`));
-        }),
-      formatTestTimeoutMs,
-    );
-
-    cached.effect("reads 193 MathML kinds: common 4, presentation 40, content 140, strict 9", () =>
-      Effect.gen(function* mathmlKinds() {
-        const { mathml } = yield* Schemas;
-        const parts = valueOf(mathmlKindsOf(mathml));
-
-        assert.deepStrictEqual(
-          parts.map(({ names, path: part }) => [part, names.length]),
-          [
-            ["mathml/mathml3-common.xsd", 4],
-            ["mathml/mathml3-presentation.xsd", 40],
-            ["mathml/mathml3-content.xsd", 140],
-            ["mathml/mathml3-strict-content.xsd", 9],
-          ],
+    cached.effect("keeps the anonymous attribute types of the ASI leaves as declared", () =>
+      Effect.gen(function* inlineTypesFromXsd() {
+        const { asi301, documents } = yield* Schemas;
+        const asiDocument = Option.getOrElse(
+          Option.fromNullishOr(documents.get("imsqti_asiv3p0p1_v1p0.xsd")),
+          () => assert.fail("the ASI 3.0.1 XSD was not read"),
         );
-        assert.strictEqual(new Set(parts.flatMap(({ names }) => names)).size, 193);
+        const kept = leaves.map((leaf) =>
+          checkInlineTypes(valueOf(entriesOf(asi301, leaf)), [asiDocument.root]),
+        );
+        assert.deepStrictEqual(kept, [635, 1133, 38]);
       }),
     );
 
-    cached.effect("reads m:semantics from the widest of its three declarations", () =>
-      Effect.gen(function* semantics() {
-        const { mathml } = yield* Schemas;
-        const entry = mathmlEntry(valueOf(mathmlEntriesOf(mathml)), "m:semantics");
-        const children = new Set(entry.references.map((reference) => reference.name));
-
-        assert.strictEqual(entry.type, "anonymous, in m:semantics in group m:semantics");
-        for (const child of ["m:ci", "m:semantics", "m:apply", "m:mi", "m:annotation-xml"]) {
-          assert.isTrue(children.has(child), child);
-        }
-      }),
-    );
-
-    cached.effect("reads substitution members, inherited types and untyped attributes", () =>
-      Effect.gen(function* members() {
-        const { mathml } = yield* Schemas;
-        const entries = valueOf(mathmlEntriesOf(mathml));
-        const mtr = mathmlEntry(entries, "m:mtr");
-        const plus = mathmlEntry(entries, "m:plus");
-        const alttext = mathmlEntry(entries, "m:math").attributes.find(
-          (row) => row.name === "alttext",
-        );
-
+    cached.effect("reads simple content's text type and inline enumerations' values", () =>
+      Effect.gen(function* textAndValues() {
+        const { asi301 } = yield* Schemas;
+        const asi = leaves.flatMap((leaf) => valueOf(entriesOf(asi301, leaf)));
+        const values = (entries: readonly Entry[], handle: string, name: string) =>
+          rowOf(entryNamed(entries, handle), name).inline.pipe(Option.map(enumerationsOf));
         assert.deepStrictEqual(
-          mtr.references.map((reference) => reference.name),
-          ["m:mtd"],
+          entryNamed(asi, "qti-value").content,
+          textOf("xs:normalizedString", "replace"),
         );
-        assert.strictEqual(
-          mathmlEntry(entries, "m:mtd").type,
-          "anonymous, in m:TableCellExpression",
-        );
-        assert.strictEqual(plus.type, "anonymous, in m:nary-arith.class");
-        assert.deepStrictEqual(plus.references, []);
         assert.deepStrictEqual(
-          [alttext?.type, alttext?.whiteSpace],
-          ["xs:anySimpleType", "preserve"],
+          entryNamed(asi, "qti-base-value").content,
+          textOf("xs:string", "preserve"),
         );
-        assert.isTrue(mathmlEntry(entries, "m:annotation-xml").wildcard);
-        assert.strictEqual(valueOf(mathmlReadingsOf(mathml)).length, 193);
+        assert.deepStrictEqual(
+          values(asi, "qti-value", "base-type"),
+          Option.some([
+            "boolean",
+            "directedPair",
+            "duration",
+            "file",
+            "float",
+            "identifier",
+            "integer",
+            "pair",
+            "point",
+            "string",
+            "uri",
+          ]),
+        );
+        assert.deepStrictEqual(values(asi, "p", "dir"), Option.some(["ltr", "rtl", "auto"]));
       }),
     );
 

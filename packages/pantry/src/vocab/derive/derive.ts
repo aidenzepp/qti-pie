@@ -16,11 +16,8 @@
  *   each set's name, source and size, then its names in code-point order.
  * - `arity` prints the child-expression multiplicity of the 64 expression kinds from the ASI 3.0 XSD,
  *   the table `src/schema/seed/operator-arity.ts` transcribes.
- * - `mathml` prints the MathML leaf, `src/vocab/inventory/mathml.ts`, from `mathml/mathml3.xsd` and
- *   the four documents it includes, unformatted like the others.
  *
- * A leaf is regenerated, `html`, `processing` and `mathml` likewise (the MathML leaf into
- * `src/vocab/inventory/`), with:
+ * A leaf is regenerated, `html` and `processing` likewise, with:
  *
  * ```sh
  * node src/vocab/derive/derive.ts asi > src/schema/content/inventory/asi.ts
@@ -58,31 +55,40 @@
  *   for a list and for every built-in but `xs:string` and `xs:anySimpleType` (`preserve`) and
  *   `xs:normalizedString` (`replace`); a restriction takes its own `whiteSpace` facet or else its
  *   base's class; a union is `collapse` when every member is, else `union`. An attribute wildcard
- *   adds no row; {@link attributeWildcardsOf} reads it.
- * - A type is mixed when it, or its `complexContent`, says so, or else when its base type is.
+ *   adds no row; {@link attributeWildcardOf} reads it.
+ * - A simple type is written as its QName, a built-in as `xs:<local>` whatever prefix the schema
+ *   binds to the XML Schema namespace. An anonymous simple type keeps its definition
+ *   ({@link InlineType}): a restriction's base and facets in document order, a list's item type, a
+ *   union's members, its `memberTypes` first. Its designator is `list`, `union`, or its
+ *   restriction's base, read through nested anonymous restrictions.
+ * - A type is mixed when it, or its `complexContent`, says so, or else when its base type is. Its
+ *   content class ({@link Content}) is `text`, of the base its `simpleContent` extends, when it has
+ *   simple content; else `mixed` when it is mixed; else `element` when its content references an
+ *   element, `wildcard` when it may hold only a wildcard's, and `empty` otherwise.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Array as Arr, Console, Effect, Layer, Option, Order, Result, Schema } from "effect";
+import { Array as Arr, Console, Effect, Layer, Match, Option, Order, Result, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
 import { Digest } from "effect/crypto";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
-import { readSource, sourcePaths, sources } from "#pantry/vocab/derive/sources.ts";
-import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
-
-/**
- * The XML Schema namespace, which every construct the deriver reads and every built-in type is in.
- */
-const XS = "http://www.w3.org/2001/XMLSchema";
-
-/**
- * The namespace of namespace declarations, which crust gives every `xmlns` attribute.
- */
-const XMLNS = "http://www.w3.org/2000/xmlns/";
-
-/**
- * The namespace the `xml` prefix is bound to without a declaration.
- */
-const XML = "http://www.w3.org/XML/1998/namespace";
+import { readPlaced, sourcePaths, sources } from "#pantry/vocab/derive/sources.ts";
+import type { Placed, SourcePath } from "#pantry/vocab/derive/sources.ts";
+import type {
+  AttributeWildcard,
+  Facet,
+  FacetName,
+  InlineType,
+  NamespaceConstraint,
+  Processing,
+  TypeReading,
+  ValueType,
+  WhiteSpace,
+} from "#pantry/vocab/inventory/types.ts";
+import {
+  xmlNamespace as XML,
+  xmlnsNamespace as XMLNS,
+  xsNamespace as XS,
+} from "#pantry/vocab/namespaces.ts";
 
 /**
  * The XSD does not have a shape the deriver reads.
@@ -103,10 +109,12 @@ export class XsdReadingError extends Schema.TaggedError<XsdReadingError>()("XsdR
 /**
  * Refuse a construct the reading rules do not cover.
  *
+ * Public: every vocabulary's reading refuses with it.
+ *
  * @param detail - The construct and what about it is not read.
  * @returns The failure.
  */
-const refuse = (detail: string): Result.Result<never, XsdReadingError> =>
+export const refuse = (detail: string): Result.Result<never, XsdReadingError> =>
   Result.fail(new XsdReadingError({ detail }));
 
 /**
@@ -135,10 +143,13 @@ export const isXs = (node: Element, local: string): boolean =>
 /**
  * Whether an element is a compositor: a `sequence`, a `choice` or an `all`.
  *
+ * Public, and stable while the vocabularies are derived: `sequences.ts` reads content models'
+ * structure with it.
+ *
  * @param node - The element.
  * @returns Whether it groups particles.
  */
-const isCompositor = (node: Element): boolean =>
+export const isCompositor = (node: Element): boolean =>
   isXs(node, "sequence") || isXs(node, "choice") || isXs(node, "all");
 
 /**
@@ -219,18 +230,19 @@ const resolveIn = (
  * A schema, from one document or from a document and those it includes, indexed for derivation.
  *
  * The component maps hold the top-level named components by local name, `elements` the top-level
- * element declarations. A valid schema names each component once per kind, and the pinned files
- * hold no named component below the top level. `declarations` holds, per element name, the
- * distinct `type` of its declarations at any depth, in document order; a declaration with an
- * anonymous type adds nothing. `substitutions` holds, per top-level element, the top-level
- * elements whose `substitutionGroup` names it, in document order. `namespaces` maps each prefix
- * the `xs:schema` element declares, `""` for the default namespace, and `xml`. `qualified` is
- * whether a local element declaration is in the target namespace by default
- * (`elementFormDefault="qualified"`), and `targetPrefix` is the prefix a name in the target
+ * element declarations and `attributes` the top-level attribute declarations. A valid schema names
+ * each component once per kind, and the pinned files hold no named component below the top level.
+ * `declarations` holds, per element name, the distinct `type` of its declarations at any depth, in
+ * document order; a declaration with an anonymous type adds nothing. `substitutions` holds, per
+ * top-level element, the top-level elements whose `substitutionGroup` names it, in document order.
+ * `namespaces` maps each prefix the `xs:schema` element declares, `""` for the default namespace,
+ * and `xml`. `qualified` is whether a local element declaration is in the target namespace by
+ * default (`elementFormDefault="qualified"`), and `targetPrefix` is the prefix a name in the target
  * namespace is written with: `""` when that namespace is the default one or no namespace.
  */
 export interface XsdSchema {
   readonly attributeGroups: ReadonlyMap<string, Element>;
+  readonly attributes: ReadonlyMap<string, Element>;
   readonly complexTypes: ReadonlyMap<string, Element>;
   readonly declarations: ReadonlyMap<string, readonly string[]>;
   readonly elements: ReadonlyMap<string, Element>;
@@ -349,6 +361,7 @@ const indexDocument = (document: XmlDocument): Result.Result<DocumentIndex, XsdR
 
     return {
       attributeGroups: componentsOf(root, "attributeGroup"),
+      attributes: componentsOf(root, "attribute"),
       complexTypes: componentsOf(root, "complexType"),
       declarations: declarationsOf(root),
       elements: componentsOf(root, "element"),
@@ -504,6 +517,10 @@ export const indexSchemas = (
         "attributeGroup",
         parts.map((part) => part.attributeGroups),
       ),
+      attributes: yield* mergeComponents(
+        "attribute",
+        parts.map((part) => part.attributes),
+      ),
       complexTypes: yield* mergeComponents(
         "complexType",
         parts.map((part) => part.complexTypes),
@@ -633,11 +650,6 @@ const requireChild = (
   );
 
 /**
- * The `whiteSpace` class of an attribute's declared type, as the inventory records it.
- */
-export type WhiteSpace = "preserve" | "replace" | "collapse" | "union";
-
-/**
  * The values of the XSD `whiteSpace` facet.
  */
 const whiteSpaceFacets = ["preserve", "replace", "collapse"] as const;
@@ -646,7 +658,7 @@ const whiteSpaceFacets = ["preserve", "replace", "collapse"] as const;
  * A simple type as a declaration or a derivation refers to it: by a QName, or as an anonymous
  * definition written in place.
  */
-type SimpleTypeRef =
+export type SimpleTypeRef =
   | { readonly _tag: "Named"; readonly lexical: string }
   | { readonly _tag: "Anonymous"; readonly definition: Element };
 
@@ -751,25 +763,171 @@ const whiteSpaceOf = (
   });
 
 /**
- * The name the inventory records for an anonymous simple type: `list`, `union`, or the base of its
- * restriction, read through nested anonymous restrictions.
- *
- * @param definition - The anonymous `xs:simpleType` element.
- * @returns The name, or an {@link XsdReadingError} when the type is none of the three.
+ * The facets of XML Schema 1.0 Part 2, 4.3, by element name: what an anonymous restriction may
+ * state beside its base.
  */
-const inlineTypeName = (definition: Element): Result.Result<string, XsdReadingError> =>
-  Result.gen(function* inlineTypeNameBody() {
+const facetNames: readonly FacetName[] = [
+  "enumeration",
+  "fractionDigits",
+  "length",
+  "maxExclusive",
+  "maxInclusive",
+  "maxLength",
+  "minExclusive",
+  "minInclusive",
+  "minLength",
+  "pattern",
+  "totalDigits",
+  "whiteSpace",
+];
+
+/**
+ * Write a QName-valued reference to a type as the inventory writes it.
+ *
+ * Public, and stable while the vocabularies are derived: every vocabulary's types are spelled with
+ * it, so SSML's `xsd:token` is written `xs:token` as the ASI and MathML schemas write it.
+ *
+ * @param schema - The schema the reference is written in.
+ * @param lexical - The QName as written, such as `xsd:token` or `m:length`.
+ * @returns `xs:<local>` for a name in the XML Schema namespace, whatever prefix the schema binds to
+ *   it, and any other name as written; an {@link XsdReadingError} for an undeclared prefix.
+ */
+export const spell = (schema: XsdSchema, lexical: string): Result.Result<string, XsdReadingError> =>
+  Result.map(resolve(schema, lexical), (name) =>
+    name.namespace === XS ? `xs:${name.local}` : lexical,
+  );
+
+/**
+ * Read one facet of an anonymous restriction.
+ *
+ * @param node - A child of the `xs:restriction` other than its annotation and its anonymous base.
+ * @returns The facet, or an {@link XsdReadingError} for an element that is no XSD facet or has no
+ *   `value`.
+ */
+const facetOf = (node: Element): Result.Result<Facet, XsdReadingError> =>
+  Result.gen(function* facetOfBody() {
+    const facet = yield* Option.match(
+      Arr.findFirst(facetNames, (name) => isXs(node, name)),
+      {
+        onNone: () => refuse(`an xs:restriction holds an ${node.qname}, which is no XSD facet`),
+        onSome: (name) => Result.succeed(name),
+      },
+    );
+
+    return { facet, value: yield* requireAttribute(node, "value") };
+  });
+
+/**
+ * Read an anonymous simple type's definition.
+ *
+ * Public, and stable while the vocabularies are derived: a vocabulary whose kinds have simple
+ * content of an anonymous type reads that type with it.
+ *
+ * @param schema - The schema the type is written in.
+ * @param definition - The anonymous `xs:simpleType` element.
+ * @returns Its definition, every named type in it spelled; an {@link XsdReadingError} for a type
+ *   that is no list, union or restriction, or a restriction that holds an element no facet is.
+ */
+export const inlineOf = (
+  schema: XsdSchema,
+  definition: Element,
+): Result.Result<InlineType, XsdReadingError> => {
+  const named = (lexical: string): Result.Result<TypeReading, XsdReadingError> =>
+    Result.map(spell(schema, lexical), (name) => ({ _tag: "named", name }) as const);
+  const referenced = (
+    holder: Element,
+    attribute: string,
+  ): Result.Result<TypeReading, XsdReadingError> =>
+    Option.match(attributeOf(holder, attribute), {
+      onNone: () =>
+        Result.flatMap(requireChild(holder, ["simpleType"]), (nested) => inlineOf(schema, nested)),
+      onSome: named,
+    });
+
+  return Result.gen(function* inlineOfBody() {
     const variety = yield* requireChild(definition, ["list", "union", "restriction"]);
 
-    if (!isXs(variety, "restriction")) {
-      return variety.local;
+    if (isXs(variety, "list")) {
+      return { _tag: "list", item: yield* referenced(variety, "itemType") } as const;
     }
 
-    const base = attributeOf(variety, "base");
+    if (isXs(variety, "union")) {
+      const members: TypeReading[] = [];
 
-    return Option.isSome(base)
-      ? base.value
-      : yield* inlineTypeName(yield* requireChild(variety, ["simpleType"]));
+      for (const lexical of Option.match(attributeOf(variety, "memberTypes"), {
+        onNone: () => [],
+        onSome: (value) => value.split(/\s+/u).filter((member) => member !== ""),
+      })) {
+        members.push(yield* named(lexical));
+      }
+
+      for (const nested of xsChildren(variety, "simpleType")) {
+        members.push(yield* inlineOf(schema, nested));
+      }
+
+      return { _tag: "union", members } as const;
+    }
+
+    const facets: Facet[] = [];
+
+    for (const node of elementsOf(variety)) {
+      if (!isXs(node, "annotation") && !isXs(node, "simpleType")) {
+        facets.push(yield* facetOf(node));
+      }
+    }
+
+    return {
+      _tag: "restriction",
+      base: yield* referenced(variety, "base"),
+      facets,
+    } as const;
+  });
+};
+
+/**
+ * The designator the inventory records for a type: a named type's name, or for an anonymous one,
+ * in place of a name, `list` or `union`, or for a restriction its base's designator.
+ *
+ * Public, and stable while the vocabularies are derived: a vocabulary that records an anonymous
+ * type names it with it.
+ *
+ * @param type - The type.
+ * @returns Its designator; a restriction's is read through nested anonymous restrictions to the
+ *   named type, list or union they restrict.
+ */
+export const designatorOf = (type: TypeReading): string =>
+  Match.valueTags(type, {
+    list: () => "list",
+    named: ({ name }) => name,
+    restriction: ({ base }) => designatorOf(base),
+    union: () => "union",
+  });
+
+/**
+ * Read the simple type a value is read under.
+ *
+ * Public, and stable while the vocabularies are derived: a vocabulary whose kinds are declared with
+ * a simple type reads their text's type with it.
+ *
+ * @param schema - The schema the reference is written in.
+ * @param ref - The type, by name or as an anonymous definition.
+ * @returns Its designator, its definition when anonymous, and its class; an {@link XsdReadingError}
+ *   for a type the reading rules do not read.
+ */
+export const valueTypeOf = (
+  schema: XsdSchema,
+  ref: SimpleTypeRef,
+): Result.Result<ValueType, XsdReadingError> =>
+  Result.gen(function* valueTypeOfBody() {
+    const whiteSpace = yield* whiteSpaceOf(schema, ref);
+
+    if (ref._tag === "Named") {
+      return { inline: Option.none(), type: yield* spell(schema, ref.lexical), whiteSpace };
+    }
+
+    const inline = yield* inlineOf(schema, ref.definition);
+
+    return { inline: Option.some(inline), type: designatorOf(inline), whiteSpace };
   });
 
 /**
@@ -801,18 +959,18 @@ const xmlAttributeTypes: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
- * One attribute an XSD type declares, as the inventory records it.
- *
- * `type` is the declared type as written, or for an anonymous type the name {@link inlineTypeName}
- * gives it; `default` is the declared default.
+ * One attribute an XSD type declares, as the inventory records it: its name, its simple type, and
+ * the declared use and default.
  */
-export interface AttributeRow {
+export interface AttributeRow extends ValueType {
+  /**
+   * The `xs:attribute` that declares or references it, which its provenance cites.
+   */
+  readonly declaration: Element;
   readonly default: Option.Option<string>;
   readonly family: "base" | "aria" | "own";
   readonly name: string;
-  readonly type: string;
   readonly use: "required" | "optional";
-  readonly whiteSpace: WhiteSpace;
 }
 
 /**
@@ -831,57 +989,48 @@ const familyOf = (name: string): AttributeRow["family"] => {
 };
 
 /**
- * The name, declared type and class of a declaration that names its attribute.
+ * The simple type of a declaration that names its attribute.
  *
  * A declaration with neither a `type` nor an anonymous type has `xs:anySimpleType`, as XML Schema
  * gives it.
  *
  * @param schema - The schema the declaration is in.
  * @param declaration - The `xs:attribute` element.
- * @param name - Its `name`.
- * @returns The three, or an {@link XsdReadingError} for a type the reading rules do not read.
+ * @returns The type, or an {@link XsdReadingError} for a type the reading rules do not read.
  */
-const declaredType = (
+export const declaredType = (
   schema: XsdSchema,
   declaration: Element,
-  name: string,
-): Result.Result<Pick<AttributeRow, "name" | "type" | "whiteSpace">, XsdReadingError> =>
-  Result.gen(function* declaredTypeBody() {
-    const type = attributeOf(declaration, "type");
+): Result.Result<ValueType, XsdReadingError> => {
+  const type = attributeOf(declaration, "type");
 
-    if (Option.isSome(type)) {
-      return {
-        name,
-        type: type.value,
-        whiteSpace: yield* whiteSpaceOf(schema, { _tag: "Named", lexical: type.value }),
-      };
-    }
+  if (Option.isSome(type)) {
+    return valueTypeOf(schema, { _tag: "Named", lexical: type.value });
+  }
 
-    const inline = firstXs(declaration, "simpleType");
-
-    if (Option.isNone(inline)) {
-      return { name, type: "xs:anySimpleType", whiteSpace: builtinWhiteSpace("anySimpleType") };
-    }
-
-    return {
-      name,
-      type: yield* inlineTypeName(inline.value),
-      whiteSpace: yield* whiteSpaceOf(schema, { _tag: "Anonymous", definition: inline.value }),
-    };
+  return Option.match(firstXs(declaration, "simpleType"), {
+    onNone: () =>
+      Result.succeed({
+        inline: Option.none(),
+        type: "xs:anySimpleType",
+        whiteSpace: builtinWhiteSpace("anySimpleType"),
+      }),
+    onSome: (definition) => valueTypeOf(schema, { _tag: "Anonymous", definition }),
   });
+};
 
 /**
- * The name, declared type and class of a reference to an `xml:` attribute.
+ * The simple type of a reference to an `xml:` attribute.
  *
  * @param schema - The schema the reference is in.
  * @param ref - The `ref` as written, which is also the row's name.
- * @returns The three, or an {@link XsdReadingError} for any reference but `xml:base`, `xml:id` and
+ * @returns The type, or an {@link XsdReadingError} for any reference but `xml:base`, `xml:id` and
  *   `xml:lang`.
  */
 const referencedType = (
   schema: XsdSchema,
   ref: string,
-): Result.Result<Pick<AttributeRow, "name" | "type" | "whiteSpace">, XsdReadingError> =>
+): Result.Result<ValueType, XsdReadingError> =>
   Result.gen(function* referencedTypeBody() {
     const name = yield* resolve(schema, ref);
     const builtin = yield* Option.match(
@@ -895,7 +1044,7 @@ const referencedType = (
       },
     );
 
-    return { name: ref, type: `xs:${builtin}`, whiteSpace: builtinWhiteSpace(builtin) };
+    return { inline: Option.none(), type: `xs:${builtin}`, whiteSpace: builtinWhiteSpace(builtin) };
   });
 
 /**
@@ -912,22 +1061,23 @@ const attributeRow = (
 ): Result.Result<AttributeRow, XsdReadingError> =>
   Result.gen(function* attributeRowBody() {
     const named = attributeOf(declaration, "name");
+    const name = Option.isSome(named) ? named.value : yield* requireAttribute(declaration, "ref");
     const typed = Option.isSome(named)
-      ? yield* declaredType(schema, declaration, named.value)
-      : yield* referencedType(schema, yield* requireAttribute(declaration, "ref"));
+      ? yield* declaredType(schema, declaration)
+      : yield* referencedType(schema, name);
     const use = Option.getOrElse(attributeOf(declaration, "use"), () => "optional");
 
     if (use !== "required" && use !== "optional") {
-      return yield* refuse(`the attribute ${typed.name} has use="${use}"`);
+      return yield* refuse(`the attribute ${name} has use="${use}"`);
     }
 
     return {
+      ...typed,
+      declaration,
       default: attributeOf(declaration, "default"),
-      family: familyOf(typed.name),
-      name: typed.name,
-      type: typed.type,
+      family: familyOf(name),
+      name,
       use,
-      whiteSpace: typed.whiteSpace,
     };
   });
 
@@ -1028,20 +1178,86 @@ const attributesOf = (
   });
 
 /**
- * The attribute wildcards a holder states itself: its own `xs:anyAttribute`, then those of each
- * attribute group it references, in reference order.
+ * An attribute wildcard as the IR states it: its namespace constraint as the XSD writes it, and its
+ * processing.
+ */
+export type AttributeWildcardReading = Pick<AttributeWildcard, "namespace" | "processing">;
+
+/**
+ * The `namespace` values of an `xs:anyAttribute` the reading covers: every one the pinned XSDs
+ * write. A list of namespace names, which no pinned XSD writes, is refused.
+ */
+const namespaceReadings: ReadonlyMap<string, NamespaceConstraint> = new Map([
+  ["##any", "##any"],
+  ["##local", "##local"],
+  ["##other", "##other"],
+]);
+
+/**
+ * What each `processContents` value of an `xs:anyAttribute` means.
+ */
+const processingReadings: ReadonlyMap<string, Processing> = new Map([
+  ["lax", "lax"],
+  ["skip", "skip"],
+  ["strict", "strict"],
+]);
+
+/**
+ * Read a value of a wildcard's attribute through its table of readings.
+ *
+ * @param node - The wildcard.
+ * @param name - The attribute, `namespace` or `processContents`.
+ * @param fallback - The attribute's XSD default, read when the wildcard omits it.
+ * @param readings - What each value the reading covers means.
+ * @returns The value's meaning, or an {@link XsdReadingError} for a value the table lacks.
+ */
+const readWildcardAttribute = <A>(
+  node: Element,
+  name: string,
+  fallback: string,
+  readings: ReadonlyMap<string, A>,
+): Result.Result<A, XsdReadingError> => {
+  const value = Option.getOrElse(attributeOf(node, name), () => fallback);
+
+  return Option.match(Option.fromNullishOr(readings.get(value)), {
+    onNone: () => refuse(`an ${node.qname} has ${name}="${value}", which is not read`),
+    onSome: (reading) => Result.succeed(reading),
+  });
+};
+
+/**
+ * Read an attribute wildcard, with the XSD defaults `##any` and `strict`.
+ *
+ * @param node - An `xs:anyAttribute` element.
+ * @returns The wildcard, or an {@link XsdReadingError} for a namespace list or an unknown
+ *   `processContents`, which the IR does not hold.
+ */
+const wildcardFrom = (node: Element): Result.Result<AttributeWildcardReading, XsdReadingError> =>
+  Result.gen(function* wildcardFromBody() {
+    return {
+      namespace: yield* readWildcardAttribute(node, "namespace", "##any", namespaceReadings),
+      processing: yield* readWildcardAttribute(
+        node,
+        "processContents",
+        "strict",
+        processingReadings,
+      ),
+    };
+  });
+
+/**
+ * The attribute groups a holder references, their own references included, in reading order.
  *
  * @param schema - The schema the holder is in.
  * @param holder - A complex type, a derivation step or an attribute group.
- * @returns The `xs:anyAttribute` elements, or an {@link XsdReadingError} for an unknown attribute
- *   group.
+ * @returns The groups, or an {@link XsdReadingError} for an unknown attribute group.
  */
-const ownWildcards = (
+const attributeGroupsOf = (
   schema: XsdSchema,
   holder: Element,
 ): Result.Result<readonly Element[], XsdReadingError> =>
-  Result.gen(function* ownWildcardsBody() {
-    const found = [...xsChildren(holder, "anyAttribute")];
+  Result.gen(function* attributeGroupsOfBody() {
+    const found: Element[] = [];
 
     for (const reference of xsChildren(holder, "attributeGroup")) {
       const group = yield* requireComponent(
@@ -1051,58 +1267,106 @@ const ownWildcards = (
         yield* requireAttribute(reference, "ref"),
       );
 
-      found.push(...(yield* ownWildcards(schema, group)));
+      found.push(group, ...(yield* attributeGroupsOf(schema, group)));
     }
 
     return found;
   });
 
 /**
- * The attribute wildcards a complex type holds: its own and its attribute groups', then for an
- * extension of a type of this document its base type's, then its derivation step's.
+ * The wildcard holders state themselves, the complete wildcard of XML Schema 1.0 Part 1, 3.4.2:
+ * each holder's `xs:anyAttribute` and its attribute groups'.
  *
- * A restriction's wildcard is the step's alone, so a restriction does not read its base's. Each
- * wildcard is returned as written; XML Schema's union and intersection of wildcards is the
- * reader's.
+ * @param schema - The schema the holders are in.
+ * @param holders - A complex type, and its derivation step when it has one.
+ * @returns The one wildcard they state, or `None`; an {@link XsdReadingError} for two, whose
+ *   intersection the reading does not compute.
+ */
+const completeWildcardOf = (
+  schema: XsdSchema,
+  holders: readonly Element[],
+): Result.Result<Option.Option<AttributeWildcardReading>, XsdReadingError> =>
+  Result.gen(function* completeWildcardOfBody() {
+    const found: AttributeWildcardReading[] = [];
+
+    for (const holder of holders) {
+      for (const node of [holder, ...(yield* attributeGroupsOf(schema, holder))]) {
+        for (const wildcard of xsChildren(node, "anyAttribute")) {
+          found.push(yield* wildcardFrom(wildcard));
+        }
+      }
+    }
+
+    return found.length > 1
+      ? yield* refuse(
+          `a complex type states ${found.length} attribute wildcards, whose intersection is not read`,
+        )
+      : Arr.head(found);
+  });
+
+/**
+ * Read a complex type's attribute wildcard, as XML Schema 1.0 Part 1, 3.4.2, builds it.
  *
- * Public, and stable while the vocabularies are derived: the vocabularies state their elements'
- * wildcards in `open.ts`'s shape from it.
+ * A type with no derivation, and a restriction, hold their complete wildcard alone. An extension
+ * holds the union of its complete wildcard and its base type's (XML Schema 1.0 Part 1, 3.10.6):
+ * the base's when it states none, else `##any` when either is `##any`, and otherwise the complete
+ * wildcard's own constraint, with its processing. Both wildcards of an extension are its schema's,
+ * so two `##other`s exclude the same namespace and their union is `##other`; no pinned type
+ * extends a `##local` wildcard, whose union with `##other` this reading leaves at the complete
+ * wildcard's.
  *
  * @param schema - The schema the type is in.
  * @param complexType - The `xs:complexType` element, named or anonymous.
- * @returns The `xs:anyAttribute` elements, in that order.
+ * @returns The wildcard, `None` when the type admits only its declared attributes; an
+ *   {@link XsdReadingError} for an extension of `xs:anyType`, whose wildcard is not read.
+ * @see {@link https://www.w3.org/TR/xmlschema-1/#Complex_Type_Definitions | XML Schema 1.0, Complex Type Definitions}
  */
-export const attributeWildcardsOf = (
+export const attributeWildcardOf = (
   schema: XsdSchema,
   complexType: Element,
-): Result.Result<readonly Element[], XsdReadingError> =>
-  Result.gen(function* attributeWildcardsOfBody() {
-    const found = [...(yield* ownWildcards(schema, complexType))];
+): Result.Result<Option.Option<AttributeWildcardReading>, XsdReadingError> =>
+  Result.gen(function* attributeWildcardOfBody() {
     const step = yield* derivationOf(complexType);
+    const complete = yield* completeWildcardOf(schema, [complexType, ...Option.toArray(step)]);
 
-    if (Option.isSome(step)) {
-      const base = isXs(step.value, "extension")
-        ? yield* baseTypeOf(schema, step.value)
-        : Option.none();
-
-      if (Option.isSome(base)) {
-        found.push(...(yield* attributeWildcardsOf(schema, base.value)));
-      }
-
-      found.push(...(yield* ownWildcards(schema, step.value)));
+    if (Option.isNone(step) || isXs(step.value, "restriction")) {
+      return complete;
     }
 
-    return found;
+    const base = yield* resolve(schema, yield* requireAttribute(step.value, "base"));
+
+    if (base.namespace === XS && base.local === "anyType") {
+      return yield* refuse("the attribute wildcard of an extension of xs:anyType is not read");
+    }
+
+    const baseType = componentOf(schema, schema.complexTypes, base);
+    const inherited = Option.isSome(baseType)
+      ? yield* attributeWildcardOf(schema, baseType.value)
+      : Option.none();
+
+    return Option.match(complete, {
+      onNone: () => inherited,
+      onSome: (own) =>
+        Option.some({
+          namespace: Option.exists(inherited, (wildcard) => wildcard.namespace === "##any")
+            ? "##any"
+            : own.namespace,
+          processing: own.processing,
+        }),
+    });
   });
 
 /**
  * Whether a complex type admits character data between its children.
  *
+ * Public, and stable while the vocabularies are derived: the content-model IR reads a type's
+ * `{content type}` with it.
+ *
  * @param schema - The schema the type is in.
  * @param complexType - The `xs:complexType` element.
  * @returns Its own or its `complexContent`'s `mixed`, else its base type's, else `false`.
  */
-const mixedOf = (
+export const mixedOf = (
   schema: XsdSchema,
   complexType: Element,
 ): Result.Result<boolean, XsdReadingError> =>
@@ -1129,6 +1393,90 @@ const mixedOf = (
     const base = yield* baseTypeOf(schema, step);
 
     return Option.isSome(base) ? yield* mixedOf(schema, base.value) : false;
+  });
+
+/**
+ * What a kind's content admits beside the element children its entry lists: its content class.
+ *
+ * `text` is character data alone, of the type the arm carries: an element declared with a simple
+ * type, or a complex type with `simpleContent`. `mixed` is character data between the children.
+ * `element` is element children only, at least one named; `wildcard` is element children only,
+ * every one a wildcard's; `empty` is nothing. A content model that names an element and also holds
+ * a wildcard is `element`, or `mixed` when it is mixed.
+ */
+export type Content =
+  | { readonly _tag: "element" }
+  | { readonly _tag: "empty" }
+  | { readonly _tag: "mixed" }
+  | ({ readonly _tag: "text" } & ValueType)
+  | { readonly _tag: "wildcard" };
+
+/**
+ * Read the type of a complex type's simple content: the base its `xs:extension` extends, through
+ * the simple content of a complex base.
+ *
+ * @param schema - The schema the type is in.
+ * @param simpleContent - The type's `xs:simpleContent` element.
+ * @returns The text's type, or an {@link XsdReadingError} for a `simpleContent` restriction, which
+ *   the reading rules do not read, or a complex base with no simple content.
+ */
+const textTypeOf = (
+  schema: XsdSchema,
+  simpleContent: Element,
+): Result.Result<ValueType, XsdReadingError> =>
+  Result.gen(function* textTypeOfBody() {
+    const step = yield* requireChild(simpleContent, ["extension", "restriction"]);
+
+    if (!isXs(step, "extension")) {
+      return yield* refuse("a simpleContent restriction is not read");
+    }
+
+    const lexical = yield* requireAttribute(step, "base");
+    const base = componentOf(schema, schema.complexTypes, yield* resolve(schema, lexical));
+
+    if (Option.isNone(base)) {
+      return yield* valueTypeOf(schema, { _tag: "Named", lexical });
+    }
+
+    return yield* Option.match(firstXs(base.value, "simpleContent"), {
+      onNone: () =>
+        refuse(`a simpleContent extends the complex type ${lexical}, which has no simple content`),
+      onSome: (inherited) => textTypeOf(schema, inherited),
+    });
+  });
+
+/**
+ * Read a complex type's content class, by the rule of the module comment.
+ *
+ * Public, and stable while the vocabularies are derived: a vocabulary that reads a type's content
+ * without {@link entryOfType} classes it with it.
+ *
+ * @param schema - The schema the type is in.
+ * @param complexType - The `xs:complexType` element.
+ * @param reading - Its content, as {@link contentOf} reads it.
+ * @returns The class, or an {@link XsdReadingError} for a shape the reading rules do not cover.
+ */
+export const contentClassOf = (
+  schema: XsdSchema,
+  complexType: Element,
+  reading: ContentReading,
+): Result.Result<Content, XsdReadingError> =>
+  Result.gen(function* contentClassOfBody() {
+    const simple = firstXs(complexType, "simpleContent");
+
+    if (Option.isSome(simple)) {
+      return { _tag: "text", ...(yield* textTypeOf(schema, simple.value)) };
+    }
+
+    if (yield* mixedOf(schema, complexType)) {
+      return { _tag: "mixed" };
+    }
+
+    if (reading.references.length > 0) {
+      return { _tag: "element" };
+    }
+
+    return reading.wildcard ? { _tag: "wildcard" } : { _tag: "empty" };
   });
 
 /**
@@ -1181,10 +1529,13 @@ const countOf = (particle: Element, value: string): Result.Result<number, XsdRea
 /**
  * The occurrence a particle's `minOccurs` and `maxOccurs` state, each 1 when absent.
  *
+ * Public, and stable while the vocabularies are derived: `sequences.ts` reads content models'
+ * structure with it.
+ *
  * @param particle - An element, a compositor, a group reference or a wildcard.
  * @returns Its occurrence.
  */
-const occursOf = (particle: Element): Result.Result<Occurs, XsdReadingError> =>
+export const occursOf = (particle: Element): Result.Result<Occurs, XsdReadingError> =>
   Result.gen(function* occursOfBody() {
     const min = attributeOf(particle, "minOccurs");
     const max = Option.getOrElse(attributeOf(particle, "maxOccurs"), () => "1");
@@ -1234,10 +1585,13 @@ export const qualify = (schema: XsdSchema, local: string): string =>
 /**
  * Whether an element declaration is abstract, so that no element of its name is valid.
  *
+ * Public, and stable while the vocabularies are derived: the content-model IR skips abstract
+ * declarations with it.
+ *
  * @param declaration - The `xs:element` element.
  * @returns Whether it says `abstract="true"`.
  */
-const isAbstract = (declaration: Element): boolean =>
+export const isAbstract = (declaration: Element): boolean =>
   Option.contains(attributeOf(declaration, "abstract"), "true");
 
 /**
@@ -1277,12 +1631,15 @@ const substitutesOf = (
  * it, unless it names a top-level element of this schema that is abstract or heads a substitution
  * group: then it stands for every element {@link substitutesOf} admits for it.
  *
+ * Public, and stable while the vocabularies are derived: `sequences.ts` reads content models'
+ * structure with it.
+ *
  * @param schema - The schema the particle is in.
  * @param particle - The `xs:element` particle.
  * @returns The names, in order, or an {@link XsdReadingError} for a particle with neither a
  *   `name` nor a `ref`.
  */
-const particleNames = (
+export const particleNames = (
   schema: XsdSchema,
   particle: Element,
 ): Result.Result<readonly string[], XsdReadingError> =>
@@ -1315,10 +1672,13 @@ const particleNames = (
 /**
  * The particles a compositor or a group definition holds, in order.
  *
+ * Public, and stable while the vocabularies are derived: `sequences.ts` reads content models'
+ * structure with it.
+ *
  * @param node - The parent construct.
  * @returns Its children other than annotations.
  */
-const particlesOf = (node: Element): readonly Element[] =>
+export const particlesOf = (node: Element): readonly Element[] =>
   elementsOf(node).filter((child) => !isXs(child, "annotation"));
 
 /**
@@ -1399,11 +1759,14 @@ const readParticles = (
  * The particles a complex type's content states, with its base type's ahead of them for an
  * extension.
  *
+ * Public, and stable while the vocabularies are derived: `sequences.ts` reads content models'
+ * structure with it.
+ *
  * @param schema - The schema the type is in.
  * @param complexType - The `xs:complexType` element.
  * @returns The particles, in content order.
  */
-const contentParticles = (
+export const contentParticles = (
   schema: XsdSchema,
   complexType: Element,
 ): Result.Result<readonly Element[], XsdReadingError> =>
@@ -1759,11 +2122,12 @@ export const vocabularies = {
 } as const satisfies { readonly [Name in Leaf]: Vocabulary };
 
 /**
- * What the inventory records for one kind handle.
+ * What the inventory records for one kind handle: its kind, its content as read and its content
+ * class, and its attributes.
  */
 export interface Entry extends KindSpec, ContentReading {
   readonly attributes: readonly AttributeRow[];
-  readonly mixed: boolean;
+  readonly content: Content;
 }
 
 /**
@@ -1794,7 +2158,7 @@ export const soleTypeOf = (
 
 /**
  * Read one kind's inventory entry from its complex type: the type's attributes, content and
- * mixedness, by the reading rules of the module comment.
+ * content class, by the reading rules of the module comment.
  *
  * Public, and stable while the vocabularies are derived: a vocabulary whose kinds have anonymous
  * types reads its entries with it.
@@ -1816,16 +2180,18 @@ export const entryOfType = (
       attributes.push(yield* attributeRow(schema, declaration));
     }
 
+    const reading = yield* contentOf(schema, complexType);
+
     return {
       ...kind,
-      ...(yield* contentOf(schema, complexType)),
+      ...reading,
       attributes,
-      mixed: yield* mixedOf(schema, complexType),
+      content: yield* contentClassOf(schema, complexType, reading),
     };
   });
 
 /**
- * Read one kind's inventory entry: its type's attributes, content and mixedness, by the reading
+ * Read one kind's inventory entry: its type's attributes, content and content class, by the reading
  * rules of the module comment.
  *
  * Public, and stable while the vocabularies are derived: every vocabulary whose kinds have named
@@ -1880,6 +2246,7 @@ export const entriesOf = (
  */
 export interface SchemaSet {
   readonly documents: ReadonlyMap<SourcePath, XmlDocument>;
+  readonly placed: ReadonlyMap<SourcePath, Placed>;
   readonly schema: XsdSchema;
 }
 
@@ -2089,8 +2456,30 @@ const declaredTypeOf = (
  */
 const attributesKey = (rows: readonly AttributeRow[]): string =>
   JSON.stringify(
-    rows.map((row) => [row.name, row.type, row.use, row.whiteSpace, Option.getOrNull(row.default)]),
+    rows.map((row) => [
+      row.name,
+      row.type,
+      Option.getOrNull(row.inline),
+      row.use,
+      row.whiteSpace,
+      Option.getOrNull(row.default),
+    ]),
   );
+
+/**
+ * A key that two content classes share exactly when they admit the same character data: none,
+ * text between children, or text alone of one type.
+ *
+ * @param content - The content class.
+ * @returns The key.
+ */
+const characterDataKey = (content: Content): string => {
+  if (content._tag === "text") {
+    return JSON.stringify([content.type, Option.getOrNull(content.inline)]);
+  }
+
+  return content._tag === "mixed" ? "mixed" : "none";
+};
 
 /**
  * One MathML kind as read: its inventory entry and the complex type the entry was read from.
@@ -2102,7 +2491,7 @@ export interface MathmlReading {
 
 /**
  * The widest of an element's declarations: the one that admits every child the others admit, a
- * wildcard if any of them does, with the same attributes and the same mixedness.
+ * wildcard if any of them does, with the same attributes and the same character data.
  *
  * @param name - The element's name.
  * @param candidates - The reading each declaration gives, in reading order.
@@ -2117,7 +2506,7 @@ const widestOf = (
   const covers = (wide: MathmlReading, narrow: MathmlReading): boolean =>
     [...namesOf(narrow)].every((child) => namesOf(wide).has(child)) &&
     attributesKey(wide.entry.attributes) === attributesKey(narrow.entry.attributes) &&
-    wide.entry.mixed === narrow.entry.mixed &&
+    characterDataKey(wide.entry.content) === characterDataKey(narrow.entry.content) &&
     (wide.entry.wildcard || !narrow.entry.wildcard);
 
   return Option.match(
@@ -2253,59 +2642,368 @@ const commentOf = (paragraphs: readonly (readonly string[])[]): readonly string[
 ];
 
 /**
- * The helper functions and type imports every leaf opens with, after its module comment.
+ * A helper a leaf may define after its imports: the types it imports for it, and its definition's
+ * lines.
  */
-const leafPreamble: readonly string[] = [
-  'import { Option } from "effect";',
-  "",
-  "import type {",
-  "  InventoryAttribute,",
-  "  InventoryChild,",
-  "  InventoryLeaf,",
-  '} from "#pantry/schema/content/xsd-inventory.ts";',
-  "",
-  ...commentOf([
-    ["Build an attribute row from its declaration."],
-    [
-      "@param name - The attribute name as the XSD spells it.",
-      "@param type - The declared type name, or the base of an inline type.",
-      "@param use - Whether the XSD requires the attribute.",
-      "@param family - Which attribute family the name belongs to.",
-      "@param whiteSpace - The `whiteSpace` class of the declared type.",
-      "@param defaultValue - The XSD `default`, absent when none is declared.",
-      "@returns The attribute row.",
+interface Builder {
+  readonly imports: readonly string[];
+  readonly lines: readonly string[];
+}
+
+/**
+ * The `@param` lines of an attribute row's builders, after the type's.
+ */
+const rowParams = [
+  "@param use - Whether the XSD requires the attribute.",
+  "@param family - Which attribute family the name belongs to.",
+  "@param whiteSpace - The `whiteSpace` class of the declared type.",
+  "@param defaultValue - The XSD `default`, absent when none is declared.",
+  "@returns The attribute row.",
+] as const;
+
+/**
+ * The helpers a leaf defines, by name, each written only into a leaf that calls it, in this order.
+ * A leaf's rows are calls of these, so its entries stay one expression per row.
+ */
+const builders = {
+  attribute: {
+    imports: ["InventoryAttribute"],
+    lines: [
+      ...commentOf([
+        ["Build an attribute row from a declaration of a named type."],
+        [
+          "@param name - The attribute name as the XSD spells it.",
+          "@param type - The declared type's name.",
+          ...rowParams,
+        ],
+      ]),
+      "const attribute = (",
+      "  name: string,",
+      "  type: string,",
+      '  use: InventoryAttribute["use"],',
+      '  family: InventoryAttribute["family"],',
+      '  whiteSpace: InventoryAttribute["whiteSpace"],',
+      "  defaultValue?: string,",
+      "): InventoryAttribute => ({",
+      "  default: Option.fromNullishOr(defaultValue),",
+      "  family,",
+      "  inline: Option.none(),",
+      "  name,",
+      "  type,",
+      "  use,",
+      "  whiteSpace,",
+      "});",
     ],
-  ]),
-  "const attribute = (",
-  "  name: string,",
-  "  type: string,",
-  '  use: InventoryAttribute["use"],',
-  '  family: InventoryAttribute["family"],',
-  '  whiteSpace: InventoryAttribute["whiteSpace"],',
-  "  defaultValue?: string,",
-  "): InventoryAttribute => ({",
-  "  default: Option.fromNullishOr(defaultValue),",
-  "  family,",
-  "  name,",
-  "  type,",
-  "  use,",
-  "  whiteSpace,",
-  "});",
-  "",
-  ...commentOf([
-    ["Build a child row from an element reference."],
-    [
-      "@param name - The referenced element name as the XSD spells it.",
-      "@param min - The effective minimum occurrence.",
-      "@param max - The effective maximum occurrence, `None` when unbounded.",
-      "@returns The child row.",
+  },
+  child: {
+    imports: ["InventoryChild"],
+    lines: [
+      ...commentOf([
+        ["Build a child row from an element reference."],
+        [
+          "@param name - The referenced element name as the XSD spells it.",
+          "@param min - The effective minimum occurrence.",
+          "@param max - The effective maximum occurrence, `None` when unbounded.",
+          "@returns The child row.",
+        ],
+      ]),
+      "const child = (name: string, min: number, max: Option.Option<number>): InventoryChild => ({",
+      "  max,",
+      "  min,",
+      "  name,",
+      "});",
     ],
+  },
+  inlineAttribute: {
+    imports: ["InventoryAttribute", "InventoryValueType"],
+    lines: [
+      ...commentOf([
+        ["Build an attribute row from a declaration of an anonymous type."],
+        [
+          "@param name - The attribute name as the XSD spells it.",
+          "@param type - The anonymous type, as one of the leaf's constants holds it.",
+          "@param use - Whether the XSD requires the attribute.",
+          "@param family - Which attribute family the name belongs to.",
+          "@param defaultValue - The XSD `default`, absent when none is declared.",
+          "@returns The attribute row.",
+        ],
+      ]),
+      "const inlineAttribute = (",
+      "  name: string,",
+      "  type: InventoryValueType,",
+      '  use: InventoryAttribute["use"],',
+      '  family: InventoryAttribute["family"],',
+      "  defaultValue?: string,",
+      "): InventoryAttribute => ({",
+      "  ...type,",
+      "  default: Option.fromNullishOr(defaultValue),",
+      "  family,",
+      "  name,",
+      "  use,",
+      "});",
+    ],
+  },
+  inlineText: {
+    imports: ["InventoryContent", "InventoryValueType"],
+    lines: [
+      ...commentOf([
+        ["Build the content class of a kind whose text is of an anonymous type."],
+        [
+          "@param type - The anonymous type, as one of the leaf's constants holds it.",
+          "@returns The `text` class.",
+        ],
+      ]),
+      'const inlineText = (type: InventoryValueType): InventoryContent => ({ _tag: "text", ...type });',
+    ],
+  },
+  inlineType: {
+    imports: ["InventoryInlineType", "InventoryValueType"],
+    lines: [
+      ...commentOf([
+        ["Build an anonymous simple type as the rows that declare it read it."],
+        [
+          "@param type - The type's designator: `list`, `union` or its restriction's base.",
+          "@param whiteSpace - The type's `whiteSpace` class.",
+          "@param definition - The type's definition.",
+          "@returns The value type.",
+        ],
+      ]),
+      "const inlineType = (",
+      "  type: string,",
+      '  whiteSpace: InventoryValueType["whiteSpace"],',
+      "  definition: InventoryInlineType,",
+      "): InventoryValueType => ({ inline: Option.some(definition), type, whiteSpace });",
+    ],
+  },
+  list: {
+    imports: ["InventoryInlineType", "InventoryType"],
+    lines: [
+      ...commentOf([
+        ["Build an anonymous list type."],
+        ["@param item - The list's item type.", "@returns The definition."],
+      ]),
+      'const list = (item: InventoryType): InventoryInlineType => ({ _tag: "list", item });',
+    ],
+  },
+  named: {
+    imports: ["InventoryType"],
+    lines: [
+      ...commentOf([
+        ["Refer to a named simple type."],
+        ["@param name - The type's QName, a built-in spelled `xs:`.", "@returns The reference."],
+      ]),
+      'const named = (name: string): InventoryType => ({ _tag: "named", name });',
+    ],
+  },
+  restriction: {
+    imports: ["InventoryFacetName", "InventoryInlineType", "InventoryType"],
+    lines: [
+      ...commentOf([
+        ["Build an anonymous restriction."],
+        [
+          "@param base - The restricted type.",
+          "@param facets - Its facets in XSD order, each as its name and its value.",
+          "@returns The definition.",
+        ],
+      ]),
+      "const restriction = (",
+      "  base: InventoryType,",
+      "  ...facets: readonly (readonly [InventoryFacetName, string])[]",
+      "): InventoryInlineType => ({",
+      '  _tag: "restriction",',
+      "  base,",
+      "  facets: facets.map(([facet, value]) => ({ facet, value })),",
+      "});",
+    ],
+  },
+  text: {
+    imports: ["InventoryContent", "InventoryValueType"],
+    lines: [
+      ...commentOf([
+        ["Build the content class of a kind whose text is of a named type."],
+        [
+          "@param type - The type's name.",
+          "@param whiteSpace - The type's `whiteSpace` class.",
+          "@returns The `text` class.",
+        ],
+      ]),
+      'const text = (type: string, whiteSpace: InventoryValueType["whiteSpace"]): InventoryContent => ({',
+      '  _tag: "text",',
+      "  inline: Option.none(),",
+      "  type,",
+      "  whiteSpace,",
+      "});",
+    ],
+  },
+  union: {
+    imports: ["InventoryInlineType", "InventoryType"],
+    lines: [
+      ...commentOf([
+        ["Build an anonymous union type."],
+        ["@param members - The member types, in XSD order.", "@returns The definition."],
+      ]),
+      "const union = (...members: readonly InventoryType[]): InventoryInlineType => ({",
+      '  _tag: "union",',
+      "  members,",
+      "});",
+    ],
+  },
+} as const satisfies Readonly<Record<string, Builder>>;
+
+/**
+ * The name of a helper a leaf may define.
+ */
+type BuilderName = keyof typeof builders;
+
+/**
+ * The helpers' names, in the order a leaf defines them.
+ */
+const builderNames: readonly BuilderName[] = Object.keys(builders).filter(
+  (name): name is BuilderName => Object.hasOwn(builders, name),
+);
+
+/**
+ * Write the imports and the helpers a leaf opens with, after its module comment.
+ *
+ * @param used - The helpers the leaf calls.
+ * @returns The lines: `Option`, the inventory types the helpers name, then each helper used.
+ */
+const preambleOf = (used: ReadonlySet<BuilderName>): readonly string[] => {
+  const chosen = builderNames.filter((name) => used.has(name));
+  const imports = Arr.sort(
+    Arr.dedupe(["InventoryLeaf", ...chosen.flatMap((name) => builders[name].imports)]),
+    Order.String,
+  );
+
+  return [
+    'import { Option } from "effect";',
+    "",
+    "import type {",
+    ...imports.map((name) => `  ${name},`),
+    '} from "#pantry/schema/content/xsd-inventory.ts";',
+    "",
+    ...chosen.flatMap((name) => [...builders[name].lines, ""]),
+  ];
+};
+
+/**
+ * One anonymous type a leaf defines once, before its entries: the constant's name, the type as the
+ * rows that declare it read it, and its first declaration, as the constant's comment names it.
+ */
+interface Hoisted {
+  readonly definition: InlineType;
+  readonly name: string;
+  readonly origin: string;
+  readonly type: string;
+  readonly whiteSpace: WhiteSpace;
+}
+
+/**
+ * The anonymous types a leaf's entries declare, each distinct one once, named as the leaf's rows
+ * are written.
+ *
+ * `nameFor` gives the constant an anonymous value type is written as: the one an earlier
+ * declaration of the same type was given, else a fresh name from `stem`, with `2`, `3`, … appended
+ * when an earlier type took it. `hoisted` lists the types in first-use order.
+ */
+interface Hoisting {
+  readonly hoisted: readonly Hoisted[];
+  readonly nameFor: (
+    definition: InlineType,
+    read: Pick<ValueType, "type" | "whiteSpace">,
+    stem: string,
+    origin: string,
+  ) => string;
+}
+
+/**
+ * Start collecting a leaf's anonymous types.
+ *
+ * @returns An empty {@link Hoisting}.
+ */
+const hoistingOf = (): Hoisting => {
+  const hoisted: Hoisted[] = [];
+  const names = new Map<string, string>();
+  const taken = new Set<string>();
+
+  return {
+    hoisted,
+    nameFor: (definition, { type, whiteSpace }, stem, origin) => {
+      const key = JSON.stringify([type, whiteSpace, definition]);
+      const known = names.get(key);
+
+      if (known !== undefined) {
+        return known;
+      }
+
+      let name = stem;
+
+      for (let suffix = 2; taken.has(name); suffix += 1) {
+        name = `${stem}${suffix}`;
+      }
+
+      names.set(key, name);
+      taken.add(name);
+      hoisted.push({ definition, name, origin, type, whiteSpace });
+
+      return name;
+    },
+  };
+};
+
+/**
+ * Write a name in lower camel case, as an identifier: `aria-current` is `ariaCurrent`, `xml:lang`
+ * is `xmlLang`.
+ *
+ * @param name - An attribute name or a kind handle.
+ * @returns The identifier stem.
+ */
+const camelOf = (name: string): string =>
+  name
+    .split(/[^A-Za-z0-9]+/u)
+    .filter((part) => part !== "")
+    .map((part, index) =>
+      index === 0
+        ? `${part.charAt(0).toLowerCase()}${part.slice(1)}`
+        : `${part.charAt(0).toUpperCase()}${part.slice(1)}`,
+    )
+    .join("");
+
+/**
+ * Write a type reference as a leaf builds it: the call of its type's helper, nested types in place.
+ *
+ * @param type - The type.
+ * @returns The expression.
+ */
+const typeExpression = (type: TypeReading): string =>
+  Match.valueTags(type, {
+    list: ({ item }) => `list(${typeExpression(item)})`,
+    named: ({ name }) => `named(${JSON.stringify(name)})`,
+    restriction: ({ base, facets }) =>
+      `restriction(${[
+        typeExpression(base),
+        ...facets.map(({ facet, value }) => `[${JSON.stringify(facet)}, ${JSON.stringify(value)}]`),
+      ].join(", ")})`,
+    union: ({ members }) => `union(${members.map(typeExpression).join(", ")})`,
+  });
+
+/**
+ * Write the constant of one anonymous type a leaf defines.
+ *
+ * @param hoisted - The type.
+ * @returns Its comment and its declaration.
+ */
+const hoistedLines = ({
+  definition,
+  name,
+  origin,
+  type,
+  whiteSpace,
+}: Hoisted): readonly string[] => [
+  ...commentOf([
+    [`The anonymous type of ${origin}, which every declaration of the same definition shares.`],
   ]),
-  "const child = (name: string, min: number, max: Option.Option<number>): InventoryChild => ({",
-  "  max,",
-  "  min,",
-  "  name,",
-  "});",
+  `const ${name} = inlineType(${JSON.stringify(type)}, ${JSON.stringify(whiteSpace)}, ${typeExpression(definition)});`,
   "",
 ];
 
@@ -2324,20 +3022,34 @@ const arrayLines = (key: string, items: readonly string[]): readonly string[] =>
 /**
  * Write the call that builds one attribute row.
  *
+ * @param handle - The kind the row is an attribute of.
  * @param row - The row.
- * @returns The `attribute(...)` call, the default last when one is declared.
+ * @param hoisting - Where the leaf's anonymous types are collected.
+ * @returns The `attribute(...)` call for a named type, or the `inlineAttribute(...)` call that names
+ *   the constant of its anonymous type; the default last when one is declared.
  */
-const attributeCall = (row: AttributeRow): string => {
-  const args = [
-    row.name,
-    row.type,
-    row.use,
-    row.family,
-    row.whiteSpace,
-    ...Option.toArray(row.default),
-  ];
+const attributeCall = (handle: string, row: AttributeRow, hoisting: Hoisting): string => {
+  const name = JSON.stringify(row.name);
+  const declared = [row.use, row.family].map((arg) => JSON.stringify(arg));
+  const fallback = Option.toArray(row.default).map((arg) => JSON.stringify(arg));
 
-  return `attribute(${args.map((arg) => JSON.stringify(arg)).join(", ")})`;
+  return Option.match(row.inline, {
+    onNone: () => {
+      const typed = [JSON.stringify(row.type), ...declared, JSON.stringify(row.whiteSpace)];
+
+      return `attribute(${[name, ...typed, ...fallback].join(", ")})`;
+    },
+    onSome: (definition) => {
+      const type = hoisting.nameFor(
+        definition,
+        row,
+        `${camelOf(row.name)}Type`,
+        `\`${row.name}\` on \`${handle}\``,
+      );
+
+      return `inlineAttribute(${[name, type, ...declared, ...fallback].join(", ")})`;
+    },
+  });
 };
 
 /**
@@ -2356,21 +3068,104 @@ const childCall = ({ name, occurs }: Reference): string => {
 };
 
 /**
+ * Write an entry's content class as a leaf builds it.
+ *
+ * @param handle - The kind.
+ * @param content - Its content class.
+ * @param hoisting - Where the leaf's anonymous types are collected.
+ * @returns A `text(...)` call for text of a named type, an `inlineText(...)` call that names the
+ *   constant of an anonymous one, else the class's object.
+ */
+const contentExpression = (handle: string, content: Content, hoisting: Hoisting): string => {
+  if (content._tag !== "text") {
+    return `{ _tag: ${JSON.stringify(content._tag)} }`;
+  }
+
+  return Option.match(content.inline, {
+    onNone: () => `text(${JSON.stringify(content.type)}, ${JSON.stringify(content.whiteSpace)})`,
+    onSome: (definition) =>
+      `inlineText(${hoisting.nameFor(definition, content, `${camelOf(handle)}Text`, `the text of \`${handle}\``)})`,
+  });
+};
+
+/**
  * Write one entry of a leaf's inventory object.
  *
  * @param entry - The entry.
+ * @param hoisting - Where the leaf's anonymous types are collected.
  * @returns Its lines, from its key to its closing brace.
  */
-const entryLines = (entry: Entry): readonly string[] => [
+const entryLines = (entry: Entry, hoisting: Hoisting): readonly string[] => [
   `  ${JSON.stringify(entry.handle)}: {`,
-  ...arrayLines("attributes", entry.attributes.map(attributeCall)),
+  ...arrayLines(
+    "attributes",
+    entry.attributes.map((row) => attributeCall(entry.handle, row, hoisting)),
+  ),
   ...arrayLines("children", entry.references.map(childCall)),
+  `    content: ${contentExpression(entry.handle, entry.content, hoisting)},`,
   `    element: ${JSON.stringify(entry.element)},`,
   `    handle: ${JSON.stringify(entry.handle)},`,
-  `    mixed: ${entry.mixed},`,
   `    type: ${JSON.stringify(entry.type)},`,
   "  },",
 ];
+
+/**
+ * The types a type refers to: a list's item type, a restriction's base, a union's members, and none
+ * for a named type.
+ *
+ * @param type - The type.
+ * @returns The types it refers to, in order.
+ */
+const nestedTypesOf = (type: TypeReading): readonly TypeReading[] =>
+  Match.valueTags(type, {
+    list: ({ item }) => [item],
+    named: () => [],
+    restriction: ({ base }) => [base],
+    union: ({ members }) => members,
+  });
+
+/**
+ * The helpers a leaf calls: an attribute builder per row's kind of type, `child` for a reference,
+ * a `text` builder per text class, and the builder of every anonymous type its constants nest.
+ *
+ * @param entries - The leaf's entries.
+ * @param hoisted - Its anonymous types.
+ * @returns The helpers' names.
+ */
+const usedBuilders = (
+  entries: readonly Entry[],
+  hoisted: readonly Hoisted[],
+): ReadonlySet<BuilderName> => {
+  const used = new Set<BuilderName>();
+  const visit = (type: TypeReading): void => {
+    used.add(type._tag);
+
+    for (const nested of nestedTypesOf(type)) {
+      visit(nested);
+    }
+  };
+
+  for (const entry of entries) {
+    for (const row of entry.attributes) {
+      used.add(Option.isSome(row.inline) ? "inlineAttribute" : "attribute");
+    }
+
+    if (entry.references.length > 0) {
+      used.add("child");
+    }
+
+    if (entry.content._tag === "text") {
+      used.add(Option.isSome(entry.content.inline) ? "inlineText" : "text");
+    }
+  }
+
+  for (const { definition } of hoisted) {
+    used.add("inlineType");
+    visit(definition);
+  }
+
+  return used;
+};
 
 /**
  * The largest choice group a leaf's module comment lists; the larger ones are the content sets.
@@ -2429,12 +3224,21 @@ const proseList = (names: readonly string[]): string =>
   names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""}`;
 
 /**
+ * The directive a leaf opens with when a constant of one of its anonymous types is named after
+ * QTI's `shape` attribute: the lint refuses the word in a symbol, read as a description of
+ * structure, and here it is the vocabulary's own name, as in `src/grammar/attributes.ts`.
+ */
+export const attributeNameDirective =
+  "/* oxlint-disable anti-slop/no-shape-in-symbol-names -- Each anonymous type's constant is named after the attribute that declares it, and `shape` is the attribute QTI names, not a structural description. */";
+
+/**
  * Write an inventory leaf module, unformatted.
  *
  * Public, and stable while the vocabularies are derived. The module comment states the entry
  * count, the command, its sources and test, the attribute declarations by `whiteSpace` class, the
- * spec's notes and the choice groups of two to six members; then come the helpers every leaf
- * shares and the entries, in the order given.
+ * spec's notes and the choice groups of two to six members. Then come the helpers the leaf calls,
+ * each anonymous type its entries declare as one constant per distinct definition, in first-use
+ * order, and the entries, in the order given.
  *
  * @param spec - What the leaf says about itself.
  * @param entries - Its entries, in the order the leaf lists them.
@@ -2454,8 +3258,11 @@ export const renderLeaf = (spec: LeafSpec, entries: readonly Entry[]): string =>
     return listed.length === 0 ? [] : [`- \`${entry.handle}\`: ${listed.join("; ")}`];
   });
   const read = proseList(spec.sources.map((source) => `\`${source}\``));
+  const hoisting = hoistingOf();
+  const body = entries.flatMap((entry) => entryLines(entry, hoisting));
 
   return [
+    ...(hoisting.hoisted.some(({ name }) => /shape/iu.test(name)) ? [attributeNameDirective] : []),
     ...commentOf([
       [
         `The derived XSD inventory of the ${spec.label} vocabulary: one entry per kind handle, ${entries.length} entries.`,
@@ -2469,10 +3276,11 @@ export const renderLeaf = (spec: LeafSpec, entries: readonly Entry[]): string =>
       ],
       groups,
     ]),
-    ...leafPreamble,
+    ...preambleOf(usedBuilders(entries, hoisting.hoisted)),
+    ...hoisting.hoisted.flatMap(hoistedLines),
     ...commentOf([[`The ${spec.label} inventory, keyed by kind handle.`]]),
     `export const ${spec.exportName}: InventoryLeaf = {`,
-    ...entries.flatMap(entryLines),
+    ...body,
     "};",
   ].join("\n");
 };
@@ -2809,7 +3617,7 @@ export const printArity = (rows: readonly ArityRow[]): string =>
 /**
  * The targets the deriver prints, in the order its help lists them.
  */
-const targetNames = ["asi", "html", "processing", "sets", "arity", "mathml"] as const;
+const targetNames = ["asi", "html", "processing", "sets", "arity"] as const;
 
 /**
  * The name of a target the deriver prints.
@@ -2846,19 +3654,6 @@ const targets = {
   },
   asi: leafTarget("asi"),
   html: leafTarget("html"),
-  mathml: {
-    print: (set) =>
-      Result.map(mathmlEntriesOf(set), (entries) =>
-        renderLeaf(
-          mathmlLeaf,
-          Arr.sort(
-            entries,
-            Order.mapInput(Order.String, (entry: Entry) => entry.handle),
-          ),
-        ),
-      ),
-    source: mathmlSource,
-  },
   processing: leafTarget("processing"),
   sets: {
     print: ({ schema }) => Result.map(contentSetsOf(schema), printContentSets),
@@ -2934,22 +3729,24 @@ export const loadSchemaSet = Effect.fn("vocab.loadSchemaSet")(function* loadSche
   path: SourcePath,
 ) {
   const documents = new Map<SourcePath, XmlDocument>();
+  const placed = new Map<SourcePath, Placed>();
   const pending: SourcePath[] = [path];
 
   while (pending.length > 0) {
     const next = pending.shift();
 
     if (next !== undefined && !documents.has(next)) {
-      const document = yield* readSource(next);
+      const read = yield* readPlaced(next);
 
-      documents.set(next, document);
-      pending.unshift(...(yield* Effect.fromResult(includesOf(next, document))));
+      documents.set(next, read.document);
+      placed.set(next, read);
+      pending.unshift(...(yield* Effect.fromResult(includesOf(next, read.document))));
     }
   }
 
   const schema = yield* Effect.fromResult(indexSchemas([...documents.values()]));
 
-  return { documents, schema } satisfies SchemaSet;
+  return { documents, placed, schema } satisfies SchemaSet;
 });
 
 /**

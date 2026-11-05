@@ -38,7 +38,7 @@ const measure = (family: Family): ((value: string) => number) | undefined => {
   if (family === "base64") {
     return (value) => {
       const digits = value.replaceAll(" ", "");
-      const padding = /=*$/u.exec(digits)?.[0].length ?? 0;
+      const padding = /[=]*$/u.exec(digits)?.[0].length ?? 0;
 
       return (digits.length / 4) * 3 - padding;
     };

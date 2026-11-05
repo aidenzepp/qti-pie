@@ -1,0 +1,672 @@
+import { assert, describe, it } from "@effect/vitest";
+import { drawn, explore } from "@grizzle/testing/explore";
+import { required } from "@grizzle/testing/features";
+import type { Pending } from "@grizzle/testing/features";
+import { element, int, shuffled } from "@grizzle/testing/gen";
+import { notesOnly } from "@grizzle/testing/sense";
+import { completeShrink } from "@grizzle/testing/shrink";
+import { searched } from "@grizzle/testing/vitest";
+import { Array as Arr, Effect, Formatter, Option, Result } from "effect";
+import { rowOf } from "#pantry/grammar/ancestry.ts";
+import type { Ancestry } from "#pantry/grammar/ancestry.ts";
+import { composed } from "#pantry/grammar/compose.ts";
+import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
+import type { Kind } from "#pantry/grammar/compose.ts";
+import { foldGrammarOf } from "#pantry/model/composed.ts";
+import type { Composed } from "#pantry/model/composed.ts";
+import { fold } from "#pantry/model/folds.ts";
+import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
+import type {
+  ClosedName,
+  ElementKind,
+  XdmAttribute,
+  XdmChild,
+  XdmDocument,
+} from "#pantry/model/xdm.ts";
+import {
+  caseHang,
+  searchTimeout,
+  admissibleVariants,
+  closedElements,
+  corrupt,
+  corruption,
+  editElement,
+  featuresOf,
+  idOf,
+  invalidVariants,
+  lawOf,
+  xdmDocument,
+} from "#pantry/test/gen/xdm.ts";
+import type { GeneratedXdm, InvalidVariant, XdmFeature } from "#pantry/test/gen/xdm.ts";
+import { documentBreaches, lawsOf, nodeLawNames } from "#pantry/test/oracle.ts";
+import type { NodeLawName } from "#pantry/test/oracle.ts";
+
+/**
+ * The composed grammar every property draws its trees over and folds them under.
+ */
+const grammar = Result.getOrThrow(composed());
+
+/**
+ * The relations the folds read, projected from the grammar once.
+ */
+const foldGrammar = foldGrammarOf(grammar);
+
+/**
+ * The host's law model: the oracle's tables over the grammar, derived once.
+ */
+const laws = lawsOf(grammar);
+
+/**
+ * The trees every property is checked over: the one generator's, over the composed grammar.
+ */
+const documents = xdmDocument(grammar);
+
+/**
+ * The features a search over generated trees must reach on its witnesses.
+ */
+const reached = required<XdmFeature>(
+  [
+    "element",
+    "wildcard",
+    "text",
+    "ws",
+    "comment",
+    "pi",
+    "entityRef",
+    "attribute",
+    "openName",
+    "doctype",
+  ],
+  { cases: 300, sense: notesOnly },
+);
+
+/**
+ * Fold a document, which is total on the trees the generator builds.
+ *
+ * @param document - The tree.
+ * @returns Its folded rows under {@link idOf}; a defect when the fold refuses it.
+ */
+const foldedOf = (document: XdmDocument<Composed>) =>
+  Effect.orDie(Effect.fromResult(fold(document, idOf, foldGrammar)));
+
+/**
+ * The node rows of a tree by their number in document order.
+ *
+ * @param rows - The rows.
+ * @param number - A node's number.
+ * @returns The row.
+ */
+const nodeAt = (rows: FoldedRows<Composed>, number: number): FoldedNode<Composed> =>
+  rows.nodes[number] ?? assert.fail(`no node numbered ${String(number)}`);
+
+/**
+ * List a set's members in one order, so two sets compare as lists.
+ *
+ * @param set - The set.
+ * @returns Its members, each spelled as a string, in string order.
+ */
+const sorted = (set: ReadonlySet<number | string>): readonly string[] =>
+  [...set].map(String).toSorted();
+
+/**
+ * Whether a kind is an interaction, which N8 makes its children's nearest.
+ *
+ * @param kind - The kind.
+ * @returns Whether `Interaction` holds it.
+ */
+const isInteraction = (kind: Kind): boolean =>
+  Option.isSome(grammar.kinds.interaction.lookup({ kind }));
+
+/**
+ * An exploration of the generator's trees, with the settings every property here shares.
+ *
+ * @param suite - The suite's label.
+ * @returns The exploration's settings.
+ */
+const over = (suite: string) =>
+  ({
+    caseHang,
+    concurrency: 1,
+    coverage: reached,
+    draw: drawn(documents),
+    kept: [],
+    literal: Formatter.format,
+    runs: 300,
+    shrink: completeShrink,
+    steerEvery: 16,
+    suite,
+  }) as const;
+
+describe("fold over generated trees", { timeout: searchTimeout }, () => {
+  it.effect(
+    "is total on valid trees and holds Node(parent, at)'s invariants where the generator's model places each node",
+    (ctx) =>
+      // Oracle: a second implementation, the generator's model of the tree, its intervals written as
+      // it closed each subtree, and the specification as a checker, plan §1.3's N1 to N3 and
+      // trees.md's T2: a self-parented sentinel alone at start 0, each family's slots 0 to n − 1,
+      // each parentStart its parent's start, one row per node.
+      // Bound: the generator's drawn bounds, up to 200 nodes and depth 7 a tree.
+      searched(
+        ctx,
+        explore(over("model/folds-node-invariants"), ({ document, model }, c) =>
+          Effect.gen(function* nodeInvariants() {
+            c.noteAll(featuresOf(document));
+
+            const rows = yield* foldedOf(document);
+            const sentinel = nodeAt(rows, 0);
+            const children = (number: number) =>
+              model.filter((placed, index) => index > 0 && placed.parent === number).length;
+
+            assert.deepStrictEqual(
+              rows.nodes.map(
+                ({ at, children: count, end, id, kind, parent, parentStart, start }) => ({
+                  at,
+                  children: count,
+                  end,
+                  id,
+                  kind,
+                  parent,
+                  parentStart,
+                  start,
+                }),
+              ),
+              model.map((placed, number) => ({
+                at: BigInt(placed.at),
+                children: BigInt(children(number)),
+                end: BigInt(placed.end),
+                id: idOf(number),
+                kind: placed.kind,
+                parent: idOf(placed.parent),
+                parentStart: BigInt(model[placed.parent]?.start ?? -1),
+                start: BigInt(placed.start),
+              })),
+            );
+            assert.deepStrictEqual(
+              rows.nodes
+                .filter(({ id, parent }) => id === parent)
+                .map(({ id, start }) => [id, start]),
+              [[sentinel.id, 0n]],
+            );
+            assert.strictEqual(new Set(rows.nodes.map(({ id }) => id)).size, rows.nodes.length);
+          }),
+        ),
+      ),
+  );
+
+  it.effect(
+    "starts every fold at its identity: each first slot's copies, each empty family's end values, each first attribute's names, and the sentinel's own copies",
+    (ctx) =>
+      // Oracle: the specification as a checker, fin.md §4.3: the identity of the content
+      // automaton's state is its start, 0, of a set the empty set, and of a count 0; and N1 pins the
+      // sentinel's copies.
+      // Bound: the generator's drawn bounds.
+      searched(
+        ctx,
+        explore(over("model/folds-identities"), ({ document }, c) =>
+          Effect.gen(function* identities() {
+            c.noteAll(featuresOf(document));
+
+            const rows = yield* foldedOf(document);
+            const sentinel = nodeAt(rows, 0);
+
+            for (const node of rows.nodes.filter(({ at }) => at === 0n)) {
+              assert.deepStrictEqual([node.was, node.elementsWas], [0, 0n], node.id);
+            }
+
+            for (const node of rows.nodes.filter(({ children }) => children === 0n)) {
+              assert.deepStrictEqual([node.childState, node.elementChildren], [0, 0n], node.id);
+            }
+
+            for (const attribute of rows.attributes.filter(({ at }) => at === 0n)) {
+              assert.deepStrictEqual(sorted(attribute.attrsWas), []);
+            }
+
+            assert.deepStrictEqual(
+              {
+                document: sentinel.document,
+                nearest: sentinel.nearest,
+                nearestKind: sentinel.nearestKind,
+                parent: sentinel.parent,
+                parentAncestry: sorted(sentinel.parentAncestry),
+                parentKind: sentinel.parentKind,
+                parentNearest: sentinel.parentNearest,
+                parentNearestKind: sentinel.parentNearestKind,
+              },
+              {
+                document: sentinel.id,
+                nearest: sentinel.id,
+                nearestKind: "document",
+                parent: sentinel.id,
+                parentAncestry: [],
+                parentKind: "document",
+                parentNearest: sentinel.id,
+                parentNearestKind: "document",
+              },
+            );
+          }),
+        ),
+      ),
+  );
+
+  it.effect("agrees with a naive recomputation of every fold over the whole tree", (ctx) =>
+    // Oracle: a second implementation, each fold's meaning computed from the whole tree at once:
+    // `parentStart` as the parent's start, `nearest` as the nearest interaction among the
+    // ancestors, `stringValue` as the characters of the node's text, whitespace and entity rows,
+    // `parentAncestry` as the flags they enter; a node's state as its own `Admission` position, or
+    // for a kind several positions name one `Symbol` gives it, or for character data the state of
+    // the nearest element before it (0 when none is); a family's end state as its last child's; its
+    // element count; and `attrs` as its attributes' positions.
+    // Bound: the generator's drawn bounds.
+    searched(
+      ctx,
+      explore(over("model/folds-naive"), ({ document }, c) =>
+        Effect.gen(function* naive() {
+          c.noteAll(featuresOf(document));
+
+          const rows = yield* foldedOf(document);
+          const byId = new Map(rows.nodes.map((node) => [node.id, node]));
+          const self = rows.document.node;
+          const charactersOf = new Map([
+            ...[...rows.texts, ...rows.whitespace].map(({ node, value }) => [node, value] as const),
+            ...rows.entityRefs.map(({ name, node }) => [node, `&${name};`] as const),
+          ]);
+          for (const node of rows.nodes) {
+            const above: FoldedNode<Composed>[] = [];
+            for (
+              let at = node.id === self ? undefined : byId.get(node.parent);
+              at !== undefined;
+              at = at.id === self ? undefined : byId.get(at.parent)
+            ) {
+              above.push(at);
+            }
+
+            const family = rows.nodes.filter(({ id, parent }) => parent === node.id && id !== self);
+            const key = (child: FoldedNode<Composed>) => ({
+              child: child.kind,
+              parent: node.kind,
+              version: node.version,
+            });
+            const stateOf = (child: FoldedNode<Composed>): number => {
+              const position = Option.match(grammar.admission.lookup(key(child)), {
+                onNone: () => -1,
+                onSome: ({ position: cell }) => Number(cell),
+              });
+              const before = family.findLast(({ at }) => at < child.at);
+              if (position !== 0) {
+                return position;
+              }
+
+              const shared = grammar.content.symbol.lookup({
+                ...key(child),
+                kind: child.kind,
+                position: String(child.derived.state),
+              });
+              if (Option.isSome(shared)) {
+                return child.derived.state;
+              }
+
+              return before === undefined ? 0 : stateOf(before);
+            };
+            const nearest = above.find(({ kind }) => isInteraction(kind)) ?? nodeAt(rows, 0);
+            const entered: Ancestry = new Set(
+              above.flatMap(({ kind }) => [...rowOf(grammar.ancestry.enters, kind)]),
+            );
+            const names = rows.attributes
+              .filter((attribute) => attribute.node === node.id)
+              .map(({ name }) =>
+                Option.match(
+                  grammar.attributes.admission.lookup({
+                    kind: node.kind,
+                    name,
+                    version: node.version,
+                  }),
+                  { onNone: () => -1, onSome: ({ position }) => Number(position) },
+                ),
+              );
+
+            assert.deepStrictEqual(
+              {
+                attrs: sorted(node.attrs),
+                childState: node.childState,
+                document: node.document,
+                elementChildren: node.elementChildren,
+                nearest: node.nearest,
+                nearestKind: node.nearestKind,
+                parentAncestry: sorted(node.parentAncestry),
+                parentStart: node.parentStart,
+                stringValue: node.stringValue,
+              },
+              {
+                attrs: sorted(new Set(names)),
+                childState: Option.match(Option.fromNullishOr(family.at(-1)), {
+                  onNone: () => 0,
+                  onSome: stateOf,
+                }),
+                document: self,
+                elementChildren: BigInt(
+                  family.filter(({ kind }) =>
+                    Option.isSome(grammar.kinds.isElement.lookup({ kind })),
+                  ).length,
+                ),
+                nearest: nearest.id,
+                nearestKind: nearest.kind,
+                parentAncestry: sorted(entered),
+                parentStart: (above[0] ?? node).start,
+                stringValue: family.map(({ id }) => charactersOf.get(id) ?? "").join(""),
+              },
+              node.id,
+            );
+            assert.deepStrictEqual(
+              family.map(({ derived, was }) => [was, derived.state]),
+              family.map((child, at) => [
+                Option.match(Option.fromNullishOr(family[at - 1]), {
+                  onNone: () => 0,
+                  onSome: stateOf,
+                }),
+                stateOf(child),
+              ]),
+              node.id,
+            );
+          }
+        }),
+      ),
+    ),
+  );
+});
+
+describe("fold's count and set folds", { timeout: searchTimeout }, () => {
+  /**
+   * What a metamorphic case did to an element: permuted its children and attributes, appended
+   * copies of one child, or appended a copy of one attribute.
+   */
+  type Edit = "permuted" | "copied once" | "copied twice" | "attribute copied";
+
+  it.effect(
+    "fold a family's count and an element's names the same in any order, count each element copied, and hold a name's position once however often it occurs",
+    (ctx) =>
+      // Oracle: metamorphic relations: `elements` and `attrs` are commutative folds (any order of a
+      // family or of the attributes folds to the same end values); `elements` grows by one for each
+      // element copied and by none for character data; and `attrs`, an OR, is idempotent (an
+      // attribute copied adds no position). A family a permutation or a copy takes out of its
+      // content model whose kinds several positions name has no fold, and the case is set aside.
+      // Bound: the generator's drawn bounds, one element edited a case.
+      searched(
+        ctx,
+        explore(
+          {
+            ...over("model/folds-metamorphic"),
+            coverage: required<Edit>(
+              ["permuted", "copied once", "copied twice", "attribute copied"],
+              { cases: 300, sense: notesOnly },
+            ),
+          },
+          ({ document, model }, c) =>
+            Effect.gen(function* metamorphic() {
+              const owners = closedElements(model);
+              if (!Arr.isReadonlyArrayNonEmpty(owners)) {
+                assert.fail("a generated tree has a root element");
+              }
+
+              const target = c.draw(element(owners));
+              const before = nodeAt(yield* foldedOf(document), target);
+              const edit = c.draw(
+                element(["permuted", "copied once", "copied twice", "attribute copied"] as const),
+              );
+              let elementsCopied = 0n;
+              const edited = editElement(document, target, (owner) => {
+                switch (edit) {
+                  case "permuted": {
+                    return {
+                      ...owner,
+                      attributes: c.draw(
+                        shuffled<XdmAttribute<Composed>>(owner.attributes, {
+                          max: owner.attributes.length,
+                          min: owner.attributes.length,
+                        }),
+                      ),
+                      children: c.draw(
+                        shuffled<XdmChild<Composed>>(owner.children, {
+                          max: owner.children.length,
+                          min: owner.children.length,
+                        }),
+                      ),
+                    };
+                  }
+                  case "attribute copied": {
+                    const copied = owner.attributes.at(
+                      c.draw(int(0, Math.max(0, owner.attributes.length - 1))),
+                    );
+
+                    return copied === undefined
+                      ? owner
+                      : { ...owner, attributes: [...owner.attributes, copied] };
+                  }
+                  case "copied once":
+                  case "copied twice": {
+                    const copied = owner.children.at(
+                      c.draw(int(0, Math.max(0, owner.children.length - 1))),
+                    );
+                    if (copied === undefined) {
+                      return owner;
+                    }
+
+                    const copies = edit === "copied once" ? [copied] : [copied, copied];
+                    elementsCopied = "children" in copied ? BigInt(copies.length) : 0n;
+
+                    return { ...owner, children: [...owner.children, ...copies] };
+                  }
+                  default: {
+                    return edit satisfies never;
+                  }
+                }
+              });
+              const folded = fold(edited, idOf, foldGrammar);
+              yield* c.assume(Result.isSuccess(folded));
+              c.note(edit);
+
+              const after = nodeAt(yield* Effect.orDie(Effect.fromResult(folded)), target);
+
+              assert.deepStrictEqual(sorted(after.attrs), sorted(before.attrs));
+              assert.strictEqual(after.elementChildren, before.elementChildren + elementsCopied);
+            }),
+        ),
+      ),
+  );
+});
+
+describe("fold's refusals", { timeout: searchTimeout }, () => {
+  /**
+   * What a refusal case added: a child its parent does not admit, or an attribute its kind does
+   * not admit.
+   */
+  type Unadmitted = "child" | "attribute";
+
+  it.effect(
+    "refuses a child its parent does not admit and an attribute its kind does not admit, naming each",
+    (ctx) =>
+      // Oracle: the specification as a checker: a fold reads one `Admission` cell per child and one
+      // `AttributeAdmission` cell per attribute, and a missing cell is a refusal.
+      // Bound: the generator's drawn bounds, one addition a case.
+      searched(
+        ctx,
+        explore(
+          {
+            ...over("model/folds-refusals"),
+            coverage: required<Unadmitted>(["child", "attribute"], {
+              cases: 300,
+              sense: notesOnly,
+            }),
+          },
+          ({ document, model }, c) =>
+            Effect.gen(function* refusals() {
+              const owners = closedElements(model);
+              if (!Arr.isReadonlyArrayNonEmpty(owners)) {
+                assert.fail("a generated tree has a root element");
+              }
+
+              const target = c.draw(element(owners));
+              const owner = model[target] ?? assert.fail("no owner");
+              const { kind } = owner;
+              const { version } = document;
+              const kinds = grammar.kinds.nodeKind.handles.filter(
+                (child): child is ElementKind<Composed> =>
+                  !isForeignKind(child) &&
+                  !["document", "doctype", "text", "ws", "comment", "pi", "entityRef"].includes(
+                    child,
+                  ) &&
+                  Option.isNone(grammar.admission.lookup({ child, parent: kind, version })),
+              );
+              const names = grammar.kinds.attributeName.handles.filter(
+                (name): name is ClosedName<Composed> =>
+                  !openClasses.some((open) => open === name) &&
+                  Option.isNone(grammar.attributes.admission.lookup({ kind, name, version })),
+              );
+              const added = c.draw(element(["child", "attribute"] as const));
+              c.note(added);
+              if (added === "child" && Arr.isReadonlyArrayNonEmpty(kinds)) {
+                const child = c.draw(element(kinds));
+                const edited = editElement(document, target, (held) => ({
+                  ...held,
+                  children: [
+                    {
+                      _tag: "element",
+                      attributes: [],
+                      children: [],
+                      governs: grammar.xsi.declaredType(version, child),
+                      kind: child,
+                      namespaces: [],
+                      prefix: "",
+                    },
+                    ...held.children,
+                  ],
+                }));
+                const refusal = yield* Effect.flip(
+                  Effect.fromResult(fold(edited, idOf, foldGrammar)),
+                );
+
+                assert.deepStrictEqual(
+                  [
+                    refusal._tag,
+                    refusal.node,
+                    refusal.kind,
+                    refusal._tag === "ChildUnadmitted" ? refusal.reason : "",
+                  ],
+                  ["ChildUnadmitted", idOf(target + 1), child, "unadmitted"],
+                );
+              } else if (Arr.isReadonlyArrayNonEmpty(names)) {
+                const name = c.draw(element(names));
+                const edited = editElement(document, target, (held) => ({
+                  ...held,
+                  attributes: [
+                    { lexical: "v", name: { _tag: "closed", handle: name }, references: [] },
+                    ...held.attributes,
+                  ],
+                }));
+                const refusal = yield* Effect.flip(
+                  Effect.fromResult(fold(edited, idOf, foldGrammar)),
+                );
+
+                assert.deepStrictEqual(
+                  [refusal._tag, refusal.node, refusal.kind === kind],
+                  ["AttributeUnadmitted", idOf(target), true],
+                );
+              }
+            }),
+        ),
+      ),
+  );
+});
+
+/**
+ * The node laws a generated tree is built to meet: every law of the document layer but the
+ * ancestry bans, the required attributes, the default hotspot's place, the counts of 2…n the
+ * content automaton relaxes, and the children an attribute bars, which the generator does not
+ * construct.
+ */
+const constructed: ReadonlySet<string> = new Set<NodeLawName>(
+  nodeLawNames.filter(
+    (law) =>
+      law !== "N6 ancestry" &&
+      law !== "AL3 required" &&
+      law !== "default hotspot last slot" &&
+      law !== "N7 Counted" &&
+      law !== "N7 barred by",
+  ),
+);
+
+/**
+ * The variants a case draws among: under steering, the pending ones its tree admits, so a variant
+ * only a rare tree admits is drawn whenever such a tree comes; otherwise, and when none of them is
+ * pending, every variant.
+ *
+ * @param generated - The case's tree.
+ * @param steering - The case's steering, none for a plain draw.
+ * @returns The variants.
+ */
+const steeredVariants = (
+  generated: GeneratedXdm,
+  steering: Option.Option<Pending<InvalidVariant>>,
+): Arr.NonEmptyReadonlyArray<InvalidVariant> => {
+  const pending = Option.match(steering, {
+    onNone: () => [],
+    onSome: (pendingNow) =>
+      admissibleVariants(generated).filter((variant) => pendingNow.has(variant)),
+  });
+
+  return Arr.isReadonlyArrayNonEmpty(pending) ? pending : invalidVariants;
+};
+
+describe("the host's law model over folded rows", { timeout: searchTimeout }, () => {
+  it.effect("holds every law a generated tree is built to meet", (ctx) =>
+    // Oracle: the specification as a checker, the host's law model (`#pantry/test/oracle.ts`),
+    // over the rows fold writes for trees built to meet those laws.
+    // Bound: the generator's drawn bounds.
+    searched(
+      ctx,
+      explore(over("model/folds-laws-valid"), ({ document }, c) =>
+        Effect.gen(function* valid() {
+          c.noteAll(featuresOf(document));
+
+          const rows = yield* foldedOf(document);
+          const broken = documentBreaches("generated.xml", rows, laws).filter(({ law }) =>
+            constructed.has(law),
+          );
+
+          assert.deepStrictEqual(broken, []);
+        }),
+      ),
+    ),
+  );
+
+  it.effect("refuses every named invalid variant by its law", (ctx) =>
+    // Oracle: the specification as a checker, the host's law model, which must name each variant's
+    // law (`lawOf`); PostgreSQL's laws meet the same variants at W5.
+    // Bound: the generator's drawn bounds, every variant a tree admits; a steered case draws among
+    // the pending variants its tree admits, since some need a rare tree (a foreign element, which
+    // `wrongClass` needs, is in about one tree in ten).
+    searched(
+      ctx,
+      explore(
+        {
+          ...over("model/folds-laws-variants"),
+          coverage: required<InvalidVariant>(invalidVariants, { cases: 400, sense: notesOnly }),
+        },
+        (generated: GeneratedXdm, c) =>
+          Effect.gen(function* variants() {
+            const variant = c.draw(corruption(generated, steeredVariants(generated, c.steering)));
+            c.note(variant._tag);
+
+            const rows = corrupt(yield* foldedOf(generated.document), variant);
+            const broken = new Set(
+              documentBreaches("generated.xml", rows, laws).map(({ law }) => law),
+            );
+
+            assert.isTrue(
+              broken.has(lawOf[variant._tag]),
+              `${variant._tag}: ${[...broken].join(", ")}`,
+            );
+          }),
+      ),
+    ),
+  );
+});

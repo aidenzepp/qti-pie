@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect } from "effect";
-import { readRows } from "#pantry/import/package.ts";
+import { readRows } from "#pantry/import/preview.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import { materializeProcessing, processingFixtureNames } from "#pantry/processing/fixtures.ts";
 import { PackageEntry } from "#pantry/schema/package.ts";

@@ -8,6 +8,7 @@ import {
   yesFlag,
   zipFlag,
 } from "#pantry/cli/args.ts";
+import { withAuthorApp } from "#pantry/cli/engine.ts";
 import { emitSuccess, outputMode } from "#pantry/cli/output.ts";
 
 /**
@@ -67,9 +68,10 @@ const targetActionOf = Effect.fn("cli.targetActionOf")(function* targetActionOf(
  * is written beside the target first and takes its place only once it is complete, so an export
  * that fails leaves the old target as it was. A symlink target is replaced, never followed.
  *
- * The engine loads when the handler runs, so `--help` and a usage error never pay for it.
- * `exportPackage` returns nothing, so under `--output json` the entries are read back from what it
- * wrote; text mode prints nothing and does not read them.
+ * The engine loads when the handler runs, so `--help` and a usage error never pay for it, and the
+ * exporter loads inside the database's pool (`withAuthorApp`), so neither does a run that cannot
+ * reach the database. `exportPackage` returns nothing, so under `--output json` the entries are
+ * read back from what it wrote; text mode prints nothing and does not read them.
  *
  * Under `--dry-run` nothing is written and the target is not touched: the entries the export would
  * write are listed with their sizes, and whether the target would be created or replaced. A dry run
@@ -92,11 +94,11 @@ export const exportCommand = Command.make(
     const id = yield* requirePackageId(packageId);
     yield* requireReplaceable(target, yes);
 
-    const { AuthorAppLayer } = yield* Effect.promise(() => import("#pantry/db/layer.ts"));
-
     if (dryRun) {
-      const { exportEntries } = yield* Effect.promise(() => import("#pantry/export/package.ts"));
-      const planned = yield* exportEntries(id).pipe(Effect.provide(AuthorAppLayer));
+      const planned = yield* withAuthorApp(
+        () => import("#pantry/export/package.ts"),
+        ({ exportEntries }) => exportEntries(id),
+      );
       const entries = planned.map(({ bytes, path }) => ({ bytes: bytes.byteLength, path }));
       const action = yield* targetActionOf(target);
       const lines = entries.map(({ bytes, path }) => `  ${path} (${bytes} bytes)`);
@@ -118,10 +120,11 @@ export const exportCommand = Command.make(
       return;
     }
 
-    const { exportPackage } = yield* Effect.promise(() => import("#pantry/export/package.ts"));
-
     yield* replaceWith(target, (written) =>
-      exportPackage(id, written).pipe(Effect.provide(AuthorAppLayer)),
+      withAuthorApp(
+        () => import("#pantry/export/package.ts"),
+        ({ exportPackage }) => exportPackage(id, written),
+      ),
     );
 
     if (mode === "text") {

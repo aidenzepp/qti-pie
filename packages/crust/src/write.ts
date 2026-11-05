@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import { EncodeError } from "#crust/errors.ts";
-import type { Attribute, Child, XmlDocument, XmlDeclaration } from "#crust/tree.ts";
+import type { Attribute, Child, Element, XmlDocument, XmlDeclaration } from "#crust/tree.ts";
 
 /**
  * How the writer treats code points above the highest one the label's encoder represents.
@@ -129,10 +129,14 @@ const renderCdata = (value: string, threshold: number): string => {
 };
 
 /**
- * Render a node: an element with its attributes in stored order, as `<x/>` when it has no children,
- * or one of the leaf kinds.
+ * Render a node that holds no other node: a text run, a comment, a processing instruction or an
+ * entity reference.
+ *
+ * @param node - The node to render.
+ * @param threshold - The highest code point a text run writes as itself.
+ * @returns The node's markup.
  */
-const renderNode = (node: Child, threshold: number): string => {
+const renderLeaf = (node: Exclude<Child, Element>, threshold: number): string => {
   if (node.kind === "text") {
     return node.cdata ? renderCdata(node.value, threshold) : escapeText(node.value, threshold);
   }
@@ -145,21 +149,62 @@ const renderNode = (node: Child, threshold: number): string => {
     return `<?${node.target}${node.data === "" ? "" : ` ${node.data}`}?>`;
   }
 
-  if (node.kind === "entityRef") {
-    return `&${node.name};`;
-  }
+  return `&${node.name};`;
+};
 
-  const attributes = node.attributes
+/**
+ * Render an element's attributes in stored order, each led by a space.
+ *
+ * @param element - The element whose attributes to render.
+ * @param threshold - The highest code point an attribute value writes as itself.
+ * @returns The attributes' markup, empty when the element has none.
+ */
+const renderAttributes = (element: Element, threshold: number): string =>
+  element.attributes
     .map((attribute) => ` ${attribute.qname}="${renderValue(attribute, threshold)}"`)
     .join("");
 
-  if (node.children.length === 0) {
-    return `<${node.qname}${attributes}/>`;
+/**
+ * The end tag of an element whose children are still being written.
+ */
+interface EndTag {
+  readonly kind: "end";
+  readonly qname: string;
+}
+
+/**
+ * Render a node and everything below it: an element with its attributes in stored order, as
+ * `<x/>` when it has no children, or one of the leaf kinds.
+ *
+ * The walk keeps its own stack of what is still to write, so a tree of any depth or width renders
+ * without recursion. An element's end tag goes on the stack beneath its children, which go on last
+ * first, so each child's whole subtree leaves the stack before its next sibling and the end tag
+ * after the last, which keeps the output in document order.
+ *
+ * @param node - The node to render.
+ * @param threshold - The highest code point a text run or an attribute value writes as itself.
+ * @returns The node's markup.
+ */
+const renderNode = (node: Child, threshold: number): string => {
+  const rendered: string[] = [];
+  const pending: (Child | EndTag)[] = [node];
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    if (next.kind === "end") {
+      rendered.push(`</${next.qname}>`);
+    } else if (next.kind !== "element") {
+      rendered.push(renderLeaf(next, threshold));
+    } else if (next.children.length === 0) {
+      rendered.push(`<${next.qname}${renderAttributes(next, threshold)}/>`);
+    } else {
+      rendered.push(`<${next.qname}${renderAttributes(next, threshold)}>`);
+      pending.push({ kind: "end", qname: next.qname });
+      for (const child of next.children.toReversed()) {
+        pending.push(child);
+      }
+    }
   }
 
-  const children = node.children.map((child) => renderNode(child, threshold)).join("");
-
-  return `<${node.qname}${attributes}>${children}</${node.qname}>`;
+  return rendered.join("");
 };
 
 /**
@@ -206,10 +251,15 @@ const unwritable = (
 };
 
 /**
- * The first construct under `node`, itself included, that cannot carry a character reference and
- * holds a code point above `threshold`, in document order.
+ * The first construct of `node` itself, its children aside, that cannot carry a character
+ * reference and holds a code point above `threshold`: an element's name, then each attribute's
+ * name and recorded reference names in stored order.
+ *
+ * @param node - The node to search.
+ * @param threshold - The highest code point the encoder carries as itself.
+ * @returns The failure for the first such construct, or `undefined` when there is none.
  */
-const findInNode = (node: Child, threshold: number): EncodeError | undefined => {
+const findInOwn = (node: Child, threshold: number): EncodeError | undefined => {
   if (node.kind === "text") {
     return undefined;
   }
@@ -244,9 +294,36 @@ const findInNode = (node: Child, threshold: number): EncodeError | undefined => 
     }
   }
 
-  return node.children
-    .map((child) => findInNode(child, threshold))
-    .find((error) => error !== undefined);
+  return undefined;
+};
+
+/**
+ * The first construct under `node`, itself included, that cannot carry a character reference and
+ * holds a code point above `threshold`, in document order.
+ *
+ * The walk keeps its own stack, children pushed last first, so it visits a tree of any depth or
+ * width in document order without recursion and stops at the first failure.
+ *
+ * @param node - The node to search.
+ * @param threshold - The highest code point the encoder carries as itself.
+ * @returns The failure for the first such construct, or `undefined` when there is none.
+ */
+const findInNode = (node: Child, threshold: number): EncodeError | undefined => {
+  const pending: Child[] = [node];
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    const found = findInOwn(next, threshold);
+    if (found !== undefined) {
+      return found;
+    }
+
+    if (next.kind === "element") {
+      for (const child of next.children.toReversed()) {
+        pending.push(child);
+      }
+    }
+  }
+
+  return undefined;
 };
 
 /**

@@ -1,0 +1,525 @@
+import { NodeServices } from "@effect/platform-node";
+import { assert, describe, it } from "@effect/vitest";
+import { drawn, explore } from "@grizzle/testing/explore";
+import { noCoverage } from "@grizzle/testing/features";
+import { array, element, int, weighted } from "@grizzle/testing/gen";
+import type { Gen } from "@grizzle/testing/gen";
+import { completeShrink } from "@grizzle/testing/shrink";
+import { searched } from "@grizzle/testing/vitest";
+import { Duration, Effect, Formatter, Option, Result } from "effect";
+import { composed } from "#pantry/grammar/compose.ts";
+import { documentRoots } from "#pantry/grammar/facets.ts";
+import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
+import { checkCache } from "#pantry/vocab/derive/sources.ts";
+import * as open from "#pantry/vocab/open.ts";
+import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
+import type { ContentModel, Occurs, Particle } from "#pantry/vocab/inventory/types.ts";
+import {
+  elementsOf,
+  resolverOf,
+  loadXsd,
+  toyFacets,
+  toyGrammar,
+  toySources,
+  toyVocabulary,
+  wildcardAdmits,
+  wildcardsOf,
+  XsdOracleLayer,
+  xsdContents,
+} from "#pantry/test/gen/grammar.ts";
+import type { Content } from "#pantry/test/gen/grammar.ts";
+
+/**
+ * The composed grammar of production, failing the test that reads it when a generator refuses.
+ */
+const grammar = Effect.fromResult(composed());
+
+/**
+ * Whether every pinned XSD is in the cache. The XSD differential needs them; without them it is
+ * skipped with its reason.
+ */
+const cached = await Effect.runPromise(
+  checkCache().pipe(
+    Effect.as(true),
+    Effect.catchTag("XsdSourceMissing", () => Effect.succeed(false)),
+    Effect.provide(NodeServices.layer),
+  ),
+);
+
+/**
+ * The pinned schema sets the differential walks, each with the version its rows are read in. The
+ * metadata XSD is one for both versions.
+ */
+const schemas: readonly (readonly [SourcePath, (typeof schemaVersions)[number]])[] = [
+  ["imsqti_asiv3p0_v1p0.xsd", "3.0.0"],
+  ["imsqti_asiv3p0p1_v1p0.xsd", "3.0.1"],
+  ["imsqtiv3p0_imscpv1p2_v1p0.xsd", "3.0.0"],
+  ["imsqtiv3p0p1_imscpv1p2_v1p0.xsd", "3.0.1"],
+  ["imsqti_metadatav3p0_v1p0.xsd", "3.0.0"],
+  ["imsqti_metadatav3p0_v1p0.xsd", "3.0.1"],
+];
+
+/**
+ * How long reading the pinned XSDs and walking them may take: the two ASI XSDs are 18 MB each, and
+ * a read of one took 3.2 s on 2026-11-05 at a load average of about 15, beside the swarm's other
+ * suites. Twice the six reads' worst, rounded up.
+ */
+const xsdTimeout = 120_000;
+
+/**
+ * The character data XML Schema Part 1 §3.4.4 lets stand between an element's children, by its
+ * content type: whitespace, comments and processing instructions in element content, comments and
+ * processing instructions alone in empty content, text and entity references too where the content
+ * is character data. The oracle states the rule from the specification; the content type is read
+ * independently, by the test's own XSD reader.
+ *
+ * @param content - The content, as the reader reads it.
+ * @returns The character-data kinds.
+ */
+const characterDataOf = (content: Content): readonly string[] => {
+  if (content.simple || content.mixed) {
+    return ["comment", "entityRef", "pi", "text", "ws"];
+  }
+
+  return Option.isSome(content.particle) ? ["comment", "pi", "ws"] : ["comment", "pi"];
+};
+
+describe.skipIf(!cached)("Admission against the XSD", () => {
+  it.effect(
+    "admits under each kind exactly the elements its content model names, wildcards apart, in every pinned schema",
+    () =>
+      Effect.gen(function* admissionIsTheXsds() {
+        const { admission, kinds } = yield* grammar;
+        const isElement = (kind: string) => Option.isSome(kinds.isElement.lookup({ kind }));
+        const namespaceOf = (kind: string) =>
+          Option.map(kinds.elementName.lookup({ kind }), ({ namespace }) => namespace);
+        const differences: string[] = [];
+        let compared = 0;
+        for (const [root, version] of schemas) {
+          const { set } = yield* loadXsd(root);
+          const { contents } = xsdContents(set, (namespace, local, parent) =>
+            resolverOf(kinds)(namespace, local, parent),
+          );
+          for (const [parent, models] of contents) {
+            const particles = models.flatMap((model) => Option.toArray(model.particle));
+            const named = new Set<string>(
+              particles
+                .flatMap(elementsOf)
+                .flatMap((particle) => particle.members)
+                .flatMap((member) =>
+                  Option.toArray(
+                    resolverOf(kinds)(member.name.namespace, member.name.local, parent),
+                  ),
+                ),
+            );
+            const wildcards = particles.flatMap(wildcardsOf);
+            const admitted = admission.rows
+              .filter((row) => row.version === version && row.parent === parent)
+              .map(({ child }) => child);
+            const elements = admitted.filter(isElement);
+            compared += elements.length;
+            for (const child of elements) {
+              // A foreign kind is its namespace class: a namespace of that class stands for it.
+              const classNamespace = (wildcard: { readonly target: string }): string => {
+                if (child === foreignKinds.absent) {
+                  return "";
+                }
+
+                return child === foreignKinds.own ? wildcard.target : "urn:x-grammar-test-foreign";
+              };
+              const byWildcard = isForeignKind(child)
+                ? wildcards.some((wildcard) => wildcardAdmits(wildcard, classNamespace(wildcard)))
+                : Option.exists(namespaceOf(child), (namespace) =>
+                    wildcards.some((wildcard) => wildcardAdmits(wildcard, namespace)),
+                  );
+              if (!named.has(child) && !byWildcard) {
+                differences.push(
+                  `${root} ${version} ${parent} admits ${child}, which its model does not name`,
+                );
+              }
+            }
+
+            for (const child of named) {
+              if (!elements.includes(child)) {
+                differences.push(
+                  `${root} ${version} ${parent} does not admit ${child}, which its model names`,
+                );
+              }
+            }
+
+            const data = new Set(admitted.filter((child) => !isElement(child)));
+            const expected = new Set(models.flatMap(characterDataOf));
+            if (data.symmetricDifference(expected).size > 0) {
+              differences.push(
+                `${root} ${version} ${parent} admits ${[...data].toSorted().join(",")} of character data, and its content type admits ${[...expected].toSorted().join(",")}`,
+              );
+            }
+          }
+        }
+
+        assert.isAbove(compared, 0);
+        assert.deepStrictEqual(differences, []);
+      }).pipe(Effect.provide(XsdOracleLayer)),
+    xsdTimeout,
+  );
+
+  it.effect(
+    "resolves every element name under every parent by locality, as the XSD reads it: a local declaration, else a global one a wildcard finds, else none",
+    () =>
+      // Oracle: XML Schema Part 1 §3.3.2 and §3.10.4 over the tests' own reading of the XSDs: a
+      // parent's model declares a name by an element particle, and a wildcard admitting the name's
+      // namespace finds its top-level declaration, but for reading 6's roots, which stay foreign;
+      // any other name is undeclared there. The document node declares the roots its model (R5)
+      // names. The box is every parent the walks reach, in either version, by every element name.
+      Effect.gen(function* locality() {
+        const { kinds } = yield* grammar;
+        const names = kinds.elementName.rows.map(({ local, namespace }) => ({ local, namespace }));
+        const declared = new Set<string>(
+          documentRoots.flatMap((root) =>
+            Option.toArray(kinds.elementName.lookup({ kind: root })).map(
+              ({ local, namespace }) => `document {${namespace}}${local}`,
+            ),
+          ),
+        );
+        const parents = new Set<string>(["document"]);
+        const read = [];
+        // The usage-data XSD declares `usageData`, a root no other walk reaches.
+        for (const root of [
+          ...schemas.map(([held]) => held),
+          "usagedata/imsqti_usagedatav3p0_v1p0.xsd" as const,
+        ]) {
+          const { set } = yield* loadXsd(root);
+          read.push({ contents: xsdContents(set, resolverOf(kinds)).contents, set });
+        }
+
+        const globals = new Set(read.flatMap(({ set }) => [...set.elements.keys()]));
+        const kept = new Set(
+          [...open.foreignRoots].flatMap((root) =>
+            Option.toArray(kinds.elementName.lookup({ kind: root })).map(
+              ({ local, namespace }) => `{${namespace}}${local}`,
+            ),
+          ),
+        );
+        for (const { contents } of read) {
+          for (const [parent, models] of contents) {
+            parents.add(parent);
+            for (const particle of models.flatMap((model) => Option.toArray(model.particle))) {
+              for (const { members } of elementsOf(particle)) {
+                for (const member of members) {
+                  declared.add(`${parent} {${member.name.namespace}}${member.name.local}`);
+                }
+              }
+
+              for (const wildcard of wildcardsOf(particle)) {
+                for (const name of names) {
+                  const key = `{${name.namespace}}${name.local}`;
+                  if (
+                    globals.has(key) &&
+                    !kept.has(key) &&
+                    wildcardAdmits(wildcard, name.namespace)
+                  ) {
+                    declared.add(`${parent} ${key}`);
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        const differences: string[] = [];
+        for (const parent of parents) {
+          for (const name of names) {
+            const key = `{${name.namespace}}${name.local}`;
+            const resolved = resolverOf(kinds)(name.namespace, name.local, parent);
+            const named = Option.exists(resolved, (kind) =>
+              Option.exists(
+                kinds.elementName.lookup({ kind }),
+                (held) => held.local === name.local && held.namespace === name.namespace,
+              ),
+            );
+            if (declared.has(`${parent} ${key}`) !== named) {
+              differences.push(
+                `${key} under ${parent}: the XSD ${declared.has(`${parent} ${key}`) ? "declares" : "does not declare"} it, the grammar resolves it to ${Option.getOrElse(resolved, () => "nothing")}`,
+              );
+            }
+          }
+        }
+
+        assert.isAbove(parents.size, 1);
+        assert.deepStrictEqual(differences.slice(0, 30), []);
+      }).pipe(Effect.provide(XsdOracleLayer)),
+    xsdTimeout,
+  );
+});
+
+/**
+ * The toy kinds a generated content model's element particles name, each named once, so the model
+ * keeps Unique Particle Attribution by construction.
+ */
+const toyKinds = Array.from({ length: 12 }, (_, at) => `e${at + 1}`);
+
+/**
+ * Occurrence bounds in a small box: least 0 to 2, greatest 1 to 2 or unbounded, the least never
+ * above the greatest; and, on its own arm so every run reaches it, the named variant the IR finding
+ * is about, a greatest of 0 (`maxOccurs="0"`, CP 3.0.1's `cp:resource`).
+ */
+const occursGen: Gen<Occurs> = weighted([
+  [
+    3,
+    (source) => {
+      const max = source.draw(
+        weighted<Option.Option<number>>([
+          [2, (inner) => Option.some(inner.draw(int(1, 2)))],
+          [1, () => Option.none()],
+        ]),
+      );
+
+      return {
+        max,
+        min: source.draw(
+          int(
+            0,
+            Option.getOrElse(max, () => 2),
+          ),
+        ),
+      };
+    },
+  ],
+  [1, () => ({ max: Option.some(0), min: 0 })],
+]);
+
+/**
+ * An element particle of one toy kind, its kind left to be numbered.
+ */
+const leaf: Gen<Particle> = (source) => ({
+  _tag: "element",
+  kinds: ["e1"],
+  occurs: source.draw(occursGen),
+  sources: toySources(schemaVersions),
+});
+
+/**
+ * A particle tree at most two levels of groups deep, its element particles' kinds left to be
+ * numbered.
+ *
+ * @param depth - The levels of groups it may still open.
+ * @returns The generator.
+ */
+const treeGen = (depth: number): Gen<Particle> => {
+  const group: Gen<Particle> = (source) => ({
+    _tag: "group",
+    compositor: source.draw(element(["sequence", "choice", "all"] as const)),
+    occurs: source.draw(occursGen),
+    particles: source.draw(array(treeGen(depth - 1), { max: 3, min: 0 })),
+    sources: toySources(schemaVersions),
+  });
+
+  return depth === 0
+    ? leaf
+    : weighted([
+        [2, leaf],
+        [1, group],
+      ]);
+};
+
+/**
+ * Number a tree's element particles with distinct toy kinds, in tree order.
+ *
+ * @param particle - The tree.
+ * @returns The tree, its kinds distinct.
+ */
+const numbered = (particle: Particle): Particle => {
+  let next = 0;
+  const walk = (node: Particle): Particle => {
+    switch (node._tag) {
+      case "element": {
+        next += 1;
+
+        return { ...node, kinds: [`e${next}`] };
+      }
+      case "any": {
+        return node;
+      }
+      case "group": {
+        return { ...node, particles: node.particles.map(walk) };
+      }
+      default: {
+        return node satisfies never;
+      }
+    }
+  };
+
+  return walk(particle);
+};
+
+/**
+ * The element kinds a particle may hold as children, by XML Schema Part 1's rule written as a
+ * naive walk: a particle names its kinds unless it, or a group enclosing it, can never occur.
+ *
+ * @param particle - The particle.
+ * @returns The kinds.
+ */
+const mayHold = (particle: Particle): readonly string[] => {
+  if (Option.contains(particle.occurs.max, 0)) {
+    return [];
+  }
+
+  switch (particle._tag) {
+    case "element": {
+      return particle.kinds;
+    }
+    case "any": {
+      return [];
+    }
+    case "group": {
+      return particle.particles.flatMap(mayHold);
+    }
+    default: {
+      return particle satisfies never;
+    }
+  }
+};
+
+describe("Admission projected from content models", () => {
+  it.effect(
+    "admits exactly the elements a particle that may occur names, and never a maxOccurs 0 particle's, through compose",
+    (ctx) =>
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang: Duration.minutes(1),
+            concurrency: 1,
+            coverage: noCoverage,
+            draw: drawn((source) => numbered(source.draw(treeGen(2)))),
+            kept: [],
+            literal: Formatter.format,
+            runs: 300,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "grammar/admission/projection",
+          },
+          (particle) =>
+            Effect.sync(() => {
+              const model: ContentModel = {
+                content: {
+                  _tag: "element-only",
+                  particle: {
+                    _tag: "group",
+                    compositor: "sequence",
+                    occurs: { max: Option.some(1), min: 1 },
+                    particles: [particle],
+                    sources: toySources(schemaVersions),
+                  },
+                },
+                kind: "e0",
+                sources: toySources(schemaVersions),
+                type: Option.none(),
+                versions: schemaVersions,
+              };
+              const toy = toyVocabulary({
+                admission: [],
+                attributes: [],
+                data: ["ws", "comment", "pi"],
+                facets: toyFacets({}),
+                kinds: ["e0", ...toyKinds],
+              });
+              const result = toyGrammar([{ ...toy, models: [model] }]);
+              const held = result.pipe(
+                Result.map((composedToy) =>
+                  composedToy.admission.rows
+                    .filter(({ parent, version }) => parent === "e0" && version === "3.0.1")
+                    .map(({ child }) => child)
+                    .filter((child) => !["comment", "pi", "ws"].includes(child))
+                    .toSorted(),
+                ),
+              );
+
+              assert.deepStrictEqual(
+                held,
+                Result.succeed([...new Set(mayHold(particle))].toSorted()),
+              );
+            }),
+        ),
+      ),
+  );
+});
+
+/**
+ * The toy kinds of the restated-triple search.
+ */
+const restatedKinds = ["e1", "e2", "e3", "e4"] as const;
+
+describe("Admission through compose", () => {
+  it.effect("refuses a triple two vocabularies both state, and keeps one stated once", (ctx) =>
+    searched(
+      ctx,
+      explore(
+        {
+          caseHang: Duration.minutes(1),
+          concurrency: 1,
+          coverage: noCoverage,
+          draw: drawn((source) => ({
+            restated: source.draw(int(0, 1)) === 1,
+            rows: source.draw(
+              array(
+                (s) => ({
+                  child: s.draw(element(restatedKinds)),
+                  parent: s.draw(element(restatedKinds)),
+                }),
+                { max: 6, min: 1 },
+              ),
+            ),
+          })),
+          kept: [],
+          literal: Formatter.format,
+          runs: 200,
+          shrink: completeShrink,
+          steerEvery: 16,
+          suite: "grammar/admission/restated",
+        },
+        ({ restated, rows }) =>
+          Effect.sync(() => {
+            const triples = [
+              ...new Map(
+                rows.map((row) => [
+                  `${row.parent} ${row.child}`,
+                  { ...row, version: "3.0.1" as const },
+                ]),
+              ).values(),
+            ];
+            const [first] = triples;
+            const second = restated && first !== undefined ? [first] : [];
+            const result = toyGrammar([
+              toyVocabulary({
+                admission: triples,
+                attributes: [],
+                data: ["ws"],
+                facets: toyFacets({}),
+                kinds: restatedKinds,
+              }),
+              toyVocabulary({
+                admission: second,
+                attributes: [],
+                data: [],
+                facets: toyFacets({}),
+                kinds: [],
+              }),
+            ]);
+
+            if (second.length > 0) {
+              assert.strictEqual(
+                Result.isFailure(result) ? result.failure._tag : "composed",
+                "KeyCollision",
+              );
+            } else {
+              assert.deepStrictEqual(
+                result.pipe(Result.map((composedToy) => composedToy.admission.rows.length)),
+                Result.succeed(triples.length),
+              );
+            }
+          }),
+      ),
+    ),
+  );
+});

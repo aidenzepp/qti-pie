@@ -178,13 +178,11 @@ export const hrefInPackage =
   "^(?:[A-Za-z][A-Za-z0-9+.\\-]{0,31}:[^ \\t\\r\\n]{0,255}|(?:[^/]|[^/.][^/]|\\.[^/.]|[^/]{3,80})(?:/(?:[^/]|[^/.][^/]|\\.[^/.]|[^/]{3,80})){0,7})$" as const;
 
 /**
- * `xs:anyURI` lexical space as `xmllint` enforces it: libxml2's mapping of the characters outside
- * the URI set to `_`, then RFC 3986's URI-reference grammar with a closed IP literal, a non-empty
- * port, a relative-path reference whose first segment has no colon, and a fragment that admits `[`
- * and `]`. Judged on the collapsed value.
+ * `xs:anyURI`'s lexical space as XML Schema 1.0 defines it (spec reading 61): the derived anyURI
+ * domain's pattern, translated once into the dialect `str.regex` reads
+ * (`src/vocab/inventory/patterns.ts`). Judged on the collapsed value.
  */
-export const anyUri =
-  "^(?:[A-Za-z][A-Za-z0-9+\\-.]*:(?://(?:(?:[^#%/?@\\[\\]]|%[0-9A-Fa-f]{2})*@)?(?:\\[[^\\]]*\\]|(?:[^#%/?:@\\[\\]]|%[0-9A-Fa-f]{2})*)(?::[0-9]+)?(?:/(?:[^#%?\\[\\]]|%[0-9A-Fa-f]{2})*)?|/(?:(?:[^#%/?\\[\\]]|%[0-9A-Fa-f]{2})(?:[^#%?\\[\\]]|%[0-9A-Fa-f]{2})*)?|(?:[^#%/?\\[\\]]|%[0-9A-Fa-f]{2})(?:[^#%?\\[\\]]|%[0-9A-Fa-f]{2})*)?|(?://(?:(?:[^#%/?@\\[\\]]|%[0-9A-Fa-f]{2})*@)?(?:\\[[^\\]]*\\]|(?:[^#%/?:@\\[\\]]|%[0-9A-Fa-f]{2})*)(?::[0-9]+)?(?:/(?:[^#%?\\[\\]]|%[0-9A-Fa-f]{2})*)?|/(?:(?:[^#%/?\\[\\]]|%[0-9A-Fa-f]{2})(?:[^#%?\\[\\]]|%[0-9A-Fa-f]{2})*)?|(?:[^#%/?:\\[\\]]|%[0-9A-Fa-f]{2})+(?:/(?:[^#%?\\[\\]]|%[0-9A-Fa-f]{2})*)?)?)(?:\\?(?:[^#%\\[\\]]|%[0-9A-Fa-f]{2})*)?(?:#(?:[^#%]|%[0-9A-Fa-f]{2})*)?$" as const;
+export { anyUriSource as anyUri } from "#pantry/vocab/inventory/patterns.ts";
 
 /**
  * `xs:language` lexical space: dash-separated subtags of at most eight characters, the first

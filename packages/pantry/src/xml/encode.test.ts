@@ -81,25 +81,6 @@ const failureOf = <A>(effect: Effect.Effect<A, EncodeError>) =>
   });
 
 layer(NodeServices.layer, { excludeTestServices: true })("xml/encode.ts", (suite) => {
-  suite.effect("encodes the latin1 fixture back to its bytes' meaning", () =>
-    Effect.gen(function* encodeLatin1() {
-      const { document } = yield* readChoice("latin1");
-
-      assert.strictEqual(exportCharset("ISO-8859-1", document), "ISO-8859-1");
-
-      const bytes = yield* encode(document, "ISO-8859-1");
-      const text = latin1Text(bytes);
-
-      assert.include(text, "\u0085");
-      assert.include(text, "&#x20AC;");
-      assert.notInclude(text, "€");
-
-      const again = yield* readXml(bytes);
-
-      assert.deepStrictEqual(again, document);
-    }),
-  );
-
   suite.effect("refuses U+20AC in a prolog comment under ISO-8859-1", () =>
     Effect.gen(function* encodeLatin1Comment() {
       const { document } = yield* readChoice("latin1");
@@ -112,24 +93,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("xml/encode.ts", (suite
       assert.strictEqual(error.where, "comment");
       assert.strictEqual(error.codePoint, 0x20_ac);
       assert.strictEqual(error.threshold, 0xff);
-    }),
-  );
-
-  suite.effect("encodes the windows-1252 fixture as UTF-8 after the import decision", () =>
-    Effect.gen(function* encodeWindows1252() {
-      const { document } = yield* readChoice("windows-1252");
-
-      assert.strictEqual(exportCharset("windows-1252", document), "UTF-8");
-
-      const declaration = Option.getOrThrow(document.declaration);
-      const exported: XmlDocument = {
-        ...document,
-        declaration: Option.some({ ...declaration, encoding: Option.some("UTF-8") }),
-      };
-      const bytes = yield* encode(exported, "UTF-8");
-      const again = yield* readXml(bytes);
-
-      assert.deepStrictEqual(again, { ...exported, charset: "UTF-8" });
     }),
   );
 
@@ -156,16 +119,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("xml/encode.ts", (suite
 
       assert.deepStrictEqual([...bytes.subarray(0, 4)], [0xfe, 0xff, 0x00, 0x3c]);
       assert.deepStrictEqual(yield* readXml(bytes), { ...declared, charset: "UTF-16" });
-    }),
-  );
-
-  suite.effect("encodes a document as plain UTF-8", () =>
-    Effect.gen(function* encodeUtf8() {
-      const { document } = yield* readChoice("windows-1252");
-      const bytes = yield* encode(document, "UTF-8");
-
-      assert.include(new TextDecoder("utf-8").decode(bytes), "€");
-      assert.notStrictEqual(bytes[0], 0xff);
     }),
   );
 

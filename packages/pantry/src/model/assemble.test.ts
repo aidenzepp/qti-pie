@@ -1,534 +1,511 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Order } from "effect";
+import { drawn, explore } from "@grizzle/testing/explore";
+import { required } from "@grizzle/testing/features";
+import { element, int, shuffled } from "@grizzle/testing/gen";
+import type { Gen } from "@grizzle/testing/gen";
+import { notesOnly } from "@grizzle/testing/sense";
+import { completeShrink } from "@grizzle/testing/shrink";
+import { searched } from "@grizzle/testing/vitest";
+import { Array as Arr, Effect, Formatter, Result } from "effect";
+import { canonicalize } from "@qti-pie/crust/canonical.ts";
+import { composed } from "#pantry/grammar/compose.ts";
 import { assemble } from "#pantry/model/assemble.ts";
 import type { AssembleError } from "#pantry/model/assemble.ts";
-import { flatten, none } from "#pantry/model/xdm.ts";
+import { foldGrammarOf, namesOf } from "#pantry/model/composed.ts";
+import type { Composed } from "#pantry/model/composed.ts";
+import { fold } from "#pantry/model/folds.ts";
+import { toXmlDocument } from "#pantry/model/unshred.ts";
+import { flatten } from "#pantry/model/xdm.ts";
+import type { FlatRows } from "#pantry/model/xdm.ts";
+import {
+  caseHang,
+  searchTimeout,
+  corrupt,
+  corruption,
+  featuresOf,
+  idOf,
+  rowVariants,
+  scrambledIdOf,
+  xdmDocument,
+} from "#pantry/test/gen/xdm.ts";
 import type {
-  FixedKind,
-  FlatRows,
-  NodeId,
-  NodeRow,
-  OpenClass,
-  XdmAttribute,
-  XdmAttributeName,
-  XdmChild,
-  XdmDocument,
-  XdmDocumentChild,
-  XdmElement,
-  XdmVocabulary,
-} from "#pantry/model/xdm.ts";
+  Corruption,
+  GeneratedXdm,
+  Placed,
+  RowVariant,
+  XdmFeature,
+} from "#pantry/test/gen/xdm.ts";
 
 /**
- * A vocabulary of a few handles, so a small generated tree reaches every arm.
+ * The composed grammar every property draws its trees over.
  */
-interface Toy extends XdmVocabulary {
-  readonly domain: "identifier" | "language" | "string";
-  readonly kind: FixedKind | "body" | "item" | "p";
-  readonly name: OpenClass | "identifier" | "title" | "xml:lang";
-  readonly version: "3.0.0" | "3.0.1";
-}
+const grammar = Result.getOrThrow(composed());
 
 /**
- * Give the node numbered `index` a uuid that spells its number, so ids sort in document order.
+ * The names every tree is converted back to a crust tree under.
+ */
+const names = namesOf(grammar);
+
+/**
+ * The trees every property is checked over: the one generator's, over the composed grammar.
+ */
+const documents = xdmDocument(grammar);
+
+/**
+ * The lists of {@link FlatRows} other than the document row.
+ */
+type RowList = Exclude<keyof FlatRows<Composed>, "document">;
+
+/**
+ * Every list of rows, each shuffled by the case.
+ */
+const rowLists = [
+  "attributeEntities",
+  "attributes",
+  "comments",
+  "doctypes",
+  "entityRefs",
+  "namespaces",
+  "nodes",
+  "openElementNames",
+  "openNames",
+  "pis",
+  "texts",
+  "whitespace",
+] as const satisfies readonly RowList[];
+
+/**
+ * The lists whose rows another row names by key, so each must be there: the rows of character
+ * data and the doctype, an attribute's open name, and a foreign element's name.
+ */
+const keyedLists = [
+  "comments",
+  "doctypes",
+  "entityRefs",
+  "openElementNames",
+  "openNames",
+  "pis",
+  "texts",
+  "whitespace",
+] as const satisfies readonly RowList[];
+
+/**
+ * The refusal a repeated row of each list meets: a node row takes its own start twice, the
+ * document node's too; an attribute or a namespace declaration its own slot twice; and any other
+ * row is taken once, so its second is left over.
+ */
+const repeatedRefusal = {
+  attributeEntities: "RowUnreached",
+  attributes: "SlotTaken",
+  comments: "RowUnreached",
+  doctypes: "RowUnreached",
+  entityRefs: "RowUnreached",
+  namespaces: "SlotTaken",
+  nodes: "StartTaken",
+  openElementNames: "RowUnreached",
+  openNames: "RowUnreached",
+  pis: "RowUnreached",
+  texts: "RowUnreached",
+  whitespace: "RowUnreached",
+} as const satisfies Readonly<Record<RowList, AssembleError["_tag"]>>;
+
+/**
+ * Shuffle every list of a document's rows, as a scan in any order returns them.
  *
- * @param index - The node's number in document order.
- * @returns A uuid whose last group is the number in hexadecimal.
+ * @param rows - The rows.
+ * @returns A generator of the same rows, each list in a drawn order.
  */
-const idOf = (index: number): NodeId =>
-  `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`;
+const shuffledRows =
+  (rows: FlatRows<Composed>): Gen<FlatRows<Composed>> =>
+  (source) => {
+    const shuffle = <Row>(list: readonly Row[]): readonly Row[] =>
+      source.draw(shuffled(list, { max: list.length, min: list.length }));
 
-/**
- * Give the node numbered `index` a uuid whose order is not document order, as drawn ids are not:
- * the number times an odd constant, modulo 2³², is a bijection, so every node keeps its own id.
- *
- * @param index - The node's number in document order, below 3,000,000, where the product is exact.
- * @returns A uuid that spells the scrambled number.
- */
-const scrambledIdOf = (index: number): NodeId => idOf((index * 2_654_435_761) % 4_294_967_296);
-
-/**
- * Draws a whole number below `bound`.
- *
- * @param bound - One more than the largest number it may draw.
- * @returns The number drawn.
- */
-type Draw = (bound: number) => number;
-
-/**
- * Make a seeded Park-Miller generator, so a failing tree is rebuilt from its seed.
- *
- * @param seed - The generator's seed, from 1 to 2,147,483,646.
- * @returns A draw over the generator's sequence.
- */
-const seeded = (seed: number): Draw => {
-  let state = seed;
-
-  return (bound) => {
-    state = (state * 48_271) % 2_147_483_647;
-
-    return state % bound;
+    return {
+      attributeEntities: shuffle(rows.attributeEntities),
+      attributes: shuffle(rows.attributes),
+      comments: shuffle(rows.comments),
+      doctypes: shuffle(rows.doctypes),
+      document: rows.document,
+      entityRefs: shuffle(rows.entityRefs),
+      namespaces: shuffle(rows.namespaces),
+      nodes: shuffle(rows.nodes),
+      openElementNames: shuffle(rows.openElementNames),
+      openNames: shuffle(rows.openNames),
+      pis: shuffle(rows.pis),
+      texts: shuffle(rows.texts),
+      whitespace: shuffle(rows.whitespace),
+    };
   };
-};
 
 /**
- * Draw one item of a non-empty list.
+ * Fold a generated tree, which is total on the trees the generator builds.
  *
- * @param draw - The generator to draw with.
- * @param items - The items to choose from.
- * @returns The item drawn.
+ * @param generated - The case.
+ * @returns Its folded rows, under {@link idOf}.
  */
-const pick = <T>(draw: Draw, items: readonly [T, ...T[]]): T =>
-  items[draw(items.length)] ?? items[0];
-
-/**
- * The attribute names a generated attribute takes: closed names and one of each open class.
- */
-const names: readonly [XdmAttributeName<Toy>, ...XdmAttributeName<Toy>[]] = [
-  { _tag: "closed", handle: "identifier" },
-  { _tag: "closed", handle: "xml:lang" },
-  { _tag: "data-*", local: "data-x" },
-  { _tag: "foreign", local: "foo", prefix: "m", uri: "urn:m" },
-  { _tag: "lax", local: "patternMask" },
-];
-
-/**
- * Generate an attribute holding none, one or two unexpanded entity references.
- *
- * @param draw - The generator to draw with.
- * @returns The attribute.
- */
-const attribute = (draw: Draw): XdmAttribute<Toy> => {
-  const references = Array.from({ length: draw(3) }, (_, at) => ({
-    name: `e${String(draw(3))}`,
-    offset: at * 4,
-  }));
-
-  return {
-    domain: pick(draw, ["identifier", "language", "string"]),
-    lexical: `${references.map(({ name }) => `&${name};`).join("")}v${String(draw(10))}`,
-    name: pick(draw, names),
-    references,
-  };
-};
-
-/**
- * Generate a leaf an element holds: any kind of character data, with a drawn value.
- *
- * @param draw - The generator to draw with.
- * @returns The leaf.
- */
-const leaf = (draw: Draw): XdmChild<Toy> => {
-  const value = String(draw(10));
-
-  return pick<XdmChild<Toy>>(draw, [
-    { _tag: "text", value: `t${value}` },
-    { _tag: "ws", value: " ".repeat(Number(value) + 1) },
-    { _tag: "comment", value: `c${value}` },
-    { _tag: "pi", data: `d${value}`, target: "t" },
-    { _tag: "entityRef", name: `e${value}` },
-  ]);
-};
-
-/**
- * The extent of a generated tree: how deep its spine runs and how many other children an element
- * holds at most.
- */
-interface Extent {
-  readonly depth: number;
-  readonly width: number;
-}
-
-/**
- * The extents every law is checked over: a bushy tree, a deep and narrow one, and a shallow and
- * wide one.
- */
-const extents: readonly Extent[] = [
-  { depth: 4, width: 4 },
-  { depth: 40, width: 2 },
-  { depth: 2, width: 24 },
-];
-
-/**
- * Generate an element and its subtree: up to `width` children, each an element or a leaf, and at a
- * drawn place among them one element whose subtree reaches the full depth.
- *
- * @param draw - The generator to draw with.
- * @param width - How many children, beside the spine, an element holds at most.
- * @param depth - How many levels of elements sit below it on its spine.
- * @returns The element.
- */
-const element = (draw: Draw, width: number, depth: number): XdmElement<Toy> => {
-  const children = Array.from({ length: draw(width + 1) }, () =>
-    depth > 0 && draw(2) === 0 ? element(draw, width, draw(Math.min(depth, 3))) : leaf(draw),
-  );
-  const spine = depth > 0 ? [element(draw, width, depth - 1)] : [];
-  const at = draw(children.length + 1);
-
-  return {
-    _tag: "element",
-    attributes: Array.from({ length: draw(4) }, () => attribute(draw)),
-    children: [...children.slice(0, at), ...spine, ...children.slice(at)],
-    kind: pick(draw, ["body", "item", "p"]),
-    namespaces: Array.from({ length: draw(3) }, (_, slot) => ({
-      prefix: slot === 0 ? "" : `n${String(slot)}`,
-      uri: `urn:n${String(slot)}`,
-    })),
-    prefix: pick(draw, ["", "q"]),
-  };
-};
-
-/**
- * Generate a document: an optional doctype, a prolog, a root element of the given extent and an
- * epilog, and a declaration whose fields agree on whether it exists.
- *
- * @param seed - The seed the document is rebuilt from.
- * @param extent - The root element's extent.
- * @returns The document.
- */
-const generated = (seed: number, extent: Extent): XdmDocument<Toy> => {
-  const draw = seeded(seed);
-  const misc = (): readonly XdmDocumentChild<Toy>[] =>
-    Array.from({ length: draw(3) }, () =>
-      pick<XdmDocumentChild<Toy>>(draw, [
-        { _tag: "comment", value: "m" },
-        { _tag: "pi", data: "", target: "m" },
-      ]),
-    );
-  const doctype: readonly XdmDocumentChild<Toy>[] =
-    draw(2) === 0 ? [] : [{ _tag: "doctype", value: "<!DOCTYPE item>" }];
-  const declared = draw(2) === 0;
-
-  return {
-    _tag: "document",
-    charset: "utf-8",
-    children: [...doctype, ...misc(), element(draw, extent.width, extent.depth), ...misc()],
-    encoding: declared ? pick(draw, ["", "utf-8"]) : "",
-    exportCharset: "utf-8",
-    standalone: declared ? pick(draw, [none, "yes", "no"]) : none,
-    version: pick(draw, ["3.0.0", "3.0.1"]),
-    xmlVersion: declared ? "1.0" : none,
-  };
-};
-
-/**
- * The documents every law is checked over: 100 seeds of each extent.
- */
-const documents = extents.flatMap((extent) =>
-  Array.from({ length: 100 }, (_, index) => generated(index + 1, extent)),
-);
-
-/**
- * The order of a family's rows by key: owner, then slot.
- */
-const byOwnerAndSlot = Order.mapInput(
-  Order.Tuple([Order.String, Order.BigInt]),
-  (row: { readonly at: bigint; readonly node: NodeId }) => [row.node, row.at] as const,
-);
-
-/**
- * The order of leaf rows by key, their node.
- */
-const byNode = Order.mapInput(Order.String, (row: { readonly node: NodeId }) => row.node);
-
-/**
- * Sort every relation of a document's rows into key order, as a scan in key order returns them: the
- * nodes by (parent, at), the attribute-keyed rows by (node, at), entity references by offset within
- * their attribute, and the leaves by node.
- *
- * @param rows - The rows, in any order.
- * @returns The same rows in key order.
- */
-const inKeyOrder = (rows: FlatRows<Toy>): FlatRows<Toy> => ({
-  attributeEntities: rows.attributeEntities.toSorted(
-    Order.mapInput(
-      Order.Tuple([Order.String, Order.BigInt, Order.BigInt]),
-      (row: FlatRows<Toy>["attributeEntities"][number]) => [row.node, row.at, row.offset] as const,
-    ),
-  ),
-  attributes: rows.attributes.toSorted(byOwnerAndSlot),
-  comments: rows.comments.toSorted(byNode),
-  doctypes: rows.doctypes.toSorted(byNode),
-  document: rows.document,
-  entityRefs: rows.entityRefs.toSorted(byNode),
-  lexicals: rows.lexicals.toSorted(byOwnerAndSlot),
-  namespaces: rows.namespaces.toSorted(byOwnerAndSlot),
-  nodes: rows.nodes.toSorted(
-    Order.mapInput(
-      Order.Tuple([Order.String, Order.BigInt]),
-      (row: NodeRow<Toy>) => [row.parent, row.at] as const,
-    ),
-  ),
-  openNames: rows.openNames.toSorted(byOwnerAndSlot),
-  pis: rows.pis.toSorted(byNode),
-  texts: rows.texts.toSorted(byNode),
-  whitespace: rows.whitespace.toSorted(byNode),
-});
-
-/**
- * A document that reaches every arm: a doctype and a prolog, attributes under each kind of name
- * with an entity reference in one, namespace declarations, every kind of character data, and an
- * epilog. Its nodes are numbered 0 (the document node) to 11 in document order.
- */
-const sample: XdmDocument<Toy> = {
-  _tag: "document",
-  charset: "utf-8",
-  children: [
-    { _tag: "doctype", value: "<!DOCTYPE item>" },
-    { _tag: "comment", value: " prolog " },
-    {
-      _tag: "element",
-      attributes: [
-        {
-          domain: "identifier",
-          lexical: "i1",
-          name: { _tag: "closed", handle: "identifier" },
-          references: [],
-        },
-        {
-          domain: "string",
-          lexical: "&ent;y",
-          name: { _tag: "data-*", local: "data-x" },
-          references: [{ name: "ent", offset: 0 }],
-        },
-        {
-          domain: "string",
-          lexical: "bar",
-          name: { _tag: "foreign", local: "foo", prefix: "m", uri: "urn:m" },
-          references: [],
-        },
-        {
-          domain: "string",
-          lexical: "z",
-          name: { _tag: "lax", local: "patternMask" },
-          references: [],
-        },
-      ],
-      children: [
-        { _tag: "ws", value: "\n  " },
-        {
-          _tag: "element",
-          attributes: [
-            {
-              domain: "language",
-              lexical: "en",
-              name: { _tag: "closed", handle: "xml:lang" },
-              references: [],
-            },
-          ],
-          children: [
-            { _tag: "text", value: "Hi " },
-            { _tag: "entityRef", name: "ent" },
-            { _tag: "pi", data: "d", target: "t" },
-            { _tag: "comment", value: "c" },
-          ],
-          kind: "body",
-          namespaces: [],
-          prefix: "m",
-        },
-        { _tag: "ws", value: "\n" },
-      ],
-      kind: "item",
-      namespaces: [
-        { prefix: "", uri: "urn:qti" },
-        { prefix: "m", uri: "urn:m" },
-      ],
-      prefix: "",
-    },
-    { _tag: "pi", data: "", target: "end" },
-  ],
-  encoding: "",
-  exportCharset: "utf-8",
-  standalone: none,
-  version: "3.0.1",
-  xmlVersion: "1.0",
-};
-
-/**
- * The sample's rows, its nodes numbered by {@link idOf}.
- */
-const sampleRows = flatten(sample, idOf);
-
-/**
- * Change one of the sample's node rows.
- *
- * @param index - The node's number.
- * @param change - The fields to give it.
- * @param change.kind - Its new kind, when it changes.
- * @param change.parent - Its new parent, when it changes.
- * @returns The sample's rows with that node changed.
- */
-const changed = (
-  index: number,
-  change: { readonly kind: NodeRow<Toy>["kind"] } | { readonly parent: NodeId },
-): FlatRows<Toy> => ({
-  ...sampleRows,
-  nodes: sampleRows.nodes.map((row, at) => (at === index ? { ...row, ...change } : row)),
-});
+const foldedOf = (generated: GeneratedXdm) =>
+  Effect.orDie(Effect.fromResult(fold(generated.document, idOf, foldGrammarOf(grammar))));
 
 /**
  * Assemble rows that must be refused.
  *
  * @param rows - The rows.
- * @returns The refusal, or a failure with the document when the rows assemble.
+ * @returns The refusal; a failure with the document when they assemble.
  */
-const refusal = (rows: FlatRows<Toy>): Effect.Effect<AssembleError, XdmDocument<Toy>> =>
-  Effect.flip(Effect.fromResult(assemble(rows)));
+const refusalOf = (rows: FlatRows<Composed>) => Effect.flip(Effect.fromResult(assemble(rows)));
 
-describe("assemble", () => {
-  it.effect("assembles a document that reaches every arm back from its rows", () =>
-    Effect.gen(function* sampleDocument() {
-      const assembled = yield* Effect.fromResult(assemble(sampleRows));
+/**
+ * The nodes a refusal names: the row that failed its check, and for two rows at one start the
+ * row that held it first.
+ *
+ * @param refusal - The refusal.
+ * @returns The ids it names.
+ */
+const namedBy = (refusal: AssembleError): ReadonlySet<string> => {
+  switch (refusal._tag) {
+    case "StartTaken": {
+      return new Set([refusal.node, refusal.other]);
+    }
+    case "SlotBeyond":
+    case "SlotTaken": {
+      return new Set([refusal.owner]);
+    }
+    case "RowUnreached":
+    case "RowMissing": {
+      return new Set([refusal.key]);
+    }
+    case "DocumentInterval":
+    case "EndBeyondParent":
+    case "IdRepeated":
+    case "IntervalEmpty":
+    case "LeafOversized":
+    case "NodeMisplaced":
+    case "ParentNotOpen":
+    case "RootMissing":
+    case "SlotOutOfTurn":
+    case "StartBeyond": {
+      return new Set([refusal.node]);
+    }
+    default: {
+      return refusal satisfies never;
+    }
+  }
+};
 
-      assert.deepStrictEqual(assembled, sample);
-    }),
-  );
+/**
+ * The kinds of node that hold no children and keep their content in a row of their kind.
+ */
+const leafKinds: ReadonlySet<string> = new Set([
+  "comment",
+  "doctype",
+  "entityRef",
+  "pi",
+  "text",
+  "ws",
+]);
 
-  it.effect("assembles every generated document back from its rows in document order", () =>
-    Effect.gen(function* documentOrder() {
-      for (const document of documents) {
-        const assembled = yield* Effect.fromResult(assemble(flatten(document, idOf)));
+/**
+ * The refusal a row variant meets, as the refusal's tag and the model number of the node it names,
+ * from the scan's checks in document order: the first row, by start, that a variant's edit makes
+ * fail is the one refused.
+ *
+ * - A slot out of order fails the slot check at the node itself.
+ * - A second row of an id over a start of its own is a repeated id, and a start taken from the node
+ *   before collides where the rows are placed by start.
+ * - A second root or a cycle names a parent that is not open at the node's start.
+ * - A wrong size moves every later start on, so the last node starts past the document's last start;
+ *   when the node is itself the last, the document node's interval grows past `[0, N)`.
+ * - A predecessor that overlaps its successor is an oversized leaf when it is one, and otherwise an
+ *   element still open at the successor's start, which is not the successor's parent.
+ * - A predecessor that ends early holds no node when it has no children, and otherwise its last child
+ *   leaves its interval: past its end when that child starts inside it, and outside it altogether
+ *   when the child is childless, so it starts at the end.
+ * - A parent that ends inside its last child leaves that child's end beyond its own.
+ *
+ * @param model - The valid tree's model.
+ * @param variant - The variant.
+ * @returns The refusals it may meet, each a tag and a node's number.
+ */
+const expectedFor = (
+  model: readonly Placed[],
+  variant: Extract<Corruption, { readonly _tag: RowVariant }>,
+): readonly (readonly [AssembleError["_tag"], number])[] => {
+  const numbered = model.map((placed, number) => ({ ...placed, number }));
+  const childrenOf = Map.groupBy(numbered.slice(1), ({ parent }) => parent);
+  const isChildless = (number: number) => !childrenOf.has(number);
+  const lastOf = (number: number) => childrenOf.get(number)?.at(-1)?.number ?? -1;
+  const before = (number: number) =>
+    (childrenOf.get(model[number]?.parent ?? -1) ?? []).find(
+      ({ at }) => at === (model[number]?.at ?? 0) - 1,
+    )?.number ?? -1;
+  switch (variant._tag) {
+    case "gap":
+    case "duplicateSlot": {
+      return [["SlotOutOfTurn", variant.node]];
+    }
+    case "secondParent": {
+      return [["IdRepeated", variant.node]];
+    }
+    case "startTaken": {
+      return [
+        ["StartTaken", variant.node],
+        ["StartTaken", variant.node - 1],
+      ];
+    }
+    case "secondRoot":
+    case "cycle": {
+      return [["ParentNotOpen", variant.node]];
+    }
+    case "wrongSize": {
+      return variant.node === model.length - 1
+        ? [["DocumentInterval", 0]]
+        : [["StartBeyond", model.length - 1]];
+    }
+    case "overlappingSiblings": {
+      const predecessor = before(variant.node);
 
-        assert.deepStrictEqual(assembled, document);
+      return leafKinds.has(model[predecessor]?.kind ?? "")
+        ? [["LeafOversized", predecessor]]
+        : [["ParentNotOpen", variant.node]];
+    }
+    case "gapBetweenSiblings": {
+      const predecessor = before(variant.node);
+      if (isChildless(predecessor)) {
+        return [["IntervalEmpty", predecessor]];
       }
-    }),
-  );
 
-  it.effect("assembles rows in key order, under ids that do not follow document order", () =>
-    Effect.gen(function* keyOrder() {
-      const reordered = documents.filter((document) => {
-        const rows = flatten(document, scrambledIdOf);
+      const last = lastOf(predecessor);
 
-        return inKeyOrder(rows).nodes.some((row, at) => row !== rows.nodes[at]);
-      });
-      for (const document of documents) {
-        const assembled = yield* Effect.fromResult(
-          assemble(inKeyOrder(flatten(document, scrambledIdOf))),
-        );
+      return isChildless(last) ? [["ParentNotOpen", last]] : [["EndBeyondParent", last]];
+    }
+    case "childOutsideParent": {
+      return [["EndBeyondParent", lastOf(variant.node)]];
+    }
+    default: {
+      return variant satisfies never;
+    }
+  }
+};
 
-        assert.deepStrictEqual(assembled, document);
-      }
+/**
+ * Test whether a corruption is a row variant, which assembly meets.
+ *
+ * @param variant - The corruption.
+ * @returns Whether its tag is one of {@link rowVariants}.
+ */
+const isRowVariant = (
+  variant: Corruption,
+): variant is Extract<Corruption, { readonly _tag: RowVariant }> =>
+  rowVariants.some((tag) => tag === variant._tag);
 
-      assert.strictEqual(reordered.length, documents.length);
-    }),
+describe("assemble", { timeout: searchTimeout }, () => {
+  it.effect(
+    "gives back every generated tree from its rows, under ids in any order and every list in any order, to the same canonical bytes",
+    (ctx) =>
+      // Oracle: a universal one, the round trip assemble ∘ flatten = id, and the canonical bytes of
+      // the tree assembled equal to the source tree's; row order is not data.
+      // Bound: the generator's drawn bounds, up to 200 nodes and depth 7 a tree.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang,
+            concurrency: 1,
+            coverage: required<XdmFeature>(
+              [
+                "element",
+                "wildcard",
+                "text",
+                "ws",
+                "comment",
+                "pi",
+                "entityRef",
+                "attribute",
+                "openName",
+                "doctype",
+              ],
+              { cases: 300, sense: notesOnly },
+            ),
+            draw: drawn(documents),
+            kept: [],
+            literal: Formatter.format,
+            runs: 300,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "model/assemble-round-trip",
+          },
+          (generated, c) =>
+            Effect.gen(function* roundTrip() {
+              c.noteAll(featuresOf(generated.document));
+
+              const ids = c.draw(element([idOf, scrambledIdOf]));
+              const rows = c.draw(shuffledRows(flatten(generated.document, ids)));
+              const assembled = yield* Effect.fromResult(assemble(rows));
+
+              assert.deepStrictEqual(assembled, generated.document);
+              assert.deepStrictEqual(
+                canonicalize(toXmlDocument(assembled, names)),
+                canonicalize(toXmlDocument(generated.document, names)),
+              );
+            }),
+        ),
+      ),
   );
 
   it.effect(
-    "assembles a tree 100,000 elements deep, and an element 100,000 children wide",
-    () =>
-      Effect.gen(function* extremes() {
-        const leafElement: XdmElement<Toy> = {
-          _tag: "element",
-          attributes: [],
-          children: [],
-          kind: "p",
-          namespaces: [],
-          prefix: "",
-        };
-        const size = 100_000;
-        let deep = leafElement;
-        for (let level = 1; level < size; level += 1) {
-          deep = { ...leafElement, children: [deep] };
-        }
+    "refuses each named row variant by the first check its edit fails in document order, naming its node",
+    (ctx) =>
+      // Oracle: the specification as a checker, trees.md §6: rows sorted by start rebuild the
+      // document with one stack, refusing a row whose start is taken or past the last, whose parent
+      // is not the open element, whose slot is not that element's next, or whose interval leaves
+      // its parent's, is empty, or holds more than a leaf; each variant's first failing row is
+      // read off the valid tree's model ({@link expectedFor}).
+      // Bound: the generator's drawn bounds, every row variant a tree admits.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang,
+            concurrency: 1,
+            coverage: required<RowVariant>(rowVariants, { cases: 400, sense: notesOnly }),
+            draw: drawn(documents),
+            kept: [],
+            literal: Formatter.format,
+            runs: 400,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "model/assemble-row-variants",
+          },
+          (generated, c) =>
+            Effect.gen(function* rowVariant() {
+              const variant = c.draw(corruption(generated, rowVariants));
+              if (!isRowVariant(variant)) {
+                assert.fail(`drew ${variant._tag}, which is no row variant`);
+              }
 
-        const wide: XdmElement<Toy> = {
-          ...leafElement,
-          children: Array.from({ length: size }, (_, at): XdmChild<Toy> => ({
-            _tag: "text",
-            value: String(at),
-          })),
-        };
-        const of = (root: XdmElement<Toy>): XdmDocument<Toy> => ({
-          _tag: "document",
-          charset: "utf-8",
-          children: [root],
-          encoding: "",
-          exportCharset: "utf-8",
-          standalone: none,
-          version: "3.0.0",
-          xmlVersion: none,
-        });
-        const deepRows = inKeyOrder(flatten(of(deep), scrambledIdOf));
-        const deepAssembled = yield* Effect.fromResult(assemble(deepRows));
-        const wideAssembled = yield* Effect.fromResult(
-          assemble(inKeyOrder(flatten(of(wide), scrambledIdOf))),
-        );
+              c.note(variant._tag);
 
-        // A deep comparison recurses once per level, so the deep tree is compared through its rows:
-        // flatten writes every field of every node, so equal rows are equal trees.
-        assert.deepStrictEqual(inKeyOrder(flatten(deepAssembled, scrambledIdOf)), deepRows);
-        assert.deepStrictEqual(wideAssembled, of(wide));
-      }),
-    // Two trees of 100,000 nodes take about 2 s on an idle laptop: the timeout leaves room for a busy one.
-    30_000,
-  );
+              const rows = yield* foldedOf(generated);
+              const refusal = yield* refusalOf(c.draw(shuffledRows(corrupt(rows, variant))));
+              const named = namedBy(refusal);
 
-  it.effect("refuses rows that lack a row another of them names", () =>
-    Effect.gen(function* missing() {
-      const cases: readonly (readonly [FlatRows<Toy>, string])[] = [
-        [{ ...sampleRows, texts: [] }, `no texts row at (${idOf(6)})`],
-        [{ ...sampleRows, pis: sampleRows.pis.slice(1) }, `no pis row at (${idOf(8)})`],
-        [
-          { ...sampleRows, lexicals: sampleRows.lexicals.filter(({ node }) => node !== idOf(5)) },
-          `no lexicals row at (${idOf(5)}, 0)`,
-        ],
-        [
-          { ...sampleRows, openNames: sampleRows.openNames.filter(({ at }) => at !== 2n) },
-          `no openNames row at (${idOf(3)}, 2)`,
-        ],
-        [{ ...sampleRows, nodes: sampleRows.nodes.slice(1) }, `no nodes row at (${idOf(0)})`],
-      ];
-      for (const [rows, fragment] of cases) {
-        const failure = yield* refusal(rows);
-
-        assert.strictEqual(failure._tag, "RowMissing");
-        assert.include(failure.message, fragment);
-      }
-    }),
-  );
-
-  it.effect("refuses a node under a parent that cannot hold it", () =>
-    Effect.gen(function* misplaced() {
-      const cases: readonly (readonly [FlatRows<Toy>, string])[] = [
-        [changed(6, { parent: idOf(0) }), `Node ${idOf(6)}, of kind text, sits under ${idOf(0)}`],
-        [changed(4, { parent: idOf(0) }), `Node ${idOf(4)}, of kind ws, sits under ${idOf(0)}`],
-        [
-          changed(7, { parent: idOf(0) }),
-          `Node ${idOf(7)}, of kind entityRef, sits under ${idOf(0)}`,
-        ],
-        [
-          changed(1, { parent: idOf(3) }),
-          `Node ${idOf(1)}, of kind doctype, sits under ${idOf(3)}`,
-        ],
-        [
-          changed(7, { parent: idOf(6) }),
-          `Node ${idOf(7)}, of kind entityRef, sits under ${idOf(6)}`,
-        ],
-        [
-          changed(9, { kind: "document" }),
-          `Node ${idOf(9)}, of kind document, sits under ${idOf(5)}`,
-        ],
-        [changed(8, { parent: idOf(99) }), `Node ${idOf(8)}, of kind pi, sits under ${idOf(99)}`],
-      ];
-      for (const [rows, fragment] of cases) {
-        const failure = yield* refusal(rows);
-
-        assert.strictEqual(failure._tag, "NodeMisplaced");
-        assert.include(failure.message, fragment);
-      }
-    }),
-  );
-
-  it.effect("refuses a data attribute whose name does not begin with data-", () =>
-    Effect.gen(function* malformed() {
-      const failure = yield* refusal({
-        ...sampleRows,
-        openNames: sampleRows.openNames.map((row) =>
-          row.at === 1n ? { ...row, local: "x-data" } : row,
+              assert.isTrue(
+                expectedFor(generated.model, variant).some(
+                  ([tag, number]) => tag === refusal._tag && named.has(idOf(number)),
+                ),
+                `${variant._tag}: ${refusal._tag} naming ${[...named].join(", ")}`,
+              );
+            }),
         ),
-      });
+      ),
+  );
 
-      assert.strictEqual(failure._tag, "OpenNameMalformed");
-      assert.include(failure.message, `The data attribute at (${idOf(3)}, 1) is named x-data`);
-    }),
+  /**
+   * The ways a set of rows leaves flatten's image beside the row variants: a row another names is
+   * missing, a row is repeated, or a node is of a kind its parent cannot hold.
+   */
+  type Outside = "missing" | "repeated" | "misplaced";
+
+  it.effect(
+    "refuses rows outside flatten's image: a row another names missing, any row repeated, a node of a kind its parent cannot hold",
+    (ctx) =>
+      // Oracle: the specification as a checker, the rows flatten writes for some tree.
+      // Bound: the generator's drawn bounds, one edit a case.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang,
+            concurrency: 1,
+            coverage: required<Outside>(["missing", "repeated", "misplaced"], {
+              cases: 300,
+              sense: notesOnly,
+            }),
+            draw: drawn(documents),
+            kept: [],
+            literal: Formatter.format,
+            runs: 300,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "model/assemble-outside-image",
+          },
+          (generated, c) =>
+            Effect.gen(function* outsideImage() {
+              const rows = flatten(generated.document, idOf);
+              const named = keyedLists.filter((list) => rows[list].length > 0);
+              const listed = rowLists.filter((list) => rows[list].length > 0);
+              const runs = [...rows.texts, ...rows.whitespace];
+              const edit = c.draw(
+                element([
+                  "repeated",
+                  ...(Arr.isReadonlyArrayNonEmpty(named) ? (["missing"] as const) : []),
+                  ...(Arr.isReadonlyArrayNonEmpty(runs) ? (["misplaced"] as const) : []),
+                ] as const),
+              );
+              c.note(edit);
+              switch (edit) {
+                case "missing": {
+                  if (!Arr.isReadonlyArrayNonEmpty(named)) {
+                    assert.fail("drew a missing row from rows with no keyed list");
+                  }
+
+                  const list = c.draw(element(named));
+                  const at = c.draw(int(0, rows[list].length - 1));
+                  const refusal = yield* refusalOf({
+                    ...rows,
+                    [list]: rows[list].filter((_, index) => index !== at),
+                  });
+
+                  assert.deepStrictEqual(
+                    [refusal._tag, refusal._tag === "RowMissing" ? refusal.rows : ""],
+                    ["RowMissing", list],
+                  );
+                  break;
+                }
+                case "repeated": {
+                  if (!Arr.isReadonlyArrayNonEmpty(listed)) {
+                    assert.fail("drew a repeated row from rows with no list");
+                  }
+
+                  const list = c.draw(element(listed));
+                  const at = c.draw(int(0, rows[list].length - 1));
+                  const refusal = yield* refusalOf({
+                    ...rows,
+                    [list]: [...rows[list], ...rows[list].slice(at, at + 1)],
+                  });
+
+                  assert.strictEqual(refusal._tag, repeatedRefusal[list]);
+                  break;
+                }
+                case "misplaced": {
+                  if (!Arr.isReadonlyArrayNonEmpty(runs)) {
+                    assert.fail("drew a misplaced node from rows with no character data");
+                  }
+
+                  const run = c.draw(element(runs));
+                  const refusal = yield* refusalOf({
+                    ...rows,
+                    doctypes: [...rows.doctypes, run],
+                    nodes: rows.nodes.map((row) =>
+                      row.id === run.node ? { ...row, kind: "doctype" } : row,
+                    ),
+                    texts: rows.texts.filter((row) => row !== run),
+                    whitespace: rows.whitespace.filter((row) => row !== run),
+                  });
+
+                  assert.deepStrictEqual(
+                    [refusal._tag, [...namedBy(refusal)]],
+                    ["NodeMisplaced", [run.node]],
+                  );
+                  break;
+                }
+                default: {
+                  assert.fail(`no edit ${String(edit satisfies never)}`);
+                }
+              }
+            }),
+        ),
+      ),
   );
 });

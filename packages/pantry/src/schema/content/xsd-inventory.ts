@@ -1,7 +1,7 @@
 /**
  * The derived XSD inventory: for every ASI, HTML, processing and test kind handle, the element and
- * type the ASI 3.0.1 XSD declares, whether the type is mixed, every attribute it declares and every
- * element it references.
+ * type the ASI 3.0.1 XSD declares, its content class, every attribute it declares and every element
+ * it references.
  *
  * The inventory is data derived once from `imsqti_asiv3p0p1_v1p0.xsd` and read by the kinds files,
  * the attribute arms and the importer. Each vocabulary is a leaf file (`inventory/asi.ts`,
@@ -14,8 +14,11 @@
  * the class of the declared type: `collapse` for lists and every built-in but `xs:string` and
  * `xs:normalizedString`, `preserve` for `xs:string` and its enumerations, `replace` for
  * `xs:normalizedString`, `CoordsDType`, `MimeTypeDType` and `URLDType`, and `union` for a union of
- * classes. A child's `min` and `max` are its own bounds multiplied by those of every enclosing
- * group, `None` for unbounded; the choice groups are listed in each leaf's module comment.
+ * classes. An attribute declared with an anonymous type keeps the type's definition (`inline`),
+ * so an inline enumeration keeps its values. A child's `min` and `max` are its own bounds
+ * multiplied by those of every enclosing group, `None` for unbounded; the choice groups are listed
+ * in each leaf's module comment. The content class ({@link InventoryContent}) says what a kind
+ * admits beside its children, and for a kind of simple content, the type of its text.
  *
  * The ASI, HTML and processing leaves are the output of the vocabulary deriver,
  * `src/vocab/derive/derive.ts`, whose module comment states the reading rules, and `derive.test.ts`
@@ -54,19 +57,79 @@ import { processingInventory } from "#pantry/schema/content/inventory/processing
 import { testInventory } from "#pantry/schema/content/inventory/test.ts";
 
 /**
+ * The facets an XSD restriction may state, by element name: the twelve of XML Schema 1.0 Part 2,
+ * 4.3.
+ */
+export type InventoryFacetName =
+  | "enumeration"
+  | "fractionDigits"
+  | "length"
+  | "maxExclusive"
+  | "maxInclusive"
+  | "maxLength"
+  | "minExclusive"
+  | "minInclusive"
+  | "minLength"
+  | "pattern"
+  | "totalDigits"
+  | "whiteSpace";
+
+/**
+ * One facet an anonymous restriction states: its name and its `value` as written.
+ */
+export interface InventoryFacet {
+  readonly facet: InventoryFacetName;
+  readonly value: string;
+}
+
+/**
+ * A simple type as a definition refers to it: a named type, by its QName with a built-in spelled
+ * `xs:` whatever prefix its XSD binds, or an anonymous type's definition.
+ */
+export type InventoryType = { readonly _tag: "named"; readonly name: string } | InventoryInlineType;
+
+/**
+ * An anonymous simple type, as its XSD writes it in place of a type name: a restriction of a base
+ * by its facets in document order, a list of an item type, or a union of member types, the named
+ * members first as `memberTypes` lists them.
+ *
+ * It is the whole lexical definition, so with the named types' definitions it is a complete value
+ * domain: an enumeration's values are its `enumeration` facets.
+ */
+export type InventoryInlineType =
+  | { readonly _tag: "list"; readonly item: InventoryType }
+  | {
+      readonly _tag: "restriction";
+      readonly base: InventoryType;
+      readonly facets: readonly InventoryFacet[];
+    }
+  | { readonly _tag: "union"; readonly members: readonly InventoryType[] };
+
+/**
+ * The simple type a value is read under: an attribute's, or an element's text.
+ *
+ * `type` is the type's QName, a built-in spelled `xs:`, or for an anonymous type `list`, `union`
+ * or the base of its restriction, read through nested anonymous restrictions. `inline` is the
+ * anonymous type's definition, `None` for a named type. `whiteSpace` is the class of the type, as
+ * the module comment states.
+ */
+export interface InventoryValueType {
+  readonly inline: Option.Option<InventoryInlineType>;
+  readonly type: string;
+  readonly whiteSpace: "preserve" | "replace" | "collapse" | "union";
+}
+
+/**
  * One attribute an XSD type declares, through its attribute groups and its extension bases.
  *
- * `type` is the declared type name (`xml:lang` is `xs:language`, `xml:base` is `xs:anyURI`) or, for
- * an inline type, the name of its base. `default` is the XSD default, absent when none is
- * declared.
+ * `xml:lang` is `xs:language`, `xml:base` is `xs:anyURI` and `xml:id` is `xs:ID`. `default` is the
+ * XSD default, absent when none is declared.
  */
-export interface InventoryAttribute {
+export interface InventoryAttribute extends InventoryValueType {
   readonly name: string;
-  readonly type: string;
   readonly use: "required" | "optional";
   readonly default: Option.Option<string>;
   readonly family: "own" | "base" | "aria";
-  readonly whiteSpace: "preserve" | "replace" | "collapse" | "union";
 }
 
 /**
@@ -81,14 +144,54 @@ export interface InventoryChild {
 }
 
 /**
- * What the XSD declares for one kind handle: the element, its type, whether the type is mixed, its
+ * What a kind's content admits beside the element children its entry lists: its content class.
+ *
+ * - `text`: character data of a simple type alone, for an element declared with a simple type or a
+ *   complex type with `simpleContent`; the arm carries the type.
+ * - `mixed`: character data between the element children (`mixed="true"`).
+ * - `element`: element children only, at least one of them named.
+ * - `wildcard`: element children only, all of them an element wildcard's (`xs:any`).
+ * - `empty`: nothing.
+ *
+ * A content model that names an element and also holds a wildcard is `element`, or `mixed` when it
+ * is mixed: the class says what character data the kind admits and whether its children are
+ * modeled, not every particle it holds.
+ */
+export type InventoryContent =
+  | { readonly _tag: "element" }
+  | { readonly _tag: "empty" }
+  | { readonly _tag: "mixed" }
+  | ({ readonly _tag: "text" } & InventoryValueType)
+  | { readonly _tag: "wildcard" };
+
+/**
+ * The content class of an {@link InventoryContent}.
+ */
+export type InventoryContentClass = InventoryContent["_tag"];
+
+/**
+ * The character kinds each content class admits beside its element children, as phase-1's 4.3
+ * states them: whitespace, comments and processing instructions between element children, and
+ * character data and entity references where text is admitted. A kind's admission rows are its
+ * element children's handles, then these, in this order.
+ */
+export const characterKinds = {
+  element: ["ws", "comment", "pi"],
+  empty: ["comment", "pi"],
+  mixed: ["text", "ws", "entityRef", "comment", "pi"],
+  text: ["text", "ws", "entityRef", "comment", "pi"],
+  wildcard: ["ws", "comment", "pi"],
+} as const satisfies Readonly<Record<InventoryContentClass, readonly string[]>>;
+
+/**
+ * What the XSD declares for one kind handle: the element, its type, its content class, its
  * attributes and its children in XSD order.
  */
 export interface InventoryEntry {
   readonly handle: string;
   readonly element: string;
   readonly type: string;
-  readonly mixed: boolean;
+  readonly content: InventoryContent;
   readonly attributes: readonly InventoryAttribute[];
   readonly children: readonly InventoryChild[];
 }

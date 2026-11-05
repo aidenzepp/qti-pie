@@ -2,25 +2,36 @@
  * The ancestry grammar as three closed sets over kind × flag: `Enters`, `Banned` and `Needs`
  * (fin.md §13 P3, §16).
  *
- * An ancestry is the set of flags a node's ancestors enter, one `bit(8)` on `Node`. A node hands
+ * An ancestry is the set of flags a node's ancestors enter, one `bit(9)` on `Node`. A node hands
  * its children `ancestry = parentAncestry | Enters[kind]`, and a node of kind k may sit in its
  * parent's ancestry when that ancestry holds no flag of `Banned[k]` and every flag of `Needs[k]`.
  * The flags are independent, so these three constants replace the product automaton `AncestryStep`,
  * 56 states × 363 kinds written out as 18,924 rows.
  *
- * Each set is keyed by (kind, flag), kind first, so kind k's row is the 8 cells from k·8,
- * `substring(S FROM k·8 + 1 FOR 8)`: a `bit(8)` laid out as an ancestry is, `fb` leftmost.
+ * Each set is keyed by (kind, flag), kind first, so kind k's row is the 9 cells from k·9,
+ * `substring(S FROM k·9 + 1 FOR 9)`: a `bit(9)` laid out as an ancestry is, `fb` leftmost.
  */
 import { Option, Result } from "effect";
-import { closed } from "#pantry/grammar/closed.ts";
-import type { Closed, ClosedRelationError, Field } from "#pantry/grammar/closed.ts";
-import type { kinds as asiKinds } from "#pantry/schema/kinds/asi.ts";
+import { closed, idField, roster } from "#pantry/grammar/closed.ts";
+import type { Closed, ClosedRelationError, IdField, Roster } from "#pantry/grammar/closed.ts";
 
 /**
- * The ancestry flags in code order. A flag's code is its bit's position in the `bit(8)`, the first
- * flag leftmost, so a kind's row of each set reads as an ancestry does.
+ * The ancestry flags in code order. A flag's code is its bit's position in the `bit(9)`, the first
+ * flag leftmost, so a kind's row of each set reads as an ancestry does. Codes are append-only:
+ * `test`, the content of a test's rubric block or feedback, is last, after the eight an item's
+ * kinds enter.
  */
-export const flags = ["fb", "modal", "rubric", "tmpl", "int", "gap", "choice", "htx"] as const;
+export const flags = [
+  "fb",
+  "modal",
+  "rubric",
+  "tmpl",
+  "int",
+  "gap",
+  "choice",
+  "htx",
+  "test",
+] as const;
 
 /**
  * One ancestry flag.
@@ -28,14 +39,14 @@ export const flags = ["fb", "modal", "rubric", "tmpl", "int", "gap", "choice", "
 export type Flag = (typeof flags)[number];
 
 /**
- * An ancestry as the host shows a `bit(8)`: the flags it holds.
+ * An ancestry as the host shows a `bit(9)`: the flags it holds.
  */
 export type Ancestry = ReadonlySet<Flag>;
 
 /**
  * The key of the three sets: a `NodeKind` handle, then a flag.
  */
-export type KindFlag = readonly [Field<"kind", string>, Field<"flag", Flag>];
+export type KindFlag = readonly [IdField<"kind", string>, IdField<"flag", Flag>];
 
 /**
  * A closed set over kind × flag, one bit a cell.
@@ -62,81 +73,38 @@ export interface AncestrySets {
 }
 
 /**
- * An ASI kind, the vocabulary every kind the grammar names comes from.
- */
-type AsiKind = (typeof asiKinds)[number];
-
-/**
  * A rectangle of a kind × flag set: every kind it lists holds every flag it lists.
  */
-interface Block<Kind extends string> {
+export interface Block {
   readonly flags: readonly Flag[];
-  readonly kinds: readonly Kind[];
+  readonly kinds: readonly string[];
+}
+
+/**
+ * A vocabulary's share of the ancestry grammar: the kinds that enter flags, the kinds banned under
+ * flags, and the kinds that need flags, each as rectangles. A vocabulary that states none has three
+ * empty lists.
+ */
+export interface AncestryFacet {
+  readonly banning: readonly Block[];
+  readonly entering: readonly Block[];
+  readonly needing: readonly Block[];
 }
 
 /**
  * The flags under which an interaction may not sit: no interaction inside another, nor inside a
- * choice, a hottext, a rubric block, a template block or a modal feedback.
+ * choice, a hottext, a rubric block, a template block, a modal feedback, or a test's rubric block
+ * or feedback.
  */
-const interactionBans = [
+export const interactionBans = [
   "int",
   "choice",
   "htx",
   "rubric",
   "tmpl",
   "modal",
+  "test",
 ] as const satisfies readonly Flag[];
-
-/**
- * The kinds that enter a flag, beside the interactions, which each enter `int`.
- */
-const entering = [
-  { flags: ["gap"], kinds: ["qti-gap-match-interaction"] },
-  {
-    flags: ["choice"],
-    kinds: [
-      "qti-prompt",
-      "qti-simple-choice",
-      "qti-simple-associable-choice",
-      "qti-inline-choice",
-      "qti-label",
-      "qti-gap-text",
-      "qti-gap-img",
-    ],
-  },
-  { flags: ["htx"], kinds: ["qti-hottext"] },
-  { flags: ["rubric"], kinds: ["qti-rubric-block"] },
-  {
-    flags: ["tmpl"],
-    kinds: [
-      "qti-template-block",
-      "qti-template-block.rubric",
-      "qti-template-inline",
-      "qti-template-inline.rubric",
-    ],
-  },
-  { flags: ["modal"], kinds: ["qti-modal-feedback"] },
-  {
-    flags: ["fb"],
-    kinds: ["qti-feedback-block", "qti-feedback-block.template", "qti-feedback-inline"],
-  },
-] as const satisfies readonly Block<AsiKind>[];
-
-/**
- * The bans beside the interactions': a rubric block holds no rubric block, and a hottext no
- * hottext. A hottext under a prompt or a choice is admitted.
- */
-const banning = [
-  { flags: ["rubric"], kinds: ["qti-rubric-block"] },
-  { flags: ["htx"], kinds: ["qti-hottext"] },
-] as const satisfies readonly Block<AsiKind>[];
-
-/**
- * The needs: a gap sits only inside a gap match interaction.
- */
-const needing = [
-  { flags: ["gap"], kinds: ["qti-gap"] },
-] as const satisfies readonly Block<AsiKind>[];
 
 /**
  * Expand rectangles into the rows of a kind × flag set.
@@ -145,7 +113,7 @@ const needing = [
  * @returns One row for each kind and flag of each rectangle.
  */
 const rowsOf = (
-  blocks: readonly Block<string>[],
+  blocks: readonly Block[],
 ): readonly { readonly flag: Flag; readonly kind: string }[] =>
   blocks.flatMap((block) =>
     block.kinds.flatMap((kind) => block.flags.map((flag) => ({ flag, kind }))),
@@ -154,44 +122,50 @@ const rowsOf = (
 /**
  * Construct the ancestry grammar over a composed vocabulary.
  *
- * The interactions are an input, not a list held here, because the `Interaction` set that
+ * Every interaction enters `int` and carries the {@link interactionBans}; every other row is a
+ * vocabulary's own block. The interactions are an input, because the `Interaction` set that
  * `Node.parentIsInteraction` reads owns them, and a vocabulary that adds an interaction adds it
  * there.
  *
  * @param vocabulary - The composed vocabulary.
- * @param vocabulary.kinds - The `NodeKind` handles in code order, the sets' first key field.
- * @param vocabulary.interactions - The interaction kinds: each enters `int` and carries the
- *   interaction bans.
- * @returns The three sets, or the first reason one has no constant, as for a kind the grammar names
+ * @param vocabulary.kinds - The `NodeKind` roster, the sets' first key field.
+ * @param vocabulary.interactions - The interaction kinds.
+ * @param vocabulary.facets - Each vocabulary's blocks.
+ * @returns The three sets, or the first reason one has no constant, as for a kind a block names
  *   that the roster lacks.
  */
 export const generate = (vocabulary: {
+  readonly facets: readonly AncestryFacet[];
   readonly interactions: readonly string[];
-  readonly kinds: readonly string[];
+  readonly kinds: Roster<string>;
 }): Result.Result<AncestrySets, ClosedRelationError> =>
   Result.gen(function* generateAncestry() {
+    const { facets, interactions } = vocabulary;
     const key: KindFlag = [
-      { name: "kind", values: vocabulary.kinds },
-      { name: "flag", values: flags },
+      idField("kind", vocabulary.kinds),
+      idField("flag", yield* roster("Flag", flags)),
     ];
-    const set = (name: string, blocks: readonly Block<string>[]) =>
+    const set = (name: string, blocks: readonly Block[]) =>
       closed({ key, name, payload: [], rows: rowsOf(blocks) });
 
     const enters = yield* set("Enters", [
-      { flags: ["int"], kinds: vocabulary.interactions },
-      ...entering,
+      { flags: ["int"], kinds: interactions },
+      ...facets.flatMap((facet) => facet.entering),
     ]);
     const banned = yield* set("Banned", [
-      { flags: interactionBans, kinds: vocabulary.interactions },
-      ...banning,
+      { flags: interactionBans, kinds: interactions },
+      ...facets.flatMap((facet) => facet.banning),
     ]);
-    const needs = yield* set("Needs", needing);
+    const needs = yield* set(
+      "Needs",
+      facets.flatMap((facet) => facet.needing),
+    );
 
     return { banned, enters, needs };
   });
 
 /**
- * Read a kind's row of a kind × flag set, the `bit(8)` as the host shows it.
+ * Read a kind's row of a kind × flag set, the `bit(9)` as the host shows it.
  *
  * @param set - The set.
  * @param kind - The `NodeKind` handle.

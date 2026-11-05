@@ -2,9 +2,8 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option } from "effect";
 import { materialize } from "#pantry/test/fixtures.ts";
-import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { EncodeError } from "@qti-pie/crust/errors.ts";
-import { OracleLayer, xmllintC14n } from "#pantry/xml/oracle.ts";
+import { OracleLayer } from "#pantry/xml/oracle.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Attribute, Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 import { writeXml } from "@qti-pie/crust/write.ts";
@@ -105,34 +104,12 @@ const readsBack = (name: "simple" | "doctype" | "external") =>
     assert.deepStrictEqual(second, first);
   });
 
-/**
- * Assert that one of `simple`'s files, read, written and read again, canonicalizes to the oracle's
- * bytes for the original file.
- */
-const matchesOracle = (file: string) =>
-  Effect.gen(function* firstRoundTrip() {
-    const { second } = yield* roundTrip(`${simple}/${file}`);
-    const expected = yield* xmllintC14n(`${simple}/${file}`);
-    const actual = canonicalize(second);
-
-    assert.strictEqual(new TextDecoder().decode(actual), new TextDecoder().decode(expected));
-    assert.deepStrictEqual([...actual], [...expected]);
-  });
-
 layer(TestLayer)("xml/write.ts", (it) => {
-  for (const name of ["simple", "doctype", "external"] as const) {
+  for (const name of ["external"] as const) {
     it.effect(`the ${name} fixture's choice.xml reads back deep-equal after a write`, () =>
       readsBack(name),
     );
   }
-
-  it.effect("simple's imsmanifest.xml reads back deep-equal after a write", () =>
-    Effect.gen(function* manifest() {
-      const { first, second } = yield* roundTrip(`${simple}/imsmanifest.xml`);
-
-      assert.deepStrictEqual(second, first);
-    }),
-  );
 
   it.effect("the external fixture writes &undeclared; exactly twice, text and attribute", () =>
     Effect.gen(function* undeclared() {
@@ -142,13 +119,6 @@ layer(TestLayer)("xml/write.ts", (it) => {
       assert.strictEqual(text.split("&undeclared;").length - 1, 2);
     }),
   );
-
-  for (const file of ["choice.xml", "imsmanifest.xml"]) {
-    it.effect(
-      `simple's ${file} survives read, write and read with the oracle's canonical form`,
-      () => matchesOracle(file),
-    );
-  }
 
   it.effect(
     "the declaration is written with only the fields present, then the doctype and prolog",

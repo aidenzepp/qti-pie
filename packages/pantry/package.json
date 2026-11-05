@@ -17,10 +17,12 @@
     "@bjornpagen/grizzle": "file:../../vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz",
     "@effect/platform-node": "4.1.2",
     "@qti-pie/crust": "workspace:*",
-    "effect": "4.1.2"
+    "effect": "4.1.2",
+    "saxes": "6.0.0"
   },
   "devDependencies": {
     "@effect/vitest": "4.1.2",
-    "vitest": "5.0.1"
+    "@grizzle/testing": "file:../../vendor/grizzle-testing-0.0.0.tgz",
+    "vitest": "5.1.0"
   }
 }

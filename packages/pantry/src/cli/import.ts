@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
 import { databaseNotChecked, dryRunFlag, requirePackage } from "#pantry/cli/args.ts";
+import { withAuthorApp } from "#pantry/cli/engine.ts";
 import { emitSuccess, outputMode } from "#pantry/cli/output.ts";
 
 /**
@@ -34,7 +35,9 @@ export const ImportData = Schema.Union([ImportStored, ImportPreview]);
  * accepts can still be refused by the real import.
  *
  * `importPackage` reads through `listPackage`, which reads a zip as it reads a directory. The
- * engine loads when the handler runs, so `--help` and a usage error never pay for it.
+ * engine loads when the handler runs, so `--help` and a usage error never pay for it, and the
+ * importer loads inside the database's pool (`withAuthorApp`), so neither does a run that cannot
+ * reach the database.
  */
 export const importCommand = Command.make(
   "import",
@@ -59,10 +62,10 @@ export const importCommand = Command.make(
       return;
     }
 
-    const { AuthorAppLayer } = yield* Effect.promise(() => import("#pantry/db/layer.ts"));
-    const { importPackage } = yield* Effect.promise(() => import("#pantry/import/package.ts"));
-
-    const packageId = yield* importPackage(dir).pipe(Effect.provide(AuthorAppLayer));
+    const packageId = yield* withAuthorApp(
+      () => import("#pantry/import/package.ts"),
+      ({ importPackage }) => importPackage(dir),
+    );
 
     yield* emitSuccess(mode, {
       command: "import",

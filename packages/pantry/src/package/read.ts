@@ -1,7 +1,7 @@
 /* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import { Effect, FileSystem, Schema } from "effect";
 import type { PlatformError } from "effect";
-import { readZip } from "#pantry/package/zip.ts";
+import { packageBudget, readZip } from "#pantry/package/zip.ts";
 import type { ZipEntry, ZipRefusal } from "#pantry/package/zip.ts";
 
 /**
@@ -97,7 +97,7 @@ const readZipPackage = Effect.fn("package.readZipPackage")(function* readZipPack
   PackageReadError | ZipRefusal | PlatformError.PlatformError,
   FileSystem.FileSystem
 > {
-  return yield* readZip(dir).pipe(
+  return yield* readZip(dir, packageBudget).pipe(
     Effect.catchIf(
       (refusal) => refusal._tag === "ZipRefusal" && refusal.rule === "manifest-root",
       () => new PackageReadError({ dir, path: MANIFEST, rule: "manifest-root" }),
@@ -228,7 +228,7 @@ export const readEntry = Effect.fn("package.readEntry")(function* readEntry(
   FileSystem.FileSystem
 > {
   if (yield* isZipFile(dir)) {
-    const found = (yield* readZip(dir)).find((entry) => entry.path === path);
+    const found = (yield* readZip(dir, packageBudget)).find((entry) => entry.path === path);
 
     return found === undefined
       ? yield* new PackageReadError({ dir, path, rule: "entry-path" })

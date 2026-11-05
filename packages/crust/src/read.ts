@@ -6,6 +6,7 @@ import type { Decoded } from "#crust/decode.ts";
 import { NAME_CHAR, NAME_START, lexProlog, substitute } from "#crust/dtd.ts";
 import type { AttlistEntry, Prolog, Substituted } from "#crust/dtd.ts";
 import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
+import { rebuild } from "#crust/rebuild.ts";
 import type {
   Attribute,
   AttributeReference,
@@ -21,6 +22,11 @@ import type {
  */
 interface OpenElement {
   readonly attributes: readonly Attribute[];
+  /**
+   * Every namespace binding in scope at the element, its own declarations included, from prefix
+   * to namespace name.
+   */
+  readonly bindings: Readonly<Record<string, string>>;
   readonly children: Child[];
   readonly local: string;
   readonly namespace: string;
@@ -193,21 +199,65 @@ const toElement = (open: OpenElement): Element => ({
 });
 
 /**
- * The most elements open at once; `xmllint`'s default depth limit.
+ * The most elements a document may hold open at once unless its reader says otherwise: `xmllint`'s
+ * default depth limit.
  */
-const ELEMENT_DEPTH = 256;
+export const defaultElementDepth = 256;
+
+/**
+ * How {@link readXml} reads a document.
+ */
+export interface ReadOptions {
+  /**
+   * The most elements open at once before the document is refused under rule `element-depth`:
+   * {@link defaultElementDepth} when absent, and `Number.POSITIVE_INFINITY` for a document of any
+   * depth.
+   */
+  readonly elementDepth?: number;
+}
+
+/**
+ * The namespace bindings in scope above the root element: the `xml` and `xmlns` prefixes, bound by
+ * definition (Namespaces in XML 1.0, section 3), and the empty default, which names no namespace
+ * until a declaration gives it one.
+ */
+const ROOT_BINDINGS = {
+  "": "",
+  xml: "http://www.w3.org/XML/1998/namespace",
+  xmlns: "http://www.w3.org/2000/xmlns/",
+} as const;
 
 /**
  * Run `saxes` over `substituted.body` and build the root element with the comments and processing
  * instructions around it.
  *
  * `saxes` throws its first well-formedness error; that error becomes a `WellFormednessError` at
- * the position the parser had reached. A document that nests more than `ELEMENT_DEPTH` elements is
- * refused with a `ReaderRefusal` under rule `element-depth`.
+ * the position the parser had reached. A document that nests more than `elementDepth` elements is
+ * refused with a `ReaderRefusal` under rule `element-depth`. The tree is built on a stack of open
+ * elements, so a document of any depth within that bound is read without recursion.
+ *
+ * Each start tag's `ns` record is seeded with every binding in scope, its parent's whole record,
+ * before `saxes` reads the tag's attributes. `saxes` resolves a prefix by looking in the open tag's
+ * own record, then in every open ancestor's from the innermost out, then in its root record
+ * (`SaxesParser.resolve`), so unseeded, a prefix the tag does not itself declare, the empty
+ * default included, costs a walk over every open element, and reading costs the square of the
+ * depth. Seeded, the tag's own record answers every lookup with the name the walk would find,
+ * because `saxes` writes the tag's own declarations into that record after the seed, overriding
+ * the inherited ones. A prefix bound nowhere is in no record, and `saxes` refuses it as unbound.
+ *
+ * @param substituted - The document text with its declared entities substituted.
+ * @param sentinels - The stand-in character of each undeclared entity name.
+ * @param elementDepth - The most elements open at once.
+ * @returns The root element and the comments and processing instructions around it, the
+ *   `ReaderRefusal` for an element past `elementDepth`, or the `WellFormednessError` for the first
+ *   error `saxes` raises.
+ * @see {@link https://github.com/lddubeau/saxes/blob/v6.0.0/src/saxes.ts#L2458-L2479 saxes 6.0.0, SaxesParser.resolve}
+ * @see {@link https://github.com/lddubeau/saxes/blob/v6.0.0/src/saxes.ts#L2005-L2009 saxes 6.0.0, the start tag's own record}
  */
 const parse = (
   substituted: Substituted,
   sentinels: ReadonlyMap<string, string>,
+  elementDepth: number,
 ): Effect.Effect<Built, WellFormednessError | ReaderRefusal> => {
   const parser = new SaxesParser({ position: true, xmlns: true });
   for (const [name, sentinel] of sentinels) {
@@ -240,10 +290,14 @@ const parse = (
         }
       };
 
+      parser.on("opentagstart", (tag) => {
+        const parent = open.at(-1);
+        Object.assign(tag.ns, parent === undefined ? ROOT_BINDINGS : parent.bindings);
+      });
       parser.on("opentag", (tag) => {
-        if (open.length >= ELEMENT_DEPTH) {
+        if (open.length >= elementDepth) {
           throw new ReaderRefusal({
-            detail: `The document nests elements more than ${ELEMENT_DEPTH} deep: element <${tag.name}> at line ${parser.line}, column ${parser.column} opens past the reader's limit. Flatten the structure so at most ${ELEMENT_DEPTH} elements are open at once.`,
+            detail: `The document nests elements more than ${elementDepth} deep: element <${tag.name}> at line ${parser.line}, column ${parser.column} opens past the reader's limit. Flatten the structure so at most ${elementDepth} elements are open at once.`,
             rule: "element-depth",
           });
         }
@@ -252,6 +306,7 @@ const parse = (
         // namespace declarations included.
         open.push({
           attributes: Object.values(tag.attributes).map(toAttribute),
+          bindings: tag.ns,
           children: [],
           local: tag.local,
           namespace: tag.uri,
@@ -367,19 +422,22 @@ const applyAttlist = (
 };
 
 /**
- * `element` and everything below it with the ATTLIST tables applied.
+ * `root` and everything below it with the ATTLIST tables applied, without recursion.
+ *
+ * @param root - The root element as `saxes` built it.
+ * @param attlists - The ATTLIST table of each element name.
+ * @returns The tree with each element's table applied to its attributes.
  */
-const applyAttlists = (element: Element, attlists: Prolog["attlists"]): Element => {
-  const table = attlists.get(element.qname);
+const applyAttlists = (root: Element, attlists: Prolog["attlists"]): Element =>
+  rebuild(
+    root,
+    (element) => {
+      const table = attlists.get(element.qname);
 
-  return {
-    ...element,
-    attributes: table === undefined ? element.attributes : applyAttlist(element.attributes, table),
-    children: element.children.map((child) =>
-      child.kind === "element" ? applyAttlists(child, attlists) : child,
-    ),
-  };
-};
+      return table === undefined ? element.attributes : applyAttlist(element.attributes, table);
+    },
+    (leaf) => [leaf],
+  );
 
 /**
  * An attribute value after its stand-in characters are written back as `&name;`, with where each
@@ -438,27 +496,27 @@ const restoreText = (value: string, names: ReadonlyMap<string, string>): readonl
 };
 
 /**
- * `element` and everything below it with each stand-in character replaced by the reference it
- * stands for: an `EntityRef` among the children, and `&name;` in an attribute value with its
- * offset recorded.
+ * `root` and everything below it, without recursion, with each stand-in character replaced by the
+ * reference it stands for: an `EntityRef` among the children, and `&name;` in an attribute value
+ * with its offset recorded.
+ *
+ * @param root - The root element with the ATTLIST tables applied.
+ * @param names - The entity name each stand-in character stands for.
+ * @returns The tree with every stand-in character restored.
  */
-const restoreReferences = (element: Element, names: ReadonlyMap<string, string>): Element => ({
-  ...element,
-  attributes: element.attributes.map((attribute) => {
-    const restored = restoreValue(attribute.value, names);
+const restoreReferences = (root: Element, names: ReadonlyMap<string, string>): Element =>
+  rebuild(
+    root,
+    (element) =>
+      element.attributes.map((attribute) => {
+        const restored = restoreValue(attribute.value, names);
 
-    return restored.references.length === 0
-      ? attribute
-      : { ...attribute, references: restored.references, value: restored.value };
-  }),
-  children: element.children.flatMap((child): readonly Child[] => {
-    if (child.kind === "element") {
-      return [restoreReferences(child, names)];
-    }
-
-    return child.kind === "text" && !child.cdata ? restoreText(child.value, names) : [child];
-  }),
-});
+        return restored.references.length === 0
+          ? attribute
+          : { ...attribute, references: restored.references, value: restored.value };
+      }),
+    (leaf) => (leaf.kind === "text" && !leaf.cdata ? restoreText(leaf.value, names) : [leaf]),
+  );
 
 /**
  * Assemble the document from what the earlier stages read and the tree `saxes` built.
@@ -497,22 +555,27 @@ const assemble = (
  * character becomes the reference it stood for: an `EntityRef` in content, `&name;` with a recorded
  * offset in an attribute value.
  *
- * At most 256 elements may be open at once, as in `xmllint`; a deeper document is refused under
- * rule `element-depth`.
+ * At most `options.elementDepth` elements may be open at once, {@link defaultElementDepth} (256,
+ * as in `xmllint`) unless the caller gives another bound; a deeper document is refused under rule
+ * `element-depth`. Within the bound, a document of any depth or width is read: the tree is built,
+ * and then rewritten, on stacks of its own, never by recursion.
  *
  * @param bytes - The document as read from storage.
- * @returns The tree; a `ReaderRefusal` from decoding, the prolog or the element depth, or a
+ * @param options - How to read it: the element depth it is refused past.
+ * @returns The tree; a `ReaderRefusal` from decoding, the prolog, an entity reference or the
+ *   element depth, or a
  *   `WellFormednessError` whose position is the parser's and whose `afterSubstitution` says whether
  *   a substitution precedes it.
  */
 export const readXml = Effect.fn("xml.read")(function* readXml(
   bytes: Uint8Array,
+  options: ReadOptions = {},
 ): Effect.fn.Return<XmlDocument, WellFormednessError | ReaderRefusal> {
   const decoded = yield* decode(bytes);
   const prolog = yield* lexProlog(decoded.text);
   const substituted = yield* substitute(decoded.text, prolog);
   const sentinels = yield* assignSentinels(substituted, prolog);
-  const built = yield* parse(substituted, sentinels);
+  const built = yield* parse(substituted, sentinels, options.elementDepth ?? defaultElementDepth);
   const names = new Map([...sentinels].map(([name, sentinel]) => [sentinel, name]));
 
   return assemble(decoded, prolog, built, names);

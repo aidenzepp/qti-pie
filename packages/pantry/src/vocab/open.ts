@@ -1,35 +1,90 @@
 /* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 /**
- * Open attribute names: the attributes no closed `AttributeName` handle names, which an element's
- * attribute wildcard admits without a declaration to validate them (fin.md, D2).
+ * The open vocabulary: what the element and attribute wildcards admit without a declaration to
+ * validate it (fin.md, D2), and the `xml:` and `xsi:` attributes every schema processor knows.
  *
- * A closed name comes first: an attribute the element's kind admits under a closed handle is that
- * handle, wherever its spelling also fits an open class. Only an attribute the kind does not admit
- * closed is read here, and it is open when the element's wildcard admits it unvalidated. It then
- * takes one of the roster's open-class handles ({@link openClasses}), kept beside its exact name
- * ({@link XdmOpenName}):
+ * Every wildcard's reach is the leaf's: the content-model IR's `any` particles
+ * (`src/vocab/inventory/models.ts`) and the attribute wildcards
+ * (`src/vocab/inventory/attributes.ts`), each a namespace constraint and a processing as the pinned
+ * XSDs write them. A constraint admits namespace classes ({@link namespaceClassesUnder}): a name in
+ * no namespace, in the wildcard's target namespace, which is its element's, or in another.
+ *
+ * **Open attribute names.** A closed name comes first: an attribute the element's kind admits under
+ * a closed `AttributeName` handle is that handle, wherever its spelling also fits an open class.
+ * Only an attribute the kind does not admit closed is read here ({@link openClassOf}), as one of
+ * the roster's open-class handles ({@link openClasses}), kept beside its exact name
+ * ({@link OpenName}):
  *
  * - `data-*`, an attribute in no namespace whose name begins `data-`, which must then match spec
  *   reading 13 ({@link dataName});
- * - `lax`, any other attribute in no namespace;
- * - `foreign`, an attribute in a namespace, with its prefix and namespace name.
+ * - `no-namespace`, any other attribute in no namespace;
+ * - `own-namespace`, an attribute in its element's namespace;
+ * - `foreign`, an attribute in another namespace.
  *
- * Where a wildcard admits them is read from the pinned XSDs ({@link wildcards}). QTI 3.0.1's
- * no-namespace attributes are admitted on the 127 elements whose types inherit
- * `extensionAnyTypeLax.Attr`, and QTI 3.0.0's on the 126 of them its own `dataExtension.*.Attr`
- * groups reach. An open name keeps its lexical form only ({@link openLexical}).
+ * Which kinds admit which classes is the admission relation's to say: {@link attributesUnder} reads
+ * an attribute wildcard as the classes its constraint admits, unless it is `strict`, and
+ * {@link foreignAttributes} gives a foreign element `xs:anyType`'s. So a class a wildcard refuses
+ * is refused by the law, and the Foreign attribute class law ties a stored name's class to its
+ * namespace. An open name keeps its lexical form only, read under {@link openValueType}.
+ *
+ * **Foreign elements.** An element a wildcard admits and no declaration names is a foreign element,
+ * whose kind is its namespace class (`foreignKinds` of `src/grammar/kinds.ts`), so the content law
+ * refuses a class its parent's wildcard refuses; the Foreign element class law ties a stored
+ * element's class to its namespace. A wildcard never reads spec reading 6's roots as their kinds
+ * ({@link foreignRoots}).
+ *
+ * **The `xml:` and `xsi:` names** are closed names wherever an element carries them, never open
+ * names (fin.md, D2's refinement). `xml.xsd` is a known schema, so the four names it declares are
+ * admitted on every kind whose attribute wildcard admits the XML namespace, and on every foreign
+ * kind: with `xml.xsd`'s types where the wildcard validates them, and as free text where it skips
+ * them. XML Schema's four instance attributes ({@link xsiAttributes}) are admitted on every element
+ * kind with their built-in types (spec reading 47). The composition (`src/grammar/compose.ts`)
+ * derives those admission rows, since they need every vocabulary's element names.
  */
-import { Option, Result, Schema } from "effect";
-import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
-import type { openClasses } from "#pantry/grammar/kinds.ts";
-import type { XdmOpenName } from "#pantry/model/xdm.ts";
-import { xsString, xsStringFlags } from "#pantry/schema/patterns.ts";
+import { Match, Result, Schema } from "effect";
+import type { Attribute } from "@qti-pie/crust/tree.ts";
+import { openClasses } from "#pantry/grammar/kinds.ts";
+import { globalAttributes, openAttribute } from "#pantry/vocab/inventory/attributes.ts";
+import type {
+  AttributeWildcard,
+  GlobalAttributeDeclaration,
+  Processing,
+} from "#pantry/vocab/inventory/types.ts";
+import {
+  namespaceClassesUnder,
+  namespaceClassOf,
+  xmlNamespace,
+  xsiNamespace,
+} from "#pantry/vocab/namespaces.ts";
+import type { NamespaceClass } from "#pantry/vocab/namespaces.ts";
 
 /**
- * An open name this module reads: an {@link XdmOpenName} whose tag is one of the `AttributeName`
- * roster's {@link openClasses}, so a tag the roster does not hold fails to compile here.
+ * An `AttributeName` handle that stands for a class of open names: `data-*`, `foreign`,
+ * `no-namespace` or `own-namespace`.
  */
-type OpenName = Extract<XdmOpenName, { readonly _tag: (typeof openClasses)[number] }>;
+export type OpenClass = (typeof openClasses)[number];
+
+/**
+ * An attribute no closed handle names, read as an open name: its class and its name (fin.md, D2). A
+ * name in no namespace keeps its local name; one in a namespace its local name, prefix and
+ * namespace name, which the Foreign attribute class law ties to its class: `own-namespace` exactly
+ * when it is its element's namespace, `foreign` exactly when it is another.
+ */
+export type OpenName =
+  | { readonly _tag: "data-*"; readonly local: string }
+  | {
+      readonly _tag: "foreign";
+      readonly local: string;
+      readonly prefix: string;
+      readonly uri: string;
+    }
+  | { readonly _tag: "no-namespace"; readonly local: string }
+  | {
+      readonly _tag: "own-namespace";
+      readonly local: string;
+      readonly prefix: string;
+      readonly uri: string;
+    };
 
 /**
  * The language of a `data-*` attribute's name, which is in no namespace: `data-`, then one or more
@@ -38,381 +93,112 @@ type OpenName = Extract<XdmOpenName, { readonly _tag: (typeof openClasses)[numbe
  * It follows the information model's prose, which bars upper-case letters, and sets aside the
  * looser pattern the information model gives beside it, the XSD's wildcard and the Schematron's
  * prefix test (reading 13 of `docs/spec-readings.md`). A no-namespace name that begins `data-` and
- * breaks it is refused, never read as `lax`.
+ * breaks it is refused, never read as `no-namespace`.
  */
 export const dataName = /^data-[a-z0-9_.-]+$/u;
 
 /**
- * The lexical definition every open attribute's value is read under: any text, with the
- * whitespace the reader's attribute-value normalization left, as `xs:anySimpleType`.
+ * The type and domain every open attribute's value is read under: `xs:anySimpleType`, its
+ * whitespace preserved, as the derived leaf states it (`openAttribute` of
+ * `src/vocab/inventory/attributes.ts`).
  *
  * No declaration governs an open name, so no typed value is derived from it and the lexical form
  * is the whole record (fin.md, D2).
  */
-export const openLexical = {
-  datatype: "xs:anySimpleType",
-  flags: xsStringFlags,
-  pattern: xsString,
-  whiteSpace: "preserve",
-} as const;
+export const openValueType: GlobalAttributeDeclaration = openAttribute;
 
 /**
- * An element type's attribute wildcard: the namespaces whose undeclared attributes it admits, and
- * how a schema processor validates one it admits.
- *
- * `any` admits every attribute, in no namespace or any. `other` admits an attribute in a namespace
- * other than the element's own, never one in no namespace. `lax` validates an admitted attribute
- * against a declaration when the schemas hold one and lets it through otherwise, `strict` refuses
- * it without one, and `skip` never validates it.
- *
- * @see {@link https://www.w3.org/TR/xmlschema-1/#Wildcards | XML Schema 1.0, Wildcards}
+ * The global elements spec reading 6 keeps foreign inside wildcard content, by kind: QTI's
+ * document roots (an item, a section, a stimulus, a test and an outcome declaration), its two
+ * processing roots, and the content package's manifest. A wildcard never reads one of them as its
+ * kind, so under a `lax` wildcard each is a foreign element.
  */
-export interface Wildcard {
-  readonly namespaces: "any" | "other";
-  readonly processing: "lax" | "skip" | "strict";
-}
-
-/**
- * The wildcard `extensionAnyTypeLax.Attr` holds in 3.0.1 and the `dataExtension.*.Attr` groups hold
- * in 3.0.0.
- */
-const anyLax = { namespaces: "any", processing: "lax" } as const satisfies Wildcard;
-
-/**
- * The wildcard `extensionNamespaceLax.Attr` holds in 3.0.1, the `extension.Custom*.Attr` groups in
- * 3.0.0, and XInclude's two types.
- */
-const otherLax = { namespaces: "other", processing: "lax" } as const satisfies Wildcard;
-
-/**
- * The wildcard `extensionNamespaceStrict.Attr` holds in 3.0.1 and `extension.Ordering.Attr` and
- * `extension.Selection.Attr` hold in 3.0.0.
- */
-const otherStrict = { namespaces: "other", processing: "strict" } as const satisfies Wildcard;
-
-/**
- * The QTI namespace, which the ASI XSDs' elements, HTML's included, are in.
- */
-const asiNamespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
-
-/**
- * The XInclude namespace, which `w3/XInclude.xsd`'s two elements are in.
- */
-const xincludeNamespace = "http://www.w3.org/2001/XInclude";
-
-/**
- * One wildcard the elements of one namespace hold, stated once with the schema versions it holds
- * in.
- */
-export interface WildcardStatement {
-  /**
-   * The elements' local names, in code-point order. Every type an element is declared with holds
-   * the same wildcard, so every kind of it does.
-   */
-  readonly elements: readonly string[];
-  readonly namespace: string;
-  readonly versions: readonly string[];
-  readonly wildcard: Wildcard;
-}
-
-/**
- * The attribute wildcards of the elements of the ASI XSDs (`imsqti_asiv3p0_v1p0.xsd` for 3.0.0,
- * `imsqti_asiv3p0p1_v1p0.xsd` for 3.0.1) and of the XInclude XSD both import, each element stated
- * once per version. An element no statement names holds no wildcard and admits no open name.
- *
- * An element's wildcard is its type's: the wildcard the type or its derivation step holds itself or
- * through its attribute groups, joined for an extension with its base type's, the union taking the
- * step's processing (XML Schema 1.0, §3.4.2). `open.test.ts` derives these statements from the
- * pinned XSDs.
- *
- * The metadata and content-packaging XSDs hold no wildcard; MathML's and SSML's elements are their
- * own vocabularies' to state, in this shape.
- */
-export const wildcards = [
-  {
-    elements: [
-      "a",
-      "abbr",
-      "acronym",
-      "address",
-      "article",
-      "aside",
-      "audio",
-      "b",
-      "bdi",
-      "bdo",
-      "big",
-      "blockquote",
-      "br",
-      "caption",
-      "cite",
-      "code",
-      "col",
-      "colgroup",
-      "dd",
-      "details",
-      "dfn",
-      "div",
-      "dl",
-      "dt",
-      "em",
-      "figcaption",
-      "figure",
-      "footer",
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-      "header",
-      "hr",
-      "i",
-      "img",
-      "kbd",
-      "label",
-      "li",
-      "nav",
-      "object",
-      "ol",
-      "p",
-      "picture",
-      "pre",
-      "q",
-      "qti-assessment-item",
-      "qti-assessment-item-ref",
-      "qti-assessment-section",
-      "qti-assessment-section-ref",
-      "qti-assessment-stimulus",
-      "qti-assessment-stimulus-ref",
-      "qti-assessment-test",
-      "qti-associable-hotspot",
-      "qti-associate-interaction",
-      "qti-card-entry",
-      "qti-choice-interaction",
-      "qti-custom-interaction",
-      "qti-drawing-interaction",
-      "qti-end-attempt-interaction",
-      "qti-extended-text-interaction",
-      "qti-feedback-block",
-      "qti-feedback-inline",
-      "qti-gap",
-      "qti-gap-img",
-      "qti-gap-match-interaction",
-      "qti-gap-text",
-      "qti-graphic-associate-interaction",
-      "qti-graphic-gap-match-interaction",
-      "qti-graphic-order-interaction",
-      "qti-hotspot-choice",
-      "qti-hotspot-interaction",
-      "qti-hottext",
-      "qti-hottext-interaction",
-      "qti-html-content",
-      "qti-inline-choice",
-      "qti-inline-choice-interaction",
-      "qti-label",
-      "qti-match-interaction",
-      "qti-media-interaction",
-      "qti-modal-feedback",
-      "qti-order-interaction",
-      "qti-portable-custom-interaction",
-      "qti-position-object-interaction",
-      "qti-position-object-stage",
-      "qti-prompt",
-      "qti-rubric-block",
-      "qti-select-point-interaction",
-      "qti-simple-associable-choice",
-      "qti-simple-choice",
-      "qti-simple-match-set",
-      "qti-slider-interaction",
-      "qti-template-block",
-      "qti-template-inline",
-      "qti-test-feedback",
-      "qti-test-part",
-      "qti-text-entry-interaction",
-      "qti-upload-interaction",
-      "rb",
-      "rp",
-      "rt",
-      "rtc",
-      "ruby",
-      "samp",
-      "section",
-      "small",
-      "source",
-      "span",
-      "strong",
-      "sub",
-      "summary",
-      "sup",
-      "table",
-      "tbody",
-      "td",
-      "tfoot",
-      "th",
-      "thead",
-      "tr",
-      "track",
-      "tt",
-      "ul",
-      "var",
-      "video",
-    ],
-    namespace: asiNamespace,
-    versions: ["3.0.0", "3.0.1"],
-    wildcard: anyLax,
-  },
-  {
-    elements: ["qti-stimulus-body"],
-    namespace: asiNamespace,
-    versions: ["3.0.1"],
-    wildcard: anyLax,
-  },
-  {
-    elements: ["qti-custom-operator"],
-    namespace: asiNamespace,
-    versions: ["3.0.0", "3.0.1"],
-    wildcard: otherLax,
-  },
-  {
-    elements: ["qti-ordering", "qti-selection"],
-    namespace: asiNamespace,
-    versions: ["3.0.0", "3.0.1"],
-    wildcard: otherStrict,
-  },
-  {
-    elements: ["fallback", "include"],
-    namespace: xincludeNamespace,
-    versions: ["3.0.0", "3.0.1"],
-    wildcard: otherLax,
-  },
-] as const satisfies readonly WildcardStatement[];
-
-/**
- * A schema version the wildcards are stated under.
- */
-export type WildcardVersion = (typeof wildcards)[number]["versions"][number];
-
-/**
- * The key of an element under a schema version: the version, a space, and the element's expanded
- * name in Clark notation, `{namespace}local`. No version holds a space, so no two keys collide.
- *
- * @param version - The schema version.
- * @param element - The element's namespace name and local name.
- * @returns Its key in {@link stated}.
- */
-const keyOf = (version: WildcardVersion, element: Pick<Element, "local" | "namespace">): string =>
-  `${version} {${element.namespace}}${element.local}`;
-
-/**
- * The wildcard of each element under each version a statement names it in.
- */
-const stated: ReadonlyMap<string, Wildcard> = new Map(
-  wildcards.flatMap(({ elements, namespace, versions, wildcard }) =>
-    versions.flatMap((version) =>
-      elements.map((local) => [keyOf(version, { local, namespace }), wildcard] as const),
-    ),
-  ),
-);
-
-/**
- * Look up the attribute wildcard an element holds in a schema version.
- *
- * @param version - The version of the element's document.
- * @param element - The element's namespace name and local name.
- * @returns Its wildcard, or `None` when it admits only the attributes its type declares.
- */
-export const wildcardOf = (
-  version: WildcardVersion,
-  element: Pick<Element, "local" | "namespace">,
-): Option.Option<Wildcard> => Option.fromNullishOr(stated.get(keyOf(version, element)));
-
-/**
- * The namespace of the attributes `xml.xsd` declares.
- */
-const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
-
-/**
- * The namespace of XML Schema's built-in instance attributes.
- */
-const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
-
-/**
- * The XML-namespace attributes `w3/xml.xsd` declares globally, the only global attribute
- * declarations the pinned XSDs hold. A `lax` or `strict` wildcard validates each against its
- * declaration, so under either none is an open name: it is the closed handle `xml:<name>` or it is
- * refused.
- */
-const xmlDeclared: ReadonlySet<string> = new Set(["base", "id", "lang", "space"]);
-
-/**
- * XML Schema's four built-in `xsi:` attributes. A schema processor holds their declarations
- * everywhere and checks them before any wildcard, so none is ever an open name.
- *
- * @see {@link https://www.w3.org/TR/xmlschema-1/#cvc-complex-type | XML Schema 1.0, Element Locally Valid (Complex Type), clause 3}
- */
-const xsiBuiltins: ReadonlySet<string> = new Set([
-  "nil",
-  "noNamespaceSchemaLocation",
-  "schemaLocation",
-  "type",
+export const foreignRoots: ReadonlySet<string> = new Set([
+  "cp:manifest",
+  "qti-assessment-item",
+  "qti-assessment-section",
+  "qti-assessment-stimulus",
+  "qti-assessment-test",
+  "qti-outcome-declaration",
+  "qti-outcome-processing",
+  "qti-response-processing",
 ]);
 
 /**
- * The reasons an attribute no closed handle names is not an open name either.
- *
- * - `closed-element`: the element holds no wildcard.
- * - `outside-namespaces`: its wildcard is `other`, and the attribute is in no namespace or in the
- *   element's own.
- * - `declared`: a schema declares the attribute, so a processor validates it rather than letting it
- *   through; the model reads it only as a closed name, and the kind admits none by it.
- * - `strict`: its wildcard validates strictly, and no schema declares the attribute.
- * - `data-name`: its name begins `data-` and breaks {@link dataName}.
+ * One attribute a schema declares globally, which a kind admits under its closed handle: its
+ * handle, its value type and that type's domain, as the derived leaf states them.
  */
-export const openNameRefusals = [
-  "closed-element",
-  "outside-namespaces",
-  "declared",
-  "strict",
-  "data-name",
-] as const;
+export type GlobalAttribute = GlobalAttributeDeclaration;
 
 /**
- * A reason an attribute is not an open name.
+ * The XML-namespace attributes `w3/xml.xsd` declares globally, as it declares them: the only global
+ * attribute declarations the pinned XSDs hold (fin.md, D2's refinement). A `lax` or `strict`
+ * wildcard validates each against its declaration, so these are the types a kind under either
+ * admits them with ({@link xmlAttributesUnder}).
  */
-export type OpenNameRefusal = (typeof openNameRefusals)[number];
+export const xmlAttributes: readonly GlobalAttribute[] = globalAttributes.filter(({ name }) =>
+  name.startsWith("xml:"),
+);
 
 /**
- * An attribute its element's kind does not admit under a closed name, and that its element's
- * wildcard does not admit as an open name.
- *
- * `attribute` is the attribute's qualified name as written and `namespace` its namespace name,
- * empty for none; `element` is the element's local name.
+ * The four `xml:` names as a `skip` wildcard admits them: unvalidated, so each value is read under
+ * the open type, while the name keeps its closed handle.
  */
-export class OpenNameRefused extends Schema.TaggedError<OpenNameRefused>()("OpenNameRefused", {
-  attribute: Schema.String,
-  element: Schema.String,
-  namespace: Schema.String,
-  reason: Schema.Literals(openNameRefusals),
-}) {
-  /**
-   * What the element admits beyond its declared attributes, and how to change the attribute so
-   * the document is read.
-   */
-  override get message(): string {
-    const { attribute, element, namespace } = this;
-    const where = namespace === "" ? "in no namespace" : `in the namespace ${namespace}`;
-    const messages: Readonly<Record<OpenNameRefusal, string>> = {
-      "closed-element": `${element} admits no attribute beyond those it declares, and ${attribute} is not one of them. Remove ${attribute}, or rename it to an attribute ${element} declares.`,
-      "data-name": `${attribute} is not a valid data-* attribute name: after "data-", QTI allows one or more lower-case ASCII letters, digits, "_", "." and "-" (spec reading 13). Rename it in lower case.`,
-      declared: `${attribute} is declared by a schema, so ${element} admits it only as that declaration types it, and the model has no attribute ${attribute} on ${element}. The document may still be valid: this is a gap in the model's vocabulary, so report it with the document.`,
-      "outside-namespaces": `${element} admits an attribute it does not declare only in a namespace other than its own, and ${attribute} is ${namespace === "" ? "in no namespace" : `in ${element}'s own namespace, ${namespace}`}. Remove ${attribute}, or give it a prefix bound to a namespace of its own.`,
-      strict: `${element} admits an attribute it does not declare only when a schema declares it, and no schema the model reads declares ${attribute} ${where}. Remove ${attribute}.`,
-    };
+const unvalidatedXmlAttributes: readonly GlobalAttribute[] = xmlAttributes.map(({ name }) => ({
+  ...openAttribute,
+  name,
+}));
 
-    return messages[this.reason];
-  }
-}
+/**
+ * The `xml:` attributes a kind admits under an attribute wildcard that admits the XML namespace, by
+ * the wildcard's processing.
+ *
+ * Under `lax` and `strict` a processor validates each name against its global declaration, so its
+ * value has `xml.xsd`'s type ({@link xmlAttributes}). Under `skip`, which MathML's 182 wildcards
+ * hold, it validates none, so its value is free text. Under all three the name is the closed handle
+ * `xml:<name>`, never an open `foreign` name (fin.md, D2).
+ *
+ * @see {@link https://www.w3.org/TR/xmlschema-1/#Wildcard_details | XML Schema 1.0, The Wildcard Schema Component}
+ */
+const xmlAttributesUnder: Readonly<Record<Processing, readonly GlobalAttribute[]>> = {
+  lax: xmlAttributes,
+  skip: unvalidatedXmlAttributes,
+  strict: xmlAttributes,
+};
+
+/**
+ * XML Schema's four built-in instance attributes, as the derived leaf states XML Schema 1.0 Part 1,
+ * 3.2.7's declarations of them.
+ *
+ * A schema processor holds their declarations everywhere and assesses them before any wildcard,
+ * skip included, so every element kind admits all four, in both versions, as closed attributes
+ * (spec reading 47), and none is ever an open name. The rules that tie `xsi:type` to the declared
+ * type and `xsi:nil` to a nillable declaration are not stated by these rows.
+ *
+ * @see {@link https://www.w3.org/TR/xmlschema-1/#xsi_type | XML Schema 1.0, 2.6 Schema-Related Markup in Documents Being Validated}
+ */
+export const xsiAttributes: readonly GlobalAttribute[] = globalAttributes.filter(({ name }) =>
+  name.startsWith("xsi:"),
+);
+
+/**
+ * The local names of global attributes, their prefix removed.
+ *
+ * @param declared - The attributes, each named `<prefix>:<local>`.
+ * @returns Their local names.
+ */
+const localsOf = (declared: readonly GlobalAttribute[]): ReadonlySet<string> =>
+  new Set(declared.map(({ name }) => name.slice(name.indexOf(":") + 1)));
+
+/**
+ * The local names of {@link xmlAttributes}, in the XML namespace.
+ */
+const xmlDeclared = localsOf(xmlAttributes);
+
+/**
+ * The local names of {@link xsiAttributes}, in XML Schema's instance namespace.
+ */
+const xsiDeclared = localsOf(xsiAttributes);
 
 /**
  * Whether a no-namespace attribute's name is a valid `data-*` name.
@@ -423,28 +209,82 @@ export class OpenNameRefused extends Schema.TaggedError<OpenNameRefused>()("Open
 const isDataName = (local: string): local is `data-${string}` => dataName.test(local);
 
 /**
- * Read an attribute that its element's kind does not admit under a closed name as an open name.
+ * The reasons a name no closed handle names cannot be an open name, whatever its element admits.
  *
- * The attribute is open when the wildcard admits its namespace and lets it through unvalidated:
- * under `skip`, or under `lax` when no schema declares it. Its class then follows from its name, as
- * the module comment states.
- *
- * @param element - The element the attribute is on: its namespace name, which an `other` wildcard
- *   excludes, and its local name, which a refusal names.
- * @param wildcard - The element's wildcard, `None` when it holds none ({@link wildcardOf}).
- * @param attribute - The attribute's name as the reader resolved it; never a namespace declaration,
- *   which is no attribute.
- * @returns The attribute's open name, or an {@link OpenNameRefused} giving the reason it is none.
+ * - `declared`: `xml.xsd` or XML Schema itself declares it, an `xml:` or `xsi:` name, so it is read
+ *   only under its closed handle.
+ * - `data-name`: it is in no namespace and begins `data-`, but breaks {@link dataName}.
  */
-export const openNameOf = (
-  element: Pick<Element, "local" | "namespace">,
-  wildcard: Option.Option<Wildcard>,
+export const openClassRefusals = ["declared", "data-name"] as const;
+
+/**
+ * A reason {@link openClassOf} refuses a name.
+ */
+export type OpenClassRefusal = (typeof openClassRefusals)[number];
+
+/**
+ * An attribute name no closed handle names that is no open name either, whatever its element
+ * admits: one a schema declares, or a `data-` name that breaks {@link dataName}.
+ *
+ * `attribute` is the attribute's qualified name as written and `namespace` its namespace name,
+ * empty for none; `element` is the element's local name.
+ */
+export class OpenClassRefused extends Schema.TaggedError<OpenClassRefused>()("OpenClassRefused", {
+  attribute: Schema.String,
+  element: Schema.String,
+  namespace: Schema.String,
+  reason: Schema.Literals(openClassRefusals),
+}) {
+  /**
+   * Why the name is read under no class, and how to change the attribute so the document is read.
+   */
+  override get message(): string {
+    const { attribute, element } = this;
+    const messages: Readonly<Record<OpenClassRefusal, string>> = {
+      "data-name": `${attribute} is not a valid data-* attribute name: after "data-", QTI allows one or more lower-case ASCII letters, digits, "_", "." and "-" (spec reading 13). Rename it in lower case.`,
+      declared: `${attribute} is declared by a schema the model reads, so the model reads it only under its own name, and it has no attribute ${attribute} on ${element}. The document may still be valid: this is a gap in the model's vocabulary, so report it with the document.`,
+    };
+
+    return messages[this.reason];
+  }
+}
+
+/**
+ * The element an attribute is on, as {@link openClassOf} reads it: its namespace name, which a
+ * name in its own namespace is classed against; its local name, which a refusal names; and
+ * whether it is a foreign element, whose names in no namespace are never `data-*`.
+ */
+export interface AttributeHost {
+  readonly foreign: boolean;
+  readonly local: string;
+  readonly namespace: string;
+}
+
+/**
+ * Classify an attribute name that no closed handle names (review R6): the codec's half of open
+ * names, beside the admission that `AttributeAdmission` states for each class.
+ *
+ * In a namespace it is classed by {@link namespaceClassOf} against its element's namespace, the
+ * target namespace of every wildcard its element holds: `own-namespace` in that namespace and
+ * `foreign` in another, but for a name `xml.xsd` or XML Schema declares. In no namespace it is
+ * `data-*` when it matches {@link dataName}, refused when it begins `data-` and does not (spec
+ * reading 13), and `no-namespace` otherwise; on a foreign element, whose markup is no HTML, it is
+ * `no-namespace`
+ * whatever its name. Which classes a kind admits is the admission relation's to say, so a class
+ * the element's wildcard refuses is refused there, not here.
+ *
+ * @param attribute - The attribute's name as the reader resolved it; never a namespace declaration.
+ * @param element - The element it is on.
+ * @returns Its open name, or an {@link OpenClassRefused}.
+ */
+export const openClassOf = (
   attribute: Pick<Attribute, "local" | "namespace" | "prefix" | "qname">,
-): Result.Result<OpenName, OpenNameRefused> => {
+  element: AttributeHost,
+): Result.Result<OpenName, OpenClassRefused> => {
   const { local, namespace, prefix } = attribute;
-  const refuse = (reason: OpenNameRefusal): Result.Result<never, OpenNameRefused> =>
+  const refuse = (reason: OpenClassRefusal): Result.Result<never, OpenClassRefused> =>
     Result.fail(
-      new OpenNameRefused({
+      new OpenClassRefused({
         attribute: attribute.qname,
         element: element.local,
         namespace,
@@ -452,35 +292,97 @@ export const openNameOf = (
       }),
     );
 
-  if (namespace === xsiNamespace && xsiBuiltins.has(local)) {
+  if (
+    (namespace === xsiNamespace && xsiDeclared.has(local)) ||
+    (namespace === xmlNamespace && xmlDeclared.has(local))
+  ) {
     return refuse("declared");
   }
 
-  if (Option.isNone(wildcard)) {
-    return refuse("closed-element");
-  }
+  return Match.value(namespaceClassOf(namespace, element.namespace)).pipe(
+    Match.when("own", () =>
+      Result.succeed<OpenName>({ _tag: "own-namespace", local, prefix, uri: namespace }),
+    ),
+    Match.when("other", () =>
+      Result.succeed<OpenName>({ _tag: "foreign", local, prefix, uri: namespace }),
+    ),
+    Match.when("absent", () => {
+      if (element.foreign || !local.startsWith("data-")) {
+        return Result.succeed<OpenName>({ _tag: "no-namespace", local });
+      }
 
-  const { namespaces, processing } = wildcard.value;
-
-  if (namespaces === "other" && (namespace === "" || namespace === element.namespace)) {
-    return refuse("outside-namespaces");
-  }
-
-  if (processing !== "skip" && namespace === xmlNamespace && xmlDeclared.has(local)) {
-    return refuse("declared");
-  }
-
-  if (processing === "strict") {
-    return refuse("strict");
-  }
-
-  if (namespace !== "") {
-    return Result.succeed({ _tag: "foreign", local, prefix, uri: namespace });
-  }
-
-  if (isDataName(local)) {
-    return Result.succeed({ _tag: "data-*", local });
-  }
-
-  return local.startsWith("data-") ? refuse("data-name") : Result.succeed({ _tag: "lax", local });
+      return isDataName(local)
+        ? Result.succeed<OpenName>({ _tag: "data-*", local })
+        : refuse("data-name");
+    }),
+    Match.exhaustive,
+  );
 };
+
+/**
+ * The open classes an attribute that no closed handle names takes, by its namespace class
+ * ({@link openClassOf}): in no namespace `data-*` or `no-namespace`, by its name; in its element's
+ * own namespace `own-namespace`; in another `foreign`.
+ */
+const openClassesIn: Readonly<Record<NamespaceClass, readonly OpenClass[]>> = {
+  absent: ["data-*", "no-namespace"],
+  other: ["foreign"],
+  own: ["own-namespace"],
+};
+
+/**
+ * Admit an open class, its values read as free text: the open type, under the class's handle.
+ *
+ * @param name - The class's handle.
+ * @returns Its admission.
+ */
+const openAs = (name: OpenClass): GlobalAttribute => ({ ...openAttribute, name });
+
+/**
+ * The attributes an attribute wildcard adds to the kinds of the element that holds it, beside those
+ * its kinds declare, as its namespace constraint and processing read them (XML Schema 1.0 Part 1,
+ * §3.10.4 and §3.4.4, clause 3.1):
+ *
+ * - The `xml:` names `xml.xsd` declares, where the constraint admits the XML namespace, which is
+ *   never a target namespace (`other`): under `lax` and `strict` validated against `xml.xsd`'s
+ *   declarations, so with their types; under `skip` unvalidated, so as free text under their closed
+ *   handles.
+ * - The open classes of every namespace class the constraint admits ({@link namespaceClassesUnder}),
+ *   as free text, unless it is `strict`, which lets through no attribute that no schema declares,
+ *   and no schema declares one of an open class.
+ *
+ * @param wildcard - The wildcard's namespace constraint and processing, as the leaf states them.
+ * @returns The attributes, the `xml:` names first, then the classes in roster order.
+ */
+export const attributesUnder = ({
+  namespace,
+  processing,
+}: Pick<AttributeWildcard, "namespace" | "processing">): readonly GlobalAttribute[] => {
+  const classes = namespaceClassesUnder[namespace];
+  const xml = classes.includes("other") ? xmlAttributesUnder[processing] : [];
+  const open =
+    processing === "strict"
+      ? []
+      : openClasses.filter((name) => classes.some((held) => openClassesIn[held].includes(name)));
+
+  return [...xml, ...open.map(openAs)];
+};
+
+/**
+ * The attribute wildcard of `xs:anyType`, the type XML Schema assesses a foreign element against
+ * when a `lax` or `skip` wildcard admits it with no declaration: every namespace, `lax` (XML
+ * Schema 1.0 Part 1, §3.4.7).
+ */
+const anyTypeWildcard = { namespace: "##any", processing: "lax" } as const satisfies Pick<
+  AttributeWildcard,
+  "namespace" | "processing"
+>;
+
+/**
+ * The attributes every foreign kind admits: those {@link anyTypeWildcard} adds, but `data-*`, the
+ * class of HTML's custom data names, which a foreign element's markup is not ({@link openClassOf}
+ * reads its names in no namespace as `no-namespace`).
+ */
+export const foreignAttributes: readonly GlobalAttribute[] = attributesUnder(
+  anyTypeWildcard,
+).filter(({ name }) => name !== "data-*");

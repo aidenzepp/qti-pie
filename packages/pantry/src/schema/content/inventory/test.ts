@@ -16,6 +16,12 @@
  *   (xi:include | qti-assessment-item-ref | qti-assessment-section |
  *   qti-assessment-section-ref){0..n}
  * - `qti-test-part`: (qti-assessment-section | qti-assessment-section-ref){1..n}
+ *
+ * The script writes each entry's `mixed` flag. This leaf holds it as the entry's content class
+ * (`content`, `xsd-inventory.ts`), restated by hand when the inventory moved to content classes:
+ * `mixed: true` is the `mixed` class, and `mixed: false` the `element` class for an entry with
+ * children and the `empty` class for one without, so every admission row the flag gave is kept.
+ * Each attribute row's `inline` is `None`, as the script records no anonymous type's definition.
  */
 import { Option } from "effect";
 
@@ -46,6 +52,7 @@ const attribute = (
 ): InventoryAttribute => ({
   default: Option.fromNullishOr(defaultValue),
   family,
+  inline: Option.none(),
   name,
   type,
   use,
@@ -76,9 +83,9 @@ export const testInventory: InventoryLeaf = {
       attribute("href", "xs:anyURI", "required", "own", "collapse"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-adaptive-engine-ref",
     handle: "qti-adaptive-engine-ref",
-    mixed: false,
     type: "AdaptiveHrefDType",
   },
   "qti-adaptive-selection": {
@@ -89,9 +96,9 @@ export const testInventory: InventoryLeaf = {
       child("qti-usagedata-ref", 0, Option.some(1)),
       child("qti-metadata-ref", 0, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-adaptive-selection",
     handle: "qti-adaptive-selection",
-    mixed: false,
     type: "AdaptiveSelectionDType",
   },
   "qti-adaptive-settings-ref": {
@@ -100,9 +107,9 @@ export const testInventory: InventoryLeaf = {
       attribute("href", "xs:anyURI", "required", "own", "collapse"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-adaptive-settings-ref",
     handle: "qti-adaptive-settings-ref",
-    mixed: false,
     type: "AdaptiveHrefDType",
   },
   "qti-assessment-item-ref": {
@@ -123,9 +130,9 @@ export const testInventory: InventoryLeaf = {
       child("qti-weight", 0, Option.none()),
       child("qti-template-default", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-assessment-item-ref",
     handle: "qti-assessment-item-ref",
-    mixed: false,
     type: "AssessmentItemRefDType",
   },
   "qti-assessment-section": {
@@ -152,9 +159,9 @@ export const testInventory: InventoryLeaf = {
       child("qti-assessment-section", 0, Option.none()),
       child("qti-assessment-section-ref", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-assessment-section",
     handle: "qti-assessment-section",
-    mixed: false,
     type: "AssessmentSectionDType",
   },
   "qti-assessment-section-ref": {
@@ -164,9 +171,9 @@ export const testInventory: InventoryLeaf = {
       attribute("href", "xs:anyURI", "required", "own", "collapse"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-assessment-section-ref",
     handle: "qti-assessment-section-ref",
-    mixed: false,
     type: "AssessmentSectionRefDType",
   },
   "qti-assessment-stimulus": {
@@ -183,9 +190,9 @@ export const testInventory: InventoryLeaf = {
       child("qti-stimulus-body", 1, Option.some(1)),
       child("qti-catalog-info", 0, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-assessment-stimulus",
     handle: "qti-assessment-stimulus",
-    mixed: false,
     type: "AssessmentStimulusDType",
   },
   "qti-assessment-stimulus-ref": {
@@ -195,9 +202,9 @@ export const testInventory: InventoryLeaf = {
       attribute("title", "xs:normalizedString", "optional", "own", "replace"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-assessment-stimulus-ref",
     handle: "qti-assessment-stimulus-ref",
-    mixed: false,
     type: "AssessmentStimulusRefDType",
   },
   "qti-assessment-test": {
@@ -219,9 +226,9 @@ export const testInventory: InventoryLeaf = {
       child("qti-outcome-processing", 0, Option.some(1)),
       child("qti-test-feedback", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-assessment-test",
     handle: "qti-assessment-test",
-    mixed: false,
     type: "AssessmentTestDType",
   },
   "qti-branch-rule": {
@@ -292,9 +299,9 @@ export const testInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-branch-rule",
     handle: "qti-branch-rule",
-    mixed: false,
     type: "BranchRuleDType",
   },
   "qti-content-body.testFeedback": {
@@ -369,9 +376,9 @@ export const testInventory: InventoryLeaf = {
       child("xi:include", 0, Option.none()),
       child("m3:math", 0, Option.none()),
     ],
+    content: { _tag: "mixed" },
     element: "qti-content-body",
     handle: "qti-content-body.testFeedback",
-    mixed: true,
     type: "TestFeedbackFlowContentBodyDType",
   },
   "qti-content-body.testRubric": {
@@ -446,9 +453,9 @@ export const testInventory: InventoryLeaf = {
       child("xi:include", 0, Option.none()),
       child("m3:math", 0, Option.none()),
     ],
+    content: { _tag: "mixed" },
     element: "qti-content-body",
     handle: "qti-content-body.testRubric",
-    mixed: true,
     type: "TestRubricBlockContentBodyDType",
   },
   "qti-item-session-control": {
@@ -462,9 +469,9 @@ export const testInventory: InventoryLeaf = {
       attribute("validate-responses", "xs:boolean", "optional", "own", "collapse", "false"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-item-session-control",
     handle: "qti-item-session-control",
-    mixed: false,
     type: "ItemSessionControlDType",
   },
   "qti-metadata-ref": {
@@ -473,17 +480,17 @@ export const testInventory: InventoryLeaf = {
       attribute("href", "xs:anyURI", "required", "own", "collapse"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-metadata-ref",
     handle: "qti-metadata-ref",
-    mixed: false,
     type: "AdaptiveHrefDType",
   },
   "qti-ordering": {
     attributes: [attribute("shuffle", "xs:boolean", "optional", "own", "collapse", "false")],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-ordering",
     handle: "qti-ordering",
-    mixed: false,
     type: "OrderingDType",
   },
   "qti-pre-condition": {
@@ -554,9 +561,9 @@ export const testInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-pre-condition",
     handle: "qti-pre-condition",
-    mixed: false,
     type: "LogicSingleDType",
   },
   "qti-rubric-block.test": {
@@ -627,9 +634,9 @@ export const testInventory: InventoryLeaf = {
       child("qti-catalog-info", 0, Option.some(1)),
       child("qti-printed-variable", 0, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-rubric-block",
     handle: "qti-rubric-block.test",
-    mixed: false,
     type: "TestRubricBlockDType",
   },
   "qti-selection": {
@@ -638,9 +645,9 @@ export const testInventory: InventoryLeaf = {
       attribute("with-replacement", "xs:boolean", "optional", "own", "collapse", "false"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-selection",
     handle: "qti-selection",
-    mixed: false,
     type: "SelectionDType",
   },
   "qti-stimulus-body": {
@@ -730,9 +737,9 @@ export const testInventory: InventoryLeaf = {
       child("section", 1, Option.none()),
       child("video", 1, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-stimulus-body",
     handle: "qti-stimulus-body",
-    mixed: false,
     type: "StimulusBodyDType",
   },
   "qti-template-default": {
@@ -805,9 +812,9 @@ export const testInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-template-default",
     handle: "qti-template-default",
-    mixed: false,
     type: "TemplateDefaultDType",
   },
   "qti-test-feedback": {
@@ -823,9 +830,9 @@ export const testInventory: InventoryLeaf = {
       child("qti-content-body", 0, Option.some(1)),
       child("qti-catalog-info", 0, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-test-feedback",
     handle: "qti-test-feedback",
-    mixed: false,
     type: "TestFeedbackDType",
   },
   "qti-test-part": {
@@ -846,9 +853,9 @@ export const testInventory: InventoryLeaf = {
       child("qti-assessment-section-ref", 1, Option.none()),
       child("qti-test-feedback", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-test-part",
     handle: "qti-test-part",
-    mixed: false,
     type: "TestPartDType",
   },
   "qti-time-limits": {
@@ -858,9 +865,9 @@ export const testInventory: InventoryLeaf = {
       attribute("allow-late-submission", "xs:boolean", "optional", "own", "collapse", "false"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-time-limits",
     handle: "qti-time-limits",
-    mixed: false,
     type: "TimeLimitsDType",
   },
   "qti-usagedata-ref": {
@@ -869,9 +876,9 @@ export const testInventory: InventoryLeaf = {
       attribute("href", "xs:anyURI", "required", "own", "collapse"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-usagedata-ref",
     handle: "qti-usagedata-ref",
-    mixed: false,
     type: "AdaptiveHrefDType",
   },
   "qti-variable-mapping": {
@@ -880,9 +887,9 @@ export const testInventory: InventoryLeaf = {
       attribute("target-identifier", "IdentifierDType", "required", "own", "collapse"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-variable-mapping",
     handle: "qti-variable-mapping",
-    mixed: false,
     type: "VariableMappingDType",
   },
   "qti-weight": {
@@ -891,9 +898,9 @@ export const testInventory: InventoryLeaf = {
       attribute("value", "xs:double", "required", "own", "collapse"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-weight",
     handle: "qti-weight",
-    mixed: false,
     type: "WeightDType",
   },
 };

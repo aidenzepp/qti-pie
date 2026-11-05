@@ -7,7 +7,7 @@ import { guards } from "#pantry/import/guards.ts";
 import { ContentGuardRefusal } from "#pantry/import/guards/content.ts";
 import { ReferenceGuardRefusal } from "#pantry/import/guards/reference.ts";
 import { TestGuardRefusal } from "#pantry/import/guards/test.ts";
-import { readRows } from "#pantry/import/package.ts";
+import { readRows } from "#pantry/import/preview.ts";
 import { ruleOfError } from "#pantry/import/refusal.ts";
 import type { Rule } from "#pantry/import/refusal.ts";
 import type { Rows } from "#pantry/import/tree.ts";

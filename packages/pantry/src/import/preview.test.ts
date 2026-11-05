@@ -2,8 +2,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, inject, layer } from "@effect/vitest";
 import { Effect } from "effect";
 import { ContentGuardRefusal } from "#pantry/import/guards/content.ts";
-import { readRows } from "#pantry/import/package.ts";
-import { previewPackage } from "#pantry/import/preview.ts";
+import { previewPackage, readRows } from "#pantry/import/preview.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 

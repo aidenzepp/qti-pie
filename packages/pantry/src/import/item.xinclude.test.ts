@@ -7,7 +7,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect } from "effect";
 import { itemRows } from "#pantry/import/item.ts";
-import { readRows } from "#pantry/import/package.ts";
+import { readRows } from "#pantry/import/preview.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import { Node } from "#pantry/schema/node.ts";
 import { Fallback, XInclude, XIncludeHref, XIncludeParse } from "#pantry/schema/rule.ts";

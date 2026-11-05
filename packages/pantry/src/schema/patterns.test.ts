@@ -319,10 +319,11 @@ describe("patterns", () => {
       "https://x/y.png",
       "images/sign.png",
       "a#[x]",
+      "a?[",
     ]) {
       assert.isTrue(admits(anyUri, "u", value), value);
     }
-    for (const value of ["a%zz", "http://[::1", "1a:b", "a?[", " a:b"]) {
+    for (const value of ["a%zz", "http://[::1", "1a:b", " a:b"]) {
       assert.isFalse(admits(anyUri, "u", value), value);
     }
   });

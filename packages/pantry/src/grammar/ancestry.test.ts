@@ -1,299 +1,226 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
-import { admits, flags, generate, rowOf, step } from "#pantry/grammar/ancestry.ts";
-import type { Ancestry, AncestrySets, Flag } from "#pantry/grammar/ancestry.ts";
-import { NodeKind } from "#pantry/schema/node.ts";
-import { admission, ancestryStep } from "#pantry/schema/seed/admission.ts";
-import { ancestryHandles, interactionKinds } from "#pantry/schema/seed/ancestry.ts";
+import { exhaust } from "@grizzle/testing/explore";
+import { requiredInSpace } from "@grizzle/testing/features";
+import { array, element } from "@grizzle/testing/gen";
+import { searched } from "@grizzle/testing/vitest";
+import { Duration, Effect, Formatter, Option } from "effect";
+import { admits, flags, rowOf, step } from "#pantry/grammar/ancestry.ts";
+import type { Ancestry, Flag } from "#pantry/grammar/ancestry.ts";
+import { composed } from "#pantry/grammar/compose.ts";
 
 /**
- * Today's composition: the 363 `NodeKind` handles the `AncestryStep` rows range over, and the 20
- * interaction kinds.
+ * The composed grammar of production, failing the test that reads it when a generator refuses.
  */
-const today = { interactions: interactionKinds, kinds: NodeKind.handles };
+const grammar = Effect.fromResult(composed());
 
 /**
- * The ancestry grammar over today's composition.
+ * The choice-like kinds spec 3.7 lets hold an interaction's options, whose content no interaction
+ * may enter: the prompt, the choices, the label and the gap choices.
  */
-const grammar = Effect.fromResult(generate(today));
+const choiceLike = new Set([
+  "qti-prompt",
+  "qti-simple-choice",
+  "qti-simple-associable-choice",
+  "qti-inline-choice",
+  "qti-label",
+  "qti-gap-text",
+  "qti-gap-img",
+]);
 
 /**
- * An `AncestryStep` row: the ancestry a node sits in, its kind, and the ancestry it hands its
- * children, each ancestry by its handle.
+ * A kind's rows of the three flag sets, as the reference model states them.
  */
-interface StepRow {
-  readonly ancestry: string;
-  readonly kind: string;
-  readonly next: string;
+interface FlagSets {
+  readonly banned: ReadonlySet<Flag>;
+  readonly enters: ReadonlySet<Flag>;
+  readonly needs: ReadonlySet<Flag>;
 }
 
 /**
- * The ancestries a tree reaches, and where its nodes sit.
+ * Whether two sets of flags hold the same flags.
+ *
+ * @param left - A set.
+ * @param right - A set.
+ * @returns Whether they are equal.
  */
-interface Closure {
-  /**
-   * Each ancestry some node sits in, under its handle.
-   */
-  readonly ancestries: ReadonlyMap<string, Ancestry>;
-  /**
-   * Each (ancestry handle, kind) pair some node is, as {@link placeOf} spells it.
-   */
-  readonly placed: ReadonlySet<string>;
-}
+const same = (left: ReadonlySet<Flag>, right: ReadonlySet<Flag>): boolean =>
+  left.symmetricDifference(right).size === 0;
 
 /**
- * Construct an ancestry from its flags.
+ * The reference model of the flag sets, written from the QTI readings by the kinds' categories
+ * rather than from `ancestry.ts`'s blocks: which flags a kind enters, which it may not sit under,
+ * and which it needs.
  *
- * @param held - The flags.
- * @returns The ancestry holding them.
+ * @param kind - The kind.
+ * @param interaction - Whether it is an interaction, by the `Interaction` set.
+ * @returns Its flags.
  */
-const at = (...held: readonly Flag[]): Ancestry => new Set(held);
+const referenceOf = (kind: string, interaction: boolean): FlagSets => {
+  const template = kind.startsWith("qti-template-block") || kind.startsWith("qti-template-inline");
+  const enters = new Set<Flag>([
+    ...(interaction ? ["int" as const] : []),
+    ...(kind === "qti-gap-match-interaction" ? ["gap" as const] : []),
+    ...(choiceLike.has(kind) ? ["choice" as const] : []),
+    ...(kind === "qti-hottext" ? ["htx" as const] : []),
+    ...(kind === "qti-rubric-block" ? ["rubric" as const] : []),
+    ...(template ? ["tmpl" as const] : []),
+    ...(kind === "qti-modal-feedback" ? ["modal" as const] : []),
+    ...(kind.startsWith("qti-feedback-block") || kind === "qti-feedback-inline"
+      ? ["fb" as const]
+      : []),
+    ...(kind === "qti-rubric-block.test" || kind === "qti-test-feedback" ? ["test" as const] : []),
+  ]);
+  const banned = new Set<Flag>([
+    ...(interaction ? (["int", "choice", "htx", "rubric", "tmpl", "modal", "test"] as const) : []),
+    ...(kind === "qti-rubric-block" ? ["rubric" as const] : []),
+    ...(kind === "qti-hottext" ? ["htx" as const] : []),
+    ...(template ? ["test" as const] : []),
+  ]);
+  const needs = new Set<Flag>(kind === "qti-gap" ? ["gap"] : []);
 
-/**
- * Name an ancestry as an `Ancestry` handle is named: its flags in code order joined with `.`,
- * `root` for none.
- *
- * @param ancestry - The ancestry.
- * @returns Its handle.
- */
-const nameOf = (ancestry: Ancestry): string => {
-  const held = flags.filter((flag) => ancestry.has(flag));
-
-  return held.length === 0 ? "root" : held.join(".");
+  return { banned, enters, needs };
 };
 
 /**
- * Spell a node's place, the ancestry it sits in and its kind, as one key.
+ * Decide a path below the document node by the reference model, from each node's ancestors
+ * directly: a node may sit where no ancestor (the document included) enters a flag it is banned
+ * under and some ancestor enters every flag it needs. No step fold is read.
  *
- * @param ancestry - The ancestry's handle.
- * @param kind - The kind.
- * @returns The key.
+ * @param path - The kinds, the document node first.
+ * @param interaction - Whether a kind is an interaction.
+ * @returns Whether every node of the path may sit where it does.
  */
-const placeOf = (ancestry: string, kind: string): string => `${ancestry}\u0000${kind}`;
+const referenceAdmits = (
+  path: readonly string[],
+  interaction: (kind: string) => boolean,
+): boolean =>
+  path.every((kind, at) => {
+    const above = new Set(
+      path
+        .slice(0, at)
+        .flatMap((ancestor) => [...referenceOf(ancestor, interaction(ancestor)).enters]),
+    );
+    const own = referenceOf(kind, interaction(kind));
+
+    return own.banned.isDisjointFrom(above) && own.needs.isSubsetOf(above);
+  });
 
 /**
- * Spell a step row as one key.
- *
- * @param row - The row.
- * @returns Its three fields, as one key.
- */
-const keyOf = (row: StepRow): string => `${placeOf(row.ancestry, row.kind)}\u0000${row.next}`;
-
-/**
- * Close the ancestries over the composed `Admission` rows, both versions together, as
- * `AncestryStep`'s roster was closed: a tree starts at every kind no row admits as a child, in the
- * empty ancestry, and a node the law admits hands each child kind its step.
+ * Fold a path below the document node through the grammar, as the host and the database fold
+ * `parentAncestry | Enters[kind]`: the document node sits in the empty ancestry (N1), and each node
+ * must be admitted in the ancestry its parent hands it.
  *
  * @param sets - The ancestry grammar.
- * @returns The ancestries reached, and the places nodes reach.
+ * @param path - The kinds, the document node first.
+ * @returns Whether every node may sit where it does.
  */
-const closure = (sets: AncestrySets): Closure => {
-  const childrenOf = Map.groupBy(admission, (row) => row.parent);
-  const children = new Set(admission.map((row) => row.child));
-  const pending: (readonly [Ancestry, string])[] = [...childrenOf.keys()]
-    .filter((kind) => !children.has(kind))
-    .map((kind) => [at(), kind] as const);
-  const ancestries = new Map<string, Ancestry>();
-  const placed = new Set<string>();
-
-  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-    const [parent, kind] = next;
-    const place = placeOf(nameOf(parent), kind);
-
-    if (!placed.has(place) && admits(sets, parent, kind)) {
-      placed.add(place);
-      ancestries.set(nameOf(parent), parent);
-
-      const inner = step(sets, parent, kind);
-      for (const row of childrenOf.get(kind) ?? []) {
-        pending.push([inner, row.child]);
-      }
+const grammarAdmits = (sets: Parameters<typeof step>[0], path: readonly string[]): boolean => {
+  let ancestry: Ancestry = new Set();
+  for (const kind of path) {
+    if (!admits(sets, ancestry, kind)) {
+      return false;
     }
+
+    ancestry = step(sets, ancestry, kind);
   }
 
-  return { ancestries, placed };
+  return true;
 };
 
 /**
- * Expand the law over ancestries: one row for each ancestry and each kind the law admits there,
- * with the step it hands its children.
- *
- * @param sets - The ancestry grammar.
- * @param ancestries - The ancestries.
- * @returns The rows, ancestries outermost.
+ * The kinds the exhaustive search draws paths over: every kind some flag set names, and two kinds
+ * no set names. The interactions are added from the composed `Interaction` set when the test runs.
  */
-const expand = (sets: AncestrySets, ancestries: Iterable<Ancestry>): readonly StepRow[] =>
-  [...ancestries].flatMap((parent) =>
-    NodeKind.handles
-      .filter((kind) => admits(sets, parent, kind))
-      .map((kind) => ({ ancestry: nameOf(parent), kind, next: nameOf(step(sets, parent, kind)) })),
-  );
+const flagged = [
+  "p",
+  "div",
+  ...choiceLike,
+  "qti-gap",
+  "qti-gap-match-interaction",
+  "qti-hottext",
+  "qti-rubric-block",
+  "qti-rubric-block.test",
+  "qti-test-feedback",
+  "qti-modal-feedback",
+  "qti-feedback-block",
+  "qti-feedback-inline",
+  "qti-template-block",
+  "qti-template-inline",
+  "qti-template-block.rubric",
+  "qti-template-inline.rubric",
+  "qti-choice-interaction",
+  "qti-portable-custom-interaction",
+  "qti-text-entry-interaction",
+] as const;
 
-describe("the three sets", () => {
-  it.effect("are 363 kinds by 8 flags, 2,904 one-bit cells and 371 bytes each", () =>
-    Effect.gen(function* sizes() {
-      const sets = yield* grammar;
+/**
+ * How long the exhaustive path search may take: its 30,000-odd cases took 4.5 s up to the default
+ * deadline on 2026-11-05 at a load average of about 15, so ten times that, rounded up.
+ */
+const pathsTimeout = 60_000;
 
-      for (const set of [sets.enters, sets.banned, sets.needs]) {
-        assert.strictEqual(set.cells, 2904, set.name);
-        assert.strictEqual(set.width, 1, set.name);
-        assert.strictEqual(set.bytes, 371, set.name);
-      }
-
-      assert.deepStrictEqual(
-        [sets.enters, sets.banned, sets.needs].map((set) => [set.name, set.rows.length]),
-        [
-          ["Enters", 38],
-          ["Banned", 122],
-          ["Needs", 1],
-        ],
-      );
-    }),
-  );
-
-  it.effect("hold each kind's flags as its row", () =>
-    Effect.gen(function* rows() {
-      const sets = yield* grammar;
-
-      assert.deepStrictEqual(rowOf(sets.enters, "qti-gap-match-interaction"), at("int", "gap"));
-      assert.deepStrictEqual(rowOf(sets.enters, "qti-prompt"), at("choice"));
-      assert.deepStrictEqual(rowOf(sets.enters, "p"), at());
-      assert.deepStrictEqual(
-        rowOf(sets.banned, "qti-choice-interaction"),
-        at("int", "choice", "htx", "rubric", "tmpl", "modal"),
-      );
-      assert.deepStrictEqual(rowOf(sets.banned, "qti-gap"), at());
-      assert.deepStrictEqual(rowOf(sets.needs, "qti-gap"), at("gap"));
-    }),
-  );
-
-  it.effect("refuse a kind the roster lacks, naming the set that names it", () =>
-    Effect.gen(function* refusals() {
-      const noGap = yield* Effect.flip(
-        Effect.fromResult(
-          generate({ ...today, kinds: today.kinds.filter((kind) => kind !== "qti-gap") }),
-        ),
-      );
-      const unknownInteraction = yield* Effect.flip(
-        Effect.fromResult(
-          generate({
-            ...today,
-            interactions: [...today.interactions, "qti-portable-custom-interaction"],
-          }),
-        ),
-      );
-
-      assert.strictEqual(noGap._tag, "OutsideCodeSpace");
-      assert.include(noGap.message, "Needs has a row whose kind is qti-gap");
-      assert.include(
-        unknownInteraction.message,
-        "Enters has a row whose kind is qti-portable-custom-interaction",
-      );
-    }),
-  );
-});
-
-describe("the law", () => {
-  it.effect("steps by the kind's row of Enters", () =>
-    Effect.gen(function* steps() {
-      const sets = yield* grammar;
-
-      assert.deepStrictEqual(step(sets, at(), "qti-choice-interaction"), at("int"));
-      assert.deepStrictEqual(step(sets, at("int"), "qti-prompt"), at("int", "choice"));
-      assert.deepStrictEqual(
-        step(sets, at("int", "choice"), "qti-hottext"),
-        at("int", "choice", "htx"),
-      );
-      assert.deepStrictEqual(step(sets, at("fb"), "qti-choice-interaction"), at("fb", "int"));
-      assert.deepStrictEqual(step(sets, at(), "p"), at());
-    }),
-  );
-
-  it.effect("refuses a banned flag and a needed one missing, and admits the rest", () =>
-    Effect.gen(function* bans() {
-      const sets = yield* grammar;
-      const refused = [
-        [at("int"), "qti-choice-interaction"],
-        [at("int", "choice"), "qti-text-entry-interaction"],
-        [at(), "qti-gap"],
-        [at("rubric"), "qti-rubric-block"],
-        [at("int", "htx"), "qti-hottext"],
-        [at("htx"), "qti-text-entry-interaction"],
-      ] as const;
-      const admitted = [
-        [at("int", "gap"), "qti-gap"],
-        [at("int", "choice"), "qti-hottext"],
-        [at("fb"), "qti-choice-interaction"],
-        [at("fb", "int", "gap", "choice", "htx"), "p"],
-      ] as const;
-
-      for (const [ancestry, kind] of refused) {
-        assert.isFalse(admits(sets, ancestry, kind), `${nameOf(ancestry)} ${kind}`);
-      }
-
-      for (const [ancestry, kind] of admitted) {
-        assert.isTrue(admits(sets, ancestry, kind), `${nameOf(ancestry)} ${kind}`);
-      }
-    }),
-  );
-
+describe("the ancestry grammar against the reference model", () => {
   it.effect(
-    "reads the bans in the parent's ancestry, since 22 kinds enter a flag they are banned under",
-    () =>
-      Effect.gen(function* parentAncestry() {
-        const sets = yield* grammar;
-        const selfBanned = NodeKind.handles.filter(
-          (kind) => !rowOf(sets.banned, kind).isDisjointFrom(rowOf(sets.enters, kind)),
-        );
+    "admits exactly the paths the readings admit, every path of at most 3 flag-relevant kinds below the document node",
+    (ctx) =>
+      searched(
+        ctx,
+        exhaust(
+          {
+            caseHang: Duration.minutes(5),
+            coverage: requiredInSpace<"admitted" | "refused" | "self-banned admitted">([
+              "admitted",
+              "refused",
+              "self-banned admitted",
+            ]),
+            generator: array(element(flagged), { max: 3, min: 0 }),
+            limit: 50_000,
+            literal: Formatter.format,
+            suite: "grammar/ancestry/paths",
+          },
+          (path, c) =>
+            Effect.gen(function* everyPath() {
+              const { ancestry, kinds } = yield* grammar;
+              const interaction = (kind: string) =>
+                Option.isSome(kinds.interaction.lookup({ kind }));
+              const full = ["document", ...path];
+              const expected = referenceAdmits(full, interaction);
+              c.note(expected ? "admitted" : "refused");
 
-        assert.deepStrictEqual(
-          selfBanned.toSorted(),
-          [...interactionKinds, "qti-rubric-block", "qti-hottext"].toSorted(),
-        );
+              const [last] = path.slice(-1);
+              if (
+                expected &&
+                last !== undefined &&
+                !rowOf(ancestry.banned, last).isDisjointFrom(rowOf(ancestry.enters, last))
+              ) {
+                c.note("self-banned admitted");
+              }
 
-        for (const kind of selfBanned) {
-          assert.isTrue(admits(sets, at(), kind), kind);
-          assert.isFalse(rowOf(sets.banned, kind).isDisjointFrom(step(sets, at(), kind)), kind);
-        }
-      }),
+              assert.strictEqual(grammarAdmits(ancestry, full), expected, full.join(" > "));
+            }),
+        ),
+      ),
+    pathsTimeout,
   );
-});
 
-describe("against AncestryStep", () => {
-  it.effect("closes over the composed Admission rows to the 56 reachable ancestries", () =>
-    Effect.gen(function* reachable() {
-      const { ancestries } = closure(yield* grammar);
+  it.effect("states every kind's rows as the reference does, over the whole roster", () =>
+    Effect.gen(function* everyKind() {
+      const { ancestry, kinds } = yield* grammar;
+      const differing = kinds.nodeKind.handles.flatMap((kind) => {
+        const reference = referenceOf(kind, Option.isSome(kinds.interaction.lookup({ kind })));
 
-      assert.strictEqual(ancestries.size, 56);
-      assert.deepStrictEqual([...ancestries.keys()].toSorted(), [...ancestryHandles].toSorted());
-    }),
-  );
+        return same(rowOf(ancestry.enters, kind), reference.enters) &&
+          same(rowOf(ancestry.banned, kind), reference.banned) &&
+          same(rowOf(ancestry.needs, kind), reference.needs)
+          ? []
+          : [kind];
+      });
 
-  it.effect("expands to exactly the 18,924 AncestryStep rows and their next", () =>
-    Effect.gen(function* reproduce() {
-      const sets = yield* grammar;
-      const { ancestries } = closure(sets);
-      const rows = expand(sets, ancestries.values()).filter((row) => ancestries.has(row.next));
-
-      assert.strictEqual(rows.length, 18_924);
-      assert.deepStrictEqual(rows.map(keyOf).toSorted(), ancestryStep.map(keyOf).toSorted());
-    }),
-  );
-
-  it.effect("admits 248 places more than AncestryStep, none of which a tree reaches", () =>
-    Effect.gen(function* equivalent() {
-      const sets = yield* grammar;
-      const { ancestries, placed } = closure(sets);
-      const expansion = expand(sets, ancestries.values());
-      const beyond = expansion.filter((row) => !ancestries.has(row.next));
-
-      // 56 × 363 places: 1,156 the bans refuse, 18,924 `AncestryStep` holds, and 248 whose step
-      // leaves the 56 ancestries, which `AncestryStep` could not name.
-      assert.strictEqual(56 * 363 - expansion.length, 1156);
-      assert.strictEqual(beyond.length, 248);
+      assert.deepStrictEqual(differing, []);
+      assert.deepStrictEqual(rowOf(ancestry.enters, "document"), new Set());
       assert.deepStrictEqual(
-        beyond.filter((row) => placed.has(placeOf(row.ancestry, row.kind))),
-        [],
+        [...flags],
+        ["fb", "modal", "rubric", "tmpl", "int", "gap", "choice", "htx", "test"],
       );
     }),
   );

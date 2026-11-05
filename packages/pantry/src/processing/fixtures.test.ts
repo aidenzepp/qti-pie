@@ -8,7 +8,7 @@ import {
   specOfProcessing,
 } from "#pantry/processing/fixtures.ts";
 import type { ProcessingFixtureName } from "#pantry/processing/fixtures.ts";
-import { readRows } from "#pantry/import/package.ts";
+import { readRows } from "#pantry/import/preview.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import { AttributeFileReference } from "#pantry/schema/reference.ts";
 import { PackageEntry } from "#pantry/schema/package.ts";

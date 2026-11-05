@@ -89,14 +89,21 @@ export const cliProcessTestTimeoutMs = 10_000;
  * beside the parallel CLI set: 13 concurrent loads took 15.5 to 15.8 s at load averages of 9 to 26.
  * Measured on 2026-11-04 at `0f3e8e4` (grizzle trunk), from `packages/pantry`: three batches of
  * thirteen concurrent runs (vitest's default worker count on 14 CPUs, `availableParallelism() - 1`)
- * of one process that imports the six modules `preloadEngine` imports. Batch 1 took 22328, 22477,
- * 22507, 22925, 22874, 22928, 22735, 22402, 22445, 23119, 22230, 22696 and 22438 ms at a one-minute
- * load average of 119.6 before and 105.7 after. Batch 2 took 26114, 26314, 26108, 26539, 26527,
- * 26273, 26278, 26006, 26575, 26013, 25572, 26055 and 25194 ms at 105.7 before and 107.2 after.
- * Batch 3 took 26744, 26963, 26263, 26243, 26812, 26878, 26923, 26880, 26130, 26925, 26937, 26081
- * and 27104 ms at 107.2 before and 102.5 after. The maximum is 27104 ms. A batch at the lowest load
- * sampled (21.1 in 20 minutes; the batch started at 25.8 and ended at 28.1) took 8137 to 8343 ms.
- * The budget is the larger of twice the maximum (54.2 s) and 20 s, rounded up to the next second.
+ * of one process that imports the six modules `preloadEngine` imported then. Batch 1 took 22328,
+ * 22477, 22507, 22925, 22874, 22928, 22735, 22402, 22445, 23119, 22230, 22696 and 22438 ms at a
+ * one-minute load average of 119.6 before and 105.7 after. Batch 2 took 26114, 26314, 26108, 26539,
+ * 26527, 26273, 26278, 26006, 26575, 26013, 25572, 26055 and 25194 ms at 105.7 before and 107.2
+ * after. Batch 3 took 26744, 26963, 26263, 26243, 26812, 26878, 26923, 26880, 26130, 26925, 26937,
+ * 26081 and 27104 ms at 107.2 before and 102.5 after. The maximum is 27104 ms. A batch at the
+ * lowest load sampled (21.1 in 20 minutes; the batch started at 25.8 and ended at 28.1) took 8137
+ * to 8343 ms. The budget is the larger of twice the maximum (54.2 s) and 20 s, rounded up to the
+ * next second.
+ *
+ * Since Q5's CLI fix (2026-11-05) `preloadEngine` imports four modules, not six, and the
+ * measurements above are of the six. Q5's re-measurement of the four, batch 2, had a maximum of
+ * 37.3 s at load averages of 34 to 45, which this rule turns into 75 s. The budget stays at 55 s
+ * until grizzle's `textLookup` is memoized (G5, about 47% of what is left of the preload); then
+ * the four-module preload is measured again, recorded here, and the budget set by this rule.
  * Raise it only on a new measurement recorded here, never to make a run pass.
  */
 export const engineLoadHookTimeoutMs = 55_000;

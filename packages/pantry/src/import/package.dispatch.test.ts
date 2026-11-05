@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it as plainIt, layer } from "@effect/vitest";
 import { Effect } from "effect";
-import { readRows, routeOf } from "#pantry/import/package.ts";
+import { readRows, routeOf } from "#pantry/import/preview.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import { Document } from "#pantry/schema/document.ts";
 import { Node } from "#pantry/schema/node.ts";

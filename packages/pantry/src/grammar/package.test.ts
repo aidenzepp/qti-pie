@@ -1,117 +1,142 @@
+import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
-import { OutsideCodeSpace } from "#pantry/grammar/closed.ts";
-import { resourceTypeOf, resourceTypes, rootKinds, rootOfType } from "#pantry/grammar/package.ts";
-import type { ResourceTypeHandle } from "#pantry/grammar/package.ts";
-import { RootKind, SchemaVersion } from "#pantry/schema/node.ts";
-import type { SchemaVersionHandle } from "#pantry/schema/node.ts";
-import { resourceTypes as seededTypes } from "#pantry/schema/seed/resource-types.ts";
-import { rootOfType as seededRoots } from "#pantry/schema/seed/root-of-type.ts";
+import { Effect, Option, Result } from "effect";
+import type { Element } from "@qti-pie/crust/tree.ts";
+import { fin, roster } from "#pantry/grammar/closed.ts";
+import { cp, documentRoots, lom, manifestRoot, asi, ud } from "#pantry/grammar/facets.ts";
+import { schemaVersions } from "#pantry/grammar/kinds.ts";
+import { packageGrammar } from "#pantry/grammar/package.ts";
+import { checkCache } from "#pantry/vocab/derive/sources.ts";
+import { loadXsd, XsdOracleLayer } from "#pantry/test/gen/grammar.ts";
 
 /**
- * Spell rows as sorted text, so two row lists compare as sets.
- *
- * @param rows - The rows, each with its fields' values.
- * @param fields - The fields to spell, in order.
- * @returns One line per row, the values joined by a space, sorted.
+ * Whether every pinned XSD is in the cache; without them the XSD read is skipped.
  */
-const spelled = <Row extends object>(
-  rows: readonly Row[],
-  fields: readonly (keyof Row)[],
-): readonly string[] => rows.map((row) => fields.map((field) => row[field]).join(" ")).toSorted();
+const cached = await Effect.runPromise(
+  checkCache().pipe(
+    Effect.as(true),
+    Effect.catchTag("XsdSourceMissing", () => Effect.succeed(false)),
+    Effect.provide(NodeServices.layer),
+  ),
+);
 
-describe("ResourceType", () => {
-  it("holds each type the seed names once, 21 handles for its 39 rows", () => {
-    assert.strictEqual(resourceTypes.length, 21);
-    assert.strictEqual(new Set(resourceTypes).size, 21);
-    assert.sameMembers([...resourceTypes], [...new Set(seededTypes.map(({ type }) => type))]);
-  });
+/**
+ * The package relations of production's facets, over a roster of the kinds their roots name.
+ */
+const relations = Effect.gen(function* packageRelations() {
+  const versions = yield* Effect.fromResult(roster("SchemaVersion", schemaVersions));
+  const kinds = yield* Effect.fromResult(roster("NodeKind", [...documentRoots]));
+
+  return yield* Effect.fromResult(
+    packageGrammar({
+      facets: [asi, cp, lom, ud].map(({ package: stated }) => stated),
+      kinds,
+      versions,
+    }),
+  );
 });
 
-describe("ResourceTypeOf", () => {
-  it.effect("reproduces the 39 seeded (version, type) rows", () =>
-    Effect.gen(function* seededPairs() {
-      const relation = yield* Effect.fromResult(resourceTypeOf(SchemaVersion.handles));
+/**
+ * Collect the enumeration values of a type's `type` attribute in a schema node's subtree, following
+ * a named simple type into the set's types: XML Schema Part 2's enumeration facet, read from the
+ * XSD itself.
+ *
+ * @param node - The node.
+ * @param named - Resolve a simple type's local name to its node.
+ * @param inside - Whether the walk is inside the `type` attribute's declaration.
+ * @returns The values.
+ */
+const enumerationOf = (
+  node: Element,
+  named: (local: string) => Option.Option<Element>,
+  inside: boolean,
+): readonly string[] =>
+  node.children.flatMap((child): readonly string[] => {
+    if (child.kind !== "element") {
+      return [];
+    }
 
-      assert.strictEqual(relation.rows.length, 39);
-      assert.deepStrictEqual(
-        spelled(relation.rows, ["version", "type"]),
-        spelled(seededTypes, ["version", "type"]),
+    const name = child.attributes.find((held) => held.local === "name")?.value;
+    const typeOf = child.attributes.find((held) => held.local === "type")?.value;
+    const entering = child.local === "attribute" && name === "type";
+    if (inside && child.local === "enumeration") {
+      return Option.toArray(
+        Option.fromNullishOr(child.attributes.find((held) => held.local === "value")?.value),
       );
-    }),
-  );
+    }
 
-  it.effect("is a set of 42 one-bit cells, 14 bytes", () =>
-    Effect.gen(function* pairSize() {
-      const relation = yield* Effect.fromResult(resourceTypeOf(SchemaVersion.handles));
+    const viaType =
+      entering && typeOf !== undefined
+        ? Option.match(named(typeOf.slice(typeOf.indexOf(":") + 1)), {
+            onNone: () => [],
+            onSome: (found) => enumerationOf(found, named, true),
+          })
+        : [];
 
-      assert.strictEqual(relation.cells, 42);
-      assert.strictEqual(relation.width, 1);
-      assert.strictEqual(relation.bytes, 14);
-    }),
-  );
+    return [...viaType, ...enumerationOf(child, named, inside || entering)];
+  });
 
-  it.effect("keeps each LTI type under its own version", () =>
-    Effect.gen(function* ltiVersions() {
-      const relation = yield* Effect.fromResult(resourceTypeOf(SchemaVersion.handles));
-      const holds = (version: SchemaVersionHandle, type: ResourceTypeHandle) =>
-        Option.isSome(relation.lookup({ type, version }));
+describe.skipIf(!cached)("ResourceTypeOf against the content-packaging XSDs", () => {
+  it.effect(
+    "holds exactly the (version, type) pairs each version's resource type's @type enumerates",
+    () =>
+      Effect.gen(function* resourceTypes() {
+        const { resourceTypeOf } = yield* relations;
+        const target = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
+        for (const [root, version] of [
+          ["imsqtiv3p0_imscpv1p2_v1p0.xsd", "3.0.0"],
+          ["imsqtiv3p0p1_imscpv1p2_v1p0.xsd", "3.0.1"],
+        ] as const) {
+          const { set } = yield* loadXsd(root);
+          // The 3.0.0 XSD names the type `Resource.Type`, the 3.0.1 XSD `ResourceDType`.
+          const resource =
+            set.types.get(`{${target}}Resource.Type`) ?? set.types.get(`{${target}}ResourceDType`);
+          const named = (local: string) =>
+            Option.map(
+              Option.fromNullishOr(set.types.get(`{${target}}${local}`)),
+              ({ node }) => node,
+            );
+          const enumerated =
+            resource === undefined ? [] : enumerationOf(resource.node, named, false);
 
-      assert.isTrue(holds("3.0.0", "imsbasiclti_xmlv1p3"));
-      assert.isFalse(holds("3.0.1", "imsbasiclti_xmlv1p3"));
-      assert.isFalse(holds("3.0.0", "imslti_xmlv1p1"));
-      assert.isTrue(holds("3.0.1", "imslti_xmlv1p1"));
-      assert.isFalse(holds("3.0.0", "imsltia_xmlv1p0"));
-      assert.isTrue(holds("3.0.1", "imsltia_xmlv1p0"));
-    }),
-  );
-
-  it.effect("refuses a version roster that lacks a stated version", () =>
-    Effect.gen(function* missingVersion() {
-      const failure = yield* Effect.flip(Effect.fromResult(resourceTypeOf(["3.0.0"])));
-
-      assert.instanceOf(failure, OutsideCodeSpace);
-      assert.include(failure.message, "ResourceTypeOf has a row whose version is 3.0.1");
-    }),
+          assert.isAbove(enumerated.length, 0, root);
+          assert.deepStrictEqual(
+            new Set(
+              resourceTypeOf.rows.filter((row) => row.version === version).map(({ type }) => type),
+            ),
+            new Set(enumerated),
+            version,
+          );
+        }
+      }).pipe(Effect.provide(XsdOracleLayer)),
+    120_000,
   );
 });
 
 describe("RootOfType", () => {
-  it.effect("reproduces the 9 seeded (type, root) rows", () =>
-    Effect.gen(function* rootPairs() {
-      const relation = yield* Effect.fromResult(rootOfType);
+  it.effect(
+    "is a function into the document roots, and the roots are the manifest's and its payload's",
+    () =>
+      Effect.gen(function* roots() {
+        const { rootOfType } = yield* relations;
+        const types = rootOfType.rows.map(({ type }) => type);
 
-      assert.strictEqual(relation.rows.length, 9);
-      assert.deepStrictEqual(
-        spelled(relation.rows, ["type", "root"]),
-        spelled(seededRoots, ["type", "root"]),
-      );
-    }),
+        assert.strictEqual(new Set(types).size, types.length);
+        assert.deepStrictEqual(
+          new Set(documentRoots),
+          new Set([manifestRoot, ...rootOfType.rows.map(({ root }) => root)]),
+        );
+      }),
   );
 
-  it.effect("is 21 cells of 4 bits, one per type, 19 bytes", () =>
-    Effect.gen(function* rootSize() {
-      const relation = yield* Effect.fromResult(rootOfType);
+  it("refuses a root kind the composition's roster does not hold", () => {
+    const result = Result.flatMap(roster("SchemaVersion", schemaVersions), (versions) =>
+      packageGrammar({ facets: [asi.package, cp.package], kinds: fin("NodeKind", 1), versions }),
+    );
 
-      assert.strictEqual(relation.cells, 21);
-      assert.strictEqual(relation.width, 4);
-      assert.strictEqual(relation.bytes, 19);
-    }),
-  );
-
-  it.effect("maps both template types to rptemplate, and a file type to nothing", () =>
-    Effect.gen(function* rootLookup() {
-      const relation = yield* Effect.fromResult(rootOfType);
-      const rootOf = (type: ResourceTypeHandle) =>
-        relation.lookup({ type }).pipe(Option.map(({ root }) => root));
-
-      assert.deepStrictEqual(rootOf("imsqti_rptemplate_xmlv3p0"), Option.some("rptemplate"));
-      assert.deepStrictEqual(rootOf("imsqti_resprocessing_xmlv3p0"), Option.some("rptemplate"));
-      assert.deepStrictEqual(rootOf("webcontent"), Option.none());
-    }),
-  );
-
-  it("keeps the RootKind roster's handles in its code order", () => {
-    assert.deepStrictEqual([...rootKinds], [...RootKind.handles]);
+    assert.strictEqual(
+      Result.isFailure(result) ? result.failure._tag : "generated",
+      "OutsideCodeSpace",
+    );
   });
 });

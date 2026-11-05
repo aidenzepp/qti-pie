@@ -18,7 +18,7 @@ import {
   transformHash,
 } from "#pantry/test/fixtures.ts";
 import type { Edit, FixtureName, FixtureSpec } from "#pantry/test/fixtures.ts";
-import { readRows } from "#pantry/import/package.ts";
+import { readRows } from "#pantry/import/preview.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import { AttributeFileReference } from "#pantry/schema/reference.ts";
 import { PackageEntry } from "#pantry/schema/package.ts";

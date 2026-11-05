@@ -1,0 +1,176 @@
+/**
+ * The composed grammar as the model reads it: the handle types of every roster `compose` generates
+ * ({@link Composed}), and the one projection of the grammar each model function reads a document
+ * through: shred's ({@link shredGrammarOf}), the folds' ({@link foldGrammarOf}) and unshred's names
+ * ({@link namesOf}).
+ *
+ * Each projection reads the grammar's closed relations as they are and computes no step of its
+ * own, so the importer, the export and every test read a document through the same relations.
+ */
+import { Array as Arr, Option, Result } from "effect";
+import type { ComposedGrammar, Kind, Name } from "#pantry/grammar/compose.ts";
+import { contentStep } from "#pantry/grammar/content.ts";
+import { typeHandle } from "#pantry/grammar/xsi.ts";
+import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
+import type { FoldGrammar } from "#pantry/model/folds.ts";
+import type { ShredGrammar } from "#pantry/model/shred.ts";
+import type { QualifiedName, XdmNames } from "#pantry/model/unshred.ts";
+import { handlePrefixes } from "#pantry/model/xdm.ts";
+import type { ClosedName, ElementKind, ExpandedName, XdmVocabulary } from "#pantry/model/xdm.ts";
+import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
+
+/**
+ * The handle types of the composed grammar: every roster `compose` generates.
+ */
+export interface Composed extends XdmVocabulary {
+  readonly kind: Kind;
+  readonly name: Name;
+  readonly version: SchemaVersion;
+}
+
+/**
+ * Keep a `NodeKind` handle when it is an element kind of a vocabulary.
+ *
+ * @param kind - A handle of the composed roster.
+ * @returns The handle, or none for a kind the XDM fixes or a foreign kind.
+ */
+const elementKindOf = (kind: Kind): Option.Option<ElementKind<Composed>> =>
+  kind === "document" ||
+  kind === "doctype" ||
+  kind === "text" ||
+  kind === "ws" ||
+  kind === "comment" ||
+  kind === "pi" ||
+  kind === "entityRef" ||
+  isForeignKind(kind)
+    ? Option.none()
+    : Option.some(kind);
+
+/**
+ * The open classes, the `AttributeName` handles that name no one attribute.
+ */
+const openHandles: ReadonlySet<string> = new Set(openClasses);
+
+/**
+ * Test whether an `AttributeName` handle names one attribute.
+ *
+ * @param name - A handle of the composed roster.
+ * @returns Whether it is no open class.
+ */
+const isClosedName = (name: Name): name is ClosedName<Composed> => !openHandles.has(name);
+
+/**
+ * Keep an `AttributeName` handle when it names one attribute.
+ *
+ * @param name - A handle of the composed roster.
+ * @returns The handle, or none for an open class.
+ */
+const closedNameOf = (name: Name): Option.Option<ClosedName<Composed>> =>
+  Option.liftPredicate(name, isClosedName);
+
+/**
+ * Read the composed grammar as shred reads a grammar: its kind resolution, the `AttributeName`
+ * roster's closed handles, `Order`'s key set as the children each kind admits,
+ * `AttributeAdmission`, and the `TypeName` roster with each kind's declared type.
+ *
+ * @param grammar - The composed grammar.
+ * @returns The grammar shred reads documents through.
+ */
+export const shredGrammarOf = (grammar: ComposedGrammar): ShredGrammar<Composed> => ({
+  admitsChild: (version, parent, child) =>
+    Option.isSome(grammar.admission.lookup({ child, parent, version })),
+  admitted: (version, kind, name) =>
+    Option.isSome(grammar.attributes.admission.lookup({ kind, name, version })),
+  closedName: (spelling) =>
+    grammar.kinds.attributeName.has(spelling) ? closedNameOf(spelling) : Option.none(),
+  declaredType: (version, kind) => grammar.xsi.declaredType(version, kind),
+  resolve: (namespace, local, parent) =>
+    grammar.kinds.resolve(namespace, local, parent).pipe(Option.flatMap(elementKindOf)),
+  typeName: (name) => {
+    const handle = typeHandle(name);
+
+    return grammar.xsi.typeName.has(handle) ? Option.some(handle) : Option.none();
+  },
+});
+
+/**
+ * Read the composed grammar as the folds read a grammar: a child's state in its parent's content
+ * automaton, from `Admission`'s position or, where it names none, `contentStep` over `Symbol` and
+ * `Follow`; `AttributeAdmission`'s position; `Enters`, `Interaction` and `IsElement`.
+ *
+ * @param grammar - The composed grammar.
+ * @returns The closed relations the folds read.
+ */
+export const foldGrammarOf = (grammar: ComposedGrammar): FoldGrammar<Composed> => {
+  const positionOf = (key: {
+    readonly child: string;
+    readonly parent: string;
+    readonly version: Composed["version"];
+  }): Option.Option<number> =>
+    Option.map(grammar.admission.lookup(key), ({ position }) => Number(position));
+
+  return {
+    ancestry: grammar.ancestry,
+    attributePosition: (key) =>
+      Option.map(grammar.attributes.admission.lookup(key), ({ position }) => Number(position)),
+    interaction: grammar.kinds.interaction,
+    isElement: grammar.kinds.isElement,
+    state: (key, was) =>
+      Option.match(positionOf(key), {
+        onNone: () => Result.fail("unadmitted" as const),
+        onSome: (position) =>
+          position === 0
+            ? Result.fromOption(
+                contentStep(grammar.content, positionOf, key, was),
+                () => "unfollowed" as const,
+              )
+            : Result.succeed(position),
+      }),
+  };
+};
+
+/**
+ * Name the attribute a closed handle spells: a handle that begins with a prefix of
+ * {@link handlePrefixes} names an attribute in that prefix's namespace, and any other handle one
+ * in no namespace.
+ *
+ * @param handle - The handle.
+ * @returns The prefix, local name and namespace name it is written and read with.
+ */
+const attributeNameOf = (handle: string): QualifiedName =>
+  Option.getOrElse(
+    Arr.findFirst(handlePrefixes, ({ prefix }) => handle.startsWith(`${prefix}:`)).pipe(
+      Option.map(({ namespace, prefix }) => ({
+        local: handle.slice(prefix.length + 1),
+        namespace,
+        prefix,
+      })),
+    ),
+    () => ({ local: handle, namespace: "", prefix: "" }),
+  );
+
+/**
+ * Read the composed grammar's names as unshred writes a tree under them: each element kind's
+ * `ElementName` row, and each closed handle's own spelling.
+ *
+ * @param grammar - The composed grammar.
+ * @returns The names. Naming a kind `ElementName` holds no row for is a defect of the grammar,
+ *   whose element kinds are exactly that relation's key set.
+ */
+export const namesOf = (grammar: ComposedGrammar): XdmNames<Composed> => {
+  const elements: ReadonlyMap<string, ExpandedName> = new Map(
+    grammar.kinds.elementName.rows.map(({ kind, local, namespace }) => [
+      kind,
+      { local, namespace },
+    ]),
+  );
+
+  return {
+    attribute: attributeNameOf,
+    element: (kind) =>
+      Option.getOrThrowWith(
+        Option.fromNullishOr(elements.get(kind)),
+        () => new Error(`The grammar's ElementName holds no row for the element kind ${kind}.`),
+      ),
+  };
+};

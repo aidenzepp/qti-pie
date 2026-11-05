@@ -1,881 +1,769 @@
-import type { AnyRelation } from "@bjornpagen/grizzle";
+/**
+ * The attribute grammar's laws, each against an oracle that is not the generator:
+ *
+ * - **The XSD's attribute uses.** An independent reading of the pinned XSDs (`loadXsd` and
+ *   `xsdContents` of `src/test/gen/grammar.ts`, written from XML Schema Part 1 apart from the
+ *   vocabulary deriver) gives each kind its declared names and uses; `AttributeGrammar` must admit
+ *   exactly those, with the XSD's use, beside the document layer's names.
+ * - **The spec readings' text.** Each reading of `docs/spec-readings.md` that narrows a value is
+ *   checked on every attribute it names, and the XSD's own reading of the same type is checked
+ *   everywhere else.
+ * - **The XSD's values, for the departures of the old grammar.** Each value the XSD admits and the
+ *   old grammar refused is admitted, read from the leaf's own resolution of the XSD.
+ * - **Structural laws:** positions a bijection onto 0..n−1 in `AttributeName` order; `TextDomain` a
+ *   row for every text type in every version; `ValueIdentity` derived from the built-in alone; the
+ *   generator's refusals as named invalid inputs.
+ */
+import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option, Predicate, Result, Schema } from "effect";
+import { Effect, FileSystem, Option, Result } from "effect";
+import { baseTypes, generate, specReadings } from "#pantry/grammar/attributes.ts";
+import type { AttributeGrammar, Declared, ValueDomain } from "#pantry/grammar/attributes.ts";
+import { roster } from "#pantry/grammar/closed.ts";
+import type { Roster } from "#pantry/grammar/closed.ts";
+import { composed } from "#pantry/grammar/compose.ts";
+import { patternFlags } from "#pantry/grammar/domains.ts";
+import { openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
+import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
+import { loadXsd, XsdOracleLayer, xsdContents } from "#pantry/test/gen/grammar.ts";
+import { checkCache } from "#pantry/vocab/derive/sources.ts";
+import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
+import { writeXsdOracle, xsdOracleDirectory } from "#pantry/test/xsd-catalog.ts";
 import {
-  admittedIn,
-  attributesOf,
-  domainOf,
-  generate,
-  mediaRevisions,
-  supplement,
-  valueDomains,
-} from "#pantry/grammar/attributes.ts";
-import type {
-  Admitted,
-  AttributeVocabulary,
-  Declared,
-  ValueDomain,
-} from "#pantry/grammar/attributes.ts";
-import { ownByKind, shared } from "#pantry/schema/attribute-homes.ts";
-import type { Index, Reader } from "#pantry/schema/attribute-homes.ts";
-import * as family from "#pantry/schema/attributes.ts";
-import { inventory } from "#pantry/schema/content/xsd-inventory.ts";
-import * as rosters from "#pantry/schema/content/rosters.ts";
-import { BaseType, TypedCardinality } from "#pantry/schema/declaration.ts";
-import { AttributeName, NodeKind, SchemaVersion } from "#pantry/schema/node.ts";
-import { BuiltIn } from "#pantry/schema/processing.ts";
-import { attributeAdmission } from "#pantry/schema/seed/admission.ts";
-import * as patterns from "#pantry/schema/patterns.ts";
+  attributeDeclarations,
+  attributeWildcards,
+  globalAttributes,
+  textTypes,
+} from "#pantry/vocab/inventory/attributes.ts";
+import type { Domain } from "#pantry/vocab/inventory/types.ts";
+import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
- * Today's composition of the attribute vocabularies: the XSD inventory's ASI, HTML and processing
- * kinds with the 3.0.0 media revisions, and the kinds the inventory does not hold.
+ * The leaf's rosters: every kind that declares an attribute or has text, every attribute name, and
+ * the two versions.
  */
-const today: readonly AttributeVocabulary[] = [
-  { attributes: attributesOf(inventory), revisions: mediaRevisions },
-  supplement,
-];
+const rosters = {
+  kinds: Result.getOrThrow(
+    roster("NodeKind", [
+      ...new Set([
+        ...attributeDeclarations.map(({ kind }) => kind),
+        ...textTypes.map(({ kind }) => kind),
+      ]),
+    ]),
+  ),
+  names: Result.getOrThrow(
+    roster("AttributeName", [...new Set(attributeDeclarations.map(({ name }) => name))]),
+  ),
+  versions: Result.getOrThrow(roster("SchemaVersion", schemaVersions)),
+} as const;
 
 /**
- * Today's attribute grammar, over today's `NodeKind` (K = 363), `AttributeName` (A = 221) and
- * `SchemaVersion` rosters.
+ * The attribute grammar of the whole leaf, no document layer: every declaration the pinned XSDs
+ * state, and every text type.
  */
-const grammar = Effect.fromResult(
-  generate({
-    kinds: NodeKind.handles,
-    names: AttributeName.handles,
-    versions: SchemaVersion.handles,
-    vocabularies: today,
-  }),
+const leafGrammar: AttributeGrammar = Result.getOrThrow(
+  generate({ declarations: attributeDeclarations, texts: textTypes, ...rosters }),
 );
 
 /**
- * Today's admitted attributes, as the generator lists them.
+ * The domain of an attribute row, by its handle.
  */
-const admitted = Effect.fromResult(admittedIn(SchemaVersion.handles, today));
+const domainsByHandle = new Map(leafGrammar.domains.map((domain) => [domain.handle, domain]));
 
 /**
- * Spell a (kind, name) pair as one key.
+ * The domain a kind's attribute is read under in a version.
  *
- * @param kind - The kind's handle.
- * @param name - The attribute's name.
- * @returns `kind name`.
- */
-const pairOf = (kind: string, name: string): string => `${kind} ${name}`;
-
-/**
- * List the domain of each admitted attribute of one version, by pair.
- *
- * @param rows - The admitted attributes.
  * @param version - The version.
- * @returns Each pair's domain in that version.
+ * @param kind - The kind.
+ * @param name - The attribute.
+ * @returns The domain, none where the kind does not admit the name.
  */
-const domainsIn = (rows: readonly Admitted[], version: string): ReadonlyMap<string, ValueDomain> =>
-  new Map(
-    rows
-      .filter((row) => row.version === version)
-      .map((row) => [pairOf(row.kind, row.name), row.domain]),
+const domainAt = (version: SchemaVersion, kind: string, name: string): Option.Option<ValueDomain> =>
+  Option.flatMap(leafGrammar.admission.lookup({ kind, name, version }), ({ domain }) =>
+    Option.fromNullishOr(domainsByHandle.get(domain)),
   );
 
 /**
- * Find a value domain by handle.
+ * Whether a domain's pattern matches a raw lexical form, as the attribute CHECK reads it.
  *
- * @param handle - The handle.
- * @returns The domain, or none.
+ * @param domain - The domain.
+ * @param raw - The form as written.
+ * @returns Whether it matches.
  */
-const domainNamed = (handle: string): Option.Option<ValueDomain> =>
-  Option.fromNullishOr(valueDomains.find((domain) => domain.handle === handle));
+const matches = (domain: ValueDomain, raw: string): boolean =>
+  new RegExp(domain.pattern, patternFlags).test(raw);
 
-describe("the value domains", () => {
-  it("are 81, each one distinct definition under its own handle", () => {
-    const definitions = new Set(
-      valueDomains.map(
-        ({ datatype, flags, source, whiteSpace }) =>
-          `${source}\u0000${flags}\u0000${whiteSpace}\u0000${datatype}`,
-      ),
-    );
+/**
+ * Every (version, kind) that declares a name, each once.
+ *
+ * @param name - The attribute.
+ * @returns The (version, kind) pairs.
+ */
+const declarersOf = (
+  name: string,
+): readonly { readonly kind: string; readonly version: SchemaVersion }[] =>
+  attributeDeclarations
+    .filter((declared) => declared.name === name)
+    .flatMap(({ kind, versions }) => versions.map((version) => ({ kind, version })));
 
-    assert.strictEqual(valueDomains.length, 81);
-    assert.strictEqual(new Set(valueDomains.map(({ handle }) => handle)).size, 81);
-    assert.strictEqual(definitions.size, 81);
-  });
+/**
+ * The enumeration values a definition states.
+ *
+ * @param domain - The definition.
+ * @returns Its values.
+ */
+const enumerationOf = (domain: Domain): readonly string[] =>
+  domain.facets.flatMap(({ facet, value }) => (facet === "enumeration" ? [value] : []));
 
-  it("spell an enumeration as the alternation of its values, and match only those", () => {
-    assert.deepStrictEqual(
-      domainNamed("showHide").pipe(Option.map(({ source }) => source)),
-      Option.some("^(?:show|hide)$"),
-    );
-    for (const domain of valueDomains) {
-      if (domain._tag !== "pattern") {
-        const regex = new RegExp(domain.source, domain.flags);
-        for (const value of domain.values) {
-          assert.isTrue(regex.test(value), `${domain.handle} ${value}`);
-          assert.isFalse(regex.test(`${value} `), `${domain.handle} ${value} with a space`);
-        }
+describe("The departures from the XSD", () => {
+  it("are gone: bdo@dir is optional and takes every value the XSD lists, auto among them", () => {
+    for (const version of schemaVersions) {
+      const row = Option.getOrThrow(
+        leafGrammar.admission.lookup({ kind: "bdo", name: "dir", version }),
+      );
+      const declared = attributeDeclarations.find(
+        ({ kind, name }) => kind === "bdo" && name === "dir",
+      );
+      const values = declared === undefined ? [] : enumerationOf(declared.domain);
+      const domain = Option.getOrThrow(domainAt(version, "bdo", "dir"));
+
+      assert.strictEqual(row.use, "optional");
+      assert.include(values, "auto");
+      for (const value of values) {
+        assert.isTrue(matches(domain, value), value);
       }
     }
   });
 
-  it("code the five enumerations a law reads, in today's roster order", () => {
-    const coded = valueDomains.flatMap((domain) =>
-      domain._tag === "coded" ? [[domain.handle, domain.values] as const] : [],
-    );
+  it("are gone: h1@role takes every ARIA role, the same domain as h2 to h6", () => {
+    for (const version of schemaVersions) {
+      const h1 = Option.getOrThrow(domainAt(version, "h1", "role"));
+      const declared = attributeDeclarations.find(
+        ({ kind, name }) => kind === "h2" && name === "role",
+      );
+      const roles = declared === undefined ? [] : enumerationOf(declared.domain);
 
-    assert.deepStrictEqual(coded, [
-      ["baseType", BaseType.handles],
-      ["cardinality", [...TypedCardinality.handles, "record"]],
-      ["shape", rosters.Shape.handles],
-      ["roundingMode", rosters.RoundingMode.handles],
-      ["toleranceMode", rosters.ToleranceMode.handles],
-    ]);
+      assert.isAbove(roles.length, 70);
+      for (const heading of ["h2", "h3", "h4", "h5", "h6"]) {
+        assert.strictEqual(
+          Option.getOrThrow(domainAt(version, heading, "role")).handle,
+          h1.handle,
+          heading,
+        );
+      }
+
+      for (const role of roles) {
+        assert.isTrue(matches(h1, role), role);
+      }
+    }
+  });
+
+  it("are gone: every MimeTypeDType attribute reads the XSD's pattern, as xmllint judged Appendix F's probes", () => {
+    const attributes = [
+      ["a", "type"],
+      ["object", "type"],
+      ["param", "type"],
+      ["source", "type"],
+      ["qti-stylesheet", "type"],
+      ["qti-calculator-info", "mime-type"],
+      ["qti-digital-material", "mime-type"],
+      ["qti-file-href.card", "mime-type"],
+    ] as const;
+    const valid = [
+      "a/b c",
+      `${"a".repeat(128)}/x`,
+      `x/${"b".repeat(256)}`,
+      " image/png ",
+      "image/png",
+      "a/b\tc",
+    ];
+    const invalid = ["a(b)/c", "a/b/c", "é/x", "a@b/c", "image", "/png", "a/"];
+    for (const [kind, name] of attributes) {
+      for (const { version } of declarersOf(name).filter((declarer) => declarer.kind === kind)) {
+        const domain = Option.getOrThrow(domainAt(version, kind, name));
+        for (const value of valid) {
+          assert.isTrue(matches(domain, value), `${kind}@${name} ${JSON.stringify(value)}`);
+        }
+
+        for (const value of invalid) {
+          assert.isFalse(matches(domain, value), `${kind}@${name} ${JSON.stringify(value)}`);
+        }
+      }
+    }
+
+    const upload = Option.getOrThrow(domainAt("3.0.1", "qti-upload-interaction", "type"));
+    assert.isTrue(matches(upload, " image/png  text/plain "));
+    assert.isFalse(matches(upload, "image/png a(b)/c"));
+  });
+
+  it("are gone: a slider's step is NonNegativeDoubleDType, 0, INF and NaN its lexical forms and zero its bound", () => {
+    for (const version of schemaVersions) {
+      const step = Option.getOrThrow(domainAt(version, "qti-slider-interaction", "step"));
+      for (const value of ["0", "0.0", "INF", "NaN", " 2.5 ", "1e3"]) {
+        assert.isTrue(matches(step, value), value);
+      }
+
+      assert.deepStrictEqual(step.facets, [{ facet: "minInclusive", value: "0.0" }]);
+    }
+  });
+
+  it("are gone: a cell's headers are a plain list of identifiers, no reference read on them", () => {
+    for (const kind of ["td", "th"]) {
+      for (const version of schemaVersions) {
+        const headers = Option.getOrThrow(domainAt(version, kind, "headers"));
+
+        assert.isTrue(matches(headers, "a b  c"));
+        assert.isTrue(Option.isNone(headers.identity));
+      }
+    }
+  });
+
+  it("are gone: coords is required on every kind the XSD requires it on, param@valuetype is required, source@role is admitted, and xml:base is admitted on the three manifest kinds", () => {
+    for (const version of schemaVersions) {
+      for (const kind of ["qti-area-map-entry", "qti-associable-hotspot", "qti-hotspot-choice"]) {
+        assert.strictEqual(
+          Option.getOrThrow(leafGrammar.admission.lookup({ kind, name: "coords", version })).use,
+          "required",
+          kind,
+        );
+      }
+
+      assert.strictEqual(
+        Option.getOrThrow(
+          leafGrammar.admission.lookup({ kind: "param", name: "valuetype", version }),
+        ).use,
+        "required",
+      );
+      assert.isTrue(
+        Option.isSome(leafGrammar.admission.lookup({ kind: "source", name: "role", version })),
+      );
+      for (const kind of ["cp:manifest", "cp:resources", "cp:resource"]) {
+        const base = Option.getOrThrow(domainAt(version, kind, "xml:base"));
+
+        assert.isTrue(matches(base, " ../items/ "), kind);
+      }
+    }
   });
 });
 
 /**
- * A field read of today's attribute homes: the relation a reader asked for, the column it keyed
- * the relation by, and the field it read.
+ * A word every domain of a numeric type accepts, and the same word with outer whitespace.
  */
-interface Read {
-  readonly field: string;
-  readonly key: string;
-  readonly relation: AnyRelation;
-}
+const spaced = [" 1", "1 ", "\t1\n"] as const;
 
-/**
- * The id the probe asks every home for.
- */
-const probe = "00000000-0000-4000-8000-000000000000";
-
-/**
- * Run one of today's attribute homes against an index that holds a fact for every relation it
- * asks for, and record each field it reads.
- *
- * Every fact answers every field with the text `probe`, which no home takes for a discriminator
- * (`record`, `ref`, `picture`), so each home reads the column of its plain case; the token rows of
- * an identifier-reference attribute answer no attribute name, so they record only that read.
- *
- * @param source - The home, as `attribute-homes.ts` builds it.
- * @returns The fields it read, in order.
- */
-const readsOf = (source: (index: Index) => Reader): readonly Read[] => {
-  const reads: Read[] = [];
-  const factOf = (relation: AnyRelation, key: string) =>
-    new Proxy<Readonly<Record<string, string>>>(
-      {},
-      {
-        get: (_target, field) => {
-          if (Predicate.isString(field)) {
-            reads.push({ field, key, relation });
+describe("The spec readings", () => {
+  it("read 7: every typed QTI value an attribute carries is read exactly: outer whitespace refused around a number, kept in a string, where the same XSD type elsewhere collapses it", () => {
+    const listed = specReadings.filter(({ reading }) => reading === 7);
+    assert.isAbove(listed.length, 0);
+    let numbers = 0;
+    for (const reading of listed) {
+      for (const kind of Option.getOrElse(reading.kinds, () => [])) {
+        for (const { version } of declarersOf(reading.name).filter(
+          (declarer) => declarer.kind === kind,
+        )) {
+          const domain = Option.getOrThrow(domainAt(version, kind, reading.name));
+          const textual = domain.primitive === "string" || domain.primitive === "anySimpleType";
+          numbers += textual ? 0 : 1;
+          for (const value of spaced) {
+            assert.strictEqual(
+              matches(domain, value),
+              textual,
+              `${kind}@${reading.name} ${JSON.stringify(value)}`,
+            );
           }
-
-          return "probe";
-        },
-      },
-    );
-  const index: Index = {
-    many: (relation, key) => new Map([[probe, [factOf(relation, key)]]]),
-    one: (relation, key) => new Map([[probe, factOf(relation, key)]]),
-  };
-  source(index)(probe);
-
-  return reads;
-};
-
-/**
- * Every field today's homes read for an attribute of a kind: its own homes, then the shared ones,
- * as the renderer reads them.
- *
- * @param kind - The kind's handle.
- * @param name - The attribute's name.
- * @returns The reads of every home named `name`.
- */
-const homeReadsOf = (kind: string, name: string): readonly Read[] =>
-  [...(ownByKind.get(kind) ?? []), ...shared]
-    .filter(([named]) => named === name)
-    .flatMap(([, source]) => readsOf(source));
-
-/**
- * A column type today: a regex over text, a closed roster, or a scalar such as `bigint`.
- */
-type Column =
-  | { readonly _tag: "pattern"; readonly flags: string; readonly source: string }
-  | { readonly _tag: "roster"; readonly values: readonly string[] }
-  | { readonly _tag: "scalar"; readonly sql: string };
-
-/**
- * A column a regex types.
- */
-const PatternColumn = Schema.Struct({
-  pattern: Schema.Struct({ flags: Schema.String, source: Schema.String }),
-});
-
-/**
- * The field types of a relation's columns, as grizzle builds them: a contract, which is a
- * constructor over its base and so is read first, a regex, a roster, or a scalar.
- */
-const Fields = Schema.Record(
-  Schema.String,
-  Schema.Union([
-    Schema.declare(
-      (input: unknown): input is { readonly base: unknown } =>
-        Predicate.isFunction(input) && Predicate.hasProperty(input, "base"),
-    ),
-    PatternColumn,
-    Schema.Struct({ roster: Schema.Struct({ handles: Schema.Array(Schema.String) }) }),
-    Schema.Struct({ sql: Schema.String }),
-  ]),
-);
-
-/**
- * Read the type of each column a set of field reads names.
- *
- * @param reads - The field reads.
- * @returns The type of each read field's column, in order.
- */
-const columnsOf = Effect.fnUntraced(function* columnsOf(reads: readonly Read[]) {
-  const columns: Column[] = [];
-  for (const { field, relation } of reads) {
-    const fields = yield* Schema.decodeUnknownEffect(Fields)(relation.fields);
-    const found = fields[field];
-    if (found === undefined) {
-      return yield* Effect.die(`${relation.name} has no column ${field}`);
+        }
+      }
     }
 
-    if ("base" in found) {
-      const { pattern } = yield* Schema.decodeUnknownEffect(PatternColumn)(found.base);
-      columns.push({ _tag: "pattern", ...pattern });
-    } else if ("pattern" in found) {
-      columns.push({ _tag: "pattern", ...found.pattern });
-    } else if ("roster" in found) {
-      columns.push({ _tag: "roster", values: found.roster.handles });
-    } else {
-      columns.push({ _tag: "scalar", sql: found.sql });
+    const collapsing = Option.getOrThrow(domainAt("3.0.1", "ud:ordinaryStatistic", "stdError"));
+    assert.isAbove(numbers, 0);
+    assert.isTrue(matches(collapsing, " 1"));
+  });
+
+  it("read 8: a match table entry's target-value is any value, read by the overlay as the outcome's base type", () => {
+    for (const version of schemaVersions) {
+      const target = Option.getOrThrow(domainAt(version, "qti-match-table-entry", "target-value"));
+      for (const value of ["0.5", "true", "a b", "", "identifier"]) {
+        assert.isTrue(matches(target, value), value);
+      }
     }
-  }
+  });
 
-  return columns;
+  it("read 14, restated: a text-entry interaction's response-identifier and string-identifier are IDREFs, as the XSD types them", () => {
+    for (const name of ["response-identifier", "string-identifier"]) {
+      for (const version of schemaVersions) {
+        assert.deepStrictEqual(
+          Option.getOrThrow(domainAt(version, "qti-text-entry-interaction", name)).identity,
+          Option.some("IDREF"),
+          name,
+        );
+      }
+    }
+  });
+
+  it("read 15: a variable-identifier-ref is an identifier, not an IDREF", () => {
+    for (const version of schemaVersions) {
+      const ref = Option.getOrThrow(
+        domainAt(version, "qti-outcome-declaration", "variable-identifier-ref"),
+      );
+
+      assert.isTrue(Option.isNone(ref.identity));
+      assert.isTrue(matches(ref, " EXT "));
+      assert.isFalse(matches(ref, "1EXT"));
+    }
+  });
+
+  it("read 16: normal-maximum is greater than zero", () => {
+    for (const version of schemaVersions) {
+      assert.deepStrictEqual(
+        Option.getOrThrow(domainAt(version, "qti-outcome-declaration", "normal-maximum")).facets,
+        [{ facet: "minExclusive", value: "0" }],
+      );
+    }
+  });
+
+  it("read 18: an order or graphic-order interaction's min-choices is at least 1, every other kind's at least 0", () => {
+    for (const { kind, version } of declarersOf("min-choices")) {
+      const domain = Option.getOrThrow(domainAt(version, kind, "min-choices"));
+      const ordered = kind === "qti-order-interaction" || kind === "qti-graphic-order-interaction";
+
+      assert.strictEqual(matches(domain, "0"), !ordered, kind);
+      assert.isTrue(matches(domain, " 1 "), kind);
+    }
+  });
+
+  it("read 46: every count, and figures, holds a signed 64-bit integer exactly", () => {
+    for (const name of [
+      "max-choices",
+      "min-choices",
+      "max-associations",
+      "min-associations",
+      "match-max",
+      "match-min",
+      "max-plays",
+      "min-plays",
+    ]) {
+      const declarers = declarersOf(name);
+      assert.isAbove(declarers.length, 0, name);
+      for (const { kind, version } of declarers) {
+        const domain = Option.getOrThrow(domainAt(version, kind, name));
+
+        assert.isTrue(matches(domain, "9223372036854775807"), `${kind}@${name}`);
+        assert.isTrue(matches(domain, " +09223372036854775807 "), `${kind}@${name}`);
+        assert.isFalse(matches(domain, "9223372036854775808"), `${kind}@${name}`);
+        assert.isFalse(matches(domain, "-1"), `${kind}@${name}`);
+      }
+    }
+
+    for (const kind of ["qti-round-to", "qti-equal-rounded"]) {
+      for (const version of schemaVersions) {
+        const figures = Option.getOrThrow(domainAt(version, kind, "figures"));
+
+        assert.isTrue(matches(figures, "-9223372036854775808"), kind);
+        assert.isFalse(matches(figures, "-9223372036854775809"), kind);
+        assert.isFalse(matches(figures, "9223372036854775808"), kind);
+        assert.isTrue(matches(figures, "FIGURES"), kind);
+      }
+    }
+  });
 });
 
 /**
- * The fields a home reads beside the attribute's value, which say nothing of its language: a
- * `source`'s parent, which decides the picture fill, and the attribute name of an
- * identifier-reference token row.
- */
-const ignored = new Set(["AttributeIdref.attribute", "Source.parentKind"]);
-
-/**
- * The fields a home reads to choose which of its columns holds the value: a declaration's or a
- * value's shape, and the literal-or-reference kind of `figures`, `n` and `number-repeats`.
- */
-const choosers = new Set([
-  "Declaration.shape",
-  "DeclaredValue.shape",
-  "EqualRounded.figuresKind",
-  "Index.nKind",
-  "Repeat.numberRepeatsKind",
-  "RoundTo.figuresKind",
-]);
-
-/**
- * The columns today's homes hold an attribute's value in, and whether a home chooses between
- * them.
- */
-interface Home {
-  readonly chosen: boolean;
-  readonly columns: readonly Column[];
-}
-
-/**
- * Read today's home of an attribute of a kind.
+ * The identity type a definition's built-in makes it, by XML Schema Part 1's ID/IDREF rules: an
+ * atomic `ID` or `IDREF`, or a list of `IDREF`s.
  *
- * @param kind - The kind's handle.
- * @param name - The attribute's name.
- * @returns Its value columns, and whether a home reads a field that chooses between them.
+ * @param domain - The definition.
+ * @returns Its identity type, or none.
  */
-const homeOf = Effect.fnUntraced(function* homeOf(kind: string, name: string) {
-  const reads = homeReadsOf(kind, name).filter(
-    ({ field, relation }) => !ignored.has(`${relation.name}.${field}`),
-  );
-  const chosen = reads.some(({ field, relation }) => choosers.has(`${relation.name}.${field}`));
-  const columns = yield* columnsOf(
-    reads.filter(({ field, relation }) => !choosers.has(`${relation.name}.${field}`)),
-  );
-
-  return { chosen, columns } satisfies Home;
-});
-
-/**
- * The value sets today's checks narrow a roster column to, by version and pair: the media booleans'
- * `ByVersion` checks (`schema/html/media.ts`), `BdoDirNotAuto` and `AriaRoleH1`
- * (`schema/attributes.ts`).
- *
- * @param version - The schema version.
- * @param kind - The kind's handle.
- * @param name - The attribute's name.
- * @returns The values the column admits there, or none where no check narrows it.
- */
-const narrowed = (
-  version: string,
-  kind: string,
-  name: string,
-): Option.Option<readonly string[]> => {
-  const booleanWords = ["true", "false", "1", "0"];
-  if (
-    (kind === "audio" || kind === "video") &&
-    ["autoplay", "controls", "loop", "muted"].includes(name)
-  ) {
-    return Option.some(version === "3.0.0" ? booleanWords : ["true", "false", name]);
+const identityOf = (domain: Domain): Option.Option<string> => {
+  if (domain._tag === "atomic") {
+    return domain.builtin === "ID" || domain.builtin === "IDREF"
+      ? Option.some(domain.builtin)
+      : Option.none();
   }
 
-  if (kind === "track" && name === "default") {
-    return Option.some(version === "3.0.0" ? booleanWords : ["true", "false", name]);
-  }
-
-  if (kind === "bdo" && name === "dir") {
-    return Option.some(["ltr", "rtl"]);
-  }
-
-  return kind === "h1" && name === "role"
-    ? Option.some(["heading", "tab", "presentation"])
+  return domain._tag === "list" && domain.item._tag === "atomic" && domain.item.builtin === "IDREF"
+    ? Option.some("IDREFS")
     : Option.none();
 };
 
-/**
- * The domain that reads each attribute whose home is not one column or chooses between columns,
- * by name:
- *
- * - `cardinality`: a typed declaration's `TypedCardinality`, or `record`, which the declaration's
- *   shape chooses.
- * - `base-type` of a `qti-value`: written only for a record's field value, the shape choosing.
- * - `map-key`, `default-value`, `target-value`: one column per base type, the domain being the XSD's
- *   string type; the mapping's base type narrows the value in its overlay (O5).
- * - `figures`, `n`, `number-repeats`: a literal integer (a `bigint` column) or a variable reference,
- *   the kind choosing.
- * - `identifier` of a variable reference: a declared variable's identifier or a built-in's name, each
- *   an NCName.
- * - `class` of a custom operator: its NCName class, which is also a one-token class list.
- * - `data-ssml`: no home, the importer refusing it until the cutover lifts the refusal.
- * - `headers`: token rows only, each an NCName, an empty list kept as its lexical form.
- */
-const explained: ReadonlyMap<string, string> = new Map([
-  ["base-type", "baseType"],
-  ["cardinality", "cardinality"],
-  ["class", "ncName"],
-  ["data-ssml", "string"],
-  ["default-value", "string"],
-  ["figures", "integerOrVariable"],
-  ["headers", "identifierList"],
-  ["identifier", "ncName"],
-  ["map-key", "normalizedString"],
-  ["n", "integerOrVariable"],
-  ["number-repeats", "integerOrVariable"],
-  ["target-value", "string"],
-]);
+describe("The attribute grammar's structure", () => {
+  it("numbers each (version, kind)'s admitted names 0 to n − 1 in AttributeName code order, a bijection", () => {
+    const byKind = Map.groupBy(
+      leafGrammar.admission.rows,
+      ({ kind, version }) => `${version} ${kind}`,
+    );
+    for (const [key, rows] of byKind) {
+      const ordered = rows.toSorted(
+        (left, right) =>
+          Option.getOrThrow(rosters.names.codeOf(left.name)) -
+          Option.getOrThrow(rosters.names.codeOf(right.name)),
+      );
 
-/**
- * How a domain was found to read its home's language: by the home's one regex, its roster, its
- * integer count, or the table of explained readings; or why it does not.
- */
-type Verdict =
-  | { readonly _tag: "agrees"; readonly by: "count" | "explained" | "regex" | "roster" }
-  | { readonly _tag: "differs"; readonly why: string };
+      assert.deepStrictEqual(
+        ordered.map(({ position }) => Number(position)),
+        ordered.map((_, at) => at),
+        key,
+      );
+    }
 
-/**
- * Judge whether a domain reads the language today's home holds for one attribute.
- *
- * A home of one column must agree with it: a regex column, or several with one regex, must be the
- * domain's regex; a roster column, as today's checks narrow it, must hold the enumeration's values;
- * a `bigint` count is read as the importer's integer reader reads `xs:nonNegativeInteger`. A home
- * that chooses between columns, or has none or several, must be read as {@link explained} says.
- *
- * @param row - The admitted attribute.
- * @param home - Its home today.
- * @returns The verdict.
- */
-const verdictOf = (row: Admitted, home: Home): Verdict => {
-  const { domain, kind, name, version } = row;
-  const differs = (why: string): Verdict => ({
-    _tag: "differs",
-    why: `${version} ${kind} ${name} (${domain.handle}): ${why}`,
+    assert.strictEqual(
+      leafGrammar.positions.handles.length,
+      Math.max(...[...byKind.values()].map((rows) => rows.length)),
+    );
   });
-  const sources = new Set(
-    home.columns.map((column) =>
-      column._tag === "pattern" ? `${column.source}\u0000${column.flags}` : column._tag,
-    ),
-  );
-  const [only] = home.columns;
-  if (!home.chosen && only?._tag === "pattern" && sources.size === 1) {
-    return sources.has(`${domain.source}\u0000${domain.flags}`)
-      ? { _tag: "agrees", by: "regex" }
-      : differs("the home's regex differs");
-  }
 
-  if (!home.chosen && home.columns.length === 1 && only?._tag === "roster") {
-    const values = Option.getOrElse(narrowed(version, kind, name), () => only.values);
-    const held = domain._tag === "pattern" ? [] : domain.values;
-
-    return new Set(held).size === values.length && values.every((value) => held.includes(value))
-      ? { _tag: "agrees", by: "roster" }
-      : differs(`the values differ from ${values.join("|")}`);
-  }
-
-  if (!home.chosen && home.columns.length === 1 && only?._tag === "scalar") {
-    return only.sql === "bigint" && domain.handle === "xsdNonNegativeInteger"
-      ? { _tag: "agrees", by: "count" }
-      : differs(`a ${only.sql} column`);
-  }
-
-  return Option.match(Option.fromNullishOr(explained.get(name)), {
-    onNone: () => differs("no one column, and no reading explained"),
-    onSome: (handle): Verdict =>
-      handle === domain.handle
-        ? { _tag: "agrees", by: "explained" }
-        : differs(`explained as ${handle}`),
-  });
-};
-
-describe("today's composition", () => {
-  it("declares the 6,788 (kind, name) pairs of the attribute-admission seed", () => {
-    const declared = today.flatMap(({ attributes }) =>
-      Object.entries(attributes).flatMap(([kind, declarations]) =>
-        declarations.map(({ name }) => pairOf(kind, name)),
+  it("admits each declaration of the leaf, in each of its versions, with its use, and nothing else", () => {
+    const stated = new Set(
+      attributeDeclarations.flatMap(({ kind, name, use, versions }) =>
+        versions.map((version) => `${version} ${kind} ${name} ${use}`),
       ),
     );
-    const seeded = attributeAdmission.map(({ attribute, kind }) => pairOf(kind, attribute));
+    const admitted = new Set(
+      leafGrammar.admission.rows.map(
+        ({ kind, name, use, version }) => `${version} ${kind} ${name} ${use}`,
+      ),
+    );
 
-    assert.strictEqual(declared.length, 6788);
-    assert.deepStrictEqual(new Set(declared), new Set(seeded));
+    assert.deepStrictEqual([...admitted.symmetricDifference(stated)], []);
   });
 
-  it.effect("admits every declared pair in both versions but a source's role", () =>
-    Effect.gen(function* admitsPairs() {
-      const { admission } = yield* grammar;
-      const seeded = attributeAdmission.map(({ attribute, kind }) => pairOf(kind, attribute));
-      for (const version of SchemaVersion.handles) {
-        const rows = admission.rows.filter((row) => row.version === version);
-        const pairs = new Set(rows.map(({ kind, name }) => pairOf(kind, name)));
+  it("gives every simple-content kind of the leaf its text's domain in each of its versions (A9)", () => {
+    const stated = new Set(
+      textTypes.flatMap(({ kind, versions }) => versions.map((version) => `${version} ${kind}`)),
+    );
+    const held = new Set(leafGrammar.text.rows.map(({ kind, version }) => `${version} ${kind}`));
 
-        assert.strictEqual(rows.length, 6787, version);
-        assert.deepStrictEqual(
-          seeded.filter((pair) => !pairs.has(pair)),
-          ["source role"],
-        );
-      }
+    assert.deepStrictEqual([...held.symmetricDifference(stated)], []);
+    for (const kind of [
+      "cp:schema",
+      "cp:schemaversion",
+      "qmd:toolName",
+      "qmd:interactionType",
+      "drd:hazard",
+      "lom:string",
+      "ud:value",
+    ]) {
+      assert.isTrue(Option.isSome(leafGrammar.text.lookup({ kind, version: "3.0.1" })), kind);
+    }
+  });
 
-      assert.strictEqual(admission.rows.length, 13_574);
-      assert.strictEqual(new Set(admission.rows.map(({ domain }) => domain)).size, 81);
-    }),
-  );
-
-  it.effect("reads every attribute as the language of its home today", () =>
-    Effect.gen(function* matchesHomes() {
-      const differing: string[] = [];
-      const agreeing = new Map<string, number>();
-      const explainedNames = new Map<string, number>();
-      for (const row of yield* admitted) {
-        const verdict = verdictOf(row, yield* homeOf(row.kind, row.name));
-        if (verdict._tag === "differs") {
-          differing.push(verdict.why);
-        } else {
-          agreeing.set(verdict.by, (agreeing.get(verdict.by) ?? 0) + 1);
-          if (verdict.by === "explained") {
-            explainedNames.set(row.name, (explainedNames.get(row.name) ?? 0) + 1);
-          }
+  it("derives each domain's identity from the built-in its type restricts, and from nothing else", () => {
+    for (const declared of attributeDeclarations) {
+      if (declared.name !== "variable-identifier-ref") {
+        for (const version of declared.versions) {
+          assert.deepStrictEqual(
+            Option.getOrThrow(domainAt(version, declared.kind, declared.name)).identity,
+            identityOf(declared.domain),
+            `${declared.kind}@${declared.name}`,
+          );
         }
       }
-
-      assert.deepStrictEqual(differing, []);
-      assert.isTrue(BuiltIn.handles.every((name) => new RegExp(patterns.ncName, "u").test(name)));
-      assert.deepStrictEqual(Object.fromEntries(agreeing), {
-        count: 68,
-        explained: 150,
-        regex: 7974,
-        roster: 5382,
-      });
-      assert.deepStrictEqual(Object.fromEntries(explainedNames), {
-        "base-type": 2,
-        cardinality: 8,
-        class: 2,
-        "data-ssml": 96,
-        "default-value": 4,
-        figures: 4,
-        headers: 4,
-        identifier: 20,
-        "map-key": 2,
-        n: 2,
-        "number-repeats": 2,
-        "target-value": 4,
-      });
-    }),
-  );
-
-  it.effect("reads each identifier-reference token as an NCName, as the reference domains do", () =>
-    Effect.gen(function* tokens() {
-      const columns = yield* columnsOf([
-        { field: "target", key: "node", relation: family.AttributeIdref },
-      ]);
-      const later = domainsIn(yield* admitted, "3.0.1");
-      const handles = [
-        "td headers",
-        "p aria-controls",
-        "p aria-details",
-        "p data-catalog-idref",
-      ].map((pair) => later.get(pair)?.handle);
-
-      assert.deepStrictEqual(columns, [{ _tag: "pattern", flags: "u", source: patterns.ncName }]);
-      assert.deepStrictEqual(handles, ["identifierList", "idrefs", "idref", "idref"]);
-    }),
-  );
-
-  it.effect("differs between the versions in the nine media booleans only", () =>
-    Effect.gen(function* versions() {
-      const rows = yield* admitted;
-      const earlier = domainsIn(rows, "3.0.0");
-      const later = domainsIn(rows, "3.0.1");
-      const differing = [...later]
-        .flatMap(([pair, domain]) =>
-          earlier.get(pair)?.handle === domain.handle
-            ? []
-            : [`${pair}: ${earlier.get(pair)?.handle ?? "none"} then ${domain.handle}`],
-        )
-        .toSorted();
-
-      assert.deepStrictEqual(differing, [
-        "audio autoplay: boolean then mediaAutoplay",
-        "audio controls: boolean then mediaControls",
-        "audio loop: boolean then mediaLoop",
-        "audio muted: boolean then mediaMuted",
-        "track default: boolean then trackDefault",
-        "video autoplay: boolean then mediaAutoplay",
-        "video controls: boolean then mediaControls",
-        "video loop: boolean then mediaLoop",
-        "video muted: boolean then mediaMuted",
-      ]);
-    }),
-  );
-
-  it.effect("takes the whitespace class each inventory declaration states", () =>
-    Effect.gen(function* classes() {
-      const later = domainsIn(yield* admitted, "3.0.1");
-      const differing = Object.values(inventory).flatMap((entry) =>
-        entry.attributes.flatMap(({ name, whiteSpace }) => {
-          const domain = later.get(pairOf(entry.handle, name));
-
-          return whiteSpace === "union" || domain === undefined || domain.whiteSpace === whiteSpace
-            ? []
-            : [pairOf(entry.handle, name)];
-        }),
-      );
-
-      assert.deepStrictEqual(differing, []);
-    }),
-  );
-});
-
-/**
- * Record the relations a home looks up an attribute's facts in, each with the column it keys them
- * by.
- *
- * @param kind - The kind's handle.
- * @param name - The attribute's name.
- * @returns Each lookup as `relation/key`, in order.
- */
-const lookupsOf = (kind: string, name: string): readonly string[] => {
-  const lookups: string[] = [];
-  const index: Index = {
-    many: (relation, key) => {
-      lookups.push(`${relation.name}/${key}`);
-
-      return new Map();
-    },
-    one: (relation, key) => {
-      lookups.push(`${relation.name}/${key}`);
-
-      return new Map();
-    },
-  };
-  for (const [named, source] of [...(ownByKind.get(kind) ?? []), ...shared]) {
-    if (named === name) {
-      source(index)(probe);
     }
-  }
 
-  return lookups;
-};
+    assert.deepStrictEqual(leafGrammar.identity.rows.map(({ identity }) => identity).toSorted(), [
+      "ID",
+      "IDREF",
+      "IDREFS",
+    ]);
+  });
 
-/**
- * The attributes today's importer refuses to find absent, by its `requiredAttribute` calls: in
- * `import/item.ts`, `import/content.ts`, `import/html.ts` and `import/interactions/other.ts`.
- */
-const refusedAbsent = [
-  "a href",
-  "img alt",
-  "img src",
-  "object data",
-  "object type",
-  "param name",
-  "param value",
-  "qti-end-attempt-interaction title",
-  "qti-media-interaction autostart",
-  "qti-modal-feedback show-hide",
-  "qti-slider-interaction lower-bound",
-  "qti-slider-interaction upper-bound",
-  "qti-stylesheet href",
-  "source src",
-  "track src",
-];
+  it("holds the BaseType roster's members as the XSD's base-type enumeration", () => {
+    const declared = attributeDeclarations.find(
+      ({ kind, name }) => kind === "qti-response-declaration" && name === "base-type",
+    );
 
-describe("Required", () => {
-  it.effect("holds 135 attributes in each version, the same in both", () =>
-    Effect.gen(function* sameInBoth() {
-      const { required } = yield* grammar;
-      const [earlier, later] = SchemaVersion.handles.map(
-        (version) =>
-          new Set(
-            required.rows
-              .filter((row) => row.version === version)
-              .map(({ kind, name }) => pairOf(kind, name)),
-          ),
-      );
-
-      assert.strictEqual(later?.size, 135);
-      assert.deepStrictEqual(earlier, later);
-      assert.strictEqual(required.rows.length, 270);
-    }),
-  );
-
-  it.effect("is the declared use but where today's rules read it otherwise", () =>
-    Effect.gen(function* departures() {
-      const { required } = yield* grammar;
-      const held = new Set(
-        required.rows
-          .filter((row) => row.version === "3.0.1")
-          .map(({ kind, name }) => pairOf(kind, name)),
-      );
-      const declared = new Set(
-        today.flatMap(({ attributes }) =>
-          Object.entries(attributes).flatMap(([kind, declarations]) =>
-            declarations.flatMap(({ name, use }) =>
-              use === "required" ? [pairOf(kind, name)] : [],
-            ),
-          ),
-        ),
-      );
-
-      assert.deepStrictEqual(
-        [...held].filter((pair) => !declared.has(pair)),
-        ["bdo dir"],
-      );
-      assert.deepStrictEqual([...declared].filter((pair) => !held.has(pair)).toSorted(), [
-        "param valuetype",
-        "qti-area-map-entry coords",
-        "qti-associable-hotspot coords",
-        "qti-hotspot-choice coords",
-      ]);
-      for (const kind of ["qti-area-map-entry", "qti-associable-hotspot", "qti-hotspot-choice"]) {
-        assert.deepStrictEqual(lookupsOf(kind, "coords"), ["Coords/node"], kind);
-      }
-
-      assert.include(lookupsOf("param", "valuetype"), "DeclaredValuetype/node");
-      assert.isTrue(
-        family.rules.some(
-          (rule) => rule.kind === "capacity" && rule.from.source.name === "NodeDir",
-        ),
-      );
-    }),
-  );
-
-  it.effect("holds every attribute the importer refuses to find absent, but a source's src", () =>
-    Effect.gen(function* refusals() {
-      const { required } = yield* grammar;
-      const held = new Set(required.rows.map(({ kind, name }) => pairOf(kind, name)));
-
-      assert.deepStrictEqual(
-        refusedAbsent.filter((pair) => !held.has(pair)),
-        ["source src"],
-      );
-    }),
-  );
-});
-
-describe("Enumeration", () => {
-  it.effect("codes each value of a coded domain by its position, and nothing else", () =>
-    Effect.gen(function* codes() {
-      const { enumeration } = yield* grammar;
-      const codeOf = (domain: string, value: string) =>
-        enumeration.lookup({ domain, value }).pipe(Option.map(({ code }) => code));
-
-      assert.strictEqual(enumeration.rows.length, 25);
-      assert.deepStrictEqual(codeOf("baseType", "float"), Option.some(2));
-      assert.deepStrictEqual(codeOf("cardinality", "record"), Option.some(3));
-      assert.deepStrictEqual(codeOf("shape", "rect"), Option.some(4));
-      assert.deepStrictEqual(codeOf("toleranceMode", "exact"), Option.some(1));
-      assert.isTrue(Option.isNone(codeOf("baseType", "record")));
-      assert.isTrue(Option.isNone(codeOf("string", "float")));
-    }),
-  );
-});
-
-describe("the constants", () => {
-  it.effect(
-    "AttributeAdmission at K = 363 and A = 221 is 160,446 cells of 7 bits, 140,399 bytes",
-    () =>
-      Effect.gen(function* admissionSize() {
-        const { admission } = yield* grammar;
-
-        assert.strictEqual(admission.cells, 160_446);
-        assert.strictEqual(admission.width, 7);
-        assert.strictEqual(admission.bytes, 140_399);
-      }),
-  );
-
-  it.effect("Required is 160,446 bits, 20,064 bytes, and Enumeration 2,025 cells of 4 bits", () =>
-    Effect.gen(function* sets() {
-      const { enumeration, required } = yield* grammar;
-
-      assert.deepStrictEqual(
-        [required.cells, required.width, required.bytes],
-        [160_446, 1, 20_064],
-      );
-      assert.deepStrictEqual(
-        [enumeration.cells, enumeration.width, enumeration.bytes],
-        [2025, 4, 1021],
-      );
-    }),
-  );
+    assert.deepStrictEqual(
+      [...baseTypes].toSorted(),
+      [...(declared === undefined ? [] : enumerationOf(declared.domain))].toSorted(),
+    );
+  });
 });
 
 /**
- * Declare an optional attribute.
+ * One toy declaration over a toy kind.
  *
- * @param name - Its name.
- * @param type - Its XSD type.
- * @param whiteSpace - Its whitespace class.
+ * @param kind - The kind.
+ * @param name - The attribute.
+ * @param pattern - Its one XSD pattern.
  * @returns The declaration.
  */
-const optional = (name: string, type: string, whiteSpace: Declared["whiteSpace"]): Declared => ({
+const toyDeclaration = (kind: string, name: string, pattern: string): Declared => ({
+  domain: {
+    _tag: "atomic",
+    builtin: "string",
+    facets: [{ facet: "whiteSpace", value: "preserve" }],
+    patterns: [[pattern]],
+    primitive: "string",
+  },
+  kind,
   name,
-  type,
+  type: { inline: Option.none(), type: "Toy", whiteSpace: "preserve" },
   use: "optional",
-  whiteSpace,
+  versions: ["3.0.1"],
 });
 
 /**
- * Read a declaration on a kind and name its domain.
+ * Generate a toy grammar over the toy rosters.
  *
- * @param kind - The kind's handle.
- * @param declared - The declaration.
- * @returns The domain's handle, or the failure's tag.
+ * @param declarations - The declarations.
+ * @param kinds - The kind roster.
+ * @returns The generator's result.
  */
-const handleOf = (kind: string, declared: Declared): string =>
-  Result.match(domainOf(kind, declared), {
-    onFailure: (failure) => failure._tag,
-    onSuccess: (domain) => domain.handle,
+const toyGenerate = (declarations: readonly Declared[], kinds: Roster<string>) =>
+  generate({
+    declarations,
+    kinds,
+    names: Result.getOrThrow(roster("AttributeName", ["a", "b"])),
+    texts: [],
+    versions: rosters.versions,
   });
 
-/**
- * List what one vocabulary admits in both versions when its revisions of `a` and its two added
- * attributes, one on a kind it declares nothing of, hold in `version`.
- *
- * @param version - The version the added attributes' revisions hold in.
- * @returns The admitted attributes, or the failure.
- */
-const revised = (version: string) =>
-  admittedIn(
-    ["3.0.0", "3.0.1"],
-    [
-      {
-        attributes: { k: [optional("a", "xs:string", "preserve")] },
-        revisions: [
-          { ...optional("a", "xs:boolean", "collapse"), kind: "k", version: "3.0.0" },
-          { ...optional("b", "xs:int", "collapse"), kind: "k", version },
-          { ...optional("c", "xs:ID", "collapse"), kind: "m", version },
-        ],
-      },
-    ],
-  );
+describe("The attribute grammar's refusals", () => {
+  const kinds = Result.getOrThrow(roster("NodeKind", ["k"]));
+
+  it("refuse a kind that declares a name twice in a version", () => {
+    const result = toyGenerate(
+      [toyDeclaration("k", "a", "x"), toyDeclaration("k", "a", "y")],
+      kinds,
+    );
+
+    assert.isTrue(Result.isFailure(result) && result.failure._tag === "KeyCollision");
+  });
+
+  it("refuse a kind or a name outside its roster", () => {
+    for (const declared of [toyDeclaration("j", "a", "x"), toyDeclaration("k", "c", "x")]) {
+      const result = toyGenerate([declared], kinds);
+
+      assert.isTrue(
+        Result.isFailure(result) && result.failure._tag === "OutsideCodeSpace",
+        `${declared.kind}@${declared.name}`,
+      );
+    }
+  });
+
+  it("refuse a declaration whose domain does not compile, naming it", () => {
+    const result = toyGenerate([toyDeclaration("k", "b", "[]")], kinds);
+
+    assert.isTrue(Result.isFailure(result) && result.failure._tag === "UncompiledDomain");
+    assert.include(Result.isFailure(result) ? result.failure.message : "", "k@b");
+  });
+
+  it("intern one domain per definition, whichever declarations share it", () => {
+    const result = Result.getOrThrow(
+      toyGenerate([toyDeclaration("k", "a", "x"), toyDeclaration("k", "b", "x")], kinds),
+    );
+
+    assert.strictEqual(result.domains.length, 1);
+    assert.strictEqual(result.valueDomain.rows.length, 1);
+  });
+});
 
 /**
- * Generate the attribute grammar of one vocabulary over a roster of one kind and one name, and
- * take its failure.
- *
- * @param attributes - The vocabulary's declarations.
- * @returns The failure, or a defect when the grammar generates.
+ * Whether every pinned XSD is in the cache.
  */
-const refusalOf = (attributes: AttributeVocabulary["attributes"]) =>
-  Effect.flip(
-    Effect.fromResult(
-      generate({
-        kinds: ["k"],
-        names: ["a"],
-        versions: ["3.0.1"],
-        vocabularies: [{ attributes, revisions: [] }],
+const cached = await Effect.runPromise(
+  checkCache().pipe(
+    Effect.as(true),
+    Effect.catchTag("XsdSourceMissing", () => Effect.succeed(false)),
+    Effect.provide(NodeServices.layer),
+  ),
+);
+
+/**
+ * The pinned schema sets the XSD reading walks, each with the version its uses are read in.
+ */
+const schemas: readonly (readonly [SourcePath, SchemaVersion])[] = [
+  ["imsqti_asiv3p0_v1p0.xsd", "3.0.0"],
+  ["imsqti_asiv3p0p1_v1p0.xsd", "3.0.1"],
+  ["imsqtiv3p0_imscpv1p2_v1p0.xsd", "3.0.0"],
+  ["imsqtiv3p0p1_imscpv1p2_v1p0.xsd", "3.0.1"],
+];
+
+/**
+ * The open classes, the `AttributeName` handles of names no declaration states, from their owner's
+ * roster, so a class the roster gains is set aside here too.
+ */
+const openNames: ReadonlySet<string> = new Set(openClasses);
+
+/**
+ * Whether a name is one the composition states beside the XSD's declarations: an XML Schema
+ * instance attribute, or an open class.
+ *
+ * @param name - An attribute handle.
+ * @returns Whether it is the layer's.
+ */
+const isLayerName = (name: string): boolean => name.startsWith("xsi:") || openNames.has(name);
+
+/**
+ * The XML namespace, whose attributes the grammar names `xml:<local>`.
+ */
+const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
+
+describe.skipIf(!cached)("The XSD's attribute uses", () => {
+  it.effect(
+    "are what the composed grammar admits on every kind the XSD reading reaches, with the XSD's use, the layer's names aside",
+    () =>
+      Effect.gen(function* attributeUsesAreTheXsds() {
+        const { attributes, kinds } = yield* Effect.fromResult(composed());
+        const differences: string[] = [];
+        let compared = 0;
+        for (const [root, version] of schemas) {
+          const { set } = yield* loadXsd(root);
+          const { contents } = xsdContents(set, (namespace, local, parent) =>
+            kinds.nodeKind.has(parent) ? kinds.resolve(namespace, local, parent) : Option.none(),
+          );
+          for (const [kind, models] of contents) {
+            const expected = new Map<string, string>();
+            for (const model of models) {
+              for (const use of model.attributes) {
+                if (use.use !== "prohibited") {
+                  expected.set(
+                    use.name.namespace === xmlNamespace ? `xml:${use.name.local}` : use.name.local,
+                    use.use,
+                  );
+                }
+              }
+            }
+
+            const admitted = new Map(
+              attributes.admission.rows
+                .filter(
+                  (row) =>
+                    row.version === version &&
+                    row.kind === kind &&
+                    !isLayerName(row.name) &&
+                    (!row.name.startsWith("xml:") ||
+                      expected.has(row.name) ||
+                      !models.some(({ anyAttribute }) => anyAttribute)),
+                )
+                .map(({ name, use }) => [name, use] as const),
+            );
+            compared += admitted.size;
+            for (const [name, use] of expected) {
+              if (admitted.get(name) !== use) {
+                differences.push(
+                  `${version} ${kind}@${name}: the XSD declares it ${use}, the grammar ${admitted.get(name) ?? "does not admit it"}`,
+                );
+              }
+            }
+
+            for (const name of admitted.keys()) {
+              if (!expected.has(name)) {
+                differences.push(
+                  `${version} ${kind}@${name}: the grammar admits it, the XSD does not declare it`,
+                );
+              }
+            }
+          }
+        }
+
+        assert.isAbove(compared, 5000);
+        assert.deepStrictEqual(differences, []);
+      }).pipe(Effect.provide(XsdOracleLayer)),
+    300_000,
+  );
+});
+
+/**
+ * The four attributes `xml.xsd` declares globally.
+ */
+const xmlGlobals = globalAttributes.filter(({ name }) => name.startsWith("xml:"));
+
+/**
+ * A minimal LOM document whose `string` carries `xml:lang`: valid, since LOM loose's `string` holds
+ * an `xs:anyAttribute namespace="##other" processContents="lax"`, and the XML namespace is other
+ * than LOM's (the reduction of five corpus manifests the grammar refused).
+ */
+const lomWithXmlLang =
+  '<lom xmlns="http://ltsc.ieee.org/xsd/LOM"><general><title><string xml:lang="en">t</string></title></general></lom>\n';
+
+describe.skipIf(!cached)("The document layer", () => {
+  it.effect(
+    "admits xml.xsd's four globals under their own domains on every kind whose lax or strict attribute wildcard admits the XML namespace, and under the open domain where it skips",
+    () =>
+      Effect.gen(function* layerFollowsTheWildcards() {
+        const { attributes } = yield* Effect.fromResult(composed());
+        const byHandle = new Map(attributes.domains.map((domain) => [domain.handle, domain]));
+        const missing: string[] = [];
+        let checked = 0;
+        for (const wildcard of attributeWildcards.filter(
+          ({ namespace }) => namespace !== "##local",
+        )) {
+          for (const version of wildcard.versions) {
+            for (const global of xmlGlobals) {
+              const row = attributes.admission.lookup({
+                kind: wildcard.kind,
+                name: global.name,
+                version,
+              });
+              const declared = attributeDeclarations.some(
+                ({ kind, name, versions }) =>
+                  kind === wildcard.kind && name === global.name && versions.includes(version),
+              );
+              checked += 1;
+              if (Option.isNone(row)) {
+                missing.push(`${version} ${wildcard.kind}@${global.name}`);
+              } else if (!declared) {
+                const domain = byHandle.get(row.value.domain);
+                const lax = wildcard.processing !== "skip";
+                const accepts = (value: string) => domain !== undefined && matches(domain, value);
+                if (lax && global.name === "xml:space" && accepts("neither")) {
+                  missing.push(
+                    `${version} ${wildcard.kind}@xml:space reads no xml.xsd type under ${wildcard.processing}`,
+                  );
+                }
+
+                if (!lax && !accepts("neither")) {
+                  missing.push(
+                    `${version} ${wildcard.kind}@${global.name} is validated under skip`,
+                  );
+                }
+              }
+            }
+          }
+        }
+
+        assert.isAbove(checked, 1000);
+        assert.deepStrictEqual(missing, []);
+        for (const version of schemaVersions) {
+          const lang = Option.getOrThrow(
+            attributes.admission.lookup({ kind: "lom:string", name: "xml:lang", version }),
+          );
+          const domain = byHandle.get(lang.domain);
+
+          assert.isTrue(
+            domain !== undefined && matches(domain, "en") && matches(domain, ""),
+            version,
+          );
+        }
       }),
-    ),
+    300_000,
   );
-
-describe("the readings", () => {
-  it("read an attribute on its kind before its name's reading, and that before its type's", () => {
-    assert.deepStrictEqual(
-      [
-        handleOf("bdo", optional("dir", "xs:string", "preserve")),
-        handleOf("p", optional("dir", "xs:string", "preserve")),
-        handleOf("p", optional("title", "xs:string", "preserve")),
-        handleOf("qti-printed-variable", optional("format", "xs:normalizedString", "replace")),
-        handleOf(
-          "qti-text-entry-interaction",
-          optional("format", "xs:normalizedString", "replace"),
-        ),
-        handleOf("p", optional("data-foo", "xs:anySimpleType", "preserve")),
-      ],
-      ["bdoDirection", "textDirection", "string", "printfFormat", "normalizedString", "string"],
-    );
-  });
-
-  it("refuse a type no reading maps, and a class the domain does not apply", () => {
-    const unread = domainOf("p", optional("span", "xs:duration", "collapse"));
-    const mismatched = domainOf("p", optional("id", "xs:ID", "preserve"));
-
-    assert.isTrue(Result.isFailure(unread));
-    assert.include(
-      Result.match(unread, { onFailure: ({ message }) => message, onSuccess: () => "" }),
-      "p declares span of type xs:duration, which no value domain reads",
-    );
-    assert.include(
-      Result.match(mismatched, { onFailure: ({ message }) => message, onSuccess: () => "" }),
-      "p declares id with whitespace class preserve, and the id domain it is read as applies collapse",
-    );
-  });
 
   it.effect(
-    "revise a declaration in its version only, add one there, and refuse a stray version",
+    "admits the LOM string's xml:lang that xmllint validates, the corpus manifests' reduction",
     () =>
-      Effect.gen(function* revisions() {
-        const rows = yield* Effect.fromResult(revised("3.0.1"));
-        const stray = yield* Effect.flip(Effect.fromResult(revised("3.1")));
+      Effect.gen(function* lomXmlLangIsValid() {
+        const fs = yield* FileSystem.FileSystem;
+        const directory = `${xsdOracleDirectory}/attribute-layer`;
+        const oracle = yield* writeXsdOracle(directory);
+        yield* fs.writeFileString(`${directory}/lom-xml-lang.xml`, lomWithXmlLang);
 
-        assert.deepStrictEqual(
-          rows.map(
-            ({ domain, kind, name, version }) => `${version} ${kind} ${name} ${domain.handle}`,
+        const [verdict] = yield* xmllintValidate({
+          catalog: oracle.catalog,
+          paths: [`${directory}/lom-xml-lang.xml`],
+          schema: oracle.drivers["3.0.1"],
+        });
+        const { attributes } = yield* Effect.fromResult(composed());
+
+        assert.strictEqual(verdict?._tag, "Valid");
+        assert.isTrue(
+          Option.isSome(
+            attributes.admission.lookup({ kind: "lom:string", name: "xml:lang", version: "3.0.1" }),
           ),
-          ["3.0.0 k a boolean", "3.0.1 k a string", "3.0.1 k b int", "3.0.1 m c id"],
         );
-        assert.include(stray.message, "AttributeAdmission has a row whose version is 3.1");
-      }),
-  );
-
-  it.effect("refuse a kind outside the roster, and a name one kind declares twice", () =>
-    Effect.gen(function* outsideOrTwice() {
-      const outside = yield* refusalOf({ z: [optional("a", "xs:string", "preserve")] });
-      const twice = yield* refusalOf({
-        k: [optional("a", "xs:string", "preserve"), optional("a", "xs:NCName", "collapse")],
-      });
-
-      assert.include(outside.message, "AttributeAdmission has a row whose kind is z");
-      assert.include(
-        twice.message,
-        "AttributeAdmission states two rows at (version 3.0.1, kind k, name a)",
-      );
-    }),
+      }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
+    300_000,
   );
 });

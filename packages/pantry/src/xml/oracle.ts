@@ -1,6 +1,6 @@
 /* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import { NodeChildProcessSpawner } from "@effect/platform-node";
-import { Config, Effect, Schema, Stream } from "effect";
+import { Array as Arr, Config, Effect, Option, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 /**
@@ -108,3 +108,251 @@ export const xmllintC14n = Effect.fn("oracle.xmllintC14n")(function* xmllintC14n
 
   return result.stdout;
 });
+
+/**
+ * The validity oracle's report holds a line it cannot read: a line before any file's first
+ * message, or a file it was asked to judge that has no verdict, such as a path that does not
+ * exist.
+ *
+ * `line` is the line, or the path that has no verdict, and `stderr` the whole report, so a schema
+ * diagnostic (an import the catalog does not map, which `--nonet` refuses) shows in full.
+ */
+export class OracleUnreadable extends Schema.TaggedError<OracleUnreadable>()("OracleUnreadable", {
+  line: Schema.String,
+  stderr: Schema.String,
+}) {
+  /**
+   * The line the oracle could not attribute, and what to check.
+   */
+  override get message(): string {
+    return `xmllint's report holds a line no judged file owns: ${this.line}. Check that every path exists and that the catalog maps every schema location the schema imports.`;
+  }
+}
+
+/**
+ * One message `xmllint` wrote about a judged file.
+ *
+ * - `line` is the file's line the message names.
+ * - `source` is `schema` for a schema validity error or warning, and `parser` for anything the parser
+ *   said: a well-formedness or namespace error, its context lines appended.
+ * - `element` is the element a schema message is on, as `{namespace}local` (`local` when it has no
+ *   namespace), and `attribute` the attribute it names; both are none for a parser message.
+ * - `text` is the message proper, after `Element '…', attribute '…': ` for a schema message. A
+ *   message whose value holds a line break goes on over the report's following lines, which are
+ *   appended to it.
+ */
+export interface XsdMessage {
+  readonly attribute: Option.Option<string>;
+  readonly element: Option.Option<string>;
+  readonly line: number;
+  readonly source: "parser" | "schema";
+  readonly text: string;
+}
+
+/**
+ * The validity oracle's verdict on one file: valid against the schema, or invalid with every
+ * message `xmllint` wrote about it. A file that is not well-formed is invalid, its messages the
+ * parser's. `warnings` are the messages a valid file drew, which do not affect its validity.
+ */
+export type XsdVerdict =
+  | { readonly _tag: "Valid"; readonly warnings: readonly XsdMessage[] }
+  | { readonly _tag: "Invalid"; readonly messages: readonly XsdMessage[] };
+
+/**
+ * A schema message's shape after `file:line: `: `element NAME: Schemas validity error : `, then
+ * `Element 'QNAME'`, an optional `, attribute 'NAME'`, and the message.
+ */
+const schemaMessage =
+  /^element [^:]+: Schemas validity (?:error|warning) : Element '(?<element>[^']+)'(?:, attribute '(?<attribute>[^']+)')?: (?<text>.*)$/su;
+
+/**
+ * The most files one `xmllint` process is given, so its argument list stays far below the
+ * platform's limit (`ARG_MAX`, 1 MiB on macOS) whatever the paths' lengths; a longer list runs as
+ * several processes, one after another, each compiling the schema again.
+ */
+const filesPerProcess = 1000;
+
+/**
+ * Read one judged file's message.
+ *
+ * @param line - The line the message names.
+ * @param body - What follows `file:line: `.
+ * @returns The message, a schema message's element and attribute read out of it.
+ */
+const messageOf = (line: number, body: string): XsdMessage => {
+  const groups = schemaMessage.exec(body)?.groups;
+
+  return groups === undefined
+    ? {
+        attribute: Option.none(),
+        element: Option.none(),
+        line,
+        source: "parser",
+        text: body,
+      }
+    : {
+        attribute: Option.fromNullishOr(groups["attribute"]),
+        element: Option.fromNullishOr(groups["element"]),
+        line,
+        source: "schema",
+        text: groups["text"] ?? "",
+      };
+};
+
+/**
+ * A judged file's message line: the file, the line it names, and what follows. The file is the
+ * shortest prefix followed by `:digits: `, so a path must not itself hold `:digits: `.
+ */
+const messageLine = /^(?<path>.+?):(?<line>\d+): (?<body>.*)$/su;
+
+/**
+ * A judged file's status line: the file, then whether it validates.
+ */
+const statusLine = /^(?<path>.+) (?<status>validates|fails to validate)$/u;
+
+/**
+ * Read one process's report into each file's verdict.
+ *
+ * Every line is a file's message (`file:line: …`), a file's status (`file validates` or `file
+ * fails to validate`), or the continuation of the message before it: a parser error's context
+ * lines, or a value that holds a line break. A file with no status is invalid when it drew a
+ * message (it is not well-formed, so it was never validated).
+ *
+ * @param paths - The files the process judged.
+ * @param report - Everything it wrote.
+ * @returns Each file's verdict, in `paths` order; an {@link OracleUnreadable} for a line before any
+ *   message, or for a file with neither a status nor a message.
+ */
+const verdictsOf = (
+  paths: readonly string[],
+  report: string,
+): Effect.Effect<readonly XsdVerdict[], OracleUnreadable> =>
+  Effect.gen(function* readReport() {
+    const judged = new Set(paths);
+    const messages = new Map<string, XsdMessage[]>();
+    const status = new Map<string, boolean>();
+    let last: XsdMessage[] | undefined;
+
+    for (const line of report.split("\n")) {
+      const stated = statusLine.exec(line)?.groups;
+      const said = messageLine.exec(line)?.groups;
+
+      if (stated !== undefined && judged.has(stated["path"] ?? "")) {
+        status.set(stated["path"] ?? "", stated["status"] === "validates");
+        last = undefined;
+      } else if (said !== undefined && judged.has(said["path"] ?? "")) {
+        const path = said["path"] ?? "";
+        const list = messages.get(path) ?? [];
+
+        list.push(messageOf(Number(said["line"]), said["body"] ?? ""));
+        messages.set(path, list);
+        last = list;
+      } else if (last === undefined) {
+        if (line.trim() !== "") {
+          return yield* new OracleUnreadable({ line, stderr: report });
+        }
+      } else {
+        const held = last.pop();
+
+        if (held !== undefined) {
+          last.push({ ...held, text: `${held.text}\n${line}` });
+        }
+      }
+    }
+
+    const unjudged = paths.find((path) => !status.has(path) && !messages.has(path));
+    if (unjudged !== undefined) {
+      return yield* new OracleUnreadable({ line: unjudged, stderr: report });
+    }
+
+    return paths.map((path): XsdVerdict => {
+      const held = messages.get(path) ?? [];
+
+      return status.get(path) === true
+        ? { _tag: "Valid", warnings: held }
+        : { _tag: "Invalid", messages: held };
+    });
+  });
+
+/**
+ * Validate files against an XML Schema with `xmllint --schema --nonet`, the XSD's own validator,
+ * and return each file's verdict.
+ *
+ * Libxml2 judges the files in one process (one compile of the schema) per thousand files.
+ * `--nonet` forbids every network fetch, so each `schemaLocation` the schema reaches resolves
+ * through `catalog` (an OASIS XML catalog, passed as `XML_CATALOG_FILES`) to a file on disk, or is
+ * not read at all, which the report shows and this refuses rather than judge against a partial
+ * schema. An instance's own `xsi:schemaLocation` hints are not read: `--schema` names the schema.
+ *
+ * Exit status 0, 1 (a file not well-formed or not found) and 3 (a file invalid) are reports; any
+ * other is an {@link OracleError}, the schema not compiling (5) among them. A process whose output
+ * cannot be read, or a `XMLLINT` setting that cannot be read, is a defect, as for
+ * {@link xmllintC14n}.
+ *
+ * @param input - What to validate.
+ * @param input.schema - The schema document to validate against.
+ * @param input.catalog - The XML catalog that maps the schema's imports onto files.
+ * @param input.paths - The files to judge.
+ * @returns Each file's verdict, in `paths` order; an {@link OracleError} when `xmllint` exits with a
+ *   status that is not a report, an {@link OracleUnreadable} when its report holds a line no file
+ *   owns or a file has no verdict, or an {@link OracleUnavailable} when it does not start.
+ */
+export const xmllintValidate = Effect.fn("oracle.xmllintValidate")(
+  function* xmllintValidate(input: {
+    readonly catalog: string;
+    readonly paths: readonly string[];
+    readonly schema: string;
+  }): Effect.fn.Return<
+    readonly XsdVerdict[],
+    OracleError | OracleUnavailable | OracleUnreadable,
+    ChildProcessSpawner.ChildProcessSpawner
+  > {
+    const xmllint = yield* Effect.orDie(xmllintPath);
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    yield* Effect.annotateCurrentSpan({ files: input.paths.length, schema: input.schema });
+
+    const chunks = yield* Effect.forEach(Arr.chunksOf(input.paths, filesPerProcess), (chunk) =>
+      Effect.gen(function* validateChunk() {
+        const result = yield* Effect.scoped(
+          Effect.gen(function* collectReport() {
+            const handle = yield* spawner
+              .spawn(
+                ChildProcess.make(
+                  xmllint,
+                  ["--nonet", "--noout", "--schema", input.schema, ...chunk],
+                  {
+                    env: { XML_CATALOG_FILES: input.catalog },
+                    extendEnv: true,
+                    stdin: "ignore",
+                  },
+                ),
+              )
+              .pipe(
+                Effect.mapError(
+                  (error) => new OracleUnavailable({ executable: xmllint, reason: error.message }),
+                ),
+              );
+
+            return yield* Effect.all(
+              {
+                code: handle.exitCode,
+                stderr: Stream.mkString(Stream.decodeText(handle.stderr)),
+                stdout: Stream.mkString(Stream.decodeText(handle.stdout)),
+              },
+              { concurrency: "unbounded" },
+            ).pipe(Effect.orDie);
+          }),
+        );
+        const report = `${result.stdout}${result.stderr}`;
+
+        if (![0, 1, 3].some((code) => result.code === ChildProcessSpawner.ExitCode(code))) {
+          return yield* new OracleError({ exitCode: result.code, stderr: report });
+        }
+
+        return yield* verdictsOf(chunk, report);
+      }),
+    );
+
+    return chunks.flat();
+  },
+);

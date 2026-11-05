@@ -17,11 +17,13 @@ const packageRoot = path.resolve(import.meta.dirname, "..", "..");
 const copiesRoot = path.join(packageRoot, "work", "cli-copies");
 
 /**
- * Load every engine module a command handler imports when it runs, all at once.
+ * Load every engine module a command handler imports outside the database's pool, all at once.
  *
  * A test file pays that load once, in a `beforeAll` under `engineLoadHookTimeoutMs`, instead of
- * inside its first test's timeout. The list must equal this command's output, so a new lazy import
- * gets added here:
+ * inside its first test's timeout. The list is every module this command prints but the ones a
+ * handler passes to `withAuthorApp` (`#pantry/cli/engine.ts`), the importer and the exporter, which
+ * load only once the database's settings resolve and so never in a test without a database; a new
+ * lazy import outside `withAuthorApp` gets added here:
  *
  * ```sh
  * cd packages/pantry && grep -hoE 'import\("#pantry/[^"]+"\)' src/cli.ts $(ls src/cli/*.ts | grep -v '\.test\.ts$') | sort -u
@@ -31,8 +33,6 @@ export const preloadEngine = Effect.promise(() =>
   Promise.all([
     import("#pantry/db/layer.ts"),
     import("#pantry/export/compare.ts"),
-    import("#pantry/export/package.ts"),
-    import("#pantry/import/package.ts"),
     import("#pantry/import/preview.ts"),
     import("#pantry/package/read.ts"),
   ]),

@@ -11,7 +11,7 @@ import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/docu
 import { FeedbackInline } from "#pantry/schema/feedback.ts";
 import { AssessmentItemLabel, ItemTool, ItemToolBoth } from "#pantry/schema/item.ts";
 import { NodeClass, NodeXmlLang } from "#pantry/schema/attributes.ts";
-import { readRows } from "#pantry/import/package.ts";
+import { readRows } from "#pantry/import/preview.ts";
 import {
   ChoiceInteraction,
   DeclaredMaxChoices,

@@ -138,4 +138,19 @@ describe("the test helpers", () => {
 
     assert.deepStrictEqual(offences(files, ["#pantry/test/"]), pending);
   });
+
+  // The law oracle is kept (review T9): the tests that judge by it, the XSD differential among
+  // them (spec-alignment slice A2), and the XDM generator that names its laws so a renamed law
+  // breaks the build. The list changes only with a reason.
+  it("reach the law oracle only from the tests that judge by it and the generator that names its laws", () => {
+    const files = globSync("**/*.ts", { cwd: sourceRoot }).toSorted();
+
+    assert.deepStrictEqual(offences(files, ["#pantry/test/oracle.ts"]), [
+      "model/folds.test.ts: #pantry/test/oracle.ts",
+      "test/gen/xdm.ts: #pantry/test/oracle.ts",
+      "test/oracle.test.ts: #pantry/test/oracle.ts",
+      "test/prewitness.corpus.test.ts: #pantry/test/oracle.ts",
+      "test/xsd.corpus.test.ts: #pantry/test/oracle.ts",
+    ]);
+  });
 });

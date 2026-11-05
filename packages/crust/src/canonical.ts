@@ -120,30 +120,75 @@ const renderMisc = (item: Misc): string =>
     : `<?${item.target}${item.data === "" ? "" : ` ${item.data}`}?>`;
 
 /**
+ * Render a node that holds no other node: a text run escaped, an entity reference as `&name;`, or
+ * a comment or a processing instruction.
+ *
+ * @param node - The node to render.
+ * @returns The node's canonical form.
+ */
+const renderLeaf = (node: Exclude<Child, Element>): string => {
+  if (node.kind === "text") {
+    return escapeText(node.value);
+  }
+
+  if (node.kind === "entityRef") {
+    return `&${node.name};`;
+  }
+
+  return renderMisc(node);
+};
+
+/**
+ * A node still to render, with the scope its parent's declarations make.
+ */
+interface PendingNode {
+  readonly kind: "node";
+  readonly node: Child;
+  readonly parent: Scope;
+}
+
+/**
+ * The end tag of an element whose children are still being rendered.
+ */
+interface EndTag {
+  readonly kind: "end";
+  readonly qname: string;
+}
+
+/**
  * Render an element, its namespace axis, its attribute axis and its children, always with a
  * separate end tag.
+ *
+ * The walk keeps its own stack, so a tree of any depth or width renders without recursion. Each
+ * element's end tag goes on the stack beneath its children, which go on last first with the scope
+ * the element makes, so each child's whole subtree leaves the stack before its next sibling and the
+ * end tag after the last, which keeps the output in document order.
+ *
+ * @param root - The element to render.
+ * @returns The element's canonical form.
  */
-const renderElement = (element: Element, parent: Scope): string => {
-  const scope = scopeOf(element, parent);
-  const children = element.children
-    .map((child: Child): string => {
-      if (child.kind === "element") {
-        return renderElement(child, scope);
+const renderElement = (root: Element): string => {
+  const rendered: string[] = [];
+  const pending: (PendingNode | EndTag)[] = [{ kind: "node", node: root, parent: new Map() }];
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    if (next.kind === "end") {
+      rendered.push(`</${next.qname}>`);
+    } else if (next.node.kind === "element") {
+      const element = next.node;
+      const scope = scopeOf(element, next.parent);
+      rendered.push(
+        `<${element.qname}${renderNamespaces(scope, next.parent)}${renderAttributes(element)}>`,
+      );
+      pending.push({ kind: "end", qname: element.qname });
+      for (const node of element.children.toReversed()) {
+        pending.push({ kind: "node", node, parent: scope });
       }
+    } else {
+      rendered.push(renderLeaf(next.node));
+    }
+  }
 
-      if (child.kind === "text") {
-        return escapeText(child.value);
-      }
-
-      if (child.kind === "entityRef") {
-        return `&${child.name};`;
-      }
-
-      return renderMisc(child);
-    })
-    .join("");
-
-  return `<${element.qname}${renderNamespaces(scope, parent)}${renderAttributes(element)}>${children}</${element.qname}>`;
+  return rendered.join("");
 };
 
 /**
@@ -161,5 +206,5 @@ export const canonicalize = (doc: XmlDocument): Uint8Array => {
   const prolog = doc.prolog.map((item) => `${renderMisc(item)}\n`).join("");
   const epilog = doc.epilog.map((item) => `\n${renderMisc(item)}`).join("");
 
-  return new TextEncoder().encode(`${prolog}${renderElement(doc.root, new Map())}${epilog}`);
+  return new TextEncoder().encode(`${prolog}${renderElement(doc.root)}${epilog}`);
 };

@@ -27,9 +27,10 @@
  *   - `qti-template-block` and `qti-template-inline` under `qti-content-body.rubric` are
  *     `qti-template-block.rubric` and `qti-template-inline.rubric`;
  *   - Every other reference is the element's plain handle.
- * - The content type adds rows to every host, as phase-1's 4.3 states: an element-only host adds
- *   `ws`, `comment` and `pi`; a mixed host adds `text`, `ws`, `entityRef`, `comment` and `pi`; the
- *   empty type (no element child, not mixed) admits `comment` and `pi` only.
+ * - The content class adds rows to every host, as phase-1's 4.3 states (`characterKinds` of
+ *   `content/xsd-inventory.ts`): an `element` host adds `ws`, `comment` and `pi`; a `mixed` host,
+ *   and a `text` host such as `qti-value`, adds `text`, `ws`, `entityRef`, `comment` and `pi`; an
+ *   `empty` host admits `comment` and `pi` only.
  * - Both versions get the same rows: the M1 and HTML types' child sets do not differ (the spec's
  *   3.5), only the occurrence bounds of `qti-modal-feedback`'s body do.
  * - Rows are deduplicated on `(version, parent, child)`, so a derived row an M0 row already states is
@@ -96,7 +97,8 @@
 import { Option } from "effect";
 
 import { asiInventory } from "#pantry/schema/content/inventory/asi.ts";
-import { entryOf } from "#pantry/schema/content/xsd-inventory.ts";
+import { processingInventory } from "#pantry/schema/content/inventory/processing.ts";
+import { characterKinds, entryOf } from "#pantry/schema/content/xsd-inventory.ts";
 import type { InventoryEntry } from "#pantry/schema/content/xsd-inventory.ts";
 import type {
   AdmissionRow,
@@ -3465,8 +3467,8 @@ const mixed = ["text", "ws", "entityRef", "comment", "pi"] as const;
 /**
  * The children each ASI kind admits, by content type: the spec's 3.6 and 4.3. The element-only
  * hosts add whitespace, comments and instructions; the mixed hosts add character data and entity
- * references; `qti-value` is simple content; `qti-response-processing` admits only the generic
- * rows here and takes its element children from `processingChildren`.
+ * references; `qti-response-processing` admits only the generic rows here and takes its element
+ * children from `processingChildren`.
  */
 const children: Readonly<Partial<Record<(typeof kinds)[number], readonly string[]>>> = {
   "qti-assessment-item": [
@@ -3485,7 +3487,6 @@ const children: Readonly<Partial<Record<(typeof kinds)[number], readonly string[
   "qti-response-declaration": ["qti-default-value", "qti-correct-response", ...elementOnly],
   "qti-response-processing": elementOnly,
   "qti-simple-choice": ["p", "img", ...mixed],
-  "qti-value": mixed,
 };
 
 /**
@@ -3629,18 +3630,10 @@ const elementChildren = {
 } satisfies Readonly<Record<string, readonly string[]>>;
 
 /**
- * The kinds that admit no child but comments and instructions: the 20 empty ones (3.3 D).
- */
-const emptyKinds = [
-  ...[...operandless].filter((kind) => kind !== "qti-base-value"),
-  "qti-exit-response",
-  "qti-exit-test",
-  "qti-exit-template",
-] as const;
-
-/**
- * The children of every M3 host by the content-type rule of phase-1's 4.3: the element children,
- * the generic rows of each host class, and the one element `qti-assessment-item` gains.
+ * The children of every M3 host by the content-type rule of phase-1's 4.3: the element children
+ * and the generic rows of each host with element children, the one element `qti-assessment-item`
+ * gains, and the rows the content class of each other processing kind admits: the 20 `empty` ones
+ * (3.3 D) and `qti-base-value`'s `text`.
  */
 const processingChildren = {
   ...Object.fromEntries(
@@ -3650,8 +3643,11 @@ const processingChildren = {
     ]),
   ),
   "qti-assessment-item": ["qti-template-processing"],
-  "qti-base-value": mixed,
-  ...Object.fromEntries(emptyKinds.map((host) => [host, ["comment", "pi"]] as const)),
+  ...Object.fromEntries(
+    Object.values(processingInventory)
+      .filter((entry) => !Object.hasOwn(elementChildren, entry.handle))
+      .map((entry) => [entry.handle, characterKinds[entry.content._tag]] as const),
+  ),
 } satisfies Readonly<Record<string, readonly string[]>>;
 
 /**
@@ -3695,25 +3691,17 @@ const childHandle = (element: string, host: string, own: ReadonlyMap<string, str
 
 /**
  * The admitted children of one inventory host: its element children that have a handle in the
- * inventory, then the content-type rows.
+ * inventory, then the rows its content class admits.
  */
 const childrenOfHost = (
   entry: InventoryEntry,
   own: ReadonlyMap<string, string>,
-): readonly string[] => {
-  const elements = entry.children
+): readonly string[] => [
+  ...entry.children
     .map((child) => childHandle(child.name, entry.handle, own))
-    .filter((handle) => Option.isSome(entryOf(handle)) && handle !== "template");
-  if (entry.mixed) {
-    return [...elements, "text", "ws", "entityRef", "comment", "pi"];
-  }
-
-  if (entry.children.length === 0) {
-    return ["comment", "pi"];
-  }
-
-  return [...elements, ...elementOnly];
-};
+    .filter((handle) => Option.isSome(entryOf(handle)) && handle !== "template"),
+  ...characterKinds[entry.content._tag],
+];
 
 /**
  * The M1 admission rows of a vocabulary's hosts, derived from their inventory entries and the same

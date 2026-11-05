@@ -1,6 +1,6 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The tests spell the XML encoding labels (`UTF-8`, `US-ASCII`) the declarations under test carry. */
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { decode } from "#crust/decode.ts";
 import type { ReaderRefusal } from "#crust/errors.ts";
 import { ascii, bytesOf, declared } from "#crust/test/bytes.ts";
@@ -26,6 +26,84 @@ const utf16 = (text: string, order: "be" | "le"): Uint8Array => {
  * byte order named.
  */
 const utf16Bare = (text: string, order: "be" | "le"): Uint8Array => utf16(text, order).subarray(2);
+
+/**
+ * The byte order marks of XML 1.0 section 4.3.3, with the `TextDecoder` encoding and the label
+ * each selects.
+ */
+const marks = [
+  { bytes: [0xef, 0xbb, 0xbf], encoding: "utf-8", label: "UTF-8" },
+  { bytes: [0xfe, 0xff], encoding: "utf-16be", label: "UTF-16" },
+  { bytes: [0xff, 0xfe], encoding: "utf-16le", label: "UTF-16" },
+] as const;
+
+/**
+ * Every near byte order mark, each once: a mark with any one of its bytes replaced by any byte
+ * value (the mark itself among them), and each proper prefix of a mark.
+ */
+const nearMarkPrefixes: readonly (readonly number[])[] = [
+  ...new Map(
+    marks
+      .flatMap(({ bytes }) => [
+        ...bytes.flatMap((_, at) =>
+          Array.from({ length: 256 }, (__, value) =>
+            bytes.map((byte, index) => (index === at ? value : byte)),
+          ),
+        ),
+        ...bytes.slice(1).map((_, length) => bytes.slice(0, length + 1)),
+      ])
+      .map((prefix) => [prefix.join(" "), prefix] as const),
+  ).values(),
+];
+
+/**
+ * The bodies a near mark opens: ASCII, and text with a two-byte UTF-8 character.
+ */
+const nearMarkBodies = [ascii("<a/>"), bytesOf(ascii("<a>"), [0xc3, 0xa9], ascii("</a>"))].map(
+  (body) => [...body],
+);
+
+/**
+ * What decoding a document gives: its label and text, or a refusal.
+ */
+type MarkReading =
+  | { readonly _tag: "read"; readonly label: string; readonly text: string }
+  | { readonly _tag: "refused" };
+
+/**
+ * Read a document with no XML declaration as XML 1.0 section 4.3.3 says, through the platform's
+ * fatal decoders: a whole mark selects its encoding and is not text, and anything else is UTF-8,
+ * every byte of it text. Text holding U+0000 or an unpaired surrogate is refused (section 2.2).
+ *
+ * @param bytes - The document.
+ * @returns The label and text, or a refusal.
+ */
+const markReading = (bytes: Uint8Array): MarkReading => {
+  const mark = marks.find(({ bytes: held }) => held.every((byte, index) => bytes[index] === byte));
+  const encoding = mark?.encoding ?? "utf-8";
+  const decoded = Result.try(() =>
+    new TextDecoder(encoding, { fatal: true, ignoreBOM: true }).decode(
+      bytes.subarray(mark?.bytes.length ?? 0),
+    ),
+  );
+
+  return Result.match(decoded, {
+    onFailure: (): MarkReading => ({ _tag: "refused" }),
+    onSuccess: (text): MarkReading =>
+      text.includes("\0") || /\p{Cs}/u.test(text)
+        ? { _tag: "refused" }
+        : { _tag: "read", label: mark?.label ?? "UTF-8", text },
+  });
+};
+
+/**
+ * Spell bytes in hexadecimal, for a failure's message.
+ *
+ * @param bytes - The bytes.
+ * @returns Each byte as two upper-case digits, spaced.
+ */
+const hexOf = (bytes: readonly number[]): string =>
+  bytes.map((byte) => byte.toString(16).toUpperCase().padStart(2, "0")).join(" ");
 
 /**
  * Decodes `input` and returns the refusal it raised, failing the test when `input` decodes.
@@ -189,6 +267,41 @@ describe("decode reads the label and the bytes", () => {
 
       assert.strictEqual(decoded.text, `${String.fromCodePoint(0xfe_ff)}<a/>`);
     }),
+  );
+
+  it.effect(
+    "drops a byte order mark only when the whole mark opens the document, and loses no byte of any near one",
+    () =>
+      // Oracle: the specification as a checker, XML 1.0 section 4.3.3 and Appendix F (a document
+      // opened by `EF BB BF` is UTF-8, by `FE FF` or `FF FE` UTF-16 in that order, the mark not
+      // part of its text; any other is read as UTF-8 here, having no declaration), with the
+      // platform's fatal `TextDecoder` as a second implementation of each decoding.
+      // Bound: exhaustive over the near marks: each mark with any one of its bytes replaced by
+      // any of the 256 values, and each mark's proper prefixes, before each of two bodies.
+      Effect.gen(function* nearMarks() {
+        const wrong: string[] = [];
+        for (const prefix of nearMarkPrefixes) {
+          for (const body of nearMarkBodies) {
+            const bytes = bytesOf(prefix, body);
+            const expected = markReading(bytes);
+            const read = yield* decode(bytes).pipe(
+              Effect.match({
+                onFailure: (): MarkReading => ({ _tag: "refused" }),
+                onSuccess: ({ label, text }): MarkReading => ({ _tag: "read", label, text }),
+              }),
+            );
+
+            if (JSON.stringify(read) !== JSON.stringify(expected)) {
+              wrong.push(
+                `${hexOf(prefix)} before ${hexOf(body)}: read ${JSON.stringify(read)}, expected ${JSON.stringify(expected)}`,
+              );
+            }
+          }
+        }
+
+        assert.strictEqual(wrong.slice(0, 8).join("\n"), "");
+        assert.strictEqual(nearMarkPrefixes.length, 1790, "the box holds every near mark once");
+      }),
   );
 
   it.effect("decodes UTF-8 without a declaration and labels it UTF-8", () =>

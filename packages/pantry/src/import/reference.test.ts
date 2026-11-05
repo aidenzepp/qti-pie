@@ -2,7 +2,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import type { Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
-import { documentRows } from "#pantry/import/package.ts";
+import { documentRows } from "#pantry/import/preview.ts";
 import { itemRows } from "#pantry/import/item.ts";
 import { packageStage } from "#pantry/import/reference.ts";
 import type { StagedDocument } from "#pantry/import/reference.ts";

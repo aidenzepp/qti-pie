@@ -1,3 +1,4 @@
+/* oxlint-disable anti-slop/no-shape-in-symbol-names -- Each anonymous type's constant is named after the attribute that declares it, and `shape` is the attribute QTI names, not a structural description. */
 /**
  * The derived XSD inventory of the ASI processing vocabulary: one entry per kind handle, 89
  * entries.
@@ -45,14 +46,19 @@ import { Option } from "effect";
 import type {
   InventoryAttribute,
   InventoryChild,
+  InventoryContent,
+  InventoryFacetName,
+  InventoryInlineType,
   InventoryLeaf,
+  InventoryType,
+  InventoryValueType,
 } from "#pantry/schema/content/xsd-inventory.ts";
 
 /**
- * Build an attribute row from its declaration.
+ * Build an attribute row from a declaration of a named type.
  *
  * @param name - The attribute name as the XSD spells it.
- * @param type - The declared type name, or the base of an inline type.
+ * @param type - The declared type's name.
  * @param use - Whether the XSD requires the attribute.
  * @param family - Which attribute family the name belongs to.
  * @param whiteSpace - The `whiteSpace` class of the declared type.
@@ -69,6 +75,7 @@ const attribute = (
 ): InventoryAttribute => ({
   default: Option.fromNullishOr(defaultValue),
   family,
+  inline: Option.none(),
   name,
   type,
   use,
@@ -88,6 +95,288 @@ const child = (name: string, min: number, max: Option.Option<number>): Inventory
   min,
   name,
 });
+
+/**
+ * Build an attribute row from a declaration of an anonymous type.
+ *
+ * @param name - The attribute name as the XSD spells it.
+ * @param type - The anonymous type, as one of the leaf's constants holds it.
+ * @param use - Whether the XSD requires the attribute.
+ * @param family - Which attribute family the name belongs to.
+ * @param defaultValue - The XSD `default`, absent when none is declared.
+ * @returns The attribute row.
+ */
+const inlineAttribute = (
+  name: string,
+  type: InventoryValueType,
+  use: InventoryAttribute["use"],
+  family: InventoryAttribute["family"],
+  defaultValue?: string,
+): InventoryAttribute => ({
+  ...type,
+  default: Option.fromNullishOr(defaultValue),
+  family,
+  name,
+  use,
+});
+
+/**
+ * Build an anonymous simple type as the rows that declare it read it.
+ *
+ * @param type - The type's designator: `list`, `union` or its restriction's base.
+ * @param whiteSpace - The type's `whiteSpace` class.
+ * @param definition - The type's definition.
+ * @returns The value type.
+ */
+const inlineType = (
+  type: string,
+  whiteSpace: InventoryValueType["whiteSpace"],
+  definition: InventoryInlineType,
+): InventoryValueType => ({ inline: Option.some(definition), type, whiteSpace });
+
+/**
+ * Build an anonymous list type.
+ *
+ * @param item - The list's item type.
+ * @returns The definition.
+ */
+const list = (item: InventoryType): InventoryInlineType => ({ _tag: "list", item });
+
+/**
+ * Refer to a named simple type.
+ *
+ * @param name - The type's QName, a built-in spelled `xs:`.
+ * @returns The reference.
+ */
+const named = (name: string): InventoryType => ({ _tag: "named", name });
+
+/**
+ * Build an anonymous restriction.
+ *
+ * @param base - The restricted type.
+ * @param facets - Its facets in XSD order, each as its name and its value.
+ * @returns The definition.
+ */
+const restriction = (
+  base: InventoryType,
+  ...facets: readonly (readonly [InventoryFacetName, string])[]
+): InventoryInlineType => ({
+  _tag: "restriction",
+  base,
+  facets: facets.map(([facet, value]) => ({ facet, value })),
+});
+
+/**
+ * Build the content class of a kind whose text is of a named type.
+ *
+ * @param type - The type's name.
+ * @param whiteSpace - The type's `whiteSpace` class.
+ * @returns The `text` class.
+ */
+const text = (type: string, whiteSpace: InventoryValueType["whiteSpace"]): InventoryContent => ({
+  _tag: "text",
+  inline: Option.none(),
+  type,
+  whiteSpace,
+});
+
+/**
+ * Build an anonymous union type.
+ *
+ * @param members - The member types, in XSD order.
+ * @returns The definition.
+ */
+const union = (...members: readonly InventoryType[]): InventoryInlineType => ({
+  _tag: "union",
+  members,
+});
+
+/**
+ * The anonymous type of `min` on `qti-any-n`, which every declaration of the same definition
+ * shares.
+ */
+const minType = inlineType(
+  "union",
+  "union",
+  union(restriction(named("xs:integer")), restriction(named("VariableStringDType"))),
+);
+
+/**
+ * The anonymous type of `base-type` on `qti-base-value`, which every declaration of the same
+ * definition shares.
+ */
+const baseTypeType = inlineType(
+  "xs:string",
+  "preserve",
+  restriction(
+    named("xs:string"),
+    ["enumeration", "boolean"],
+    ["enumeration", "directedPair"],
+    ["enumeration", "duration"],
+    ["enumeration", "file"],
+    ["enumeration", "float"],
+    ["enumeration", "identifier"],
+    ["enumeration", "integer"],
+    ["enumeration", "pair"],
+    ["enumeration", "point"],
+    ["enumeration", "string"],
+    ["enumeration", "uri"],
+  ),
+);
+
+/**
+ * The anonymous type of `tolerance-mode` on `qti-equal`, which every declaration of the same
+ * definition shares.
+ */
+const toleranceModeType = inlineType(
+  "xs:string",
+  "preserve",
+  restriction(
+    named("xs:string"),
+    ["enumeration", "absolute"],
+    ["enumeration", "exact"],
+    ["enumeration", "relative"],
+  ),
+);
+
+/**
+ * The anonymous type of `tolerance` on `qti-equal`, which every declaration of the same definition
+ * shares.
+ */
+const toleranceType = inlineType("list", "collapse", list(named("ToleranceListDType")));
+
+/**
+ * The anonymous type of `rounding-mode` on `qti-equal-rounded`, which every declaration of the same
+ * definition shares.
+ */
+const roundingModeType = inlineType(
+  "xs:string",
+  "preserve",
+  restriction(
+    named("xs:string"),
+    ["enumeration", "decimalPlaces"],
+    ["enumeration", "significantFigures"],
+  ),
+);
+
+/**
+ * The anonymous type of `n` on `qti-index`, which every declaration of the same definition shares.
+ */
+const nType = inlineType(
+  "union",
+  "collapse",
+  union(restriction(named("xs:NCName")), restriction(named("xs:int"))),
+);
+
+/**
+ * The anonymous type of `shape` on `qti-inside`, which every declaration of the same definition
+ * shares.
+ */
+const shapeType = inlineType(
+  "xs:string",
+  "preserve",
+  restriction(
+    named("xs:string"),
+    ["enumeration", "circle"],
+    ["enumeration", "default"],
+    ["enumeration", "ellipse"],
+    ["enumeration", "poly"],
+    ["enumeration", "rect"],
+  ),
+);
+
+/**
+ * The anonymous type of `name` on `qti-math-constant`, which every declaration of the same
+ * definition shares.
+ */
+const nameType = inlineType(
+  "xs:string",
+  "preserve",
+  restriction(named("xs:string"), ["enumeration", "pi"], ["enumeration", "e"]),
+);
+
+/**
+ * The anonymous type of `name` on `qti-math-operator`, which every declaration of the same
+ * definition shares.
+ */
+const nameType2 = inlineType(
+  "xs:string",
+  "preserve",
+  restriction(
+    named("xs:string"),
+    ["enumeration", "sin"],
+    ["enumeration", "cos"],
+    ["enumeration", "tan"],
+    ["enumeration", "sec"],
+    ["enumeration", "csc"],
+    ["enumeration", "cot"],
+    ["enumeration", "asin"],
+    ["enumeration", "acos"],
+    ["enumeration", "atan"],
+    ["enumeration", "atan2"],
+    ["enumeration", "asec"],
+    ["enumeration", "acsc"],
+    ["enumeration", "acot"],
+    ["enumeration", "sinh"],
+    ["enumeration", "cosh"],
+    ["enumeration", "tanh"],
+    ["enumeration", "sech"],
+    ["enumeration", "csch"],
+    ["enumeration", "coth"],
+    ["enumeration", "log"],
+    ["enumeration", "ln"],
+    ["enumeration", "exp"],
+    ["enumeration", "abs"],
+    ["enumeration", "signum"],
+    ["enumeration", "floor"],
+    ["enumeration", "ceil"],
+    ["enumeration", "toDegrees"],
+    ["enumeration", "toRadians"],
+  ),
+);
+
+/**
+ * The anonymous type of `include-category` on `qti-number-correct`, which every declaration of the
+ * same definition shares.
+ */
+const includeCategoryType = inlineType("list", "collapse", list(named("IdentifierListDType")));
+
+/**
+ * The anonymous type of `pattern` on `qti-pattern-match`, which every declaration of the same
+ * definition shares.
+ */
+const patternType = inlineType(
+  "union",
+  "union",
+  union(restriction(named("xs:string")), restriction(named("EncVariableStringDType"))),
+);
+
+/**
+ * The anonymous type of `min` on `qti-random-float`, which every declaration of the same definition
+ * shares.
+ */
+const minType2 = inlineType(
+  "union",
+  "union",
+  union(restriction(named("xs:double")), restriction(named("VariableStringDType"))),
+);
+
+/**
+ * The anonymous type of `name` on `qti-stats-operator`, which every declaration of the same
+ * definition shares.
+ */
+const nameType3 = inlineType(
+  "xs:string",
+  "preserve",
+  restriction(
+    named("xs:string"),
+    ["enumeration", "mean"],
+    ["enumeration", "sampleVariance"],
+    ["enumeration", "sampleSD"],
+    ["enumeration", "popVariance"],
+    ["enumeration", "popSD"],
+  ),
+);
 
 /**
  * The ASI processing inventory, keyed by kind handle.
@@ -161,15 +450,15 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.none()),
       child("qti-outcome-maximum", 1, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-and",
     handle: "qti-and",
-    mixed: false,
     type: "Logic1toManyDType",
   },
   "qti-any-n": {
     attributes: [
-      attribute("min", "union", "required", "own", "union"),
-      attribute("max", "union", "required", "own", "union"),
+      inlineAttribute("min", minType, "required", "own"),
+      inlineAttribute("max", minType, "required", "own"),
     ],
     children: [
       child("qti-and", 1, Option.none()),
@@ -237,17 +526,17 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.none()),
       child("qti-outcome-maximum", 1, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-any-n",
     handle: "qti-any-n",
-    mixed: false,
     type: "AnyNDType",
   },
   "qti-base-value": {
-    attributes: [attribute("base-type", "xs:string", "required", "own", "preserve")],
+    attributes: [inlineAttribute("base-type", baseTypeType, "required", "own")],
     children: [],
+    content: text("xs:string", "preserve"),
     element: "qti-base-value",
     handle: "qti-base-value",
-    mixed: false,
     type: "BaseValueDType",
   },
   "qti-container-size": {
@@ -318,9 +607,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-container-size",
     handle: "qti-container-size",
-    mixed: false,
     type: "LogicSingleDType",
   },
   "qti-contains": {
@@ -391,17 +680,17 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-contains",
     handle: "qti-contains",
-    mixed: false,
     type: "LogicPairDType",
   },
   "qti-correct": {
     attributes: [attribute("identifier", "IdentifierDType", "required", "own", "collapse")],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-correct",
     handle: "qti-correct",
-    mixed: false,
     type: "CorrectDType",
   },
   "qti-custom-operator": {
@@ -475,17 +764,17 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 0, Option.none()),
       child("qti-outcome-maximum", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-custom-operator",
     handle: "qti-custom-operator",
-    mixed: false,
     type: "CustomOperatorDType",
   },
   "qti-default": {
     attributes: [attribute("identifier", "IdentifierDType", "required", "own", "collapse")],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-default",
     handle: "qti-default",
-    mixed: false,
     type: "DefaultDType",
   },
   "qti-delete": {
@@ -556,9 +845,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-delete",
     handle: "qti-delete",
-    mixed: false,
     type: "LogicPairDType",
   },
   "qti-divide": {
@@ -629,9 +918,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-divide",
     handle: "qti-divide",
-    mixed: false,
     type: "LogicPairDType",
   },
   "qti-duration-gte": {
@@ -702,9 +991,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-duration-gte",
     handle: "qti-duration-gte",
-    mixed: false,
     type: "LogicPairDType",
   },
   "qti-duration-lt": {
@@ -775,15 +1064,15 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-duration-lt",
     handle: "qti-duration-lt",
-    mixed: false,
     type: "LogicPairDType",
   },
   "qti-equal": {
     attributes: [
-      attribute("tolerance-mode", "xs:string", "optional", "own", "preserve", "exact"),
-      attribute("tolerance", "list", "optional", "own", "collapse"),
+      inlineAttribute("tolerance-mode", toleranceModeType, "optional", "own", "exact"),
+      inlineAttribute("tolerance", toleranceType, "optional", "own"),
       attribute("include-lower-bound", "xs:boolean", "optional", "own", "collapse", "true"),
       attribute("include-upper-bound", "xs:boolean", "optional", "own", "collapse", "true"),
     ],
@@ -853,15 +1142,15 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-equal",
     handle: "qti-equal",
-    mixed: false,
     type: "EqualDType",
   },
   "qti-equal-rounded": {
     attributes: [
-      attribute("rounding-mode", "xs:string", "optional", "own", "preserve", "significantFigures"),
-      attribute("figures", "union", "required", "own", "union"),
+      inlineAttribute("rounding-mode", roundingModeType, "optional", "own", "significantFigures"),
+      inlineAttribute("figures", minType, "required", "own"),
     ],
     children: [
       child("qti-and", 2, Option.some(2)),
@@ -929,33 +1218,33 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-equal-rounded",
     handle: "qti-equal-rounded",
-    mixed: false,
     type: "EqualRoundedDType",
   },
   "qti-exit-response": {
     attributes: [],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-exit-response",
     handle: "qti-exit-response",
-    mixed: false,
     type: "EmptyPrimitiveTypeDType",
   },
   "qti-exit-template": {
     attributes: [],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-exit-template",
     handle: "qti-exit-template",
-    mixed: false,
     type: "EmptyPrimitiveTypeDType",
   },
   "qti-exit-test": {
     attributes: [],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-exit-test",
     handle: "qti-exit-test",
-    mixed: false,
     type: "EmptyPrimitiveTypeDType",
   },
   "qti-field-value": {
@@ -1026,9 +1315,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-field-value",
     handle: "qti-field-value",
-    mixed: false,
     type: "FieldValueDType",
   },
   "qti-gcd": {
@@ -1099,9 +1388,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.none()),
       child("qti-outcome-maximum", 1, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-gcd",
     handle: "qti-gcd",
-    mixed: false,
     type: "Logic1toManyDType",
   },
   "qti-gt": {
@@ -1172,9 +1461,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-gt",
     handle: "qti-gt",
-    mixed: false,
     type: "LogicPairDType",
   },
   "qti-gte": {
@@ -1245,13 +1534,13 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-gte",
     handle: "qti-gte",
-    mixed: false,
     type: "LogicPairDType",
   },
   "qti-index": {
-    attributes: [attribute("n", "union", "required", "own", "collapse")],
+    attributes: [inlineAttribute("n", nType, "required", "own")],
     children: [
       child("qti-and", 1, Option.some(1)),
       child("qti-gt", 1, Option.some(1)),
@@ -1318,14 +1607,14 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-index",
     handle: "qti-index",
-    mixed: false,
     type: "IndexDType",
   },
   "qti-inside": {
     attributes: [
-      attribute("shape", "xs:string", "required", "own", "preserve"),
+      inlineAttribute("shape", shapeType, "required", "own"),
       attribute("coords", "CoordsDType", "required", "own", "replace"),
     ],
     children: [
@@ -1394,9 +1683,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-inside",
     handle: "qti-inside",
-    mixed: false,
     type: "InsideDType",
   },
   "qti-integer-divide": {
@@ -1467,9 +1756,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-integer-divide",
     handle: "qti-integer-divide",
-    mixed: false,
     type: "LogicPairDType",
   },
   "qti-integer-modulus": {
@@ -1540,9 +1829,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-integer-modulus",
     handle: "qti-integer-modulus",
-    mixed: false,
     type: "LogicPairDType",
   },
   "qti-integer-to-float": {
@@ -1613,9 +1902,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-integer-to-float",
     handle: "qti-integer-to-float",
-    mixed: false,
     type: "LogicSingleDType",
   },
   "qti-is-null": {
@@ -1686,9 +1975,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-is-null",
     handle: "qti-is-null",
-    mixed: false,
     type: "LogicSingleDType",
   },
   "qti-lcm": {
@@ -1759,9 +2048,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.none()),
       child("qti-outcome-maximum", 1, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-lcm",
     handle: "qti-lcm",
-    mixed: false,
     type: "Logic1toManyDType",
   },
   "qti-lookup-outcome-value": {
@@ -1832,9 +2121,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-lookup-outcome-value",
     handle: "qti-lookup-outcome-value",
-    mixed: false,
     type: "LookupOutcomeValueDType",
   },
   "qti-lt": {
@@ -1905,9 +2194,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-lt",
     handle: "qti-lt",
-    mixed: false,
     type: "LogicPairDType",
   },
   "qti-lte": {
@@ -1978,25 +2267,25 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-lte",
     handle: "qti-lte",
-    mixed: false,
     type: "LogicPairDType",
   },
   "qti-map-response": {
     attributes: [attribute("identifier", "IdentifierDType", "required", "own", "collapse")],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-map-response",
     handle: "qti-map-response",
-    mixed: false,
     type: "MapResponseDType",
   },
   "qti-map-response-point": {
     attributes: [attribute("identifier", "IdentifierDType", "required", "own", "collapse")],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-map-response-point",
     handle: "qti-map-response-point",
-    mixed: false,
     type: "MapResponseDType",
   },
   "qti-match": {
@@ -2067,21 +2356,21 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-match",
     handle: "qti-match",
-    mixed: false,
     type: "LogicPairDType",
   },
   "qti-math-constant": {
-    attributes: [attribute("name", "xs:string", "required", "own", "preserve")],
+    attributes: [inlineAttribute("name", nameType, "required", "own")],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-math-constant",
     handle: "qti-math-constant",
-    mixed: false,
     type: "MathConstantDType",
   },
   "qti-math-operator": {
-    attributes: [attribute("name", "xs:string", "required", "own", "preserve")],
+    attributes: [inlineAttribute("name", nameType2, "required", "own")],
     children: [
       child("qti-and", 1, Option.none()),
       child("qti-gt", 1, Option.none()),
@@ -2148,9 +2437,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.none()),
       child("qti-outcome-maximum", 1, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-math-operator",
     handle: "qti-math-operator",
-    mixed: false,
     type: "MathOperatorDType",
   },
   "qti-max": {
@@ -2221,9 +2510,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.none()),
       child("qti-outcome-maximum", 1, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-max",
     handle: "qti-max",
-    mixed: false,
     type: "Logic1toManyDType",
   },
   "qti-member": {
@@ -2294,9 +2583,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-member",
     handle: "qti-member",
-    mixed: false,
     type: "LogicPairDType",
   },
   "qti-min": {
@@ -2367,9 +2656,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.none()),
       child("qti-outcome-maximum", 1, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-min",
     handle: "qti-min",
-    mixed: false,
     type: "Logic1toManyDType",
   },
   "qti-multiple": {
@@ -2440,9 +2729,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 0, Option.none()),
       child("qti-outcome-maximum", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-multiple",
     handle: "qti-multiple",
-    mixed: false,
     type: "Logic0toManyDType",
   },
   "qti-not": {
@@ -2513,77 +2802,77 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-not",
     handle: "qti-not",
-    mixed: false,
     type: "LogicSingleDType",
   },
   "qti-null": {
     attributes: [],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-null",
     handle: "qti-null",
-    mixed: false,
     type: "EmptyPrimitiveTypeDType",
   },
   "qti-number-correct": {
     attributes: [
       attribute("section-identifier", "IdentifierDType", "optional", "own", "collapse"),
-      attribute("include-category", "list", "optional", "own", "collapse"),
-      attribute("exclude-category", "list", "optional", "own", "collapse"),
+      inlineAttribute("include-category", includeCategoryType, "optional", "own"),
+      inlineAttribute("exclude-category", includeCategoryType, "optional", "own"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-number-correct",
     handle: "qti-number-correct",
-    mixed: false,
     type: "NumberDType",
   },
   "qti-number-incorrect": {
     attributes: [
       attribute("section-identifier", "IdentifierDType", "optional", "own", "collapse"),
-      attribute("include-category", "list", "optional", "own", "collapse"),
-      attribute("exclude-category", "list", "optional", "own", "collapse"),
+      inlineAttribute("include-category", includeCategoryType, "optional", "own"),
+      inlineAttribute("exclude-category", includeCategoryType, "optional", "own"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-number-incorrect",
     handle: "qti-number-incorrect",
-    mixed: false,
     type: "NumberDType",
   },
   "qti-number-presented": {
     attributes: [
       attribute("section-identifier", "IdentifierDType", "optional", "own", "collapse"),
-      attribute("include-category", "list", "optional", "own", "collapse"),
-      attribute("exclude-category", "list", "optional", "own", "collapse"),
+      inlineAttribute("include-category", includeCategoryType, "optional", "own"),
+      inlineAttribute("exclude-category", includeCategoryType, "optional", "own"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-number-presented",
     handle: "qti-number-presented",
-    mixed: false,
     type: "NumberDType",
   },
   "qti-number-responded": {
     attributes: [
       attribute("section-identifier", "IdentifierDType", "optional", "own", "collapse"),
-      attribute("include-category", "list", "optional", "own", "collapse"),
-      attribute("exclude-category", "list", "optional", "own", "collapse"),
+      inlineAttribute("include-category", includeCategoryType, "optional", "own"),
+      inlineAttribute("exclude-category", includeCategoryType, "optional", "own"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-number-responded",
     handle: "qti-number-responded",
-    mixed: false,
     type: "NumberDType",
   },
   "qti-number-selected": {
     attributes: [
       attribute("section-identifier", "IdentifierDType", "optional", "own", "collapse"),
-      attribute("include-category", "list", "optional", "own", "collapse"),
-      attribute("exclude-category", "list", "optional", "own", "collapse"),
+      inlineAttribute("include-category", includeCategoryType, "optional", "own"),
+      inlineAttribute("exclude-category", includeCategoryType, "optional", "own"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-number-selected",
     handle: "qti-number-selected",
-    mixed: false,
     type: "NumberDType",
   },
   "qti-or": {
@@ -2654,9 +2943,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.none()),
       child("qti-outcome-maximum", 1, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-or",
     handle: "qti-or",
-    mixed: false,
     type: "Logic1toManyDType",
   },
   "qti-ordered": {
@@ -2727,9 +3016,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 0, Option.none()),
       child("qti-outcome-maximum", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-ordered",
     handle: "qti-ordered",
-    mixed: false,
     type: "Logic0toManyDType",
   },
   "qti-outcome-condition": {
@@ -2739,9 +3028,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-else-if", 0, Option.none()),
       child("qti-outcome-else", 0, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-outcome-condition",
     handle: "qti-outcome-condition",
-    mixed: false,
     type: "OutcomeConditionDType",
   },
   "qti-outcome-else": {
@@ -2754,9 +3043,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-exit-test", 0, Option.none()),
       child("qti-outcome-condition", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-outcome-else",
     handle: "qti-outcome-else",
-    mixed: false,
     type: "OutcomeElseDType",
   },
   "qti-outcome-else-if": {
@@ -2833,9 +3122,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-exit-test", 0, Option.none()),
       child("qti-outcome-condition", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-outcome-else-if",
     handle: "qti-outcome-else-if",
-    mixed: false,
     type: "OutcomeIfDType",
   },
   "qti-outcome-if": {
@@ -2912,37 +3201,37 @@ export const processingInventory: InventoryLeaf = {
       child("qti-exit-test", 0, Option.none()),
       child("qti-outcome-condition", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-outcome-if",
     handle: "qti-outcome-if",
-    mixed: false,
     type: "OutcomeIfDType",
   },
   "qti-outcome-maximum": {
     attributes: [
       attribute("section-identifier", "IdentifierDType", "optional", "own", "collapse"),
-      attribute("include-category", "list", "optional", "own", "collapse"),
-      attribute("exclude-category", "list", "optional", "own", "collapse"),
+      inlineAttribute("include-category", includeCategoryType, "optional", "own"),
+      inlineAttribute("exclude-category", includeCategoryType, "optional", "own"),
       attribute("outcome-identifier", "IdentifierDType", "required", "own", "collapse"),
       attribute("weight-identifier", "IdentifierDType", "optional", "own", "collapse"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-outcome-maximum",
     handle: "qti-outcome-maximum",
-    mixed: false,
     type: "OutcomeMinMaxDType",
   },
   "qti-outcome-minimum": {
     attributes: [
       attribute("section-identifier", "IdentifierDType", "optional", "own", "collapse"),
-      attribute("include-category", "list", "optional", "own", "collapse"),
-      attribute("exclude-category", "list", "optional", "own", "collapse"),
+      inlineAttribute("include-category", includeCategoryType, "optional", "own"),
+      inlineAttribute("exclude-category", includeCategoryType, "optional", "own"),
       attribute("outcome-identifier", "IdentifierDType", "required", "own", "collapse"),
       attribute("weight-identifier", "IdentifierDType", "optional", "own", "collapse"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-outcome-minimum",
     handle: "qti-outcome-minimum",
-    mixed: false,
     type: "OutcomeMinMaxDType",
   },
   "qti-outcome-processing": {
@@ -2955,9 +3244,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-exit-test", 0, Option.none()),
       child("qti-outcome-condition", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-outcome-processing",
     handle: "qti-outcome-processing",
-    mixed: false,
     type: "OutcomeProcessingDType",
   },
   "qti-outcome-processing-fragment": {
@@ -2970,13 +3259,13 @@ export const processingInventory: InventoryLeaf = {
       child("qti-exit-test", 0, Option.none()),
       child("qti-outcome-condition", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-outcome-processing-fragment",
     handle: "qti-outcome-processing-fragment",
-    mixed: false,
     type: "OutcomeProcessingFragmentDType",
   },
   "qti-pattern-match": {
-    attributes: [attribute("pattern", "union", "required", "own", "union")],
+    attributes: [inlineAttribute("pattern", patternType, "required", "own")],
     children: [
       child("qti-and", 1, Option.some(1)),
       child("qti-gt", 1, Option.some(1)),
@@ -3043,9 +3332,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-pattern-match",
     handle: "qti-pattern-match",
-    mixed: false,
     type: "PatternMatchDType",
   },
   "qti-power": {
@@ -3116,9 +3405,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-power",
     handle: "qti-power",
-    mixed: false,
     type: "LogicPairDType",
   },
   "qti-product": {
@@ -3189,9 +3478,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.none()),
       child("qti-outcome-maximum", 1, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-product",
     handle: "qti-product",
-    mixed: false,
     type: "Logic1toManyDType",
   },
   "qti-random": {
@@ -3262,36 +3551,36 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-random",
     handle: "qti-random",
-    mixed: false,
     type: "LogicSingleDType",
   },
   "qti-random-float": {
     attributes: [
-      attribute("min", "union", "optional", "own", "union", "0"),
-      attribute("max", "union", "required", "own", "union"),
+      inlineAttribute("min", minType2, "optional", "own", "0"),
+      inlineAttribute("max", minType2, "required", "own"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-random-float",
     handle: "qti-random-float",
-    mixed: false,
     type: "RandomFloatDType",
   },
   "qti-random-integer": {
     attributes: [
-      attribute("min", "union", "optional", "own", "union", "0"),
-      attribute("max", "union", "required", "own", "union"),
-      attribute("step", "union", "optional", "own", "union", "1"),
+      inlineAttribute("min", minType, "optional", "own", "0"),
+      inlineAttribute("max", minType, "required", "own"),
+      inlineAttribute("step", minType, "optional", "own", "1"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-random-integer",
     handle: "qti-random-integer",
-    mixed: false,
     type: "RandomIntegerDType",
   },
   "qti-repeat": {
-    attributes: [attribute("number-repeats", "union", "required", "own", "collapse")],
+    attributes: [inlineAttribute("number-repeats", nType, "required", "own")],
     children: [
       child("qti-and", 1, Option.none()),
       child("qti-gt", 1, Option.none()),
@@ -3358,9 +3647,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.none()),
       child("qti-outcome-maximum", 1, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-repeat",
     handle: "qti-repeat",
-    mixed: false,
     type: "RepeatDType",
   },
   "qti-response-condition": {
@@ -3370,9 +3659,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-response-else-if", 0, Option.none()),
       child("qti-response-else", 0, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-response-condition",
     handle: "qti-response-condition",
-    mixed: false,
     type: "ResponseConditionDType",
   },
   "qti-response-else": {
@@ -3385,9 +3674,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-exit-response", 0, Option.none()),
       child("qti-lookup-outcome-value", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-response-else",
     handle: "qti-response-else",
-    mixed: false,
     type: "ResponseElseDType",
   },
   "qti-response-else-if": {
@@ -3464,9 +3753,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-exit-response", 0, Option.none()),
       child("qti-lookup-outcome-value", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-response-else-if",
     handle: "qti-response-else-if",
-    mixed: false,
     type: "ResponseIfDType",
   },
   "qti-response-if": {
@@ -3543,9 +3832,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-exit-response", 0, Option.none()),
       child("qti-lookup-outcome-value", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-response-if",
     handle: "qti-response-if",
-    mixed: false,
     type: "ResponseIfDType",
   },
   "qti-response-processing-fragment": {
@@ -3558,9 +3847,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-exit-response", 0, Option.none()),
       child("qti-lookup-outcome-value", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-response-processing-fragment",
     handle: "qti-response-processing-fragment",
-    mixed: false,
     type: "ResponseProcessingFragmentDType",
   },
   "qti-round": {
@@ -3631,15 +3920,15 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-round",
     handle: "qti-round",
-    mixed: false,
     type: "LogicSingleDType",
   },
   "qti-round-to": {
     attributes: [
-      attribute("rounding-mode", "xs:string", "required", "own", "preserve"),
-      attribute("figures", "union", "required", "own", "union"),
+      inlineAttribute("rounding-mode", roundingModeType, "required", "own"),
+      inlineAttribute("figures", minType, "required", "own"),
     ],
     children: [
       child("qti-and", 1, Option.some(1)),
@@ -3707,9 +3996,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-round-to",
     handle: "qti-round-to",
-    mixed: false,
     type: "RoundToDType",
   },
   "qti-set-correct-response": {
@@ -3780,9 +4069,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-set-correct-response",
     handle: "qti-set-correct-response",
-    mixed: false,
     type: "SetValueDType",
   },
   "qti-set-default-value": {
@@ -3853,9 +4142,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-set-default-value",
     handle: "qti-set-default-value",
-    mixed: false,
     type: "SetValueDType",
   },
   "qti-set-outcome-value": {
@@ -3926,9 +4215,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-set-outcome-value",
     handle: "qti-set-outcome-value",
-    mixed: false,
     type: "SetValueDType",
   },
   "qti-set-template-value": {
@@ -3999,13 +4288,13 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-set-template-value",
     handle: "qti-set-template-value",
-    mixed: false,
     type: "SetValueDType",
   },
   "qti-stats-operator": {
-    attributes: [attribute("name", "xs:string", "required", "own", "preserve")],
+    attributes: [inlineAttribute("name", nameType3, "required", "own")],
     children: [
       child("qti-and", 1, Option.some(1)),
       child("qti-gt", 1, Option.some(1)),
@@ -4072,9 +4361,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-stats-operator",
     handle: "qti-stats-operator",
-    mixed: false,
     type: "StatsOperatorDType",
   },
   "qti-string-match": {
@@ -4148,9 +4437,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-string-match",
     handle: "qti-string-match",
-    mixed: false,
     type: "StringMatchDType",
   },
   "qti-substring": {
@@ -4221,9 +4510,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-substring",
     handle: "qti-substring",
-    mixed: false,
     type: "SubstringDType",
   },
   "qti-subtract": {
@@ -4294,9 +4583,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 2, Option.some(2)),
       child("qti-outcome-maximum", 2, Option.some(2)),
     ],
+    content: { _tag: "element" },
     element: "qti-subtract",
     handle: "qti-subtract",
-    mixed: false,
     type: "LogicPairDType",
   },
   "qti-sum": {
@@ -4347,9 +4636,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.none()),
       child("qti-outcome-maximum", 1, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-sum",
     handle: "qti-sum",
-    mixed: false,
     type: "NumericLogic1toManyDType",
   },
   "qti-template-condition": {
@@ -4359,9 +4648,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-template-else-if", 0, Option.none()),
       child("qti-template-else", 0, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-template-condition",
     handle: "qti-template-condition",
-    mixed: false,
     type: "TemplateConditionDType",
   },
   "qti-template-constraint": {
@@ -4432,9 +4721,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-template-constraint",
     handle: "qti-template-constraint",
-    mixed: false,
     type: "TemplateConstraintDType",
   },
   "qti-template-else": {
@@ -4447,9 +4736,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-set-correct-response", 0, Option.none()),
       child("qti-template-constraint", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-template-else",
     handle: "qti-template-else",
-    mixed: false,
     type: "TemplateElseDType",
   },
   "qti-template-else-if": {
@@ -4526,9 +4815,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-set-correct-response", 0, Option.none()),
       child("qti-template-constraint", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-template-else-if",
     handle: "qti-template-else-if",
-    mixed: false,
     type: "TemplateIfDType",
   },
   "qti-template-if": {
@@ -4605,9 +4894,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-set-correct-response", 0, Option.none()),
       child("qti-template-constraint", 0, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-template-if",
     handle: "qti-template-if",
-    mixed: false,
     type: "TemplateIfDType",
   },
   "qti-template-processing": {
@@ -4620,24 +4909,24 @@ export const processingInventory: InventoryLeaf = {
       child("qti-set-correct-response", 1, Option.none()),
       child("qti-template-constraint", 1, Option.none()),
     ],
+    content: { _tag: "element" },
     element: "qti-template-processing",
     handle: "qti-template-processing",
-    mixed: false,
     type: "TemplateProcessingDType",
   },
   "qti-test-variables": {
     attributes: [
       attribute("section-identifier", "IdentifierDType", "optional", "own", "collapse"),
-      attribute("include-category", "list", "optional", "own", "collapse"),
-      attribute("exclude-category", "list", "optional", "own", "collapse"),
+      inlineAttribute("include-category", includeCategoryType, "optional", "own"),
+      inlineAttribute("exclude-category", includeCategoryType, "optional", "own"),
       attribute("variable-identifier", "IdentifierDType", "required", "own", "collapse"),
       attribute("weight-identifier", "IdentifierDType", "optional", "own", "collapse"),
-      attribute("base-type", "xs:string", "optional", "own", "preserve"),
+      inlineAttribute("base-type", baseTypeType, "optional", "own"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-test-variables",
     handle: "qti-test-variables",
-    mixed: false,
     type: "TestVariablesDType",
   },
   "qti-truncate": {
@@ -4708,9 +4997,9 @@ export const processingInventory: InventoryLeaf = {
       child("qti-outcome-minimum", 1, Option.some(1)),
       child("qti-outcome-maximum", 1, Option.some(1)),
     ],
+    content: { _tag: "element" },
     element: "qti-truncate",
     handle: "qti-truncate",
-    mixed: false,
     type: "LogicSingleDType",
   },
   "qti-variable": {
@@ -4719,9 +5008,9 @@ export const processingInventory: InventoryLeaf = {
       attribute("weight-identifier", "IdentifierDType", "optional", "own", "collapse"),
     ],
     children: [],
+    content: { _tag: "empty" },
     element: "qti-variable",
     handle: "qti-variable",
-    mixed: false,
     type: "VariableDType",
   },
 };

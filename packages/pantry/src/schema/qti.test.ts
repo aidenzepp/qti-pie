@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import nodePath from "node:path";
 import { afterAll, assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
-import { inventory } from "#pantry/schema/content/xsd-inventory.ts";
+import { characterKinds, inventory } from "#pantry/schema/content/xsd-inventory.ts";
 import * as asi from "#pantry/schema/kinds/asi.ts";
 import * as html from "#pantry/schema/kinds/html.ts";
 import * as xi from "#pantry/schema/kinds/xi.ts";
@@ -124,8 +124,8 @@ afterAll(() => {
 });
 
 /**
- * The children a host's content model names, as inventory handles, and the content kinds around
- * them: text and entityRef for a mixed host, ws for a host with children, comment and pi for all.
+ * The children a host's content model names, as inventory handles, and the character kinds its
+ * content class admits around them.
  */
 const modelOf = (host: string): ReadonlySet<string> => {
   const entry = inventory[host];
@@ -141,13 +141,7 @@ const modelOf = (host: string): ReadonlySet<string> => {
     )
     .filter((name) => Object.hasOwn(inventory, name));
 
-  return new Set([
-    ...named,
-    ...(entry.mixed ? ["text", "entityRef"] : []),
-    ...(entry.mixed || named.length > 0 ? ["ws"] : []),
-    "comment",
-    "pi",
-  ]);
+  return new Set([...named, ...characterKinds[entry.content._tag]]);
 };
 
 /**

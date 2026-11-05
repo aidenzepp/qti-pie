@@ -13,6 +13,16 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    that QTI's schema imports. MathML that breaks a rule of the Recommendation, such as an operator applied to the wrong
    number of arguments or a piecewise expression with two `otherwise` parts, is invalid even when the QTI XSD accepts it.
    (2026-11-02.)
+   MathML's own rules that its XSD does not state are enforced where they are unambiguous:
+   - the RelaxNG's two element interleaves, `bvar` (one annotated variable and at most one `degree`, in either order)
+     and `piecewise` (at most one `otherwise`, anywhere among its pieces), which the XSD widens to repetitions;
+   - each operator's argument count under `apply`, by its class (MathML 3 §4.1.5, §4.3.4.5 and §4.3.4.6), for an
+     `apply` that holds no qualifier but its operator's own. `moment` is left out, because the Recommendation's own
+     example (§4.4.8.6) applies it to five arguments.
+     Every other difference between the Recommendation and the MathML XSD is decision D12's ruled gap, and where the XSD
+     is stricter than the RelaxNG (trang's altered models: `annotation-xml`'s one child, `interval` among the
+     qualifiers), the XSD is followed until the operator rules otherwise. Whether §2.1.5.1's notation narrows the XSD's
+     number types is the operator's question B1.
 
 ## Scope of names and references
 
@@ -20,6 +30,8 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    that speak of the document (a `mark` name defined once, `startmark` and `endmark` naming a defined mark, a `lookup`
    naming a `lexicon`) apply within one fragment. Two fragments may each define `mark name="a"`. A reference from one
    fragment to a mark or lexicon in another does not resolve. (2026-11-03.)
+   A `mark` name may repeat within a fragment. Only a `startmark` or `endmark` must name a mark defined once in its
+   fragment (SSML 1.1, §3.1.1.1).
 4. **Prefixed variable references** (`ITEMREF.N.VAR`) are valid in a test's pre-conditions and branch rules as well as
    in its outcome processing, as QTI's information model and 1EdTech's own examples use them. (2026-11-03.)
 5. **A section document** may hold prefixed references and `section-identifier`. They resolve once for each test that
@@ -76,6 +88,9 @@ against it. A reading that is not an information-model-over-XSD case says which 
    ancestors, and the Schematron's text is not copied. This follows the intent that the information model's prose states
    for each rule and sets the Schematron's text aside, because a rule that never fires or always fails is a defect, not
    a requirement. (2026-11-04.)
+   The Schematron's two ARIA role rules (no `role` on `source`; `h1`'s `role` limited to `heading`, `tab` or
+   `presentation`) are not followed: the operator ruled on 2026-11-05 that attributes follow the XSD exactly, and those
+   rules encode HTML's ARIA conformance prose, which QTI's XSD admits and does not restate.
 10. **`aria-keyshorts` and `aria-keyshortcuts` are both accepted on empty elements.** The XSD, the information model's
     attribute table and the Schematron's allow-lists all name the attribute `aria-keyshorts` on the empty element
     families, a misspelling of ARIA's `aria-keyshortcuts`, which the information model's own description uses. A
@@ -98,14 +113,13 @@ against it. A reading that is not an information-model-over-XSD case says which 
     Schematron checks only the `data-` prefix. This follows the information model's prose and sets aside its own
     pattern, the XSD and the Schematron, because the prose states the rule and the other three are looser than it.
     (2026-11-04.)
-14. **A text-entry interaction's `response-identifier` and `string-identifier` name response declarations, not
-    `xs:IDREF`s.** The XSD, and the information model's attribute table for this one interaction, type both as
-    `xs:IDREF` (UniqueIdentifierRef), while every other interaction's `response-identifier`, and an extended-text
-    interaction's `string-identifier`, is a plain identifier. The information model describes `response-identifier` the
-    same way for all of them: the response variable associated with the interaction. This follows that description and
-    the other interactions, and sets aside the XSD and the text-entry attribute table. A response declaration's
-    identifier is not an `xs:ID`, so the IDREF type would put a second reference rule on this one interaction and no
-    other. (2026-11-04.)
+14. **A text-entry interaction's `response-identifier` and `string-identifier` are `xs:IDREF`s, as the XSD types them.**
+    The XSD, and the information model's attribute table for this interaction, type both as `xs:IDREF`
+    (UniqueIdentifierRef). A response declaration's `identifier` is `UniqueIdentifierDType`, a restriction of `xs:ID`
+    (3.0.1 line 30814, 3.0.0 line 30664), so each reference resolves to the declaration it names, as the information
+    model describes, and an element `id` equal to a response identifier is a duplicate ID and invalid. This follows the
+    XSD exactly. _(Restated by the operator, 2026-11-05: the earlier reading's premise, that a response declaration's
+    identifier is not an `xs:ID`, contradicted both XSDs.)_
 15. **A `variable-identifier-ref` names an outcome declaration, not an `xs:ID`.** The XSD types
     `variable-identifier-ref` as `xs:IDREF`, which must match an `xs:ID` in the same document, and the information
     model's attribute table types it the same way (UniqueIdentifierRef). The information model's description calls it
@@ -235,7 +249,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     the information model's prose and sets the XSD aside. The rule also refuses a gap inside the gap text of a graphic
     gap-match interaction. Where the prose is silent, such as hottext placement or a gap text that contains gaps,
     nothing is refused. (2026-11-04.)
-39. **An SSML `speak/@version` is `1.1`.** The SSML 1.1 Recommendation says `speak` "MUST have the value 1.1". QTI's
+39. **An SSML `speak/@version` is `1.1`.** The SSML 1.1 Recommendation says `speak` "must have the value "1.1"". QTI's
     core XSD types the attribute as `xs:NMTOKEN`. This follows the SSML Recommendation and sets the XSD aside, because
     the Recommendation defines the language and the XSD's type is wider than it. (2026-11-04.)
 40. **SSML `meta`, `metadata` and `lexicon` come before everything else in `speak`.** The SSML 1.1 Recommendation says
@@ -610,3 +624,169 @@ against it. A reading that is not an information-model-over-XSD case says which 
     plate, which delivers tests; pantry delivers nothing. This is not a case of documents in conflict: the information
     model is silent on responses a candidate cannot give, and this follows its own rule for an item with none. (The
     renderer's ruling in its phase-4 repair, applied in plate; 2026-11-06.)
+61. **`xs:anyURI` is XML Schema 1.0's: a value is valid when XLink's escaping makes it an RFC 2396 URI reference
+    as RFC 2732 amends it, and libxml2's verdict, which follows RFC 3986, is set aside where the two differ.**
+    QTI 3.0's information model cites XML Schema Part 2 of 2 May 2001 ([XSCHEMA, 01]) and RFC 2396 ([URI, 98]),
+    and QTI's XSDs use nothing of XML Schema 1.1, so XML Schema 1.0 decides. Its Part 2 (W3C Recommendation, 28
+    October 2004, section 3.2.17.1) makes the lexical space the strings that, once XLink 1.0's section 5.4 escapes
+    their disallowed characters, "result in strings which are legal URIs according to [RFC 2396], as amended by
+    [RFC 2732]". That is RFC 2396's `URI-reference` (Appendix A) with RFC 2732's three changes (section 3), judged
+    on the collapsed value (section 4.3.6). RFC 2732 takes `IPv6address` from RFC 2373 without saying whether
+    its Appendix B rule or its section 2.2 text forms are meant, and the rule cannot derive the section's own
+    example `::13.1.68.3`. So both are admitted, `::` standing for one or more zero groups and a dotted part
+    allowed leading zeros (reading 1, decision 227). libxml2, whose `xmllint` is the validity oracle, judges
+    anyURI by RFC 3986 instead, with departures of its own, so the oracle and this reading disagree on these
+    values, and each disagreement is recorded against this reading rather than counted as a defect. Nothing after
+    the scheme (`foo:`) and a query with no path (`?q`): RFC 2396 refuses them, and libxml2 accepts them. A `[`
+    or `]` in a query (`p?a[0]=1`) or after the first character of an opaque part (`foo:a[b]`): RFC 2732 admits
+    it, and libxml2 refuses it. An authority that is a registry name holding a `:` or `@` beyond a host and a
+    port (`http://h:abc/`, `http://a@b@c/`), and an empty port (`http://h:/`): RFC 2396 admits them, and libxml2
+    refuses them. A port above 2,147,483,647: libxml2 refuses it. An IP literal that is not an RFC 2373 IPv6
+    address (`[v1.x]`, `[zz]`, `[]`): libxml2 accepts it without reading it. Square brackets in a fragment
+    (`#[x]`) are admitted by both. This binds pantry and plate alike, so the two never read the same URI
+    differently. This is not a case of documents in conflict: XML Schema 1.0 decides, and libxml2 is a second
+    implementation that reads the RFC that later replaced XML Schema 1.0's references. (Operator ruling "the spec
+    wins", 2026-11-05.)
+62. **An item resource's LOM general identifier names the item, compared collapsed.** The implementation guide's LOM
+    profile ([§2.1.2, "LOM Metadata"](https://www.imsglobal.org/spec/qti/v3p0/impl#h.lqndupc0ugmq)) says "the test or
+    item identifier should be present as an identifier in the LOM metadata." So when an item resource's `lom:lom`
+    lists `general/identifier` entries, one of them is the item document's `identifier`; a record that lists none is
+    not judged, because the guide asks that the identifier be present among them, not that a record have one. The
+    entry is LOM's `CharacterString`, an `xs:string`, but it names the item, so it is compared in the item
+    identifier's value space, `UniqueIdentifierDType`, a restriction of `xs:ID` whose whitespace is collapsed: an
+    entry `item1` names `item1`. This also follows reading 1, since nothing valid is refused for padding. The guide
+    states the same for tests, so the law reads a test resource's record against the test document's `identifier`
+    in the same way. The guide's word is "should", which RFC 2119 makes a recommendation, not a requirement. The
+    operator rules it binding: a package whose record lists identifiers and none names its document is refused. That
+    is a deliberate exception to reading 1, stated here so the two readings do not silently disagree: reading 1
+    still governs every value-space question this law raises, which is why padding is collapsed rather than refused.
+    Reading 33 reads another of the guide's "should"s as advice, and the two are consistent: that one would contradict
+    Content Packaging 1.2's "shall describe all control files", which outranks the guide, so it yields. This one
+    contradicts no rule of any specification, so the operator's ruling binds it. (Operator ruling, 2026-11-05.)
+63. **The built-in outcome variable is `completionStatus`, spelled exactly; `completion_status` and
+    `completion-status` name variables nothing declares.** The information model defines one built-in outcome
+    variable, "'completionStatus', that is declared implicitly and must not appear in an outcome declaration"
+    (section 2.2.2.3), and lists the reserved identifiers of the built-in session variables as "completionStatus,
+    numAttempts and duration" (the `identifier` of OutcomeDeclaration, ResponseDeclaration and TemplateDeclaration,
+    tables 4.5.1, 5.115.1 and 5.151.1). Every other variable must be declared (section 2.2.2), and identifiers "are
+    always compared case-sensitively" (section 7.16). The implementation guide's examples, the results reporting
+    specification's examples and QTI 2.0, 2.1 and 2.2 all write `completionStatus`. No QTI 3.0 document writes
+    `completion_status`, which is the CMI data model's element name (SCORM's `cmi.completion_status`). QTI 2.x
+    cited that data model for the values' meanings, and QTI 3.0 does not cite it. The `max-attempts` description
+    (table 7.19.1) twice writes "completion-status", where QTI 2.2's same sentence wrote `completionStatus` beside
+    `maxAttempts` and `showFeedback`. That is prose converted to kebab case with its neighbours, not a second
+    definition. So a set rule or a variable reference that names `completion_status` or `completion-status` names a
+    variable nothing declares, and the document is refused under P8. 1EdTech's `adaptive.xml` in the `maxfiles` and
+    `test_package_minfiles` example packages is refused this way; the same item in its `items` package writes
+    `completionStatus` and is not. The underscore in the value `not_attempted` belongs to a value of the identifier
+    base type, not to a variable's name, and does not bear on it. This is not a case of documents in conflict: the
+    XSD types the identifier as an `xs:NCName` and names no built-in, the information model defines the name, and
+    every other QTI 3.0 source agrees with it; one example disagrees with all of them. (Operator ruling pending;
+    proposed 2026-11-05.)
+64. **`xs:unsignedLong`, `xs:unsignedInt`, `xs:unsignedShort` and `xs:unsignedByte` admit a sign as
+    `xs:nonNegativeInteger` does: `+` before any value, `-` only before zero.** XML Schema Part 2 (W3C
+    Recommendation, 28 October 2004) says each "has a lexical representation consisting of a finite-length sequence
+    of decimal digits" (sections 3.3.21.1 to 3.3.24.1). The same Recommendation derives each from the one before by
+    `maxInclusive` alone, down from `xs:nonNegativeInteger` (sections 3.3.21 to 3.3.24, and Appendix A, where section
+    3.3 says "the complete definitions of the built-in derived datatypes are provided"). Each therefore carries
+    `xs:integer`'s pattern `[\-+]?[0-9]+` and `xs:nonNegativeInteger`'s `minInclusive` of 0 (section 4.1.2.1).
+    Datatype Valid (section 4.1.4), the rule schema validity applies (Part 1, section 3.14.4), tests a literal
+    against those facets and against no prose, so `+0`, `+1` and `-0` are valid and `-1` is not. XML Schema 1.0
+    thus contradicts itself, and the derivation is followed for three reasons. Validity is computed from it. The
+    Working Group settled the same contradiction for `xs:nonPositiveInteger` by correcting the prose to the
+    derivation, and stated `xs:nonNegativeInteger`'s signs in the same erratum (E2-27, Rec issue R-149). And XML
+    Schema 1.1 (Appendix I.2) revised the four types' prose "to agree with the schema for schemas by allowing for
+    the possibility of a leading sign", keeping 1.0's schema for datatypes as it was. So this is XML Schema 1.0's
+    own answer and is consistent with reading 61. `xs:nonNegativeInteger` (section 3.3.20.1) and
+    `xs:positiveInteger` (section 3.3.25.1) need no ruling: their prose and their derivation agree, `+` before any
+    value and `-` before zero for the first, `+` before a positive value for the second. libxml2 2.9.13, whose
+    `xmllint` is the validity oracle, refuses every sign on the four unsigned types, as the uncorrected prose says.
+    libxml2 2.13.0 and later accept them. The oracle's verdict is recorded against this reading rather than counted
+    as a defect. A value keeps its spelling through a round trip. Under QTI's XSDs these four types appear only as
+    MathML's `m:unsigned-integer`, and whether MathML's own notation (MathML 3, section 2.1.5.1) narrows it is
+    reading 2's question, not this one's. This binds pantry and plate alike. This is not a case of documents in
+    conflict: XML Schema decides its own types, and where its prose and its derivation disagree, the derivation it
+    validates by is followed. (Operator ruling "the spec wins", 2026-11-05.)
+65. **An identifier names one variable among the declarations of its document.** The information model says "The
+    purpose of the declaration is to associate an identifier with the variable" (section 2.2.2, Item Variables,
+    https://www.imsglobal.org/spec/qti/v3p0/info#Variables). Each declaration's `identifier` adds "All item
+    variables declared in an item share the same namespace" (section 4.5.1, `#RootCharacteristic_OutcomeDeclaration.Attr_identifier`,
+    and sections 5.34.1, 5.115.1 and 5.151.1). A response's and a context's identifier is a UniqueIdentifier,
+    "unique within the scope of the instance" (section 7.43), which the XSD types `xs:ID`. An outcome's and a
+    template's is an Identifier, which neither document makes unique. One identifier declared twice in one namespace
+    would stand for two variables, and a variable expression that names it (section 2.11.1.2) could not tell which.
+    So no two declarations of a document, of any of the four kinds, share an identifier, and a test's own
+    declarations form one namespace in the same way. This is implied, not stated: no sentence calls an outcome's or a
+    template's identifier unique. This is not a case of documents in conflict: the information model implies the
+    rule, and the XSD states it only for the two kinds it types `xs:ID`. (Draft for Sterling's review, 2026-11-05;
+    the law `Declaration key`.)
+66. **An interaction's `response-identifier` names a declared response variable.** The information model says each
+    interaction "must be bound to a response variable" of the types it lists (section 2.4,
+    https://www.imsglobal.org/spec/qti/v3p0/info#Main2p4; for example section 2.4.1.1, "The qti-choice-interaction
+    must be bound to a response variable with a base-type of identifier and single or multiple cardinality"). It says
+    "Response variables are declared by response declarations and bound to interactions in the itemBody" (section
+    2.2.2.2, `#IV_Response`) and "All variables must be declared except for the built-in session variables" (section
+    2.2.2). So a `response-identifier` that names no response declaration binds its interaction to nothing, and the
+    item is refused. The built-in response variables `numAttempts` and `duration` are "declared implicitly", and the
+    delivery engine maintains them (section 2.2.2.2), so an interaction bound to one is refused too. For the text
+    entry and extended text interactions, whose references the XSD types `xs:IDREF` (reading 14), the XSD already
+    resolves the reference. This is implied: the binding sentence and the declaration sentence together state it,
+    and no single sentence does. This is not a case of documents in conflict. (Draft for Sterling's review,
+    2026-11-05; the law `Binding declared`.)
+67. **A least count is at most its most, unless the most is 0.** The information model states this for each pair:
+    - "min-choices must be less than or equal to the limit imposed by max-choices" (section 5.30.3,
+      https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ChoiceInteraction.Attr_min-choices), with "If
+      max-choices is 0 then there is no restriction" (section 5.30.2);
+    - the same sentence for `min-associations` (sections 5.8.3, 5.57.2, 5.59.1, 5.60.1, 5.89.3), `match-min`
+      (sections 5.7.9, 5.56.6, 5.58.6, 5.131.7), the hottext, hotspot, position object and select point
+      interactions' `min-choices` (sections 5.66.2, 5.68.1, 5.107.2, 5.128.1), and an extended text interaction's
+      `min-strings` (section 5.48.7: "min-strings must be less than or equal to the limit imposed by max-strings").
+      A limit of 0 imposes none, so any least meets it, and reading 53 reads `max-strings="0"` the same way. The order
+      and graphic order interactions and the media interaction's plays have no such sentence. The Schematron states
+      each (rules 8Ba, 5Ba and 13Ba), and reading 9 reads them by intent, 13Ba with `max-plays="0"` as no limit
+      (section 5.92.3: "A value of 0 (the default) indicates that there is no limit"). This is stated, and is not a
+      case of documents in conflict. (Draft for Sterling's review, 2026-11-05; the law `Choice bounds`, whose
+      `ChoiceBound` pairs lack `min-strings` and `max-strings` today.)
+68. **A feedback element names an outcome variable, and a printed variable an outcome or a template variable, the
+    built-in `completionStatus` among them.** The information model states both:
+    - Every feedback element's `outcome-identifier` is "The identifier of an outcome variable that must have a
+      base-type of identifier and be of either single or multiple cardinality" (sections 5.49.1, 5.52.1, 5.93.1,
+      5.148.1 and 5.157.2, https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_FeedbackBlock.Attr_outcome-identifier).
+    - A printed variable's `identifier` says "The outcome variable or template variable must have been defined. The
+      values of response variables cannot be printed directly" (section 7.30.6,
+      `#DerivedCharacteristic_PrintedVariable.Attr_identifier`).
+      `completionStatus` is an outcome variable "declared implicitly", "a single identifier" (section 2.2.2.3), so a
+      feedback element or a printed variable may name it. A response variable, declared or built in, is refused for
+      both, and so is a feedback outcome of another base type or cardinality. This is stated, and is not a case of
+      documents in conflict. (Draft for Sterling's review, 2026-11-05; the laws `Feedback reference` and `Printed
+      variable reference`, which refused `completionStatus` until RD's patch and do not yet read the outcome's base
+      type and cardinality.)
+69. **A mapping maps a base type other than `file` and `duration`, of a variable that is not a record.** The
+    information model's Mapping class is "A special class used to create a mapping from a source set of any
+    base-type (except file and duration) to a single 'float'" (section 5.88,
+    https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping). Its map response expression "cannot be applied to
+    variables of record cardinality" (section 2.11.1.5). The map response template's sentence "The template applies
+    to responses of any base-type and cardinality" (section 2.5.1) says where the template may be used, not what a
+    mapping maps, and is read with the class definition, which is the narrower and the more specific. This is stated.
+    It is a sentence inside the information model read beside its class definition, not a case of documents in
+    conflict. (Draft for Sterling's review, 2026-11-05; the law `MappableBaseType`.)
+70. **A selection without replacement selects at most its section's parts.** The information model says of `select`
+    "The number of children to select may exceed the number of child elements defined only if with-replacement is
+    true", and "Sub-sections always count as 1, regardless of how many child elements they have and whether or not
+    they are visible" (section 5.129.1,
+    https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Selection.Attr_select). So a section's parts
+    (item references, sections and section references) are counted once each, and `select` above their number is
+    refused unless `with-replacement` is true. `with-replacement` is an `xs:boolean`, so `1` is true; reading 34
+    binds `qti-value` only. This is stated, and is not a case of documents in conflict. (Draft for Sterling's
+    review, 2026-11-05; the law `Selection bound`.)
+71. **A default hotspot is the last hotspot of its interaction, and a graphic gap match interaction has none.** The
+    information model says "The default hotspot, if defined, must appear last":
+    - in the HotspotChoice class (section 5.67, https://www.imsglobal.org/spec/qti/v3p0/info#Data_HotspotChoice);
+    - in the AssociableHotspot class (section 5.7, `#Data_AssociableHotspot`);
+    - in the hotspot interaction's `qti-hotspot-choice` (section 5.68.6).
+      Of the graphic gap match interaction's hotspots it says "The default hotspot must not be defined" (section
+      5.60.9). "Last" is last among the interaction's hotspots, which its content model places after its image, so it
+      is its last element child: whitespace, comments and processing instructions after it are no hotspots and do not
+      count. This is stated, and is not a case of documents in conflict. (Draft for Sterling's review, 2026-11-05; the
+      law `default hotspot last slot`, which counted trailing whitespace and skipped associable hotspots until RD's
+      patch, and the graphic gap match ban, which no law states yet.)
