@@ -1,5 +1,6 @@
 /**
- * M1's closed value sets: the QTI vocabulary phase 1 models, renders and reads, as data.
+ * The closed value sets: the QTI vocabulary phase 1 models, renders and reads, and the test,
+ * package and session vocabulary M2's validators and engine read, as data.
  *
  * Every set is closed: a value outside it is unsupported or invalid, never guessed at. The model
  * builder, the verdict and the emitter read these lists, so what phase 1 renders is decided once.
@@ -526,3 +527,185 @@ export const behaviourClasses: Readonly<Record<ClassOwner, readonly string[]>> =
    */
   "text-entry-interaction": [],
 };
+
+/**
+ * The two navigation modes of a test part, as its `navigation-mode` attribute spells them.
+ */
+export const navigationModes = ["linear", "nonlinear"] as const;
+
+/**
+ * A test part's navigation mode.
+ */
+export type NavigationMode = (typeof navigationModes)[number];
+
+/**
+ * The two submission modes of a test part, as its `submission-mode` attribute spells them.
+ */
+export const submissionModes = ["individual", "simultaneous"] as const;
+
+/**
+ * A test part's submission mode.
+ */
+export type SubmissionMode = (typeof submissionModes)[number];
+
+/**
+ * The two versions of QTI 3's Content Packaging 1.2 profile a manifest may name in its
+ * `schemaversion`: 3.0.0 (`imsqtiv3p0_imscpv1p2_v1p0.xsd`) and 3.0.1
+ * (`imsqtiv3p0p1_imscpv1p2_v1p0.xsd`). A manifest is read against the profile it names; any other
+ * version is the refusal `package-profile`.
+ */
+export const cpVersions = ["3.0.0", "3.0.1"] as const;
+
+/**
+ * A Content Packaging profile version a manifest may name.
+ */
+export type CpVersion = (typeof cpVersions)[number];
+
+/**
+ * The resource types each profile version admits on a manifest's `resource`, as its XSD's `type`
+ * enumeration spells them (`imsqtiv3p0_imscpv1p2_v1p0.xsd:397-411`,
+ * `imsqtiv3p0p1_imscpv1p2_v1p0.xsd:350-365`).
+ *
+ * Both versions list the same eight QTI types (`imsqti_*`). They differ in LTI: 3.0.0 lists
+ * `imsbasiclti_xmlv1p3`, and 3.0.1 lists `imslti_xmlv1p1` and `imsltia_xmlv1p0` in its place.
+ */
+export const resourceTypes = {
+  "3.0.0": [
+    "imsqti_test_xmlv3p0",
+    "imsqti_section_xmlv3p0",
+    "imsqti_item_xmlv3p0",
+    "imsqti_resprocessing_xmlv3p0",
+    "imsqti_outcomes_xmlv3p0",
+    "imsqti_stimulus_xmlv3p0",
+    "imsqti_fragment_xmlv3p0",
+    "imsqti_rptemplate_xmlv3p0",
+    "associatedcontent/learning-application-resource",
+    "webcontent",
+    "imsbasiclti_xmlv1p3",
+    "controlfile",
+    "resourcemetadata/xml",
+    "resourceextmetadata/xml",
+    "qtiusagedata/xml",
+  ],
+  "3.0.1": [
+    "imsqti_test_xmlv3p0",
+    "imsqti_section_xmlv3p0",
+    "imsqti_item_xmlv3p0",
+    "imsqti_resprocessing_xmlv3p0",
+    "imsqti_outcomes_xmlv3p0",
+    "imsqti_stimulus_xmlv3p0",
+    "imsqti_fragment_xmlv3p0",
+    "imsqti_rptemplate_xmlv3p0",
+    "associatedcontent/learning-application-resource",
+    "webcontent",
+    "imslti_xmlv1p1",
+    "imsltia_xmlv1p0",
+    "controlfile",
+    "resourcemetadata/xml",
+    "resourceextmetadata/xml",
+    "qtiusagedata/xml",
+  ],
+} as const satisfies Readonly<Record<CpVersion, readonly string[]>>;
+
+/**
+ * A resource type some profile version admits.
+ */
+export type ResourceType = (typeof resourceTypes)[CpVersion][number];
+
+/**
+ * The QTI resource types whose document has a fixed root, each paired with that root's QTI name:
+ * a resource of one of these types whose document has another root is the refusal
+ * `resource-type-mismatch`.
+ *
+ * Two types share a root: a response-processing template and response processing are both a
+ * `qti-response-processing`. `imsqti_fragment_xmlv3p0` has no pair, so a fragment's root is not
+ * checked.
+ */
+export const resourceRoots = [
+  ["imsqti_item_xmlv3p0", "qti-assessment-item"],
+  ["imsqti_test_xmlv3p0", "qti-assessment-test"],
+  ["imsqti_section_xmlv3p0", "qti-assessment-section"],
+  ["imsqti_stimulus_xmlv3p0", "qti-assessment-stimulus"],
+  ["imsqti_outcomes_xmlv3p0", "qti-outcome-declaration"],
+  ["imsqti_rptemplate_xmlv3p0", "qti-response-processing"],
+  ["imsqti_resprocessing_xmlv3p0", "qti-response-processing"],
+] as const satisfies readonly (readonly [ResourceType, string])[];
+
+/**
+ * The XSD defaults of the six boolean attributes of `qti-item-session-control`, as its attributes
+ * spell them (`imsqti_asiv3p0_v1p0.xsd:34079-34084`, `imsqti_asiv3p0p1_v1p0.xsd:34313-34318`).
+ *
+ * The seventh, `max-attempts`, has no XSD default and so no entry: an item none of its enclosing
+ * elements limits has one attempt when it is not adaptive.
+ */
+export const sessionControlDefaults = {
+  "allow-comment": false,
+  "allow-review": true,
+  "allow-skipping": true,
+  "show-feedback": false,
+  "show-solution": false,
+  "validate-responses": false,
+} as const;
+
+/**
+ * The item session statuses M2's engine gives an item, as Results Reporting's `sessionStatus`
+ * spells them (`rr-bind.txt:4069-4079`): `initial` before its first attempt, `pendingSubmission`
+ * while an attempt has started and its responses are unprocessed, and `final` once a submission
+ * closes it.
+ *
+ * Results Reporting's other two, `pendingResponseProcessing` and `pendingExternalScoring`, are
+ * outside the set: M2's engine gives neither (spec §4.5).
+ */
+export const sessionStatuses = ["initial", "pendingSubmission", "final"] as const;
+
+/**
+ * An item session status.
+ */
+export type SessionStatus = (typeof sessionStatuses)[number];
+
+/**
+ * The candidate's levels of interaction with an item, as Results Reporting's `answeredStatus`
+ * spells them (`rr-bind.txt:2951-2960`): never presented, presented and skipped, responded and
+ * invalid, and responded and valid.
+ */
+export const answeredStatuses = ["notpresented", "presented", "attempted", "answered"] as const;
+
+/**
+ * An item's answered status.
+ */
+export type AnsweredStatus = (typeof answeredStatuses)[number];
+
+/**
+ * The keys of the test features M2 accepts and does not deliver (spec §4.6): each is a mark on the
+ * verdict at its path, never a notice, and the delivered sequence ignores it.
+ *
+ * An element feature is keyed by its QTI name. `allow-comment="true"` is a session control that
+ * asks for a comment box; `max-attempts:negative` is a negative `max-attempts`, delivered as no
+ * limit; `root:<name>` is a section or a stimulus given as a document's root, which is not
+ * delivered alone.
+ */
+export const testMarks = [
+  "qti-selection",
+  "qti-ordering",
+  "qti-time-limits",
+  "qti-pre-condition",
+  "qti-branch-rule",
+  "qti-outcome-processing",
+  "qti-rubric-block",
+  "qti-test-feedback",
+  "qti-assessment-section-ref",
+  "qti-stylesheet",
+  "qti-context-declaration",
+  "qti-template-default",
+  "qti-variable-mapping",
+  "qti-weight",
+  'allow-comment="true"',
+  "max-attempts:negative",
+  "root:qti-assessment-section",
+  "root:qti-assessment-stimulus",
+] as const;
+
+/**
+ * The key of a test feature M2 marks.
+ */
+export type TestMark = (typeof testMarks)[number];
