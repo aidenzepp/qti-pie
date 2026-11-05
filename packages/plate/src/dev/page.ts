@@ -18,6 +18,9 @@
  * form beside the item's. It reads the corpus through `readCorpusFile` and the ledger from
  * `PLATE_LEDGER_DIR`, and opens no port: `scripts/serve.ts` is the listener.
  *
+ * The item form's action names the Status region as its fragment, so the page after a submit opens
+ * at the result.
+ *
  * @module
  */
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown. */
@@ -33,6 +36,7 @@ import type { Theme, ThemeRefused } from "#plate/dev/theme.ts";
 import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { text } from "#plate/emit/node.ts";
+import { scopedId } from "#plate/emit/parts.ts";
 import { toHtml } from "#plate/emit/serialise.ts";
 import { isPosted } from "#plate/form/encoding.ts";
 import {
@@ -363,8 +367,14 @@ const sheetLinks: readonly Element[] = ["/styles.css", "/playground.css", "/them
 );
 
 /**
+ * The id of the theme box's heading, which names the box.
+ */
+const themeHeadingId = "playground-theme-heading";
+
+/**
  * Construct the theme box: the playground's own form, outside the item's, that posts a pasted
- * theme, the dark flag and the page to return to `/theme`.
+ * theme, the dark flag and the page to return to `/theme`, named by its heading, Theme, so a screen
+ * reader announces it by that name and not as an unnamed group.
  *
  * Its textarea shows the stored theme as `themeText` writes it, and its Dark checkbox is checked
  * while the flag is on, so applying the box unchanged keeps the appearance.
@@ -373,8 +383,8 @@ const sheetLinks: readonly Element[] = ["/styles.css", "/playground.css", "/them
  * @returns The form.
  */
 const themeBox = ({ appearance, back }: Chrome): Element =>
-  h("form", { action: "/theme", method: "post" }, [
-    h("h2", {}, [text("Theme")]),
+  h("form", { action: "/theme", "aria-labelledby": themeHeadingId, method: "post" }, [
+    h("h2", { id: themeHeadingId }, [text("Theme")]),
     h("p", {}, [
       text(
         "Paste a shadcn theme's :root and .dark blocks, tick Dark to use the .dark block, and apply the theme. The dev playground keeps it until the server restarts.",
@@ -705,11 +715,32 @@ const noLedgerPage = (missing: LedgerMissing): Page =>
   ]);
 
 /**
+ * The id of an item page's title, which names the item's form.
+ */
+const titleId = "playground-title";
+
+/**
+ * Give the id of the Status region a page after a submit holds: the id `renderStatus` gives the
+ * region of an instance, which the item form's action names as its fragment.
+ *
+ * @param instance The item's instance token.
+ * @returns The region's id.
+ */
+const resultId = (instance: string): string => scopedId(instance, "status");
+
+/**
  * Compose an item page: the item's title, then the item region, holding the Status part when the
  * page follows a post and the playground's native form around the rendered item and its Submit.
+ * The form is named by the item's title, so a screen reader announces it by that name and not as
+ * an unnamed group.
  *
- * The form posts to the item's target with its instance token and no fragment, so a browser
- * flushes the page's one `autofocus`.
+ * The form posts to the item's target with its instance token and, as its fragment, the id of the
+ * Status region that every page after a submit holds first in reading order. That page is the
+ * answer to the post, so the browser opens it at the fragment, with no script: HTML's "scroll to
+ * the fragment" focuses the region, which carries `tabindex="-1"`, scrolls it into view and starts
+ * sequential focus navigation there, so reading starts at the result, not at the top of the page.
+ * The action is written before the post's outcome is known, so the fragment is the same after
+ * every submit, and the page of every outcome holds the region it names.
  *
  * @param accepted The accepted document.
  * @param session The item's corpus path and instance token.
@@ -748,7 +779,8 @@ const itemPage = (
       const form = h(
         "form",
         {
-          action: itemTarget(session.path, session.instance),
+          action: `${itemTarget(session.path, session.instance)}#${resultId(session.instance)}`,
+          "aria-labelledby": titleId,
           method: "post",
           novalidate: true,
         },
@@ -760,7 +792,7 @@ const itemPage = (
         locale,
         message(locale, "title", { state: message(locale, view.state), title }),
         [
-          h("h1", {}, [text(title)]),
+          h("h1", { id: titleId }, [text(title)]),
           home,
           h("div", { id: "playground-item" }, [...status.map((_, index) => slot(index)), form]),
         ],
@@ -898,7 +930,15 @@ const scoreText = (
 
 /**
  * Construct the page of a refused post: the Status part with the messages first, and the item
- * with the posted text and its invalid Controls, the first of which takes `autofocus`.
+ * with the posted text and its invalid Controls, the first of which takes the page's one
+ * `autofocus`.
+ *
+ * The Status region is the fragment's target here as after any submit: the action named it before
+ * the outcome was known, and the messages are the result a screen reader reads first. The first
+ * invalid Control keeps `autofocus`, so keyboard focus can start where the answer is corrected.
+ * HTML skips autofocus in a document whose fragment names an element, so a browser that follows
+ * that rule leaves focus on the region, and the next Tab moves into the item; one that does not
+ * moves focus on to the Control.
  *
  * @param target The item's instance and session.
  * @param configuration The configuration.
@@ -925,8 +965,9 @@ const refusedPage = (
   );
 
 /**
- * Construct the page after a scored post: the Status part first, with `autofocus`, and the item
- * restored from the posted values, disabled with its Submit once the attempt limit is reached.
+ * Construct the page after a scored post: the Status part first, the fragment's target, with
+ * `autofocus`, and the item restored from the posted values, disabled with its Submit once the
+ * attempt limit is reached.
  *
  * @param target The item's instance and session, after the attempt.
  * @param configuration The configuration, which gives `maxAttempts` (0 means unlimited).

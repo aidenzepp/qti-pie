@@ -16,7 +16,7 @@ import type { Ledger } from "#plate/ledger/report.ts";
 import { ledgerHtml } from "#plate/ledger/view.ts";
 import { message } from "#plate/messages.ts";
 import type { MessageKey } from "#plate/messages.ts";
-import { checkTree } from "#plate/test/accessibility.ts";
+import { checkTree, nameOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
@@ -253,11 +253,13 @@ afterAll(() => {
 });
 
 /**
- * A response with its body read as text.
+ * A response with its body read as text, and the address the request went to as a browser keeps
+ * it, fragment included: the address of the page the response becomes.
  */
 interface Answer {
   readonly html: string;
   readonly response: Response;
+  readonly url: string;
 }
 
 /**
@@ -271,7 +273,7 @@ const send = (handle: Handler, request: Request) =>
   Effect.promise(async (): Promise<Answer> => {
     const response = await handle(request);
 
-    return { html: await response.text(), response };
+    return { html: await response.text(), response, url: request.url };
   });
 
 /**
@@ -611,22 +613,30 @@ const returnOf = (html: string): string | true | undefined =>
 type State = Extract<MessageKey, "notAccepted" | "responseRecorded" | "scored">;
 
 /**
- * Assert spec §4.7's rule on a page after a submit: the Status part first in the item region, its
- * heading at the base level, exactly one `autofocus` where the state puts it, a title naming the
- * state, and no fragment in the action or in a redirect.
+ * Assert the rule on a page after a submit: the Status part first in the item region, its heading
+ * at the base level, the fragment of the address the post went to naming that region and the
+ * page's form posting with the same fragment, exactly one `autofocus` where the state puts it (the
+ * region after a scored or recorded submit, the first invalid Control after a refused one), a
+ * title naming the state, and no redirect.
  *
  * @param answer The page after the submit.
  * @param state The state the page must name.
  * @param title The item's title.
  */
 const assertAfterSubmit = (answer: Answer, state: State, title: string): void => {
-  const { html, response } = answer;
+  const { html, response, url } = answer;
   const all = elementsOf(parseHtml(html));
-  const region = find(html, (element) => element.attrs["id"] === "playground-item");
-  const [first, second] = region.children.filter((child) => child.kind === "element");
+  const region = all.find((element) => element.attrs["id"] === "playground-item");
+  const [first, second] = (region?.children ?? []).filter((child) => child.kind === "element");
+  const fragment = new URL(url).hash;
+  const targets = all.filter((element) => `#${String(element.attrs["id"])}` === fragment);
   const focused = all.filter((element) => Object.hasOwn(element.attrs, "autofocus"));
   const titleElement = all.find((element) => element.tag === "title");
 
+  assert.notStrictEqual(fragment, "", "the post's address names no fragment");
+  assert.lengthOf(targets, 1, `no single element is ${fragment}`);
+  assert.strictEqual(targets[0], first, "the fragment names no Status region first in the item");
+  assert.strictEqual(new URL(actionOf(html), origin).hash, fragment);
   assert.strictEqual(first?.attrs["role"], "status");
   assert.strictEqual(second?.tag, "form");
   assert.strictEqual(
@@ -636,6 +646,11 @@ const assertAfterSubmit = (answer: Answer, state: State, title: string): void =>
   assert.lengthOf(focused, 1);
   if (state === "notAccepted") {
     assert.strictEqual(focused[0]?.attrs["aria-invalid"], "true");
+    assert.strictEqual(
+      focused[0],
+      all.find((element) => element.attrs["aria-invalid"] === "true"),
+      "autofocus is not on the first invalid Control",
+    );
   } else {
     assert.strictEqual(focused[0]?.attrs["role"], "status");
     assert.strictEqual(focused[0]?.attrs["id"], first?.attrs["id"]);
@@ -645,7 +660,6 @@ const assertAfterSubmit = (answer: Answer, state: State, title: string): void =>
     textOf(titleElement?.children ?? []),
     message("en", "title", { state: message("en", state), title }),
   );
-  assert.notInclude(actionOf(html), "#");
   assert.isNull(response.headers.get("location"));
 };
 
@@ -736,6 +750,21 @@ const walkAndPost = Effect.fnUntraced(function* walkAndPost(
 
   return yield* post(handle, actionOf(opened.html), entries);
 });
+
+/**
+ * Run `checkTree` over a page's `main`, inside an element carrying the page's language, with its
+ * headings starting at `h1`.
+ *
+ * @param html The page.
+ * @returns Every violation, empty for a page that passes.
+ */
+const pageViolations = (html: string) =>
+  checkTree(
+    h("div", { lang: attributeOf(documentRoot(html), "lang") ?? "" }, [
+      find(html, (element) => element.tag === "main"),
+    ]),
+    { baseLevel: 1 },
+  );
 
 describe("dev/page.ts", () => {
   it.effect(
@@ -1324,13 +1353,76 @@ describe("dev/page.ts", () => {
       const listed = yield* get(handle, "/");
       const opened = yield* get(handle, itemTarget(paths.bg007));
       const action = actionOf(opened.html);
+      const { pathname, search } = new URL(action, origin);
       const answered = yield* post(handle, action, [
         [entryName(instanceOf(opened.html), "RESPONSE"), "true"],
       ]);
       assert.strictEqual(returnOf(listed.html), "/");
       assert.strictEqual(returnOf(opened.html), itemTarget(paths.bg007));
-      assert.strictEqual(returnOf(answered.html), action);
+      assert.strictEqual(returnOf(answered.html), `${pathname}${search}`);
     }),
+  );
+
+  it.effect(
+    "each form is named by its visible heading: the item's form by the item's title, the theme box by Theme",
+    () =>
+      Effect.gen(function* namedForms() {
+        const handle = playground();
+        const listed = yield* get(handle, "/");
+        const opened = yield* get(handle, itemTarget(paths.bg011));
+        const answered = yield* post(handle, actionOf(opened.html), [
+          [entryName(instanceOf(opened.html), "RESPONSE"), "Crows clean up."],
+        ]);
+
+        for (const [{ html }, itemForms] of [
+          [listed, 0],
+          [opened, 1],
+          [answered, 1],
+        ] as const) {
+          const tree = h("div", {}, parseHtml(html));
+          const forms = elementsOf([tree]).filter((element) => element.tag === "form");
+          const box = forms.find((form) => form.attrs["action"] === "/theme");
+          const heading = elementsOf(box?.children ?? []).find((element) => element.tag === "h2");
+          const title = elementsOf([tree]).find((element) => element.tag === "h1");
+          const others = forms.filter((candidate) => candidate !== box);
+
+          assert.isDefined(box);
+          assert.strictEqual(nameOf(box, tree), "Theme");
+          assert.strictEqual(nameOf(box, tree), textOf(heading?.children ?? []));
+          assert.lengthOf(others, itemForms);
+          for (const form of others) {
+            assert.strictEqual(nameOf(form, tree), "BG media example");
+            assert.strictEqual(nameOf(form, tree), textOf(title?.children ?? []));
+          }
+        }
+      }),
+  );
+
+  it.effect(
+    "checkTree passes on the listing and on an item page before a submit and after a scored, a recorded and a refused one",
+    () =>
+      Effect.gen(function* accessibleItemPages() {
+        const handle = playground();
+        const listed = yield* get(handle, "/");
+        const opened = yield* get(handle, itemTarget(paths.bg007));
+        const name = entryName(instanceOf(opened.html), "RESPONSE");
+        const scored = yield* post(handle, actionOf(opened.html), [[name, "true"]]);
+        const refusing = yield* get(handle, itemTarget(paths.bg007));
+        const refusedName = entryName(instanceOf(refusing.html), "RESPONSE");
+        const refused = yield* post(handle, actionOf(refusing.html), [
+          [refusedName, "true"],
+          [refusedName, "false"],
+        ]);
+        const recording = yield* get(handle, itemTarget(paths.bg011));
+        const recorded = yield* post(handle, actionOf(recording.html), [
+          [entryName(instanceOf(recording.html), "RESPONSE"), "Crows clean up."],
+        ]);
+
+        for (const { html } of [listed, opened, scored, refused, recording, recorded]) {
+          assert.deepStrictEqual(pageViolations(html), []);
+        }
+      }),
+    corpusTimeoutMs,
   );
 
   it.effect("the box's textarea shows the stored theme's text, escaped", () =>
@@ -1447,21 +1539,6 @@ const rowHeaders = (
 
       return [header?.attrs["scope"], textOf(header?.children ?? [])] as const;
     });
-
-/**
- * Run `checkTree` over a page's `main`, inside an element carrying the page's language, with its
- * headings starting at `h1`.
- *
- * @param html The page.
- * @returns Every violation, empty for a page that passes.
- */
-const pageViolations = (html: string) =>
-  checkTree(
-    h("div", { lang: attributeOf(documentRoot(html), "lang") ?? "" }, [
-      find(html, (element) => element.tag === "main"),
-    ]),
-    { baseLevel: 1 },
-  );
 
 describe("dev/page.ts: the verdicts page and the ledger page", () => {
   it.effect(
