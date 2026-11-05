@@ -6,110 +6,114 @@
 
 Render QTI 3.0 items and tests for candidates, on the server and in the browser.
 
-plate is parts plus pure functions, with no built-in form, submit control or submission flow.
-`open` reads and validates a QTI 3.0 item, `render` emits its parts as native controls in HTML that
-work inside a native form, React Hook Form, TanStack Form, or none, and `score` scores what comes
-back with a pure function. The form, its submit control, the flow and the attempt limit are the
-host's.
+plate is a library of parts and pure functions. `open` checks a QTI 3.0 item, `render` writes it as
+HTML with native form controls, and `score` scores the responses that come back. It renders choice,
+text entry and extended text interactions, and `open`'s verdict names each feature that plate does
+not render. plate has no form, submit control, submission flow or attempt limit. The host page owns
+those. plate reads XML through [crust](../crust/README.md), never depends on pantry, and is
+pre-release.
 
-The public surface is `src/index.ts`, published through the `exports` map in `package.json`. It
-exports these names and no others:
+## Install
 
-- The functions: `open`, `redact`, `render`, `renderStatus`, `score`, `checkResponses` and
-  `configure`.
-- The form helpers: `encode`, `decode`, `entryName`, `partition`, `checkInstance` and `isPosted`.
-- The redacted item's JSON codec: `encodeRedacted` and `decodeRedacted`.
-- The part constructor `h`.
-- The errors: `InvalidConfiguration`, `InvalidInstance`, `InvalidRecord`, `InvalidRedacted`,
-  `InvalidResponses`, `Malformed`, `OutcomeMismatchError`, `PartSwapRefused`, `RecordMismatch`,
-  `ResponsesRefused`, `UnknownIdentifierError`, `UnknownPart` and `UnmappedResponseError`.
-- The types: `Accepted`, `Attributes`, `Binding`, `Configuration`, `DecodeOptions`, `Element`,
-  `EngineFailure`, `Entry`, `InstanceRequirement`, `Node`, `Options`, `PartFunction`,
-  `PartOverrides`, `Partition`, `PostedBaseType`, `Redacted`, `RedactedJson`, `Rendered`,
-  `StatusInput`, `StoredRecord`, `Text`, `ValidationMessage`, `Value` and `Verdict`.
+plate is a private workspace package of [qti-pie](../../README.md). In a sibling package's
+`package.json`:
 
-plate reads QTI XML through `@qti-pie/crust` and never depends on `pantry`.
-
-Give each item on a page its own instance token, `render`'s `instance` option, which scopes the
-item's ids and form entry names and which `render` returns as `instance` beside `html`, for
-`renderStatus`, `entryName`, `decode` and `partition`. Omit it to draw a UUID, or pass your own,
-such as React's `useId()`: ASCII letters, digits, `_`, `.`, `:` and `-`, not ending in `-` and
-holding no `--`. Each token is checked on its own, so two tokens where one extends the other with
-`-` or `.`, such as `a` and `a-R`, or `a` and `a.b`, can give colliding ids or colliding entry
-names: instance `a` with response `b.c` and instance `a.b` with response `c` both post `a.b.c`.
-Drawn UUIDs and React's `useId()` never collide.
-
-## Secure composition
-
-Start from `redact`: the server keeps the full item `open` accepted, with its correct responses,
-mappings and processing; the browser gets only the HTML `render` makes from `redact`'s item; and
-the server scores the post with `score`. plate does not enforce this split, so a host that sends
-the item itself to the browser sends what redaction removed. A host that sends the redacted item
-itself to a browser sends `encodeRedacted`'s JSON form and reads it there with `decodeRedacted`.
-
-- `open` runs in Node today: the shared reader `@qti-pie/crust` decodes through Node's `Buffer`, so
-  `open` throws in a browser.
-- Compute `redact` for each render, never once per document, because a later render state can
-  change what the page may know.
-- `decodeRedacted` checks the JSON's shape, not its content, so a host trusts redacted JSON only as
-  far as the item it came from; the emitter's second line of defence still filters elements,
-  attributes and URLs.
-- Post the form's entries to the server and decode them there with `decode`.
-- A serverless host re-runs `open(location, bytes)` for each request, because an `Accepted` holds
-  Maps, bigints and `Option`s and is not JSON.
-- A native `form` around the parts submits with script off.
-- Form names are unique per page: give each item on the page its own instance token.
-- After a submit, put `renderStatus`'s part first with `autofocus`, or pass the messages to
-  `render`, which puts `autofocus` on the first invalid Control, and keep any fragment out of the
-  form's `action`, so the browser moves focus to it.
-- Serve package assets from a separate origin or with the CSP `sandbox` directive, because package
-  documents are live documents, and refuse a request path that resolves outside the package once
-  it is percent-decoded.
-
-## Dev playground
-
-From the repository root:
-
-```sh
-pnpm --filter @qti-pie/plate serve
+```json
+"dependencies": { "@qti-pie/plate": "workspace:*", "effect": "4.0.7" }
 ```
 
-Then open `http://localhost:5190`. The playground, `src/dev/page.ts`, is an example host composed
-from the parts: it lists BG007, BG010, BG011 and the CAT test from the 1EdTech example corpus,
-opens one with `open`, and wraps `render`'s HTML in its own native form. That form is the
-playground's own composition, the way an author would compose one, not library behaviour. It
-listens on `127.0.0.1` only; `PLATE_DEV_PORT` picks another port and `PLATE_CORPUS_DIR` another
-corpus root.
+Then run `pnpm install` from the repository root.
 
-To try a theme, paste a shadcn theme's `:root` and `.dark` blocks into the theme box, tick Dark for
-the `.dark` block, apply, and the page re-renders in that theme.
+## Start
+
+On the server, open an item and render it:
+
+```ts
+import { readFile } from "node:fs/promises";
+import { Effect, Result } from "effect";
+import { configure, open, redact, render } from "@qti-pie/plate";
+
+const verdict = await Effect.runPromise(open("item.xml", await readFile("item.xml")));
+if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") {
+  const configuration = await Effect.runPromise(configure({}));
+  const rendered = render(redact(verdict.accepted), configuration);
+  if (Result.isSuccess(rendered)) console.log(rendered.success.html);
+}
+```
+
+Put that HTML inside your own form. When the form posts back, `partition` and `decode` read its
+entries and `score` scores them. The [playground](#playground) does the whole round trip.
+
+## Functions
+
+| Function | Does |
+| --- | --- |
+| `open` | Reads and checks an item's bytes, and returns a verdict |
+| `configure` | Decodes the host's settings into a `Configuration` |
+| `redact` | Copies an accepted item without its correct responses and response processing |
+| `render` | Writes an item as HTML |
+| `renderStatus` | Writes the Status part, which shows the result after a submit |
+| `partition`, `decode` | Turn a posted form's entries into responses |
+| `checkResponses` | Validates responses without scoring them |
+| `score` | Scores responses and returns the record the host stores |
+
+`open` and `configure` return Effects. Every other function is plain and returns its value, or a
+`Result` when it can fail. `render`'s `parts` option swaps a part for the host's own markup, built
+with `h`. A host that builds its own Status part reads the fields `StatusInput` documents.
+[`src/index.ts`](src/index.ts) lists every export, and the TSDoc on each name is its reference.
+
+## Server and browser
+
+The server keeps what `open` accepted, correct responses included. The browser gets only the HTML
+that `render` makes from `redact`'s copy, and the server scores the post. plate does not enforce
+this split. A host that sends the accepted item to the browser sends what `redact` removes.
+
+- `open` runs on Node, not in a browser.
+- An accepted item is not JSON, so a stateless server opens the bytes again for each request. To
+  send the redacted item itself, write it with `encodeRedacted` and read it with `decodeRedacted`.
+- Each item on a page needs its own instance token, `render`'s `instance` option. `render` draws a
+  UUID when you pass none. Two tokens where one extends the other after a `.` or `-`, such as `a`
+  and `a.b`, can collide.
+- A package's documents are live documents. Serve its assets from another origin or under the CSP
+  `sandbox` directive, and refuse an asset path that leaves the package once it is percent-decoded.
 
 ## Styling
 
-[`src/styles.css`](src/styles.css) is plate's default theme for hosts that are not React. It is not
-the shadcn look, but it reads shadcn's token names, so a host's shadcn theme carries over. It reads
-thirteen tokens and no others: `--primary`, `--primary-foreground`, `--accent`,
-`--accent-foreground`, `--muted`, `--muted-foreground`, `--card`, `--card-foreground`,
-`--destructive`, `--border`, `--input`, `--ring` and `--radius`, as shadcn's
-[theming page](https://github.com/shadcn-ui/ui/blob/4aaea19d9cff3e0908e12a8c1d504b8c5ec34610/apps/v4/content/docs/(root)/theming.mdx)
-names them.
+[`src/styles.css`](src/styles.css) is plate's default theme. The `exports` map does not list it, so
+serve the file and link it from the page. It reads shadcn's token names, so a shadcn theme carries
+over, and its opening comment lists them. The host's theme sets the tokens at `:root` and `.dark`.
+The page's surface and font are the host's. A host that skips the sheet copies its
+`[data-slot="item"]` rule, which keeps authored content inside the item.
 
-- Nothing is defined at `:root`: the host's theme supplies the tokens, and the sheet carries
-  shadcn's neutral light values as fallbacks.
-- Parts are found by their `data-slot` marker.
-- Live state comes from the controls themselves (`:checked`, `:disabled`, `aria-invalid`), never
-  from a mirrored attribute.
-- The host owns the page's surface and font, and declares `color-scheme` in each theme block,
-  `:root` and `.dark`.
-- A host that skips the stylesheet gives the item Root (`[data-slot="item"]`)
-  `contain: layout paint`, `overflow: auto` and a padding of at least the focus ring's width plus
-  its offset, 3px.
-
-## Checks
+## Playground
 
 From the repository root:
 
-| Command | Runs |
-|---|---|
-| `pnpm --filter @qti-pie/plate run test` | This package's tests |
-| `pnpm check` | Formatting, lint and the typecheck over the repository |
+```console
+$ pnpm --filter @qti-pie/plate serve
+```
+
+Then open `http://localhost:5190`. The playground, [`src/dev/page.ts`](src/dev/page.ts), lists four
+documents from
+[1EdTech's QTI 3 examples](https://github.com/1EdTech/qti-examples/tree/0a92fbbb6d2e620a1f7fad19977be4c418246bc0),
+renders the ones `open` accepts inside its own form, and scores what you submit. It listens on
+`127.0.0.1` only. `PLATE_DEV_PORT` picks another port. `PLATE_CORPUS_DIR` names the directory that
+holds the extracted examples, and when that directory is missing, the page shows where it looked and
+the command that extracts them. To try a theme, paste a shadcn theme's `:root` and `.dark` blocks
+into the theme box.
+
+## Development
+
+From the repository root:
+
+```bash
+pnpm check
+pnpm --filter @qti-pie/plate test
+```
+
+Tests sit beside the code they test. [`docs/spec-readings.md`](../../docs/spec-readings.md) records
+how the packages read the specifications. Agents start at [`AGENTS.md`](../../AGENTS.md).
+
+## License
+
+MIT
