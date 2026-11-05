@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqtiv3p0p1_imscpv1p2_v1p0.xsd"
+  identifier="m2-fixture">
+  <metadata>
+    <schema>QTI Package</schema>
+    <schemaversion>3.0.1</schemaversion>
+  </metadata>
+  <organizations/>
+  <resources>
+    <resource identifier="m2-test" type="imsqti_test_xmlv3p0" href="test.xml">
+      <file href="test.xml"/>
+      <dependency identifierref="p1-single-choice"/>
+      <dependency identifierref="p1-text-entry"/>
+      <dependency identifierref="p1-multiple-choice"/>
+      <dependency identifierref="p2-extended-text"/>
+      <dependency identifierref="p2-choice"/>
+    </resource>
+    <resource identifier="p1-single-choice" type="imsqti_item_xmlv3p0" href="items/p1-single-choice.xml">
+      <file href="items/p1-single-choice.xml"/>
+    </resource>
+    <resource identifier="p1-text-entry" type="imsqti_item_xmlv3p0" href="items/p1-text-entry.xml">
+      <file href="items/p1-text-entry.xml"/>
+    </resource>
+    <resource identifier="p1-multiple-choice" type="imsqti_item_xmlv3p0" href="items/p1-multiple-choice.xml">
+      <file href="items/p1-multiple-choice.xml"/>
+    </resource>
+    <resource identifier="p2-extended-text" type="imsqti_item_xmlv3p0" href="items/p2-extended-text.xml">
+      <file href="items/p2-extended-text.xml"/>
+    </resource>
+    <resource identifier="p2-choice" type="imsqti_item_xmlv3p0" href="items/p2-choice.xml">
+      <file href="items/p2-choice.xml"/>
+    </resource>
+  </resources>
+</manifest>
