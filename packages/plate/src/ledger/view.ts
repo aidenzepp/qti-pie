@@ -5,7 +5,10 @@
  * The ledger reads by level (Basic, Advanced, Elevated, elective), each opening with its headline,
  * then by family, one table per family with the feature ID as the row header. The `limited` rows
  * are listed again with their sources, then the browser-support note, the session's records, the
- * notes on each sitting, and each engine's browser run.
+ * notes on each sitting, and each engine's browser run with OD-14 (e)'s result in it.
+ * The records stay as the sitting wrote them. Once the ledger holds a browser run, each entry the
+ * sitting did not observe shows the latest run as what replaced it, and no owner, because nobody
+ * sits or owes a sitting (rule c8a113fd); beside the OD-14 (e) entry it shows each engine's result.
  * The text and the HTML say the same thing; the HTML is built through `h`, so the serialiser
  * escapes every string, a test title included. The ledger says only that these tests pass over
  * these fixtures, and never claims conformance or certification.
@@ -28,6 +31,7 @@ import type {
   InteractionColumns,
   Ledger,
   LedgerRow,
+  Od14Result,
   ProofFile,
   RowState,
 } from "#plate/ledger/report.ts";
@@ -151,7 +155,46 @@ const recordColumns = [
   "Interactions",
   "Notes",
   "Owner",
+  "Replaced by",
 ] as const;
+
+/**
+ * The rule under which a browser run replaces an entry a sitting did not observe: browsers are
+ * tested by machine, and nobody sits or owns a sitting.
+ */
+const replacingRule = "rule c8a113fd";
+
+/**
+ * The browser run that replaces every entry a sitting did not observe: the latest run the ledger
+ * holds.
+ */
+interface Replacement {
+  /**
+   * The run's date, as the run recorded it.
+   */
+  readonly date: string;
+
+  /**
+   * The run's engines, each with OD-14 (e)'s result in it.
+   */
+  readonly engines: readonly BrowserRunRow[];
+}
+
+/**
+ * What the view shows beside an entry a browser run replaced.
+ */
+interface Replaced {
+  /**
+   * Each engine's OD-14 (e) result, beside the OD-14 (e) entry only.
+   */
+  readonly engines: readonly string[];
+
+  /**
+   * The run that replaced the entry, such as `the browser run of 2026-11-05T19:47:15.511Z (rule
+   * c8a113fd)`.
+   */
+  readonly run: string;
+}
 
 /**
  * The words each kind of record is shown in.
@@ -195,7 +238,16 @@ const runsCaption = "Each engine's run of the browser tests";
 /**
  * The column headers of the browser runs' table, the row header (the engine) first.
  */
-const runColumns = ["Engine", "Version", "Playwright", "Date", "Passed", "Failed", "Note"] as const;
+const runColumns = [
+  "Engine",
+  "Version",
+  "Playwright",
+  "Date",
+  "Passed",
+  "Failed",
+  "OD-14 (e)",
+  "Note",
+] as const;
 
 /**
  * The words each engine is named by.
@@ -517,20 +569,22 @@ const supportWords = (note: SupportNote): string =>
   `${note.feature}: ${baselineWords[note.status]}; without it, ${note.degrade}`;
 
 /**
- * Give a record's cells, in {@link recordColumns}' order: a cell that does not apply to its kind is
- * empty.
+ * Give a record's cells, in {@link recordColumns}' order up to Owner: a cell that does not apply to
+ * its kind is empty.
  *
  * An entry that was not observed states no environment it did not observe: its JavaScript state,
  * browser, macOS and reader version are empty, and its reader cell names only the reader the check
  * is for. Those fields of an open entry name the sitting that recorded it, not a run of the check.
  * Every other entry, an unavailable reader included, states all of them as recorded; an
  * unavailable reader's JavaScript state, browser and macOS are those of the sitting that recorded
- * it, on the machine the reader is missing from.
+ * it, on the machine the reader is missing from. An entry a browser run replaced shows no owner:
+ * nobody owes a sitting (rule c8a113fd).
  *
  * @param record The record.
+ * @param replaced Whether a browser run replaced it.
  * @returns Its cells' words.
  */
-const recordCells = (record: PassRecord): readonly string[] => {
+const recordCells = (record: PassRecord, replaced: boolean): readonly string[] => {
   const observed = record.result !== "not-observed";
 
   return [
@@ -546,26 +600,151 @@ const recordCells = (record: PassRecord): readonly string[] => {
     observed ? record.macosVersion : "",
     record.kind === "screen-reader-pass" ? record.interactions.join(", ") : "",
     record.notes,
-    record.owner,
+    replaced ? "" : record.owner,
   ];
 };
+
+/**
+ * Word how one part of OD-14 (e) ended in an engine.
+ *
+ * @param state The part's state.
+ * @returns The state, or `has no result` when the engine has none for the part.
+ */
+const partWords = (state: Od14Result["control"]): string =>
+  state === "absent" ? "has no result" : state;
+
+/**
+ * Word OD-14 (e)'s result in an engine.
+ *
+ * @param od14 The result.
+ * @returns The result beside how its parts ended, such as `failed (the control (a) passed and the
+ *   proof (b) failed)`.
+ */
+const od14Words = (od14: Od14Result): string =>
+  `${od14.result} (the control (a) ${partWords(od14.control)} and the proof (b) ${partWords(od14.proof)})`;
+
+/**
+ * Word OD-14 (e)'s result in one engine of a run, naming the engine and its version.
+ *
+ * @param run The engine's entry.
+ * @returns The words, such as `OD-14 (e) in WebKit 27.2: passed (the control (a) passed and the
+ *   proof (b) passed)`.
+ */
+const od14EngineWords = (run: BrowserRunRow): string =>
+  `OD-14 (e) in ${engineWords[run.engine]} ${run.version}: ${od14Words(run.od14)}`;
+
+/**
+ * Give the browser run that replaces every entry a sitting did not observe.
+ *
+ * @param runs Each engine of each browser run the ledger holds.
+ * @returns The latest run's date, as recorded, and its engines; `undefined` when the ledger holds
+ *   no browser run.
+ */
+const replacementOf = (runs: readonly BrowserRunRow[]): Replacement | undefined => {
+  let latest: string | undefined;
+
+  for (const run of runs) {
+    if (latest === undefined || Date.parse(run.date) > Date.parse(latest)) {
+      latest = run.date;
+    }
+  }
+
+  return latest === undefined
+    ? undefined
+    : { date: latest, engines: runs.filter((run) => run.date === latest) };
+};
+
+/**
+ * Give what the view shows beside a record a browser run replaced: the run and, beside the OD-14
+ * (e) entry, each engine's result in it.
+ *
+ * @param record The record.
+ * @param replacement The browser run that replaces every entry a sitting did not observe, if any.
+ * @returns The words; `undefined` when the record was observed or there is no browser run, so the
+ *   record shows as the sitting wrote it.
+ */
+const replacedOf = (
+  record: PassRecord,
+  replacement: Replacement | undefined,
+): Replaced | undefined =>
+  replacement === undefined || record.result !== "not-observed"
+    ? undefined
+    : {
+        engines:
+          record.kind === "manual-check" && record.check === "OD-14 (e)"
+            ? replacement.engines.map(od14EngineWords)
+            : [],
+        run: `the browser run of ${replacement.date} (${replacingRule})`,
+      };
 
 /**
  * Word a record as one line: each cell that applies, after its column's header.
  *
  * @param record The record.
+ * @param replaced Whether a browser run replaced it.
  * @returns The line.
  */
-const recordWords = (record: PassRecord): string =>
-  recordCells(record)
+const recordWords = (record: PassRecord, replaced: boolean): string =>
+  recordCells(record, replaced)
     .map((words, index) => [recordColumns[index] ?? "", words] as const)
     .filter(([, words]) => words !== "")
     .map(([column, words]) => `${column}: ${words}`)
     .join("; ");
 
 /**
- * Give an engine's browser-run cells, in {@link runColumns}' order: WebKit's note is the sentence
- * that it stands in for Safari, and Chromium's is empty.
+ * Write a record as text lines: its line and, when a browser run replaced it, an indented line
+ * naming the run, then beside the OD-14 (e) entry one indented line per engine's result.
+ *
+ * @param record The record.
+ * @param replacement The browser run that replaces every entry a sitting did not observe, if any.
+ * @returns The lines.
+ */
+const recordLines = (
+  record: PassRecord,
+  replacement: Replacement | undefined,
+): readonly string[] => {
+  const replaced = replacedOf(record, replacement);
+
+  return replaced === undefined
+    ? [recordWords(record, false)]
+    : [
+        recordWords(record, true),
+        `  Replaced by ${replaced.run}`,
+        ...replaced.engines.map((line) => `  ${line}`),
+      ];
+};
+
+/**
+ * Construct a record's Replaced by cell: the run that replaced it and, beside the OD-14 (e) entry,
+ * a list of each engine's result.
+ *
+ * @param replaced What replaced the record, if anything.
+ * @returns The cell, empty when nothing replaced it.
+ */
+const replacedCell = (replaced: Replaced | undefined): Element =>
+  h(
+    "td",
+    {},
+    replaced === undefined
+      ? []
+      : [
+          text(replaced.run),
+          ...(replaced.engines.length === 0
+            ? []
+            : [
+                h(
+                  "ul",
+                  {},
+                  replaced.engines.map((line) => h("li", {}, [text(line)])),
+                ),
+              ]),
+        ],
+  );
+
+/**
+ * Give an engine's browser-run cells, in {@link runColumns}' order: OD-14 (e)'s result in the
+ * engine beside how its parts ended; WebKit's note is the sentence that it stands in for Safari,
+ * and Chromium's is empty.
  *
  * @param run The engine's entry.
  * @returns Its cells' words.
@@ -577,6 +756,7 @@ const runCells = (run: BrowserRunRow): readonly string[] => [
   run.date,
   String(run.passed),
   String(run.failed),
+  od14Words(run.od14),
   run.engine === "webkit" ? standsInForSafari : "",
 ];
 
@@ -669,8 +849,9 @@ const rowLines = (row: LedgerRow, family: Family): readonly string[] => {
  * @param support The browser-support note's rows; `browserSupport` when absent.
  * @param notes The notes on each sitting; `sessionNotes` when absent.
  * @returns The text: the title and what it says, each level's headline and its rows by family, the
- *   `limited` rows with their sources, the browser-support note, the records, the notes and the
- *   browser runs, each line ending in a line feed.
+ *   `limited` rows with their sources, the browser-support note, the records (each one a browser
+ *   run replaced followed by the run's lines), the notes and the browser runs, each line ending in
+ *   a line feed.
  */
 export const ledgerText = (
   ledger: Ledger,
@@ -678,6 +859,7 @@ export const ledgerText = (
   notes: readonly SessionNote[] = sessionNotes,
 ): string => {
   const limited = ledger.rows.filter(isLimited);
+  const replacement = replacementOf(ledger.browserRuns);
 
   return [
     title,
@@ -701,7 +883,9 @@ export const ledgerText = (
     ...(support.length === 0 ? [noSupportNote] : support.map(supportWords)),
     "",
     "Records",
-    ...(ledger.records.length === 0 ? [noRecords] : ledger.records.map(recordWords)),
+    ...(ledger.records.length === 0
+      ? [noRecords]
+      : ledger.records.flatMap((record) => recordLines(record, replacement))),
     "",
     notesHeading,
     ...(notes.length === 0 ? [noNotes] : notes.map(noteWords)),
@@ -719,10 +903,12 @@ export const ledgerText = (
  * browser-support note, the records, under its own `h3` the notes on each sitting, and the browser
  * runs.
  *
- * Every table has a caption and column headers (`th scope="col"`). Each row has a row header
- * (`th scope="row"`): the feature ID, the feature, the reader, or the engine. A proof links to its
- * test file in the public repository and to each corpus document it names in the dev playground.
- * Headings start at `h1`. Every string is a text node, so the serialiser escapes it.
+ * Every table has a caption and column headers (`th scope="col"`). Each row has a row header (`th
+ * scope="row"`): the feature ID, the feature, the reader, or the engine. A record a browser run
+ * replaced names the run in its Replaced by cell, with each engine's OD-14 (e) result beside the
+ * OD-14 (e) entry, and leaves its owner empty. A proof links to its test file in the public
+ * repository and to each corpus document it names in the dev playground. Headings start at `h1`.
+ * Every string is a text node, so the serialiser escapes it.
  *
  * @param ledger The ledger.
  * @param support The browser-support note's rows; `browserSupport` when absent.
@@ -735,6 +921,7 @@ export const ledgerHtml = (
   notes: readonly SessionNote[] = sessionNotes,
 ): Element => {
   const limited = ledger.rows.filter(isLimited);
+  const replacement = replacementOf(ledger.browserRuns);
 
   return h("article", { lang: "en" }, [
     h("h1", {}, [text(title)]),
@@ -778,9 +965,14 @@ export const ledgerHtml = (
             "tbody",
             {},
             ledger.records.map((record) => {
-              const [reader = "", ...rest] = recordCells(record);
+              const replaced = replacedOf(record, replacement);
+              const [reader = "", ...rest] = recordCells(record, replaced !== undefined);
 
-              return h("tr", {}, [h("th", { scope: "row" }, [text(reader)]), ...rest.map(cell)]);
+              return h("tr", {}, [
+                h("th", { scope: "row" }, [text(reader)]),
+                ...rest.map(cell),
+                replacedCell(replaced),
+              ]);
             }),
           ),
         ]),

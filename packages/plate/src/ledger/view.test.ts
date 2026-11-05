@@ -181,6 +181,7 @@ const runsLedger: Ledger = {
       date: "2026-11-05T18:57:26.239Z",
       engine: "chromium",
       failed: 1,
+      od14: { control: "passed", proof: "passed", result: "passed" },
       passed: 41,
       playwright: "1.64.1",
       version: "156.0.8078.4",
@@ -189,6 +190,7 @@ const runsLedger: Ledger = {
       date: "2026-11-05T18:57:26.239Z",
       engine: "webkit",
       failed: 0,
+      od14: { control: "passed", proof: "failed", result: "failed" },
       passed: 42,
       playwright: "1.64.1",
       standsInFor: "Safari",
@@ -196,6 +198,19 @@ const runsLedger: Ledger = {
     },
   ],
 };
+
+/**
+ * The words the view gives the browser run of {@link runsLedger} beside each entry it replaced.
+ */
+const replacedLine = "  Replaced by the browser run of 2026-11-05T18:57:26.239Z (rule c8a113fd)";
+
+/**
+ * The words the view gives each engine's OD-14 (e) result in {@link runsLedger}.
+ */
+const od14Lines = [
+  "OD-14 (e) in Chromium 156.0.8078.4: passed (the control (a) passed and the proof (b) passed)",
+  "OD-14 (e) in WebKit 27.2: failed (the control (a) passed and the proof (b) failed)",
+] as const;
 
 /**
  * The fixture records of one sitting, as the first one ran: an Extended Text pass that passed and,
@@ -690,6 +705,68 @@ describe("ledger/view.ts", () => {
     );
   });
 
+  it("shows each not-observed entry replaced by the latest browser run, with no owner, once the ledger holds one", () => {
+    const lines = ledgerText(runsLedger).split("\n");
+    const open = `Reader: VoiceOver; Entry: manual check; Check: OD-14 (e); Item: ${bg007}; Control: did-not-run; Result: not-observed; Date: 2026-11-06`;
+    const at = lines.indexOf(open);
+
+    assert.notStrictEqual(at, -1, "the open entry's line, with no owner");
+    assert.deepStrictEqual(lines.slice(at + 1, at + 4), [
+      replacedLine,
+      ...od14Lines.map((line) => `  ${line}`),
+    ]);
+    assert.strictEqual(lines.filter((line) => line.startsWith("  Replaced by ")).length, 1);
+    assert.isTrue(
+      lines.some(
+        (line) =>
+          line.startsWith("Reader: VoiceOver 27.2; Entry: screen-reader pass;") &&
+          line.endsWith("; Owner: operator"),
+      ),
+      "an observed entry keeps its owner",
+    );
+
+    const rows = rowsOf(tableCaptioned(ledgerHtml(runsLedger), "Session records"));
+    const replaced = rows.map((row) => row.get("Replaced by") ?? h("td", {}));
+
+    assert.deepStrictEqual(
+      rows.map((row) => textOf(row.get("Owner") ?? h("td", {}))),
+      ["operator", "operator", "operator", "", "operator", "operator"],
+    );
+    assert.deepStrictEqual(
+      replaced.map(textOf).map((words) => words === ""),
+      [true, true, true, false, true, true],
+    );
+    assert.include(
+      textOf(replaced[3] ?? h("td", {})),
+      "the browser run of 2026-11-05T18:57:26.239Z (rule c8a113fd)",
+    );
+    assert.deepStrictEqual(byTag(replaced[3] ?? h("td", {}), "li").map(textOf), [...od14Lines]);
+  });
+
+  it("names the latest of two browser runs as the replacement, and lists OD-14 (e) only beside its own entry", () => {
+    const earlier = runsLedger.browserRuns.map((run) => ({ ...run, date: "2026-11-04T09:00:00Z" }));
+    const lines = ledgerText({
+      ...sittingLedger,
+      browserRuns: [...earlier, ...runsLedger.browserRuns],
+    }).split("\n");
+    const open = lines.findIndex((line) => line.includes("Result: not-observed"));
+
+    assert.notStrictEqual(open, -1);
+    assert.notInclude(lines[open] ?? "", "Owner:");
+    assert.strictEqual(lines[open + 1], replacedLine);
+    assert.notInclude(lines[open + 2] ?? "", "OD-14 (e)");
+  });
+
+  it("shows each not-observed entry as recorded, its owner kept, while the ledger holds no browser run", () => {
+    const text = ledgerText(fixture);
+
+    assert.notInclude(text, "Replaced by");
+    assert.include(
+      text,
+      "Control: did-not-run; Result: not-observed; Date: 2026-11-06; Owner: operator\n",
+    );
+  });
+
   it("says no session is recorded while there are no records", () => {
     const empty = { ...fixture, records: [] };
     const sentence = "No session has been recorded yet.";
@@ -705,22 +782,40 @@ describe("ledger/view.ts", () => {
 
     assert.deepStrictEqual(
       rows.map((row) =>
-        ["Engine", "Version", "Playwright", "Date", "Passed", "Failed", "Note"].map((column) =>
-          textOf(row.get(column) ?? h("td", {})),
+        ["Engine", "Version", "Playwright", "Date", "Passed", "Failed", "OD-14 (e)", "Note"].map(
+          (column) => textOf(row.get(column) ?? h("td", {})),
         ),
       ),
       [
-        ["Chromium", "156.0.8078.4", "1.64.1", "2026-11-05T18:57:26.239Z", "41", "1", ""],
-        ["WebKit", "27.2", "1.64.1", "2026-11-05T18:57:26.239Z", "42", "0", standsInForSafari],
+        [
+          "Chromium",
+          "156.0.8078.4",
+          "1.64.1",
+          "2026-11-05T18:57:26.239Z",
+          "41",
+          "1",
+          "passed (the control (a) passed and the proof (b) passed)",
+          "",
+        ],
+        [
+          "WebKit",
+          "27.2",
+          "1.64.1",
+          "2026-11-05T18:57:26.239Z",
+          "42",
+          "0",
+          "failed (the control (a) passed and the proof (b) failed)",
+          standsInForSafari,
+        ],
       ],
     );
     assert.include(
       text,
-      "\n\nBrowser runs\nEngine: Chromium; Version: 156.0.8078.4; Playwright: 1.64.1; Date: 2026-11-05T18:57:26.239Z; Passed: 41; Failed: 1\n",
+      "\n\nBrowser runs\nEngine: Chromium; Version: 156.0.8078.4; Playwright: 1.64.1; Date: 2026-11-05T18:57:26.239Z; Passed: 41; Failed: 1; OD-14 (e): passed (the control (a) passed and the proof (b) passed)\n",
     );
     assert.include(
       text,
-      `Engine: WebKit; Version: 27.2; Playwright: 1.64.1; Date: 2026-11-05T18:57:26.239Z; Passed: 42; Failed: 0; Note: ${standsInForSafari}\n`,
+      `Engine: WebKit; Version: 27.2; Playwright: 1.64.1; Date: 2026-11-05T18:57:26.239Z; Passed: 42; Failed: 0; OD-14 (e): failed (the control (a) passed and the proof (b) failed); Note: ${standsInForSafari}\n`,
     );
     assert.isAbove(text.indexOf("Browser runs\n"), text.indexOf("Session notes\n"));
     assert.isAbove(

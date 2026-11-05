@@ -4,10 +4,13 @@
  * reads.
  *
  * Every entry names the reader and its version, the browser and its version, the macOS version, the
- * item, the JavaScript state, the date, the result and notes, and the owner. A check a sitting has
- * not run yet stays in the record as an open entry, `not-observed`, until a later sitting runs it.
- * An open entry's browser, macOS version, JavaScript state and reader version name the sitting that
- * recorded it, not a run of the check, so the ledger's view states none of them for it.
+ * item, the JavaScript state, the date, the result and notes, and the owner. A check a sitting did
+ * not run stays in the record as an open entry, `not-observed`. The record is history and stays as
+ * the sitting wrote it: browsers are now tested by machine, and nobody sits or owns a sitting (rule
+ * c8a113fd), so once the ledger holds a browser run its view shows that run beside each open entry,
+ * and no owner. An open entry's browser, macOS version, JavaScript state and reader version name
+ * the sitting that recorded it, not a run of the check, so the ledger's view states none of them
+ * for it.
  * An OD-14 (e) entry also holds its control's result, and its type admits `passed` or `failed` only
  * beside `control: "ran"`, and `not-observed` only beside `control: "did-not-run"`, so no entry can
  * record a pass without its control.
@@ -255,7 +258,9 @@ const derivedProbes = [
  * The first sitting (2026-11-05) ran step 1 in part, with JavaScript on: BG007, BG010 and BG011
  * under VoiceOver, and BG011's submit. Every other check of the session (the other four step-1
  * items, all of step 2, step 3's OD-14 (e) proof and the M1 walk-through) is an open entry,
- * `not-observed`. NVDA and JAWS are unavailable on this machine.
+ * `not-observed`. NVDA and JAWS are unavailable on this machine. No later sitting follows (rule
+ * c8a113fd): the browser run's results stand beside the open entries in the ledger, and OD-14 (e)'s
+ * result in each engine replaces its entry as the gate's evidence.
  */
 export const passes: readonly PassRecord[] = [
   {
@@ -337,7 +342,9 @@ export const passes: readonly PassRecord[] = [
 
 /**
  * The notes on each sitting, in the order they were recorded: what the operator noted about a
- * sitting as a whole rather than about one entry.
+ * sitting as a whole rather than about one entry. They are history and stay as written, the last
+ * one's plan for a later sitting included, though rule c8a113fd replaced that sitting with the
+ * browser run.
  */
 export const sessionNotes: readonly SessionNote[] = [
   {

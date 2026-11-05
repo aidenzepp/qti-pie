@@ -276,6 +276,20 @@ describe("ledger/passes.ts", () => {
     walkTimeoutMs,
   );
 
+  it("the first sitting's record stays as written: its last note still says the operator will do the rest later", () => {
+    assert.deepStrictEqual(
+      sessionNotes.map((note) => [note.date, note.owner]),
+      [
+        ["2026-11-05", "operator"],
+        ["2026-11-05", "operator"],
+        ["2026-11-05", "operator"],
+      ],
+    );
+    assert.isTrue(
+      sessionNotes.at(-1)?.text.endsWith("The operator will do the rest in a later sitting."),
+    );
+  });
+
   it("the session notes hold the odd group near Submit and the Theme heading", () => {
     assert.isTrue(
       sessionNotes.some(
