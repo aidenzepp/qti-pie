@@ -516,51 +516,58 @@ describe("renderChoice", () => {
       }),
   );
 
-  it.effect("[Q-2] names every Control by the payload's form name, the author's when given", () =>
-    Effect.gen(function* namesControls() {
-      const authored = payloadOf(colours, { ...answering, names: new Map([[response, "colour"]]) });
-      const root = yield* render(authored);
-      const plain = yield* render(payloadOf(colours));
+  it.effect(
+    "[Q-2] [keyboard] names every Control by the payload's form name, the author's when given",
+    () =>
+      Effect.gen(function* namesControls() {
+        const authored = payloadOf(colours, {
+          ...answering,
+          names: new Map([[response, "colour"]]),
+        });
+        const root = yield* render(authored);
+        const plain = yield* render(payloadOf(colours));
 
-      assert.strictEqual(choiceIn(authored).formName, "colour");
-      assert.deepStrictEqual(
-        partsIn(root, "control").map((control) => control.attrs["name"]),
-        ["colour", "colour", "colour"],
-      );
-      assert.deepStrictEqual(
-        partsIn(plain, "control").map((control) => control.attrs["name"]),
-        [name, name, name],
-      );
-      assert.deepStrictEqual(
-        keyboardWalk(page(root, authored), ["Tab", "ArrowDown", "Tab", "Enter"]),
-        Option.some([["colour", "B"]]),
-      );
-    }),
+        assert.strictEqual(choiceIn(authored).formName, "colour");
+        assert.deepStrictEqual(
+          partsIn(root, "control").map((control) => control.attrs["name"]),
+          ["colour", "colour", "colour"],
+        );
+        assert.deepStrictEqual(
+          partsIn(plain, "control").map((control) => control.attrs["name"]),
+          [name, name, name],
+        );
+        assert.deepStrictEqual(
+          keyboardWalk(page(root, authored), ["Tab", "ArrowDown", "Tab", "Enter"]),
+          Option.some([["colour", "B"]]),
+        );
+      }),
   );
 
-  it.effect("[Q-2] a radio walk (Tab, ArrowDown, Tab, Enter) posts the second choice", () =>
-    Effect.gen(function* radioWalk() {
-      const built = payloadOf(colours);
-      const root = yield* render(built);
-      const posted = keyboardWalk(page(root, built), ["Tab", "ArrowDown", "Tab", "Enter"]);
+  it.effect(
+    "[Q-2] [keyboard] a radio walk (Tab, ArrowDown, Tab, Enter) posts the second choice",
+    () =>
+      Effect.gen(function* radioWalk() {
+        const built = payloadOf(colours);
+        const root = yield* render(built);
+        const posted = keyboardWalk(page(root, built), ["Tab", "ArrowDown", "Tab", "Enter"]);
 
-      assert.deepStrictEqual(posted, Option.some([[name, "B"]]));
+        assert.deepStrictEqual(posted, Option.some([[name, "B"]]));
 
-      assert.deepStrictEqual(
-        validateChoice(
-          colours,
-          yield* decoded(
+        assert.deepStrictEqual(
+          validateChoice(
             colours,
-            Option.getOrElse(posted, () => []),
+            yield* decoded(
+              colours,
+              Option.getOrElse(posted, () => []),
+            ),
+            yield* configure({}),
           ),
-          yield* configure({}),
-        ),
-        [],
-      );
-    }),
+          [],
+        );
+      }),
   );
 
-  it.effect("[Q-2] a checkbox walk posts the selected set", () =>
+  it.effect("[Q-2] [keyboard] a checkbox walk posts the selected set", () =>
     Effect.gen(function* checkboxWalk() {
       const built = payloadOf(pairs);
       const root = yield* render(built);
@@ -892,7 +899,7 @@ describe("validateChoice", () => {
   );
 
   it.effect(
-    "[Q-2] checks the value decoded under the caller's entry name, the author's form name included, and accepts NULL",
+    "[Q-2] [keyboard] checks the value decoded under the caller's entry name, the author's form name included, and accepts NULL",
     () =>
       Effect.gen(function* callerDecodes() {
         const configuration = yield* configure({});
