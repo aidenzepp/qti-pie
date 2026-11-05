@@ -19,7 +19,7 @@ plate is a private workspace package of [qti-pie](../../README.md). In a sibling
 `package.json`:
 
 ```json
-"dependencies": { "@qti-pie/plate": "workspace:*", "effect": "4.0.7" }
+"dependencies": { "@qti-pie/plate": "workspace:*", "effect": "4.1.2" }
 ```
 
 Then run `pnpm install` from the repository root.
@@ -62,6 +62,33 @@ entries and `score` scores them. The [playground](#playground) does the whole ro
 with `h`. A host that builds its own Status part reads the fields `StatusInput` documents.
 [`src/index.ts`](src/index.ts) lists every export, and the TSDoc on each name is its reference.
 
+## Interactions
+
+The modules in [`src/interactions/`](src/interactions/) document each interaction's attributes. A
+host can rely on these:
+
+- `render` derives a shuffled Choice's order from the configuration's `seed`, the `instance` and
+  the response's identifier, so the same three always give the same order. Keep the `seed` stable
+  across restarts and pass the `instance` you stored. With no `seed`, the instance alone decides
+  the order, so vary the `seed` when the instance never changes, as with React's `useId()` on a
+  page that holds one item.
+- `checkResponses` checks a `pattern-mask` only when the configuration's `validateResponses` is
+  on, and `score` never checks it. A number is matched as plate writes it, not as typed: `1.50` as
+  `1.5`, and `007` as `7`.
+- An Extended Text with `format="xhtml"` is a plain `textarea`, since a rich-text editor needs
+  script. plate never renders its text as markup.
+- A `multiple` or `ordered` Extended Text renders at most 100 `textarea`s. When its `min-strings`
+  is above 100, a notice takes their place, and `open` accepts the item with the unsupported
+  feature `min-strings>100`.
+
+## Scoring
+
+`score` runs inline response processing and six built-in templates: `match_correct`,
+`map_response`, `map_response_point`, `CC2_match`, `CC2_match_basic` and `CC2_map_response`.
+`open`'s verdict names any other template, and any inline rule that plate does not run. No
+interaction that plate renders collects a `point`, so `map_response_point` scores the point your
+own control passes to `score`.
+
 ## Server and browser
 
 The server keeps what `open` accepted, correct responses included. The browser gets only the HTML
@@ -93,14 +120,34 @@ From the repository root:
 $ pnpm --filter @qti-pie/plate serve
 ```
 
-Then open `http://localhost:5190`. The playground, [`src/dev/page.ts`](src/dev/page.ts), lists four
-documents from
-[1EdTech's QTI 3 examples](https://github.com/1EdTech/qti-examples/tree/0a92fbbb6d2e620a1f7fad19977be4c418246bc0),
-renders the ones `open` accepts inside its own form, and scores what you submit. It listens on
+Then open `http://localhost:5190`. The playground, [`src/dev/page.ts`](src/dev/page.ts), lists every
+document in
+[1EdTech's QTI 3 examples](https://github.com/1EdTech/qti-examples/tree/0a92fbbb6d2e620a1f7fad19977be4c418246bc0)
+under the verdict `open` gives it, renders the ones `open` accepts inside its own form, and scores
+what you submit. Its Verdicts page puts every document's verdict in one table, and its Ledger page
+shows the ledger that the [ledger command](#conformance-ledger) last wrote. It listens on
 `127.0.0.1` only. `PLATE_DEV_PORT` picks another port. `PLATE_CORPUS_DIR` names the directory that
 holds the extracted examples, and when that directory is missing, the page shows where it looked and
 the command that extracts them. To try a theme, paste a shadcn theme's `:root` and `.dark` blocks
 into the theme box.
+
+## Conformance ledger
+
+From the repository root:
+
+```bash
+pnpm --filter @qti-pie/plate ledger
+```
+
+The command runs plate's tests, opens every document in 1EdTech's examples, and writes the ledger,
+each document's verdict and the test report to `packages/plate/work/ledger/`, or to the folder
+`PLATE_LEDGER_DIR` names. It also reads 1EdTech's QTI 3.0 Conformance and Certification text from
+`~/.cache/gr8des/qti3-text/conf.txt`.
+
+For each feature in that text's Appendix A, the ledger says only that these tests pass over these
+fixtures. It never says plate is conformant or certified. The command exits with 1 when a test
+fails or the ledger's honesty check, [`src/ledger/honesty.ts`](src/ledger/honesty.ts), finds a
+problem.
 
 ## Development
 
