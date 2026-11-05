@@ -20,6 +20,7 @@ import { checkTree, nameOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, Verdict } from "#plate/validate/verdict.ts";
 
 /**
@@ -725,9 +726,9 @@ const sectionsOf = (html: string): readonly ListedSection[] =>
  * @returns Its accepted document; the test fails when `open` did not accept it.
  */
 const acceptedOf = (verdict: Verdict): Accepted =>
-  verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
-    ? verdict.accepted
-    : assert.fail(`${verdict.document} is ${verdict.verdict}, not accepted`);
+  Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`${verdict.document} is ${verdict.verdict}, not accepted`),
+  );
 
 /**
  * Open a document in a playground, walk its item form by keys with `keyboardWalk`, and post the

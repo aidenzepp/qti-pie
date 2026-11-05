@@ -22,6 +22,7 @@ import type {
   UnknownPart,
   Verdict,
 } from "#plate/index.ts";
+import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
  * One corpus member, read and opened.
@@ -89,10 +90,7 @@ export const openCorpus: Effect.Effect<
 export const acceptedOf = (member: Member): Option.Option<Accepted> =>
   Exit.match(member.verdict, {
     onFailure: () => Option.none(),
-    onSuccess: (verdict) =>
-      verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
-        ? Option.some(verdict.accepted)
-        : Option.none(),
+    onSuccess: acceptedItem,
   });
 
 /**

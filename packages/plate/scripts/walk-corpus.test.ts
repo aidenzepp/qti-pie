@@ -3,10 +3,11 @@ import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, assert, describe, it } from "@effect/vitest";
-import { ConfigProvider, Effect } from "effect";
+import { ConfigProvider, Effect, Option } from "effect";
 import { corpusRoot } from "#plate/document/corpus.ts";
 import type { BodyNode } from "#plate/model/item.ts";
 import { open } from "#plate/validate/open.ts";
+import { acceptedItem } from "#plate/validate/verdict.ts";
 import { instructions, writeWalkCorpus } from "#scripts/walk-corpus.ts";
 
 /**
@@ -175,8 +176,10 @@ describe("the walk corpus", () => {
         const verdict = yield* open(walk.od14, readWritten(walk.od14));
 
         assert.strictEqual(verdict.verdict, "accepted");
-        if (verdict.verdict === "accepted") {
-          assert.deepStrictEqual(objectData(verdict.accepted.item.body), [
+
+        const accepted = acceptedItem(verdict);
+        if (Option.isSome(accepted)) {
+          assert.deepStrictEqual(objectData(accepted.value.item.body), [
             "od14-probe.html",
             "od14-probe.svg",
           ]);

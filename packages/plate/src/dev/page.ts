@@ -73,7 +73,7 @@ import { Ledger } from "#plate/ledger/report.ts";
 import { ledgerHtml, verdictTable } from "#plate/ledger/view.ts";
 import { message } from "#plate/messages.ts";
 import type { BodyNode } from "#plate/model/item.ts";
-import { describeRefusal } from "#plate/validate/verdict.ts";
+import { acceptedItem, describeRefusal } from "#plate/validate/verdict.ts";
 import type { Verdict } from "#plate/validate/verdict.ts";
 
 /**
@@ -1027,7 +1027,8 @@ const routeFailure = (
 
 /**
  * Answer a member of the document set with its item page, or with its refusals or unchecked
- * reasons, from its cached verdict; a path that names no member is not found.
+ * reasons, from its cached verdict; a path that names no member, or a member whose accepted
+ * document `acceptedItem` does not give as an item, is not found.
  *
  * @param playground The playground.
  * @param corpusPath The document's corpus path, as the request named it.
@@ -1068,16 +1069,21 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
     }
     case "accepted":
     case "accepted-with-unsupported": {
+      const accepted = acceptedItem(verdict);
+      if (Option.isNone(accepted)) {
+        return notFound();
+      }
+
       const instance = crypto.randomUUID();
       remember(playground, instance, {
-        accepted: verdict.accepted,
+        accepted: accepted.value,
         attempts: 0,
         last: Option.none(),
         path: corpusPath,
         record: Option.none(),
       });
 
-      return itemPage(verdict.accepted, { instance, path: corpusPath }, configuration, {
+      return itemPage(accepted.value, { instance, path: corpusPath }, configuration, {
         disabled: false,
         options: {},
         state: "answering",
