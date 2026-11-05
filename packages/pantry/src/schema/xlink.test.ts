@@ -137,13 +137,17 @@ describe("the xlink model", () => {
     }
   });
 
-  it("admits the ten names on every LOM attribute host and on foreign, and nowhere else", () => {
+  it("admits the ten names on every LOM attribute host, xi:include, xi:fallback and foreign, and nowhere else", () => {
     const hosts = new Set(wildcardAttributeAdmission.map((row) => row.kind));
-    const lomAndForeign = [...hosts].filter(
-      (kind) => kind.startsWith("lom:") || kind === "foreign",
+    const admitted = [...hosts].filter(
+      (kind) =>
+        kind.startsWith("lom:") ||
+        kind === "xi:include" ||
+        kind === "xi:fallback" ||
+        kind === "foreign",
     );
-    assert.isAbove(lomAndForeign.length, 1);
-    for (const host of lomAndForeign) {
+    assert.isAbove(admitted.length, 1);
+    for (const host of admitted) {
       for (const name of names) {
         assert.isTrue(
           wildcardAttributeAdmission.some(
@@ -156,9 +160,9 @@ describe("the xlink model", () => {
     const xlinkRows = wildcardAttributeAdmission.filter((row) =>
       row.attribute.startsWith("xlink:"),
     );
-    assert.strictEqual(xlinkRows.length, lomAndForeign.length * names.length);
+    assert.strictEqual(xlinkRows.length, admitted.length * names.length);
     for (const row of xlinkRows) {
-      assert.isTrue(row.kind.startsWith("lom:") || row.kind === "foreign", row.kind);
+      assert.include(admitted, row.kind);
     }
   });
 

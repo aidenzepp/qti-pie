@@ -1324,33 +1324,69 @@ describe.skipIf(!existsSync(cacheDirectory))(
       sameRows("attributeExclusion", seed.attributeExclusion.map(pairKey), expected);
     });
 
-    it("wildcardAttributeAdmission is the four xml names on every attribute wildcard host and foreign, and the ten xlink names on the LOM hosts and foreign", () => {
+    it("wildcardAttributeAdmission is each declared global attribute, xsi apart, on every attribute wildcard host that appears in its set and whose policy admits its namespace", () => {
+      const prefixes: ReadonlyMap<string, string> = new Map(
+        Object.entries(seed.namespaces).map(([prefix, namespace]) => [namespace, prefix]),
+      );
+      const { closures } = derived();
+      // A host appears in the sets whose closures declare it; `xi:include` and `xi:fallback` also
+      // reach a manifest through the wildcard content of its metadata hosts, and `foreign` any set.
+      const setsOf = (kind: string): readonly SetName[] => {
+        if (kind === "foreign") {
+          return sets;
+        }
+
+        const declaring = sets.filter((set) =>
+          closures.some(
+            (closure) => closure.set === set && closure.hosts.some((host) => host.kind === kind),
+          ),
+        );
+
+        return kind.startsWith("xi:")
+          ? [...new Set([...declaring, "manifest" as const])]
+          : declaring;
+      };
+      const refused = new Map<string, Set<string>>();
+
+      for (const row of seed.attributeExclusion) {
+        refused.set(row.host, new Set([...(refused.get(row.host) ?? []), row.namespace]));
+      }
+
       const kinds = [...derivedAttributeRows().map((row) => row.host), "foreign"];
-      const xlinkNames = [
-        "xlink:type",
-        "xlink:href",
-        "xlink:role",
-        "xlink:arcrole",
-        "xlink:title",
-        "xlink:show",
-        "xlink:actuate",
-        "xlink:label",
-        "xlink:from",
-        "xlink:to",
-      ];
+      const expected = kinds.flatMap((kind) => [
+        ...new Set(
+          setsOf(kind).flatMap((set) =>
+            declaredAttributes(set).flatMap((name) => {
+              const [namespace = "", local = ""] = name.split("|");
+
+              return namespace === seed.namespaces.xsi || refused.get(kind)?.has(namespace) === true
+                ? []
+                : [`${kind}|${prefixes.get(namespace)}:${local}`];
+            }),
+          ),
+        ),
+      ]);
 
       sameRows(
         "wildcardAttributeAdmission",
         seed.wildcardAttributeAdmission.map((row) => `${row.kind}|${row.attribute}`),
-        kinds.flatMap((kind) =>
-          [
-            "xml:lang",
-            "xml:base",
-            "xml:space",
-            "xml:id",
-            ...(kind.startsWith("lom:") || kind === "foreign" ? xlinkNames : []),
-          ].map((attribute) => `${kind}|${attribute}`),
-        ),
+        expected,
+      );
+      assert.isTrue(expected.includes("xi:include|xlink:href"));
+      assert.isTrue(expected.includes("xi:fallback|xlink:to"));
+      assert.isTrue(expected.includes("lom:lom|xlink:type"));
+      assert.isTrue(expected.includes("foreign|xlink:href"));
+      // The operator is an ASI host, where only the four `xml` names are declared, and its policy
+      // refuses the ASI namespace: no `xlink` row, and no `xsi` row on any host (R1-7).
+      assert.deepStrictEqual(
+        seed.wildcardAttributeAdmission
+          .filter((row) => row.kind === "qti-custom-operator")
+          .map((row) => row.attribute)
+          .toSorted(),
+        ["xml:base", "xml:id", "xml:lang", "xml:space"],
+      );
+      assert.isFalse(
+        seed.wildcardAttributeAdmission.some((row) => row.attribute.startsWith("xsi:")),
       );
     });
 
