@@ -3,7 +3,9 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Schema } from "effect";
+import { browserSupport } from "#plate/ledger/browser-support.ts";
 import { generateFeatures } from "#plate/ledger/features.ts";
+import type { SessionNote } from "#plate/ledger/passes.ts";
 import { Ledger } from "#plate/ledger/report.ts";
 import { ledgerText } from "#plate/ledger/view.ts";
 import {
@@ -124,6 +126,13 @@ const outputWith = (name: string, text: string): string => {
 };
 
 /**
+ * The fixture session notes: one note on one sitting.
+ */
+const notes: readonly SessionNote[] = [
+  { date: "2026-11-05", owner: "operator", text: "A fixture sitting, step 1 only." },
+];
+
+/**
  * Build the input of one build over the fixtures.
  *
  * @param output The output folder, which holds the fixture report.
@@ -135,6 +144,7 @@ const fixture = (output: string, testExit = 0): LedgerBuild => ({
   conf: fixtureConf,
   exclusions: [],
   features: generateFeatures(fixtureConf),
+  notes,
   output,
   records: [],
   root: scratch,
@@ -226,7 +236,10 @@ describe("scripts/ledger.ts", () => {
 
       assert.deepStrictEqual(written.headlines.basic, honestBasic);
       assert.deepStrictEqual(written, outcome.ledger);
-      assert.strictEqual(readOutput(output, "ledger.txt"), ledgerText(written));
+      assert.strictEqual(
+        readOutput(output, "ledger.txt"),
+        ledgerText(written, browserSupport, notes),
+      );
       assert.deepStrictEqual(
         written.rows
           .find((row) => row.id === "Q-2")
@@ -261,6 +274,25 @@ describe("scripts/ledger.ts", () => {
       assert.include(
         summary(outcome),
         "Basic: 1 covered, 0 excluded, 1 limited, 0 unsupported-with-notice",
+      );
+    }),
+  );
+
+  it.effect("writes the build's session notes into ledger.txt", () =>
+    Effect.gen(function* notedBuild() {
+      const output = outputWith(
+        "notes",
+        report([
+          { fullName: backing, status: "passed" },
+          { fullName: posting, status: "passed" },
+        ]),
+      );
+
+      yield* build(fixture(output));
+
+      assert.include(
+        readOutput(output, "ledger.txt"),
+        "\nSession notes\nDate: 2026-11-05; Owner: operator; Note: A fixture sitting, step 1 only.\n",
       );
     }),
   );

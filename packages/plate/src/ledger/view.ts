@@ -4,7 +4,8 @@
  *
  * The ledger reads by level (Basic, Advanced, Elevated, elective), each opening with its headline,
  * then by family, one table per family with the feature ID as the row header. The `limited` rows
- * are listed again with their sources, then the browser-support note and the session's records.
+ * are listed again with their sources, then the browser-support note, the session's records and
+ * the notes on each sitting.
  * The text and the HTML say the same thing; the HTML is built through `h`, so the serialiser
  * escapes every string, a test title included. The ledger says only that these tests pass over
  * these fixtures, and never claims conformance or certification.
@@ -20,7 +21,8 @@ import type { Element, Node } from "#plate/emit/node.ts";
 import { browserSupport } from "#plate/ledger/browser-support.ts";
 import type { SupportNote } from "#plate/ledger/browser-support.ts";
 import { families, levels } from "#plate/ledger/features.ts";
-import type { PassRecord } from "#plate/ledger/passes.ts";
+import { sessionNotes } from "#plate/ledger/passes.ts";
+import type { PassRecord, ScreenReaderPass, SessionNote } from "#plate/ledger/passes.ts";
 import type {
   InteractionColumns,
   Ledger,
@@ -169,6 +171,16 @@ const recordsCaption = "Session records";
 const noRecords = "No session has been recorded yet.";
 
 /**
+ * The heading of the notes on each sitting, under the records.
+ */
+const notesHeading = "Session notes";
+
+/**
+ * The sentence the notes are while no sitting has a note.
+ */
+const noNotes = "No session note has been recorded yet.";
+
+/**
  * The column headers of the verdict report's table, the row header (the document) first.
  */
 const verdictColumns = ["Document", "Verdict", "Reason", "Unsupported features"] as const;
@@ -261,13 +273,40 @@ const documentsWords = (proof: ProofFile): string => {
 };
 
 /**
+ * Word a record's reader and its version.
+ *
+ * @param record The record.
+ * @returns The reader, then its version when there is one.
+ */
+const readerWords = (record: PassRecord): string =>
+  `${record.reader} ${record.readerVersion}`.trim();
+
+/**
+ * Word a record's browser and its version.
+ *
+ * @param record The record.
+ * @returns The browser, then its version when there is one.
+ */
+const browserWords = (record: PassRecord): string =>
+  `${record.browser} ${record.browserVersion}`.trim();
+
+/**
+ * Word a screen-reader pass's result, date, reader and browser.
+ *
+ * @param pass The pass.
+ * @returns The words, such as `failed on 2026-11-05, VoiceOver 27.2 in Safari 26.1`.
+ */
+const passWords = (pass: ScreenReaderPass): string =>
+  `${pass.result} on ${pass.date}, ${readerWords(pass)} in ${browserWords(pass)}`;
+
+/**
  * Give an interaction row's latest screen-reader pass.
  *
  * @param columns The row's interaction columns, absent on a row that has none.
- * @returns The pass's date, or `none recorded`.
+ * @returns The pass's result beside its date, reader and browser, or `none recorded`.
  */
 const screenReaderWords = (columns: InteractionColumns | undefined): string =>
-  columns?.screenReaderPass?.date ?? "none recorded";
+  columns?.screenReaderPass === undefined ? "none recorded" : passWords(columns.screenReaderPass);
 
 /**
  * Word how an interaction row's keyboard proofs are composed.
@@ -452,7 +491,7 @@ const supportWords = (note: SupportNote): string =>
  * @returns Its cells' words.
  */
 const recordCells = (record: PassRecord): readonly string[] => [
-  `${record.reader} ${record.readerVersion}`.trim(),
+  readerWords(record),
   entryWords[record.kind],
   record.kind === "manual-check" ? record.check : "",
   record.item,
@@ -460,7 +499,7 @@ const recordCells = (record: PassRecord): readonly string[] => [
   record.kind === "manual-check" && record.check === "OD-14 (e)" ? record.control : "",
   record.result,
   record.date,
-  `${record.browser} ${record.browserVersion}`.trim(),
+  browserWords(record),
   record.macosVersion,
   record.kind === "screen-reader-pass" ? record.interactions.join(", ") : "",
   record.notes,
@@ -479,6 +518,15 @@ const recordWords = (record: PassRecord): string =>
     .filter(([, words]) => words !== "")
     .map(([column, words]) => `${column}: ${words}`)
     .join("; ");
+
+/**
+ * Word a note on one sitting: its date, its owner and its text.
+ *
+ * @param note The note.
+ * @returns The line.
+ */
+const noteWords = (note: SessionNote): string =>
+  `Date: ${note.date}; Owner: ${note.owner}; Note: ${note.text}`;
 
 /**
  * Write a list of a row's titles as text lines under a label.
@@ -544,13 +592,15 @@ const rowLines = (row: LedgerRow, family: Family): readonly string[] => {
  *
  * @param ledger The ledger.
  * @param support The browser-support note's rows; `browserSupport` when absent.
+ * @param notes The notes on each sitting; `sessionNotes` when absent.
  * @returns The text: the title and what it says, each level's headline and its rows by family, the
- *   `limited` rows with their sources, the browser-support note and the records, each line ending
- *   in a line feed.
+ *   `limited` rows with their sources, the browser-support note, the records and the notes, each
+ *   line ending in a line feed.
  */
 export const ledgerText = (
   ledger: Ledger,
   support: readonly SupportNote[] = browserSupport,
+  notes: readonly SessionNote[] = sessionNotes,
 ): string => {
   const limited = ledger.rows.filter(isLimited);
 
@@ -577,6 +627,9 @@ export const ledgerText = (
     "",
     "Records",
     ...(ledger.records.length === 0 ? [noRecords] : ledger.records.map(recordWords)),
+    "",
+    notesHeading,
+    ...(notes.length === 0 ? [noNotes] : notes.map(noteWords)),
   ]
     .map((line) => `${line}\n`)
     .join("");
@@ -585,7 +638,7 @@ export const ledgerText = (
 /**
  * Construct the ledger as an HTML tree, a plain page a third party can read: per level its heading,
  * its headline and a table per family, then the `limited` rows with their sources, the
- * browser-support note and the records.
+ * browser-support note, the records and, under its own `h3`, the notes on each sitting.
  *
  * Every table has a caption and column headers (`th scope="col"`), and each row a row header
  * (`th scope="row"`): the feature ID, the feature, or the reader. A proof links to its test file in
@@ -594,11 +647,13 @@ export const ledgerText = (
  *
  * @param ledger The ledger.
  * @param support The browser-support note's rows; `browserSupport` when absent.
+ * @param notes The notes on each sitting; `sessionNotes` when absent.
  * @returns An `article` in `lang="en"`.
  */
 export const ledgerHtml = (
   ledger: Ledger,
   support: readonly SupportNote[] = browserSupport,
+  notes: readonly SessionNote[] = sessionNotes,
 ): Element => {
   const limited = ledger.rows.filter(isLimited);
 
@@ -650,6 +705,14 @@ export const ledgerHtml = (
             }),
           ),
         ]),
+    h("h3", {}, [text(notesHeading)]),
+    notes.length === 0
+      ? h("p", {}, [text(noNotes)])
+      : h(
+          "ul",
+          {},
+          notes.map((note) => h("li", {}, [text(noteWords(note))])),
+        ),
   ]);
 };
 

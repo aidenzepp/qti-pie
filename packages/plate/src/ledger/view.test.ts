@@ -6,7 +6,8 @@ import { h } from "#plate/emit/node.ts";
 import { browserSupport } from "#plate/ledger/browser-support.ts";
 import { claims } from "#plate/ledger/claims.ts";
 import { exclusions, families, features, levels } from "#plate/ledger/features.ts";
-import type { PassRecord } from "#plate/ledger/passes.ts";
+import { sessionNotes } from "#plate/ledger/passes.ts";
+import type { PassRecord, SessionNote } from "#plate/ledger/passes.ts";
 import { ledger } from "#plate/ledger/report.ts";
 import type { TestResult } from "#plate/ledger/report.ts";
 import { ledgerHtml, ledgerText, verdictLines, verdictTable } from "#plate/ledger/view.ts";
@@ -143,17 +144,74 @@ const records: readonly PassRecord[] = [
 ];
 
 /**
- * The fixture ledger, derived by the reporter from the real features file, exclusions and claims.
+ * The reporter's inputs every fixture ledger shares: the real features file, exclusions and
+ * claims, beside the fixture results and sources.
  */
-const fixture = ledger({
+const inputs = {
   claims,
   corpus: new Set([bg007]),
   exclusions,
   features,
-  records,
   results,
   sources: new Map([["src/validate/open.test.ts", `const location = "${bg007}";`]]),
-});
+};
+
+/**
+ * The fixture ledger, derived by the reporter from the real features file, exclusions and claims.
+ */
+const fixture = ledger({ ...inputs, records });
+
+/**
+ * The fixture records of one sitting, as the first one ran: an Extended Text pass that passed and,
+ * recorded later the same day, one that failed, and a Text Entry pass the sitting left open.
+ */
+const sitting: readonly PassRecord[] = [
+  {
+    ...recorded,
+    date: "2026-11-05",
+    interactions: ["Q-5"],
+    javascript: "on",
+    kind: "screen-reader-pass",
+    result: "passed",
+  },
+  {
+    ...recorded,
+    date: "2026-11-05",
+    interactions: ["Q-5"],
+    javascript: "on",
+    kind: "screen-reader-pass",
+    result: "failed",
+  },
+  {
+    ...recorded,
+    date: "2026-11-05",
+    interactions: ["Q-20"],
+    javascript: "on",
+    kind: "screen-reader-pass",
+    result: "not-observed",
+  },
+];
+
+/**
+ * The fixture ledger over {@link sitting}.
+ */
+const sittingLedger = ledger({ ...inputs, records: sitting });
+
+/**
+ * The fixture session notes: two sittings, the second note holding markup.
+ */
+const notes: readonly SessionNote[] = [
+  { date: "2026-11-05", owner: "operator", text: "JavaScript was left on throughout." },
+  { date: "2026-11-06", owner: "overseer", text: "<b>Step 2</b> follows." },
+];
+
+/**
+ * The lines the view gives {@link notes}, in text and in the HTML's list.
+ */
+const noteLines = [
+  "Date: 2026-11-05; Owner: operator; Note: JavaScript was left on throughout.",
+  "Date: 2026-11-06; Owner: overseer; Note: <b>Step 2</b> follows.",
+] as const;
 
 /**
  * Every element below a node, in document order.
@@ -231,6 +289,44 @@ const cellOf = (root: Element, id: string, column: string): Element => {
   assert.isDefined(cell, `${id} ${column}`);
 
   return cell;
+};
+
+/**
+ * Read one field of a row in the ledger's text: the line under the row's ID and name that starts
+ * with the field's label.
+ *
+ * @param text The ledger's text.
+ * @param id The feature ID.
+ * @param label The field's label, such as `Screen-reader pass`.
+ * @returns The field's words, `undefined` when the row has no such field.
+ */
+const rowField = (text: string, id: string, label: string): string | undefined => {
+  const lines = text.split("\n");
+  const block = lines.slice(lines.findIndex((line) => line.startsWith(`${id} `)) + 1);
+  const end = block.findIndex((line) => !line.startsWith(" "));
+  const prefix = `  ${label}: `;
+
+  return (end === -1 ? block : block.slice(0, end))
+    .find((line) => line.startsWith(prefix))
+    ?.slice(prefix.length);
+};
+
+/**
+ * Find the element that follows a heading among a tree's children.
+ *
+ * @param root The tree.
+ * @param heading The heading's text.
+ * @returns The element after it.
+ */
+const afterHeading = (root: Element, heading: string): Element => {
+  const children = childElements(root);
+  const index = children.findIndex((child) => textOf(child) === heading);
+  assert.notStrictEqual(index, -1, heading);
+
+  const next = children[index + 1];
+  assert.isDefined(next, heading);
+
+  return next;
 };
 
 /**
@@ -408,7 +504,10 @@ describe("ledger/view.ts", () => {
       "interactions/choice.ts [Q-2] [keyboard] a Choice completes by keyboard",
       "dev/page.ts [Q-2] [keyboard] BG007 completes in the playground",
     ]);
-    assert.strictEqual(textOf(cellOf(tree, "Q-2", "Screen-reader pass")), "2026-11-05");
+    assert.strictEqual(
+      textOf(cellOf(tree, "Q-2", "Screen-reader pass")),
+      "passed on 2026-11-05, VoiceOver 27.2 in Safari 26.1",
+    );
     assert.strictEqual(textOf(cellOf(tree, "Q-5", "Screen-reader pass")), "none recorded");
     assert.strictEqual(
       textOf(cellOf(tree, "Q-2", "Composition")),
@@ -420,6 +519,60 @@ describe("ledger/view.ts", () => {
         .find((row) => textOf(row.get("ID") ?? h("th", {})) === "I-7")
         ?.get("Keyboard"),
     );
+  });
+
+  it("shows a failed latest screen-reader pass as failed, beside its date, reader and browser", () => {
+    const failed = "failed on 2026-11-05, VoiceOver 27.2 in Safari 26.1";
+
+    assert.strictEqual(
+      textOf(cellOf(ledgerHtml(sittingLedger), "Q-5", "Screen-reader pass")),
+      failed,
+    );
+    assert.strictEqual(rowField(ledgerText(sittingLedger), "Q-5", "Screen-reader pass"), failed);
+  });
+
+  it("shows none recorded for an interaction whose only screen-reader pass is not-observed", () => {
+    assert.strictEqual(
+      textOf(cellOf(ledgerHtml(sittingLedger), "Q-20", "Screen-reader pass")),
+      "none recorded",
+    );
+    assert.strictEqual(
+      rowField(ledgerText(sittingLedger), "Q-20", "Screen-reader pass"),
+      "none recorded",
+    );
+  });
+
+  it("lists the session notes, each with its date and owner, after the records", () => {
+    const tree = ledgerHtml(fixture, browserSupport, notes);
+    const text = ledgerText(fixture, browserSupport, notes);
+    const list = afterHeading(tree, "Session notes");
+
+    assert.deepStrictEqual(
+      childElements(tree)
+        .filter((child) => child.tag === "h3")
+        .map(textOf),
+      ["Session notes"],
+    );
+    assert.strictEqual(list.tag, "ul");
+    assert.deepStrictEqual(byTag(list, "li").map(textOf), [...noteLines]);
+    assert.include(text, `\n\nSession notes\n${noteLines.join("\n")}\n`);
+    assert.isAbove(text.indexOf("Session notes"), text.indexOf("Records\n"));
+    assert.include(toHtml(tree), "&lt;b&gt;Step 2&lt;/b&gt; follows.");
+  });
+
+  it("lists the recorded session notes when none are given, and says so when there are none", () => {
+    const sentence = "No session note has been recorded yet.";
+
+    assert.strictEqual(
+      toHtml(ledgerHtml(fixture)),
+      toHtml(ledgerHtml(fixture, browserSupport, sessionNotes)),
+    );
+    assert.strictEqual(ledgerText(fixture), ledgerText(fixture, browserSupport, sessionNotes));
+    assert.strictEqual(
+      textOf(afterHeading(ledgerHtml(fixture, browserSupport, []), "Session notes")),
+      sentence,
+    );
+    assert.include(ledgerText(fixture, browserSupport, []), `Session notes\n${sentence}\n`);
   });
 
   it("says no Baseline-low feature is used while the browser-support note is empty", () => {
@@ -509,6 +662,13 @@ describe("ledger/view.ts", () => {
       assert.include(view, "these tests pass over these fixtures");
       assert.notMatch(view, /conformant|certified/iu);
     }
+  });
+
+  it("round-trips and passes checkTree with a failed pass and session notes", () => {
+    const tree = ledgerHtml(sittingLedger, browserSupport, notes);
+
+    assert.isTrue(roundTrips(tree));
+    assert.deepStrictEqual(checkTree(tree, { baseLevel: 1 }), []);
   });
 
   it("round-trips, passes checkTree, and gives every table a caption and header cells", () => {
