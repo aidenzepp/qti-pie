@@ -76,10 +76,11 @@ const leafPairs: readonly string[] = Object.entries(mathmlInventory).flatMap(([k
 );
 
 /**
- * The names a new family, roster or contract may not reuse: every relation `Qti` declares, which
- * includes the rosters it holds, and every name `content/rosters.ts` exports.
+ * Every name `Qti` declares as a relation, which includes the rosters it holds, and every name
+ * `content/rosters.ts` exports. Once the MathML additions join them, this holds those additions
+ * too, so the collision check subtracts the names MathML itself declares.
  */
-const existingNames: ReadonlySet<string> = new Set([
+const declaredNames: ReadonlySet<string> = new Set([
   ...Object.keys(Qti.relations),
   ...Object.keys(rosters),
 ]);
@@ -160,6 +161,11 @@ describe("the MathML attribute families", () => {
     assert.isFalse(routed.includes(pairKey("m:maction", "actiontype")));
   });
 
+  /**
+   * "Existing" means the names the schema had without MathML: the declared names minus the ones
+   * this case's `added` list declares, so the check keeps failing for a real collision once the
+   * rosters (p6-11) and the arms (p6-21) join `Qti.relations`.
+   */
   it("keep the arm, relation, roster and contract names pairwise distinct from the existing names", () => {
     const arms = Object.keys(mathmlInventory).map((handle) => `Mathml${pascal(handle.slice(2))}`);
     const rosterNames = [...rosterFamilies.map((family) => family.valueType), "MathmlValueType"];
@@ -180,6 +186,13 @@ describe("the MathML attribute families", () => {
     ];
 
     assert.strictEqual(new Set(added).size, added.length);
+
+    for (const name of rosterNames) {
+      assert.isTrue(declaredNames.has(name), `${name} is declared by rosters.ts`);
+    }
+
+    const addedNames = new Set(added);
+    const existingNames = new Set([...declaredNames].filter((name) => !addedNames.has(name)));
 
     for (const name of added) {
       assert.isFalse(existingNames.has(name), `${name} is not an existing declared name`);
