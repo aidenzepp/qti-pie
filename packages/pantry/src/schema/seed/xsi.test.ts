@@ -80,6 +80,10 @@ interface Derived {
    */
   readonly roots: readonly Declared[];
   /**
+   * The paths of the anonymous simple types that element declarations hold.
+   */
+  readonly simpleOfElements: readonly string[];
+  /**
    * The derivation, attribute uses and simple facets of the named types.
    */
   readonly types: TypeTables;
@@ -103,6 +107,7 @@ const deriveClosure = (
 ): Derived => {
   const index = indexOf(schemas);
   const anonymous = new Map<string, Definition>();
+  const elementSimple = new Map<string, { element: Element; schema: Schema }>();
   const containerOf = (namespace: string, local: string) => `${codeOf(namespace)}:${local}`;
   const typeKeyOf = (declaration: Element, schema: Schema, path: string): TypeKey => {
     const typeName = attributeOf(declaration, "type");
@@ -121,7 +126,15 @@ const deriveClosure = (
       return { local: "anyType", namespace: XS };
     }
 
-    if (isXs(inline, "complexType")) {
+    if (isXs(inline, "simpleType")) {
+      const known = elementSimple.get(path);
+
+      assert.isTrue(
+        known === undefined || known.element === inline,
+        `${schema.file} holds two anonymous simple types at ${path}`,
+      );
+      elementSimple.set(path, { element: inline, schema });
+    } else {
       const known = anonymous.get(path);
 
       assert.isTrue(
@@ -252,7 +265,13 @@ const deriveClosure = (
     pending = [...anonymous.keys()].filter((path) => !done.has(path));
   }
 
-  return { children, named: index.typeNames, roots, types: deriveTypeTables(index, codeOf) };
+  return {
+    children,
+    named: index.typeNames,
+    roots,
+    simpleOfElements: [...elementSimple.keys()],
+    types: deriveTypeTables(index, codeOf, elementSimple),
+  };
 };
 
 /**
@@ -1063,6 +1082,13 @@ describe.skipIf(!cacheAvailable)(
               .map((row) => keyText(row.attributeType)),
             ...seed.globalAttributeType.filter(here).map((row) => keyText(row.type)),
           ]);
+          const elementSimple = derivedOf(set, version).simpleOfElements.map((path) => `!${path}`);
+
+          for (const key of elementSimple) {
+            assert.isTrue(rows.has(key), `${set} ${version}: ${key} has no typeDerivation row`);
+            attributeTypes.add(key);
+          }
+
           const terminals = new Set<string>();
 
           for (const key of attributeTypes) {
