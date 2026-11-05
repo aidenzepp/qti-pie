@@ -1324,16 +1324,32 @@ describe.skipIf(!existsSync(cacheDirectory))(
       sameRows("attributeExclusion", seed.attributeExclusion.map(pairKey), expected);
     });
 
-    it("wildcardAttributeAdmission is xml:lang, xml:base, xml:space and xml:id on every attribute wildcard host and foreign", () => {
+    it("wildcardAttributeAdmission is the four xml names on every attribute wildcard host and foreign, and the ten xlink names on the LOM hosts and foreign", () => {
       const kinds = [...derivedAttributeRows().map((row) => row.host), "foreign"];
+      const xlinkNames = [
+        "xlink:type",
+        "xlink:href",
+        "xlink:role",
+        "xlink:arcrole",
+        "xlink:title",
+        "xlink:show",
+        "xlink:actuate",
+        "xlink:label",
+        "xlink:from",
+        "xlink:to",
+      ];
 
       sameRows(
         "wildcardAttributeAdmission",
         seed.wildcardAttributeAdmission.map((row) => `${row.kind}|${row.attribute}`),
         kinds.flatMap((kind) =>
-          ["xml:lang", "xml:base", "xml:space", "xml:id"].map(
-            (attribute) => `${kind}|${attribute}`,
-          ),
+          [
+            "xml:lang",
+            "xml:base",
+            "xml:space",
+            "xml:id",
+            ...(kind.startsWith("lom:") || kind === "foreign" ? xlinkNames : []),
+          ].map((attribute) => `${kind}|${attribute}`),
         ),
       );
     });
