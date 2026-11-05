@@ -168,7 +168,8 @@ export const InteractionColumns = Schema.Struct({
 
 /**
  * The columns only an interaction (Q) row has: how its keyboard proofs are composed, their titles,
- * and the latest screen-reader pass that covered it, absent when none is recorded.
+ * and the latest screen-reader pass that covered it, `passed` or `failed`, absent when none is
+ * recorded. An open entry, `not-observed`, is never that pass.
  */
 export type InteractionColumns = typeof InteractionColumns.Type;
 
@@ -394,10 +395,14 @@ const proofsOf = (
 /**
  * Find the latest recorded screen-reader pass that covered an interaction.
  *
+ * Only a pass that ran counts: an open entry, `not-observed`, records a check a sitting left for a
+ * later one, so it never replaces a `passed` or `failed` pass, and an interaction whose only
+ * entries are open has no pass.
+ *
  * @param id The interaction's feature ID.
  * @param records The records.
- * @returns The pass with the latest date; of two on one date, the one recorded later. `undefined`
- *   when none covered it.
+ * @returns The `passed` or `failed` pass with the latest date; of two on one date, the one recorded
+ *   later. `undefined` when none that ran covered it.
  */
 const latestPass = (id: string, records: readonly PassRecord[]): ScreenReaderPass | undefined => {
   let latest: ScreenReaderPass | undefined;
@@ -405,6 +410,7 @@ const latestPass = (id: string, records: readonly PassRecord[]): ScreenReaderPas
   for (const record of records) {
     if (
       record.kind === "screen-reader-pass" &&
+      record.result !== "not-observed" &&
       record.interactions.includes(id) &&
       (latest === undefined || Date.parse(record.date) >= Date.parse(latest.date))
     ) {
@@ -450,7 +456,7 @@ const interactionColumns = (
  * yes when a proof lives under `src/validate/`; Renders when one lives under `src/emit/` or
  * `src/interactions/`, in `src/render.test.ts`, `src/vertical.test.ts` or `src/witness.test.ts`, or
  * in a sweep. An interaction (Q) row also lists its keyboard proofs, their composition and its
- * latest screen-reader pass.
+ * latest screen-reader pass that ran.
  *
  * @param input The features, exclusions, claims, records, results, sources and corpus.
  * @returns Each level's headline, the records, and one row per feature in the features file's
