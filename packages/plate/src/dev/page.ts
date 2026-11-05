@@ -103,15 +103,28 @@ export interface PlaygroundSettings {
 const sessionLimit = 100;
 
 /**
- * The headers of every HTML page (`work/planning/mind/od14-decisions.md`, rule `723e580c`): no
- * script and no `'unsafe-inline'` in any directive, posts only to this origin, and no caching.
- * The stylesheets and the theme box's redirect carry them too, a stylesheet with its own type.
+ * The headers of every HTML page (rule `723e580c`): no script and no `'unsafe-inline'` in any
+ * directive, posts only to this origin, and no caching. The stylesheets and the theme box's
+ * redirect carry them too, a stylesheet with its own type. The policy stands behind `check`'s URL
+ * pass: it refuses by default and allows only what a rendered item loads, so markup the pass let
+ * through still cannot run script or post to another origin.
  *
  * `object-src 'self'` lets an item's `object` load a package document from `/assets/`.
  * `frame-src 'self'` is there for Chromium, which also checks the document an `object` loads
- * into its nested browsing context against `frame-src` (then `child-src`, then `default-src`);
- * WebKit and Firefox check `object-src` alone (`docs/research/1909bcff.md`). The nested document
- * is sandboxed by its own header ({@link assetHeaders}), not by this policy.
+ * into its nested browsing context against `frame-src` (then `child-src`, then `default-src`).
+ * WebKit and Firefox check `object-src` alone, as CSP Level 3 says: an `object`'s requests,
+ * the navigation of its nested browsing context included, fall under `object-src`, whose fallback
+ * list holds neither `frame-src` nor `child-src`. The nested document is sandboxed by its own
+ * header ({@link assetHeaders}), not by this policy.
+ *
+ * @see https://w3c.github.io/webappsec-csp/#directive-object-src (CSP Level 3, object-src, its note)
+ * @see https://w3c.github.io/webappsec-csp/#effective-directive-for-a-request (object, embed: object-src)
+ * @see https://w3c.github.io/webappsec-csp/#directive-fallback-list (object-src falls back to default-src only)
+ * @see https://github.com/WebKit/WebKit/commit/fb743bfbe7abba7c7553bf73eef0ba6d3d1cf1c4 (WebKit: the nested browsing context of an object or embed respects object-src)
+ * @see https://github.com/WebKit/WebKit/blob/5e62f67e97ebccc9da92e1ab166cfe640767dea4/LayoutTests/http/tests/security/contentSecurityPolicy/object-src-allows-object-blocked-by-frame-src.html (WebKit's test: object-src 'self' with frame-src 'none' loads the document)
+ * @see https://github.com/chromium/chromium/blob/3cb88deaf2150d76f4c414a90862f07440a404cc/content/browser/renderer_host/navigation_request.cc#L8405-L8423 (Chromium checks frame-src on every child navigation, an object's included)
+ * @see https://github.com/chromium/chromium/blob/3cb88deaf2150d76f4c414a90862f07440a404cc/services/network/public/cpp/content_security_policy/content_security_policy.cc#L1281-L1308 (Chromium's frame-src falls back to child-src, then default-src)
+ * @see https://github.com/mozilla-firefox/firefox/blob/935e9f7e39fcb9d738d3ac064905dcf4cc0c9cfc/dom/security/nsCSPUtils.cpp#L385-L388 (Firefox maps an object's load to object-src)
  */
 const pageHeaders = {
   "cache-control": "no-store",
@@ -520,7 +533,9 @@ const joinedSegments = (segments: readonly string[]): Option.Option<string> =>
  *
  * A segment that decodes to a separator or a dot segment (`..%2Fx`, `%2e%2e%2f`) is refused, so
  * the decoded path holds exactly the directories the request path names and cannot climb out of
- * the directory an item's asset base names (`work/planning/mind/od14-decisions.md`).
+ * the directory an item's asset base names. `check`'s URL pass leaves such a segment literal in the
+ * URL it writes, inside the package as a URL (rule `723e580c`), so the route that serves package
+ * files must decode it and refuse a climb.
  *
  * @param pathname The request path, still percent-encoded.
  * @returns The corpus path, or none when a segment does not decode or is refused.

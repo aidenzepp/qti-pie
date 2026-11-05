@@ -66,8 +66,8 @@ const playground = (settings: Pick<PlaygroundSettings, "configuration"> = {}): H
   createHandler({ ...settings, verdicts });
 
 /**
- * The headers every page carries, exactly (`work/planning/mind/od14-decisions.md`, rule
- * `723e580c`).
+ * The headers every page carries, exactly (rule `723e580c`); `pageHeaders` in
+ * `#plate/dev/page.ts` gives the reason for each directive.
  */
 const pageHeaders = {
   "cache-control": "no-store",
