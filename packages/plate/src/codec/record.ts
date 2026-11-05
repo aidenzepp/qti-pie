@@ -2,21 +2,28 @@
  * The Schema codec of the session record, for the server and the boundaries:
  * {@link ItemRecordSchema} checks the plain {@link ItemRecord} of `#plate/model/record.ts`,
  * {@link encodeRecord} writes it in the form the host stores, and {@link decodeRecord} checks one
- * the host hands back before the renderer trusts it.
+ * the host hands back before the renderer trusts it. The stored form names its version,
+ * {@link storedVersion}, and only that version is read, so a change to the form shows as another
+ * version rather than as a record that half fits.
  *
  * No browser module imports this file, so Schema stays out of the browser bundle.
  *
  * @module
  */
-import { Data, Result, Schema } from "effect";
+import { Data, Formatter, Option, Result, Schema, SchemaTransformation } from "effect";
 import { ValueSchema } from "#plate/codec/values.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 
 /**
- * The Schema of one item's session; its type is {@link ItemRecord}, and its encoded form the
- * {@link StoredRecord} the host keeps.
+ * The version of every stored form this renderer writes, the session record's and the test
+ * session's, and the only version it reads.
  */
-export const ItemRecordSchema = Schema.Struct({
+export const storedVersion = 1;
+
+/**
+ * The fields of one item's session, as {@link ItemRecord} has them.
+ */
+const recordFields = {
   attempt: Schema.Literals(["none", "submitted"]),
   document: Schema.String,
   instance: Schema.String,
@@ -26,15 +33,80 @@ export const ItemRecordSchema = Schema.Struct({
   numAttempts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   outcomes: Schema.Record(Schema.String, ValueSchema),
   responses: Schema.Record(Schema.String, ValueSchema),
-});
+};
 
 /**
- * One item's session in the form the host stores: JSON-safe data, with every integer written as
- * its decimal digits, so no integer is rounded on the way through the host, and the floats JSON has
- * no number for written by name: the infinities as `"INF"` and `"-INF"`, NaN as `"NaN"` and
- * negative zero as `"-0"`.
+ * The Schema of one item's session; its type is {@link ItemRecord}, and its encoded form the
+ * {@link StoredRecord} the host keeps, which adds `version`. Encoding writes {@link storedVersion}
+ * and decoding requires it, so the plain record carries no version.
+ */
+export const ItemRecordSchema = Schema.Struct({
+  ...recordFields,
+  version: Schema.Literal(storedVersion),
+}).pipe(
+  Schema.decodeTo(
+    Schema.toType(Schema.Struct(recordFields)),
+    SchemaTransformation.transform({
+      decode: ({ version: _stored, ...record }) => record,
+      encode: (record) => ({ ...record, version: storedVersion }),
+    }),
+  ),
+);
+
+/**
+ * One item's session in the form the host stores: JSON-safe data that names its version, `1`,
+ * with every integer written as its decimal digits, so no integer is rounded on the way through
+ * the host, and the floats JSON has no number for written by name: the infinities as `"INF"` and
+ * `"-INF"`, NaN as `"NaN"` and negative zero as `"-0"`.
  */
 export type StoredRecord = typeof ItemRecordSchema.Encoded;
+
+/**
+ * The part of a stored form read before the rest: its `version`, none when it names none.
+ */
+const Versioned = Schema.Struct({ version: Schema.OptionFromOptionalKey(Schema.Unknown) });
+
+/**
+ * Read a stored form's `version`.
+ */
+const readVersioned = Schema.decodeUnknownOption(Versioned);
+
+/**
+ * Read the version a stored form names.
+ *
+ * @param input The stored form, as the host handed it back.
+ * @returns The value `input` holds under `version`, or none when `input` is not an object or has
+ *   no `version`.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- The host hands the stored form back as any value, and this reads it before any other Schema does.
+export const versionOf = (input: unknown): Option.Option<unknown> =>
+  Option.flatMap(readVersioned(input), ({ version }) => version);
+
+/**
+ * Check the version a stored form names before its Schema reads the rest, so a form of another
+ * version is refused as that version rather than for the first field that changed.
+ *
+ * @param input The stored form, as the host handed it back.
+ * @returns What is wrong, in words naming the version found, when `input` is an object whose
+ *   `version` is missing or is not {@link storedVersion}; none when it is {@link storedVersion},
+ *   or when `input` is not an object, which its Schema refuses.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- The host hands the stored form back as any value, and this is the first check that parses it.
+export const versionIssue = (input: unknown): Option.Option<string> =>
+  Option.flatMap(readVersioned(input), ({ version }) =>
+    Option.match(version, {
+      onNone: () =>
+        Option.some(
+          `it names no version, and this renderer reads only version ${String(storedVersion)}`,
+        ),
+      onSome: (found) =>
+        found === storedVersion
+          ? Option.none()
+          : Option.some(
+              `it is version ${Formatter.format(found)}, and this renderer reads only version ${String(storedVersion)}`,
+            ),
+    }),
+  );
 
 /**
  * Where the record codec failed: reading a record the host handed back, or writing one the
@@ -94,12 +166,18 @@ export const encodeRecord = (record: ItemRecord): Result.Result<StoredRecord, In
  *
  * @param input The stored record, as the host returned it: the {@link StoredRecord}
  *   {@link encodeRecord} wrote, after any JSON round trip. An integer written as a JSON number is
- *   refused.
- * @returns The record, or {@link InvalidRecord} at stage `decode` naming what does not fit.
+ *   refused, and so is a record that names no version or another version than
+ *   {@link storedVersion}.
+ * @returns The record, or {@link InvalidRecord} at stage `decode` naming what does not fit, the
+ *   version found when that is what does not fit.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The host stores the record and hands it back as any value, and this is the check that parses it.
 export const decodeRecord = (input: unknown): Result.Result<ItemRecord, InvalidRecord> =>
-  Result.mapError(
-    Schema.decodeUnknownResult(ItemRecordSchema)(input),
-    (schemaError) => new InvalidRecord({ issue: schemaError.message, stage: "decode" }),
-  );
+  Option.match(versionIssue(input), {
+    onNone: () =>
+      Result.mapError(
+        Schema.decodeUnknownResult(ItemRecordSchema)(input),
+        (schemaError) => new InvalidRecord({ issue: schemaError.message, stage: "decode" }),
+      ),
+    onSome: (issue) => Result.fail(new InvalidRecord({ issue, stage: "decode" })),
+  });
