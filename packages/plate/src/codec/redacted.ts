@@ -93,6 +93,7 @@ interface TextEntryInteractionJson {
   readonly expectedLength?: string;
   readonly kind: "text-entry";
   readonly path: string;
+  readonly patternMask?: string;
   readonly patternMaskMessage?: string;
   readonly placeholder?: string;
   readonly response: string;
@@ -171,6 +172,7 @@ const textControlFields = {
   class: Schema.String,
   expectedLength: OptionalCount,
   path: Schema.String,
+  patternMask: OptionalText,
   patternMaskMessage: OptionalText,
   placeholder: OptionalText,
   response: Schema.String,
@@ -209,7 +211,7 @@ const BodyNodeSchema = Schema.Union([
   Schema.Struct({
     ...textControlFields,
     expectedLines: OptionalCount,
-    format: Schema.Literals(["plain", "preformatted"]),
+    format: Schema.Literals(["plain", "preformatted", "xhtml"]),
     kind: Schema.Literal("extended-text"),
     prompt: Schema.OptionFromOptionalKey(BodyNodes),
   }),

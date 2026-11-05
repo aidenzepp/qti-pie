@@ -249,7 +249,7 @@ export interface TextEntryPayload extends TextControlPayload {
  */
 export interface ExtendedTextPayload extends TextControlPayload {
   readonly expectedLines: Option.Option<bigint>;
-  readonly format: "plain" | "preformatted";
+  readonly format: ExtendedTextInteraction["format"];
   readonly kind: "extended-text";
   readonly prompt: Option.Option<readonly PayloadNode[]>;
 }

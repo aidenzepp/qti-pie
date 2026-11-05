@@ -147,7 +147,7 @@ const choice: ChoiceInteraction = {
 };
 
 /**
- * A Text Entry for an integer, with an `expected-length`, a placeholder and a pattern-mask
+ * A Text Entry for an integer, with an `expected-length`, a placeholder, a `pattern-mask` and its
  * message.
  */
 const year: TextEntryInteraction = {
@@ -159,6 +159,7 @@ const year: TextEntryInteraction = {
   expectedLength: Option.some(4n),
   kind: "text-entry",
   path: "qti-assessment-item/qti-item-body/p/qti-text-entry-interaction",
+  patternMask: Option.some("[0-9]{4}"),
   patternMaskMessage: Option.some("Write the year in four digits."),
   placeholder: Option.some("YYYY"),
   response: "YEAR",
@@ -178,6 +179,7 @@ const essay: ExtendedTextInteraction = {
   format: "plain",
   kind: "extended-text",
   path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
+  patternMask: Option.none(),
   patternMaskMessage: Option.none(),
   placeholder: Option.none(),
   prompt: Option.some([words("Describe the water cycle.")]),
@@ -453,6 +455,74 @@ describe("encodeRedacted and decodeRedacted", () => {
     assert.notInclude(choiceText, '"max":');
     assert.notInclude(wireText(yearItem), '"lang":');
   });
+});
+
+/**
+ * An item document whose body holds one text interaction bound to a single string `RESPONSE`.
+ *
+ * @param body The body's markup.
+ * @returns The document's bytes.
+ */
+const textItemBytes = (body: string): Uint8Array =>
+  new TextEncoder().encode(
+    `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="text" title="Text" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="string"/><qti-item-body>${body}</qti-item-body></qti-assessment-item>`,
+  );
+
+describe('the verdict and the codec on pattern-mask and format="xhtml"', () => {
+  const documents = [
+    [
+      '[Q-20] a Text Entry with pattern-mask="[0-9]+"',
+      '<p>Code: <qti-text-entry-interaction response-identifier="RESPONSE" pattern-mask="[0-9]+"/></p>',
+      [],
+    ],
+    [
+      '[Q-20] a Text Entry whose pattern-mask="[0-9" the translator refuses',
+      '<p>Code: <qti-text-entry-interaction response-identifier="RESPONSE" pattern-mask="[0-9"/></p>',
+      ["pattern-mask"],
+    ],
+    [
+      '[Q-5] an Extended Text with format="xhtml"',
+      '<qti-extended-text-interaction response-identifier="RESPONSE" format="xhtml"/>',
+      [],
+    ],
+  ] as const;
+
+  for (const [name, body, unsupported] of documents) {
+    it.effect(
+      `${name}: is accepted, naming only ${JSON.stringify(unsupported)} unsupported, and round-trips through JSON text`,
+      () =>
+        Effect.gen(function* acceptedAndRoundTripped() {
+          const verdict = yield* open("items/text.xml", textItemBytes(body));
+          const accepted =
+            verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
+              ? verdict.accepted
+              : assert.fail(`${name} is ${verdict.verdict}`);
+
+          assert.strictEqual(
+            verdict.verdict,
+            unsupported.length === 0 ? "accepted" : "accepted-with-unsupported",
+          );
+          assert.deepStrictEqual(
+            accepted.unsupported.map((entry) => entry.feature),
+            [...unsupported],
+          );
+
+          const redacted = redact(accepted);
+          // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
+          const handedOver: unknown = JSON.parse(
+            JSON.stringify(Result.getOrThrow(encodeRedacted(redacted))),
+          );
+          const decoded = Result.getOrThrow(decodeRedacted(handedOver));
+          const configuration = yield* defaults;
+
+          assert.deepStrictEqual(decoded, redacted);
+          assert.strictEqual(
+            Result.getOrThrow(render(decoded, configuration, { instance })).html,
+            Result.getOrThrow(render(redacted, configuration, { instance })).html,
+          );
+        }),
+    );
+  }
 });
 
 describe("decodeRedacted", () => {

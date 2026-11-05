@@ -59,6 +59,7 @@ const city: TextEntryInteraction = {
   expectedLength: Option.some(12n),
   kind: "text-entry",
   path: `${paragraphPath}/qti-text-entry-interaction`,
+  patternMask: Option.none(),
   patternMaskMessage: Option.none(),
   placeholder: Option.some("A city"),
   response,

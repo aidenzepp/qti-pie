@@ -30,6 +30,7 @@ const en = {
   malformedSingleMany: "Enter one answer.",
   notAccepted: "Not accepted",
   notice: "Not supported here: {feature}",
+  patternMismatch: "Enter an answer in the form this question asks for.",
   responseRecorded: "Response recorded",
   score: "Score: {score}",
   scored: "Scored",
@@ -56,7 +57,7 @@ type Placeholders<Text extends string> = Text extends `${string}{${infer Name}}$
  *
  * Each value is text as the candidate reads it: a number arrives already formatted for the locale,
  * and `notice`'s `feature` is the feature key in QTI's own spelling (an element name,
- * `pattern-mask`, `format="xhtml"`).
+ * `pattern-mask`, `cardinality="record"`).
  */
 export type MessageParams<Key extends MessageKey> = Readonly<
   Record<Placeholders<(typeof en)[Key]>, string>
