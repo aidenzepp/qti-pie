@@ -101,8 +101,19 @@ const masked: ExtendedTextInteraction = {
 };
 
 /**
- * Construct an item whose body is the given Extended Texts, each bound to a single response of its
- * base type, with no response processing.
+ * The essay bound to an `ordered` response of at most three strings, so it renders three Controls
+ * in a group its Prompt names.
+ */
+const rivers: ExtendedTextInteraction = {
+  ...essay,
+  cardinality: "ordered",
+  maxStrings: Option.some(3n),
+  prompt: Option.some([words("Name three rivers.")]),
+};
+
+/**
+ * Construct an item whose body is the given Extended Texts, each bound to a response of its base
+ * type and cardinality, with no response processing.
  *
  * @param interactions The Extended Texts, in body order.
  * @returns The item.
@@ -120,7 +131,7 @@ const itemOf = (...interactions: readonly ExtendedTextInteraction[]): Item => ({
       {
         areaMapping: Option.none(),
         baseType: interaction.baseType,
-        cardinality: "single",
+        cardinality: interaction.cardinality,
         correct: Option.none(),
         defaultValue: Option.none(),
         identifier: interaction.response,
@@ -288,7 +299,7 @@ const onePart = (tree: Element, part: PartOf<"extended-text-interaction">): Elem
 
 /**
  * Decode the entries posted for an Extended Text as its caller does, under the default entry name,
- * as a single value of the interaction's base type.
+ * as a value of the interaction's base type and cardinality.
  *
  * @param interaction The Extended Text.
  * @param entries The posted entries.
@@ -302,7 +313,7 @@ const decoded = (
     Result.merge(
       decode(entries, {
         baseType: interaction.baseType,
-        cardinality: "single",
+        cardinality: interaction.cardinality,
         name: entryName(instance, interaction.response),
       }),
     ),
@@ -707,6 +718,329 @@ describe("validateExtendedText", () => {
         assert.deepStrictEqual(validateExtendedText(essay, file, configuration), [
           { response, text: message("en", "malformedFile") },
         ]);
+      }),
+  );
+});
+
+/**
+ * Give the accessible name of each Control of an Extended Text, in document order.
+ *
+ * @param root The Extended Text Root.
+ * @param tree The tree the Root stands in, which `aria-labelledby` resolves against.
+ * @returns The Controls' names.
+ */
+const controlNames = (root: Element, tree: Element): readonly string[] =>
+  partsIn(root, "control").map((control) => nameOf(control, tree));
+
+/**
+ * The renderer's names for the Controls of an Extended Text that holds several.
+ *
+ * @param count How many Controls it holds.
+ * @returns "Answer n of count" for each, in order.
+ */
+const answersOf = (count: number): readonly string[] =>
+  Array.from({ length: count }, (_, index) =>
+    message("en", "answerOf", { count: String(count), n: String(index + 1) }),
+  );
+
+/**
+ * Construct the entries a form posts for the first Extended Text, one per text, in order.
+ *
+ * @param texts The texts, one per Control.
+ * @returns The entries, each under the default entry name.
+ */
+const entriesOf = (...texts: readonly string[]): readonly Entry[] =>
+  texts.map((posted): Entry => [name, posted]);
+
+/**
+ * Construct an `ordered` string value.
+ *
+ * @param texts Its members, in order.
+ * @returns The value.
+ */
+const orderedOf = (...texts: readonly string[]): Value => ({
+  baseType: "string",
+  cardinality: "ordered",
+  values: texts.map((value) => ({ baseType: "string", value })),
+});
+
+describe("an Extended Text bound to a container", () => {
+  it.effect(
+    '[Q-5] renders an ordered binding with max-strings="3" as three textareas posting under one name, in a group its Prompt names, each "Answer n of 3"',
+    () =>
+      Effect.gen(function* threeControls() {
+        const built = payloadOf([rivers]);
+        const root = yield* render(built);
+        const tree = page([root], built);
+        const prompt = onePart(root, "prompt");
+        const controls = partsIn(root, "control");
+
+        assert.deepStrictEqual(root.children, [prompt, ...controls]);
+        assert.deepStrictEqual(
+          controls.map((control) => control.tag),
+          ["textarea", "textarea", "textarea"],
+        );
+        assert.deepStrictEqual(
+          controls.map((control) => control.attrs["name"]),
+          [name, name, name],
+        );
+        assert.deepStrictEqual(
+          controls.map((control) => control.attrs["id"]),
+          [0, 1, 2].map((index) => scopedId(instance, response, "control", index)),
+        );
+        assert.deepStrictEqual(
+          controls.map((control) => control.attrs["rows"]),
+          ["5", "5", "5"],
+        );
+        assert.strictEqual(root.attrs["role"], "group");
+        assert.strictEqual(root.attrs["aria-labelledby"], prompt.attrs["id"]);
+        assert.strictEqual(nameOf(root, tree), "Name three rivers.");
+        assert.deepStrictEqual(controlNames(root, tree), answersOf(3));
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+
+        const single = yield* render(payloadOf([essay]));
+        assert.isUndefined(single.attrs["role"]);
+        assert.isUndefined(single.attrs["aria-labelledby"]);
+        assert.strictEqual(
+          onePart(single, "control").attrs["id"],
+          scopedId(instance, response, "control"),
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-5] with no Prompt, names the group by the author's aria-label or aria-labelledby, else leaves it unnamed, and names each Control",
+    () =>
+      Effect.gen(function* groupNames() {
+        const unprompted: ExtendedTextInteraction = { ...rivers, prompt: Option.none() };
+
+        const labelled = payloadOf([{ ...unprompted, ariaLabel: Option.some("Rivers") }]);
+        const labelledRoot = yield* render(labelled);
+        assert.strictEqual(labelledRoot.attrs["role"], "group");
+        assert.strictEqual(labelledRoot.attrs["aria-label"], "Rivers");
+        assert.isUndefined(labelledRoot.attrs["aria-labelledby"]);
+        assert.deepStrictEqual(
+          controlNames(labelledRoot, page([labelledRoot], labelled)),
+          answersOf(3),
+        );
+
+        const referenced = yield* render(
+          payloadOf([{ ...unprompted, ariaLabelledby: Option.some("intro") }]),
+        );
+        assert.strictEqual(referenced.attrs["aria-labelledby"], authoredId(instance, "intro"));
+        assert.isUndefined(referenced.attrs["aria-label"]);
+        for (const control of partsIn(referenced, "control")) {
+          assert.isUndefined(control.attrs["aria-labelledby"]);
+        }
+
+        const unnamed = payloadOf([unprompted]);
+        const unnamedRoot = yield* render(unnamed);
+        const tree = page([unnamedRoot], unnamed);
+        assert.strictEqual(unnamedRoot.attrs["role"], "group");
+        assert.isUndefined(unnamedRoot.attrs["aria-label"]);
+        assert.isUndefined(unnamedRoot.attrs["aria-labelledby"]);
+        assert.deepStrictEqual(controlNames(unnamedRoot, tree), answersOf(3));
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+      }),
+  );
+
+  it.effect(
+    "[Q-5] [keyboard] a walk that fills two of the three Controls posts an ordered value of two, which restores in order",
+    () =>
+      Effect.gen(function* fillTwo() {
+        const built = payloadOf([rivers]);
+        const tree = page([yield* render(built)], built);
+        const posted = keyboardWalk(tree, [
+          "Tab",
+          { type: "Nile" },
+          "Tab",
+          "Tab",
+          { type: "Amazon" },
+          "Tab",
+          "Enter",
+        ]);
+
+        assert.deepStrictEqual(posted, Option.some(entriesOf("Nile", "", "Amazon")));
+
+        const value = yield* decoded(
+          rivers,
+          Option.getOrElse(posted, () => []),
+        );
+        assert.deepStrictEqual(value, orderedOf("Nile", "Amazon"));
+        assert.deepStrictEqual(
+          validateExtendedText(rivers, value, yield* configure({ validateResponses: true })),
+          [],
+        );
+
+        const again = payloadOf([rivers], {
+          ...answering,
+          values: new Map([[response, orderedOf("Nile", "Amazon")]]),
+        });
+        const againRoot = yield* render(again);
+        assert.deepStrictEqual(
+          partsIn(againRoot, "control").map((control) => control.children),
+          [[text("Nile")], [text("Amazon")], []],
+        );
+        assert.isTrue(roundTrips(page([againRoot], again)));
+      }),
+  );
+
+  it.effect(
+    '[Q-5] renders 10 textareas for a max-strings above 10 or of 0, 100 for min-strings="100", and for min-strings="101" the notice and none',
+    () =>
+      Effect.gen(function* controlCounts() {
+        const counted = (interaction: ExtendedTextInteraction) =>
+          Effect.map(render(payloadOf([interaction])), (root) => partsIn(root, "control").length);
+
+        assert.strictEqual(
+          yield* counted({ ...rivers, maxStrings: Option.some(1_000_000_000_000n) }),
+          10,
+        );
+        assert.strictEqual(yield* counted({ ...rivers, maxStrings: Option.some(0n) }), 10);
+
+        const hundred = payloadOf([{ ...rivers, maxStrings: Option.some(200n), minStrings: 100n }]);
+        const hundredRoot = yield* render(hundred);
+        const hundredTree = page([hundredRoot], hundred);
+        assert.lengthOf(partsIn(hundredRoot, "control"), 100);
+        assert.deepStrictEqual(controlNames(hundredRoot, hundredTree), answersOf(100));
+        assert.deepStrictEqual(checkTree(hundredTree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(hundredTree));
+
+        const over = payloadOf([{ ...rivers, maxStrings: Option.some(200n), minStrings: 101n }]);
+        const overRoot = yield* render(over);
+        const overTree = page([overRoot], over);
+        const notices = elementsIn(overRoot).filter(
+          (element) => element.attrs["data-slot"] === rowFor("item", "notice").slot,
+        );
+
+        assert.deepStrictEqual(partsIn(overRoot, "control"), []);
+        assert.lengthOf(notices, 1);
+        assert.include(textOf(notices[0] ?? overRoot), "min-strings>100");
+        assert.isUndefined(overRoot.attrs["role"]);
+        assert.deepStrictEqual(checkTree(overTree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(overTree));
+      }),
+  );
+
+  it.effect(
+    "[Q-5] with a refused post, restores each entry to its Control, marks every Control invalid and described, and autofocuses the first",
+    () =>
+      Effect.gen(function* afterRefused() {
+        const pair: ExtendedTextInteraction = { ...rivers, minStrings: 2n };
+        const configuration = yield* configure({ validateResponses: true });
+        const messages = validateExtendedText(
+          pair,
+          yield* decoded(pair, entriesOf("Nile", "", "")),
+          configuration,
+        );
+
+        assert.lengthOf(messages, 1);
+
+        const built = payloadOf([pair], {
+          ...answering,
+          messages,
+          posted: Option.some(new Map([[response, ["Nile", "", ""]]])),
+        });
+        const root = yield* render(built);
+        const tree = page([root], built);
+        const controls = partsIn(root, "control");
+
+        assert.deepStrictEqual(
+          controls.map((control) => control.children),
+          [[text("Nile")], [], []],
+        );
+        for (const control of controls) {
+          assert.strictEqual(control.attrs["aria-invalid"], "true");
+          assert.strictEqual(
+            control.attrs["aria-describedby"],
+            scopedId(instance, response, "message", 0),
+          );
+        }
+        assert.deepStrictEqual(
+          elementsIn(tree).filter((element) => element.attrs["autofocus"] !== undefined),
+          controls.slice(0, 1),
+        );
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+      }),
+  );
+
+  it.effect(
+    "[Q-5] refuses more entries than a nonzero max-strings whatever validateResponses says, and fewer than min-strings only under it",
+    () =>
+      Effect.gen(function* counts() {
+        const lenient = yield* configure({});
+        const strict = yield* configure({ validateResponses: true });
+        const four = yield* decoded(rivers, entriesOf("a", "b", "c", "d"));
+
+        for (const configuration of [lenient, strict]) {
+          assert.deepStrictEqual(validateExtendedText(rivers, four, configuration), [
+            { response, text: message("en", "atMostStrings", { n: "3" }) },
+          ]);
+        }
+        assert.deepStrictEqual(
+          validateExtendedText(rivers, yield* decoded(rivers, entriesOf("a", "b", "c")), strict),
+          [],
+        );
+
+        const pair: ExtendedTextInteraction = { ...rivers, minStrings: 2n };
+        const one = yield* decoded(pair, entriesOf("a", "", ""));
+        assert.deepStrictEqual(validateExtendedText(pair, one, strict), [
+          { response, text: message("en", "atLeastStrings", { n: "2" }) },
+        ]);
+        assert.deepStrictEqual(validateExtendedText(pair, one, lenient), []);
+
+        const atMostOne: ExtendedTextInteraction = { ...rivers, maxStrings: Option.some(1n) };
+        assert.deepStrictEqual(
+          validateExtendedText(atMostOne, yield* decoded(atMostOne, entriesOf("a", "b")), lenient),
+          [{ response, text: message("en", "atMostOneString") }],
+        );
+
+        const atLeastOne: ExtendedTextInteraction = { ...rivers, minStrings: 1n };
+        assert.deepStrictEqual(
+          validateExtendedText(
+            atLeastOne,
+            yield* decoded(atLeastOne, entriesOf("", "", "")),
+            strict,
+          ),
+          [{ response, text: message("en", "atLeastOneString") }],
+        );
+
+        const unlimited: ExtendedTextInteraction = { ...rivers, maxStrings: Option.some(0n) };
+        const many = Array.from({ length: 25 }, (_, index) => `river ${index}`);
+        assert.deepStrictEqual(
+          validateExtendedText(unlimited, yield* decoded(unlimited, entriesOf(...many)), strict),
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-5] under validateResponses, checks the pattern-mask on each member of a container",
+    () =>
+      Effect.gen(function* eachMember() {
+        const strict = yield* configure({ validateResponses: true });
+        const lowered: ExtendedTextInteraction = {
+          ...rivers,
+          patternMask: Option.some("[a-z ]+"),
+          patternMaskMessage: Option.some("Write in lower-case words."),
+        };
+        const mixed = yield* decoded(lowered, entriesOf("nile", "Amazon"));
+
+        assert.deepStrictEqual(validateExtendedText(lowered, mixed, strict), [
+          { response, text: "Write in lower-case words." },
+        ]);
+        assert.deepStrictEqual(validateExtendedText(lowered, mixed, yield* configure({})), []);
+        assert.deepStrictEqual(
+          validateExtendedText(
+            lowered,
+            yield* decoded(lowered, entriesOf("nile", "amazon")),
+            strict,
+          ),
+          [],
+        );
       }),
   );
 });

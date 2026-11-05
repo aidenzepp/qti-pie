@@ -528,6 +528,56 @@ describe("checkTree", () => {
     ]);
   });
 
+  it("prompt-name: an Extended Text group of Controls its Prompt does not name", () => {
+    const [prompt, control] = essay({ "aria-label": "Answer 1 of 2" }).children;
+    const second = h("textarea", {
+      "aria-label": "Answer 2 of 2",
+      "data-slot": slot("extended-text-interaction", "control"),
+      id: "q1-ESSAY-1",
+      name: "q1-ESSAY",
+    });
+    const group = (root: Attributes) =>
+      h("qti-extended-text-interaction", root, [prompt ?? text(""), control ?? text(""), second]);
+    const marker = { "data-slot": slot("extended-text-interaction", "root") };
+
+    assert.deepStrictEqual(
+      checksOf(
+        item([
+          status,
+          group({ ...marker, "aria-labelledby": "q1-ESSAY-prompt", role: "group" }),
+          submit,
+        ]),
+      ),
+      [],
+    );
+    assert.deepStrictEqual(
+      checksOf(item([status, group({ ...marker, "aria-label": "Essay", role: "group" }), submit])),
+      ["prompt-name"],
+    );
+    assert.deepStrictEqual(
+      checksOf(item([status, group({ ...marker, "aria-labelledby": "q1-ESSAY-prompt" }), submit])),
+      ["prompt-name"],
+    );
+  });
+
+  it("prompt-name: an Extended Text with a Prompt, no Control and no Notice", () => {
+    const [prompt] = essay({}).children;
+    const bare = h(
+      "qti-extended-text-interaction",
+      { "data-slot": slot("extended-text-interaction", "root") },
+      [prompt ?? text("")],
+    );
+    const capped = h(bare.tag, bare.attrs, [
+      ...bare.children,
+      h("span", { "data-slot": slot("item", "notice"), role: "note" }, [
+        text("Not supported here: min-strings>100"),
+      ]),
+    ]);
+
+    assert.deepStrictEqual(checksOf(item([status, bare, submit])), ["prompt-name"]);
+    assert.deepStrictEqual(checksOf(item([status, capped, submit])), []);
+  });
+
   it("list-item: a stray li", () => {
     const stray = h("li", {}, [text("Stray")]);
     assert.deepStrictEqual(checksOf(item([status, stray, capital, submit])), ["list-item"]);

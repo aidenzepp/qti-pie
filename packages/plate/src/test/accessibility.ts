@@ -529,6 +529,29 @@ export const isFocusable = (element: Element, tree: Element): boolean =>
   );
 
 /**
+ * Decide whether an Extended Text Root that holds several Controls is the group its Prompt names
+ * (Q10): `role="group"`, and `aria-labelledby` naming the Prompt's `id` alone, so the group's name
+ * is the Prompt's text. Each Control is then named within the group, not by the Prompt.
+ *
+ * @param root The Extended Text Root.
+ * @param prompt The Prompt the Root owns.
+ * @param tree The tree both sit in.
+ * @returns Whether the Prompt names the Root's group.
+ */
+const promptNamesTextGroup = (root: Element, prompt: Element, tree: Element): boolean => {
+  const id = attribute(prompt, "id");
+  const labelledBy = idRefs(attribute(root, "aria-labelledby"));
+
+  return (
+    attribute(root, "role") === "group" &&
+    id !== undefined &&
+    labelledBy.length === 1 &&
+    labelledBy[0] === id &&
+    nameOf(root, tree) === textOf(prompt)
+  );
+};
+
+/**
  * Decide whether a Choice Root and its Prompt take one of the two markups the operator ruled
  * (rule `efed9867`), and nothing else.
  *
@@ -686,9 +709,15 @@ const rules = {
         return promptNamesGroup(root.element, prompt.element, tree) ? [] : [root];
       }
 
-      const control = owned.find((visit) => isPart(visit.element, interaction.value, "control"));
+      const controls = owned.filter((visit) => isPart(visit.element, interaction.value, "control"));
+      const [control] = controls;
       if (control === undefined) {
-        return [root];
+        // The cap's Notice stands in place of every Control (Q23), so the Prompt names nothing.
+        return owned.some((visit) => isPart(visit.element, "item", "notice")) ? [] : [root];
+      }
+
+      if (controls.length > 1) {
+        return promptNamesTextGroup(root.element, prompt.element, tree) ? [] : [root];
       }
 
       return nameOf(control.element, tree) === textOf(prompt.element) ? [] : [control];
@@ -757,7 +786,9 @@ const rules = {
  * and its submit button are the host's composition, not parts, so `submit-order` reads them from
  * the HTML: a submit button must sit inside a `form`, after every control of that form. A Choice
  * Root's Prompt must take one of the two ruled markups, a `legend` first in the `fieldset` or a
- * `qti-prompt` the `fieldset` names through `aria-labelledby`. A Root with no Prompt has no name
+ * `qti-prompt` the `fieldset` names through `aria-labelledby`. A text interaction's Prompt names
+ * its one Control; an Extended Text Root that holds several Controls is a group its Prompt names,
+ * and one whose Controls the cap's Notice replaces names nothing. A Root with no Prompt has no name
  * requirement (Q9).
  *
  * @param tree The tree's root, which must carry `lang`.
