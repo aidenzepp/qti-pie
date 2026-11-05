@@ -1,18 +1,15 @@
 import { CompileError, ExecutionFailure } from "@bjornpagen/grizzle";
-import type { CompileBound } from "@bjornpagen/grizzle";
+import type { CompileBound, ServerError } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { Option, Schema } from "effect";
+import { Option } from "effect";
 import { ImportRefused, budgetRefusalOf } from "#pantry/import/refusal.ts";
 
 /**
- * Grizzle exports no constructor for an `ExecutionFailure`, and the schema of its `reason` accepts
- * a `CompileError` only as an instance (an object literal fails to decode: `Expected CompileError
- * at ["reason"]`), so the failure is built by decoding a `CompileError` made by the engine's own
- * factory.
+ * An `ExecutionFailure` built with `new` over a `CompileError` the engine's own factory made, for
+ * a bound the compiler refused.
  */
 const refusedFor = (bound: CompileBound) =>
-  Schema.decodeUnknownSync(ExecutionFailure)({
-    _tag: "ExecutionFailure",
+  new ExecutionFailure({
     reason: CompileError.make({
       _tag: "ResourceBound",
       at: { label: "ChangeSet", path: [], site: undefined },
@@ -50,21 +47,25 @@ describe("budgetRefusalOf", () => {
   });
 
   it("maps an ExecutionFailure whose reason is a ServerError to nothing", () => {
-    const failure = Schema.decodeUnknownSync(ExecutionFailure)({
-      _tag: "ExecutionFailure",
-      reason: {
-        _tag: "ServerError",
-        column: undefined,
-        constraint: undefined,
-        dataType: undefined,
-        detail: undefined,
-        hint: undefined,
-        message: "boom",
-        schema: undefined,
-        sqlstate: "XX000",
-        table: undefined,
-      },
-    });
+    const report = {
+      _tag: "ServerError",
+      column: undefined,
+      constraint: undefined,
+      dataType: undefined,
+      detail: undefined,
+      hint: undefined,
+      message: "boom",
+      schema: undefined,
+      sqlstate: "XX000",
+      table: undefined,
+    };
+
+    // SAFETY: Grizzle exports `ServerError` as a type only (`adapter/public/errors.ts:58`; findings
+    // row 21), and its `sqlstate` is a branded `Sqlstate` with no public parse
+    // (`engine/src/core/sqlstate.ts:5`). The plain fields of the class at
+    // `adapter/errors/failures.ts:34-44` stand for it: the code under test reads only `_tag`.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
+    const failure = new ExecutionFailure({ reason: report as ServerError });
 
     assert.isTrue(Option.isNone(budgetRefusalOf(failure)));
   });
