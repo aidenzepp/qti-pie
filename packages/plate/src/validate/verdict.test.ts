@@ -887,6 +887,30 @@ describe("acceptForTest", () => {
 });
 
 /**
+ * Construct a refusal of a named document at a location.
+ *
+ * @param rule The rule it breaks.
+ * @param document The document it refuses.
+ * @param location Where in the document it points.
+ * @param detail The facts its wording reads.
+ * @returns The refusal.
+ */
+const refusalAt = (
+  rule: RefusalRule,
+  document: string,
+  location: Location,
+  detail: Readonly<Record<string, string>> = {},
+): Refusal =>
+  new Refusal({
+    detail,
+    document,
+    location,
+    readerRule: Option.none(),
+    rule,
+    suggestion: Option.none(),
+  });
+
+/**
  * Construct a refusal of `item.xml` at the item root.
  *
  * @param rule The rule it breaks.
@@ -894,14 +918,7 @@ describe("acceptForTest", () => {
  * @returns The refusal.
  */
 const refusalOf = (rule: RefusalRule, detail: Readonly<Record<string, string>>): Refusal =>
-  new Refusal({
-    detail,
-    document: "item.xml",
-    location: { kind: "path", path: root },
-    readerRule: Option.none(),
-    rule,
-    suggestion: Option.none(),
-  });
+  refusalAt(rule, "item.xml", { kind: "path", path: root }, detail);
 
 /**
  * What remains of a Markdown sentence once its code spans are removed, and the spans' contents.
@@ -977,6 +994,45 @@ describe("describeRefusal", () => {
     assert.notInclude(outside, "![");
     assert.notInclude(outside, "](");
     assert.include(spans, escapingValue);
+  });
+
+  it("keeps the document, the path, the parser's message and the reader's detail inside code spans, whole", () => {
+    const sentences = {
+      "document as a whole": describeRefusal(
+        refusalAt("unknown-element", escapingValue, { kind: "document" }),
+      ),
+      "document at a path": describeRefusal(
+        refusalAt("unknown-element", escapingValue, { kind: "path", path: root }),
+      ),
+      "document at a position": describeRefusal(
+        refusalAt("unknown-element", escapingValue, { column: 3, kind: "position", line: 2 }),
+      ),
+      "document not QTI": describeRefusal(
+        refusalAt("not-qti-root", escapingValue, { kind: "document" }),
+      ),
+      "not-well-formed message": describeRefusal(
+        refusalAt(
+          "not-well-formed",
+          "item.xml",
+          { column: 3, kind: "position", line: 2 },
+          { message: escapingValue },
+        ),
+      ),
+      path: describeRefusal(
+        refusalAt("unknown-element", "item.xml", { kind: "path", path: escapingValue }),
+      ),
+      "reader-refused detail": describeRefusal(
+        refusalAt("reader-refused", "item.xml", { kind: "document" }, { detail: escapingValue }),
+      ),
+    };
+
+    for (const [where, sentence] of Object.entries(sentences)) {
+      const { outside, spans } = codeSpans(sentence);
+
+      assert.notInclude(outside, "![", where);
+      assert.notInclude(outside, "](", where);
+      assert.include(spans, escapingValue, where);
+    }
   });
 
   it("keeps a value of spaces and other whitespace whole inside its code span", () => {
