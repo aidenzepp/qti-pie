@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Effect, Option } from "effect";
+import { readCorpusFile } from "#plate/document/corpus.ts";
+import { readSource } from "#plate/document/read.ts";
 import {
   attr,
   doc,
@@ -23,7 +25,7 @@ import type { BodyElement, BodyNode, Item } from "#plate/model/item.ts";
 import { Refusal, refusalRules } from "#plate/validate/refusal.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
 import { tables } from "#plate/validate/tables.ts";
-import { acceptForTest, check, describeRefusal } from "#plate/validate/verdict.ts";
+import { acceptedItem, acceptForTest, check, describeRefusal } from "#plate/validate/verdict.ts";
 import type { Accepted, Verdict } from "#plate/validate/verdict.ts";
 
 /**
@@ -913,6 +915,52 @@ describe("acceptForTest", () => {
     assert.strictEqual(accepted.item, built);
     assert.strictEqual(accepted.document, "hand.xml");
     assert.deepStrictEqual(accepted.unsupported, built.unsupported);
+  });
+});
+
+describe("acceptedItem", () => {
+  it.effect("gives BG007's accepted item, read from the corpus", () =>
+    Effect.gen(function* bg007() {
+      const location = "QTI3_BPIG_Examples/items/BG007.xml";
+      const source = yield* readCorpusFile(location).pipe(
+        Effect.flatMap((bytes) => readSource(location, bytes)),
+      );
+      const verdict = verdictOf(source);
+      const accepted = acceptedItem(verdict);
+
+      assert.strictEqual(Option.getOrUndefined(accepted), acceptedOf(verdict, "accepted"));
+      assert.deepStrictEqual(
+        accepted.pipe(Option.map(({ item: built }) => built.identifier)),
+        Option.some("beginnersguide007"),
+      );
+    }),
+  );
+
+  it("gives the item of an accepted-with-unsupported verdict", () => {
+    const verdict = verdictOf(
+      item([body([el("p", [], [el("a", [attr("href", scriptUrl)], [text("Go")])])])]),
+    );
+
+    assert.strictEqual(
+      Option.getOrUndefined(acceptedItem(verdict)),
+      acceptedOf(verdict, "accepted-with-unsupported"),
+    );
+  });
+
+  it("gives none for a refused verdict", () => {
+    const xhtml = "http://www.w3.org/1999/xhtml";
+    const verdict = verdictOf(doc("page.xml", el("html", [], [], xhtml)));
+
+    assert.strictEqual(verdict.verdict, "refused");
+    assert.deepStrictEqual(acceptedItem(verdict), Option.none());
+  });
+
+  it("gives none for an unchecked verdict", () => {
+    const math = el("math", [], [el("mi", [], [text("x")], mathmlNamespace)], mathmlNamespace);
+    const verdict = verdictOf(item([body([el("p", [], [math])])]));
+
+    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.deepStrictEqual(acceptedItem(verdict), Option.none());
   });
 });
 
