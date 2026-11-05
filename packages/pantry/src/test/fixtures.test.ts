@@ -1246,4 +1246,16 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
       ),
     60_000,
   );
+
+  it.effect("extmeta's record keeps the two xml:lang attributes the published file carries", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* externalRecordLang() {
+        const fs = yield* FileSystem.FileSystem;
+        const record = yield* fs.readFileString(`${yield* materialize("extmeta")}/meta/choice.xml`);
+
+        assert.include(record, '<string xml:lang="en">jacs</string>');
+        assert.include(record, '<string xml:lang="en">Mathematics</string>');
+      }),
+    ),
+  );
 });
