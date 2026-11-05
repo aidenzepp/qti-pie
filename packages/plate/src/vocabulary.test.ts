@@ -34,7 +34,7 @@ const assertDistinct = (list: readonly string[]): void => {
 const fewerSpaces = 4000;
 
 describe("templateName", () => {
-  it("[I-9b] resolves all four spellings of each built-in to its name", () => {
+  it("resolves all four spellings of each built-in to its name", () => {
     for (const name of templateNames) {
       for (const prefix of templatePrefixes) {
         for (const suffix of ["", ".xml"]) {
@@ -44,7 +44,7 @@ describe("templateName", () => {
     }
   });
 
-  it("[I-9b] resolves the three CC2 templates to their names under either prefix", () => {
+  it("resolves the three CC2 templates to their names under either prefix", () => {
     for (const prefix of templatePrefixes) {
       for (const name of ["CC2_match", "CC2_match_basic", "CC2_map_response"] as const) {
         assert.deepStrictEqual(templateName(`${prefix}${name}.xml`), Option.some(name));
@@ -53,7 +53,7 @@ describe("templateName", () => {
     }
   });
 
-  it("[I-9b] resolves an unknown URI to none", () => {
+  it("resolves an unknown URI to none", () => {
     for (const prefix of templatePrefixes) {
       assert.isTrue(Option.isNone(templateName(`${prefix}CC2_other.xml`)));
       assert.isTrue(Option.isNone(templateName(`${prefix}cc2_match.xml`)));
@@ -64,7 +64,7 @@ describe("templateName", () => {
     assert.isTrue(Option.isNone(templateName("")));
   });
 
-  it("[I-9b] resolves a built-in padded with XML whitespace to its name, as xs:anyURI collapses it", () => {
+  it("resolves a built-in padded with XML whitespace to its name, as xs:anyURI collapses it", () => {
     for (const name of templateNames) {
       for (const prefix of templatePrefixes) {
         for (const padding of [" ", "\n\t"]) {
@@ -77,14 +77,14 @@ describe("templateName", () => {
     }
   });
 
-  it("[I-9b] resolves a URI with whitespace inside its name to none", () => {
+  it("resolves a URI with whitespace inside its name to none", () => {
     for (const prefix of templatePrefixes) {
       assert.isTrue(Option.isNone(templateName(`${prefix}match_ correct`)));
       assert.isTrue(Option.isNone(templateName(`${prefix}match_\ncorrect`)));
     }
   });
 
-  it.effect("[I-9b] reads 8 times the spaces inside a URI in under 32 times the time", () =>
+  it.effect("reads 8 times the spaces inside a URI in under 32 times the time", () =>
     Effect.gen(function* readsInLinearTime() {
       const fewer = `a${" ".repeat(fewerSpaces)}b`;
       const more = `a${" ".repeat(fewerSpaces * growthFactor)}b`;
