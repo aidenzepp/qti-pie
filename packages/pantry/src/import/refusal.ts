@@ -271,6 +271,13 @@ export type ImportLaw =
   | { readonly from: LawSide; readonly kind: "mirrors"; readonly to: LawSide }
   | { readonly from: LawSide; readonly kind: "coverage"; readonly to: LawSide }
   | { readonly field: string; readonly kind: "alternatives"; readonly relation: string }
+  | {
+      readonly arm: string;
+      readonly field: string;
+      readonly handles: readonly [string, ...string[]];
+      readonly kind: "alternativesArm";
+      readonly relation: string;
+    }
   | { readonly from: LawSide; readonly kind: "capacity"; readonly target: LawSide }
   | { readonly contract: string; readonly kind: "contract" }
   | { readonly field: string; readonly kind: "numericBound"; readonly relation: string }
@@ -1033,6 +1040,21 @@ const phaseSidesRule = (from: LawSide, to: LawSide): Rule | undefined =>
   packageSidesRule(from, to) ?? moduleSidesRule(from, to);
 
 /**
+ * The sides an `alternativesArm` law stands for, the arm and the parent it is the payload of: the
+ * arm leaves, and the parent is entered selecting its discriminator on the arm's handles. These
+ * are the sides the arm-to-parent `mirrors` half named before grizzle reported one law per arm
+ * relation, so the same breach keeps its rule.
+ */
+const armSides = (law: Extract<ImportLaw, { kind: "alternativesArm" }>): [LawSide, LawSide] => [
+  { fields: [], relation: law.arm },
+  {
+    fields: [],
+    relation: law.relation,
+    selection: law.handles.map((handle) => ({ field: law.field, value: handle })),
+  },
+];
+
+/**
  * The rule of a law over the relations this phase added, or nothing when the law is an earlier
  * phase's (those rows follow). Every `Node` kind with an arm has its own `mirrors` law, so a
  * `qmd:qtiMetadata` that lacks its host arm breaks that handle's law, which the containments and
@@ -1049,6 +1071,10 @@ const phaseRule = (law: ImportLaw): Rule | undefined => {
 
   if (law.kind === "contained" || law.kind === "mirrors") {
     return phaseSidesRule(law.from, law.to);
+  }
+
+  if (law.kind === "alternativesArm") {
+    return phaseSidesRule(...armSides(law));
   }
 
   if (law.kind === "alternatives") {
@@ -1266,6 +1292,10 @@ const recognized = (law: ImportLaw): Mapped | undefined => {
       : undefined;
   }
 
+  if (law.kind === "alternativesArm") {
+    return conditionMirrors.has(law.arm) ? named("P4") : undefined;
+  }
+
   if (law.kind === "pattern") {
     return some(patternRules.get(law.source)) ?? { mapped: false, rule: "value-lexical" };
   }
@@ -1320,6 +1350,10 @@ const lawText = (law: ImportLaw): string => {
 
   if (law.kind === "alternatives") {
     return `alternatives ${law.relation}.${law.field}`;
+  }
+
+  if (law.kind === "alternativesArm") {
+    return `alternatives arm ${law.arm} of ${law.relation}.${law.field}`;
   }
 
   if (law.kind === "contract") {
