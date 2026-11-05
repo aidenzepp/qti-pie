@@ -679,13 +679,16 @@ export type AnsweredStatus = (typeof answeredStatuses)[number];
  * The keys of the test features M2 accepts and does not deliver (spec §4.6): each is a mark on the
  * verdict at its path, never a notice, and the delivered sequence ignores it.
  *
- * An element feature is keyed by its QTI name. `allow-comment="true"` is a session control that
+ * An element feature is keyed by its QTI name. `qti-adaptive-selection` is selection, which M3
+ * delivers. `xi:include` is XInclude's `include`, which is never fetched (S-6), so the content it
+ * names is missing from the delivered sequence. `allow-comment="true"` is a session control that
  * asks for a comment box; `max-attempts:negative` is a negative `max-attempts`, delivered as no
  * limit; `root:<name>` is a section or a stimulus given as a document's root, which is not
  * delivered alone.
  */
 export const testMarks = [
   "qti-selection",
+  "qti-adaptive-selection",
   "qti-ordering",
   "qti-time-limits",
   "qti-pre-condition",
@@ -699,6 +702,7 @@ export const testMarks = [
   "qti-template-default",
   "qti-variable-mapping",
   "qti-weight",
+  "xi:include",
   'allow-comment="true"',
   "max-attempts:negative",
   "root:qti-assessment-section",
