@@ -4,7 +4,7 @@ import { assert, beforeAll, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Layer } from "effect";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
-import { OracleError, OracleLayer, xmllintC14n } from "#pantry/xml/oracle.ts";
+import { OracleError, OracleLayer, OracleUnavailable, xmllintC14n } from "#pantry/xml/oracle.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
@@ -73,6 +73,19 @@ layer(TestLayer)("xml/oracle.ts", (it) => {
 
       assert.instanceOf(failure, OracleError);
       assert.strictEqual(failure.exitCode, 1);
+    }),
+  );
+
+  it.effect("an executable that does not start fails as OracleUnavailable, naming it", () =>
+    Effect.gen(function* missingExecutable() {
+      const missing = `${simple}/no-such-xmllint`;
+      const failure = yield* Effect.flip(xmllintC14n(`${simple}/choice.xml`)).pipe(
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ XMLLINT: missing }))),
+      );
+
+      assert.instanceOf(failure, OracleUnavailable);
+      assert.strictEqual(failure.executable, missing);
+      assert.include(failure.message, "set XMLLINT");
     }),
   );
 });

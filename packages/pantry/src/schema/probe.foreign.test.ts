@@ -104,13 +104,23 @@ const WildcardLike = relation(
   ["host"],
 );
 
-const base = { AttributeLike, ExclusionLike, ForeignLike, GlobalLike, NodeLike, WildcardLike };
+const base = {
+  ProbeAttributeLike: AttributeLike,
+  ProbeExclusionLike: ExclusionLike,
+  ProbeForeignKinds: Kinds,
+  ProbeForeignLike: ForeignLike,
+  ProbeForeignProcesses: Processes,
+  ProbeForeignSets: Sets,
+  ProbeGlobalLike: GlobalLike,
+  ProbeNodeLike: NodeLike,
+  ProbeWildcardLike: WildcardLike,
+};
 
 describe("wildcard statement probe", () => {
   it.effect("form a", () =>
     Effect.gen(function* probe() {
       const built = yield* Effect.try(() =>
-        schema("ProbeFormA", { ...base, Kinds, Processes, Sets }, [
+        schema("ProbeFormA", { ...base }, [
           capacity(on(ExclusionLike, "host", "namespace"), {
             from: on(ForeignLike, "parentKind", "namespace"),
             within: within(0n, 0n),
@@ -124,7 +134,7 @@ describe("wildcard statement probe", () => {
   it.effect("form b", () =>
     Effect.gen(function* probe() {
       const built = yield* Effect.try(() =>
-        schema("ProbeFormB", { ...base, Kinds, Processes, Sets }, [
+        schema("ProbeFormB", { ...base }, [
           capacity(on(GlobalLike, "set", "namespace", "local"), {
             from: on(ForeignLike, "schemaSet", "namespace", "local"),
             within: within(0n, 0n),
@@ -138,7 +148,7 @@ describe("wildcard statement probe", () => {
   it.effect("form c", () =>
     Effect.gen(function* probe() {
       const built = yield* Effect.try(() =>
-        schema("ProbeFormC", { ...base, Kinds, Processes, Sets }, [
+        schema("ProbeFormC", { ...base }, [
           check("NamespaceOrNoPrefix", ForeignLike, (row) =>
             row.or(row.ne(row.namespace, ""), row.eq(row.prefix, "")),
           ),
@@ -157,7 +167,7 @@ describe("wildcard statement probe", () => {
   it.effect("form d", () =>
     Effect.gen(function* probe() {
       const built = yield* Effect.try(() =>
-        schema("ProbeFormD", { ...base, Kinds, Processes, Sets }, [
+        schema("ProbeFormD", { ...base }, [
           contained(
             on(ForeignLike, "id", "prefix", "rootKind"),
             on(NodeLike, "id", "prefix", "rootKind"),
@@ -172,7 +182,7 @@ describe("wildcard statement probe", () => {
   it.effect("form f", () =>
     Effect.gen(function* probe() {
       const built = yield* Effect.try(() =>
-        schema("ProbeFormF", { ...base, Kinds, Processes, Sets }, [
+        schema("ProbeFormF", { ...base }, [
           capacity(on(GlobalLike, "set", "namespace", "local"), {
             from: on(select(AttributeLike, { process: "lax" }), "schemaSet", "namespace", "local"),
             within: within(0n, 0n),

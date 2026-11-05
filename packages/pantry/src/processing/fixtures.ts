@@ -227,7 +227,7 @@ const guardNames = [
 /**
  * The packages M3 derives: the two round-trip packages, the template-item package, one package per
  * broken and guard document, the padded reference the importer refuses and the padded literal it
- * admits.
+ * admits, and the large program.
  */
 export const processingFixtureNames = [
   "processing-item",
@@ -237,6 +237,7 @@ export const processingFixtureNames = [
   ...guardNames,
   "padded-reference",
   "padded-literal",
+  "large-program",
 ] as const;
 
 /**
@@ -285,6 +286,63 @@ const simpleItemName: ProcessingEdit = {
 };
 
 /**
+ * `processing-item`'s edits: `simple` with `choice.xml`'s processing replaced by `response.xml`'s
+ * rules, and the declarations and the `xi` namespace those rules need added.
+ */
+const processingItemEdits: readonly ProcessingEdit[] = [
+  {
+    _tag: "replaceText",
+    file: "choice.xml",
+    replacement:
+      '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"',
+    search: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"',
+  },
+  { _tag: "addDeclarations", file: "choice.xml", fromFile: "valid/response.xml" },
+  { _tag: "replaceProcessing", file: "choice.xml", withFile: "valid/response.xml" },
+];
+
+/**
+ * `rptemplates`' edits: the five template documents of the corpus under `rptemplates/`, each
+ * copied in and listed as an `imsqti_rptemplate_xmlv3p0` resource. They touch no file
+ * {@link processingItemEdits} edits.
+ */
+const templateResourceEdits: readonly ProcessingEdit[] = templateFiles.flatMap(
+  ([fromPkg, fromPath]): readonly ProcessingEdit[] => [
+    { _tag: "addFile", fromPath, fromPkg, path: fromPath },
+    {
+      _tag: "addResource",
+      href: fromPath,
+      identifier: `rptemplate-${path.basename(fromPath, ".xml")}`,
+      type: "imsqti_rptemplate_xmlv3p0",
+    },
+  ],
+);
+
+/**
+ * The item documents of `ccPackage` that the large program adds, each a path inside the package:
+ * the one text-entry item and the one extended-text item, whose interactions write to relations
+ * that `processing-item` and the template documents leave empty. Their relations carry the import
+ * program from 1,011,442 to 1,048,611 SQL bytes on `ee3b5fc`.
+ */
+const largeProgramItems = ["testitems/QUE_102011.xml", "testitems/QUE_102016.xml"] as const;
+
+/**
+ * The edits that copy each of {@link largeProgramItems} in and list it as an
+ * `imsqti_item_xmlv3p0` resource.
+ */
+const largeProgramItemEdits: readonly ProcessingEdit[] = largeProgramItems.flatMap(
+  (fromPath): readonly ProcessingEdit[] => [
+    { _tag: "addFile", fromPath, fromPkg: "ccPackage", path: fromPath },
+    {
+      _tag: "addResource",
+      href: fromPath,
+      identifier: `item-${path.basename(fromPath, ".xml")}`,
+      type: "imsqti_item_xmlv3p0",
+    },
+  ],
+);
+
+/**
  * Define a derived package by name.
  *
  * - `processing-item`: `simple` with `choice.xml`'s processing replaced by `response.xml`'s rules,
@@ -296,6 +354,11 @@ const simpleItemName: ProcessingEdit = {
  *   written to a new integer response `TOTAL` instead.
  * - `rptemplates`: `simple` plus the five template documents of the corpus under `rptemplates/`, each
  *   listed as an `imsqti_rptemplate_xmlv3p0` resource.
+ * - `large-program`: `processing-item`'s item, `rptemplates`' five template documents and two more
+ *   items of `ccPackage` in one package, so its import writes facts to the relations of all. It
+ *   exists to be a valid package whose single-transaction import program is larger than the
+ *   1,048,576 SQL bytes grizzle's compiler once refused above (pinned `ee3b5fc`), imported and
+ *   round-tripped by `import/package.large.db.test.ts`.
  * - `padded-reference`: `response.xml` with `figures=" COUNT "` on a `qti-equal-rounded`, refused
  *   under `attribute-lexical` (decision 123).
  * - `padded-literal`: `response.xml` with an identifier `qti-base-value` written on its own line
@@ -308,21 +371,7 @@ const simpleItemName: ProcessingEdit = {
  */
 export const specOfProcessing = (name: ProcessingFixtureName): ProcessingFixtureSpec => {
   if (name === "processing-item") {
-    return {
-      base: "simple",
-      edits: [
-        {
-          _tag: "replaceText",
-          file: "choice.xml",
-          replacement:
-            '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"',
-          search: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"',
-        },
-        { _tag: "addDeclarations", file: "choice.xml", fromFile: "valid/response.xml" },
-        { _tag: "replaceProcessing", file: "choice.xml", withFile: "valid/response.xml" },
-      ],
-      name,
-    };
+    return { base: "simple", edits: processingItemEdits, name };
   }
 
   if (name === "template-item") {
@@ -359,17 +408,13 @@ export const specOfProcessing = (name: ProcessingFixtureName): ProcessingFixture
   }
 
   if (name === "rptemplates") {
+    return { base: "simple", edits: templateResourceEdits, name };
+  }
+
+  if (name === "large-program") {
     return {
       base: "simple",
-      edits: templateFiles.flatMap(([fromPkg, fromPath]): readonly ProcessingEdit[] => [
-        { _tag: "addFile", fromPath, fromPkg, path: fromPath },
-        {
-          _tag: "addResource",
-          href: fromPath,
-          identifier: `rptemplate-${path.basename(fromPath, ".xml")}`,
-          type: "imsqti_rptemplate_xmlv3p0",
-        },
-      ]),
+      edits: [...processingItemEdits, ...templateResourceEdits, ...largeProgramItemEdits],
       name,
     };
   }
