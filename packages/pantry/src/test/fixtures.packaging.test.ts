@@ -140,6 +140,11 @@ interface MetadataCut {
    */
   readonly counts: Readonly<Record<string, number>>;
   readonly name: FixtureName;
+  /**
+   * The copies made from the positive, each differing from it in its manifest or its record. They
+   * are named negatives for most, which a rule refuses; `filelom-qmd` is grouped here for its
+   * manifest and is not refused (its file-level `qtiMetadata` is stored as foreign content).
+   */
   readonly negatives: readonly FixtureName[];
   /**
    * The number of content packaging `resource` elements in the positive's manifest.

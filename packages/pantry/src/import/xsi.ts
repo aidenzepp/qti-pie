@@ -22,7 +22,9 @@
  * calls it yet: the tree walk of `tree.ts` does, with `judgeTree`.
  *
  * Two known model limits shape it, both stated for pantry and plate alike in reading 50 (decision
- * 227 while reading 50 is not on the base):
+ * 227). Reading 60 extends reading 50 to a built-in simple `xsi:type` on lax foreign content: the
+ * element must then hold no attribute but the four `xsi:` ones and no element child, which both
+ * packages check, and its text, which plate cannot judge and pantry does (`validLocal`):
  *
  * - L-1: a complex `xsi:type` on lax foreign content, other than `xs:anyType`, is accepted without
  *   being checked against that type, because that needs a general XML Schema validator. Revisit if
