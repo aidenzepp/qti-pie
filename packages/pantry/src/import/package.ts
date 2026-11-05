@@ -18,6 +18,7 @@ import { outcomeRows } from "#pantry/import/outcome.ts";
 import type { ImportLaw, ImportRefused, ImportWitness } from "#pantry/import/refusal.ts";
 import { budgetRefusalOf, refusalOfLaw, ruleOfError } from "#pantry/import/refusal.ts";
 import { packageStage } from "#pantry/import/reference.ts";
+import type { StagedDocument } from "#pantry/import/reference.ts";
 import { rptemplateRows } from "#pantry/import/rptemplate.ts";
 import { stimulusRows } from "#pantry/import/stimulus.ts";
 import { testRows } from "#pantry/import/test.ts";
@@ -294,6 +295,7 @@ export const readRows = Effect.fn("import.readRows")(function* readRows(dir: str
   const manifest = yield* readXml(yield* readEntry(dir, "imsmanifest.xml"));
   const built = yield* manifestRows(dir, entries, manifest, Rows.empty());
   let { rows } = built;
+  const decoded: StagedDocument[] = [];
 
   for (const document of built.documents) {
     const doc = yield* readXml(yield* readEntry(dir, document.path));
@@ -312,9 +314,10 @@ export const readRows = Effect.fn("import.readRows")(function* readRows(dir: str
       rows,
     );
     ({ rows } = item);
+    decoded.push({ doc, nodes: item.nodes });
   }
 
-  rows = yield* packageStage(rows);
+  rows = yield* packageStage(rows, decoded);
 
   yield* guards(rows, entries);
 

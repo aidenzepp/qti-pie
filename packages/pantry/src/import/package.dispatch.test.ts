@@ -1,11 +1,12 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it as plainIt, layer } from "@effect/vitest";
 import { Effect } from "effect";
-import { packageStage } from "#pantry/import/reference.ts";
 import { readRows, routeOf } from "#pantry/import/package.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import { Document } from "#pantry/schema/document.ts";
 import { Node } from "#pantry/schema/node.ts";
+import { TemplateDefault } from "#pantry/schema/test/rules.ts";
+import { TestReach } from "#pantry/schema/test/structure.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 
 describe("routeOf", () => {
@@ -39,15 +40,22 @@ describe("routeOf", () => {
   );
 });
 
-layer(NodeServices.layer)("readRows over simple", (it) => {
-  it.effect("hands its rows through the package stage unchanged", () =>
+layer(NodeServices.layer)("readRows", (it) => {
+  it.effect("reads a simple package's documents and nodes", () =>
     Effect.gen(function* readsSimple() {
       const { rows } = yield* readRows(yield* materialize("simple"));
-      const staged = yield* packageStage(rows);
 
-      assert.strictEqual(staged, rows);
-      assert.strictEqual(Rows.of(rows, Document).length, Rows.of(staged, Document).length);
+      assert.isAbove(Rows.of(rows, Document).length, 0);
       assert.isAbove(Rows.of(rows, Node).length, 0);
+    }),
+  );
+
+  it.effect("includes the rows the package stage writes, the template-default arm among them", () =>
+    Effect.gen(function* readsMapping() {
+      const { rows } = yield* readRows(yield* materialize("test-template-default"));
+
+      assert.isAbove(Rows.of(rows, TestReach).length, 0);
+      assert.isAbove(Rows.of(rows, TemplateDefault).length, 0);
     }),
   );
 });
