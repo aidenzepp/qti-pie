@@ -23,10 +23,11 @@ const namespaces = {
   mathml: "http://www.w3.org/1998/Math/MathML",
   qmd: "http://www.imsglobal.org/xsd/imsqti_metadata_v3p0",
   xi: "http://www.w3.org/2001/XInclude",
+  xlink: "http://www.w3.org/1999/xlink",
   xsi: "http://www.w3.org/2001/XMLSchema-instance",
 } as const;
 
-const { asi, cp, cpx, lom, mathml, qmd, xi, xsi } = namespaces;
+const { asi, cp, cpx, lom, mathml, qmd, xi, xlink, xsi } = namespaces;
 
 const treeId = "11111111-1111-4111-8111-111111111111";
 
@@ -417,6 +418,45 @@ describe("import/tree.ts wildcard attribute classification", () => {
       assert.strictEqual(refusal.kind, "attribute");
       assert.strictEqual(refusal.name, "xml:space");
       assert.deepStrictEqual(refusal.parent, Option.some("p"));
+    }),
+  );
+});
+
+/**
+ * An `xi:include` that carries `attributes` and `inner`, declaring the two prefixes it uses.
+ */
+const include = (attributes: string, inner = "") =>
+  `<xi:include xmlns:xi="${xi}" xmlns:xlink="${xlink}" ${attributes}>${inner}</xi:include>`;
+
+describe("import/tree.ts global attributes on every attribute wildcard host (decision 257)", () => {
+  it.effect("xlink:href on xi:include in a manifest is typed, not refused", () =>
+    Effect.gen(function* hrefOnInclude() {
+      const walked = yield* walkedOf(manifest("", include('xlink:href="a"')), "manifest");
+
+      assert.strictEqual(named(walked, "xi:include").kind, "xi:include");
+      assert.strictEqual(classOf(walked, "xi:include", "xlink:href", "manifest"), "typed");
+    }),
+  );
+
+  it.effect("xlink:href on xi:fallback in a manifest is typed, not refused", () =>
+    Effect.gen(function* hrefOnFallback() {
+      const walked = yield* walkedOf(
+        manifest("", include('xlink:href="a"', `<xi:fallback xlink:href="b"/>`)),
+        "manifest",
+      );
+
+      assert.strictEqual(named(walked, "xi:fallback").kind, "xi:fallback");
+      assert.strictEqual(classOf(walked, "xi:fallback", "xlink:href", "manifest"), "typed");
+    }),
+  );
+
+  it.effect("a name the host's policy refuses is not typed: q:foo on the operator", () =>
+    Effect.gen(function* excludedNamespace() {
+      const walked = yield* walkedOf(operatorItem(operand, 'q:foo="1"'), "item");
+
+      // The walk keeps it a foreign attribute, as before; the database refuses it by the
+      // operator's AttributeExclusion row for the ASI namespace (wildcard-namespace).
+      assert.strictEqual(classOf(walked, "qti-custom-operator", "q:foo", "item"), "foreign");
     }),
   );
 });
