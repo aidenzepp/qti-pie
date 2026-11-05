@@ -30,9 +30,10 @@ import { captureCli, spawnCli } from "#pantry/test/cli.ts";
 import { cliProcessTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
- * Grizzle's nine public errors, each with the tag its class declares. The tag is read from the
- * class, so a tag grizzle renames fails the roster test below instead of silently mapping to
- * `internal`.
+ * Grizzle's nine public errors, each with the tag its class declares. `Data.TaggedError(tag)` sets
+ * the tag as an instance field and as `prototype.name`, so the tag is read from the prototype's
+ * name without constructing an error. A tag grizzle renames fails the roster test below instead of
+ * silently mapping to `internal`.
  */
 const grizzleErrors = [
   CommitUnknown,
@@ -44,7 +45,7 @@ const grizzleErrors = [
   TokenError,
   TransientFailure,
   TransportFailure,
-].map((error) => ({ name: error.name, tag: String(error.fields._tag.ast.literal) }));
+].map((error) => ({ name: error.name, tag: error.prototype.name }));
 
 /**
  * A `PlatformError` of the kind a failed file read raises.
