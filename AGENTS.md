@@ -114,7 +114,9 @@ purpose; never restore it. Pushing code may come later, but only on an explicit 
 Before writing Effect code, read `packages/pantry/node_modules/effect/AGENTS.md` and follow its links. For APIs it does not
 cover, read `node_modules/effect/src` of the installed version.
 
-Use the skills in `.agents/skills/`:
+Use the skills in `.agents/skills/`. `.claude/skills/` holds a link to each, so Claude Code lists them too; edit only
+`.agents/skills/`. `.agents/skills/grizzle` is the skill grizzle ships (`node_modules/@bjornpagen/grizzle/skills/grizzle`): when
+the grizzle pin moves, copy the new one over it in the same pull request.
 
 - `effect-design`: the native-capability review and this repository's local Effect rulings. Effect structure and style
   stay with the installed Effect guide above.
