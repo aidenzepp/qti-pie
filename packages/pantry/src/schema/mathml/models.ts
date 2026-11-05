@@ -1091,8 +1091,11 @@ const contentKinds: ReadonlySet<string> = new Set(content);
  * The qualifiers an `m:apply` or `m:bind` holds after this head, in qualifier order.
  *
  * A head admits what `qualifiersOf` lists for it (REC syntax tables, E C7), less `m:interval`. A
- * head the table lacks admits none (decision 233, F-4): `m:bind`, `m:declare`, `m:fn`, `m:reln` and
- * `m:share` are such heads today. An `m:bind` always admits `m:bvar`, which it must hold (E C12).
+ * content head the table lacks (`m:bind`, `m:declare`, `m:fn`, `m:reln` and `m:share`) is modeled
+ * like `m:ci`: every qualifier, no operand count. The REC's tables say nothing about them (`fn`,
+ * `reln` and `declare` are deprecated MathML 2 forms the schema keeps), so nothing bans a
+ * qualifier after them; this is decision 245's accept-by-default, recorded as a limit. An
+ * `m:bind` always admits `m:bvar`, which it must hold (E C12).
  *
  * @param kind - `m:apply` or `m:bind`.
  * @param head - The head's handle.
@@ -1102,7 +1105,7 @@ export const headQualifiers = (kind: "m:apply" | "m:bind", head: string): readon
   qualifierOrder.filter(
     (qualifier) =>
       qualifierKinds.has(qualifier) &&
-      ((qualifiersOf[head] ?? []).includes(qualifier) ||
+      ((qualifiersOf[head] ?? qualifiersOf["m:ci"] ?? []).includes(qualifier) ||
         (kind === "m:bind" && qualifier === "m:bvar")),
   );
 

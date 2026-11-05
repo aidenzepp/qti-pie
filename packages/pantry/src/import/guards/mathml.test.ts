@@ -270,8 +270,14 @@ describe("modelFinding", () => {
     assert.strictEqual(modelFinding("m:apply", ["m:csymbol", "m:degree", "m:ci"]), undefined);
     assert.strictEqual(modelFinding("m:apply", ["m:cn", "m:bvar", "m:ci"]), "admission");
     assert.strictEqual(modelFinding("m:apply", ["m:apply", "m:degree", "m:ci"]), "admission");
-    assert.strictEqual(modelFinding("m:apply", ["m:declare", "m:bvar", "m:ci"]), "admission");
+    assert.strictEqual(modelFinding("m:apply", ["m:declare", "m:bvar", "m:ci"]), undefined);
     assert.strictEqual(modelFinding("m:apply", ["m:declare", "m:ci", "m:ci"]), undefined);
+    for (const head of ["m:bind", "m:declare", "m:fn", "m:reln", "m:share"]) {
+      assert.strictEqual(modelFinding("m:apply", [head, "m:bvar", "m:ci"]), undefined, head);
+      assert.strictEqual(modelFinding("m:apply", [head, "m:degree", "m:ci"]), undefined, head);
+      assert.strictEqual(modelFinding("m:apply", [head, "m:ci", "m:bvar"]), "ordering", head);
+    }
+    assert.strictEqual(modelFinding("m:apply", ["m:fn", "m:bvar", "m:ci"]), undefined);
   });
 
   it("keeps the XSD's model for a head that is no content expression", () => {
