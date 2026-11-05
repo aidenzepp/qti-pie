@@ -444,6 +444,7 @@ const checkRules = new Map<string, Rule>([
   ["VariableWeightInTest", "P12"],
   ["VariantNotSelf", "variant-target"],
   ["XsiNilUndeclared", "xsi-nil"],
+  ["XsiTypeAttributePrefix", "xsi-type"],
 ]);
 
 /**
@@ -550,6 +551,7 @@ const containedRules = new Map<string, Rule>([
   ["Source>SourceSrcset", "source-srcset"],
   ["Track>TrackSrclang", "track-srclang"],
   ["TypedBinding>BindingFit", "binding-fit"],
+  ["XsiTypeAttribute>XsiType", "xsi-type"],
 ]);
 
 /**

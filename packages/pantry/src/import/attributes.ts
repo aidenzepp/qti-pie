@@ -57,7 +57,7 @@ import {
   PrintedVariableId,
 } from "#pantry/schema/document.ts";
 import { NodeXmlSpace } from "#pantry/schema/foreign-attributes.ts";
-import { AttributeLexical, AttributeName, Tree } from "#pantry/schema/node.ts";
+import { AttributeLexical, AttributeName, Tree, XsiTypeAttribute } from "#pantry/schema/node.ts";
 import type { NodeKindHandle } from "#pantry/schema/node.ts";
 import { ManifestId, ManifestXmlId } from "#pantry/schema/package.ts";
 import { attributeAdmission } from "#pantry/schema/seed/admission.ts";
@@ -206,6 +206,26 @@ const readable = (element: Element): readonly Attribute[] =>
   );
 
 /**
+ * Whether an attribute of a node is one a derived `xsi:type` added, stored by the tree walk as an
+ * `XsiTypeAttribute` row: this pass neither checks nor writes it.
+ */
+type Stored = (node: Uuid, attribute: Attribute) => boolean;
+
+/**
+ * The attributes `rows` holds as `XsiTypeAttribute` rows, by node and expanded name.
+ */
+const storedIn = (rows: Rows): Stored => {
+  const held = new Set(
+    Rows.of(rows, XsiTypeAttribute).map(
+      (row) => `${row.node}\u0000${row.namespace}\u0000${row.local}`,
+    ),
+  );
+
+  return (node, attribute) =>
+    held.has(`${node}\u0000${attribute.namespace}\u0000${attribute.local}`);
+};
+
+/**
  * The elements of a tree in document order that the node index holds.
  */
 const indexedElements = (element: Element, nodes: NodeIndex): readonly Element[] =>
@@ -231,18 +251,20 @@ const isForeign = (scope: Scope, attribute: Attribute, kind: NodeKindHandle): bo
  * whose whitespace class the inventory cannot give. A foreign attribute is the foreign builder's.
  *
  * The item root's `label` is `AssessmentItemLabel`'s, written with the root, so it is not refused.
+ * An attribute `stored` holds as an `XsiTypeAttribute` row is the tree walk's.
  */
 const firstUnmodeled = (
   elements: readonly Element[],
   nodes: NodeIndex,
   scope: Scope,
+  stored: Stored,
 ): Option.Option<UnmodeledVocabulary> => {
   for (const element of elements) {
     const node = nodes.get(element);
     const holds = node === undefined ? undefined : admitted.get(node.kind);
     if (node !== undefined) {
       for (const attribute of readable(element).filter(
-        (found) => !isForeign(scope, found, node.kind),
+        (found) => !isForeign(scope, found, node.kind) && !stored(node.id, found),
       )) {
         const { qname } = attribute;
         const modeled =
@@ -490,17 +512,21 @@ const writeElement = (
   written: Written,
   element: Element,
   node: { readonly id: Uuid; readonly kind: NodeKindHandle },
-  context: Pick<Subject, "documentId" | "rootKind" | "tree"> & { readonly scope: Scope },
+  context: Pick<Subject, "documentId" | "rootKind" | "tree"> & {
+    readonly scope: Scope;
+    readonly stored: Stored;
+  },
 ): Effect.Effect<void, ImportRefused> =>
   Effect.gen(function* writeElementRows() {
     const { kind } = node;
-    const { scope, ...fixed } = context;
+    const { scope, stored, ...fixed } = context;
     for (const found of readable(element)) {
       const { qname: name, value: lexical } = found;
       const attribute = AttributeName.handles.find((known) => known === name);
       const whiteSpace = whiteSpaceOf(kind, name);
       const skipped =
         isForeign(scope, found, kind) ||
+        stored(node.id, found) ||
         attribute === undefined ||
         Option.isNone(whiteSpace) ||
         !isShared(name) ||
@@ -564,7 +590,8 @@ export const attributeRows = Effect.fn("import.attributeRows")(function* attribu
   }
 
   const scope = scopeOf(treeRow.value.root, treeRow.value.version);
-  const refusal = firstUnmodeled(elements, nodes, scope);
+  const stored = storedIn(rows);
+  const refusal = firstUnmodeled(elements, nodes, scope, stored);
   if (Option.isSome(refusal)) {
     return yield* refusal.value;
   }
@@ -577,6 +604,7 @@ export const attributeRows = Effect.fn("import.attributeRows")(function* attribu
         documentId,
         rootKind: scope.root,
         scope,
+        stored,
         tree: root.id,
       });
     }
