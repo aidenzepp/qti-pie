@@ -612,18 +612,37 @@ const inResponseProcessing = (context: Context, element: SourceElement): boolean
 };
 
 /**
- * Apply `template-requirements` to an inline `qti-map-response`: the response it names is declared
- * with a `qti-mapping`, "the associated mapping, which must have been declared" (the information
- * model, `info-compact.txt:11438`).
+ * What each inline mapping expression needs of the response it names.
  *
- * A `qti-map-response` that names no response declaration is not judged here: an undeclared
- * variable is its own refusal, and this rule refuses only a declared response with no mapping.
+ * `qti-map-response` needs a `qti-mapping`, "the associated mapping, which must have been
+ * declared" (the information model, `info-compact.txt:11438`). `qti-map-response-point` "looks up
+ * the value of a response variable that must be of base-type point, and transforms it using the
+ * associated areaMapping" (`info-compact.txt:11437`), so it needs a `point` response holding a
+ * `qti-area-mapping`. The `identifier` here is a placeholder: each expression's own replaces it.
+ */
+const mappingNeeds = {
+  "qti-map-response": responseHolding("qti-mapping", Option.none()),
+  "qti-map-response-point": responseHolding("qti-area-mapping", Option.some("point")),
+} as const satisfies Record<string, Needed>;
+
+/**
+ * The local name of an inline mapping expression.
+ */
+type MappingExpression = keyof typeof mappingNeeds;
+
+/**
+ * Apply `template-requirements` to an inline `qti-map-response` or `qti-map-response-point`: the
+ * response it names is declared with what {@link mappingNeeds} lists for it. The qti package
+ * refuses both as P27 (`checkMapping` in `packages/pantry/src/processing/check.ts`).
+ *
+ * An expression that names no response declaration is not judged here: an undeclared variable is
+ * its own refusal, and this rule refuses only a declared response that lacks what it needs.
  *
  * @param source The document.
  * @param visit The element's visit.
  * @param context The item's declarations and the parents the walk has met.
- * @returns The refusal at the `qti-map-response`'s path when its response has no mapping; none for
- *   any other element.
+ * @returns The refusal at the expression's path when its response lacks what it needs; none for any
+ *   other element.
  */
 const mapResponseRequirements = (
   source: SourceDocument,
@@ -631,8 +650,11 @@ const mapResponseRequirements = (
   context: Context,
 ): readonly Refusal[] => {
   const attribute = attributeOf(visit.element, "identifier");
+  const expression = Arr.findFirst(Object.keys(mappingNeeds), (local): local is MappingExpression =>
+    isQti(visit.element, (name) => name === local),
+  );
   if (
-    !isQti(visit.element, (local) => local === "qti-map-response") ||
+    Option.isNone(expression) ||
     Option.isNone(attribute) ||
     !inResponseProcessing(context, visit.element)
   ) {
@@ -640,7 +662,7 @@ const mapResponseRequirements = (
   }
 
   const needed: Needed = {
-    ...responseHolding("qti-mapping", Option.none()),
+    ...mappingNeeds[expression.value],
     identifier: identifierOf(attribute.value),
   };
   const declaration = context.responses.get(needed.identifier);
@@ -660,9 +682,11 @@ const mapResponseRequirements = (
 /**
  * Give an element's `base-type` when the value model holds values of it.
  *
- * A base type the value model does not hold (`point`, `duration`, `file`) has no lexical check here
- * (the slice list's 0.11 item 3), so its values are not judged. A missing or out-of-vocabulary
- * `base-type` is the structural validator's.
+ * A base type the value model does not hold (`duration`, `file`) has no lexical check here (the
+ * slice list's 0.11 item 3), so its values are not judged. A `point` is held, so a value that is
+ * not two integers is refused, as the qti package refuses it (`value-lexical`, the `point` pattern
+ * in `packages/pantry/src/import/refusal.ts`). A missing or out-of-vocabulary `base-type` is the
+ * structural validator's.
  *
  * @param element An element with a `base-type`, such as a declaration or a `qti-base-value`.
  * @returns Its base type, none when it is absent or not modelled.
@@ -912,15 +936,16 @@ type Expected = "outcome" | "response" | "variable";
  *
  * "This expression looks up the value of an item variable that has been declared in a
  * corresponding variable declaration or is one of the built-in variables" (`qti-variable`,
- * `info-compact.txt:9286`); `qti-correct` and `qti-map-response` read a response variable
- * (`:11418`, `:11438`); `qti-set-outcome-value` sets an outcome variable (`:11770`), and so does
- * `qti-lookup-outcome-value`, whose `identifier` is "The identifier of the outcome variable to be
- * set" (`:10775`).
+ * `info-compact.txt:9286`); `qti-correct`, `qti-map-response` and `qti-map-response-point` read a
+ * response variable (`:11418`, `:11438`, `:11437`); `qti-set-outcome-value` sets an outcome
+ * variable (`:11770`), and so does `qti-lookup-outcome-value`, whose `identifier` is "The
+ * identifier of the outcome variable to be set" (`:10775`).
  */
 const referencing: ReadonlyMap<string, Expected> = new Map([
   ["qti-correct", "response"],
   ["qti-lookup-outcome-value", "outcome"],
   ["qti-map-response", "response"],
+  ["qti-map-response-point", "response"],
   ["qti-set-outcome-value", "outcome"],
   ["qti-variable", "variable"],
 ]);
@@ -1039,9 +1064,11 @@ const variableType = (
  * Apply `undeclared-variable` to an element of inline response processing.
  *
  * `qti-variable` names a response, outcome, template or context declaration of the item, or a
- * built-in variable (`info-compact.txt:9286`); `qti-correct` and `qti-map-response` name a
- * response declaration; `qti-set-outcome-value` and `qti-lookup-outcome-value` name an outcome
- * declaration or `completionStatus`. Template processing is not checked here.
+ * built-in variable (`info-compact.txt:9286`); `qti-correct`, `qti-map-response` and
+ * `qti-map-response-point` name a response declaration; `qti-set-outcome-value` and
+ * `qti-lookup-outcome-value` name an outcome declaration or `completionStatus`. Template processing
+ * is not checked here. The qti package refuses each as P8 (`reference` and `target` in
+ * `packages/pantry/src/processing/check.ts`).
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1085,14 +1112,17 @@ const operandOf = (element: SourceElement): Option.Option<SourceElement> => {
 };
 
 /**
- * Give the type of an expression built only of the eight phase-1 elements (spec §4.12), each
- * naming a declared or built-in variable.
+ * Give the type of an expression built only of the eight phase-1 elements (spec §4.12) and the two
+ * that M1-R adds, `qti-map-response-point` and `qti-equal`, each naming a declared or built-in
+ * variable.
  *
  * `qti-base-value` is a single of its `base-type`; `qti-variable` and `qti-correct` have their
- * variable's type; `qti-map-response` is a single float; `qti-match` and `qti-is-null` are a
- * single boolean. An expression that holds any other element is not typed: phase 1 marks that
- * processing and never runs it (spec Q15, ruled B, where this is the one residual difference from
- * the qti package).
+ * variable's type; `qti-map-response` and `qti-map-response-point` are a single float (the latter
+ * "similar to mapResponse", `info-compact.txt:11437`); `qti-match`, `qti-is-null` and `qti-equal`
+ * are a single boolean ("The result is a single boolean", `:11415`). An expression that holds any
+ * other element is not typed: phase 1 marks that processing and never runs it (spec Q15, ruled B,
+ * where this is the one residual difference from the qti package). The qti package types the same
+ * expressions alike (`resultType` in `packages/pantry/src/processing/types.ts`).
  *
  * @param expression The expression.
  * @param context The item's declarations.
@@ -1117,11 +1147,13 @@ const expressionType = (
     case "qti-correct": {
       return Option.flatten(variable);
     }
-    case "qti-map-response": {
+    case "qti-map-response":
+    case "qti-map-response-point": {
       return Option.as(variable, singleOf("float"));
     }
     case "qti-match":
-    case "qti-is-null": {
+    case "qti-is-null":
+    case "qti-equal": {
       return expression.children.every(
         (child) => child.kind !== "element" || Option.isSome(expressionType(child, context)),
       )
@@ -1148,7 +1180,8 @@ const baseTypeText = (type: ExpressionType): string => Option.getOrElse(type.bas
  * "Floating point values can not be assigned to integer variables and vice-versa"
  * (`info-compact.txt:11770`): the expression's base type and cardinality are the outcome's. A type
  * with no base type (a `record`) compares by cardinality alone. An outcome or an expression that
- * is not typed is not judged.
+ * is not typed is not judged. The qti package refuses the same as P20 (`typeRule` in
+ * `packages/pantry/src/processing/check.ts`).
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1282,7 +1315,8 @@ const lookupTableRequirements = (
  * `qti-match-table` (operator ruling `96840ced`, Q15 B: refused although phase 1 never runs a
  * lookup). An operand phase 1 cannot type is accepted untyped. An outcome that is undeclared or
  * holds no lookup table is not judged here: they are `undeclared-variable`'s refusal and
- * {@link lookupTableRequirements}'s.
+ * {@link lookupTableRequirements}'s. The qti package refuses the same as P22 (`checkLookup` in
+ * `packages/pantry/src/processing/check.ts`).
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1333,6 +1367,64 @@ const lookupOperandType = (
           table: table.value,
         }),
       ];
+};
+
+/**
+ * The base types a `qti-equal` operand may have: "two sub-expressions which must both have single
+ * cardinality and have a numerical base-type" (`info-compact.txt:11415`). Numerical is integer or
+ * float, never duration, as the qti package reads it.
+ */
+const equalOperands: ReadonlySet<BaseType> = new Set<BaseType>(["integer", "float"]);
+
+/**
+ * Apply `expression-type` to the operands of a `qti-equal` of inline response processing: each is
+ * a single integer or float (`info-compact.txt:11415`), so the engine never compares any other
+ * value. The qti package refuses the same as P23 (`operandRules` in
+ * `packages/pantry/src/processing/check.ts`).
+ *
+ * An operand that is not typed is not judged, and neither is one with no base type of its own
+ * whose cardinality is `single`, as {@link lookupOperandType} judges a lookup's. The detail names
+ * the operand by its position among the `qti-equal`'s child elements, from 1.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The item's declarations and the parents the walk has met.
+ * @returns One refusal at the `qti-equal`'s path per operand of another type; none for any other
+ *   element.
+ */
+const equalOperandType = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] => {
+  if (
+    !isQti(visit.element, (local) => local === "qti-equal") ||
+    !inResponseProcessing(context, visit.element)
+  ) {
+    return [];
+  }
+
+  const operands = visit.element.children.flatMap((child) =>
+    child.kind === "element" ? [child] : [],
+  );
+
+  return operands.flatMap((operand, index) =>
+    Option.match(expressionType(operand, context), {
+      onNone: () => [],
+      onSome: (type) =>
+        type.cardinality === "single" &&
+        !Option.exists(type.baseType, (baseType) => !equalOperands.has(baseType))
+          ? []
+          : [
+              refusal(source, "expression-type", visit.path, {
+                element: visit.element.local,
+                expressionBaseType: baseTypeText(type),
+                expressionCardinality: type.cardinality,
+                operand: String(index + 1),
+              }),
+            ],
+    }),
+  );
 };
 
 /**
@@ -1458,8 +1550,9 @@ const setCorrectResponses = (
  * Check a document against the prose rules: `undeclared-response`, `duplicate-identifier`,
  * `binding`, `template-requirements`, `value-type`, `undeclared-variable` and `expression-type`,
  * and reading 19's `max-strings` on an Extended Text bound to a container. `template-requirements`
- * judges the declarations a standard template, an inline `qti-map-response` and a
- * `qti-lookup-outcome-value` need.
+ * judges the declarations a standard template, an inline `qti-map-response` or
+ * `qti-map-response-point` and a `qti-lookup-outcome-value` need. `expression-type` judges what a
+ * `qti-set-outcome-value` sets, a lookup's operand and a `qti-equal`'s operands.
  *
  * The rules judge only what the structural walk judges, and only an item they can read whole:
  *
@@ -1518,6 +1611,7 @@ export const checkRules = (source: SourceDocument): readonly Refusal[] => {
       ...setOutcomeType(source, visit, context),
       ...lookupTableRequirements(source, visit, context),
       ...lookupOperandType(source, visit, context),
+      ...equalOperandType(source, visit, context),
     );
   }
 
