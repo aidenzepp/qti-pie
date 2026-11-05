@@ -68,6 +68,10 @@ const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
 const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
 
+const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
+
+const xlinkNamespace = "http://www.w3.org/1999/xlink";
+
 /**
  * The four attributes XML Schema declares in the `xsi` namespace; the tree walk stores each in a
  * relation of its own.
@@ -194,6 +198,24 @@ const isShared = (name: string): boolean =>
   familyClass.has(name) || ariaRelations.has(name) || name === "headers";
 
 /**
+ * The name the model knows `attribute` by, from its expanded name and never from the prefix its
+ * author chose (Namespaces in XML 1.0): an unqualified name as written, `xml:` and `xlink:` for the
+ * local names of those two namespaces, and for any other namespace a Clark name no table holds.
+ */
+const modelName = (attribute: Attribute): string => {
+  const { local, namespace } = attribute;
+  if (namespace === "") {
+    return local;
+  }
+
+  if (namespace === xmlNamespace) {
+    return `xml:${local}`;
+  }
+
+  return namespace === xlinkNamespace ? `xlink:${local}` : `{${namespace}}${local}`;
+};
+
+/**
  * The attributes of `element` this pass reads: all but namespace declarations and the four
  * `xsi` attributes XML Schema declares, which the tree walk stores as `NamespaceDeclaration`,
  * `SchemaLocation`, `XsiType`, `XsiNil` and `NoNamespaceSchemaLocation`.
@@ -267,10 +289,11 @@ const firstUnmodeled = (
         (found) => !isForeign(scope, found, node.kind) && !stored(node.id, found),
       )) {
         const { qname } = attribute;
+        const name = modelName(attribute);
         const modeled =
-          holds?.has(qname) === true &&
-          qname !== "data-ssml" &&
-          (!isShared(qname) || Option.isSome(whiteSpaceOf(node.kind, qname)));
+          holds?.has(name) === true &&
+          name !== "data-ssml" &&
+          (!isShared(name) || Option.isSome(whiteSpaceOf(node.kind, name)));
         if (!modeled) {
           return Option.some(
             new UnmodeledVocabulary({
@@ -521,7 +544,8 @@ const writeElement = (
     const { kind } = node;
     const { scope, stored, ...fixed } = context;
     for (const found of readable(element)) {
-      const { qname: name, value: lexical } = found;
+      const { value: lexical } = found;
+      const name = modelName(found);
       const attribute = AttributeName.handles.find((known) => known === name);
       const whiteSpace = whiteSpaceOf(kind, name);
       const skipped =
