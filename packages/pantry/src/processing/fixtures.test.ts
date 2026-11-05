@@ -17,6 +17,7 @@ import type { Child, Element } from "@qti-pie/crust/tree.ts";
  */
 const notHandWrittenItems: ReadonlySet<string> = new Set([
   "p29-test-variables-weight-integer",
+  "large-program",
   "processing-item",
   "rptemplates",
   "template-item",
@@ -66,7 +67,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing fixtures", 
 
       assert.deepStrictEqual(
         processingFixtureNames.filter((name) => !handWritten.has(name)).toSorted(),
-        ["processing-item", "rptemplates", "template-item"],
+        ["large-program", "processing-item", "rptemplates", "template-item"],
       );
     }),
   );
