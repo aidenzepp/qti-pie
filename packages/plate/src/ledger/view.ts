@@ -19,6 +19,7 @@
  *
  * @module
  */
+import { Option } from "effect";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { browserSupport } from "#plate/ledger/browser-support.ts";
@@ -36,7 +37,7 @@ import type {
   RowState,
 } from "#plate/ledger/report.ts";
 import { standsInForSafari } from "#plate/ledger/runs.ts";
-import { describeRefusal } from "#plate/validate/verdict.ts";
+import { acceptedItem, describeRefusal } from "#plate/validate/verdict.ts";
 import type { Verdict } from "#plate/validate/verdict.ts";
 
 /**
@@ -1039,9 +1040,11 @@ const reasonsOf = (verdict: Verdict): readonly string[] => {
  *   not accepted.
  */
 const unsupportedOf = (verdict: Verdict): readonly string[] =>
-  verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
-    ? verdict.accepted.unsupported.map((feature) => `${feature.feature} at ${feature.path}`)
-    : [];
+  Option.match(acceptedItem(verdict), {
+    onNone: () => [],
+    onSome: ({ unsupported }) =>
+      unsupported.map((feature) => `${feature.feature} at ${feature.path}`),
+  });
 
 /**
  * Join a list of words with semicolons, or give `none` when there are none.

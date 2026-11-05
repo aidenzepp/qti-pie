@@ -22,6 +22,7 @@ import { message } from "#plate/messages.ts";
 import { attribute, textOf } from "#plate/test/accessibility.ts";
 import { Playground, eachEngine, playgroundLayer, withPage } from "#plate/test/browsers.ts";
 import { elementsOf, itemTarget } from "#plate/test/playground-page.ts";
+import { acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, Verdict } from "#plate/validate/verdict.ts";
 
 /**
@@ -236,9 +237,9 @@ const verdictOf = Effect.fn("verdictOf")(function* verdictOf(corpusPath: string)
  * @returns Its accepted document; the test fails when `open` did not accept it.
  */
 const acceptedOf = (verdict: Verdict): Accepted =>
-  verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
-    ? verdict.accepted
-    : assert.fail(`${verdict.document} is ${verdict.verdict}, not accepted`);
+  Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`${verdict.document} is ${verdict.verdict}, not accepted`),
+  );
 
 /**
  * Locate a field of the theme box by its name.
