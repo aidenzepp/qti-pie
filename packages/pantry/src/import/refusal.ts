@@ -14,6 +14,8 @@ import type { ContentGuardRefusal } from "#pantry/import/guards/content.ts";
 import type { ItemGuardRefusal } from "#pantry/import/guards/item.ts";
 import type { ManifestGuardRefusal } from "#pantry/import/guards/manifest.ts";
 import type { ProcessingGuardRefusal } from "#pantry/import/guards/processing.ts";
+import type { ReferenceGuardRefusal } from "#pantry/import/guards/reference.ts";
+import type { TestGuardRefusal } from "#pantry/import/guards/test.ts";
 import type { GuardRefusal } from "#pantry/import/guards/tree.ts";
 import type { UsageGuardRefusal } from "#pantry/import/guards/usage.ts";
 import type { NotQti3 } from "#pantry/import/manifest.ts";
@@ -1458,6 +1460,8 @@ export type ReadRefusal =
   | ProcessingGuardRefusal
   | ProcessingRefused
   | ReaderRefusal
+  | ReferenceGuardRefusal
+  | TestGuardRefusal
   | UnmodeledVocabulary
   | UsageGuardRefusal
   | WellFormednessError
@@ -1499,6 +1503,8 @@ export const ruleOfError = (e: ContentGuardRefusal | ReadRefusal): ImportRefused
       ProcessingRefused: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ReaderRefusal: (g) =>
         new ImportRefused({ detail: `${g.rule}: ${g.detail}`, rule: "reader-refusal" }),
+      ReferenceGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
+      TestGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       UnmodeledVocabulary: (g) =>
         new ImportRefused({
           detail: `${g.kind} ${g.name}${g.parent._tag === "Some" ? ` in ${g.parent.value}` : ""} has no model yet`,
