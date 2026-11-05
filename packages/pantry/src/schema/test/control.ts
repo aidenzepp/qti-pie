@@ -11,13 +11,28 @@
  * says the source wrote it (the placement rules of `#pantry/schema/attribute-homes.ts`). Integers
  * are `bigint` columns; a non-canonical spelling is an `AttributeSpelling` row.
  */
-import { closedId, key, pg, relation, uuid } from "@bjornpagen/grizzle";
+import {
+  capacity,
+  check,
+  closedId,
+  contained,
+  key,
+  on,
+  pg,
+  ref,
+  relation,
+  select,
+  uuid,
+  within,
+} from "@bjornpagen/grizzle";
 import { XsBoolean } from "#pantry/schema/content/rosters.ts";
 import {
   AdaptiveRefHref,
   AdaptiveRefIdentifier,
   TimeLimitSeconds,
 } from "#pantry/schema/contracts.ts";
+import { Edge } from "#pantry/schema/node.ts";
+import { AssessmentSection, RequiredChild, StructureChild } from "#pantry/schema/test/structure.ts";
 
 /**
  * A `qti-selection` element. `select` is required; `withReplacement` defaults to `false`, and
@@ -238,8 +253,95 @@ export const relations = {
 } as const;
 
 /**
- * The statements this module declares: the candidate key a later containment targets. A section
- * holds at most one selection, so `Selection.section` is unique, and `SelectionBounded` contains
- * into `Selection.(section, select, withReplacement)`.
+ * The `qti-adaptive-selection` edge kinds that hold at most one child each.
  */
-export const rules = [key(Selection, ["section"])] as const;
+const optionalAdaptiveRefs = [
+  "qti-adaptive-settings-ref",
+  "qti-metadata-ref",
+  "qti-usagedata-ref",
+] as const;
+
+/**
+ * An `xs:int`'s lowest value (`select` and `max-attempts`, ASI 3.0.1 lines 31603 and 34312;
+ * reading 45).
+ */
+const intLowest = -2_147_483_648n;
+
+/**
+ * An `xs:int`'s highest value.
+ */
+const intHighest = 2_147_483_647n;
+
+/**
+ * The statements this module declares.
+ *
+ * A section holds at most one selection, so `Selection.section` is unique. A selection hangs from
+ * an edge, and from a section. `SelectionBounded` holds exactly the selections without
+ * replacement: it is contained into `Selection`, a row check holds its `withReplacement` to a
+ * false spelling (`false` or `0`, two handles a selection on one value cannot count together), and
+ * one selected containment per spelling makes it complete. A bounded selection's `select` is at
+ * most the section's children (S-R20, `selection-bounds`), and any selection's is at least the
+ * section's required children (S-R21, `selection-required`); `select="0"` and a negative `select`
+ * are admitted (S-R22). `select` and `max-attempts` keep `xs:int`'s range. An adaptive selection
+ * has its engine ref exactly once and each other ref at most once. Each marker and optional value
+ * belongs to its arm.
+ */
+export const rules = [
+  key(Selection, ["section"]),
+  contained(on(Selection, "id", "section"), on(Edge, "child", "parent")),
+  contained(on(Selection, "section"), on(AssessmentSection, "id")),
+  contained(
+    on(SelectionBounded, "section", "select", "withReplacement"),
+    on(Selection, "section", "select", "withReplacement"),
+  ),
+  check("SelectionBoundedWithoutReplacement", SelectionBounded, (s) =>
+    s.or(s.eq(s.withReplacement, "false"), s.eq(s.withReplacement, "0")),
+  ),
+  contained(
+    on(select(Selection, { withReplacement: "false" }), "section"),
+    on(SelectionBounded, "section"),
+  ),
+  contained(
+    on(select(Selection, { withReplacement: "0" }), "section"),
+    on(SelectionBounded, "section"),
+  ),
+  capacity(on(SelectionBounded, "section"), {
+    from: on(StructureChild, "parent"),
+    within: within(ref("select"), "*"),
+  }),
+  capacity(on(Selection, "section"), {
+    from: on(RequiredChild, "parent"),
+    within: within(0n, ref("select")),
+  }),
+  check("SelectionSelectInt", Selection, (s) =>
+    s.and(s.ge(s.select, intLowest), s.le(s.select, intHighest)),
+  ),
+  check("MaxAttemptsInt", ItemSessionMaxAttempts, (m) =>
+    m.and(m.ge(m.value, intLowest), m.le(m.value, intHighest)),
+  ),
+  capacity(on(AdaptiveSelection, "id"), {
+    from: on(
+      select(Edge, { childKind: "qti-adaptive-engine-ref", parentKind: "qti-adaptive-selection" }),
+      "parent",
+    ),
+    within: within(1n, 1n),
+  }),
+  ...optionalAdaptiveRefs.map((childKind) =>
+    capacity(on(AdaptiveSelection, "id"), {
+      from: on(select(Edge, { childKind, parentKind: "qti-adaptive-selection" }), "parent"),
+      within: within(0n, 1n),
+    }),
+  ),
+  contained(on(DeclaredWithReplacement, "node"), on(Selection, "id")),
+  contained(on(DeclaredOrderingShuffle, "node"), on(Ordering, "id")),
+  contained(on(DeclaredAllowComment, "node"), on(ItemSessionControl, "id")),
+  contained(on(DeclaredAllowReview, "node"), on(ItemSessionControl, "id")),
+  contained(on(DeclaredAllowSkipping, "node"), on(ItemSessionControl, "id")),
+  contained(on(DeclaredShowFeedback, "node"), on(ItemSessionControl, "id")),
+  contained(on(DeclaredShowSolution, "node"), on(ItemSessionControl, "id")),
+  contained(on(DeclaredValidateResponses, "node"), on(ItemSessionControl, "id")),
+  contained(on(ItemSessionMaxAttempts, "node"), on(ItemSessionControl, "id")),
+  contained(on(DeclaredAllowLateSubmission, "node"), on(TimeLimits, "id")),
+  contained(on(TimeLimitMin, "node"), on(TimeLimits, "id")),
+  contained(on(TimeLimitMax, "node"), on(TimeLimits, "id")),
+] as const;
