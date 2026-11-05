@@ -11,8 +11,11 @@
 import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
+import { ownNames, schemaSetOf } from "#pantry/import/foreign.ts";
 import { closedOf, Rows, typedAttribute, UnmodeledVocabulary } from "#pantry/import/tree.ts";
 import type { NodeIndex, WhiteSpace } from "#pantry/import/tree.ts";
+import { isForeignAttribute, scopeOf } from "#pantry/import/wildcard.ts";
+import type { Scope } from "#pantry/import/wildcard.ts";
 import {
   AriaAutocompleteValue,
   AriaCurrentValue,
@@ -26,16 +29,38 @@ import {
   IdrefAttribute,
   SuppressTtsMode,
   TextDirection,
+  XlinkActuateValue,
+  XlinkShowValue,
+  XlinkTypeValue,
+  XmlSpace,
   XsBoolean,
 } from "#pantry/schema/content/rosters.ts";
 import { entryOf } from "#pantry/schema/content/xsd-inventory.ts";
 import * as family from "#pantry/schema/attributes.ts";
-import { ClassList, ContentLanguage, IdReference, XmlBaseUri } from "#pantry/schema/contracts.ts";
-import { DocumentId, HtmlId, ItemBodyId, PrintedVariableId } from "#pantry/schema/document.ts";
-import type { RegistryRow } from "#pantry/schema/kinds/generic.ts";
+import {
+  ClassList,
+  ContentLanguage,
+  IdReference,
+  ManifestIdentifier,
+  XlinkArcroleUri,
+  XlinkHrefUri,
+  XlinkLabelName,
+  XlinkRoleUri,
+  XmlBaseUri,
+} from "#pantry/schema/contracts.ts";
+import {
+  DocumentId,
+  DocumentXmlId,
+  HtmlId,
+  ItemBodyId,
+  PrintedVariableId,
+} from "#pantry/schema/document.ts";
+import { NodeXmlSpace } from "#pantry/schema/foreign-attributes.ts";
 import { AttributeLexical, AttributeName, Tree } from "#pantry/schema/node.ts";
 import type { NodeKindHandle } from "#pantry/schema/node.ts";
-import { registries } from "#pantry/schema/seed/admission.ts";
+import { ManifestId, ManifestXmlId } from "#pantry/schema/package.ts";
+import { attributeAdmission } from "#pantry/schema/seed/admission.ts";
+import * as xlink from "#pantry/schema/xlink.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
@@ -43,15 +68,18 @@ const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
 
 /**
- * The attribute names each node kind's registry holds, from the composed registry list.
+ * The attribute names each node kind may carry, from the composed `AttributeAdmission` rows: the
+ * kind's registry names and the typed names a wildcard host admits (the `foreign` kind's among
+ * them).
  */
-const admitted: ReadonlyMap<string, ReadonlySet<string>> = new Map(
-  registries.flatMap((registry) =>
-    Object.entries<RegistryRow>(registry).map(
-      ([kind, row]) => [kind, new Set(row.attributes)] as const,
-    ),
-  ),
-);
+const admitted: ReadonlyMap<string, ReadonlySet<string>> = (() => {
+  const byKind = new Map<string, Set<string>>();
+  for (const row of attributeAdmission) {
+    byKind.set(row.kind, (byKind.get(row.kind) ?? new Set<string>()).add(row.attribute));
+  }
+
+  return byKind;
+})();
 
 /**
  * The relation of `role` and of each `aria-*` attribute, by attribute name: `AriaRole` is `role`'s
@@ -96,7 +124,9 @@ const ariaRosters: ReadonlyMap<string, readonly string[]> = new Map<string, read
 
 /**
  * The whitespace class of the families when no inventory entry names the kind: the manifest's LOM
- * `string` carries `xml:lang` and has none (spec 3.9).
+ * `string` carries `xml:lang` and has none (spec 3.9). An attribute an XSD types is read as the XSD
+ * reads it, outer whitespace collapsed (reading 7): the two typed `xml:` names and nine of the ten
+ * `xlink:` names; `xlink:title` is an `xs:string` and keeps its whitespace.
  */
 const familyClass: ReadonlyMap<string, WhiteSpace> = new Map([
   ["class", "collapse"],
@@ -106,8 +136,20 @@ const familyClass: ReadonlyMap<string, WhiteSpace> = new Map([
   ["id", "collapse"],
   ["label", "replace"],
   ["lang", "replace"],
+  ["xlink:actuate", "collapse"],
+  ["xlink:arcrole", "collapse"],
+  ["xlink:from", "collapse"],
+  ["xlink:href", "collapse"],
+  ["xlink:label", "collapse"],
+  ["xlink:role", "collapse"],
+  ["xlink:show", "collapse"],
+  ["xlink:title", "preserve"],
+  ["xlink:to", "collapse"],
+  ["xlink:type", "collapse"],
   ["xml:base", "collapse"],
+  ["xml:id", "collapse"],
   ["xml:lang", "collapse"],
+  ["xml:space", "collapse"],
 ]);
 
 /**
@@ -164,21 +206,31 @@ const indexedElements = (element: Element, nodes: NodeIndex): readonly Element[]
     : [];
 
 /**
- * The first attribute, in document order, that the registry of its element's kind does not hold, or
- * that no relation here models: `data-ssml`, whose rows are a later phase's, and a name this pass
- * reads whose whitespace class the inventory cannot give.
+ * Whether `attribute` is foreign on an element of `kind`: a name the foreign builder stores as a
+ * `ForeignAttribute` row, which this pass neither checks nor writes.
+ */
+const isForeign = (scope: Scope, attribute: Attribute, kind: NodeKindHandle): boolean =>
+  isForeignAttribute(scope, attribute, kind, ownNames(kind));
+
+/**
+ * The first attribute, in document order, that its element's kind does not admit, or that no
+ * relation here models: `data-ssml`, whose rows are a later phase's, and a name this pass reads
+ * whose whitespace class the inventory cannot give. A foreign attribute is the foreign builder's.
  *
  * The item root's `label` is `AssessmentItemLabel`'s, written with the root, so it is not refused.
  */
 const firstUnmodeled = (
   elements: readonly Element[],
   nodes: NodeIndex,
+  scope: Scope,
 ): Option.Option<UnmodeledVocabulary> => {
   for (const element of elements) {
     const node = nodes.get(element);
     const holds = node === undefined ? undefined : admitted.get(node.kind);
     if (node !== undefined) {
-      for (const attribute of readable(element)) {
+      for (const attribute of readable(element).filter(
+        (found) => !isForeign(scope, found, node.kind),
+      )) {
         const { qname } = attribute;
         const modeled =
           holds?.has(qname) === true &&
@@ -260,11 +312,77 @@ const writeId = (written: Written, subject: Subject): void => {
 };
 
 /**
- * Write the row of a family, `role` or `aria-*` attribute into its relation. A closed value is
- * narrowed to its roster's handle first.
+ * Write the rows of an `xml:id`: by the tree's schema set, in `asi` a `DocumentId` row of holder
+ * `xmlId` and the `DocumentXmlId` row it mirrors; in `manifest` a `ManifestId` row of holder
+ * `xmlId` and its `ManifestXmlId` row, the package being the id the manifest builder passes. The
+ * other sets declare no `xml:id`, so the walk calls it foreign and it never reaches here.
+ */
+const writeXmlId = (written: Written, subject: Subject): void => {
+  const { attribute, documentId, kind, node, rootKind, value } = subject;
+  const set = schemaSetOf(rootKind);
+  if (Option.isNone(set)) {
+    return;
+  }
+
+  if (set.value === "asi") {
+    emit(written, DocumentId, { document: documentId, holder: "xmlId", id: value });
+    emit(written, DocumentXmlId, { attribute, document: documentId, id: value, kind, node });
+  } else if (set.value === "manifest") {
+    const id = ManifestIdentifier(value);
+    emit(written, ManifestId, { holder: "xmlId", id, package: documentId });
+    emit(written, ManifestXmlId, { attribute, id, kind, node, package: documentId });
+  }
+};
+
+/**
+ * Write the row of an `xlink:` attribute into its relation: the three enumerations narrowed to
+ * their roster's handle, the URIs and labels through their contracts, `xlink:title` as written.
+ *
+ * @returns Nothing; `ImportRefused` under `attribute-lexical` for a `type`, `show` or `actuate`
+ *   value outside its roster.
+ */
+const writeXlink = (
+  written: Written,
+  name: string,
+  subject: Subject,
+): Effect.Effect<void, ImportRefused> =>
+  Effect.gen(function* writeXlinkRow() {
+    const { attribute, kind, node, value } = subject;
+    const own = { attribute, kind, node };
+    const where = `the ${name} attribute of ${kind}`;
+    if (name === "xlink:type") {
+      const type = yield* closedOf(XlinkTypeValue.handles, value, "attribute-lexical", where);
+      emit(written, xlink.XlinkType, { ...own, value: type });
+    } else if (name === "xlink:show") {
+      const show = yield* closedOf(XlinkShowValue.handles, value, "attribute-lexical", where);
+      emit(written, xlink.XlinkShow, { ...own, value: show });
+    } else if (name === "xlink:actuate") {
+      const actuate = yield* closedOf(XlinkActuateValue.handles, value, "attribute-lexical", where);
+      emit(written, xlink.XlinkActuate, { ...own, value: actuate });
+    } else if (name === "xlink:href") {
+      emit(written, xlink.XlinkHref, { ...own, value: XlinkHrefUri(value) });
+    } else if (name === "xlink:role") {
+      emit(written, xlink.XlinkRole, { ...own, value: XlinkRoleUri(value) });
+    } else if (name === "xlink:arcrole") {
+      emit(written, xlink.XlinkArcrole, { ...own, value: XlinkArcroleUri(value) });
+    } else if (name === "xlink:title") {
+      emit(written, xlink.XlinkTitle, { ...own, value });
+    } else if (name === "xlink:label") {
+      emit(written, xlink.XlinkLabel, { ...own, value: XlinkLabelName(value) });
+    } else if (name === "xlink:from") {
+      emit(written, xlink.XlinkFrom, { ...own, value: XlinkLabelName(value) });
+    } else if (name === "xlink:to") {
+      emit(written, xlink.XlinkTo, { ...own, value: XlinkLabelName(value) });
+    }
+  });
+
+/**
+ * Write the row of a family, `role`, `aria-*`, `xml:space`, `xml:id` or `xlink:` attribute into its
+ * relation. A closed value is narrowed to its roster's handle first.
  *
  * @returns Nothing; `ImportRefused` under `attribute-lexical` for a `dir`, `data-qti-suppress-tts`,
- *   `role` or `aria-*` value outside its roster.
+ *   `xml:space`, `xlink:type`, `xlink:show`, `xlink:actuate`, `role` or `aria-*` value outside its
+ *   roster.
  */
 const writeFamily = (
   written: Written,
@@ -300,6 +418,13 @@ const writeFamily = (
       });
     } else if (name === "id") {
       writeId(written, subject);
+    } else if (name === "xml:space") {
+      const space = yield* closedOf(XmlSpace.handles, value, "attribute-lexical", where);
+      emit(written, NodeXmlSpace, { ...own, value: space });
+    } else if (name === "xml:id") {
+      writeXmlId(written, subject);
+    } else if (name.startsWith("xlink:")) {
+      yield* writeXlink(written, name, subject);
     } else {
       const relation = ariaRelations.get(name);
       if (relation !== undefined) {
@@ -352,14 +477,17 @@ const writeElement = (
   written: Written,
   element: Element,
   node: { readonly id: Uuid; readonly kind: NodeKindHandle },
-  context: Pick<Subject, "documentId" | "rootKind" | "tree">,
+  context: Pick<Subject, "documentId" | "rootKind" | "tree"> & { readonly scope: Scope },
 ): Effect.Effect<void, ImportRefused> =>
   Effect.gen(function* writeElementRows() {
     const { kind } = node;
-    for (const { qname: name, value: lexical } of readable(element)) {
+    const { scope, ...fixed } = context;
+    for (const found of readable(element)) {
+      const { qname: name, value: lexical } = found;
       const attribute = AttributeName.handles.find((known) => known === name);
       const whiteSpace = whiteSpaceOf(kind, name);
       const skipped =
+        isForeign(scope, found, kind) ||
         attribute === undefined ||
         Option.isNone(whiteSpace) ||
         !isShared(name) ||
@@ -377,7 +505,7 @@ const writeElement = (
           emit(written, AttributeLexical, fact);
         }
 
-        const subject = { ...context, attribute, kind, node: node.id, value: typed.value };
+        const subject = { ...fixed, attribute, kind, node: node.id, value: typed.value };
         if (name !== "headers") {
           yield* writeFamily(written, name, subject);
         }
@@ -414,19 +542,18 @@ export const attributeRows = Effect.fn("import.attributeRows")(function* attribu
   rows: Rows,
 ): Effect.fn.Return<Rows, ImportRefused | UnmodeledVocabulary> {
   const elements = indexedElements(tree, nodes);
-  const refusal = firstUnmodeled(elements, nodes);
-  if (Option.isSome(refusal)) {
-    return yield* refusal.value;
-  }
-
   const root = nodes.get(tree);
-  const rootKind = Option.fromNullishOr(
-    Rows.of(rows, Tree).find((row) => row.id === root?.id)?.root,
-  );
-  if (root === undefined || Option.isNone(rootKind)) {
+  const treeRow = Option.fromNullishOr(Rows.of(rows, Tree).find((row) => row.id === root?.id));
+  if (root === undefined || Option.isNone(treeRow)) {
     return yield* Effect.die(
       new Error(`attributeRows needs the tree walk's Tree row for the root node, and found none`),
     );
+  }
+
+  const scope = scopeOf(treeRow.value.root, treeRow.value.version);
+  const refusal = firstUnmodeled(elements, nodes, scope);
+  if (Option.isSome(refusal)) {
+    return yield* refusal.value;
   }
 
   const written: Written = new Map();
@@ -435,7 +562,8 @@ export const attributeRows = Effect.fn("import.attributeRows")(function* attribu
     if (node !== undefined) {
       yield* writeElement(written, element, node, {
         documentId,
-        rootKind: rootKind.value,
+        rootKind: scope.root,
+        scope,
         tree: root.id,
       });
     }
