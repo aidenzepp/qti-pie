@@ -27,6 +27,7 @@ import type {
 } from "#plate/model/item.ts";
 import { format } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
+import { controlCap } from "#plate/vocabulary.ts";
 
 /**
  * A message response validation gives one response, in the locale's text or the author's.
@@ -245,13 +246,34 @@ export interface TextEntryPayload extends TextControlPayload {
 
 /**
  * An Extended Text as the page may know it (Q-5): a text control with `expected-lines`, a
- * `format` and a Prompt.
+ * `format`, a Prompt, its binding's cardinality, and its `n` Controls with the text each restores,
+ * or the notice that stands in their place.
  */
 export interface ExtendedTextPayload extends TextControlPayload {
+  readonly cardinality: ExtendedTextInteraction["cardinality"];
   readonly expectedLines: Option.Option<bigint>;
   readonly format: ExtendedTextInteraction["format"];
   readonly kind: "extended-text";
+  /**
+   * The number of Controls (Q9): 1 for a `single` binding; for a container, `max-strings` when it
+   * is from 1 to 10, else the greater of 10 and `min-strings`, so `max-strings="0"` and an absent
+   * one give at least 10 (R-d). It also covers every member of the value or post it restores, up to
+   * a nonzero `max-strings`. At most 100 (Q23), and 0 when `min-strings` exceeds 100.
+   */
+  readonly n: number;
+  /**
+   * The cap's notice, `min-strings>100` (Q23): in place of the Controls when `min-strings` exceeds
+   * 100, `n` then 0, or beside the first 100 Controls when the value or post restored holds more
+   * members than they do; none otherwise.
+   */
+  readonly notice: Option.Option<NoticePayload>;
   readonly prompt: Option.Option<readonly PayloadNode[]>;
+  /**
+   * The text each Control shows, one per Control in order: the strings posted when the view has
+   * messages, else the view's values, each written as {@link TextControlPayload.restore} writes
+   * one; empty for a Control with none.
+   */
+  readonly restores: readonly string[];
 }
 
 /**
@@ -580,6 +602,109 @@ const textControlPayload = (
 };
 
 /**
+ * The number of Controls a container renders when `max-strings` does not fix it (Q9).
+ */
+const defaultControls = 10n;
+
+/**
+ * Give the larger of two counts.
+ *
+ * @param left One count.
+ * @param right The other.
+ * @returns The larger.
+ */
+const larger = (left: bigint, right: bigint): bigint => (left > right ? left : right);
+
+/**
+ * Give the smaller of two counts.
+ *
+ * @param left One count.
+ * @param right The other.
+ * @returns The smaller.
+ */
+const smaller = (left: bigint, right: bigint): bigint => (left < right ? left : right);
+
+/**
+ * How many Controls an Extended Text renders, and whether the cap's notice shows.
+ */
+interface Controls {
+  readonly n: number;
+  /**
+   * Whether the cap (Q23) holds back what the item or its value asks for: `min-strings` above
+   * 100, or a value with more members than 100 Controls hold.
+   */
+  readonly overCap: boolean;
+}
+
+/**
+ * Count the Controls an Extended Text renders.
+ *
+ * Q9 gives a container `max-strings` Controls when it is from 1 to 10, else the greater of 10 and
+ * `min-strings`; `max-strings="0"` restricts nothing (R-d). So restoring drops no answer silently,
+ * `n` also covers each member the restored or posted value holds, up to `max-strings` when it
+ * restricts and up to the cap of 100 (Q23). Over the cap, the first 100 show beside the cap's
+ * notice; a `min-strings` above 100 leaves no Control, the notice in their place.
+ *
+ * @param interaction The Extended Text.
+ * @param members How many members the value or post to restore holds.
+ * @returns The count, from 0 to 100, and whether the cap's notice shows.
+ */
+const controlsOf = (interaction: ExtendedTextInteraction, members: number): Controls => {
+  const cap = controlCap.when.limit;
+  if (interaction.minStrings > cap) {
+    return { n: 0, overCap: true };
+  }
+
+  if (interaction.cardinality === "single") {
+    return { n: 1, overCap: false };
+  }
+
+  const limit = interaction.maxStrings.pipe(Option.filter((maxStrings) => maxStrings > 0n));
+  const asked = Option.getOrElse(
+    limit.pipe(Option.filter((maxStrings) => maxStrings <= defaultControls)),
+    () => larger(defaultControls, interaction.minStrings),
+  );
+  const held = Option.match(limit, {
+    onNone: () => BigInt(members),
+    onSome: (maxStrings) => smaller(BigInt(members), maxStrings),
+  });
+
+  return { n: Number(larger(asked, smaller(held, cap))), overCap: held > cap };
+};
+
+/**
+ * Copy an Extended Text into its payload.
+ *
+ * @param interaction The Extended Text.
+ * @param build The build.
+ * @returns Its payload: `n` Controls, each restoring the posted string or value at its place, and
+ *   the cap's notice when the cap holds back what the item or its value asks for.
+ */
+const extendedTextPayload = (
+  interaction: ExtendedTextInteraction,
+  build: Build,
+): ExtendedTextPayload => {
+  const entries = Option.match(build.posted, {
+    onNone: () =>
+      shown(build, interaction.response).map((single) => writeIn(single, interaction.base)),
+    onSome: (posted) => posted.get(interaction.response) ?? [],
+  });
+  const { n, overCap } = controlsOf(interaction, entries.length);
+
+  return {
+    ...textControlPayload(interaction, build),
+    cardinality: interaction.cardinality,
+    expectedLines: interaction.expectedLines,
+    format: interaction.format,
+    kind: "extended-text",
+    n,
+    notice: overCap ? Option.some({ feature: controlCap.feature, kind: "notice" }) : Option.none(),
+    prompt: interaction.prompt.pipe(Option.map((prompt) => copyNodes(prompt, build))),
+    restores: Array.from({ length: n }, (_, index) => entries[index] ?? ""),
+  };
+};
+
+/**
  * Copy one body node into its payload node.
  *
  * @param node The body node.
@@ -613,13 +738,7 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
       };
     }
     case "extended-text": {
-      return {
-        ...textControlPayload(node, build),
-        expectedLines: node.expectedLines,
-        format: node.format,
-        kind: "extended-text",
-        prompt: node.prompt.pipe(Option.map((prompt) => copyNodes(prompt, build))),
-      };
+      return extendedTextPayload(node, build);
     }
     default: {
       return node satisfies never;

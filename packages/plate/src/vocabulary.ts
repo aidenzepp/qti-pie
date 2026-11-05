@@ -138,6 +138,8 @@ export interface FormattedBinding extends Binding {
  * - `attribute-true`: the element's `xs:boolean` attribute `name` is true: `true` or `1` once its
  *   outer whitespace goes, as XSD reads it (reading Q8).
  * - `cardinality`: the response declaration the interaction binds has this cardinality.
+ * - `integer-above`: the element's attribute `name`, its outer whitespace gone, reads as an integer
+ *   greater than `limit`. A value that is not an integer never is.
  * - `refused-pattern`: the element carries the attribute `name`, and the translator refuses its value
  *   as an XML Schema regular expression (`translate` in `#plate/model/regex.ts`), so the pattern
  *   cannot be checked.
@@ -151,6 +153,7 @@ export type Condition =
   | { readonly kind: "attribute-value"; readonly name: string; readonly value: string }
   | { readonly kind: "attribute-true"; readonly name: string }
   | { readonly cardinality: Cardinality; readonly kind: "cardinality" }
+  | { readonly kind: "integer-above"; readonly limit: bigint; readonly name: string }
   | { readonly kind: "refused-pattern"; readonly name: string }
   | { readonly kind: "template"; readonly name: TemplateName }
   | { readonly kind: "untyped" };
@@ -181,6 +184,12 @@ export interface Renders {
     readonly "qti-text-entry-interaction": Binding;
   };
   /**
+   * The features shown as a notice in place of an interaction's Controls. The interaction is still
+   * built, every field held, and its Prompt renders; only its Controls give way to the notice, and
+   * the verdict lists the feature as one shown as a notice.
+   */
+  readonly controlNotices: readonly Feature[];
+  /**
    * The `qti-*` elements phase 1 renders or reads, the engine's included. Every element in the QTI
    * namespace without the `qti-` prefix is HTML and renders as itself.
    */
@@ -208,6 +217,22 @@ export interface Renders {
 }
 
 /**
+ * The cap on an Extended Text's Controls (Q23): at most 100. One whose `min-strings` exceeds 100
+ * asks for more strings than 100 Controls hold, so it shows the notice `min-strings>100` in place
+ * of its Controls, whatever `max-strings` says; the verdict is then `accepted-with-unsupported`,
+ * never a refusal, as the item is valid.
+ *
+ * The cap bounds a rendered item's tab stops and markup, so one authored attribute cannot exhaust a
+ * host that renders it. The payload reads `limit` and `feature` from here, and shows the same
+ * notice beside the first 100 Controls when a value it restores holds more members than they do.
+ */
+export const controlCap = {
+  feature: "min-strings>100",
+  on: ["qti-extended-text-interaction"],
+  when: { kind: "integer-above", limit: 100n, name: "min-strings" },
+} as const satisfies Feature;
+
+/**
  * What phase 1 renders, reads, shows a notice for and marks, as data (spec §4.5).
  *
  * The emitter and the model builder read the same lists, so an element is rendered exactly when
@@ -221,7 +246,7 @@ export const renders = {
     },
     "qti-extended-text-interaction": {
       baseTypes: ["string", "integer", "float"],
-      cardinalities: ["single"],
+      cardinalities: ["single", "multiple", "ordered"],
       formats: ["plain", "preformatted", "xhtml"],
     },
     "qti-text-entry-interaction": {
@@ -229,6 +254,7 @@ export const renders = {
       cardinalities: ["single"],
     },
   },
+  controlNotices: [controlCap],
   elements: [
     "qti-assessment-item",
     "qti-response-declaration",
@@ -312,16 +338,6 @@ export const renders = {
       feature: 'cardinality="record"',
       on: textInteractions,
       when: { cardinality: "record", kind: "cardinality" },
-    },
-    {
-      feature: 'cardinality="multiple"',
-      on: ["qti-extended-text-interaction"],
-      when: { cardinality: "multiple", kind: "cardinality" },
-    },
-    {
-      feature: 'cardinality="ordered"',
-      on: ["qti-extended-text-interaction"],
-      when: { cardinality: "ordered", kind: "cardinality" },
     },
   ],
 } as const satisfies Renders;

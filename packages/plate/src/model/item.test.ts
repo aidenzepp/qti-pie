@@ -636,6 +636,24 @@ const textEntryItem = (attributes: readonly SourceAttribute[]): SourceDocument =
   });
 
 /**
+ * An item whose body is one `qti-extended-text-interaction` bound to a string response.
+ *
+ * @param cardinality The response's cardinality.
+ * @param attributes The interaction's attributes beside `response-identifier`.
+ * @returns The document at `items/test.xml`.
+ */
+const extendedTextItem = (
+  cardinality: string,
+  attributes: readonly SourceAttribute[],
+): SourceDocument =>
+  item({
+    body: [
+      el("qti-extended-text-interaction", [...attributes, attr("response-identifier", "RESPONSE")]),
+    ],
+    declarations: [declaration("qti-response-declaration", "RESPONSE", "string", cardinality)],
+  });
+
+/**
  * Find the one Choice model among body nodes.
  *
  * @param nodes The nodes to search.
@@ -1521,9 +1539,96 @@ describe("buildItem", () => {
 
       assert.strictEqual(node?.kind, "extended-text");
       assert.deepStrictEqual(
-        node?.kind === "extended-text" ? [node.format, node.expectedLines, node.prompt] : [],
-        ["preformatted", Option.some(5n), Option.some([{ kind: "text", text: "Write a poem." }])],
+        node?.kind === "extended-text"
+          ? [
+              node.format,
+              node.expectedLines,
+              node.prompt,
+              node.cardinality,
+              node.maxStrings,
+              node.minStrings,
+            ]
+          : [],
+        [
+          "preformatted",
+          Option.some(5n),
+          Option.some([{ kind: "text", text: "Write a poem." }]),
+          "single",
+          Option.none(),
+          0n,
+        ],
       );
+    }),
+  );
+
+  for (const [cardinality, attributes, maxStrings, minStrings] of [
+    ["ordered", [attr("max-strings", "3")], Option.some(3n), 0n],
+    ["multiple", [attr("max-strings", "1000000000000")], Option.some(1_000_000_000_000n), 0n],
+    ["ordered", [attr("max-strings", "200"), attr("min-strings", "100")], Option.some(200n), 100n],
+    ["ordered", [attr("max-strings", "0")], Option.some(0n), 0n],
+  ] as const) {
+    it.effect(
+      `[Q-5] builds an Extended Text bound to ${cardinality} with ${attributes.map((attribute) => `${attribute.local}="${attribute.value}"`).join(" ")}, its counts held exactly, with no notice`,
+      () =>
+        Effect.gen(function* buildsContainer() {
+          const built = yield* buildItem(extendedTextItem(cardinality, attributes));
+          const [node] = built.body;
+
+          assert.strictEqual(node?.kind, "extended-text");
+          assert.deepStrictEqual(
+            node?.kind === "extended-text"
+              ? [node.cardinality, node.maxStrings, node.minStrings]
+              : [],
+            [cardinality, maxStrings, minStrings],
+          );
+          assert.deepStrictEqual(built.unsupported, []);
+        }),
+    );
+  }
+
+  for (const [attributes, maxStrings, minStrings] of [
+    [[attr("max-strings", "200"), attr("min-strings", "101")], Option.some(200n), 101n],
+    [
+      [attr("max-strings", "1000000000000"), attr("min-strings", "1000000000000")],
+      Option.some(1_000_000_000_000n),
+      1_000_000_000_000n,
+    ],
+    [[attr("max-strings", "5"), attr("min-strings", "101")], Option.some(5n), 101n],
+  ] as const) {
+    it.effect(
+      `[Q-5] builds an ordered Extended Text with ${attributes.map((attribute) => `${attribute.local}="${attribute.value}"`).join(" ")}, its counts held exactly, and shows min-strings>100 in place of its Controls`,
+      () =>
+        Effect.gen(function* overTheCap() {
+          const built = yield* buildItem(extendedTextItem("ordered", attributes));
+          const [node] = built.body;
+
+          assert.strictEqual(node?.kind, "extended-text");
+          assert.deepStrictEqual(
+            node?.kind === "extended-text"
+              ? [node.cardinality, node.maxStrings, node.minStrings]
+              : [],
+            ["ordered", maxStrings, minStrings],
+          );
+          assert.deepStrictEqual(built.unsupported, [
+            {
+              feature: "min-strings>100",
+              path: `${body}/qti-extended-text-interaction`,
+              shown: "notice",
+            },
+          ]);
+        }),
+    );
+  }
+
+  it.effect("[Q-5] refuses a min-strings that is not a count, and shows no notice for it", () =>
+    Effect.gen(function* refusesMinStrings() {
+      const refused = yield* Effect.flip(
+        buildItem(
+          extendedTextItem("ordered", [attr("max-strings", "3"), attr("min-strings", "x101")]),
+        ),
+      );
+
+      assert.strictEqual(refused.rule, "value-type");
     }),
   );
 

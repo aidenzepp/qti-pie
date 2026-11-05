@@ -100,13 +100,16 @@ interface TextEntryInteractionJson {
 }
 
 /**
- * An Extended Text in the JSON form: a Text Entry's fields, with `expectedLines` as decimal digits
- * and its Prompt an optional key.
+ * An Extended Text in the JSON form: a Text Entry's fields, with `expectedLines`, `maxStrings` and
+ * `minStrings` as decimal digits, and `expectedLines`, `maxStrings` and its Prompt optional keys.
  */
 interface ExtendedTextInteractionJson extends Omit<TextEntryInteractionJson, "kind"> {
+  readonly cardinality: ExtendedTextInteraction["cardinality"];
   readonly expectedLines?: string;
   readonly format: ExtendedTextInteraction["format"];
   readonly kind: "extended-text";
+  readonly maxStrings?: string;
+  readonly minStrings: string;
   readonly prompt?: readonly BodyNodeJson[];
 }
 
@@ -154,12 +157,16 @@ const ChoiceCount = Schema.BigIntFromString.check(
 );
 
 /**
- * `expected-length` and `expected-lines`: a count with no upper bound, held exactly and written as
- * its decimal digits, an optional key absent when the author gave none.
+ * `min-strings`: a count with no upper bound (reading 46 does not list it), held exactly and
+ * written as its decimal digits.
  */
-const OptionalCount = Schema.OptionFromOptionalKey(
-  Schema.BigIntFromString.check(Schema.isGreaterThanOrEqualToBigInt(0n)),
-);
+const Count = Schema.BigIntFromString.check(Schema.isGreaterThanOrEqualToBigInt(0n));
+
+/**
+ * `expected-length`, `expected-lines` and `max-strings`: a {@link Count}, an optional key absent
+ * when the author gave none.
+ */
+const OptionalCount = Schema.OptionFromOptionalKey(Count);
 
 /**
  * The fields a Text Entry and an Extended Text share, as `TextEntryInteraction` declares them.
@@ -210,9 +217,12 @@ const BodyNodeSchema = Schema.Union([
   Schema.Struct({ ...textControlFields, kind: Schema.Literal("text-entry") }),
   Schema.Struct({
     ...textControlFields,
+    cardinality: Schema.Literals(["multiple", "ordered", "single"]),
     expectedLines: OptionalCount,
     format: Schema.Literals(["plain", "preformatted", "xhtml"]),
     kind: Schema.Literal("extended-text"),
+    maxStrings: OptionalCount,
+    minStrings: Count,
     prompt: Schema.OptionFromOptionalKey(BodyNodes),
   }),
   Schema.Struct({

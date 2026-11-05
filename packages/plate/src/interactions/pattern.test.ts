@@ -37,6 +37,18 @@ const one = (single: Single & { readonly baseType: "float" | "integer" | "string
 });
 
 /**
+ * Construct an ordered string value.
+ *
+ * @param members Its strings, in order.
+ * @returns The value of cardinality `ordered`.
+ */
+const ordered = (...members: readonly string[]): Value => ({
+  baseType: "string",
+  cardinality: "ordered",
+  values: members.map((value) => ({ baseType: "string", value })),
+});
+
+/**
  * The author's message on the interactions below that carry one.
  */
 const authored = "Enter up to six digits and points.";
@@ -102,6 +114,23 @@ describe("patternMessage", () => {
         );
         assert.deepStrictEqual(
           patternMessage(noLeadingZero, one({ baseType: "integer", value: 7n }), configuration),
+          Option.none(),
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-5] gives the message for an ordered value with one mismatching member, and none when every member matches",
+    () =>
+      Effect.gen(function* containerMembers() {
+        const configuration = yield* configure({ validateResponses: true });
+
+        assert.deepStrictEqual(
+          patternMessage(sixDigits, ordered("12.5", "12a", "3"), configuration),
+          Option.some(authored),
+        );
+        assert.deepStrictEqual(
+          patternMessage(sixDigits, ordered("12.5", "3"), configuration),
           Option.none(),
         );
       }),

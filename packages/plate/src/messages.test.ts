@@ -22,7 +22,11 @@ const english = {
   answerOf: "Answer 1 of 2",
   answering: "Answering",
   atLeast: "Select at least 1.",
+  atLeastOneString: "Enter at least 1 answer.",
+  atLeastStrings: "Enter at least 1 answers.",
   atMost: "Select at most 1.",
+  atMostOneString: "Enter at most 1 answer.",
+  atMostStrings: "Enter at most 1 answers.",
   choiceOf: "Choice 1 of 2",
   malformedFile: "Enter text, not a file.",
   malformedNumber: "Enter a number.",
@@ -77,6 +81,16 @@ describe("message", () => {
       message("en", "patternMismatch"),
       "Enter an answer in the form this question asks for.",
     );
+  });
+
+  it("writes atLeastStrings and atMostStrings, an Extended Text container's counts, with their n", () => {
+    assert.strictEqual(message("en", "atLeastStrings", { n: "3" }), "Enter at least 3 answers.");
+    assert.strictEqual(message("en", "atMostStrings", { n: "5" }), "Enter at most 5 answers.");
+  });
+
+  it("writes atLeastOneString and atMostOneString, the singular a count of 1 takes", () => {
+    assert.strictEqual(message("en", "atLeastOneString"), "Enter at least 1 answer.");
+    assert.strictEqual(message("en", "atMostOneString"), "Enter at most 1 answer.");
   });
 
   it("writes a key with no placeholder without params", () => {

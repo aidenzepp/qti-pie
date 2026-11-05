@@ -190,7 +190,12 @@ describe("the closed value sets", () => {
       [
         "notices",
         renders.notices.map((notice) => notice.feature),
-        ["pattern-mask", 'cardinality="record"', 'cardinality="multiple"', 'cardinality="ordered"'],
+        ["pattern-mask", 'cardinality="record"'],
+      ],
+      [
+        "controlNotices",
+        renders.controlNotices.map((notice) => notice.feature),
+        ["min-strings>100"],
       ],
       [
         "marks",
@@ -257,8 +262,15 @@ describe("the closed value sets", () => {
     );
     for (const name of ["qti-text-entry-interaction", "qti-extended-text-interaction"] as const) {
       assert.sameMembers([...renders.bindings[name].baseTypes], ["string", "integer", "float"]);
-      assert.sameMembers([...renders.bindings[name].cardinalities], ["single"]);
     }
+    assert.sameMembers(
+      [...renders.bindings["qti-text-entry-interaction"].cardinalities],
+      ["single"],
+    );
+    assert.sameMembers(
+      [...renders.bindings["qti-extended-text-interaction"].cardinalities],
+      ["single", "multiple", "ordered"],
+    );
     assert.sameMembers(
       [...renders.bindings["qti-extended-text-interaction"].formats],
       ["plain", "preformatted", "xhtml"],
@@ -274,8 +286,18 @@ describe("the closed value sets", () => {
     );
   });
 
+  it("shows min-strings>100 in place of an Extended Text's Controls when min-strings exceeds 100, whatever max-strings says", () => {
+    assert.deepStrictEqual(renders.controlNotices, [
+      {
+        feature: "min-strings>100",
+        on: ["qti-extended-text-interaction"],
+        when: { kind: "integer-above", limit: 100n, name: "min-strings" },
+      },
+    ]);
+  });
+
   it("puts every notice on a rendered interaction", () => {
-    for (const notice of renders.notices) {
+    for (const notice of [...renders.notices, ...renders.controlNotices]) {
       assert.includeMembers([...interactionNames], [...notice.on], notice.feature);
     }
   });
