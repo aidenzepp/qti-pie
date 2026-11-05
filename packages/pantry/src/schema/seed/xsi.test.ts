@@ -10,6 +10,16 @@
  * - `declaredChild`: the element particles of each complex type's content model, through its groups
  *   and compositors and, for a type derived by extension, its base's particles.
  * - `namedTypes`: every named simple and complex type of the closure, and XML Schema's own.
+ * - `typeDerivation` and `simpleFacet`: the named types, XML Schema's own, and every anonymous simple
+ *   type that an attribute declaration holds or a list, union or restriction inside one holds.
+ * - `simpleMember`: the item type of every list and the members of every union, XML Schema's three
+ *   list datatypes included.
+ * - `typeAttributeWildcard`: the complete attribute wildcard of every named complex type that has one
+ *   (Part 1, 3.4.2).
+ * - `globalAttributeType`: every global attribute declaration of the closure and its type, read
+ *   against the `globalAttribute` rows of `wildcard.ts`.
+ * - Every attribute type of every type derived from a declared type, and of every global attribute,
+ *   reaches a built-in primitive through `typeDerivation` and `simpleMember`.
  * - No element declaration in any cached schema is nillable, and no `block`, `blockDefault`, `final`,
  *   `finalDefault` or `abstract="true"` appears in the schema sets' own documents: both are scans
  *   of the documents, so a later schema release that adds one fails here.
@@ -23,7 +33,7 @@ import { existsSync, readFileSync } from "node:fs";
 import nodePath from "node:path";
 import { assert, beforeAll, describe, it } from "@effect/vitest";
 import type { Element } from "@qti-pie/crust/tree.ts";
-import { namespaces } from "#pantry/schema/seed/wildcard.ts";
+import { globalAttribute, namespaces } from "#pantry/schema/seed/wildcard.ts";
 import * as seed from "#pantry/schema/seed/xsi.ts";
 import {
   XS,
@@ -309,6 +319,12 @@ const derivedDatatypes = {
 const listDatatypes: ReadonlySet<string> = new Set(["ENTITIES", "IDREFS", "NMTOKENS"]);
 
 /**
+ * The item type of each list datatype, `xs:` names without the prefix: XML Schema Part 2 states
+ * them in the schema for datatypes of its appendix A.
+ */
+const listItems = { ENTITIES: "ENTITY", IDREFS: "IDREF", NMTOKENS: "NMTOKEN" } as const;
+
+/**
  * The rows without repeats, in code-unit order.
  *
  * @param rows - The rows.
@@ -334,8 +350,11 @@ interface Tables {
   readonly attributeUse: readonly string[];
   readonly declaredChild: readonly string[];
   readonly declaredRoot: readonly string[];
+  readonly globalAttributeType: readonly string[];
   readonly namedTypes: readonly string[];
   readonly simpleFacet: readonly string[];
+  readonly simpleMember: readonly string[];
+  readonly typeAttributeWildcard: readonly string[];
   readonly typeDerivation: readonly string[];
 }
 
@@ -390,6 +409,11 @@ const tablesOf = (
         .filter((root) => registry.has(codeOf(root.namespace)))
         .map((root) => `${name(root.namespace, root.local)} ${textOfKey(root.type, codeOf)}`),
     ),
+    globalAttributeType: sortedRows(
+      derived.types.globals.map(
+        (entry) => `${name(entry.namespace, entry.local)} ${textOfKey(entry.type, codeOf)}`,
+      ),
+    ),
     namedTypes: sortedRows([
       ...derived.named.map(([namespace, local]) => name(namespace, local)),
       ...["anyType", "anySimpleType", ...primitiveDatatypes, ...Object.keys(derivedDatatypes)].map(
@@ -401,6 +425,21 @@ const tablesOf = (
         (entry) => `${textOfKey(entry.type, codeOf)} ${entry.facet} ${entry.value}`,
       ),
     ),
+    simpleMember: sortedRows([
+      ...derived.types.members.map(
+        (entry) =>
+          `${textOfKey(entry.type, codeOf)} ${textOfKey(entry.member, codeOf)} ${entry.role} ${entry.position}`,
+      ),
+      ...Object.entries(listItems).map(
+        ([list, item]) => `${builtin(list)} ${builtin(item)} item 0`,
+      ),
+    ]),
+    typeAttributeWildcard: sortedRows(
+      derived.types.wildcards.map(
+        (entry) =>
+          `${textOfKey(entry.type, codeOf)} ${entry.process} ${codeOf(entry.target)} ${entry.namespaces}`,
+      ),
+    ),
     typeDerivation: sortedRows([
       ...derived.types.derivations.map(
         (entry) =>
@@ -410,6 +449,19 @@ const tablesOf = (
     ]),
   };
 };
+
+/**
+ * The rows of a table that describe an anonymous type.
+ *
+ * @param rows - The table's rows as strings.
+ * @returns The rows whose type is anonymous.
+ */
+const anonymous = (rows: readonly string[]) => rows.filter((row) => row.startsWith("!"));
+
+/**
+ * The namespace of XML Schema's instance attributes, whose four names have no declaration.
+ */
+const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
 
 const sets = ["asi", "manifest", "lom", "usagedata"] as const;
 
@@ -567,10 +619,21 @@ const moduleTables = (set: (typeof sets)[number], version: (typeof versions)[num
     declaredRoot: seed.declaredRoot
       .filter(here)
       .map((row) => `${nameText(row.namespace, row.local)} ${keyText(row.type)}`),
+    globalAttributeType: seed.globalAttributeType
+      .filter(here)
+      .map((row) => `${nameText(row.namespace, row.local)} ${keyText(row.type)}`),
     namedTypes: seed.namedTypes.filter(here).map((row) => nameText(row.namespace, row.local)),
     simpleFacet: seed.simpleFacet
       .filter(here)
       .map((row) => `${keyText(row.type)} ${row.facet} ${row.value}`),
+    simpleMember: seed.simpleMember
+      .filter(here)
+      .map(
+        (row) => `${keyText(row.type)} ${keyText(row.member)} ${row.role} ${String(row.position)}`,
+      ),
+    typeAttributeWildcard: seed.typeAttributeWildcard
+      .filter(here)
+      .map((row) => `${keyText(row.type)} ${row.process} ${codeOf(row.target)} ${row.namespaces}`),
     typeDerivation: seed.typeDerivation
       .filter(here)
       .map((row) => `${keyText(row.type)} ${keyText(row.base)} ${row.method} ${row.variety}`),
@@ -640,7 +703,9 @@ const typeId = (key: TypeKey) =>
  */
 const censusOf = (derived: Derived) => {
   const baseOfType = new Map<string, string>(
-    derived.types.derivations.map((entry) => [typeId(entry.type), typeId(entry.base)]),
+    derived.types.derivations
+      .filter((entry) => !("anonymous" in entry.type))
+      .map((entry) => [typeId(entry.type), typeId(entry.base)]),
   );
 
   for (const local of primitiveDatatypes) {
@@ -818,6 +883,204 @@ describe.skipIf(!cacheAvailable)(
       }
     });
 
+    it("the anonymous simple types an attribute reaches have their derivation and facets", () => {
+      for (const set of sets) {
+        for (const version of versions) {
+          sameRows(
+            `anonymous typeDerivation ${set} ${version}`,
+            anonymous(moduleTables(set, version).typeDerivation),
+            anonymous(derivedTables(set, version).typeDerivation),
+            set === "lom" ? 0 : 1,
+          );
+          sameRows(
+            `anonymous simpleFacet ${set} ${version}`,
+            anonymous(moduleTables(set, version).simpleFacet),
+            anonymous(derivedTables(set, version).simpleFacet),
+            0,
+          );
+        }
+      }
+    });
+
+    it("simpleMember is the item type of every list and the members of every union", () => {
+      for (const set of sets) {
+        for (const version of versions) {
+          sameRows(
+            `simpleMember ${set} ${version}`,
+            moduleTables(set, version).simpleMember,
+            derivedTables(set, version).simpleMember,
+          );
+        }
+      }
+    });
+
+    it("typeAttributeWildcard is the complete attribute wildcard of every named complex type", () => {
+      for (const set of sets) {
+        for (const version of versions) {
+          sameRows(
+            `typeAttributeWildcard ${set} ${version}`,
+            moduleTables(set, version).typeAttributeWildcard,
+            derivedTables(set, version).typeAttributeWildcard,
+            set === "usagedata" ? 0 : 1,
+          );
+        }
+      }
+    });
+
+    it("globalAttributeType is every global attribute declaration of each closure", () => {
+      for (const set of sets) {
+        for (const version of versions) {
+          sameRows(
+            `globalAttributeType ${set} ${version}`,
+            moduleTables(set, version).globalAttributeType,
+            derivedTables(set, version).globalAttributeType,
+            set === "asi" || set === "manifest" ? 1 : 0,
+          );
+        }
+      }
+    });
+
+    it("globalAttributeType names the global attributes of wildcard.ts, xsi's own left out", () => {
+      for (const set of sets) {
+        for (const version of versions) {
+          const here = (row: { readonly set: string; readonly version: string }) =>
+            row.set === set && row.version === version;
+          const triple = (row: { readonly local: string; readonly namespace: string }) =>
+            `${set} ${row.namespace} ${row.local}`;
+
+          assert.deepStrictEqual(
+            sortedRows(seed.globalAttributeType.filter(here).map(triple)),
+            sortedRows(
+              globalAttribute
+                .filter((row) => row.set === set && row.namespace !== xsiNamespace)
+                .map(triple),
+            ),
+            `${set} ${version}: globalAttributeType and wildcard.ts differ`,
+          );
+        }
+      }
+    });
+
+    it("every list and union has its members, and every attribute type reaches a primitive", () => {
+      const primitives = new Set(primitiveDatatypes.map((local) => `xs:${local}`));
+
+      for (const set of sets) {
+        for (const version of versions) {
+          const here = (row: { readonly set: string; readonly version: string }) =>
+            row.set === set && row.version === version;
+          const rows = new Map(
+            seed.typeDerivation.filter(here).map((row) => [keyText(row.type), row]),
+          );
+          const membersOf = new Map<string, seed.SimpleMemberRow[]>();
+
+          for (const row of seed.simpleMember.filter(here)) {
+            membersOf.set(keyText(row.type), [...(membersOf.get(keyText(row.type)) ?? []), row]);
+          }
+
+          for (const row of rows.values()) {
+            const own = membersOf.get(keyText(row.type)) ?? [];
+
+            if (row.method === "list" || row.method === "union") {
+              assert.isAbove(
+                own.length,
+                0,
+                `${set} ${version}: ${keyText(row.type)} has no member`,
+              );
+              assert.deepStrictEqual(
+                own.map((member) => member.position).toSorted((left, right) => left - right),
+                own.map((_member, position) => position),
+                `${set} ${version}: ${keyText(row.type)} has a gap in its positions`,
+              );
+              assert.isTrue(
+                own.every((member) => member.role === (row.method === "list" ? "item" : "member")),
+                `${set} ${version}: ${keyText(row.type)} has a member of the wrong role`,
+              );
+              assert.isTrue(row.method === "union" || own.length === 1, "a list has one item");
+            } else {
+              assert.deepStrictEqual(own, [], `${keyText(row.type)} has members and is no list`);
+            }
+
+            for (const member of own) {
+              assert.isTrue(rows.has(keyText(member.member)), `${keyText(member.member)} dangles`);
+            }
+          }
+
+          const reached = new Map<string, ReadonlySet<string>>();
+          const ends = (key: string, trail: readonly string[]): ReadonlySet<string> => {
+            const known = reached.get(key);
+
+            if (known !== undefined) {
+              return known;
+            }
+
+            assert.isFalse(trail.includes(key), `${set} ${version}: ${key} derives from itself`);
+
+            let found: ReadonlySet<string>;
+
+            if (primitives.has(key) || key === "xs:anySimpleType") {
+              found = new Set([key]);
+            } else {
+              const row = required(rows.get(key), `${set} ${version}: ${key} dangles`);
+              const next = [...trail, key];
+
+              found = new Set(
+                row.method === "list" || row.method === "union"
+                  ? (membersOf.get(key) ?? []).flatMap((member) => [
+                      ...ends(keyText(member.member), next),
+                    ])
+                  : [...ends(keyText(row.base), next)],
+              );
+            }
+
+            reached.set(key, found);
+
+            return found;
+          };
+          const derivedFromDeclared = new Set(
+            [...seed.declaredRoot.filter(here), ...seed.declaredChild.filter(here)].map((row) =>
+              keyText(row.type),
+            ),
+          );
+          const complexBase = new Map(
+            seed.typeDerivation
+              .filter(here)
+              .filter((row) => row.variety === "complex")
+              .map((row) => [keyText(row.type), keyText(row.base)]),
+          );
+          const subject = (type: string) => {
+            for (let up: string | undefined = type; up !== undefined; up = complexBase.get(up)) {
+              if (derivedFromDeclared.has(up)) {
+                return true;
+              }
+            }
+
+            return false;
+          };
+          const attributeTypes = new Set([
+            ...seed.attributeUse
+              .filter(here)
+              .filter((row) => subject(keyText(row.type)))
+              .map((row) => keyText(row.attributeType)),
+            ...seed.globalAttributeType.filter(here).map((row) => keyText(row.type)),
+          ]);
+          const terminals = new Set<string>();
+
+          for (const key of attributeTypes) {
+            for (const end of ends(key, [])) {
+              terminals.add(end);
+            }
+          }
+
+          assert.isTrue(
+            [...terminals].every((end) => primitives.has(end) || end === "xs:anySimpleType"),
+          );
+          report(
+            `reach ${set} ${version}: ${attributeTypes.size} attribute types reach ${terminals.size} built-in types${terminals.has("xs:anySimpleType") ? " (xs:anySimpleType, an untyped attribute, among them)" : ""}`,
+          );
+        }
+      }
+    });
+
     it.skipIf(!existsSync(partTwo))(
       "the built-in datatypes and their bases are those of XML Schema Part 2, section 3",
       () => {
@@ -852,6 +1115,16 @@ describe.skipIf(!cacheAvailable)(
         );
         assert.strictEqual(Object.keys(bases).length, 22);
         assert.deepStrictEqual([...listDatatypes].toSorted(), ["ENTITIES", "IDREFS", "NMTOKENS"]);
+        assert.deepStrictEqual(
+          Object.fromEntries(
+            [
+              ...html.matchAll(
+                /xmlschema-2\/#(?<name>ENTITIES|IDREFS|NMTOKENS)&quot;[^]{0,400}?itemType=&quot;xs:(?<item>\w+)&quot;/gu,
+              ),
+            ].map((match) => [match.groups?.["name"] ?? "", match.groups?.["item"] ?? ""]),
+          ),
+          listItems,
+        );
       },
     );
 
@@ -868,13 +1141,13 @@ describe.skipIf(!cacheAvailable)(
           const rows = seed.typeDerivation.filter(here);
           const baseByType = new Map(rows.map((row) => [keyText(row.type), keyText(row.base)]));
           const resolves = (key: seed.TypeKey) =>
-            "anonymous" in key ? key.anonymous.length > 0 : named.has(keyText(key));
+            "anonymous" in key ? baseByType.has(keyText(key)) : named.has(keyText(key));
 
           assert.strictEqual(baseByType.size, rows.length, "a type has two derivations");
           assert.deepStrictEqual(
-            [...baseByType.keys()].toSorted(),
+            [...baseByType.keys()].filter((key) => !key.startsWith("!")).toSorted(),
             [...named].filter((name) => name !== "xs:anyType").toSorted(),
-            `${set} ${version}: the derived types are the named types but xs:anyType`,
+            `${set} ${version}: the derived named types are the named types but xs:anyType`,
           );
           assert.deepStrictEqual(
             rows.filter((row) => !resolves(row.base)).map((row) => keyText(row.type)),
@@ -975,6 +1248,61 @@ describe.skipIf(!cacheAvailable)(
       },
       derivationTimeoutMs,
     );
+
+    it("reports the census of the types derived from qti-null's declared type", () => {
+      for (const set of sets) {
+        for (const version of versions) {
+          const here = (row: { readonly set: string; readonly version: string }) =>
+            row.set === set && row.version === version;
+          const declared = new Set(
+            seed.declaredChild
+              .filter(here)
+              .filter((row) => row.local === "qti-null")
+              .map((row) => keyText(row.type)),
+          );
+
+          if (declared.size === 0) {
+            continue;
+          }
+
+          const baseOf = new Map(
+            seed.typeDerivation
+              .filter(here)
+              .filter((row) => row.variety === "complex")
+              .map((row) => [keyText(row.type), keyText(row.base)]),
+          );
+          const derivedTypes = [...baseOf.keys()].filter((type) => {
+            for (let up = baseOf.get(type); up !== undefined; up = baseOf.get(up)) {
+              if (declared.has(up)) {
+                return true;
+              }
+            }
+
+            return false;
+          });
+          const wildcards = new Map(
+            seed.typeAttributeWildcard.filter(here).map((row) => [keyText(row.type), row]),
+          );
+          const laxAny = derivedTypes.filter((type) => {
+            const wildcard = wildcards.get(type);
+
+            return wildcard?.namespaces === "##any" && wildcard.process === "lax";
+          });
+          const named = new Set<string>();
+          const inline = new Set<string>();
+
+          for (const row of seed.attributeUse.filter(here)) {
+            if (derivedTypes.includes(keyText(row.type))) {
+              ("anonymous" in row.attributeType ? inline : named).add(keyText(row.attributeType));
+            }
+          }
+
+          report(
+            `census ${set} ${version}: ${[...declared].join(", ")} has ${derivedTypes.length} derived types, ${laxAny.length} with a ##any lax attribute wildcard; their uses name ${named.size + inline.size} attribute types, ${named.size} named or built-in, ${inline.size} anonymous`,
+          );
+        }
+      }
+    });
 
     it("reports the census of declared types that another type derives from", () => {
       for (const set of sets) {
