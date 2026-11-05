@@ -11,7 +11,9 @@
  * as MathML, is kept and not walked. On every element it walks it judges `xsi:type` and `xsi:nil`
  * as XML Schema judges them (reading 47), and no attribute wildcard admits either: a type is valid
  * when it names the element's declared type or a type derived from it, and `xsi:nil` never is,
- * because the XSD declares no element nillable.
+ * because the XSD declares no element nillable. After a valid `xsi:type` naming one of QTI's types,
+ * that type's own table governs the element's attributes, text and children in place of its name's
+ * (AD-9); {@link governingTables} gives the table that governs each element the walk checks.
  *
  * Over the XSD's rules it applies the shared readings that set the XSD aside where the walk can see
  * them, each a row of {@link readingRows}: attributes narrowed or retyped, `data-*` names,
@@ -30,7 +32,12 @@ import {
   xsdNamespace,
   xsiNamespace,
 } from "#plate/document/source.ts";
-import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
+import type {
+  SourceAttribute,
+  SourceDocument,
+  SourceElement,
+  Visit,
+} from "#plate/document/source.ts";
 import {
   decimalLexical,
   doubleLexical,
@@ -45,8 +52,10 @@ import type {
   AttributeType,
   BuiltinName,
   ChildName,
+  ContentTable,
   ElementTable,
   Tables,
+  TypeEntry,
   Wildcard,
 } from "#plate/validate/xsd.ts";
 
@@ -1128,7 +1137,7 @@ const misnamed = (attribute: SourceAttribute): Option.Option<AttributeName> =>
  * @param source The document.
  * @param element The attribute's element.
  * @param path The element's path.
- * @param table The element's table.
+ * @param table The table that governs the element.
  * @param attribute The undeclared attribute.
  * @returns The refusal, or none when the wildcard admits the attribute and no reading refuses
  *   its name.
@@ -1137,7 +1146,7 @@ const checkUndeclared = (
   source: SourceDocument,
   element: SourceElement,
   path: string,
-  table: ElementTable,
+  table: ContentTable,
   attribute: SourceAttribute,
 ): Option.Option<Refusal> => {
   const detail = { attribute: attributeName(attribute), element: elementName(element) };
@@ -1363,7 +1372,7 @@ const checkChildCounts = (
  * @param source The document.
  * @param element The element.
  * @param path The element's path.
- * @param table The element's table.
+ * @param table The table of the element's name, which lists the types it is declared with.
  * @param parents Each walked element's parent, for the namespace declarations in scope.
  * @param tables The tables, for the derivations of QTI's types.
  * @returns The refusals of the two attributes, in document order.
@@ -1402,6 +1411,45 @@ const checkInstance = (
   });
 
 /**
+ * Find the entry of the QTI type an element's valid `xsi:type` names, whose table then governs the
+ * element in place of its name's (AD-9, XML Schema Part 1, section 3.3.4, clause 4.3).
+ *
+ * The type is valid as {@link checkInstance} judges it: its QName resolves through the declarations
+ * in scope and names one of the types the element's name is declared with, or a type derived from
+ * one of them. For a name declared with several types, the named type's own table governs, not the
+ * union of the name's. A type of XML Schema's, which adds no attribute or child, leaves the name's
+ * table in force, and so does an invalid type, an absent one, or one whose value holds an
+ * unexpanded entity reference and is unknown.
+ *
+ * @param element The element.
+ * @param table The table of the element's name.
+ * @param parents Each walked element's parent, for the namespace declarations in scope.
+ * @param tables The tables.
+ * @returns The named type's entry, or none when the name's table governs.
+ */
+const namedType = (
+  element: SourceElement,
+  table: ElementTable,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+  tables: Tables,
+): Option.Option<TypeEntry> => {
+  const written = element.attributes.find(
+    (attribute) => attribute.namespace === xsiNamespace && attribute.local === "type",
+  );
+  if (written === undefined || written.references.length > 0) {
+    return Option.none();
+  }
+
+  return Option.flatMap(resolveQName(written.value, element, parents), (type) =>
+    type.namespace === qtiNamespace &&
+    Object.hasOwn(tables.types, type.local) &&
+    derivesFrom(type, table.types, tables)
+      ? Option.fromUndefinedOr(tables.types[type.local])
+      : Option.none(),
+  );
+};
+
+/**
  * Check the attributes and the text of one element the walk admitted.
  *
  * A required attribute that is absent is `missing-attribute` at the element. `xsi:type` and
@@ -1410,12 +1458,14 @@ const checkInstance = (
  * unexpanded entity reference, whose value is unknown. An undeclared one goes to
  * {@link checkUndeclared}. Non-whitespace text in an element whose table admits none is
  * `text-not-allowed`. The placement and child-count rows go to {@link checkPlacement} and
- * {@link checkChildCounts}.
+ * {@link checkChildCounts}. The attributes and the text are checked by the table that governs the
+ * element, and its `xsi:type` by the types its name is declared with.
  *
  * @param source The document.
  * @param element The element.
  * @param path The element's path.
- * @param table The element's table.
+ * @param name The table of the element's name.
+ * @param table The table that governs the element: its name's, or a valid `xsi:type`'s.
  * @param parents Each walked element's parent, for the declaration a padded value reads and the
  *   namespace declarations in scope.
  * @param tables The tables, for the derivations an `xsi:type` follows.
@@ -1426,12 +1476,13 @@ const checkElement = (
   source: SourceDocument,
   element: SourceElement,
   path: string,
-  table: ElementTable,
+  name: ElementTable,
+  table: ContentTable,
   parents: ReadonlyMap<SourceElement, SourceElement>,
   tables: Tables,
 ): readonly Refusal[] => {
   const refusals: Refusal[] = [...checkPlacement(source, element, path, parents)];
-  const name = elementName(element);
+  const label = elementName(element);
   const declared = table.attributes.filter((declaration) => declaration.use !== "prohibited");
 
   for (const declaration of declared) {
@@ -1443,13 +1494,13 @@ const checkElement = (
       refusals.push(
         refuse(source, "missing-attribute", path, {
           attribute: attributeName(declaration),
-          element: name,
+          element: label,
         }),
       );
     }
   }
 
-  refusals.push(...checkInstance(source, element, path, table, parents, tables));
+  refusals.push(...checkInstance(source, element, path, name, parents, tables));
   for (const attribute of element.attributes) {
     if (isAllowance(attribute) || isInstanceAttribute(attribute)) {
       continue;
@@ -1473,7 +1524,7 @@ const checkElement = (
       refusals.push(
         refuse(source, "padded-attribute", attributePath(path, attribute), {
           attribute: attributeName(attribute),
-          element: name,
+          element: label,
           reading: "7",
           value: attribute.value,
         }),
@@ -1485,15 +1536,15 @@ const checkElement = (
     (child) => child.kind === "text" && nonXmlSpace.test(child.text),
   );
   if (holdsText && !table.text) {
-    refusals.push(refuse(source, "text-not-allowed", path, { element: name }));
+    refusals.push(refuse(source, "text-not-allowed", path, { element: label }));
   }
 
   return [...refusals, ...checkChildCounts(source, element, path, parents)];
 };
 
 /**
- * How the walk treats one element: check it against its table, refuse it as `unknown-element`, or
- * pass over it and its subtree.
+ * How the walk treats one element: check it against its name's table, refuse it as
+ * `unknown-element`, or pass over it and its subtree.
  */
 type Admission =
   | { readonly kind: "check"; readonly table: ElementTable }
@@ -1501,7 +1552,7 @@ type Admission =
   | { readonly kind: "pass" };
 
 /**
- * Decide how the walk treats an element, from its parent's table.
+ * Decide how the walk treats an element, from the table that governs its parent.
  *
  * The root is checked when it is a QTI-namespace element with a table; a root in another namespace
  * is the verdict's `not-qti-root`, so it is passed over. A child of an element the walk did not
@@ -1515,14 +1566,14 @@ type Admission =
  *
  * @param element The element.
  * @param parent Its parent, none for the root.
- * @param checked The table of each element the walk has checked so far.
+ * @param checked The table that governs each element the walk has checked so far.
  * @param tables The tables.
  * @returns How to treat the element.
  */
 const admit = (
   element: SourceElement,
   parent: Option.Option<SourceElement>,
-  checked: ReadonlyMap<SourceElement, ElementTable>,
+  checked: ReadonlyMap<SourceElement, ContentTable>,
   tables: Tables,
 ): Admission => {
   /**
@@ -1561,43 +1612,112 @@ const admit = (
 };
 
 /**
+ * One element the walk checks or refuses, in document order.
+ */
+type Step =
+  | {
+      readonly kind: "check";
+      readonly name: ElementTable;
+      readonly table: ContentTable;
+      readonly visit: Visit;
+    }
+  | { readonly kind: "unknown"; readonly visit: Visit };
+
+/**
+ * The walk of a document: each element it checks or refuses, the table that governs each element
+ * it checks, and each element's parent.
+ */
+interface Walked {
+  readonly governing: ReadonlyMap<SourceElement, ContentTable>;
+  readonly parents: ReadonlyMap<SourceElement, SourceElement>;
+  readonly steps: readonly Step[];
+}
+
+/**
+ * Walk a document once from its root, deciding how each element is treated and, for each element
+ * it checks, which table governs it: its name's, or the table of the QTI type a valid `xsi:type`
+ * names. An element's children are admitted by the table that governs it.
+ *
+ * @param source The document.
+ * @param tables The tables.
+ * @returns The walk.
+ */
+const walkTables = (source: SourceDocument, tables: Tables): Walked => {
+  const parents = new Map<SourceElement, SourceElement>();
+  const governing = new Map<SourceElement, ContentTable>();
+  const steps: Step[] = [];
+
+  for (const visit of walk(source)) {
+    const { element, parent } = visit;
+    if (Option.isSome(parent)) {
+      parents.set(element, parent.value);
+    }
+
+    const admission = admit(element, parent, governing, tables);
+    if (admission.kind === "unknown") {
+      steps.push({ kind: "unknown", visit });
+    } else if (admission.kind === "check") {
+      const name = admission.table;
+      const table = Option.getOrElse(
+        namedType(element, name, parents, tables),
+        (): ContentTable => name,
+      );
+      governing.set(element, table);
+      steps.push({ kind: "check", name, table, visit });
+    }
+  }
+
+  return { governing, parents, steps };
+};
+
+/**
+ * Give each element the structural walk checks with the table that governs it (AD-9).
+ *
+ * That is the element's name's table, or, after a valid `xsi:type` naming one of QTI's types, that
+ * type's own entry in `tables.types`: for a name declared with several types, the named type's
+ * table, not the union. A type of XML Schema's leaves the name's table in force. An element the
+ * walk passes over or refuses has no entry. {@link checkStructure} walks by the same tables, so the
+ * two cannot drift.
+ *
+ * @param source The document, as the reader adapter built it.
+ * @param tables The tables generated from the QTI XSD.
+ * @returns The table that governs each checked element, keyed by the element; each value is the
+ *   element's table or the type's entry itself, never a copy.
+ */
+export const governingTables = (
+  source: SourceDocument,
+  tables: Tables,
+): ReadonlyMap<SourceElement, ContentTable> => walkTables(source, tables).governing;
+
+/**
  * Check a document against the XSD's tables, every structural rule at once.
  *
  * The walk starts at the root and enters every QTI-namespace element the tables admit. It refuses
- * `unknown-element`, `unknown-attribute`, `missing-attribute`, `attribute-type`,
- * `padded-attribute` and `text-not-allowed`, and the readings' `misplaced-element`, `child-count`
- * and `count-range`, each at the path of the element or attribute at fault. It does not enter an
- * element it refuses as unknown, and does enter a misplaced one. A document whose root is outside
- * the QTI namespace yields nothing here: that is the verdict's `not-qti-root`.
+ * `unknown-element`, `unknown-attribute`, `missing-attribute`, `attribute-type`, `padded-attribute`
+ * and `text-not-allowed`, and the readings' `misplaced-element`, `child-count` and `count-range`,
+ * each at the path of the element or attribute at fault. Each element is checked by the table
+ * {@link governingTables} gives it. It does not enter an element it refuses as unknown, and does
+ * enter a misplaced one. A document whose root is outside the QTI namespace yields nothing here:
+ * that is the verdict's `not-qti-root`.
  *
  * @param source The document, as the reader adapter built it.
  * @param tables The tables generated from the QTI XSD.
  * @returns Every refusal, in document order; empty when the document's structure is valid.
  */
 export const checkStructure = (source: SourceDocument, tables: Tables): readonly Refusal[] => {
-  const refusals: Refusal[] = [];
-  const parents = new Map<SourceElement, SourceElement>();
-  const checked = new Map<SourceElement, ElementTable>();
+  const { parents, steps } = walkTables(source, tables);
 
-  for (const { element, parent, path } of walk(source)) {
-    if (Option.isSome(parent)) {
-      parents.set(element, parent.value);
+  return steps.flatMap((step): readonly Refusal[] => {
+    const { element, parent, path } = step.visit;
+    if (step.kind === "check") {
+      return checkElement(source, element, path, step.name, step.table, parents, tables);
     }
 
-    const admission = admit(element, parent, checked, tables);
-    if (admission.kind === "unknown") {
-      const detail = Option.match(parent, {
-        onNone: () => ({ element: elementName(element) }),
-        onSome: (container) => ({ element: elementName(element), parent: elementName(container) }),
-      });
-      refusals.push(refuse(source, "unknown-element", path, detail));
-    } else if (admission.kind === "check") {
-      checked.set(element, admission.table);
-      for (const refusal of checkElement(source, element, path, admission.table, parents, tables)) {
-        refusals.push(refusal);
-      }
-    }
-  }
+    const detail = Option.match(parent, {
+      onNone: () => ({ element: elementName(element) }),
+      onSome: (container) => ({ element: elementName(element), parent: elementName(container) }),
+    });
 
-  return refusals;
+    return [refuse(source, "unknown-element", path, detail)];
+  });
 };
