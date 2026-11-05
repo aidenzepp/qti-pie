@@ -184,10 +184,10 @@ describe("expression", () => {
     }
   });
 
-  it("holds 42 containments into Expression, 3 more, 4 into VariableRef, and the target's three containments and check", () => {
+  it("holds 42 containments into Expression, 3 more, 4 into VariableRef, and the target's four containments and check", () => {
     const kinds = new Set(expression.rules.map((rule) => rule.kind));
     assert.deepStrictEqual([...kinds].toSorted(), ["check", "contained"]);
-    assert.strictEqual(expression.rules.length, 42 + 3 + 4 + 3 + 1);
+    assert.strictEqual(expression.rules.length, 42 + 3 + 4 + 4 + 1);
   });
 
   it("builds a schema over the leaves without refusal", () => {
@@ -211,18 +211,13 @@ describe("contracts (expression)", () => {
       contracts.CategoryList.name,
     );
   });
-  it("types ExpressionSectionIdentifier.value SectionReference", () => {
+  it("types ExpressionSectionIdentifier.value TestStructureIdentifier", () => {
     assert.strictEqual(
       expression.ExpressionSectionIdentifier.fields.value.name,
-      contracts.SectionReference.name,
+      contracts.TestStructureIdentifier.name,
     );
   });
 });
-
-/**
- * A relation name widened to a string, so a comparison against a name outside the union is allowed.
- */
-const sourceName = (name: string): string => name;
 
 describe("expression: the section identifier target", () => {
   it("declares SectionIdentifierTarget keyed by (node, test)", () => {
@@ -241,7 +236,7 @@ describe("expression: the section identifier target", () => {
     assert.strictEqual(expression.relations.SectionIdentifierTarget, target);
   });
 
-  it("contains (node, document) in Node.(id, tree), (test, document) in TestDocument and (test, identifier, holderKind) in TestReach", () => {
+  it("contains (node, document) in Node.(id, tree), (test, document) in TestDocument, (test, identifier, holderKind) in TestReach and (node, identifier) in ExpressionSectionIdentifier.(node, value)", () => {
     assert.deepStrictEqual(
       expression.rules.flatMap((rule) =>
         rule.kind === "contained" && rule.left.source === expression.SectionIdentifierTarget
@@ -256,6 +251,7 @@ describe("expression: the section identifier target", () => {
           ["test", "identifier", "holderKind"],
           ["test", "identifier", "holderKind"],
         ],
+        [expression.ExpressionSectionIdentifier, ["node", "identifier"], ["node", "value"]],
       ],
     );
   });
@@ -267,20 +263,5 @@ describe("expression: the section identifier target", () => {
         : [],
     );
     assert.deepStrictEqual(checks, ["SectionIdentifierTargetHolderKind"]);
-  });
-
-  it("leaves ExpressionSectionIdentifier.value SectionReference, with no containment into it", () => {
-    assert.isFalse(
-      expression.rules.some(
-        (rule) =>
-          rule.kind === "contained" &&
-          "name" in rule.right.source &&
-          sourceName(rule.right.source.name) === expression.ExpressionSectionIdentifier.name,
-      ),
-    );
-    assert.strictEqual(
-      expression.ExpressionSectionIdentifier.fields.value.name,
-      contracts.SectionReference.name,
-    );
   });
 });

@@ -640,6 +640,7 @@ const testContainedEntries: readonly (readonly [Rule, readonly string[]])[] = [
   [
     "section-identifier-target",
     [
+      "SectionIdentifierTarget>ExpressionSectionIdentifier",
       "SectionIdentifierTarget>Node",
       "SectionIdentifierTarget>TestDocument",
       "SectionIdentifierTarget>TestReach",
@@ -1496,7 +1497,6 @@ const writtenContractRules: readonly (readonly [Rule, readonly string[]])[] = [
       "OutcomeScaleValue",
       "PiTarget",
       "RecordFieldIdentifier",
-      "SectionReference",
       "StimulusRefIdentifier",
       "TemplateParameterName",
       "TestStructureIdentifier",

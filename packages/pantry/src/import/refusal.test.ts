@@ -362,7 +362,6 @@ const writtenRules = {
     "OutcomeScaleValue",
     "PiTarget",
     "RecordFieldIdentifier",
-    "SectionReference",
     "StimulusRefIdentifier",
     "TemplateParameterName",
     "TestStructureIdentifier",
@@ -442,11 +441,11 @@ const makeEveryContract = (): readonly string[] => {
 const everyContract: readonly string[] = makeEveryContract();
 
 describe("the rules of a contract", () => {
-  it("names 147 contracts, each in the expected table once", () => {
+  it("names 146 contracts, each in the expected table once", () => {
     const names = everyContract;
 
-    assert.strictEqual(names.length, 147);
-    assert.strictEqual(expectedRules.size, 147);
+    assert.strictEqual(names.length, 146);
+    assert.strictEqual(expectedRules.size, 146);
     assert.deepStrictEqual([...expectedRules.keys()].toSorted(), names.toSorted());
   });
 
@@ -889,6 +888,7 @@ const phaseRules: readonly (readonly [string, readonly string[]])[] = [
     "section-identifier-target",
     [
       "check SectionIdentifierTarget.SectionIdentifierTargetHolderKind",
+      "contained SectionIdentifierTarget(node,identifier) > ExpressionSectionIdentifier(node,value)",
       "contained SectionIdentifierTarget(node,document) > Node(id,tree)",
       "contained SectionIdentifierTarget(test,document) > TestDocument(test,document)",
       "contained SectionIdentifierTarget(test,identifier,holderKind) > TestReach(test,identifier,holderKind)",

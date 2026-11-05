@@ -7,9 +7,10 @@ import { Qti } from "#pantry/schema/qti.ts";
 import * as valueContracts from "#pantry/schema/value-contracts.ts";
 
 /**
- * The 147 contracts of the schema tightening (the 136 of the dry run `p13-d1` and the eleven of
- * phase 5), from the dry run `p13-d1` (its list (c)): the 254 contracts the contracts document
- * lists as present after the canonical wave, less none, over 264 columns. Sorted.
+ * The 146 contracts of the schema tightening (the 136 of the dry run `p13-d1` and the eleven of
+ * phase 5, less `SectionReference`, which phase 5 retyped away), from the dry run `p13-d1` (its
+ * list (c)): the 254 contracts the contracts document lists as present after the canonical wave,
+ * less none, over 264 columns. Sorted.
  */
 const derived = [
   "AccessMode",
@@ -119,7 +120,6 @@ const derived = [
   "RectCoords",
   "ResourceEntryHref",
   "SectionRefHref",
-  "SectionReference",
   "ShapeCoords",
   "ShowHideIdentifier",
   "SliderBound",
@@ -205,10 +205,10 @@ describe("schema/contracts", () => {
     );
   });
 
-  it("makes exactly the 147 contracts the dry run and phase 5 derived", () => {
+  it("makes exactly the 146 contracts the dry run and phase 5 derived", () => {
     const { arms, written } = everyName();
 
-    assert.strictEqual(written.length, 83);
+    assert.strictEqual(written.length, 82);
     assert.strictEqual(arms.length, 64);
     assert.deepStrictEqual([...written, ...arms].toSorted(), derived);
   });

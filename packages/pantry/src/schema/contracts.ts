@@ -73,13 +73,6 @@ export const ChoiceIdentifier = contract("ChoiceIdentifier", str.regex(patterns.
 export const TemplateParameterName = contract("TemplateParameterName", str.regex(patterns.ncName));
 
 /**
- * A reference to an assessment section by identifier.
- *
- * The base is `patterns.ncName`.
- */
-export const SectionReference = contract("SectionReference", str.regex(patterns.ncName));
-
-/**
  * The identifier of a test part, an assessment section or an assessment item reference of a test
  * (the `identifier` columns of the test-structure relations).
  *
