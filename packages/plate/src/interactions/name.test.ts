@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 import { authoredId } from "#plate/emit/parts.ts";
-import { authorsName, textControlName } from "#plate/interactions/name.ts";
+import { authorsName, resolvedLabelledby, textControlName } from "#plate/interactions/name.ts";
 import { message } from "#plate/messages.ts";
 
 /**
@@ -58,5 +58,34 @@ describe("textControlName", () => {
         JSON.stringify(label),
       );
     }
+  });
+});
+
+describe("resolvedLabelledby", () => {
+  /**
+   * The ids the author gave the item's elements.
+   */
+  const ids: ReadonlySet<string> = new Set(["hint", "intro"]);
+
+  it("keeps the ids an element of the item carries, in the author's order, and drops the others", () => {
+    assert.deepStrictEqual(
+      resolvedLabelledby({ ariaLabelledby: Option.some(" nope intro\tmissing hint ") }, ids),
+      Option.some("intro hint"),
+    );
+  });
+
+  it("gives none when no id names an element of the item, or the author named no id", () => {
+    for (const value of ["nope", "nope missing", "", " \t\n "]) {
+      assert.deepStrictEqual(
+        resolvedLabelledby({ ariaLabelledby: Option.some(value) }, ids),
+        Option.none(),
+        JSON.stringify(value),
+      );
+    }
+
+    assert.deepStrictEqual(
+      resolvedLabelledby({ ariaLabelledby: Option.none() }, ids),
+      Option.none(),
+    );
   });
 });

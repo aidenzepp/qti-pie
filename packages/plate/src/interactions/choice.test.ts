@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
+import { emitBody } from "#plate/emit/body.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element } from "#plate/emit/node.ts";
 import { authoredId, partForSlot, resolveOverrides, rowFor } from "#plate/emit/parts.ts";
@@ -200,6 +201,64 @@ const page = (root: Element, built: Payload): Element =>
       h("button", { type: "submit" }, [text("Submit")]),
     ]),
   ]);
+
+/**
+ * Construct a paragraph that carries an authored id, which an `aria-labelledby` can name.
+ *
+ * @param id The id.
+ * @param value The paragraph's text.
+ * @returns The paragraph.
+ */
+const idParagraph = (id: string, value: string): BodyNode => ({
+  attributes: [{ name: "id", value: id }],
+  children: [words(value)],
+  kind: "element",
+  path: `qti-assessment-item/qti-item-body/p[@id="${id}"]`,
+  tag: "p",
+});
+
+/**
+ * Compute the payload of an item holding one Choice, then paragraphs after it, so the Choice
+ * keeps its place at the start of the body.
+ *
+ * @param labels The paragraphs, such as {@link idParagraph} ones.
+ * @param interaction The Choice.
+ * @returns The payload of the redacted item, for a first render.
+ */
+const payloadBeside = (labels: readonly BodyNode[], interaction: ChoiceInteraction): Payload =>
+  payload(redactItem({ ...itemOf(interaction), body: [interaction, ...labels] }), answering);
+
+/**
+ * Render a payload's whole body, its Choice through {@link renderChoice}, and place it as
+ * {@link page} places a Choice Root.
+ *
+ * @param built The payload.
+ * @returns The item's root.
+ */
+const pageOf = (built: Payload): Effect.Effect<Element> =>
+  Effect.gen(function* renderPage() {
+    const state = yield* emitState;
+    const body = yield* Effect.orDie(
+      Effect.fromResult(
+        emitBody(built, state, (interaction) =>
+          interaction.kind === "choice"
+            ? renderChoice(interaction, built, state)
+            : assert.fail("This page renders no text control."),
+        ),
+      ),
+    );
+
+    return h(
+      "qti-assessment-item",
+      { "data-slot": rowFor("item", "root").slot, lang: built.lang },
+      [
+        h("form", { action: "/submit", method: "post", novalidate: true }, [
+          ...body,
+          h("button", { type: "submit" }, [text("Submit")]),
+        ]),
+      ],
+    );
+  });
 
 /**
  * List an element and every element below it, in document order.
@@ -406,7 +465,7 @@ describe("renderChoice", () => {
     () =>
       Effect.gen(function* namesByAriaLabelledby() {
         const root = yield* render(
-          payloadOf({
+          payloadBeside([idParagraph("intro", "Pick"), idParagraph("note", "a city")], {
             ...colours,
             ariaLabelledby: Option.some("intro note"),
             prompt: Option.none(),
@@ -444,6 +503,51 @@ describe("renderChoice", () => {
 
         assert.isUndefined(labelled.attrs["aria-labelledby"]);
         assert.strictEqual(labelled.attrs["aria-label"], "Pick a city");
+      }),
+  );
+
+  it.effect(
+    "[Q-2] writes no aria-labelledby whose ids name no element of the item, and leaves the group unnamed as with none",
+    () =>
+      Effect.gen(function* danglingAriaLabelledby() {
+        for (const ids of ["nope", "nope missing"]) {
+          const built = payloadOf({
+            ...colours,
+            ariaLabelledby: Option.some(ids),
+            prompt: Option.none(),
+          });
+          const root = yield* render(built);
+          const tree = page(root, built);
+
+          assert.isUndefined(root.attrs["aria-labelledby"], ids);
+          assert.isUndefined(root.attrs["aria-label"], ids);
+          assert.deepStrictEqual(
+            partsIn(tree, "control").map((control) => nameOf(control, tree)),
+            ["Red", "Green", "Blue"],
+            ids,
+          );
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], ids);
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-2] names a Choice with no Prompt by the ids of its aria-labelledby that name an element of the item, and drops the others",
+    () =>
+      Effect.gen(function* partlyDangling() {
+        const tree = yield* pageOf(
+          payloadBeside([idParagraph("intro", "Pick a city")], {
+            ...colours,
+            ariaLabelledby: Option.some("nope intro"),
+            prompt: Option.none(),
+          }),
+        );
+        const [root] = partsIn(tree, "root");
+
+        assert.strictEqual(root?.attrs["aria-labelledby"], authoredId(instance, "intro"));
+        assert.isUndefined(root?.attrs["aria-label"]);
+        assert.strictEqual(root === undefined ? "" : nameOf(root, tree), "Pick a city");
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
       }),
   );
 

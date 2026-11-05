@@ -16,11 +16,11 @@
 import { Array as Arr, Option } from "effect";
 import type { Brand } from "effect";
 import { controlCap, exceedsControlCap } from "#plate/control-cap.ts";
-import { scopedId, splitTokens } from "#plate/emit/parts.ts";
+import { scopedId } from "#plate/emit/parts.ts";
 import type { Resolved } from "#plate/emit/parts.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { entryName } from "#plate/form/encoding.ts";
-import { authorsLabel } from "#plate/interactions/name.ts";
+import { authorsLabel, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type {
@@ -168,8 +168,9 @@ export interface ChoicePayload extends ValidationPayload {
    */
   readonly ariaLabel: Option.Option<string>;
   /**
-   * The author's `aria-labelledby`, the ids unscoped, which names the group when there is no
-   * Prompt.
+   * The ids of the author's `aria-labelledby` that an element of the item carries, unscoped
+   * ({@link resolvedLabelledby}), which name the group when there is no Prompt; none when the
+   * author wrote none or none of its ids is carried.
    */
   readonly ariaLabelledby: Option.Option<string>;
   readonly cardinality: "multiple" | "single";
@@ -215,13 +216,14 @@ export interface UnnamedPosition {
 /**
  * How a text control is named (§4.8, Q10).
  *
- * `ariaLabel` and `ariaLabelledby` are the author's, as written, the ids unscoped. `unnamed` is set
- * exactly when the renderer names the control's Controls: it has neither of them nor a Prompt, a
- * blank `ariaLabel` and an `ariaLabelledby` that names no id each counting as none, and it renders
- * at least one Control. Every Control the renderer names counts once, in document order across the
- * item, which is the order the Controls are emitted in: a Text Entry's one Control and each Control
- * of an Extended Text. `n` is the position of the control's first Control, an Extended Text's
- * others following at `n + 1` onwards, and `count` is how many there are.
+ * `ariaLabel` is the author's, as written. `ariaLabelledby` holds the ids of the author's that an
+ * element of the item carries, unscoped ({@link resolvedLabelledby}), none when none is carried.
+ * `unnamed` is set exactly when the renderer names the control's Controls: it has neither of them
+ * nor a Prompt, a blank `ariaLabel` counting as none, and it renders at least one Control. Every
+ * Control the renderer names counts once, in document order across the item, which is the order
+ * the Controls are emitted in: a Text Entry's one Control and each Control of an Extended Text. `n`
+ * is the position of the control's first Control, an Extended Text's others following at `n + 1`
+ * onwards, and `count` is how many there are.
  */
 export interface TextName {
   readonly ariaLabel: Option.Option<string>;
@@ -403,6 +405,10 @@ interface Build {
    * The interaction whose first Control takes `autofocus`, if any.
    */
   readonly autofocus: Option.Option<Interaction>;
+  /**
+   * The ids the author gave the item's elements, unscoped ({@link authoredIdsIn}).
+   */
+  readonly ids: ReadonlySet<string>;
   readonly instance: string;
   readonly messages: readonly MessagePayload[];
   readonly names: View["names"];
@@ -423,17 +429,55 @@ interface Build {
 }
 
 /**
+ * Collect the ids the author gave the elements of body nodes, in document order: the `id` of
+ * every element, below elements and in Prompts and choice content, the places {@link copyNodes}
+ * copies, so each one is an id an element of the rendered item carries.
+ *
+ * @param nodes The body nodes.
+ * @returns The ids, unscoped.
+ */
+const authoredIdsIn = (nodes: readonly BodyNode[]): readonly string[] =>
+  nodes.flatMap((node): readonly string[] => {
+    switch (node.kind) {
+      case "element": {
+        return [
+          ...node.attributes.flatMap(({ name, value }) => (name === "id" ? [value] : [])),
+          ...authoredIdsIn(node.children),
+        ];
+      }
+      case "choice": {
+        return [
+          ...authoredIdsIn(Option.getOrElse(node.prompt, () => [])),
+          ...node.choices.flatMap((choice) => authoredIdsIn(choice.content)),
+        ];
+      }
+      case "extended-text": {
+        return authoredIdsIn(Option.getOrElse(node.prompt, () => []));
+      }
+      case "text-entry":
+      case "text":
+      case "unsupported": {
+        return [];
+      }
+      default: {
+        return node satisfies never;
+      }
+    }
+  });
+
+/**
  * Report whether an interaction is a text control with no authored name and no Prompt (Q10). A
- * blank `aria-label` ({@link authorsLabel}) and an `aria-labelledby` that names no id are no
- * authored names.
+ * blank `aria-label` ({@link authorsLabel}) and an `aria-labelledby` none of whose ids an element
+ * of the item carries ({@link resolvedLabelledby}) are no authored names.
  *
  * @param interaction The interaction.
+ * @param ids The ids the author gave the item's elements.
  * @returns Whether the renderer must name it.
  */
-const isUnnamed = (interaction: Interaction): boolean =>
+const isUnnamed = (interaction: Interaction, ids: ReadonlySet<string>): boolean =>
   interaction.kind !== "choice" &&
   Option.isNone(authorsLabel(interaction)) &&
-  !Option.exists(interaction.ariaLabelledby, (ids) => splitTokens(ids).length > 0) &&
+  Option.isNone(resolvedLabelledby(interaction, ids)) &&
   (interaction.kind === "text-entry" || Option.isNone(interaction.prompt));
 
 /**
@@ -563,7 +607,7 @@ const presentedChoices = (interaction: ChoiceInteraction, build: Build): readonl
 const choicePayload = (interaction: ChoiceInteraction, build: Build): ChoicePayload => ({
   ...validationOf(interaction, build),
   ariaLabel: interaction.ariaLabel,
-  ariaLabelledby: interaction.ariaLabelledby,
+  ariaLabelledby: resolvedLabelledby(interaction, build.ids),
   cardinality: interaction.cardinality,
   choices: presentedChoices(interaction, build).map((choice) => ({
     content: copyNodes(choice.content, build),
@@ -601,7 +645,7 @@ const textControlPayload = (
   formName: formNameOf(build, interaction.response),
   name: {
     ariaLabel: interaction.ariaLabel,
-    ariaLabelledby: interaction.ariaLabelledby,
+    ariaLabelledby: resolvedLabelledby(interaction, build.ids),
     unnamed: Option.fromNullishOr(build.unnamed.get(interaction)),
   },
   placeholder: interaction.placeholder,
@@ -753,16 +797,17 @@ const extendedTextPayload = (
  * and no Prompt. An Extended Text that renders no Control, over the cap, takes no position.
  *
  * @param interactions The item's interactions, in document order.
- * @param build The build's posted strings and values, which give an Extended Text its Controls.
+ * @param build The build's ids, which say whether an `aria-labelledby` names an element, and its
+ *   posted strings and values, which give an Extended Text its Controls.
  * @returns Each text control the renderer names, with where its first Control stands.
  */
 const unnamedPositions = (
   interactions: readonly Interaction[],
-  build: Pick<Build, "posted" | "values">,
+  build: Pick<Build, "ids" | "posted" | "values">,
 ): ReadonlyMap<Interaction, UnnamedPosition> => {
   const firsts: (readonly [Interaction, number])[] = [];
   let next = 1;
-  for (const interaction of interactions.filter(isUnnamed)) {
+  for (const interaction of interactions.filter((each) => isUnnamed(each, build.ids))) {
     const controls =
       interaction.kind === "extended-text"
         ? controlsOf(interaction, entriesOf(interaction, build).length).n
@@ -855,6 +900,7 @@ export const payload = (redacted: Redacted, view: View): Payload => {
   const messages = identifyMessages(view.instance, view.messages);
   const interactions = interactionsIn(redacted.body);
   const restoring = {
+    ids: new Set(authoredIdsIn(redacted.body)),
     posted: messages.length > 0 ? view.posted : Option.none(),
     values: view.values,
   };

@@ -62,6 +62,20 @@ const one = (single: Value["values"][number]): Value => ({
 const text = (value: string): BodyNode => ({ kind: "text", text: value });
 
 /**
+ * Construct a paragraph that carries an authored id, which an `aria-labelledby` can name.
+ *
+ * @param id The id.
+ * @returns The paragraph, which holds the id as text.
+ */
+const idParagraph = (id: string): BodyNode => ({
+  attributes: [{ name: "id", value: id }],
+  children: [text(id)],
+  kind: "element",
+  path: `qti-assessment-item/qti-item-body/p[@id="${id}"]`,
+  tag: "p",
+});
+
+/**
  * Construct a Text Entry with no authored name, bound to a single string response.
  *
  * @param response The response it binds.
@@ -533,6 +547,67 @@ const unpromptedOf = (maxStrings: Option.Option<bigint>, minStrings: bigint): Re
   });
 
 /**
+ * Give a body node of {@link item} the `aria-labelledby` `ids`: the Choice and the Extended Text,
+ * and `NAMED` below a paragraph, which loses its `aria-label`. The Choice's first choice becomes
+ * a paragraph `paris` and the Extended Text's Prompt a paragraph `why`.
+ *
+ * @param node The body node.
+ * @param ids The `aria-labelledby` value.
+ * @returns The node, changed.
+ */
+const referencingNode = (node: BodyNode, ids: string): BodyNode => {
+  switch (node.kind) {
+    case "choice": {
+      return {
+        ...node,
+        ariaLabelledby: Option.some(ids),
+        choices: node.choices.map((entry, index) =>
+          index === 0 ? { ...entry, content: [idParagraph("paris")] } : entry,
+        ),
+      };
+    }
+    case "extended-text": {
+      return {
+        ...node,
+        ariaLabelledby: Option.some(ids),
+        prompt: Option.some([idParagraph("why")]),
+      };
+    }
+    case "element": {
+      return {
+        ...node,
+        children: node.children.map((child) =>
+          child.kind === "text-entry" && child.response === "NAMED"
+            ? { ...child, ariaLabel: Option.none(), ariaLabelledby: Option.some(ids) }
+            : child,
+        ),
+      };
+    }
+    case "text":
+    case "text-entry":
+    case "unsupported": {
+      return node;
+    }
+    default: {
+      return node satisfies never;
+    }
+  }
+};
+
+/**
+ * Construct {@link item} after a paragraph `intro`, with the Choice, `NAMED` and the Extended Text
+ * each given the `aria-labelledby` `ids` ({@link referencingNode}).
+ *
+ * @param ids The `aria-labelledby` value.
+ * @returns The item, redacted.
+ */
+const referencing = (ids: string): Redacted =>
+  redactItem({
+    ...item,
+    body: [idParagraph("intro"), ...item.body.map((node) => referencingNode(node, ids))],
+  });
+
+/**
  * Name the stages of a list, `stage 1` onwards.
  *
  * @param count How many.
@@ -726,7 +801,7 @@ describe("payload", () => {
     }
   });
 
-  it("[Q-2] carries the Choice's aria-label and aria-labelledby as the model holds them", () => {
+  it("[Q-2] carries the Choice's aria-label and aria-labelledby as the model holds them when each id names an element of the item", () => {
     const named: ChoiceInteraction = {
       ...choice,
       ariaLabel: Option.some("Pick a city"),
@@ -735,7 +810,7 @@ describe("payload", () => {
 
     for (const interaction of [choice, named]) {
       const capital = choiceFor(
-        payload(redactItem({ ...item, body: [interaction] }), answering),
+        payload(redactItem({ ...item, body: [idParagraph("intro"), interaction] }), answering),
         "CAPITAL",
       );
 
@@ -924,6 +999,31 @@ describe("payload", () => {
         JSON.stringify(label),
       );
     }
+  });
+
+  it("[Q-2] [Q-20] [Q-5] keeps the ids of an authored aria-labelledby that an element of the item carries, in order, and drops the others", () => {
+    const namesOf = (built: Payload): readonly Option.Option<string>[] => [
+      choiceFor(built, "CAPITAL").ariaLabelledby,
+      textFor(built, "NAMED").name.ariaLabelledby,
+      textFor(built, "ESSAY").name.ariaLabelledby,
+    ];
+
+    for (const ids of ["nope", "nope missing", " nope "]) {
+      const built = payload(referencing(ids), answering);
+
+      assert.deepStrictEqual(namesOf(built), [Option.none(), Option.none(), Option.none()], ids);
+      assert.deepStrictEqual(
+        textFor(built, "NAMED").name.unnamed,
+        Option.some({ count: 3, n: 3 }),
+        ids,
+      );
+    }
+
+    const kept = payload(referencing("nope intro\tmissing why paris"), answering);
+    const intro = Option.some("intro why paris");
+    assert.deepStrictEqual(namesOf(kept), [intro, intro, intro]);
+    assert.deepStrictEqual(textFor(kept, "NAMED").name.unnamed, Option.none());
+    assert.deepStrictEqual(textFor(kept, "FIRST").name.unnamed, Option.some({ count: 2, n: 1 }));
   });
 
   it("[Q-20] [Q-5] numbers each Control of an unnamed Extended Text group in one sequence with the unnamed Text Entries", () => {

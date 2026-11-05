@@ -88,6 +88,17 @@ const length: TextEntryInteraction = {
 const second: TextEntryInteraction = { ...city, response: "SECOND" };
 
 /**
+ * A span of the paragraph whose authored id, `capital-label`, an `aria-labelledby` can name.
+ */
+const capitalLabel: BodyNode = {
+  attributes: [{ name: "id", value: "capital-label" }],
+  children: [words("Capital of England")],
+  kind: "element",
+  path: `${paragraphPath}/span`,
+  tag: "span",
+};
+
+/**
  * The author's message for a mismatch on {@link masked}.
  */
 const maskMessage = "Enter up to six digits and points.";
@@ -385,13 +396,7 @@ describe("renderTextEntry", () => {
         const labelledControl = onlyPart(labelled, "control");
         const referenced = yield* page(
           payloadOf([{ ...city, ariaLabelledby: Option.some("capital-label") }], answering, [
-            {
-              attributes: [{ name: "id", value: "capital-label" }],
-              children: [words("Capital of England")],
-              kind: "element",
-              path: `${paragraphPath}/span`,
-              tag: "span",
-            },
+            capitalLabel,
             words(": "),
           ]),
         );
@@ -418,6 +423,60 @@ describe("renderTextEntry", () => {
 
         assert.isUndefined(control.attrs["aria-labelledby"]);
         assert.strictEqual(nameOf(control, tree), message("en", "answer"));
+      }),
+  );
+
+  it.effect(
+    "[Q-20] writes no aria-labelledby whose ids name no element of the item, and names the Control the renderer's way",
+    () =>
+      Effect.gen(function* danglingAriaLabelledby() {
+        const answers = [
+          message("en", "answerOf", { count: "2", n: "1" }),
+          message("en", "answerOf", { count: "2", n: "2" }),
+        ];
+
+        for (const ids of ["nope", "nope missing"]) {
+          const tree = yield* page(
+            payloadOf([{ ...city, ariaLabelledby: Option.some(ids) }, second]),
+          );
+          const controls = partsIn(tree, "control");
+
+          assert.deepStrictEqual(
+            controls.map((control) => control.attrs["aria-labelledby"]),
+            [undefined, undefined],
+            ids,
+          );
+          assert.deepStrictEqual(
+            controls.map((control) => control.attrs["aria-label"]),
+            answers,
+            ids,
+          );
+          assert.deepStrictEqual(
+            controls.map((control) => nameOf(control, tree)),
+            answers,
+            ids,
+          );
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], ids);
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-20] keeps the ids of the author's aria-labelledby that name an element of the item, and drops the others",
+    () =>
+      Effect.gen(function* partlyDangling() {
+        const tree = yield* page(
+          payloadOf([{ ...city, ariaLabelledby: Option.some("nope capital-label") }], answering, [
+            capitalLabel,
+            words(": "),
+          ]),
+        );
+        const control = onlyPart(tree, "control");
+
+        assert.strictEqual(control.attrs["aria-labelledby"], authoredId(instance, "capital-label"));
+        assert.isUndefined(control.attrs["aria-label"]);
+        assert.strictEqual(nameOf(control, tree), "Capital of England");
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
       }),
   );
 

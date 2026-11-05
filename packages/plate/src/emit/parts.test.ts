@@ -529,7 +529,8 @@ const groupedEssay: ExtendedTextInteraction = {
 const authorNamedGroup: ExtendedTextInteraction = { ...groupedEssay, prompt: Option.none() };
 
 /**
- * Construct an item whose body holds one interaction, bound to a response of its base type and
+ * Construct an item whose body holds a paragraph carrying the id `intro`, which the fixtures'
+ * `aria-labelledby` names, then one interaction, bound to a response of its base type and
  * cardinality (a Text Entry's is single), and a Notice for an unsupported part.
  *
  * @param interaction The interaction.
@@ -539,6 +540,13 @@ const itemOf = (
   interaction: ChoiceInteraction | ExtendedTextInteraction | TextEntryInteraction,
 ): Item => ({
   body: [
+    {
+      attributes: [{ name: "id", value: "intro" }],
+      children: [words("Colours and dates.")],
+      kind: "element",
+      path: 'qti-assessment-item/qti-item-body/p[@id="intro"]',
+      tag: "p",
+    },
     interaction.kind === "text-entry"
       ? {
           attributes: [],
