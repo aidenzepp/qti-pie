@@ -444,8 +444,14 @@ const responseHolding = (child: string, baseType: Option.Option<BaseType>): Need
  *
  * A `qti-correct-response` child is the one need template processing can meet instead: it may set
  * the correct response, but not a mapping or an area mapping ({@link templateRequirements}).
+ *
+ * The `CC2_*` templates need nothing here: `template-requirements` judges the three canonical
+ * templates only (Q6), so a `CC2_*` template is never refused by it.
  */
 const templateNeeds = {
+  CC2_map_response: [],
+  CC2_match: [],
+  CC2_match_basic: [],
   map_response: [responseHolding("qti-mapping", Option.none()), floatScore],
   map_response_point: [responseHolding("qti-area-mapping", Option.some("point")), floatScore],
   match_correct: [responseHolding("qti-correct-response", Option.none()), floatScore],
@@ -501,9 +507,10 @@ const neededDetail = (element: string, needed: Needed) => ({
  * response for `match_correct`, a `qti-mapping` for `map_response`, and a `point` base type and a
  * `qti-area-mapping` for `map_response_point`, and a declared float `SCORE`. The template is
  * resolved by the vocabulary's `templateName` from its `template` as written, as the item model
- * resolves it, so a `CC2_*` or other template is not judged. "If both embedded rules and a template
- * reference are supplied then the internal rules take precedence" (the information model), so a
- * template beside inline rules never runs and is not judged either; the inline rules are.
+ * resolves it; a `CC2_*` template needs nothing (Q6), and any other template is not judged. "If
+ * both embedded rules and a template reference are supplied then the internal rules take
+ * precedence" (the information model), so a template beside inline rules never runs and is not
+ * judged either; the inline rules are.
  *
  * The correct response `match_correct` needs may also be set by template processing: "The response
  * variable to have its correct value set" is a template rule, `qti-set-correct-response` (the

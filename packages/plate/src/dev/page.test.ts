@@ -748,7 +748,7 @@ describe("dev/page.ts", () => {
   );
 
   it.effect(
-    "a ccPackage item opens, and a POST of its correct response shows its score, or, while CC2_match is unsupported, records it",
+    "a ccPackage item opens, and a POST of its correct response shows its CC2_match score, 1",
     () =>
       Effect.gen(function* ccPackage() {
         const handle = playground();
@@ -764,16 +764,9 @@ describe("dev/page.ts", () => {
         const status = find(answered.html, (element) => element.attrs["role"] === "status");
 
         assert.strictEqual(opened.response.status, 200);
-        if (Option.isSome(accepted.item.processing)) {
-          assert.include(textOf(status.children), message("en", "score", { score: "1" }));
-          assertAfterSubmit(answered, "scored", "Question 02");
-        } else {
-          assert.include(
-            accepted.unsupported.map((entry) => entry.feature),
-            'template="https://www.imsglobal.org/question/qti_v3p0/rptemplates/CC2_match.xml"',
-          );
-          assertAfterSubmit(answered, "responseRecorded", "Question 02");
-        }
+        assert.isTrue(Option.isSome(accepted.item.processing));
+        assert.include(textOf(status.children), message("en", "score", { score: "1" }));
+        assertAfterSubmit(answered, "scored", "Question 02");
       }),
   );
 
