@@ -516,6 +516,13 @@ const prefixedArms = [
  * reference is a node of its document's tree with a declared, a built-in or a template-parameter
  * arm, each naming the kind of node that refers.
  *
+ * A reference in a section document takes the as-written arm `SectionVariableRef`, whose root is a
+ * section and whose referrer is one of the five expressions a section document holds. Each test
+ * that reaches the document resolves it once, in `SectionVariableResolution`, to the test's
+ * declaration of the whole name, to a prefixed source or to a duration target. The two thin arms
+ * mirror the hub's and `SectionDurationTarget`'s section-variable rows, one selected side each
+ * (the law compiler refuses a containment selected on both).
+ *
  * The declared and built-in checks list the allowed pairs and refuse every other referring kind, so
  * they are also the check that the kind is one of the ten that refer; the template-parameter arm
  * has a check of its own for that.
@@ -580,6 +587,7 @@ export const rules = [
     itemInstanceVariable: ItemInstanceVariableRef,
     itemVariable: ItemVariableRef,
     sectionDuration: SectionDurationRef,
+    sectionVariable: SectionVariableRef,
     templateParameter: TemplateParameterRef,
   }),
   contained(
@@ -693,5 +701,65 @@ export const rules = [
   ),
   check("SectionDurationTargetHolder", SectionDurationTarget, (r) =>
     r.in(r.holderKind, ["part", "section"]),
+  ),
+  contained(on(SectionVariableRef, "id", "document"), on(VariableRef, "id", "document")),
+  check("SectionVariableRoot", SectionVariableRef, (r) => r.eq(r.root, "section")),
+  contained(on(SectionVariableRef, "id", "referrerKind"), on(node.Node, "id", "kind")),
+  check("SectionVariableReferrer", SectionVariableRef, (r) =>
+    r.in(r.referrerKind, [
+      "qti-variable",
+      "qti-default",
+      "qti-correct",
+      "qti-map-response",
+      "qti-map-response-point",
+    ]),
+  ),
+  contained(
+    on(SectionVariableResolution, "ref", "document"),
+    on(SectionVariableRef, "id", "document"),
+  ),
+  alternatives(SectionVariableResolution, "target", SectionVariableTarget, {
+    declared: SectionVariableDeclared,
+    duration: SectionVariableDuration,
+    prefixed: SectionVariablePrefixed,
+  }),
+  contained(
+    on(SectionVariableDeclared, "ref", "identifier", "referrerKind"),
+    on(SectionVariableRef, "id", "identifier", "referrerKind"),
+  ),
+  contained(
+    on(SectionVariableDeclared, "test", "identifier", "declarationKind"),
+    on(declaration.Declaration, "document", "identifier", "kind"),
+  ),
+  check("SectionVariableDeclaredKind", SectionVariableDeclared, (r) =>
+    r.or(
+      r.in(r.referrerKind, ["qti-variable", "qti-default"]),
+      r.and(
+        r.in(r.referrerKind, [
+          "qti-correct",
+          "qti-map-response",
+          "qti-map-response-point",
+          "qti-set-correct-response",
+        ]),
+        r.eq(r.declarationKind, "response"),
+      ),
+      r.and(
+        r.in(r.referrerKind, ["qti-set-outcome-value", "qti-lookup-outcome-value"]),
+        r.eq(r.declarationKind, "outcome"),
+      ),
+      r.and(r.eq(r.referrerKind, "qti-set-template-value"), r.eq(r.declarationKind, "template")),
+      r.and(
+        r.eq(r.referrerKind, "qti-set-default-value"),
+        r.in(r.declarationKind, ["response", "outcome"]),
+      ),
+    ),
+  ),
+  mirrors(
+    on(SectionVariablePrefixed, "ref", "test"),
+    on(select(PrefixedVariableSource, { refKind: "sectionVariable" }), "ref", "test"),
+  ),
+  mirrors(
+    on(SectionVariableDuration, "ref", "test"),
+    on(select(SectionDurationTarget, { refKind: "sectionVariable" }), "ref", "test"),
   ),
 ] as const;

@@ -96,10 +96,10 @@ describe("test/processing", () => {
     );
   });
 
-  it("keeps p5-34's statement count: processing's rules and this module's together are the 71", () => {
-    assert.strictEqual(processing.rules.length, 62);
-    assert.strictEqual(testProcessing.rules.length, 9);
-    assert.strictEqual(processing.rules.length + testProcessing.rules.length, 71);
+  it("holds p5-34's 71 statements and E18's thirteen: processing's rules and this module's together are the 84", () => {
+    assert.strictEqual(processing.rules.length, 73);
+    assert.strictEqual(testProcessing.rules.length, 11);
+    assert.strictEqual(processing.rules.length + testProcessing.rules.length, 84);
   });
 
   it("holds only containments", () => {
@@ -156,6 +156,22 @@ describe("test/processing", () => {
         TestReach,
         undefined,
         ["test", "identifier", "holder", "holderKind"],
+      ],
+    ]);
+  });
+
+  it("binds a section variable reference's root to a document and its resolution to a test document", () => {
+    const { SectionVariableRef, SectionVariableResolution } = processing.relations;
+    assert.deepStrictEqual(lawsFrom(SectionVariableRef), [
+      [undefined, ["document", "root"], document.relations.Document, undefined, ["id", "root"]],
+    ]);
+    assert.deepStrictEqual(lawsFrom(SectionVariableResolution), [
+      [
+        undefined,
+        ["test", "document"],
+        testStructure.relations.TestDocument,
+        undefined,
+        ["test", "document"],
       ],
     ]);
   });
