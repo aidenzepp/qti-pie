@@ -14,9 +14,15 @@ import { Malformed, decode, entryName } from "#plate/form/encoding.ts";
 import type { Entry } from "#plate/form/encoding.ts";
 import { renderChoice } from "#plate/interactions/choice.ts";
 import { renderExtendedText, validateExtendedText } from "#plate/interactions/extended-text.ts";
+import { renderTextEntry } from "#plate/interactions/text-entry.ts";
 import { message } from "#plate/messages.ts";
 import { buildItem } from "#plate/model/item.ts";
-import type { BodyNode, ExtendedTextInteraction, Item } from "#plate/model/item.ts";
+import type {
+  BodyNode,
+  ExtendedTextInteraction,
+  Item,
+  TextEntryInteraction,
+} from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import { payload, redactItem } from "#plate/payload.ts";
 import type { EmitState, ExtendedTextPayload, Payload, View } from "#plate/payload.ts";
@@ -764,6 +770,96 @@ const orderedOf = (...texts: readonly string[]): Value => ({
   values: texts.map((value) => ({ baseType: "string", value })),
 });
 
+/**
+ * An unnamed Text Entry bound to a single string `CITY`, which the renderer names.
+ */
+const city: TextEntryInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  base: 10,
+  baseType: "string",
+  class: "",
+  expectedLength: Option.none(),
+  kind: "text-entry",
+  path: "qti-assessment-item/qti-item-body/p/qti-text-entry-interaction",
+  patternMask: Option.none(),
+  patternMaskMessage: Option.none(),
+  placeholder: Option.none(),
+  response: "CITY",
+};
+
+/**
+ * Construct an item whose body is a paragraph holding {@link city}, then an Extended Text.
+ *
+ * @param interaction The Extended Text.
+ * @returns The item.
+ */
+const besideCity = (interaction: ExtendedTextInteraction): Item => {
+  const alone = itemOf(interaction);
+
+  return {
+    ...alone,
+    body: [
+      {
+        attributes: [],
+        children: [words("City: "), city],
+        kind: "element",
+        path: "qti-assessment-item/qti-item-body/p",
+        tag: "p",
+      },
+      interaction,
+    ],
+    responses: new Map([
+      ...alone.responses,
+      [
+        city.response,
+        {
+          areaMapping: Option.none(),
+          baseType: "string",
+          cardinality: "single",
+          correct: Option.none(),
+          defaultValue: Option.none(),
+          identifier: city.response,
+          mapping: Option.none(),
+        },
+      ],
+    ]),
+  };
+};
+
+/**
+ * Render a payload's whole body, its Text Entries and Extended Texts, and place it as {@link page}
+ * does.
+ *
+ * @param built The payload.
+ * @returns The item's root.
+ */
+const pageOf = (built: Payload): Effect.Effect<Element> =>
+  Effect.gen(function* renderPage() {
+    const state = yield* emitState;
+    const renderInteraction: RenderInteraction = (interaction) => {
+      switch (interaction.kind) {
+        case "extended-text": {
+          return renderExtendedText(interaction, built, state);
+        }
+        case "text-entry": {
+          return renderTextEntry(interaction, built, state);
+        }
+        case "choice": {
+          return assert.fail("This page renders no Choice.");
+        }
+        default: {
+          return interaction satisfies never;
+        }
+      }
+    };
+
+    return page(
+      yield* Effect.orDie(Effect.fromResult(emitBody(built, state, renderInteraction))),
+      built,
+    );
+  });
+
 describe("an Extended Text bound to a container", () => {
   it.effect(
     '[Q-5] renders an ordered binding with max-strings="3" as three textareas posting under one name, in a group its Prompt names, each "Answer n of 3"',
@@ -841,6 +937,26 @@ describe("an Extended Text bound to a container", () => {
         assert.isUndefined(unnamedRoot.attrs["aria-label"]);
         assert.isUndefined(unnamedRoot.attrs["aria-labelledby"]);
         assert.deepStrictEqual(controlNames(unnamedRoot, tree), answersOf(3));
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+      }),
+  );
+
+  it.effect(
+    '[Q-20] [Q-5] numbers an unnamed Text Entry and each Control of an unnamed group in one sequence, "Answer 1 of 4" to "Answer 4 of 4"',
+    () =>
+      Effect.gen(function* oneSequence() {
+        const built = payload(
+          redactItem(besideCity({ ...rivers, prompt: Option.none() })),
+          answering,
+        );
+        const tree = yield* pageOf(built);
+        const inputs = elementsIn(tree).filter((element) => element.tag === "input");
+
+        assert.deepStrictEqual(
+          [...inputs, ...partsIn(tree, "control")].map((control) => nameOf(control, tree)),
+          answersOf(4),
+        );
         assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
         assert.isTrue(roundTrips(tree));
       }),

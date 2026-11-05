@@ -102,27 +102,44 @@ const numeral = (locale: Locale, n: bigint | number): string =>
   new Intl.NumberFormat(locale).format(n);
 
 /**
- * Compute how the one Control of an Extended Text is named (§4.8, Q10): the Prompt when there is
- * one; else as any text control is named ({@link textControlName}): the author's `aria-label` and
- * `aria-labelledby`, else the locale's "Answer", or "Answer n of N" when the item has several
- * unnamed text controls.
+ * Compute how one Control of an Extended Text is named (§4.8, Q10).
+ *
+ * - Each Control of a group its Prompt or its author names, a group whose payload has no `unnamed`
+ *   position, is the locale's "Answer i of n", `i` its place in the group and `n` the group's
+ *   Controls; the group carries the Prompt's or the author's name ({@link groupName}).
+ * - A lone Control is named by the Prompt when there is one.
+ * - Any other Control is named as any text control is ({@link textControlName}): the author's
+ *   `aria-label` and `aria-labelledby`, else the locale's "Answer", or "Answer n of N", `n` its
+ *   position among every Control the renderer names in the item.
  *
  * @param interaction The Extended Text.
  * @param instance The item instance key.
  * @param locale The locale of the renderer's own text.
  * @param promptId The Prompt's id, none when there is no Prompt.
+ * @param index The Control's index, from 0.
  * @returns The Control's naming attributes.
  */
-const nameAttributes = (
+const controlName = (
   interaction: ExtendedTextPayload,
   instance: string,
   locale: Locale,
   promptId: Option.Option<string>,
-): Attributes =>
-  Option.match(promptId, {
-    onNone: () => textControlName(interaction.name, instance, locale),
+  index: number,
+): Attributes => {
+  if (interaction.n > 1 && Option.isNone(interaction.name.unnamed)) {
+    return {
+      "aria-label": message(locale, "answerOf", {
+        count: numeral(locale, interaction.n),
+        n: numeral(locale, index + 1),
+      }),
+    };
+  }
+
+  return Option.match(promptId, {
+    onNone: () => textControlName(interaction.name, instance, locale, index),
     onSome: (id) => ({ "aria-labelledby": id }),
   });
+};
 
 /**
  * Compute how the group an Extended Text with several Controls makes of its Root is named (Q10):
@@ -154,9 +171,8 @@ const groupName = (
  * - Each Control: its id, the payload's `formName`, `rows` from `expected-lines` above 0, the
  *   author's `placeholder-text`, `disabled` when finished, its name, `aria-invalid` and
  *   `aria-describedby` → the message ids when the response is invalid, `autofocus` on the first
- *   Control when the payload says, and `data-format="xhtml"` for the `xhtml` format. One Control is
- *   named by {@link nameAttributes}; each of several is the locale's "Answer n of N", `n` its
- *   position and `N` the number of Controls, inside the group that names them all.
+ *   Control when the payload says, and `data-format="xhtml"` for the `xhtml` format. Each is named
+ *   by {@link controlName}.
  *
  * Every id is `scopedId(instance, response, part)`, a Control's with its index from 0 when there
  * are several.
@@ -171,7 +187,6 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
   const promptId = scopedId(instance, interaction.response, "prompt");
   const prompted = interaction.prompt.pipe(Option.as(promptId));
   const grouped = interaction.n > 1;
-  const named = nameAttributes(interaction, instance, locale, prompted);
   const placeholder = Option.match(interaction.placeholder, {
     onNone: () => ({}),
     onSome: (written) => ({ placeholder: written }),
@@ -186,14 +201,7 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
 
   return {
     controls: Array.from({ length: interaction.n }, (_, index) => ({
-      ...(grouped
-        ? {
-            "aria-label": message(locale, "answerOf", {
-              count: numeral(locale, interaction.n),
-              n: numeral(locale, index + 1),
-            }),
-          }
-        : named),
+      ...controlName(interaction, instance, locale, prompted, index),
       ...when(interaction.invalid, {
         "aria-describedby": interaction.messageIds.join(" "),
         "aria-invalid": "true",
