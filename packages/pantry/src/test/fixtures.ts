@@ -277,10 +277,11 @@ const copyNames = [
 ] as const;
 
 /**
- * The names of the eight wildcard fixtures of phase 11 (spec W12): foreign content under the lax
+ * The names of the nine wildcard fixtures of phase 11 (spec W12): foreign content under the lax
  * hosts of `qti-custom-operator`, `xi:include`, `xi:fallback` and LOM, and the four refusals.
  */
 const wildcardNames = [
+  "cut-custom-operator",
   "operator-foreign-content",
   "fallback-3-0-1",
   "lom-wildcard",
@@ -2253,8 +2254,10 @@ const lomWildcardEdits: readonly Edit[] = [
 ];
 
 /**
- * The eight wildcard fixtures of phase 11 (spec W12) that join no shared set, keyed by name.
+ * The nine wildcard fixtures of phase 11 (spec W12), keyed by name.
  *
+ * - `cut-custom-operator` is `SineRule-001.xml` unedited, a `qti-custom-operator` in its template
+ *   processing.
  * - `operator-foreign-content` adds `xml:foo` to the operator and an `ma:extension` and an
  *   `xi:include` with a fallback after its operand. `nested-root-in-foreign` holds a
  *   `qti-response-processing` inside the extension.
@@ -2267,6 +2270,7 @@ const lomWildcardEdits: readonly Edit[] = [
  *   operand.
  */
 const wildcardSpecs: Record<(typeof wildcardNames)[number], FixtureSpec> = {
+  "cut-custom-operator": overOperator("cut-custom-operator", []),
   "fallback-3-0-1": {
     ...cutItem("fallback-3-0-1", "BPIG_22April", fallbackItem, "3.0.1"),
     edits: [...fallbackEdits, { _tag: "cut", item: fallbackItem, schemaversion: "3.0.1" }],

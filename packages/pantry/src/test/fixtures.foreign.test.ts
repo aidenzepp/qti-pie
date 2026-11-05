@@ -31,10 +31,11 @@ const sineRule = "SineRule-001.xml";
 const bgItem = "BG007.xml";
 
 /**
- * The eight wildcard fixtures of phase 11 (spec W12) that join no shared set, each with the one
- * edit that makes it what it is.
+ * The nine wildcard fixtures of phase 11 (spec W12), each with the one edit that makes it what it
+ * is. The `cut-custom-operator` source is unedited, so its marker is the operator's own tag.
  */
 const expectations: readonly Expectation[] = [
+  { file: sineRule, marker: "<qti-custom-operator ", name: "cut-custom-operator" },
   { file: sineRule, marker: "<ma:extension ", name: "operator-foreign-content" },
   { file: bgItem, marker: "<xi:fallback", name: "fallback-3-0-1" },
   { file: "imsmanifest.xml", marker: 'xlink:foo="1"', name: "lom-wildcard" },
@@ -63,9 +64,9 @@ layer(NodeServices.layer, { excludeTestServices: true })(
   "test/fixtures.ts wildcard fixtures",
   (it) => {
     it.effect.skipIf(!tarballPresent)(
-      "the eight wildcard fixtures materialize with each edit applied exactly once (skipped without the examples tarball)",
+      "the nine wildcard fixtures materialize with each edit applied exactly once (skipped without the examples tarball)",
       () =>
-        Effect.gen(function* eightFixtures() {
+        Effect.gen(function* nineFixtures() {
           const fs = yield* FileSystem.FileSystem;
 
           yield* fs.makeDirectory(workDirectory, { recursive: true });
@@ -91,7 +92,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             assert.strictEqual(text.split(marker).length - 1, 1, `${name}: ${marker}`);
           }
 
-          assert.strictEqual(expectations.length, 8);
+          assert.strictEqual(expectations.length, 9);
         }).pipe(Effect.scoped),
     );
   },
