@@ -64,30 +64,25 @@ with `h`. A host that builds its own Status part reads the fields `StatusInput` 
 
 ## Interactions
 
-The modules in [`src/interactions/`](src/interactions/) document each interaction's attributes. A
-host can rely on these:
+A host can rely on these, and [`src/interactions/`](src/interactions/) documents the rest:
 
-- `render` derives a shuffled Choice's order from the configuration's `seed`, the `instance` and
-  the response's identifier, so the same three always give the same order. Keep the `seed` stable
-  across restarts and pass the `instance` you stored. With no `seed`, the instance alone decides
-  the order, so vary the `seed` when the instance never changes, as with React's `useId()` on a
-  page that holds one item.
-- `checkResponses` checks a `pattern-mask` only when the configuration's `validateResponses` is
-  on, and `score` never checks it. A number is matched as plate writes it, not as typed: `1.50` as
-  `1.5`, and `007` as `7`.
-- An Extended Text with `format="xhtml"` is a plain `textarea`, since a rich-text editor needs
-  script. plate never renders its text as markup.
-- A `multiple` or `ordered` Extended Text renders at most 100 `textarea`s. When its `min-strings`
-  is above 100, a notice takes their place, and `open` accepts the item with the unsupported
-  feature `min-strings>100`.
+- A shuffled Choice's order follows the configuration's `seed`, `render`'s `instance` and the
+  response. Keep the `seed` stable across restarts, pass the `instance` you stored, and vary the
+  `seed` per candidate when every candidate gets the same instance.
+- `checkResponses` checks a `pattern-mask` only when `validateResponses` is on, and matches a number
+  in its canonical form ([`src/interactions/pattern.ts`](src/interactions/pattern.ts)). `score`
+  never checks it.
+- An Extended Text with `format="xhtml"` is a plain `textarea`.
+- A `multiple` or `ordered` Extended Text renders at most 100 `textarea`s, and shows a notice in
+  their place when `min-strings` is above 100.
 
 ## Scoring
 
 `score` runs inline response processing and six built-in templates: `match_correct`,
 `map_response`, `map_response_point`, `CC2_match`, `CC2_match_basic` and `CC2_map_response`.
 `open`'s verdict names any other template, and any inline rule that plate does not run. No
-interaction that plate renders collects a `point`, so `map_response_point` scores the point your
-own control passes to `score`.
+interaction that plate renders collects a `point`, so `map_response_point` scores only a point
+your own control supplies.
 
 ## Server and browser
 
@@ -123,13 +118,12 @@ $ pnpm --filter @qti-pie/plate serve
 Then open `http://localhost:5190`. The playground, [`src/dev/page.ts`](src/dev/page.ts), lists every
 document in
 [1EdTech's QTI 3 examples](https://github.com/1EdTech/qti-examples/tree/0a92fbbb6d2e620a1f7fad19977be4c418246bc0)
-under the verdict `open` gives it, renders the ones `open` accepts inside its own form, and scores
-what you submit. Its Verdicts page puts every document's verdict in one table, and its Ledger page
-shows the ledger that the [ledger command](#conformance-ledger) last wrote. It listens on
-`127.0.0.1` only. `PLATE_DEV_PORT` picks another port. `PLATE_CORPUS_DIR` names the directory that
-holds the extracted examples, and when that directory is missing, the page shows where it looked and
-the command that extracts them. To try a theme, paste a shadcn theme's `:root` and `.dark` blocks
-into the theme box.
+by its verdict, renders the ones `open` accepts inside its own form, and scores what you submit. Its
+Verdicts page shows every verdict, and its Ledger page shows the last [ledger](#conformance-ledger).
+It listens on `127.0.0.1` only. `PLATE_DEV_PORT` picks another port. `PLATE_CORPUS_DIR` names the
+directory that holds the extracted examples, and when that directory is missing, the page shows
+where it looked and the command that extracts them. To try a theme, paste a shadcn theme's `:root`
+and `.dark` blocks into the theme box.
 
 ## Conformance ledger
 
@@ -139,15 +133,11 @@ From the repository root:
 pnpm --filter @qti-pie/plate ledger
 ```
 
-The command runs plate's tests, opens every document in 1EdTech's examples, and writes the ledger,
-each document's verdict and the test report to `packages/plate/work/ledger/`, or to the folder
-`PLATE_LEDGER_DIR` names. It also reads 1EdTech's QTI 3.0 Conformance and Certification text from
-`~/.cache/gr8des/qti3-text/conf.txt`.
-
-For each feature in that text's Appendix A, the ledger says only that these tests pass over these
-fixtures. It never says plate is conformant or certified. The command exits with 1 when a test
-fails or the ledger's honesty check, [`src/ledger/honesty.ts`](src/ledger/honesty.ts), finds a
-problem.
+The command runs plate's tests, opens every document in 1EdTech's examples, and writes the ledger
+and the verdicts to `packages/plate/work/ledger/`, or to the folder `PLATE_LEDGER_DIR` names. It
+needs the QTI 3.0 conformance text at `~/.cache/gr8des/qti3-text/conf.txt`. The ledger says only
+that these tests pass over these fixtures, never that plate is conformant or certified. The command
+exits with 1 when a test fails or [`src/ledger/honesty.ts`](src/ledger/honesty.ts) finds a problem.
 
 ## Development
 
