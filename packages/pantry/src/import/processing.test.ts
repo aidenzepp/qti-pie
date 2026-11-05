@@ -2270,6 +2270,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             [first, second].toSorted().map((test) => [test, target] as const);
 
           assert.deepStrictEqual(refs.map((ref) => ref.identifier).toSorted(), [
+            "COUNT",
             "I2.SCORE",
             "ITEMREF.SCORE",
             "PART.duration",
@@ -2394,23 +2395,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             assert.isFalse(family.some((row) => "ref" in row && row.ref === lonelyRef));
           }
         }),
-    );
-
-    suite.effect("writes a section identifier target for each test that names a section", () =>
-      Effect.gen(function* sectionIdentifier() {
-        const { rows } = yield* rowsOfFixture("test-section-ref");
-        const shared = documentAt(rows, "sections/shared.xml");
-        const first = documentAt(rows, "rtest01.xml").id;
-        const second = documentAt(rows, "test-b.xml").id;
-        const identifiers = of(rows, expression.SectionIdentifierTarget).filter(
-          (row) => row.document === shared.id,
-        );
-
-        assert.deepStrictEqual(
-          identifiers.map((row) => [row.test, row.identifier, row.holderKind]).toSorted(byText),
-          [first, second].map((test) => [test, "shared", "section"]).toSorted(byText),
-        );
-      }),
     );
 
     suite.effect("writes a section identifier target once per reaching test, over hand rows", () =>

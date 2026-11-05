@@ -2685,15 +2685,16 @@ const sectionRefTest = (
 
 /**
  * The section document both tests of `test-section-ref` reach: a pre-condition with
- * `ITEMREF.SCORE`, one naming `SCORE` unprefixed, a branch rule with `PART.duration`, one naming
- * `I2.SCORE`, a `qti-test-variables` with `section-identifier`, and a rubric with a printed
- * variable of `SCORE` (`base` `COUNT`) and a feedback inline of `FLAG`.
+ * `ITEMREF.SCORE`, one naming `SCORE` unprefixed, a third naming `COUNT` unprefixed, a branch
+ * rule comparing `PART.duration` with `qti-duration-gte`, one naming `I2.SCORE`, and a rubric with
+ * a printed variable of `SCORE` (`base` `COUNT`) and a feedback inline of `FLAG`. It holds no
+ * outcome-only expression: a pre-condition and a branch rule are outside outcome processing.
  */
 const sharedSection: string = sectionDocument("shared", [
   `  <qti-pre-condition>${greaterThan("ITEMREF.SCORE", "float", "0")}</qti-pre-condition>`,
   `  <qti-pre-condition>${greaterThan("SCORE", "float", "0")}</qti-pre-condition>`,
-  '  <qti-pre-condition><qti-gt><qti-sum><qti-test-variables variable-identifier="SCORE" section-identifier="shared"/></qti-sum><qti-base-value base-type="float">0</qti-base-value></qti-gt></qti-pre-condition>',
-  `  <qti-branch-rule target="EXIT_SECTION">${greaterThan("PART.duration", "duration", "100")}</qti-branch-rule>`,
+  `  <qti-pre-condition>${greaterThan("COUNT", "integer", "0")}</qti-pre-condition>`,
+  '  <qti-branch-rule target="EXIT_SECTION"><qti-duration-gte><qti-variable identifier="PART.duration"/><qti-base-value base-type="duration">100</qti-base-value></qti-duration-gte></qti-branch-rule>',
   `  <qti-branch-rule target="EXIT_SECTION">${greaterThan("I2.SCORE", "float", "0")}</qti-branch-rule>`,
   '  <qti-rubric-block view="candidate">',
   "    <qti-content-body>",
