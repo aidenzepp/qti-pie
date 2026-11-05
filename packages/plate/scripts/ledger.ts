@@ -271,6 +271,9 @@ export interface LedgerOutcome {
    */
   readonly failed: readonly TestResult[];
 
+  /**
+   * The ledger derived from the run, as `ledger.json` and `ledger.txt` hold it.
+   */
   readonly ledger: Ledger;
 
   /**
@@ -284,6 +287,9 @@ export interface LedgerOutcome {
    */
   readonly problems: readonly HonestyProblem[];
 
+  /**
+   * The test run's exit code, as the build was given it.
+   */
   readonly testExit: number;
 
   /**
@@ -528,7 +534,13 @@ export const summary = (outcome: LedgerOutcome): string => {
  * How the command starts the test run.
  */
 export interface TestCommand {
+  /**
+   * The arguments `vp` runs with.
+   */
   readonly args: readonly string[];
+  /**
+   * The folder the run starts in, the package directory.
+   */
   readonly cwd: string;
   /**
    * The child's environment: the command's own, with the `test` script's `TMPDIR` and

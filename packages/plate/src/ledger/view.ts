@@ -276,7 +276,8 @@ const documentsWords = (proof: ProofFile): string => {
  * Word a record's reader and its version.
  *
  * @param record The record.
- * @returns The reader, then its version when there is one.
+ * @returns The reader followed by its version as recorded, such as `VoiceOver as shipped with
+ *   macOS 27.2`; an empty version adds nothing.
  */
 const readerWords = (record: PassRecord): string =>
   `${record.reader} ${record.readerVersion}`.trim();
@@ -285,7 +286,8 @@ const readerWords = (record: PassRecord): string =>
  * Word a record's browser and its version.
  *
  * @param record The record.
- * @returns The browser, then its version when there is one.
+ * @returns The browser followed by its version as recorded, such as `Safari 27.2`; an empty
+ *   version adds nothing.
  */
 const browserWords = (record: PassRecord): string =>
   `${record.browser} ${record.browserVersion}`.trim();
@@ -294,7 +296,8 @@ const browserWords = (record: PassRecord): string =>
  * Word a screen-reader pass's result, date, reader and browser.
  *
  * @param pass The pass.
- * @returns The words, such as `failed on 2026-11-05, VoiceOver 27.2 in Safari 26.1`.
+ * @returns The words, such as `failed on 2026-11-05, VoiceOver as shipped with macOS 27.2 in
+ *   Safari 27.2`.
  */
 const passWords = (pass: ScreenReaderPass): string =>
   `${pass.result} on ${pass.date}, ${readerWords(pass)} in ${browserWords(pass)}`;
@@ -490,6 +493,9 @@ const supportWords = (note: SupportNote): string =>
  * An entry that was not observed states no environment it did not observe: its JavaScript state,
  * browser, macOS and reader version are empty, and its reader cell names only the reader the check
  * is for. Those fields of an open entry name the sitting that recorded it, not a run of the check.
+ * Every other entry, an unavailable reader included, states all of them as recorded; an
+ * unavailable reader's JavaScript state, browser and macOS are those of the sitting that recorded
+ * it, on the machine the reader is missing from.
  *
  * @param record The record.
  * @returns Its cells' words.

@@ -221,13 +221,27 @@ const tokenize = (source: string): readonly Token[] => {
   // The open brackets, and the template substitutions, innermost last.
   const groups: ("bracket" | "substitution")[] = [];
 
+  /**
+   * Record a token with the number of brackets and substitutions open where it starts.
+   *
+   * @param kind The token's kind.
+   * @param start Where its text starts.
+   * @param end Where its text ends.
+   * @returns `end`, the index to read on from.
+   */
   const push = (kind: TokenKind, start: number, end: number): number => {
     tokens.push({ depth: groups.length, kind, start, text: source.slice(start, end) });
 
     return end;
   };
 
-  // Read template text from `start`, the index after a backtick or a substitution's `}`.
+  /**
+   * Read template text up to its closing backtick, recorded as one value, or up to a `${`, which
+   * opens a substitution whose code is read next.
+   *
+   * @param start The index after a backtick or a substitution's `}`.
+   * @returns The index to read on from.
+   */
   const template = (start: number): number => {
     const match = matchAt(templateText, source, start);
     const end = start + (match?.[0].length ?? 0);
@@ -242,6 +256,13 @@ const tokenize = (source: string): readonly Token[] => {
     return push("value", start - 1, end);
   };
 
+  /**
+   * Read one punctuator, opening or closing a bracket or, at a substitution's `}`, returning to its
+   * template's text.
+   *
+   * @param index Where the punctuator is.
+   * @returns The index to read on from.
+   */
   const punctuator = (index: number): number => {
     const character = source.charAt(index);
 
@@ -264,6 +285,13 @@ const tokenize = (source: string): readonly Token[] => {
     return index + 1;
   };
 
+  /**
+   * Read the token at an index: template text, a token a pattern matches, a regular expression
+   * literal where one may start, or else a punctuator.
+   *
+   * @param index Where the token starts.
+   * @returns The index to read on from.
+   */
   const step = (index: number): number => {
     if (source.charAt(index) === "`") {
       return template(index + 1);
@@ -623,6 +651,11 @@ export const valueClosure = (
 ): readonly string[] => {
   const reached = new Set<string>();
 
+  /**
+   * Reach a module once, then every module its value declarations load.
+   *
+   * @param module The module's path under the package.
+   */
   const visit = (module: string): void => {
     const source = modules.get(module);
 
