@@ -5,6 +5,7 @@ import { assert, describe, it, layer } from "@effect/vitest";
 import { ConfigProvider, Context, Effect, FileSystem, Layer, Option, Result, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { HBLOCK, HFLOW, HINL, PHR } from "#pantry/schema/content/sets.ts";
 import {
@@ -14,15 +15,26 @@ import {
 } from "#pantry/schema/seed/operator-arity.ts";
 import {
   arityOf,
+  contentOf,
   contentSetsOf,
   entriesOf,
+  hostsOf,
   htmlNamesOf,
+  includesOf,
   indexSchema,
+  indexSchemas,
+  leafSpecOf,
   leaves,
+  loadSchemaSet,
+  mathmlEntriesOf,
+  mathmlKindsOf,
+  mathmlLeaf,
+  mathmlReadingsOf,
+  mathmlSource,
   printArity,
   renderLeaf,
 } from "#pantry/vocab/derive/derive.ts";
-import type { XsdSchema } from "#pantry/vocab/derive/derive.ts";
+import type { Entry, SchemaSet, XsdSchema } from "#pantry/vocab/derive/derive.ts";
 import {
   checkCache,
   readSource,
@@ -76,7 +88,8 @@ const schemasHookTimeoutMs = 20_000;
 const formatTestTimeoutMs = 10_000;
 
 /**
- * The pinned XSDs as read once for the suite: every document, and the two ASI schemas indexed.
+ * The pinned XSDs as read once for the suite: every document, the two ASI schemas indexed, and the
+ * MathML schema read through its includes.
  */
 class Schemas extends Context.Service<
   Schemas,
@@ -84,11 +97,13 @@ class Schemas extends Context.Service<
     readonly asi300: XsdSchema;
     readonly asi301: XsdSchema;
     readonly documents: ReadonlyMap<SourcePath, XmlDocument>;
+    readonly mathml: SchemaSet;
   }
 >()("vocab/derive.test/Schemas") {}
 
 /**
- * Read every pinned XSD through its digest check and index the two ASI schemas.
+ * Read every pinned XSD through its digest check, index the two ASI schemas, and read the MathML
+ * schema from its entry document.
  */
 const SchemasLayer = Layer.effect(
   Schemas,
@@ -108,6 +123,7 @@ const SchemasLayer = Layer.effect(
       asi300: yield* indexed("imsqti_asiv3p0_v1p0.xsd"),
       asi301: yield* indexed("imsqti_asiv3p0p1_v1p0.xsd"),
       documents,
+      mathml: yield* loadSchemaSet(mathmlSource),
     });
   }),
 );
@@ -177,6 +193,69 @@ const textBlockOf = (source: string): string => {
 const valueOf = <A, E>(result: Result.Result<A, E>): A =>
   Result.getOrElse(result, (failure) => assert.fail(String(failure)));
 
+/**
+ * Read an inline XML document, as crust reads a pinned XSD.
+ *
+ * @param text - The document's text.
+ * @returns Its tree.
+ */
+const parse = (text: string) => readXml(new TextEncoder().encode(text));
+
+/**
+ * The `xs:schema` start tag of an inline schema in the namespace `urn:t`, bound to `t`.
+ *
+ * @param target - The target namespace, `urn:t` unless a test needs another.
+ * @returns The start tag, with `elementFormDefault="qualified"`.
+ */
+const schemaTag = (target = "urn:t"): string =>
+  `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="${target}" targetNamespace="${target}" elementFormDefault="qualified">`;
+
+/**
+ * The failure detail of a derivation that must fail.
+ *
+ * @param result - The derivation's result.
+ * @returns The reading error's message.
+ */
+const failureOf = <A, E>(result: Result.Result<A, E>): string =>
+  Result.match(result, {
+    onFailure: String,
+    onSuccess: () => assert.fail("the derivation succeeded"),
+  });
+
+/**
+ * Read the content of one named complex type of an inline schema.
+ *
+ * @param schema - The schema.
+ * @param type - The type's name.
+ * @returns The reading.
+ */
+const contentOfType = (schema: XsdSchema, type: string) =>
+  Option.match(Option.fromNullishOr(schema.complexTypes.get(type)), {
+    onNone: () => assert.fail(`no complex type ${type}`),
+    onSome: (complexType) => valueOf(contentOf(schema, complexType)),
+  });
+
+/**
+ * The MathML entry of a kind, failing the test when the MathML reading has none.
+ *
+ * @param entries - The MathML entries.
+ * @param handle - The kind.
+ * @returns Its entry.
+ */
+const mathmlEntry = (entries: readonly Entry[], handle: string): Entry =>
+  Option.getOrElse(Option.fromNullishOr(entries.find((entry) => entry.handle === handle)), () =>
+    assert.fail(`no MathML entry ${handle}`),
+  );
+
+/**
+ * Read an inline schema that includes one location, as `mathml/mathml3.xsd` would.
+ *
+ * @param location - The `schemaLocation` of its one `xs:include`.
+ * @returns Its tree.
+ */
+const including = (location: string) =>
+  parse(`${schemaTag()}<xs:include schemaLocation="${location}"/></xs:schema>`);
+
 describe("vocab/derive/sources.ts", () => {
   it.effect("refuses bytes that do not hash to the pin, naming both digests and the URL", () =>
     Effect.gen(function* mismatch() {
@@ -217,6 +296,100 @@ describe("vocab/derive/sources.ts", () => {
   );
 });
 
+describe("vocab/derive/derive.ts over inline schemas", () => {
+  it.effect(
+    "resolves an xs:include against the including pin's URL, and refuses one no pin is",
+    () =>
+      Effect.gen(function* includes() {
+        assert.deepStrictEqual(
+          valueOf(includesOf(mathmlSource, yield* including("mathml3-common.xsd"))),
+          ["mathml/mathml3-common.xsd"],
+        );
+        assert.deepStrictEqual(
+          valueOf(
+            includesOf(
+              mathmlSource,
+              yield* including("../../../../ssml/v1p1/schema/xsd/ssmlv1p1-core.xsd"),
+            ),
+          ),
+          ["ssml/ssmlv1p1-core.xsd"],
+        );
+        assert.include(
+          failureOf(includesOf(mathmlSource, yield* including("mathml3-extra.xsd"))),
+          "https://purl.imsglobal.org/spec/mathml/v3p0/schema/xsd/mathml3-extra.xsd, a file no pin",
+        );
+      }),
+  );
+
+  it.effect("refuses an xs:redefine rather than read the schema without it", () =>
+    Effect.gen(function* redefine() {
+      const document = yield* parse(
+        `${schemaTag()}<xs:redefine schemaLocation="mathml3-common.xsd"/></xs:schema>`,
+      );
+
+      assert.include(failureOf(includesOf(mathmlSource, document)), "has an xs:redefine");
+    }),
+  );
+
+  it.effect("indexes included documents as one schema, refusing a second target or name", () =>
+    Effect.gen(function* merge() {
+      const holder = yield* parse(
+        `${schemaTag()}<xs:complexType name="Holder"><xs:sequence><xs:element ref="t:item"/></xs:sequence></xs:complexType></xs:schema>`,
+      );
+      const declarer = yield* parse(
+        `${schemaTag()}<xs:element name="item"/><xs:complexType name="Other"/></xs:schema>`,
+      );
+      const schema = valueOf(indexSchemas([holder, declarer]));
+
+      assert.deepStrictEqual([...schema.complexTypes.keys()], ["Holder", "Other"]);
+      assert.deepStrictEqual([...schema.elements.keys()], ["item"]);
+      assert.strictEqual(schema.targetPrefix, "t");
+      assert.include(
+        failureOf(indexSchemas([holder, yield* parse(`${schemaTag("urn:u")}</xs:schema>`)])),
+        'the target namespace "urn:u"',
+      );
+      assert.include(
+        failureOf(indexSchemas([holder, holder])),
+        "both declare a top-level xs:complexType Holder",
+      );
+    }),
+  );
+
+  it.effect(
+    "reads a substitution group head as its members, as one choice unless a choice holds it",
+    () =>
+      Effect.gen(function* substitution() {
+        const schema = valueOf(
+          indexSchema(
+            yield* parse(
+              `${schemaTag()}<xs:element name="head" abstract="true"/><xs:element name="a" substitutionGroup="t:head"/><xs:element name="b" substitutionGroup="t:head"/><xs:element name="c"/>` +
+                `<xs:complexType name="Run"><xs:sequence><xs:element ref="t:head" maxOccurs="unbounded"/></xs:sequence></xs:complexType>` +
+                `<xs:complexType name="Pick"><xs:choice><xs:element ref="t:head"/><xs:element ref="t:c"/></xs:choice></xs:complexType>` +
+                `<xs:complexType name="Local"><xs:sequence><xs:element name="d"/></xs:sequence></xs:complexType></xs:schema>`,
+            ),
+          ),
+        );
+        const many = { max: Option.none(), min: 1 };
+        const one = { max: Option.some(1), min: 1 };
+
+        assert.deepStrictEqual(contentOfType(schema, "Run"), {
+          choices: [{ names: ["t:a", "t:b"], occurs: many }],
+          references: [
+            { name: "t:a", occurs: many },
+            { name: "t:b", occurs: many },
+          ],
+          wildcard: false,
+        });
+        assert.deepStrictEqual(contentOfType(schema, "Pick").choices, [
+          { names: ["t:a", "t:b", "t:c"], occurs: one },
+        ]);
+        assert.deepStrictEqual(contentOfType(schema, "Local").references, [
+          { name: "t:d", occurs: one },
+        ]);
+      }),
+  );
+});
+
 if (Option.isSome(absence)) {
   it("derives the vocabulary data from the pinned XSDs", (context) => {
     context.skip(`the XSD cache is incomplete: ${absence.value.message}`);
@@ -253,7 +426,10 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/derive.ts over the pinned 
             const fs = yield* FileSystem.FileSystem;
             const { asi301 } = yield* Schemas;
             const file = `src/schema/content/inventory/${leaf}.ts`;
-            const derived = yield* vpFmt(renderLeaf(leaf, valueOf(entriesOf(asi301, leaf))), file);
+            const derived = yield* vpFmt(
+              renderLeaf(leafSpecOf(leaf), valueOf(entriesOf(asi301, leaf))),
+              file,
+            );
 
             assert.strictEqual(derived, yield* fs.readFileString(`${packageRoot}/${file}`));
           }),
@@ -304,6 +480,111 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/derive.ts over the pinned 
         );
         assert.deepStrictEqual(bounded, operatorArityMax);
         assert.deepStrictEqual(unbounded, operatorArityUnbounded);
+      }),
+    );
+
+    cached.effect(
+      "reads mathml3.xsd and the four documents it includes, each once, depth first",
+      () =>
+        Effect.gen(function* mathmlDocuments() {
+          const { mathml } = yield* Schemas;
+
+          assert.deepStrictEqual([...mathml.documents.keys()], mathmlLeaf.sources);
+          assert.strictEqual(mathml.schema.targetPrefix, "m");
+        }),
+    );
+
+    cached.effect(
+      "regenerates src/vocab/inventory/mathml.ts byte for byte after vp fmt",
+      () =>
+        Effect.gen(function* regenerateMathml() {
+          const fs = yield* FileSystem.FileSystem;
+          const { mathml } = yield* Schemas;
+          const file = "src/vocab/inventory/mathml.ts";
+          const entries = valueOf(mathmlEntriesOf(mathml)).toSorted((left, right) =>
+            left.handle < right.handle ? -1 : 1,
+          );
+          const derived = yield* vpFmt(renderLeaf(mathmlLeaf, entries), file);
+
+          assert.strictEqual(derived, yield* fs.readFileString(`${packageRoot}/${file}`));
+        }),
+      formatTestTimeoutMs,
+    );
+
+    cached.effect("reads 193 MathML kinds: common 4, presentation 40, content 140, strict 9", () =>
+      Effect.gen(function* mathmlKinds() {
+        const { mathml } = yield* Schemas;
+        const parts = valueOf(mathmlKindsOf(mathml));
+
+        assert.deepStrictEqual(
+          parts.map(({ names, path: part }) => [part, names.length]),
+          [
+            ["mathml/mathml3-common.xsd", 4],
+            ["mathml/mathml3-presentation.xsd", 40],
+            ["mathml/mathml3-content.xsd", 140],
+            ["mathml/mathml3-strict-content.xsd", 9],
+          ],
+        );
+        assert.strictEqual(new Set(parts.flatMap(({ names }) => names)).size, 193);
+      }),
+    );
+
+    cached.effect("reads m:semantics from the widest of its three declarations", () =>
+      Effect.gen(function* semantics() {
+        const { mathml } = yield* Schemas;
+        const entry = mathmlEntry(valueOf(mathmlEntriesOf(mathml)), "m:semantics");
+        const children = new Set(entry.references.map((reference) => reference.name));
+
+        assert.strictEqual(entry.type, "anonymous, in m:semantics in group m:semantics");
+        for (const child of ["m:ci", "m:semantics", "m:apply", "m:mi", "m:annotation-xml"]) {
+          assert.isTrue(children.has(child), child);
+        }
+      }),
+    );
+
+    cached.effect("reads substitution members, inherited types and untyped attributes", () =>
+      Effect.gen(function* members() {
+        const { mathml } = yield* Schemas;
+        const entries = valueOf(mathmlEntriesOf(mathml));
+        const mtr = mathmlEntry(entries, "m:mtr");
+        const plus = mathmlEntry(entries, "m:plus");
+        const alttext = mathmlEntry(entries, "m:math").attributes.find(
+          (row) => row.name === "alttext",
+        );
+
+        assert.deepStrictEqual(
+          mtr.references.map((reference) => reference.name),
+          ["m:mtd"],
+        );
+        assert.strictEqual(
+          mathmlEntry(entries, "m:mtd").type,
+          "anonymous, in m:TableCellExpression",
+        );
+        assert.strictEqual(plus.type, "anonymous, in m:nary-arith.class");
+        assert.deepStrictEqual(plus.references, []);
+        assert.deepStrictEqual(
+          [alttext?.type, alttext?.whiteSpace],
+          ["xs:anySimpleType", "preserve"],
+        );
+        assert.isTrue(mathmlEntry(entries, "m:annotation-xml").wildcard);
+        assert.strictEqual(valueOf(mathmlReadingsOf(mathml)).length, 193);
+      }),
+    );
+
+    cached.effect("finds m3:math under 61 elements in 34 types, in 3.0.0 and 3.0.1 alike", () =>
+      Effect.gen(function* mathHosts() {
+        const { asi300, asi301 } = yield* Schemas;
+        const hosts = valueOf(hostsOf(asi301, "m3:math"));
+
+        assert.deepStrictEqual(valueOf(hostsOf(asi300, "m3:math")), hosts);
+        assert.deepStrictEqual(
+          [
+            hosts.length,
+            new Set(hosts.map((host) => host.element)).size,
+            new Set(hosts.map((host) => host.type)).size,
+          ],
+          [68, 61, 34],
+        );
       }),
     );
 
