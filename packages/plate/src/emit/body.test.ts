@@ -9,11 +9,13 @@ import type { PartOverrides } from "#plate/emit/parts.ts";
 import { toHtml } from "#plate/emit/serialise.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { renderChoice } from "#plate/interactions/choice.ts";
+import { renderExtendedText } from "#plate/interactions/extended-text.ts";
 import { message } from "#plate/messages.ts";
 import type {
   ChoicePayload,
   ElementPayload,
   EmitState,
+  ExtendedTextPayload,
   NoticePayload,
   Payload,
   PayloadNode,
@@ -21,6 +23,7 @@ import type {
   TextPayload,
 } from "#plate/payload.ts";
 import { checkTree } from "#plate/test/accessibility.ts";
+import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
 
 /**
@@ -1069,4 +1072,157 @@ describe("emitBody, the XSD's HTML subset", () => {
       }
     }
   });
+});
+
+/**
+ * The choices, or the Extended Texts, each growth check renders first, before it renders
+ * {@link growthFactor} times as many.
+ */
+const fewerInteractions = 2000;
+
+/**
+ * Each growth check renders 16,000 interactions three times and 2,000 interactions 24 times. A
+ * render that read the whole body again for each choice or Prompt took about two minutes of that,
+ * far beyond vitest's default of 5 s, and a failing check should report its ratio, not a timeout.
+ */
+const growthTimeoutMs = 300_000;
+
+/**
+ * The render function `render` builds, dispatching each interaction to its module, so a choice's
+ * content and a Prompt go through {@link emitNodes} as they do in a render.
+ *
+ * @param payload The render's payload.
+ * @param state The render's emit state.
+ * @returns The function that renders one interaction through its module.
+ */
+const interactionsOf =
+  (payload: Payload, state: EmitState): RenderInteraction =>
+  (interaction) => {
+    switch (interaction.kind) {
+      case "choice": {
+        return renderChoice(interaction, payload, state);
+      }
+      case "extended-text": {
+        return renderExtendedText(interaction, payload, state);
+      }
+      case "text-entry": {
+        return stub(interaction);
+      }
+      default: {
+        return interaction satisfies never;
+      }
+    }
+  };
+
+/**
+ * A body of one single Choice with `count` choices, each a paragraph `cN`.
+ *
+ * @param count How many choices the Choice holds.
+ * @returns The body's payload nodes.
+ */
+const choicesBody = (count: number): readonly PayloadNode[] => [
+  {
+    ...choice,
+    choices: Array.from({ length: count }, (_, index) => ({
+      content: [el("p", {}, [txt(`c${index}`)])],
+      identifier: `C${index}`,
+    })),
+  },
+];
+
+/**
+ * A body of `count` single Extended Texts, each bound to its own response and each with a Prompt.
+ *
+ * @param count How many Extended Texts the body holds.
+ * @returns The body's payload nodes.
+ */
+const essaysBody = (count: number): readonly PayloadNode[] =>
+  Array.from({ length: count }, (_, index): ExtendedTextPayload => ({
+    autofocus: false,
+    base: 10,
+    baseType: "string",
+    cardinality: "single",
+    class: "",
+    expectedLines: Option.none(),
+    formName: entryName(instance, `R${index}`),
+    format: "plain",
+    invalid: false,
+    kind: "extended-text",
+    messageIds: [],
+    n: 1,
+    name: { ariaLabel: Option.none(), ariaLabelledby: Option.none(), unnamed: Option.none() },
+    notice: Option.none(),
+    placeholder: Option.none(),
+    prompt: Option.some([txt(`Prompt ${index}`)]),
+    response: `R${index}`,
+    restores: [""],
+  }));
+
+/**
+ * Give a render of a body as `render` runs one: the payload built, then the body emitted with
+ * each interaction rendered through its module.
+ *
+ * @param body Builds the body's payload nodes, once per render.
+ * @param state The emit state.
+ * @returns The render, which fails the test on a refusal.
+ */
+const renderOf =
+  (body: () => readonly PayloadNode[], state: EmitState): (() => void) =>
+  () => {
+    const payload = payloadOf(body());
+    Result.getOrThrow(emitBody(payload, state, interactionsOf(payload, state)));
+  };
+
+describe("emitBody, render time", () => {
+  it.effect(
+    "[I-8] renders 8 times the choices of one Choice in under 32 times the time",
+    () =>
+      Effect.gen(function* choicesInLinearTime() {
+        const state = yield* stateAt(2);
+        const more = fewerInteractions * growthFactor;
+        const payload = payloadOf(choicesBody(more));
+        const nodes = Result.getOrThrow(emitBody(payload, state, interactionsOf(payload, state)));
+        assert.lengthOf(
+          elementsIn(nodes).filter(({ tag }) => tag === "li"),
+          more,
+        );
+
+        const growth = yield* growthRatio(
+          renderOf(() => choicesBody(fewerInteractions), state),
+          renderOf(() => choicesBody(more), state),
+        );
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the choices took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
+
+  it.effect(
+    "[I-8] renders 8 times the Extended Texts, each with a Prompt, in under 32 times the time",
+    () =>
+      Effect.gen(function* essaysInLinearTime() {
+        const state = yield* stateAt(2);
+        const more = fewerInteractions * growthFactor;
+        const payload = payloadOf(essaysBody(more));
+        const nodes = Result.getOrThrow(emitBody(payload, state, interactionsOf(payload, state)));
+        assert.lengthOf(
+          elementsIn(nodes).filter(({ tag }) => tag === "textarea"),
+          more,
+        );
+
+        const growth = yield* growthRatio(
+          renderOf(() => essaysBody(fewerInteractions), state),
+          renderOf(() => essaysBody(more), state),
+        );
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the Extended Texts took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
 });
