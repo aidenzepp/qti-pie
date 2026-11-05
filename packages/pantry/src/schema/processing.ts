@@ -495,6 +495,16 @@ export const relations = {
 };
 
 /**
+ * The three prefixed reference arms, each with the per-test relation that resolves its references
+ * in a test document's own test.
+ */
+const prefixedArms = [
+  [ItemVariableRef, PrefixedVariableSource],
+  [ItemInstanceVariableRef, PrefixedVariableSource],
+  [SectionDurationRef, SectionDurationTarget],
+] as const;
+
+/**
  * The statements over this module's relations: a processing node is item- or template-rooted; an
  * item-rooted one and its item row name each other, and the row hangs under its item by an edge; a
  * template-rooted one is the root of its tree; the template attributes belong to a processing
@@ -509,6 +519,10 @@ export const relations = {
  * The declared and built-in checks list the allowed pairs and refuse every other referring kind, so
  * they are also the check that the kind is one of the ten that refer; the template-parameter arm
  * has a check of its own for that.
+ *
+ * The prefixed arms, the hub and `SectionDurationTarget` are also bound to a test document, to its
+ * structure, to its item references and to its variable mappings. Those statements name relations
+ * of modules that import this one, so they are `rules` of `#pantry/schema/test/processing.ts`.
  */
 export const rules = [
   contained(on(ResponseProcessing, "id", "rootKind"), on(node.Node, "id", "rootKind")),
@@ -563,6 +577,9 @@ export const rules = [
   alternatives(VariableRef, "kind", RefKind, {
     builtIn: BuiltInRef,
     declared: DeclaredRef,
+    itemInstanceVariable: ItemInstanceVariableRef,
+    itemVariable: ItemVariableRef,
+    sectionDuration: SectionDurationRef,
     templateParameter: TemplateParameterRef,
   }),
   contained(
@@ -617,5 +634,64 @@ export const rules = [
       "qti-set-default-value",
       "qti-set-correct-response",
     ]),
+  ),
+  ...prefixedArms.flatMap(([arm, target]) => [
+    contained(on(arm, "id", "document"), on(VariableRef, "id", "document")),
+    contained(on(select(arm, { root: "test" }), "id", "document"), on(target, "ref", "test")),
+  ]),
+  check("ItemVariableRoot", ItemVariableRef, (r) => r.eq(r.root, "test")),
+  check("ItemInstanceVariableRoot", ItemInstanceVariableRef, (r) => r.eq(r.root, "test")),
+  check("SectionDurationRoot", SectionDurationRef, (r) => r.eq(r.root, "test")),
+  check("ItemInstancePositive", ItemInstanceVariableRef, (r) => r.ge(r.instance, 1n)),
+  contained(on(ItemInstanceSpelling, "ref"), on(ItemInstanceVariableRef, "id")),
+  contained(
+    on(PrefixedVariableSource, "ref", "document", "refKind"),
+    on(VariableRef, "id", "document", "kind"),
+  ),
+  check("PrefixedVariableSourceKind", PrefixedVariableSource, (r) =>
+    r.in(r.refKind, ["itemVariable", "itemInstanceVariable", "sectionVariable"]),
+  ),
+  contained(
+    on(select(PrefixedVariableSource, { refKind: "itemVariable" }), "ref", "prefix"),
+    on(ItemVariableRef, "id", "prefix"),
+  ),
+  contained(
+    on(select(PrefixedVariableSource, { refKind: "itemInstanceVariable" }), "ref", "prefix"),
+    on(ItemInstanceVariableRef, "id", "prefix"),
+  ),
+  alternatives(PrefixedVariableSource, "source", PrefixedSource, {
+    builtIn: PrefixedBuiltIn,
+    declared: PrefixedDeclared,
+    mapped: PrefixedMapped,
+  }),
+  contained(
+    on(PrefixedDeclared, "ref", "test", "itemDocument"),
+    on(PrefixedVariableSource, "ref", "test", "itemDocument"),
+  ),
+  contained(
+    on(PrefixedDeclared, "itemDocument", "variable"),
+    on(declaration.Declaration, "document", "identifier"),
+  ),
+  contained(
+    on(PrefixedMapped, "ref", "test", "itemRef"),
+    on(PrefixedVariableSource, "ref", "test", "itemRef"),
+  ),
+  contained(on(PrefixedBuiltIn, "ref", "test"), on(PrefixedVariableSource, "ref", "test")),
+  check("PrefixedBuiltInName", PrefixedBuiltIn, (r) =>
+    r.in(r.builtIn, ["duration", "numAttempts", "completionStatus"]),
+  ),
+  contained(
+    on(SectionDurationTarget, "ref", "document", "refKind"),
+    on(VariableRef, "id", "document", "kind"),
+  ),
+  check("SectionDurationTargetKind", SectionDurationTarget, (r) =>
+    r.in(r.refKind, ["sectionDuration", "sectionVariable"]),
+  ),
+  contained(
+    on(select(SectionDurationTarget, { refKind: "sectionDuration" }), "ref", "document", "prefix"),
+    on(SectionDurationRef, "id", "document", "prefix"),
+  ),
+  check("SectionDurationTargetHolder", SectionDurationTarget, (r) =>
+    r.in(r.holderKind, ["part", "section"]),
   ),
 ] as const;

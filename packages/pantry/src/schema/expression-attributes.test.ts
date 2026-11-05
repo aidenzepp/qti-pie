@@ -218,6 +218,7 @@ const probe = () =>
       ...declaration.relations,
       ...value.relations,
       ...item.relations,
+      ...rosters.relations,
       ...processing.relations,
       ...testStructure.relations,
       ...expression.relations,
