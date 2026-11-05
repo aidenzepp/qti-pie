@@ -432,14 +432,61 @@ const media = (
 ];
 
 /**
+ * A value written as several parts joined by dots, each part a source of its own.
+ *
+ * @param parts - The parts in order.
+ * @returns The source of the joined value, none when any column part is absent.
+ */
+const dotted =
+  (...parts: readonly Source[]): Source =>
+  (index) => {
+    const readers = parts.map((part) => part(index));
+
+    return (id) => {
+      const values = readers.map((read) => read(id));
+
+      return values.every((value) => value !== undefined) ? values.join(".") : undefined;
+    };
+  };
+
+/**
+ * A fixed text as a part of a {@link dotted} value.
+ */
+const text =
+  (value: string): Source =>
+  () =>
+  () =>
+    value;
+
+/**
+ * The instance of an `ItemInstanceVariableRef` as the source wrote it: the `ItemInstanceSpelling`
+ * row's text where the spelling is not canonical, else the number.
+ */
+const instanceSpelled: Source = (index) => {
+  const spelling = column(R.ItemInstanceSpelling, "value", "ref")(index);
+  const number = arm(R.ItemInstanceVariableRef, "instance")(index);
+
+  return (id) => spelling(id) ?? number(id);
+};
+
+/**
  * The `identifier` of a node that refers to a declaration: the `identifier` of its declared
  * reference, of its template-parameter reference, or the name of its built-in, whichever row the
- * node has.
+ * node has; or, in a test, the prefixed form `PREFIX.VAR`, `PREFIX.N.VAR` or `PREFIX.duration`
+ * written from its columns, or a section document's reference as written.
  */
 const referenced: Source = first(
   arm(R.DeclaredRef, "identifier"),
   arm(R.TemplateParameterRef, "identifier"),
   arm(R.BuiltInRef, "name"),
+  dotted(arm(R.ItemVariableRef, "prefix"), arm(R.ItemVariableRef, "variable")),
+  dotted(
+    arm(R.ItemInstanceVariableRef, "prefix"),
+    instanceSpelled,
+    arm(R.ItemInstanceVariableRef, "variable"),
+  ),
+  dotted(arm(R.SectionDurationRef, "prefix"), text("duration")),
+  arm(R.SectionVariableRef, "identifier"),
 );
 
 /**
