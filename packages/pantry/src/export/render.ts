@@ -11,16 +11,23 @@
  * integer holds only the value; with both, the lexical row wins (spec 4.6: lexical, else spelling,
  * else the canonical rendering).
  *
- * Attributes are placed in the order the module reads them: namespace declarations,
- * `xsi:schemaLocation`, the kind's own attributes in the order of `ownAttributes`, then the
- * families, `id`, `role` and ARIA. The order the source wrote them in is not stored, and it need
- * not be: canonical XML sorts attributes, so canonical equality holds whatever this order is.
+ * Attributes are placed in the order the module reads them: namespace declarations, the `xsi`
+ * attributes (`schemaLocation`, `type`, `nil`, `noNamespaceSchemaLocation`), the kind's own
+ * attributes in the order of `ownAttributes`, then the families, `id`, `role` and ARIA. The order
+ * the source wrote them in is not stored, and it need not be: canonical XML sorts attributes, so
+ * canonical equality holds whatever this order is.
  */
 import type { Uuid } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import type { Rows as RowSet } from "#pantry/import/tree.ts";
 import { Rows } from "#pantry/import/tree.ts";
-import { by, foreignAttributesOf, indexOf, readersFor } from "#pantry/schema/attribute-homes.ts";
+import {
+  by,
+  foreignAttributesOf,
+  indexOf,
+  readersFor,
+  xsiTypeAttributesOf,
+} from "#pantry/schema/attribute-homes.ts";
 import { ForeignElement } from "#pantry/schema/foreign.ts";
 import type { RegistryRow } from "#pantry/schema/kinds/generic.ts";
 import {
@@ -32,6 +39,7 @@ import {
   EntityReference,
   NamespaceDeclaration,
   Node,
+  NoNamespaceSchemaLocation,
   Pi as PiRow,
   SchemaLocation,
   TextNode,
@@ -44,6 +52,8 @@ import {
   TreeXmlVersion,
   vocabularies,
   Ws,
+  XsiNil,
+  XsiType,
 } from "#pantry/schema/node.ts";
 import type { Attribute, Child, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
 
@@ -176,7 +186,12 @@ export const renderTree = (rows: RowSet, treeId: Uuid): XmlDocument => {
   const entities = by(Rows.of(rows, EntityReference), (row) => row.id);
   const declarations = Map.groupBy(Rows.of(rows, NamespaceDeclaration), (row) => row.node);
   const foreignElements = by(Rows.of(rows, ForeignElement), (row) => row.id);
-  const schemaLocations = by(Rows.of(rows, SchemaLocation), (row) => row.node);
+  const xsiRows = [
+    ["schemaLocation", by(Rows.of(rows, SchemaLocation), (row) => row.node)],
+    ["type", by(Rows.of(rows, XsiType), (row) => row.node)],
+    ["nil", by(Rows.of(rows, XsiNil), (row) => row.node)],
+    ["noNamespaceSchemaLocation", by(Rows.of(rows, NoNamespaceSchemaLocation), (row) => row.node)],
+  ] as const;
   const lexical = Map.groupBy(Rows.of(rows, AttributeLexical), (row) => row.node);
   const spelling = Map.groupBy(Rows.of(rows, AttributeSpelling), (row) => row.node);
   const references = Map.groupBy(
@@ -186,6 +201,7 @@ export const renderTree = (rows: RowSet, treeId: Uuid): XmlDocument => {
   const index = indexOf(rows);
   const readersOf = readersFor(index);
   const foreignOf = foreignAttributesOf(index);
+  const addedOf = xsiTypeAttributesOf(index);
 
   const referencesOf = (id: Uuid, qname: string): Attribute["references"] =>
     (references.get(`${id}\n${qname}`) ?? [])
@@ -237,27 +253,29 @@ export const renderTree = (rows: RowSet, treeId: Uuid): XmlDocument => {
           value: row.uri,
         };
       }),
-    ...Option.match(Option.fromNullishOr(schemaLocations.get(id)), {
-      onNone: (): readonly Attribute[] => [],
-      onSome: (row): readonly Attribute[] => {
-        const qname = `${row.prefix}:schemaLocation`;
+    ...xsiRows.flatMap(([local, byNode]): readonly Attribute[] => {
+      const row = byNode.get(id);
+      if (row === undefined) {
+        return [];
+      }
 
-        return [
-          {
-            local: "schemaLocation",
-            namespace: xsiNamespace,
-            prefix: row.prefix,
-            qname,
-            references: referencesOf(id, qname),
-            value: row.value,
-          },
-        ];
-      },
+      const qname = `${row.prefix}:${local}`;
+
+      return [
+        {
+          local,
+          namespace: xsiNamespace,
+          prefix: row.prefix,
+          qname,
+          references: referencesOf(id, qname),
+          value: row.value,
+        },
+      ];
     }),
     ...[...stored(id, kind)].map(([name, value]) =>
       attributeOf(name, value, referencesOf(id, name), xlinkPrefixIn(scope)),
     ),
-    ...foreignOf(id).map((row): Attribute => {
+    ...[...foreignOf(id), ...addedOf(id)].map((row): Attribute => {
       const qname = row.prefix === "" ? row.local : `${row.prefix}:${row.local}`;
 
       return {
