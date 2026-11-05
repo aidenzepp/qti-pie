@@ -28,7 +28,7 @@ import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { access, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { Config, Console, Effect, Option, Schema } from "effect";
+import { Config, Console, Effect, Schema } from "effect";
 import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
 import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
 import { browserSupport } from "#plate/ledger/browser-support.ts";
@@ -47,7 +47,7 @@ import { BrowserRun, browserRunFile, standsInForSafari } from "#plate/ledger/run
 import { ledgerText, verdictLines } from "#plate/ledger/view.ts";
 import { open } from "#plate/validate/open.ts";
 import { Location, RefusalRule } from "#plate/validate/refusal.ts";
-import { acceptedItem, describeRefusal } from "#plate/validate/verdict.ts";
+import { describeRefusal, unsupportedFeatures } from "#plate/validate/verdict.ts";
 import type { Verdict } from "#plate/validate/verdict.ts";
 
 /**
@@ -425,11 +425,10 @@ const toEntry = (verdict: Verdict): VerdictEntry => {
 
   return {
     document: verdict.document,
-    unsupported: Option.match(acceptedItem(verdict), {
-      onNone: () => [],
-      onSome: ({ unsupported }) =>
-        unsupported.map(({ feature, path: at }) => ({ feature, path: at })),
-    }),
+    unsupported: unsupportedFeatures(verdict).map(({ feature, path: at }) => ({
+      feature,
+      path: at,
+    })),
     verdict: verdict.verdict,
   };
 };

@@ -338,9 +338,9 @@ interface AttributeName {
 }
 
 /**
- * A reading that places elements the XSD admits more widely: each of `elements` must have
- * `container` as its parent, or as an ancestor, or it is `misplaced-element`. `requires` says where
- * it must sit, for the wording.
+ * A reading that places elements the XSD admits more widely: in a document whose root `roots`
+ * accepts, each of `elements` must have `container` as its parent, or as an ancestor, or it is
+ * `misplaced-element`. `requires` says where it must sit, for the wording.
  */
 interface Placement {
   readonly container: string;
@@ -348,6 +348,7 @@ interface Placement {
   readonly kind: "placement";
   readonly reading: string;
   readonly requires: string;
+  readonly roots: (root: SourceElement) => boolean;
   readonly within: "ancestor" | "parent";
 }
 
@@ -395,11 +396,24 @@ type ReadingRow =
   | RetypedAttribute;
 
 /**
- * Accept every parent, for a child count that holds wherever its element sits.
+ * Accept every parent, for a child count that holds wherever its element sits, and every root, for
+ * a placement that holds in every document.
  *
  * @returns Always true.
  */
 const anywhere = (): boolean => true;
+
+/**
+ * Report whether a document's root is neither a QTI test nor a QTI section, whose misplaced
+ * outcome-only expressions the test prose rules refuse as `expression-placement` (reading 23), so
+ * that the structural walk does not refuse them a second time.
+ *
+ * @param root The document's root.
+ * @returns Whether the root is anything but a `qti-assessment-test` or a `qti-assessment-section`.
+ */
+const outsideTests = (root: SourceElement): boolean =>
+  root.namespace !== qtiNamespace ||
+  (root.local !== "qti-assessment-test" && root.local !== "qti-assessment-section");
 
 /**
  * The declarations whose `qti-default-value` and `qti-correct-response` hold their values.
@@ -513,10 +527,12 @@ const readingRows: readonly ReadingRow[] = [
     kind: "placement",
     reading: "22",
     requires: "a direct child of qti-template-processing",
+    roots: anywhere,
     within: "parent",
   },
   // Reading 23 (spec-readings.md:145): the eight outcome-only expressions sit inside outcome
-  // processing, so in an item, which holds none, every one is misplaced.
+  // processing, so in an item, which holds none, every one is misplaced. In a test or a section the
+  // test prose rules refuse a misplaced one as `expression-placement`, once.
   {
     container: "qti-outcome-processing",
     elements: [
@@ -532,6 +548,7 @@ const readingRows: readonly ReadingRow[] = [
     kind: "placement",
     reading: "23",
     requires: "inside qti-outcome-processing",
+    roots: outsideTests,
     within: "ancestor",
   },
   // Reading 31 (spec-readings.md:187; `CardDType`, XSD:26089-26104): a card holds at least one of
@@ -566,6 +583,7 @@ const readingRows: readonly ReadingRow[] = [
     kind: "placement",
     reading: "38",
     requires: "inside a qti-gap-match-interaction",
+    roots: anywhere,
     within: "ancestor",
   },
   // Reading 46 (spec-readings.md:267): a count attribute holds a signed 64-bit integer, read
@@ -1396,6 +1414,7 @@ const checkPlacement = (
       (row) =>
         element.namespace === qtiNamespace &&
         row.elements.includes(element.local) &&
+        row.roots(source.root) &&
         !isPlaced(row, element, parents),
     )
     .map((row) =>

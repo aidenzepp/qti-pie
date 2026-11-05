@@ -475,8 +475,13 @@ const rendersOf = Effect.fnUntraced(function* rendersOf(
   configuration: Configuration,
 ) {
   const verdict: Verdict = yield* open(item.location, item.bytes);
-  if (verdict.verdict !== "accepted" && verdict.verdict !== "accepted-with-unsupported") {
-    return assert.fail(`${item.location} is ${verdict.verdict}, not accepted`);
+  if (
+    (verdict.verdict !== "accepted" && verdict.verdict !== "accepted-with-unsupported") ||
+    verdict.kind !== "item"
+  ) {
+    return assert.fail(
+      `${item.location} is ${verdict.verdict} of kind ${verdict.kind}, not an accepted item`,
+    );
   }
 
   assert.strictEqual(verdict.verdict, item.verdict, item.location);

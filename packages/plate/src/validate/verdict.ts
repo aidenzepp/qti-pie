@@ -1,15 +1,18 @@
 /**
  * The verdict on a document (spec §4.5), the one gate between a source and an item a host may
- * redact, score or render, and the sentences that word a refusal for the host and the author
- * (spec §4.6).
+ * redact, score or render, or a test it may deliver, and the sentences that word a refusal for the
+ * host and the author (spec §4.6).
  *
- * {@link check} refuses a root outside QTI's namespace, then runs the structural validator and the
- * prose rules together, then leaves unchecked what phase 1 cannot judge. On a document it accepts
- * it secures the source before it builds the item: it removes every attribute only a wildcard
- * admits (E3) and passes every URL attribute through `url.ts`, keeping each value in its parsed
- * form or dropping it with a notice beside its element. Its {@link Accepted} is the only input
- * `redact` and `score` take. A refusal is a verdict, never a failure, so `check` is a plain
- * function; it lifts the item builder, which stays an Effect, once.
+ * {@link check} refuses a root outside QTI's namespace, then runs the structural validator, the
+ * item prose rules and the test prose rules together, then leaves unchecked what it cannot judge.
+ * Every verdict carries the kind of its document's root. On an item it accepts it secures the
+ * source before it builds the item: it removes every attribute only a wildcard admits (E3) and
+ * passes every URL attribute through `url.ts`, keeping each value in its parsed form or dropping it
+ * with a notice beside its element. Its {@link Accepted} is the only input `redact` and `score`
+ * take. On a test it builds the test model, the {@link AcceptedTest} a session starts from; a
+ * section or a stimulus is accepted and marked, delivered by neither M2 nor M1. A refusal is a
+ * verdict, never a failure, so `check` is a plain function; it lifts each builder, which stays an
+ * Effect, once.
  *
  * @module
  */
@@ -32,7 +35,10 @@ import type {
 } from "#plate/document/source.ts";
 import { buildItem } from "#plate/model/item.ts";
 import type { BodyNode, Item, Unsupported, UnsupportedFeature } from "#plate/model/item.ts";
+import { buildTest } from "#plate/model/test.ts";
+import type { MarkedFeature, Test } from "#plate/model/test.ts";
 import { classifyUrl, formatUrl, urlContextOf } from "#plate/model/url.ts";
+import { trimXmlSpace } from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { checkRules } from "#plate/validate/rules.ts";
@@ -44,13 +50,16 @@ import {
   isInstanceAttribute,
   tableOf,
 } from "#plate/validate/structure.ts";
+import { checkTestRules } from "#plate/validate/test-rules.ts";
 import type { ContentTable, Tables } from "#plate/validate/xsd.ts";
+import type { TestMark } from "#plate/vocabulary.ts";
 
 /**
  * Why a valid document is left unchecked: it holds MathML (reading 2) or SSML (reading 3), whose
- * validity phase 1 cannot judge, an XInclude `include`, whose inclusion phase 1 neither performs
- * nor judges, an entity reference the reader kept unexpanded, or a root that is not
- * `qti-assessment-item`. `path` is the element or attribute at issue.
+ * validity plate cannot judge, an XInclude `include` in an item or a stimulus, whose inclusion
+ * plate neither performs nor judges, an entity reference the reader kept unexpanded, or a root
+ * that is not an item, a test, a section or a stimulus. `path` is the element or attribute at
+ * issue.
  */
 export interface UncheckedReason {
   readonly path: string;
@@ -92,33 +101,181 @@ export type Accepted = Brand.Branded<AcceptedFields, "Accepted">;
 const accept = Brand.nominal<Accepted>();
 
 /**
+ * The fields of an accepted test, which only {@link check} and {@link acceptTestForTest} brand.
+ */
+interface AcceptedTestFields {
+  /**
+   * The document's location as the host named it, the test's own `document`.
+   */
+  readonly document: string;
+  /**
+   * The test model built from the document.
+   */
+  readonly test: Test;
+  /**
+   * Every feature the test holds and M2 does not deliver, the test's own `unsupported`.
+   */
+  readonly unsupported: readonly MarkedFeature[];
+}
+
+/**
+ * A test {@link check} accepted, the test a session starts from and a stored session is checked
+ * against.
+ *
+ * The brand exists only in the type, as {@link Accepted}'s does: {@link check} is its constructor,
+ * and {@link acceptTestForTest} the one named seam for tests. It is not an {@link Accepted}, so
+ * `redact`, `score` and `render` do not take it.
+ */
+export type AcceptedTest = Brand.Branded<AcceptedTestFields, "AcceptedTest">;
+
+/**
+ * The brand's constructor, kept to this module.
+ */
+const acceptTest = Brand.nominal<AcceptedTest>();
+
+/**
+ * What M2 holds of a section or a stimulus document it accepts: valid, and delivered alone by no
+ * stage before M3 (spec §4.2).
+ */
+export interface RootSummary {
+  /**
+   * The document's location as the host named it.
+   */
+  readonly document: string;
+  /**
+   * The root's `identifier`, its outer XML whitespace removed, as an NCName reads.
+   */
+  readonly identifier: string;
+  /**
+   * The root's `title`, as written.
+   */
+  readonly title: string;
+  /**
+   * Every feature not delivered: the root's own mark, `root:qti-assessment-section` or
+   * `root:qti-assessment-stimulus`, at the root's path.
+   */
+  readonly unsupported: readonly MarkedFeature[];
+}
+
+/**
+ * A section document {@link check} accepted. {@link check} is its constructor, and
+ * {@link acceptSectionForTest} the one named seam for tests.
+ */
+export type AcceptedSection = Brand.Branded<RootSummary, "AcceptedSection">;
+
+/**
+ * The brand's constructor, kept to this module.
+ */
+const acceptSection = Brand.nominal<AcceptedSection>();
+
+/**
+ * A stimulus document {@link check} accepted. {@link check} is its constructor, and
+ * {@link acceptStimulusForTest} the one named seam for tests.
+ */
+export type AcceptedStimulus = Brand.Branded<RootSummary, "AcceptedStimulus">;
+
+/**
+ * The brand's constructor, kept to this module.
+ */
+const acceptStimulus = Brand.nominal<AcceptedStimulus>();
+
+/**
+ * The kind of a QTI 3 root, by its local name in QTI's namespace: the item, the test, the section
+ * and the stimulus, and the two roots M3 checks, an outcome declaration and response processing.
+ */
+export type RootKind =
+  | "item"
+  | "outcome-declaration"
+  | "response-processing"
+  | "section"
+  | "stimulus"
+  | "test";
+
+/**
+ * The kind a verdict carries: its root's, or `"none"` when the document has no QTI 3 root. That is
+ * bytes that are not well-formed XML, a root outside QTI's namespace, or a QTI element other than
+ * the six roots at the root.
+ */
+export type VerdictKind = RootKind | "none";
+
+/**
+ * The kinds of root {@link check} accepts.
+ */
+export type AcceptedKind = "item" | "section" | "stimulus" | "test";
+
+/**
+ * An accepting verdict's document, by its kind, so that `kind` narrows `accepted`.
+ */
+type AcceptedByKind =
+  | { readonly accepted: Accepted; readonly kind: "item" }
+  | { readonly accepted: AcceptedSection; readonly kind: "section" }
+  | { readonly accepted: AcceptedStimulus; readonly kind: "stimulus" }
+  | { readonly accepted: AcceptedTest; readonly kind: "test" };
+
+/**
  * The verdict on a document, by `verdict`.
  *
  * - `refused`: one or more refusals; never rendered.
- * - `unchecked`: valid as far as phase 1 checks, with every reason it cannot judge the rest; never
+ * - `unchecked`: valid as far as plate checks, with every reason it cannot judge the rest; never
  *   rendered.
- * - `accepted-with-unsupported`: valid, with features phase 1 does not render, each named.
- * - `accepted`: valid, and phase 1 renders all of it.
+ * - `accepted-with-unsupported`: valid, with features plate does not render or deliver, each named.
+ * - `accepted`: valid, and plate renders or delivers all of it.
  *
- * Only the two accepting verdicts carry an {@link Accepted}. `document` is the document's location.
+ * Every arm carries `kind` (spec §4.2): an accepting verdict's is `item`, `test`, `section` or
+ * `stimulus`, and `accepted` is the {@link Accepted}, {@link AcceptedTest},
+ * {@link AcceptedSection} or {@link AcceptedStimulus} to match, so `kind` narrows it. `unchecked`
+ * and `refused` carry the root's kind, `"none"` when it is none of the six. Read an accepted item
+ * through {@link acceptedItem}. `document` is the document's location.
  */
 export type Verdict =
   | {
       readonly document: string;
+      readonly kind: VerdictKind;
       readonly refusals: Arr.NonEmptyReadonlyArray<Refusal>;
       readonly verdict: "refused";
     }
   | {
       readonly document: string;
+      readonly kind: VerdictKind;
       readonly reasons: readonly UncheckedReason[];
       readonly verdict: "unchecked";
     }
-  | {
-      readonly accepted: Accepted;
+  | (AcceptedByKind & {
       readonly document: string;
       readonly verdict: "accepted-with-unsupported";
-    }
-  | { readonly accepted: Accepted; readonly document: string; readonly verdict: "accepted" };
+    })
+  | (AcceptedByKind & { readonly document: string; readonly verdict: "accepted" });
+
+/**
+ * Each QTI 3 root's kind, by its local name in QTI's namespace.
+ */
+const rootKinds: ReadonlyMap<string, RootKind> = new Map<string, RootKind>([
+  ["qti-assessment-item", "item"],
+  ["qti-assessment-section", "section"],
+  ["qti-assessment-stimulus", "stimulus"],
+  ["qti-assessment-test", "test"],
+  ["qti-outcome-declaration", "outcome-declaration"],
+  ["qti-response-processing", "response-processing"],
+]);
+
+/**
+ * Give the kind of a document's root.
+ *
+ * @param root The root.
+ * @returns Its kind, or `"none"` when it is not one of QTI 3's six roots.
+ */
+const kindOf = (root: SourceElement): VerdictKind =>
+  root.namespace === qtiNamespace ? (rootKinds.get(root.local) ?? "none") : "none";
+
+/**
+ * Report whether {@link check} accepts a root of a kind, when nothing refuses it and nothing leaves
+ * it unchecked.
+ *
+ * @param kind The root's kind.
+ * @returns Whether it is an item, a test, a section or a stimulus.
+ */
+const isAcceptedKind = (kind: VerdictKind): kind is AcceptedKind =>
+  kind === "item" || kind === "section" || kind === "stimulus" || kind === "test";
 
 /**
  * A source with its attributes secured, and what securing it removed.
@@ -528,15 +685,23 @@ const complete = (built: Item, secured: Secured): Item => {
 };
 
 /**
- * Collect every reason phase 1 cannot judge a document: a root other than `qti-assessment-item`,
- * then in document order each MathML, SSML or XInclude element whose parent is outside its
- * namespace, each attribute whose value holds an unexpanded entity reference, and each element
- * with one among its children.
+ * Collect every reason plate cannot judge a document: a root other than an item, a test, a section
+ * or a stimulus, then in document order each MathML, SSML or XInclude element whose parent is
+ * outside its namespace, each attribute whose value holds an unexpanded entity reference, and each
+ * element with one among its children.
+ *
+ * In a test or a section an XInclude `include` is no reason: the test model marks it
+ * `xi:include` and leaves it out, as it is never fetched.
  *
  * @param source A document whose root is in QTI's namespace.
- * @returns The reasons, empty when phase 1 can judge all of it.
+ * @param kind The root's kind.
+ * @returns The reasons, empty when plate can judge all of it.
  */
-const uncheckedReasons = (source: SourceDocument): readonly UncheckedReason[] => {
+const uncheckedReasons = (
+  source: SourceDocument,
+  kind: VerdictKind,
+): readonly UncheckedReason[] => {
+  const includes = kind !== "section" && kind !== "test";
   const reasons: UncheckedReason[] = [];
   for (const { element, parent, path } of walk(source)) {
     /**
@@ -549,7 +714,7 @@ const uncheckedReasons = (source: SourceDocument): readonly UncheckedReason[] =>
     const island = (namespace: string): boolean =>
       element.namespace === namespace &&
       !Option.exists(parent, (container) => container.namespace === namespace);
-    if (Option.isNone(parent) && element.local !== "qti-assessment-item") {
+    if (Option.isNone(parent) && !isAcceptedKind(kind)) {
       reasons.push({ path, reason: "root" });
     }
 
@@ -561,7 +726,7 @@ const uncheckedReasons = (source: SourceDocument): readonly UncheckedReason[] =>
       reasons.push({ path, reason: "ssml" });
     }
 
-    if (island(xincludeNamespace)) {
+    if (includes && island(xincludeNamespace)) {
       reasons.push({ path, reason: "xinclude" });
     }
 
@@ -596,54 +761,209 @@ const notQtiRoot = (source: SourceDocument): Refusal =>
   });
 
 /**
- * Give the verdict on a document, in order:
+ * Construct the refusal `missing-attribute` of an attribute a root must carry.
  *
- * 1. A root outside QTI's namespace is `refused`, with `not-qti-root` alone.
- * 2. The structural validator's refusals and the prose rules', together and in that order, with no
- *    short-circuit: any one makes the document `refused`, with all of them.
- * 3. A document holding MathML, SSML, an XInclude `include`, an unexpanded entity reference, or a root
- *    other than `qti-assessment-item` is `unchecked`, with every reason. It is never rendered.
- * 4. Otherwise each attribute only a wildcard admitted is removed and marked `attribute:<name>` (E3),
- *    and each URL attribute goes through `url.ts`: a kept value is written in its parsed form, and
- *    a dropped one goes, with its notice beside its element.
- * 5. The item is built from the secured source. A refusal of the builder, such as `value-type` or
- *    `count-range`, makes the document `refused`. Otherwise it is `accepted-with-unsupported` when
- *    anything is unsupported, the builder's `variable:<identifier>` marks included, and `accepted`
- *    when nothing is.
- *
- * @param source The document, as the reader adapter built it.
- * @param tables The tables generated from the QTI XSD.
- * @returns The verdict. A refusal is a verdict, never a failure. A defect of the item builder,
- *   which a checked document cannot cause, is thrown.
+ * @param source The document.
+ * @param name The attribute's name.
+ * @returns The refusal at the root.
  */
-export const check = (source: SourceDocument, tables: Tables): Verdict => {
+const missingRootAttribute = (source: SourceDocument, name: string): Refusal =>
+  new Refusal({
+    detail: { attribute: name, element: source.root.local },
+    document: source.location,
+    location: { kind: "path", path: source.root.local },
+    readerRule: Option.none(),
+    rule: "missing-attribute",
+    suggestion: Option.none(),
+  });
+
+/**
+ * Read an attribute in no namespace that a QTI root must carry.
+ *
+ * @param source The document, its root in QTI's namespace.
+ * @param name The attribute's name.
+ * @returns Its value as written, or the refusal `missing-attribute`, which a document the
+ *   structural validator accepted never gives.
+ */
+const rootAttribute = (source: SourceDocument, name: string): Result.Result<string, Refusal> =>
+  Option.match(
+    Arr.findFirst(
+      source.root.attributes,
+      (attribute) => attribute.namespace === "" && attribute.local === name,
+    ),
+    {
+      onNone: () => Result.fail(missingRootAttribute(source, name)),
+      onSome: (attribute) => Result.succeed(attribute.value),
+    },
+  );
+
+/**
+ * Read what M2 holds of a section or a stimulus document: its identifier, its title and its root
+ * mark.
+ *
+ * @param source A section or stimulus document the validators accepted.
+ * @param mark The root's mark.
+ * @returns The summary, or the refusal `missing-attribute`, which a document the structural
+ *   validator accepted never gives.
+ */
+const summarise = (source: SourceDocument, mark: TestMark): Result.Result<RootSummary, Refusal> =>
+  Result.gen(function* summary() {
+    const identifier = trimXmlSpace(yield* rootAttribute(source, "identifier"));
+    const title = yield* rootAttribute(source, "title");
+
+    return {
+      document: source.location,
+      identifier,
+      title,
+      unsupported: [{ feature: mark, path: source.root.local, shown: "mark" }],
+    };
+  });
+
+/**
+ * Give the verdict on an item that every validator accepted and plate can judge: secure it, build
+ * it, and accept it.
+ *
+ * @param source The item.
+ * @param tables The tables it was checked against.
+ * @returns `refused` when the builder refuses it, else `accepted` or `accepted-with-unsupported`.
+ */
+const checkItem = (source: SourceDocument, tables: Tables): Verdict => {
   const document = source.location;
-  if (source.root.namespace !== qtiNamespace) {
-    return { document, refusals: [notQtiRoot(source)], verdict: "refused" };
-  }
-
-  const refusals = [...checkStructure(source, tables), ...checkRules(source, tables)];
-  if (Arr.isReadonlyArrayNonEmpty(refusals)) {
-    return { document, refusals, verdict: "refused" };
-  }
-
-  const reasons = uncheckedReasons(source);
-  if (reasons.length > 0) {
-    return { document, reasons, verdict: "unchecked" };
-  }
-
   const secured = secure(source, tables);
   const built = Effect.runSync(Effect.result(buildItem(secured.source)));
   if (Result.isFailure(built)) {
-    return { document, refusals: [built.failure], verdict: "refused" };
+    return { document, kind: "item", refusals: [built.failure], verdict: "refused" };
   }
 
   const item = complete(built.success, secured);
   const accepted = accept({ document, item, unsupported: item.unsupported });
 
   return item.unsupported.length > 0
-    ? { accepted, document, verdict: "accepted-with-unsupported" }
-    : { accepted, document, verdict: "accepted" };
+    ? { accepted, document, kind: "item", verdict: "accepted-with-unsupported" }
+    : { accepted, document, kind: "item", verdict: "accepted" };
+};
+
+/**
+ * Give the verdict on a test that every validator accepted and plate can judge: build the test
+ * model and accept it.
+ *
+ * @param source The test.
+ * @returns `refused` when the builder refuses it, else `accepted-with-unsupported` when it holds a
+ *   feature M2 marks and `accepted` when it holds none.
+ */
+const checkTest = (source: SourceDocument): Verdict => {
+  const document = source.location;
+  const built = Effect.runSync(Effect.result(buildTest(source)));
+  if (Result.isFailure(built)) {
+    return { document, kind: "test", refusals: [built.failure], verdict: "refused" };
+  }
+
+  const test = built.success;
+  const accepted = acceptTest({ document, test, unsupported: test.unsupported });
+
+  return test.unsupported.length > 0
+    ? { accepted, document, kind: "test", verdict: "accepted-with-unsupported" }
+    : { accepted, document, kind: "test", verdict: "accepted" };
+};
+
+/**
+ * Give the verdict on a section or a stimulus document that every validator accepted and plate can
+ * judge: always `accepted-with-unsupported`, with its root's mark, as M2 delivers neither alone.
+ *
+ * @param source The section or stimulus.
+ * @param kind Which of the two it is.
+ * @returns The verdict.
+ */
+const checkUndelivered = (source: SourceDocument, kind: "section" | "stimulus"): Verdict => {
+  const document = source.location;
+  const summary = summarise(
+    source,
+    kind === "section" ? "root:qti-assessment-section" : "root:qti-assessment-stimulus",
+  );
+  if (Result.isFailure(summary)) {
+    return { document, kind, refusals: [summary.failure], verdict: "refused" };
+  }
+
+  return kind === "section"
+    ? {
+        accepted: acceptSection(summary.success),
+        document,
+        kind,
+        verdict: "accepted-with-unsupported",
+      }
+    : {
+        accepted: acceptStimulus(summary.success),
+        document,
+        kind,
+        verdict: "accepted-with-unsupported",
+      };
+};
+
+/**
+ * Give the verdict on a document, in order:
+ *
+ * 1. A root outside QTI's namespace is `refused`, of kind `none`, with `not-qti-root` alone.
+ * 2. The structural validator's refusals, the item prose rules' and the test prose rules', together
+ *    and in that order, with no short-circuit: any one makes the document `refused`, with all of
+ *    them. Each rule set judges only its own roots.
+ * 3. A document holding MathML, SSML, an unexpanded entity reference, an XInclude `include` in
+ *    anything but a test or a section, or a root other than an item, a test, a section or a
+ *    stimulus, is `unchecked`, with every reason. It is never rendered.
+ * 4. An item: each attribute only a wildcard admitted is removed and marked `attribute:<name>` (E3),
+ *    and each URL attribute goes through `url.ts`: a kept value is written in its parsed form, and
+ *    a dropped one goes, with its notice beside its element. The item is built from the secured
+ *    source. A refusal of the builder, such as `value-type` or `count-range`, makes the document
+ *    `refused`. Otherwise it is `accepted-with-unsupported` when anything is unsupported, the
+ *    builder's `variable:<identifier>` marks included, and `accepted` when nothing is.
+ * 5. A test: the test model is built. A refusal of the builder makes the document `refused`; otherwise
+ *    it is `accepted-with-unsupported` when the test holds a feature M2 marks (spec §4.6) and
+ *    `accepted` when it holds none.
+ * 6. A section or a stimulus is `accepted-with-unsupported`, marked `root:qti-assessment-section` or
+ *    `root:qti-assessment-stimulus`.
+ *
+ * Every verdict carries its root's kind, `"none"` for a root that is none of QTI 3's six.
+ *
+ * @param source The document, as the reader adapter built it.
+ * @param tables The tables generated from the QTI XSD.
+ * @returns The verdict. A refusal is a verdict, never a failure. A defect of the item or test
+ *   builder, which a checked document cannot cause, is thrown.
+ */
+export const check = (source: SourceDocument, tables: Tables): Verdict => {
+  const document = source.location;
+  if (source.root.namespace !== qtiNamespace) {
+    return { document, kind: "none", refusals: [notQtiRoot(source)], verdict: "refused" };
+  }
+
+  const kind = kindOf(source.root);
+  const refusals = [
+    ...checkStructure(source, tables),
+    ...checkRules(source, tables),
+    ...checkTestRules(source, tables),
+  ];
+  if (Arr.isReadonlyArrayNonEmpty(refusals)) {
+    return { document, kind, refusals, verdict: "refused" };
+  }
+
+  const reasons = uncheckedReasons(source, kind);
+  if (reasons.length > 0 || !isAcceptedKind(kind)) {
+    return { document, kind, reasons, verdict: "unchecked" };
+  }
+
+  switch (kind) {
+    case "item": {
+      return checkItem(source, tables);
+    }
+    case "test": {
+      return checkTest(source);
+    }
+    case "section":
+    case "stimulus": {
+      return checkUndelivered(source, kind);
+    }
+    default: {
+      return kind satisfies never;
+    }
+  }
 };
 
 /**
@@ -658,18 +978,63 @@ export const acceptForTest = (item: Item): Accepted =>
   accept({ document: item.document, item, unsupported: item.unsupported });
 
 /**
+ * Construct an {@link AcceptedTest} from a hand-built test model: the one named seam through which
+ * tests reach a session without a source. Nothing outside a test calls it.
+ *
+ * @param test The hand-built test.
+ * @returns The test accepted as it is, with its own unsupported features.
+ */
+export const acceptTestForTest = (test: Test): AcceptedTest =>
+  acceptTest({ document: test.document, test, unsupported: test.unsupported });
+
+/**
+ * Construct an {@link AcceptedSection} from a hand-built summary: the one named seam for tests.
+ * Nothing outside a test calls it.
+ *
+ * @param section The hand-built summary.
+ * @returns The section accepted as it is.
+ */
+export const acceptSectionForTest = (section: RootSummary): AcceptedSection =>
+  acceptSection(section);
+
+/**
+ * Construct an {@link AcceptedStimulus} from a hand-built summary: the one named seam for tests.
+ * Nothing outside a test calls it.
+ *
+ * @param stimulus The hand-built summary.
+ * @returns The stimulus accepted as it is.
+ */
+export const acceptStimulusForTest = (stimulus: RootSummary): AcceptedStimulus =>
+  acceptStimulus(stimulus);
+
+/**
  * Read the accepted item out of a verdict: the one way a caller reads one.
  *
- * An `accepted` or `accepted-with-unsupported` verdict gives its {@link Accepted}; `unchecked` and
- * `refused` give none. It gives an item only: an accepting verdict on any other root gives none.
+ * An `accepted` or `accepted-with-unsupported` verdict of kind `item` gives its {@link Accepted};
+ * `unchecked` and `refused` give none, and so does an accepting verdict on a test, a section or a
+ * stimulus.
  *
  * @param verdict The verdict, as {@link check} gave it.
  * @returns The accepted item, or none when the verdict accepts no item.
  */
 export const acceptedItem = (verdict: Verdict): Option.Option<Accepted> =>
-  verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
+  (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") &&
+  verdict.kind === "item"
     ? Option.some(verdict.accepted)
     : Option.none();
+
+/**
+ * Give the features an accepting verdict names as not rendered or not delivered, for a document of
+ * any kind: an item's, a test's marks, or a section's or stimulus's root mark.
+ *
+ * @param verdict The verdict, as {@link check} gave it.
+ * @returns The accepted document's unsupported features, in its order; none for `unchecked` and
+ *   `refused`.
+ */
+export const unsupportedFeatures = (verdict: Verdict): readonly UnsupportedFeature[] =>
+  verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
+    ? verdict.accepted.unsupported
+    : [];
 
 /**
  * Write text as a Markdown code span that holds it exactly (CommonMark 0.31.2, §6.1), so that a
@@ -919,7 +1284,8 @@ const templateRequirements = (refusal: Refusal): string => {
  * M2's rules read these facts from the detail: `expression-placement` the `element`, the
  * `attribute` when an attribute is what is misplaced, the `context` it is in and the `reading`;
  * `not-qti3-package` the manifest root's `element` and `namespace`; `package-profile` the
- * `schemaversion` found, none when the manifest gives none; `package-path-outside`,
+ * `schemaversion` found, none when the manifest gives none; `package-path-outside` the `path` that
+ * leaves the root, a file the package holds or a manifest `href` as written;
  * `package-file-unlisted` and `package-file-missing` the file's `path`, and the last also the
  * `resource` that lists it; `dependency-unresolved` the `resource` and the `dependency` it names;
  * `item-ref-unresolved` the item ref's `identifier`, its `href` and the `path` that resolves to;
@@ -1118,12 +1484,15 @@ const wordings = {
       `The package holds no ${code("imsmanifest.xml")} at its root.`,
       `add the package's manifest at its root, named ${code("imsmanifest.xml")}`,
     ),
-  "package-path-outside": (refusal) =>
-    sentence(
+  "package-path-outside": (refusal) => {
+    const path = code(fact(refusal, "path", ""));
+
+    return sentence(
       refusal,
-      `The package holds a file at ${code(fact(refusal, "path", ""))}, a path that leads outside the package's root.`,
-      `give the file a path inside the package's root, with no ${code("..")} segment that leaves it`,
-    ),
+      `The path ${path} leads outside the package's root.`,
+      `write ${path} relative to the package's root so that it stays inside it: no leading ${code("/")}, and no ${code("..")} segment that climbs above the root, counting any ${code("xml:base")} the path is resolved against`,
+    );
+  },
   "package-profile": (refusal) => {
     const field = code("schemaversion");
     const accepted = `${code("3.0.0")} or ${code("3.0.1")}`;

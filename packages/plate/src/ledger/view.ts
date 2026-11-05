@@ -19,7 +19,6 @@
  *
  * @module
  */
-import { Option } from "effect";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { browserSupport } from "#plate/ledger/browser-support.ts";
@@ -37,7 +36,7 @@ import type {
   RowState,
 } from "#plate/ledger/report.ts";
 import { standsInForSafari } from "#plate/ledger/runs.ts";
-import { acceptedItem, describeRefusal } from "#plate/validate/verdict.ts";
+import { describeRefusal, unsupportedFeatures } from "#plate/validate/verdict.ts";
 import type { Verdict } from "#plate/validate/verdict.ts";
 
 /**
@@ -1033,18 +1032,15 @@ const reasonsOf = (verdict: Verdict): readonly string[] => {
 };
 
 /**
- * Give the features an accepted document holds and the renderer does not render.
+ * Give the features an accepted document holds and plate does not render or deliver: an item's, a
+ * test's marks, or a section's or a stimulus's root mark.
  *
  * @param verdict The document's verdict.
  * @returns Each feature and the path of the element that carries it; none for a document that is
  *   not accepted.
  */
 const unsupportedOf = (verdict: Verdict): readonly string[] =>
-  Option.match(acceptedItem(verdict), {
-    onNone: () => [],
-    onSome: ({ unsupported }) =>
-      unsupported.map((feature) => `${feature.feature} at ${feature.path}`),
-  });
+  unsupportedFeatures(verdict).map((feature) => `${feature.feature} at ${feature.path}`);
 
 /**
  * Join a list of words with semicolons, or give `none` when there are none.

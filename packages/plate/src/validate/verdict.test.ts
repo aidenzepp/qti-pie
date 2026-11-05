@@ -22,11 +22,24 @@ import type {
   SourceElement,
 } from "#plate/document/source.ts";
 import type { BodyElement, BodyNode, Item } from "#plate/model/item.ts";
+import type { Test } from "#plate/model/test.ts";
+import type { Redacted } from "#plate/payload.ts";
+import { redact } from "#plate/render.ts";
+import { open } from "#plate/validate/open.ts";
 import { Refusal, refusalRules } from "#plate/validate/refusal.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
 import { tables } from "#plate/validate/tables.ts";
-import { acceptedItem, acceptForTest, check, describeRefusal } from "#plate/validate/verdict.ts";
-import type { Accepted, Verdict } from "#plate/validate/verdict.ts";
+import {
+  acceptedItem,
+  acceptForTest,
+  acceptSectionForTest,
+  acceptStimulusForTest,
+  acceptTestForTest,
+  check,
+  describeRefusal,
+  unsupportedFeatures,
+} from "#plate/validate/verdict.ts";
+import type { Accepted, AcceptedTest, RootSummary, Verdict } from "#plate/validate/verdict.ts";
 
 /**
  * A `javascript:` URL, which every URL attribute drops.
@@ -191,21 +204,25 @@ const matchCorrect = el(
 const verdictOf = (source: SourceDocument): Verdict => check(source, tables);
 
 /**
- * Read the accepted document of a verdict that must accept it.
+ * Read the accepted item of a verdict that must accept an item.
  *
  * @param verdict The verdict.
  * @param expected Which of the two accepting verdicts it must be.
- * @returns Its accepted document.
+ * @returns Its accepted item.
  */
 const acceptedOf = (
   verdict: Verdict,
   expected: "accepted" | "accepted-with-unsupported",
 ): Accepted => {
   assert.strictEqual(verdict.verdict, expected);
+  assert.strictEqual(verdict.kind, "item");
 
-  return verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
+  return (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") &&
+    verdict.kind === "item"
     ? verdict.accepted
-    : assert.fail(`The verdict is ${verdict.verdict}, not ${expected}.`);
+    : assert.fail(
+        `The verdict is ${verdict.verdict} on a ${verdict.kind}, not ${expected} on an item.`,
+      );
 };
 
 /**
@@ -452,23 +469,13 @@ describe("check", () => {
     }
   });
 
-  it("leaves a root other than qti-assessment-item unchecked", () => {
-    const verdict = verdictOf(
-      doc(
-        "stimulus.xml",
-        el(
-          "qti-assessment-stimulus",
-          [attr("identifier", "stimulus-1"), attr("title", "Stimulus")],
-          [el("qti-stimulus-body", [], [el("p", [], [text("Read this.")])])],
-        ),
-      ),
-    );
+  it("leaves a QTI element that is none of the six roots unchecked at the root, of kind none", () => {
+    const verdict = verdictOf(doc("fragment.xml", el("p", [], [text("Read this.")])));
 
     assert.strictEqual(verdict.verdict, "unchecked");
+    assert.strictEqual(verdict.kind, "none");
     if (verdict.verdict === "unchecked") {
-      assert.deepStrictEqual(verdict.reasons, [
-        { path: "qti-assessment-stimulus", reason: "root" },
-      ]);
+      assert.deepStrictEqual(verdict.reasons, [{ path: "p", reason: "root" }]);
     }
   });
 
@@ -897,6 +904,308 @@ describe("check, processing the model does not hold", () => {
   });
 });
 
+/**
+ * The location of every hand-built test, section and stimulus document in these tests.
+ */
+const testLocation = "tests/test.xml";
+
+/**
+ * Construct a `qti-assessment-section` with its required attributes.
+ *
+ * @param identifier Its `identifier`, also its `title`.
+ * @param children Its children, in document order.
+ * @returns The section.
+ */
+const assessmentSection = (identifier: string, children: readonly SourceChild[]): SourceElement =>
+  el(
+    "qti-assessment-section",
+    [attr("identifier", identifier), attr("title", identifier), attr("visible", "true")],
+    children,
+  );
+
+/**
+ * Construct a test of one linear, individual part `P` holding one section `S`.
+ *
+ * @param sectionChildren The section's children.
+ * @param testChildren The test's children after the part.
+ * @returns The test, at {@link testLocation}.
+ */
+const assessmentTest = (
+  sectionChildren: readonly SourceChild[],
+  testChildren: readonly SourceElement[] = [],
+): SourceDocument =>
+  doc(
+    testLocation,
+    el(
+      "qti-assessment-test",
+      [attr("identifier", "T"), attr("title", "Test")],
+      [
+        el(
+          "qti-test-part",
+          [
+            attr("identifier", "P"),
+            attr("navigation-mode", "linear"),
+            attr("submission-mode", "individual"),
+          ],
+          [assessmentSection("S", sectionChildren)],
+        ),
+        ...testChildren,
+      ],
+    ),
+  );
+
+/**
+ * Construct a `qti-assessment-item-ref` to `items/<identifier>.xml`.
+ *
+ * @param identifier Its `identifier`.
+ * @param children Its children, such as a `qti-branch-rule`.
+ * @returns The item ref.
+ */
+const itemRef = (identifier: string, children: readonly SourceElement[] = []): SourceElement =>
+  el(
+    "qti-assessment-item-ref",
+    [attr("href", `items/${identifier}.xml`), attr("identifier", identifier)],
+    children,
+  );
+
+/**
+ * Construct a stimulus document with its required attributes.
+ *
+ * @param children The children of its `qti-stimulus-body`.
+ * @returns The stimulus, at `stimulus.xml`.
+ */
+const stimulus = (children: readonly SourceChild[]): SourceDocument =>
+  doc(
+    "stimulus.xml",
+    el(
+      "qti-assessment-stimulus",
+      [attr("identifier", "stimulus-1"), attr("title", "Stimulus")],
+      [el("qti-stimulus-body", [], children)],
+    ),
+  );
+
+/**
+ * Read a corpus document from the cache and give its verdict.
+ *
+ * @param location The document's path under the corpus root.
+ * @returns Its verdict.
+ */
+const corpusVerdict = (location: string) =>
+  readCorpusFile(location).pipe(
+    Effect.flatMap((bytes) => readSource(location, bytes)),
+    Effect.map(verdictOf),
+  );
+
+/**
+ * Read the accepted test of a verdict that must accept a test.
+ *
+ * @param verdict The verdict.
+ * @param expected Which of the two accepting verdicts it must be.
+ * @returns Its accepted test.
+ */
+const acceptedTestOf = (
+  verdict: Verdict,
+  expected: "accepted" | "accepted-with-unsupported",
+): AcceptedTest => {
+  assert.strictEqual(verdict.verdict, expected);
+  assert.strictEqual(verdict.kind, "test");
+
+  return (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") &&
+    verdict.kind === "test"
+    ? verdict.accepted
+    : assert.fail(
+        `The verdict is ${verdict.verdict} on a ${verdict.kind}, not ${expected} on a test.`,
+      );
+};
+
+/**
+ * Write a verdict's unsupported features as `<feature>@<path>`.
+ *
+ * @param features The features.
+ * @returns One entry per feature, in order.
+ */
+const featuresOf = (
+  features: readonly { readonly feature: string; readonly path: string }[],
+): readonly string[] => features.map(({ feature, path }) => `${feature}@${path}`);
+
+describe("check, every QTI 3 root", () => {
+  it.effect("[T-4] [S-0] accepts BGtest.xml as a test it delivers in full", () =>
+    Effect.gen(function* bgTest() {
+      const location = "QTI3_BeginnersGuide_Examples/BGtest.xml";
+      const accepted = acceptedTestOf(yield* corpusVerdict(location), "accepted");
+
+      assert.strictEqual(accepted.document, location);
+      assert.strictEqual(accepted.test.document, location);
+      assert.strictEqual(accepted.test.identifier, "BGtest");
+      assert.deepStrictEqual(accepted.unsupported, []);
+      assert.deepStrictEqual(
+        accepted.test.parts.map((part) => part.identifier),
+        ["testPart-1"],
+      );
+    }),
+  );
+
+  it.effect(
+    "[T-4] [S-0] accepts -TX_G06SAMP_000.xml as a test with unsupported features, its outcome processing marked",
+    () =>
+      Effect.gen(function* weightedTest() {
+        const location = "qtiv3-examples/packaging/CASE/testitems/-TX_G06SAMP_000.xml";
+        const accepted = acceptedTestOf(
+          yield* corpusVerdict(location),
+          "accepted-with-unsupported",
+        );
+
+        assert.deepInclude(accepted.unsupported, {
+          feature: "qti-outcome-processing",
+          path: "qti-assessment-test/qti-outcome-processing",
+          shown: "mark",
+        });
+        assert.deepStrictEqual(accepted.unsupported, accepted.test.unsupported);
+      }),
+  );
+
+  it("refuses a hand-built empty section document with child-count, of kind section", () => {
+    const verdict = verdictOf(doc("section.xml", assessmentSection("S", [])));
+
+    assert.deepStrictEqual(refusalsOf(verdict), [
+      { location: { kind: "path", path: "qti-assessment-section" }, rule: "child-count" },
+    ]);
+    assert.strictEqual(verdict.kind, "section");
+  });
+
+  it("accepts a section document with unsupported features, marked as a section root", () => {
+    const verdict = verdictOf(doc("section.xml", assessmentSection("S", [itemRef("q1")])));
+
+    assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+    assert.isTrue(verdict.kind === "section");
+    if (verdict.verdict === "accepted-with-unsupported" && verdict.kind === "section") {
+      assert.strictEqual(verdict.accepted.document, "section.xml");
+      assert.strictEqual(verdict.accepted.identifier, "S");
+      assert.deepStrictEqual(featuresOf(verdict.accepted.unsupported), [
+        "root:qti-assessment-section@qti-assessment-section",
+      ]);
+    }
+  });
+
+  it("accepts a stimulus holding an interaction with unsupported features, marked as a stimulus root", () => {
+    const verdict = verdictOf(stimulus([el("div", [], [choiceInteraction()])]));
+
+    assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+    assert.isTrue(verdict.kind === "stimulus");
+    if (verdict.verdict === "accepted-with-unsupported" && verdict.kind === "stimulus") {
+      assert.strictEqual(verdict.accepted.document, "stimulus.xml");
+      assert.strictEqual(verdict.accepted.identifier, "stimulus-1");
+      assert.strictEqual(verdict.accepted.title, "Stimulus");
+      assert.deepStrictEqual(featuresOf(verdict.accepted.unsupported), [
+        "root:qti-assessment-stimulus@qti-assessment-stimulus",
+      ]);
+    }
+  });
+
+  it("leaves a stimulus holding MathML unchecked, of kind stimulus", () => {
+    const math = el("math", [], [el("mi", [], [text("x")], mathmlNamespace)], mathmlNamespace);
+    const verdict = verdictOf(stimulus([el("p", [], [math])]));
+
+    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.strictEqual(verdict.kind, "stimulus");
+    if (verdict.verdict === "unchecked") {
+      assert.deepStrictEqual(verdict.reasons, [
+        {
+          path: `qti-assessment-stimulus/qti-stimulus-body/p/{${mathmlNamespace}}math`,
+          reason: "mathml",
+        },
+      ]);
+    }
+  });
+
+  it("marks a test's xi:include rather than leaving the test unchecked", () => {
+    const include = el("include", [attr("href", "shared/items.xml")], [], xincludeNamespace);
+    const accepted = acceptedTestOf(
+      verdictOf(assessmentTest([itemRef("q1"), include])),
+      "accepted-with-unsupported",
+    );
+
+    assert.deepStrictEqual(featuresOf(accepted.unsupported), [
+      `xi:include@qti-assessment-test/qti-test-part/qti-assessment-section/{${xincludeNamespace}}include`,
+    ]);
+  });
+
+  it("refuses a test's outcome-only expression outside outcome processing once, as expression-placement", () => {
+    const branch = el(
+      "qti-branch-rule",
+      [attr("target", "EXIT_TEST")],
+      [
+        el(
+          "qti-gte",
+          [],
+          [
+            el("qti-number-correct"),
+            el("qti-base-value", [attr("base-type", "integer")], [text("1")]),
+          ],
+        ),
+      ],
+    );
+    const verdict = verdictOf(assessmentTest([itemRef("q1", [branch])]));
+
+    assert.deepStrictEqual(refusalsOf(verdict), [
+      {
+        location: {
+          kind: "path",
+          path: "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref/qti-branch-rule/qti-gte/qti-number-correct",
+        },
+        rule: "expression-placement",
+      },
+    ]);
+    assert.strictEqual(verdict.kind, "test");
+  });
+
+  it("leaves a qti-response-processing root unchecked, of kind response-processing", () => {
+    const verdict = verdictOf(doc("match_correct.xml", matchCorrect));
+
+    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.strictEqual(verdict.kind, "response-processing");
+  });
+
+  it("leaves a qti-outcome-declaration root unchecked, of kind outcome-declaration", () => {
+    const verdict = verdictOf(doc("score.xml", score()));
+
+    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.strictEqual(verdict.kind, "outcome-declaration");
+    if (verdict.verdict === "unchecked") {
+      assert.deepStrictEqual(verdict.reasons, [
+        { path: "qti-outcome-declaration", reason: "root" },
+      ]);
+    }
+  });
+
+  it("refuses a foreign root with kind none", () => {
+    const xhtml = "http://www.w3.org/1999/xhtml";
+    const verdict = verdictOf(doc("page.xml", el("html", [], [], xhtml)));
+
+    assert.strictEqual(verdict.verdict, "refused");
+    assert.strictEqual(verdict.kind, "none");
+  });
+
+  it.effect("refuses bytes that are not well-formed with kind none", () =>
+    Effect.gen(function* notWellFormed() {
+      const verdict = yield* open("broken.xml", new TextEncoder().encode("<qti-assessment-test"));
+
+      assert.strictEqual(verdict.verdict, "refused");
+      assert.strictEqual(verdict.kind, "none");
+    }),
+  );
+
+  it("refuses an item with the kind item, and an item's accepting verdict carries kind item", () => {
+    const refused = verdictOf(item([response("integer", "single", [correct("abc")])]));
+    const accepted = verdictOf(item([body([el("p", [], [text("Hello")])])]));
+
+    assert.strictEqual(refused.verdict, "refused");
+    assert.strictEqual(refused.kind, "item");
+    assert.strictEqual(accepted.verdict, "accepted");
+    assert.strictEqual(accepted.kind, "item");
+  });
+});
+
 describe("acceptForTest", () => {
   it("wraps a hand-built item with its own unsupported features", () => {
     const built: Item = {
@@ -915,6 +1224,57 @@ describe("acceptForTest", () => {
     assert.strictEqual(accepted.item, built);
     assert.strictEqual(accepted.document, "hand.xml");
     assert.deepStrictEqual(accepted.unsupported, built.unsupported);
+  });
+});
+
+/**
+ * A hand-built test model with one mark.
+ */
+const handTest: Test = {
+  document: "tests/hand.xml",
+  identifier: "hand",
+  outcomes: new Map(),
+  parts: [],
+  title: "Hand",
+  unsupported: [
+    {
+      feature: "qti-outcome-processing",
+      path: "qti-assessment-test/qti-outcome-processing",
+      shown: "mark",
+    },
+  ],
+};
+
+describe("acceptTestForTest, acceptSectionForTest and acceptStimulusForTest", () => {
+  it("wrap a hand-built test with its own document and unsupported features", () => {
+    const accepted = acceptTestForTest(handTest);
+
+    assert.strictEqual(accepted.test, handTest);
+    assert.strictEqual(accepted.document, "tests/hand.xml");
+    assert.deepStrictEqual(accepted.unsupported, handTest.unsupported);
+  });
+
+  it("wrap a hand-built section and stimulus summary as they are", () => {
+    const summary: RootSummary = {
+      document: "sections/hand.xml",
+      identifier: "S",
+      title: "Section",
+      unsupported: [
+        { feature: "root:qti-assessment-section", path: "qti-assessment-section", shown: "mark" },
+      ],
+    };
+
+    assert.deepStrictEqual({ ...acceptSectionForTest(summary) }, summary);
+    assert.deepStrictEqual({ ...acceptStimulusForTest(summary) }, summary);
+  });
+
+  it("give an AcceptedTest that redact does not take", () => {
+    const accepted: AcceptedTest = acceptTestForTest(handTest);
+    const redactTest = (): Redacted =>
+      // @ts-expect-error -- redact takes an accepted item, and an AcceptedTest is not an Accepted.
+      redact(accepted);
+
+    assert.isFunction(redactTest);
   });
 });
 
@@ -961,6 +1321,51 @@ describe("acceptedItem", () => {
 
     assert.strictEqual(verdict.verdict, "unchecked");
     assert.deepStrictEqual(acceptedItem(verdict), Option.none());
+  });
+
+  it("gives none for an accepted test", () => {
+    const verdict = verdictOf(assessmentTest([itemRef("q1")]));
+
+    assert.strictEqual(verdict.verdict, "accepted");
+    assert.strictEqual(verdict.kind, "test");
+    assert.deepStrictEqual(acceptedItem(verdict), Option.none());
+  });
+});
+
+describe("unsupportedFeatures", () => {
+  it("gives an accepted test's marks, a section's root mark and an item's features", () => {
+    const test: Verdict = {
+      accepted: acceptTestForTest(handTest),
+      document: handTest.document,
+      kind: "test",
+      verdict: "accepted-with-unsupported",
+    };
+    const section = verdictOf(doc("section.xml", assessmentSection("S", [itemRef("q1")])));
+    const linked = verdictOf(
+      item([body([el("p", [], [el("a", [attr("href", scriptUrl)], [text("Go")])])])]),
+    );
+
+    assert.deepStrictEqual(unsupportedFeatures(test), handTest.unsupported);
+    assert.deepStrictEqual(featuresOf(unsupportedFeatures(section)), [
+      "root:qti-assessment-section@qti-assessment-section",
+    ]);
+    assert.deepStrictEqual(
+      unsupportedFeatures(linked),
+      acceptedOf(linked, "accepted-with-unsupported").unsupported,
+    );
+  });
+
+  it("gives none for a refused and an unchecked verdict", () => {
+    const xhtml = "http://www.w3.org/1999/xhtml";
+
+    assert.deepStrictEqual(
+      unsupportedFeatures(verdictOf(doc("page.xml", el("html", [], [], xhtml)))),
+      [],
+    );
+    assert.deepStrictEqual(
+      unsupportedFeatures(verdictOf(doc("match_correct.xml", matchCorrect))),
+      [],
+    );
   });
 });
 
@@ -1135,8 +1540,25 @@ const m2Wordings: readonly {
   },
   {
     args: ["package-path-outside", "package.zip", { kind: "document" }, { path: "../outside.xml" }],
-    name: "package-path-outside",
-    spans: ["../outside.xml"],
+    name: "package-path-outside of a file the package holds",
+    spans: ["package.zip", "../outside.xml", "/", ".."],
+  },
+  {
+    args: [
+      "package-path-outside",
+      "package/imsmanifest.xml",
+      { kind: "path", path: "manifest/resources/resource/file/@href" },
+      { path: "../a.xml" },
+    ],
+    name: "package-path-outside of a manifest href",
+    spans: [
+      "package/imsmanifest.xml",
+      "manifest/resources/resource/file/@href",
+      "../a.xml",
+      "/",
+      "..",
+      "xml:base",
+    ],
   },
   {
     args: ["package-file-unlisted", "package.zip", { kind: "document" }, { path: "notes.txt" }],
