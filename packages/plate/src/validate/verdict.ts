@@ -160,8 +160,11 @@ const attributeName = (attribute: Pick<SourceAttribute, "local" | "namespace">):
 
 /**
  * Report whether an attribute is one E3 keeps on any element without its table naming it: a
- * namespace declaration, `xsi:schemaLocation`, `xsi:noNamespaceSchemaLocation`, `xml:lang` or
- * `xml:base`.
+ * namespace declaration, `xsi:schemaLocation`, `xsi:noNamespaceSchemaLocation`, `xsi:type`,
+ * `xsi:nil`, `xml:lang` or `xml:base`.
+ *
+ * The structural walk judges `xsi:type` and `xsi:nil` on every element it checks (reading 47), so
+ * a valid `xsi:type` is kept, never marked; on an element only a wildcard admits neither is judged.
  *
  * @param attribute The attribute.
  * @returns Whether it is an allowance.
@@ -169,7 +172,10 @@ const attributeName = (attribute: Pick<SourceAttribute, "local" | "namespace">):
 const isAllowance = (attribute: SourceAttribute): boolean =>
   attribute.namespace === xmlnsNamespace ||
   (attribute.namespace === xsiNamespace &&
-    (attribute.local === "schemaLocation" || attribute.local === "noNamespaceSchemaLocation")) ||
+    (attribute.local === "schemaLocation" ||
+      attribute.local === "noNamespaceSchemaLocation" ||
+      attribute.local === "type" ||
+      attribute.local === "nil")) ||
   (attribute.namespace === xmlNamespace &&
     (attribute.local === "lang" || attribute.local === "base"));
 

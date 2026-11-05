@@ -8,7 +8,10 @@
  * never refuses what the XSD admits (reading 1): namespace declarations, `xsi:schemaLocation` and
  * `xsi:noNamespaceSchemaLocation`, whitespace between elements, entity references and whatever a
  * wildcard matches all pass. An element a wildcard admits, and an element in another namespace such
- * as MathML, is kept and not walked.
+ * as MathML, is kept and not walked. On every element it walks it judges `xsi:type` and `xsi:nil`
+ * as XML Schema judges them (reading 47), and no attribute wildcard admits either: a type is valid
+ * when it names the element's declared type or a type derived from it, and `xsi:nil` never is,
+ * because the XSD declares no element nillable.
  *
  * Over the XSD's rules it applies the shared readings that set the XSD aside where the walk can see
  * them, each a row of {@link readingRows}: attributes narrowed or retyped, `data-*` names,
@@ -24,6 +27,7 @@ import {
   walk,
   xmlNamespace,
   xmlnsNamespace,
+  xsdNamespace,
   xsiNamespace,
 } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
@@ -40,6 +44,7 @@ import { patternEquivalents } from "#plate/validate/xsd.ts";
 import type {
   AttributeType,
   BuiltinName,
+  ChildName,
   ElementTable,
   Tables,
   Wildcard,
@@ -752,6 +757,9 @@ const attributeName = (attribute: Pick<SourceAttribute, "local" | "namespace">):
  * namespace declaration, which the shared reader returns as an attribute, `xsi:schemaLocation` or
  * `xsi:noNamespaceSchemaLocation`.
  *
+ * `xsi:type` and `xsi:nil` are not allowances: {@link checkInstance} judges them on every element
+ * the walk checks.
+ *
  * @param attribute The attribute.
  * @returns Whether it is always allowed.
  */
@@ -759,6 +767,236 @@ const isAllowance = (attribute: SourceAttribute): boolean =>
   attribute.namespace === xmlnsNamespace ||
   (attribute.namespace === xsiNamespace &&
     (attribute.local === "schemaLocation" || attribute.local === "noNamespaceSchemaLocation"));
+
+/**
+ * Report whether an attribute is `xsi:type` or `xsi:nil`, which {@link checkInstance} judges and
+ * the attribute loop passes over.
+ *
+ * @param attribute The attribute.
+ * @returns Whether it is one of the two.
+ */
+const isInstanceAttribute = (attribute: SourceAttribute): boolean =>
+  attribute.namespace === xsiNamespace && (attribute.local === "type" || attribute.local === "nil");
+
+/**
+ * The base of each XML Schema built-in type, by local name, so that a derivation is followed
+ * through the built-ins as it is through QTI's types.
+ *
+ * Each derived built-in restricts the base XML Schema Part 2 names for it (section 3.3). The
+ * primitives and the three list types have `anySimpleType` as their base (Part 2, section 4.1.1),
+ * and its base is `anyType` (Part 1, section 3.14.7), which has none.
+ */
+const builtinBases: ReadonlyMap<string, string> = new Map([
+  ["anySimpleType", "anyType"],
+  ["anyURI", "anySimpleType"],
+  ["base64Binary", "anySimpleType"],
+  ["boolean", "anySimpleType"],
+  ["byte", "short"],
+  ["date", "anySimpleType"],
+  ["dateTime", "anySimpleType"],
+  ["decimal", "anySimpleType"],
+  ["double", "anySimpleType"],
+  ["duration", "anySimpleType"],
+  ["ENTITIES", "anySimpleType"],
+  ["ENTITY", "NCName"],
+  ["float", "anySimpleType"],
+  ["gDay", "anySimpleType"],
+  ["gMonth", "anySimpleType"],
+  ["gMonthDay", "anySimpleType"],
+  ["gYear", "anySimpleType"],
+  ["gYearMonth", "anySimpleType"],
+  ["hexBinary", "anySimpleType"],
+  ["ID", "NCName"],
+  ["IDREF", "NCName"],
+  ["IDREFS", "anySimpleType"],
+  ["int", "long"],
+  ["integer", "decimal"],
+  ["language", "token"],
+  ["long", "integer"],
+  ["Name", "token"],
+  ["NCName", "Name"],
+  ["negativeInteger", "nonPositiveInteger"],
+  ["NMTOKEN", "token"],
+  ["NMTOKENS", "anySimpleType"],
+  ["nonNegativeInteger", "integer"],
+  ["nonPositiveInteger", "integer"],
+  ["normalizedString", "string"],
+  ["NOTATION", "anySimpleType"],
+  ["positiveInteger", "nonNegativeInteger"],
+  ["QName", "anySimpleType"],
+  ["short", "int"],
+  ["string", "anySimpleType"],
+  ["time", "anySimpleType"],
+  ["token", "normalizedString"],
+  ["unsignedByte", "unsignedShort"],
+  ["unsignedInt", "unsignedLong"],
+  ["unsignedLong", "nonNegativeInteger"],
+  ["unsignedShort", "unsignedInt"],
+]);
+
+/**
+ * Find the base of a named type: through `tables.types` for one of QTI's, `anySimpleType` for a
+ * union, and through {@link builtinBases} for one of XML Schema's.
+ *
+ * @param type The type's name.
+ * @param tables The tables.
+ * @returns Its base, or none for `anyType` and for a name that resolves to no type.
+ */
+const baseOf = (type: ChildName, tables: Tables): Option.Option<ChildName> => {
+  if (type.namespace === xsdNamespace) {
+    const base = builtinBases.get(type.local);
+
+    return base === undefined
+      ? Option.none()
+      : Option.some({ local: base, namespace: xsdNamespace });
+  }
+
+  const entry =
+    type.namespace === qtiNamespace && Object.hasOwn(tables.types, type.local)
+      ? tables.types[type.local]
+      : undefined;
+  if (entry === undefined) {
+    return Option.none();
+  }
+
+  return Option.some(
+    "base" in entry ? entry.base : { local: "anySimpleType", namespace: xsdNamespace },
+  );
+};
+
+/**
+ * Report whether a type is one of the declared types or derived from one of them, through any
+ * chain of extensions and restrictions (XML Schema Part 1, section 3.3.4, clause 4.3). The XSD
+ * blocks no derivation, so every chain counts.
+ *
+ * @param type The type's name.
+ * @param declared The types the element is declared with.
+ * @param tables The tables.
+ * @returns Whether `type` is validly derived from one of `declared`.
+ */
+const derivesFrom = (type: ChildName, declared: readonly ChildName[], tables: Tables): boolean => {
+  const seen = new Set<string>();
+  for (
+    let current = Option.some(type);
+    Option.isSome(current);
+    current = baseOf(current.value, tables)
+  ) {
+    const { local, namespace } = current.value;
+    const key = `{${namespace}}${local}`;
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    if (declared.some((name) => name.namespace === namespace && name.local === local)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Find the namespace a prefix is bound to at an element, from the declarations on it and on its
+ * ancestors, the nearest first.
+ *
+ * `xml` and `xmlns` are bound by definition. The empty prefix stands for the default namespace,
+ * which is no namespace, `""`, when no declaration is in scope. The reader gives a default
+ * declaration the local name `xmlns` and a prefixed one its prefix.
+ *
+ * @param prefix The prefix, `""` for none.
+ * @param element The element the name is written on.
+ * @param parents Each walked element's parent.
+ * @returns The namespace, or none when the prefix is bound to nothing.
+ */
+const boundNamespace = (
+  prefix: string,
+  element: SourceElement,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+): Option.Option<string> => {
+  if (prefix === "xml") {
+    return Option.some(xmlNamespace);
+  }
+
+  if (prefix === "xmlns") {
+    return Option.some(xmlnsNamespace);
+  }
+
+  const local = prefix === "" ? "xmlns" : prefix;
+  for (
+    let current: SourceElement | undefined = element;
+    current !== undefined;
+    current = parents.get(current)
+  ) {
+    const declaration = current.attributes.find(
+      (attribute) => attribute.namespace === xmlnsNamespace && attribute.local === local,
+    );
+    if (declaration !== undefined) {
+      return prefix === "" || declaration.value !== ""
+        ? Option.some(declaration.value)
+        : Option.none();
+    }
+  }
+
+  return prefix === "" ? Option.some("") : Option.none();
+};
+
+/**
+ * Resolve a QName written on an element: collapse its whitespace, as `xs:QName` does, and bind its
+ * prefix through the declarations in scope.
+ *
+ * @param value The QName as written.
+ * @param element The element it is written on.
+ * @param parents Each walked element's parent.
+ * @returns The name it stands for, or none when it is not a QName or its prefix is bound to
+ *   nothing.
+ */
+const resolveQName = (
+  value: string,
+  element: SourceElement,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+): Option.Option<ChildName> => {
+  const lexical = collapse(value);
+  const colon = lexical.indexOf(":");
+  const prefix = colon === -1 ? "" : lexical.slice(0, colon);
+  const local = lexical.slice(colon + 1);
+  if ((colon !== -1 && !isNcName(prefix)) || !isNcName(local)) {
+    return Option.none();
+  }
+
+  return Option.map(boundNamespace(prefix, element, parents), (namespace) => ({
+    local,
+    namespace,
+  }));
+};
+
+/**
+ * Name a type as a refusal's detail does: its local name in the QTI namespace and
+ * `{<namespace>}<local>` otherwise, as {@link elementName} names an element.
+ *
+ * @param type The type's name.
+ * @returns Its name.
+ */
+const typeName = (type: ChildName): string =>
+  type.namespace === qtiNamespace ? type.local : `{${type.namespace}}${type.local}`;
+
+/**
+ * Describe the values an element's `xsi:type` may take, for the wording of its `attribute-type`
+ * refusal.
+ *
+ * @param table The element's table.
+ * @returns A phrase naming the element's declared types.
+ */
+const describeInstanceTypes = (table: ElementTable): string => {
+  const [first, ...others] = table.types.map(typeName);
+  if (first === undefined) {
+    return "a named type derived from the element's anonymous type, and the XSD has none";
+  }
+
+  return others.length === 0
+    ? `a QName naming ${first} or a type derived from it`
+    : `a QName naming one of ${[first, ...others].join(", ")} or a type derived from one of them`;
+};
 
 /**
  * Look up an element's table, only among the tables' own keys.
@@ -1109,9 +1347,65 @@ const checkChildCounts = (
 };
 
 /**
+ * Judge an element's `xsi:type` and `xsi:nil` as XML Schema judges them (reading 47).
+ *
+ * No declaration names either, and no attribute wildcard takes either (XML Schema Part 1, section
+ * 3.4.4, clause 3), so they are judged here, never by {@link checkUndeclared}. `xsi:type` is valid
+ * when its value, a QName, names one of the types the element's table lists in `types`, or a type
+ * derived from one of them (section 3.3.4, clause 4); otherwise, its prefix bound to nothing
+ * included, it is `attribute-type`. For a name declared with several types, a type valid for any
+ * one of them is valid. A value holding an unexpanded entity reference is unknown and not judged.
+ * The walk does not check the element's content against the named type, so `xs:ENTITY`, whose
+ * content would have to name an unparsed entity the reader does not see, is admitted unverified
+ * where it derives from the declared type (reading 50). The XSD declares no element nillable, so
+ * `xsi:nil` is `unknown-attribute` whatever its value (section 3.3.4, clause 3).
+ *
+ * @param source The document.
+ * @param element The element.
+ * @param path The element's path.
+ * @param table The element's table.
+ * @param parents Each walked element's parent, for the namespace declarations in scope.
+ * @param tables The tables, for the derivations of QTI's types.
+ * @returns The refusals of the two attributes, in document order.
+ */
+const checkInstance = (
+  source: SourceDocument,
+  element: SourceElement,
+  path: string,
+  table: ElementTable,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+  tables: Tables,
+): readonly Refusal[] =>
+  element.attributes.filter(isInstanceAttribute).flatMap((attribute) => {
+    const at = attributePath(path, attribute);
+    const detail = { attribute: attributeName(attribute), element: elementName(element) };
+    if (attribute.local === "nil") {
+      return [refuse(source, "unknown-attribute", at, { ...detail, reading: "47" })];
+    }
+
+    const valid =
+      attribute.references.length > 0 ||
+      Option.exists(resolveQName(attribute.value, element, parents), (type) =>
+        derivesFrom(type, table.types, tables),
+      );
+
+    return valid
+      ? []
+      : [
+          refuse(source, "attribute-type", at, {
+            ...detail,
+            expected: describeInstanceTypes(table),
+            reading: "47",
+            value: attribute.value,
+          }),
+        ];
+  });
+
+/**
  * Check the attributes and the text of one element the walk admitted.
  *
- * A required attribute that is absent is `missing-attribute` at the element. A declared attribute
+ * A required attribute that is absent is `missing-attribute` at the element. `xsi:type` and
+ * `xsi:nil` go to {@link checkInstance}, before any other attribute. A declared attribute
  * goes to {@link checkValue} and is checked for `padded-attribute`, unless its value holds an
  * unexpanded entity reference, whose value is unknown. An undeclared one goes to
  * {@link checkUndeclared}. Non-whitespace text in an element whose table admits none is
@@ -1122,9 +1416,11 @@ const checkChildCounts = (
  * @param element The element.
  * @param path The element's path.
  * @param table The element's table.
- * @param parents Each walked element's parent, for the declaration a padded value reads.
- * @returns The element's refusals: its placement, missing attributes, then each attribute's in
- *   document order, then its text, then its child counts.
+ * @param parents Each walked element's parent, for the declaration a padded value reads and the
+ *   namespace declarations in scope.
+ * @param tables The tables, for the derivations an `xsi:type` follows.
+ * @returns The element's refusals: its placement, missing attributes, its `xsi:type` and `xsi:nil`,
+ *   then each other attribute's in document order, then its text, then its child counts.
  */
 const checkElement = (
   source: SourceDocument,
@@ -1132,6 +1428,7 @@ const checkElement = (
   path: string,
   table: ElementTable,
   parents: ReadonlyMap<SourceElement, SourceElement>,
+  tables: Tables,
 ): readonly Refusal[] => {
   const refusals: Refusal[] = [...checkPlacement(source, element, path, parents)];
   const name = elementName(element);
@@ -1152,8 +1449,9 @@ const checkElement = (
     }
   }
 
+  refusals.push(...checkInstance(source, element, path, table, parents, tables));
   for (const attribute of element.attributes) {
-    if (isAllowance(attribute)) {
+    if (isAllowance(attribute) || isInstanceAttribute(attribute)) {
       continue;
     }
 
@@ -1295,7 +1593,7 @@ export const checkStructure = (source: SourceDocument, tables: Tables): readonly
       refusals.push(refuse(source, "unknown-element", path, detail));
     } else if (admission.kind === "check") {
       checked.set(element, admission.table);
-      for (const refusal of checkElement(source, element, path, admission.table, parents)) {
+      for (const refusal of checkElement(source, element, path, admission.table, parents, tables)) {
         refusals.push(refusal);
       }
     }
