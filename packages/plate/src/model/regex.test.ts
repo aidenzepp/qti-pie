@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 import { Result } from "effect";
 import { translate } from "#plate/model/regex.ts";
@@ -145,11 +146,54 @@ describe("translate", () => {
     refusedAt("[a-c-e]", 4);
     refusedAt("[z-a]", 1);
     refusedAt("[]", 1);
-    refusedAt(String.raw`\p{IsBasicLatin}`, 0);
     refusedAt(String.raw`\p{Lx}`, 0);
   });
 
+  it("reads block escapes as the ranges of XML Schema's block table", () => {
+    holds(String.raw`\p{IsBasicLatin}+`, "abc", "é");
+    holds(String.raw`\P{IsBasicLatin}`, "é", "a");
+    holds(String.raw`\p{IsLatin-1Supplement}`, "é", "e");
+    // Specials is listed twice: U+FEFF alone, and U+FFF0 to U+FFFD; U+FF01 lies between them.
+    holds(String.raw`\p{IsSpecials}`, "\uFEFF", "\uFF01");
+    holds(String.raw`\p{IsSpecials}`, "\uFFFD", "\uFEFE");
+    holds(String.raw`\P{IsSpecials}`, "\uFF01", "\uFFF0");
+  });
+
+  it("reads block escapes inside a class, negated or subtracted", () => {
+    holds(String.raw`[\p{IsBasicLatin}-[a-z]]`, "A", "a");
+    holds(String.raw`[^\p{IsBasicLatin}]`, "é", "a");
+    holds(String.raw`[\P{IsBasicLatin}\d]+`, "é1", "a");
+    holds(String.raw`[a-zé-[\p{IsBasicLatin}]]`, "é", "a");
+  });
+
+  it("refuses a block name the table does not list, at its escape", () => {
+    refusedAt(String.raw`ab\p{IsNoSuchBlock}`, 2);
+    refusedAt(String.raw`[a\P{IsBasicLatin1}]`, 2);
+    refusedAt(String.raw`\p{isBasicLatin}`, 0);
+  });
+
+  it("reads groups and classes nested 100 deep, and refuses the 101st level at its opening", () => {
+    holds(`${"(".repeat(100)}a${")".repeat(100)}`, "a", "aa");
+    refusedAt(`${"(".repeat(101)}a${")".repeat(101)}`, 100);
+    holds(`[b${"-[a".repeat(99)}${"]".repeat(100)}`, "b", "a");
+    refusedAt(`[b${"-[a".repeat(100)}${"]".repeat(101)}`, 300);
+    // Groups and classes share the one count.
+    refusedAt(`${"(".repeat(99)}[b-[a]]${")".repeat(99)}`, 102);
+  });
+
+  it("refuses a pattern nested thousands deep instead of overflowing the stack", () => {
+    refusedAt(`${"(".repeat(100_000)}a${")".repeat(100_000)}`, 100);
+    refusedAt(`[b${"-[a".repeat(100_000)}${"]".repeat(100_001)}`, 300);
+  });
+
   it("passes the browser allowlist as a root", () => {
-    assert.deepStrictEqual(checkAllowlist(sourceModules(), ["src/model/regex.ts"]), []);
+    const table = readFileSync(
+      new URL(import.meta.resolve("#plate/model/blocks.generated.json")),
+      "utf-8",
+    );
+    // `sourceModules` reads only `.ts` files; the block table is JSON and imports nothing.
+    const modules = new Map([...sourceModules(), ["src/model/blocks.generated.json", table]]);
+
+    assert.deepStrictEqual(checkAllowlist(modules, ["src/model/regex.ts"]), []);
   });
 });
