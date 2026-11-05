@@ -491,10 +491,13 @@ const textEntry: TextEntryInteraction = {
 const promptedEssay: ExtendedTextInteraction = {
   ...textEntry,
   baseType: "string",
+  cardinality: "single",
   class: "qti-height-lines-6",
   expectedLines: Option.some(5n),
   format: "preformatted",
   kind: "extended-text",
+  maxStrings: Option.none(),
+  minStrings: 0n,
   path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
   prompt: Option.some([words("Describe your day.")]),
 };

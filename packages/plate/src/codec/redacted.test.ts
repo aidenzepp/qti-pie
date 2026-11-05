@@ -173,17 +173,32 @@ const essay: ExtendedTextInteraction = {
   ariaLabelledby: Option.none(),
   base: 10,
   baseType: "string",
+  cardinality: "single",
   class: "",
   expectedLength: Option.none(),
   expectedLines: Option.some(12n),
   format: "plain",
   kind: "extended-text",
+  maxStrings: Option.none(),
+  minStrings: 0n,
   path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
   patternMask: Option.none(),
   patternMaskMessage: Option.none(),
   placeholder: Option.none(),
   prompt: Option.some([words("Describe the water cycle.")]),
   response: "ESSAY",
+};
+
+/**
+ * An Extended Text bound to an ordered response, with counts past 2^63-1, which no reading bounds.
+ */
+const stages: ExtendedTextInteraction = {
+  ...essay,
+  cardinality: "ordered",
+  maxStrings: Option.some(18_446_744_073_709_551_616n),
+  minStrings: 2n,
+  prompt: Option.some([words("Name the stages in order.")]),
+  response: "STAGES",
 };
 
 /**
@@ -225,6 +240,16 @@ const essayItem = itemOf(
 );
 
 /**
+ * The ordered Extended Text item.
+ */
+const stagesItem = itemOf(
+  "stages",
+  Option.none(),
+  [stages],
+  [declaration("STAGES", "string", "ordered")],
+);
+
+/**
  * An item whose body holds an element with an attribute, text and an unsupported part shown as a
  * notice.
  */
@@ -263,6 +288,7 @@ const items: readonly (readonly [string, Item])[] = [
   ["Choice", choiceItem],
   ["Text Entry", yearItem],
   ["Extended Text", essayItem],
+  ["ordered Extended Text", stagesItem],
   ["element, text and notice", noticeItem],
 ];
 
@@ -454,19 +480,68 @@ describe("encodeRedacted and decodeRedacted", () => {
     assert.notInclude(choiceText, '"ariaLabelledby":');
     assert.notInclude(choiceText, '"max":');
     assert.notInclude(wireText(yearItem), '"lang":');
+    assert.include(wireText(stagesItem), '"maxStrings":"18446744073709551616"');
+    assert.include(wireText(stagesItem), '"minStrings":"2"');
+    assert.notInclude(wireText(essayItem), '"maxStrings":');
   });
 });
 
 /**
- * An item document whose body holds one text interaction bound to a single string `RESPONSE`.
+ * An item document whose body holds one text interaction bound to a string `RESPONSE`.
  *
  * @param body The body's markup.
+ * @param cardinality The response's cardinality, `single` by default.
  * @returns The document's bytes.
  */
-const textItemBytes = (body: string): Uint8Array =>
+const textItemBytes = (body: string, cardinality = "single"): Uint8Array =>
   new TextEncoder().encode(
-    `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="text" title="Text" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="string"/><qti-item-body>${body}</qti-item-body></qti-assessment-item>`,
+    `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="text" title="Text" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="${cardinality}" base-type="string"/><qti-item-body>${body}</qti-item-body></qti-assessment-item>`,
   );
+
+/**
+ * Open an item document, assert it is accepted naming exactly the unsupported features given, and
+ * assert its redaction round-trips through JSON text to an equal `Redacted` that renders the same
+ * HTML.
+ *
+ * @param name The case, which a failure names.
+ * @param bytes The document's bytes.
+ * @param unsupported The features the verdict must name, in order; none for `accepted`.
+ * @returns Nothing; each check is an assertion.
+ */
+const acceptedAndRoundTripped = Effect.fnUntraced(function* acceptedAndRoundTripped(
+  name: string,
+  bytes: Uint8Array,
+  unsupported: readonly string[],
+) {
+  const verdict = yield* open("items/text.xml", bytes);
+  const accepted =
+    verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
+      ? verdict.accepted
+      : assert.fail(`${name} is ${verdict.verdict}`);
+
+  assert.strictEqual(
+    verdict.verdict,
+    unsupported.length === 0 ? "accepted" : "accepted-with-unsupported",
+  );
+  assert.deepStrictEqual(
+    accepted.unsupported.map((entry) => entry.feature),
+    [...unsupported],
+  );
+
+  const redacted = redact(accepted);
+  // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
+  const handedOver: unknown = JSON.parse(
+    JSON.stringify(Result.getOrThrow(encodeRedacted(redacted))),
+  );
+  const decoded = Result.getOrThrow(decodeRedacted(handedOver));
+  const configuration = yield* defaults;
+
+  assert.deepStrictEqual(decoded, redacted);
+  assert.strictEqual(
+    Result.getOrThrow(render(decoded, configuration, { instance })).html,
+    Result.getOrThrow(render(redacted, configuration, { instance })).html,
+  );
+});
 
 describe('the verdict and the codec on pattern-mask and format="xhtml"', () => {
   const documents = [
@@ -490,37 +565,36 @@ describe('the verdict and the codec on pattern-mask and format="xhtml"', () => {
   for (const [name, body, unsupported] of documents) {
     it.effect(
       `${name}: is accepted, naming only ${JSON.stringify(unsupported)} unsupported, and round-trips through JSON text`,
+      () => acceptedAndRoundTripped(name, textItemBytes(body), unsupported),
+    );
+  }
+});
+
+describe("the verdict and the codec on Extended Text containers", () => {
+  const documents = [
+    ['max-strings="3"', []],
+    ['max-strings="1000000000000"', []],
+    ['min-strings="100" max-strings="200"', []],
+    ['max-strings="0"', []],
+    ['min-strings="101" max-strings="200"', ["min-strings>100"]],
+    ['min-strings="1000000000000" max-strings="1000000000000"', ["min-strings>100"]],
+    ['max-strings="5" min-strings="101"', ["min-strings>100"]],
+  ] as const;
+
+  for (const [counts, unsupported] of documents) {
+    const name = `[Q-5] an ordered Extended Text with ${counts}`;
+
+    it.effect(
+      `${name}: is accepted, naming only ${JSON.stringify(unsupported)} unsupported, and round-trips through JSON text`,
       () =>
-        Effect.gen(function* acceptedAndRoundTripped() {
-          const verdict = yield* open("items/text.xml", textItemBytes(body));
-          const accepted =
-            verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
-              ? verdict.accepted
-              : assert.fail(`${name} is ${verdict.verdict}`);
-
-          assert.strictEqual(
-            verdict.verdict,
-            unsupported.length === 0 ? "accepted" : "accepted-with-unsupported",
-          );
-          assert.deepStrictEqual(
-            accepted.unsupported.map((entry) => entry.feature),
-            [...unsupported],
-          );
-
-          const redacted = redact(accepted);
-          // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
-          const handedOver: unknown = JSON.parse(
-            JSON.stringify(Result.getOrThrow(encodeRedacted(redacted))),
-          );
-          const decoded = Result.getOrThrow(decodeRedacted(handedOver));
-          const configuration = yield* defaults;
-
-          assert.deepStrictEqual(decoded, redacted);
-          assert.strictEqual(
-            Result.getOrThrow(render(decoded, configuration, { instance })).html,
-            Result.getOrThrow(render(redacted, configuration, { instance })).html,
-          );
-        }),
+        acceptedAndRoundTripped(
+          name,
+          textItemBytes(
+            `<qti-extended-text-interaction response-identifier="RESPONSE" ${counts}/>`,
+            "ordered",
+          ),
+          unsupported,
+        ),
     );
   }
 });

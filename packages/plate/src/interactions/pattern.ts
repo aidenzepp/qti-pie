@@ -3,10 +3,13 @@
  * `pattern-mask`, a tier (b) check, run only under `validateResponses`.
  *
  * A `pattern-mask` is an XML Schema regular expression, which {@link translate} turns into a
- * JavaScript expression anchored at both ends, once per pattern. A value of base type `integer` or
- * `float` is matched in its canonical lexical form, as `format` writes it, so on a `float` binding
- * a posted `1.50` is matched as `1.5` and on an `integer` binding `007` as `7`. A `string` is
- * matched as the candidate typed it, its line breaks already LF.
+ * JavaScript expression anchored at both ends, once per check. Nothing is kept between checks: a
+ * translation takes time linear in the pattern's length, and the patterns are author content, so a
+ * host that renders many packages holds none of them after its checks return. A value of base type
+ * `integer` or `float` is matched in its canonical lexical form, as `format` writes it, so on a
+ * `float` binding a posted `1.50` is matched as `1.5` and on an `integer` binding `007` as `7`. A
+ * `string` is matched as the candidate typed it, its line breaks already LF. Each member of a
+ * `multiple` or `ordered` value is matched on its own.
  *
  * The check is this function, which the host runs with the posted response; no native `pattern`
  * attribute is written.
@@ -24,38 +27,21 @@ import { format } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 
 /**
- * Each pattern translated so far, with its expression, or none when the translator refused it.
- *
- * Patterns come from the items a process renders, so the map holds one entry per distinct
- * `pattern-mask` it has checked.
- */
-const translated = new Map<string, Option.Option<RegExp>>();
-
-/**
- * Translate a pattern, once.
+ * Translate a pattern.
  *
  * @param pattern The `pattern-mask`, as written.
  * @returns Its expression, or none when the translator refuses it.
  */
-const expressionOf = (pattern: string): Option.Option<RegExp> => {
-  const known = translated.get(pattern);
-  if (known !== undefined) {
-    return known;
-  }
-
-  const expression = Result.getSuccess(translate(pattern));
-  translated.set(pattern, expression);
-
-  return expression;
-};
+const expressionOf = (pattern: string): Option.Option<RegExp> =>
+  Result.getSuccess(translate(pattern));
 
 /**
  * Check a text response against its interaction's `pattern-mask`.
  *
- * The response mismatches when any of its values does not match the whole pattern. NULL is not
- * checked. An interaction without a `pattern-mask` checks nothing, and so does one whose pattern
- * the translator refuses, which an item built by `open` never holds: it shows the notice
- * `pattern-mask` instead.
+ * The response mismatches when any of its values does not match the whole pattern, so one
+ * mismatching member of a container gives the message. NULL is not checked. An interaction without
+ * a `pattern-mask` checks nothing, and so does one whose pattern the translator refuses, which an
+ * item built by `open` never holds: it shows the notice `pattern-mask` instead.
  *
  * @example
  *   // With validateResponses on, against pattern-mask="([0-9.]{0,6})":

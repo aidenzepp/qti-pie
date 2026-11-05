@@ -272,16 +272,32 @@ export interface TextEntryInteraction {
 }
 
 /**
- * A `qti-extended-text-interaction` (Q-5): a Text Entry's fields, its prompt, `expected-lines`, and
- * a `format` of `plain` (the default), `preformatted` or `xhtml`.
+ * A `qti-extended-text-interaction` (Q-5): a Text Entry's fields, its prompt, `expected-lines`, a
+ * `format` of `plain` (the default), `preformatted` or `xhtml`, and its binding's cardinality with
+ * `max-strings` and `min-strings`.
  */
 export interface ExtendedTextInteraction extends Omit<TextEntryInteraction, "kind"> {
+  /**
+   * The bound response's cardinality: `single`, or a container, `multiple` or `ordered`, whose
+   * strings each take a Control of their own.
+   */
+  readonly cardinality: "multiple" | "ordered" | "single";
   /**
    * `expected-lines`: a count, held exactly, with no upper bound.
    */
   readonly expectedLines: Option.Option<bigint>;
   readonly format: "plain" | "preformatted" | "xhtml";
   readonly kind: "extended-text";
+  /**
+   * `max-strings`: a count, held exactly, with no upper bound (reading 46 does not list it). `0`
+   * restricts nothing, as `max-choices` reads it (R-d).
+   */
+  readonly maxStrings: Option.Option<bigint>;
+  /**
+   * `min-strings`, 0 when absent: a count, held exactly, with no upper bound. One above 100 shows
+   * the notice `min-strings>100` in place of the Controls (Q23).
+   */
+  readonly minStrings: bigint;
   readonly prompt: Option.Option<readonly BodyNode[]>;
 }
 
@@ -422,6 +438,12 @@ const marks: readonly Feature[] = renders.marks;
  * The features shown as a notice in place of their interaction.
  */
 const notices: readonly Feature[] = renders.notices;
+
+/**
+ * The features shown as a notice in place of an interaction's Controls, the interaction still
+ * built.
+ */
+const controlNotices: readonly Feature[] = renders.controlNotices;
 
 /**
  * The attributes a body element loses because a mark names them, such as `xml:base`.
@@ -1025,6 +1047,15 @@ const holds = (build: Build, condition: Condition, element: SourceElement): bool
     );
   }
 
+  if (condition.kind === "integer-above") {
+    return Option.exists(valueOf(element, condition.name), (written) =>
+      Option.exists(
+        Result.getSuccess(parseLexical("integer", trimXmlSpace(written))),
+        (single) => integerOf(single) > condition.limit,
+      ),
+    );
+  }
+
   if (condition.kind === "cardinality") {
     return (
       Option.getOrUndefined(
@@ -1532,7 +1563,9 @@ const choiceInteraction = (
 
 /**
  * Read one of the three interactions phase 1 renders: its model when its binding is in `renders`
- * and it carries no notice feature, otherwise its notice.
+ * and it carries no notice feature, otherwise its notice. An Extended Text that carries a feature
+ * of `renders.controlNotices`, such as `min-strings>100`, is still built, and the feature is
+ * recorded as a notice that stands in place of its Controls.
  *
  * @param build The build.
  * @param interaction The interaction.
@@ -1604,9 +1637,26 @@ const interactionNode = (
 
     const fields = yield* textFields(build, interaction, bound.success.baseType);
     const expectedLines = yield* countAttribute(build, interaction, "expected-lines");
+    const maxStrings = yield* countAttribute(build, interaction, "max-strings");
+    const minStrings = yield* countAttribute(build, interaction, "min-strings");
+    for (const feature of controlNotices) {
+      if (sitsOn(feature, interaction, true) && holds(build, feature.when, interaction)) {
+        record(build, { feature: feature.feature, path, shown: "notice" });
+      }
+    }
+
     const prompt = yield* promptOf(build, interaction);
 
-    return { ...fields, expectedLines, format, kind: "extended-text", prompt };
+    return {
+      ...fields,
+      cardinality: bound.success.cardinality,
+      expectedLines,
+      format,
+      kind: "extended-text",
+      maxStrings,
+      minStrings: Option.getOrElse(minStrings, () => 0n),
+      prompt,
+    };
   });
 
 /**

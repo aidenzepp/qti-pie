@@ -109,9 +109,12 @@ const choice: ChoiceInteraction = {
  */
 const essay: ExtendedTextInteraction = {
   ...textEntry("ESSAY"),
+  cardinality: "single",
   expectedLines: Option.some(3n),
   format: "plain",
   kind: "extended-text",
+  maxStrings: Option.none(),
+  minStrings: 0n,
   path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
   prompt: Option.some([text("Why is it the capital?")]),
 };
@@ -416,6 +419,80 @@ const textFor = (built: Payload, response: string): ExtendedTextPayload | TextEn
   return found.kind === "choice" ? assert.fail(`${response} is a Choice`) : found;
 };
 
+/**
+ * Find the Extended Text payload bound to a response.
+ *
+ * @param built The payload.
+ * @param response The response identifier.
+ * @returns The Extended Text payload; the test fails when the interaction is not an Extended Text.
+ */
+const extendedTextFor = (built: Payload, response: string): ExtendedTextPayload => {
+  const found = interactionFor(built, response);
+
+  return found.kind === "extended-text"
+    ? found
+    : assert.fail(`${response} is not an Extended Text`);
+};
+
+/**
+ * Construct an item whose body is one Extended Text bound to an ordered string response `LIST`,
+ * with the counts given.
+ *
+ * @param maxStrings `max-strings`, none when absent.
+ * @param minStrings `min-strings`.
+ * @returns The item, redacted.
+ */
+const listOf = (maxStrings: Option.Option<bigint>, minStrings: bigint): Redacted =>
+  redactItem({
+    ...item,
+    body: [
+      {
+        ...essay,
+        cardinality: "ordered",
+        maxStrings,
+        minStrings,
+        path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction[LIST]",
+        response: "LIST",
+      },
+    ],
+    responses: new Map([
+      [
+        "LIST",
+        {
+          areaMapping: Option.none(),
+          baseType: "string",
+          cardinality: "ordered",
+          correct: Option.none(),
+          defaultValue: Option.none(),
+          identifier: "LIST",
+          mapping: Option.none(),
+        },
+      ],
+    ]),
+    unsupported: [],
+  });
+
+/**
+ * Name the stages of a list, `stage 1` onwards.
+ *
+ * @param count How many.
+ * @returns The names, in order.
+ */
+const stages = (count: number): readonly string[] =>
+  Array.from({ length: count }, (_, index) => `stage ${String(index + 1)}`);
+
+/**
+ * Construct an ordered string value.
+ *
+ * @param members Its strings, in order.
+ * @returns The value.
+ */
+const orderedOf = (members: readonly string[]): Value => ({
+  baseType: "string",
+  cardinality: "ordered",
+  values: members.map((value) => ({ baseType: "string", value })),
+});
+
 describe("redactItem", () => {
   it("[Q-2] [Q-20] keeps no correct response, mapping key, default or rule value", () => {
     const written = json(redacted);
@@ -707,5 +784,162 @@ describe("payload", () => {
 
     assert.deepStrictEqual(textFor(built, "FIRST").name.unnamed, Option.some({ count: 3, n: 1 }));
     assert.deepStrictEqual(textFor(built, "NAMED").name.unnamed, Option.some({ count: 3, n: 3 }));
+  });
+
+  it("[Q-5] gives a single Extended Text one Control, restoring the text its control shows", () => {
+    const built = payload(redacted, {
+      ...answering,
+      values: new Map([["ESSAY", one({ baseType: "string", value: "Rivers" })]]),
+    });
+    const essayPayload = extendedTextFor(built, "ESSAY");
+
+    assert.deepStrictEqual(
+      [essayPayload.cardinality, essayPayload.n, essayPayload.restores, essayPayload.notice],
+      ["single", 1, ["Rivers"], Option.none()],
+    );
+  });
+
+  for (const [counts, maxStrings, minStrings, n] of [
+    ['max-strings="3"', Option.some(3n), 0n, 3],
+    ['max-strings="1000000000000" and no min-strings', Option.some(1_000_000_000_000n), 0n, 10],
+    ['min-strings="100" max-strings="200"', Option.some(200n), 100n, 100],
+    ['max-strings="0"', Option.some(0n), 0n, 10],
+    ["no max-strings", Option.none(), 0n, 10],
+    ['min-strings="12" max-strings="0"', Option.some(0n), 12n, 12],
+  ] as const) {
+    it(`[Q-5] gives an ordered Extended Text with ${counts} ${String(n)} Controls`, () => {
+      const list = extendedTextFor(payload(listOf(maxStrings, minStrings), answering), "LIST");
+
+      assert.deepStrictEqual(
+        [list.cardinality, list.n, list.restores, list.notice],
+        ["ordered", n, Array.from({ length: n }, () => ""), Option.none()],
+      );
+    });
+  }
+
+  for (const [counts, maxStrings, minStrings] of [
+    ['min-strings="101" max-strings="200"', Option.some(200n), 101n],
+    ['min-strings="1000000000000"', Option.some(1_000_000_000_000n), 1_000_000_000_000n],
+    ['max-strings="5" min-strings="101"', Option.some(5n), 101n],
+  ] as const) {
+    it(`[Q-5] holds the notice min-strings>100 and no Control for an ordered Extended Text with ${counts}`, () => {
+      const list = extendedTextFor(
+        payload(listOf(maxStrings, minStrings), {
+          ...answering,
+          values: new Map([
+            [
+              "LIST",
+              {
+                baseType: "string",
+                cardinality: "ordered",
+                values: [{ baseType: "string", value: "first" }],
+              },
+            ],
+          ]),
+        }),
+        "LIST",
+      );
+
+      assert.deepStrictEqual(
+        [list.n, list.restores, list.notice],
+        [0, [], Option.some({ feature: "min-strings>100", kind: "notice" })],
+      );
+    });
+  }
+
+  for (const [counts, maxStrings] of [
+    ['max-strings="0"', Option.some(0n)],
+    ['max-strings="1000000000000"', Option.some(1_000_000_000_000n)],
+    ["no max-strings", Option.none()],
+  ] as const) {
+    it(`[Q-5] gives an ordered Extended Text with ${counts} a Control for each of a 12-member value, each restoring its member`, () => {
+      const list = listOf(maxStrings, 0n);
+      const members = stages(12);
+      const shownValues = extendedTextFor(
+        payload(list, { ...answering, values: new Map([["LIST", orderedOf(members)]]) }),
+        "LIST",
+      );
+      const posted = extendedTextFor(
+        payload(list, {
+          ...answering,
+          messages: [{ response: "LIST", text: "Name each stage." }],
+          posted: Option.some(new Map([["LIST", members]])),
+        }),
+        "LIST",
+      );
+
+      assert.deepStrictEqual(
+        [shownValues.n, shownValues.restores, shownValues.notice],
+        [12, members, Option.none()],
+      );
+      assert.deepStrictEqual(
+        [posted.n, posted.restores, posted.notice],
+        [12, members, Option.none()],
+      );
+    });
+  }
+
+  it("[Q-5] shows the first 100 members of a 150-member value and the cap's notice beside them", () => {
+    const members = stages(150);
+    const list = extendedTextFor(
+      payload(listOf(Option.some(0n), 0n), {
+        ...answering,
+        values: new Map([["LIST", orderedOf(members)]]),
+      }),
+      "LIST",
+    );
+
+    assert.deepStrictEqual(
+      [list.n, list.restores, list.notice],
+      [100, members.slice(0, 100), Option.some({ feature: "min-strings>100", kind: "notice" })],
+    );
+  });
+
+  it('[Q-5] covers a value\'s members only up to max-strings="12", with no notice', () => {
+    const members = stages(15);
+    const list = extendedTextFor(
+      payload(listOf(Option.some(12n), 0n), {
+        ...answering,
+        values: new Map([["LIST", orderedOf(members)]]),
+      }),
+      "LIST",
+    );
+
+    assert.deepStrictEqual(
+      [list.n, list.restores, list.notice],
+      [12, members.slice(0, 12), Option.none()],
+    );
+  });
+
+  it("[Q-5] fills a container's Controls in order with its values, or with the posted strings beside messages", () => {
+    const list = listOf(Option.some(3n), 0n);
+    const shownValues = payload(list, {
+      ...answering,
+      values: new Map([
+        [
+          "LIST",
+          {
+            baseType: "string",
+            cardinality: "ordered",
+            values: [
+              { baseType: "string", value: "evaporation" },
+              { baseType: "string", value: "condensation" },
+            ],
+          },
+        ],
+      ]),
+    });
+    const posted = payload(list, {
+      ...answering,
+      messages: [{ response: "LIST", text: "Enter at least 3 answers." }],
+      posted: Option.some(new Map([["LIST", ["rain", "", "rivers"]]])),
+    });
+
+    assert.deepStrictEqual(extendedTextFor(shownValues, "LIST").restores, [
+      "evaporation",
+      "condensation",
+      "",
+    ]);
+    assert.deepStrictEqual(extendedTextFor(posted, "LIST").restores, ["rain", "", "rivers"]);
   });
 });
