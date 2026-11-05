@@ -211,7 +211,7 @@ const associate = Effect.fn("import.associate")(function* associate(
       maxAssociationsN: associations.maxN,
       minAssociationsN: associations.minN,
       responseIdentifier: associations.responseIdentifier,
-      rootKind: "item",
+      rootKind: ctx.rootKind,
       shuffle: shuffleHandle,
     },
   ]);
@@ -260,7 +260,7 @@ const match = Effect.fn("import.match")(function* match(
       maxAssociationsN: associations.maxN,
       minAssociationsN: associations.minN,
       responseIdentifier: associations.responseIdentifier,
-      rootKind: "item",
+      rootKind: ctx.rootKind,
       shuffle: shuffleHandle,
     },
   ]);
@@ -313,7 +313,7 @@ const graphicAssociate = Effect.fn("import.graphicAssociate")(function* graphicA
       maxAssociationsN: associations.maxN,
       minAssociationsN: associations.minN,
       responseIdentifier: associations.responseIdentifier,
-      rootKind: "item",
+      rootKind: ctx.rootKind,
     },
   ]);
 
