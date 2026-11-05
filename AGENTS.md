@@ -7,13 +7,13 @@ QTI 3.0 on [grizzle](vendor/README.md), and exists first to put grizzle through 
 [docs/qti-intent.md](docs/qti-intent.md) before planning or changing the QTI model. `packages/plate` (`@qti-pie/plate`)
 is planned: it renders QTI 3.0, depends on crust and never on pantry, and its intent and rules arrive with its own goal;
 pantry's intent (a grizzle test vehicle, delivery out of scope) does not bind it. The packages read the specifications the same way: [docs/spec-readings.md](docs/spec-readings.md). Everything runs locally; there is no deploy target. The shared repository
-is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (private), the remote `origin`.
+is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (public, MIT-licensed; main is protected), the remote `origin`.
 
 ## Toolchain
 
-- Node 24 or later runs TypeScript source directly. There is no build step.
-- pnpm workspace. Effect is pinned to `4.0.7`, and the workspace must keep exactly one copy (`pnpm why effect -r`).
-- grizzle trunk at commit `a1d5af1` (`a1d5af193cee117ab481f5897edd41101ff5d679`) is vendored as tarballs; see
+- Node 26 or later runs TypeScript source directly. There is no build step.
+- pnpm workspace. Effect is pinned to `4.1.2`, and the workspace must keep exactly one copy (`pnpm why effect -r`).
+- grizzle trunk at commit `ee3b5fc` (`ee3b5fca4b5b72bb042c6ce56d31d5ed4c70759b`) is vendored as tarballs; see
   `vendor/README.md`.
 - Git LFS holds every `packages/*/migrations/**/snapshot.json` (`.gitattributes`). Install `git-lfs` before cloning;
   without it the snapshot checks out as a pointer file and grizzle refuses it.
@@ -102,7 +102,9 @@ waived. If any step fails or is in doubt, record the finding and do not file.
    `GH_TOKEN="$(gh auth token --user aidenzepp)" gh issue create --repo bjornpagen/grizzle --title … --body-file …`,
    with no labels or assignees. Record the issue URL in `docs/grizzle-findings.md` and mail the operator the link.
 
-**Issues only.** `bjornpagen/grizzle` is private, and `aidenzepp` holds write access to it so that it can file issues.
+**Issues only.** `bjornpagen/grizzle` is public (since 2026-11-03), and `aidenzepp` holds write access to it so that it can
+file issues. The issues are public under the operator's account, so a draft carries none of this project's names,
+internals or anything private.
 Opening an issue is the only thing any agent does there. Never push, create or delete a branch or tag, open or review
 a pull request, comment, edit or close an issue, or change any setting. The local clone's push URL is disabled on
 purpose; never restore it. Pushing code may come later, but only on an explicit operator ruling.
@@ -112,7 +114,9 @@ purpose; never restore it. Pushing code may come later, but only on an explicit 
 Before writing Effect code, read `packages/pantry/node_modules/effect/AGENTS.md` and follow its links. For APIs it does not
 cover, read `node_modules/effect/src` of the installed version.
 
-Use the skills in `.agents/skills/`:
+Use the skills in `.agents/skills/`. `.claude/skills/` holds a link to each, so Claude Code lists them too; edit only
+`.agents/skills/`. `.agents/skills/grizzle` is the skill grizzle ships (`node_modules/@bjornpagen/grizzle/skills/grizzle`): when
+the grizzle pin moves, copy the new one over it in the same pull request.
 
 - `effect-design`: the native-capability review and this repository's local Effect rulings. Effect structure and style
   stay with the installed Effect guide above.

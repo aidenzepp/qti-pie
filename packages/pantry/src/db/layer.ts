@@ -99,7 +99,7 @@ export const AuthorAppLayer = Layer.unwrap(
     );
     const password = fs.readFileString(`${secrets}/qti__author_app.password`).pipe(
       Effect.map((text) => Redacted.make(text.trim())),
-      Effect.mapError((cause) => CredentialError.make({ cause })),
+      Effect.mapError((cause) => new CredentialError({ cause })),
     );
 
     return DbLayer.make({

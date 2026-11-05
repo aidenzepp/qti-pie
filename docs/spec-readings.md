@@ -326,3 +326,17 @@ against it. A reading that is not an information-model-over-XSD case says which 
     is refused because the schema refuses it. Beneath `m:math` the only wildcard is `annotation-xml`'s, so MathML's content model refuses
     any other placement. This binds the renderer the same way as the qti package, so the two accept and refuse the same
     file. (Corrected 2026-11-04 by decision 214, replacing the version merged earlier that day under decision 212.) (Wording corrected 2026-11-04, decision 218; the rule is decision 216's.)
+50. **Two `xsi:type` cases are accepted without a check: a complex type under a lax wildcard, and `xs:ENTITY`.** This
+    extends reading 47. Under a `lax` wildcard, foreign content whose `xsi:type` names a resolved complex type is
+    accepted without being checked against that type. Checking it would take a general XML Schema validator, which is
+    its own phase, so this is a known limit, to be revisited if a real package needs it. `xsi:type="xs:ENTITY"` is
+    accepted as written, unverified. XML Schema requires the value to be a declared entity name, one of the DTD's
+    unparsed entities, and neither package reads the DTD's unparsed-entity declarations, so neither can tell. The rule
+    behind both is the operator's, decision 227: "if the standard does not ban it, do not refuse it"; where we cannot
+    tell, prefer accepting over refusing and record the limit. Refusing what cannot be shown invalid would refuse
+    content that may be valid, and reading 1 forbids that. Both limits bind pantry and plate alike, so the two never
+    read the same file differently. The sources are XML Schema Part 1 (W3C Recommendation, 28 October 2004): section
+    3.10.4 (Item Valid (Wildcard), clause 1) defines `lax` as assessing an item only where a declaration is found,
+    and section 3.14.4 (String Valid, clause 2.1) holds the declared-entity-name constraint on `ENTITY`, defined
+    just after it as "declared entity name". This is not a case of documents in conflict: the XML Schema Recommendation
+    decides what is valid, and what it requires is beyond what this package can read. (Decision 227, 2026-11-05.)

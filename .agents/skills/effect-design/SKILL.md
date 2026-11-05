@@ -16,7 +16,7 @@ Before writing or reviewing Effect code:
 Apply this review before implementing an effectful operation, including a one-line `Effect.sync`, `Effect.try`, `Effect.promise`, or `Effect.tryPromise`. Those constructors integrate an API. They do not show that Effect, grizzle or the platform lacks the operation.
 
 1. State the contract: accepted input, output, failures, limits, lifecycle, and guarantees.
-2. Inspect the owning code and the versions pinned in `package.json` (Effect `4.0.7`; grizzle at the commit `vendor/README.md` names).
+2. Inspect the owning code and the versions pinned in `package.json` (Effect `4.1.2`; grizzle at the commit `vendor/README.md` names).
 3. Check the installed Effect module and its neighbors, `@effect/platform-node`, grizzle's README and agent skill (`.agents/skills/grizzle/SKILL.md`), and the Node or browser API. One missed symbol is not a gap.
 4. Use the Effect, grizzle or platform API that meets the contract. Preserve streaming limits, cancellation, the error channel, and resource lifetime.
 5. When custom glue remains, name the API you checked and the requirement it does not meet. "I did not find an API" without that evidence is not a gap. Put the same rationale in the implementation handoff.
