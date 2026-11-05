@@ -96,7 +96,9 @@ const required = (local: string, type: AttributeType): AttributeTable => ({
 const element = (fields: Partial<ElementTable> = {}): ElementTable => ({
   attributes: [],
   children: [],
+  global: false,
   text: false,
+  types: [],
   ...fields,
 });
 
@@ -334,6 +336,7 @@ const tables: Tables = {
     }),
     "qti-value": element({ text: true }),
   },
+  types: {},
 };
 
 /**
@@ -426,6 +429,7 @@ const refusedValues = (type: AttributeType, values: readonly string[]): readonly
     (value) =>
       checkStructure(doc(location, el("probe", [attr("value", value)])), {
         elements: { probe: element({ attributes: [optional("value", type)] }) },
+        types: {},
       }).length > 0,
   );
 
@@ -966,6 +970,7 @@ describe("checkStructure", () => {
             anyElement: { namespace: [otherNamespace], process: "lax" },
           }),
         },
+        types: {},
       };
       const source = item([
         el(
@@ -988,6 +993,7 @@ describe("checkStructure", () => {
     it("[I-8] admits an element of no namespace under an ##any element wildcard, and does not walk it", () => {
       const open: Tables = {
         elements: { ...tables.elements, "qti-item-body": element({ anyElement: anyLax }) },
+        types: {},
       };
       const source = body(el("div", [attr("any", "thing")], [el("qti-undefined")], ""));
 
@@ -1040,6 +1046,7 @@ describe("checkStructure", () => {
             ],
           }),
         },
+        types: {},
       };
       const source = body(
         el("qti-choice-interaction", [
@@ -1265,6 +1272,7 @@ describe("checkStructure", () => {
             ],
           }),
         },
+        types: {},
       };
 
       assert.deepStrictEqual(found(item([matched("float", "0.5")]), enumerated), []);

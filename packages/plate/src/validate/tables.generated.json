@@ -879,7 +879,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "ADType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "abbr": {
       "anyAttribute": {
@@ -1741,7 +1748,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "acronym": {
       "anyAttribute": {
@@ -2603,7 +2617,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "address": {
       "anyAttribute": {
@@ -3465,7 +3486,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "article": {
       "anyAttribute": {
@@ -4485,7 +4513,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "BaseHTML5FlowDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "aside": {
       "anyAttribute": {
@@ -5505,7 +5540,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "BaseHTML5FlowDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "audio": {
       "anyAttribute": {
@@ -6232,7 +6274,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "AudioDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "b": {
       "anyAttribute": {
@@ -7094,7 +7143,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "bdi": {
       "anyAttribute": {
@@ -7998,7 +8054,14 @@
           "namespace": "http://www.w3.org/2001/10/synthesis"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "BDIDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "bdo": {
       "anyAttribute": {
@@ -8807,7 +8870,14 @@
           "namespace": "http://www.w3.org/2001/10/synthesis"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "BDODType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "big": {
       "anyAttribute": {
@@ -9669,7 +9739,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "blockquote": {
       "anyAttribute": {
@@ -10600,7 +10677,14 @@
           "namespace": "http://www.w3.org/2001/10/synthesis"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "BlockQuoteDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "br": {
       "anyAttribute": {
@@ -11248,7 +11332,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "BRDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "caption": {
       "anyAttribute": {
@@ -12268,7 +12359,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "CaptionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "cite": {
       "anyAttribute": {
@@ -13130,7 +13228,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "code": {
       "anyAttribute": {
@@ -13992,7 +14097,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "col": {
       "anyAttribute": {
@@ -14649,7 +14761,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "ColDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "colgroup": {
       "anyAttribute": {
@@ -15302,7 +15421,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "ColGroupDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "dd": {
       "anyAttribute": {
@@ -16340,7 +16466,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "DDDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "details": {
       "anyAttribute": {
@@ -17257,7 +17390,14 @@
           "namespace": "http://www.w3.org/2001/10/synthesis"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "DetailsDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "dfn": {
       "anyAttribute": {
@@ -18119,7 +18259,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "div": {
       "anyAttribute": {
@@ -19161,7 +19308,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "DivDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "dl": {
       "anyAttribute": {
@@ -19827,7 +19981,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "DLDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "dt": {
       "anyAttribute": {
@@ -20689,7 +20850,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "DTDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "em": {
       "anyAttribute": {
@@ -21551,7 +21719,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "figcaption": {
       "anyAttribute": {
@@ -22571,7 +22746,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "BaseHTML5FlowDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "figure": {
       "anyAttribute": {
@@ -23479,7 +23661,14 @@
           "namespace": "http://www.w3.org/2001/10/synthesis"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "FigureDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "footer": {
       "anyAttribute": {
@@ -24499,7 +24688,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "BaseHTML5FlowDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "h1": {
       "anyAttribute": {
@@ -25361,7 +25557,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "h2": {
       "anyAttribute": {
@@ -26223,7 +26426,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "h3": {
       "anyAttribute": {
@@ -27085,7 +27295,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "h4": {
       "anyAttribute": {
@@ -27947,7 +28164,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "h5": {
       "anyAttribute": {
@@ -28809,7 +29033,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "h6": {
       "anyAttribute": {
@@ -29671,7 +29902,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "header": {
       "anyAttribute": {
@@ -30691,7 +30929,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "BaseHTML5FlowDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "hr": {
       "anyAttribute": {
@@ -31339,7 +31584,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "HRDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "i": {
       "anyAttribute": {
@@ -32201,7 +32453,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "img": {
       "anyAttribute": {
@@ -32896,7 +33155,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "ImgDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "kbd": {
       "anyAttribute": {
@@ -33758,7 +34024,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "label": {
       "anyAttribute": {
@@ -34778,7 +35051,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "BaseHTML5FlowDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "li": {
       "anyAttribute": {
@@ -35798,7 +36078,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "LIDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "nav": {
       "anyAttribute": {
@@ -36818,7 +37105,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "BaseHTML5FlowDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "object": {
       "anyAttribute": {
@@ -37791,7 +38085,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "ObjectDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "ol": {
       "anyAttribute": {
@@ -38453,7 +38754,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "OULDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "p": {
       "anyAttribute": {
@@ -39315,7 +39623,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "param": {
       "attributes": [
@@ -39359,7 +39674,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ParamDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "picture": {
       "anyAttribute": {
@@ -40007,7 +40329,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "PictureDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "pre": {
       "anyAttribute": {
@@ -40869,7 +41198,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "q": {
       "anyAttribute": {
@@ -41740,7 +42076,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "QDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-adaptive-engine-ref": {
       "attributes": [
@@ -41764,7 +42107,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "AdaptiveHrefDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-adaptive-selection": {
       "attributes": [],
@@ -41786,7 +42136,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "AdaptiveSelectionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-adaptive-settings-ref": {
       "attributes": [
@@ -41810,7 +42167,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "AdaptiveHrefDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-and": {
       "attributes": [],
@@ -42072,7 +42436,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "Logic1toManyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-any-n": {
       "attributes": [
@@ -42373,7 +42744,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "AnyNDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-area-map-entry": {
       "attributes": [
@@ -42408,7 +42786,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "AreaMapEntryDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-area-mapping": {
       "attributes": [
@@ -42447,7 +42832,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "AreaMappingDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-assessment-item": {
       "anyAttribute": {
@@ -42579,7 +42971,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "AssessmentItemDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-assessment-item-ref": {
       "anyAttribute": {
@@ -42680,7 +43079,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "AssessmentItemRefDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-assessment-section": {
       "anyAttribute": {
@@ -42808,7 +43214,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "AssessmentSectionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-assessment-section-ref": {
       "anyAttribute": {
@@ -42848,7 +43261,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "AssessmentSectionRefDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-assessment-stimulus": {
       "anyAttribute": {
@@ -42925,7 +43345,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "AssessmentStimulusDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-assessment-stimulus-ref": {
       "anyAttribute": {
@@ -42962,7 +43389,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "AssessmentStimulusRefDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-assessment-test": {
       "anyAttribute": {
@@ -43053,7 +43487,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "AssessmentTestDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-associable-hotspot": {
       "anyAttribute": {
@@ -43790,7 +44231,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "AssociableHotspotDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-associate-interaction": {
       "anyAttribute": {
@@ -44486,7 +44934,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "AssociateInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-base-value": {
       "attributes": [
@@ -44514,7 +44969,14 @@
         }
       ],
       "children": [],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "BaseValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-branch-rule": {
       "attributes": [
@@ -44786,7 +45248,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "BranchRuleDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-calculator": {
       "attributes": [],
@@ -44804,7 +45273,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "CalculatorDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-calculator-info": {
       "attributes": [
@@ -44838,12 +45314,22 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ItemFileInfoDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-calculator-type": {
+      "anonymousType": true,
       "attributes": [],
       "children": [],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": []
     },
     "qti-card": {
       "attributes": [
@@ -44907,7 +45393,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "CardDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-card-entry": {
       "anyAttribute": {
@@ -44945,7 +45438,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "CardEntryDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-catalog": {
       "attributes": [
@@ -44965,7 +45465,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "CatalogDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-catalog-info": {
       "attributes": [],
@@ -44975,7 +45482,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "CatalogInfoDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-choice-interaction": {
       "anyAttribute": {
@@ -45700,7 +46214,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ChoiceInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-companion-materials-info": {
       "anyElement": {
@@ -45730,7 +46251,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "CompanionMaterialsInfoDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-container-size": {
       "attributes": [],
@@ -45992,7 +46520,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicSingleDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-contains": {
       "attributes": [],
@@ -46254,7 +46789,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicPairDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-content-body": {
       "attributes": [],
@@ -46632,7 +47174,38 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "FeedbackContentBodyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "FeedbackFlowContentBodyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "RubricBlockContentBodyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "RubricBlockTemplateBlockContentBodyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "TemplateBlockContentBodyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "TestFeedbackFlowContentBodyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "TestRubricBlockContentBodyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-context-declaration": {
       "attributes": [
@@ -46684,7 +47257,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ContextDeclarationDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-context-variable": {
       "attributes": [
@@ -46699,7 +47279,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ContextUniqueIDRefDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-correct": {
       "attributes": [
@@ -46714,7 +47301,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "CorrectDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-correct-response": {
       "attributes": [
@@ -46734,7 +47328,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "CorrectResponseDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-custom-interaction": {
       "anyAttribute": {
@@ -47395,7 +47996,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "CustomInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-custom-operator": {
       "anyAttribute": {
@@ -47684,7 +48292,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "CustomOperatorDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-default": {
       "attributes": [
@@ -47699,7 +48314,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "DefaultDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-default-value": {
       "attributes": [
@@ -47719,7 +48341,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "DefaultValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-delete": {
       "attributes": [],
@@ -47981,12 +48610,26 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicPairDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-description": {
       "attributes": [],
       "children": [],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "normalizedString",
+          "namespace": "http://www.w3.org/2001/XMLSchema"
+        }
+      ]
     },
     "qti-digital-material": {
       "attributes": [
@@ -48020,7 +48663,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ItemFileInfoDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-divide": {
       "attributes": [],
@@ -48282,7 +48932,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicPairDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-drawing-interaction": {
       "anyAttribute": {
@@ -48956,7 +49613,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "DrawingInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-duration-gte": {
       "attributes": [],
@@ -49218,7 +49882,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicPairDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-duration-lt": {
       "attributes": [],
@@ -49480,7 +50151,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicPairDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-end-attempt-interaction": {
       "anyAttribute": {
@@ -50155,7 +50833,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "EndAttemptInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-equal": {
       "attributes": [
@@ -50470,7 +51155,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "EqualDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-equal-rounded": {
       "attributes": [
@@ -50763,22 +51455,50 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "EqualRoundedDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-exit-response": {
       "attributes": [],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "EmptyPrimitiveTypeDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-exit-template": {
       "attributes": [],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "EmptyPrimitiveTypeDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-exit-test": {
       "attributes": [],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "EmptyPrimitiveTypeDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-extended-text-interaction": {
       "anyAttribute": {
@@ -51534,7 +52254,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ExtendedTextInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-feedback-block": {
       "anyAttribute": {
@@ -52233,7 +52960,18 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "FeedbackBlockDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "TemplateBlockFeedbackBlockDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-feedback-inline": {
       "anyAttribute": {
@@ -53096,7 +53834,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "FeedbackInlineDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-field-value": {
       "attributes": [
@@ -53368,7 +54113,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "FieldValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-file-href": {
       "attributes": [
@@ -53384,7 +54136,18 @@
         }
       ],
       "children": [],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "FileHrefCardDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "FileHrefDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-gap": {
       "anyAttribute": {
@@ -54083,7 +54846,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "GapDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-gap-img": {
       "anyAttribute": {
@@ -54822,7 +55592,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "GapImgDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-gap-match-interaction": {
       "anyAttribute": {
@@ -55664,7 +56441,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "GapMatchInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-gap-text": {
       "anyAttribute": {
@@ -56544,7 +57328,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "GapTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-gcd": {
       "attributes": [],
@@ -56806,7 +57597,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "Logic1toManyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-graphic-associate-interaction": {
       "anyAttribute": {
@@ -57503,7 +58301,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "GraphicAssociateInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-graphic-gap-match-interaction": {
       "anyAttribute": {
@@ -58235,7 +59040,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "GraphicGapMatchInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-graphic-order-interaction": {
       "anyAttribute": {
@@ -58931,7 +59743,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "GraphicOrderInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-gt": {
       "attributes": [],
@@ -59193,7 +60012,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicPairDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-gte": {
       "attributes": [],
@@ -59455,7 +60281,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicPairDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-hotspot-choice": {
       "anyAttribute": {
@@ -60161,7 +60994,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "HotspotChoiceDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-hotspot-interaction": {
       "anyAttribute": {
@@ -60877,7 +61717,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "HotspotInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-hottext": {
       "anyAttribute": {
@@ -61744,7 +62591,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "HotTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-hottext-interaction": {
       "anyAttribute": {
@@ -62560,7 +63414,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "HotTextInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-html-content": {
       "anyAttribute": {
@@ -62848,7 +63709,14 @@
           "namespace": "http://www.w3.org/2001/10/synthesis"
         }
       ],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLContentDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-increment-si": {
       "attributes": [],
@@ -62862,7 +63730,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "IncrementSIDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-increment-us": {
       "attributes": [],
@@ -62876,7 +63751,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "IncrementUSDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-index": {
       "attributes": [
@@ -63157,7 +64039,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "IndexDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-inline-choice": {
       "anyAttribute": {
@@ -64016,7 +64905,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "InlineChoiceDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-inline-choice-interaction": {
       "anyAttribute": {
@@ -64730,7 +65626,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "InlineChoiceInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-inside": {
       "attributes": [
@@ -65013,7 +65916,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "InsideDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-integer-divide": {
       "attributes": [],
@@ -65275,7 +66185,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicPairDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-integer-modulus": {
       "attributes": [],
@@ -65537,7 +66454,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicPairDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-integer-to-float": {
       "attributes": [],
@@ -65799,7 +66723,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicSingleDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-interaction-markup": {
       "attributes": [],
@@ -66101,7 +67032,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "InteractionMarkupDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-interaction-module": {
       "attributes": [
@@ -66134,7 +67072,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "InteractionModuleDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-interaction-modules": {
       "attributes": [
@@ -66165,7 +67110,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "InteractionModulesDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-interpolation-table": {
       "attributes": [
@@ -66185,7 +67137,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "InterpolationTableDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-interpolation-table-entry": {
       "attributes": [
@@ -66219,7 +67178,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "InterpolationTableEntryDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-is-null": {
       "attributes": [],
@@ -66481,7 +67447,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicSingleDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-item-body": {
       "attributes": [
@@ -66743,7 +67716,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ItemBodyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-item-session-control": {
       "attributes": [
@@ -66818,7 +67798,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ItemSessionControlDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-label": {
       "anyAttribute": {
@@ -67656,7 +68643,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "LabelDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-lcm": {
       "attributes": [],
@@ -67918,7 +68912,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "Logic1toManyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-lookup-outcome-value": {
       "attributes": [
@@ -68190,7 +69191,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LookupOutcomeValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-lt": {
       "attributes": [],
@@ -68452,7 +69460,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicPairDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-lte": {
       "attributes": [],
@@ -68714,7 +69729,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicPairDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-major-increment": {
       "attributes": [
@@ -68750,7 +69772,26 @@
         }
       ],
       "children": [],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "RadialSIValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "RadialUSValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "SILinearValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "USLinearValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-map-entry": {
       "attributes": [
@@ -68784,7 +69825,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "MapEntryDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-map-response": {
       "attributes": [
@@ -68799,7 +69847,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "MapResponseDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-map-response-point": {
       "attributes": [
@@ -68814,7 +69869,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "MapResponseDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-mapping": {
       "attributes": [
@@ -68853,7 +69915,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "MappingDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-match": {
       "attributes": [],
@@ -69115,7 +70184,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicPairDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-match-interaction": {
       "anyAttribute": {
@@ -69838,7 +70914,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "MatchInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-match-table": {
       "attributes": [
@@ -69858,7 +70941,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "MatchTableDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-match-table-entry": {
       "attributes": [
@@ -69895,7 +70985,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "MatchTableEntryDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-math-constant": {
       "attributes": [
@@ -69911,7 +71008,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "MathConstantDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-math-operator": {
       "attributes": [
@@ -70213,7 +71317,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "MathOperatorDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-max": {
       "attributes": [],
@@ -70475,7 +71586,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "Logic1toManyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-media-interaction": {
       "anyAttribute": {
@@ -71198,7 +72316,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "MediaInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-member": {
       "attributes": [],
@@ -71460,7 +72585,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicPairDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-metadata-ref": {
       "attributes": [
@@ -71484,7 +72616,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "AdaptiveHrefDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-min": {
       "attributes": [],
@@ -71746,12 +72885,26 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "Logic1toManyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-minimum-length": {
       "attributes": [],
       "children": [],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "integer",
+          "namespace": "http://www.w3.org/2001/XMLSchema"
+        }
+      ]
     },
     "qti-minor-increment": {
       "attributes": [
@@ -71787,7 +72940,26 @@
         }
       ],
       "children": [],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "RadialSIValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "RadialUSValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "SILinearValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "USLinearValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-modal-feedback": {
       "anyAttribute": {
@@ -71847,7 +73019,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ModalFeedbackDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-multiple": {
       "attributes": [],
@@ -72109,7 +73288,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "Logic0toManyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-not": {
       "attributes": [],
@@ -72371,12 +73557,26 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicSingleDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-null": {
       "attributes": [],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "EmptyPrimitiveTypeDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-number-correct": {
       "attributes": [
@@ -72415,7 +73615,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "NumberDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-number-incorrect": {
       "attributes": [
@@ -72454,7 +73661,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "NumberDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-number-presented": {
       "attributes": [
@@ -72493,7 +73707,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "NumberDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-number-responded": {
       "attributes": [
@@ -72532,7 +73753,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "NumberDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-number-selected": {
       "attributes": [
@@ -72571,7 +73799,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "NumberDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-or": {
       "attributes": [],
@@ -72833,7 +74068,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "Logic1toManyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-order-interaction": {
       "anyAttribute": {
@@ -73564,7 +74806,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "OrderInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-ordered": {
       "attributes": [],
@@ -73826,7 +75075,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "Logic0toManyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-ordering": {
       "anyAttribute": {
@@ -73850,7 +75106,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "OrderingDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-outcome-condition": {
       "attributes": [],
@@ -73868,7 +75131,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "OutcomeConditionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-outcome-declaration": {
       "attributes": [
@@ -74007,7 +75277,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "OutcomeDeclarationDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-outcome-else": {
       "attributes": [],
@@ -74037,7 +75314,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "OutcomeElseDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-outcome-else-if": {
       "attributes": [],
@@ -74323,7 +75607,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "OutcomeIfDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-outcome-if": {
       "attributes": [],
@@ -74609,7 +75900,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "OutcomeIfDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-outcome-maximum": {
       "attributes": [
@@ -74666,7 +75964,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "OutcomeMinMaxDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-outcome-minimum": {
       "attributes": [
@@ -74723,7 +76028,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "OutcomeMinMaxDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-outcome-processing": {
       "attributes": [],
@@ -74753,7 +76065,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "OutcomeProcessingDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-outcome-processing-fragment": {
       "attributes": [],
@@ -74783,7 +76102,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "OutcomeProcessingFragmentDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-pattern-match": {
       "attributes": [
@@ -75065,12 +76391,26 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "PatternMatchDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-physical-material": {
       "attributes": [],
       "children": [],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "normalizedString",
+          "namespace": "http://www.w3.org/2001/XMLSchema"
+        }
+      ]
     },
     "qti-portable-custom-interaction": {
       "anyAttribute": {
@@ -75774,7 +77114,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "PortableCustomInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-position-object-interaction": {
       "anyAttribute": {
@@ -76466,7 +77813,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "PositionObjectInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-position-object-stage": {
       "anyAttribute": {
@@ -76502,7 +77856,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "PositionObjectStageDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-power": {
       "attributes": [],
@@ -76764,7 +78125,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicPairDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-pre-condition": {
       "attributes": [],
@@ -77026,7 +78394,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicSingleDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-printed-variable": {
       "attributes": [
@@ -77176,7 +78551,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "PrintedVariableDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-product": {
       "attributes": [],
@@ -77438,7 +78820,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "Logic1toManyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-prompt": {
       "anyAttribute": {
@@ -78350,7 +79739,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "PromptDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-protractor": {
       "attributes": [],
@@ -78368,7 +79764,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ProtractorDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-random": {
       "attributes": [],
@@ -78630,7 +80033,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicSingleDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-random-float": {
       "attributes": [
@@ -78675,7 +80085,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "RandomFloatDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-random-integer": {
       "attributes": [
@@ -78740,7 +80157,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "RandomIntegerDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-repeat": {
       "attributes": [
@@ -79021,12 +80445,26 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "RepeatDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-resource-icon": {
       "attributes": [],
       "children": [],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "URLDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-response-condition": {
       "attributes": [],
@@ -79044,7 +80482,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ResponseConditionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-response-declaration": {
       "attributes": [
@@ -79108,7 +80553,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ResponseDeclarationDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-response-else": {
       "attributes": [],
@@ -79138,7 +80590,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ResponseElseDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-response-else-if": {
       "attributes": [],
@@ -79424,7 +80883,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ResponseIfDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-response-if": {
       "attributes": [],
@@ -79710,7 +81176,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ResponseIfDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-response-processing": {
       "attributes": [
@@ -79759,7 +81232,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "ResponseProcessingDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-response-processing-fragment": {
       "attributes": [],
@@ -79789,7 +81269,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "ResponseProcessingFragmentDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-round": {
       "attributes": [],
@@ -80051,7 +81538,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicSingleDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-round-to": {
       "attributes": [
@@ -80343,7 +81837,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "RoundToDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-rubric-block": {
       "anyAttribute": {
@@ -81050,7 +82551,18 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "RubricBlockDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "TestRubricBlockDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-rule": {
       "attributes": [],
@@ -81068,7 +82580,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "RuleDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-rule-system-si": {
       "attributes": [],
@@ -81086,7 +82605,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "SIRuleSystemDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-rule-system-us": {
       "attributes": [],
@@ -81104,7 +82630,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "USRuleSystemDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-select-point-interaction": {
       "anyAttribute": {
@@ -81798,7 +83331,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "SelectPointInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-selection": {
       "anyAttribute": {
@@ -81831,7 +83371,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "SelectionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-set-correct-response": {
       "attributes": [
@@ -82103,7 +83650,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "SetValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-set-default-value": {
       "attributes": [
@@ -82375,7 +83929,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "SetValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-set-outcome-value": {
       "attributes": [
@@ -82647,7 +84208,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "SetValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-set-template-value": {
       "attributes": [
@@ -82919,7 +84487,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "SetValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-simple-associable-choice": {
       "anyAttribute": {
@@ -83919,7 +85494,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "SimpleAssociableChoiceDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-simple-choice": {
       "anyAttribute": {
@@ -84890,7 +86472,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "SimpleChoiceDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-simple-match-set": {
       "anyAttribute": {
@@ -84914,7 +86503,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "SimpleMatchSetDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-slider-interaction": {
       "anyAttribute": {
@@ -85636,7 +87232,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "SliderInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-stats-operator": {
       "attributes": [
@@ -85909,7 +87512,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "StatsOperatorDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-stimulus-body": {
       "anyAttribute": {
@@ -86657,7 +88267,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "StimulusBodyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-string-match": {
       "attributes": [
@@ -86939,7 +88556,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "StringMatchDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-stylesheet": {
       "attributes": [
@@ -86982,7 +88606,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "StyleSheetDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-substring": {
       "attributes": [
@@ -87254,7 +88885,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "SubstringDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-subtract": {
       "attributes": [],
@@ -87516,7 +89154,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicPairDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-sum": {
       "attributes": [],
@@ -87698,7 +89343,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "NumericLogic1toManyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-template-block": {
       "anyAttribute": {
@@ -88397,7 +90049,18 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "RubricBlockTemplateBlockDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "TemplateBlockDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-template-condition": {
       "attributes": [],
@@ -88415,7 +90078,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "TemplateConditionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-template-constraint": {
       "attributes": [],
@@ -88677,7 +90347,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "TemplateConstraintDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-template-declaration": {
       "attributes": [
@@ -88749,7 +90426,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "TemplateDeclarationDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-template-default": {
       "attributes": [
@@ -89021,7 +90705,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "TemplateDefaultDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-template-else": {
       "attributes": [],
@@ -89051,7 +90742,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "TemplateElseDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-template-else-if": {
       "attributes": [],
@@ -89337,7 +91035,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "TemplateIfDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-template-if": {
       "attributes": [],
@@ -89623,7 +91328,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "TemplateIfDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-template-inline": {
       "anyAttribute": {
@@ -90498,7 +92210,18 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "RubricBlockTemplateInlineDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        },
+        {
+          "local": "TemplateInlineDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-template-processing": {
       "attributes": [],
@@ -90528,7 +92251,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "TemplateProcessingDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-template-variable": {
       "attributes": [
@@ -90543,7 +92273,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "TemplateUniqueIDRefDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-test-feedback": {
       "anyAttribute": {
@@ -90613,7 +92350,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "TestFeedbackDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-test-part": {
       "anyAttribute": {
@@ -90706,7 +92450,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "TestPartDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-test-variables": {
       "attributes": [
@@ -90785,7 +92536,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "TestVariablesDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-text-entry-interaction": {
       "anyAttribute": {
@@ -91506,7 +93264,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "TextEntryInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-time-limits": {
       "attributes": [
@@ -91542,7 +93307,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "TimeLimitsDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-truncate": {
       "attributes": [],
@@ -91804,7 +93576,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "LogicSingleDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-upload-interaction": {
       "anyAttribute": {
@@ -92479,7 +94258,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "UploadInteractionDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-usagedata-ref": {
       "attributes": [
@@ -92503,7 +94289,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "AdaptiveHrefDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-value": {
       "attributes": [
@@ -92540,7 +94333,14 @@
         }
       ],
       "children": [],
-      "text": true
+      "global": false,
+      "text": true,
+      "types": [
+        {
+          "local": "ValueDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-variable": {
       "attributes": [
@@ -92564,7 +94364,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "VariableDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-variable-mapping": {
       "attributes": [
@@ -92588,7 +94395,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "VariableMappingDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "qti-weight": {
       "attributes": [
@@ -92612,7 +94426,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": false,
+      "text": false,
+      "types": [
+        {
+          "local": "WeightDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "rb": {
       "anyAttribute": {
@@ -93360,7 +95181,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "BaseHTML5PhrasingDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "rp": {
       "anyAttribute": {
@@ -94108,7 +95936,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "BaseHTML5PhrasingDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "rt": {
       "anyAttribute": {
@@ -94856,7 +96691,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "BaseHTML5PhrasingDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "rtc": {
       "anyAttribute": {
@@ -95608,7 +97450,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "RTCDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "ruby": {
       "anyAttribute": {
@@ -96372,7 +98221,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "RubyDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "samp": {
       "anyAttribute": {
@@ -97234,7 +99090,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "section": {
       "anyAttribute": {
@@ -98254,7 +100117,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "BaseHTML5FlowDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "small": {
       "anyAttribute": {
@@ -99116,7 +100986,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "source": {
       "anyAttribute": {
@@ -99801,7 +101678,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "SourceDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "span": {
       "anyAttribute": {
@@ -100663,7 +102547,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "strong": {
       "anyAttribute": {
@@ -101525,7 +103416,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "sub": {
       "anyAttribute": {
@@ -102387,7 +104285,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "summary": {
       "anyAttribute": {
@@ -103135,7 +105040,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "BaseHTML5PhrasingDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "sup": {
       "anyAttribute": {
@@ -103997,7 +105909,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "table": {
       "anyAttribute": {
@@ -104692,7 +106611,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "TableDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "tbody": {
       "anyAttribute": {
@@ -105336,7 +107262,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "TablePartDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "td": {
       "anyAttribute": {
@@ -106434,7 +108367,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "TDHDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "template": {
       "anyElement": {
@@ -106443,7 +108383,14 @@
       },
       "attributes": [],
       "children": [],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "TemplateDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "tfoot": {
       "anyAttribute": {
@@ -107087,7 +109034,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "TablePartDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "th": {
       "anyAttribute": {
@@ -108185,7 +110139,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "TDHDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "thead": {
       "anyAttribute": {
@@ -108829,7 +110790,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "TablePartDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "tr": {
       "anyAttribute": {
@@ -109477,7 +111445,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "TRDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "track": {
       "anyAttribute": {
@@ -110154,7 +112129,14 @@
         }
       ],
       "children": [],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "TrackDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "tt": {
       "anyAttribute": {
@@ -111016,7 +112998,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "ul": {
       "anyAttribute": {
@@ -111678,7 +113667,14 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": false
+      "global": true,
+      "text": false,
+      "types": [
+        {
+          "local": "OULDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "var": {
       "anyAttribute": {
@@ -112540,7 +114536,14 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "HTMLTextDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
     },
     "video": {
       "anyAttribute": {
@@ -113294,7 +115297,1625 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
-      "text": true
+      "global": true,
+      "text": true,
+      "types": [
+        {
+          "local": "VideoDType",
+          "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+        }
+      ]
+    }
+  },
+  "types": {
+    "ADType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "ARIABaseDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ARIABaseEmptyDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "ARIALevelIntegerDType": {
+      "base": {
+        "local": "integer",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ARIARelevantListDType": {
+      "base": {
+        "local": "string",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "AdaptiveHrefDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "AdaptiveSelectionDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "AnyNDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "AreaMapEntryDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "AreaMappingDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "AssessmentItemDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "AssessmentItemRefDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "AssessmentSectionDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "AssessmentSectionRefDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "AssessmentStimulusDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "AssessmentStimulusRefDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "AssessmentTestDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "AssociableHotspotDType": {
+      "base": {
+        "local": "BaseSequenceXBaseEmptyDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "AssociateInteractionDType": {
+      "base": {
+        "local": "BasePromptInteractionDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "AudioDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "BDIDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "BDODType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "BRDType": {
+      "base": {
+        "local": "BaseSequenceXBaseEmptyDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "BaseHTML5FlowDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "BaseHTML5PhrasingDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "BasePromptInteractionDType": {
+      "base": {
+        "local": "ARIABaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "BaseSequenceDType": {
+      "base": {
+        "local": "ARIABaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "BaseSequenceEmptyDType": {
+      "base": {
+        "local": "ARIABaseEmptyDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "BaseSequenceFullDType": {
+      "base": {
+        "local": "ARIABaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "BaseSequenceRIdentDType": {
+      "base": {
+        "local": "ARIABaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "BaseSequenceXBaseDType": {
+      "base": {
+        "local": "ARIABaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "BaseSequenceXBaseEmptyDType": {
+      "base": {
+        "local": "ARIABaseEmptyDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "BaseValueDType": {
+      "base": {
+        "local": "string",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "extension"
+    },
+    "BlockQuoteDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "BranchRuleDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "CalculatorDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "CaptionDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "CardDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "CardEntryDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "CatalogDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "CatalogInfoDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ChoiceInteractionDType": {
+      "base": {
+        "local": "BasePromptInteractionDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "ColDType": {
+      "base": {
+        "local": "BaseSequenceXBaseEmptyDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "ColGroupDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "CompanionMaterialsInfoDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ContextDeclarationDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ContextUniqueIDRefDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "CoordsDType": {
+      "base": {
+        "local": "normalizedString",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "CorrectDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "CorrectResponseDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "CustomInteractionDType": {
+      "base": {
+        "local": "BaseSequenceFullDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "CustomOperatorDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "DDDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "DLDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "DTDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "DefaultDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "DefaultValueDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "DetailsDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "DivDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "DrawingInteractionDType": {
+      "base": {
+        "local": "BasePromptInteractionDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "EmptyPrimitiveTypeDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "EncVariableStringDType": {
+      "base": {
+        "local": "string",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "EndAttemptInteractionDType": {
+      "base": {
+        "local": "BaseSequenceXBaseEmptyDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "EqualDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "EqualRoundedDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ExtendedTextInteractionDType": {
+      "base": {
+        "local": "BasePromptInteractionDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "FeedbackBlockDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "FeedbackContentBodyDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "FeedbackFlowContentBodyDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "FeedbackInlineDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "FieldValueDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "FigureDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "FileHrefCardDType": {
+      "base": {
+        "local": "anyURI",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "extension"
+    },
+    "FileHrefDType": {
+      "base": {
+        "local": "anyURI",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "GapDType": {
+      "base": {
+        "local": "BaseSequenceXBaseEmptyDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "GapImgDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "GapMatchInteractionDType": {
+      "base": {
+        "local": "BasePromptInteractionDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "GapTextDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "GraphicAssociateInteractionDType": {
+      "base": {
+        "local": "BasePromptInteractionDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "GraphicGapMatchInteractionDType": {
+      "base": {
+        "local": "BaseSequenceFullDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "GraphicOrderInteractionDType": {
+      "base": {
+        "local": "BaseSequenceFullDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "HRDType": {
+      "base": {
+        "local": "BaseSequenceXBaseEmptyDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "HTMLContentDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "HTMLTextDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "HotTextDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "HotTextInteractionDType": {
+      "base": {
+        "local": "BasePromptInteractionDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "HotspotChoiceDType": {
+      "base": {
+        "local": "BaseSequenceXBaseEmptyDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "HotspotInteractionDType": {
+      "base": {
+        "local": "BasePromptInteractionDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "IdentifierDType": {
+      "base": {
+        "local": "NCName",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "IdentifierListDType": {
+      "base": {
+        "local": "NCName",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ImgDType": {
+      "base": {
+        "local": "BaseSequenceXBaseEmptyDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "IncrementSIDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "IncrementUSDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "IndexDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "InlineChoiceDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "InlineChoiceInteractionDType": {
+      "base": {
+        "local": "BaseSequenceFullDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "InsideDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "IntegerListDType": {
+      "base": {
+        "local": "int",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "InteractionMarkupDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "InteractionModuleDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "InteractionModulesDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "InterpolationTableDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "InterpolationTableEntryDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "ItemBodyDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ItemFileInfoDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ItemSessionControlDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "LIDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "LabelDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "LengthDType": {
+      "base": {
+        "local": "string",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "Logic0toManyDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "Logic1toManyDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "LogicPairDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "LogicSingleDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "LookupOutcomeValueDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "MapEntryDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "MapResponseDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "MappingDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "MatchInteractionDType": {
+      "base": {
+        "local": "BasePromptInteractionDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "MatchTableDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "MatchTableEntryDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "MathConstantDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "MathOperatorDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "MediaInteractionDType": {
+      "base": {
+        "local": "BasePromptInteractionDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "MimeTypeDType": {
+      "base": {
+        "local": "normalizedString",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "MimeTypeListDType": {
+      "base": {
+        "local": "MimeTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "restriction"
+    },
+    "ModalFeedbackDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "NonNegativeDoubleDType": {
+      "base": {
+        "local": "double",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "NumberDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "NumericLogic1toManyDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "OULDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "ObjectDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "OrderInteractionDType": {
+      "base": {
+        "local": "BasePromptInteractionDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "OrderingDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "OutcomeConditionDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "OutcomeDeclarationDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "OutcomeElseDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "OutcomeIfDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "OutcomeMinMaxDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "OutcomeProcessingDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "OutcomeProcessingFragmentDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ParamDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "PatternMatchDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "PictureDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "PortableCustomInteractionDType": {
+      "base": {
+        "local": "BasePromptInteractionDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "PositionObjectInteractionDType": {
+      "base": {
+        "local": "BaseSequenceRIdentDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "PositionObjectStageDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "PrintedVariableDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "PromptDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "ProtractorDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "QDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "RTCDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "RadialSIValueDType": {
+      "base": {
+        "local": "decimal",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "extension"
+    },
+    "RadialUSValueDType": {
+      "base": {
+        "local": "decimal",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "extension"
+    },
+    "RandomFloatDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "RandomIntegerDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "RepeatDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ResponseConditionDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ResponseDeclarationDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ResponseElseDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ResponseIfDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ResponseProcessingDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ResponseProcessingFragmentDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "RoundToDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "RubricBlockContentBodyDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "RubricBlockDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "RubricBlockTemplateBlockContentBodyDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "RubricBlockTemplateBlockDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "RubricBlockTemplateInlineDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "RubyDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "RuleDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "SILinearValueDType": {
+      "base": {
+        "local": "decimal",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "extension"
+    },
+    "SIRuleSystemDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "SelectPointInteractionDType": {
+      "base": {
+        "local": "BasePromptInteractionDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "SelectionDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "SetValueDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "SimpleAssociableChoiceDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "SimpleChoiceDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "SimpleMatchSetDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "SliderInteractionDType": {
+      "base": {
+        "local": "BasePromptInteractionDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "SourceDType": {
+      "base": {
+        "local": "BaseSequenceEmptyDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "StatsOperatorDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "StimulusBodyDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "StringListDType": {
+      "base": {
+        "local": "string",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "StringMatchDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "StyleSheetDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "SubstringDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "SupportExtStringDType": {
+      "base": {
+        "local": "normalizedString",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "TDHDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "TRDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "TableDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "TablePartDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "TemplateBlockContentBodyDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "TemplateBlockContentDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "TemplateBlockDType": {
+      "base": {
+        "local": "TemplateBlockContentDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "TemplateBlockFeedbackBlockDType": {
+      "base": {
+        "local": "TemplateBlockContentDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "TemplateConditionDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "TemplateConstraintDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "TemplateDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "TemplateDeclarationDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "TemplateDefaultDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "TemplateElseDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "TemplateIfDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "TemplateInlineDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "TemplateProcessingDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "TemplateUniqueIDRefDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "TestFeedbackDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "TestFeedbackFlowContentBodyDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "TestPartDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "TestRubricBlockContentBodyDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "TestRubricBlockDType": {
+      "base": {
+        "local": "BaseSequenceXBaseDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "TestVariablesDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "TextEntryInteractionDType": {
+      "base": {
+        "local": "BaseSequenceXBaseEmptyDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "TimeLimitsDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "ToleranceListDType": {
+      "derivation": "union",
+      "members": [
+        {
+          "local": "string",
+          "namespace": "http://www.w3.org/2001/XMLSchema"
+        },
+        {
+          "local": "double",
+          "namespace": "http://www.w3.org/2001/XMLSchema"
+        }
+      ]
+    },
+    "TrackDType": {
+      "base": {
+        "local": "BaseSequenceEmptyDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "URLDType": {
+      "base": {
+        "local": "normalizedString",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "USLinearValueDType": {
+      "base": {
+        "local": "decimal",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "extension"
+    },
+    "USRuleSystemDType": {
+      "base": {
+        "local": "anyType",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "UniqueIdentifierDType": {
+      "base": {
+        "local": "ID",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "UniqueIdentifierRefDType": {
+      "base": {
+        "local": "IDREF",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "UploadInteractionDType": {
+      "base": {
+        "local": "BasePromptInteractionDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "UseExtensionStringDType": {
+      "base": {
+        "local": "normalizedString",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "ValueDType": {
+      "base": {
+        "local": "normalizedString",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "extension"
+    },
+    "VariableDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "VariableMappingDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "VariableStringDType": {
+      "base": {
+        "local": "string",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "VideoDType": {
+      "base": {
+        "local": "BaseSequenceDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
+    },
+    "ViewEnumDType": {
+      "base": {
+        "local": "string",
+        "namespace": "http://www.w3.org/2001/XMLSchema"
+      },
+      "derivation": "restriction"
+    },
+    "WeightDType": {
+      "base": {
+        "local": "EmptyPrimitiveTypeDType",
+        "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
+      },
+      "derivation": "extension"
     }
   }
 }

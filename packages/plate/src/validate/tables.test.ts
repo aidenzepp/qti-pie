@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { readSource } from "#plate/document/read.ts";
-import { xmlNamespace } from "#plate/document/source.ts";
+import { qtiNamespace, xmlNamespace, xsdNamespace } from "#plate/document/source.ts";
 import { htmlSubset } from "#plate/emit/body.ts";
 import { baseTypes } from "#plate/vocabulary.ts";
 import { tables, xsdPath, xsdSha256 } from "#plate/validate/tables.ts";
@@ -151,6 +151,66 @@ describe("validate/tables.ts", () => {
     );
 
     assert.isTrue(admitted);
+  });
+
+  it("qti-content-body records the seven types it is declared with", () => {
+    assert.deepStrictEqual(
+      elementNamed("qti-content-body").types,
+      [
+        "FeedbackContentBodyDType",
+        "FeedbackFlowContentBodyDType",
+        "RubricBlockContentBodyDType",
+        "RubricBlockTemplateBlockContentBodyDType",
+        "TemplateBlockContentBodyDType",
+        "TestFeedbackFlowContentBodyDType",
+        "TestRubricBlockContentBodyDType",
+      ].map((local) => ({ local, namespace: qtiNamespace })),
+    );
+  });
+
+  it("div and qti-assessment-item are declared globally and qti-choice-interaction is not", () => {
+    assert.isTrue(elementNamed("div").global);
+    assert.isTrue(elementNamed("qti-assessment-item").global);
+    assert.isFalse(elementNamed("qti-choice-interaction").global);
+  });
+
+  it("every base and union member in types names a key of types or an XML Schema type", () => {
+    const unnamed = Object.entries(tables.types).flatMap(([name, entry]) =>
+      (entry.derivation === "union" ? entry.members : [entry.base])
+        .filter(
+          (type) =>
+            type.namespace !== xsdNamespace &&
+            !(type.namespace === qtiNamespace && Object.hasOwn(tables.types, type.local)),
+        )
+        .map((type) => `${name}: {${type.namespace}}${type.local}`),
+    );
+
+    assert.isAbove(Object.keys(tables.types).length, 0);
+    assert.deepStrictEqual(unnamed, []);
+  });
+
+  it("WeightDType extends EmptyPrimitiveTypeDType", () => {
+    assert.deepStrictEqual(tables.types["WeightDType"], {
+      base: { local: "EmptyPrimitiveTypeDType", namespace: qtiNamespace },
+      derivation: "extension",
+    });
+  });
+
+  it("ToleranceListDType is a union of xs:string and xs:double, with no base", () => {
+    assert.deepStrictEqual(tables.types["ToleranceListDType"], {
+      derivation: "union",
+      members: [
+        { local: "string", namespace: xsdNamespace },
+        { local: "double", namespace: xsdNamespace },
+      ],
+    });
+  });
+
+  it("qti-calculator-type has an inline type, for which types holds no name", () => {
+    const table = elementNamed("qti-calculator-type");
+
+    assert.isTrue(table.anonymousType);
+    assert.deepStrictEqual(table.types, []);
   });
 
   it("the content emitter's HTML subset is exactly the tables' elements and attributes outside qti-", () => {
