@@ -749,7 +749,7 @@ describe("runRules", () => {
 });
 
 describe("evaluateExpression", () => {
-  it("[I-9b] is-null on NULL is true", () => {
+  it("is-null on NULL is true", () => {
     const value = Result.getOrThrow(
       evaluateExpression(
         { kind: "is-null", operand: variable("RESPONSE") },
@@ -761,7 +761,7 @@ describe("evaluateExpression", () => {
     assert.deepStrictEqual(value, booleanValue(true));
   });
 
-  it("[I-9b] a match with a NULL side is NULL", () => {
+  it("a match with a NULL side is NULL", () => {
     const value = Result.getOrThrow(
       evaluateExpression(
         { kind: "match", operands: [variable("OPEN"), base(identifierValue("A"))] },
@@ -773,7 +773,7 @@ describe("evaluateExpression", () => {
     assert.deepStrictEqual(value, nullOf("boolean", "single"));
   });
 
-  it.effect("[I-9b] a match tells an integer correct response beyond 2^53 from its neighbour", () =>
+  it.effect("a match tells an integer correct response beyond 2^53 from its neighbour", () =>
     Effect.gen(function* exactIntegerMatch() {
       const built = yield* buildItem(
         doc(
@@ -822,7 +822,7 @@ describe("evaluateExpression", () => {
     }),
   );
 
-  it("[I-9b] correct is the declared correct response, or NULL of the declared type", () => {
+  it("correct is the declared correct response, or NULL of the declared type", () => {
     const variables = variablesOf(identifierValue("A"));
 
     assert.deepStrictEqual(
@@ -839,7 +839,7 @@ describe("evaluateExpression", () => {
     );
   });
 
-  it("[I-9b] a variable reads a response or an outcome", () => {
+  it("a variable reads a response or an outcome", () => {
     const variables = variablesOf(identifierValue("A"), floatValue(0.75));
 
     assert.deepStrictEqual(
@@ -994,29 +994,29 @@ describe("equal", () => {
 });
 
 describe("map-response", () => {
-  it("[I-9b] maps BG010's answers: YORK and york to 0.5, Paris and NULL to 0", () => {
+  it("maps BG010's answers: YORK and york to 0.5, Paris and NULL to 0", () => {
     assert.deepStrictEqual(mapped("CITY", [stringOf("YORK")]), floatValue(0.5));
     assert.deepStrictEqual(mapped("CITY", [stringOf("york")]), floatValue(0.5));
     assert.deepStrictEqual(mapped("CITY", [stringOf("Paris")]), floatValue(0));
     assert.deepStrictEqual(mapped("CITY", []), floatValue(0));
   });
 
-  it("[I-9b] a value two entries match maps by the first in document order (placeholder while spec §12 Q5 is open)", () => {
+  it("a value two entries match maps by the first in document order (placeholder while spec §12 Q5 is open)", () => {
     assert.deepStrictEqual(mapped("TIED", [stringOf("York")]), floatValue(0.5));
   });
 
-  it("[I-9b] the bounds clamp a single value, and a NULL response's 0 too", () => {
+  it("the bounds clamp a single value, and a NULL response's 0 too", () => {
     assert.deepStrictEqual(mapped("BOUNDED", [stringOf("york")]), floatValue(0.4));
     assert.deepStrictEqual(mapped("BOUNDED", []), floatValue(0.25));
   });
 
-  it("[I-9b] a multiple response sums its distinct values, each once", () => {
+  it("a multiple response sums its distinct values, each once", () => {
     const answer = [identifierOf("A"), identifierOf("A"), identifierOf("C")];
 
     assert.deepStrictEqual(mapped("CHOICES", answer), floatValue(1.5));
   });
 
-  it("[I-9b] an identifier key keeps its case, and a pair key matches in either order", () => {
+  it("an identifier key keeps its case, and a pair key matches in either order", () => {
     assert.deepStrictEqual(
       mapped("CHOICES", [identifierOf("a"), identifierOf("C")]),
       floatValue(0.5),
@@ -1027,7 +1027,7 @@ describe("map-response", () => {
     );
   });
 
-  it("[I-9b] a multiple response counts a value once however it is written, as the pairwise comparison does", () => {
+  it("a multiple response counts a value once however it is written, as the pairwise comparison does", () => {
     // Each NaN counts: `match` compares floats with `===`, so a NaN equals no value, itself included.
     const cases = [
       ["CHOICES", "identifier", ["A", "A", "C"], 1.5],
@@ -1075,14 +1075,14 @@ describe("map-response", () => {
 });
 
 describe("map-response-point", () => {
-  it("[I-9b] maps a point inside the circle, or on its edge, to 1, and one in no area to the default", () => {
+  it("maps a point inside the circle, or on its edge, to 1, and one in no area to the default", () => {
     assert.deepStrictEqual(pointMapped("TARGET", [pointOf(102n, 113n)]), floatValue(1));
     assert.deepStrictEqual(pointMapped("TARGET", [pointOf(118n, 113n)]), floatValue(1));
     assert.deepStrictEqual(pointMapped("TARGET", [pointOf(102n, 97n)]), floatValue(1));
     assert.deepStrictEqual(pointMapped("TARGET", [pointOf(200n, 200n)]), floatValue(0.25));
   });
 
-  it("[I-9b] maps an area once however many points it holds, and adds the default once per distinct point in no area", () => {
+  it("maps an area once however many points it holds, and adds the default once per distinct point in no area", () => {
     assert.deepStrictEqual(
       pointMapped("TARGET", [pointOf(102n, 113n), pointOf(110n, 113n)]),
       floatValue(1),
@@ -1097,7 +1097,7 @@ describe("map-response-point", () => {
     );
   });
 
-  it("[I-9b] counts a point once however it is written, as the pairwise comparison does", () => {
+  it("counts a point once however it is written, as the pairwise comparison does", () => {
     const points = written("point", [
       "200 300",
       "+200 0300",
@@ -1123,7 +1123,7 @@ describe("map-response-point", () => {
     assert.deepStrictEqual(pointMapped("TARGET", points), floatValue(12_500));
   });
 
-  it("[I-9b] a NULL response maps to 0 before the bounds, and the bounds clamp the sum", () => {
+  it("a NULL response maps to 0 before the bounds, and the bounds clamp the sum", () => {
     assert.deepStrictEqual(pointMapped("TARGET", []), floatValue(0));
     assert.deepStrictEqual(pointMapped("CLAMPED", []), floatValue(0.5));
     assert.deepStrictEqual(
@@ -1132,7 +1132,7 @@ describe("map-response-point", () => {
     );
   });
 
-  it("[I-9b] a point two areas hold is mapped by the first listed", () => {
+  it("a point two areas hold is mapped by the first listed", () => {
     assert.deepStrictEqual(pointMapped("OVERLAPPING", [pointOf(45n, 35n)]), floatValue(0.5));
     assert.deepStrictEqual(
       pointMapped("OVERLAPPING", [pointOf(45n, 35n), pointOf(55n, 35n)]),
@@ -1141,7 +1141,7 @@ describe("map-response-point", () => {
   });
 
   /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure. */
-  it("[I-9b] each shape holds the points on its boundary, and default holds every point", () => {
+  it("each shape holds the points on its boundary, and default holds every point", () => {
     const rect = { coords: [10, 20, 30, 40], shape: "rect" } as const;
     const circle = { coords: [0, 0, 5], shape: "circle" } as const;
     const ellipse = { coords: [0, 0, 4, 2], shape: "ellipse" } as const;
@@ -1174,7 +1174,7 @@ describe("map-response-point", () => {
   });
   /* oxlint-enable anti-slop/no-shape-in-symbol-names */
 
-  it("[I-9b] compares a coordinate beyond 2^53 after its one conversion to the nearest double", () => {
+  it("compares a coordinate beyond 2^53 after its one conversion to the nearest double", () => {
     // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
     const edge = { coords: [0, 0, 9_007_199_254_740_992, 1], shape: "rect" } as const;
 

@@ -250,7 +250,7 @@ const outcomeXml = (identifier: string, baseType: string, initial?: string): str
   }</qti-outcome-declaration>`;
 
 /**
- * Write a hand-built item a `CC2_*` template processes, as the bytes a host reads: a single
+ * Write a hand-built item a built-in template processes, as the bytes a host reads: a single
  * identifier `RESPONSE` whose correct response is `A`, with a `qti-mapping` of `A` to 1 when asked,
  * a Choice of `A` and `B` bound to it, and the outcomes given.
  *
@@ -259,7 +259,11 @@ const outcomeXml = (identifier: string, baseType: string, initial?: string): str
  * @param outcomes The outcome declarations' XML, in document order.
  * @returns The document's bytes.
  */
-const cc2Bytes = (template: string, mapped: boolean, outcomes: readonly string[]): Uint8Array =>
+const templatedBytes = (
+  template: string,
+  mapped: boolean,
+  outcomes: readonly string[],
+): Uint8Array =>
   new TextEncoder().encode(
     [
       `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="cc2" title="CC2" adaptive="false" time-dependent="false">`,
@@ -327,7 +331,7 @@ describe("a CC2_* template whose needs the item does not meet (Q6: marked, never
         const feedback = outcomeXml("FEEDBACK", "identifier");
 
         yield* markedNotRun(
-          cc2Bytes("CC2_map_response", false, [
+          templatedBytes("CC2_map_response", false, [
             outcomeXml("SCORE", "float"),
             outcomeXml("MAXSCORE", "float", "1"),
             feedback,
@@ -335,7 +339,7 @@ describe("a CC2_* template whose needs the item does not meet (Q6: marked, never
           "mapping:RESPONSE",
         );
         yield* markedNotRun(
-          cc2Bytes("CC2_map_response", true, [
+          templatedBytes("CC2_map_response", true, [
             outcomeXml("SCORE", "integer"),
             outcomeXml("MAXSCORE", "float", "1"),
             feedback,
@@ -350,7 +354,7 @@ describe("a CC2_* template whose needs the item does not meet (Q6: marked, never
     () =>
       Effect.gen(function* cc2MatchUnmet() {
         yield* markedNotRun(
-          cc2Bytes("CC2_match", false, [outcomeXml("SCORE", "integer")]),
+          templatedBytes("CC2_match", false, [outcomeXml("SCORE", "integer")]),
           "outcome-type:SCORE",
         );
       }),
@@ -361,11 +365,30 @@ describe("a CC2_* template whose needs the item does not meet (Q6: marked, never
     () =>
       Effect.gen(function* cc2MatchBasicUnmet() {
         yield* markedNotRun(
-          cc2Bytes("CC2_match_basic", false, [
+          templatedBytes("CC2_match_basic", false, [
             outcomeXml("SCORE", "float"),
             outcomeXml("MAXSCORE", "integer", "1"),
             outcomeXml("FEEDBACKBASIC", "identifier"),
           ]),
+          "outcome-type:SCORE",
+        );
+      }),
+  );
+});
+
+describe("a canonical template whose tree needs what template-requirements does not judge (marked, never refused)", () => {
+  it.effect(
+    "map_response and match_correct are marked outcome-type:SCORE when SCORE is a float of multiple cardinality, and score runs neither",
+    () =>
+      Effect.gen(function* canonicalMultipleScore() {
+        const multipleScore = `<qti-outcome-declaration identifier="SCORE" cardinality="multiple" base-type="float"/>`;
+
+        yield* markedNotRun(
+          templatedBytes("map_response", true, [multipleScore]),
+          "outcome-type:SCORE",
+        );
+        yield* markedNotRun(
+          templatedBytes("match_correct", false, [multipleScore]),
           "outcome-type:SCORE",
         );
       }),

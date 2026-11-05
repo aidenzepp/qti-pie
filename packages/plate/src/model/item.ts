@@ -2056,8 +2056,8 @@ const matchCorrect: readonly Rule[] = [
  * `correct` when `MAXSCORE` and `SCORE` are equal in `exact` mode, else to `incorrect`. A
  * template's tree goes through the check inline rules do ({@link runnable}), so one that names a
  * variable the item does not declare, such as `MAXSCORE`, is marked and never refused, and so is a
- * `CC2_*` template that needs a declaration the item does not provide, such as a `qti-mapping` or
- * a float `SCORE`.
+ * template that needs a declaration the item does not provide, such as a `CC2_*` template's
+ * `qti-mapping` or a `SCORE` of a single float.
  */
 const templates = {
   CC2_map_response: [
@@ -2464,17 +2464,6 @@ const typeOf = (
 };
 
 /**
- * The built-in templates whose needs no prose rule judges: `template-requirements` judges the
- * canonical three and leaves the `CC2_*` templates alone (Q6), so {@link runnable} judges what
- * their trees need ({@link unmetNeeds}).
- */
-const unjudgedTemplates: ReadonlySet<TemplateName> = new Set([
-  "CC2_map_response",
-  "CC2_match",
-  "CC2_match_basic",
-]);
-
-/**
  * Give each declaration a rule tree needs and the item does not provide, as the mark that names
  * it, once, in the order the tree first needs it.
  *
@@ -2482,10 +2471,11 @@ const unjudgedTemplates: ReadonlySet<TemplateName> = new Set([
  * `qti-mapping` and for a `qti-map-response-point` of one with no `qti-area-mapping`, which only a
  * `point` declaration holds, and `OutcomeMismatchError` for a `qti-set-outcome-value` whose
  * expression's type ({@link typeOf}) is not the outcome's (`#plate/engine/evaluate.ts`). The prose
- * rules refuse inline rules that need these and judge what a canonical template needs of
- * `RESPONSE` and `SCORE` (`template-requirements` and `expression-type` in
- * `#plate/validate/rules.ts`), but leave the `CC2_*` templates alone (Q6), so {@link runnable}
- * runs no `CC2_*` tree this walk finds a need in, and those failures stay unreachable from one.
+ * rules refuse inline rules that need these (`expression-type` and `template-requirements` in
+ * `#plate/validate/rules.ts`). Of a built-in template they judge less: `template-requirements`
+ * judges what a canonical template needs of `RESPONSE` and the base type of `SCORE`, not its
+ * cardinality, and leaves the `CC2_*` templates alone (Q6). So {@link runnable} runs no built-in
+ * template's tree this walk finds a need in, and those failures stay unreachable from one.
  * The marks name what is missing: `mapping:<identifier>` and `area-mapping:<identifier>` for the
  * response's mapping and area mapping, and `outcome-type:<identifier>` for an outcome a rule sets
  * to a value of another base type or cardinality. An identifier the engine does not hold is
@@ -2588,17 +2578,19 @@ interface ReadProcessing extends ProcessingTree {
 /**
  * Keep a rule tree the engine can run. Each identifier {@link unheldIdentifiers} finds is the mark
  * `variable:<identifier>` at the processing element's path, each need {@link unmetNeeds} finds in a
- * `CC2_*` template's tree is its mark there (`mapping:<identifier>`, `area-mapping:<identifier>`
+ * built-in template's tree is its mark there (`mapping:<identifier>`, `area-mapping:<identifier>`
  * or `outcome-type:<identifier>`), and a tree that maps a point through an area mapping with a `%`
  * coordinate ({@link readsPercentArea}) is the mark `area-coords-percent` there. The marks are
- * placed among the others in document order, and the tree is then none. So a `CC2_*` template the
- * item does not provide for is marked and does not run, as Q6 has it, and is never refused.
+ * placed among the others in document order, and the tree is then none. So a built-in template the
+ * item does not provide for, a `CC2_*` one (Q6) or a canonical one whose `SCORE` has the base type
+ * `template-requirements` asks for and another cardinality, is marked and does not run, and is
+ * never refused. Inline rules are not walked for needs: the prose rules refuse those that have one.
  *
  * @param build The build.
  * @param read The processing as read.
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
- * @returns The tree, or none when it names an identifier the engine does not hold, is a `CC2_*`
+ * @returns The tree, or none when it names an identifier the engine does not hold, is a built-in
  *   template that needs a declaration the item does not provide, or reads an area mapping with a
  *   `%` coordinate.
  */
@@ -2613,9 +2605,7 @@ const runnable = (
     ...unheldIdentifiers(read.tree, responses, outcomes, builtIns).map(
       (identifier) => `variable:${identifier}`,
     ),
-    ...(Option.exists(read.template, (name) => unjudgedTemplates.has(name))
-      ? unmetNeeds(read.tree, responses, outcomes, builtIns)
-      : []),
+    ...(Option.isSome(read.template) ? unmetNeeds(read.tree, responses, outcomes, builtIns) : []),
   ];
   if (readsPercentArea(read.tree, responses)) {
     features.push("area-coords-percent");
@@ -2669,7 +2659,7 @@ const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceEle
  * not read. Response processing is a rule tree: a built-in template resolves to the tree its text
  * gives, and inline rules become their tree when every element is in the engine. The tree is kept
  * only when the engine holds every identifier it names, the item provides every declaration a
- * `CC2_*` template's tree needs, and it maps no point through an area mapping with a `%`
+ * built-in template's tree needs, and it maps no point through an area mapping with a `%`
  * coordinate; each identifier it does not hold is the mark `variable:<identifier>` at the
  * processing element's path, each such need unmet its mark there (`mapping:<identifier>`,
  * `area-mapping:<identifier>` or `outcome-type:<identifier>`), such a point mapping the mark
