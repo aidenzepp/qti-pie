@@ -11,6 +11,13 @@ import { listPackage, readEntry } from "#pantry/package/read.ts";
 import { manifestRows } from "#pantry/import/manifest.ts";
 import { ResourceLomGeneral } from "#pantry/schema/lang.ts";
 import { Document } from "#pantry/schema/document.ts";
+import { FeedbackInline, FeedbackOutcomeRef } from "#pantry/schema/feedback.ts";
+import {
+  PrintedVariable,
+  PrintedVariableRef,
+  PrintedVariableVarRef,
+} from "#pantry/schema/template.ts";
+import * as content from "#pantry/schema/test/content.ts";
 import * as reference from "#pantry/schema/reference.ts";
 import { TemplateDefault, VariableMapping } from "#pantry/schema/test/rules.ts";
 import {
@@ -302,6 +309,88 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/reference.ts", 
       }
     }),
   );
+
+  suite.effect(
+    "test-section-ref's shared rubric binds once per reaching test, with the twins and none of C's",
+    () =>
+      Effect.gen(function* sectionBindings() {
+        const { before, rows } = yield* stagedFixture("test-section-ref");
+        const shared = documentAt(rows, "sections/shared.xml");
+        const tests = ["rtest01.xml", "test-b.xml"].map((path) => documentAt(rows, path));
+        const printed = only(Rows.of(rows, PrintedVariable).filter((row) => row.base === "COUNT"));
+        const feedback = only(Rows.of(rows, FeedbackInline));
+
+        for (const twin of [
+          content.SectionPrintedVariableRef,
+          content.SectionPrintedVariableVarRef,
+          content.SectionFeedbackOutcomeRef,
+        ]) {
+          assert.strictEqual(Rows.of(before, twin).length, 0);
+        }
+
+        assert.sameDeepMembers(
+          [...Rows.of(rows, content.SectionPrintedVariableRef)],
+          tests.map((test) => ({
+            document: shared.id,
+            identifier: "SCORE",
+            kind: "outcome",
+            node: printed.id,
+            test: test.id,
+          })),
+        );
+        assert.sameDeepMembers(
+          [...Rows.of(rows, content.SectionPrintedVariableVarRef)],
+          tests.map((test) => ({
+            attribute: "base",
+            baseType: "integer",
+            cardinality: "single",
+            document: shared.id,
+            identifier: "COUNT",
+            kind: "outcome",
+            node: printed.id,
+            test: test.id,
+          })),
+        );
+        assert.sameDeepMembers(
+          [...Rows.of(rows, content.SectionFeedbackOutcomeRef)],
+          tests.map((test) => ({
+            baseType: "identifier",
+            cardinality: "single",
+            document: shared.id,
+            identifier: "FLAG",
+            node: feedback.id,
+            test: test.id,
+          })),
+        );
+        assert.strictEqual(Rows.of(rows, PrintedVariableRef).length, 0);
+        assert.strictEqual(Rows.of(rows, PrintedVariableVarRef).length, 0);
+        assert.strictEqual(Rows.of(rows, FeedbackOutcomeRef).length, 0);
+        keys(
+          Rows.of(rows, content.SectionPrintedVariableVarRef).map(
+            (row) => `${row.node}\n${row.attribute}\n${row.test}`,
+          ),
+        );
+      }),
+  );
+
+  for (const [name, identifier] of [
+    ["section-printed-undeclared", "COUNT"],
+    ["section-feedback-undeclared", "FLAG"],
+  ] as const) {
+    suite.effect(`${name} is refused as binding-declared, naming the test that lacks it`, () =>
+      Effect.gen(function* undeclared() {
+        const refused = yield* Effect.flip(stagedFixture(name));
+
+        assert.strictEqual(refused._tag, "ItemRefusal");
+        if (refused._tag === "ItemRefusal") {
+          assert.strictEqual(refused.rule, "binding-declared");
+          assert.include(refused.detail, "test-b.xml");
+          assert.include(refused.detail, identifier);
+          assert.notInclude(refused.detail, "rtest01.xml");
+        }
+      }),
+    );
+  }
 
   suite.effect("test-mapping's mapping names the item document its item ref resolves to", () =>
     Effect.gen(function* mappings() {
