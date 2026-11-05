@@ -3,16 +3,16 @@
  * wildcard content, and whether an attribute is the registry's, typed by a declaration, foreign or
  * a stray.
  *
- * Pure functions over the seed tables of `seed/wildcard.ts` and the rows `seed/admission.ts`
- * composes from them, so a host or a global a later unit appends changes the answer with no edit
- * here. `tree.ts` calls them for every element and attribute it walks; `kindOf` stays what it was
- * and its answer comes in as a parameter, since `tree.ts` owns it.
+ * Pure functions over the seed tables of `seed/wildcard.ts` and the kinds files' rows
+ * `seed/admission.ts` composes, so a host or a global a later unit appends changes the answer with
+ * no edit here. `tree.ts` calls them for every element and attribute it walks; `kindOf` stays what
+ * it was and its answer comes in as a parameter, since `tree.ts` owns it.
  */
 import { Option } from "effect";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 import type { ProcessContentsHandle, SchemaSetHandle } from "#pantry/schema/content/rosters.ts";
 import type { NodeKindHandle, RootKindHandle, SchemaVersionHandle } from "#pantry/schema/node.ts";
-import { admission, attributeAdmission } from "#pantry/schema/seed/admission.ts";
+import { attributeAdmission, explicitAdmission } from "#pantry/schema/seed/admission.ts";
 import {
   attributeWildcard,
   globalAttribute,
@@ -99,7 +99,7 @@ const opaque: ReadonlySet<string> = new Set(
 );
 
 const admitted: ReadonlySet<string> = new Set(
-  admission.map((row) => `${row.version}\u0000${row.parent}\u0000${row.child}`),
+  explicitAdmission.map((row) => `${row.version}\u0000${row.parent}\u0000${row.child}`),
 );
 
 /**
@@ -126,12 +126,14 @@ const typedAttributes: ReadonlySet<string> = new Set(
  * The kind an element is, given what `kindOf` made of it.
  *
  * Inside a wildcard context, an element child of a lax host or of a `foreign` node, in order: the
- * host's explicit particle (`kindOf` names a kind and `Admission(version, parent, kind)` exists);
- * else a typed global of the tree's schema set, which is its kind whether or not the derived
- * `Admission` row exists (the database refuses an absent row as `admission`) and, when no kind
- * exists yet, none, so the caller refuses it as unmodeled; else `foreign`, whatever its namespace,
- * an opaque global included. Under a strict host the third step admits an opaque global only; any
- * other element is none. Outside a wildcard context the answer is `kindOf`'s.
+ * host's explicit particle (`kindOf` names a kind and a kinds file's `Admission(version, parent,
+ * kind)` row exists, the derived wildcard rows not counted); else a typed global of the tree's
+ * schema set, which is its kind whether or not the derived `Admission` row exists (the database
+ * refuses an absent row as `admission`) and, when no kind exists yet, none, so the caller refuses
+ * it as unmodeled; a global of another set is neither, so it falls to the third step; else
+ * `foreign`, whatever its namespace, an opaque global included. Under a strict host the third step
+ * admits an opaque global only; any other element is none. Outside a wildcard context the answer is
+ * `kindOf`'s.
  *
  * @param scope - The tree's scope.
  * @param element - The element to classify.
