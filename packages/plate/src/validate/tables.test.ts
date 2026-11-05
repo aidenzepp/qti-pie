@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { isDeepStrictEqual } from "node:util";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { readSource } from "#plate/document/read.ts";
@@ -7,7 +8,7 @@ import { qtiNamespace, xmlNamespace, xsdNamespace } from "#plate/document/source
 import { htmlSubset } from "#plate/emit/body.ts";
 import { baseTypes } from "#plate/vocabulary.ts";
 import { tables, xsdPath, xsdSha256 } from "#plate/validate/tables.ts";
-import type { AttributeTable, ElementTable } from "#plate/validate/xsd.ts";
+import type { AttributeTable, ContentTable, ElementTable, TypeEntry } from "#plate/validate/xsd.ts";
 import { generateTables } from "#plate/validate/xsd.ts";
 
 /**
@@ -45,6 +46,46 @@ const attributeNamed = (element: string, local: string): Option.Option<Attribute
       (attribute) => attribute.namespace === "" && attribute.local === local,
     ),
   );
+
+/**
+ * The entry of a type the committed tables must hold.
+ *
+ * @param name The type's local name.
+ * @returns Its entry; the test fails when the tables have none.
+ */
+const typeNamed = (name: string): TypeEntry => {
+  const entry = tables.types[name];
+  assert.isDefined(entry, `the tables hold the type ${name}`);
+
+  return entry;
+};
+
+/**
+ * The derivation part of a type's entry, its table set aside: its base and derivation, or a
+ * union's members.
+ *
+ * @param entry The entry.
+ * @returns The derivation part.
+ */
+const derivationOf = (entry: TypeEntry) =>
+  entry.derivation === "union"
+    ? { derivation: entry.derivation, members: entry.members }
+    : { base: entry.base, derivation: entry.derivation };
+
+/**
+ * The fields an element table and a type's entry share, every key present, so two tables compare
+ * on exactly those.
+ *
+ * @param table An element table or a type's entry.
+ * @returns Its wildcards, attributes, children and text.
+ */
+const contentOf = ({ anyAttribute, anyElement, attributes, children, text }: ContentTable) => ({
+  anyAttribute,
+  anyElement,
+  attributes,
+  children,
+  text,
+});
 
 /**
  * Name an attribute as the content emitter names it: its local name, `xml:` before a name in the
@@ -190,19 +231,71 @@ describe("validate/tables.ts", () => {
   });
 
   it("WeightDType extends EmptyPrimitiveTypeDType", () => {
-    assert.deepStrictEqual(tables.types["WeightDType"], {
+    assert.deepStrictEqual(derivationOf(typeNamed("WeightDType")), {
       base: { local: "EmptyPrimitiveTypeDType", namespace: qtiNamespace },
       derivation: "extension",
     });
   });
 
   it("ToleranceListDType is a union of xs:string and xs:double, with no base", () => {
-    assert.deepStrictEqual(tables.types["ToleranceListDType"], {
+    assert.deepStrictEqual(derivationOf(typeNamed("ToleranceListDType")), {
       derivation: "union",
       members: [
         { local: "string", namespace: xsdNamespace },
         { local: "double", namespace: xsdNamespace },
       ],
+    });
+  });
+
+  it("WeightDType holds the required attributes identifier and value", () => {
+    const required = typeNamed("WeightDType")
+      .attributes.filter((attribute) => attribute.namespace === "" && attribute.use === "required")
+      .map((attribute) => attribute.local);
+
+    assert.deepStrictEqual(required, ["identifier", "value"]);
+  });
+
+  it("qti-null's attributes, children and text are EmptyPrimitiveTypeDType's", () => {
+    const element = elementNamed("qti-null");
+    const type = typeNamed("EmptyPrimitiveTypeDType");
+
+    assert.deepStrictEqual(element.attributes, type.attributes);
+    assert.deepStrictEqual(element.children, type.children);
+    assert.strictEqual(element.text, type.text);
+  });
+
+  it("every element declared with exactly one named type has that type's table", () => {
+    const compared: string[] = [];
+    const mismatches: string[] = [];
+
+    for (const [name, table] of Object.entries(tables.elements)) {
+      const [type, ...others] = table.types;
+      if (
+        type !== undefined &&
+        others.length === 0 &&
+        table.anonymousType !== true &&
+        type.namespace === qtiNamespace
+      ) {
+        compared.push(name);
+        if (!isDeepStrictEqual(contentOf(table), contentOf(typeNamed(type.local)))) {
+          mismatches.push(`${name}: not ${type.local}'s table`);
+        }
+      }
+    }
+
+    assert.isAbove(compared.length, 0);
+    assert.deepStrictEqual(mismatches, []);
+  });
+
+  it("a simple type's table holds text and no attributes, children or wildcards", () => {
+    const entry = typeNamed("ToleranceListDType");
+
+    assert.deepStrictEqual(contentOf(entry), {
+      anyAttribute: undefined,
+      anyElement: undefined,
+      attributes: [],
+      children: [],
+      text: true,
     });
   });
 
