@@ -2306,6 +2306,117 @@ describe("checkStructure", () => {
       assert.deepStrictEqual(found(customized(widget("z:WeightDType")), generatedTables), [fault]);
     });
 
+    it("relies on the committed tables: the simple and complex types the reading 60 cases name", () => {
+      assert.deepStrictEqual(
+        [
+          generatedTables.types["MimeTypeListDType"],
+          generatedTables.types["MimeTypeDType"],
+          generatedTables.types["BaseValueDType"],
+        ].map((entry) => (entry !== undefined && "base" in entry ? entry.base : undefined)),
+        [qtiType("MimeTypeDType"), xsdType("normalizedString"), xsdType("string")],
+      );
+      assert.deepStrictEqual(
+        ["MimeTypeListDType", "MimeTypeDType", "BaseValueDType", "ToleranceListDType"].map(
+          (local) => generatedTables.types[local]?.derivation,
+        ),
+        ["restriction", "restriction", "extension", "union"],
+      );
+    });
+
+    it("[I-8] refuses an attribute and a child element on foreign content typed by a simple type, and leaves its text unchecked (reading 60)", () => {
+      const widgetPath = `${custom}/{${otherNamespace}}widget`;
+      const widget = (
+        written: string,
+        attributes: readonly SourceAttribute[],
+        ...children: readonly SourceChild[]
+      ) =>
+        customized(
+          el(
+            "widget",
+            [...declarations, attr("type", written, xsiNamespace), ...attributes],
+            children,
+            otherNamespace,
+          ),
+        );
+      const foreign = attr("foreign", "1", otherNamespace);
+      const lang = attr("lang", "en", xmlNamespace);
+      const schemaLocation = attr("schemaLocation", `${otherNamespace} other.xsd`, xsiNamespace);
+
+      for (const written of [
+        "xs:string",
+        "xs:integer",
+        "q:MimeTypeListDType",
+        "q:ToleranceListDType",
+      ]) {
+        assert.deepStrictEqual(
+          found(widget(written, [], badDiv), generatedTables),
+          [["unknown-element", at(`${widgetPath}/div`)]],
+          written,
+        );
+        assert.deepStrictEqual(
+          found(widget(written, [], el("part", [], [], otherNamespace)), generatedTables),
+          [["unknown-element", at(`${widgetPath}/{${otherNamespace}}part`)]],
+          written,
+        );
+        assert.deepStrictEqual(
+          found(widget(written, [foreign, attr("size", "3"), lang]), generatedTables),
+          [
+            ["unknown-attribute", at(`${widgetPath}/@{${otherNamespace}}foreign`)],
+            ["unknown-attribute", at(`${widgetPath}/@size`)],
+            ["unknown-attribute", at(`${widgetPath}/@xml:lang`)],
+          ],
+          written,
+        );
+        assert.deepStrictEqual(
+          found(
+            widget(written, [schemaLocation], text("not a number, nor a MIME type")),
+            generatedTables,
+          ),
+          [],
+          written,
+        );
+      }
+    });
+
+    it("[I-8] cites reading 60 on the refusals of foreign content typed by a simple type", () => {
+      const source = customized(
+        el(
+          "widget",
+          [...declarations, attr("type", "xs:string", xsiNamespace), attr("size", "3")],
+          [badDiv],
+          otherNamespace,
+        ),
+      );
+      const widget = `{${otherNamespace}}widget`;
+
+      assert.deepStrictEqual(
+        checkStructure(source, generatedTables).map((refusal) => refusal.detail),
+        [
+          { attribute: "size", element: widget, reading: "60" },
+          { element: "div", parent: widget, reading: "60" },
+        ],
+      );
+    });
+
+    it("[I-8] keeps foreign content typed by a complex type unchecked whatever it holds, simple content included (reading 50)", () => {
+      for (const written of ["q:WeightDType", "q:BaseValueDType"]) {
+        const source = customized(
+          el(
+            "widget",
+            [
+              ...declarations,
+              attr("type", written, xsiNamespace),
+              attr("foreign", "1", otherNamespace),
+            ],
+            [badDiv, el("part", [], [], otherNamespace), text("text")],
+            otherNamespace,
+          ),
+        );
+
+        assert.deepStrictEqual(found(source, generatedTables), [], written);
+      }
+    });
+
     it("governingTables gives the lax-checked elements, and not the ones passed over", () => {
       const checkedDiv = customized(badDiv);
       const choice = customized(
