@@ -29,6 +29,13 @@ describe("configure", () => {
     }),
   );
 
+  it.effect("holds no seed unless one is given, and decodes seed 7 as 7", () =>
+    Effect.gen(function* seedKey() {
+      assert.isFalse(Object.hasOwn(yield* configure({}), "seed"));
+      assert.strictEqual((yield* configure({ seed: 7 })).seed, 7);
+    }),
+  );
+
   it.effect("decodes an empty configuration with no trust key", () =>
     Effect.gen(function* noTrust() {
       assert.isFalse(Object.hasOwn(yield* configure({}), "trust"));
