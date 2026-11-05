@@ -1,6 +1,6 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the tool column the rows under test carry; the shape here is which of the two tool attributes the root wrote, not a structure. */
 import path from "node:path";
-import type { Uuid } from "@bjornpagen/grizzle";
+import type { AnyRelation, Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
@@ -11,8 +11,17 @@ import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/docu
 import { FeedbackInline } from "#pantry/schema/feedback.ts";
 import { AssessmentItemLabel, ItemTool, ItemToolBoth } from "#pantry/schema/item.ts";
 import { NodeClass, NodeXmlLang } from "#pantry/schema/attributes.ts";
-import { ChoiceInteraction, InteractionBinding } from "#pantry/schema/interaction.ts";
+import { readRows } from "#pantry/import/package.ts";
+import {
+  ChoiceInteraction,
+  DeclaredMaxChoices,
+  InteractionBinding,
+  SimpleChoice,
+  TypedBinding,
+} from "#pantry/schema/interaction.ts";
 import { Node } from "#pantry/schema/node.ts";
+import { nodeArms } from "#pantry/schema/qti.ts";
+import { XInclude, XIncludeHref, XIncludeParse } from "#pantry/schema/rule.ts";
 import {
   AssessmentStimulus,
   ItemStimulusRef,
@@ -65,6 +74,11 @@ const only = <Row>(rows: readonly Row[]): Row => {
  */
 const kindsOf = (rows: Rows, nodes: readonly string[]): readonly string[] =>
   nodes.map((id) => Rows.of(rows, Node).find((node) => node.id === id)?.kind ?? "");
+
+/**
+ * The arm each `NodeKind` handle has under its own `mirrors` law from `Node`.
+ */
+const armOfKind: ReadonlyMap<string, AnyRelation> = new Map(Object.entries(nodeArms));
 
 const stimulusPath = "passages/unbelievableNight.xml";
 
@@ -150,10 +164,70 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/stimulus.ts", (
         );
 
         assert.strictEqual(Rows.of(rows, InteractionBinding).length, 0);
-        assert.strictEqual(Rows.of(rows, ChoiceInteraction).length, 0);
+        assert.strictEqual(Rows.of(rows, TypedBinding).length, 0);
+
+        const choice = only(Rows.of(rows, ChoiceInteraction));
+        assert.strictEqual(choice.rootKind, "stimulus");
+        assert.strictEqual(choice.responseIdentifier, "RESPONSE");
+        assert.strictEqual(choice.maxChoicesN, 1n);
+        assert.deepStrictEqual(
+          Rows.of(rows, DeclaredMaxChoices).map((row) => row.node),
+          [choice.id],
+        );
+        assert.deepStrictEqual(
+          Rows.of(rows, SimpleChoice).map(({ identifier, interaction }) => ({
+            identifier,
+            interaction,
+          })),
+          [{ identifier: "A", interaction: choice.id }],
+        );
+
+        const include = only(Rows.of(rows, XInclude));
+        assert.strictEqual(only(Rows.of(rows, XIncludeHref)).node, include.id);
+        assert.strictEqual(only(Rows.of(rows, XIncludeHref)).value, "fragment.xml");
+        assert.strictEqual(only(Rows.of(rows, XIncludeParse)).node, include.id);
+        assert.strictEqual(only(Rows.of(rows, XIncludeParse)).value, "xml");
         assert.strictEqual(Rows.of(rows, FeedbackInline).length, 1);
         assert.strictEqual(Rows.of(rows, TemplateInline).length, 1);
       }),
+  );
+
+  for (const [fixture, version] of [
+    ["stimulus-shared", "3.0.0"],
+    ["stimulus-301", "3.0.1"],
+  ] as const) {
+    suite.effect(`${fixture}: every node of the stimulus has a row in its kind's arm`, () =>
+      Effect.gen(function* armed() {
+        const { rows } = yield* stimulusRows(
+          yield* inputOf(fixture, stimulusPath, version),
+          Rows.empty(),
+        );
+
+        const missing = Rows.of(rows, Node)
+          .filter((node) => {
+            const arm = armOfKind.get(node.kind);
+
+            return (
+              arm === undefined ||
+              !Rows.of(rows, arm).some((fact) => "id" in fact && fact.id === node.id)
+            );
+          })
+          .map((node) => node.kind);
+
+        assert.deepStrictEqual(missing, []);
+      }),
+    );
+  }
+
+  suite.effect("stimulus-301's package guards accept the stimulus's rows", () =>
+    Effect.gen(function* guarded() {
+      const { rows } = yield* readRows(yield* materialize("stimulus-301"));
+
+      assert.strictEqual(
+        Rows.of(rows, ChoiceInteraction).filter((choice) => choice.rootKind === "stimulus").length,
+        1,
+      );
+    }),
   );
 
   suite.effect("a root that is not a stimulus is refused as unmodeled vocabulary", () =>

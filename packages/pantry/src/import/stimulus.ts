@@ -14,9 +14,11 @@ import { Effect, Option } from "effect";
 import { attributeRows } from "#pantry/import/attributes.ts";
 import { contentRows } from "#pantry/import/content.ts";
 import { htmlRows } from "#pantry/import/html.ts";
+import { includeRows } from "#pantry/import/include.ts";
+import { unboundChoiceRows } from "#pantry/import/item.ts";
 import type { ItemInput } from "#pantry/import/item.ts";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
-import { attributeReader } from "#pantry/import/interactions.ts";
+import { attributeReader, unboundInteractionRows } from "#pantry/import/interactions.ts";
 import { requiredAttribute } from "#pantry/import/required.ts";
 import {
   collapse,
@@ -25,6 +27,7 @@ import {
   Rows,
   treeRows,
   UnmodeledVocabulary,
+  withParents,
 } from "#pantry/import/tree.ts";
 import type { NodeIndex } from "#pantry/import/tree.ts";
 import {
@@ -86,8 +89,10 @@ const toolRows = (
 
 /**
  * Write the rows of a stimulus document: its tree, its `Document` row with the identifier and title
- * rows, the root with its tool and label rows, the body, and the shared attribute, HTML and content
- * rows of the tree.
+ * rows, the root with its tool and label rows, the body, and the shared attribute, HTML, include,
+ * interaction and content rows of the tree. The interactions and their choices are written bare, as
+ * `unboundChoiceRows` and `unboundInteractionRows` write them, and each `xi:include` as
+ * `includeRows` writes it, so every node of the tree has its arm.
  *
  * `identifier` and `title` are required and read with their inventory classes; `label`,
  * `tool-name` and `tool-version` are optional and a row is written only for one the source wrote.
@@ -181,6 +186,9 @@ export const stimulusRows = Effect.fn("import.stimulusRows")(function* stimulusR
 
   built = yield* attributeRows(root, nodes, documentId, built);
   built = yield* htmlRows(root, nodes, built);
+  built = yield* includeRows(root, nodes, built);
+  built = yield* unboundChoiceRows(built, withParents(root, Option.none()), nodes);
+  built = yield* unboundInteractionRows(root, nodes, documentId, built);
   built = yield* contentRows(root, nodes, documentId, "stimulus", new Map(), built);
 
   return { documentId, nodes, rows: built };
