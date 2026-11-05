@@ -14,7 +14,8 @@ import { Effect, Option, Schema } from "effect";
 import type { Uuid } from "@bjornpagen/grizzle";
 import type { ImportRefused, Rule } from "#pantry/import/refusal.ts";
 import { closedOf, Rows, spelledInteger, typedAttribute, valueText } from "#pantry/import/tree.ts";
-import type { NodeIndex, UnmodeledVocabulary, WhiteSpace } from "#pantry/import/tree.ts";
+import type { NodeIndex, UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import type {
   AttributeValue,
   IncludeNode,

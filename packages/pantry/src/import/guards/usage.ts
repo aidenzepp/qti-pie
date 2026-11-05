@@ -6,8 +6,9 @@
  */
 import type { Uuid } from "@bjornpagen/grizzle";
 import { Effect, Predicate, Schema } from "effect";
-import { collapse, replace, Rows, valueText } from "#pantry/import/tree.ts";
-import type { WhiteSpace } from "#pantry/import/tree.ts";
+import { Rows, valueText } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import { AttributeLexical, Edge, EntityReference, TextNode, Ws } from "#pantry/schema/node.ts";
 import * as ud from "#pantry/schema/usage.ts";
 

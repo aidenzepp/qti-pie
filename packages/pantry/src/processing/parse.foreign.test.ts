@@ -74,15 +74,14 @@ describe("processing/parse.ts, wildcard content", () => {
     }),
   );
 
-  it.effect("passes xsi:foo over and still refuses the three declared xsi names", () =>
+  it.effect("passes xsi:foo and the three declared xsi names over", () =>
     Effect.gen(function* xsiNames() {
       const passed = yield* customOperator('xsi:foo="1"', "<qti-null/>");
       assert.strictEqual(expressionOf(passed.rules).attributes.size, 0);
 
       for (const name of ["type", "nil", "noNamespaceSchemaLocation"]) {
-        const refusal = yield* refusalOf(customOperator(`xsi:${name}="x:T"`, "<qti-null/>"));
-        assert.strictEqual(refusal.kind, "attribute");
-        assert.strictEqual(refusal.name, `xsi:${name}`);
+        const parsed = yield* customOperator(`xsi:${name}="x:T"`, "<qti-null/>");
+        assert.strictEqual(expressionOf(parsed.rules).attributes.size, 0);
       }
     }),
   );

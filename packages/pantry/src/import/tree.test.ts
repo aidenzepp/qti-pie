@@ -40,10 +40,8 @@ import { materialize } from "#pantry/test/fixtures.ts";
 import { GuardRefusal, treeGuards } from "#pantry/import/guards/tree.ts";
 import {
   closedOf,
-  collapse,
   integerOf,
   kindOf,
-  replace,
   Rows,
   spelledInteger,
   treeRows,
@@ -51,6 +49,7 @@ import {
   UnmodeledVocabulary,
   valueText,
 } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
 import type { NodeIndex, TreeInput } from "#pantry/import/tree.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";

@@ -13,7 +13,8 @@ import { Effect, Option } from "effect";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { ownNames, schemaSetOf } from "#pantry/import/foreign.ts";
 import { closedOf, Rows, typedAttribute, UnmodeledVocabulary } from "#pantry/import/tree.ts";
-import type { NodeIndex, WhiteSpace } from "#pantry/import/tree.ts";
+import type { NodeIndex } from "#pantry/import/tree.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import { isForeignAttribute, scopeOf } from "#pantry/import/wildcard.ts";
 import type { Scope } from "#pantry/import/wildcard.ts";
 import {
@@ -66,6 +67,17 @@ import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
 const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
+
+/**
+ * The four attributes XML Schema declares in the `xsi` namespace; the tree walk stores each in a
+ * relation of its own.
+ */
+const declaredXsi: ReadonlySet<string> = new Set([
+  "nil",
+  "noNamespaceSchemaLocation",
+  "schemaLocation",
+  "type",
+]);
 
 /**
  * The attribute names each node kind may carry, from the composed `AttributeAdmission` rows: the
@@ -182,14 +194,15 @@ const isShared = (name: string): boolean =>
   familyClass.has(name) || ariaRelations.has(name) || name === "headers";
 
 /**
- * The attributes of `element` this pass reads: all but namespace declarations and
- * `xsi:schemaLocation`, which the tree walk stores as `NamespaceDeclaration` and `SchemaLocation`.
+ * The attributes of `element` this pass reads: all but namespace declarations and the four
+ * `xsi` attributes XML Schema declares, which the tree walk stores as `NamespaceDeclaration`,
+ * `SchemaLocation`, `XsiType`, `XsiNil` and `NoNamespaceSchemaLocation`.
  */
 const readable = (element: Element): readonly Attribute[] =>
   element.attributes.filter(
     (attribute) =>
       attribute.namespace !== xmlnsNamespace &&
-      !(attribute.namespace === xsiNamespace && attribute.local === "schemaLocation"),
+      !(attribute.namespace === xsiNamespace && declaredXsi.has(attribute.local)),
   );
 
 /**

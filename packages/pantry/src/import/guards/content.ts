@@ -11,8 +11,9 @@
  */
 import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
-import { collapse, replace, Rows } from "#pantry/import/tree.ts";
-import type { WhiteSpace } from "#pantry/import/tree.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import { IdrefAttribute } from "#pantry/schema/content/rosters.ts";
 import { entryOf } from "#pantry/schema/content/xsd-inventory.ts";
 import { spelledText, typedValues } from "#pantry/schema/attribute-homes.ts";

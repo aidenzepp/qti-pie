@@ -9,6 +9,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
 import { Rows, treeRows, UnmodeledVocabulary } from "#pantry/import/tree.ts";
 import type { TreeInput } from "#pantry/import/tree.ts";
 import { classifyAttribute, isForeignAttribute, scopeOf } from "#pantry/import/wildcard.ts";
@@ -379,15 +380,25 @@ describe("import/tree.ts wildcard attribute classification", () => {
     }),
   );
 
-  it.effect("xsi:type, xsi:nil and xsi:noNamespaceSchemaLocation stay refused as today", () =>
-    Effect.gen(function* declaredRefused() {
-      for (const name of ["xsi:type", "xsi:nil", "xsi:noNamespaceSchemaLocation"]) {
-        const refusal = yield* refusalOf(operatorItem(`${operand}<ma:foo ${name}="x"/>`), "item");
+  it.effect(
+    "xsi:type and xsi:noNamespaceSchemaLocation are accepted on a foreign element, xsi:nil is judged",
+    () =>
+      Effect.gen(function* declaredJudged() {
+        for (const name of ["xsi:type", "xsi:noNamespaceSchemaLocation"]) {
+          yield* walkedOf(operatorItem(`${operand}<ma:foo ${name}="x"/>`), "item");
+        }
 
-        assert.strictEqual(refusal.kind, "attribute");
-        assert.strictEqual(refusal.name, name);
-      }
-    }),
+        const doc = yield* readXml(
+          new TextEncoder().encode(operatorItem(`${operand}<ma:foo xsi:nil="x"/>`)),
+        );
+        const exit = yield* Effect.exit(treeRows(doc, inputOf("item", doc.charset), Rows.empty()));
+        const refusal = Option.getOrThrow(
+          Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none(),
+        );
+
+        assert.instanceOf(refusal, ImportRefused);
+        assert.strictEqual(refusal.rule, "attribute-lexical");
+      }),
   );
 
   it.effect("in an externalLom tree xml:space and xml:id on a foreign element are foreign", () =>

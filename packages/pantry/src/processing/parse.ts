@@ -1,7 +1,8 @@
 import { Effect, Option } from "effect";
 
-import { collapse, replace, UnmodeledVocabulary } from "#pantry/import/tree.ts";
-import type { WhiteSpace } from "#pantry/import/tree.ts";
+import { UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import type {
   AttributeValue,
   ExpressionNode,
@@ -297,10 +298,16 @@ const elementWildcardHosts: ReadonlySet<string> = new Set(
 );
 
 /**
- * The XSD names the processing vocabulary refuses on every element: the `xsi` attributes whose
- * judgment is the tree walk's, `xsi:type`, `xsi:nil` and `xsi:noNamespaceSchemaLocation`.
+ * The attributes XML Schema declares in the `xsi` namespace, which every element carries and the
+ * tree walk judges and stores: `xsi:schemaLocation`, `xsi:type`, `xsi:nil` and
+ * `xsi:noNamespaceSchemaLocation`.
  */
-const refusedXsiNames: ReadonlySet<string> = new Set(["nil", "noNamespaceSchemaLocation", "type"]);
+const declaredXsiNames: ReadonlySet<string> = new Set([
+  "nil",
+  "noNamespaceSchemaLocation",
+  "schemaLocation",
+  "type",
+]);
 
 /**
  * The element children of `element`, in document order, each with its index among them.
@@ -356,11 +363,10 @@ const applyWhiteSpace = (lexical: string, whiteSpace: WhiteSpace): string => {
 /**
  * Read an element's attributes, each in both forms and under its `whiteSpace` class.
  *
- * Namespace declarations and `xsi:schemaLocation` are admitted on every element and are not
- * attributes of the kind; any other attribute outside `allowed` is refused, naming the first. On
- * a host of an attribute wildcard, an attribute with a namespace (but `xsi:type`, `xsi:nil` and
- * `xsi:noNamespaceSchemaLocation`) is wildcard content: it is passed over, not read, and the tree
- * walk judges it.
+ * Namespace declarations and the four `xsi` attributes XML Schema declares are admitted on every
+ * element and are not attributes of the kind; any other attribute outside `allowed` is refused,
+ * naming the first. On a host of an attribute wildcard, an attribute with a namespace is wildcard
+ * content: it is passed over, not read, and the tree walk judges it.
  */
 const readAttributes = (
   element: Element,
@@ -374,15 +380,11 @@ const readAttributes = (
         continue;
       }
 
-      if (attribute.namespace === xsiNamespace && attribute.local === "schemaLocation") {
+      if (attribute.namespace === xsiNamespace && declaredXsiNames.has(attribute.local)) {
         continue;
       }
 
-      if (
-        attribute.namespace !== "" &&
-        attributeWildcardHosts.has(kind) &&
-        (attribute.namespace !== xsiNamespace || !refusedXsiNames.has(attribute.local))
-      ) {
+      if (attribute.namespace !== "" && attributeWildcardHosts.has(kind)) {
         continue;
       }
 

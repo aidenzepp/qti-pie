@@ -51,7 +51,7 @@ import { Option, Result } from "effect";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import type { Rule } from "#pantry/import/refusal.ts";
-import { collapse } from "#pantry/import/tree.ts";
+import { collapse } from "#pantry/import/whitespace.ts";
 import { addedAttributes, validLocal } from "#pantry/import/xsi-types.ts";
 import { anyUri, ncNameContinuation, ncNameStart } from "#pantry/schema/patterns.ts";
 import type { SchemaSetHandle } from "#pantry/schema/content/rosters.ts";
