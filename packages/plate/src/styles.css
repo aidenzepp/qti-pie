@@ -788,6 +788,88 @@
 }
 
 /*
+ * The test navigation's Root: its parts on one line, wrapping when the line is full. No rule over
+ * a navigation part tests its type, so a button a host swaps to type="submit" looks the same.
+ */
+:where([data-slot="test-navigation"]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/*
+ * The item list: no numbers, since each button names its item, and its items on one line,
+ * wrapping.
+ */
+:where([data-slot="test-navigation-items"]) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* An item of the list: a box for its button, with no list marker of its own. */
+:where([data-slot="test-navigation-item"]) {
+  display: block;
+}
+
+/* The navigation buttons: the text Controls' card surface, border and font. */
+:where(
+  [data-slot="test-navigation-previous"],
+  [data-slot="test-navigation-next"],
+  [data-slot="test-navigation-item-button"],
+  [data-slot="test-navigation-submit"],
+  [data-slot="test-navigation-end"]
+) {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--input, oklch(0.922 0 0));
+  border-radius: calc(var(--radius, 0.625rem) * 0.8);
+  font: inherit;
+  background-color: var(--card, oklch(1 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+/* A navigation button under the pointer, unless it is disabled: a Choice row's hover look. */
+:where(
+  [data-slot="test-navigation-previous"]:hover:not(:disabled),
+  [data-slot="test-navigation-next"]:hover:not(:disabled),
+  [data-slot="test-navigation-item-button"]:hover:not(:disabled),
+  [data-slot="test-navigation-submit"]:hover:not(:disabled),
+  [data-slot="test-navigation-end"]:hover:not(:disabled)
+) {
+  background-color: var(--accent, oklch(0.97 0 0));
+  color: var(--accent-foreground, oklch(0.205 0 0));
+}
+
+/* A disabled navigation button. */
+:where(
+  [data-slot="test-navigation-previous"]:disabled,
+  [data-slot="test-navigation-next"]:disabled,
+  [data-slot="test-navigation-item-button"]:disabled,
+  [data-slot="test-navigation-submit"]:disabled,
+  [data-slot="test-navigation-end"]:disabled
+) {
+  opacity: 0.5;
+}
+
+/* Focus on a navigation button: the same ring as a text Control's. */
+:where(
+  [data-slot="test-navigation-previous"]:focus-visible,
+  [data-slot="test-navigation-next"]:focus-visible,
+  [data-slot="test-navigation-item-button"]:focus-visible,
+  [data-slot="test-navigation-submit"]:focus-visible,
+  [data-slot="test-navigation-end"]:focus-visible
+) {
+  outline-width: 3px;
+  outline-offset: 0;
+  outline-style: solid;
+  outline-color: color-mix(in oklab, var(--ring, oklch(0.708 0 0)) 50%, transparent);
+}
+
+/*
  * Forced colours drop drawn backgrounds, so the native Control shows in place of the Indicator,
  * on the Label's line.
  */
