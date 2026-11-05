@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { configure } from "#plate/configuration.ts";
-import { patternMessage } from "#plate/interactions/pattern.ts";
+import { malformedMessage, patternMessage } from "#plate/interactions/pattern.ts";
 import { message } from "#plate/messages.ts";
 import type { TextEntryInteraction } from "#plate/model/item.ts";
 import { maximumStates } from "#plate/model/regex.ts";
@@ -245,5 +245,50 @@ describe("patternMessage", () => {
 
     assert.isTrue(modules.has("src/model/blocks.generated.json"));
     assert.deepStrictEqual(checkAllowlist(modules, ["src/interactions/pattern.ts"]), []);
+  });
+});
+
+describe("malformedMessage", () => {
+  it("[Q-20] gives a numeric binding's file malformedFile, its second entry malformedSingleMany and its number malformedNumber or the author's message", () => {
+    for (const baseType of ["integer", "float"] as const) {
+      const plain = { baseType, patternMaskMessage: Option.none() };
+      const withMessage = { baseType, patternMaskMessage: Option.some(authored) };
+
+      for (const binding of [plain, withMessage]) {
+        assert.strictEqual(
+          malformedMessage(binding, "file", "en"),
+          message("en", "malformedFile"),
+          baseType,
+        );
+        assert.strictEqual(
+          malformedMessage(binding, "single-many", "en"),
+          message("en", "malformedSingleMany"),
+          baseType,
+        );
+        assert.strictEqual(
+          malformedMessage(binding, "identifier", "en"),
+          message("en", "notAccepted"),
+          baseType,
+        );
+      }
+      assert.strictEqual(
+        malformedMessage(plain, "number", "en"),
+        message("en", "malformedNumber"),
+        baseType,
+      );
+      assert.strictEqual(malformedMessage(withMessage, "number", "en"), authored, baseType);
+    }
+  });
+
+  it("[Q-20] gives a string binding's file malformedFile, its second entry malformedSingleMany and any other reason notAccepted", () => {
+    const string = { baseType: "string", patternMaskMessage: Option.some(authored) } as const;
+
+    assert.strictEqual(malformedMessage(string, "file", "en"), message("en", "malformedFile"));
+    assert.strictEqual(
+      malformedMessage(string, "single-many", "en"),
+      message("en", "malformedSingleMany"),
+    );
+    assert.strictEqual(malformedMessage(string, "number", "en"), message("en", "notAccepted"));
+    assert.strictEqual(malformedMessage(string, "identifier", "en"), message("en", "notAccepted"));
   });
 });
