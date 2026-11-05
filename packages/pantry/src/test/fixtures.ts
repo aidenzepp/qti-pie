@@ -2542,7 +2542,7 @@ const mappingOutcomes = [
   ["PADDED", "float"],
   ["PARTTIME", "duration"],
   ["SECTIONSUM", "float"],
-  ["TIMED", "duration"],
+  ["TIMED", "float"],
 ] as const;
 
 /**
