@@ -7,7 +7,7 @@ QTI 3.0 on [grizzle](vendor/README.md), and exists first to put grizzle through 
 [docs/qti-intent.md](docs/qti-intent.md) before planning or changing the QTI model. `packages/plate` (`@qti-pie/plate`)
 is planned: it renders QTI 3.0, depends on crust and never on pantry, and its intent and rules arrive with its own goal;
 pantry's intent (a grizzle test vehicle, delivery out of scope) does not bind it. The packages read the specifications the same way: [docs/spec-readings.md](docs/spec-readings.md). Everything runs locally; there is no deploy target. The shared repository
-is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (private), the remote `origin`.
+is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (public, MIT-licensed; main is protected), the remote `origin`.
 
 ## Toolchain
 
