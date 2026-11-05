@@ -6,7 +6,12 @@ import { Effect } from "effect";
 import { modelFinding } from "#pantry/import/guards/mathml.ts";
 import { mathmlInventory } from "#pantry/schema/content/inventory/mathml.ts";
 import { inventory } from "#pantry/schema/content/xsd-inventory.ts";
-import { mathmlBlocks, presentationHandles } from "#pantry/test/mathml-blocks.ts";
+import {
+  annotationXmlBlock,
+  contentHandles,
+  mathmlBlocks,
+  presentationHandles,
+} from "#pantry/test/mathml-blocks.ts";
 import type { MathmlBlock } from "#pantry/test/mathml-blocks.ts";
 
 const mathmlNamespace = "http://www.w3.org/1998/Math/MathML";
@@ -27,26 +32,38 @@ const parseBlock = Effect.fn("test.mathmlBlocks.parse")(function* parseBlock(blo
 });
 
 /**
- * Every element under a root, the root included, in document order, each with its parent.
- *
- * @param root - The root element.
- * @returns The elements with their parents.
+ * One element of a parsed block with its parent and its handle: `m:` and its local name, except for
+ * the `m:semantics` of an `m:bvar` or of another `m:semantics.ci`, which is the kind
+ * `m:semantics.ci`.
  */
-const walk = (
-  root: Element,
-  parent?: Element,
-): readonly { readonly element: Element; readonly parent: Element | undefined }[] => [
-  { element: root, parent },
-  ...root.children.flatMap((child) => (child.kind === "element" ? walk(child, root) : [])),
-];
+interface Found {
+  readonly element: Element;
+  readonly handle: string;
+  readonly parent: Element | undefined;
+}
 
 /**
- * The handle of a MathML element.
+ * Every element under a root, the root included, in document order, each with its parent and
+ * handle.
  *
- * @param element - The element.
- * @returns `m:` and its local name.
+ * @param root - The root element.
+ * @param parent - The root's parent, when the root is not the fragment's own.
+ * @param parentHandle - The parent's handle.
+ * @returns The elements.
  */
-const handleOf = (element: Element): string => `m:${element.local}`;
+const walk = (root: Element, parent?: Element, parentHandle?: string): readonly Found[] => {
+  const handle =
+    root.local === "semantics" && (parentHandle === "m:bvar" || parentHandle === "m:semantics.ci")
+      ? "m:semantics.ci"
+      : `m:${root.local}`;
+
+  return [
+    { element: root, handle, parent },
+    ...root.children.flatMap((child) =>
+      child.kind === "element" ? walk(child, root, handle) : [],
+    ),
+  ];
+};
 
 /**
  * Whether an element is in the MathML namespace.
@@ -56,15 +73,60 @@ const handleOf = (element: Element): string => `m:${element.local}`;
  */
 const isMathml = (element: Element): boolean => element.namespace === mathmlNamespace;
 
+/**
+ * The content-model findings of a block: each MathML element whose element children break its
+ * kind's model, and the non-local rule of `m:mglyph` (its `src` and `alt`).
+ *
+ * @param block - The block.
+ * @returns One entry per fault, none when the block passes.
+ */
+const findingsOf = Effect.fn("test.mathmlBlocks.findings")(function* findingsOf(
+  block: MathmlBlock,
+) {
+  const root = yield* parseBlock(block);
+  const found = walk(root).filter(({ element }) => isMathml(element));
+  const handles = new Map(found.map(({ element, handle }) => [element, handle]));
+  const faults: string[] = [];
+
+  for (const { element, handle } of found) {
+    const finding = modelFinding(
+      handle,
+      element.children.flatMap((child) =>
+        child.kind === "element" ? [handles.get(child) ?? `m:${child.local}`] : [],
+      ),
+    );
+
+    if (finding !== undefined) {
+      faults.push(`${handle}: ${finding}`);
+    }
+
+    if (element.local === "mglyph") {
+      const names = new Set(element.attributes.map((attribute) => attribute.local));
+
+      if (!names.has("src") || !names.has("alt")) {
+        faults.push(`${handle}: src and alt`);
+      }
+    }
+  }
+
+  return faults;
+});
+
 const hostEntries = Object.values(inventory).filter((entry) =>
   entry.children.some((child) => child.name === "m3:math"),
 );
 
 const kindBlocks = mathmlBlocks.filter((block) => block.part === "kind");
 
+const presentationBlocks = kindBlocks.filter((block) =>
+  presentationHandles.includes(`m:${block.name.slice("kind-".length)}`),
+);
+
+const contentBlocks = kindBlocks.filter((block) => !presentationBlocks.includes(block));
+
 const hostBlocks = mathmlBlocks.filter((block) => block.part === "host");
 
-describe("the host and presentation coverage blocks", () => {
+describe("the host, presentation and content coverage blocks", () => {
   it("has unique names and writes only host and kind blocks for a 3.0.0 item", () => {
     const names = mathmlBlocks.map((block) => block.name);
 
@@ -72,7 +134,8 @@ describe("the host and presentation coverage blocks", () => {
     assert.isTrue(mathmlBlocks.every((block) => block.part === "host" || block.part === "kind"));
     assert.isTrue(mathmlBlocks.every((block) => block.version === "3.0.0"));
     assert.strictEqual(hostBlocks.length, 63);
-    assert.strictEqual(kindBlocks.length, 43);
+    assert.strictEqual(presentationBlocks.length, 43);
+    assert.strictEqual(kindBlocks.length, 193);
   });
 
   it("puts m:math under every roster host the composed inventory names", () => {
@@ -104,12 +167,12 @@ describe("the host and presentation coverage blocks", () => {
       Effect.gen(function* checkBlock() {
         const root = yield* parseBlock(block);
         const found = walk(root).filter(({ element }) => isMathml(element));
-        const handles = [...new Set(found.map(({ element }) => handleOf(element)))];
+        const handles = [...new Set(found.map(({ handle }) => handle))];
         const pairs = new Set(
-          found.flatMap(({ element }) =>
+          found.flatMap(({ element, handle }) =>
             element.attributes
               .filter((attribute) => attribute.namespace === "")
-              .map((attribute) => `${handleOf(element)} ${attribute.local}`),
+              .map((attribute) => `${handle} ${attribute.local}`),
           ),
         );
         const claimed = block.handles.filter((handle) => handle in mathmlInventory);
@@ -122,32 +185,54 @@ describe("the host and presentation coverage blocks", () => {
 
     it.effect(`${block.name} passes the MathML content models`, () =>
       Effect.gen(function* checkModels() {
-        const root = yield* parseBlock(block);
-        const findings = walk(root)
-          .filter(({ element }) => isMathml(element))
-          .map(({ element }) => ({
-            finding: modelFinding(
-              handleOf(element),
-              element.children.flatMap((child) =>
-                child.kind === "element" ? [handleOf(child)] : [],
-              ),
-            ),
-            kind: handleOf(element),
-          }))
-          .filter(({ finding }) => finding !== undefined);
-
-        assert.deepStrictEqual(findings, []);
-
-        for (const { element } of walk(root)) {
-          if (element.namespace === mathmlNamespace && element.local === "mglyph") {
-            const names = new Set(element.attributes.map((attribute) => attribute.local));
-
-            assert.isTrue(names.has("src") && names.has("alt"));
-          }
-        }
+        assert.deepStrictEqual(yield* findingsOf(block), []);
       }),
     );
   }
+
+  it("covers every leaf handle but m:annotation-xml in some kind block", () => {
+    const covered = new Set(kindBlocks.flatMap((block) => block.handles));
+    const leaf = Object.keys(mathmlInventory).filter((handle) => handle !== "m:annotation-xml");
+
+    assert.strictEqual(contentHandles.length, 150);
+    assert.strictEqual(contentBlocks.length, 150);
+    assert.deepStrictEqual(
+      leaf.filter((handle) => !covered.has(handle)),
+      [],
+    );
+    assert.deepStrictEqual([...presentationHandles, ...contentHandles].toSorted(), leaf.toSorted());
+    assert.isTrue(
+      contentBlocks.every((block) =>
+        contentHandles.some((handle) => block.handles.includes(handle)),
+      ),
+    );
+  });
+
+  it("names the content handle each content block is for, with its qualifiers and heads", () => {
+    for (const block of contentBlocks) {
+      assert.isTrue(
+        block.handles.includes(`m:${block.name.slice("kind-".length)}`),
+        `${block.name} holds its own handle`,
+      );
+    }
+  });
+
+  it.effect("keeps m:annotation-xml apart, one MathExpression kind inside it", () =>
+    Effect.gen(function* checkAnnotationXml() {
+      const root = yield* parseBlock(annotationXmlBlock);
+      const holders = walk(root).filter(({ handle }) => handle === "m:annotation-xml");
+      const children = holders.flatMap(({ element }) =>
+        element.children.flatMap((child) => (child.kind === "element" ? [child] : [])),
+      );
+
+      assert.isFalse(mathmlBlocks.some((block) => block.handles.includes("m:annotation-xml")));
+      assert.isTrue(annotationXmlBlock.handles.includes("m:annotation-xml"));
+      assert.strictEqual(holders.length, 1);
+      assert.strictEqual(children.length, 1);
+      assert.isTrue(children.every((child) => `m:${child.local}` in mathmlInventory));
+      assert.deepStrictEqual(yield* findingsOf(annotationXmlBlock), []);
+    }),
+  );
 
   it.effect(
     "puts each host's element directly around an m:math, the item body being the fragment's own root",
