@@ -1,17 +1,28 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the declaration column the rows under test carry; the shape here is the typed-or-record choice, not a structure. */
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { assert, layer } from "@effect/vitest";
+import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option, Predicate } from "effect";
 import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { inject } from "vitest";
 import { itemGuards, ItemGuardRefusal } from "#pantry/import/guards/item.ts";
-import { documentLangRows, itemRows, standardTemplate } from "#pantry/import/item.ts";
+import {
+  documentLangRows,
+  itemRows,
+  standardTemplate,
+  unboundChoiceRows,
+} from "#pantry/import/item.ts";
 import { manifestRows } from "#pantry/import/manifest.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { renderTree } from "#pantry/export/render.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
-import { ItemRefusal, Rows, UnmodeledVocabulary, withParents } from "#pantry/import/tree.ts";
+import {
+  ItemRefusal,
+  Rows,
+  treeRows,
+  UnmodeledVocabulary,
+  withParents,
+} from "#pantry/import/tree.ts";
 import type { NodeIndex } from "#pantry/import/tree.ts";
 import {
   Declaration,
@@ -66,6 +77,7 @@ import {
   DeclaredOrientation,
   DeclaredShuffle,
   InteractionBinding,
+  RecordBinding,
   SimpleChoice,
   TypedBinding,
 } from "#pantry/schema/interaction.ts";
@@ -1624,6 +1636,58 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts composi
         Rows.of(rows, DeclarationExternalScored).map((row) => row.value),
         ["externalMachine"],
       );
+    }),
+  );
+});
+
+describe("unboundChoiceRows", () => {
+  const stimulus = `<qti-assessment-stimulus xmlns="${itemNamespace}" identifier="hand" title="Hand"><qti-stimulus-body><div><qti-choice-interaction response-identifier="NOPE" max-choices="2"><qti-prompt>p</qti-prompt><qti-simple-choice identifier="A">A</qti-simple-choice></qti-choice-interaction></div></qti-stimulus-body></qti-assessment-stimulus>`;
+
+  it.effect("writes the choice arms of a stimulus with the identifier bare and no binding", () =>
+    Effect.gen(function* unbound() {
+      const doc = yield* readXml(new TextEncoder().encode(stimulus));
+      const tree = yield* treeRows(
+        doc,
+        {
+          charset: doc.charset,
+          id: "33333333-3333-4333-8333-333333333333",
+          kind: "document",
+          root: "stimulus",
+          version: "3.0.1",
+        },
+        Rows.empty(),
+      );
+
+      const built = yield* unboundChoiceRows(
+        tree.rows,
+        withParents(doc.root, Option.none()),
+        tree.nodes,
+      );
+
+      const choices = Rows.of(built, ChoiceInteraction);
+      assert.deepStrictEqual(
+        choices.map(({ maxChoicesN, responseIdentifier, rootKind }) => ({
+          maxChoicesN,
+          responseIdentifier,
+          rootKind,
+        })),
+        [{ maxChoicesN: 2n, responseIdentifier: "NOPE", rootKind: "stimulus" }],
+      );
+      assert.strictEqual(Rows.of(built, DeclaredMaxChoices).length, 1);
+      assert.deepStrictEqual(
+        Rows.of(built, SimpleChoice).map(({ identifier, interaction }) => ({
+          identifier,
+          interaction,
+        })),
+        [{ identifier: "A", interaction: choices[0]?.id }],
+      );
+      assert.deepStrictEqual(
+        Rows.of(built, Prompt).map((row) => row.parent),
+        [choices[0]?.id],
+      );
+      assert.strictEqual(Rows.of(built, InteractionBinding).length, 0);
+      assert.strictEqual(Rows.of(built, TypedBinding).length, 0);
+      assert.strictEqual(Rows.of(built, RecordBinding).length, 0);
     }),
   );
 });
