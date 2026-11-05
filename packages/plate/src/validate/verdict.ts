@@ -901,8 +901,31 @@ const templateRequirements = (refusal: Refusal): string => {
 
 /**
  * The sentence of each rule, one function per rule in `refusalRules`.
+ *
+ * M2's rules read these facts from the detail: `expression-placement` the `element`, the
+ * `attribute` when an attribute is what is misplaced, the `context` it is in and the `reading`;
+ * `not-qti3-package` the manifest root's `element` and `namespace`; `package-profile` the
+ * `schemaversion` found, none when the manifest gives none; `package-path-outside`,
+ * `package-file-unlisted` and `package-file-missing` the file's `path`, and the last also the
+ * `resource` that lists it; `dependency-unresolved` the `resource` and the `dependency` it names;
+ * `item-ref-unresolved` the item ref's `identifier`, its `href` and the `path` that resolves to;
+ * `ambiguous-reference` the `reference`, its two readings as `firstPrefix` with `firstVariable`
+ * and `secondPrefix` with `secondVariable`, and the `reading`; `resource-type-mismatch` the
+ * declared `type`, the resource's `path`, the `root` its document has and, when known, the type
+ * that root names, `expected`.
  */
 const wordings = {
+  "ambiguous-reference": (refusal) => {
+    const reference = code(fact(refusal, "reference", ""));
+    const reading = (prefix: string, variable: string): string =>
+      `${code(fact(refusal, prefix, ""))} with the variable ${code(fact(refusal, variable, ""))}`;
+
+    return sentence(
+      refusal,
+      `The reference ${reference} reads two ways, ${reading("firstPrefix", "firstVariable")} and ${reading("secondPrefix", "secondVariable")}, and both name a variable that exists${citation(refusal)}.`,
+      `rename the identifier whose ${code(".")} lets ${reference} split two ways, so that only one reading names a variable`,
+    );
+  },
   "attribute-type": (refusal) => {
     const { attribute, cite, element } = named(refusal);
     const expected = optionalFact(refusal, "expected");
@@ -949,6 +972,15 @@ const wordings = {
       `write a value from ${least} to ${greatest}`,
     );
   },
+  "dependency-unresolved": (refusal) => {
+    const dependency = code(fact(refusal, "dependency", ""));
+
+    return sentence(
+      refusal,
+      `The resource ${code(fact(refusal, "resource", ""))} depends on ${dependency}, and the manifest declares no resource with that identifier.`,
+      `point the ${code("dependency")} at a resource the manifest declares, or declare a resource ${dependency}`,
+    );
+  },
   "duplicate-identifier": (refusal) => {
     const identifier = fact(refusal, "identifier", "");
 
@@ -958,7 +990,42 @@ const wordings = {
       `give each one its own identifier in place of ${code(identifier)}`,
     );
   },
+  "expression-placement": (refusal) => {
+    const { cite, element } = named(refusal);
+    const outcomeProcessing = code("qti-outcome-processing");
+    const where = Option.match(optionalFact(refusal, "context"), {
+      onNone: () => "",
+      onSome: (context) => `, and it is in ${code(context)}`,
+    });
+
+    return Option.match(optionalFact(refusal, "attribute"), {
+      onNone: () =>
+        sentence(
+          refusal,
+          `${code(element)} is allowed only in outcome processing${where}${cite}.`,
+          `move ${code(element)} into ${outcomeProcessing}, or remove it`,
+        ),
+      onSome: (attribute) =>
+        sentence(
+          refusal,
+          `${code(element)}'s attribute ${code(attribute)} is allowed only in outcome processing${where}${cite}.`,
+          `remove ${code(attribute)} from ${code(element)}, or move the expression into ${outcomeProcessing}`,
+        ),
+    });
+  },
   "expression-type": expressionType,
+  "item-ref-unresolved": (refusal) => {
+    const resolved = Option.match(optionalFact(refusal, "path"), {
+      onNone: () => ",",
+      onSome: (path) => `, which resolves to ${code(path)},`,
+    });
+
+    return sentence(
+      refusal,
+      `The item ref ${code(fact(refusal, "identifier", ""))} points at ${code(fact(refusal, "href", ""))}${resolved} and the manifest lists no item resource there.`,
+      `point the item ref's ${code("href")} at an item resource the manifest lists, or list the item as a resource of the package`,
+    );
+  },
   "misplaced-element": (refusal) => {
     const { cite, element } = named(refusal);
 
@@ -987,6 +1054,16 @@ const wordings = {
       "replace this file with the QTI document it was meant to be, or put its root in QTI 3.0's namespace",
     );
   },
+  "not-qti3-package": (refusal) => {
+    const namespace = fact(refusal, "namespace", "");
+    const where = namespace === "" ? "in no namespace" : `in the namespace ${code(namespace)}`;
+
+    return sentence(
+      refusal,
+      `The manifest's root ${code(named(refusal).element)} is ${where}, not QTI 3.0's content packaging namespace ${code("http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1")}.`,
+      "give the package a QTI 3.0 manifest, whose root is in that namespace",
+    );
+  },
   "not-well-formed": (refusal) => {
     const at =
       refusal.location.kind === "position"
@@ -997,6 +1074,54 @@ const wordings = {
       refusal,
       `The file is not well-formed XML: ${quoted(refusal, "message", "the parser stopped")}${at}.`,
       "correct the XML at that line",
+    );
+  },
+  "package-file-missing": (refusal) => {
+    const path = code(fact(refusal, "path", ""));
+    const lister = Option.match(optionalFact(refusal, "resource"), {
+      onNone: () => "The manifest",
+      onSome: (resource) => `The resource ${code(resource)}`,
+    });
+
+    return sentence(
+      refusal,
+      `${lister} lists the file ${path}, and the package holds no such file.`,
+      `add ${path} to the package, or remove its ${code("file")} entry`,
+    );
+  },
+  "package-file-unlisted": (refusal) => {
+    const path = code(fact(refusal, "path", ""));
+
+    return sentence(
+      refusal,
+      `The package holds ${path}, and no resource in the manifest lists it in a ${code("file")} entry.`,
+      `list ${path} in a ${code("file")} entry of the resource that uses it, or remove it from the package`,
+    );
+  },
+  "package-manifest-missing": (refusal) =>
+    sentence(
+      refusal,
+      `The package holds no ${code("imsmanifest.xml")} at its root.`,
+      `add the package's manifest at its root, named ${code("imsmanifest.xml")}`,
+    ),
+  "package-path-outside": (refusal) =>
+    sentence(
+      refusal,
+      `The package holds a file at ${code(fact(refusal, "path", ""))}, a path that leads outside the package's root.`,
+      `give the file a path inside the package's root, with no ${code("..")} segment that leaves it`,
+    ),
+  "package-profile": (refusal) => {
+    const field = code("schemaversion");
+    const accepted = `${code("3.0.0")} or ${code("3.0.1")}`;
+    const found = Option.match(optionalFact(refusal, "schemaversion"), {
+      onNone: () => `The manifest gives no ${field}`,
+      onSome: (version) => `The manifest's ${field} is ${code(version)}`,
+    });
+
+    return sentence(
+      refusal,
+      `${found}, and a QTI 3.0 package's is ${accepted}.`,
+      `set the manifest's ${field} to ${accepted}, whichever QTI 3.0 profile the package follows`,
     );
   },
   "padded-attribute": (refusal) => {
@@ -1018,6 +1143,19 @@ const wordings = {
       refusal,
       `The XML reader refused the file: ${quoted(refusal, "detail", "it gave no detail")}${rule}.`,
       "replace this file with the QTI document it was meant to be",
+    );
+  },
+  "resource-type-mismatch": (refusal) => {
+    const root = code(fact(refusal, "root", ""));
+
+    return sentence(
+      refusal,
+      `The manifest declares ${code(fact(refusal, "path", ""))} a resource of type ${code(fact(refusal, "type", ""))}, and its document's root is ${root}.`,
+      Option.match(optionalFact(refusal, "expected"), {
+        onNone: () => `give the resource the type its document's root ${root} names`,
+        onSome: (expected) =>
+          `give the resource the type ${code(expected)}, which its document's root ${root} names`,
+      }),
     );
   },
   "template-requirements": templateRequirements,

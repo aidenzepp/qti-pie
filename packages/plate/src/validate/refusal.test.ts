@@ -33,9 +33,9 @@ const cases = () => [
 ];
 
 /**
- * An encoded refusal for each rule the readings, the queued follow-ups and the count ruling add,
- * written as a caller would send it rather than built through the class, so decoding is what
- * checks the rule against the roster.
+ * An encoded refusal for each rule the readings, the queued follow-ups, the count ruling and M2's
+ * test and package stages add, written as a caller would send it rather than built through the
+ * class, so decoding is what checks the rule against the roster.
  */
 const addedRules = [
   {
@@ -72,10 +72,64 @@ const addedRules = [
     path: "qti-assessment-item/qti-item-body/qti-choice-interaction/@max-choices",
     rule: "count-range",
   },
+  {
+    detail: { context: "qti-pre-condition", element: "qti-number-correct", reading: "23" },
+    path: "qti-assessment-test/qti-test-part/qti-pre-condition/qti-number-correct",
+    rule: "expression-placement",
+  },
+  {
+    detail: { element: "manifest", namespace: "http://www.imsglobal.org/xsd/imscp_v1p1" },
+    path: "manifest",
+    rule: "not-qti3-package",
+  },
+  {
+    detail: { schemaversion: "1.2" },
+    path: "manifest/metadata/schemaversion",
+    rule: "package-profile",
+  },
+  { detail: {}, path: "imsmanifest.xml", rule: "package-manifest-missing" },
+  { detail: { path: "../outside.xml" }, path: "../outside.xml", rule: "package-path-outside" },
+  { detail: { path: "notes.txt" }, path: "notes.txt", rule: "package-file-unlisted" },
+  {
+    detail: { path: "items/missing.xml", resource: "ITEM-1" },
+    path: "manifest/resources/resource/file/@href",
+    rule: "package-file-missing",
+  },
+  {
+    detail: { dependency: "RES-9", resource: "ITEM-1" },
+    path: "manifest/resources/resource/dependency/@identifierref",
+    rule: "dependency-unresolved",
+  },
+  {
+    detail: { href: "items/q1.xml", identifier: "q1", path: "items/q1.xml" },
+    path: "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref/@href",
+    rule: "item-ref-unresolved",
+  },
+  {
+    detail: {
+      firstPrefix: "a.b",
+      firstVariable: "SCORE",
+      reading: "48",
+      reference: "a.b.SCORE",
+      secondPrefix: "a",
+      secondVariable: "b.SCORE",
+    },
+    path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-variable/@identifier",
+    rule: "ambiguous-reference",
+  },
+  {
+    detail: {
+      path: "passages/night.xml",
+      root: "qti-assessment-stimulus",
+      type: "imsqti_item_xmlv3p0",
+    },
+    path: "manifest/resources/resource/@type",
+    rule: "resource-type-mismatch",
+  },
 ] as const;
 
 describe("refusalRules", () => {
-  it("lists the validator's, the verdict's and the reader's nineteen rules", () => {
+  it("lists the validator's, the verdict's and the reader's nineteen rules, then M2's eleven", () => {
     assert.deepStrictEqual(
       [...refusalRules],
       [
@@ -98,6 +152,17 @@ describe("refusalRules", () => {
         "not-qti-root",
         "not-well-formed",
         "reader-refused",
+        "expression-placement",
+        "not-qti3-package",
+        "package-profile",
+        "package-manifest-missing",
+        "package-path-outside",
+        "package-file-unlisted",
+        "package-file-missing",
+        "dependency-unresolved",
+        "item-ref-unresolved",
+        "ambiguous-reference",
+        "resource-type-mismatch",
       ],
     );
   });

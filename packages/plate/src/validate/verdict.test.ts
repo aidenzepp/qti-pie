@@ -1009,6 +1009,174 @@ const escapingValue =
  */
 const matchCorrectUri = "https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct";
 
+/**
+ * QTI 3.0's content packaging namespace, which a package's manifest root is in.
+ */
+const qtiPackageNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
+
+/**
+ * A hand-built refusal for each rule M2 adds, as the arguments of {@link refusalAt}, with the
+ * author facts its wording must write in code spans. The refusals are built inside each test, so a
+ * rule missing from the roster fails that test rather than the file.
+ */
+const m2Wordings: readonly {
+  readonly args: readonly [RefusalRule, string, Location, Readonly<Record<string, string>>?];
+  readonly name: string;
+  readonly spans: readonly string[];
+}[] = [
+  {
+    args: [
+      "expression-placement",
+      "test.xml",
+      {
+        kind: "path",
+        path: "qti-assessment-test/qti-test-part/qti-pre-condition/qti-number-correct",
+      },
+      { context: "qti-pre-condition", element: "qti-number-correct", reading: "23" },
+    ],
+    name: "expression-placement of an element",
+    spans: ["qti-number-correct", "qti-pre-condition", "qti-outcome-processing"],
+  },
+  {
+    args: [
+      "expression-placement",
+      "test.xml",
+      {
+        kind: "path",
+        path: "qti-assessment-test/qti-test-part/qti-branch-rule/qti-variable/@weight-identifier",
+      },
+      {
+        attribute: "weight-identifier",
+        context: "qti-branch-rule",
+        element: "qti-variable",
+        reading: "23",
+      },
+    ],
+    name: "expression-placement of an attribute",
+    spans: ["qti-variable", "weight-identifier", "qti-branch-rule", "qti-outcome-processing"],
+  },
+  {
+    args: [
+      "not-qti3-package",
+      "package/imsmanifest.xml",
+      { kind: "path", path: "manifest" },
+      { element: "manifest", namespace: "http://www.imsglobal.org/xsd/imscp_v1p1" },
+    ],
+    name: "not-qti3-package",
+    spans: ["manifest", "http://www.imsglobal.org/xsd/imscp_v1p1", qtiPackageNamespace],
+  },
+  {
+    args: [
+      "package-profile",
+      "package/imsmanifest.xml",
+      { kind: "path", path: "manifest/metadata/schemaversion" },
+      { schemaversion: "1.2" },
+    ],
+    name: "package-profile",
+    spans: ["schemaversion", "1.2", "3.0.0", "3.0.1"],
+  },
+  {
+    args: ["package-profile", "package/imsmanifest.xml", { kind: "path", path: "manifest" }],
+    name: "package-profile with no schemaversion",
+    spans: ["schemaversion", "3.0.0", "3.0.1"],
+  },
+  {
+    args: ["package-manifest-missing", "package.zip", { kind: "document" }],
+    name: "package-manifest-missing",
+    spans: ["package.zip", "imsmanifest.xml"],
+  },
+  {
+    args: ["package-path-outside", "package.zip", { kind: "document" }, { path: "../outside.xml" }],
+    name: "package-path-outside",
+    spans: ["../outside.xml"],
+  },
+  {
+    args: ["package-file-unlisted", "package.zip", { kind: "document" }, { path: "notes.txt" }],
+    name: "package-file-unlisted",
+    spans: ["notes.txt", "file"],
+  },
+  {
+    args: [
+      "package-file-missing",
+      "package/imsmanifest.xml",
+      { kind: "path", path: "manifest/resources/resource/file/@href" },
+      { path: "items/missing.xml", resource: "ITEM-1" },
+    ],
+    name: "package-file-missing",
+    spans: ["ITEM-1", "items/missing.xml"],
+  },
+  {
+    args: [
+      "dependency-unresolved",
+      "package/imsmanifest.xml",
+      { kind: "path", path: "manifest/resources/resource/dependency/@identifierref" },
+      { dependency: "RES-9", resource: "ITEM-1" },
+    ],
+    name: "dependency-unresolved",
+    spans: ["ITEM-1", "RES-9"],
+  },
+  {
+    args: [
+      "item-ref-unresolved",
+      "tests/test.xml",
+      {
+        kind: "path",
+        path: "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref/@href",
+      },
+      { href: "../items/q1.xml", identifier: "q1", path: "items/q1.xml" },
+    ],
+    name: "item-ref-unresolved",
+    spans: ["q1", "../items/q1.xml", "items/q1.xml"],
+  },
+  {
+    args: [
+      "ambiguous-reference",
+      "test.xml",
+      { kind: "path", path: "qti-assessment-test/qti-outcome-processing/qti-variable/@identifier" },
+      {
+        firstPrefix: "a.b",
+        firstVariable: "SCORE",
+        reading: "48",
+        reference: "a.b.SCORE",
+        secondPrefix: "a",
+        secondVariable: "b.SCORE",
+      },
+    ],
+    name: "ambiguous-reference",
+    spans: ["a.b.SCORE", "a.b", "SCORE", "a", "b.SCORE"],
+  },
+  {
+    args: [
+      "resource-type-mismatch",
+      "package/imsmanifest.xml",
+      { kind: "path", path: "manifest/resources/resource/@type" },
+      { path: "passages/night.xml", root: "qti-assessment-stimulus", type: "imsqti_item_xmlv3p0" },
+    ],
+    name: "resource-type-mismatch",
+    spans: ["passages/night.xml", "imsqti_item_xmlv3p0", "qti-assessment-stimulus"],
+  },
+  {
+    args: [
+      "resource-type-mismatch",
+      "package/imsmanifest.xml",
+      { kind: "path", path: "manifest/resources/resource/@type" },
+      {
+        expected: "imsqti_stimulus_xmlv3p0",
+        path: "passages/night.xml",
+        root: "qti-assessment-stimulus",
+        type: "imsqti_item_xmlv3p0",
+      },
+    ],
+    name: "resource-type-mismatch with the type the root names",
+    spans: [
+      "passages/night.xml",
+      "imsqti_item_xmlv3p0",
+      "qti-assessment-stimulus",
+      "imsqti_stimulus_xmlv3p0",
+    ],
+  },
+];
+
 describe("describeRefusal", () => {
   it("words every rule in refusalRules", () => {
     for (const rule of refusalRules) {
@@ -1143,5 +1311,53 @@ describe("describeRefusal", () => {
 
     assert.include(sentence, "response processing template");
     assert.include(sentence, matchCorrectUri);
+  });
+
+  it.each(m2Wordings)("writes the author facts of $name in code spans", ({ args, spans }) => {
+    const [rule] = args;
+    const sentence = describeRefusal(refusalAt(...args));
+    const written = codeSpans(sentence);
+
+    assert.notMatch(sentence, /[\n\r]/u);
+    assert.include(written.spans, rule);
+
+    for (const span of spans) {
+      assert.include(written.spans, span);
+    }
+  });
+
+  it("names both readings of an ambiguous reference, each its prefix and its variable", () => {
+    const ambiguous = m2Wordings.find(({ args: [rule] }) => rule === "ambiguous-reference");
+    assert.isDefined(ambiguous);
+
+    const refusal = refusalAt(...ambiguous.args);
+    const { spans } = codeSpans(describeRefusal(refusal));
+    const readings = ["firstPrefix", "firstVariable", "secondPrefix", "secondVariable"].map(
+      (key) => refusal.detail[key],
+    );
+
+    assert.deepStrictEqual(readings, ["a.b", "SCORE", "a", "b.SCORE"]);
+
+    for (const fact of readings) {
+      assert.include(spans, fact);
+    }
+  });
+
+  it("keeps a package path holding backticks inside one code span, whole", () => {
+    for (const rule of [
+      "package-path-outside",
+      "package-file-unlisted",
+      "package-file-missing",
+    ] as const) {
+      const { outside, spans } = codeSpans(
+        describeRefusal(
+          refusalAt(rule, "package.zip", { kind: "document" }, { path: escapingValue }),
+        ),
+      );
+
+      assert.notInclude(outside, "![", rule);
+      assert.notInclude(outside, "](", rule);
+      assert.include(spans, escapingValue, rule);
+    }
   });
 });
