@@ -705,6 +705,29 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
     ),
   );
 
+  it.effect("the media fixtures' referenced files are entries of their package", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* mediaFiles() {
+        for (const name of ["html-audio", "html-param", "controls-3-0-0"] as const) {
+          const { rows } = yield* readRows(yield* materialize(name));
+          const references = Rows.of(rows, AttributeFileReference);
+          const entries = Rows.of(rows, PackageEntry);
+
+          assert.isAtLeast(references.length, 1, `${name}: file references`);
+
+          for (const reference of references) {
+            assert.isTrue(
+              entries.some(
+                (entry) => entry.package === reference.package && entry.path === reference.path,
+              ),
+              `${name}: ${reference.path} is a package entry`,
+            );
+          }
+        }
+      }),
+    ),
+  );
+
   it.effect("doctype declares a general entity and an ATTLIST default and uses the entity", () =>
     inFreshRoot(() =>
       Effect.gen(function* doctypeVariant() {
