@@ -54,9 +54,9 @@ export const itemPart = (
 /**
  * Emit the item Root around an emitted body.
  *
- * The Root (`qti-assessment-item`) carries `lang`, its scoped `id`, `data-mode`, and
- * `data-disabled` when the author disabled every control. It holds the body's nodes by identity,
- * in order, and nothing else: no form, no submit control, no attempt state.
+ * The Root (`qti-assessment-item`) carries `lang`, its scoped `id`, `data-mode` naming the
+ * payload's mode, and `data-disabled` when the author disabled every control. It holds the body's
+ * nodes by identity, in order, and nothing else: no form, no submit control, no attempt state.
  *
  * @example
  *   Result.map(emitItem(payload, state, body), toHtml);
@@ -85,8 +85,18 @@ export const emitItem = (
   );
 
 /**
- * The data the results box shows after a submit (spec §4.1): the instance, the after-submit state
- * its heading names, and what the region shows under the heading.
+ * The data the results box shows (spec §4.1): the instance, the state its heading names, and what
+ * the region shows under the heading.
+ *
+ * Each heading names one state, in the text `messages.ts` keys it by:
+ *
+ * - `notAccepted`: the author refused a post, and `messages` says why.
+ * - `responseRecorded`: the author recorded a post that no processing scores.
+ * - `scored`: the author recorded a post and scored it, and `score` holds the score.
+ * - `review`: the item is shown for review, its values the attempt the author recorded.
+ * - `solution`: the item is shown with its correct responses as the values.
+ * - `partSubmitted`: the test part holding the item was submitted.
+ * - `testFinished`: the test holding the item was finished.
  *
  * The results box is a part plate keeps: `renderStatus` emits the Status region from this input,
  * and the author places it and feeds it what `score` or `checkResponses` gave. The part has no
@@ -114,10 +124,17 @@ export interface StatusInput {
    */
   readonly autofocus?: boolean;
   /**
-   * The after-submit state, as `messages.ts` keys it; the heading shows its text in the
-   * configuration's locale.
+   * The state, one of those listed above; the heading shows its text in the configuration's
+   * locale.
    */
-  readonly heading: "notAccepted" | "responseRecorded" | "scored";
+  readonly heading:
+    | "notAccepted"
+    | "partSubmitted"
+    | "responseRecorded"
+    | "review"
+    | "scored"
+    | "solution"
+    | "testFinished";
   /**
    * The item instance key `render` used, which scopes the region's ids and its Messages' ids.
    */

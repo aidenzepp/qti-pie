@@ -8,7 +8,8 @@
  * reaches the page only when this file names it. Neither copy holds a correct response, a mapping,
  * a response or outcome default, a processing rule, a template value or feedback content, and the
  * payload holds no seed: the view's seed only orders a shuffled Choice's choices. What the page
- * cannot be given, it cannot leak.
+ * cannot be given, it cannot leak. A `solution` render shows correct responses only when the
+ * author passes them as the view's values; nothing here reads them from the item.
  *
  * @module
  * @see {@link Item} for the model it reads.
@@ -47,6 +48,15 @@ export interface ValidationMessage {
 }
 
 /**
+ * The state a render shows an item in, which its Root's `data-mode` names (spec §4.4).
+ *
+ * `answering` lets the candidate change each response. `review` and `solution` show the values the
+ * author passes and let the candidate change none: `review` shows a recorded attempt, and
+ * `solution` the correct responses, which reach the page only as the author's values.
+ */
+export type RenderMode = "answering" | "review" | "solution";
+
+/**
  * The author's inputs to one render: the instance, the seed, the values to show, the entry names,
  * and the messages of a post the author refused.
  *
@@ -68,6 +78,10 @@ export interface View {
   readonly instance: string;
   readonly locale: Locale;
   readonly messages: readonly ValidationMessage[];
+  /**
+   * The state the item is shown in, which decides whether the candidate may change a response.
+   */
+  readonly mode: RenderMode;
   /**
    * The name each response's controls post under, `entryName(instance, response)` when absent.
    */
@@ -159,10 +173,23 @@ export interface ValidationPayload {
 }
 
 /**
+ * What every interaction payload says about the render's mode.
+ *
+ * `editable` holds exactly when the mode is `answering`. When it is false, in `review` and
+ * `solution`, the candidate may change no response, and the interaction's render function is to
+ * show its Controls' values without accepting input. It is apart from the payload's `finished`,
+ * the author's choice to disable every control, so a Control accepts input only when `editable`
+ * holds and `finished` does not.
+ */
+export interface ModePayload {
+  readonly editable: boolean;
+}
+
+/**
  * A Choice as the page may know it (Q-2): its binding, its constraints, its Prompt, its choices in
  * the order they are presented, and the identifiers to show as checked.
  */
-export interface ChoicePayload extends ValidationPayload {
+export interface ChoicePayload extends ModePayload, ValidationPayload {
   /**
    * The author's `aria-label`, which names the group when there is no Prompt.
    */
@@ -235,7 +262,7 @@ export interface TextName {
  * What a Text Entry and an Extended Text share: the binding, the integer `base`, the placeholder,
  * the entry name and the accessible name.
  */
-export interface TextControlPayload extends ValidationPayload {
+export interface TextControlPayload extends ModePayload, ValidationPayload {
   readonly base: number;
   readonly baseType: "float" | "integer" | "string";
   /**
@@ -321,8 +348,9 @@ export type PayloadNode = ElementPayload | InteractionPayload | NoticePayload | 
  * Everything the emitter may know about one render of an item.
  *
  * `lang` is the item's `xml:lang`, else the view's locale. `finished` is the view's: the author
- * disabled every control. `mode` is the Root's `data-mode` state (spec §4.4), which phase 1 only
- * renders as `answering`. `notices` names the unsupported features the body shows as notices.
+ * disabled every control. `mode` is the view's, the state the Root's and each interaction Root's
+ * `data-mode` name (spec §4.4). `notices` names the unsupported features the body shows as
+ * notices.
  */
 export interface Payload {
   readonly body: readonly PayloadNode[];
@@ -333,7 +361,7 @@ export interface Payload {
   readonly instance: string;
   readonly lang: string;
   readonly messages: readonly MessagePayload[];
-  readonly mode: "answering";
+  readonly mode: RenderMode;
   readonly notices: readonly string[];
   readonly title: string;
 }
@@ -405,6 +433,10 @@ interface Build {
    * The interaction whose first Control takes `autofocus`, if any.
    */
   readonly autofocus: Option.Option<Interaction>;
+  /**
+   * Whether the view's mode lets the candidate change a response ({@link ModePayload}).
+   */
+  readonly editable: boolean;
   /**
    * The ids the author gave the item's elements, unscoped ({@link authoredIdsIn}).
    */
@@ -614,6 +646,7 @@ const choicePayload = (interaction: ChoiceInteraction, build: Build): ChoicePayl
     identifier: choice.identifier,
   })),
   class: interaction.class,
+  editable: build.editable,
   formName: formNameOf(build, interaction.response),
   kind: "choice",
   maxChoices: interaction.maxChoices,
@@ -642,6 +675,7 @@ const textControlPayload = (
   base: interaction.base,
   baseType: interaction.baseType,
   class: interaction.class,
+  editable: build.editable,
   formName: formNameOf(build, interaction.response),
   name: {
     ariaLabel: interaction.ariaLabel,
@@ -890,11 +924,11 @@ export const redactItem = (item: Item): Redacted =>
  * item and the author's inputs.
  *
  * @param redacted The item, through {@link redactItem}.
- * @param view The author's inputs: the instance, the seed, values, names, messages and posted
- *   strings.
+ * @param view The author's inputs: the instance, the mode, the seed, values, names, messages and
+ *   posted strings.
  * @returns The payload. It holds no correct response, mapping, default, processing rule, seed,
- *   template value or feedback content, whatever the view; the seed only orders a shuffled
- *   Choice's choices.
+ *   template value or feedback content of the item, whatever the view; the seed only orders a
+ *   shuffled Choice's choices, and a value it shows is one the view gave.
  */
 export const payload = (redacted: Redacted, view: View): Payload => {
   const messages = identifyMessages(view.instance, view.messages);
@@ -909,6 +943,7 @@ export const payload = (redacted: Redacted, view: View): Payload => {
     autofocus: Arr.findFirst(interactions, (interaction) =>
       messages.some((entry) => entry.response === interaction.response),
     ),
+    editable: view.mode === "answering",
     instance: view.instance,
     messages,
     names: view.names,
@@ -922,7 +957,7 @@ export const payload = (redacted: Redacted, view: View): Payload => {
     instance: view.instance,
     lang: Option.getOrElse(redacted.lang, () => view.locale),
     messages,
-    mode: "answering",
+    mode: view.mode,
     notices: redacted.notices,
     title: redacted.title,
   };

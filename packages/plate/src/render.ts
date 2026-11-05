@@ -27,7 +27,14 @@ import { renderExtendedText } from "#plate/interactions/extended-text.ts";
 import { renderTextEntry } from "#plate/interactions/text-entry.ts";
 import type { Value } from "#plate/model/values.ts";
 import { payload, redactItem } from "#plate/payload.ts";
-import type { EmitState, Payload, Redacted, ValidationMessage, View } from "#plate/payload.ts";
+import type {
+  EmitState,
+  Payload,
+  Redacted,
+  RenderMode,
+  ValidationMessage,
+  View,
+} from "#plate/payload.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
 /**
@@ -40,13 +47,17 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * (NULL when absent), and the strings a refused post sent, which the controls show instead of
  * `values` when `messages` is not empty. `messages` are a refused post's validation messages: each
  * marks its response's controls invalid, and the first invalid Control takes `autofocus`.
- * `disabled` disables every control.
+ * `disabled` disables every control. `mode` is the state the item is shown in, `answering` when
+ * absent, which the Root's `data-mode` names: `review` and `solution` mark every interaction not
+ * editable, and `solution` shows the correct responses only when the author passes them as
+ * `values`.
  */
 export interface Options {
   readonly assetBase?: string;
   readonly disabled?: boolean;
   readonly instance?: string;
   readonly messages?: readonly ValidationMessage[];
+  readonly mode?: RenderMode;
   readonly names?: Readonly<Record<string, string>>;
   readonly parts?: PartOverrides;
   readonly posted?: Readonly<Record<string, readonly string[]>>;
@@ -156,7 +167,8 @@ const mapOf = <A>(record: Readonly<Record<string, A>> = {}): ReadonlyMap<string,
  * @param instance The checked or drawn instance token.
  * @param configuration The configuration, which gives the locale and the seed.
  * @param options The author's options.
- * @returns The view `payload` reads, holding the configuration's `seed` when it has one.
+ * @returns The view `payload` reads, its mode `answering` when the author names none, holding the
+ *   configuration's `seed` when it has one.
  */
 const viewOf = (instance: string, configuration: Configuration, options: Options): View => {
   const view: View = {
@@ -164,6 +176,7 @@ const viewOf = (instance: string, configuration: Configuration, options: Options
     instance,
     locale: configuration.locale,
     messages: options.messages ?? [],
+    mode: options.mode ?? "answering",
     names: mapOf(options.names),
     posted: Option.map(Option.fromUndefinedOr(options.posted), mapOf),
     values: mapOf(options.values),
@@ -220,9 +233,9 @@ const interactionRenderer =
  * It resolves the overrides once, takes the instance from `options.instance` or draws a lowercase
  * UUID (`crypto.randomUUID()`, never derived from the seed), builds the payload from the redacted
  * item and the options, and emits the body and the Root. A shuffled Choice is presented in the
- * order the configuration's `seed`, the instance and its response key. It writes no form, submit
- * control, title or record. Given the same instance, configuration and inputs, it gives the same
- * HTML, and it returns the instance it used.
+ * order the configuration's `seed`, the instance and its response key. The Root's `data-mode` names
+ * `options.mode`. It writes no form, submit control, title or record. Given the same instance,
+ * configuration and inputs, it gives the same HTML, and it returns the instance it used.
  *
  * @example
  *   const rendered = render(redact(accepted), configuration, { instance: "q1" });
