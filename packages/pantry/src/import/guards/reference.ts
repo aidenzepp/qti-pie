@@ -18,6 +18,7 @@ import { typedValues } from "#pantry/schema/attribute-homes.ts";
 import { resolvePackageReference } from "#pantry/import/package-reference.ts";
 import { reachOf } from "#pantry/import/reach.ts";
 import type { Reach, StructureDocument } from "#pantry/import/reach.ts";
+import { srcsetUrls } from "#pantry/import/reference.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import { prefixedReadings } from "#pantry/processing/prefixed.ts";
 import { NodeXmlBase } from "#pantry/schema/attributes.ts";
@@ -146,41 +147,6 @@ const baseChain = (rows: Rows): ((node: string) => readonly string[]) => {
 
     return chain.toReversed();
   };
-};
-
-/**
- * The URL of each candidate of a `srcset` value, in order: a candidate is a run of non-space
- * characters, with any commas that end it dropped, then an optional descriptor up to the next comma
- * outside parentheses.
- */
-const srcsetUrls = (value: string): readonly string[] => {
-  const urls: string[] = [];
-  let at = 0;
-  while (at < value.length) {
-    while (at < value.length && /[\s,]/u.test(value.charAt(at))) {
-      at += 1;
-    }
-
-    const start = at;
-    while (at < value.length && !/\s/u.test(value.charAt(at))) {
-      at += 1;
-    }
-
-    if (at > start) {
-      const url = value.slice(start, at);
-      urls.push(url.replace(/,+$/u, ""));
-      if (!url.endsWith(",")) {
-        let depth = 0;
-        while (at < value.length && (depth > 0 || value.charAt(at) !== ",")) {
-          depth += value.charAt(at) === "(" ? 1 : 0;
-          depth -= value.charAt(at) === ")" && depth > 0 ? 1 : 0;
-          at += 1;
-        }
-      }
-    }
-  }
-
-  return urls;
 };
 
 /**
