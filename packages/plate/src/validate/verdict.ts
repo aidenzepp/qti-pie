@@ -658,6 +658,20 @@ export const acceptForTest = (item: Item): Accepted =>
   accept({ document: item.document, item, unsupported: item.unsupported });
 
 /**
+ * Read the accepted item out of a verdict: the one way a caller reads one.
+ *
+ * An `accepted` or `accepted-with-unsupported` verdict gives its {@link Accepted}; `unchecked` and
+ * `refused` give none. It gives an item only: an accepting verdict on any other root gives none.
+ *
+ * @param verdict The verdict, as {@link check} gave it.
+ * @returns The accepted item, or none when the verdict accepts no item.
+ */
+export const acceptedItem = (verdict: Verdict): Option.Option<Accepted> =>
+  verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
+    ? Option.some(verdict.accepted)
+    : Option.none();
+
+/**
  * Write text as a Markdown code span that holds it exactly (CommonMark 0.31.2, §6.1), so that a
  * refusal's facts, which are author text, stay text: no backtick in them closes the span early.
  *
