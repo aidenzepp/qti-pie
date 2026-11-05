@@ -11,12 +11,17 @@
  * Every character the translation writes is a letter, a digit or a `\u{…}` escape, so no
  * character of the pattern is read by JavaScript's own syntax.
  *
+ * A block escape (`\p{IsBasicLatin}`, or its complement `\P{…}`) is the class of its block's code
+ * points as XML Schema 1.0's own block table lists them ({@link blocks}), not the Unicode
+ * Database's current blocks; a name the table lists twice (`Specials`) takes both its ranges.
+ *
  * Anything outside the grammar is refused with its position, never approximated: back-references,
- * lazy and possessive quantifiers, `(?…)` groups, unbalanced brackets and parentheses, and escapes
- * Appendix F does not define. A block escape (`\p{IsBasicLatin}`) is refused as an unknown block:
- * the translator knows no block names. `{` and `}` are metacharacters, as Appendix F's definition
- * of a metacharacter and XML Schema 1.1 say, though production [10] omits them, so an unescaped
- * `{` that opens no repetition count is refused.
+ * lazy and possessive quantifiers, `(?…)` groups, unbalanced brackets and parentheses, escapes
+ * Appendix F does not define, and block names the table does not list. `{` and `}` are
+ * metacharacters, as Appendix F's definition of a metacharacter and XML Schema 1.1 say, though
+ * production [10] omits them, so an unescaped `{` that opens no repetition count is refused. Groups
+ * and classes nest at most {@link maximumNesting} deep, a bound of this translator rather than of
+ * the grammar.
  *
  * Two readings follow later standards than XML Schema 1.0 names (reading R-f, provisional): a
  * category escape takes the Unicode version the engine ships rather than Unicode 3.1, as Appendix F
@@ -30,6 +35,7 @@
  * @see https://www.w3.org/TR/xmlschema11-2/#regexs
  */
 import { Data, Result } from "effect";
+import { blocks } from "#plate/model/blocks.ts";
 import { nameClass, nameStartClass } from "#plate/model/values.ts";
 
 /**
@@ -68,6 +74,10 @@ interface Reader {
    * The index, in {@link Reader.chars}, of the next character to read.
    */
   at: number;
+  /**
+   * How many groups and classes enclose the next character, at most {@link maximumNesting}.
+   */
+  depth: number;
 }
 
 /**
@@ -269,6 +279,19 @@ const categories: ReadonlySet<string> = new Set([
 const blockProperty = /^Is[-0-9A-Za-z]+$/u;
 
 /**
+ * The deepest a pattern may nest groups and classes, together: 100.
+ *
+ * The reader recurses once per group, `(…)`, and once per class, `[…]` or a subtraction's `-[…]`,
+ * and `pattern-mask` is author text read inside `open`, so a pattern nested thousands deep would
+ * exhaust the call stack (Node's default stack holds about 560 nested groups) and throw instead of
+ * being refused. The bound refuses such a pattern at the opening that passes it, keeping the
+ * reader's stack under a fifth of Node's whatever the pattern. It is no smaller than real patterns
+ * need: the `xs:pattern` facets of the QTI 3.0 XSD nest at most 4 deep and the corpus's
+ * `pattern-mask` values 2.
+ */
+const maximumNesting = 100;
+
+/**
  * Refuse the pattern at a character.
  *
  * @param reader The pattern being read.
@@ -284,6 +307,27 @@ const refuse = (reader: Reader, at: number, reason: string): Result.Result<never
       reason,
     }),
   );
+
+/**
+ * Enter a group or a class whose opening character is the next one, refusing it when it would
+ * nest the pattern past {@link maximumNesting}.
+ *
+ * @param reader The pattern being read, at the `(` or `[`; its depth rises by one on success.
+ * @returns Nothing, or the refusal at the opening character.
+ */
+const enter = (reader: Reader): Result.Result<void, RegexRefused> => {
+  if (reader.depth >= maximumNesting) {
+    return refuse(
+      reader,
+      reader.at,
+      `this ${reader.chars[reader.at] ?? ""} nests groups and classes ${maximumNesting + 1} deep, and this translator reads at most ${maximumNesting}; flatten the pattern so no group or class sits inside more than ${maximumNesting - 1} others`,
+    );
+  }
+
+  reader.depth += 1;
+
+  return Result.void;
+};
 
 /**
  * Read the run of decimal digits that starts at a character.
@@ -323,7 +367,11 @@ const undefinedEscape = (letter: string): string => {
 };
 
 /**
- * Read a category escape, `\p{…}` or `\P{…}`, whose backslash is the next character.
+ * Read a category escape or a block escape, `\p{…}` or `\P{…}`, whose backslash is the next
+ * character.
+ *
+ * A block escape is written as a `v`-flag class of its block's ranges, which reads the same inside
+ * a class (as a nested class) and outside one.
  *
  * @param reader The pattern being read.
  * @param negated Whether the escape is `\P`, the complement.
@@ -358,11 +406,23 @@ const categoryEscape = (reader: Reader, negated: boolean): Result.Result<Escape,
     });
   }
 
+  const isBlock = blockProperty.test(property);
+  const ranges = isBlock ? blocks.get(property.slice("Is".length)) : undefined;
+
+  if (ranges !== undefined) {
+    reader.at = close + 1;
+
+    return Result.succeed({
+      kind: "class",
+      source: `[${negated ? "^" : ""}${ranges.map(rangeSource).join("")}]`,
+    });
+  }
+
   return refuse(
     reader,
     start,
-    blockProperty.test(property)
-      ? `${property} names a Unicode block, which this translator does not know; match its characters with a category escape or a character range`
+    isBlock
+      ? `${property} names no block in XML Schema's block table; use a block name the table lists, such as IsBasicLatin or IsGreek, spelled as the table spells it`
       : `${JSON.stringify(property)} is not a category XML Schema names; use one of ${[...categories].join(", ")}`,
   );
 };
@@ -570,6 +630,7 @@ const classExpression = (reader: Reader): Result.Result<string, RegexRefused> =>
   Result.gen(function* readClassExpression() {
     const open = reader.at;
 
+    yield* enter(reader);
     reader.at += 1;
 
     const source = yield* characterGroup(reader);
@@ -583,6 +644,7 @@ const classExpression = (reader: Reader): Result.Result<string, RegexRefused> =>
     }
 
     reader.at += 1;
+    reader.depth -= 1;
 
     return source;
   });
@@ -597,6 +659,7 @@ const group = (reader: Reader): Result.Result<string, RegexRefused> =>
   Result.gen(function* readGroup() {
     const open = reader.at;
 
+    yield* enter(reader);
     reader.at += 1;
 
     if (reader.chars[reader.at] === "?") {
@@ -619,6 +682,7 @@ const group = (reader: Reader): Result.Result<string, RegexRefused> =>
     }
 
     reader.at += 1;
+    reader.depth -= 1;
 
     return `(?:${inner})`;
   });
@@ -838,7 +902,7 @@ export const translate = (pattern: string): Result.Result<RegExp, RegexRefused> 
 
   offsets.push(offset);
 
-  const reader: Reader = { at: 0, chars, offsets, pattern };
+  const reader: Reader = { at: 0, chars, depth: 0, offsets, pattern };
 
   return Result.flatMap(regularExpression(reader), (body) =>
     reader.at < chars.length
