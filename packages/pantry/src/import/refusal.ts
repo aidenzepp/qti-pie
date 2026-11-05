@@ -8,8 +8,7 @@
  * the schema that the apply broke. {@link ruleOfError} maps the first two and {@link ruleOfLaw} the
  * third, so a caller and a test see one closed roster, {@link ImportRule}, whichever refused.
  */
-import type { ApplyError } from "@bjornpagen/grizzle";
-import { Match, Option, Schema } from "effect";
+import { Match, Schema } from "effect";
 import type { ContentGuardRefusal } from "#pantry/import/guards/content.ts";
 import type { ItemGuardRefusal } from "#pantry/import/guards/item.ts";
 import type { ManifestGuardRefusal } from "#pantry/import/guards/manifest.ts";
@@ -171,7 +170,6 @@ export const ImportRule = Schema.Literals([
   "record-unnamed",
   "entry-kind",
   "zip-format",
-  "program-budget",
   "structure-count",
   "section-empty",
   "structure-identifier",
@@ -1800,35 +1798,3 @@ export const ruleOfError = (e: ContentGuardRefusal | ReadRefusal): ImportRefused
 if (import.meta.main) {
   process.stdout.write(`ImportRule: ${ImportRule.members.length} names\n`);
 }
-
-/**
- * The refusal of an apply that grizzle's compiler refused for size.
- *
- * Grizzle compiles the whole `ChangeSet` of a package into one program, and refuses it when the
- * program crosses a compiler budget (`ResourceBound` of kind `budget`). That is the package being
- * too large for one transaction, not a fault of the database, so it is the rule `program-budget`.
- * Every other bound kind and every other failure is grizzle's own and maps to nothing.
- *
- * @param error - The error an apply failed with.
- * @returns The refusal when the compiler's budget refused the program, else nothing.
- */
-export const budgetRefusalOf = (error: ApplyError): Option.Option<ImportRefused> => {
-  if (error._tag !== "ExecutionFailure" || error.reason._tag !== "CompileError") {
-    return Option.none();
-  }
-
-  const { reason } = error.reason;
-
-  if (reason._tag !== "ResourceBound" || reason.bound.kind !== "budget") {
-    return Option.none();
-  }
-
-  const { budget, limit, needed } = reason.bound;
-
-  return Option.some(
-    new ImportRefused({
-      detail: `the package's import program needs ${needed} of the ${budget} budget and grizzle compiles at most ${limit} in one transaction; split the package's documents across packages, or report the package`,
-      rule: "program-budget",
-    }),
-  );
-};

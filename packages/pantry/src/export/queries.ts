@@ -237,9 +237,9 @@ export const subtree = query(Author).recursive("Subtree", {
 });
 
 /**
- * The most attachments one query carries. grizzle compiles a query within a budget of 10,000 nodes,
- * and 85 attachments of this schema's relations fit while 90 do not, so the attachments of a node
- * are read by several queries of at most this many, each walking the tree again.
+ * The most attachments one query carries. The attachments of a node are read by several queries of
+ * at most this many, each walking the tree again, because one query of every attachment builds
+ * about eight times slower at module load.
  */
 const ATTACHMENTS_PER_QUERY = 30;
 
