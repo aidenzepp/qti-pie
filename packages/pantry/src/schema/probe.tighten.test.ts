@@ -52,7 +52,9 @@ describe("schema tightening probe", () => {
     Effect.gen(function* probe() {
       const NcName = contract("ProbeNcName", str.regex(patterns.ncName));
       const Keyed = relation("ProbeKeyedByContract", { id: NcName, owner: uuid }, ["id"]);
-      const built = yield* Effect.try(() => schema("ProbeContractKey", { Keyed }, []));
+      const built = yield* Effect.try(() =>
+        schema("ProbeContractKey", { ProbeKeyedByContract: Keyed }, []),
+      );
       assert.isDefined(built);
     }),
   );
@@ -63,7 +65,7 @@ describe("schema tightening probe", () => {
       const Parent = relation("ProbeLinkParent", { id: NcName }, ["id"]);
       const Child = relation("ProbeLinkChild", { id: uuid, parent: NcName }, ["id"]);
       const built = yield* Effect.try(() =>
-        schema("ProbeContractLink", { Child, Parent }, [
+        schema("ProbeContractLink", { ProbeLinkChild: Child, ProbeLinkParent: Parent }, [
           contained(on(Child, "parent"), on(Parent, "id")),
         ]),
       );
@@ -75,7 +77,9 @@ describe("schema tightening probe", () => {
     Effect.gen(function* probe() {
       const AnyUri = contract("ProbeAnyUri", str.regex(patterns.anyUri));
       const Holder = relation("ProbeUriHolder", { id: uuid, uri: AnyUri }, ["id"]);
-      const built = yield* Effect.try(() => schema("ProbeUriContract", { Holder }, []));
+      const built = yield* Effect.try(() =>
+        schema("ProbeUriContract", { ProbeUriHolder: Holder }, []),
+      );
       assert.isDefined(built);
     }),
   );
@@ -89,7 +93,9 @@ describe("schema tightening probe", () => {
         "computer-read-aloud",
       ]);
       const Holder = relation("ProbeHandleHolder", { handle: closedId(Handles), id: uuid }, ["id"]);
-      const built = yield* Effect.try(() => schema("ProbeClosedHandles", { Handles, Holder }, []));
+      const built = yield* Effect.try(() =>
+        schema("ProbeClosedHandles", { ProbeHandleHolder: Holder, ProbeHandles: Handles }, []),
+      );
       assert.isDefined(built);
     }),
   );
@@ -101,7 +107,7 @@ describe("schema tightening probe", () => {
       const Parent = relation("ProbeBareParent", { id: bare }, ["id"]);
       const Child = relation("ProbeBrandedChild", { id: uuid, parent: Branded }, ["id"]);
       const built = yield* Effect.try(() =>
-        schema("ProbeBrandMismatch", { Child, Parent }, [
+        schema("ProbeBrandMismatch", { ProbeBareParent: Parent, ProbeBrandedChild: Child }, [
           // @ts-expect-error both sides of a containment need one host type, brand included
           contained(on(Child, "parent"), on(Parent, "id")),
         ]),
@@ -123,10 +129,19 @@ describe("schema tightening probe", () => {
         ["id"],
       );
       const built = yield* Effect.try(() =>
-        schema("ProbePairShape", { Child, Metadata, Package, Version }, [
-          contained(on(Child, "metadata", "package"), on(Metadata, "id", "manifest")),
-          contained(on(Child, "package", "version"), on(Package, "id", "schemaversion")),
-        ]),
+        schema(
+          "ProbePairShape",
+          {
+            ProbeMetadata: Metadata,
+            ProbePackage: Package,
+            ProbePairChild: Child,
+            ProbeSchemaVersionLike: Version,
+          },
+          [
+            contained(on(Child, "metadata", "package"), on(Metadata, "id", "manifest")),
+            contained(on(Child, "package", "version"), on(Package, "id", "schemaversion")),
+          ],
+        ),
       );
       assert.isDefined(built);
     }),
