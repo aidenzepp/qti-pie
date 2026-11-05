@@ -6,6 +6,8 @@
  * Every entry names the reader and its version, the browser and its version, the macOS version, the
  * item, the JavaScript state, the date, the result and notes, and the owner. A check a sitting has
  * not run yet stays in the record as an open entry, `not-observed`, until a later sitting runs it.
+ * An open entry's browser, macOS version, JavaScript state and reader version name the sitting that
+ * recorded it, not a run of the check, so the ledger's view states none of them for it.
  * An OD-14 (e) entry also holds its control's result, and its type admits `passed` or `failed` only
  * beside `control: "ran"`, and `not-observed` only beside `control: "did-not-run"`, so no entry can
  * record a pass without its control.

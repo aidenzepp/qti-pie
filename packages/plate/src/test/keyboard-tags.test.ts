@@ -25,6 +25,30 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
     ],
   ],
   [
+    "interactions/extended-text.test.ts",
+    [
+      "[Q-5] [keyboard] writes the Control's id, rows from expected-lines, placeholder and the payload's form name, the author's when given",
+      String.raw`[Q-5] [keyboard] a keyboard walk in a test-built form posts multi-line text, "a\\r\\nb", which decode turns into "a\\nb"`,
+      "[Q-5] [keyboard] holds the value's text as the textarea's only child, and a text that starts with a line feed round-trips",
+      '[Q-5] [keyboard] presents format="xhtml" as a plain textarea marked data-format="xhtml", whose typed markup posts as text',
+      "[Q-5] [keyboard] a walk that fills two of the three Controls posts an ordered value of two, which restores in order",
+      '[Q-5] [keyboard] builds an Extended Text whose pattern-mask="[0-9" the translator refuses beside a Choice as a notice in its place, and a walk still posts the Choice',
+    ],
+  ],
+  [
+    "interactions/text-entry.test.ts",
+    [
+      "[Q-20] [keyboard] a keyboard walk (Tab, type York, Enter) posts York under the Control's name",
+      "[Q-20] [keyboard] names the Control by the author's form name when names gives one",
+    ],
+  ],
+  [
+    "render.test.ts",
+    [
+      "[Q-2] [keyboard] a radio walk (Tab, ArrowDown, Tab, Enter) posts the presented second choice",
+    ],
+  ],
+  [
     "vertical.test.ts",
     [
       "[Q-2] [I-9b] [keyboard] BG007 by keyboard: true scores 1, false 0, none 0",

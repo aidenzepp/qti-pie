@@ -487,24 +487,32 @@ const supportWords = (note: SupportNote): string =>
  * Give a record's cells, in {@link recordColumns}' order: a cell that does not apply to its kind is
  * empty.
  *
+ * An entry that was not observed states no environment it did not observe: its JavaScript state,
+ * browser, macOS and reader version are empty, and its reader cell names only the reader the check
+ * is for. Those fields of an open entry name the sitting that recorded it, not a run of the check.
+ *
  * @param record The record.
  * @returns Its cells' words.
  */
-const recordCells = (record: PassRecord): readonly string[] => [
-  readerWords(record),
-  entryWords[record.kind],
-  record.kind === "manual-check" ? record.check : "",
-  record.item,
-  record.javascript,
-  record.kind === "manual-check" && record.check === "OD-14 (e)" ? record.control : "",
-  record.result,
-  record.date,
-  browserWords(record),
-  record.macosVersion,
-  record.kind === "screen-reader-pass" ? record.interactions.join(", ") : "",
-  record.notes,
-  record.owner,
-];
+const recordCells = (record: PassRecord): readonly string[] => {
+  const observed = record.result !== "not-observed";
+
+  return [
+    observed ? readerWords(record) : record.reader,
+    entryWords[record.kind],
+    record.kind === "manual-check" ? record.check : "",
+    record.item,
+    observed ? record.javascript : "",
+    record.kind === "manual-check" && record.check === "OD-14 (e)" ? record.control : "",
+    record.result,
+    record.date,
+    observed ? browserWords(record) : "",
+    observed ? record.macosVersion : "",
+    record.kind === "screen-reader-pass" ? record.interactions.join(", ") : "",
+    record.notes,
+    record.owner,
+  ];
+};
 
 /**
  * Word a record as one line: each cell that applies, after its column's header.
