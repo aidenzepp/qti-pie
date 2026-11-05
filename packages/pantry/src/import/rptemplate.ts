@@ -16,6 +16,7 @@
  */
 import { Effect, Option } from "effect";
 import type { Uuid } from "@bjornpagen/grizzle";
+import { attributeRows } from "#pantry/import/attributes.ts";
 import { processingRows } from "#pantry/import/processing.ts";
 import type { ProcessingRefused } from "#pantry/import/processing.ts";
 import {
@@ -171,6 +172,7 @@ export const rptemplateRows = Effect.fn("import.rptemplateRows")(function* rptem
     },
     built,
   );
+  built = yield* attributeRows(root, nodes, documentId, built);
 
   return { documentId, nodes, rows: built };
 });
