@@ -1,18 +1,35 @@
 import { assert } from "@effect/vitest";
-import { Effect, Option, Predicate, Schema } from "effect";
+import { Effect, Option } from "effect";
 import type { Locator, Page } from "playwright-core";
-import { openMember } from "#plate/dev/listing.ts";
-import { h } from "#plate/emit/node.ts";
-import type { Element, Node } from "#plate/emit/node.ts";
+import type { Element } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
 import { message } from "#plate/messages.ts";
-import { format } from "#plate/model/values.ts";
 import { attribute, inputType, nameOf } from "#plate/test/accessibility.ts";
-import { axQuery, chromiumTree } from "#plate/test/ax-tree.ts";
+import {
+  axQuery,
+  byNodeId,
+  chromiumTree,
+  descendantsOf,
+  focusedIn,
+  propertyOf,
+} from "#plate/test/ax-tree.ts";
 import type { AxNode } from "#plate/test/ax-tree.ts";
-import { Playground, eachEngine, playgroundLayer, withPage } from "#plate/test/browsers.ts";
-import type { EngineName } from "#plate/test/browsers.ts";
-import { parseHtml } from "#plate/test/round-trip.ts";
+import { eachEngine, nextControlKey, playgroundLayer, withPage } from "#plate/test/browsers.ts";
+import {
+  assertResultFirst,
+  byId,
+  correctOf,
+  count,
+  elementsOf,
+  exposed,
+  focusedElement,
+  openItem as openPage,
+  press,
+  snapshotDescendants,
+  snapshotOf,
+  submitRead,
+  treesRead,
+} from "#plate/test/playground-page.ts";
 
 /**
  * The corpus items whose Choice the tests read: BG007's True/False Choice, with no Prompt, so its
@@ -69,56 +86,6 @@ interface Presented {
 }
 
 /**
- * A node of Playwright's computed tree, as `ariaSnapshotJSON` gives it: the role, the name when it
- * has one, the states it carries (`checked` and `invalid` only when set), its one text child as
- * `text`, else its children.
- */
-interface SnapshotNode {
-  readonly checked?: boolean | "mixed";
-  readonly children?: readonly (SnapshotNode | string)[];
-  readonly invalid?: boolean | string;
-  readonly name?: string;
-  readonly role: string;
-  readonly text?: string;
-}
-
-/**
- * The Schema of a {@link SnapshotNode}; the keys a test does not read are ignored.
- */
-const SnapshotNodeSchema: Schema.Codec<SnapshotNode> = Schema.Struct({
-  checked: Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.Literal("mixed")])),
-  children: Schema.optionalKey(
-    Schema.Array(
-      Schema.Union([
-        Schema.String,
-        Schema.suspend((): Schema.Codec<SnapshotNode> => SnapshotNodeSchema),
-      ]),
-    ),
-  ),
-  invalid: Schema.optionalKey(Schema.Union([Schema.Boolean, Schema.String])),
-  name: Schema.optionalKey(Schema.String),
-  role: Schema.String,
-  text: Schema.optionalKey(Schema.String),
-});
-
-/**
- * Collect every element of a tree, each before its descendants.
- *
- * @param nodes The tree's top-level nodes.
- * @returns The elements in document order.
- */
-const elementsOf = (nodes: readonly Node[]): readonly Element[] =>
-  nodes.flatMap((node) => (node.kind === "element" ? [node, ...elementsOf(node.children)] : []));
-
-/**
- * Read a page's HTML as one tree, which `nameOf` reads.
- *
- * @param html The HTML the playground answered.
- * @returns The page's nodes under one root.
- */
-const treeOf = (html: string): Element => h("body", {}, [...parseHtml(html)]);
-
-/**
  * Read what a page's HTML presents of its one Choice, as the oracle names it.
  *
  * @param tree The page's tree.
@@ -164,25 +131,8 @@ const presentedIn = (tree: Element): Presented => {
  * @param corpusPath The item's corpus path.
  * @returns What the answered HTML presents of its Choice.
  */
-const openItem = Effect.fn("openItem")(function* openItem(page: Page, corpusPath: string) {
-  const { origin } = yield* Playground;
-  const query = new URLSearchParams({ path: corpusPath }).toString();
-  const response = yield* Effect.promise(() => page.goto(`${origin}/item?${query}`));
-
-  assert.isNotNull(response);
-  assert.strictEqual(response.status(), 200);
-
-  return presentedIn(treeOf(yield* Effect.promise(() => response.text())));
-});
-
-/**
- * Locate an element of the page by its id.
- *
- * @param page The page.
- * @param id The id.
- * @returns The locator.
- */
-const byId = (page: Page, id: string): Locator => page.locator(`[id="${id}"]`);
+const openItem = (page: Page, corpusPath: string) =>
+  openPage(page, corpusPath).pipe(Effect.map(presentedIn));
 
 /**
  * Locate the page's one Choice group by its Root marker.
@@ -202,111 +152,6 @@ const groupOf = (page: Page): Locator => page.locator(`[data-slot="${slots.root}
  */
 const clickLabel = (page: Page, control: PresentedControl) =>
   Effect.promise(() => page.locator(`[data-slot="${slots.label}"][for="${control.id}"]`).click());
-
-/**
- * Submit the item form by clicking its Submit button, and read the page the post answered.
- *
- * @param page The page.
- * @returns The answered page's tree, once that page has loaded.
- */
-const submit = Effect.fn("submit")(function* submit(page: Page) {
-  const [response] = yield* Effect.promise(() =>
-    Promise.all([
-      page.waitForResponse((answer) => answer.request().method() === "POST"),
-      page.waitForURL((url) => url.searchParams.has("instance")),
-      page.getByRole("button", { exact: true, name: message("en", "submit") }).click(),
-    ]),
-  );
-
-  return treeOf(yield* Effect.promise(() => response.text()));
-});
-
-/**
- * Read an element's node of Playwright's computed tree.
- *
- * @param target The element.
- * @returns Its snapshot node; the test fails unless the snapshot is one node.
- */
-const snapshotOf = Effect.fn("snapshotOf")(function* snapshotOf(target: Locator) {
-  const nodes = yield* Schema.decodeUnknownEffect(Schema.Array(SnapshotNodeSchema))(
-    yield* Effect.promise(() => target.ariaSnapshotJSON()),
-  );
-
-  assert.strictEqual(nodes.length, 1, "the snapshot is one node");
-
-  const [node] = nodes;
-  assert.isDefined(node);
-
-  return node;
-});
-
-/**
- * Collect the descendants of a computed-tree node, each before its own, in child order.
- *
- * @param node The node.
- * @returns Its descendant nodes; text children are left out.
- */
-const snapshotDescendants = (node: SnapshotNode): readonly SnapshotNode[] =>
-  (node.children ?? []).flatMap((child) =>
-    Predicate.isString(child) ? [] : [child, ...snapshotDescendants(child)],
-  );
-
-/**
- * Collect the text a computed-tree node and its descendants hold: their names, their single text
- * children and their text fragments.
- *
- * @param node The node.
- * @returns The texts, in tree order.
- */
-const snapshotTexts = (node: SnapshotNode): readonly string[] => [
-  ...(node.name === undefined ? [] : [node.name]),
-  ...(node.text === undefined ? [] : [node.text]),
-  ...(node.children ?? []).flatMap((child) =>
-    Predicate.isString(child) ? [child] : snapshotTexts(child),
-  ),
-];
-
-/**
- * Index a Chromium tree's nodes by their `nodeId`.
- *
- * @param nodes The tree's nodes.
- * @returns The index.
- */
-const indexOf = (nodes: readonly AxNode[]): ReadonlyMap<string, AxNode> =>
-  new Map(nodes.map((node) => [node.nodeId, node]));
-
-/**
- * Collect the descendants of a node of Chromium's tree, each before its own, in child order.
- *
- * @param node The node.
- * @param index Every node of the tree, by `nodeId`.
- * @returns The node's descendants.
- */
-const descendantsOf = (node: AxNode, index: ReadonlyMap<string, AxNode>): readonly AxNode[] =>
-  node.childIds.flatMap((id) => {
-    const child = index.get(id);
-
-    return child === undefined ? [] : [child, ...descendantsOf(child, index)];
-  });
-
-/**
- * Find the one node of Chromium's tree, not ignored, with a role and a name.
- *
- * @param nodes The tree's nodes.
- * @param role The role.
- * @param name The name.
- * @returns The node; the test fails unless exactly one matches.
- */
-const exposed = (nodes: readonly AxNode[], role: string, name: string): AxNode => {
-  const found = nodes.filter((node) => !node.ignored && node.role === role && node.name === name);
-
-  assert.strictEqual(found.length, 1, `Chromium's tree exposes one ${role} named "${name}"`);
-
-  const [node] = found;
-  assert.isDefined(node);
-
-  return node;
-};
 
 /**
  * Find, in Chromium's tree, the group that holds a Choice's Controls: the nearest ancestor of role
@@ -339,70 +184,6 @@ const exposedGroup = (nodes: readonly AxNode[], presented: Presented): AxNode =>
 };
 
 /**
- * Read a property's value from a node of Chromium's tree.
- *
- * @param node The node.
- * @param property The property's protocol name.
- * @returns Its value, or `undefined` when the node does not carry it.
- */
-const valueOf = (node: AxNode, property: string): boolean | number | string | undefined =>
-  node.properties.get(property)?.value;
-
-/**
- * List the elements Chromium's tree marks focused: the nodes, not ignored, whose `focused` is
- * true, the document's own node aside. Chromium marks the `RootWebArea` focused too whenever its
- * frame holds focus, beside the element that holds it.
- *
- * @param nodes The tree's nodes.
- * @returns Them, in tree order.
- */
-const focusedIn = (nodes: readonly AxNode[]): readonly AxNode[] =>
-  nodes.filter(
-    (node) => !node.ignored && node.role !== "RootWebArea" && valueOf(node, "focused") === true,
-  );
-
-/**
- * Read the correct response of an item's `RESPONSE`, from the item `open` accepted.
- *
- * @param corpusPath The item's corpus path.
- * @returns The correct response's values in their lexical form; the test fails when the item is
- *   not accepted.
- */
-const correctOf = Effect.fn("correctOf")(function* correctOf(corpusPath: string) {
-  const verdict = yield* openMember(corpusPath);
-  if (verdict.verdict === "refused" || verdict.verdict === "unchecked") {
-    return assert.fail(`${corpusPath} is ${verdict.verdict}, not accepted`);
-  }
-
-  const declaration = verdict.accepted.item.responses.get("RESPONSE");
-
-  return declaration === undefined
-    ? []
-    : Option.match(declaration.correct, {
-        onNone: () => [],
-        onSome: (value) => value.values.map(format),
-      });
-});
-
-/**
- * Describe the element that holds focus, for a failure message.
- *
- * @param page The page.
- * @returns The focused element's id and role, or that nothing is focused.
- */
-const focusedElement = Effect.fn("focusedElement")(function* focusedElement(page: Page) {
-  const focused = page.locator(":focus");
-  if ((yield* Effect.promise(() => focused.count())) === 0) {
-    return "nothing is focused";
-  }
-
-  const id = yield* Effect.promise(() => focused.first().getAttribute("id"));
-  const role = yield* Effect.promise(() => focused.first().getAttribute("role"));
-
-  return `the focused element is id=${id ?? "(none)"} role=${role ?? "(none)"}`;
-});
-
-/**
  * Open BG008, tick four of its five choices by their Labels against `max-choices="3"`, submit, and
  * read the page the refused post answered.
  *
@@ -419,99 +200,13 @@ const overTick = Effect.fn("overTick")(function* overTick(page: Page) {
 
   yield* Effect.forEach(ticked, (control) => clickLabel(page, control), { discard: true });
 
-  const answered = yield* submit(page);
+  const answered = yield* submitRead(page);
   const choice = presentedIn(answered);
   const refused = choice.controls.find((control) => control.invalid);
   assert.isDefined(refused, "the answered page holds a refused Control");
 
   return { answered, choice, refused };
 });
-
-/**
- * Give the key that moves focus to the next control of any kind in an engine on this platform.
- *
- * WebKit on macOS keeps Safari's split by default: Tab highlights only fields and pop-up menus,
- * and Option+Tab (Alt+Tab) highlights clickable items too, checkboxes and radios among them.
- * Elsewhere Tab reaches every control.
- *
- * @param name The engine.
- * @returns `Alt+Tab` for WebKit on macOS, else `Tab`.
- * @see https://support.apple.com/guide/safari/cpsh003/mac (Safari's keyboard shortcuts: Tab and Option-Tab, and the setting that swaps them)
- */
-const nextControlKey = (name: EngineName): string =>
-  name === "webkit" && process.platform === "darwin" ? "Alt+Tab" : "Tab";
-
-/**
- * Assert that the page a submit answered opened at its result: the URL's fragment names the
- * Status region, and that region, of role `status` and named by its heading, is the focused
- * element and holds each of the texts, in Playwright's computed tree and, in Chromium, in
- * Chromium's own tree too.
- *
- * @param page The page, after the submit.
- * @param name The engine.
- * @param answered The answered page's tree, which gives the region's id and name.
- * @param texts The texts the region holds.
- * @returns Once every assertion has held.
- */
-const assertResultFirst = Effect.fn("assertResultFirst")(function* assertResultFirst(
-  page: Page,
-  name: EngineName,
-  answered: Element,
-  texts: readonly string[],
-) {
-  const regions = elementsOf([answered]).filter(
-    (element) => attribute(element, "role") === "status",
-  );
-
-  assert.strictEqual(regions.length, 1, "the answered page holds one Status region");
-
-  const [region] = regions;
-  assert.isDefined(region);
-
-  const regionId = attribute(region, "id") ?? "";
-  const regionName = nameOf(region, answered);
-
-  assert.strictEqual(new URL(page.url()).hash, `#${regionId}`);
-
-  const status = page.getByRole("status", { exact: true, name: regionName });
-
-  assert.strictEqual(yield* Effect.promise(() => status.and(byId(page, regionId)).count()), 1);
-  assert.strictEqual(
-    yield* Effect.promise(() => status.and(page.locator(":focus")).count()),
-    1,
-    yield* focusedElement(page),
-  );
-
-  const held = snapshotTexts(yield* snapshotOf(status));
-  for (const text of texts) {
-    assert.include(held, text);
-  }
-
-  if (name === "chromium") {
-    const nodes = yield* chromiumTree(page, name);
-    const own = exposed(nodes, "status", regionName);
-    const below = descendantsOf(own, indexOf(nodes)).map((node) => node.name);
-
-    assert.deepStrictEqual(
-      focusedIn(nodes).map((node) => node.nodeId),
-      [own.nodeId],
-    );
-    for (const text of texts) {
-      assert.include(below, text);
-    }
-  }
-});
-
-/**
- * Name the trees an engine's assertions read, for a test's title.
- *
- * @param name The engine.
- * @returns Chromium's own tree and the computed tree in Chromium; the computed tree only in WebKit.
- */
-const treesRead = (name: EngineName): string =>
-  name === "chromium"
-    ? "Chromium's own tree and Playwright's computed tree"
-    : "Playwright's computed tree";
 
 eachEngine((it, name) => {
   it.layer(playgroundLayer({}))("the accessibility tree, Choice", (tree) => {
@@ -589,7 +284,7 @@ eachEngine((it, name) => {
                 const nodes = yield* chromiumTree(page, name);
 
                 return presented.controls.map((control) =>
-                  valueOf(exposed(nodes, control.role, control.name), "checked"),
+                  propertyOf(exposed(nodes, control.role, control.name), "checked"),
                 );
               });
 
@@ -648,7 +343,7 @@ eachEngine((it, name) => {
                 const nodes = yield* chromiumTree(page, name);
 
                 assert.deepStrictEqual(
-                  descendantsOf(exposedGroup(nodes, presented), indexOf(nodes))
+                  descendantsOf(exposedGroup(nodes, presented), byNodeId(nodes))
                     .filter((node) => !node.ignored && node.role === presented.role)
                     .map((node) => node.name),
                   presented.controls.map((control) => control.name),
@@ -665,12 +360,12 @@ eachEngine((it, name) => {
         withPage({ javaScriptEnabled: false }, (page) =>
           Effect.gen(function* resultFirst() {
             const presented = yield* openItem(page, bg007.path);
-            const correct = yield* correctOf(bg007.path);
+            const correct = yield* correctOf(bg007.path, "RESPONSE");
             const chosen = presented.controls.find((control) => correct.includes(control.value));
             assert.isDefined(chosen, "the correct choice is presented");
 
             yield* clickLabel(page, chosen);
-            yield* assertResultFirst(page, name, yield* submit(page), [
+            yield* assertResultFirst(page, name, yield* submitRead(page), [
               message("en", "score", { score: "1" }),
             ]);
           }),
@@ -703,7 +398,7 @@ eachEngine((it, name) => {
             if (name === "chromium") {
               const own = exposed(yield* chromiumTree(page, name), refused.role, refused.name);
 
-              assert.strictEqual(valueOf(own, "invalid"), "true");
+              assert.strictEqual(propertyOf(own, "invalid"), "true");
               assert.strictEqual(own.description, atMost);
             }
           }),
@@ -715,20 +410,21 @@ eachEngine((it, name) => {
       () =>
         withPage({ javaScriptEnabled: false }, (page) =>
           Effect.gen(function* refusalFocus() {
+            const key = yield* nextControlKey(page);
             const { answered, choice } = yield* overTick(page);
 
             yield* assertResultFirst(page, name, answered, [
               message("en", "notAccepted"),
               message("en", "atMost", { n: "3" }),
             ]);
-            yield* Effect.promise(() => page.keyboard.press(nextControlKey(name)));
+            yield* press(page, key);
 
             const itemControls = page.locator(
               choice.controls.map((control) => `[id="${control.id}"]`).join(", "),
             );
 
             assert.strictEqual(
-              yield* Effect.promise(() => itemControls.and(page.locator(":focus")).count()),
+              yield* count(itemControls.and(page.locator(":focus"))),
               1,
               yield* focusedElement(page),
             );

@@ -298,10 +298,11 @@ const browserRun: BrowserRun = {
 };
 
 /**
- * A unit test outside the browser files whose full name starts with an engine's name: it is not a
- * browser result, so no engine counts it.
+ * A unit test outside the browser files under a `describe` named for an engine: it is not a browser
+ * result, so no engine counts it.
  */
 const engineNamedUnitTest: TestResult = {
+  ancestorTitles: ["chromium"],
   file: "src/test/browsers.test.ts",
   fullName: "chromium is the first engine name",
   state: "passed",
@@ -358,6 +359,7 @@ describe("ledger/report.ts", () => {
 
       assert.lengthOf(results, 13);
       assert.deepStrictEqual(results[0], {
+        ancestorTitles: [],
         file: "src/validate/open.test.ts",
         fullName: "validate/open.ts [Q-2] a Choice item is accepted",
         state: "passed",

@@ -3,7 +3,6 @@ import { connect } from "node:net";
 import path from "node:path";
 import { assert } from "@effect/vitest";
 import { ConfigProvider, Effect, Predicate, Result } from "effect";
-import type { Element, Node } from "#plate/emit/node.ts";
 import { textOf } from "#plate/test/accessibility.ts";
 import {
   Engine,
@@ -17,6 +16,7 @@ import {
   walkCorpusLayer,
   withPage,
 } from "#plate/test/browsers.ts";
+import { elementsOf } from "#plate/test/playground-page.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 
 /**
@@ -24,15 +24,6 @@ import { parseHtml } from "#plate/test/round-trip.ts";
  * item and the ordered Extended Text.
  */
 const probes = ["od14/od14-probe.xml", "pattern.xml", "ordered.xml"];
-
-/**
- * Collect every element of a tree, each before its descendants.
- *
- * @param nodes The tree's top-level nodes.
- * @returns The elements in document order.
- */
-const elementsOf = (nodes: readonly Node[]): readonly Element[] =>
-  nodes.flatMap((node) => (node.kind === "element" ? [node, ...elementsOf(node.children)] : []));
 
 /**
  * Read the title of a page the playground answered, as a reader of its HTML would.

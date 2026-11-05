@@ -274,3 +274,64 @@ export const axQuery = Effect.fn("axQuery")(function* axQuery(
     }),
   ).pipe(Effect.map((reply) => reply.nodes.map(toAxNode)));
 });
+
+/**
+ * Index a tree's nodes by their `nodeId`.
+ *
+ * @param nodes The tree's nodes.
+ * @returns The index.
+ */
+export const byNodeId = (nodes: readonly AxNode[]): ReadonlyMap<string, AxNode> =>
+  new Map(nodes.map((node) => [node.nodeId, node]));
+
+/**
+ * Collect the descendants of a node of the tree, each before its own, in child order.
+ *
+ * @param node The node.
+ * @param index Every node of the tree, by `nodeId` ({@link byNodeId}).
+ * @returns The node's descendants.
+ */
+export const descendantsOf = (
+  node: AxNode,
+  index: ReadonlyMap<string, AxNode>,
+): readonly AxNode[] =>
+  node.childIds.flatMap((id) => {
+    const child = index.get(id);
+
+    return child === undefined ? [] : [child, ...descendantsOf(child, index)];
+  });
+
+/**
+ * Read a property's value from a node of the tree.
+ *
+ * @param node The node.
+ * @param property The property's protocol name, such as `checked` or `focused`.
+ * @returns Its value, or `undefined` when the node does not carry it.
+ */
+export const propertyOf = (node: AxNode, property: string): boolean | number | string | undefined =>
+  node.properties.get(property)?.value;
+
+/**
+ * List the elements the tree marks focused: the nodes, not ignored, whose `focused` is true, the
+ * document's own node aside. Chromium marks the `RootWebArea` focused too whenever its frame holds
+ * focus, beside the element that holds it.
+ *
+ * @param nodes The tree's nodes.
+ * @returns Them, in tree order.
+ */
+export const focusedIn = (nodes: readonly AxNode[]): readonly AxNode[] =>
+  nodes.filter(
+    (node) => !node.ignored && node.role !== "RootWebArea" && propertyOf(node, "focused") === true,
+  );
+
+/**
+ * Read a name of the tree as the flat string AccName defines, its whitespace runs one space and its
+ * ends trimmed, as `nameOf` and Playwright's computed tree give it. Chromium keeps a space its own
+ * join produced at an end: a Prompt whose text starts with `<br/>`, as each of the postcard's
+ * does, names its Control " Demonstrates …" there, the same tokens.
+ *
+ * @param name The name as Chromium computed it.
+ * @returns The flat name.
+ * @see https://w3c.github.io/accname/#terminology (flat string)
+ */
+export const flatName = (name: string): string => name.replaceAll(/[\t\n\f\r ]+/gu, " ").trim();

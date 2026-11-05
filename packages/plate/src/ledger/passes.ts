@@ -15,16 +15,7 @@
  * @module
  */
 import { Schema } from "effect";
-
-/**
- * An ISO 8601 date, `YYYY-MM-DD`, optionally followed by a time and a zone, such as
- * `2026-11-05T14:30:00Z`.
- */
-const isoDate = Schema.String.check(
-  Schema.isPattern(
-    /^[0-9]{4}-[0-9]{2}-[0-9]{2}(?:T[0-9]{2}:[0-9]{2}(?::[0-9]{2}(?:\.[0-9]+)?)?(?:Z|[+-][0-9]{2}:[0-9]{2})?)?$/u,
-  ),
-);
+import { isoDate } from "#plate/ledger/runs.ts";
 
 /**
  * The fields every entry holds, whatever its kind.

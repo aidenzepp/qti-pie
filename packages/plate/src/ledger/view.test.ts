@@ -30,41 +30,49 @@ const bg007 = "QTI3_BPIG_Examples/items/BG007.xml";
  */
 const results: readonly TestResult[] = [
   {
+    ancestorTitles: ["validate/open.ts"],
     file: "src/validate/open.test.ts",
     fullName: "validate/open.ts [Q-2] a Choice item is accepted",
     state: "passed",
   },
   {
+    ancestorTitles: ["interactions/choice.ts"],
     file: "src/interactions/choice.test.ts",
     fullName: "interactions/choice.ts [Q-2] [keyboard] a Choice completes by keyboard",
     state: "passed",
   },
   {
+    ancestorTitles: ["dev/page.ts"],
     file: "src/dev/page.test.ts",
     fullName: "dev/page.ts [Q-2] [keyboard] BG007 completes in the playground",
     state: "passed",
   },
   {
+    ancestorTitles: [],
     file: "src/interactions/text-entry.test.ts",
     fullName: "[Q-20] a Text Entry takes text",
     state: "failed",
   },
   {
+    ancestorTitles: ["styles.css"],
     file: "src/styles.test.ts",
     fullName: "styles.css [I-19] the vocabulary classes apply",
     state: "passed",
   },
   {
+    ancestorTitles: [],
     file: "src/corpus.render.test.ts",
     fullName: "[I-7] [I-8] every document renders",
     state: "passed",
   },
   {
+    ancestorTitles: ["emit/body.ts"],
     file: "src/emit/body.test.ts",
     fullName: "emit/body.ts [A-1] <script>alert(1)</script> stays text",
     state: "passed",
   },
   {
+    ancestorTitles: [],
     file: "src/validate/structure.test.ts",
     fullName: "[A-2a] an elevated row is checked",
     state: "passed",
