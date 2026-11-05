@@ -2,8 +2,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Result, Schema } from "effect";
 import { claims } from "#plate/ledger/claims.ts";
 import { exclusions, features, levels } from "#plate/ledger/features.ts";
-import { ManualCheck } from "#plate/ledger/passes.ts";
-import type { PassRecord, ScreenReaderPass } from "#plate/ledger/passes.ts";
+import { ManualCheck, PassRecord } from "#plate/ledger/passes.ts";
+import type { ScreenReaderPass } from "#plate/ledger/passes.ts";
 import { decodeReport, ledger } from "#plate/ledger/report.ts";
 import type { Ledger, LedgerRow, ProofFile } from "#plate/ledger/report.ts";
 
@@ -212,6 +212,41 @@ const fixtureLedger = decodeReport(reportText, root).pipe(
 );
 
 /**
+ * Derive the ledger over the fixture report with records added after the fixture's.
+ *
+ * @param added The records recorded after the fixture's.
+ * @returns The ledger.
+ */
+const ledgerWith = (added: readonly PassRecord[]) =>
+  decodeReport(reportText, root).pipe(
+    Effect.map((results) =>
+      ledger({
+        claims,
+        corpus,
+        exclusions,
+        features,
+        records: [...records, ...added],
+        results,
+        sources,
+      }),
+    ),
+  );
+
+/**
+ * An open screen-reader entry over the Choice and the Extended Text, recorded after every fixture
+ * pass and dated later: a check a sitting left for a later one.
+ */
+const openPass: ScreenReaderPass = {
+  ...recorded,
+  date: "2026-11-07",
+  interactions: ["Q-2", "Q-5"],
+  javascript: "on",
+  kind: "screen-reader-pass",
+  notes: "not run in the first sitting (2026-11-05)",
+  result: "not-observed",
+};
+
+/**
  * Find a row of the ledger by its ID.
  *
  * @param built The ledger.
@@ -389,6 +424,44 @@ describe("ledger/report.ts", () => {
       assert.notProperty(rowOf(built, "Q-5").interaction, "screenReaderPass");
     }),
   );
+
+  it.effect("an open, not-observed entry never replaces a recorded pass, though it is later", () =>
+    Effect.gen(function* openNeverReplaces() {
+      const built = yield* ledgerWith([openPass]);
+
+      assert.deepStrictEqual(rowOf(built, "Q-2").interaction?.screenReaderPass, laterPass);
+      assert.deepStrictEqual(built.records.at(-1), openPass);
+    }),
+  );
+
+  it.effect("an interaction whose only screen-reader entries are not-observed has no pass", () =>
+    Effect.gen(function* onlyOpen() {
+      const built = yield* ledgerWith([openPass, { ...openPass, interactions: ["Q-5"] }]);
+
+      assert.notProperty(rowOf(built, "Q-5").interaction, "screenReaderPass");
+    }),
+  );
+
+  it("a screen-reader pass, a keyboard walk-through and the M1 walk-through admit not-observed", () => {
+    const open = { ...recorded, date: "2026-11-05", javascript: "on", result: "not-observed" };
+
+    assert.isTrue(Result.isSuccess(Schema.decodeUnknownResult(PassRecord)(openPass)));
+    for (const check of ["keyboard-walk-through", "M1 walk-through"]) {
+      const entry = { ...open, check, kind: "manual-check", reader: "none", readerVersion: "none" };
+
+      assert.isTrue(Result.isSuccess(Schema.decodeUnknownResult(ManualCheck)(entry)), check);
+    }
+    assert.isTrue(
+      Result.isFailure(
+        Schema.decodeUnknownResult(ManualCheck)({
+          ...open,
+          check: "M1 walk-through",
+          kind: "manual-check",
+          result: "unavailable",
+        }),
+      ),
+    );
+  });
 
   it.effect("Composition names the dev playground and the test-built form of keyboard proofs", () =>
     Effect.gen(function* composition() {
