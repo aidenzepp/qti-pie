@@ -28,6 +28,7 @@ import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus
 import { browserSupport } from "#plate/ledger/browser-support.ts";
 import { claims } from "#plate/ledger/claims.ts";
 import type { Claim } from "#plate/ledger/claims.ts";
+import { ledgerDirectory } from "#plate/ledger/directory.ts";
 import { confPath, exclusions, features, levels } from "#plate/ledger/features.ts";
 import type { Exclusion, Feature } from "#plate/ledger/features.ts";
 import { honesty } from "#plate/ledger/honesty.ts";
@@ -65,16 +66,6 @@ export const outputNames = ["verdicts.json", "verdicts.txt", "ledger.json", "led
  * `pnpm test` does.
  */
 const requiredNodeOptions = ["--disable-proto=delete", "--disable-sigusr1"] as const;
-
-/**
- * The folder the outputs go to: `PLATE_LEDGER_DIR`, read from the package directory when relative,
- * and `work/ledger` in the package when it is not set. The playground's ledger page reads the same
- * setting.
- */
-const outputDirectory = Config.NonEmptyString("PLATE_LEDGER_DIR").pipe(
-  Config.withDefault(path.join("work", "ledger")),
-  Config.map((directory) => path.resolve(packageDirectory, directory)),
-);
 
 /**
  * The conformance text could not be read.
@@ -711,7 +702,7 @@ const readConf = Effect.gen(function* readConf() {
  * print what was written and found, and set the exit code.
  */
 const program = Effect.gen(function* ledgerCommand() {
-  const output = yield* outputDirectory;
+  const output = yield* ledgerDirectory;
   const conf = yield* readConf;
   const sources = yield* readSources(packageDirectory);
   const vp = yield* findVp(packageDirectory);

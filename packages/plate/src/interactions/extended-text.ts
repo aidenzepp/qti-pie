@@ -37,9 +37,9 @@ import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
 import { authorsName, textControlName } from "#plate/interactions/name.ts";
-import { patternMessage } from "#plate/interactions/pattern.ts";
+import { malformedMessage, patternMessage } from "#plate/interactions/pattern.ts";
 import { message } from "#plate/messages.ts";
-import type { Locale, MessageKey } from "#plate/messages.ts";
+import type { Locale } from "#plate/messages.ts";
 import type { ExtendedTextInteraction } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import type {
@@ -295,24 +295,10 @@ export const renderExtendedText = (
   });
 
 /**
- * The message a string Extended Text gives for each reason its entries did not decode.
- *
- * `decode` keeps a string as posted, so for one it fails only as `file` (a file was posted) or
- * `single-many` (the entry was posted twice), each with its own message. `number` and `identifier`,
- * which only a {@link Malformed} built by hand carries here, get the general `notAccepted`.
- */
-const stringRefusals = {
-  file: "malformedFile",
-  identifier: "notAccepted",
-  number: "notAccepted",
-  "single-many": "malformedSingleMany",
-} as const satisfies Readonly<Record<Malformed["reason"], MessageKey>>;
-
-/**
  * Give the messages a decoded value's number of entries earns: more than a nonzero `max-strings`
  * always (tier (a); D5, a hard cap), fewer than `min-strings` only under `validateResponses` (tier
  * (b)). `decode` drops the empty entries, so the value's members are the non-empty ones.
- * `max-strings="0"` limits nothing (R-d). Each count reads in the singular at 1.
+ * `max-strings="0"` limits nothing (reading 53). Each count reads in the singular at 1.
  *
  * @param interaction The Extended Text.
  * @param value The decoded value.
@@ -384,11 +370,10 @@ export const validateExtendedText = (
     ].map((words) => ({ response: interaction.response, text: words }));
   }
 
-  const { locale } = configuration;
-  const words =
-    interaction.baseType === "string"
-      ? message(locale, stringRefusals[input.reason])
-      : Option.getOrElse(interaction.patternMaskMessage, () => message(locale, "malformedNumber"));
-
-  return [{ response: interaction.response, text: words }];
+  return [
+    {
+      response: interaction.response,
+      text: malformedMessage(interaction, input.reason, configuration.locale),
+    },
+  ];
 };

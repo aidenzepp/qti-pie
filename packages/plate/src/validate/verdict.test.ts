@@ -1087,6 +1087,20 @@ describe("describeRefusal", () => {
     assert.notInclude(codeSpans(sentence).outside, "![");
   });
 
+  it("cites the reading that refuses a child, and names QTI 3.0's schema only when none does", () => {
+    const cited = describeRefusal(
+      refusalOf("unknown-element", { element: "b", parent: "data", reading: "60" }),
+    );
+    const schema = describeRefusal(refusalOf("unknown-element", { element: "b", parent: "p" }));
+
+    assert.include(
+      cited,
+      "`data` may not hold `b`; XML Schema allows no such child there (reading 60).",
+    );
+    assert.notInclude(cited, "QTI 3.0's schema");
+    assert.include(schema, "`p` may not hold `b`; QTI 3.0's schema allows no such child there.");
+  });
+
   it("names which operand of a qti-equal is not a single integer or float", () => {
     const sentence = describeRefusal(
       refusalOf("expression-type", {

@@ -112,10 +112,11 @@ const engine = [
 ] as const;
 
 /**
- * The declarations an interaction renders with: the response declaration it binds must have one of
- * `baseTypes` and one of `cardinalities`.
+ * The rule on the declarations an interaction renders with: the response declaration it binds must
+ * have one of `baseTypes` and one of `cardinalities`. The form encoding's public `Binding` is
+ * another thing: how one response travels through the form.
  */
-export interface Binding {
+export interface BindingRule {
   readonly baseTypes: readonly BaseType[];
   readonly cardinalities: readonly Cardinality[];
 }
@@ -124,7 +125,7 @@ export interface Binding {
  * Extended Text's binding, which also limits the `format` it renders with: one of `formats`, or
  * none, which means `plain`.
  */
-export interface FormattedBinding extends Binding {
+export interface FormattedBindingRule extends BindingRule {
   readonly formats: readonly string[];
 }
 
@@ -159,12 +160,13 @@ export type Condition =
   | { readonly kind: "untyped" };
 
 /**
- * A feature phase 1 does not render, with the key the verdict and its notice name it by.
+ * The rule that finds a feature phase 1 does not render: the key the verdict and its notice name
+ * the feature by, the elements that can carry it, and the condition under which one does.
  *
  * `on` names the elements that can carry it by their QTI local name, or is `body` for every element
  * in the item body.
  */
-export interface Feature {
+export interface FeatureRule {
   readonly feature: string;
   readonly on: "body" | readonly string[];
   readonly when: Condition;
@@ -179,16 +181,16 @@ export interface Renders {
    * The interactions phase 1 renders, each with the binding it renders with.
    */
   readonly bindings: {
-    readonly "qti-choice-interaction": Binding;
-    readonly "qti-extended-text-interaction": FormattedBinding;
-    readonly "qti-text-entry-interaction": Binding;
+    readonly "qti-choice-interaction": BindingRule;
+    readonly "qti-extended-text-interaction": FormattedBindingRule;
+    readonly "qti-text-entry-interaction": BindingRule;
   };
   /**
    * The features shown as a notice in place of an interaction's Controls. The interaction is still
    * built, every field held, and its Prompt renders; only its Controls give way to the notice, and
    * the verdict lists the feature as one shown as a notice.
    */
-  readonly controlNotices: readonly Feature[];
+  readonly controlNotices: readonly FeatureRule[];
   /**
    * The `qti-*` elements phase 1 renders or reads, the engine's included. Every element in the QTI
    * namespace without the `qti-` prefix is HTML and renders as itself.
@@ -207,14 +209,26 @@ export interface Renders {
    * outside `engine` is a mark keyed by that element's name, and a `qti-equal` outside its `exact`
    * tolerance mode is a mark keyed `tolerance-mode="<mode>"`.
    */
-  readonly marks: readonly Feature[];
+  readonly marks: readonly FeatureRule[];
   /**
    * The features shown as a notice in place of their interaction. Beyond these, a `qti-*` element
    * in the item body outside `elements` is a notice keyed by its own name, which covers the custom
    * interactions (Q-31, Q-32): accepted, not launched.
    */
-  readonly notices: readonly Feature[];
+  readonly notices: readonly FeatureRule[];
 }
+
+/**
+ * The least value a count attribute reading 46 names may hold, -2^63, the low end of the signed
+ * 64-bit range a `count-range` refusal names.
+ */
+export const leastCount = -9_223_372_036_854_775_808n;
+
+/**
+ * The greatest value a count attribute reading 46 names may hold, 2^63-1: such a count holds a
+ * signed 64-bit value, read exactly, and a greater one is refused (operator ruling D, 2026-11-04).
+ */
+export const greatestCount = 9_223_372_036_854_775_807n;
 
 /**
  * The cap on an Extended Text's Controls (Q23): at most 100. One whose `min-strings` exceeds 100
@@ -230,7 +244,7 @@ export const controlCap = {
   feature: "min-strings>100",
   on: ["qti-extended-text-interaction"],
   when: { kind: "integer-above", limit: 100n, name: "min-strings" },
-} as const satisfies Feature;
+} as const satisfies FeatureRule;
 
 /**
  * What phase 1 renders, reads, shows a notice for and marks, as data (spec §4.5).
@@ -358,11 +372,11 @@ export const templatePrefixes = [
 
 /**
  * The response-processing templates the renderer recognises by name (reading 9.23 at head-cto's
- * pick B, R-a), each of which runs as the rule tree its file gives: the three canonical templates
- * `match_correct`, `map_response` and `map_response_point`, and the Common Cartridge templates
- * `CC2_match` (the rules of `match_correct`), `CC2_match_basic` and `CC2_map_response`. A name is
- * the URI's final path segment, with or without `.xml`, under either of {@link templatePrefixes},
- * as {@link templateName} resolves it.
+ * pick B, reading 51), each of which runs as the rule tree its file gives: the three canonical
+ * templates `match_correct`, `map_response` and `map_response_point`, and the Common Cartridge
+ * templates `CC2_match` (the rules of `match_correct`), `CC2_match_basic` and `CC2_map_response`.
+ * A name is the URI's final path segment, with or without `.xml`, under either of
+ * {@link templatePrefixes}, as {@link templateName} resolves it.
  */
 export const templateNames = [
   "match_correct",

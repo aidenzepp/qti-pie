@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 import { Result } from "effect";
 import { compile, matches, maximumStates, translate } from "#plate/model/regex.ts";
@@ -361,14 +360,7 @@ describe("translate", () => {
   });
 
   it("passes the browser allowlist as a root", () => {
-    const table = readFileSync(
-      new URL(import.meta.resolve("#plate/model/blocks.generated.json")),
-      "utf-8",
-    );
-    // `sourceModules` reads only `.ts` files; the block table is JSON and imports nothing.
-    const modules = new Map([...sourceModules(), ["src/model/blocks.generated.json", table]]);
-
-    assert.deepStrictEqual(checkAllowlist(modules, ["src/model/regex.ts"]), []);
+    assert.deepStrictEqual(checkAllowlist(sourceModules(), ["src/model/regex.ts"]), []);
   });
 });
 

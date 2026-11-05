@@ -27,7 +27,9 @@ import {
   areaShapes,
   baseTypes,
   cardinalities,
+  greatestCount,
   interactionNames,
+  leastCount,
   renders,
   templateName,
 } from "#plate/vocabulary.ts";
@@ -35,7 +37,7 @@ import type {
   // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
   AreaShape,
   Condition,
-  Feature,
+  FeatureRule,
   InteractionName,
   TemplateName,
 } from "#plate/vocabulary.ts";
@@ -193,7 +195,8 @@ export interface SimpleChoice {
 
 /**
  * A `qti-choice-interaction` (Q-2), bound to an identifier response of single or multiple
- * cardinality. Its choices stay in document order whatever `shuffle` says.
+ * cardinality. The model keeps its choices in document order whatever `shuffle` says; the payload
+ * presents a shuffled Choice's choices in the seeded order, each fixed choice at its own place.
  */
 export interface ChoiceInteraction {
   /**
@@ -295,7 +298,7 @@ export interface ExtendedTextInteraction extends Omit<TextEntryInteraction, "kin
   readonly kind: "extended-text";
   /**
    * `max-strings`: a count, held exactly, with no upper bound (reading 46 does not list it). `0`
-   * restricts nothing, as `max-choices` reads it (R-d).
+   * restricts nothing, as `max-choices` reads it (reading 53).
    */
   readonly maxStrings: Option.Option<bigint>;
   /**
@@ -317,6 +320,11 @@ export interface Unsupported {
   readonly kind: "unsupported";
   readonly path: string;
 }
+
+/**
+ * An interaction of the item model, the three phase 1 renders.
+ */
+export type Interaction = ChoiceInteraction | ExtendedTextInteraction | TextEntryInteraction;
 
 /**
  * A node of the item body.
@@ -437,18 +445,18 @@ const toleranceModes = ["absolute", "exact", "relative"] as const;
 /**
  * The features marked on the verdict.
  */
-const marks: readonly Feature[] = renders.marks;
+const marks: readonly FeatureRule[] = renders.marks;
 
 /**
  * The features shown as a notice in place of their interaction.
  */
-const notices: readonly Feature[] = renders.notices;
+const notices: readonly FeatureRule[] = renders.notices;
 
 /**
  * The features shown as a notice in place of an interaction's Controls, the interaction still
  * built.
  */
-const controlNotices: readonly Feature[] = renders.controlNotices;
+const controlNotices: readonly FeatureRule[] = renders.controlNotices;
 
 /**
  * The attributes a body element loses because a mark names them, such as `xml:base`.
@@ -850,17 +858,6 @@ const leastInt = -2_147_483_648n;
 const greatestInt = 2_147_483_647n;
 
 /**
- * The least signed 64-bit value, -2^63, the low end of the range a count's refusal names.
- */
-const leastCount = -9_223_372_036_854_775_808n;
-
-/**
- * The greatest count, 2^63-1: a count attribute holds a signed 64-bit value, read exactly, and a
- * greater one is refused (reading 46; operator ruling D, 2026-11-04).
- */
-const greatestCount = 9_223_372_036_854_775_807n;
-
-/**
  * The count attributes plate reads that reading 46 holds to the signed 64-bit range.
  * `expected-length` and `expected-lines` are counts it does not name, so they have no upper bound.
  */
@@ -1085,7 +1082,7 @@ const holds = (build: Build, condition: Condition, element: SourceElement): bool
  * @param inBody Whether the element is rendered in the item body.
  * @returns Whether the feature's `on` names the element.
  */
-const sitsOn = (feature: Feature, element: SourceElement, inBody: boolean): boolean =>
+const sitsOn = (feature: FeatureRule, element: SourceElement, inBody: boolean): boolean =>
   feature.on === "body" ? inBody : feature.on.includes(element.local);
 
 /**
@@ -2200,11 +2197,11 @@ const heldBuiltIns = (root: SourceElement): ReadonlySet<string> => {
  * variable, `qti-correct`, `qti-map-response` and `qti-map-response-point` read a response,
  * `qti-match`, `qti-equal` and `qti-is-null` read what their operands read, and
  * `qti-set-outcome-value` sets an outcome. The names it finds are valid content, never refused
- * (reading 1): a response the model does not hold (base type `point`, `duration` or `file`,
- * cardinality `record`, or no base type), a template variable, an outcome the model does not hold,
- * and the built-in variables `duration` and `completionStatus`, read or set, which the engine
- * holds no value for. Reading 29 makes an item's `duration` a single float, so it is a valid name
- * in an item's rules. An identifier nothing declares is refused before the model is built when
+ * (reading 1): a response the model does not hold (base type `duration` or `file`, cardinality
+ * `record`, or no base type), a template variable, an outcome the model does not hold, and the
+ * built-in variables `duration` and `completionStatus`, read or set, which the engine holds no
+ * value for. Reading 29 makes an item's `duration` a single float, so it is a valid name in an
+ * item's rules. An identifier nothing declares is refused before the model is built when
  * inline rules name it; the walk finds it too. One a built-in template names, such as `MAXSCORE`
  * or `FEEDBACK` in a `CC2_*` template, is not in the document, so nothing refuses it: the walk
  * finds it, and the processing is marked.

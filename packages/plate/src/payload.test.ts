@@ -464,6 +464,19 @@ const extendedTextFor = (built: Payload, response: string): ExtendedTextPayload 
 };
 
 /**
+ * Find the Text Entry payload bound to a response.
+ *
+ * @param built The payload.
+ * @param response The response identifier.
+ * @returns The Text Entry payload; the test fails when the interaction is not a Text Entry.
+ */
+const textEntryFor = (built: Payload, response: string): TextEntryPayload => {
+  const found = interactionFor(built, response);
+
+  return found.kind === "text-entry" ? found : assert.fail(`${response} is not a Text Entry`);
+};
+
+/**
  * Construct an item whose body is one Extended Text bound to an ordered string response `LIST`,
  * with the counts given.
  *
@@ -735,9 +748,9 @@ describe("payload", () => {
     const built = payload(redacted, refused);
 
     assert.deepStrictEqual(choiceFor(built, "CAPITAL").restore, ["B"]);
-    assert.strictEqual(textFor(built, "FIRST").restore, "Nice");
-    assert.strictEqual(textFor(built, "SECOND").restore, "Lyon?");
-    assert.strictEqual(textFor(built, "NAMED").restore, "");
+    assert.strictEqual(textEntryFor(built, "FIRST").restore, "Nice");
+    assert.strictEqual(textEntryFor(built, "SECOND").restore, "Lyon?");
+    assert.strictEqual(textEntryFor(built, "NAMED").restore, "");
     assert.deepStrictEqual(
       interactionsIn(built.body).map((interaction) => [
         interaction.response,
@@ -769,12 +782,12 @@ describe("payload", () => {
     const opened = payload(redacted, answering);
 
     assert.deepStrictEqual(choiceFor(built, "CAPITAL").restore, ["A"]);
-    assert.strictEqual(textFor(built, "FIRST").restore, "Marseille");
-    assert.strictEqual(textFor(built, "SECOND").restore, "");
+    assert.strictEqual(textEntryFor(built, "FIRST").restore, "Marseille");
+    assert.strictEqual(textEntryFor(built, "SECOND").restore, "");
     assert.isFalse(interactionsIn(built.body).some((interaction) => interaction.autofocus));
     assert.isTrue(built.finished);
     assert.deepStrictEqual(choiceFor(opened, "CAPITAL").restore, []);
-    assert.strictEqual(textFor(opened, "FIRST").restore, "");
+    assert.strictEqual(textEntryFor(opened, "FIRST").restore, "");
   });
 
   it("[Q-2] [Q-20] names each control's entries by the instance and response, or by the author's name", () => {
@@ -823,7 +836,7 @@ describe("payload", () => {
       values: new Map([["HEX", one({ baseType: "integer", value: 255n })]]),
     };
 
-    assert.strictEqual(textFor(payload(redactItem(hexItem), view), "HEX").restore, "ff");
+    assert.strictEqual(textEntryFor(payload(redactItem(hexItem), view), "HEX").restore, "ff");
   });
 
   it('[Q-5] carries an Extended Text\'s format, format="xhtml" included', () => {

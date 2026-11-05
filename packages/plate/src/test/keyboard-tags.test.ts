@@ -3,10 +3,18 @@ import { assert, describe, it } from "@effect/vitest";
 
 /**
  * The tests that complete an item through `keyboardWalk`, by file under `src/`, each title as
- * written: a walk directly, or `src/vertical.test.ts`'s helper `complete`, which walks. Each one
- * carries the `[keyboard]` token after its last ID token (spec §4.10).
+ * written: a walk directly, or a helper that walks, such as `src/vertical.test.ts`'s `complete`.
+ * Each one carries the `[keyboard]` token after its last ID token (spec §4.10).
  */
 const walks: ReadonlyMap<string, readonly string[]> = new Map([
+  [
+    "dev/page.test.ts",
+    [
+      "[Q-2] [keyboard] BG007 completes in the playground: its form walked by keys, posted, and scored 1",
+      "[Q-20] [keyboard] BG010 completes in the playground: York typed, posted, and scored 1",
+      "[Q-5] [keyboard] BG011 completes in the playground: past the video, its answer typed, posted, and the response recorded",
+    ],
+  ],
   [
     "interactions/choice.test.ts",
     [
@@ -23,6 +31,17 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
       "[Q-20] [I-9b] [keyboard] BG010 by keyboard: YORK and york give 0.5, Paris and none 0",
       "[Q-5] [keyboard] BG011 by keyboard, past the video: the response is recorded, not scored",
       "[I-9b] [keyboard] the hotspot item shows one notice, posts its other entries, and scores 0",
+    ],
+  ],
+  [
+    "witness.test.ts",
+    [
+      "[Q-20] [keyboard] a Text Entry's pattern-mask refuses a mismatching entry with the author's message, and a matching one is accepted and scores 1",
+      "[Q-5] [keyboard] Item_QTI3_WritingPostcard_02 posts the text typed into each xhtml Extended Text, as typed",
+      "[Q-2] [keyboard] shuffled corpus Choices keep their order across a refused post with one instance and seed, and the presented choices post",
+      "[Q-2] [I-9b] [keyboard] a shuffled corpus Choice posts the presented choice and scores it by identifier: ChoiceA, presented second, scores 1",
+      "[Q-2] [I-9b] [keyboard] a ccPackage CC2_match item scores 1 by keyboard",
+      "[Q-5] [keyboard] a hand-built ordered Extended Text posts its ordered value: in order it scores 1, reversed 0",
     ],
   ],
 ]);

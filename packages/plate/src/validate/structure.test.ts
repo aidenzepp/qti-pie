@@ -2448,7 +2448,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("R-g: one reader of xs:double", () => {
+  describe("reading 56: one reader of xs:double", () => {
     it("[I-2] admits normal-maximum 1e400 and INF, and refuses -1e400, 0e0, -0 and NaN (reading 16)", () => {
       const path = "qti-assessment-item/qti-outcome-declaration/@normal-maximum";
 

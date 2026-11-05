@@ -19,7 +19,7 @@ import {
   resolveOverrides,
   rowFor,
   scopedId,
-  splitIdrefs,
+  splitTokens,
 } from "#plate/emit/parts.ts";
 import type { PartRow } from "#plate/emit/parts.ts";
 import type {
@@ -340,14 +340,14 @@ describe("authoredId", () => {
   });
 });
 
-describe("splitIdrefs and authoredIdrefs", () => {
+describe("splitTokens and authoredIdrefs", () => {
   it("split an IDREFS value at ASCII whitespace, dropping empty ids", () => {
-    assert.deepStrictEqual(splitIdrefs(" intro\tnote\n\fhint\r "), ["intro", "note", "hint"]);
-    assert.deepStrictEqual(splitIdrefs(""), []);
+    assert.deepStrictEqual(splitTokens(" intro\tnote\n\fhint\r "), ["intro", "note", "hint"]);
+    assert.deepStrictEqual(splitTokens(""), []);
   });
 
   it("keep a no-break space inside an id, since only ASCII whitespace separates them", () => {
-    assert.deepStrictEqual(splitIdrefs("a\u00A0b c"), ["a\u00A0b", "c"]);
+    assert.deepStrictEqual(splitTokens("a\u00A0b c"), ["a\u00A0b", "c"]);
   });
 
   it("scope every authored id of the value and join them by one space", () => {

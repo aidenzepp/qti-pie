@@ -27,11 +27,11 @@
  * @see {@link Payload} for what the walk reads.
  */
 import { Data, Option, Result } from "effect";
+import { itemPart } from "#plate/emit/item.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { authoredId, authoredIdrefs, headings, positionUnder, rowFor } from "#plate/emit/parts.ts";
 import type { Position, Resolved } from "#plate/emit/parts.ts";
-import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { message } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
@@ -592,16 +592,14 @@ const withBodies = (children: readonly Node[]): readonly Node[] => {
  * @returns The Notice, a `span` at a phrasing position and a `div` at a flow position by default,
  *   or the refusal of its replacement.
  */
-const noticeOf = (notice: NoticePayload, walk: Walk): Result.Result<Element, PartSwapRefused> => {
-  const row = rowFor("item", "notice", { position: walk.position });
-
-  return applyPart(
-    row,
-    { "data-slot": row.slot, role: "note" },
+const noticeOf = (notice: NoticePayload, walk: Walk): Result.Result<Element, PartSwapRefused> =>
+  itemPart(
+    walk.parts,
+    "notice",
+    { role: "note" },
     [text(message(walk.locale, "notice", { feature: notice.feature }))],
-    Option.getOrUndefined(walk.parts.replacementFor("item", "notice")),
+    { position: walk.position },
   );
-};
 
 /**
  * Give the walk below an authored element: its children stand where the element's content stands.

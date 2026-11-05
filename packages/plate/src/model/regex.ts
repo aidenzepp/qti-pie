@@ -25,10 +25,10 @@
  * and classes nest at most {@link maximumNesting} deep, a bound of this translator rather than of
  * the grammar.
  *
- * Two readings follow later standards than XML Schema 1.0 names (reading R-f, provisional): a
- * category escape takes the Unicode version the engine ships rather than Unicode 3.1, as Appendix F
- * encourages, and `\i` and `\c` take XML 1.0 (Fifth Edition)'s name characters, from
- * {@link nameStartClass} and {@link nameClass}, with the colon added.
+ * Two readings follow later standards than XML Schema 1.0 names (reading 55): a category escape
+ * takes the Unicode version the engine ships rather than Unicode 3.1, as Appendix F encourages, and
+ * `\i` and `\c` take XML 1.0 (Fifth Edition)'s name characters, from {@link nameStartClass} and
+ * {@link nameClass}, with the colon added.
  *
  * A `pattern-mask` is author content and the value it checks is the candidate's, so the check must
  * not let either stall its host. A backtracking engine, JavaScript's `RegExp` among them, takes
@@ -41,11 +41,13 @@
  * or `|` that passes the limit, so its host shows the notice instead of checking it. A posted value
  * is as long as the host lets a request body be: plate sets no bound, and the dev playground's
  * server reads at most 1,048,576 bytes (`scripts/serve.ts`), so a value there holds at most about a
- * million characters. The worst case is 128 × 1,048,576, about 1.3 × 10^8 state visits: 0.7 to 3
- * seconds in Node 26 on the Apple-silicon laptop it was measured on, at 5 to 25 nanoseconds a visit
- * (the higher figure when every visit tests a different class), well inside a request. Each
- * optional copy of a repeated class takes two states, so the limit admits the corpus's
- * `pattern-mask` values (at most 21 states) and `[0-9]{0,63}` (127), and refuses `[0-9]{0,64}`.
+ * million characters. The worst case is 128 × 1,048,576, about 1.3 × 10^8 state visits. Most
+ * patterns take 5 to 25 nanoseconds a visit in Node 26 on the Apple-silicon laptop they were
+ * measured on, 0.7 to 3 seconds at that size. A visit that tests a class costs more, so the slowest
+ * pattern the limit admits holds many distinct classes under `*`, where each character tests every
+ * class: 63 of them, 127 states, took 6.4 seconds over a million characters there. Each optional
+ * copy of a repeated class takes two states, so the limit admits the corpus's `pattern-mask` values
+ * (at most 21 states) and `[0-9]{0,63}` (127), and refuses `[0-9]{0,64}`.
  *
  * A count is measured against the limit as written, before it becomes a number, and one above
  * 127, the most copies of one character the automaton holds, is refused at its quantifier whatever
