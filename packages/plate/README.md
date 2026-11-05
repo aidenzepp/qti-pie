@@ -19,7 +19,7 @@ plate is a private workspace package of [qti-pie](../../README.md). In a sibling
 `package.json`:
 
 ```json
-"dependencies": { "@qti-pie/plate": "workspace:*", "effect": "4.0.7" }
+"dependencies": { "@qti-pie/plate": "workspace:*", "effect": "4.1.2" }
 ```
 
 Then run `pnpm install` from the repository root.
@@ -62,6 +62,28 @@ entries and `score` scores them. The [playground](#playground) does the whole ro
 with `h`. A host that builds its own Status part reads the fields `StatusInput` documents.
 [`src/index.ts`](src/index.ts) lists every export, and the TSDoc on each name is its reference.
 
+## Interactions
+
+A host can rely on these, and [`src/interactions/`](src/interactions/) documents the rest:
+
+- A shuffled Choice's order follows the configuration's `seed`, `render`'s `instance` and the
+  response. Keep the `seed` stable across restarts, pass the `instance` you stored, and vary the
+  `seed` per candidate when every candidate gets the same instance.
+- `checkResponses` checks a `pattern-mask` only when `validateResponses` is on, and matches a number
+  in its canonical form ([`src/interactions/pattern.ts`](src/interactions/pattern.ts)). `score`
+  never checks it.
+- An Extended Text with `format="xhtml"` is a plain `textarea`.
+- A `multiple` or `ordered` Extended Text renders at most 100 `textarea`s, and shows a notice in
+  their place when `min-strings` is above 100.
+
+## Scoring
+
+`score` runs inline response processing and six built-in templates: `match_correct`,
+`map_response`, `map_response_point`, `CC2_match`, `CC2_match_basic` and `CC2_map_response`.
+`open`'s verdict names any other template, and any inline rule that plate does not run. No
+interaction that plate renders collects a `point`, so `map_response_point` scores only a point
+your own control supplies.
+
 ## Server and browser
 
 The server keeps what `open` accepted, correct responses included. The browser gets only the HTML
@@ -93,14 +115,29 @@ From the repository root:
 $ pnpm --filter @qti-pie/plate serve
 ```
 
-Then open `http://localhost:5190`. The playground, [`src/dev/page.ts`](src/dev/page.ts), lists four
-documents from
-[1EdTech's QTI 3 examples](https://github.com/1EdTech/qti-examples/tree/0a92fbbb6d2e620a1f7fad19977be4c418246bc0),
-renders the ones `open` accepts inside its own form, and scores what you submit. It listens on
-`127.0.0.1` only. `PLATE_DEV_PORT` picks another port. `PLATE_CORPUS_DIR` names the directory that
-holds the extracted examples, and when that directory is missing, the page shows where it looked and
-the command that extracts them. To try a theme, paste a shadcn theme's `:root` and `.dark` blocks
-into the theme box.
+Then open `http://localhost:5190`. The playground, [`src/dev/page.ts`](src/dev/page.ts), lists every
+document in
+[1EdTech's QTI 3 examples](https://github.com/1EdTech/qti-examples/tree/0a92fbbb6d2e620a1f7fad19977be4c418246bc0)
+by its verdict, renders the ones `open` accepts inside its own form, and scores what you submit. Its
+Verdicts page shows every verdict, and its Ledger page shows the last [ledger](#conformance-ledger).
+It listens on `127.0.0.1` only. `PLATE_DEV_PORT` picks another port. `PLATE_CORPUS_DIR` names the
+directory that holds the extracted examples, and when that directory is missing, the page shows
+where it looked and the command that extracts them. To try a theme, paste a shadcn theme's `:root`
+and `.dark` blocks into the theme box.
+
+## Conformance ledger
+
+From the repository root:
+
+```bash
+pnpm --filter @qti-pie/plate ledger
+```
+
+The command runs plate's tests, opens every document in 1EdTech's examples, and writes the ledger
+and the verdicts to `packages/plate/work/ledger/`, or to the folder `PLATE_LEDGER_DIR` names. It
+needs the QTI 3.0 conformance text at `~/.cache/gr8des/qti3-text/conf.txt`. The ledger says only
+that these tests pass over these fixtures, never that plate is conformant or certified. The command
+exits with 1 when a test fails or [`src/ledger/honesty.ts`](src/ledger/honesty.ts) finds a problem.
 
 ## Development
 
