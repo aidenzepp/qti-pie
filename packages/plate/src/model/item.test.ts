@@ -1,6 +1,8 @@
+import { readFile } from "node:fs/promises";
 import { assert, describe, it } from "@effect/vitest";
-import { Duration, Effect, Option } from "effect";
+import { Config, ConfigProvider, Data, Duration, Effect, Option } from "effect";
 import { configure } from "#plate/configuration.ts";
+import { readSource } from "#plate/document/read.ts";
 import { attr, doc, el, text, xmlNamespace } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
@@ -318,6 +320,104 @@ const matchCorrect: readonly Rule[] = [
     otherwise: Option.some([scoreRule(0)]),
   },
 ];
+
+/**
+ * `map_response_point` as a rule tree: `SCORE` is 0 when `RESPONSE` is NULL, else its value
+ * through its area mapping.
+ */
+const mapResponsePoint: readonly Rule[] = [
+  {
+    branches: [
+      branch({ kind: "is-null", operand: { identifier: "RESPONSE", kind: "variable" } }, [
+        scoreRule(0),
+      ]),
+    ],
+    kind: "condition",
+    otherwise: Option.some([
+      {
+        expression: { identifier: "RESPONSE", kind: "map-response-point" },
+        identifier: "SCORE",
+        kind: "set-outcome",
+      },
+    ]),
+  },
+];
+
+/**
+ * An item whose single point `RESPONSE` has the area mapping {@link areaMapping} gives, and whose
+ * float `SCORE` the processing sets.
+ *
+ * @param processing The item's response processing.
+ * @param attributes The area mapping's attributes, none by default.
+ * @param rectRight The rect's third coordinate, as written; 50 by default.
+ * @returns The document at `items/test.xml`.
+ */
+const pointItem = (
+  processing: SourceElement,
+  attributes: readonly SourceAttribute[] = [],
+  rectRight = "50",
+): SourceDocument =>
+  item({
+    after: [processing],
+    body: [],
+    declarations: [
+      declaration("qti-response-declaration", "RESPONSE", "point", "single", [
+        areaMapping(attributes, rectRight),
+      ]),
+      declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+    ],
+  });
+
+/**
+ * A single point value.
+ *
+ * @param points The point, none for NULL.
+ * @returns The value.
+ */
+const pointValue = (...points: readonly (readonly [bigint, bigint])[]): Value => ({
+  baseType: "point",
+  cardinality: "single",
+  values: points.map((point) => ({ baseType: "point", value: point })),
+});
+
+/**
+ * A built-in template's file is missing or unreadable under `HOME`.
+ */
+class UnreadableTemplateError extends Data.TaggedError("UnreadableTemplateError")<{
+  /**
+   * The path the template was read from.
+   */
+  readonly path: string;
+}> {
+  /**
+   * The path, and where the template files come from, in one line.
+   */
+  override get message(): string {
+    return `Cannot read the response-processing template ${this.path}: fetch QTI 3's rptemplates into ~/.cache/gr8des/qti3/rptemplates/.`;
+  }
+}
+
+/**
+ * Read the rules of a built-in template from its file in the cache, under `HOME`, as `confPath`
+ * names `conf.txt`.
+ *
+ * @param name The template's name.
+ * @returns The children of the file's `qti-response-processing`; an
+ *   {@link UnreadableTemplateError} naming the path when the file cannot be read.
+ */
+const templateRules = (name: string) =>
+  Effect.gen(function* readTemplateRules() {
+    const file = yield* Config.String("HOME").pipe(
+      Config.map((home) => `${home}/.cache/gr8des/qti3/rptemplates/${name}.xml`),
+    );
+    const bytes = yield* Effect.tryPromise({
+      catch: () => new UnreadableTemplateError({ path: file }),
+      try: () => readFile(file),
+    });
+    const source = yield* readSource(file, bytes);
+
+    return source.root.children;
+  });
 
 /**
  * An item whose body is one `qti-choice-interaction` bound to a single identifier response.
@@ -638,10 +738,8 @@ describe("buildItem", () => {
           }),
         );
         assert.deepStrictEqual(built.responses.get("OTHER")?.areaMapping, Option.none());
-        assert.deepStrictEqual(built.processing, Option.none());
-        assert.deepStrictEqual(built.unsupported, [
-          { feature: "map_response_point", path: `${root}/qti-response-processing`, shown: "mark" },
-        ]);
+        assert.deepStrictEqual(built.processing, Option.some(mapResponsePoint));
+        assert.deepStrictEqual(built.unsupported, []);
       }),
   );
 
@@ -681,6 +779,88 @@ describe("buildItem", () => {
   );
 
   /* oxlint-enable anti-slop/no-shape-in-symbol-names */
+
+  it.effect(
+    "[I-9b] resolves map_response_point to the rules of its file, read from the cache",
+    () =>
+      Effect.gen(function* resolvesMapResponsePoint() {
+        const rules = yield* templateRules("map_response_point");
+        const inline = yield* buildItem(pointItem(el("qti-response-processing", [], rules)));
+        const built = yield* buildItem(pointItem(template("map_response_point")));
+
+        assert.deepStrictEqual(built.processing, Option.some(mapResponsePoint));
+        assert.deepStrictEqual(inline.processing, built.processing);
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.deepStrictEqual(inline.unsupported, []);
+      }),
+  );
+
+  it.effect("fails naming the path when a template file is missing under HOME", () =>
+    Effect.gen(function* missingTemplate() {
+      const home = `${import.meta.dirname}/no-such-home`;
+      const failure = yield* Effect.flip(
+        templateRules("map_response_point").pipe(
+          Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ HOME: home }))),
+        ),
+      );
+
+      assert.deepStrictEqual(
+        failure._tag === "UnreadableTemplateError" ? failure.path : failure._tag,
+        `${home}/.cache/gr8des/qti3/rptemplates/map_response_point.xml`,
+      );
+    }),
+  );
+
+  it.effect(
+    "[I-9b] map_response_point scores a point in the circle or on its edge 1, one in no area the default, and NULL 0",
+    () =>
+      Effect.gen(function* scoresMapResponsePoint() {
+        const built = yield* buildItem(
+          pointItem(template("map_response_point"), [attr("default-value", "0.25")]),
+        );
+        const scoreOf = (answer: Value) =>
+          Effect.map(
+            Effect.fromResult(runAttempt(built, fresh(built, "i"), { RESPONSE: answer })),
+            (after) => after.outcomes["SCORE"],
+          );
+
+        assert.deepStrictEqual(yield* scoreOf(pointValue([102n, 113n])), float(1));
+        assert.deepStrictEqual(yield* scoreOf(pointValue([118n, 113n])), float(1));
+        assert.deepStrictEqual(yield* scoreOf(pointValue([300n, 300n])), float(0.25));
+        assert.deepStrictEqual(yield* scoreOf(pointValue()), float(0));
+      }),
+  );
+
+  it.effect(
+    "[I-9b] marks processing that reads an area mapping with a % coordinate area-coords-percent",
+    () =>
+      Effect.gen(function* marksPercentCoords() {
+        const inline = el(
+          "qti-response-processing",
+          [],
+          [
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "SCORE")],
+              [el("qti-map-response-point", [attr("identifier", "RESPONSE")])],
+            ),
+          ],
+        );
+
+        for (const processing of [template("map_response_point"), inline]) {
+          const built = yield* buildItem(pointItem(processing, [], "50%"));
+
+          assert.deepStrictEqual(built.processing, Option.none());
+          assert.deepStrictEqual(built.unsupported, [
+            {
+              feature: "area-coords-percent",
+              path: `${root}/qti-response-processing`,
+              shown: "mark",
+            },
+          ]);
+        }
+      }),
+  );
 
   it.effect(
     "[I-1] refuses an area map entry's shape or coords outside its type as attribute-type",
@@ -1161,7 +1341,7 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "[I-9b] gives no processing for map_response_point, another template or an element outside the engine",
+    "[I-9b] gives no processing for a template outside the built-ins or an element outside the engine",
     () =>
       Effect.gen(function* unsupportedProcessing() {
         const declarations = [
@@ -1169,11 +1349,6 @@ describe("buildItem", () => {
         ];
         const processing = `${root}/qti-response-processing`;
         const cases = [
-          {
-            element: template("map_response_point"),
-            feature: "map_response_point",
-            path: processing,
-          },
           {
             element: el("qti-response-processing", [
               attr("template", "https://example.com/rp/custom.xml"),

@@ -150,6 +150,7 @@ describe("the closed value sets", () => {
           "qti-base-value",
           "qti-is-null",
           "qti-map-response",
+          "qti-map-response-point",
         ],
       ],
       [
@@ -203,7 +204,6 @@ describe("the closed value sets", () => {
           "data-catalog-idref",
           "data-qti-suppress-tts",
           "data-ssml",
-          "map_response_point",
         ],
       ],
       [

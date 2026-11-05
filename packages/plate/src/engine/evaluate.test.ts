@@ -10,6 +10,8 @@ import {
 } from "#plate/engine/evaluate.ts";
 import type { Variables } from "#plate/engine/evaluate.ts";
 import type {
+  AreaMapEntry,
+  AreaMapping,
   Branch,
   Expression,
   Item,
@@ -173,6 +175,76 @@ const paired: ResponseDeclaration = {
   }),
 };
 
+/* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure. */
+/**
+ * The area mapping of the point cases: the circle `102,113,16` mapped to 1, then the rect
+ * `0,0,50,40` mapped to 0.5; a point in neither maps to 0.25.
+ */
+const targetMapping: AreaMapping = {
+  defaultValue: 0.25,
+  entries: [
+    { coords: [102, 113, 16], mappedValue: 1, shape: "circle" },
+    { coords: [0, 0, 50, 40], mappedValue: 0.5, shape: "rect" },
+  ],
+  lowerBound: Option.none(),
+  percent: false,
+  upperBound: Option.none(),
+};
+
+/**
+ * Construct a multiple point response.
+ *
+ * @param identifier The response's identifier.
+ * @param areaMapping Its area mapping, when it has one.
+ * @returns The declaration.
+ */
+const pointResponse = (
+  identifier: string,
+  areaMapping: Option.Option<AreaMapping>,
+): ResponseDeclaration => ({
+  areaMapping,
+  baseType: "point",
+  cardinality: "multiple",
+  correct: Option.none(),
+  defaultValue: Option.none(),
+  identifier,
+  mapping: Option.none(),
+});
+
+/**
+ * A point response with {@link targetMapping}.
+ */
+const target = pointResponse("TARGET", Option.some(targetMapping));
+
+/**
+ * A point response with {@link targetMapping} bounded from 0.5 to 1.25.
+ */
+const clamped = pointResponse(
+  "CLAMPED",
+  Option.some({ ...targetMapping, lowerBound: Option.some(0.5), upperBound: Option.some(1.25) }),
+);
+
+/**
+ * A point response whose areas overlap: the rect `0,0,50,40` mapped to 0.5, then the circle
+ * `40,30,20` mapped to 1, which holds the rect's corner `50,40`.
+ */
+const overlapping = pointResponse(
+  "OVERLAPPING",
+  Option.some({
+    ...targetMapping,
+    entries: [
+      { coords: [0, 0, 50, 40], mappedValue: 0.5, shape: "rect" },
+      { coords: [40, 30, 20], mappedValue: 1, shape: "circle" },
+    ],
+  }),
+);
+/* oxlint-enable anti-slop/no-shape-in-symbol-names */
+
+/**
+ * A point response with no area mapping.
+ */
+const unmapped = pointResponse("UNMAPPED", Option.none());
+
 /**
  * A single float outcome with no default, as `SCORE` is declared.
  */
@@ -209,6 +281,10 @@ const item: Item = {
     ["BOUNDED", bounded],
     ["CHOICES", choices],
     ["PAIRED", paired],
+    ["TARGET", target],
+    ["CLAMPED", clamped],
+    ["OVERLAPPING", overlapping],
+    ["UNMAPPED", unmapped],
   ]),
   title: "Evaluate",
   unsupported: [],
@@ -270,6 +346,66 @@ const mapped = (identifier: string, values: readonly Single[]): Value =>
       responses: { [identifier]: answerOf(identifier, values) },
     }),
   );
+
+/**
+ * Construct a single point.
+ *
+ * @param x Its x coordinate.
+ * @param y Its y coordinate.
+ * @returns The single.
+ */
+const pointOf = (x: bigint, y: bigint): Single => ({ baseType: "point", value: [x, y] });
+
+/**
+ * Give the value of a `qti-map-response-point` of one response.
+ *
+ * @param identifier The response.
+ * @param points Its points, none for NULL.
+ * @returns The mapped value.
+ */
+const pointMapped = (identifier: string, points: readonly Single[]): Value =>
+  Result.getOrThrow(
+    evaluateExpression({ identifier, kind: "map-response-point" }, item, {
+      ...variablesOf(identifierValue("A")),
+      responses: { [identifier]: answerOf(identifier, points) },
+    }),
+  );
+
+/**
+ * Report whether one area holds a point, through a `qti-map-response-point` whose mapping is that
+ * area alone, mapped to 1 with a default of 0.
+ *
+ * @param entry The area.
+ * @param x The point's x coordinate.
+ * @param y The point's y coordinate.
+ * @returns Whether the area maps the point.
+ */
+const holds = (entry: Omit<AreaMapEntry, "mappedValue">, x: bigint, y: bigint): boolean => {
+  const area = pointResponse(
+    "AREA",
+    Option.some({
+      defaultValue: 0,
+      entries: [{ ...entry, mappedValue: 1 }],
+      lowerBound: Option.none(),
+      percent: false,
+      upperBound: Option.none(),
+    }),
+  );
+  const value = Result.getOrThrow(
+    evaluateExpression(
+      { identifier: "AREA", kind: "map-response-point" },
+      { ...item, responses: new Map([["AREA", area]]) },
+      {
+        outcomes: {},
+        responses: {
+          AREA: { baseType: "point", cardinality: "multiple", values: [pointOf(x, y)] },
+        },
+      },
+    ),
+  );
+
+  return value.values[0]?.baseType === "float" && value.values[0].value === 1;
+};
 
 /**
  * Construct a single string.
@@ -682,6 +818,105 @@ describe("map-response", () => {
     assert.deepStrictEqual(
       { _tag: failure._tag, identifier: failure.identifier },
       { _tag: "UnmappedResponseError", identifier: "OPEN" },
+    );
+  });
+});
+
+describe("map-response-point", () => {
+  it("[I-9b] maps a point inside the circle, or on its edge, to 1, and one in no area to the default", () => {
+    assert.deepStrictEqual(pointMapped("TARGET", [pointOf(102n, 113n)]), floatValue(1));
+    assert.deepStrictEqual(pointMapped("TARGET", [pointOf(118n, 113n)]), floatValue(1));
+    assert.deepStrictEqual(pointMapped("TARGET", [pointOf(102n, 97n)]), floatValue(1));
+    assert.deepStrictEqual(pointMapped("TARGET", [pointOf(200n, 200n)]), floatValue(0.25));
+  });
+
+  it("[I-9b] maps an area once however many points it holds, and adds the default once per distinct point in no area", () => {
+    assert.deepStrictEqual(
+      pointMapped("TARGET", [pointOf(102n, 113n), pointOf(110n, 113n)]),
+      floatValue(1),
+    );
+    assert.deepStrictEqual(
+      pointMapped("TARGET", [pointOf(102n, 113n), pointOf(10n, 10n), pointOf(110n, 113n)]),
+      floatValue(1.5),
+    );
+    assert.deepStrictEqual(
+      pointMapped("TARGET", [pointOf(200n, 200n), pointOf(300n, 300n), pointOf(200n, 200n)]),
+      floatValue(0.5),
+    );
+  });
+
+  it("[I-9b] a NULL response maps to 0 before the bounds, and the bounds clamp the sum", () => {
+    assert.deepStrictEqual(pointMapped("TARGET", []), floatValue(0));
+    assert.deepStrictEqual(pointMapped("CLAMPED", []), floatValue(0.5));
+    assert.deepStrictEqual(
+      pointMapped("CLAMPED", [pointOf(102n, 113n), pointOf(10n, 10n)]),
+      floatValue(1.25),
+    );
+  });
+
+  it("[I-9b] a point two areas hold is mapped by the first listed", () => {
+    assert.deepStrictEqual(pointMapped("OVERLAPPING", [pointOf(45n, 35n)]), floatValue(0.5));
+    assert.deepStrictEqual(
+      pointMapped("OVERLAPPING", [pointOf(45n, 35n), pointOf(55n, 35n)]),
+      floatValue(1.5),
+    );
+  });
+
+  /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure. */
+  it("[I-9b] each shape holds the points on its boundary, and default holds every point", () => {
+    const rect = { coords: [10, 20, 30, 40], shape: "rect" } as const;
+    const circle = { coords: [0, 0, 5], shape: "circle" } as const;
+    const ellipse = { coords: [0, 0, 4, 2], shape: "ellipse" } as const;
+    const triangle = { coords: [0, 0, 10, 0, 0, 10], shape: "poly" } as const;
+    const closed = { coords: [0, 0, 10, 0, 0, 10, 0, 0], shape: "poly" } as const;
+    const cases = [
+      [rect, 10n, 20n, true],
+      [rect, 30n, 40n, true],
+      [rect, 20n, 30n, true],
+      [rect, 31n, 40n, false],
+      [circle, 3n, 4n, true],
+      [circle, 4n, 4n, false],
+      [ellipse, 4n, 0n, true],
+      [ellipse, 0n, -2n, true],
+      [ellipse, 2n, 1n, true],
+      [ellipse, 3n, 2n, false],
+      [triangle, 0n, 0n, true],
+      [triangle, 5n, 5n, true],
+      [triangle, 2n, 2n, true],
+      [triangle, 6n, 6n, false],
+      [triangle, -1n, 0n, false],
+      [closed, 5n, 5n, true],
+      [closed, 6n, 6n, false],
+      [{ coords: [], shape: "default" }, 999n, -5n, true],
+    ] as const;
+
+    for (const [entry, x, y, expected] of cases) {
+      assert.strictEqual(holds(entry, x, y), expected, `${entry.shape} ${String(x)} ${String(y)}`);
+    }
+  });
+  /* oxlint-enable anti-slop/no-shape-in-symbol-names */
+
+  it("[I-9b] compares a coordinate beyond 2^53 after its one conversion to the nearest double", () => {
+    // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
+    const edge = { coords: [0, 0, 9_007_199_254_740_992, 1], shape: "rect" } as const;
+
+    assert.isTrue(holds(edge, 2n ** 53n + 1n, 0n));
+    assert.isFalse(holds(edge, 2n ** 53n + 2n, 0n));
+  });
+
+  it("refuses to map a point response with no area mapping, naming qti-area-mapping", () => {
+    const failure = failureOf(
+      evaluateExpression(
+        { identifier: "UNMAPPED", kind: "map-response-point" },
+        item,
+        variablesOf(identifierValue("A")),
+      ),
+    );
+
+    assert.instanceOf(failure, UnmappedResponseError);
+    assert.deepStrictEqual(
+      { _tag: failure._tag, identifier: failure.identifier, mapping: failure.mapping },
+      { _tag: "UnmappedResponseError", identifier: "UNMAPPED", mapping: "qti-area-mapping" },
     );
   });
 });

@@ -87,8 +87,8 @@ const textInteractions = ["qti-text-entry-interaction", "qti-extended-text-inter
 const declarations = ["qti-response-declaration", "qti-outcome-declaration"] as const;
 
 /**
- * The response-processing elements of phase 1's engine (spec §4.12): the eight elements it
- * evaluates and the three branches of `qti-response-condition`.
+ * The response-processing elements of the engine (spec §4.12): the nine elements it evaluates and
+ * the three branches of `qti-response-condition`.
  *
  * An inline `qti-response-processing` that uses only these becomes a rule tree; one that uses any
  * other element is a mark keyed by that element's name.
@@ -105,6 +105,7 @@ const engine = [
   "qti-base-value",
   "qti-is-null",
   "qti-map-response",
+  "qti-map-response-point",
 ] as const;
 
 /**
@@ -289,11 +290,6 @@ export const renders = {
       when: { kind: "attribute", name: "data-qti-suppress-tts" },
     },
     { feature: "data-ssml", on: "body", when: { kind: "attribute", name: "data-ssml" } },
-    {
-      feature: "map_response_point",
-      on: ["qti-response-processing"],
-      when: { kind: "template", name: "map_response_point" },
-    },
   ],
   notices: [
     {
@@ -344,8 +340,8 @@ export const templatePrefixes = [
 ] as const;
 
 /**
- * The response-processing templates phase 1 recognises by name: `match_correct` and `map_response`
- * run, and `map_response_point` is a mark.
+ * The response-processing templates the renderer recognises by name, each of which runs as the
+ * rule tree its file gives: `match_correct`, `map_response` and `map_response_point`.
  */
 export const templateNames = ["match_correct", "map_response", "map_response_point"] as const;
 
