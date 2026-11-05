@@ -43,12 +43,13 @@ interface Crossing {
 /**
  * The specifiers the core may not load (rules `b454bdf7` and `6f47762b`, and the composition
  * ruling `a9d04969` point 1, so the one `"."` entry stays callable anywhere): the dev playground,
- * test support, the Node-only corpus reader, every Node built-in, the HTML parser the tests use,
- * the QTI database package and grizzle. One that ends in `/` or `:` forbids every specifier it
- * begins; any other forbids itself and its subpaths.
+ * the conformance ledger, test support, the Node-only corpus reader, every Node built-in, the HTML
+ * parser the tests use, the QTI database package and grizzle. One that ends in `/` or `:` forbids
+ * every specifier it begins; any other forbids itself and its subpaths.
  */
 const forbiddenSpecifiers: readonly string[] = [
   "#plate/dev/",
+  "#plate/ledger/",
   "#plate/test/",
   "#plate/document/corpus.ts",
   "node:",
@@ -160,6 +161,7 @@ describe("the core boundary's scanner", () => {
   it("forbids each listed specifier and its subpaths, and nothing else", () => {
     const forbidden = [
       "#plate/dev/serve.ts",
+      "#plate/ledger/view.ts",
       "#plate/test/imports.ts",
       "#plate/document/corpus.ts",
       "node:fs",
@@ -208,7 +210,7 @@ const closure = valueClosure(modules, ["src/index.ts"]);
 const Manifest = Schema.Struct({ exports: Schema.Record(Schema.String, Schema.String) });
 
 describe("the core, from src/index.ts", () => {
-  it("loads no dev playground, test support, corpus reader, Node built-in, parse5, pantry or grizzle", () => {
+  it("loads no dev playground, ledger, test support, corpus reader, Node built-in, parse5, pantry or grizzle", () => {
     assert.deepStrictEqual(crossings(modules, ["src/index.ts"]), []);
   });
 

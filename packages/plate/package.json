@@ -11,6 +11,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "ledger": "node scripts/ledger.ts",
     "serve": "node scripts/serve.ts",
     "test": "mkdir -p work/.vp-tmp && TMPDIR=\"$PWD/work/.vp-tmp\" NODE_OPTIONS=\"$NODE_OPTIONS --disable-proto=delete --disable-sigusr1\" vp test run"
   },
