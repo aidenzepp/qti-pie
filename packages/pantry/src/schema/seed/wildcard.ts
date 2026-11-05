@@ -22,6 +22,7 @@
 import type {
   NamespacePolicyHandle,
   ProcessContentsHandle,
+  SchemaNamespaceHandle,
   SchemaSetHandle,
 } from "#pantry/schema/content/rosters.ts";
 import type { AttributeNameHandle, NodeKindHandle, RootKindHandle } from "#pantry/schema/node.ts";
@@ -93,7 +94,7 @@ export const namespaces = {
   xml: "http://www.w3.org/XML/1998/namespace",
   xmlns: "http://www.w3.org/2000/xmlns/",
   xsi: "http://www.w3.org/2001/XMLSchema-instance",
-} as const;
+} as const satisfies Readonly<Record<Exclude<SchemaNamespaceHandle, "absent">, string>>;
 
 /**
  * The rows of one namespace and set from their local names.

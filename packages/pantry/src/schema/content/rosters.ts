@@ -479,6 +479,31 @@ export const NamespacePolicy = closed("NamespacePolicy", ["any", "other", "other
 export const ProcessContents = closed("ProcessContents", ["lax", "strict", "skip"]);
 
 /**
+ * The namespaces the four schema sets and their imports name, by the prefix `seed/wildcard.ts`
+ * gives each, and `absent` for no namespace (XML Schema's word; a roster handle cannot be empty).
+ * A column of this roster holds a seeded namespace, never an author's. Handles are prefixes, not
+ * URIs: grizzle lowers a roster to a PostgreSQL enum, whose labels hold at most 63 bytes.
+ */
+export const SchemaNamespace = closed("SchemaNamespace", [
+  "asi",
+  "cp",
+  "cpx",
+  "csmd",
+  "drd",
+  "lom",
+  "mathml",
+  "qmd",
+  "ssml",
+  "ud",
+  "xi",
+  "xlink",
+  "xml",
+  "xmlns",
+  "xsi",
+  "absent",
+]);
+
+/**
  * The schema sets a foreign tree is judged against: the QTI assessment-item schema, the content
  * packaging manifest schema, the LOM schema and the usage data schema.
  */
@@ -559,6 +584,7 @@ export const relations = {
   QmdInteractionTypeValue,
   QmdScoringModeValue,
   RoundingMode,
+  SchemaNamespace,
   SchemaSet,
   Shape,
   ShowHide,
@@ -813,6 +839,11 @@ export type NamespacePolicyHandle = (typeof NamespacePolicy.handles)[number];
  * A handle of `ProcessContents`.
  */
 export type ProcessContentsHandle = (typeof ProcessContents.handles)[number];
+
+/**
+ * A handle of `SchemaNamespace`.
+ */
+export type SchemaNamespaceHandle = (typeof SchemaNamespace.handles)[number];
 
 /**
  * A handle of `SchemaSet`.
