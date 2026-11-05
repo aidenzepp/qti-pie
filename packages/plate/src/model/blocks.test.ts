@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { assert, describe, it } from "@effect/vitest";
 import { Config, Effect, Result } from "effect";
@@ -77,13 +76,6 @@ describe("model/blocks.ts", () => {
   });
 
   it("blocks.ts's imports pass the browser allowlist with it as a root", () => {
-    const table = readFileSync(
-      new URL(import.meta.resolve("#plate/model/blocks.generated.json")),
-      "utf-8",
-    );
-    // `sourceModules` reads only `.ts` files; the table is JSON and imports nothing.
-    const modules = new Map([...sourceModules(), ["src/model/blocks.generated.json", table]]);
-
-    assert.deepStrictEqual(checkAllowlist(modules, ["src/model/blocks.ts"]), []);
+    assert.deepStrictEqual(checkAllowlist(sourceModules(), ["src/model/blocks.ts"]), []);
   });
 });

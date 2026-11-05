@@ -778,18 +778,20 @@ export const scopedId = (instance: string, ...segments: readonly (number | strin
 export const authoredId = (instance: string, id: string): string => scopedId(instance, "", id);
 
 /**
- * The ASCII whitespace that separates the ids of an IDREFS value.
+ * The ASCII whitespace that separates the tokens of an HTML token list.
  */
-const idSeparator = /[\t\n\f\r ]+/u;
+const tokenSeparator = /[\t\n\f\r ]+/u;
 
 /**
- * Split an IDREFS value, such as `aria-labelledby` or `headers`, into its ids.
+ * Split a value of tokens separated by ASCII whitespace, as HTML splits one: an IDREFS value, such
+ * as `aria-labelledby` or `headers`, into its ids, or a `class` value into its classes.
  *
  * @param value The attribute's value.
- * @returns The ids in order, with no empty id from leading, trailing or repeated whitespace.
+ * @returns The tokens in order, with no empty token from leading, trailing or repeated whitespace.
+ * @see https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#space-separated-tokens
  */
-export const splitIdrefs = (value: string): readonly string[] =>
-  value.split(idSeparator).filter((id) => id !== "");
+export const splitTokens = (value: string): readonly string[] =>
+  value.split(tokenSeparator).filter((token) => token !== "");
 
 /**
  * Scope every id of an IDREFS value the author wrote through {@link authoredId}, so each still
@@ -804,7 +806,7 @@ export const splitIdrefs = (value: string): readonly string[] =>
  * @returns The scoped ids, in order, joined by one space; none when the value names no id.
  */
 export const authoredIdrefs = (instance: string, value: string): Option.Option<string> => {
-  const ids = splitIdrefs(value);
+  const ids = splitTokens(value);
 
   return ids.length === 0
     ? Option.none()

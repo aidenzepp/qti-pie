@@ -15,57 +15,12 @@ import type { Malformed } from "#plate/form/encoding.ts";
 import { validateChoice } from "#plate/interactions/choice.ts";
 import { validateExtendedText } from "#plate/interactions/extended-text.ts";
 import { validateTextEntry } from "#plate/interactions/text-entry.ts";
-import type {
-  BodyNode,
-  ChoiceInteraction,
-  ExtendedTextInteraction,
-  Item,
-  TextEntryInteraction,
-} from "#plate/model/item.ts";
+import { interactionsIn } from "#plate/model/interactions.ts";
+import type { Interaction, Item } from "#plate/model/item.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
-
-/**
- * An interaction {@link checkResponses} validates.
- */
-type Interaction = ChoiceInteraction | ExtendedTextInteraction | TextEntryInteraction;
-
-/**
- * Collect the interactions of body nodes in document order, inside elements, Prompts and choices.
- *
- * @param nodes The body nodes.
- * @returns The interactions.
- */
-const interactionsIn = (nodes: readonly BodyNode[]): readonly Interaction[] =>
-  nodes.flatMap((node): readonly Interaction[] => {
-    switch (node.kind) {
-      case "element": {
-        return interactionsIn(node.children);
-      }
-      case "choice": {
-        return [
-          node,
-          ...interactionsIn(Option.getOrElse(node.prompt, () => [])),
-          ...node.choices.flatMap((choice) => interactionsIn(choice.content)),
-        ];
-      }
-      case "extended-text": {
-        return [node, ...interactionsIn(Option.getOrElse(node.prompt, () => []))];
-      }
-      case "text-entry": {
-        return [node];
-      }
-      case "text":
-      case "unsupported": {
-        return [];
-      }
-      default: {
-        return node satisfies never;
-      }
-    }
-  });
 
 /**
  * Give an interaction's NULL, the input of a response the caller left out.

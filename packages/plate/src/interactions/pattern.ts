@@ -1,6 +1,7 @@
 /**
- * The pattern check Text Entry and Extended Text share: a response against its interaction's
- * `pattern-mask`, a tier (b) check, run only under `validateResponses`.
+ * The checks Text Entry and Extended Text share: a response against its interaction's
+ * `pattern-mask`, a tier (b) check, run only under `validateResponses`, and the message an entry
+ * that did not decode earns ({@link malformedMessage}).
  *
  * A `pattern-mask` is an XML Schema regular expression, which {@link compile} turns into an
  * automaton once per check, and {@link matches} runs that automaton over each value, anchored at
@@ -23,7 +24,9 @@
  */
 import { Option, Result, pipe } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
+import type { Malformed } from "#plate/form/encoding.ts";
 import { message } from "#plate/messages.ts";
+import type { Locale, MessageKey } from "#plate/messages.ts";
 import type { TextEntryInteraction } from "#plate/model/item.ts";
 import { compile, matches } from "#plate/model/regex.ts";
 import type { Matcher } from "#plate/model/regex.ts";
@@ -77,3 +80,38 @@ export const patternMessage = (
         ),
       )
     : Option.none();
+
+/**
+ * The message a string Text Entry or Extended Text gives for each reason its entry did not decode.
+ *
+ * `decode` keeps a string as posted, so for one it fails only as `file` (a file was posted) or
+ * `single-many` (the entry was posted twice), each with its own message. `number` and `identifier`,
+ * which only a {@link Malformed} built by hand carries here, get the general `notAccepted`.
+ */
+const stringRefusals = {
+  file: "malformedFile",
+  identifier: "notAccepted",
+  number: "notAccepted",
+  "single-many": "malformedSingleMany",
+} as const satisfies Readonly<Record<Malformed["reason"], MessageKey>>;
+
+/**
+ * Give the message a text entry that did not decode earns, a tier (a) check.
+ *
+ * A `string` binding gives the message of the {@link Malformed} reason, `malformedFile` for a file
+ * and `malformedSingleMany` for a second entry. An `integer` or `float` binding gives the author's
+ * `data-patternmask-message` when set, else `malformedNumber`.
+ *
+ * @param interaction The Text Entry or Extended Text: its base type and the author's message.
+ * @param reason Why the entry did not decode.
+ * @param locale The locale of the message.
+ * @returns The one message.
+ */
+export const malformedMessage = (
+  interaction: Pick<TextEntryInteraction, "baseType" | "patternMaskMessage">,
+  reason: Malformed["reason"],
+  locale: Locale,
+): string =>
+  interaction.baseType === "string"
+    ? message(locale, stringRefusals[reason])
+    : Option.getOrElse(interaction.patternMaskMessage, () => message(locale, "malformedNumber"));

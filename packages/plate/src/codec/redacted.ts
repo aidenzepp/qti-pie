@@ -24,6 +24,7 @@ import type {
 import { modelledBaseTypes, modelledCardinalities } from "#plate/model/values.ts";
 import { brandRedacted } from "#plate/payload.ts";
 import type { Redacted, RedactedFields } from "#plate/payload.ts";
+import { greatestCount } from "#plate/vocabulary.ts";
 
 /**
  * A body element's attribute in the JSON form.
@@ -154,7 +155,7 @@ const OptionalText = Schema.OptionFromOptionalKey(Schema.String);
  * decimal digits (reading 46).
  */
 const ChoiceCount = Schema.BigIntFromString.check(
-  Schema.isBetweenBigInt({ maximum: 2n ** 63n - 1n, minimum: 0n }),
+  Schema.isBetweenBigInt({ maximum: greatestCount, minimum: 0n }),
 );
 
 /**
@@ -464,15 +465,20 @@ const decodeJson = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
  * Check the JSON form of a redacted item and make the {@link Redacted} `render` takes. It never
  * throws, whatever it is handed.
  *
+ * It checks the JSON's shape, every field against {@link RedactedSchema}, and one rule of the
+ * body's content: no interaction stands, at any depth, inside a Choice's Prompt or a choice's
+ * content or inside an Extended Text's Prompt, where QTI's schema admits none and `render` cannot
+ * emit one, so `render` never meets such an interaction in a `Redacted` it returns. It checks the
+ * item against no other rule of QTI's, so a host trusts redacted JSON only as far as the item it
+ * came from; the emitter still keeps only the HTML subset's elements and attributes, and the URLs
+ * `url.ts` keeps.
+ *
  * @param input The JSON form as the host handed it over: the {@link RedactedJson}
  *   {@link encodeRedacted} wrote, after any JSON round trip. A count written as a JSON number is
  *   refused, and so is input that nests arrays and objects more than {@link maximumDepth} levels
- *   deep, which no item the reader accepts reaches. So is a body that holds an interaction, at any
- *   depth, inside a Choice's Prompt or a choice's content or inside an Extended Text's Prompt,
- *   where QTI's schema admits none and `render` cannot emit one, so `render` never meets such an
- *   interaction in a `Redacted` it returns. So is a live object that throws when read, such as one
- *   hiding a deep field in its prototype or a non-enumerable property, or holding a getter that
- *   throws; plain JSON data never does.
+ *   deep, which no item the reader accepts reaches. So is a live object that throws when read,
+ *   such as one hiding a deep field in its prototype or a non-enumerable property, or holding a
+ *   getter that throws; plain JSON data never does.
  * @returns The redacted item, branded only after every field passed {@link RedactedSchema} and its
  *   body held no interaction where `render` cannot emit one, or {@link InvalidRedacted} at stage
  *   `decode` naming what does not fit.

@@ -75,6 +75,8 @@ A host can rely on these, and [`src/interactions/`](src/interactions/) documents
 - An Extended Text with `format="xhtml"` is a plain `textarea`.
 - A `multiple` or `ordered` Extended Text renders at most 100 `textarea`s, and shows a notice in
   their place when `min-strings` is above 100.
+- A Text Entry or Extended Text bound to a `record` response shows a notice in its place, since
+  plate does not take `record` answers yet.
 
 ## Scoring
 

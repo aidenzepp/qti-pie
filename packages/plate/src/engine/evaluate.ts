@@ -497,8 +497,8 @@ const polygonHolds = (
 
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure. */
 /**
- * Report whether an area of each shape holds a point, its boundary included (9.15's default, R-b),
- * from the area's coordinates and the point's, as floats.
+ * Report whether an area of each shape holds a point, its boundary included (9.15's default,
+ * reading 52), from the area's coordinates and the point's, as floats.
  *
  * The coordinates are QTI's, which are HTML's: `rect` is left-x, top-y, right-x, bottom-y;
  * `circle` is center-x, center-y, radius; `ellipse` is center-x, center-y, h-radius, v-radius;
@@ -562,7 +562,7 @@ const firstArea = (mapping: AreaMapping, x: number, y: number): number =>
  *
  * QTI tests the points "against each area in turn, with those listed first taking priority in the
  * case where areas overlap", and "each area can be mapped once only". The rest is open (9.15), and
- * these defaults (R-b) hold until a ruling changes this function and its tests:
+ * these defaults (reading 52) hold until a ruling changes this function and its tests:
  *
  * - A point on a shape's boundary is inside (`rect`, `circle`, `ellipse` and `poly`, edges included;
  *   `default` holds every point), as {@link areaHolds} reads it.

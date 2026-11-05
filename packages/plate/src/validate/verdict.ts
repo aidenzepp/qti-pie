@@ -22,8 +22,6 @@ import {
   walk,
   xincludeNamespace,
   xmlNamespace,
-  xmlnsNamespace,
-  xsiNamespace,
 } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
@@ -38,8 +36,15 @@ import { classifyUrl, formatUrl, urlContextOf } from "#plate/model/url.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { checkRules } from "#plate/validate/rules.ts";
-import { checkStructure, governingTables } from "#plate/validate/structure.ts";
-import type { ContentTable, ElementTable, Tables } from "#plate/validate/xsd.ts";
+import {
+  attributeName,
+  checkStructure,
+  governingTables,
+  isAllowance,
+  isInstanceAttribute,
+  tableOf,
+} from "#plate/validate/structure.ts";
+import type { ContentTable, Tables } from "#plate/validate/xsd.ts";
 
 /**
  * Why a valid document is left unchecked: it holds MathML (reading 2) or SSML (reading 3), whose
@@ -142,26 +147,22 @@ const mediaElements: ReadonlySet<string> = new Set(["audio", "picture", "video"]
 const mediaSources: ReadonlySet<string> = new Set(["source", "track"]);
 
 /**
- * Name an attribute as its path step spells it without the `@`: its local name in no namespace,
- * `xml:<local>` in the XML namespace and `{<namespace>}<local>` otherwise.
+ * Report whether an attribute is `xml:lang` or `xml:base`, which E3 keeps on any element beyond
+ * the structural walk's allowances.
  *
- * @param attribute The attribute's name parts.
- * @returns Its name.
+ * @param attribute The attribute.
+ * @returns Whether it is one of the two.
  */
-const attributeName = (attribute: Pick<SourceAttribute, "local" | "namespace">): string => {
-  if (attribute.namespace === "") {
-    return attribute.local;
-  }
-
-  return attribute.namespace === xmlNamespace
-    ? `xml:${attribute.local}`
-    : `{${attribute.namespace}}${attribute.local}`;
-};
+const isLangOrBase = (attribute: SourceAttribute): boolean =>
+  attribute.namespace === xmlNamespace &&
+  (attribute.local === "lang" || attribute.local === "base");
 
 /**
- * Report whether an attribute is one E3 keeps on any element without its table naming it: a
- * namespace declaration, `xsi:schemaLocation`, `xsi:noNamespaceSchemaLocation`, `xsi:type`,
- * `xsi:nil`, `xml:lang` or `xml:base`.
+ * Report whether an attribute is one E3 keeps on any element without its table naming it: the
+ * structural walk's allowances ({@link isAllowance}: a namespace declaration,
+ * `xsi:schemaLocation` or `xsi:noNamespaceSchemaLocation`), `xsi:type` and `xsi:nil`
+ * ({@link isInstanceAttribute}), and, E3's one difference, `xml:lang` and `xml:base`
+ * ({@link isLangOrBase}).
  *
  * The structural walk judges `xsi:type` and `xsi:nil` on every element it checks (reading 47), so
  * a valid `xsi:type` is kept, never marked; on an element only a wildcard admits neither is judged.
@@ -169,15 +170,8 @@ const attributeName = (attribute: Pick<SourceAttribute, "local" | "namespace">):
  * @param attribute The attribute.
  * @returns Whether it is an allowance.
  */
-const isAllowance = (attribute: SourceAttribute): boolean =>
-  attribute.namespace === xmlnsNamespace ||
-  (attribute.namespace === xsiNamespace &&
-    (attribute.local === "schemaLocation" ||
-      attribute.local === "noNamespaceSchemaLocation" ||
-      attribute.local === "type" ||
-      attribute.local === "nil")) ||
-  (attribute.namespace === xmlNamespace &&
-    (attribute.local === "lang" || attribute.local === "base"));
+const isKeptEverywhere = (attribute: SourceAttribute): boolean =>
+  isAllowance(attribute) || isInstanceAttribute(attribute) || isLangOrBase(attribute);
 
 /**
  * Report whether an element's table declares an attribute by its exact namespace and local name,
@@ -210,7 +204,7 @@ const declares = (table: ContentTable, namespace: string, local: string): boolea
  * @returns Whether it stays; any other attribute was admitted only by a wildcard.
  */
 const isKept = (table: Option.Option<ContentTable>, attribute: SourceAttribute): boolean =>
-  isAllowance(attribute) ||
+  isKeptEverywhere(attribute) ||
   Option.exists(
     table,
     (declared) =>
@@ -219,18 +213,6 @@ const isKept = (table: Option.Option<ContentTable>, attribute: SourceAttribute):
         attribute.local === "aria-keyshortcuts" &&
         declares(declared, "", "aria-keyshorts")),
   );
-
-/**
- * Look up an element's table, only among the tables' own keys.
- *
- * @param tables The tables.
- * @param local The element's local name in the QTI namespace.
- * @returns Its table, or none when the XSD declares no element of that name.
- */
-const tableOf = (tables: Tables, local: string): Option.Option<ElementTable> =>
-  Object.hasOwn(tables.elements, local)
-    ? Option.fromUndefinedOr(tables.elements[local])
-    : Option.none();
 
 /**
  * Secure one element's attributes: remove each one only a wildcard admits (E3) and pass each URL
@@ -1086,7 +1068,7 @@ const wordings = {
     });
   },
   "unknown-element": (refusal) => {
-    const { element } = named(refusal);
+    const { cite, element } = named(refusal);
 
     return Option.match(optionalFact(refusal, "parent"), {
       onNone: () =>
@@ -1096,11 +1078,17 @@ const wordings = {
           "use a QTI 3.0 element as the root",
         ),
       onSome: (parent) =>
-        sentence(
-          refusal,
-          `${code(parent)} may not hold ${code(element)}; QTI 3.0's schema allows no such child there.`,
-          `remove ${code(element)}, or use an element ${code(parent)} allows`,
-        ),
+        cite === ""
+          ? sentence(
+              refusal,
+              `${code(parent)} may not hold ${code(element)}; QTI 3.0's schema allows no such child there.`,
+              `remove ${code(element)}, or use an element ${code(parent)} allows`,
+            )
+          : sentence(
+              refusal,
+              `${code(parent)} may not hold ${code(element)}; XML Schema allows no such child there${cite}.`,
+              `remove ${code(element)}`,
+            ),
     });
   },
   "value-type": (refusal) => {

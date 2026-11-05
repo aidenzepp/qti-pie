@@ -15,15 +15,17 @@
  */
 import { Array as Arr, Option } from "effect";
 import type { Brand } from "effect";
-import { scopedId, splitIdrefs } from "#plate/emit/parts.ts";
+import { scopedId, splitTokens } from "#plate/emit/parts.ts";
 import type { Resolved } from "#plate/emit/parts.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import type { Locale } from "#plate/messages.ts";
+import { interactionsIn } from "#plate/model/interactions.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
+  Interaction,
   Item,
   SimpleChoice,
   TextEntryInteraction,
@@ -228,7 +230,7 @@ export interface TextName {
 
 /**
  * What a Text Entry and an Extended Text share: the binding, the integer `base`, the placeholder,
- * the entry name, the accessible name and the text to restore.
+ * the entry name and the accessible name.
  */
 export interface TextControlPayload extends ValidationPayload {
   readonly base: number;
@@ -254,11 +256,6 @@ export interface TextControlPayload extends ValidationPayload {
    * The identifier of the response it binds.
    */
   readonly response: string;
-  /**
-   * The text the control shows: the string posted when the view has messages, else the view's
-   * value written in its lexical form, an integer in `base`; empty for NULL.
-   */
-  readonly restore: string;
 }
 
 /**
@@ -267,6 +264,11 @@ export interface TextControlPayload extends ValidationPayload {
 export interface TextEntryPayload extends TextControlPayload {
   readonly expectedLength: Option.Option<bigint>;
   readonly kind: "text-entry";
+  /**
+   * The text the Control shows: the string posted when the view has messages, else the view's
+   * value written in its lexical form, an integer in `base`; empty for NULL.
+   */
+  readonly restore: string;
 }
 
 /**
@@ -282,8 +284,9 @@ export interface ExtendedTextPayload extends TextControlPayload {
   /**
    * The number of Controls (Q9): 1 for a `single` binding; for a container, `max-strings` when it
    * is from 1 to 10, else the greater of 10 and `min-strings`, so `max-strings="0"` and an absent
-   * one give at least 10 (R-d). It also covers every member of the value or post it restores, up to
-   * a nonzero `max-strings`. At most 100 (Q23), and 0 when `min-strings` exceeds 100.
+   * one give at least 10 (reading 53). It also covers every member of the value or post it
+   * restores, up to a nonzero `max-strings`. At most 100 (Q23), and 0 when `min-strings` exceeds
+   * 100.
    */
   readonly n: number;
   /**
@@ -295,8 +298,8 @@ export interface ExtendedTextPayload extends TextControlPayload {
   readonly prompt: Option.Option<readonly PayloadNode[]>;
   /**
    * The text each Control shows, one per Control in order: the strings posted when the view has
-   * messages, else the view's values, each written as {@link TextControlPayload.restore} writes
-   * one; empty for a Control with none.
+   * messages, else the view's values, each written as {@link TextEntryPayload.restore} writes one;
+   * empty for a Control with none.
    */
   readonly restores: readonly string[];
 }
@@ -392,11 +395,6 @@ export const brandRedacted = (fields: RedactedFields): Redacted =>
   fields as Redacted;
 
 /**
- * An interaction of the item model.
- */
-type Interaction = ChoiceInteraction | ExtendedTextInteraction | TextEntryInteraction;
-
-/**
  * What one payload build knows about the whole item while it copies one node.
  */
 interface Build {
@@ -424,41 +422,6 @@ interface Build {
 }
 
 /**
- * Collect the interactions of body nodes in document order, inside elements, Prompts and choices.
- *
- * @param nodes The body nodes.
- * @returns The interactions.
- */
-const interactionsIn = (nodes: readonly BodyNode[]): readonly Interaction[] =>
-  nodes.flatMap((node): readonly Interaction[] => {
-    switch (node.kind) {
-      case "element": {
-        return interactionsIn(node.children);
-      }
-      case "choice": {
-        return [
-          node,
-          ...interactionsIn(Option.getOrElse(node.prompt, () => [])),
-          ...node.choices.flatMap((choice) => interactionsIn(choice.content)),
-        ];
-      }
-      case "extended-text": {
-        return [node, ...interactionsIn(Option.getOrElse(node.prompt, () => []))];
-      }
-      case "text-entry": {
-        return [node];
-      }
-      case "text":
-      case "unsupported": {
-        return [];
-      }
-      default: {
-        return node satisfies never;
-      }
-    }
-  });
-
-/**
  * Report whether an interaction is a text control with no authored name and no Prompt (Q10). An
  * `aria-labelledby` that names no id is no authored name.
  *
@@ -468,7 +431,7 @@ const interactionsIn = (nodes: readonly BodyNode[]): readonly Interaction[] =>
 const isUnnamed = (interaction: Interaction): boolean =>
   interaction.kind !== "choice" &&
   Option.isNone(interaction.ariaLabel) &&
-  !Option.exists(interaction.ariaLabelledby, (ids) => splitIdrefs(ids).length > 0) &&
+  !Option.exists(interaction.ariaLabelledby, (ids) => splitTokens(ids).length > 0) &&
   (interaction.kind === "text-entry" || Option.isNone(interaction.prompt));
 
 /**
@@ -641,6 +604,20 @@ const textControlPayload = (
   },
   placeholder: interaction.placeholder,
   response: interaction.response,
+});
+
+/**
+ * Copy a Text Entry into its payload.
+ *
+ * @param interaction The Text Entry.
+ * @param build The build.
+ * @returns Its payload; `restore` holds the posted string when the view has messages, else the
+ *   view's value in its lexical form.
+ */
+const textEntryPayload = (interaction: TextEntryInteraction, build: Build): TextEntryPayload => ({
+  ...textControlPayload(interaction, build),
+  expectedLength: interaction.expectedLength,
+  kind: "text-entry",
   restore: Option.match(build.posted, {
     onNone: () =>
       Option.match(Arr.head(shown(build, interaction.response)), {
@@ -690,10 +667,10 @@ interface Controls {
  * Count the Controls an Extended Text renders.
  *
  * Q9 gives a container `max-strings` Controls when it is from 1 to 10, else the greater of 10 and
- * `min-strings`; `max-strings="0"` restricts nothing (R-d). So restoring drops no answer silently,
- * `n` also covers each member the restored or posted value holds, up to `max-strings` when it
- * restricts and up to the cap of 100 (Q23). Over the cap, the first 100 show beside the cap's
- * notice; a `min-strings` above 100 leaves no Control, the notice in their place.
+ * `min-strings`; `max-strings="0"` restricts nothing (reading 53). So restoring drops no answer
+ * silently, `n` also covers each member the restored or posted value holds, up to `max-strings`
+ * when it restricts and up to the cap of 100 (Q23). Over the cap, the first 100 show beside the
+ * cap's notice; a `min-strings` above 100 leaves no Control, the notice in their place.
  *
  * @param interaction The Extended Text.
  * @param members How many members the value or post to restore holds.
@@ -824,11 +801,7 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
       return choicePayload(node, build);
     }
     case "text-entry": {
-      return {
-        ...textControlPayload(node, build),
-        expectedLength: node.expectedLength,
-        kind: "text-entry",
-      };
+      return textEntryPayload(node, build);
     }
     case "extended-text": {
       return extendedTextPayload(node, build);

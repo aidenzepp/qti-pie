@@ -1,6 +1,6 @@
 import { Option } from "effect";
 import type { Element } from "#plate/emit/node.ts";
-import { partForSlot, promptMarkupFor, splitIdrefs } from "#plate/emit/parts.ts";
+import { partForSlot, promptMarkupFor, splitTokens } from "#plate/emit/parts.ts";
 import type { InteractionKey, PartName, PartOf } from "#plate/emit/parts.ts";
 
 /**
@@ -225,7 +225,7 @@ const isFormControl = (element: Element): boolean =>
  *   case.
  * @see https://html.spec.whatwg.org/multipage/form-elements.html#attr-button-type
  */
-const isSubmitButton = (element: Element): boolean => {
+export const isSubmitButton = (element: Element): boolean => {
   const type = attribute(element, "type")?.toLowerCase();
 
   return element.tag === "button" && type !== "button" && type !== "reset";
@@ -455,7 +455,7 @@ export const textOf = (element: Element): string => collapse(textBelow(element))
  * @param value The attribute's value, if present.
  * @returns The ids in order, none for an absent attribute.
  */
-const idRefs = (value: string | undefined): readonly string[] => splitIdrefs(value ?? "");
+const idRefs = (value: string | undefined): readonly string[] => splitTokens(value ?? "");
 
 /**
  * Compute the accessible name of a form control or a group Root from explicit references only.

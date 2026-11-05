@@ -1535,9 +1535,9 @@ const setCorrectResponses = (
  * - Only the elements the structural walk checks are visited, the keys of {@link governingTables} for
  *   the same tables. An element outside QTI's namespace is not, nor is an element the walk refuses
  *   as unknown. In lax wildcard content the rules judge the elements the walk checks there as they
- *   judge them anywhere else (R-h): an interaction there binds a declared response, its identifiers
- *   count toward `duplicate-identifier`, and an unexpanded entity reference among a checked
- *   element's children leaves the document to the verdict's `unchecked`.
+ *   judge them anywhere else (reading 57): an interaction there binds a declared response, its
+ *   identifiers count toward `duplicate-identifier`, and an unexpanded entity reference among a
+ *   checked element's children leaves the document to the verdict's `unchecked`.
  *
  * Every refusal is located at an element or attribute path and returned in document order; the
  * check never stops at the first. An empty list means no prose rule this module implements refuses

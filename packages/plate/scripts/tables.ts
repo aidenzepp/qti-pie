@@ -14,21 +14,9 @@
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { Config, Console, Effect, Schema } from "effect";
+import { Console, Effect, Schema } from "effect";
 import { readSource } from "#plate/document/read.ts";
-import { generateTables, Tables } from "#plate/validate/xsd.ts";
-
-/**
- * Where the XSD is cached: `.cache/gr8des/qti3/xsd/imsqti_asiv3p0p1_v1p0.xsd` under `HOME`, the
- * path `xsdPath` in `src/validate/tables.ts` names.
- *
- * The script spells it here rather than import it, because `src/validate/tables.ts` decodes the
- * committed tables when it loads: after a change to the tables' Schema the old file no longer
- * decodes, and importing it would stop the regeneration that replaces it.
- */
-const xsdPath = Config.String("HOME").pipe(
-  Config.map((home) => `${home}/.cache/gr8des/qti3/xsd/imsqti_asiv3p0p1_v1p0.xsd`),
-);
+import { generateTables, Tables, xsdPath } from "#plate/validate/xsd.ts";
 
 /**
  * Where the generated file goes.

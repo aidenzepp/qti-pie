@@ -7,9 +7,9 @@ import { readSource } from "#plate/document/read.ts";
 import { qtiNamespace, xmlNamespace, xsdNamespace } from "#plate/document/source.ts";
 import { htmlSubset } from "#plate/emit/body.ts";
 import { baseTypes } from "#plate/vocabulary.ts";
-import { tables, xsdPath, xsdSha256 } from "#plate/validate/tables.ts";
+import { tables, xsdSha256 } from "#plate/validate/tables.ts";
 import type { AttributeTable, ContentTable, ElementTable, TypeEntry } from "#plate/validate/xsd.ts";
-import { generateTables } from "#plate/validate/xsd.ts";
+import { generateTables, xsdPath } from "#plate/validate/xsd.ts";
 
 /**
  * The XSD's bytes, read from the cache under `HOME`.

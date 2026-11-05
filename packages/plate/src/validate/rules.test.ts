@@ -659,7 +659,7 @@ describe("checkRules", () => {
   describe("template-requirements", () => {
     const processingPath = "qti-assessment-item/qti-response-processing";
 
-    it("[I-9b] refuses match_correct when RESPONSE declares no correct response", () => {
+    it("refuses match_correct when RESPONSE declares no correct response", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -684,7 +684,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9b] accepts match_correct with a correct response and a float SCORE", () => {
+    it("accepts match_correct with a correct response and a float SCORE", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -700,7 +700,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9b] accepts match_correct when template processing sets RESPONSE's correct response", () => {
+    it("accepts match_correct when template processing sets RESPONSE's correct response", () => {
       for (const identifier of ["RESPONSE", " RESPONSE "]) {
         assert.deepStrictEqual(
           judged(
@@ -720,7 +720,7 @@ describe("checkRules", () => {
       }
     });
 
-    it("[I-9b] accepts match_correct when a template condition's branch sets RESPONSE's correct response", () => {
+    it("accepts match_correct when a template condition's branch sets RESPONSE's correct response", () => {
       const branch = el(
         "qti-template-condition",
         [],
@@ -743,7 +743,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9b] refuses match_correct when template processing sets another response's correct response", () => {
+    it("refuses match_correct when template processing sets another response's correct response", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -773,7 +773,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9b] refuses map_response with no qti-mapping though template processing sets RESPONSE's correct response", () => {
+    it("refuses map_response with no qti-mapping though template processing sets RESPONSE's correct response", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -802,7 +802,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9b] refuses map_response when SCORE is an integer", () => {
+    it("refuses map_response when SCORE is an integer", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -830,7 +830,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9b] accepts map_response with a mapped RESPONSE and a float SCORE", () => {
+    it("accepts map_response with a mapped RESPONSE and a float SCORE", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -843,7 +843,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9b] refuses an inline qti-map-response of a response with no qti-mapping, at its path", () => {
+    it("refuses an inline qti-map-response of a response with no qti-mapping, at its path", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -871,7 +871,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9b] accepts an inline qti-map-response of a response with a qti-mapping", () => {
+    it("accepts an inline qti-map-response of a response with a qti-mapping", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -1034,7 +1034,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9b] reads a qti-base-value under its own base-type", () => {
+    it("reads a qti-base-value under its own base-type", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -1108,7 +1108,7 @@ describe("checkRules", () => {
   describe("undeclared-variable", () => {
     const rulePath = "qti-assessment-item/qti-response-processing/qti-set-outcome-value";
 
-    it('[I-9b] refuses an inline qti-variable identifier="NOPE" at its path', () => {
+    it('refuses an inline qti-variable identifier="NOPE" at its path', () => {
       assert.deepStrictEqual(
         judged(item([outcome("SCORE")], [], [processing(undefined, [setScore(variable("NOPE"))])])),
         [
@@ -1121,7 +1121,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9b] accepts a qti-variable of the built-in duration and of a declared template variable", () => {
+    it("accepts a qti-variable of the built-in duration and of a declared template variable", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -1134,7 +1134,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9b] accepts a qti-variable of the built-in QTI_CONTEXT and of a declared context variable", () => {
+    it("accepts a qti-variable of the built-in QTI_CONTEXT and of a declared context variable", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -1155,7 +1155,7 @@ describe("checkRules", () => {
       );
     });
 
-    it('[I-9b] refuses qti-set-outcome-value identifier="NOPE" at its path', () => {
+    it('refuses qti-set-outcome-value identifier="NOPE" at its path', () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -1174,7 +1174,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9b] refuses a qti-correct that names an outcome, not a response", () => {
+    it("refuses a qti-correct that names an outcome, not a response", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -1251,23 +1251,23 @@ describe("checkRules", () => {
       rule: "expression-type" as const,
     });
 
-    it('[I-9b] refuses setting a float SCORE from a qti-base-value of base-type="integer"', () => {
+    it('refuses setting a float SCORE from a qti-base-value of base-type="integer"', () => {
       assert.deepStrictEqual(settingScore(baseValue("integer", "1")), [scoreRefused("integer")]);
     });
 
-    it('[I-9b] accepts setting it from a qti-base-value of base-type="float"', () => {
+    it('accepts setting it from a qti-base-value of base-type="float"', () => {
       assert.deepStrictEqual(settingScore(baseValue("float", "1")), []);
     });
 
-    it("[I-9b] refuses setting it from numAttempts, an integer", () => {
+    it("refuses setting it from numAttempts, an integer", () => {
       assert.deepStrictEqual(settingScore(variable("numAttempts")), [scoreRefused("integer")]);
     });
 
-    it("[I-9b] accepts setting it from duration, a float in an item (reading 29)", () => {
+    it("accepts setting it from duration, a float in an item (reading 29)", () => {
       assert.deepStrictEqual(settingScore(variable("duration")), []);
     });
 
-    it("[I-9b] neither types nor refuses an expression that holds a qti-sum, outside the eight", () => {
+    it("neither types nor refuses an expression that holds a qti-sum, outside the eight", () => {
       assert.deepStrictEqual(
         settingScore(el("qti-sum", [], [baseValue("integer", "1"), baseValue("integer", "2")])),
         [],
@@ -1387,7 +1387,7 @@ describe("checkRules", () => {
       });
     });
 
-    it("[I-9b] compares a record outcome by cardinality alone", () => {
+    it("compares a record outcome by cardinality alone", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -1419,7 +1419,7 @@ describe("checkRules", () => {
     });
 
     describe("a lookup operand (reading 28)", () => {
-      it("[I-9b] refuses a float operand under a match table, at the qti-lookup-outcome-value", () => {
+      it("refuses a float operand under a match table, at the qti-lookup-outcome-value", () => {
         assert.deepStrictEqual(judged(lookupItem("qti-match-table", baseValue("float", "1.5"))), [
           {
             detail: {
@@ -1436,14 +1436,14 @@ describe("checkRules", () => {
         ]);
       });
 
-      it("[I-9b] accepts an integer operand under a match table", () => {
+      it("accepts an integer operand under a match table", () => {
         assert.deepStrictEqual(
           judged(lookupItem("qti-match-table", baseValue("integer", "1"))),
           [],
         );
       });
 
-      it("[I-9b] accepts a float operand under an interpolation table", () => {
+      it("accepts a float operand under an interpolation table", () => {
         assert.deepStrictEqual(
           judged(lookupItem("qti-interpolation-table", baseValue("float", "1.5"))),
           [],
@@ -1506,7 +1506,7 @@ describe("checkRules", () => {
         );
       });
 
-      it("[I-9b] accepts an operand that holds a qti-sum, untyped", () => {
+      it("accepts an operand that holds a qti-sum, untyped", () => {
         assert.deepStrictEqual(
           judged(
             lookupItem(
@@ -1523,7 +1523,7 @@ describe("checkRules", () => {
   describe("a lookup's outcome", () => {
     const lookupPath = "qti-assessment-item/qti-response-processing/qti-lookup-outcome-value";
 
-    it("[I-9b] refuses a lookup that names no outcome declaration, as undeclared-variable", () => {
+    it("refuses a lookup that names no outcome declaration, as undeclared-variable", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -1546,7 +1546,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9b] refuses a lookup whose outcome holds no lookup table, as template-requirements", () => {
+    it("refuses a lookup whose outcome holds no lookup table, as template-requirements", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -1570,14 +1570,14 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9b] accepts an integer operand under an interpolation table", () => {
+    it("accepts an integer operand under an interpolation table", () => {
       assert.deepStrictEqual(
         judged(lookupItem("qti-interpolation-table", baseValue("integer", "1"))),
         [],
       );
     });
 
-    it("[I-9b] accepts a lookup that names the built-in completionStatus", () => {
+    it("accepts a lookup that names the built-in completionStatus", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -1591,7 +1591,7 @@ describe("checkRules", () => {
     });
   });
 
-  describe("lax wildcard content (R-h)", () => {
+  describe("lax wildcard content (reading 57)", () => {
     it("[I-1] refuses a Choice in a div in a custom interaction bound to an undeclared response", () => {
       assert.deepStrictEqual(judged(inCustomInteraction([], [el("div", [], [choice("VENDOR")])])), [
         {

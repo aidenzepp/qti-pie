@@ -55,6 +55,7 @@ import {
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { patternEquivalents } from "#plate/validate/xsd.ts";
+import { greatestCount, leastCount } from "#plate/vocabulary.ts";
 import type {
   AttributeType,
   BuiltinName,
@@ -579,9 +580,9 @@ const readingRows: readonly ReadingRow[] = [
       "min-choices",
       "min-plays",
     ],
-    greatest: 9_223_372_036_854_775_807n,
+    greatest: greatestCount,
     kind: "count-range",
-    least: -9_223_372_036_854_775_808n,
+    least: leastCount,
     reading: "46",
   },
   // Single cardinality is "a single value" (info.txt:73049, the information model's
@@ -758,7 +759,7 @@ const elementName = (element: SourceElement): string =>
  * @param attribute The attribute's name parts.
  * @returns Its name.
  */
-const attributeName = (attribute: Pick<SourceAttribute, "local" | "namespace">): string => {
+export const attributeName = (attribute: Pick<SourceAttribute, "local" | "namespace">): string => {
   if (attribute.namespace === "") {
     return attribute.local;
   }
@@ -779,7 +780,7 @@ const attributeName = (attribute: Pick<SourceAttribute, "local" | "namespace">):
  * @param attribute The attribute.
  * @returns Whether it is always allowed.
  */
-const isAllowance = (attribute: SourceAttribute): boolean =>
+export const isAllowance = (attribute: SourceAttribute): boolean =>
   attribute.namespace === xmlnsNamespace ||
   (attribute.namespace === xsiNamespace &&
     (attribute.local === "schemaLocation" || attribute.local === "noNamespaceSchemaLocation"));
@@ -791,7 +792,7 @@ const isAllowance = (attribute: SourceAttribute): boolean =>
  * @param attribute The attribute.
  * @returns Whether it is one of the two.
  */
-const isInstanceAttribute = (attribute: SourceAttribute): boolean =>
+export const isInstanceAttribute = (attribute: SourceAttribute): boolean =>
   attribute.namespace === xsiNamespace && (attribute.local === "type" || attribute.local === "nil");
 
 /**
@@ -1034,7 +1035,7 @@ const nestedRoots: ReadonlySet<string> = new Set([
  * @param local The element's local name in the QTI namespace.
  * @returns Its table, or none when the XSD declares no element of that name.
  */
-const tableOf = (tables: Tables, local: string): Option.Option<ElementTable> =>
+export const tableOf = (tables: Tables, local: string): Option.Option<ElementTable> =>
   Object.hasOwn(tables.elements, local)
     ? Option.fromUndefinedOr(tables.elements[local])
     : Option.none();

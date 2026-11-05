@@ -1,7 +1,7 @@
 import { Data, Result } from "effect";
 import { h } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node, PartFunction } from "#plate/emit/node.ts";
-import { allows, lists } from "#plate/emit/parts.ts";
+import { allows, lists, splitTokens } from "#plate/emit/parts.ts";
 import type { PartRow, TagClass } from "#plate/emit/parts.ts";
 
 /**
@@ -287,16 +287,14 @@ const checkLegendFirst = (root: Element, children: readonly Node[]): Breach | un
 };
 
 /**
- * Split a `class` value into its tokens, at ASCII whitespace as HTML does.
+ * Split a `class` value into its tokens, at ASCII whitespace as HTML does ({@link splitTokens}).
  *
  * @param value The attribute's value, if present.
  * @returns The tokens, none for an absent or boolean attribute.
  * @see https://html.spec.whatwg.org/multipage/dom.html#classes
  */
 const classTokens = (value: string | true | undefined): readonly string[] =>
-  value === undefined || value === true
-    ? []
-    : value.split(/[\t\n\f\r ]+/u).filter((token) => token !== "");
+  value === undefined || value === true ? [] : splitTokens(value);
 
 /**
  * Apply I1: write every attribute of `props` onto the replacement's root, `props` winning a

@@ -68,6 +68,7 @@ import type {
   ValidationMessage,
   Value,
 } from "#plate/index.ts";
+import { ledgerDirectory } from "#plate/ledger/directory.ts";
 import { Ledger } from "#plate/ledger/report.ts";
 import { ledgerHtml, verdictTable } from "#plate/ledger/view.ts";
 import { message } from "#plate/messages.ts";
@@ -170,23 +171,16 @@ const sheets: ReadonlyMap<string, URL> = new Map([
 ]);
 
 /**
- * The package directory, `packages/plate`, which a relative `PLATE_LEDGER_DIR` is read from.
- */
-const packageDirectory = path.resolve(import.meta.dirname, "..", "..");
-
-/**
  * The command that writes the ledger, which the ledger page and its errors name.
  */
 const ledgerCommand = "pnpm --filter @qti-pie/plate ledger";
 
 /**
- * The file the ledger page reads: `ledger.json` in `PLATE_LEDGER_DIR`, read from the package
- * directory when relative, and in `work/ledger` in the package when it is not set, the folder the
- * one command writes to.
+ * The file the ledger page reads: `ledger.json` in the folder the one command writes to,
+ * {@link ledgerDirectory}.
  */
-const ledgerFile = Config.NonEmptyString("PLATE_LEDGER_DIR").pipe(
-  Config.withDefault(path.join("work", "ledger")),
-  Config.map((directory) => path.resolve(packageDirectory, directory, "ledger.json")),
+const ledgerFile = ledgerDirectory.pipe(
+  Config.map((directory) => path.join(directory, "ledger.json")),
 );
 
 /**
