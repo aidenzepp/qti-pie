@@ -25,14 +25,15 @@ import path from "node:path";
 import { Config, Console, Effect, Schema } from "effect";
 import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
 import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
+import { browserSupport } from "#plate/ledger/browser-support.ts";
 import { claims } from "#plate/ledger/claims.ts";
 import type { Claim } from "#plate/ledger/claims.ts";
 import { confPath, exclusions, features, levels } from "#plate/ledger/features.ts";
 import type { Exclusion, Feature } from "#plate/ledger/features.ts";
 import { honesty } from "#plate/ledger/honesty.ts";
 import type { HonestyProblem } from "#plate/ledger/honesty.ts";
-import { passes } from "#plate/ledger/passes.ts";
-import type { PassRecord } from "#plate/ledger/passes.ts";
+import { passes, sessionNotes } from "#plate/ledger/passes.ts";
+import type { PassRecord, SessionNote } from "#plate/ledger/passes.ts";
 import { decodeReport, ledger, Ledger, rowStates, tagsOf } from "#plate/ledger/report.ts";
 import type { ReportOutsideRoot, TestResult } from "#plate/ledger/report.ts";
 import { ledgerText, verdictLines } from "#plate/ledger/view.ts";
@@ -231,6 +232,12 @@ export interface LedgerBuild {
    * The features file's rows, `features` from `#plate/ledger/features.ts`.
    */
   readonly features: readonly Feature[];
+
+  /**
+   * The notes on each sitting, `sessionNotes` from `#plate/ledger/passes.ts`, which `ledger.txt`
+   * lists after the records.
+   */
+  readonly notes: readonly SessionNote[];
 
   /**
    * The folder that holds `vitest.json` and receives the four outputs, created when absent.
@@ -456,7 +463,7 @@ export const buildLedger = Effect.fn("buildLedger")(function* buildLedger(
   ];
 
   yield* writeOutput(ledgerJson, `${yield* encodeLedger(built)}\n`);
-  yield* writeOutput(ledgerTxt, ledgerText(built));
+  yield* writeOutput(ledgerTxt, ledgerText(built, browserSupport, input.notes));
 
   const failed = results.filter((result) => result.state === "failed");
 
@@ -726,6 +733,7 @@ const program = Effect.gen(function* ledgerCommand() {
     conf,
     exclusions,
     features,
+    notes: sessionNotes,
     output,
     records: passes,
     root: packageDirectory,
