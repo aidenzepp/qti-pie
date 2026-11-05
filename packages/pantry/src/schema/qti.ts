@@ -48,6 +48,7 @@ import * as coords from "#pantry/schema/shapes.ts";
 import * as template from "#pantry/schema/template.ts";
 import * as usage from "#pantry/schema/usage.ts";
 import * as value from "#pantry/schema/value.ts";
+import * as xlink from "#pantry/schema/xlink.ts";
 
 /**
  * The arm of each `NodeKind` handle, one relation per handle.
@@ -142,6 +143,7 @@ export const Qti = schema(
     ...feedback.relations,
     ...foreign.relations,
     ...foreignAttributes.relations,
+    ...xlink.relations,
     ...template.relations,
     ...rubric.relations,
     ...mapping.relations,
@@ -184,6 +186,7 @@ export const Qti = schema(
     ...feedback.rules,
     ...foreign.rules,
     ...foreignAttributes.rules,
+    ...xlink.rules,
     ...template.rules,
     ...rubric.rules,
     ...mapping.rules,
