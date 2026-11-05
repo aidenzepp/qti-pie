@@ -454,8 +454,8 @@ describe("import/tree.ts global attributes on every attribute wildcard host (dec
     Effect.gen(function* excludedNamespace() {
       const walked = yield* walkedOf(operatorItem(operand, 'q:foo="1"'), "item");
 
-      // The walk keeps it a foreign attribute, as before; the database refuses it by the
-      // operator's AttributeExclusion row for the ASI namespace (wildcard-namespace).
+      // The walk keeps it a foreign attribute, as before; the importer's wildcard guard
+      // refuses it against the operator's attributeExclusion row (wildcard-namespace, decision 270).
       assert.strictEqual(classOf(walked, "qti-custom-operator", "q:foo", "item"), "foreign");
     }),
   );

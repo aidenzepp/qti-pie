@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
-import { isMappedLaw, ruleOfLaw } from "#pantry/import/refusal.ts";
+import { WildcardGuardRefusal } from "#pantry/import/guards/wildcard.ts";
+import { ImportRefused, isMappedLaw, ruleOfError, ruleOfLaw } from "#pantry/import/refusal.ts";
 import type { ImportLaw, Rule } from "#pantry/import/refusal.ts";
 
 interface Side {
@@ -34,36 +35,24 @@ const expectRule = (law: ImportLaw, rule: Rule): void => {
 };
 
 describe("the wildcard rules of a law", () => {
-  it("names the two exclusion capacities wildcard-namespace", () => {
-    expectRule(
-      capacity("WildcardExclusion", side("ForeignElement", ["document", "node"])),
-      "wildcard-namespace",
-    );
-    expectRule(
-      capacity("AttributeExclusion", side("ForeignAttribute", ["document", "node"])),
-      "wildcard-namespace",
-    );
+  it("maps a wildcard guard's refusal to an ImportRefused of its rule", () => {
+    for (const rule of ["wildcard-namespace", "wildcard-declared"] as const) {
+      const refused = ruleOfError(new WildcardGuardRefusal({ detail: "d", rule }));
+
+      assert.instanceOf(refused, ImportRefused);
+      assert.strictEqual(refused.rule, rule);
+    }
   });
 
-  it("names the two declared-name capacities wildcard-declared", () => {
-    expectRule(
-      capacity("GlobalElement", side("ForeignElement", ["document", "node"])),
-      "wildcard-declared",
-    );
-    expectRule(
-      capacity("GlobalAttribute", side("ForeignAttribute", ["document", "node"])),
-      "wildcard-declared",
-    );
-  });
-
-  it("names a declared-name capacity filled from a select on process", () => {
-    expectRule(
-      capacity(
-        "GlobalAttribute",
-        side("ForeignAttribute", ["document", "node"], [{ field: "process", value: "item" }]),
-      ),
-      "wildcard-declared",
-    );
+  it("maps none of the four retired capacities", () => {
+    for (const [target, from] of [
+      ["WildcardExclusion", "ForeignElement"],
+      ["AttributeExclusion", "ForeignAttribute"],
+      ["GlobalElement", "ForeignElement"],
+      ["GlobalAttribute", "ForeignAttribute"],
+    ] as const) {
+      assert.isFalse(isMappedLaw(capacity(target, side(from, ["document", "node"]))));
+    }
   });
 
   it("names the ForeignAttribute containment in AttributeWildcard wildcard-attribute", () => {
