@@ -29,6 +29,7 @@ import { fresh } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import { checkRules } from "#plate/validate/rules.ts";
+import { tables } from "#plate/validate/tables.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 
 /**
@@ -1151,7 +1152,7 @@ describe("buildItem", () => {
           const source = cc2Item(template(name), Option.none());
           const built = yield* buildItem(source);
 
-          assert.deepStrictEqual(checkRules(source), [], name);
+          assert.deepStrictEqual(checkRules(source, tables), [], name);
           assert.deepStrictEqual(built.processing, Option.none(), name);
           assert.deepStrictEqual(
             built.unsupported,

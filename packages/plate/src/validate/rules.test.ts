@@ -1,9 +1,9 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { attr, doc, el, entity, text } from "#plate/document/source.ts";
-import type { SourceAttribute, SourceElement } from "#plate/document/source.ts";
+import type { SourceAttribute, SourceChild, SourceElement } from "#plate/document/source.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
-import { checkRules, wildcardContentHolders } from "#plate/validate/rules.ts";
+import { checkRules } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
 
 /**
@@ -347,7 +347,7 @@ const setCorrect = (identifier: string): SourceElement =>
  * @returns One entry per refusal, in the order `checkRules` gives them.
  */
 const judged = (source: ReturnType<typeof item>) =>
-  checkRules(source).map((refusal) => {
+  checkRules(source, tables).map((refusal) => {
     assert.strictEqual(refusal.document, location);
     assert.isTrue(Option.isNone(refusal.suggestion));
     assert.isTrue(Option.isNone(refusal.readerRule));
@@ -398,6 +398,30 @@ const comparing = (...operands: readonly SourceElement[]) =>
       [],
       [processing(undefined, [setOutcome("PASSED", equal(...operands))])],
     ),
+  );
+
+/**
+ * The path of a `div` directly inside the body's `qti-custom-interaction`: a global QTI element
+ * that the custom interaction's `lax` wildcard admits, so the structural walk checks it by its
+ * table.
+ */
+const laxDiv = "qti-assessment-item/qti-item-body/qti-custom-interaction/div";
+
+/**
+ * Construct an item whose body holds a `qti-custom-interaction` bound to its declared
+ * `RESPONSE` around the given content.
+ *
+ * @param declarations The declarations after `RESPONSE`'s.
+ * @param content The custom interaction's children.
+ * @returns The item.
+ */
+const inCustomInteraction = (
+  declarations: readonly SourceElement[],
+  content: readonly SourceChild[],
+) =>
+  item(
+    [response("RESPONSE", "single", "identifier"), ...declarations],
+    [el("qti-custom-interaction", [attr("response-identifier", "RESPONSE")], content)],
   );
 
 describe("checkRules", () => {
@@ -536,7 +560,7 @@ describe("checkRules", () => {
         judged(
           item(
             [response("RESPONSE", "multiple", "string")],
-            [interaction("qti-text-entry-interaction", "RESPONSE")],
+            [el("p", [], [interaction("qti-text-entry-interaction", "RESPONSE")])],
           ),
         ),
         [
@@ -547,7 +571,7 @@ describe("checkRules", () => {
               interaction: "qti-text-entry-interaction",
               response: "RESPONSE",
             },
-            path: "qti-assessment-item/qti-item-body/qti-text-entry-interaction",
+            path: "qti-assessment-item/qti-item-body/p/qti-text-entry-interaction",
             rule: "binding",
           },
         ],
@@ -559,7 +583,7 @@ describe("checkRules", () => {
         judged(
           item(
             [response("RESPONSE", "record")],
-            [interaction("qti-text-entry-interaction", "RESPONSE")],
+            [el("p", [], [interaction("qti-text-entry-interaction", "RESPONSE")])],
           ),
         ),
         [],
@@ -571,7 +595,7 @@ describe("checkRules", () => {
         judged(
           item(
             [response("CHOICE", "single", "identifier"), response("TEXT", "single", "integer")],
-            [choice("TEXT"), interaction("qti-text-entry-interaction", "CHOICE")],
+            [choice("TEXT"), el("p", [], [interaction("qti-text-entry-interaction", "CHOICE")])],
           ),
         ),
         [
@@ -592,7 +616,7 @@ describe("checkRules", () => {
               interaction: "qti-text-entry-interaction",
               response: "CHOICE",
             },
-            path: "qti-assessment-item/qti-item-body/qti-text-entry-interaction",
+            path: "qti-assessment-item/qti-item-body/p/qti-text-entry-interaction",
             rule: "binding",
           },
         ],
@@ -1567,6 +1591,71 @@ describe("checkRules", () => {
     });
   });
 
+  describe("lax wildcard content (R-h)", () => {
+    it("[I-1] refuses a Choice in a div in a custom interaction bound to an undeclared response", () => {
+      assert.deepStrictEqual(judged(inCustomInteraction([], [el("div", [], [choice("VENDOR")])])), [
+        {
+          detail: { response: "VENDOR" },
+          path: `${laxDiv}/qti-choice-interaction/@response-identifier`,
+          rule: "undeclared-response",
+        },
+      ]);
+    });
+
+    it("[I-1] accepts that Choice bound to a declared response", () => {
+      assert.deepStrictEqual(
+        judged(
+          inCustomInteraction(
+            [response("VENDOR", "single", "identifier")],
+            [el("div", [], [choice("VENDOR")])],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("[I-1] refuses the second of two choices named A in that Choice", () => {
+      assert.deepStrictEqual(
+        judged(
+          inCustomInteraction(
+            [response("VENDOR", "single", "identifier")],
+            [el("div", [], [choice("VENDOR", ["A", "A"])])],
+          ),
+        ),
+        [
+          {
+            detail: { identifier: "A" },
+            path: `${laxDiv}/qti-choice-interaction/qti-simple-choice[2]/@identifier`,
+            rule: "duplicate-identifier",
+          },
+        ],
+      );
+    });
+
+    it("passes over a Choice directly in a custom interaction, which the walk does not check", () => {
+      assert.deepStrictEqual(judged(inCustomInteraction([], [choice("VENDOR")])), []);
+    });
+
+    it("gives no refusal for an item whose custom interaction holds an unexpanded entity", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier")],
+            [
+              choice("VENDOR"),
+              el(
+                "qti-custom-interaction",
+                [attr("response-identifier", "RESPONSE")],
+                [entity("widget")],
+              ),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+  });
+
   describe("what the rules do not judge", () => {
     /**
      * 1EdTech's `match_correct` response-processing template, as its own document's root.
@@ -1630,27 +1719,6 @@ describe("checkRules", () => {
       );
     });
 
-    // An interim, not a reading: reading 6 covers only a nested QTI root, and rule `5b8ee08b`
-    // validates a known QTI element inside lax wildcard content as QTI. M1-R judges this Choice in
-    // the structural walk and the prose rules (the ledger's lax-wildcard deferral).
-    it("passes over a Choice inside a custom interaction: phase 1 skips wildcard content", () => {
-      assert.deepStrictEqual(
-        judged(
-          item(
-            [response("RESPONSE", "single", "identifier")],
-            [
-              el(
-                "qti-custom-interaction",
-                [attr("response-identifier", "RESPONSE")],
-                [choice("VENDOR")],
-              ),
-            ],
-          ),
-        ),
-        [],
-      );
-    });
-
     it("does not read a Choice inside an element of another namespace as QTI", () => {
       assert.deepStrictEqual(
         judged(
@@ -1674,15 +1742,6 @@ describe("checkRules", () => {
           },
         ],
       );
-    });
-
-    it("passes over the children of exactly the elements whose content is an ##any wildcard", () => {
-      const holders = Object.entries(tables.elements)
-        .filter(([, table]) => table.anyElement?.namespace === "##any")
-        .map(([name]) => name)
-        .toSorted();
-
-      assert.deepStrictEqual([...wildcardContentHolders].toSorted(), holders);
     });
   });
 });
@@ -1736,10 +1795,10 @@ describe("reading an identifier", () => {
 
         const growth = yield* growthRatio(
           () => {
-            checkRules(fewer);
+            checkRules(fewer, tables);
           },
           () => {
-            checkRules(more);
+            checkRules(more, tables);
           },
         );
         assert.isBelow(

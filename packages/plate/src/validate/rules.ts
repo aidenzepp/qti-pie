@@ -23,6 +23,8 @@ import { isModelled, parseElementText, parseLexical, trimXmlSpace } from "#plate
 import type { InvalidValue, ModelledBaseType } from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
+import { governingTables } from "#plate/validate/structure.ts";
+import type { Tables } from "#plate/validate/xsd.ts";
 import { baseTypes, cardinalities, interactionNames, templateName } from "#plate/vocabulary.ts";
 import type { BaseType, Cardinality, InteractionName, TemplateName } from "#plate/vocabulary.ts";
 
@@ -1439,70 +1441,37 @@ const variableDeclarations = [
 ] as const;
 
 /**
- * The QTI elements whose XSD content is an element wildcard of `##any` that names no child, so that
- * every element below one is wildcard content.
+ * List the elements the prose rules judge, in document order: exactly those the structural walk
+ * checks, the keys of {@link governingTables}.
  *
- * Phase 1 skips that content. The structural walk passes over a child that only its parent's
- * element wildcard admits, and over everything below it (`admit` in `src/validate/structure.ts`),
- * and the prose rules pass over it too, so a `qti-choice-interaction` inside a
- * `qti-custom-interaction` binds nothing. The skip is an interim, not a reading. Reading 6 keeps
- * only a nested QTI root, processing root or manifest global as foreign content, and rule
- * `5b8ee08b` says a known QTI element inside lax wildcard content is validated as QTI, refused only
- * where the schema or a normative rule refuses it. M1-R validates this content in both the walk
- * and the prose rules (the ledger's lax-wildcard deferral).
- *
- * The XSD's other element wildcards are `##other`, which admit no QTI element, so passing over
- * every element outside QTI's namespace already covers what they admit. The generated tables are
- * the source of this list; a test compares the two.
- */
-export const wildcardContentHolders = ["qti-custom-interaction", "template"] as const;
-
-/**
- * Report whether an element's children are wildcard content, one of {@link wildcardContentHolders}.
- *
- * @param element The element.
- * @returns Whether it is a QTI element whose every child is wildcard content.
- */
-const holdsWildcardContent = (element: SourceElement): boolean =>
-  isQti(element, (local) => wildcardContentHolders.some((holder) => holder === local));
-
-/**
- * Visit the elements the prose rules judge, in document order: those the structural walk enters.
- *
- * An element outside QTI's namespace is passed over with everything below it, and so is every
- * element below one of {@link wildcardContentHolders}, phase 1's interim skip of wildcard content
- * (see there). `walk` cannot prune, so this keeps the elements it has passed over and passes over
- * each child of one.
+ * One admission decides for both stages, so the rules never refuse what the walk does not check,
+ * nor skip what it does. An element outside QTI's namespace is not judged, nor anything below it
+ * that the walk does not reach, nor an element the walk refuses as unknown. In lax wildcard content
+ * (rule `5b8ee08b`) the rules judge what the walk checks there, a global QTI element and what its
+ * table admits below it, and not what the walk passes over: a nested QTI root (reading 6) or a QTI
+ * element the XSD declares only locally, such as a `qti-choice-interaction` directly inside a
+ * `qti-custom-interaction`.
  *
  * @param source The document.
- * @yields {Visit} Each element the rules judge, with the path and the parent `walk` gives it.
+ * @param tables The tables generated from the QTI XSD, the ones the structural walk checks it by.
+ * @returns Each element the rules judge, with the path and the parent `walk` gives it.
  */
-const judgedVisits = function* judgedVisits(
-  source: SourceDocument,
-): Generator<Visit, void, undefined> {
-  const passed = new Set<SourceElement>();
-  for (const visit of walk(source)) {
-    const passOver =
-      visit.element.namespace !== qtiNamespace ||
-      Option.exists(visit.parent, (parent) => passed.has(parent) || holdsWildcardContent(parent));
-    if (passOver) {
-      passed.add(visit.element);
-    } else {
-      yield visit;
-    }
-  }
+const judgedVisits = (source: SourceDocument, tables: Tables): readonly Visit[] => {
+  const governing = governingTables(source, tables);
+
+  return [...walk(source)].filter((visit) => governing.has(visit.element));
 };
 
 /**
  * Report whether a judged element holds an unexpanded entity reference where a rule may read it:
- * in an attribute's value, or among its children unless they are wildcard content.
+ * in an attribute's value or among its children, wildcard content included.
  *
  * @param element The element.
- * @returns Whether its attributes or its read children hold a reference whose value is unknown.
+ * @returns Whether its attributes or its children hold a reference whose value is unknown.
  */
 const holdsUnexpanded = (element: SourceElement): boolean =>
   element.attributes.some((attribute) => attribute.references.length > 0) ||
-  (!holdsWildcardContent(element) && element.children.some((child) => child.kind === "entity"));
+  element.children.some((child) => child.kind === "entity");
 
 /**
  * Collect the responses whose correct response the item's template processing sets.
@@ -1554,7 +1523,7 @@ const setCorrectResponses = (
  * `qti-map-response-point` and a `qti-lookup-outcome-value` need. `expression-type` judges what a
  * `qti-set-outcome-value` sets, a lookup's operand and a `qti-equal`'s operands.
  *
- * The rules judge only what the structural walk judges, and only an item they can read whole:
+ * The rules judge exactly what the structural walk checks, and only an item they can read whole:
  *
  * - A root other than a QTI `qti-assessment-item` gives no refusal. Every rule reads an item's
  *   declarations, and phase 1 leaves any other root `unchecked` (spec §4.5).
@@ -1563,25 +1532,29 @@ const setCorrectResponses = (
  *   what another element's rule finds: `identifier="&id;"` on a declaration would make every
  *   `qti-variable` naming that identifier look undeclared. Such a document is `unchecked` unless
  *   the structural walk refuses it.
- * - An element outside QTI's namespace, and every element below it, is not visited.
- * - No element below one of {@link wildcardContentHolders} is visited. Phase 1 skips that wildcard
- *   content in the structural walk and here alike. Rule `5b8ee08b` validates a known QTI element
- *   there as QTI, so the skip is an interim until M1-R (the ledger's lax-wildcard deferral).
+ * - Only the elements the structural walk checks are visited, the keys of {@link governingTables} for
+ *   the same tables. An element outside QTI's namespace is not, nor is an element the walk refuses
+ *   as unknown. In lax wildcard content the rules judge the elements the walk checks there as they
+ *   judge them anywhere else (R-h): an interaction there binds a declared response, its identifiers
+ *   count toward `duplicate-identifier`, and an unexpanded entity reference among a checked
+ *   element's children leaves the document to the verdict's `unchecked`.
  *
  * Every refusal is located at an element or attribute path and returned in document order; the
  * check never stops at the first. An empty list means no prose rule this module implements refuses
  * the document, not that the document is valid: the structural validator judges the XSD's rules.
  *
  * @param source The document to check.
+ * @param tables The tables generated from the QTI XSD, the ones `checkStructure` checks the
+ *   document by.
  * @returns The refusals, empty when every rule holds or the document is one the rules do not judge.
  * @see {@link Refusal} for what each refusal carries.
  */
-export const checkRules = (source: SourceDocument): readonly Refusal[] => {
+export const checkRules = (source: SourceDocument, tables: Tables): readonly Refusal[] => {
   if (!isQti(source.root, (local) => local === "qti-assessment-item")) {
     return [];
   }
 
-  const visits = [...judgedVisits(source)];
+  const visits = judgedVisits(source, tables);
   if (visits.some((visit) => holdsUnexpanded(visit.element))) {
     return [];
   }
