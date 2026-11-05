@@ -9,7 +9,7 @@ import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import type { Rule } from "#pantry/import/refusal.ts";
-import { materializeZip } from "#pantry/test/fixtures.ts";
+import { materializeSpec, materializeZip, zipMembers } from "#pantry/test/fixtures.ts";
 import type { ZipName } from "#pantry/test/fixtures.ts";
 import { hasLease, leaseTestTimeoutMs, settings } from "#pantry/test/settings.ts";
 
@@ -43,21 +43,25 @@ const refusedPackages = [
 const scratchRoot = path.resolve(import.meta.dirname, "..", "..", "work", "corpus-tests");
 
 /**
- * Import a corpus package, export it, and assert every entry of the export compares equal to the
- * source.
+ * Import a corpus package from its zip, export it, and assert every entry of the export compares
+ * equal to the extracted package of the same tarball member.
+ *
+ * The import reads the zip file (spec 4.19). The compare reads a directory, so its source is the
+ * package extracted from the same member, never the zip file.
  */
 const roundTrips = Effect.fn("corpus.roundTrips")(function* roundTrips(name: ZipName) {
   const fs = yield* FileSystem.FileSystem;
-  const source = yield* materializeZip(name);
+  const zip = yield* materializeZip(name);
+  const extracted = yield* materializeSpec({ edits: [], member: zipMembers[name], name });
   const target = path.join(scratchRoot, name);
 
-  const id = yield* importPackage(source);
+  const id = yield* importPackage(zip);
 
   yield* fs.remove(target, { force: true, recursive: true });
   yield* fs.makeDirectory(target, { recursive: true });
   yield* exportPackage(id, target);
 
-  const report = yield* comparePackage(source, target);
+  const report = yield* comparePackage(extracted, target);
   const rendered = renderReport(report);
 
   assert.isAbove(report.length, 0, `${name}: the package has entries`);
