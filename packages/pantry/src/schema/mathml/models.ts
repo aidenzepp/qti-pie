@@ -192,6 +192,13 @@
  * print("classes",{k:len(v) for k,v in CLASSES.items()},"kinds",len(models),file=sys.stderr)
  * ```
  */
+import {
+  operatorArguments,
+  partialdiffFunctionArguments,
+  qualifierOrder,
+  qualifiersOf,
+} from "#pantry/schema/mathml/operators.ts";
+import type { ArgumentCount } from "#pantry/schema/mathml/operators.ts";
 
 /**
  * A particle that matches one element child out of a set of handles, repeated between `min` and
@@ -1016,11 +1023,20 @@ const bvarVariable: Particle = {
  *   and C9; RelaxNG `bvar = ((ci | semantics-ci) & degree?)`, REC 4.2.1.7 `contm.bvar`,
  *   `appendixa.html#parsing_bvar`). The XSD's `m:bvar` holds any number of `m:ci`, `m:semantics.ci`
  *   and `m:degree` in any order.
+ * - `m:bind` holds a non-empty list of `m:bvar` after its head (E C12, REC 4.2.6 `contm.bind`, "a
+ *   non-empty list of bvar elements"; D3). The XSD's `bvar*` admits none. This is the model of a
+ *   head the head-dependent models below do not reach; they hold the same minimum.
  * - `m:piecewise` holds any number of `m:piece` and at most one `m:otherwise`, in any order (E C10;
  *   RelaxNG `piecewise = (piece* & otherwise?)`, REC 4.4.1.9 `contm.piecewise`). The XSD admits any
  *   number of `m:otherwise`. The sequence `piece*, otherwise?, piece*` is that interleave.
  */
 const recModels = {
+  "m:bind": [
+    { kinds: content, max: 1, min: 1 },
+    { kinds: ["m:bvar"], max: undefined, min: 1 },
+    qualifiers,
+    { kinds: content, max: undefined, min: 0 },
+  ],
   "m:bvar": [
     {
       choice: [
@@ -1040,7 +1056,7 @@ const recModels = {
 
 /**
  * The content model of each MathML handle, keyed by handle: the XSD's, with the Recommendation's
- * narrower models of `m:bvar` and `m:piecewise` in place of the XSD's.
+ * narrower models of `m:bvar`, `m:bind` and `m:piecewise` in place of the XSD's.
  */
 export const models = { ...xsdModels, ...recModels } satisfies Models;
 
@@ -1054,3 +1070,120 @@ export const notLast = {
   "m:mlongdiv": ["m:mscarries"],
   "m:mstack": ["m:mscarries"],
 } satisfies Readonly<Record<string, readonly string[]>>;
+
+/**
+ * The qualifier kinds an operator's qualifiers are judged by: the REC's nine less `m:interval`. The
+ * XSD lists `m:interval` among the content expressions, not the qualifiers (`m:Qualifier` is
+ * `m:DomainQ` with `m:degree`, `m:momentabout` and `m:logbase`), so an `m:interval` after a head is
+ * read as an operand, which the XSD accepts anywhere among the operands and the REC accepts as a
+ * domain; no head with a stated argument count admits it as a qualifier, so no count changes.
+ */
+export const qualifierKinds: ReadonlySet<string> = new Set(
+  qualifierOrder.filter((kind) => kind !== "m:interval"),
+);
+
+/**
+ * The element a head must be to have a head-dependent model: a content expression.
+ */
+const contentKinds: ReadonlySet<string> = new Set(content);
+
+/**
+ * The qualifiers an `m:apply` or `m:bind` holds after this head, in qualifier order.
+ *
+ * A head admits what `qualifiersOf` lists for it (REC syntax tables, E C7), less `m:interval`. A
+ * head the table lacks admits none (decision 233, F-4): `m:bind`, `m:declare`, `m:fn`, `m:reln` and
+ * `m:share` are such heads today. An `m:bind` always admits `m:bvar`, which it must hold (E C12).
+ *
+ * @param kind - `m:apply` or `m:bind`.
+ * @param head - The head's handle.
+ * @returns The qualifier handles the head admits.
+ */
+export const headQualifiers = (kind: "m:apply" | "m:bind", head: string): readonly string[] =>
+  qualifierOrder.filter(
+    (qualifier) =>
+      qualifierKinds.has(qualifier) &&
+      ((qualifiersOf[head] ?? []).includes(qualifier) ||
+        (kind === "m:bind" && qualifier === "m:bvar")),
+  );
+
+/**
+ * The particles of the qualifiers a head admits, in the REC's order (E C5). Each repeats as the XSD
+ * lets it; a `m:lowlimit` takes its optional `m:uplimit` straight after, as the XSD pairs them (no
+ * head admits an `m:uplimit` without an `m:lowlimit`; a test pins that).
+ *
+ * @param admitted - The qualifiers the head admits, from {@link headQualifiers}.
+ * @returns The particles, `m:bvar` aside.
+ */
+const qualifierParticles = (admitted: readonly string[]): readonly Particle[] =>
+  admitted.flatMap((qualifier): readonly Particle[] => {
+    if (qualifier === "m:bvar" || qualifier === "m:uplimit") {
+      return [];
+    }
+
+    if (qualifier === "m:lowlimit") {
+      return [
+        {
+          max: undefined,
+          min: 0,
+          sequence: [
+            { kinds: ["m:lowlimit"], max: 1, min: 1 },
+            ...(admitted.includes("m:uplimit") ? [{ kinds: ["m:uplimit"], max: 1, min: 0 }] : []),
+          ],
+        },
+      ];
+    }
+
+    return [{ kinds: [qualifier], max: undefined, min: 0 }];
+  });
+
+/**
+ * The count of operands a head takes: its own, else unconstrained. `m:partialdiff` with an `m:bvar`
+ * differentiates in its bound variables, and without one takes two (E C4).
+ *
+ * @param head - The head's handle.
+ * @param bound - Whether an `m:bvar` follows the head.
+ * @returns The inclusive bounds.
+ */
+const operandCount = (head: string, bound: boolean): ArgumentCount => {
+  if (head === "m:partialdiff" && !bound) {
+    return partialdiffFunctionArguments;
+  }
+
+  return operatorArguments[head] ?? { max: undefined, min: 0 };
+};
+
+/**
+ * The model of what follows the head of an `m:apply` or `m:bind`: the `m:bvar` elements, the
+ * qualifiers the head admits in order, then the operands the head takes.
+ *
+ * It replaces the XSD's `(C, bvar*, Qualifier*, C*)` where the head is a content expression: the
+ * qualifiers are those the head's syntax table admits, in the REC's order, and the operands number
+ * what its class states (spec 4.8; E C1 to C5, C7, C12). The model does not hold the head; the
+ * guard reads it as the first child. An `m:bind` holds at least one `m:bvar`.
+ *
+ * @param kind - `m:apply` or `m:bind`.
+ * @param head - The head's handle.
+ * @param bound - Whether an `m:bvar` follows the head; only `m:partialdiff` reads it.
+ * @returns The model, or nothing when the head is no content expression and the XSD's model of
+ *   the kind stands.
+ */
+export const headModel = (
+  kind: "m:apply" | "m:bind",
+  head: string,
+  bound: boolean,
+): Model | undefined => {
+  if (!contentKinds.has(head)) {
+    return undefined;
+  }
+
+  const admitted = headQualifiers(kind, head);
+  const { max, min } = operandCount(head, bound);
+
+  return [
+    ...(admitted.includes("m:bvar")
+      ? [{ kinds: ["m:bvar"], max: undefined, min: kind === "m:bind" ? 1 : 0 }]
+      : []),
+    ...qualifierParticles(admitted),
+    { kinds: content, max, min },
+  ];
+};
