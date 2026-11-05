@@ -782,9 +782,9 @@ const completeWildcard = (
  * type is `<container>/@<name>` (a global attribute's `<code>:@<name>`), and the types inside a
  * simple type are `<path>/base` (a restriction's inline base), `<path>/item` (a list's inline item
  * type) and `<path>/member<n>` (a union's inline member, `n` its position among all the members).
- * Every anonymous simple type an attribute declaration holds is described, and every one inside
- * those; a list's item type and a union's members are `MemberEntry` rows, a list's or union's base
- * is `xs:anySimpleType`.
+ * Every anonymous simple type an attribute declaration or the caller's element declarations hold is
+ * described, and every one inside those; a list's item type and a union's members are `MemberEntry`
+ * rows, a list's or union's base is `xs:anySimpleType`.
  *
  * A complex type's attribute wildcard is its complete wildcard (Part 1, 3.4.2): its own
  * `xs:anyAttribute` intersected with the wildcards of the attribute groups it references; a type
@@ -793,16 +793,24 @@ const completeWildcard = (
  * supplies it, and otherwise from the combined value, with `##targetNamespace` and `##local` as
  * tokens.
  *
+ * The anonymous simple types that element declarations hold are described too: the caller found
+ * them walking the content models, keyed by the path of the declaration, and passes them in.
+ *
  * @param index - The closure's definitions.
  * @param codeOf - A namespace's code, for the anonymous paths.
+ * @param elementSimple - The anonymous simple types that element declarations hold, by path.
  * @returns The derivations, attribute uses and facets of the named types.
  */
 export const deriveTypeTables = (
   index: Index,
   codeOf: (namespace: string) => string,
+  elementSimple: ReadonlyMap<
+    string,
+    { readonly element: Element; readonly schema: Schema }
+  > = new Map(),
 ): TypeTables => {
   const containerOf = (namespace: string, local: string) => `${codeOf(namespace)}:${local}`;
-  const anonymousSimple = new Map<string, { element: Element; schema: Schema }>();
+  const anonymousSimple = new Map<string, { element: Element; schema: Schema }>(elementSimple);
   const registerInline = (declaration: Element, schema: Schema, path: string) => {
     const inline = childElements(declaration).find((candidate) => isXs(candidate, "simpleType"));
     const known = anonymousSimple.get(path);
