@@ -536,6 +536,27 @@ describe("the attribute blocks, the padded block and the groups", () => {
     }),
   );
 
+  it.effect("gives every m:share a src that is a fragment naming an id of its own block", () =>
+    Effect.gen(function* checkShares() {
+      let seen = 0;
+
+      for (const block of mathmlBlocks.filter((candidate) =>
+        candidate.handles.includes("m:share"),
+      )) {
+        const written = yield* writtenBy(block);
+        const ids = new Set(written.filter(({ name }) => name === "id").map(({ value }) => value));
+
+        for (const { value } of written.filter(({ pair }) => pair === "m:share src")) {
+          seen += 1;
+          assert.isTrue(value.startsWith("#"), `${block.name}: ${value}`);
+          assert.isTrue(ids.has(value.slice(1)), `${block.name}: ${value}`);
+        }
+      }
+
+      assert.isAtLeast(seen, 2);
+    }),
+  );
+
   it.effect(
     "writes the padded block's values padded and unsigned, with the one sign D6 lists",
     () =>

@@ -243,7 +243,7 @@
  *     "declare": "<m:declare>%s<m:cn>1</m:cn></m:declare>" % X,
  *     "fn": "<m:fn>%s</m:fn>" % X,
  *     "reln": "<m:reln><m:eq/>%s%s</m:reln>" % (X, Y),
- *     "share": '<m:share src="item.xml"/>',
+ *     "share": '<m:ci id="kind-share-target">x</m:ci><m:share src="#kind-share-target"/>',
  *     "set": "<m:set>%s%s</m:set>" % (X, Y), "list": "<m:list>%s%s</m:list>" % (X, Y), "vector": "<m:vector>%s%s</m:vector>" % (X, Y),
  *     "matrix": "<m:matrix><m:matrixrow>%s%s</m:matrixrow><m:matrixrow>%s%s</m:matrixrow></m:matrix>" % (X, Y, Y, X),
  *     "lambda": "<m:lambda>%s%s</m:lambda>" % (BV, SIN),
@@ -3125,13 +3125,16 @@ export const mathmlBlocks: readonly MathmlBlock[] = [
     xml: "<m:math><m:apply><m:setdiff/><m:ci>x</m:ci><m:ci>y</m:ci></m:apply></m:math>",
   },
   {
-    handles: ["m:math", "m:share"],
+    handles: ["m:math", "m:ci", "m:share"],
     name: "kind-share",
-    pairs: [["m:share", "src"]],
+    pairs: [
+      ["m:ci", "id"],
+      ["m:share", "src"],
+    ],
     part: "kind",
     site: "body",
     version: "3.0.0",
-    xml: '<m:math><m:share src="item.xml"/></m:math>',
+    xml: '<m:math><m:ci id="kind-share-target">x</m:ci><m:share src="#kind-share-target"/></m:math>',
   },
   {
     handles: ["m:math", "m:apply", "m:sin", "m:ci"],
