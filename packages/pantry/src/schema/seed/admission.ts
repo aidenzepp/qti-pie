@@ -7,6 +7,7 @@ import * as cp from "#pantry/schema/kinds/cp.ts";
 import * as cpx from "#pantry/schema/kinds/cpx.ts";
 import * as csmd from "#pantry/schema/kinds/csmd.ts";
 import * as drd from "#pantry/schema/kinds/drd.ts";
+import * as foreign from "#pantry/schema/kinds/foreign.ts";
 import * as generic from "#pantry/schema/kinds/generic.ts";
 import type { AdmissionRow, SchemaVersionHandle } from "#pantry/schema/kinds/generic.ts";
 import * as html from "#pantry/schema/kinds/html.ts";
@@ -17,6 +18,12 @@ import * as xi from "#pantry/schema/kinds/xi.ts";
 import { NodeKind, SchemaVersion } from "#pantry/schema/node.ts";
 import { KindEnters, ancestryStepRows } from "#pantry/schema/seed/ancestry.ts";
 import { attributeAdmissionRows } from "#pantry/schema/seed/attribute-admission.ts";
+import {
+  globalElement,
+  wildcardAttributeAdmission,
+  wildcardHost,
+} from "#pantry/schema/seed/wildcard.ts";
+import { wildcardAdmissionRows } from "#pantry/schema/seed/wildcard-admission.ts";
 
 /**
  * The registry of every kinds file, in composition order. A later phase's kinds file joins this
@@ -97,6 +104,8 @@ export const admission: readonly AdmissionRow[] = [
       ...csmd.admission,
       ...ud.admission,
       ...xi.admission,
+      ...foreign.admission,
+      ...wildcardAdmissionRows({ globals: globalElement, hosts: wildcardHost, registries }),
     ].map((row) => [`${row.version}\u0000${row.parent}\u0000${row.child}`, row] as const),
   ).values(),
 ].toSorted(
@@ -113,9 +122,11 @@ export const admissionByVersion = (version: SchemaVersionHandle): readonly Admis
   admission.filter((row) => row.version === version);
 
 /**
- * The attribute names each kind may carry, from the one composed registry list.
+ * The attribute names each kind may carry: the one composed registry list, and the names a
+ * wildcard host admits as typed (`foreign`'s own names reach it through the latter, so its registry
+ * row is not in `registries`).
  */
-export const attributeAdmission = attributeAdmissionRows(registries);
+export const attributeAdmission = attributeAdmissionRows(registries, wildcardAttributeAdmission);
 
 /**
  * The ancestry steps of every handle of `NodeKind`: a kind a later phase appends gains its rows

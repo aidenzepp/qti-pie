@@ -24,6 +24,7 @@ import { operatorArity, operatorArityMax } from "#pantry/schema/seed/operator-ar
 import { recordBindingFit } from "#pantry/schema/seed/record-binding-fit.ts";
 import { resourceTypes } from "#pantry/schema/seed/resource-types.ts";
 import { rootOfType } from "#pantry/schema/seed/root-of-type.ts";
+import { wildcardAttributeAdmission } from "#pantry/schema/seed/wildcard.ts";
 import { seedSqlProcessTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -280,7 +281,14 @@ describe("qti", () => {
         .filter((row) => row.kind === handle)
         .map((row) => row.attribute)
         .toSorted();
-      const declared = [...new Set(registry.get(handle)?.attributes)].toSorted();
+      const declared = [
+        ...new Set([
+          ...(registry.get(handle)?.attributes ?? []),
+          ...wildcardAttributeAdmission
+            .filter((row) => row.kind === handle)
+            .map((row) => row.attribute),
+        ]),
+      ].toSorted();
       assert.deepStrictEqual(admitted, declared, handle);
     }
   });
