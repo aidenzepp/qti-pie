@@ -4,6 +4,7 @@ import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
 import * as rosters from "#pantry/schema/content/rosters.ts";
+import * as attributes from "#pantry/schema/attributes.ts";
 import * as contracts from "#pantry/schema/contracts.ts";
 import * as declaration from "#pantry/schema/declaration.ts";
 import * as document from "#pantry/schema/document.ts";
@@ -13,30 +14,40 @@ import * as node from "#pantry/schema/node.ts";
 import * as pkg from "#pantry/schema/package.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
 import * as processing from "#pantry/schema/processing.ts";
+import * as reference from "#pantry/schema/reference.ts";
 import * as ruleSchema from "#pantry/schema/rule.ts";
 import {
   operatorArity,
   operatorArityMax,
   operatorArityUnbounded,
 } from "#pantry/schema/seed/operator-arity.ts";
+import * as stimulus from "#pantry/schema/stimulus.ts";
 import * as value from "#pantry/schema/value.ts";
+import * as testRules from "#pantry/schema/test/rules.ts";
+import * as testStructure from "#pantry/schema/test/structure.ts";
 import { printSeed } from "#pantry/test/seed.ts";
 import { seedPrintTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
- * The probe schema: the node and item modules' relations and rules with this module's.
+ * The probe schema: the node, item, reference and test modules' relations and rules with this
+ * module's.
  */
 const probe = () =>
   schema(
     "QtiProcessingProbe",
     {
       ...node.relations,
+      ...attributes.relations,
       ...pkg.relations,
       ...document.relations,
       ...declaration.relations,
       ...value.relations,
       ...item.relations,
       ...rosters.relations,
+      ...reference.relations,
+      ...stimulus.relations,
+      ...testRules.relations,
+      ...testStructure.relations,
       ...processing.relations,
     },
     [
@@ -46,6 +57,9 @@ const probe = () =>
       ...declaration.rules,
       ...value.rules,
       ...item.rules,
+      ...reference.rules,
+      ...testRules.rules,
+      ...testStructure.rules,
       ...processing.rules,
     ],
   );
@@ -183,6 +197,21 @@ const predicateText = (
 const selectionOf = (side: { readonly source: object }) =>
   "relation" in side.source && "bindings" in side.source ? side.source : undefined;
 
+/**
+ * The containments of one relation, selected or whole on the left: the left bindings, the left
+ * fields, the right relation, its bindings and its fields.
+ */
+const lawsFrom = (owner: { readonly name: string }) =>
+  ofKind("contained")
+    .filter((rule) => (selectionOf(rule.left)?.relation ?? rule.left.source) === owner)
+    .map((rule) => [
+      selectionOf(rule.left)?.bindings,
+      [...rule.left.fields],
+      selectionOf(rule.right)?.relation ?? rule.right.source,
+      selectionOf(rule.right)?.bindings,
+      [...rule.right.fields],
+    ]);
+
 describe("processing", () => {
   it("builds a schema over node, item and processing without refusal", () => {
     const built = probe();
@@ -197,6 +226,9 @@ describe("processing", () => {
         declaration.rules.length +
         value.rules.length +
         item.rules.length +
+        reference.rules.length +
+        testRules.rules.length +
+        testStructure.rules.length +
         processing.rules.length,
     );
   });
@@ -591,6 +623,9 @@ describe("processing", () => {
     assert.deepStrictEqual(Object.keys(variableRef?.arms ?? {}).toSorted(), [
       "builtIn",
       "declared",
+      "itemInstanceVariable",
+      "itemVariable",
+      "sectionDuration",
       "templateParameter",
     ]);
 
@@ -653,7 +688,7 @@ describe("processing", () => {
     );
   });
 
-  it("declares VariableRef alternatives over RefKind with the declared and built-in arms", () => {
+  it("declares VariableRef alternatives over RefKind with the declared, built-in, template-parameter and prefixed arms", () => {
     const { VariableRef, DeclaredRef, BuiltInRef } = processing.relations;
     assert.deepStrictEqual(
       [...processing.relations.RefKind.handles],
@@ -694,6 +729,9 @@ describe("processing", () => {
     assert.deepStrictEqual(rule?.arms, {
       builtIn: BuiltInRef,
       declared: DeclaredRef,
+      itemInstanceVariable: processing.relations.ItemInstanceVariableRef,
+      itemVariable: processing.relations.ItemVariableRef,
+      sectionDuration: processing.relations.SectionDurationRef,
       templateParameter: processing.relations.TemplateParameterRef,
     });
     assert.deepStrictEqual(containedFrom(VariableRef), [
@@ -834,26 +872,227 @@ describe("processing headings: the prefixed arms and the per-test relations", ()
     );
   });
 
-  it("keeps the VariableRef alternatives at three arms and declares no statement of its own", () => {
-    const [rule, ...rest] = ofKind("alternatives").filter(
-      (candidate) => candidate.parent === processing.relations.VariableRef,
-    );
-    assert.strictEqual(rest.length, 0);
-    assert.deepStrictEqual(Object.keys(rule?.arms ?? {}).toSorted(), [
-      "builtIn",
-      "declared",
-      "templateParameter",
+  it("keeps the instance spelling and positivity as laws of the instance arm", () => {
+    const { ItemInstanceSpelling, ItemInstanceVariableRef } = processing.relations;
+    assert.deepStrictEqual(lawsFrom(ItemInstanceSpelling), [
+      [undefined, ["ref"], ItemInstanceVariableRef, undefined, ["id"]],
     ]);
 
-    const added = new Set<unknown>(headings.map(([name]) => processing.relations[name]));
-    assert.deepStrictEqual(
-      processing.rules.filter(
-        (statement) =>
-          ("relation" in statement && added.has(statement.relation)) ||
-          ("left" in statement && added.has(statement.left.source)) ||
-          ("parent" in statement && added.has(statement.parent)),
-      ),
-      [],
+    const positive = predicateText(
+      ofKind("check").filter((check) => check.name === "ItemInstancePositive"),
+      ItemInstanceVariableRef,
     );
+    assert.strictEqual(positive.length, 1);
+    assert.include(positive[0], "instance");
+    assert.include(positive[0], "1n");
+    assert.deepStrictEqual(
+      ofKind("check")
+        .filter((check) => check.relation === ItemInstanceVariableRef)
+        .map((check) => check.name),
+      ["ItemInstanceVariableRoot", "ItemInstancePositive"],
+    );
+  });
+
+  it("binds each prefixed arm to VariableRef, to a test document and to its own test's row", () => {
+    const { ItemInstanceVariableRef, ItemVariableRef, SectionDurationRef, VariableRef } =
+      processing.relations;
+    const { Document } = document.relations;
+    const { PrefixedVariableSource, SectionDurationTarget } = processing.relations;
+    const resolved = { root: "test" };
+    for (const [arm, target] of [
+      [ItemVariableRef, PrefixedVariableSource],
+      [ItemInstanceVariableRef, PrefixedVariableSource],
+      [SectionDurationRef, SectionDurationTarget],
+    ] as const) {
+      assert.deepStrictEqual(
+        lawsFrom(arm),
+        [
+          [undefined, ["id", "document"], VariableRef, undefined, ["id", "document"]],
+          [undefined, ["document", "root"], Document, undefined, ["id", "root"]],
+          [resolved, ["id", "document"], target, undefined, ["ref", "test"]],
+        ],
+        arm.name,
+      );
+
+      const checks = predicateText(processing.rules, arm).filter((text) => text.includes("root"));
+      assert.strictEqual(checks.length, 1, arm.name);
+      assert.include(checks[0], "test", arm.name);
+    }
+    const rootChecks = new Set([
+      "ItemVariableRoot",
+      "ItemInstanceVariableRoot",
+      "SectionDurationRoot",
+    ]);
+    assert.deepStrictEqual(
+      ofKind("check")
+        .filter((check) => rootChecks.has(check.name))
+        .map((check) => [check.name, check.relation.name]),
+      [
+        ["ItemVariableRoot", "ItemVariableRef"],
+        ["ItemInstanceVariableRoot", "ItemInstanceVariableRef"],
+        ["SectionDurationRoot", "SectionDurationRef"],
+      ],
+    );
+  });
+
+  it("ties the hub PrefixedVariableSource to its reference, test, item reference and item document", () => {
+    const { ItemInstanceVariableRef, ItemVariableRef, PrefixedVariableSource, VariableRef } =
+      processing.relations;
+    const { ItemRefDocument } = reference.relations;
+    const { TestDocument, TestReach } = testStructure.relations;
+    assert.deepStrictEqual(lawsFrom(PrefixedVariableSource), [
+      [
+        undefined,
+        ["ref", "document", "refKind"],
+        VariableRef,
+        undefined,
+        ["id", "document", "kind"],
+      ],
+      [undefined, ["test", "document"], TestDocument, undefined, ["test", "document"]],
+      [
+        { refKind: "itemVariable" },
+        ["ref", "prefix"],
+        ItemVariableRef,
+        undefined,
+        ["id", "prefix"],
+      ],
+      [
+        { refKind: "itemInstanceVariable" },
+        ["ref", "prefix"],
+        ItemInstanceVariableRef,
+        undefined,
+        ["id", "prefix"],
+      ],
+      [
+        undefined,
+        ["test", "prefix", "itemRef"],
+        TestReach,
+        { holderKind: "itemRef" },
+        ["test", "identifier", "holder"],
+      ],
+      [undefined, ["itemRef", "itemDocument"], ItemRefDocument, undefined, ["itemRef", "document"]],
+    ]);
+
+    const checks = predicateText(processing.rules, PrefixedVariableSource);
+    assert.strictEqual(checks.length, 1);
+    for (const handle of ["itemVariable", "itemInstanceVariable", "sectionVariable"]) {
+      assert.include(checks[0], handle);
+    }
+    for (const handle of ["declared", "builtIn", "sectionDuration", "templateParameter"]) {
+      assert.notInclude(checks[0], `'${handle}'`);
+    }
+
+    const [rule, ...rest] = ofKind("alternatives").filter(
+      (candidate) => candidate.parent === PrefixedVariableSource,
+    );
+    assert.strictEqual(rest.length, 0);
+    assert.strictEqual(rule?.discriminator, "source");
+    assert.strictEqual(rule?.roster, rosters.relations.PrefixedSource);
+    assert.deepStrictEqual(rule?.arms, {
+      builtIn: processing.relations.PrefixedBuiltIn,
+      declared: processing.relations.PrefixedDeclared,
+      mapped: processing.relations.PrefixedMapped,
+    });
+  });
+
+  it("homes each prefixed source in the hub and in the declaration, mapping or built-in set it names", () => {
+    const { PrefixedBuiltIn, PrefixedDeclared, PrefixedMapped, PrefixedVariableSource } =
+      processing.relations;
+    assert.deepStrictEqual(lawsFrom(PrefixedDeclared), [
+      [
+        undefined,
+        ["ref", "test", "itemDocument"],
+        PrefixedVariableSource,
+        undefined,
+        ["ref", "test", "itemDocument"],
+      ],
+      [
+        undefined,
+        ["itemDocument", "variable"],
+        declaration.relations.Declaration,
+        undefined,
+        ["document", "identifier"],
+      ],
+    ]);
+    assert.deepStrictEqual(lawsFrom(PrefixedMapped), [
+      [
+        undefined,
+        ["ref", "test", "itemRef"],
+        PrefixedVariableSource,
+        undefined,
+        ["ref", "test", "itemRef"],
+      ],
+      [
+        undefined,
+        ["itemRef", "variable"],
+        testRules.relations.VariableMapping,
+        undefined,
+        ["itemRef", "target"],
+      ],
+    ]);
+    assert.deepStrictEqual(lawsFrom(PrefixedBuiltIn), [
+      [undefined, ["ref", "test"], PrefixedVariableSource, undefined, ["ref", "test"]],
+    ]);
+
+    const [builtIn = ""] = predicateText(processing.rules, PrefixedBuiltIn);
+    for (const handle of ["duration", "numAttempts", "completionStatus"]) {
+      assert.include(builtIn, handle);
+    }
+    assert.notInclude(builtIn, "QTI_CONTEXT");
+    assert.deepStrictEqual(
+      [PrefixedDeclared, PrefixedMapped].map((owner) => predicateText(processing.rules, owner)),
+      [[], []],
+    );
+  });
+
+  it("binds SectionDurationTarget to its reference, its test and the part or section it names", () => {
+    const { SectionDurationRef, SectionDurationTarget, VariableRef } = processing.relations;
+    const { TestDocument, TestReach } = testStructure.relations;
+    assert.deepStrictEqual(lawsFrom(SectionDurationTarget), [
+      [
+        undefined,
+        ["ref", "document", "refKind"],
+        VariableRef,
+        undefined,
+        ["id", "document", "kind"],
+      ],
+      [
+        { refKind: "sectionDuration" },
+        ["ref", "document", "prefix"],
+        SectionDurationRef,
+        undefined,
+        ["id", "document", "prefix"],
+      ],
+      [undefined, ["test", "document"], TestDocument, undefined, ["test", "document"]],
+      [
+        undefined,
+        ["test", "prefix", "holder", "holderKind"],
+        TestReach,
+        undefined,
+        ["test", "identifier", "holder", "holderKind"],
+      ],
+    ]);
+
+    const checks = predicateText(processing.rules, SectionDurationTarget);
+    assert.strictEqual(checks.length, 2);
+
+    const kinds = checks.find((text) => text.includes("refKind")) ?? "";
+    for (const handle of ["sectionDuration", "sectionVariable"]) {
+      assert.include(kinds, handle);
+    }
+    const holders = checks.find((text) => text.includes("holderKind")) ?? "";
+    for (const handle of ["part", "section"]) {
+      assert.include(holders, `'${handle}'`);
+    }
+    assert.notInclude(holders, "itemRef");
+  });
+
+  it("selects at most one side of every containment this module declares", () => {
+    for (const rule of ofKind("contained")) {
+      assert.isFalse(
+        selectionOf(rule.left) !== undefined && selectionOf(rule.right) !== undefined,
+        String(rule.left.fields),
+      );
+    }
   });
 });
