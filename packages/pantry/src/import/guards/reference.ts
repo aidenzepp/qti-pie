@@ -1,12 +1,16 @@
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 
 /**
- * The package stage's copy guards: the facts about a package's reference rows that no statement can
- * state over stored rows, judged over the rows an import built before any of them is written (spec
- * 4.4, 4.5, 4.6, 4.9 and 4.10, rows 9, 12, 36, 48 and 50).
+ * The package stage's reference guards: the facts about a package's reference rows that no
+ * statement can state over stored rows, judged over the rows an import built before any of them
+ * is written (spec 4.4, 4.5, 4.6, 4.9 and 4.10, rows 7, 9, 12, 35, 36, 48 and 50).
  *
- * The importer writes both sides of each from one source, so a breach reaches these guards only
- * through rows built by hand.
+ * Most are copies: the importer writes both sides of each from one source, so a breach reaches
+ * them only through rows built by hand. `document-reference` and `item-ref-target` are not copies,
+ * they are statements grizzle cannot compile (`File` and `ResourceHref` hold no key on their
+ * `href`). The importer reaches `document-reference` through a reference to a manifest entry that
+ * no `cp:file` lists, and never reaches `item-ref-target`: it writes an LTI resolution only for a
+ * path that is a resource's or a file's `href`.
  */
 import type { Fact } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
@@ -26,6 +30,7 @@ import {
   TemplateFeedbackBlock,
 } from "#pantry/schema/feedback.ts";
 import { Edge, Node } from "#pantry/schema/node.ts";
+import { File, PackageEntry, ResourceHref } from "#pantry/schema/package.ts";
 import * as processing from "#pantry/schema/processing.ts";
 import * as reference from "#pantry/schema/reference.ts";
 import { ItemStimulusRef } from "#pantry/schema/stimulus.ts";
@@ -40,7 +45,7 @@ import {
 } from "#pantry/schema/test/structure.ts";
 
 /**
- * A reference copy guard refused the rows.
+ * A reference guard refused the rows.
  *
  * `rule` names the guard and `detail` the first row that broke it.
  */
@@ -48,7 +53,14 @@ export class ReferenceGuardRefusal extends Schema.TaggedError<ReferenceGuardRefu
   "ReferenceGuardRefusal",
   {
     detail: Schema.String,
-    rule: Schema.Literals(["resolution-copy", "reach-copy", "prefixed-copy", "section-copy"]),
+    rule: Schema.Literals([
+      "resolution-copy",
+      "reach-copy",
+      "prefixed-copy",
+      "section-copy",
+      "document-reference",
+      "item-ref-target",
+    ]),
   },
 ) {
   /**
@@ -66,6 +78,8 @@ type Finding = ReferenceGuardRefusal | undefined;
 
 const refuse = (rule: ReferenceGuardRefusal["rule"], detail: string): ReferenceGuardRefusal =>
   new ReferenceGuardRefusal({ detail, rule });
+
+const pathKey = (owner: string, path: string): string => `${owner}\n${path}`;
 
 const quoted = (text: string): string => JSON.stringify(text);
 
@@ -336,6 +350,52 @@ const resolutionCopy = (context: Context): Finding => {
   const chain = baseChain(context.rows);
 
   return refResolutions(context, chain) ?? fileResolutions(context, chain);
+};
+
+/**
+ * `document-reference` (spec 4.6; row 35, bin 2): a file reference whose `(package, path)` is a
+ * `PackageEntry` has that file described in the manifest, so it is some `File`'s
+ * `(package, href)`. A path that is no entry is left to the stated `PackageEntry` containment
+ * (`file-exists`).
+ */
+const documentReference = (context: Context): Finding => {
+  const { rows } = context;
+  const entries = new Set(Rows.of(rows, PackageEntry).map((row) => pathKey(row.package, row.path)));
+  const described = new Set(Rows.of(rows, File).map((row) => pathKey(row.package, row.href)));
+  for (const row of Rows.of(rows, reference.AttributeFileReference)) {
+    const at = pathKey(row.package, row.path);
+    if (entries.has(at) && !described.has(at)) {
+      return refuse(
+        "document-reference",
+        `AttributeFileReference ${row.node} ${row.attribute} position ${row.position} points at ${quoted(text(row.path))}, which is an entry of the package that no file element lists; list it as a file of a resource, or remove the reference.`,
+      );
+    }
+  }
+
+  return undefined;
+};
+
+/**
+ * `item-ref-target` (spec 4.5; row 7, bin 2): an item ref that resolves to an LTI resource names
+ * a path that is a resource's `href` or the `href` of one of its files (an LTI resource may have
+ * no `href` and only a file). The path is compared as text: `path` and `href` are two brands.
+ */
+const itemRefTarget = (context: Context): Finding => {
+  const { rows } = context;
+  const targets = new Set([
+    ...Rows.of(rows, ResourceHref).map((row) => pathKey(row.package, text(row.href))),
+    ...Rows.of(rows, File).map((row) => pathKey(row.package, text(row.href))),
+  ]);
+  for (const row of Rows.of(rows, reference.ItemRefResolution)) {
+    if (row.targetKind === "lti" && !targets.has(pathKey(row.package, text(row.path)))) {
+      return refuse(
+        "item-ref-target",
+        `ItemRefResolution ${row.itemRef} resolves to the LTI path ${quoted(text(row.path))}, which is the href of no resource and of no file of the package; write the href of the LTI resource or of one of its files.`,
+      );
+    }
+  }
+
+  return undefined;
 };
 
 /**
@@ -805,10 +865,12 @@ const twinCopy = (context: Context): Finding => {
 const sectionCopy = (context: Context): Finding => prefixCopy(context) ?? twinCopy(context);
 
 /**
- * Refuse reference rows that break one of the four copies no statement can state: that a
- * resolution's path is its value resolved, that the reach and every per-test row are complete and
- * exact, that a test document's per-test source names the variable as written, and that a section
- * document's per-test rows restate the spelling they resolve.
+ * Refuse reference rows that break one of the facts no statement can state: that a resolution's
+ * path is its value resolved, that a file reference to a package entry has that file described in
+ * the manifest, that an LTI item ref's path is a resource's or a file's `href`, that the reach and
+ * every per-test row are complete and exact, that a test document's per-test source names the
+ * variable as written, and that a section document's per-test rows restate the spelling they
+ * resolve.
  *
  * The first refusal found, in that order, is the failure. Reads rows only; writes nothing.
  *
@@ -833,7 +895,12 @@ export const referenceGuards = Effect.fn("referenceGuards")(function* referenceG
   );
   const context: Context = { ...base, closure };
   const found =
-    resolutionCopy(context) ?? reachCopy(context) ?? prefixedCopy(context) ?? sectionCopy(context);
+    resolutionCopy(context) ??
+    documentReference(context) ??
+    itemRefTarget(context) ??
+    reachCopy(context) ??
+    prefixedCopy(context) ??
+    sectionCopy(context);
   if (found !== undefined) {
     yield* found;
   }

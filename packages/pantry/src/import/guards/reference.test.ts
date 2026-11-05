@@ -10,6 +10,7 @@ import { FeedbackBlock } from "#pantry/schema/feedback.ts";
 import { A } from "#pantry/schema/html/text.ts";
 import { Source, SourceSrcset } from "#pantry/schema/html/media.ts";
 import { Node } from "#pantry/schema/node.ts";
+import { File, PackageEntry, ResourceHref } from "#pantry/schema/package.ts";
 import * as processing from "#pantry/schema/processing.ts";
 import * as reference from "#pantry/schema/reference.ts";
 import { PrintedVariable, PrintedVariableIndex } from "#pantry/schema/template.ts";
@@ -486,6 +487,45 @@ const dotted = (prefix: string, variable: string) =>
     (facts) => facts.map((row) => (row.ref === sectionVariable ? { ...row, variable } : row)),
   );
 
+/**
+ * Hand-built entry, file and LTI rows for the `document-reference` and `item-ref-target` guards.
+ */
+const entry = (path: string, kind: "file" | "manifest") => ({ kind, package: pkg, path });
+
+const listedFile = (href: string, n: number) => ({
+  href,
+  id: id(n),
+  package: pkg,
+  position: 0n,
+  resource: id(90),
+});
+
+const withEntries = (entries: readonly object[], files: readonly object[]) =>
+  edited(
+    edited(base(), PackageEntry, () => entries),
+    File,
+    () => files,
+  );
+
+const asLti = (rows: Rows): Rows =>
+  edited(rows, reference.ItemRefResolution, (facts) =>
+    facts.map((row) => (row.itemRef === itemRefT1 ? { ...row, targetKind: "lti" } : row)),
+  );
+
+const ltiHref = (n: number, inPackage: string) => ({
+  href: "items/i1.xml",
+  package: inPackage,
+  resource: id(n),
+});
+
+const ltiFile = (inPackage: string) => ({
+  href: "items/i1.xml",
+  id: id(95),
+  package: inPackage,
+  position: 0n,
+  resource: id(90),
+});
+
 describe("referenceGuards", () => {
   it.effect("accepts a package whose every copy is consistent", () => guarded(base()));
 
@@ -561,6 +601,64 @@ describe("referenceGuards", () => {
           "resolution-copy",
         );
       }),
+    );
+  });
+
+  describe("document-reference", () => {
+    it.effect("refuses a file reference to an entry that no file element lists", () =>
+      refused(withEntries([entry("items/media/x.png", "manifest")], []), "document-reference"),
+    );
+
+    it.effect("accepts the same reference when a file lists the entry", () =>
+      guarded(
+        withEntries(
+          [entry("items/media/x.png", "manifest")],
+          [listedFile("items/media/x.png", 91)],
+        ),
+      ),
+    );
+
+    it.effect("leaves a reference to no entry to the entry containment", () =>
+      guarded(withEntries([], [])),
+    );
+
+    it.effect("refuses an entry that only another package's file lists", () =>
+      refused(
+        withEntries(
+          [entry("items/media/x.png", "manifest")],
+          [{ ...listedFile("items/media/x.png", 91), package: id(2) }],
+        ),
+        "document-reference",
+      ),
+    );
+  });
+
+  describe("item-ref-target", () => {
+    it.effect("refuses an lti resolution whose path is no resource's href", () =>
+      refused(asLti(base()), "item-ref-target"),
+    );
+
+    it.effect("accepts it when a resource of the package has that href", () =>
+      guarded(edited(asLti(base()), ResourceHref, () => [ltiHref(90, pkg)])),
+    );
+
+    it.effect("accepts it when only a file of a resource has that href", () =>
+      guarded(edited(asLti(base()), File, () => [ltiFile(pkg)])),
+    );
+
+    it.effect("refuses it when the href belongs to another package", () =>
+      refused(
+        edited(
+          edited(asLti(base()), ResourceHref, () => [ltiHref(90, id(2))]),
+          File,
+          () => [ltiFile(id(2))],
+        ),
+        "item-ref-target",
+      ),
+    );
+
+    it.effect("does not judge an item resolution", () =>
+      guarded(edited(base(), ResourceHref, () => [])),
     );
   });
 
