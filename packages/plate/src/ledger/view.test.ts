@@ -16,7 +16,13 @@ import { checkTree, textOf } from "#plate/test/accessibility.ts";
 import { bg007Item } from "#plate/test/fixtures.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
-import { acceptForTest, describeRefusal } from "#plate/validate/verdict.ts";
+import {
+  acceptForTest,
+  acceptSectionForTest,
+  acceptStimulusForTest,
+  acceptTestForTest,
+  describeRefusal,
+} from "#plate/validate/verdict.ts";
 import type { Verdict } from "#plate/validate/verdict.ts";
 
 /**
@@ -929,9 +935,10 @@ const missing = new Refusal({
  * The fixture verdicts: refused, unchecked, accepted with an unsupported feature, and accepted.
  */
 const verdicts: readonly Verdict[] = [
-  { document: paths.refused, refusals: [refusal, missing], verdict: "refused" },
+  { document: paths.refused, kind: "item", refusals: [refusal, missing], verdict: "refused" },
   {
     document: paths.unchecked,
+    kind: "item",
     reasons: [{ path: "qti-assessment-item/qti-item-body/math", reason: "mathml" }],
     verdict: "unchecked",
   },
@@ -948,11 +955,13 @@ const verdicts: readonly Verdict[] = [
       ],
     }),
     document: paths.unsupported,
+    kind: "item",
     verdict: "accepted-with-unsupported",
   },
   {
     accepted: acceptForTest({ ...bg007Item, document: paths.accepted, unsupported: [] }),
     document: paths.accepted,
+    kind: "item",
     verdict: "accepted",
   },
 ];
@@ -1018,6 +1027,80 @@ describe("ledger/view.ts verdict report", () => {
       "qti-gap-match-interaction at qti-assessment-item/qti-item-body/qti-gap-match-interaction",
     );
     assert.strictEqual(textOf(rows[3]?.get("Reason") ?? h("td", {})), "none");
+  });
+
+  it("lists the marks of an accepted test, section and stimulus in the lines and the table", () => {
+    const outcomeProcessing = "qti-assessment-test/qti-outcome-processing";
+    const accepting: readonly Verdict[] = [
+      {
+        accepted: acceptTestForTest({
+          document: "tests/test.xml",
+          identifier: "T",
+          outcomes: new Map(),
+          parts: [],
+          title: "Test",
+          unsupported: [
+            { feature: "qti-outcome-processing", path: outcomeProcessing, shown: "mark" },
+          ],
+        }),
+        document: "tests/test.xml",
+        kind: "test",
+        verdict: "accepted-with-unsupported",
+      },
+      {
+        accepted: acceptSectionForTest({
+          document: "sections/section.xml",
+          identifier: "S",
+          title: "Section",
+          unsupported: [
+            {
+              feature: "root:qti-assessment-section",
+              path: "qti-assessment-section",
+              shown: "mark",
+            },
+          ],
+        }),
+        document: "sections/section.xml",
+        kind: "section",
+        verdict: "accepted-with-unsupported",
+      },
+      {
+        accepted: acceptStimulusForTest({
+          document: "stimuli/stimulus.xml",
+          identifier: "ST",
+          title: "Stimulus",
+          unsupported: [
+            {
+              feature: "root:qti-assessment-stimulus",
+              path: "qti-assessment-stimulus",
+              shown: "mark",
+            },
+          ],
+        }),
+        document: "stimuli/stimulus.xml",
+        kind: "stimulus",
+        verdict: "accepted-with-unsupported",
+      },
+    ];
+    const marks = [
+      `qti-outcome-processing at ${outcomeProcessing}`,
+      "root:qti-assessment-section at qti-assessment-section",
+      "root:qti-assessment-stimulus at qti-assessment-stimulus",
+    ];
+
+    assert.deepStrictEqual(verdictLines(accepting).split("\n"), [
+      ...accepting.map(
+        (verdict, index) =>
+          `${verdict.document} | accepted-with-unsupported | reason: none | unsupported features: ${marks[index] ?? ""}`,
+      ),
+      "",
+    ]);
+    assert.deepStrictEqual(
+      rowsOf(verdictTable(accepting)).map((row) =>
+        textOf(row.get("Unsupported features") ?? h("td", {})),
+      ),
+      marks,
+    );
   });
 
   it("round-trips and passes checkTree in a page", () => {

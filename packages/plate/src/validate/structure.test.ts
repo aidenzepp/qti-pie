@@ -1775,6 +1775,55 @@ describe("checkStructure", () => {
       assert.deepStrictEqual(found(source), []);
     });
 
+    it("leaves a test's or a section's misplaced outcome-only expression to the test prose rules (reading 23)", () => {
+      const branch = el(
+        "qti-branch-rule",
+        [attr("target", "EXIT_TEST")],
+        [
+          el(
+            "qti-gte",
+            [],
+            [
+              el("qti-number-correct"),
+              el("qti-base-value", [attr("base-type", "integer")], [text("1")]),
+            ],
+          ),
+        ],
+      );
+      const section = el(
+        "qti-assessment-section",
+        [attr("identifier", "S"), attr("title", "S"), attr("visible", "true")],
+        [
+          el(
+            "qti-assessment-item-ref",
+            [attr("href", "items/q1.xml"), attr("identifier", "q1")],
+            [branch],
+          ),
+        ],
+      );
+      const test = doc(
+        location,
+        el(
+          "qti-assessment-test",
+          [attr("identifier", "T"), attr("title", "Test")],
+          [
+            el(
+              "qti-test-part",
+              [
+                attr("identifier", "P"),
+                attr("navigation-mode", "linear"),
+                attr("submission-mode", "individual"),
+              ],
+              [section],
+            ),
+          ],
+        ),
+      );
+
+      assert.deepStrictEqual(found(test, generatedTables), []);
+      assert.deepStrictEqual(found(doc(location, section), generatedTables), []);
+    });
+
     it("[I-8] refuses a qti-gap outside a qti-gap-match-interaction as misplaced-element (reading 38)", () => {
       const gap = el("qti-gap", [attr("identifier", "G1")]);
       const loose = body(el("p", [], [gap]));

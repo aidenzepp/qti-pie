@@ -199,6 +199,21 @@ describe("the plain-HTML host", () => {
     }),
   );
 
+  it.effect("answers with a 500 page and no form when the document is an accepted test", () =>
+    Effect.gen(function* testRoot() {
+      const testLocation = "QTI3_BeginnersGuide_Examples/BGtest.xml";
+      const handler = yield* htmlHost(testLocation, yield* readCorpusFile(testLocation));
+      const response = yield* Effect.promise(() => handler(new Request(`${origin}/`)));
+      const { elements } = yield* pageOf(response);
+
+      assert.strictEqual(response.status, 500);
+      assert.deepStrictEqual(
+        elements.filter((element) => element.tag === "form"),
+        [],
+      );
+    }),
+  );
+
   it("imports only #plate/index.ts and node: modules, type imports included", () => {
     const { imports, unreadable } = readImports(
       readFileSync(new URL("html.ts", import.meta.url), "utf-8"),
