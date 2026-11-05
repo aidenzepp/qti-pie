@@ -29,8 +29,9 @@ const origin = "http://127.0.0.1:5190";
 
 /**
  * The corpus paths of the documents these tests open: phase 1's three items, the refused CAT
- * test, a Choice of the Common Cartridge package scored by `CC2_match`, and a QTI 2.2 item inside
- * the CAT package.
+ * test, a Choice of the Common Cartridge package scored by `CC2_match`, a QTI 2.2 item inside
+ * the CAT package, and two packaged items that embed a package document by `object`, an HTML
+ * page and an SVG image.
  */
 const paths = {
   bg007: "QTI3_BPIG_Examples/items/BG007.xml",
@@ -38,7 +39,9 @@ const paths = {
   bg011: "QTI3_BeginnersGuide_Examples/items/BG011.xml",
   cat: "qtiv3-examples/CAT/test.xml",
   ccPackage: "qtiv3-examples/packaging/ccPackage/testitems/QUE_102010.xml",
+  orkney: "qtiv3-examples/packaging/items/orkney1.xml",
   qti2: "qtiv3-examples/CAT/CAT_Test01_Adaptive_EchoAdapt.zip.d/items/i15211305971467662/qti.xml",
+  svg: "qtiv3-examples/packaging/svg/svg.xml",
 } as const;
 
 /**
@@ -69,7 +72,7 @@ const playground = (settings: Pick<PlaygroundSettings, "configuration"> = {}): H
 const pageHeaders = {
   "cache-control": "no-store",
   "content-security-policy":
-    "default-src 'none'; style-src 'self'; img-src 'self' https: http:; media-src 'self' https: http:; object-src 'self'; script-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    "default-src 'none'; style-src 'self'; img-src 'self' https: http:; media-src 'self' https: http:; object-src 'self'; frame-src 'self'; script-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   "referrer-policy": "no-referrer",
   "x-content-type-options": "nosniff",
 } as const;
@@ -1119,6 +1122,60 @@ describe("dev/page.ts", () => {
         }
       }
     }),
+  );
+
+  it.effect(
+    "an item's HTML and SVG objects are allowed as nested documents (frame-src 'self'), and each document keeps the asset headers",
+    () =>
+      Effect.gen(function* nestedDocuments() {
+        const handle = playground();
+        const embeds = [
+          {
+            data: "/assets/qtiv3-examples/packaging/items/shared/orkney.html",
+            item: paths.orkney,
+            served: "text/html; charset=utf-8",
+            type: "text/html",
+          },
+          {
+            data: "/assets/qtiv3-examples/packaging/svg/rectangle.svg",
+            item: paths.svg,
+            served: "image/svg+xml",
+            type: "image/svg+xml",
+          },
+        ] as const;
+
+        for (const { data, item, served, type } of embeds) {
+          const page = yield* get(handle, itemTarget(item));
+          const object = find(page.html, (element) => element.tag === "object");
+          const policy = page.response.headers.get("content-security-policy") ?? "";
+          const directives = new Map(
+            policy.split(";").map((directive) => {
+              const [name = "", ...sources] = directive.trim().split(/\s+/u);
+
+              return [name, sources] as const;
+            }),
+          );
+
+          assert.strictEqual(page.response.status, 200, item);
+          assert.strictEqual(policy, pageHeaders["content-security-policy"], item);
+          assert.deepStrictEqual(directives.get("frame-src"), ["'self'"]);
+          assert.deepStrictEqual(directives.get("object-src"), ["'self'"]);
+          assert.deepStrictEqual(
+            [...directives].filter(([name]) => name.startsWith("script-src")),
+            [["script-src", ["'none'"]]],
+          );
+          assert.strictEqual(object.attrs["data"], data, item);
+          assert.strictEqual(object.attrs["type"], type, item);
+
+          const asset = yield* get(handle, new URL(data, page.url).pathname);
+
+          assert.strictEqual(asset.response.status, 200, data);
+          assert.strictEqual(asset.response.headers.get("content-type"), served, data);
+          for (const [name, value] of Object.entries(assetHeaders)) {
+            assert.strictEqual(asset.response.headers.get(name), value, `${data}: ${name}`);
+          }
+        }
+      }),
   );
 
   it.effect("a document title that holds <script> appears escaped", () =>
