@@ -3,11 +3,13 @@
  *
  * {@link emitBody} walks the payload's body. An HTML element renders as itself through `h`, with
  * three changes: `xml:lang` becomes `lang`; an authored `id`, and every reference to one, is scoped
- * by the item instance through {@link authoredId}; and a heading shifts so that `h1` sits at the
- * configured heading level. A `tr` the author placed directly in a `table` gains the `tbody` the
- * HTML parser would insert, so the tree survives a parse. Text becomes text, an interaction goes
- * to its render function, and each notice `check` handed in becomes the Notice part, a `span` at a
- * phrasing position and a `div` where the parent takes flow content.
+ * by the item instance through {@link authoredId}; and a heading shifts so that the item's
+ * shallowest heading sits at the configured heading level, every other heading keeping its distance
+ * from it and capped at `h6` ({@link headingOffsetOf}). A `tr` the author placed directly in a
+ * `table` gains the `tbody` the HTML parser would insert, so the tree survives a parse. Text
+ * becomes text, an interaction goes to its render function, and each notice `check` handed in
+ * becomes the Notice part, a `span` at a phrasing position and a `div` where the parent takes flow
+ * content.
  *
  * URL attributes are `url.ts`'s, and so is every decision about them: `check` has already dropped
  * each refused value, placed its notice, and written each kept value in its parsed form. The walk
@@ -379,7 +381,10 @@ const blank = /^[\t\n\f\r ]*$/u;
  */
 interface Walk {
   readonly assetBase: string;
-  readonly headingLevel: number;
+  /**
+   * The amount added to an authored heading's level, from {@link headingOffsetOf}.
+   */
+  readonly headingOffset: number;
   readonly instance: string;
   readonly locale: Locale;
   readonly parts: Resolved;
@@ -396,15 +401,15 @@ interface Walk {
 }
 
 /**
- * Give the tag an authored element renders as: a heading shifted so `h1` sits at the heading level,
- * every level rising by the same amount and capped at `h6`; any other tag unchanged.
+ * Give the tag an authored element renders as: a heading shifted by the offset and capped at `h6`;
+ * any other tag unchanged.
  *
  * @param tag The authored local name.
- * @param headingLevel The configured heading level, 1 to 6.
+ * @param headingOffset The amount added to a heading's level, from {@link headingOffsetOf}.
  * @returns The tag to emit.
  */
-const tagFor = (tag: string, headingLevel: number): string =>
-  headings.has(tag) ? `h${Math.min(6, Number(tag.slice(1)) + headingLevel - 1)}` : tag;
+const tagFor = (tag: string, headingOffset: number): string =>
+  headings.has(tag) ? `h${Math.min(6, Number(tag.slice(1)) + headingOffset)}` : tag;
 
 /**
  * Scope a kept same-document reference as the id it names, so `#q1` still finds the authored
@@ -644,7 +649,7 @@ const elementOf = (
 ): Result.Result<Element, PartSwapRefused> =>
   Result.map(nodesOf(element.children, below(walk, element.tag)), (children) =>
     h(
-      tagFor(element.tag, walk.headingLevel),
+      tagFor(element.tag, walk.headingOffset),
       attributesFor(element, declared, walk),
       element.tag === "table" ? withBodies(children) : children,
     ),
@@ -687,9 +692,76 @@ const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], P
 };
 
 /**
+ * Collect the levels of the headings the emitter writes among payload nodes, in document order: a
+ * heading the HTML subset keeps, below elements it keeps, and in an interaction's Prompt or choice
+ * content, which {@link emitNodes} writes with the same shift. A heading below an element outside
+ * {@link htmlSubset} is dropped with that element, so it is left out.
+ *
+ * @param nodes The payload nodes.
+ * @returns Each written heading's authored level, 1 to 6.
+ */
+const headingLevelsIn = (nodes: readonly PayloadNode[]): readonly number[] =>
+  nodes.flatMap((node): readonly number[] => {
+    switch (node.kind) {
+      case "element": {
+        if (!htmlSubset.has(node.tag)) {
+          return [];
+        }
+
+        const nested = headingLevelsIn(node.children);
+
+        return headings.has(node.tag) ? [Number(node.tag.slice(1)), ...nested] : nested;
+      }
+      case "choice": {
+        return headingLevelsIn([
+          ...Option.getOrElse(node.prompt, () => []),
+          ...node.choices.flatMap(({ content }) => content),
+        ]);
+      }
+      case "extended-text": {
+        return headingLevelsIn(Option.getOrElse(node.prompt, () => []));
+      }
+      case "notice":
+      case "text":
+      case "text-entry": {
+        return [];
+      }
+      default: {
+        // Only a payload that lost its type on the way here holds another kind.
+        node satisfies never;
+
+        return [];
+      }
+    }
+  });
+
+/**
+ * Give the amount every authored heading of an item shifts by: the item's shallowest written
+ * heading lands at the configured heading level, and every other heading keeps its distance from
+ * it, so an item that starts at `h2` or `h3` (a delivery page owns `h1`) still starts at the
+ * heading level. An item that starts at `h1` shifts as it always did, by the heading level less
+ * one; an item with no heading has none to shift.
+ *
+ * @param body The payload's body, which holds every heading the emitter writes for the item.
+ * @param headingLevel The configured heading level, 1 to 6.
+ * @returns The offset {@link tagFor} adds to an authored level.
+ */
+const headingOffsetOf = (body: readonly PayloadNode[], headingLevel: number): number => {
+  const levels = headingLevelsIn(body);
+  let shallowest = levels[0] ?? 1;
+
+  for (const level of levels) {
+    shallowest = Math.min(shallowest, level);
+  }
+
+  return headingLevel - shallowest;
+};
+
+/**
  * Start a walk over nodes that stand at a position.
  *
- * @param payload The payload, which gives the item instance key.
+ * @param payload The payload, which gives the item instance key and the body the heading offset is
+ *   read from.
  * @param state The emit state, which gives the locale, the heading level, the asset base and the
  *   part overrides.
  * @param renderInteraction The render function for an interaction among the nodes.
@@ -704,7 +776,7 @@ const walkOf = (
   position: Position,
 ): Walk => ({
   assetBase: state.assetBase,
-  headingLevel: state.headingLevel,
+  headingOffset: headingOffsetOf(payload.body, state.headingLevel),
   instance: payload.instance,
   locale: state.locale,
   parts: state.parts,
