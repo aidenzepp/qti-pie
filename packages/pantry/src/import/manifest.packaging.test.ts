@@ -13,6 +13,7 @@ import { FileMediaType, LomVocabularyValue, PackagePath } from "#pantry/schema/c
 import * as cpx from "#pantry/schema/kinds/cpx.ts";
 import * as drd from "#pantry/schema/kinds/drd.ts";
 import { Document } from "#pantry/schema/document.ts";
+import { ForeignElement } from "#pantry/schema/foreign.ts";
 import {
   CsmCaseItemUri,
   CsmGuid,
@@ -492,7 +493,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
 
   suite.effect("writes no QtiMetadata row for a qtiMetadata with no arm to land in", () =>
     Effect.gen(function* noArmRows() {
-      for (const name of ["nestedqmd-manifest-lom", "filelom-qmd"] as const) {
+      for (const name of ["nestedqmd-manifest-lom"] as const) {
         const rows = yield* rowsOf(yield* materialize(name));
         const parents = new Map(Rows.of(rows, Edge).map((edge) => [edge.child, edge.parentKind]));
         const stranded = Rows.of(rows, Node).filter(
@@ -514,9 +515,43 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/manifest.ts hol
     }),
   );
 
+  suite.effect(
+    "stores filelom-qmd's file-level qtiMetadata as foreign content (decision 105)",
+    () =>
+      Effect.gen(function* fileLevelQmdIsForeign() {
+        const rows = yield* rowsOf(yield* materialize("filelom-qmd"));
+        const foreign = Rows.of(rows, ForeignElement).filter((row) => row.local === "qtiMetadata");
+
+        assert.strictEqual(foreign.length, 1);
+        assert.strictEqual(
+          foreign[0]?.namespace,
+          "http://www.imsglobal.org/xsd/imsqti_metadata_v3p0",
+        );
+        assert.strictEqual(foreign[0]?.parentKind, "cp:metadata.file");
+        assert.strictEqual(
+          Rows.of(rows, Edge).filter(
+            (edge) => edge.childKind.startsWith("qmd:") && edge.parentKind === "cp:metadata.file",
+          ).length,
+          0,
+        );
+
+        const fileLevel = new Set(
+          Rows.of(rows, Edge)
+            .filter((edge) => edge.parentKind === "cp:metadata.file")
+            .map((edge) => edge.child),
+        );
+        const records = [
+          ...Rows.of(rows, QtiMetadata),
+          ...Rows.of(rows, QtiMetadataInMetadata),
+          ...Rows.of(rows, QtiMetadataInResourceLom),
+        ];
+        assert.isFalse(records.some((record) => fileLevel.has(record.id)));
+      }),
+  );
+
   suite.effect("writes every qmd leaf's arm row wherever its qtiMetadata sits", () =>
     Effect.gen(function* qmdLeafArms() {
-      for (const name of ["nestedqmd-manifest-lom", "filelom-qmd"] as const) {
+      for (const name of ["nestedqmd-manifest-lom"] as const) {
         const rows = yield* rowsOf(yield* materialize(name));
         const leaves = Rows.of(rows, Node).filter(
           (node) => node.kind.startsWith("qmd:") && node.kind !== "qmd:qtiMetadata",
