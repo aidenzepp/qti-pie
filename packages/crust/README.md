@@ -27,8 +27,8 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import { writeXml } from "@qti-pie/crust/write.ts";
 ```
 
-`readXml` takes bytes and returns an `XmlDocument`. `writeXml` takes an `XmlDocument` and returns bytes. Each lists
-its failures as tagged errors in `errors.ts`.
+`readXml` takes bytes and returns an `XmlDocument`. `writeXml` takes an `XmlDocument` and returns bytes. Each reports
+its failures as the tagged errors that `errors.ts` defines.
 
 Import only the files listed in the `"exports"` map of `package.json`. Any other path, such as
 `@qti-pie/crust/decode.ts`, fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`.
