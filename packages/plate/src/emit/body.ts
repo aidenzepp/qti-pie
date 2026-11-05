@@ -734,17 +734,28 @@ const headingLevelsIn = (nodes: readonly PayloadNode[]): readonly number[] =>
   });
 
 /**
- * Give the amount every authored heading of an item shifts by: the item's shallowest written
- * heading lands at the configured heading level, and every other heading keeps its distance from
- * it, so an item that starts at `h2` or `h3` (a delivery page owns `h1`) still starts at the
- * heading level. An item that starts at `h1` shifts as it always did, by the heading level less
- * one; an item with no heading has none to shift.
+ * The level of each payload body's shallowest written heading, kept from the first walk over the
+ * body for every later one. One render starts a walk for the body and one for each Prompt and each
+ * choice's content, and each reads this level; reading the whole body again for each of them made
+ * a render's time grow with the square of its choices and Prompts. Keyed weakly, so an entry goes
+ * with its body.
+ */
+const shallowestLevels = new WeakMap<readonly PayloadNode[], number>();
+
+/**
+ * Give the level of a body's shallowest written heading, 1 when it writes none: read from the
+ * body on the first call for it, and from {@link shallowestLevels} after.
  *
  * @param body The payload's body, which holds every heading the emitter writes for the item.
- * @param headingLevel The configured heading level, 1 to 6.
- * @returns The offset {@link tagFor} adds to an authored level.
+ * @returns The least level {@link headingLevelsIn} gives for the body, or 1 when it gives none.
  */
-const headingOffsetOf = (body: readonly PayloadNode[], headingLevel: number): number => {
+const shallowestLevelOf = (body: readonly PayloadNode[]): number => {
+  const known = shallowestLevels.get(body);
+
+  if (known !== undefined) {
+    return known;
+  }
+
   const levels = headingLevelsIn(body);
   let shallowest = levels[0] ?? 1;
 
@@ -752,8 +763,25 @@ const headingOffsetOf = (body: readonly PayloadNode[], headingLevel: number): nu
     shallowest = Math.min(shallowest, level);
   }
 
-  return headingLevel - shallowest;
+  shallowestLevels.set(body, shallowest);
+
+  return shallowest;
 };
+
+/**
+ * Give the amount every authored heading of an item shifts by: the item's shallowest written
+ * heading lands at the configured heading level, and every other heading keeps its distance from
+ * it, so an item that starts at `h2` or `h3` (a delivery page owns `h1`) still starts at the
+ * heading level. An item that starts at `h1` shifts as it always did, by the heading level less
+ * one; an item with no heading has none to shift. The body is read once, however many walks of
+ * one render ask ({@link shallowestLevelOf}).
+ *
+ * @param body The payload's body, which holds every heading the emitter writes for the item.
+ * @param headingLevel The configured heading level, 1 to 6.
+ * @returns The offset {@link tagFor} adds to an authored level.
+ */
+const headingOffsetOf = (body: readonly PayloadNode[], headingLevel: number): number =>
+  headingLevel - shallowestLevelOf(body);
 
 /**
  * Start a walk over nodes that stand at a position.
