@@ -413,6 +413,33 @@ describe("renderExtendedText", () => {
   );
 
   it.effect(
+    "[Q-5] with no Prompt, writes no aria-label for an authored one that is empty or blank, and names the Control the renderer's way",
+    () =>
+      Effect.gen(function* blankAriaLabel() {
+        for (const label of ["", "   "]) {
+          const two = payloadOf([
+            { ...bare, ariaLabel: Option.some(label) },
+            { ...bare, response: "NOTES" },
+          ]);
+          const tree = page([yield* render(two, 0), yield* render(two, 1)], two);
+          const answers = ["1", "2"].map((n) => message("en", "answerOf", { count: "2", n }));
+
+          assert.deepStrictEqual(
+            partsIn(tree, "control").map((control) => control.attrs["aria-label"]),
+            answers,
+            JSON.stringify(label),
+          );
+          assert.deepStrictEqual(
+            partsIn(tree, "control").map((control) => nameOf(control, tree)),
+            answers,
+            JSON.stringify(label),
+          );
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], JSON.stringify(label));
+        }
+      }),
+  );
+
+  it.effect(
     "[Q-5] puts the author's class, data-mode and, for preformatted, data-format on the Root, and data-disabled only when finished",
     () =>
       Effect.gen(function* rootState() {
@@ -962,6 +989,34 @@ describe("an Extended Text bound to a container", () => {
         );
         assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
         assert.isTrue(roundTrips(tree));
+      }),
+  );
+
+  it.effect(
+    "[Q-20] [Q-5] numbers a group whose authored aria-label is empty or blank as an unnamed one, and writes no aria-label on its Root",
+    () =>
+      Effect.gen(function* blankGroupLabel() {
+        for (const label of ["", "   "]) {
+          const built = payload(
+            redactItem(
+              besideCity({ ...rivers, ariaLabel: Option.some(label), prompt: Option.none() }),
+            ),
+            answering,
+          );
+          const tree = yield* pageOf(built);
+          const inputs = elementsIn(tree).filter((element) => element.tag === "input");
+          const root = onePart(tree, "root");
+
+          assert.strictEqual(root.attrs["role"], "group");
+          assert.isUndefined(root.attrs["aria-label"], JSON.stringify(label));
+          assert.deepStrictEqual(
+            [...inputs, ...partsIn(tree, "control")].map((control) => nameOf(control, tree)),
+            answersOf(4),
+            JSON.stringify(label),
+          );
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], JSON.stringify(label));
+          assert.isTrue(roundTrips(tree), JSON.stringify(label));
+        }
       }),
   );
 

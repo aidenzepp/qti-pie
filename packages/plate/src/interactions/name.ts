@@ -6,7 +6,8 @@
  * `aria-labelledby` here, so every interaction scopes the author's ids the same way.
  *
  * The renderer names a control only when the author gave it no name, by Q10's rule: each Control
- * of a text control with no Prompt and no `aria-label` or `aria-labelledby` is "Answer", or
+ * of a text control with no Prompt and no `aria-label` or `aria-labelledby` (a blank `aria-label`
+ * and an `aria-labelledby` that names no id each counting as none) is "Answer", or
  * "Answer n of count", `n` its position among every Control the renderer names in the item and
  * `count` their number ({@link textControlName}); a Choice whose content gives no text is "Choice n
  * of count", `n` its position among the Choices as emitted and `count` their number
@@ -21,6 +22,7 @@ import type { Attributes } from "#plate/emit/node.ts";
 import { authoredIdrefs } from "#plate/emit/parts.ts";
 import { message, numeral } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
+import { trimXmlSpace } from "#plate/model/values.ts";
 import type { AttributePayload, PayloadNode, TextName } from "#plate/payload.ts";
 
 /**
@@ -86,6 +88,19 @@ export const givesText = (nodes: readonly PayloadNode[]): boolean =>
   });
 
 /**
+ * Give the author's `aria-label`, none when the author wrote none or wrote one that is blank:
+ * empty, or only XML whitespace. The accessible-name computation skips a blank `aria-label`
+ * (accname 1.2, step 2D), so a Control that carried one would have no name at all; it is no name,
+ * and is not written. A label that is not blank is given as written.
+ *
+ * @param names The author's names.
+ * @returns The `aria-label` as written, or none.
+ * @see https://www.w3.org/TR/accname-1.2/#comp_label
+ */
+export const authorsLabel = (names: Pick<TextName, "ariaLabel">): Option.Option<string> =>
+  names.ariaLabel.pipe(Option.filter((label) => trimXmlSpace(label) !== ""));
+
+/**
  * Give the author's `aria-labelledby` with each id scoped by the instance through
  * `authoredIdrefs`, none when the author wrote none or wrote one that names no id.
  *
@@ -101,8 +116,9 @@ const authorsLabelledby = (
 
 /**
  * Give the names the author wrote: `aria-label` as written, and `aria-labelledby` with each id
- * scoped by the instance through `authoredIdrefs`, joined by one space. An `aria-labelledby` that
- * names no id is no name, and is not written.
+ * scoped by the instance through `authoredIdrefs`, joined by one space. A blank `aria-label`
+ * ({@link authorsLabel}) and an `aria-labelledby` that names no id are no names, and are not
+ * written.
  *
  * @param names The author's `aria-label` and `aria-labelledby`, the ids unscoped.
  * @param instance The item instance key, which scopes the author's ids.
@@ -112,7 +128,7 @@ export const authorsName = (
   names: Pick<TextName, "ariaLabel" | "ariaLabelledby">,
   instance: string,
 ): Attributes => ({
-  ...Option.match(names.ariaLabel, {
+  ...Option.match(authorsLabel(names), {
     onNone: () => ({}),
     onSome: (label) => ({ "aria-label": label }),
   }),
@@ -126,9 +142,9 @@ export const authorsName = (
  * Name a Control of a text control that no Prompt names (§4.8, Q10).
  *
  * The author's `aria-label` and `aria-labelledby` win ({@link authorsName}). A control with
- * neither, an `aria-labelledby` that names no id counting as none, is named by the renderer:
- * "Answer", or "Answer n of count" when the item holds more than one Control the renderer names,
- * `n` the Control's position among them ({@link TextName}).
+ * neither, a blank `aria-label` and an `aria-labelledby` that names no id each counting as none, is
+ * named by the renderer: "Answer", or "Answer n of count" when the item holds more than one Control
+ * the renderer names, `n` the Control's position among them ({@link TextName}).
  *
  * @param name How the control is named, from the payload.
  * @param instance The item instance key, which scopes the author's ids.
@@ -142,7 +158,7 @@ export const textControlName = (
   locale: Locale,
   index = 0,
 ): Attributes => {
-  if (Option.isSome(name.ariaLabel) || Option.isSome(authorsLabelledby(name, instance))) {
+  if (Option.isSome(authorsLabel(name)) || Option.isSome(authorsLabelledby(name, instance))) {
     return authorsName(name, instance);
   }
 

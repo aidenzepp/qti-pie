@@ -20,6 +20,7 @@ import { scopedId, splitTokens } from "#plate/emit/parts.ts";
 import type { Resolved } from "#plate/emit/parts.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { entryName } from "#plate/form/encoding.ts";
+import { authorsLabel } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type {
@@ -214,13 +215,13 @@ export interface UnnamedPosition {
 /**
  * How a text control is named (§4.8, Q10).
  *
- * `ariaLabel` and `ariaLabelledby` are the author's, the ids unscoped. `unnamed` is set exactly
- * when the renderer names the control's Controls: it has neither of them nor a Prompt, an
- * `ariaLabelledby` that names no id counting as none, and it renders at least one Control. Every
- * Control the renderer names counts once, in document order across the item, which is the order
- * the Controls are emitted in: a Text Entry's one Control and each Control of an Extended Text. `n`
- * is the position of the control's first Control, an Extended Text's others following at `n + 1`
- * onwards, and `count` is how many there are.
+ * `ariaLabel` and `ariaLabelledby` are the author's, as written, the ids unscoped. `unnamed` is set
+ * exactly when the renderer names the control's Controls: it has neither of them nor a Prompt, a
+ * blank `ariaLabel` and an `ariaLabelledby` that names no id each counting as none, and it renders
+ * at least one Control. Every Control the renderer names counts once, in document order across the
+ * item, which is the order the Controls are emitted in: a Text Entry's one Control and each Control
+ * of an Extended Text. `n` is the position of the control's first Control, an Extended Text's
+ * others following at `n + 1` onwards, and `count` is how many there are.
  */
 export interface TextName {
   readonly ariaLabel: Option.Option<string>;
@@ -422,15 +423,16 @@ interface Build {
 }
 
 /**
- * Report whether an interaction is a text control with no authored name and no Prompt (Q10). An
- * `aria-labelledby` that names no id is no authored name.
+ * Report whether an interaction is a text control with no authored name and no Prompt (Q10). A
+ * blank `aria-label` ({@link authorsLabel}) and an `aria-labelledby` that names no id are no
+ * authored names.
  *
  * @param interaction The interaction.
  * @returns Whether the renderer must name it.
  */
 const isUnnamed = (interaction: Interaction): boolean =>
   interaction.kind !== "choice" &&
-  Option.isNone(interaction.ariaLabel) &&
+  Option.isNone(authorsLabel(interaction)) &&
   !Option.exists(interaction.ariaLabelledby, (ids) => splitTokens(ids).length > 0) &&
   (interaction.kind === "text-entry" || Option.isNone(interaction.prompt));
 
