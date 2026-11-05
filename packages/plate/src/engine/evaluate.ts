@@ -25,7 +25,7 @@ import type {
   ResponseDeclaration,
   Rule,
 } from "#plate/model/item.ts";
-import { isNull, match, nullOf } from "#plate/model/values.ts";
+import { format, isNull, match, nullOf } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
 /**
@@ -262,6 +262,67 @@ const equal = (left: Single, right: Single): boolean =>
   );
 
 /**
+ * Give the key {@link distinct} tells a value apart by: its base type and its value as `format`
+ * writes it, so two values share a key exactly when {@link equal} finds them equal, however each
+ * was written (`+5` and `05` are one integer, `1.0` and `1e0` one float).
+ *
+ * Where `equal` and `format` part, the key follows `equal`: a `pair`'s identifiers are written in
+ * code-unit order, as `equal` matches a pair in either order, and a float's `-0` is written as `0`,
+ * as `equal` compares floats with `===`. That `===` makes a NaN equal to no value, itself included,
+ * so a NaN has no key. A base type holds no space, and neither does an identifier or a coordinate,
+ * so one space between the parts keeps two keys apart.
+ *
+ * @param single The value.
+ * @returns Its key; none for a NaN.
+ */
+const distinctKey = (single: Single): Option.Option<string> => {
+  if (single.baseType === "float") {
+    const value = Object.is(single.value, -0) ? 0 : single.value;
+
+    return Number.isNaN(value)
+      ? Option.none()
+      : Option.some(`float ${format({ baseType: "float", value })}`);
+  }
+
+  if (single.baseType === "pair") {
+    const [first, second] = single.value;
+    const value: readonly [string, string] = first <= second ? [first, second] : [second, first];
+
+    return Option.some(`pair ${format({ baseType: "pair", value })}`);
+  }
+
+  return Option.some(`${single.baseType} ${format(single)}`);
+};
+
+/**
+ * Drop a response's repeated values: each value is kept at its first occurrence, in order, and a
+ * later value {@link equal} finds equal to it is dropped.
+ *
+ * A `Set` of each value's {@link distinctKey} finds the repeats, so the time is linear in the
+ * number of values: a candidate's post of many members costs what its length costs, where comparing
+ * every pair would cost its square. A NaN has no key and is always kept, as `equal` finds it equal
+ * to nothing.
+ *
+ * @param values The response's values.
+ * @returns The values no earlier value equals, in order.
+ */
+const distinct = (values: readonly Single[]): readonly Single[] => {
+  const seen = new Set<string>();
+  const kept: Single[] = [];
+  for (const single of values) {
+    const key = distinctKey(single);
+    if (Option.isNone(key)) {
+      kept.push(single);
+    } else if (!seen.has(key.value)) {
+      seen.add(key.value);
+      kept.push(single);
+    }
+  }
+
+  return kept;
+};
+
+/**
  * Fold a string's case for a case-insensitive map entry: upper case then lower case, by Unicode's
  * default mappings and independent of locale, so `YORK` and `york`, or `SS` and `ß`, compare
  * equal.
@@ -316,8 +377,9 @@ const mappedValue = (mapping: Mapping, single: Single): number =>
 /**
  * Give the value of a `qti-map-response`: a single float.
  *
- * A value is the sum of the mapped values of the response's distinct values, so a `single` value
- * maps to its one value's, `{B,B,C}` counts `B` once, and a NULL response maps to 0. The mapping's
+ * A value is the sum of the mapped values of the response's distinct values, as {@link distinct}
+ * finds them in time linear in their number, keyed by {@link distinctKey}: so a `single` value maps
+ * to its one value's, `{B,B,C}` counts `B` once, and a NULL response maps to 0. The mapping's
  * `lower-bound` and `upper-bound` then clamp the sum, a single value's and a NULL's included
  * (reading 9.13).
  *
@@ -346,7 +408,7 @@ const mapResponse = (
       () => new UnknownIdentifierError({ holder: "record", identifier, role: "response" }),
     );
     let sum = 0;
-    for (const single of Arr.dedupeWith(response.values, equal)) {
+    for (const single of distinct(response.values)) {
       sum += mappedValue(mapping, single);
     }
 
@@ -507,7 +569,8 @@ const firstArea = (mapping: AreaMapping, x: number, y: number): number =>
  * - Areas are tried in document order and the first that holds a point maps it; each area is mapped
  *   at most once.
  * - Each distinct point that falls in no area adds `default-value` once, as `map_response` treats an
- *   unmapped value.
+ *   unmapped value. Points are told apart as {@link distinct} tells values apart, by their two
+ *   exact coordinates, in time linear in their number.
  *
  * A coordinate is compared after the one conversion, {@link toFloat}.
  *
@@ -519,7 +582,7 @@ const firstArea = (mapping: AreaMapping, x: number, y: number): number =>
 const areaSum = (mapping: AreaMapping, points: readonly Single[]): number => {
   const mapped = new Set<number>();
   let sum = 0;
-  for (const single of Arr.dedupeWith(points, equal)) {
+  for (const single of distinct(points)) {
     const area =
       single.baseType === "point"
         ? firstArea(mapping, toFloat(single.value[0]), toFloat(single.value[1]))
