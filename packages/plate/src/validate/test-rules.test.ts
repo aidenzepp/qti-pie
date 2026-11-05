@@ -80,16 +80,14 @@ const itemRef = (
   el("qti-assessment-item-ref", [attr("href", href), attr("identifier", identifier)], children);
 
 /**
- * Construct a section ref.
+ * Construct a section ref whose `href` is `sections/<identifier>.xml` unless another is given.
  *
  * @param identifier Its `identifier`.
- * @returns The `qti-assessment-section-ref`, pointing at `sections/<identifier>.xml`.
+ * @param href Its `href`.
+ * @returns The `qti-assessment-section-ref`.
  */
-const sectionRef = (identifier: string): SourceElement =>
-  el("qti-assessment-section-ref", [
-    attr("href", `sections/${identifier}.xml`),
-    attr("identifier", identifier),
-  ]);
+const sectionRef = (identifier: string, href = `sections/${identifier}.xml`): SourceElement =>
+  el("qti-assessment-section-ref", [attr("href", href), attr("identifier", identifier)]);
 
 /**
  * Construct a test of one part `P` holding one section `S`, the shape most cases need.
@@ -353,6 +351,23 @@ describe("checkTestRules", () => {
             rule: "duplicate-identifier",
           },
         ],
+      );
+    });
+
+    it("refuses a section ref repeating an item ref's identifier", () => {
+      assert.deepStrictEqual(judged(oneSection([itemRef("I1"), sectionRef("I1")])), [
+        {
+          detail: { identifier: "I1" },
+          path: `${sectionPath}/qti-assessment-section-ref/@identifier`,
+          rule: "duplicate-identifier",
+        },
+      ]);
+    });
+
+    it("accepts two section refs pointing at one section under distinct identifiers", () => {
+      assert.deepStrictEqual(
+        judged(oneSection([sectionRef("R1"), sectionRef("R2", "sections/R1.xml"), itemRef("I1")])),
+        [],
       );
     });
 

@@ -39,12 +39,15 @@ const testRoots: ReadonlySet<string> = new Set(["qti-assessment-section", "qti-a
 /**
  * The elements whose identifiers share one scope, the test: "The identifier of the test part must
  * be unique within the test and must not be the identifier of any qti-assessment-section or
- * qti-assessment-item-ref" (info.txt:47082), and "the identifier of the section or item reference
- * must be unique within the test" (info.txt:10759).
+ * qti-assessment-item-ref" (info.txt:47082), "the identifier of the section or item reference must
+ * be unique within the test" (info.txt:10759), and of section refs "each reference must have a
+ * unique identifier" (info.txt:67406). A branch rule's `target` may name any of the four, so they
+ * share one scope.
  */
 const identifiedParts: ReadonlySet<string> = new Set([
   "qti-assessment-item-ref",
   "qti-assessment-section",
+  "qti-assessment-section-ref",
   "qti-test-part",
 ]);
 
@@ -219,8 +222,8 @@ const holdsUnexpanded = (element: SourceElement): boolean =>
   element.children.some((child) => child.kind === "entity");
 
 /**
- * Apply `duplicate-identifier` to one element: a part's, a section's or an item ref's
- * `identifier` is not one an earlier part, section or item ref of the document already gave.
+ * Apply `duplicate-identifier` to one element: a part's, a section's, an item ref's or a section
+ * ref's `identifier` is not one an earlier such element of the document already gave.
  *
  * Identifiers are compared as their `xs:NCName` type reads them, with the outer whitespace
  * collapsed, as the item rules compare theirs. A section document's identifiers are compared
@@ -398,10 +401,10 @@ const expressionPlacement = (
 
 /**
  * Check a test or section document against the test prose rules: `duplicate-identifier` over its
- * parts, sections and item refs, reading 26's `child-count` on each section, readings 24 and 25's
- * `misplaced-element` for an interaction or a template element in a rubric block or test feedback,
- * and reading 23's `expression-placement` for an outcome-only expression, or a weighted
- * `qti-variable`, outside outcome processing.
+ * parts, sections, item refs and section refs, reading 26's `child-count` on each section, readings
+ * 24 and 25's `misplaced-element` for an interaction or a template element in a rubric block or
+ * test feedback, and reading 23's `expression-placement` for an outcome-only expression, or a
+ * weighted `qti-variable`, outside outcome processing.
  *
  * The rules judge exactly what the structural walk checks, and only a document they can read
  * whole:
