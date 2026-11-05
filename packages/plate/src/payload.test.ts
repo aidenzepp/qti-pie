@@ -890,6 +890,42 @@ describe("payload", () => {
     assert.deepStrictEqual(textFor(built, "NAMED").name.unnamed, Option.some({ count: 3, n: 3 }));
   });
 
+  it("[Q-20] counts a text control whose aria-label is empty or blank as one with no authored name", () => {
+    for (const label of ["", "   ", " \t\n\r "]) {
+      const blank: Item = {
+        ...item,
+        body: item.body.map((node) =>
+          node.kind === "element"
+            ? {
+                ...node,
+                children: node.children.map((child) =>
+                  child.kind === "text-entry" && child.response === "NAMED"
+                    ? { ...child, ariaLabel: Option.some(label) }
+                    : child,
+                ),
+              }
+            : node,
+        ),
+      };
+      const built = payload(redactItem(blank), answering);
+
+      assert.deepStrictEqual(
+        textFor(built, "FIRST").name.unnamed,
+        Option.some({ count: 3, n: 1 }),
+        JSON.stringify(label),
+      );
+      assert.deepStrictEqual(
+        textFor(built, "NAMED").name,
+        {
+          ariaLabel: Option.some(label),
+          ariaLabelledby: Option.none(),
+          unnamed: Option.some({ count: 3, n: 3 }),
+        },
+        JSON.stringify(label),
+      );
+    }
+  });
+
   it("[Q-20] [Q-5] numbers each Control of an unnamed Extended Text group in one sequence with the unnamed Text Entries", () => {
     const built = payload(unpromptedOf(Option.some(3n), 0n), answering);
 

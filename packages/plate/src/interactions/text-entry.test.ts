@@ -422,6 +422,34 @@ describe("renderTextEntry", () => {
   );
 
   it.effect(
+    "[Q-20] writes no aria-label for an authored one that is empty or blank, and names the Control the renderer's way",
+    () =>
+      Effect.gen(function* blankAriaLabel() {
+        for (const label of ["", "   "]) {
+          const tree = yield* page(payloadOf([{ ...city, ariaLabel: Option.some(label) }, second]));
+
+          assert.deepStrictEqual(
+            partsIn(tree, "control").map((control) => control.attrs["aria-label"]),
+            [
+              message("en", "answerOf", { count: "2", n: "1" }),
+              message("en", "answerOf", { count: "2", n: "2" }),
+            ],
+            JSON.stringify(label),
+          );
+          assert.deepStrictEqual(
+            partsIn(tree, "control").map((control) => nameOf(control, tree)),
+            [
+              message("en", "answerOf", { count: "2", n: "1" }),
+              message("en", "answerOf", { count: "2", n: "2" }),
+            ],
+            JSON.stringify(label),
+          );
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], JSON.stringify(label));
+        }
+      }),
+  );
+
+  it.effect(
     "[Q-20] [keyboard] a keyboard walk (Tab, type York, Enter) posts York under the Control's name",
     () =>
       Effect.gen(function* typeAndSubmit() {

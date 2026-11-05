@@ -448,6 +448,29 @@ describe("renderChoice", () => {
   );
 
   it.effect(
+    "[Q-2] writes no aria-label for an authored one that is empty or blank, and leaves the group unnamed as with none",
+    () =>
+      Effect.gen(function* blankAriaLabel() {
+        for (const label of ["", "   "]) {
+          const built = payloadOf({
+            ...colours,
+            ariaLabel: Option.some(label),
+            prompt: Option.none(),
+          });
+          const root = yield* render(built);
+
+          assert.isUndefined(root.attrs["aria-label"], JSON.stringify(label));
+          assert.isUndefined(root.attrs["aria-labelledby"], JSON.stringify(label));
+          assert.deepStrictEqual(
+            checkTree(page(root, built), { baseLevel: 2 }),
+            [],
+            JSON.stringify(label),
+          );
+        }
+      }),
+  );
+
+  it.effect(
     "[Q-2] names a Choice by its Prompt, not the author's attributes, when it has one",
     () =>
       Effect.gen(function* promptWins() {
