@@ -17,12 +17,13 @@ is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (public, MIT-licens
   `vendor/README.md`.
 - Git LFS holds every `packages/*/migrations/**/snapshot.json` (`.gitattributes`). Install `git-lfs` before cloning;
   without it the snapshot checks out as a pointer file and grizzle refuses it.
-- Vite+ (`vp`) formats, lints and runs tests. TypeScript `7.0.2` typechecks under the strict settings in `tsconfig.json`.
+- Vite+ (`vp`) formats, lints and runs tests. tsrs `0.21.0-ts7.1.0-beta`, the Rust port of TypeScript 7, typechecks
+  under the strict settings in `tsconfig.json`.
 
 Run before completing implementation:
 
 ```sh
-pnpm check   # vp fmt --check, vp lint --type-aware, tsc --noEmit (root, then packages/plate/src/tsconfig.json)
+pnpm check   # vp fmt --check, vp lint --type-aware, tsrs --noEmit (root, then packages/plate/src/tsconfig.json)
 pnpm test    # each package's tests, one package at a time
 ```
 
@@ -134,7 +135,7 @@ TypeScript source (no build step), consumers depend with `"workspace:*"`, and it
 for committed snapshots), never relative paths. pantry's `"exports"` is `{}`: it exports nothing, so nothing depends on it. Nothing outside a package reaches a file its `"exports"` map does not
 list. The checks that enforce it:
 
-- The resolver (`tsc` in `pnpm check`, and Node at run time) refuses a subpath an `"exports"` map does not list, and
+- The resolver (`tsrs` in `pnpm check`, and Node at run time) refuses a subpath an `"exports"` map does not list, and
   another package's alias.
 - pnpm refuses an undeclared workspace dependency.
 - Lint refuses relative, absolute and `file:` specifiers, and crust importing itself by name.

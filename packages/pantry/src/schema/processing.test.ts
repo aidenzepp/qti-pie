@@ -460,7 +460,7 @@ describe("processing", () => {
     }
 
     const source = readFileSync(new URL("seed/operator-arity.ts", import.meta.url), "utf-8");
-    assert.match(source, /python3 -I/u);
+    assert.match(source, /node src\/vocab\/derive\/derive\.ts arity/u);
     assert.match(source, /qti-repeat\s+min=1 max=\*/u);
     assert.match(source, /qti-base-value\s+min=0 max=0/u);
     assert.match(source, /qti-sum\s+min=1 max=\*/u);

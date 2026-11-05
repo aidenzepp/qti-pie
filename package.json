@@ -7,14 +7,14 @@
     "check": "pnpm run format && pnpm run lint && pnpm run typecheck",
     "format": "vp fmt --check",
     "lint": "vp lint --type-aware",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p packages/plate/src/tsconfig.json",
+    "typecheck": "tsrs --noEmit && tsrs --noEmit -p packages/plate/src/tsconfig.json",
     "fix": "vp fmt && vp lint --fix",
     "test": "pnpm -r --workspace-concurrency=1 run test"
   },
   "devDependencies": {
     "@stylistic/eslint-plugin": "5.10.0",
     "@types/node": "26.6.4",
-    "typescript": "7.0.2",
+    "tsrs": "0.21.0-ts7.1.0-beta",
     "ultracite": "7.12.0",
     "vite": "npm:@voidzero-dev/vite-plus-core@1.0.0",
     "vite-plus": "1.0.0"

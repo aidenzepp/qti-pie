@@ -1,44 +1,19 @@
 /**
  * The HTML content sets and the QTI elements each host adds to them.
  *
- * Each set is a tuple of HTML element names, derived from the ASI 3.0.1 XSD by walking a host
+ * Each set is a tuple of HTML element names, derived from the ASI 3.0.1 XSD by reading a host
  * type's content model to its element references and keeping the names with no `qti-` prefix and
  * no namespace prefix. `HFLOW` is what `BaseHTML5FlowDType` admits, `HINL` what `HTMLTextDType`
- * admits, `PHR` what `BaseHTML5PhrasingDType` admits, and `HBLOCK` is `HFLOW` without `HINL`.
- * Run from `~/.cache/gr8des/qti3/xsd` as `python3 -I derive.py`:
+ * admits, `PHR` what `BaseHTML5PhrasingDType` admits, and `HBLOCK` is `HFLOW` without `HINL`. The
+ * derivation is the vocabulary deriver's `sets` target, run from `packages/pantry` as
+ * `node src/vocab/derive/derive.ts sets`; it prints `HFLOW BaseHTML5FlowDType 54`,
+ * `HINL HTMLTextDType 28`, `HBLOCK HFLOW - HINL 26` and `PHR BaseHTML5PhrasingDType 27`, each
+ * followed by its names in code-point order, and `derive.test.ts` checks that the four tuples below
+ * equal them.
  *
- * ```python
- * import xml.etree.ElementTree as E, os
- * XS="{http://www.w3.org/2001/XMLSchema}"
- * root=E.parse(os.path.expanduser("~/.cache/gr8des/qti3/xsd/imsqti_asiv3p0p1_v1p0.xsd")).getroot()
- * types={t.get("name"):t for t in root.iter(XS+"complexType")}
- * groups={g.get("name"):g for g in root.iter(XS+"group") if g.get("name")}
- * def walk(n,out):
- *     for c in n:
- *         if c.tag==XS+"element":
- *             nm=c.get("name") or c.get("ref")
- *             if nm: out.append(nm)
- *         elif c.tag==XS+"group" and c.get("ref"):
- *             walk(groups[c.get("ref").split(":")[-1]],out)
- *         elif c.tag in (XS+"sequence",XS+"choice",XS+"all",XS+"complexContent",XS+"extension",XS+"restriction"):
- *             walk(c,out)
- * def kids(t):
- *     out=[];walk(types[t],out);return out
- * def html(t):
- *     seen=[]
- *     for n in kids(t):
- *         if not n.startswith("qti-") and ":" not in n and n not in seen: seen.append(n)
- *     return seen
- * for name,t in (("HFLOW","BaseHTML5FlowDType"),("HINL","HTMLTextDType"),("HBLOCK","ItemBodyDType"),("PHR","BaseHTML5PhrasingDType")):
- *     s=html(t); print(name,t,len(s)); print(" ".join(sorted(s)))
- * fl, il = html("BaseHTML5FlowDType"), html("HTMLTextDType")
- * print("HBLOCK", len([n for n in fl if n not in il]))
- * ```
- *
- * It prints `HFLOW BaseHTML5FlowDType 54`, `HINL HTMLTextDType 28`, `HBLOCK 26` and
- * `PHR BaseHTML5PhrasingDType 27`. `ItemBodyDType`, `StimulusBodyDType` and
- * `HotTextInteractionDType` list only 25 HTML names: they omit `details`, which `HBLOCK` keeps as
- * the research's `HFLOW - HINL` (`docs/research/864e756f.md` section 3.3) defines it.
+ * `ItemBodyDType`, `StimulusBodyDType` and `HotTextInteractionDType` list only 25 HTML names
+ * (`derive.test.ts` checks this too): they omit `details`, which `HBLOCK` keeps as the research's
+ * `HFLOW - HINL` (`docs/research/864e756f.md` section 3.3) defines it.
  *
  * `hostAdditions` is the QTI half of the host matrix (`864e756f.md` section 3.4): per host
  * handle, the QTI elements its content model admits beyond the HTML set, checked against the

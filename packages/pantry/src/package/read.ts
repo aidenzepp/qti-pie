@@ -2,7 +2,7 @@
 import { Effect, FileSystem, Schema } from "effect";
 import type { PlatformError } from "effect";
 import { readZip } from "#pantry/package/zip.ts";
-import type { ZipRefusal } from "#pantry/package/zip.ts";
+import type { ZipEntry, ZipRefusal } from "#pantry/package/zip.ts";
 
 /**
  * The file name that marks a directory as a QTI package, looked for at the directory's root only.
@@ -10,8 +10,9 @@ import type { ZipRefusal } from "#pantry/package/zip.ts";
 const MANIFEST = "imsmanifest.xml";
 
 /**
- * How many entries `listPackage` inspects at once; a package is read from a local disk, so a small
- * bound keeps the listing quick without opening an unbounded number of requests.
+ * How many entries `listPackage` inspects, and `readPackage` reads, at once; a package is read
+ * from a local disk, so a small bound keeps the read quick without opening an unbounded number of
+ * requests.
  */
 const INSPECT_CONCURRENCY = 16;
 
@@ -49,6 +50,21 @@ export interface Entry {
 }
 
 /**
+ * One entry of a package with its bytes, untouched, as {@link readPackage} reads it.
+ */
+export interface PackageFile extends Entry {
+  readonly bytes: Uint8Array;
+}
+
+/**
+ * Name an entry's role from its path.
+ *
+ * @param path - The entry's path relative to the package root.
+ * @returns `manifest` for the root `imsmanifest.xml`, `file` for any other path.
+ */
+const kindOf = (path: string): Entry["kind"] => (path === MANIFEST ? "manifest" : "file");
+
+/**
  * Whether a path is a package zip: a regular file whose name ends `.zip`.
  *
  * @param path - The package path, a directory or a zip file.
@@ -65,6 +81,101 @@ const isZipFile = Effect.fn("package.isZipFile")(function* isZipFile(
   const info = yield* fs.stat(path);
 
   return info.type === "File";
+});
+
+/**
+ * Read a package zip whole, with `readZip`'s `manifest-root` refusal as a {@link PackageReadError}.
+ *
+ * @param dir - The `.zip` file.
+ * @returns Its files with their bytes, sorted by path, or a {@link PackageReadError} with rule
+ *   `manifest-root`. Any other {@link ZipRefusal} flows out as itself.
+ */
+const readZipPackage = Effect.fn("package.readZipPackage")(function* readZipPackage(
+  dir: string,
+): Effect.fn.Return<
+  readonly ZipEntry[],
+  PackageReadError | ZipRefusal | PlatformError.PlatformError,
+  FileSystem.FileSystem
+> {
+  return yield* readZip(dir).pipe(
+    Effect.catchIf(
+      (refusal) => refusal._tag === "ZipRefusal" && refusal.rule === "manifest-root",
+      () => new PackageReadError({ dir, path: MANIFEST, rule: "manifest-root" }),
+    ),
+  );
+});
+
+/**
+ * List the regular files under a package directory, sorted by UTF-16 code unit.
+ *
+ * Node's recursive `readdir` descends through a symbolic link to a directory, so a path listed here
+ * can lead outside the package; {@link readDirectoryEntry} refuses such a path when it is read.
+ *
+ * @param dir - The package directory.
+ * @returns The paths relative to `dir`, `/`-separated, or a {@link PackageReadError} with rule
+ *   `manifest-root` when `dir` has no `imsmanifest.xml` at its root.
+ */
+const listDirectory = Effect.fn("package.listDirectory")(function* listDirectory(
+  dir: string,
+): Effect.fn.Return<
+  readonly string[],
+  PackageReadError | PlatformError.PlatformError,
+  FileSystem.FileSystem
+> {
+  const fs = yield* FileSystem.FileSystem;
+  const names = yield* fs.readDirectory(dir, { recursive: true });
+  const files = yield* Effect.filter(
+    names,
+    (name) => Effect.map(fs.lstat(`${dir}/${name}`), (info) => info.type === "File"),
+    { concurrency: INSPECT_CONCURRENCY },
+  );
+
+  if (!files.includes(MANIFEST)) {
+    return yield* new PackageReadError({ dir, path: MANIFEST, rule: "manifest-root" });
+  }
+
+  return files.toSorted();
+});
+
+/**
+ * Read one file of a package directory, refusing a path that is not an entry of it.
+ *
+ * @param dir - The package directory.
+ * @param path - The file's path relative to `dir`.
+ * @returns The file's bytes, or a {@link PackageReadError} with rule `entry-path` when `path` is
+ *   absolute, has a `..` segment, does not name a regular file, or resolves, links in its
+ *   directories included, outside `dir`. A missing file is a `PlatformError`.
+ */
+const readDirectoryEntry = Effect.fn("package.readDirectoryEntry")(function* readDirectoryEntry(
+  dir: string,
+  path: string,
+): Effect.fn.Return<
+  Uint8Array,
+  PackageReadError | PlatformError.PlatformError,
+  FileSystem.FileSystem
+> {
+  const fs = yield* FileSystem.FileSystem;
+  const refused = new PackageReadError({ dir, path, rule: "entry-path" });
+  const target = `${dir}/${path}`;
+
+  if (path.startsWith("/") || path.split("/").includes("..")) {
+    return yield* refused;
+  }
+
+  const info = yield* fs.lstat(target);
+
+  if (info.type !== "File") {
+    return yield* refused;
+  }
+
+  const realDir = yield* fs.realPath(dir);
+  const realTarget = yield* fs.realPath(target);
+
+  if (!realTarget.startsWith(`${realDir}/`)) {
+    return yield* refused;
+  }
+
+  return yield* fs.readFile(target);
 });
 
 /**
@@ -88,35 +199,11 @@ export const listPackage = Effect.fn("package.listPackage")(function* listPackag
   PackageReadError | ZipRefusal | PlatformError.PlatformError,
   FileSystem.FileSystem
 > {
-  if (yield* isZipFile(dir)) {
-    const zipped = yield* readZip(dir).pipe(
-      Effect.catchIf(
-        (refusal) => refusal._tag === "ZipRefusal" && refusal.rule === "manifest-root",
-        () => new PackageReadError({ dir, path: MANIFEST, rule: "manifest-root" }),
-      ),
-    );
+  const paths = (yield* isZipFile(dir))
+    ? (yield* readZipPackage(dir)).map((entry) => entry.path)
+    : yield* listDirectory(dir);
 
-    return zipped.map(({ path }): Entry => ({
-      kind: path === MANIFEST ? "manifest" : "file",
-      path,
-    }));
-  }
-
-  const fs = yield* FileSystem.FileSystem;
-  const names = yield* fs.readDirectory(dir, { recursive: true });
-  const files = yield* Effect.filter(
-    names,
-    (name) => Effect.map(fs.lstat(`${dir}/${name}`), (info) => info.type === "File"),
-    { concurrency: INSPECT_CONCURRENCY },
-  );
-
-  if (!files.includes(MANIFEST)) {
-    return yield* new PackageReadError({ dir, path: MANIFEST, rule: "manifest-root" });
-  }
-
-  return files
-    .toSorted()
-    .map((path): Entry => ({ kind: path === MANIFEST ? "manifest" : "file", path }));
+  return paths.map((path): Entry => ({ kind: kindOf(path), path }));
 });
 
 /**
@@ -140,33 +227,53 @@ export const readEntry = Effect.fn("package.readEntry")(function* readEntry(
   PackageReadError | ZipRefusal | PlatformError.PlatformError,
   FileSystem.FileSystem
 > {
-  const fs = yield* FileSystem.FileSystem;
-  const refused = new PackageReadError({ dir, path, rule: "entry-path" });
-
   if (yield* isZipFile(dir)) {
     const found = (yield* readZip(dir)).find((entry) => entry.path === path);
 
-    return found === undefined ? yield* refused : found.bytes;
+    return found === undefined
+      ? yield* new PackageReadError({ dir, path, rule: "entry-path" })
+      : found.bytes;
   }
 
-  const target = `${dir}/${path}`;
+  return yield* readDirectoryEntry(dir, path);
+});
 
-  if (path.startsWith("/") || path.split("/").includes("..")) {
-    return yield* refused;
+/**
+ * Read a package directory or a package zip once: every entry with its bytes.
+ *
+ * The entries are {@link listPackage}'s, in its order, and each one's bytes are what
+ * {@link readEntry} gives for it, so a directory and a zip of the same files read the same. A zip
+ * is parsed once, with its budgets checked before any entry is inflated.
+ *
+ * @param dir - The package directory, or a `.zip` file.
+ * @returns Its entries as {@link PackageFile} values, sorted by path, or a {@link PackageReadError}:
+ *   `manifest-root` when `dir` has no `imsmanifest.xml` at its root, `entry-path` when a listed
+ *   path leads outside the package directory through a link. Any other {@link ZipRefusal} flows
+ *   out as itself.
+ */
+export const readPackage = Effect.fn("package.readPackage")(function* readPackage(
+  dir: string,
+): Effect.fn.Return<
+  readonly PackageFile[],
+  PackageReadError | ZipRefusal | PlatformError.PlatformError,
+  FileSystem.FileSystem
+> {
+  if (yield* isZipFile(dir)) {
+    return (yield* readZipPackage(dir)).map(({ bytes, path }): PackageFile => ({
+      bytes,
+      kind: kindOf(path),
+      path,
+    }));
   }
 
-  const info = yield* fs.lstat(target);
-
-  if (info.type !== "File") {
-    return yield* refused;
-  }
-
-  const realDir = yield* fs.realPath(dir);
-  const realTarget = yield* fs.realPath(target);
-
-  if (!realTarget.startsWith(`${realDir}/`)) {
-    return yield* refused;
-  }
-
-  return yield* fs.readFile(target);
+  return yield* Effect.forEach(
+    yield* listDirectory(dir),
+    (path) =>
+      Effect.map(readDirectoryEntry(dir, path), (bytes): PackageFile => ({
+        bytes,
+        kind: kindOf(path),
+        path,
+      })),
+    { concurrency: INSPECT_CONCURRENCY },
+  );
 });
