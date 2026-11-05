@@ -1271,12 +1271,26 @@ const ariaValueRange = (rows: Rows): Finding => {
   return undefined;
 };
 
+/**
+ * An `xs:double` literal as a number (reading 56): only `INF` and `-INF` name infinities, so a
+ * finite literal beyond the largest finite double reads as that double of its sign, not as
+ * infinity. An underflow to zero stays as `Number` reads it, and `NaN` stays `NaN`.
+ */
 const doubleOf = (text: string): number => {
   if (text === "INF") {
     return Number.POSITIVE_INFINITY;
   }
 
-  return text === "-INF" ? Number.NEGATIVE_INFINITY : Number(text);
+  if (text === "-INF") {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const value = Number(text);
+  if (value === Number.POSITIVE_INFINITY) {
+    return Number.MAX_VALUE;
+  }
+
+  return value === Number.NEGATIVE_INFINITY ? -Number.MAX_VALUE : value;
 };
 
 const byDeclaration = (

@@ -776,6 +776,19 @@ describe("contentGuards owner-copy", () => {
   );
 });
 
+const masteryRefused = (attributes: string) =>
+  Effect.gen(function* masteryRefusedRange() {
+    const error = yield* Effect.flip(
+      contentGuards(yield* rowsOf("3.0.1", "", outcome(attributes))),
+    );
+    assert.strictEqual(error.rule, "mastery-range");
+  });
+
+const masteryAccepted = (attributes: string) =>
+  Effect.gen(function* masteryAcceptedRange() {
+    yield* contentGuards(yield* rowsOf("3.0.1", "", outcome(attributes)));
+  });
+
 describe("contentGuards conditioned optionals", () => {
   it.effect("refuses an extended-text bound to a multiple response with no max-strings", () =>
     Effect.gen(function* maxStrings() {
@@ -818,6 +831,16 @@ describe("contentGuards conditioned optionals", () => {
           outcome(` normal-minimum="0" mastery-value="0.5" normal-maximum="1"`),
         ),
       );
+    }),
+  );
+
+  it.effect("reads an overflowing mastery-range literal as the largest finite double", () =>
+    Effect.gen(function* overflow() {
+      yield* masteryRefused(` normal-maximum="1e400" mastery-value="INF"`);
+      yield* masteryAccepted(` normal-maximum="INF" mastery-value="1e400"`);
+      yield* masteryAccepted(` normal-minimum="-INF" mastery-value="-1e400"`);
+      yield* masteryRefused(` normal-minimum="-1e400" mastery-value="-INF"`);
+      yield* masteryAccepted(` normal-maximum="1.7976931348623157e308" mastery-value="1e400"`);
     }),
   );
 
