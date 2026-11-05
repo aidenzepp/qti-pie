@@ -9,6 +9,7 @@ import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { authoredId, partForSlot, resolveOverrides, rowFor, scopedId } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
+import { toHtml } from "#plate/emit/serialise.ts";
 import { Malformed, decode, entryName } from "#plate/form/encoding.ts";
 import type { Entry } from "#plate/form/encoding.ts";
 import { renderChoice } from "#plate/interactions/choice.ts";
@@ -81,6 +82,20 @@ const bare: ExtendedTextInteraction = {
  * The bare essay bound to a float, so its posted text is read as a number.
  */
 const measure: ExtendedTextInteraction = { ...bare, baseType: "float" };
+
+/**
+ * The essay in the `xhtml` format, which plate presents as a plain textarea of text.
+ */
+const rich: ExtendedTextInteraction = { ...essay, format: "xhtml" };
+
+/**
+ * The `xhtml` essay with a `pattern-mask` of lower-case words and the author's message for it.
+ */
+const masked: ExtendedTextInteraction = {
+  ...rich,
+  patternMask: Option.some("[a-z ]+"),
+  patternMaskMessage: Option.some("Write in lower-case words."),
+};
 
 /**
  * Construct an item whose body is the given Extended Texts, each bound to a single response of its
@@ -401,7 +416,7 @@ describe("renderExtendedText", () => {
   );
 
   it.effect(
-    "[Q-5] writes the Control's id, rows from expected-lines, placeholder and the payload's form name, the author's when given",
+    "[Q-5] [keyboard] writes the Control's id, rows from expected-lines, placeholder and the payload's form name, the author's when given",
     () =>
       Effect.gen(function* controlAttributes() {
         const control = onePart(yield* render(payloadOf([essay])), "control");
@@ -434,7 +449,7 @@ describe("renderExtendedText", () => {
   );
 
   it.effect(
-    '[Q-5] a keyboard walk in a test-built form posts multi-line text, "a\\r\\nb", which decode turns into "a\\nb"',
+    '[Q-5] [keyboard] a keyboard walk in a test-built form posts multi-line text, "a\\r\\nb", which decode turns into "a\\nb"',
     () =>
       Effect.gen(function* multiLineWalk() {
         const built = payloadOf([essay]);
@@ -464,7 +479,7 @@ describe("renderExtendedText", () => {
   );
 
   it.effect(
-    "[Q-5] holds the value's text as the textarea's only child, and a text that starts with a line feed round-trips",
+    "[Q-5] [keyboard] holds the value's text as the textarea's only child, and a text that starts with a line feed round-trips",
     () =>
       Effect.gen(function* restoredText() {
         const built = payloadOf([essay], restored("first\nsecond"));
@@ -486,6 +501,48 @@ describe("renderExtendedText", () => {
 
         const empty = onePart(yield* render(payloadOf([essay])), "control");
         assert.deepStrictEqual(empty.children, []);
+      }),
+  );
+
+  it.effect(
+    '[Q-5] [keyboard] presents format="xhtml" as a plain textarea marked data-format="xhtml", whose typed markup posts as text',
+    () =>
+      Effect.gen(function* xhtmlControl() {
+        const built = payloadOf([rich]);
+        const root = yield* render(built);
+        const tree = page([root], built);
+        const control = onePart(root, "control");
+
+        assert.strictEqual(control.tag, "textarea");
+        assert.strictEqual(control.attrs["data-format"], "xhtml");
+        assert.isUndefined(root.attrs["data-format"]);
+        assert.isUndefined(
+          onePart(yield* render(payloadOf([essay])), "control").attrs["data-format"],
+        );
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+
+        const posted = keyboardWalk(tree, ["Tab", { type: "<b>x</b>" }, "Tab", "Enter"]);
+        assert.deepStrictEqual(posted, Option.some([[name, "<b>x</b>"]]));
+        assert.deepStrictEqual(
+          yield* decoded(
+            rich,
+            Option.getOrElse(posted, () => []),
+          ),
+          {
+            baseType: "string",
+            cardinality: "single",
+            values: [{ baseType: "string", value: "<b>x</b>" }],
+          },
+        );
+
+        const again = payloadOf([rich], restored("<b>x</b>"));
+        const againRoot = yield* render(again);
+        const againControl = onePart(againRoot, "control");
+
+        assert.deepStrictEqual(againControl.children, [text("<b>x</b>")]);
+        assert.include(toHtml(againControl), "&lt;b&gt;x&lt;/b&gt;</textarea>");
+        assert.isTrue(roundTrips(page([againRoot], again)));
       }),
   );
 
@@ -531,6 +588,59 @@ describe("renderExtendedText", () => {
 });
 
 describe("validateExtendedText", () => {
+  it.effect(
+    "[Q-5] under validateResponses, checks a single entry against the pattern-mask, and the refused post comes back as escaped text",
+    () =>
+      Effect.gen(function* patternChecked() {
+        const configuration = yield* configure({ validateResponses: true });
+        const mismatch = yield* decoded(masked, [[name, "<b>x</b>"]]);
+        const messages = validateExtendedText(masked, mismatch, configuration);
+
+        assert.deepStrictEqual(messages, [{ response, text: "Write in lower-case words." }]);
+        assert.deepStrictEqual(
+          validateExtendedText(
+            { ...masked, patternMaskMessage: Option.none() },
+            mismatch,
+            configuration,
+          ),
+          [{ response, text: message("en", "patternMismatch") }],
+        );
+        assert.deepStrictEqual(validateExtendedText(masked, mismatch, yield* configure({})), []);
+        assert.deepStrictEqual(
+          validateExtendedText(
+            masked,
+            yield* decoded(masked, [[name, "a quiet day"]]),
+            configuration,
+          ),
+          [],
+        );
+        assert.deepStrictEqual(
+          validateExtendedText(masked, yield* decoded(masked, []), configuration),
+          [],
+        );
+
+        const built = payloadOf([masked], {
+          ...answering,
+          messages,
+          posted: Option.some(new Map([[response, ["<b>x</b>"]]])),
+        });
+        const root = yield* render(built);
+        const tree = page([root], built);
+        const control = onePart(root, "control");
+
+        assert.deepStrictEqual(control.children, [text("<b>x</b>")]);
+        assert.include(toHtml(control), "&lt;b&gt;x&lt;/b&gt;</textarea>");
+        assert.strictEqual(control.attrs["data-format"], "xhtml");
+        assert.strictEqual(control.attrs["aria-invalid"], "true");
+        assert.strictEqual(
+          control.attrs["aria-describedby"],
+          scopedId(instance, response, "message", 0),
+        );
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+      }),
+  );
+
   it.effect(
     "[Q-5] refuses text that is not a number for a float or an integer, with the author's message when set",
     () =>
@@ -624,7 +734,7 @@ const declaration = (identifier: string, baseType: string): SourceElement =>
 
 describe("an Extended Text the renderer does not support", () => {
   it.effect(
-    '[Q-5] builds an Extended Text whose pattern-mask="[0-9" the translator refuses beside a Choice as a notice in its place, and a walk still posts the Choice',
+    '[Q-5] [keyboard] builds an Extended Text whose pattern-mask="[0-9" the translator refuses beside a Choice as a notice in its place, and a walk still posts the Choice',
     () =>
       Effect.gen(function* refusedPatternNotice() {
         const item = yield* buildItem(

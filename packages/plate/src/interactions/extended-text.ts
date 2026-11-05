@@ -10,9 +10,15 @@
  * leaves. The Prompt's content goes through the body's {@link emitNodes}, so it gets the body's id
  * scoping, heading shift, URLs and Notices.
  *
- * {@link validateExtendedText} checks a value the caller decoded. Phase 1 has tier (a) only: a
- * number binding refuses text that is not a number, and every binding refuses a file or a second
- * entry, which a native textarea never posts.
+ * An `xhtml` Extended Text is presented the same way, its Control marked `data-format="xhtml"`: a
+ * plain textarea whose response is the text typed, a `string`. Plate never renders that text as
+ * markup; a restored value is the textarea's text, which the serialiser escapes (Q21: rich-text
+ * editing needs script).
+ *
+ * {@link validateExtendedText} checks a value the caller decoded. Tier (a): a number binding
+ * refuses text that is not a number, and every binding refuses a file or a second entry, which a
+ * native textarea never posts. Tier (b), under `validateResponses`: the `pattern-mask`, through
+ * {@link patternMessage}.
  *
  * @module
  */
@@ -27,6 +33,7 @@ import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
 import { textControlName } from "#plate/interactions/name.ts";
+import { patternMessage } from "#plate/interactions/pattern.ts";
 import { message } from "#plate/messages.ts";
 import type { Locale, MessageKey } from "#plate/messages.ts";
 import type { ExtendedTextInteraction } from "#plate/model/item.ts";
@@ -101,8 +108,8 @@ const nameAttributes = (
  * - Prompt: the marker and its id, which the Control's `aria-labelledby` names.
  * - Control: its id, the payload's `formName`, `rows` from `expected-lines` above 0, the author's
  *   `placeholder-text`, `disabled` when finished, its name ({@link nameAttributes}), `aria-invalid`
- *   and `aria-describedby` → the message ids when the response is invalid, and `autofocus` when the
- *   payload says.
+ *   and `aria-describedby` → the message ids when the response is invalid, `autofocus` when the
+ *   payload says, and `data-format="xhtml"` for the `xhtml` format.
  *
  * Every id is `scopedId(instance, response, part)`.
  *
@@ -129,6 +136,7 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
         "aria-invalid": "true",
       }),
       ...when(interaction.autofocus, { autofocus: true }),
+      ...when(interaction.format === "xhtml", { "data-format": "xhtml" }),
       "data-slot": rows.control.slot,
       ...when(payload.finished, { disabled: true }),
       id: scopedId(instance, interaction.response, "control"),
@@ -161,9 +169,10 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
  * holding the Prompt, when there is one, then the Control, a `textarea`.
  *
  * The Control's only child is the text to restore, its line breaks written as line feeds, as the
- * HTML parser reads them; it has no child when that text is empty. Each part goes through
- * `applyPart` with its replacement from `state.parts`, so every swap holds I1 to I4. The Prompt's
- * content goes through {@link emitNodes}, as the body's does.
+ * HTML parser reads them; it has no child when that text is empty. That child is text in every
+ * format, `xhtml` included, so markup an author or candidate typed is written escaped. Each part
+ * goes through `applyPart` with its replacement from `state.parts`, so every swap holds I1 to I4.
+ * The Prompt's content goes through {@link emitNodes}, as the body's does.
  *
  * @param interaction The Extended Text's payload.
  * @param payload The payload of the whole render, which gives the instance and `finished`.
@@ -227,17 +236,19 @@ const stringRefusals = {
  *
  * The caller decodes the posted entries with `decode`, under the entry name its form gave the
  * Control and the Extended Text's binding (a single value of its base type, an integer read in its
- * `base`), and passes the value, or the {@link Malformed} `decode` gave. Phase 1 checks tier (a)
- * only, and a decoded value passes it.
+ * `base`), and passes the value, or the {@link Malformed} `decode` gave.
  *
  * - A {@link Malformed} input of an `integer` or `float` binding: `malformedNumber`, or the author's
  *   `data-patternmask-message` when set.
  * - A {@link Malformed} input of a `string` binding, which a native form never posts: the message of
  *   its reason, `malformedFile` for a file and `malformedSingleMany` for a second entry.
+ * - A decoded value passes tier (a). Under `validateResponses` it is checked against the
+ *   `pattern-mask` ({@link patternMessage}): a mismatch gives the author's
+ *   `data-patternmask-message`, else `patternMismatch`. NULL is not checked.
  *
  * @param interaction The Extended Text.
  * @param input The decoded value, or why the entries did not decode.
- * @param configuration The configuration, which gives the locale.
+ * @param configuration The configuration, which gives `validateResponses` and the locale.
  * @returns One message per problem, none when the response is accepted.
  */
 export const validateExtendedText = (
@@ -246,7 +257,12 @@ export const validateExtendedText = (
   configuration: Configuration,
 ): readonly ValidationMessage[] => {
   if (!(input instanceof Malformed)) {
-    return [];
+    return Option.toArray(
+      Option.map(patternMessage(interaction, input, configuration), (mismatch) => ({
+        response: interaction.response,
+        text: mismatch,
+      })),
+    );
   }
 
   const { locale } = configuration;
