@@ -690,6 +690,24 @@ const ancestry = (local: string): readonly string[] => {
   return names;
 };
 
+/**
+ * What a type's entry derives from and how, without its own table, as `tables.test.ts` compares
+ * an entry's derivation.
+ *
+ * @param entry The type's entry.
+ * @returns Its base and derivation, or its derivation and members for a union.
+ */
+const derivationOf = (entry: TypeEntry) =>
+  entry.derivation === "union"
+    ? { derivation: entry.derivation, members: entry.members }
+    : { base: entry.base, derivation: entry.derivation };
+
+/**
+ * The table fields of a hand-built type entry that admits nothing: no attributes, no children and
+ * no text.
+ */
+const noContent = { attributes: [], children: [], text: false } as const;
+
 describe("checkStructure", () => {
   describe("the six rules", () => {
     it("[I-0] refuses an element its parent's table does not admit as unknown-element", () => {
@@ -1734,7 +1752,10 @@ describe("checkStructure", () => {
       assert.isUndefined(elements["qti-null"]?.anyAttribute);
       assert.deepStrictEqual(elements["p"]?.types, [qtiType("HTMLTextDType")]);
       assert.deepStrictEqual(elements["qti-null"]?.types, [qtiType("EmptyPrimitiveTypeDType")]);
-      assert.deepStrictEqual(types["WeightDType"], {
+
+      const weight = types["WeightDType"];
+      assert.isDefined(weight);
+      assert.deepStrictEqual(derivationOf(weight), {
         base: qtiType("EmptyPrimitiveTypeDType"),
         derivation: "extension",
       });
@@ -1758,9 +1779,13 @@ describe("checkStructure", () => {
       const chained: Tables = {
         elements: { probe: element({ anyAttribute: anyLax, types: qti("ProbeDType") }) },
         types: {
-          DeepProbeDType: { base: qtiType("WideProbeDType"), derivation: "restriction" },
-          ProbeDType: { base: xsdType("anyType"), derivation: "restriction" },
-          WideProbeDType: { base: qtiType("ProbeDType"), derivation: "extension" },
+          DeepProbeDType: {
+            ...noContent,
+            base: qtiType("WideProbeDType"),
+            derivation: "restriction",
+          },
+          ProbeDType: { ...noContent, base: xsdType("anyType"), derivation: "restriction" },
+          WideProbeDType: { ...noContent, base: qtiType("ProbeDType"), derivation: "extension" },
         },
       };
 
