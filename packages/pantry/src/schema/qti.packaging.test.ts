@@ -57,23 +57,25 @@ const folderEnding = (suffix: string): string => {
 
 /**
  * The `01-seed.sql` of the one `seed` migration folder, which holds the seed rows of the first
- * history. The `seed_wildcard` folder is excluded by its name: `_seed` does not end
+ * history. Any `_seed_<word>` folder is excluded by its name: `_seed` does not end
  * `_seed_wildcard`.
  */
 const committedSeed = (): string =>
   readFileSync(path.join(folderEnding("_seed"), "01-seed.sql"), "utf-8");
 
 /**
- * The `01-seed.sql` of every migration folder whose name ends `_seed` or `_seed_wildcard`, in
+ * Names a seed migration folder: `<timestamp>_seed` or `<timestamp>_seed_<word>`, so a folder a
+ * later phase adds (`_seed_tests`, `_seed_wildcard`) is read without a further edit.
+ */
+const seedFolder = /^\d+_seed(?:_[a-z]+)?$/u;
+
+/**
+ * The `01-seed.sql` of every seed migration folder (one whose name matches `seedFolder`), in
  * folder order.
  */
 const seedFiles = (): string[] =>
   readdirSync(migrations, { withFileTypes: true })
-    .filter(
-      (entry) =>
-        entry.isDirectory() &&
-        (entry.name.endsWith("_seed") || entry.name.endsWith("_seed_wildcard")),
-    )
+    .filter((entry) => entry.isDirectory() && seedFolder.test(entry.name))
     .map((entry) => readFileSync(path.join(migrations, entry.name, "01-seed.sql"), "utf-8"));
 
 /**
