@@ -114,8 +114,8 @@ cover, read `node_modules/effect/src` of the installed version.
 
 Use the skills in `.agents/skills/`:
 
-- `effect-design`: Effect code, services, layers and configuration. Its Alchemy and Cloudflare examples do not apply
-  here; its native-capability review does.
+- `effect-design`: the native-capability review and this repository's local Effect rulings. Effect structure and style
+  stay with the installed Effect guide above.
 - `trace-effect`: effectful operations and their observability.
 - `error-messages`: caller-facing errors.
 - `document-code`: writing or reviewing code.
