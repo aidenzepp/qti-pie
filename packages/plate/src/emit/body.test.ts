@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
-import { emitBody, htmlSubset } from "#plate/emit/body.ts";
+import { emitBody, emitNodes, htmlSubset } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
@@ -213,6 +213,17 @@ const idsIn = (nodes: readonly Node[]): readonly string[] =>
 const rootOf = (nodes: readonly Node[]): Element => h("div", { lang: "en" }, nodes);
 
 /**
+ * Collect the heading tags of a node list in document order, descendants included.
+ *
+ * @param nodes The nodes.
+ * @returns The tag of every `h1` to `h6` at or below them.
+ */
+const headingTagsIn = (nodes: readonly Node[]): readonly string[] =>
+  elementsIn(nodes)
+    .map(({ tag }) => tag)
+    .filter((tag) => /^h[1-6]$/u.test(tag));
+
+/**
  * A Text Entry bound to `RESPONSE`, unnamed, with no message.
  */
 const textEntry: TextEntryPayload = {
@@ -372,20 +383,112 @@ describe("emitBody", () => {
       }),
   );
 
-  it.effect("[I-8] headings shift so h1 sits at the heading level, capped at h6", () =>
-    Effect.gen(function* headings() {
+  it.effect(
+    "[I-8] in an item that starts at h1, headings shift so h1 sits at the heading level, capped at h6",
+    () =>
+      Effect.gen(function* headings() {
+        const nodes = yield* emit([
+          el("h1", {}, [txt("A")]),
+          el("h3", {}, [txt("B")]),
+          el("h6", {}, [txt("C")]),
+        ]);
+
+        assert.deepStrictEqual(nodes, [
+          h("h2", {}, [text("A")]),
+          h("h4", {}, [text("B")]),
+          h("h6", {}, [text("C")]),
+        ]);
+      }),
+  );
+
+  it.effect("[I-8] an item that starts at h1 emits h1 at the heading level, as before", () =>
+    Effect.gen(function* startsAtH1() {
       const nodes = yield* emit([
         el("h1", {}, [txt("A")]),
-        el("h3", {}, [txt("B")]),
-        el("h6", {}, [txt("C")]),
+        el("h2", {}, [txt("B")]),
+        el("h3", {}, [txt("C")]),
       ]);
 
-      assert.deepStrictEqual(nodes, [
-        h("h2", {}, [text("A")]),
-        h("h4", {}, [text("B")]),
-        h("h6", {}, [text("C")]),
-      ]);
+      assert.deepStrictEqual(headingTagsIn(nodes), ["h2", "h3", "h4"]);
+      assert.deepStrictEqual(checkTree(rootOf(nodes), { baseLevel: 2 }), []);
     }),
+  );
+
+  it.effect("[I-8] an item that starts at h2 emits h2 first at heading level 2", () =>
+    Effect.gen(function* startsAtH2() {
+      const nodes = yield* emit([
+        el("h2", {}, [txt("A")]),
+        el("p", {}, [txt("Text")]),
+        el("h3", {}, [txt("B")]),
+      ]);
+
+      assert.deepStrictEqual(headingTagsIn(nodes), ["h2", "h3"]);
+      assert.deepStrictEqual(checkTree(rootOf(nodes), { baseLevel: 2 }), []);
+    }),
+  );
+
+  it.effect("[I-8] an item that starts at h3 with a later h4 emits h2 then h3", () =>
+    Effect.gen(function* startsAtH3() {
+      const nodes = yield* emit([el("h3", {}, [txt("A")]), el("h4", {}, [txt("B")])]);
+
+      assert.deepStrictEqual(headingTagsIn(nodes), ["h2", "h3"]);
+      assert.deepStrictEqual(checkTree(rootOf(nodes), { baseLevel: 2 }), []);
+    }),
+  );
+
+  it.effect("[I-8] at heading level 4 an item that starts at h2 shifts by two, capped at h6", () =>
+    Effect.gen(function* levelFour() {
+      const nodes = yield* emit(
+        [
+          el("h2", {}, [txt("A")]),
+          el("h3", {}, [txt("B")]),
+          el("h4", {}, [txt("C")]),
+          el("h5", {}, [txt("D")]),
+        ],
+        4,
+      );
+
+      assert.deepStrictEqual(headingTagsIn(nodes), ["h4", "h5", "h6", "h6"]);
+      assert.deepStrictEqual(checkTree(rootOf(nodes), { baseLevel: 4 }), []);
+    }),
+  );
+
+  it.effect("[I-8] headings that go h2 then h1 take the shallowest, h1, as the heading level", () =>
+    Effect.gen(function* deeperFirst() {
+      const nodes = yield* emit([el("h2", {}, [txt("A")]), el("h1", {}, [txt("B")])]);
+
+      // The authored order skips a level before the shallowest heading, so heading-order fails.
+      assert.deepStrictEqual(headingTagsIn(nodes), ["h3", "h2"]);
+    }),
+  );
+
+  it.effect("[I-8] a heading the second line drops with its subtree does not set the shift", () =>
+    Effect.gen(function* droppedHeading() {
+      const nodes = yield* emit([
+        el("script", {}, [el("h1", {}, [txt("Dropped")])]),
+        el("h2", {}, [txt("Kept")]),
+      ]);
+
+      assert.deepStrictEqual(nodes, [h("h2", {}, [text("Kept")])]);
+    }),
+  );
+
+  it.effect(
+    "[I-8] a heading in a Prompt sets the shift, and the Prompt's content shares the body's",
+    () =>
+      Effect.gen(function* promptHeading() {
+        const prompt = [el("h2", {}, [txt("Ask")])];
+        const payload = payloadOf([
+          el("h3", {}, [txt("Part")]),
+          { ...choice, prompt: Option.some(prompt) },
+        ]);
+        const state = yield* stateAt(2);
+        const body = yield* Effect.fromResult(emitBody(payload, state, stub));
+        const promptNodes = yield* Effect.fromResult(emitNodes(prompt, payload, state, stub));
+
+        assert.deepStrictEqual(headingTagsIn(body), ["h3"]);
+        assert.deepStrictEqual(headingTagsIn(promptNodes), ["h2"]);
+      }),
   );
 
   it.effect("[I-8] rows directly under a table gain one tbody, so the table round-trips", () =>
