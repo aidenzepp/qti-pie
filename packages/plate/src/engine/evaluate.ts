@@ -219,7 +219,8 @@ const variableValue = (
   );
 
 /**
- * Find the response declaration a `qti-correct` or a `qti-map-response` names.
+ * Find the response declaration a `qti-correct`, a `qti-map-response` or a
+ * `qti-map-response-point` names.
  *
  * @param item The item.
  * @param identifier The response's identifier.
@@ -722,7 +723,8 @@ const isTrue = (value: Value): boolean => {
 /**
  * Give the value of an expression of the engine subset.
  *
- * - `variable`: the response's or the outcome's current value.
+ * - `variable`: the response's or the outcome's current value, else the built-in variable's
+ *   ({@link builtInValue}).
  * - `correct`: the response's correct response, else NULL of its declared type.
  * - `base-value`: the value as the item model parsed it.
  * - `is-null`: a single boolean, whether the operand is NULL.
@@ -737,6 +739,11 @@ const isTrue = (value: Value): boolean => {
  *   mapping.
  *
  * Operands are evaluated left to right, and the first failure is the result.
+ *
+ * `typeOf` in `#plate/model/item.ts` gives each case's base type and cardinality without
+ * evaluating it, so the item model marks a tree whose `qti-set-outcome-value` this function would
+ * fail; it names the case or the function here that each of its cases mirrors, so a change to a
+ * case's type changes it too.
  *
  * @param expression The expression.
  * @param item The item, whose declarations give the correct responses, the mappings and the area

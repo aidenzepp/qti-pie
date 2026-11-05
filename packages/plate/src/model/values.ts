@@ -1,6 +1,6 @@
 /**
- * QTI values and NULL as phase 1 holds them: a base type, a cardinality and the values, with the
- * lexical parse and format of each base type and the equality `qti-match` uses.
+ * QTI values and NULL as the value model holds them: a base type, a cardinality and the values,
+ * with the lexical parse and format of each base type and the equality `qti-match` uses.
  *
  * The session record, the engine and the form encoding all carry a {@link Value}, so this module
  * owns the one value representation, and the one NCName rule the validator reuses.
@@ -30,7 +30,7 @@ export const modelledBaseTypes = [
 export type ModelledBaseType = (typeof modelledBaseTypes)[number];
 
 /**
- * The cardinalities a phase-1 value takes. Records are not modelled.
+ * The cardinalities the value model holds values of. Records are not modelled.
  */
 export const modelledCardinalities = ["single", "multiple", "ordered"] as const;
 

@@ -334,7 +334,7 @@ describe("runAttempt", () => {
       }),
   );
 
-  it.effect("[I-9b] leaves SCORE at its default when the item has no response processing", () =>
+  it.effect("leaves SCORE at its default when the item has no response processing", () =>
     Effect.gen(function* noProcessing() {
       const item = yield* buildItem(itemDocument(trueFalse, scoreOfOne));
       const scored: ItemRecord = { ...fresh(item, instance), outcomes: { SCORE: floatValue(0) } };
