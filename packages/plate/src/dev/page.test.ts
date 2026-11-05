@@ -8,10 +8,15 @@ import { groupVerdicts, openMember, verdictCache, verdictOrder } from "#plate/de
 import { createHandler } from "#plate/dev/page.ts";
 import type { Handler, PlaygroundSettings } from "#plate/dev/page.ts";
 import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
+import { h } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
+import { toHtml } from "#plate/emit/serialise.ts";
 import { entryName } from "#plate/form/encoding.ts";
+import type { Ledger } from "#plate/ledger/report.ts";
+import { ledgerHtml } from "#plate/ledger/view.ts";
 import { message } from "#plate/messages.ts";
 import type { MessageKey } from "#plate/messages.ts";
+import { checkTree } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
@@ -118,6 +123,104 @@ const scratchHandler = createHandler({
   provider: ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: scratch }),
 });
 
+/**
+ * A test title holding a script element, which the ledger page shows as text.
+ */
+const hostileTest = "<script>alert(1)</script> is shown as text";
+
+/**
+ * The hand-built ledger the ledger page reads: at Basic a `limited` Accessibility row, a
+ * `not yet supported` Items row and a covered Choice row whose proof names a test titled
+ * {@link hostileTest}, and at Advanced an `excluded` Metadata row.
+ */
+const fixtureLedger: Ledger = {
+  headlines: {
+    advanced: { covered: 0, excluded: 1, limited: 0, "unsupported-with-notice": 0 },
+    basic: { covered: 1, excluded: 0, limited: 1, "unsupported-with-notice": 1 },
+    elective: { covered: 0, excluded: 0, limited: 0, "unsupported-with-notice": 0 },
+    elevated: { covered: 0, excluded: 0, limited: 0, "unsupported-with-notice": 0 },
+  },
+  records: [],
+  rows: [
+    {
+      family: "A",
+      id: "A-1",
+      level: "basic",
+      name: "An accessibility feature",
+      proofs: [],
+      renders: true,
+      source: "a member-only source",
+      state: "limited",
+      validates: true,
+    },
+    {
+      family: "I",
+      id: "I-7",
+      level: "basic",
+      name: "An item feature",
+      proofs: [],
+      renders: false,
+      state: "unsupported-with-notice",
+      validates: true,
+    },
+    {
+      family: "Q",
+      id: "Q-2",
+      interaction: { composition: ["dev playground"], keyboard: [] },
+      level: "basic",
+      name: "Choice",
+      proofs: [
+        {
+          documents: ["QTI3_BPIG_Examples/items/BG007.xml"],
+          file: "src/dev/page.test.ts",
+          kind: "fixtures",
+          tests: [hostileTest],
+        },
+      ],
+      renders: true,
+      state: "covered",
+      validates: true,
+    },
+    {
+      family: "M",
+      id: "M-1",
+      level: "advanced",
+      name: "A metadata feature",
+      proofs: [],
+      reason: "the goal leaves it out",
+      renders: false,
+      source: "the goal",
+      state: "excluded",
+      validates: false,
+    },
+  ],
+};
+
+/**
+ * `PLATE_LEDGER_DIR` as the fixture handler sets it: relative, so it is read from the package
+ * directory, naming the scratch folder that holds {@link fixtureLedger} as `ledger.json`.
+ */
+const ledgerSetting = "work/page-test/ledger";
+
+/**
+ * The scratch folder that holds no `ledger.json`.
+ */
+const noLedgerFolder = path.join(scratch, "no-ledger");
+
+/**
+ * The scratch folder whose `ledger.json` is JSON but no ledger.
+ */
+const malformedFolder = path.join(scratch, "malformed-ledger");
+
+/**
+ * Construct a handler whose ledger page reads `ledger.json` from a folder.
+ *
+ * @param folder `PLATE_LEDGER_DIR`.
+ * @returns The handler.
+ */
+const ledgerHandler = (folder: string): Handler =>
+  createHandler({ provider: ConfigProvider.fromUnknown({ PLATE_LEDGER_DIR: folder }) });
+
 beforeAll(async () => {
   rmSync(scratch, { force: true, recursive: true });
   mkdirSync(path.join(scratch, "items"), { recursive: true });
@@ -131,6 +234,14 @@ beforeAll(async () => {
     ),
   );
   writeFileSync(path.join(scratch, scriptPath), scriptItem);
+  mkdirSync(path.resolve(import.meta.dirname, "..", "..", ledgerSetting), { recursive: true });
+  writeFileSync(
+    path.resolve(import.meta.dirname, "..", "..", ledgerSetting, "ledger.json"),
+    JSON.stringify(fixtureLedger),
+  );
+  mkdirSync(noLedgerFolder, { recursive: true });
+  mkdirSync(malformedFolder, { recursive: true });
+  writeFileSync(path.join(malformedFolder, "ledger.json"), JSON.stringify({ rows: "none" }));
 });
 
 beforeAll(async () => {
@@ -1293,4 +1404,255 @@ describe("dev/page.ts", () => {
         }),
     );
   });
+});
+
+/**
+ * Give the element children of a node tree's element.
+ *
+ * @param element The element.
+ * @returns Its children that are elements, in order.
+ */
+const elementChildren = (element: Element): readonly Element[] =>
+  element.children.filter((child): child is Element => child.kind === "element");
+
+/**
+ * Give what a reader meets first in each child of an element: a table by its caption, anything
+ * else by its text.
+ *
+ * @param element The element.
+ * @returns Each child's tag and words, in order.
+ */
+const readingOrder = (element: Element): readonly (readonly [tag: string, words: string])[] =>
+  elementChildren(element).map((child) => [
+    child.tag,
+    child.tag === "table"
+      ? textOf(elementChildren(child).find((part) => part.tag === "caption")?.children ?? [])
+      : textOf(child.children),
+  ]);
+
+/**
+ * Give the row headers of a table's body: each `th`'s `scope` and text.
+ *
+ * @param table The table.
+ * @returns Each body row's header, in order.
+ */
+const rowHeaders = (
+  table: Element,
+): readonly (readonly [scope: string | true | undefined, words: string])[] =>
+  elementChildren(table)
+    .filter((part) => part.tag === "tbody")
+    .flatMap(elementChildren)
+    .map((row) => {
+      const header = elementChildren(row).find((cell) => cell.tag === "th");
+
+      return [header?.attrs["scope"], textOf(header?.children ?? [])] as const;
+    });
+
+/**
+ * Run `checkTree` over a page's `main`, inside an element carrying the page's language, with its
+ * headings starting at `h1`.
+ *
+ * @param html The page.
+ * @returns Every violation, empty for a page that passes.
+ */
+const pageViolations = (html: string) =>
+  checkTree(
+    h("div", { lang: attributeOf(documentRoot(html), "lang") ?? "" }, [
+      find(html, (element) => element.tag === "main"),
+    ]),
+    { baseLevel: 1 },
+  );
+
+describe("dev/page.ts: the verdicts page and the ledger page", () => {
+  it.effect(
+    "/verdicts is a table with a caption, the four column headers and one row per member, in the set's order, its path the row header",
+    () =>
+      Effect.gen(function* verdictsPage() {
+        const known = yield* verdicts.verdicts;
+        const { html, response } = yield* get(playground(), "/verdicts");
+        const table = find(html, (element) => element.tag === "table");
+        const [caption, head, body] = elementChildren(table);
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(caption?.tag, "caption");
+        assert.notStrictEqual(textOf(caption?.children ?? []), "");
+        assert.strictEqual(head?.tag, "thead");
+        assert.deepStrictEqual(
+          elementsOf(head?.children ?? []).flatMap((element) =>
+            element.tag === "th" ? [[element.attrs["scope"], textOf(element.children)]] : [],
+          ),
+          [
+            ["col", "Document"],
+            ["col", "Verdict"],
+            ["col", "Reason"],
+            ["col", "Unsupported features"],
+          ],
+        );
+        assert.strictEqual(body?.tag, "tbody");
+        assert.deepStrictEqual(
+          rowHeaders(table),
+          known.map((verdict) => ["row", verdict.document]),
+        );
+        assert.deepStrictEqual(
+          elementChildren(body ?? h("tbody", {})).map((row) =>
+            textOf(elementChildren(row)[1]?.children ?? []),
+          ),
+          known.map((verdict) => verdict.verdict),
+        );
+      }),
+    corpusTimeoutMs,
+  );
+
+  it.effect(
+    "/ledger, with PLATE_LEDGER_DIR at a fixture folder, shows the view's ledger: per level its heading and headline, then a table per family with a caption and the ID as row header",
+    () =>
+      Effect.gen(function* ledgerPage() {
+        const { html, response } = yield* get(ledgerHandler(ledgerSetting), "/ledger");
+        const article = find(html, (element) => element.tag === "article");
+        const order = readingOrder(article);
+        const tables = elementChildren(article).filter((child) => child.tag === "table");
+
+        assert.strictEqual(response.status, 200);
+        assert.include(html, toHtml(ledgerHtml(fixtureLedger)));
+        assert.deepStrictEqual(order[0], ["h1", "Feature ledger"]);
+        assert.deepStrictEqual(
+          order.slice(
+            2,
+            order.findIndex(([tag, words]) => tag === "h2" && words === "Limited rows"),
+          ),
+          [
+            ["h2", "Basic"],
+            ["p", "1 covered, 1 limited, 0 excluded, 1 not yet supported."],
+            ["table", "Basic: Accessibility (A)"],
+            ["table", "Basic: Items (I)"],
+            ["table", "Basic: Interactions (Q)"],
+            ["h2", "Advanced"],
+            ["p", "0 covered, 0 limited, 1 excluded, 0 not yet supported."],
+            ["table", "Advanced: Metadata (M)"],
+            ["h2", "Elevated"],
+            ["p", "0 covered, 0 limited, 0 excluded, 0 not yet supported."],
+            ["h2", "Elective"],
+            ["p", "0 covered, 0 limited, 0 excluded, 0 not yet supported."],
+          ],
+        );
+        assert.deepStrictEqual(tables.map(rowHeaders), [
+          [["row", "A-1"]],
+          [["row", "I-7"]],
+          [["row", "Q-2"]],
+          [["row", "M-1"]],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "/ledger with no ledger.json names the file it looked for and says to run the one command and reload",
+    () =>
+      Effect.gen(function* noLedger() {
+        const { html, response } = yield* get(ledgerHandler(noLedgerFolder), "/ledger");
+        const elements = elementsOf(parseHtml(html));
+        const main = find(html, (element) => element.tag === "main");
+        const command = find(html, (element) => element.tag === "code");
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(textOf(command.children), "pnpm --filter @qti-pie/plate ledger");
+        assert.include(textOf(main.children), path.join(noLedgerFolder, "ledger.json"));
+        assert.isTrue(
+          elements.every((element) => element.tag !== "article" && element.tag !== "table"),
+        );
+      }),
+  );
+
+  it.effect(
+    "/ledger with a ledger.json that is no ledger answers a developer error naming the file",
+    () =>
+      Effect.gen(function* malformed() {
+        const { html, response } = yield* get(ledgerHandler(malformedFolder), "/ledger");
+        const main = find(html, (element) => element.tag === "main");
+
+        assert.strictEqual(response.status, 500);
+        assert.include(textOf(main.children), path.join(malformedFolder, "ledger.json"));
+        assert.isTrue(elementsOf(parseHtml(html)).every((element) => element.tag !== "article"));
+      }),
+  );
+
+  it.effect(
+    "/verdicts and /ledger carry the page headers, link the three sheets, write no style and end with the theme box",
+    () =>
+      Effect.gen(function* chrome() {
+        const pages = [
+          yield* get(playground(), "/verdicts"),
+          yield* get(ledgerHandler(ledgerSetting), "/ledger"),
+          yield* get(ledgerHandler(noLedgerFolder), "/ledger"),
+        ];
+
+        for (const { html, response } of pages) {
+          for (const [name, value] of Object.entries(pageHeaders)) {
+            assert.strictEqual(response.headers.get(name), value, name);
+          }
+          assert.strictEqual(response.headers.get("content-type"), "text/html; charset=utf-8");
+          for (const [, value] of response.headers) {
+            assert.notInclude(value, "unsafe-inline");
+          }
+          assert.deepStrictEqual(linkedSheets(html), sheetOrder);
+          assert.isTrue(
+            elementsOf(parseHtml(html)).every(
+              (element) => element.tag !== "style" && !Object.hasOwn(element.attrs, "style"),
+            ),
+          );
+          assertThemeBox(html);
+        }
+      }),
+    corpusTimeoutMs,
+  );
+
+  it.effect("a POST to /verdicts or /ledger is refused with 405", () =>
+    Effect.gen(function* refused() {
+      const verdictsPost = yield* post(playground(), "/verdicts", []);
+      const ledgerPost = yield* post(ledgerHandler(ledgerSetting), "/ledger", []);
+
+      assert.strictEqual(verdictsPost.response.status, 405);
+      assert.strictEqual(ledgerPost.response.status, 405);
+    }),
+  );
+
+  it.effect(
+    "checkTree passes on /verdicts, and on /ledger with and without a ledger",
+    () =>
+      Effect.gen(function* accessible() {
+        const pages = [
+          yield* get(playground(), "/verdicts"),
+          yield* get(ledgerHandler(ledgerSetting), "/ledger"),
+          yield* get(ledgerHandler(noLedgerFolder), "/ledger"),
+        ];
+
+        for (const { html } of pages) {
+          assert.deepStrictEqual(pageViolations(html), []);
+        }
+      }),
+    corpusTimeoutMs,
+  );
+
+  it.effect(
+    "a path and a refusal holding <script> on /verdicts, and a test title holding <script> on /ledger, appear escaped",
+    () =>
+      Effect.gen(function* escapedReports() {
+        const reported = yield* get(scratchHandler, "/verdicts");
+        const ledgered = yield* get(ledgerHandler(ledgerSetting), "/ledger");
+        const row = find(
+          reported.html,
+          (element) =>
+            element.tag === "tr" &&
+            textOf(elementChildren(element)[0]?.children ?? []) === scriptPath,
+        );
+        const article = find(ledgered.html, (element) => element.tag === "article");
+
+        for (const { html, response } of [reported, ledgered]) {
+          assert.strictEqual(response.status, 200);
+          assert.notInclude(html, "<script");
+          assert.include(html, "&lt;script&gt;");
+        }
+        assert.include(textOf(row.children), "`<script>`");
+        assert.include(textOf(article.children), hostileTest);
+      }),
+  );
 });

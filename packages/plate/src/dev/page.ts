@@ -4,18 +4,19 @@
  *
  * The library decides no form, submit control, flow or attempt limit (rule `a9d04969`), so this
  * module owns them all: it lists every member of the corpus's document set under the verdict
- * `open` gives it, opens any member through the verdict cache of `#plate/dev/listing.ts`, keeps the
- * `Accepted` item and the stored record on the server, and sends only the HTML of
- * `render(redact(…))` inside its own native form. A post is partitioned and decoded on the server,
- * checked with `checkResponses`, scored with `score`, and answered with the page after a submit
- * that spec §4.7 sets: the Status part first, one `autofocus`, and a title that names the state.
- * Every page is built through `h` and `toHtml`, so document text is escaped, and every response
- * carries the content-security headers of rule `723e580c`. It also serves plate's stylesheet, its
- * own sheet and the host CSS of the theme its theme box last accepted, which it keeps with a dark
- * flag in memory until it restarts. Every page links the three sheets, carries `class="dark"` on
- * `html` while the flag is on, and ends with the theme box, the playground's own form beside the
- * item's. It reads the corpus through `readCorpusFile` and opens no port: `scripts/serve.ts` is the
- * listener.
+ * `open` gives it, reports those verdicts as a table at `/verdicts` and the feature ledger the one
+ * command last wrote at `/ledger`, opens any member through the verdict cache of
+ * `#plate/dev/listing.ts`, keeps the `Accepted` item and the stored record on the server, and
+ * sends only the HTML of `render(redact(…))` inside its own native form. A post is partitioned and
+ * decoded on the server, checked with `checkResponses`, scored with `score`, and answered with the
+ * page after a submit that spec §4.7 sets: the Status part first, one `autofocus`, and a title that
+ * names the state. Every page is built through `h` and `toHtml`, so document text is escaped, and
+ * every response carries the content-security headers of rule `723e580c`. It also serves plate's
+ * stylesheet, its own sheet and the host CSS of the theme its theme box last accepted, which it
+ * keeps with a dark flag in memory until it restarts. Every page links the three sheets, carries
+ * `class="dark"` on `html` while the flag is on, and ends with the theme box, the playground's own
+ * form beside the item's. It reads the corpus through `readCorpusFile` and the ledger from
+ * `PLATE_LEDGER_DIR`, and opens no port: `scripts/serve.ts` is the listener.
  *
  * @module
  */
@@ -23,8 +24,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ConfigProvider, Effect, Option, Ref, Result, Schema } from "effect";
-import type { Config } from "effect";
+import { Config, ConfigProvider, Effect, Option, Ref, Result, Schema } from "effect";
 import { decodeStoredFloat } from "#plate/codec/values.ts";
 import { groupVerdicts, verdictCache } from "#plate/dev/listing.ts";
 import type { OpenFailure, VerdictCache, VerdictGroup } from "#plate/dev/listing.ts";
@@ -64,9 +64,12 @@ import type {
   ValidationMessage,
   Value,
 } from "#plate/index.ts";
+import { Ledger } from "#plate/ledger/report.ts";
+import { ledgerHtml, verdictTable } from "#plate/ledger/view.ts";
 import { message } from "#plate/messages.ts";
 import type { BodyNode } from "#plate/model/item.ts";
 import { describeRefusal } from "#plate/validate/verdict.ts";
+import type { Verdict } from "#plate/validate/verdict.ts";
 
 /**
  * A Fetch handler: one request in, one response out.
@@ -77,11 +80,11 @@ export type Handler = (request: Request) => Promise<Response>;
  * The settings of one playground, each optional.
  *
  * `configuration` is the input `configure` decodes, every default when absent; `provider` is where
- * `readCorpusFile` reads `PLATE_CORPUS_DIR` and `HOME`, the process environment when absent;
- * `verdicts` is the cache that opens and keeps the corpus's members, a new one over `openMember`
- * when absent. Handlers given one cache share its opens, and a test counts them through the
- * cache's opener; the cache reads the corpus root of the first handler that asks, so share one
- * only between handlers over the same root.
+ * `readCorpusFile` reads `PLATE_CORPUS_DIR` and `HOME` and the ledger page reads
+ * `PLATE_LEDGER_DIR`, the process environment when absent; `verdicts` is the cache that opens and
+ * keeps the corpus's members, a new one over `openMember` when absent. Handlers given one cache
+ * share its opens, and a test counts them through the cache's opener; the cache reads the corpus
+ * root of the first handler that asks, so share one only between handlers over the same root.
  */
 export interface PlaygroundSettings {
   readonly configuration?: Partial<Configuration>;
@@ -161,6 +164,60 @@ const sheets: ReadonlyMap<string, URL> = new Map([
   ["/playground.css", new URL(import.meta.resolve("#plate/dev/playground.css"))],
   ["/styles.css", new URL(import.meta.resolve("#plate/styles.css"))],
 ]);
+
+/**
+ * The package directory, `packages/plate`, which a relative `PLATE_LEDGER_DIR` is read from.
+ */
+const packageDirectory = path.resolve(import.meta.dirname, "..", "..");
+
+/**
+ * The command that writes the ledger, which the ledger page and its errors name.
+ */
+const ledgerCommand = "pnpm --filter @qti-pie/plate ledger";
+
+/**
+ * The file the ledger page reads: `ledger.json` in `PLATE_LEDGER_DIR`, read from the package
+ * directory when relative, and in `work/ledger` in the package when it is not set, the folder the
+ * one command writes to.
+ */
+const ledgerFile = Config.NonEmptyString("PLATE_LEDGER_DIR").pipe(
+  Config.withDefault(path.join("work", "ledger")),
+  Config.map((directory) => path.resolve(packageDirectory, directory, "ledger.json")),
+);
+
+/**
+ * Decode `ledger.json`'s text, as the one command encodes it.
+ */
+const decodeLedger = Schema.decodeEffect(Schema.fromJsonString(Ledger));
+
+/**
+ * The ledger page found no `ledger.json`: the one command has not written one there yet.
+ */
+class LedgerMissing extends Schema.TaggedError<LedgerMissing>()("LedgerMissing", {
+  path: Schema.String,
+}) {
+  /**
+   * The file and what to run.
+   */
+  override get message(): string {
+    return `No ledger is written at ${this.path} yet. Run ${ledgerCommand} from the repository root, then reload the page.`;
+  }
+}
+
+/**
+ * The ledger page could not read `ledger.json`, or read one that does not decode as a ledger.
+ */
+class LedgerUnreadable extends Schema.TaggedError<LedgerUnreadable>()("LedgerUnreadable", {
+  detail: Schema.String,
+  path: Schema.String,
+}) {
+  /**
+   * The file, why, and what to run.
+   */
+  override get message(): string {
+    return `Cannot read the ledger ${this.path}: ${this.detail}. Run ${ledgerCommand} from the repository root to write it again, then reload the page.`;
+  }
+}
 
 /**
  * The failure of a read of one of the package's stylesheets: the file is missing or unreadable.
@@ -600,6 +657,54 @@ const verdictPage = (
   ]);
 
 /**
+ * Construct the verdicts page: the per-document verdict report as a table, one row per member of
+ * the document set in its order, its path the row header and a link to its item page.
+ *
+ * @param verdicts Every member's verdict, from the verdict cache.
+ * @returns The page.
+ */
+const verdictsPage = (verdicts: readonly Verdict[]): Page =>
+  page(200, "en", "Verdicts", [
+    h("h1", {}, [text("Verdicts")]),
+    h("p", {}, [
+      text(
+        "The verdict open gives each document of the example corpus, with each refusal or reason it is unchecked, and the unsupported features an accepted document holds. Each path opens its document.",
+      ),
+    ]),
+    verdictTable(verdicts),
+    home,
+  ]);
+
+/**
+ * Construct the ledger page: the ledger as the view writes it, an `article` whose headings start
+ * at `h1`.
+ *
+ * @param ledger The ledger the one command wrote.
+ * @returns The page.
+ */
+const ledgerPage = (ledger: Ledger): Page =>
+  page(200, "en", "Feature ledger", [ledgerHtml(ledger), home]);
+
+/**
+ * Construct the page `/ledger` shows before the one command has written a ledger: the file it
+ * looked for, and the command to run before reloading.
+ *
+ * @param missing The file that is not there.
+ * @returns The page.
+ */
+const noLedgerPage = (missing: LedgerMissing): Page =>
+  page(200, "en", "No feature ledger yet", [
+    h("h1", {}, [text("No feature ledger yet")]),
+    h("p", {}, [text(`No ledger is written at ${missing.path} yet.`)]),
+    h("p", {}, [
+      text("Run "),
+      h("code", {}, [text(ledgerCommand)]),
+      text(" from the repository root, then reload this page."),
+    ]),
+    home,
+  ]);
+
+/**
  * Compose an item page: the item's title, then the item region, holding the Status part when the
  * page follows a post and the playground's native form around the rendered item and its Submit.
  *
@@ -848,8 +953,8 @@ const scoredPage = (
 
 /**
  * Construct the page a route's failure answers with: the 404 page for a path the corpus does not
- * hold, and a developer error's page when the corpus or a stylesheet is missing or the settings are
- * missing or invalid.
+ * hold, and a developer error's page when the corpus, a stylesheet or the ledger is missing or
+ * unreadable or the settings are missing or invalid.
  *
  * @param error The failure.
  * @returns The page.
@@ -860,6 +965,7 @@ const routeFailure = (
     | CorpusFileUnreadable
     | CorpusMissing
     | InvalidConfiguration
+    | LedgerUnreadable
     | SheetUnreadable,
 ): Page => (error._tag === "CorpusFileUnreadable" ? notFound() : failurePage(error));
 
@@ -1039,6 +1145,33 @@ const submit = Effect.fn("playground.submit")(function* submit(
 });
 
 /**
+ * Read the ledger the one command last wrote, from `ledger.json` in `PLATE_LEDGER_DIR`.
+ *
+ * @returns The ledger; fails with {@link LedgerMissing} when the file is not there, and with
+ *   {@link LedgerUnreadable} when it cannot be read or does not decode as a ledger.
+ */
+const readLedger = Effect.fn("playground.readLedger")(function* readLedger(): Effect.fn.Return<
+  Ledger,
+  Config.ConfigError | LedgerMissing | LedgerUnreadable
+> {
+  const file = yield* ledgerFile;
+  const contents = yield* Effect.tryPromise({
+    catch: (cause) =>
+      cause instanceof Error && "code" in cause && cause.code === "ENOENT"
+        ? new LedgerMissing({ path: file })
+        : new LedgerUnreadable({
+            detail: cause instanceof Error ? cause.message : String(cause),
+            path: file,
+          }),
+    try: () => readFile(file, "utf-8"),
+  });
+
+  return yield* decodeLedger(contents).pipe(
+    Effect.mapError((error) => new LedgerUnreadable({ detail: error.message, path: file })),
+  );
+});
+
+/**
  * Serve one package asset: decode its path segment by segment, refuse a path outside an open
  * item's package directory or of a type the playground does not serve, and send the bytes with the
  * asset headers.
@@ -1203,9 +1336,11 @@ const postTheme = Effect.fn("playground.postTheme")(function* postTheme(
 });
 
 /**
- * Route one request: the listing, an item page, a post, an asset, a stylesheet, or a theme box
- * post; anything else is a 404, and a method a route does not take is a 405. A member the listing
- * cannot read is a developer error there, since the listing's own address exists.
+ * Route one request: the listing, the verdicts page, the ledger page, an item page, a post, an
+ * asset, a stylesheet, or a theme box post; anything else is a 404, and a method a route does not
+ * take is a 405. A member the listing or the verdicts page cannot read is a developer error there,
+ * since the page's own address exists; so is a ledger that cannot be read, while a ledger not yet
+ * written shows the command that writes it.
  *
  * @param playground The playground.
  * @param request The request.
@@ -1216,20 +1351,40 @@ const route = (
   request: Request,
 ): Effect.Effect<
   Page | Response,
-  Config.ConfigError | CorpusFileUnreadable | CorpusMissing | InvalidConfiguration | SheetUnreadable
+  | Config.ConfigError
+  | CorpusFileUnreadable
+  | CorpusMissing
+  | InvalidConfiguration
+  | LedgerUnreadable
+  | SheetUnreadable
 > => {
   const url = new URL(request.url);
   const refusedMethod = Effect.succeed(
     notePage(405, "Method not allowed", `${request.method} is not taken at ${url.pathname}.`),
   );
-
-  if (url.pathname === "/") {
-    return request.method === "GET"
+  const fromVerdicts = (shown: (verdicts: readonly Verdict[]) => Page) =>
+    request.method === "GET"
       ? playground.verdicts.verdicts.pipe(
-          Effect.map((verdicts) => listing(groupVerdicts(verdicts))),
+          Effect.map(shown),
           Effect.catchTag("CorpusFileUnreadable", (unreadable) =>
             Effect.succeed(failurePage(unreadable)),
           ),
+        )
+      : refusedMethod;
+
+  if (url.pathname === "/") {
+    return fromVerdicts((verdicts) => listing(groupVerdicts(verdicts)));
+  }
+
+  if (url.pathname === "/verdicts") {
+    return fromVerdicts(verdictsPage);
+  }
+
+  if (url.pathname === "/ledger") {
+    return request.method === "GET"
+      ? readLedger().pipe(
+          Effect.map(ledgerPage),
+          Effect.catchTag("LedgerMissing", (missing) => Effect.succeed(noLedgerPage(missing))),
         )
       : refusedMethod;
   }
@@ -1315,9 +1470,9 @@ const answer = (
  * Construct a playground's Fetch handler, with its own sessions, theme and dark flag, and its own
  * verdict cache unless the settings give one: each member is opened once for the handler's life.
  *
- * It runs `open`, `configure` and the corpus read with `Effect.runPromise`; `render`,
- * `renderStatus`, `decode`, `checkResponses` and `score` are plain functions. A failure the
- * playground's settings or code cause answers with a 500 page that gives its message, and the
+ * It runs `open`, `configure`, the corpus read and the ledger read with `Effect.runPromise`;
+ * `render`, `renderStatus`, `decode`, `checkResponses` and `score` are plain functions. A failure
+ * the playground's settings or code cause answers with a 500 page that gives its message, and the
  * promise never rejects.
  *
  * @example
