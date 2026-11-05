@@ -4,8 +4,8 @@
  *
  * The ledger reads by level (Basic, Advanced, Elevated, elective), each opening with its headline,
  * then by family, one table per family with the feature ID as the row header. The `limited` rows
- * are listed again with their sources, then the browser-support note, the session's records and
- * the notes on each sitting.
+ * are listed again with their sources, then the browser-support note, the session's records, the
+ * notes on each sitting, and each engine's browser run.
  * The text and the HTML say the same thing; the HTML is built through `h`, so the serialiser
  * escapes every string, a test title included. The ledger says only that these tests pass over
  * these fixtures, and never claims conformance or certification.
@@ -24,12 +24,14 @@ import { families, levels } from "#plate/ledger/features.ts";
 import { sessionNotes } from "#plate/ledger/passes.ts";
 import type { PassRecord, ScreenReaderPass, SessionNote } from "#plate/ledger/passes.ts";
 import type {
+  BrowserRunRow,
   InteractionColumns,
   Ledger,
   LedgerRow,
   ProofFile,
   RowState,
 } from "#plate/ledger/report.ts";
+import { standsInForSafari } from "#plate/ledger/runs.ts";
 import { describeRefusal } from "#plate/validate/verdict.ts";
 import type { Verdict } from "#plate/validate/verdict.ts";
 
@@ -179,6 +181,34 @@ const notesHeading = "Session notes";
  * The sentence the notes are while no sitting has a note.
  */
 const noNotes = "No session note has been recorded yet.";
+
+/**
+ * The heading of the browser runs, after the notes on each sitting.
+ */
+const runsHeading = "Browser runs";
+
+/**
+ * The caption of the browser runs' table.
+ */
+const runsCaption = "Each engine's run of the browser tests";
+
+/**
+ * The column headers of the browser runs' table, the row header (the engine) first.
+ */
+const runColumns = ["Engine", "Version", "Playwright", "Date", "Passed", "Failed", "Note"] as const;
+
+/**
+ * The words each engine is named by.
+ */
+const engineWords: Readonly<Record<BrowserRunRow["engine"], string>> = {
+  chromium: "Chromium",
+  webkit: "WebKit",
+};
+
+/**
+ * The sentence the browser runs are while no browser run is recorded.
+ */
+const noRuns = "No browser run has been recorded.";
 
 /**
  * The column headers of the verdict report's table, the row header (the document) first.
@@ -534,6 +564,37 @@ const recordWords = (record: PassRecord): string =>
     .join("; ");
 
 /**
+ * Give an engine's browser-run cells, in {@link runColumns}' order: WebKit's note is the sentence
+ * that it stands in for Safari, and Chromium's is empty.
+ *
+ * @param run The engine's entry.
+ * @returns Its cells' words.
+ */
+const runCells = (run: BrowserRunRow): readonly string[] => [
+  engineWords[run.engine],
+  run.version,
+  run.playwright,
+  run.date,
+  String(run.passed),
+  String(run.failed),
+  run.engine === "webkit" ? standsInForSafari : "",
+];
+
+/**
+ * Word an engine's browser run as one line: each cell that is not empty, after its column's
+ * header.
+ *
+ * @param run The engine's entry.
+ * @returns The line.
+ */
+const runWords = (run: BrowserRunRow): string =>
+  runCells(run)
+    .map((words, index) => [runColumns[index] ?? "", words] as const)
+    .filter(([, words]) => words !== "")
+    .map(([column, words]) => `${column}: ${words}`)
+    .join("; ");
+
+/**
  * Word a note on one sitting: its date, its owner and its text.
  *
  * @param note The note.
@@ -608,8 +669,8 @@ const rowLines = (row: LedgerRow, family: Family): readonly string[] => {
  * @param support The browser-support note's rows; `browserSupport` when absent.
  * @param notes The notes on each sitting; `sessionNotes` when absent.
  * @returns The text: the title and what it says, each level's headline and its rows by family, the
- *   `limited` rows with their sources, the browser-support note, the records and the notes, each
- *   line ending in a line feed.
+ *   `limited` rows with their sources, the browser-support note, the records, the notes and the
+ *   browser runs, each line ending in a line feed.
  */
 export const ledgerText = (
   ledger: Ledger,
@@ -644,6 +705,9 @@ export const ledgerText = (
     "",
     notesHeading,
     ...(notes.length === 0 ? [noNotes] : notes.map(noteWords)),
+    "",
+    runsHeading,
+    ...(ledger.browserRuns.length === 0 ? [noRuns] : ledger.browserRuns.map(runWords)),
   ]
     .map((line) => `${line}\n`)
     .join("");
@@ -652,12 +716,13 @@ export const ledgerText = (
 /**
  * Construct the ledger as an HTML tree, a plain page a third party can read: per level its heading,
  * its headline and a table per family, then the `limited` rows with their sources, the
- * browser-support note, the records and, under its own `h3`, the notes on each sitting.
+ * browser-support note, the records, under its own `h3` the notes on each sitting, and the browser
+ * runs.
  *
- * Every table has a caption and column headers (`th scope="col"`), and each row a row header
- * (`th scope="row"`): the feature ID, the feature, or the reader. A proof links to its test file in
- * the public repository and to each corpus document it names in the dev playground. Headings start
- * at `h1`. Every string is a text node, so the serialiser escapes it.
+ * Every table has a caption and column headers (`th scope="col"`). Each row has a row header
+ * (`th scope="row"`): the feature ID, the feature, the reader, or the engine. A proof links to its
+ * test file in the public repository and to each corpus document it names in the dev playground.
+ * Headings start at `h1`. Every string is a text node, so the serialiser escapes it.
  *
  * @param ledger The ledger.
  * @param support The browser-support note's rows; `browserSupport` when absent.
@@ -727,6 +792,21 @@ export const ledgerHtml = (
           {},
           notes.map((note) => h("li", {}, [text(noteWords(note))])),
         ),
+    h("h2", {}, [text(runsHeading)]),
+    ledger.browserRuns.length === 0
+      ? h("p", {}, [text(noRuns)])
+      : h("table", {}, [
+          ...tableHead(runsCaption, runColumns),
+          h(
+            "tbody",
+            {},
+            ledger.browserRuns.map((run) => {
+              const [engine = "", ...rest] = runCells(run);
+
+              return h("tr", {}, [h("th", { scope: "row" }, [text(engine)]), ...rest.map(cell)]);
+            }),
+          ),
+        ]),
   ]);
 };
 

@@ -5,7 +5,9 @@ import { exclusions, features, levels } from "#plate/ledger/features.ts";
 import { ManualCheck, PassRecord } from "#plate/ledger/passes.ts";
 import type { ScreenReaderPass } from "#plate/ledger/passes.ts";
 import { decodeReport, ledger } from "#plate/ledger/report.ts";
-import type { Ledger, LedgerRow, ProofFile } from "#plate/ledger/report.ts";
+import type { Ledger, LedgerRow, ProofFile, TestResult } from "#plate/ledger/report.ts";
+import { standsInForSafari } from "#plate/ledger/runs.ts";
+import type { BrowserRun } from "#plate/ledger/runs.ts";
 
 /**
  * The package directory the fixture report says Vitest ran in.
@@ -207,7 +209,7 @@ const records: readonly PassRecord[] = [
  */
 const fixtureLedger = decodeReport(reportText, root).pipe(
   Effect.map((results) =>
-    ledger({ claims, corpus, exclusions, features, records, results, sources }),
+    ledger({ browserRuns: [], claims, corpus, exclusions, features, records, results, sources }),
   ),
 );
 
@@ -221,6 +223,7 @@ const ledgerWith = (added: readonly PassRecord[]) =>
   decodeReport(reportText, root).pipe(
     Effect.map((results) =>
       ledger({
+        browserRuns: [],
         claims,
         corpus,
         exclusions,
@@ -245,6 +248,85 @@ const openPass: ScreenReaderPass = {
   notes: "not run in the first sitting (2026-11-05)",
   result: "not-observed",
 };
+
+/**
+ * The fixture browser file, whose cases run once in each engine under a `describe` named for it.
+ */
+const walkFile = "src/dev/walk.browser.test.ts";
+
+/**
+ * Build one browser test's entry as Vitest's JSON reporter writes it: its title under the engine's
+ * `describe` and the walk's.
+ *
+ * @param engine The engine whose `describe` holds the test.
+ * @param title The test's own title.
+ * @param status How it ended.
+ * @returns The entry.
+ */
+const browserAssertion = (engine: string, title: string, status: string) => ({
+  ...assertion(`${engine} the walk ${title}`, status),
+  ancestorTitles: [engine, "the walk"],
+  title,
+});
+
+/**
+ * The fixture browser report's text: in each engine, a Choice walked by keys alone that passed and
+ * a Text Entry walked by keys alone that failed.
+ */
+const browserReportText = JSON.stringify({
+  testResults: [
+    {
+      ...testFile(walkFile, []),
+      assertionResults: ["chromium", "webkit"].flatMap((engine) => [
+        browserAssertion(engine, "[Q-2] [keyboard] BG007 by keys alone scores 1", "passed"),
+        browserAssertion(engine, "[Q-20] [keyboard] a Text Entry by keys alone scores 1", "failed"),
+      ]),
+    },
+  ],
+});
+
+/**
+ * The fixture browser run: Chromium, and WebKit standing in for Safari.
+ */
+const browserRun: BrowserRun = {
+  date: "2026-11-05T18:57:26.239Z",
+  engines: [
+    { engine: "chromium", version: "156.0.8078.4" },
+    { engine: "webkit", standsInFor: "Safari", version: "27.2" },
+  ],
+  playwright: "1.64.1",
+};
+
+/**
+ * A unit test outside the browser files whose full name starts with an engine's name: it is not a
+ * browser result, so no engine counts it.
+ */
+const engineNamedUnitTest: TestResult = {
+  file: "src/test/browsers.test.ts",
+  fullName: "chromium is the first engine name",
+  state: "passed",
+};
+
+/**
+ * The ledger over the fixture report and the fixture browser report, with the fixture browser run.
+ */
+const browserLedger = Effect.all([
+  decodeReport(reportText, root),
+  decodeReport(browserReportText, root),
+]).pipe(
+  Effect.map(([units, browsers]) =>
+    ledger({
+      browserRuns: [browserRun],
+      claims,
+      corpus,
+      exclusions,
+      features,
+      records,
+      results: [...units, engineNamedUnitTest, ...browsers],
+      sources,
+    }),
+  ),
+);
 
 /**
  * Find a row of the ledger by its ID.
@@ -472,6 +554,58 @@ describe("ledger/report.ts", () => {
         "test-built form",
       ]);
       assert.deepStrictEqual(rowOf(built, "Q-31").interaction?.composition, []);
+    }),
+  );
+
+  it.effect(
+    "a passing [Q-2] [keyboard] test in a browser file gives Q-2 the composition dev playground in a browser",
+    () =>
+      Effect.gen(function* browserComposition() {
+        const built = yield* browserLedger;
+
+        assert.deepStrictEqual(rowOf(built, "Q-2").interaction?.composition, [
+          "dev playground",
+          "dev playground in a browser",
+          "test-built form",
+        ]);
+        assert.deepStrictEqual(rowOf(built, "Q-2").interaction?.keyboard, [
+          "interactions/choice.ts [Q-2] [keyboard] a Choice completes by keyboard",
+          "dev/page.ts [Q-2] [keyboard] BG007 completes in the playground",
+          "chromium the walk [Q-2] [keyboard] BG007 by keys alone scores 1",
+          "webkit the walk [Q-2] [keyboard] BG007 by keys alone scores 1",
+        ]);
+      }),
+  );
+
+  it.effect("a failing browser test backs no row", () =>
+    Effect.gen(function* browserFailure() {
+      const row = rowOf(yield* browserLedger, "Q-20");
+
+      assert.strictEqual(row.state, "unsupported-with-notice");
+      assert.deepStrictEqual(row.proofs, []);
+      assert.deepStrictEqual(row.interaction?.keyboard, []);
+      assert.deepStrictEqual(row.interaction?.composition, []);
+    }),
+  );
+
+  it.effect(
+    "each engine of a browser run counts its passed and failed browser results, WebKit standing in for Safari",
+    () =>
+      Effect.gen(function* browserCounts() {
+        const built = yield* browserLedger;
+        const common = { date: browserRun.date, failed: 1, passed: 1, playwright: "1.64.1" };
+
+        assert.deepStrictEqual(built.browserRuns, [
+          { ...common, engine: "chromium", version: "156.0.8078.4" },
+          { ...common, engine: "webkit", standsInFor: "Safari", version: "27.2" },
+        ]);
+        assert.strictEqual(standsInForSafari, "WebKit stands in for Safari until safaridriver");
+      }),
+  );
+
+  it.effect("a ledger with no browser run records none", () =>
+    Effect.gen(function* noBrowserRun() {
+      assert.deepStrictEqual((yield* fixtureLedger).browserRuns, []);
     }),
   );
 
