@@ -19,22 +19,25 @@ import {
   PrefixedVariableSource,
   SectionDurationRef,
   SectionDurationTarget,
+  SectionVariableRef,
+  SectionVariableResolution,
 } from "#pantry/schema/processing.ts";
 import { ItemRefDocument } from "#pantry/schema/reference.ts";
 import { VariableMapping } from "#pantry/schema/test/rules.ts";
 import { TestDocument, TestReach } from "#pantry/schema/test/structure.ts";
 
 /**
- * The statements over the prefixed arms, the hub and `SectionDurationTarget` that name another
- * module's relations: each prefixed arm's root is a document; the hub's test is a test document's,
- * and its prefix is an item reference of that test, which has an item document and, for a mapped
- * source, a variable mapping; a section duration target's test is a test document's and its prefix
- * names a part or a section of it.
+ * The statements over the prefixed arms, the hub, `SectionDurationTarget`, `SectionVariableRef` and
+ * `SectionVariableResolution` that name another module's relations: each prefixed arm's root is a
+ * document; the hub's test is a test document's, and its prefix is an item reference of that test,
+ * which has an item document and, for a mapped source, a variable mapping; a section duration
+ * target's test is a test document's and its prefix names a part or a section of it.
  */
 export const rules = [
   contained(on(ItemVariableRef, "document", "root"), on(Document, "id", "root")),
   contained(on(ItemInstanceVariableRef, "document", "root"), on(Document, "id", "root")),
   contained(on(SectionDurationRef, "document", "root"), on(Document, "id", "root")),
+  contained(on(SectionVariableRef, "document", "root"), on(Document, "id", "root")),
   contained(on(PrefixedVariableSource, "test", "document"), on(TestDocument, "test", "document")),
   contained(
     on(PrefixedVariableSource, "test", "prefix", "itemRef"),
@@ -49,5 +52,9 @@ export const rules = [
   contained(
     on(SectionDurationTarget, "test", "prefix", "holder", "holderKind"),
     on(TestReach, "test", "identifier", "holder", "holderKind"),
+  ),
+  contained(
+    on(SectionVariableResolution, "test", "document"),
+    on(TestDocument, "test", "document"),
   ),
 ] as const;

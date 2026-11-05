@@ -268,7 +268,10 @@ describe("processing", () => {
   });
 
   it("mirrors the item-rooted processing nodes with ResponseProcessingItem on id", () => {
-    const [rule, ...rest] = ofKind("mirrors");
+    const [rule, ...rest] = ofKind("mirrors").filter(
+      (candidate) =>
+        selectionOf(candidate.left)?.relation === processing.relations.ResponseProcessing,
+    );
     assert.strictEqual(rest.length, 0);
     assert.isDefined(rule);
     if (rule === undefined) {
@@ -611,6 +614,7 @@ describe("processing", () => {
       "itemInstanceVariable",
       "itemVariable",
       "sectionDuration",
+      "sectionVariable",
       "templateParameter",
     ]);
 
@@ -673,7 +677,7 @@ describe("processing", () => {
     );
   });
 
-  it("declares VariableRef alternatives over RefKind with the declared, built-in, template-parameter and prefixed arms", () => {
+  it("declares VariableRef alternatives over RefKind with the declared, built-in, template-parameter, prefixed and section-variable arms", () => {
     const { VariableRef, DeclaredRef, BuiltInRef } = processing.relations;
     assert.deepStrictEqual(
       [...processing.relations.RefKind.handles],
@@ -717,6 +721,7 @@ describe("processing", () => {
       itemInstanceVariable: processing.relations.ItemInstanceVariableRef,
       itemVariable: processing.relations.ItemVariableRef,
       sectionDuration: processing.relations.SectionDurationRef,
+      sectionVariable: processing.relations.SectionVariableRef,
       templateParameter: processing.relations.TemplateParameterRef,
     });
     assert.deepStrictEqual(containedFrom(VariableRef), [
@@ -1050,5 +1055,152 @@ describe("processing headings: the prefixed arms and the per-test relations", ()
         String(rule.left.fields),
       );
     }
+  });
+});
+
+describe("processing: the as-written arm of a section document and its per-test resolution", () => {
+  const {
+    PrefixedVariableSource,
+    SectionDurationTarget,
+    SectionVariableDeclared,
+    SectionVariableDuration,
+    SectionVariablePrefixed,
+    SectionVariableRef,
+    SectionVariableResolution,
+    VariableRef,
+  } = processing.relations;
+
+  it("arms every one of RefKind's seven handles, sectionVariable last", () => {
+    const [rule, ...rest] = ofKind("alternatives").filter(
+      (candidate) => candidate.parent === VariableRef,
+    );
+    assert.strictEqual(rest.length, 0);
+    assert.deepStrictEqual(
+      Object.keys(rule?.arms ?? {}).toSorted(),
+      [...processing.RefKind.handles].toSorted(),
+    );
+    assert.strictEqual(processing.RefKind.handles.at(-1), "sectionVariable");
+    assert.include(Object.values(rule?.arms ?? {}), SectionVariableRef);
+  });
+
+  it("binds SectionVariableRef to its reference and to the kind of node that refers", () => {
+    assert.deepStrictEqual(lawsFrom(SectionVariableRef), [
+      [undefined, ["id", "document"], VariableRef, undefined, ["id", "document"]],
+      [undefined, ["id", "referrerKind"], node.relations.Node, undefined, ["id", "kind"]],
+    ]);
+  });
+
+  it("leaves SectionVariableRef's document root to the test module's statements", () => {
+    assert.isFalse(
+      lawsFrom(SectionVariableRef).some((law) => law[2] === document.relations.Document),
+    );
+  });
+
+  it("checks SectionVariableRef's root is a section and its referrer one of the five expressions", () => {
+    assert.deepStrictEqual(
+      ofKind("check")
+        .filter((check) => check.relation === SectionVariableRef)
+        .map((check) => check.name),
+      ["SectionVariableRoot", "SectionVariableReferrer"],
+    );
+
+    const [root = "", referrer = ""] = predicateText(processing.rules, SectionVariableRef);
+    assert.include(root, "root");
+    assert.include(root, "section");
+    assert.notInclude(root, "test");
+    for (const kind of [
+      "qti-variable",
+      "qti-default",
+      "qti-correct",
+      "qti-map-response",
+      "qti-map-response-point",
+    ]) {
+      assert.include(referrer, `'${kind}'`);
+    }
+    for (const kind of [
+      "qti-set-outcome-value",
+      "qti-lookup-outcome-value",
+      "qti-set-template-value",
+      "qti-set-default-value",
+      "qti-set-correct-response",
+    ]) {
+      assert.notInclude(referrer, kind);
+    }
+  });
+
+  it("binds SectionVariableResolution to its reference and holds a target alternatives over three arms", () => {
+    assert.deepStrictEqual(lawsFrom(SectionVariableResolution), [
+      [undefined, ["ref", "document"], SectionVariableRef, undefined, ["id", "document"]],
+    ]);
+
+    const [rule, ...rest] = ofKind("alternatives").filter(
+      (candidate) => candidate.parent === SectionVariableResolution,
+    );
+    assert.strictEqual(rest.length, 0);
+    assert.strictEqual(rule?.discriminator, "target");
+    assert.strictEqual(rule?.roster, rosters.relations.SectionVariableTarget);
+    assert.deepStrictEqual(rule?.arms, {
+      declared: SectionVariableDeclared,
+      duration: SectionVariableDuration,
+      prefixed: SectionVariablePrefixed,
+    });
+  });
+
+  it("homes a declared resolution in the section variable and in the test's declaration", () => {
+    assert.deepStrictEqual(lawsFrom(SectionVariableDeclared), [
+      [
+        undefined,
+        ["ref", "identifier", "referrerKind"],
+        SectionVariableRef,
+        undefined,
+        ["id", "identifier", "referrerKind"],
+      ],
+      [
+        undefined,
+        ["test", "identifier", "declarationKind"],
+        declaration.relations.Declaration,
+        undefined,
+        ["document", "identifier", "kind"],
+      ],
+    ]);
+  });
+
+  it("gives SectionVariableDeclared the same disjunction DeclaredRef has", () => {
+    const { DeclaredRef } = processing.relations;
+    const [declared = ""] = predicateText(processing.rules, DeclaredRef);
+    const checks = ofKind("check").filter((check) => check.relation === SectionVariableDeclared);
+    assert.deepStrictEqual(
+      checks.map((check) => check.name),
+      ["SectionVariableDeclaredKind"],
+    );
+
+    const [section = ""] = predicateText(processing.rules, SectionVariableDeclared);
+    assert.strictEqual(section, declared);
+  });
+
+  it("mirrors each thin arm against the hub's or the duration target's section-variable rows", () => {
+    const mirrored = ofKind("mirrors").filter(
+      (rule) =>
+        rule.left.source === SectionVariablePrefixed ||
+        rule.left.source === SectionVariableDuration,
+    );
+    assert.strictEqual(mirrored.length, 2);
+    for (const [arm, other] of [
+      [SectionVariablePrefixed, PrefixedVariableSource],
+      [SectionVariableDuration, SectionDurationTarget],
+    ] as const) {
+      const rule = mirrored.find((candidate) => candidate.left.source === arm);
+      assert.deepStrictEqual([...(rule?.left.fields ?? [])], ["ref", "test"], arm.name);
+      assert.strictEqual(selectionOf(rule?.left ?? { source: {} }), undefined, arm.name);
+
+      const selection = selectionOf(rule?.right ?? { source: {} });
+      assert.strictEqual(selection?.relation, other, arm.name);
+      assert.deepStrictEqual(selection?.bindings, { refKind: "sectionVariable" }, arm.name);
+      assert.deepStrictEqual([...(rule?.right.fields ?? [])], ["ref", "test"], arm.name);
+    }
+  });
+
+  it("holds 73 statements: p5-34's 62 and eleven of E18", () => {
+    assert.strictEqual(processing.rules.length, 73);
   });
 });
