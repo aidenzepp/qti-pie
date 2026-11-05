@@ -382,10 +382,9 @@ describe("check", () => {
     }
   });
 
-  // An interim, not a reading: reading 6 covers only a nested QTI root, and rule `5b8ee08b`
-  // validates a known QTI element inside lax wildcard content as QTI. M1-R judges this Choice in
-  // the structural walk and the prose rules (the ledger's lax-wildcard deferral).
-  it("accepts a Choice inside a custom interaction, unsupported: phase 1 skips wildcard content", () => {
+  // A Choice is declared only locally in the XSD, so the custom interaction's lax wildcard passes
+  // over it: neither the walk nor the prose rules judge it, and its undeclared response is no fault.
+  it("accepts a Choice directly in a custom interaction, unsupported: the walk does not check it", () => {
     const vendor = el(
       "qti-choice-interaction",
       [attr("response-identifier", "VENDOR")],
@@ -402,6 +401,39 @@ describe("check", () => {
     );
 
     assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+  });
+
+  it("refuses a Choice in a div in a custom interaction bound to an undeclared response, at the path the walk names", () => {
+    const vendor = el(
+      "qti-choice-interaction",
+      [attr("response-identifier", "VENDOR")],
+      [
+        el("qti-simple-choice", [attr("identifier", "A")], [text("Yes")]),
+        el("qti-simple-choice", [attr("identifier", "B")], [text("No")]),
+      ],
+    );
+    const verdict = verdictOf(
+      item([
+        response("identifier", "single"),
+        body([
+          el(
+            "qti-custom-interaction",
+            [attr("response-identifier", "RESPONSE")],
+            [el("div", [], [vendor])],
+          ),
+        ]),
+      ]),
+    );
+
+    assert.deepStrictEqual(refusalsOf(verdict), [
+      {
+        location: {
+          kind: "path",
+          path: `${bodyPath}/qti-custom-interaction/div/qti-choice-interaction/@response-identifier`,
+        },
+        rule: "undeclared-response",
+      },
+    ]);
   });
 
   it("leaves an entity reference unchecked, in text and in an attribute value", () => {
@@ -1055,6 +1087,21 @@ describe("describeRefusal", () => {
 
     assert.notMatch(sentence, /[\n\r]/u);
     assert.notInclude(codeSpans(sentence).outside, "![");
+  });
+
+  it("names which operand of a qti-equal is not a single integer or float", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        element: "qti-equal",
+        expressionBaseType: "string",
+        expressionCardinality: "single",
+        operand: "2",
+      }),
+    );
+
+    assert.include(sentence, "Operand 2 of `qti-equal` is a single `string` value");
+    assert.include(sentence, "a single `integer` or `float`");
+    assert.notInclude(sentence, "outcome");
   });
 
   it("names the qti-map-response that needs a mapping, not a template", () => {

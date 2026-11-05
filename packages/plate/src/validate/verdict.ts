@@ -640,7 +640,7 @@ export const check = (source: SourceDocument, tables: Tables): Verdict => {
     return { document, refusals: [notQtiRoot(source)], verdict: "refused" };
   }
 
-  const refusals = [...checkStructure(source, tables), ...checkRules(source)];
+  const refusals = [...checkStructure(source, tables), ...checkRules(source, tables)];
   if (Arr.isReadonlyArrayNonEmpty(refusals)) {
     return { document, refusals, verdict: "refused" };
   }
@@ -836,13 +836,23 @@ const variableKind = (expected: string): string =>
  * Word an `expression-type` refusal.
  *
  * @param refusal The refusal.
- * @returns The sentence: a lookup operand against its table (reading 28), or an expression against
- *   the outcome it sets.
+ * @returns The sentence: a `qti-equal`'s operand that is not a single integer or float, counted
+ *   from 1; a lookup operand against its table (reading 28); or an expression against the outcome
+ *   it sets.
  */
 const expressionType = (refusal: Refusal): string => {
   const element = fact(refusal, "element", "the element");
   const identifier = fact(refusal, "identifier", "the outcome");
   const expression = `${fact(refusal, "expressionCardinality", "")} ${baseTypeText(fact(refusal, "expressionBaseType", ""))}`;
+  const operand = optionalFact(refusal, "operand");
+
+  if (Option.isSome(operand)) {
+    return sentence(
+      refusal,
+      `Operand ${operand.value} of ${code(element)} is a ${expression} value, not a single ${code("integer")} or ${code("float")}${citation(refusal)}.`,
+      `give operand ${operand.value} a single ${code("integer")} or ${code("float")} value`,
+    );
+  }
 
   return Option.match(optionalFact(refusal, "table"), {
     onNone: () =>
