@@ -1,9 +1,16 @@
 /**
  * How the interactions name their groups and controls for assistive technology (§4.3, §4.8, Q10):
- * the names the author wrote, and the renderer's own for a text control the author left unnamed.
+ * the names the author wrote, and the renderer's own for a control the author left unnamed.
  *
  * A Choice, a Text Entry and an Extended Text each read the author's `aria-label` and
  * `aria-labelledby` here, so every interaction scopes the author's ids the same way.
+ *
+ * The renderer names a control only when the author gave it no name, by Q10's rule: a text control
+ * with no Prompt and no `aria-label` or `aria-labelledby` is "Answer", or "Answer n of count"
+ * ({@link textControlName}); a Choice whose content gives no text is "Choice n of count", `n` its
+ * position among the Choices as emitted and `count` their number ({@link choiceControlName}). A
+ * Choice's content gives text when its text nodes, an `img`'s `alt`, an element's `aria-label` or a
+ * notice hold anything but whitespace, `aria-hidden="true"` content left out ({@link givesText}).
  *
  * @module
  */
@@ -12,7 +19,78 @@ import type { Attributes } from "#plate/emit/node.ts";
 import { authoredIdrefs } from "#plate/emit/parts.ts";
 import { message } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
-import type { TextName } from "#plate/payload.ts";
+import type { AttributePayload, PayloadNode, TextName } from "#plate/payload.ts";
+
+/**
+ * Write a count or a position as the locale writes numbers.
+ *
+ * @param locale The locale of the renderer's own text.
+ * @param n The number.
+ * @returns The number, formatted.
+ */
+const numeral = (locale: Locale, n: number): string => new Intl.NumberFormat(locale).format(n);
+
+/**
+ * Decide whether a text holds anything but ASCII whitespace, the whitespace a name collapses.
+ *
+ * @param text The text.
+ * @returns Whether it is not blank.
+ */
+const isWritten = (text: string): boolean => /[^\t\n\f\r ]/u.test(text);
+
+/**
+ * Read an attribute of a body element, none when the element does not carry it.
+ *
+ * @param attributes The element's attributes, as the payload holds them.
+ * @param name The attribute's name.
+ * @returns Its value, or none.
+ */
+const attributeOf = (
+  attributes: readonly AttributePayload[],
+  name: string,
+): Option.Option<string> =>
+  Option.fromNullishOr(attributes.find((attribute) => attribute.name === name)?.value);
+
+/**
+ * Decide whether payload nodes give a reader any text, as `checkTree`'s `textOf` reads a subtree:
+ * a text node, an `img`'s `alt` and an element's `aria-label`, each counting when it holds anything
+ * but whitespace, and a notice, which the renderer writes as text. An element with
+ * `aria-hidden="true"` gives none, nor does anything below it.
+ *
+ * @param nodes The nodes, a Choice's content as the payload holds it.
+ * @returns Whether any of them gives text.
+ */
+export const givesText = (nodes: readonly PayloadNode[]): boolean =>
+  nodes.some((node) => {
+    switch (node.kind) {
+      case "text": {
+        return isWritten(node.text);
+      }
+      case "element": {
+        const read = (name: string) => Option.exists(attributeOf(node.attributes, name), isWritten);
+
+        return (
+          !Option.contains(attributeOf(node.attributes, "aria-hidden"), "true") &&
+          (read("aria-label") || (node.tag === "img" && read("alt")) || givesText(node.children))
+        );
+      }
+      case "notice": {
+        return true;
+      }
+      case "choice":
+      case "extended-text":
+      case "text-entry": {
+        // No content holds an interaction: the emitter refuses one there (`nestedInteraction`).
+        return false;
+      }
+      default: {
+        // Only a payload that lost its type on the way here holds another kind.
+        node satisfies never;
+
+        return false;
+      }
+    }
+  });
 
 /**
  * Give the author's `aria-labelledby` with each id scoped by the instance through
@@ -68,13 +146,43 @@ export const textControlName = (name: TextName, instance: string, locale: Locale
     return authorsName(name, instance);
   }
 
-  const count = (n: number): string => new Intl.NumberFormat(locale).format(n);
-
   return {
     "aria-label": Option.match(name.unnamed.pipe(Option.filter((position) => position.count > 1)), {
       onNone: () => message(locale, "answer"),
       onSome: (position) =>
-        message(locale, "answerOf", { count: count(position.count), n: count(position.n) }),
+        message(locale, "answerOf", {
+          count: numeral(locale, position.count),
+          n: numeral(locale, position.n),
+        }),
     }),
   };
 };
+
+/**
+ * Name a Choice's Control (§4.3, Q10).
+ *
+ * A Control whose content gives text ({@link givesText}) is named by its Label: `aria-labelledby`
+ * names the Label's id. One whose content gives none is named by the renderer: `aria-label` is
+ * "Choice n of count", and it carries no `aria-labelledby`, since a reference to an empty Label
+ * would name it nothing rather than fall back.
+ *
+ * @param content The Choice's content, as the payload holds it.
+ * @param labelId The id of the Choice's Label.
+ * @param position The Choice's position `n`, from 1, among the `count` Choices as emitted.
+ * @param locale The locale of the renderer's own text.
+ * @returns The naming attributes.
+ */
+export const choiceControlName = (
+  content: readonly PayloadNode[],
+  labelId: string,
+  position: { readonly count: number; readonly n: number },
+  locale: Locale,
+): Attributes =>
+  givesText(content)
+    ? { "aria-labelledby": labelId }
+    : {
+        "aria-label": message(locale, "choiceOf", {
+          count: numeral(locale, position.count),
+          n: numeral(locale, position.n),
+        }),
+      };

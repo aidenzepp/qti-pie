@@ -286,6 +286,56 @@ const decoded = (
     ),
   );
 
+/**
+ * The path of a choice's content in the fixtures that build it.
+ */
+const choicePath = "qti-assessment-item/qti-item-body/qti-choice-interaction/qti-simple-choice";
+
+/**
+ * Construct an element of a choice's content.
+ *
+ * @param tag The element's local name.
+ * @param attributes Its attributes, by name.
+ * @param children Its children, none by default.
+ * @returns The element node.
+ */
+const contentElement = (
+  tag: string,
+  attributes: Readonly<Record<string, string>>,
+  children: readonly BodyNode[] = [],
+): BodyNode => ({
+  attributes: Object.entries(attributes).map(([attribute, value]) => ({ name: attribute, value })),
+  children,
+  kind: "element",
+  path: `${choicePath}/${tag}`,
+  tag,
+});
+
+/**
+ * An image the author marked decorative, `alt=""`, which gives a reader no text.
+ *
+ * @param source The image's `src`.
+ * @returns The `img` node.
+ */
+const decorative = (source: string): BodyNode => contentElement("img", { alt: "", src: source });
+
+/**
+ * Four colour swatches, the second only an image the author marked decorative, as the corpus's
+ * image-only Choices are; the others give text: words, an image's `alt`, words.
+ */
+const swatches: ChoiceInteraction = {
+  ...colours,
+  choices: [
+    { content: [words("Red")], identifier: "A" },
+    { content: [decorative("images/green.png")], identifier: "B" },
+    {
+      content: [contentElement("img", { alt: "A blue swatch", src: "images/blue.png" })],
+      identifier: "C",
+    },
+    { content: [words("Yellow")], identifier: "D" },
+  ],
+};
+
 describe("renderChoice", () => {
   it.effect(
     "[Q-2] names each Control by its choice text and the group by its Prompt, and passes checkTree",
@@ -715,11 +765,129 @@ describe("renderChoice", () => {
   );
 
   it.effect(
+    "[Q-2] names a Control whose content gives no text Choice n of count, and passes checkTree",
+    () =>
+      Effect.gen(function* namesUnnamedChoice() {
+        const built = payloadOf(swatches);
+        const root = yield* render(built);
+        const tree = page(root, built);
+        const controls = partsIn(tree, "control");
+        const labels = partsIn(tree, "label");
+        const unnamed = controls[1] ?? assert.fail("The Choice has no second Control.");
+
+        assert.strictEqual(unnamed.attrs["aria-label"], "Choice 2 of 4");
+        assert.isUndefined(unnamed.attrs["aria-labelledby"]);
+        assert.deepStrictEqual(
+          controls.map((control) => nameOf(control, tree)),
+          ["Red", "Choice 2 of 4", "A blue swatch", "Yellow"],
+        );
+
+        for (const index of [0, 2, 3]) {
+          const control = controls[index] ?? assert.fail(`The Choice has no Control ${index}.`);
+
+          assert.strictEqual(control.attrs["aria-labelledby"], labels[index]?.attrs["id"]);
+          assert.isUndefined(control.attrs["aria-label"]);
+        }
+
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+      }),
+  );
+
+  it.effect("[Q-2] keeps the Label naming a Control whose content carries an aria-label", () =>
+    Effect.gen(function* keepsAuthoredLabel() {
+      const built = payloadOf({
+        ...swatches,
+        choices: [
+          {
+            content: [contentElement("span", { "aria-label": "A green swatch", role: "img" })],
+            identifier: "B",
+          },
+        ],
+      });
+      const root = yield* render(built);
+      const [control] = partsIn(root, "control");
+      const [label] = partsIn(root, "label");
+
+      assert.strictEqual(control?.attrs["aria-labelledby"], label?.attrs["id"]);
+      assert.isUndefined(control?.attrs["aria-label"]);
+      assert.deepStrictEqual(checkTree(page(root, built), { baseLevel: 2 }), []);
+    }),
+  );
+
+  it.effect(
+    "[Q-2] names a Control the renderer's way when its content's only text is blank or hidden, not when it holds a notice",
+    () =>
+      Effect.gen(function* blankOrHidden() {
+        const built = payloadOf({
+          ...swatches,
+          choices: [
+            {
+              content: [words(" \n\t"), contentElement("img", { alt: " ", src: "images/red.png" })],
+              identifier: "A",
+            },
+            {
+              content: [
+                contentElement("span", { "aria-hidden": "true" }, [words("Green")]),
+                decorative("images/green.png"),
+              ],
+              identifier: "B",
+            },
+            {
+              content: [
+                {
+                  feature: "qti-printed-variable",
+                  kind: "unsupported",
+                  path: `${choicePath}/qti-printed-variable`,
+                },
+              ],
+              identifier: "C",
+            },
+          ],
+        });
+        const root = yield* render(built);
+        const controls = partsIn(root, "control");
+        const labels = partsIn(root, "label");
+
+        assert.deepStrictEqual(
+          controls.map((control) => control.attrs["aria-label"]),
+          ["Choice 1 of 3", "Choice 2 of 3", undefined],
+        );
+        assert.deepStrictEqual(
+          controls.map((control) => control.attrs["aria-labelledby"]),
+          [undefined, undefined, labels[2]?.attrs["id"]],
+        );
+        assert.deepStrictEqual(checkTree(page(root, built), { baseLevel: 2 }), []);
+      }),
+  );
+
+  it.effect(
+    "[Q-2] numbers the renderer's names by each Choice's emitted position when shuffled",
+    () =>
+      Effect.gen(function* shuffledNumbers() {
+        const built = payloadOf({
+          ...swatches,
+          choices: ["red", "green", "blue"].map((colour, index) => ({
+            content: [decorative(`images/${colour}.png`)],
+            identifier: ["A", "B", "C"][index] ?? "",
+          })),
+          shuffle: true,
+        });
+        const root = yield* render(built);
+        const tree = page(root, built);
+
+        assert.deepStrictEqual(
+          partsIn(tree, "control").map((control) => control.attrs["aria-label"]),
+          ["Choice 1 of 3", "Choice 2 of 3", "Choice 3 of 3"],
+        );
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+      }),
+  );
+
+  it.effect(
     "[Q-2] writes an authored label in a choice's content as a span, so no label nests a label",
     () =>
       Effect.gen(function* labelAsSpan() {
-        const choicePath =
-          "qti-assessment-item/qti-item-body/qti-choice-interaction/qti-simple-choice";
         const labelled: ChoiceInteraction = {
           ...colours,
           choices: [
