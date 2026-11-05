@@ -5,7 +5,8 @@
   "type": "module",
   "sideEffects": false,
   "imports": {
-    "#plate/*": "./src/*"
+    "#plate/*": "./src/*",
+    "#scripts/*": "./scripts/*"
   },
   "exports": {
     ".": "./src/index.ts"

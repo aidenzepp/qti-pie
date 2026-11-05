@@ -6,10 +6,15 @@ import { ConfigProvider, Effect, Schema } from "effect";
 import { generateFeatures } from "#plate/ledger/features.ts";
 import { Ledger } from "#plate/ledger/report.ts";
 import { ledgerText } from "#plate/ledger/view.ts";
-// oxlint-disable-next-line no-restricted-imports -- the package's `#plate/*` alias maps to `src/` only, so this test reaches the script beside it by its sibling path.
-import { buildLedger, findVp, outputNames, summary, testCommand, VerdictEntry } from "./ledger.ts";
-// oxlint-disable-next-line no-restricted-imports -- as above: the script's types sit beside it, outside the alias.
-import type { LedgerBuild, LedgerOutcome } from "./ledger.ts";
+import {
+  buildLedger,
+  findVp,
+  outputNames,
+  summary,
+  testCommand,
+  VerdictEntry,
+} from "#scripts/ledger.ts";
+import type { LedgerBuild, LedgerOutcome } from "#scripts/ledger.ts";
 
 /**
  * The scratch folder this run owns, under the package's git-ignored `work/`. Its name is new for
