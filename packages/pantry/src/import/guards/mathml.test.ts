@@ -4,8 +4,9 @@ import { Effect } from "effect";
 import { mathmlGuards, modelFinding } from "#pantry/import/guards/mathml.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import { mathExpression, mathmlInventory } from "#pantry/schema/content/inventory/mathml.ts";
-import { models } from "#pantry/schema/mathml/models.ts";
+import { headModel, models } from "#pantry/schema/mathml/models.ts";
 import type { Model, Particle } from "#pantry/schema/mathml/models.ts";
+import { operatorClass, qualifiersOf } from "#pantry/schema/mathml/operators.ts";
 
 /**
  * Collect every handle a particle names, descending into sequences and choices.
@@ -184,6 +185,137 @@ describe("modelFinding", () => {
     assert.strictEqual(modelFinding("m:apply", []), "union-count");
   });
 
+  it("counts the operands of an operator by its class (E C1 to C3)", () => {
+    assert.strictEqual(modelFinding("m:apply", ["m:divide", "m:ci", "m:cn"]), undefined);
+    assert.strictEqual(modelFinding("m:apply", ["m:divide", "m:ci"]), "union-count");
+    assert.strictEqual(
+      modelFinding("m:apply", ["m:divide", "m:ci", "m:cn", "m:ci"]),
+      "union-count",
+    );
+    assert.strictEqual(modelFinding("m:apply", ["m:sin", "m:ci"]), undefined);
+    assert.strictEqual(modelFinding("m:apply", ["m:sin", "m:ci", "m:cn"]), "union-count");
+    assert.strictEqual(modelFinding("m:apply", ["m:sin"]), "union-count");
+    assert.strictEqual(modelFinding("m:apply", ["m:plus"]), undefined);
+    assert.strictEqual(modelFinding("m:apply", ["m:plus", "m:ci", "m:ci", "m:ci"]), undefined);
+    assert.strictEqual(modelFinding("m:apply", ["m:selector"]), "union-count");
+    assert.strictEqual(modelFinding("m:apply", ["m:selector", "m:ci"]), undefined);
+    assert.strictEqual(modelFinding("m:apply", ["m:selector", "m:ci", "m:cn", "m:cn"]), undefined);
+  });
+
+  it("takes one or two operands for minus and root (E C1)", () => {
+    assert.strictEqual(modelFinding("m:apply", ["m:minus"]), "union-count");
+    assert.strictEqual(modelFinding("m:apply", ["m:minus", "m:ci"]), undefined);
+    assert.strictEqual(modelFinding("m:apply", ["m:minus", "m:ci", "m:cn"]), undefined);
+    assert.strictEqual(modelFinding("m:apply", ["m:minus", "m:ci", "m:cn", "m:cn"]), "union-count");
+    assert.strictEqual(modelFinding("m:apply", ["m:root", "m:degree", "m:ci"]), undefined);
+    assert.strictEqual(modelFinding("m:apply", ["m:root", "m:ci"]), undefined);
+  });
+
+  it("reads partialdiff by its bound variables (E C4)", () => {
+    assert.strictEqual(modelFinding("m:apply", ["m:partialdiff", "m:ci"]), "union-count");
+    assert.strictEqual(modelFinding("m:apply", ["m:partialdiff", "m:list", "m:ci"]), undefined);
+    assert.strictEqual(
+      modelFinding("m:apply", ["m:partialdiff", "m:list", "m:ci", "m:ci"]),
+      "union-count",
+    );
+    assert.strictEqual(
+      modelFinding("m:apply", ["m:partialdiff", "m:bvar", "m:bvar", "m:ci"]),
+      undefined,
+    );
+    assert.strictEqual(modelFinding("m:apply", ["m:partialdiff", "m:bvar", "m:ci"]), undefined);
+  });
+
+  it("holds the qualifiers a head admits, in the REC's order (E C5, C7)", () => {
+    assert.strictEqual(
+      modelFinding("m:apply", ["m:int", "m:bvar", "m:lowlimit", "m:uplimit", "m:ci"]),
+      undefined,
+    );
+    assert.strictEqual(
+      modelFinding("m:apply", ["m:int", "m:bvar", "m:condition", "m:lowlimit", "m:ci"]),
+      "ordering",
+    );
+    assert.strictEqual(
+      modelFinding("m:apply", ["m:int", "m:bvar", "m:uplimit", "m:lowlimit", "m:ci"]),
+      "ordering",
+    );
+    assert.strictEqual(modelFinding("m:apply", ["m:sum", "m:ci", "m:bvar"]), "ordering");
+    assert.strictEqual(modelFinding("m:apply", ["m:root", "m:ci", "m:degree"]), "ordering");
+    assert.strictEqual(modelFinding("m:apply", ["m:root", "m:degree", "m:ci"]), undefined);
+    assert.strictEqual(
+      modelFinding("m:apply", ["m:diff", "m:bvar", "m:degree", "m:ci"]),
+      undefined,
+    );
+    assert.strictEqual(
+      modelFinding("m:apply", ["m:limit", "m:bvar", "m:lowlimit", "m:ci"]),
+      undefined,
+    );
+    assert.strictEqual(
+      modelFinding("m:apply", ["m:limit", "m:bvar", "m:lowlimit", "m:uplimit", "m:ci"]),
+      "admission",
+    );
+  });
+
+  it("refuses a qualifier the head does not admit (E rec 2)", () => {
+    assert.strictEqual(modelFinding("m:apply", ["m:sin", "m:logbase", "m:ci"]), "admission");
+    assert.strictEqual(modelFinding("m:apply", ["m:log", "m:logbase", "m:ci"]), undefined);
+    assert.strictEqual(modelFinding("m:apply", ["m:sin", "m:bvar", "m:ci"]), "admission");
+    assert.strictEqual(modelFinding("m:apply", ["m:log", "m:bvar", "m:ci"]), "admission");
+    assert.strictEqual(modelFinding("m:apply", ["m:moment", "m:momentabout", "m:ci"]), undefined);
+    assert.strictEqual(modelFinding("m:apply", ["m:plus", "m:momentabout", "m:ci"]), "admission");
+  });
+
+  it("judges a head the tables do not class by what its row admits (decision 233, F-4)", () => {
+    assert.strictEqual(modelFinding("m:apply", ["m:ci", "m:ci", "m:cn", "m:cn"]), undefined);
+    assert.strictEqual(modelFinding("m:apply", ["m:ci", "m:bvar", "m:logbase", "m:ci"]), undefined);
+    assert.strictEqual(modelFinding("m:apply", ["m:csymbol", "m:degree", "m:ci"]), undefined);
+    assert.strictEqual(modelFinding("m:apply", ["m:cn", "m:bvar", "m:ci"]), "admission");
+    assert.strictEqual(modelFinding("m:apply", ["m:apply", "m:degree", "m:ci"]), "admission");
+    assert.strictEqual(modelFinding("m:apply", ["m:declare", "m:bvar", "m:ci"]), undefined);
+    assert.strictEqual(modelFinding("m:apply", ["m:declare", "m:ci", "m:ci"]), undefined);
+    for (const head of ["m:bind", "m:declare", "m:fn", "m:reln", "m:share"]) {
+      assert.strictEqual(modelFinding("m:apply", [head, "m:bvar", "m:ci"]), undefined, head);
+      assert.strictEqual(modelFinding("m:apply", [head, "m:degree", "m:ci"]), undefined, head);
+      assert.strictEqual(modelFinding("m:apply", [head, "m:ci", "m:bvar"]), "ordering", head);
+    }
+    assert.strictEqual(modelFinding("m:apply", ["m:fn", "m:bvar", "m:ci"]), undefined);
+  });
+
+  it("keeps the XSD's model for a head that is no content expression", () => {
+    assert.strictEqual(modelFinding("m:apply", ["m:mi", "m:ci"]), "union-count");
+    assert.strictEqual(modelFinding("m:apply", ["m:bvar", "m:plus"]), "ordering");
+    assert.strictEqual(modelFinding("m:apply", ["m:degree"]), "union-count");
+  });
+
+  it("counts a presentation operand as no operand", () => {
+    assert.strictEqual(modelFinding("m:apply", ["m:plus", "m:mi"]), "union-count");
+    assert.strictEqual(modelFinding("m:apply", ["m:divide", "m:ci", "m:mi"]), "union-count");
+  });
+
+  it("holds at least one bvar after the head of a bind (E C12, D3)", () => {
+    assert.strictEqual(modelFinding("m:bind", ["m:forall", "m:ci"]), "union-count");
+    assert.strictEqual(modelFinding("m:bind", ["m:forall", "m:bvar", "m:ci"]), undefined);
+    assert.strictEqual(
+      modelFinding("m:bind", ["m:forall", "m:bvar", "m:bvar", "m:condition", "m:ci"]),
+      undefined,
+    );
+    assert.strictEqual(
+      modelFinding("m:bind", ["m:forall", "m:condition", "m:bvar", "m:ci"]),
+      "ordering",
+    );
+    assert.strictEqual(modelFinding("m:bind", ["m:forall"]), "union-count");
+    assert.strictEqual(modelFinding("m:bind", ["m:forall", "m:bvar"]), undefined);
+    assert.strictEqual(modelFinding("m:bind", ["m:forall", "m:degree", "m:bvar"]), "admission");
+    assert.strictEqual(modelFinding("m:bind", ["m:ci", "m:ci"]), "union-count");
+    assert.strictEqual(modelFinding("m:bind", ["m:ci", "m:bvar", "m:ci"]), undefined);
+    assert.strictEqual(modelFinding("m:bind", ["m:mi", "m:ci"]), "union-count");
+    assert.strictEqual(modelFinding("m:bind", []), "union-count");
+  });
+
+  it("holds the lambda's bvar list as the XSD states it (E C11, D3)", () => {
+    assert.strictEqual(modelFinding("m:lambda", ["m:ci"]), undefined);
+    assert.strictEqual(modelFinding("m:lambda", ["m:bvar", "m:bvar", "m:ci"]), undefined);
+  });
+
   it("matches a list's bvar and qualifiers before its elements", () => {
     assert.strictEqual(modelFinding("m:list", ["m:bvar", "m:condition", "m:ci"]), undefined);
     assert.strictEqual(modelFinding("m:list", ["m:ci", "m:bvar"]), "ordering");
@@ -277,6 +409,58 @@ describe("the table of models", () => {
       mathExpression.toSorted(),
     );
     assert.strictEqual(mathExpression.length, 168);
+  });
+});
+
+describe("the head-dependent models", () => {
+  it("reach every head of an operator class", () => {
+    for (const head of Object.keys(operatorClass)) {
+      assert.isDefined(headModel("m:apply", head, false), head);
+      assert.isDefined(headModel("m:bind", head, true), head);
+    }
+  });
+
+  it("find every classed head in the qualifier table", () => {
+    for (const head of Object.keys(operatorClass)) {
+      assert.isTrue(head in qualifiersOf, head);
+    }
+  });
+
+  it("leave only the REC's unclassed heads in the table and five content heads outside it", () => {
+    assert.deepStrictEqual(
+      Object.keys(qualifiersOf)
+        .filter((head) => !(head in operatorClass))
+        .toSorted(),
+      [
+        "m:apply",
+        "m:cbytes",
+        "m:cerror",
+        "m:ci",
+        "m:cn",
+        "m:cs",
+        "m:csymbol",
+        "m:otherwise",
+        "m:piece",
+        "m:piecewise",
+      ],
+    );
+
+    const [first] = modelOf("m:apply");
+    assert.deepStrictEqual(
+      (first === undefined ? [] : handlesOf(first)).filter((head) => !(head in qualifiersOf)),
+      ["m:bind", "m:declare", "m:fn", "m:reln", "m:share"],
+    );
+  });
+
+  it("admit an uplimit only with its lowlimit", () => {
+    for (const [head, admitted] of Object.entries(qualifiersOf)) {
+      assert.isTrue(!admitted.includes("m:uplimit") || admitted.includes("m:lowlimit"), head);
+    }
+  });
+
+  it("name no head for a kind outside the content expressions", () => {
+    assert.isUndefined(headModel("m:apply", "m:mi", false));
+    assert.isUndefined(headModel("m:bind", "m:bvar", true));
   });
 });
 

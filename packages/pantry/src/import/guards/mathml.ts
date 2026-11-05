@@ -7,16 +7,24 @@
  * them from `schema/mathml/models.ts`. {@link modelFinding} is the pure core over plain handle
  * strings; {@link mathmlGuards} reads the rows an import built and refuses before any is written.
  * The table holds the XSD's models with the Recommendation's narrower ones for `m:bvar` and
- * `m:piecewise`, and one last-child rule, `m:mscarries` (spec MA04, part 2). The head-dependent
- * models of `m:apply` and `m:bind` are a later slice's (part 4).
+ * `m:piecewise`, and one last-child rule, `m:mscarries` (spec MA04, part 2). An `m:apply` or
+ * `m:bind` whose head is a content expression is judged by its head instead (part 4): the
+ * qualifiers the head admits, in the REC's order, and the operands its class allows.
  */
 import { Effect } from "effect";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import { mathmlInventory } from "#pantry/schema/content/inventory/mathml.ts";
 import { kinds as genericKinds } from "#pantry/schema/kinds/generic.ts";
-import { models, notLast } from "#pantry/schema/mathml/models.ts";
+import {
+  headModel,
+  headQualifiers,
+  models,
+  notLast,
+  qualifierKinds,
+} from "#pantry/schema/mathml/models.ts";
 import type { Model, Particle } from "#pantry/schema/mathml/models.ts";
+import { qualifierOrder } from "#pantry/schema/mathml/operators.ts";
 import { Edge, Node } from "#pantry/schema/node.ts";
 
 /**
@@ -125,18 +133,96 @@ interface Compiled {
 }
 
 /**
+ * Compile a model once.
+ *
+ * @param model - The model.
+ * @param places - The places that order its children, where the model's own particles do not say.
+ * @returns The model with its pattern and its places.
+ */
+const compile = (
+  model: Model,
+  places: ReadonlyMap<string, number> = placesOf(model),
+): Compiled => ({
+  model,
+  pattern: new RegExp(`^${model.map(patternOf).join("")}$`, "u"),
+  places,
+});
+
+/**
+ * The place of each qualifier after a head: its index in the REC's order, so a `m:lowlimit` and the
+ * `m:uplimit` that shares its particle still sort apart. Every other child is an operand and sorts
+ * after them.
+ */
+const qualifierPlaces: ReadonlyMap<string, number> = new Map(
+  qualifierOrder.filter((kind) => qualifierKinds.has(kind)).map((kind, index) => [kind, index]),
+);
+
+/**
  * The compiled model of every MathML handle.
  */
 const compiled: ReadonlyMap<string, Compiled> = new Map(
-  Object.entries(models).map(([kind, model]) => [
-    kind,
-    {
-      model,
-      pattern: new RegExp(`^${model.map(patternOf).join("")}$`, "u"),
-      places: placesOf(model),
-    },
-  ]),
+  Object.entries(models).map(([kind, model]) => [kind, compile(model)]),
 );
+
+/**
+ * The kinds whose model depends on their first child, the head.
+ */
+type HeadedKind = "m:apply" | "m:bind";
+
+/**
+ * A head-dependent model of one `m:apply` or `m:bind`: the head, the model of what follows it and
+ * the children after it.
+ */
+interface Headed {
+  readonly entry: Compiled;
+  readonly head: string;
+  readonly kind: HeadedKind;
+  readonly tail: readonly string[];
+}
+
+/**
+ * The head-dependent models compiled so far, by kind, head and whether an `m:bvar` follows it.
+ */
+const headed = new Map<string, Compiled | undefined>();
+
+/**
+ * Find the head-dependent model of an `m:apply` or `m:bind`'s children.
+ *
+ * @param kind - The node's kind handle.
+ * @param children - The element children's handles, in document order.
+ * @returns The head, the compiled model of what follows it and the children after it, or nothing
+ *   when the kind is not headed, there is no child or the head is no content expression, so the
+ *   XSD's model of the kind stands.
+ */
+const headedOf = (kind: string, children: readonly string[]): Headed | undefined => {
+  const [head, ...tail] = children;
+  if ((kind !== "m:apply" && kind !== "m:bind") || head === undefined) {
+    return undefined;
+  }
+
+  const bound = tail.includes("m:bvar");
+  const key = `${kind} ${head} ${bound}`;
+  if (!headed.has(key)) {
+    const model = headModel(kind, head, bound);
+    headed.set(key, model === undefined ? undefined : compile(model, qualifierPlaces));
+  }
+
+  const entry = headed.get(key);
+
+  return entry === undefined ? undefined : { entry, head, kind, tail };
+};
+
+/**
+ * The qualifiers after a head that the head does not admit.
+ *
+ * @param found - The head-dependent model of the node.
+ * @returns The qualifier handles, in document order, that the head's table does not list.
+ */
+const unadmitted = (found: Headed): readonly string[] => {
+  const admitted = headQualifiers(found.kind, found.head);
+
+  return found.tail.filter((child) => qualifierKinds.has(child) && !admitted.includes(child));
+};
 
 /**
  * Whether a child list matches a compiled model.
@@ -169,7 +255,26 @@ const endsWrong = (kind: string, children: readonly string[]): boolean => {
 /**
  * The rule a failed child list breaks, or nothing when it passes.
  */
-export type ModelFinding = "ordering" | "union-count" | undefined;
+export type ModelFinding = "admission" | "ordering" | "union-count" | undefined;
+
+/**
+ * Judge a child list against one compiled model.
+ *
+ * @param entry - The compiled model.
+ * @param children - The children to judge, in document order.
+ * @returns Nothing when they match, `ordering` when only their order is wrong, else `union-count`.
+ */
+const judge = (entry: Compiled, children: readonly string[]): ModelFinding => {
+  if (matches(entry, children)) {
+    return undefined;
+  }
+
+  const place = (child: string): number => entry.places.get(child) ?? Number.MAX_SAFE_INTEGER;
+  const sorted = children.toSorted((a, b) => place(a) - place(b));
+  const moved = sorted.some((child, index) => child !== children[index]);
+
+  return moved && matches(entry, sorted) ? "ordering" : "union-count";
+};
 
 /**
  * Judge one MathML node's element children against the XSD's content model of its kind.
@@ -181,6 +286,12 @@ export type ModelFinding = "ordering" | "union-count" | undefined;
  * sorted by the first top-level particle that names them, equal places keeping their order. A list
  * that matches the model but ends with a child its kind may not end with (an `m:mscarries` last in
  * an `m:mstack`) is `ordering` too.
+ *
+ * An `m:apply` or `m:bind` whose first child, the head, is a content expression is judged by the
+ * head: a qualifier the head's table does not admit is `admission` (E rec 2), and what follows the
+ * head is matched against the qualifiers it admits in the REC's order and then the operands its
+ * class allows, so a qualifier after an operand is `ordering`, not a count. Any other head leaves
+ * the XSD's model of the kind.
  *
  * @param kind - The node's kind handle, such as `m:mfrac`.
  * @param children - The element children's handles, in document order.
@@ -196,15 +307,14 @@ export const modelFinding = (kind: string, children: readonly string[]): ModelFi
     );
   }
 
-  if (matches(entry, children)) {
-    return endsWrong(kind, children) ? "ordering" : undefined;
+  const found = headedOf(kind, children);
+  if (found !== undefined) {
+    return unadmitted(found).length > 0 ? "admission" : judge(found.entry, found.tail);
   }
 
-  const place = (child: string): number => entry.places.get(child) ?? entry.model.length;
-  const sorted = children.toSorted((a, b) => place(a) - place(b));
-  const moved = sorted.some((child, index) => child !== children[index]);
+  const finding = judge(entry, children);
 
-  return moved && matches(entry, sorted) ? "ordering" : "union-count";
+  return finding === undefined && endsWrong(kind, children) ? "ordering" : finding;
 };
 
 /**
@@ -293,18 +403,32 @@ const describeChildren = (children: readonly string[]): string => {
 };
 
 /**
+ * The refusing rules a model finding names.
+ */
+type ModelRule = "admission" | "ordering" | "union-count";
+
+/**
  * Say what is wrong with a node's children, for a refusal.
  *
- * @param rule - `ordering` or `union-count`.
+ * @param rule - The rule the children break.
  * @param kind - The node's kind handle.
  * @param children - The node's element children's handles, in document order.
  * @returns The sentence that names the fault.
  */
-const whyWrong = (
-  rule: "ordering" | "union-count",
-  kind: string,
-  children: readonly string[],
-): string => {
+const whyWrong = (rule: ModelRule, kind: string, children: readonly string[]): string => {
+  const found = headedOf(kind, children);
+  if (rule === "admission" && found !== undefined) {
+    return `the head ${found.head} does not admit ${unadmitted(found).join(", ")} as a qualifier, which the Recommendation's syntax table for it does not list`;
+  }
+
+  if (found !== undefined && rule === "ordering") {
+    return "the children are the right ones but in the wrong order: the qualifiers follow the head in the Recommendation's order, before every operand";
+  }
+
+  if (found !== undefined) {
+    return `the operands after the qualifiers do not match what ${found.head} takes, by count or by kind`;
+  }
+
   if (rule === "ordering" && endsWrong(kind, children)) {
     return "an m:mscarries is the last child, but the Recommendation makes that an error: its children apply to the following row";
   }
@@ -319,7 +443,7 @@ const whyWrong = (
 /**
  * Refuse a MathML node whose element children break its model.
  *
- * @param rule - `ordering` or `union-count`.
+ * @param rule - `admission`, `ordering` or `union-count`.
  * @param node - The node: its id, kind and schema version.
  * @param node.id - The node's id.
  * @param node.kind - The node's kind handle.
@@ -328,11 +452,15 @@ const whyWrong = (
  * @returns The refusal, naming the node, its kind, the model and the children.
  */
 const refusal = (
-  rule: "ordering" | "union-count",
+  rule: ModelRule,
   node: { readonly id: string; readonly kind: string; readonly version: string },
   children: readonly string[],
 ): ImportRefused => {
-  const model = describeModel(compiled.get(node.kind)?.model ?? []);
+  const found = headedOf(node.kind, children);
+  const model =
+    found === undefined
+      ? describeModel(compiled.get(node.kind)?.model ?? [])
+      : `${found.head}, then ${describeModel(found.entry.model)}`;
   const wrong = whyWrong(rule, node.kind, children);
 
   return new ImportRefused({
