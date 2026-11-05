@@ -277,6 +277,21 @@ const copyNames = [
 ] as const;
 
 /**
+ * The names of the eight wildcard fixtures of phase 11 (spec W12): foreign content under the lax
+ * hosts of `qti-custom-operator`, `xi:include`, `xi:fallback` and LOM, and the four refusals.
+ */
+const wildcardNames = [
+  "operator-foreign-content",
+  "fallback-3-0-1",
+  "lom-wildcard",
+  "operator-foreign-first",
+  "nested-root-in-foreign",
+  "unqualified-on-operator",
+  "strict-file-foreign",
+  "qti-ns-under-operator",
+] as const;
+
+/**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-edited
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
@@ -366,6 +381,7 @@ export const fixtureNames = [
   "usage3-feb-30",
   "usage3-bad-context",
   "usage3-bad-name",
+  ...wildcardNames,
 ] as const;
 
 /**
@@ -2091,6 +2107,193 @@ const overUsage = (name: string, ...edits: readonly Edit[]): FixtureSpec => ({
 });
 
 /**
+ * The mathassess namespace `SineRule-001.xml` declares as `ma`, which the wildcard fixtures use as
+ * their foreign namespace.
+ */
+const mathassessNamespace = "http://mathassess.qtitools.org/xsd/mathassess";
+
+/**
+ * The XInclude namespace, declared where a wildcard fixture uses `xi`.
+ */
+const xincludeNamespace = "http://www.w3.org/2001/XInclude";
+
+/**
+ * The XLink namespace, declared where a wildcard fixture uses `xlink`.
+ */
+const xlinkNamespace = "http://www.w3.org/1999/xlink";
+
+/**
+ * The item of `BBQsTest` that the operator fixtures are cut from: a `qti-custom-operator` with one
+ * `qti-base-value` operand, in its template processing.
+ */
+const sineRuleItem = "id-bd44a757f562/SineRule-001.xml";
+
+/**
+ * The start tag of `sineRuleItem`'s one `qti-custom-operator`, without its closing `>`.
+ */
+const customOperatorStart =
+  '<qti-custom-operator class="org.qtitools.mathassess.CasProcess" ma:syntax="text/x-maxima" ma:returnType="float"';
+
+/**
+ * The text that opens the operator's one operand, and the text that ends it, which the foreign
+ * content goes before and after.
+ */
+const operandStart = '<qti-base-value base-type="string"><![CDATA[';
+
+const operandEnd = "]]></qti-base-value>";
+
+/**
+ * Build the spec of a fixture cut from `sineRuleItem`: `edits` of the item, then the cut.
+ *
+ * @param name - The fixture's name.
+ * @param edits - The edits of `sineRuleItem`.
+ * @returns The spec.
+ */
+const overOperator = (name: string, edits: readonly Edit[]): FixtureSpec => {
+  const cut = cutItem(name, "BBQsTest", sineRuleItem, "3.0.0");
+
+  return { ...cut, edits: [...edits, ...cut.edits] };
+};
+
+/**
+ * Build the edit that adds `text` after the operator's operand.
+ *
+ * @param text - The content that follows the operand inside the operator.
+ * @returns The edit as plain data.
+ */
+const afterOperand = (text: string): Edit => replaceIn(sineRuleItem, operandEnd, operandEnd + text);
+
+/**
+ * Build the `ma:extension` that `operator-foreign-content` puts after the operand: foreign and
+ * unqualified attributes, the four `xml:` attributes (one the XSD does not declare), and children
+ * in no namespace, in the QTI namespace and in XInclude.
+ *
+ * @param inside - Further content, at the end of the extension.
+ * @returns The element's text.
+ */
+const extension = (inside: string): string =>
+  `<ma:extension ma:k="v" plain="1" xml:lang="en" xml:space="preserve" xml:id="x1" xml:foo="1">text<ma:inner/><p>para</p><qti-prompt>lax</qti-prompt><xi:include xmlns:xi="${xincludeNamespace}" href="inner.xml"/>${inside}</ma:extension>`;
+
+/**
+ * The `xi:include` that follows the extension: its fallback holds a QTI paragraph and an element
+ * of no namespace.
+ */
+const includeWithFallback = `<xi:include xmlns:xi="${xincludeNamespace}" href="part.xml"><xi:fallback><p>fallback</p><foo xmlns="">local</foo></xi:fallback></xi:include>`;
+
+/**
+ * The edits of `operator-foreign-content`, and of `nested-root-in-foreign` with `inside` in the
+ * extension.
+ *
+ * @param inside - Content at the end of the extension.
+ * @returns The edits of `sineRuleItem`.
+ */
+const operatorForeignEdits = (inside: string): readonly Edit[] => [
+  replaceIn(sineRuleItem, `${customOperatorStart}>`, `${customOperatorStart} xml:foo="1">`),
+  afterOperand(extension(inside) + includeWithFallback),
+];
+
+/**
+ * The item `fallback-3-0-1` is cut from, the one `html-<element>` fixtures use.
+ */
+const fallbackItem = bgChoiceItem;
+
+/**
+ * The response processing of {@link fallbackItem}, a template reference with no content.
+ */
+const fallbackResponseProcessing =
+  '<qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct"/>';
+
+/**
+ * The edits of `fallback-3-0-1`: an `xi:include` with a fallback in the item body, and a response
+ * condition testing a custom operator, with a foreign element after its operand, in the response
+ * processing.
+ */
+const fallbackEdits: readonly Edit[] = [
+  replaceIn(
+    fallbackItem,
+    bgChoiceQuestion,
+    `${bgChoiceQuestion}<xi:include xmlns:xi="${xincludeNamespace}" href="part.xml"><xi:fallback><p>fallback</p><ma:inner xmlns:ma="${mathassessNamespace}"/></xi:fallback></xi:include>`,
+  ),
+  replaceIn(
+    fallbackItem,
+    fallbackResponseProcessing,
+    `${fallbackResponseProcessing.slice(0, -2)}><qti-response-condition><qti-response-if><qti-custom-operator class="org.example.Test"><qti-base-value base-type="boolean">true</qti-base-value><ma:extension xmlns:ma="${mathassessNamespace}" ma:k="v"/></qti-custom-operator></qti-response-if></qti-response-condition></qti-response-processing>`,
+  ),
+];
+
+/**
+ * The `ma:ext` that `lom-wildcard` adds to the manifest's `general`: a foreign attribute, the
+ * four `xml:` attributes the schema reads, the ten XLink attributes and one it does not declare.
+ */
+const lomExtension =
+  '<ma:ext ma:k="v" xml:id="m1" xml:space="preserve" xlink:type="simple" xlink:href="https://example.org/a" xlink:role="https://example.org/r" xlink:arcrole="https://example.org/ar" xlink:title=" t " xlink:show="new" xlink:actuate="onLoad" xlink:label="a" xlink:from="a" xlink:to="b" xlink:foo="1"/>';
+
+/**
+ * The edits of `lom-wildcard`, over `extmeta`'s: the extension in the manifest's `general`, a
+ * foreign attribute and an `xlink:href` on its `lom`, and two extensions with a duplicate `xml:id`
+ * and a bad `xml:space` in a `general` of the record.
+ */
+const lomWildcardEdits: readonly Edit[] = [
+  ...extmetaEdits,
+  replaceIn(
+    "imsmanifest.xml",
+    `<imsmd:lom>${CRLF}            <imsmd:general>`,
+    `<imsmd:lom xmlns:ma="${mathassessNamespace}" xmlns:xlink="${xlinkNamespace}" ma:k="v" xlink:href="https://example.org/lom">${CRLF}            <imsmd:general>`,
+  ),
+  replaceIn(
+    "imsmanifest.xml",
+    `${CRLF}            </imsmd:general>${CRLF}            <imsmd:lifeCycle>`,
+    `${CRLF}                ${lomExtension}${CRLF}            </imsmd:general>${CRLF}            <imsmd:lifeCycle>`,
+  ),
+  replaceIn(
+    "meta/choice.xml",
+    "    <educational>\n",
+    `    <general xmlns:ma="${mathassessNamespace}"><ma:ext xml:id="r1" xml:space="bogus"/><ma:ext xml:id="r1"/></general>\n    <educational>\n`,
+  ),
+];
+
+/**
+ * The eight wildcard fixtures of phase 11 (spec W12) that join no shared set, keyed by name.
+ *
+ * - `operator-foreign-content` adds `xml:foo` to the operator and an `ma:extension` and an
+ *   `xi:include` with a fallback after its operand. `nested-root-in-foreign` holds a
+ *   `qti-response-processing` inside the extension.
+ * - `fallback-3-0-1` is a 3.0.1 item with an `xi:include` fallback in its body and a custom operator
+ *   with a foreign element in its response processing.
+ * - `lom-wildcard` is `extmeta` with foreign content and XLink attributes in LOM.
+ * - The refusals: `operator-foreign-first` puts the foreign element before the operand,
+ *   `unqualified-on-operator` an unqualified attribute on the operator, `strict-file-foreign` a
+ *   foreign element in a file's `metadata`, and `qti-ns-under-operator` a `qti-foo` after the
+ *   operand.
+ */
+const wildcardSpecs: Record<(typeof wildcardNames)[number], FixtureSpec> = {
+  "fallback-3-0-1": {
+    ...cutItem("fallback-3-0-1", "BPIG_22April", fallbackItem, "3.0.1"),
+    edits: [...fallbackEdits, { _tag: "cut", item: fallbackItem, schemaversion: "3.0.1" }],
+  },
+  "lom-wildcard": overSimple("lom-wildcard", lomWildcardEdits),
+  "nested-root-in-foreign": overOperator(
+    "nested-root-in-foreign",
+    operatorForeignEdits("<qti-response-processing/>"),
+  ),
+  "operator-foreign-content": overOperator("operator-foreign-content", operatorForeignEdits("")),
+  "operator-foreign-first": overOperator("operator-foreign-first", [
+    replaceIn(sineRuleItem, operandStart, `<ma:first/>${operandStart}`),
+  ]),
+  "qti-ns-under-operator": overOperator("qti-ns-under-operator", [afterOperand("<qti-foo/>")]),
+  "strict-file-foreign": overSimple("strict-file-foreign", [
+    replaceIn(
+      "imsmanifest.xml",
+      '<file href="images/sign.png"/>',
+      `<file href="images/sign.png"><metadata><ma:ext xmlns:ma="${mathassessNamespace}"/></metadata></file>`,
+    ),
+  ]),
+  "unqualified-on-operator": overOperator("unqualified-on-operator", [
+    replaceIn(sineRuleItem, `${customOperatorStart}>`, `${customOperatorStart} foo="x">`),
+  ]),
+};
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
  *
@@ -2139,6 +2342,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...cutSpecs,
   ...htmlSpecs,
   ...copySpecs,
+  ...wildcardSpecs,
   "bad-identifier-value": {
     edits: [
       replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value>Choice A</qti-value>"),
