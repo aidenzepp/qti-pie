@@ -17,19 +17,19 @@ const slot = <I extends InteractionKey>(interaction: I, part: PartOf<I>): string
   rowFor(interaction, part).slot;
 
 /**
- * Build one Choice row as the part table lays it out: `li > [Control, Label > [Indicator, text]]`,
+ * Build one Choice row as the part table lays it out: `li > [Control, Label > [Indicator, ...]]`,
  * the Control named by `aria-labelledby` and the Label pointing back with `for`.
  *
  * @param response The response identifier the row's ids are scoped by.
  * @param key The choice identifier.
- * @param label The choice text.
+ * @param label The nodes the Label holds after its Indicator.
  * @param control Attributes merged over the Control's defaults.
  * @returns The Choice row.
  */
-const choiceRow = (
+const contentRow = (
   response: string,
   key: string,
-  label: string,
+  label: readonly Node[],
   control: Attributes = {},
 ): Element =>
   h("li", { "data-slot": slot("choice-interaction", "choice") }, [
@@ -53,10 +53,26 @@ const choiceRow = (
         h("span", { "aria-hidden": "true", "data-slot": slot("choice-interaction", "indicator") }, [
           text("o"),
         ]),
-        text(label),
+        ...label,
       ],
     ),
   ]);
+
+/**
+ * Build one Choice row whose Label holds text after its Indicator.
+ *
+ * @param response The response identifier the row's ids are scoped by.
+ * @param key The choice identifier.
+ * @param label The choice text.
+ * @param control Attributes merged over the Control's defaults.
+ * @returns The Choice row.
+ */
+const choiceRow = (
+  response: string,
+  key: string,
+  label: string,
+  control: Attributes = {},
+): Element => contentRow(response, key, [text(label)], control);
 
 /**
  * Build the Choices list holding the rows.
@@ -212,6 +228,17 @@ describe("textOf", () => {
     ]);
     assert.strictEqual(textOf(label), "Paris France");
   });
+
+  it("counts an img's alt, below the element and as the element itself", () => {
+    const flag = h("img", { alt: "French flag", src: "images/fr.png" });
+    const label = h("label", {}, [
+      h("span", { "aria-hidden": "true" }, [h("img", { alt: "Hidden", src: "images/x.png" })]),
+      h("img", { src: "images/blank.png" }),
+      flag,
+    ]);
+    assert.strictEqual(textOf(label), "French flag");
+    assert.strictEqual(textOf(flag), "French flag");
+  });
 });
 
 describe("nameOf", () => {
@@ -245,6 +272,21 @@ describe("nameOf", () => {
     const tree = h("div", {}, [submit, input]);
     assert.strictEqual(nameOf(submit, tree), "Submit");
     assert.strictEqual(nameOf(input, tree), "");
+  });
+
+  it("names a fieldset by its first legend child, after aria-label", () => {
+    const fieldset = h("fieldset", {}, [
+      text(" "),
+      h("legend", {}, [text("Pick a city")]),
+      h("legend", {}, [text("Ignored")]),
+    ]);
+    assert.strictEqual(nameOf(fieldset, fieldset), "Pick a city");
+
+    const labelled = h("fieldset", { "aria-label": "Cities" }, fieldset.children);
+    assert.strictEqual(nameOf(labelled, labelled), "Cities");
+
+    const nested = h("fieldset", {}, [h("div", {}, [h("legend", {}, [text("Deep")])])]);
+    assert.strictEqual(nameOf(nested, nested), "");
   });
 });
 
@@ -290,6 +332,38 @@ describe("isFocusable", () => {
     const stray = h("summary", {}, [text("More")]);
     assert.isFalse(isFocusable(stray, h("div", {}, [stray])));
   });
+
+  it("refuses a control under a disabled fieldset unless it sits in that fieldset's first legend", () => {
+    const inLegend = h("input", { type: "checkbox" });
+    const deepInLegend = h("button", {}, [text("Help")]);
+    const inLaterLegend = h("input", { type: "text" });
+    const inBody = h("select", {});
+    const widget = h("div", { tabindex: "-1" });
+    const fieldset = h("fieldset", { disabled: true }, [
+      text(" "),
+      h("legend", {}, [inLegend, h("span", {}, [deepInLegend])]),
+      h("legend", {}, [inLaterLegend]),
+      h("p", {}, [inBody, widget]),
+    ]);
+    assert.isTrue(isFocusable(inLegend, fieldset));
+    assert.isTrue(isFocusable(deepInLegend, fieldset));
+    assert.isFalse(isFocusable(inLaterLegend, fieldset));
+    assert.isFalse(isFocusable(inBody, fieldset));
+    assert.isTrue(isFocusable(widget, fieldset));
+  });
+
+  it("keeps a control under an enabled fieldset, and refuses one an outer disabled fieldset holds", () => {
+    const control = h("input", { type: "text" });
+    const inner = h("fieldset", {}, [h("legend", {}, [control])]);
+    assert.isTrue(isFocusable(control, h("div", {}, [inner])));
+
+    const shielded = h("input", { type: "text" });
+    const outer = h("fieldset", { disabled: true }, [
+      h("legend", {}, [text("Outer")]),
+      h("fieldset", { disabled: true }, [h("legend", {}, [shielded])]),
+    ]);
+    assert.isFalse(isFocusable(shielded, outer));
+  });
 });
 
 describe("checkTree", () => {
@@ -306,6 +380,14 @@ describe("checkTree", () => {
       checksOf(item([status, essay({ "aria-labelledby": "q1-ESSAY-prompt" }), submit])),
       [],
     );
+  });
+
+  it("passes a Choice whose Labels hold only an image, named by its alt", () => {
+    const flags = choice("Which flag is France's?", [
+      contentRow("RESPONSE", "A", [h("img", { alt: "French flag", src: "images/fr.png" })]),
+      contentRow("RESPONSE", "B", [h("img", { alt: "British flag", src: "images/gb.png" })]),
+    ]);
+    assert.deepStrictEqual(checksOf(item([status, flags, submit])), []);
   });
 
   it("passes autofocus on the Status region", () => {

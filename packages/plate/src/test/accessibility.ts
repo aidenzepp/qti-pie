@@ -280,21 +280,6 @@ const isNativeFocusable = (element: Element, parent: Element | undefined): boole
 };
 
 /**
- * Decide whether an element can take focus, given its parent.
- *
- * @param element The element to classify.
- * @param parent The element's parent, `undefined` for a root.
- * @returns Whether the element can take focus.
- */
-const isFocusableUnder = (element: Element, parent: Element | undefined): boolean => {
-  if (disableableTags.has(element.tag) && attribute(element, "disabled") !== undefined) {
-    return false;
-  }
-
-  return isNativeFocusable(element, parent) || tabindexOf(element) !== undefined;
-};
-
-/**
  * Flatten a tree into its elements in document order, each with its ancestors.
  *
  * @param tree The tree's root.
@@ -324,6 +309,56 @@ const visitsOf = (tree: Element): readonly Visit[] => {
  * @returns The element's parent, `undefined` for the root.
  */
 const parentOf = (visit: Visit): Element | undefined => visit.ancestors.at(-1);
+
+/**
+ * Find an element's first `legend` element child, which captions a `fieldset`.
+ *
+ * @param element The element whose children are read.
+ * @returns The first child that is a `legend`, or `undefined` when none is.
+ */
+const firstLegendOf = (element: Element): Element | undefined =>
+  element.children.find(
+    (child): child is Element => child.kind === "element" && child.tag === "legend",
+  );
+
+/**
+ * Decide whether a disabled `fieldset` above a visit disables it: one whose first `legend` child
+ * does not hold the element.
+ *
+ * @param visit The visit to place.
+ * @returns Whether some disabled `fieldset` ancestor reaches the element.
+ * @see https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#concept-fe-disabled
+ */
+const isUnderDisabledFieldset = (visit: Visit): boolean =>
+  visit.ancestors.some((ancestor, index) => {
+    if (ancestor.tag !== "fieldset" || attribute(ancestor, "disabled") === undefined) {
+      return false;
+    }
+
+    const legend = firstLegendOf(ancestor);
+
+    return legend === undefined || visit.ancestors[index + 1] !== legend;
+  });
+
+/**
+ * Decide whether a visit's element can take focus, given its ancestors.
+ *
+ * A form control is out when it carries `disabled` or a disabled `fieldset` reaches it.
+ *
+ * @param visit The visit to classify.
+ * @returns Whether the element can take focus.
+ */
+const isFocusableAt = (visit: Visit): boolean => {
+  const { element } = visit;
+  if (
+    disableableTags.has(element.tag) &&
+    (attribute(element, "disabled") !== undefined || isUnderDisabledFieldset(visit))
+  ) {
+    return false;
+  }
+
+  return isNativeFocusable(element, parentOf(visit)) || tabindexOf(element) !== undefined;
+};
 
 /**
  * Find the interaction Root a visit sits in: its nearest ancestor whose marker names an
@@ -366,13 +401,18 @@ const violation = (check: Check, visit: Visit): Violation => ({
 });
 
 /**
- * Concatenate the text below an element as written, skipping `aria-hidden="true"` subtrees.
+ * Concatenate the text below an element as written, skipping `aria-hidden="true"` subtrees; an
+ * `img` gives its `alt`.
  *
  * @param node The element whose descendant text is wanted.
  * @returns The raw text, whitespace kept.
  */
-const textBelow = (node: Element): string =>
-  node.children
+const textBelow = (node: Element): string => {
+  if (node.tag === "img") {
+    return attribute(node, "alt") ?? "";
+  }
+
+  return node.children
     .map((child) => {
       if (child.kind === "text") {
         return child.text;
@@ -381,17 +421,20 @@ const textBelow = (node: Element): string =>
       return isAriaHidden(child) ? "" : textBelow(child);
     })
     .join("");
+};
 
 /**
  * Collect an element's descendant text, skipping `aria-hidden="true"` subtrees, with ASCII
  * whitespace collapsed and trimmed.
  *
- * Text is concatenated as written, with no space added at element boundaries. The element's own
- * `aria-hidden` is not read: a node `aria-labelledby` references contributes its text even when it
- * is hidden.
+ * Text is concatenated as written, with no space added at element boundaries. An `img`, the element
+ * itself or one below it, gives its `alt`, as HTML-AAM names an `img` with no ARIA name. The
+ * element's own `aria-hidden` is not read: a node `aria-labelledby` references contributes its text
+ * even when it is hidden.
  *
  * @param element The element whose text is wanted.
  * @returns The text a reader of the element hears.
+ * @see https://www.w3.org/TR/html-aam-1.0/#img-element-accessible-name-computation
  */
 export const textOf = (element: Element): string => collapse(textBelow(element));
 
@@ -407,12 +450,14 @@ const idRefs = (value: string | undefined): readonly string[] => splitIdrefs(val
  * Compute the accessible name of a form control or a group Root from explicit references only.
  *
  * The first non-empty source wins: the text of the elements `aria-labelledby` names, in its order;
- * then `aria-label`; then, for a labelable element, the text of each `label` whose `for` is its
- * `id`; then, for a `button`, its own text.
+ * then `aria-label`; then, for a `fieldset`, the text of its first `legend` child; then, for a
+ * labelable element, the text of each `label` whose `for` is its `id`; then, for a `button`, its
+ * own text.
  *
  * @param element The control or Root to name.
  * @param tree The tree the element and its references sit in.
  * @returns The name, empty when no source gives one.
+ * @see https://www.w3.org/TR/html-aam-1.0/#fieldset-element-accessible-name-computation
  */
 export const nameOf = (element: Element, tree: Element): string => {
   const elements = visitsOf(tree).map((visit) => visit.element);
@@ -425,6 +470,11 @@ export const nameOf = (element: Element, tree: Element): string => {
   const sources = [
     () => labelledBy.join(" "),
     () => attribute(element, "aria-label") ?? "",
+    () => {
+      const legend = element.tag === "fieldset" ? firstLegendOf(element) : undefined;
+
+      return legend === undefined ? "" : textOf(legend);
+    },
     () =>
       id === undefined || !labelableTags.has(element.tag)
         ? ""
@@ -450,18 +500,22 @@ export const nameOf = (element: Element, tree: Element): string => {
  * The focusable kinds are an `input` that is not hidden, a `textarea`, a `select`, a `button`, an
  * `a` or `area` with an `href`, an `audio` or `video` with `controls`, the first `summary` child of
  * a `details`, and any element with a `tabindex`, `-1` included. A disabled control is not
- * focusable.
+ * focusable, and neither is a control below a disabled `fieldset` unless it sits in that
+ * `fieldset`'s first `legend` child.
  *
  * @param element The element to classify.
- * @param tree The tree the element sits in, which places a `summary` under its `details`; an
- *   element outside it is judged as a root.
+ * @param tree The tree the element sits in, which places a `summary` under its `details` and a
+ *   control under its `fieldset`s; an element outside it is judged as a root.
  * @returns Whether the element can take focus.
+ * @see https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#concept-fe-disabled
  */
-export const isFocusable = (element: Element, tree: Element): boolean => {
-  const visit = visitsOf(tree).find((candidate) => candidate.element === element);
-
-  return isFocusableUnder(element, visit === undefined ? undefined : parentOf(visit));
-};
+export const isFocusable = (element: Element, tree: Element): boolean =>
+  isFocusableAt(
+    visitsOf(tree).find((candidate) => candidate.element === element) ?? {
+      ancestors: [],
+      element,
+    },
+  );
 
 /**
  * Decide whether a Choice Root and its Prompt take one of the two markups the operator ruled
@@ -521,11 +575,7 @@ const rules = {
       .filter((visit) => attribute(visit.element, "autofocus") !== undefined)
       .filter(
         (visit, index) =>
-          index > 0 ||
-          !(
-            isFocusableUnder(visit.element, parentOf(visit)) ||
-            isPart(visit.element, "item", "status")
-          ),
+          index > 0 || !(isFocusableAt(visit) || isPart(visit.element, "item", "status")),
       ),
   "control-name": ({ tree, visits }) =>
     visits.filter((visit) => isFormControl(visit.element) && nameOf(visit.element, tree) === ""),
