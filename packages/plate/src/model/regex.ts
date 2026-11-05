@@ -47,6 +47,15 @@
  * optional copy of a repeated class takes two states, so the limit admits the corpus's
  * `pattern-mask` values (at most 21 states) and `[0-9]{0,63}` (127), and refuses `[0-9]{0,64}`.
  *
+ * A count is measured against the limit as written, before it becomes a number, and one above
+ * 127, the most copies of one character the automaton holds, is refused at its quantifier whatever
+ * it repeats. So `(){1000000000}` is refused though an empty group takes no state, and no count
+ * past 127 reaches the reckoning, the builder or the translation. A count within it may still
+ * repeat a group that matches only the empty text, and such groups nest 100 deep; the builder makes
+ * one copy of such a group, as further copies change nothing, so `((){127}){127}` builds one empty
+ * group, not 16,129. The two rules together: the refusal keeps the limit one sentence long, and the
+ * single copy keeps nested counts within it from multiplying the work.
+ *
  * The module is pure and synchronous, a browser module.
  *
  * @module
@@ -120,7 +129,8 @@ type Atom =
 
 /**
  * How often a piece's atom repeats: `least` to `most` times, `most` none when unbounded. A piece
- * written without a quantifier repeats once.
+ * written without a quantifier repeats once. Each bound is at most {@link pieceBudget}, as
+ * {@link quantifier} refuses a larger one.
  */
 interface Count {
   readonly least: bigint;
@@ -812,10 +822,51 @@ const atom = (reader: Reader): Result.Result<Atom, RegexRefused> => {
 };
 
 /**
+ * The most states a pattern's automaton holds, its accepting state included: 128.
+ *
+ * {@link matches} visits each state at most once per character, so a match costs at most 128 state
+ * visits per character of the value whatever the pattern; the module doc gives the reckoning
+ * against the longest value a host posts.
+ */
+export const maximumStates = 128;
+
+/**
+ * The most states a pattern's own pieces may take: {@link maximumStates} less the accepting state.
+ */
+const pieceBudget = BigInt(maximumStates - 1);
+
+/**
+ * The digits of {@link pieceBudget}, which a count's digits are measured against.
+ */
+const budgetDigits = String(pieceBudget);
+
+/**
+ * Whether a run of digits names a count past {@link pieceBudget}, the most copies any repetition
+ * count may make.
+ *
+ * It measures the digits before they become a number: without its leading zeros, a run with more
+ * digits than the budget's is past it however long, and one with as many compares as text. So a
+ * count of a million digits costs a look at its length, never a conversion.
+ *
+ * @param digits The digits as written, empty for the missing bound of `{n,}`, which passes nothing.
+ * @returns Whether the count passes the budget.
+ */
+const pastBudget = (digits: string): boolean => {
+  const significant = digits.replace(/^0+(?=[0-9])/u, "");
+
+  return (
+    significant.length > budgetDigits.length ||
+    (significant.length === budgetDigits.length && significant > budgetDigits)
+  );
+};
+
+/**
  * Read an optional quantifier: `?`, `*`, `+`, `{n}`, `{n,}` or `{n,m}`.
  *
- * The counts are read as decimal integers of any size, written back without leading zeros, and
- * compared exactly: `{n,m}` needs n at most m.
+ * The counts are decimal integers written with any number of digits. One above
+ * {@link pieceBudget} is refused, whatever it repeats, measured by its digits before it becomes a
+ * number; the rest are written back without leading zeros and compared exactly: `{n,m}` needs n at
+ * most m.
  *
  * @param reader The pattern being read, after an atom.
  * @param start The UTF-16 index of the atom, where a piece without a quantifier points.
@@ -852,6 +903,14 @@ const quantifier = (reader: Reader, start: number): Result.Result<Count, RegexRe
       reader,
       at,
       String.raw`a { after an atom opens a repetition count; write {n}, {n,} or {n,m} in whole numbers, or \{ to match a brace`,
+    );
+  }
+
+  if (pastBudget(least) || pastBudget(most)) {
+    return refuse(
+      reader,
+      at,
+      `this repetition count is above ${pieceBudget}, the most a matcher of ${maximumStates} states takes whatever it repeats; lower it to ${pieceBudget} or less, or check the length another way`,
     );
   }
 
@@ -937,20 +996,6 @@ const regularExpression = (reader: Reader): Result.Result<Expression, RegexRefus
 
     return branches;
   });
-
-/**
- * The most states a pattern's automaton holds, its accepting state included: 128.
- *
- * {@link matches} visits each state at most once per character, so a match costs at most 128 state
- * visits per character of the value whatever the pattern; the module doc gives the reckoning
- * against the longest value a host posts.
- */
-export const maximumStates = 128;
-
-/**
- * The most states a pattern's own pieces may take: {@link maximumStates} less the accepting state.
- */
-const pieceBudget = BigInt(maximumStates - 1);
 
 /**
  * Refuse a pattern whose automaton would pass {@link maximumStates}.
@@ -1272,6 +1317,13 @@ const buildAtom = (builder: Builder, read: Atom, next: number): number => {
  * skips to `next`; `{n,}` loops its last copy back through a choice. {@link pieceStates} counts
  * the states this makes.
  *
+ * Neither bound passes {@link pieceBudget} ({@link quantifier} refuses it), so each converts to a
+ * number exactly and each loop runs at most 127 times. Each optional copy adds its choice, so the
+ * state limit bounds those. A required copy of an atom that takes no state, a group that matches
+ * only the empty text such as `()`, adds nothing and returns the state it was given, so the copies
+ * after it would change nothing and are skipped: groups of that kind nested 100 deep under `{127}`
+ * would otherwise be copied 127^100 times.
+ *
  * @param builder The automaton being built.
  * @param read The piece.
  * @param next The state the piece goes to once it matches.
@@ -1296,7 +1348,13 @@ const buildPiece = (builder: Builder, read: Piece, next: number): number => {
   }
 
   for (; required > 0; required -= 1) {
+    const built = builder.kinds.length;
+
     first = buildAtom(builder, read.atom, first);
+
+    if (builder.kinds.length === built) {
+      break;
+    }
   }
 
   return first;

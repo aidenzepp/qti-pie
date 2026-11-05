@@ -159,6 +159,12 @@ const patterns: readonly string[] = [
   "(ab|a)(bc|c)",
   "(a|b)*abb",
   "(x{0,2}){2,3}",
+  "(){0}",
+  "(){0,3}",
+  "(){2,}",
+  "(){127}",
+  "((){5}){3}",
+  "(()|()){2}",
   "😀+",
   ".😀.",
 ];
@@ -424,5 +430,52 @@ describe("compile and matches", () => {
     refusedAt(Array.from({ length: 130 }, () => "a").join("|"), 127);
     // A count too large for any number type is refused, not expanded.
     refusedAt("a{99999999999999999999999}", 1);
+  });
+
+  it("refuses a count past the limit at its quantifier whatever it repeats, an empty group included", () => {
+    const limit = maximumStates - 1;
+
+    for (const [pattern, position] of [
+      ["(){1000000000}", 2],
+      ["(){0,1000000000}", 2],
+      ["(()|()){99999999999999999999}", 7],
+      ["((){5}){1000000}", 7],
+      [`(){${limit + 1}}`, 2],
+      [`(){0,${limit + 1}}`, 2],
+      [`(){${limit + 1},}`, 2],
+      // A count of a million digits is refused by its length, never read as a number.
+      [`(){${"9".repeat(1_000_000)}}`, 2],
+    ] as const) {
+      const refusal = refusedAt(pattern, position);
+
+      assert.include(refusal?.reason ?? "", String(limit), pattern.slice(0, 40));
+    }
+  });
+
+  it("takes a count at the limit on any atom, and keeps a count of zero meaning the empty text", () => {
+    const limit = maximumStates - 1;
+
+    assert.strictEqual(compiled(`(){${limit}}`).states, 1);
+    assert.strictEqual(compiled(`(){0,${limit}}`).states, maximumStates);
+    assert.strictEqual(compiled(`(){${limit},}`).states, 2);
+    assert.isTrue(matches(compiled(`(){${limit},}`), ""));
+    holds("a{0}", "", "a");
+    holds("(){0}", "", "a");
+    holds("(a){0}b", "b", "ab");
+    holds(`x(){${limit}}y`, "xy", "xay");
+  });
+
+  it("builds an empty group once however deep its counts nest, each within the limit", () => {
+    // 100 levels of `{127}` over `()` would otherwise copy the empty group 127^100 times.
+    const nested = `${"(".repeat(99)}()${"{127})".repeat(99)}{127}`;
+    const matcher = compiled(nested);
+
+    assert.strictEqual(matcher.states, 1);
+    assert.isTrue(matches(matcher, ""));
+    assert.isFalse(matches(matcher, "a"));
+    assert.isTrue(Result.isSuccess(translate(nested)));
+    // A copy that takes a character still repeats: three levels of {2} over `a` make eight.
+    holds("((a{2}){2}){2}", "a".repeat(8), "a".repeat(7));
+    assert.strictEqual(compiled("((a{2}){2}){2}").states, 9);
   });
 });
