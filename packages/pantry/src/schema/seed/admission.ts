@@ -85,35 +85,52 @@ const compareKinds = (left: string, right: string): number => {
   return left.localeCompare(right);
 };
 
+const kindsRows: readonly AdmissionRow[] = [
+  ...generic.admission,
+  ...asi.admission,
+  ...html.admission,
+  ...cp.admission,
+  ...lom.admission,
+  ...qmd.admission,
+  ...cpx.admission,
+  ...drd.admission,
+  ...csmd.admission,
+  ...ud.admission,
+  ...xi.admission,
+  ...foreign.admission,
+];
+
 /**
- * The admission rows of every kinds file, deduplicated on (version, parent, child) and sorted by
- * version, then parent, then child in `NodeKind` roster order, a handle not yet in the roster
- * after the roster, by name.
+ * Deduplicates rows on (version, parent, child) and sorts them by version, then parent, then child
+ * in `NodeKind` roster order, a handle not yet in the roster after the roster, by name.
  */
-export const admission: readonly AdmissionRow[] = [
-  ...new Map(
-    [
-      ...generic.admission,
-      ...asi.admission,
-      ...html.admission,
-      ...cp.admission,
-      ...lom.admission,
-      ...qmd.admission,
-      ...cpx.admission,
-      ...drd.admission,
-      ...csmd.admission,
-      ...ud.admission,
-      ...xi.admission,
-      ...foreign.admission,
-      ...wildcardAdmissionRows({ globals: globalElement, hosts: wildcardHost, registries }),
-    ].map((row) => [`${row.version}\u0000${row.parent}\u0000${row.child}`, row] as const),
-  ).values(),
-].toSorted(
-  (left, right) =>
-    rank(versionOrder, left.version) - rank(versionOrder, right.version) ||
-    compareKinds(left.parent, right.parent) ||
-    compareKinds(left.child, right.child),
-);
+const composeAdmission = (rows: readonly AdmissionRow[]): readonly AdmissionRow[] =>
+  [
+    ...new Map(
+      rows.map((row) => [`${row.version}\u0000${row.parent}\u0000${row.child}`, row] as const),
+    ).values(),
+  ].toSorted(
+    (left, right) =>
+      rank(versionOrder, left.version) - rank(versionOrder, right.version) ||
+      compareKinds(left.parent, right.parent) ||
+      compareKinds(left.child, right.child),
+  );
+
+/**
+ * The admission rows of every kinds file alone, the host's explicit particles (spec 4.1 step 1),
+ * composed as `admission` is. The derived wildcard rows are left out: they are the database's
+ * representation of what a wildcard admits, not particles a host declares.
+ */
+export const explicitAdmission: readonly AdmissionRow[] = composeAdmission(kindsRows);
+
+/**
+ * The admission rows of every kinds file with the rows derived from the wildcard hosts, composed
+ * by `composeAdmission`.
+ */
+export const admission: readonly AdmissionRow[] = composeAdmission([
+  ...kindsRows,
+  ...wildcardAdmissionRows({ globals: globalElement, hosts: wildcardHost, registries }),
+]);
 
 /**
  * The admission rows of one schema version, in the order of `admission`.
