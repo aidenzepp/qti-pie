@@ -366,7 +366,9 @@ const applyWhiteSpace = (lexical: string, whiteSpace: WhiteSpace): string => {
  * Namespace declarations and the four `xsi` attributes XML Schema declares are admitted on every
  * element and are not attributes of the kind; any other attribute outside `allowed` is refused,
  * naming the first. On a host of an attribute wildcard, an attribute with a namespace is wildcard
- * content: it is passed over, not read, and the tree walk judges it.
+ * content: it is passed over, not read, and the tree walk judges it. On an element that carries
+ * `xsi:type` every attribute outside `allowed` is passed over the same way: a derived type may add
+ * it, and the tree walk stores it or refuses it.
  */
 const readAttributes = (
   element: Element,
@@ -375,6 +377,9 @@ const readAttributes = (
 ): Effect.Effect<ReadonlyMap<string, AttributeValue>, UnmodeledVocabulary> =>
   Effect.gen(function* readAttributeValues() {
     const read = new Map<string, AttributeValue>();
+    const typed = element.attributes.some(
+      (attribute) => attribute.namespace === xsiNamespace && attribute.local === "type",
+    );
     for (const attribute of element.attributes) {
       if (attribute.namespace === xmlnsNamespace) {
         continue;
@@ -389,11 +394,15 @@ const readAttributes = (
       }
 
       const whiteSpace = whiteSpaceOf.get(attribute.local);
-      if (
+      const outside =
         attribute.namespace !== "" ||
         whiteSpace === undefined ||
-        !allowed.includes(attribute.local)
-      ) {
+        !allowed.includes(attribute.local);
+      if (outside && typed) {
+        continue;
+      }
+
+      if (outside) {
         return yield* new UnmodeledVocabulary({
           kind: "attribute",
           name: attribute.qname,
